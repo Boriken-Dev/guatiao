@@ -148,6 +148,15 @@ impl From<ValueError> for ProviderError {
     }
 }
 
+/// So a provider built through an infallible `From<C>` (a type that IS
+/// its configuration, `config = Self`) satisfies `TryFrom<C, Error:
+/// Into<ProviderError>>` with nothing written.
+impl From<std::convert::Infallible> for ProviderError {
+    fn from(never: std::convert::Infallible) -> ProviderError {
+        match never {}
+    }
+}
+
 impl std::fmt::Display for ProviderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let message = self.message();
@@ -515,6 +524,119 @@ impl<K: ?Sized + Kind> std::ops::Deref for Offer<K> {
     }
 }
 
+impl<K: ?Sized + Kind> Offer<K> {
+    /// An instance of this provider built from `config`, as `K`.
+    ///
+    /// The configuration is a value fitting [`config_schema`](Offer::config_schema);
+    /// the provider decodes it and builds an instance whose address is
+    /// the context every call on the returned [`Instance`] passes. A
+    /// provider that builds no instances (`create` null) answers
+    /// `GUATIAO_ERR_NULL` with a message saying so.
+    pub fn instantiate(&self, config: &Value) -> Result<Instance<K>, ProviderError> {
+        Instance::build(&self.view, config)
+    }
+
+    /// Whether this provider builds instances from a configuration.
+    pub fn builds_instances(&self) -> bool {
+        self.view.create.is_some()
+    }
+}
+
+/// One instance a provider built from a configuration: the kind's trait,
+/// over that instance, released when this is dropped.
+///
+/// `Send + Sync`, since the kind's trait names both; not `Copy`, since it
+/// owns the instance.
+pub struct Instance<K: ?Sized + Kind> {
+    remote: Remote<K>,
+    lib_ctx: *mut c_void,
+    destroy: Option<unsafe extern "C" fn(ctx: *mut c_void, instance: *mut c_void)>,
+}
+
+impl<K: ?Sized + Kind> std::fmt::Debug for Instance<K> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Instance")
+            .field("kind", &K::NAME)
+            .finish_non_exhaustive()
+    }
+}
+
+// SAFETY: the instance is the provider's own, addressed only through the
+// kind's `Send + Sync` trait, and released once, here.
+unsafe impl<K: ?Sized + Kind> Send for Instance<K> {}
+// SAFETY: as above.
+unsafe impl<K: ?Sized + Kind> Sync for Instance<K> {}
+
+impl<K: ?Sized + Kind> Instance<K> {
+    /// Builds through a provider's `create` slot and validates its table
+    /// for `K`, or says why not.
+    pub(crate) fn build(view: &ProviderView, config: &Value) -> Result<Instance<K>, ProviderError> {
+        let Some(create) = view.create else {
+            return Err(ProviderError::new(
+                Status::GUATIAO_ERR_NULL,
+                "this provider builds no instances; it is its one instance",
+            ));
+        };
+        // The table is validated first, so a provider whose table does not
+        // fit `K` never builds an instance it would then have to destroy.
+        let remote = Remote::<K>::from_view(view)
+            .map_err(|why| ProviderError::new(Status::GUATIAO_ERR_WRONG_KIND, &why.to_string()))?;
+        let mut instance: *mut c_void = std::ptr::null_mut();
+        let mut err = ProviderError::none();
+        // SAFETY: the slot is the descriptor's own, read under its guard;
+        // `config` is a well-formed value; the out-slots are writable
+        // locals; the library is never unloaded.
+        let status = unsafe { create(view.ctx, config, &mut instance, &mut err) };
+        if status != Status::GUATIAO_OK {
+            return Err(take_err(err, status));
+        }
+        if instance.is_null() {
+            return Err(ProviderError::new(
+                Status::GUATIAO_ERR_NULL,
+                "the provider answered OK and built nothing",
+            ));
+        }
+        Ok(Instance {
+            remote: Remote {
+                table: remote.table,
+                size: remote.size,
+                ctx: instance,
+                kind: PhantomData,
+            },
+            lib_ctx: view.ctx,
+            destroy: view.destroy,
+        })
+    }
+
+    /// The proxy over this instance, valid while `self` lives.
+    pub fn remote(&self) -> Remote<K> {
+        self.remote
+    }
+
+    /// The instance pointer, for a caller that speaks C.
+    pub fn ctx(&self) -> *mut c_void {
+        self.remote.ctx
+    }
+}
+
+impl<K: ?Sized + Kind> std::ops::Deref for Instance<K> {
+    type Target = K;
+
+    fn deref(&self) -> &K {
+        K::as_dyn(&self.remote)
+    }
+}
+
+impl<K: ?Sized + Kind> Drop for Instance<K> {
+    fn drop(&mut self) {
+        if let Some(destroy) = self.destroy {
+            // SAFETY: the instance came from this provider's `create` and
+            // is released exactly once, here.
+            unsafe { destroy(self.lib_ctx, self.remote.ctx) };
+        }
+    }
+}
+
 impl<K: ?Sized + Kind> From<Offer<K>> for Remote<K> {
     fn from(offer: Offer<K>) -> Remote<K> {
         offer.remote
@@ -536,6 +658,17 @@ impl ProviderInfo {
         let remote = Remote::from_view(&view)?;
         let version = view.version.unwrap_or("");
         Ok(Offer::new(remote, view, None, None, version, 0))
+    }
+
+    /// An instance built from `config`, as `K`. See [`Offer::instantiate`].
+    pub fn instantiate<K: ?Sized + Kind>(
+        &'static self,
+        config: &Value,
+    ) -> Result<Instance<K>, ProviderError> {
+        let view = self.view().ok_or_else(|| {
+            ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, "an unreadable descriptor")
+        })?;
+        Instance::build(&view, config)
     }
 }
 
@@ -693,6 +826,64 @@ pub fn catch(body: impl FnOnce() -> Status) -> Status {
     crate::exports::guard(body)
 }
 
+/// A configuration argument, decoded as `C`, or the error a `create` shim
+/// answers.
+///
+/// # Safety
+///
+/// `config` is null or addresses a well-formed value for the call.
+#[doc(hidden)]
+pub unsafe fn config_arg<C: crate::value::convert::FromValue>(
+    config: *const Value,
+) -> Result<C, ProviderError> {
+    // SAFETY: the caller's contract.
+    let value = unsafe { config.as_ref() }
+        .ok_or_else(|| ProviderError::new(Status::GUATIAO_ERR_NULL, "no configuration"))?;
+    C::from_value(value)
+        .map_err(|e| ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, &e.to_string()))
+}
+
+/// Writes a built instance through `out`, boxed, or the error through
+/// `err`; answers the status either way.
+///
+/// # Safety
+///
+/// `out` and `err` are null or writable.
+#[doc(hidden)]
+pub unsafe fn instance_out<T>(
+    out: *mut *mut c_void,
+    err: *mut ProviderError,
+    built: Result<T, ProviderError>,
+) -> Status {
+    match built {
+        Ok(instance) => {
+            if out.is_null() {
+                return Status::GUATIAO_ERR_NULL;
+            }
+            // SAFETY: the caller's contract.
+            unsafe { out.write(Box::into_raw(Box::new(instance)).cast::<c_void>()) };
+            Status::GUATIAO_OK
+        }
+        // SAFETY: the caller's contract.
+        Err(e) => unsafe { write_err(err, e) },
+    }
+}
+
+/// Releases an instance [`instance_out`] boxed. Null is a no-op.
+///
+/// # Safety
+///
+/// `instance` is null or came from `instance_out::<T>` and is not used
+/// again.
+#[doc(hidden)]
+pub unsafe fn destroy_instance<T>(instance: *mut c_void) {
+    if instance.is_null() {
+        return;
+    }
+    // SAFETY: the caller's contract.
+    drop(unsafe { Box::from_raw(instance.cast::<T>()) });
+}
+
 /// The error a proxy hands back: what the shim wrote, or one built from
 /// the status when it wrote nothing (an older library).
 #[doc(hidden)]
@@ -786,6 +977,15 @@ impl ProviderParts {
         config: Option<Value>,
         ctx: *mut c_void,
         available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
+        create: Option<
+            unsafe extern "C" fn(
+                ctx: *mut c_void,
+                config: *const Value,
+                out: *mut *mut c_void,
+                err: *mut ProviderError,
+            ) -> Status,
+        >,
+        destroy: Option<unsafe extern "C" fn(ctx: *mut c_void, instance: *mut c_void)>,
     ) -> ProviderParts {
         let id: Box<str> = id.into();
         let name: Box<str> = name.into();
@@ -816,6 +1016,8 @@ impl ProviderParts {
                 len: tables.len(),
                 stride: size_of::<KindTable>(),
             },
+            create,
+            destroy,
         };
         ProviderParts {
             id,
@@ -1188,6 +1390,8 @@ mod tests {
             version: None,
             available: None,
             raw: std::ptr::null(),
+            create: None,
+            destroy: None,
             tables: vec![(
                 "greeter",
                 headerless as *const GreeterVtable as *const c_void,
@@ -1248,6 +1452,8 @@ mod tests {
             version: None,
             available,
             raw: std::ptr::null(),
+            create: None,
+            destroy: None,
             tables: vec![("greeter", table, size)],
         };
 

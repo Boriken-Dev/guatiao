@@ -687,6 +687,18 @@ pub struct ProviderView {
     /// provider serving several kinds with a table each. Empty when
     /// `vtable` serves them all. See [`ProviderInfo::tables`].
     pub tables: Vec<(&'static str, *const c_void, usize)>,
+    /// Builds an instance from a configuration, or `None`. See
+    /// [`ProviderInfo::create`].
+    pub create: Option<
+        unsafe extern "C" fn(
+            ctx: *mut c_void,
+            config: *const Value,
+            out: *mut *mut c_void,
+            err: *mut super::kind::ProviderError,
+        ) -> Status,
+    >,
+    /// Releases an instance `create` built. See [`ProviderInfo::destroy`].
+    pub destroy: Option<unsafe extern "C" fn(ctx: *mut c_void, instance: *mut c_void)>,
 }
 
 impl ProviderView {
@@ -956,6 +968,18 @@ unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<Provid
                 read_kind_tables(std::ptr::addr_of!((*raw).tables).read())?
             } else {
                 Vec::new()
+            },
+            create: if declared >= ProviderInfo::create_end() {
+                // SAFETY: the guard established the field is present.
+                std::ptr::addr_of!((*raw).create).read()
+            } else {
+                None
+            },
+            destroy: if declared >= ProviderInfo::destroy_end() {
+                // SAFETY: the guard established the field is present.
+                std::ptr::addr_of!((*raw).destroy).read()
+            } else {
+                None
             },
         })
     }
@@ -1353,7 +1377,40 @@ mod tests {
             version: Str::borrowed(""),
             available: None,
             tables: super::super::desc::KindTables::empty(),
+            create: None,
+            destroy: None,
         }
+    }
+
+    /// A descriptor from before `create` and `destroy` reads them as
+    /// absent, and one declaring them hands them over.
+    #[test]
+    fn a_descriptor_from_before_create_reads_it_as_absent() {
+        unsafe extern "C" fn build(
+            _ctx: *mut c_void,
+            _config: *const Value,
+            _out: *mut *mut c_void,
+            _err: *mut super::super::kind::ProviderError,
+        ) -> Status {
+            Status::GUATIAO_ERR_INTERNAL
+        }
+        unsafe extern "C" fn drop_it(_ctx: *mut c_void, _instance: *mut c_void) {}
+
+        let value = a_provider(ProviderInfo::tables_end(), 0);
+        let (_buf, ptr) = short_of(&value, ProviderInfo::tables_end());
+        // SAFETY: `_buf` owns the bytes.
+        let view =
+            unsafe { read_provider(ptr, ProviderInfo::tables_end()) }.expect("above the floor");
+        assert!(view.create.is_none() && view.destroy.is_none());
+
+        let mut value = a_provider(size_of::<ProviderInfo>(), 0);
+        value.create = Some(build);
+        value.destroy = Some(drop_it);
+        let (_buf, ptr) = short_of(&value, size_of::<ProviderInfo>());
+        // SAFETY: as above.
+        let view =
+            unsafe { read_provider(ptr, size_of::<ProviderInfo>()) }.expect("a full descriptor");
+        assert!(view.create.is_some() && view.destroy.is_some());
     }
 
     /// A provider with a table per kind hands each back by kind, and the
