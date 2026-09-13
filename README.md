@@ -46,7 +46,7 @@ Optional features:
 | Flag | Adds | Needed for |
 | --- | --- | --- |
 | `derive` | `guatiao-derive` | `#[derive(ToValue, FromValue, Schema)]` |
-| `c-exports` | nothing | the `extern "C"` surface, and a `cdylib` a C consumer links |
+| `c-header` | nothing | regenerating `include/guatiao.h` (it is committed, so most builds do not) |
 
 A default build pulls in nothing.
 
@@ -93,7 +93,7 @@ toolchain. A test compares the committed file against what the build just
 rendered, so it cannot go stale. To refresh it:
 
 ```bash
-GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-exports
+GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-header
 ```
 
 ## Licence

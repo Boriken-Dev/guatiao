@@ -122,7 +122,12 @@ pub mod convert {
 // The `extern "C"` surface: everything public that is not a Rust
 // convenience, reachable by a caller that cannot link Rust. A `//`
 // comment, never a `///`.
-#[cfg(feature = "c-exports")]
+//
+// UNGATED, on purpose. This is an FFI library and Rust is one of its
+// consumers, not the privileged one; a surface that appears only when
+// somebody remembers a feature flag is a surface a C caller cannot rely
+// on being there. The `c-header` feature renders the declarations, not
+// the symbols.
 pub mod exports;
 
 pub mod library;

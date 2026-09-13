@@ -10,7 +10,7 @@ public surface); this file is about the repository.
 | --- | --- |
 | `crates/guatiao/` | the crate: value model, C type vocabulary, schema, library envelope, loader |
 | `crates/guatiao/include/guatiao.h` | the C header, rendered by `build.rs` and committed |
-| `guatiao.dll` / `libguatiao.so` | the C ABI artifact, from the same crate — `cargo build --features c-exports` |
+| `guatiao.dll` / `libguatiao.so` | the C ABI artifact, from the same crate — `cargo build` |
 | `crates/guatiao-derive/` | `#[derive(ToValue, FromValue, Schema)]`; reached through `guatiao`'s `derive` feature, never named directly |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 
@@ -24,13 +24,13 @@ cargo package --list -p guatiao --allow-dirty   # must list AGENTS.md, README.md
 ```
 
 Regenerating the header. `build.rs` renders it on every build with
-`c-exports` on, into `OUT_DIR`; this writes the committed copy as well.
+`c-header` on, into `OUT_DIR`; this writes the committed copy as well.
 cbindgen is an **optional** build-dependency enabled by that feature, so a
 default build of the crate still pulls in nothing — which is why the
 render is gated rather than unconditional.
 
 ```bash
-GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-exports
+GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-header
 ```
 
 ## Rules

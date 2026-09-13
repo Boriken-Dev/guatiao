@@ -31,8 +31,6 @@
 //! suite red on machines where nothing is wrong. The header-drift check
 //! in `c_consumer.rs` is the one that never skips.
 
-#![cfg(feature = "c-exports")]
-
 use std::path::PathBuf;
 use std::process::Command;
 

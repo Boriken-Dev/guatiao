@@ -6,16 +6,15 @@
 //!
 //! # Why this is not inside `exports`
 //!
-//! The `extern "C"` wrappers are behind a feature, because whichever
-//! artifact wants to export them turns it on and nobody else pays. A
-//! **status code** is not like that: a library's vtable slot returns one,
-//! and a library that had to enable `c-exports` merely to name its own
-//! return type would export this crate's whole mutation surface from its
-//! own library as a side effect — which is a different artifact's job and
-//! would put two copies of those symbols in one process for no reason.
+//! A status code is part of the value model's vocabulary, not of the
+//! `extern "C"` layer that happens to return it most often. A library's
+//! vtable slot returns one without going near a wrapper, and a Rust
+//! caller reads one out of a provider's table the same way.
 //!
-//! So the type lives here, ungated, and the wrappers that return it stay
-//! behind the feature.
+//! Putting it in `exports` would make a module named for a boundary the
+//! home of a type used on both sides of it — and would leave the value
+//! model unable to name its own return type without reaching into the
+//! layer above.
 
 #![forbid(unsafe_code)]
 #![allow(non_camel_case_types)]

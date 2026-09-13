@@ -21,7 +21,7 @@ A C, C++ or Dart consumer reads a whole tree through
 | flag | adds | default |
 | --- | --- | --- |
 | `derive` | `#[derive(ToValue, FromValue, Schema)]` | off |
-| `c-exports` | the `extern "C"` functions in `exports` | off |
+| `c-header` | regenerating the committed `include/guatiao.h` | off |
 
 MSRV 1.85. No required dependencies; `derive` pulls `guatiao-derive`,
 and the loader pulls `libloading`.
@@ -367,24 +367,34 @@ compiled before the last field was appended does not have.
 
 ---
 
-# The C surface (feature `c-exports`)
+# The C surface
 
-Enabling the feature adds `#[unsafe(no_mangle)] extern "C"` wrappers. The
-crate is `crate-type = ["rlib", "cdylib"]`, so one package is both the
-Rust library and the artifact a C consumer links — `guatiao.dll` /
-`libguatiao.so`, which `cargo build --features c-exports` produces. An
-rlib exports nothing, which is why the cdylib exists at all.
+**The `extern "C"` surface is always compiled.** It is not behind a
+feature: this is an FFI library, and Rust is one of its consumers rather
+than the privileged one — a surface that appears only when somebody
+remembers a flag is one a C caller cannot rely on.
 
-Note that **`cargo test` does not build a cdylib for the package under
-test**, only for a dev-dependency, so `tests/c_exports.rs` needs a
-`cargo build` first and states a skip otherwise. CI builds before testing.
+The crate is `crate-type = ["rlib", "cdylib"]`, so one package is both the
+Rust library and the artifact a C consumer links: `cargo build` produces
+`guatiao.dll` / `libguatiao.so`. An rlib exports nothing, which is why the
+cdylib exists at all.
+
+A consequence worth knowing: **a plugin cdylib exports these too**,
+alongside its own entry symbol, because a cdylib that references this
+crate takes its object code. Two copies in one process are harmless, and
+that is a property rather than luck — every one of these functions is
+pure over the structs plus the allocator pointer the tree carries, so a
+tree allocated through one copy frees correctly through another.
+
+**`cargo test` does not build a cdylib for the package under test**, only
+for a dev-dependency, so `tests/c_exports.rs` needs a `cargo build` first
+and states a skip otherwise. CI builds before testing.
 
 The header at
 `include/guatiao.h` is rendered by `build.rs` on every build with this
 feature on, committed so a C consumer needs no Rust toolchain, and
-compared byte for byte by a test that cannot skip. Refresh the committed
-copy with `GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features
-c-exports`.
+compared byte for byte by a test. Refresh the committed copy with
+`GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-header`.
 
 Values: `guatiao_value_{free,clone,null,absent,bool,map,list,string,
 number,bytes}`, `guatiao_map_{set,discard,clear,copy_from}`,

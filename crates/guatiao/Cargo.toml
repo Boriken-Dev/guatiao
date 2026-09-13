@@ -31,15 +31,15 @@ default = []
 # names the proc-macro crate -- serde's arrangement for `serde_derive`.
 derive = ["dep:guatiao-derive"]
 
-# `#[unsafe(no_mangle)] extern "C"` wrappers of the mutation API, for C and
-# Dart callers. Exported by whichever artifact enables the feature; a Rust
-# consumer calls the same functions directly and needs none of them.
+# Renders `include/guatiao.h` from the Rust that declares it.
 #
-# It also turns on the header render in `build.rs`, which is why cbindgen
-# is an OPTIONAL build-dependency: the header describes this feature's
-# surface, and a consumer that never enables it should not compile a code
-# generator to build a header it will not read.
-c-exports = ["dep:cbindgen"]
+# NOT the `extern "C"` surface — that is always compiled, because this is
+# an FFI library and its symbols are not optional. This feature is about
+# the DECLARATIONS: it pulls cbindgen in as a build-dependency and turns
+# on the render in `build.rs`, so a consumer that never regenerates the
+# committed header does not compile a code generator to produce a file it
+# already has.
+c-header = ["dep:cbindgen"]
 
 # `Registry::load_file` and `scan_dir`: mapping a library and calling its
 # entry point, and finding which files are worth mapping.
@@ -67,8 +67,9 @@ object = { version = "0.40", optional = true, default-features = false, features
 ] }
 
 [build-dependencies]
-# Renders `include/guatiao.h`. Optional, and enabled only by `c-exports`,
-# so a default build still pulls in nothing.
+# Renders `include/guatiao.h`. Optional, and enabled only by `c-header`,
+# so a default build still pulls in nothing — the exported symbols are
+# always compiled, but the generator that declares them is not.
 cbindgen = { version = "0.29", optional = true }
 
 [dev-dependencies]

@@ -82,7 +82,7 @@ one declaration, so the schema cannot describe a value the type refuses.
 | Flag | Adds | Needed for |
 | --- | --- | --- |
 | `derive` | `guatiao-derive` | `#[derive(ToValue, FromValue, Schema)]` |
-| `c-exports` | nothing | exporting the C mutation functions |
+| `c-header` | nothing | regenerating the committed C header |
 
 A default build pulls in nothing.
 

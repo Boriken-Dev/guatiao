@@ -48,6 +48,8 @@ jobs:
         # `cargo test` does not build a cdylib for the package under
         # test, and `c_exports` links one. Building first is what keeps
         # that test from turning into a stated skip on every run.
+        # `--all-features` also turns on `c-header`, so the committed
+        # header is compared against a fresh render.
         run: cargo build --workspace --all-features
 
       - name: Test

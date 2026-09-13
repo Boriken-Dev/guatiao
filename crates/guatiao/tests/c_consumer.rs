@@ -150,7 +150,7 @@ fn the_c_consumer_reads_a_literal_tree_with_nothing_linked() {
 // conditional as a tool on PATH: CI runs `--all-features`, so this
 // runs on every push rather than on whichever machine happened to
 // have cbindgen installed.
-#[cfg(feature = "c-exports")]
+#[cfg(feature = "c-header")]
 #[test]
 fn the_committed_header_is_what_this_build_rendered() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -171,7 +171,7 @@ fn the_committed_header_is_what_this_build_rendered() {
         first_difference(&text, &fresh),
         None,
         "the committed header is not what this build renders. Regenerate it:\n  \
-         GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-exports"
+         GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-header"
     );
     assert_eq!(
         text.len(),

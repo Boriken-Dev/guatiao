@@ -7,7 +7,7 @@
 //! A C, C++ or Dart consumer reads a tree here with no call into any
 //! library — the types are the interface. Mutation needs functions, and
 //! those are ordinary Rust that a Rust host or library calls directly; the
-//! `c-exports` feature adds `extern "C"` wrappers for callers that cannot.
+//! `exports` module wraps them as `extern "C"` for callers that cannot.
 //!
 //! # This is the only module with `unsafe` in it
 //!

@@ -15,8 +15,6 @@
 //! an artifact that exports them; this is the half that proves the
 //! functions behave.
 
-#![cfg(feature = "c-exports")]
-
 use guatiao::exports::merge::{
     GUATIAO_MERGE_DEEP, GUATIAO_MERGE_OPT_MERGELISTS, GUATIAO_MERGE_SUBSTITUTE, MergeOverride,
     guatiao_merge,

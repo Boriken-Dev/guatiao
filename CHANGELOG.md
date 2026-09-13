@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 
 - Workspace scaffold: the `guatiao` crate and its `guatiao-derive`
-  proc-macro companion, feature flags `derive` and `c-exports`, and the
+  proc-macro companion, feature flags `derive`, `c-header` and `load`, and the
   test workflow.
 - **The value model, as plain C structs.** Null, bool, number, string,
   bytes, list and map; one node type; `{ptr, len}` views and

@@ -5,7 +5,7 @@
 //! Building and changing a C value tree.
 //!
 //! These are ordinary Rust functions, so a Rust host or library calls them
-//! directly whichever side of a boundary it is on. The `c-exports` feature
+//! directly whichever side of a boundary it is on. [`crate::exports`]
 //! wraps them for callers that cannot.
 //!
 //! # A refused operation changes nothing

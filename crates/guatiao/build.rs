@@ -15,19 +15,20 @@
 //! # Refreshing the committed copy
 //!
 //! ```text
-//! GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-exports
+//! GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-header
 //! ```
 //!
 //! Writing into the source tree is opt-in because a build script writing
 //! outside `OUT_DIR` breaks a read-only or vendored checkout. The default
 //! path renders into `OUT_DIR` and touches nothing.
 //!
-//! # Why this only runs under `c-exports`
+//! # Why this only runs under `c-header`
 //!
-//! The header declares the exported ABI, and `cbindgen` is an optional
-//! **build**-dependency enabled by that same feature. A default build of
-//! this crate pulls in nothing, which is a property worth keeping: a
-//! consumer that only reads a value should not compile a code generator.
+//! The exported ABI itself is always compiled — this is an FFI library.
+//! What is optional is regenerating the file that DECLARES it, because
+//! that file is committed and most builds only read it. `cbindgen` is an
+//! optional build-dependency enabled by the same feature, so a default
+//! build of this crate pulls in nothing.
 
 fn main() {
     // Cheap and unconditional, so a source edit re-renders even when the
@@ -37,11 +38,11 @@ fn main() {
     println!("cargo::rerun-if-changed=Cargo.toml");
     println!("cargo::rerun-if-env-changed=GUATIAO_WRITE_HEADER");
 
-    #[cfg(feature = "c-exports")]
+    #[cfg(feature = "c-header")]
     render();
 }
 
-#[cfg(feature = "c-exports")]
+#[cfg(feature = "c-header")]
 fn render() {
     use std::path::PathBuf;
 

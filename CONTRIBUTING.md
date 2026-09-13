@@ -47,7 +47,7 @@ layout and the rules that the test suite enforces rather than describes:
 source and committed. Do not hand-edit it. Change the Rust, then:
 
 ```bash
-GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-exports
+GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-header
 ```
 
 A test compares the committed header against a fresh render, so a change to

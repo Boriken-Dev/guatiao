@@ -23,12 +23,17 @@
 //!
 //! # Which artifact exports them
 //!
-//! Whichever one enables the `c-exports` feature. A host that is already
-//! a shared library enables it and exports them itself; a consumer with
-//! no such host builds a thin `cdylib` that does nothing else. Two copies
-//! in one process are harmless, because every one of these is pure over
-//! the structs plus the allocator pointer the tree carries — there is no
-//! process-global state for the copies to disagree about.
+//! **Every `cdylib` built from this crate, always.** These are not behind
+//! a feature: this is an FFI library, and a surface that appears only
+//! when somebody remembers a flag is one a C caller cannot rely on.
+//!
+//! That means a plugin `cdylib` exports them too, alongside its own entry
+//! symbol. Two copies in one process are harmless, and that is a property
+//! of what these functions are rather than luck: every one is pure over
+//! the structs plus the allocator pointer the tree carries, so there is
+//! no process-global state for the copies to disagree about. A tree
+//! allocated by one copy frees correctly through another, because the
+//! allocator travels with it.
 //!
 //! # The unwind discipline
 //!
