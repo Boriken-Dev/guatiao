@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `flat::resolve_in` resolves a flat key in a particular store: a payload
+  key is checked against the arm the store selects, or the field's
+  default. `validate_texts` goes through it, so a field belonging to an
+  unselected arm is refused in the text form as it already was in the
+  nested one.
 - `SchemaRef::extras` and `FieldRef::extras` enumerate every annotation
   -- each key the vocabulary does not claim, with its value -- so a
   consumer keeping a mirror of a field copies them across without

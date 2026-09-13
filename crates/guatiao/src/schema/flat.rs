@@ -24,6 +24,7 @@
 
 use std::collections::BTreeMap;
 
+use super::ValidationError;
 use super::read::{FieldRef, Kind, SchemaRef};
 use super::validate::text_of;
 use crate::value::alloc::Alloc;
@@ -146,6 +147,80 @@ pub fn resolve<'a>(schema: SchemaRef<'a>, key: &str) -> Option<FieldRef<'a>> {
         .kind()
         .arms()
         .find_map(|arm| arm.fields().find(|f| f.key() == leaf))
+}
+
+/// The field governing a flat key **in a particular store**: the arm a
+/// payload key belongs to must be the one the store selects.
+///
+/// [`resolve`] answers for the schema alone, and for a schema alone
+/// `auth.username` is a field of SOME arm. A store has said which arm --
+/// `selected("auth")` is the discriminant's text there, or `None` when
+/// nothing was written and the field's default decides -- and a payload
+/// key the chosen arm does not declare is an error rather than something
+/// to drop. Ignoring it is how a credential ends up stored under a key
+/// the chosen arm does not have.
+///
+/// A dotted key whose stem is not a tagged field is an unknown key, not a
+/// payload field: reporting it as one lists the keys that do exist.
+pub fn resolve_in<'a>(
+    schema: SchemaRef<'a>,
+    key: &str,
+    selected: impl Fn(&str) -> Option<String>,
+) -> Result<FieldRef<'a>, ValidationError> {
+    if let Some(direct) = schema.find(key) {
+        return Ok(direct);
+    }
+    let unknown = || ValidationError::UnknownOption {
+        key: key.to_string(),
+        known: schema.fields().map(|f| f.key().to_string()).collect(),
+    };
+    let Some((parent, leaf)) = split(key) else {
+        return Err(unknown());
+    };
+    let Some(owner) = schema.find(parent) else {
+        return Err(unknown());
+    };
+    let kind = owner.kind();
+    if !matches!(kind, Kind::Variant { .. }) {
+        return Err(unknown());
+    }
+    let chosen = selected(parent)
+        .filter(|t| !t.is_empty())
+        .or_else(|| owner.default().map(text_of))
+        .unwrap_or_default();
+    let Some(arm) = kind.arms().find(|a| a.value() == chosen) else {
+        // Either the tag names no arm -- which the tag's own entry
+        // reports if it was given -- or nothing selected one and there is
+        // no default. Naming the tag is the actionable half: the payload
+        // cannot be checked until the arm is known.
+        let names: Vec<&str> = kind.arms().map(|a| a.value()).collect();
+        return Err(ValidationError::BadValue {
+            key: parent.to_string(),
+            expected: format!(
+                "a value naming one of {} — '{key}' belongs to an arm and cannot be \
+                 checked until one is chosen",
+                names.join(", ")
+            ),
+        });
+    };
+    arm.fields().find(|f| f.key() == leaf).ok_or_else(|| {
+        // Names the ARM rather than listing keys, for a measured reason:
+        // the empty arm is the interesting case, and its list of accepted
+        // payload keys is EMPTY -- a sentence that stops mid-air. The key
+        // is not wrong in general, it is wrong for what was chosen.
+        let accepted: Vec<&str> = arm.fields().map(|f| f.key()).collect();
+        ValidationError::BadValue {
+            key: key.to_string(),
+            expected: if accepted.is_empty() {
+                format!("nothing — the '{chosen}' arm of '{parent}' stores no fields at all")
+            } else {
+                format!(
+                    "nothing — the '{chosen}' arm of '{parent}' accepts only {}",
+                    accepted.join(", ")
+                )
+            },
+        }
+    })
 }
 
 /// Whether a flat key names a secret, following the projection.

@@ -220,6 +220,53 @@ fn resolve_follows_one_level_of_projection() {
 /// A separator inside a field's own key would make a payload key
 /// ambiguous with a field key, so it is caught at declaration rather
 /// than tolerated at read time.
+/// A store says which arm; a payload key is checked against THAT arm.
+///
+/// `resolve` alone answers for the schema, where `auth.username` is a
+/// field of some arm. In a store that selected the empty arm it is a
+/// field of the wrong one, and a text-only front end -- a URI -- has no
+/// other way to be told so.
+#[test]
+fn resolve_in_a_store_follows_the_selected_arm() {
+    let alloc = Alloc::rust();
+    let value = schema(alloc);
+    let s = SchemaRef::new(&value).unwrap();
+
+    let selected = |store: &[(&str, &str)]| {
+        let store = store_of(store);
+        move |k: &str| store.get(k).cloned()
+    };
+
+    let field = flat::resolve_in(s, "auth.username", selected(&[("auth", "userpass")]))
+        .expect("the selected arm's own field");
+    assert_eq!(field.key(), "username");
+
+    let refused = flat::resolve_in(s, "auth.username", selected(&[("auth", "sso")]))
+        .expect_err("a field belonging to an unselected arm");
+    assert!(
+        refused.to_string().contains("sso") && refused.to_string().contains("auth.username"),
+        "names the arm and the key: {refused}"
+    );
+
+    // No selection and no default: the payload cannot be checked yet,
+    // and the message says what to give.
+    let undecided = flat::resolve_in(s, "auth.username", selected(&[]))
+        .expect_err("nothing chose an arm");
+    assert!(undecided.to_string().contains("sso, userpass"), "{undecided}");
+
+    // A dotted key whose stem is not tagged at all is unknown, listing
+    // what does exist.
+    let unknown = flat::resolve_in(s, "host.min", selected(&[])).expect_err("host is text");
+    assert!(matches!(unknown, guatiao::schema::ValidationError::UnknownOption { .. }));
+
+    // And a whole store, through the validator a front end calls.
+    use guatiao::schema::validate_texts;
+    assert!(validate_texts(s, &store_of(&[("auth", "userpass"), ("auth.username", "alice")])).is_ok());
+    assert!(validate_texts(s, &store_of(&[("auth", "sso")])).is_ok());
+    assert!(validate_texts(s, &store_of(&[("auth", "sso"), ("auth.username", "alice")])).is_err());
+    assert!(validate_texts(s, &store_of(&[("auth", "userpass"), ("auth.usernme", "alice")])).is_err());
+}
+
 #[test]
 fn an_option_key_containing_the_separator_is_rejected() {
     let alloc = Alloc::rust();
