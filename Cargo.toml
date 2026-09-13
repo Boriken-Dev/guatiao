@@ -22,8 +22,10 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-# MSRV floor: edition 2024 needs 1.85, and cargo refuses to build below it.
-rust-version = "1.85"
+# MSRV: the lowest toolchain every step of the test workflow has been run
+# on. Let chains, used throughout, set a floor of 1.88 by themselves; 1.88
+# itself has not been run, so the declared value is the verified one.
+rust-version = "1.89"
 repository = "https://github.com/Boriken-Dev/guatiao"
 license = "MPL-2.0"
 

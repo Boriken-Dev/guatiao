@@ -23,7 +23,7 @@ A C, C++ or Dart consumer reads a whole tree through
 | `derive` | `#[derive(ToValue, FromValue, Schema)]` | off |
 | `c-header` | regenerating the committed `include/guatiao.h` | off |
 
-MSRV 1.85. No required dependencies; `derive` pulls `guatiao-derive`,
+MSRV 1.89. No required dependencies; `derive` pulls `guatiao-derive`,
 and the loader pulls `libloading`.
 
 ---

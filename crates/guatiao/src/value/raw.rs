@@ -221,16 +221,16 @@ pub(crate) unsafe fn reserve<C: Container>(
 /// after this returns.
 pub(crate) unsafe fn release_buffer<C: Container>(c: &mut C) {
     let (ptr, _len, cap, stored) = c.parts();
-    if cap > 0 && !stored.is_null() {
+    if cap > 0
+        && !stored.is_null()
         // SAFETY: `from_raw` reads only what `struct_size` covers, and a
         // container with `cap > 0` was allocated through this allocator.
-        if let Ok(alloc) = unsafe { Alloc::from_raw(stored) } {
-            if let Ok(size) = array_size::<C::Elem>(cap) {
-                // SAFETY: this block came from that allocator with exactly
-                // this layout, and nothing reads it again.
-                unsafe { alloc.free(ptr.cast::<u8>(), size, align_of::<C::Elem>()) };
-            }
-        }
+        && let Ok(alloc) = unsafe { Alloc::from_raw(stored) }
+        && let Ok(size) = array_size::<C::Elem>(cap)
+    {
+        // SAFETY: this block came from that allocator with exactly this
+        // layout, and nothing reads it again.
+        unsafe { alloc.free(ptr.cast::<u8>(), size, align_of::<C::Elem>()) };
     }
     c.set_parts(dangling::<C::Elem>(), 0, 0, stored);
 }
