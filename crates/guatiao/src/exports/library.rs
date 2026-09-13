@@ -53,7 +53,9 @@ use std::ffi::c_void;
 use std::path::Path;
 
 use super::{as_str, guard, guard_with};
-use crate::library::{Loading, Order, Provider, Registry, Skipped, WhyNot, scan_dir_ordered};
+use crate::library::{
+    HostInfo, Loading, Order, Provider, Registry, Skipped, WhyNot, scan_dir_ordered,
+};
 use crate::value::ValueError;
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::status::Status;
@@ -65,9 +67,14 @@ use crate::value::types::{Str, Text, Value};
 /// [`guatiao_registry_free`]. Every other function here takes the pointer
 /// that gave you.
 ///
-/// **Not thread-safe.** One registry is one host's table, and the loading
-/// it does is not reentrant; a host sharing one across threads guards it
-/// itself, as it would any other mutable object it owns.
+/// **Not thread-safe.** One registry is one host's table; a host sharing
+/// one across threads guards it itself, as it would any other mutable
+/// object it owns. What a library reaches through its host's `services`
+/// is a snapshot the registry publishes after every change, guarded on
+/// its own, so a library asking from any thread never contends with the
+/// host's own calls — but a library's entry point must not call these
+/// functions on the handle that is loading it, which is held exclusively
+/// for the whole call.
 #[derive(Debug)]
 pub struct HostRegistry {
     inner: Registry,
@@ -172,13 +179,17 @@ impl HostRegistry {
         Ok(list)
     }
 
-    /// Every provider serving `kind`, or all of them when it is empty.
+    /// Every provider serving `kind`, or all of them when it is empty,
+    /// best first.
     fn providers(&self, kind: &str, alloc: Alloc) -> Result<Value, ValueError> {
         let mut list = Value::list_in(alloc);
-        for provider in self.inner.all() {
-            if kind.is_empty() || provider.supports(kind) {
-                list.push(provider_value(alloc, provider)?)?;
-            }
+        let ranked: Vec<&Provider> = if kind.is_empty() {
+            self.inner.all_ranked().collect()
+        } else {
+            self.inner.providers(kind).collect()
+        };
+        for provider in ranked {
+            list.push(provider_value(alloc, provider)?)?;
         }
         Ok(list)
     }
@@ -307,11 +318,38 @@ pub unsafe extern "C" fn guatiao_registry_new(
     })
 }
 
+/// How this registry introduces itself to a library: a pointer to a block
+/// that outlives the registry, carrying the host's id and version, its
+/// allocator, and a `services` table a library calls to ask what is
+/// loaded.
+///
+/// For a host that drives a library itself — calling
+/// `guatiao_library_entry` by hand — this is the pointer to pass. The
+/// loader passes it on every load. Leaked on first use, never freed, so a
+/// library may keep it; after `guatiao_registry_free` its services answer
+/// `GUATIAO_ERR_GONE`. Null for a null handle.
+///
+/// # Safety
+///
+/// `reg` is a live handle.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_host(reg: *mut HostRegistry) -> *const HostInfo {
+    guard_with(std::ptr::null(), || {
+        // SAFETY: the caller's contract.
+        match unsafe { HostRegistry::get_mut(reg) } {
+            Some(registry) => registry.inner.host().as_raw(),
+            None => std::ptr::null(),
+        }
+    })
+}
+
 /// Releases a registry. Null is a no-op.
 ///
 /// **The libraries it loaded stay mapped.** Nothing in this crate unloads
 /// one, because every tree, string and vtable they handed over points into
-/// their images; this frees the host's own table and nothing else.
+/// their images; this frees the host's own table and nothing else. The
+/// block `guatiao_registry_host` handed out stays too, and answers
+/// `GUATIAO_ERR_GONE` from then on.
 ///
 /// # Safety
 ///
@@ -376,10 +414,14 @@ pub unsafe extern "C" fn guatiao_registry_libraries_keyed_by(
 
 /// Loads one file, writing what happened to `out` as a map.
 ///
-/// `{"loaded": <library>}` or `{"skipped": "<why>", "from": "<path>"}`,
-/// where `from` is present only when the reason has one. **A skip is an
-/// answer, not a failure**: the file is not a library, the library
-/// declined this host, or this registry already has it.
+/// `{"loaded": <library>}`, `{"skipped": "<why>", "from": "<path>",
+/// "abi": <n>}` with `from` and `abi` present only when the reason has
+/// one, or `{"failed": "<message>"}`. **A skip is an answer, not a
+/// failure**: the file is not a library (`no-entry-symbol`), the library
+/// declined this host (`declined-this-host`), speaks another envelope
+/// version (`unsupported-abi`), or this registry already has it
+/// (`already-loaded`). A failure is a file the loader could not map or a
+/// descriptor this build cannot read.
 ///
 /// **Mapping a library runs its static initialisers**, which may do
 /// anything, including abort the process. Name files you are willing to
@@ -899,17 +941,21 @@ fn provider_value(alloc: Alloc, one: &Provider) -> Result<Value, ValueError> {
 /// Why something was passed over, as a map.
 fn skip_value(alloc: Alloc, why: &Skipped) -> Result<Value, ValueError> {
     let mut map = Value::map_in(alloc);
-    let (name, from, id) = match why {
-        Skipped::NoEntrySymbol => ("no-entry-symbol", None, None),
-        Skipped::DeclinedThisHost => ("declined-this-host", None, None),
-        Skipped::NotExaminable => ("not-examinable", None, None),
-        Skipped::AlreadyLoaded { from } => ("already-loaded", Some(from), None),
-        Skipped::ProviderAlreadyLoaded { id, from } => {
-            ("provider-already-loaded", Some(from), Some(id.as_str()))
-        } // No wildcard arm. `Skipped` is `#[non_exhaustive]` for a
-          // CONSUMER; in here every variant is known, so appending one is a
-          // compile error at this match rather than a reason that silently
-          // crosses the boundary unnamed.
+    let (name, from, id, abi) = match why {
+        Skipped::NoEntrySymbol => ("no-entry-symbol", None, None, None),
+        Skipped::DeclinedThisHost => ("declined-this-host", None, None, None),
+        Skipped::NotExaminable => ("not-examinable", None, None, None),
+        Skipped::UnsupportedAbi { declared } => ("unsupported-abi", None, None, Some(*declared)),
+        Skipped::AlreadyLoaded { from } => ("already-loaded", Some(from), None, None),
+        Skipped::ProviderAlreadyLoaded { id, from } => (
+            "provider-already-loaded",
+            Some(from),
+            Some(id.as_str()),
+            None,
+        ), // No wildcard arm. `Skipped` is `#[non_exhaustive]` for a
+           // CONSUMER; in here every variant is known, so appending one is a
+           // compile error at this match rather than a reason that silently
+           // crosses the boundary unnamed.
     };
     map.set("skipped", Value::string_in(alloc, name)?)?;
     if let Some(from) = from {
@@ -917,6 +963,9 @@ fn skip_value(alloc: Alloc, why: &Skipped) -> Result<Value, ValueError> {
     }
     if let Some(id) = id {
         map.set("id", Value::string_in(alloc, id)?)?;
+    }
+    if let Some(abi) = abi {
+        map.set("abi", Value::int(i64::from(abi)))?;
     }
     Ok(map)
 }

@@ -495,7 +495,17 @@ exclude = ["Entry"]
 # cbindgen monomorphises the generic newtype and emits the Rust name.
 # A header shares one flat namespace, so the typedef it introduces has to
 # carry the prefix like every other name here.
+  "HostServices",
 "MaybeNull_Map" = "guatiao_map_ptr"
 
 [parse]
 parse_deps = false
+  "KindTable",
+  "KindTables",
+  "KindHeader",
+  "ProviderError",
+"HostServices" = "guatiao_host_services"
+"KindTable" = "guatiao_kind_table"
+"KindTables" = "guatiao_kind_tables"
+"KindHeader" = "guatiao_kind_header"
+"ProviderError" = "guatiao_provider_error"

@@ -87,7 +87,7 @@ int main(int argc, char **argv) {
       CHECK(text_is(field(loaded, "id"), "hello_library"), "wrong library id");
       CHECK(text_is(field(loaded, "key"), "hello_library"),
             "the default library key is %%id");
-      CHECK(guatiao_int_or(guatiao_map_find(loaded, s("providers")), -1) == 3,
+      CHECK(guatiao_int_or(guatiao_map_find(loaded, s("providers")), -1) == 4,
             "expected three providers");
     }
   }
@@ -147,6 +147,83 @@ int main(int argc, char **argv) {
   CHECK(st == GUATIAO_OK && guatiao_list_items(&answer).len == 0,
         "an unserved kind should be an empty list");
   guatiao_value_free(&answer);
+
+  /* ---- ranking: the host's priority decides the order ---------------- */
+
+  /* Unranked, the key decides: almanac, greeter, sundial. */
+  st = guatiao_registry_providers(reg, s("everything"), &alloc, &answer);
+  CHECK(st == GUATIAO_OK, "providers(everything) returned %d", (int)st);
+  {
+    guatiao_values items = guatiao_list_items(&answer);
+    CHECK(items.len == 3, "expected three, saw %zu", items.len);
+    if (items.len == 3) {
+      CHECK(text_is(field(&items.ptr[0], "id"), "hello_library_almanac") &&
+                text_is(field(&items.ptr[2], "id"), "hello_library_sundial"),
+            "unranked providers come back by key");
+    }
+  }
+  guatiao_value_free(&answer);
+
+  /* Ranked, the raised one goes first -- in this listing, not only in
+     `available`. */
+  st = guatiao_registry_set_priority(reg, s("hello_library_sundial"), 10);
+  CHECK(st == GUATIAO_OK, "set_priority returned %d", (int)st);
+  CHECK(guatiao_registry_priority(reg, s("hello_library_sundial")) == 10,
+        "the rank reads back");
+  st = guatiao_registry_providers(reg, s("everything"), &alloc, &answer);
+  CHECK(st == GUATIAO_OK, "providers(everything) returned %d", (int)st);
+  {
+    guatiao_values items = guatiao_list_items(&answer);
+    CHECK(items.len == 3 &&
+              text_is(field(&items.ptr[0], "id"), "hello_library_sundial"),
+          "a raised provider is listed first");
+  }
+  guatiao_value_free(&answer);
+  /* And the empty kind lists everything, in the same order. */
+  st = guatiao_registry_providers(reg, s(""), &alloc, &answer);
+  CHECK(st == GUATIAO_OK &&
+            guatiao_list_items(&answer).len == 4 &&
+            text_is(field(&guatiao_list_items(&answer).ptr[0], "id"),
+                    "hello_library_sundial"),
+        "an empty kind lists every provider, ranked");
+  guatiao_value_free(&answer);
+  st = guatiao_registry_set_priority(reg, s("hello_library_sundial"), 0);
+  CHECK(st == GUATIAO_OK, "set_priority returned %d", (int)st);
+
+  /* ---- what a library sees of this host ----------------------------- */
+
+  {
+    /* The block a library keeps. A host driving a library by hand passes
+       this to guatiao_library_entry; here it is read the way a library
+       would read it. */
+    const guatiao_host_info *host = guatiao_registry_host(reg);
+    CHECK(host != NULL, "the registry hands out a host block");
+    if (host != NULL) {
+      CHECK(host->struct_size >= sizeof(guatiao_host_info),
+            "the block declares this build's size");
+      CHECK(guatiao_str_eq(host->host_id, s("c-host")), "the host's own id");
+      CHECK(host->services != NULL, "a registry offers services");
+      if (host->services != NULL && host->services->list != NULL) {
+        size_t total = 0;
+        st = host->services->list(host->services->ctx, s("greeter"), NULL, 0,
+                                  &total);
+        CHECK(st == GUATIAO_OK && total == 1, "one greeter, counted");
+        const guatiao_provider_info *found[4] = {0};
+        size_t written = 0;
+        st = host->services->list(host->services->ctx, s(""), found, 4,
+                                  &written);
+        CHECK(st == GUATIAO_OK && written == 4, "every provider listed");
+        const guatiao_provider_info *one = NULL;
+        st = host->services->get(host->services->ctx,
+                                 s("hello_library_greeter"), &one);
+        CHECK(st == GUATIAO_OK && one != NULL &&
+                  guatiao_str_eq(one->id, s("hello_library_greeter")),
+              "get hands back the library's own descriptor");
+        CHECK(host->services->alloc(host->services->ctx) == &alloc,
+              "the same allocator the registry was given");
+      }
+    }
+  }
 
   /* ---- the provider that declares no kind at all --------------------- */
 

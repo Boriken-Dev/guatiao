@@ -46,6 +46,10 @@ pub enum Status {
     GUATIAO_ERR_NOT_FOUND = 10,
     /// A required pointer was null.
     GUATIAO_ERR_NULL = 11,
+    /// The thing asked is gone: a host's registry that has been freed,
+    /// asked through the services a library kept. Nothing freed was
+    /// touched.
+    GUATIAO_ERR_GONE = 12,
     /// A callback unwound, or a panic was caught at this boundary. The
     /// operation did not happen; the process is still usable.
     GUATIAO_ERR_INTERNAL = 100,

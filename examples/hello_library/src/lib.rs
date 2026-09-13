@@ -23,10 +23,10 @@
 #![allow(non_camel_case_types)]
 
 use std::ffi::c_void;
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::{OnceLock, PoisonError, RwLock};
 
-use guatiao::library::{HostInfo, Kinds, LibraryInfo, ProviderInfo, Providers};
+use guatiao::library::{Host, KindTables, Kinds, LibraryInfo, ProviderInfo, Providers};
 use guatiao::schema::{FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::value::read::str_or;
@@ -241,6 +241,102 @@ static GREETER: GreeterVtable = GreeterVtable {
     outstanding: Some(outstanding),
 };
 
+// --- a provider that reaches another through the host -------------------
+
+/// The function table of the `echo` kind: one slot that greets by name,
+/// by finding a `greeter` through the host and calling it.
+#[repr(C)]
+pub struct EchoVtable {
+    /// `sizeof(EchoVtable)` as the library compiled it. Always first.
+    pub struct_size: u32,
+    /// Writes the greeter's answer for `name` to `out`, an owned map the
+    /// caller then owns.
+    pub echo: Option<unsafe extern "C" fn(ctx: *mut c_void, name: Str, out: *mut Value) -> Status>,
+}
+
+/// The host this library was loaded by, kept from the latest entry call.
+/// A `Host` is `Copy + Send + Sync + 'static`, which is what makes keeping
+/// it possible with no `unsafe`. A process has one host; a test suite that
+/// loads this library from several registries gets the most recent one.
+static HOST: RwLock<Option<Host>> = RwLock::new(None);
+
+/// Finds `hello_library_greeter` through the host's services and greets
+/// through it. **Looked up on every call, never at `describe`**: what the
+/// host holds changes as it loads, and this provider may be asked before
+/// the greeter's library was — even though here it is the same library.
+///
+/// # Safety
+///
+/// `name` is readable for the call and `out` points at a writable node
+/// the caller will free.
+unsafe extern "C" fn echo(_ctx: *mut c_void, name: Str, out: *mut Value) -> Status {
+    if out.is_null() {
+        return Status::GUATIAO_ERR_NULL;
+    }
+    let Some(host) = *HOST.read().unwrap_or_else(PoisonError::into_inner) else {
+        return Status::GUATIAO_ERR_INTERNAL;
+    };
+    // Every greeter the host holds, in the host's order; this one wants a
+    // particular implementation, so it picks by id rather than taking the
+    // head.
+    let greeters = match host.list("greeter") {
+        Ok(found) => found,
+        Err(status) => return status,
+    };
+    let Some(greeter) = greeters
+        .into_iter()
+        .filter_map(ProviderInfo::view)
+        .find(|p| p.id == "hello_library_greeter")
+    else {
+        return Status::GUATIAO_ERR_NOT_FOUND;
+    };
+    // SAFETY: `greeter` claims the `greeter` kind, whose table this crate
+    // itself declares; `vtable_as` refuses a table shorter than the type.
+    let Some(table) = (unsafe { greeter.vtable_as::<GreeterVtable>() }) else {
+        return Status::GUATIAO_ERR_WRONG_KIND;
+    };
+    let Some(greet) = table.greet else {
+        return Status::GUATIAO_ERR_WRONG_KIND;
+    };
+
+    // SAFETY: the caller's contract says `name` is readable for the call;
+    // an empty view may carry any pointer and is never dereferenced.
+    let bytes: &[u8] = if name.len == 0 {
+        &[]
+    } else if name.ptr.is_null() {
+        return Status::GUATIAO_ERR_NULL;
+    } else {
+        unsafe { std::slice::from_raw_parts(name.ptr, name.len) }
+    };
+    let Ok(name) = std::str::from_utf8(bytes) else {
+        return Status::GUATIAO_ERR_BAD_VALUE;
+    };
+    let alloc = library_alloc();
+    let mut config = Value::map_in(alloc);
+    let text = match Value::string_in(alloc, name) {
+        Ok(t) => t,
+        Err(e) => return Status::from(e),
+    };
+    if let Err(e) = config.set("name", text) {
+        return Status::from(e);
+    }
+    let mut answer = Value::absent();
+    // SAFETY: the greeter's contract, as declared on `greet` above; the
+    // config is a well-formed value and `answer` is a writable local.
+    let status = unsafe { greet(greeter.ctx, &config, &mut answer) };
+    if status != Status::GUATIAO_OK {
+        return status;
+    }
+    // SAFETY: `out` is writable, and whatever it held is the caller's.
+    unsafe { out.write(answer) };
+    Status::GUATIAO_OK
+}
+
+static ECHO: EchoVtable = EchoVtable {
+    struct_size: size_of::<EchoVtable>() as u32,
+    echo: Some(echo),
+};
+
 // --- the descriptor ----------------------------------------------------
 
 /// Everything the entry point hands back, kept alive for the life of the
@@ -271,7 +367,16 @@ unsafe impl Send for Registered {}
 static REGISTERED: OnceLock<Registered> = OnceLock::new();
 
 /// What this library offers. The one function an author writes.
-fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
+///
+/// Declining is an answer: a host speaking another envelope version gets
+/// null, which its loader reports as a skip rather than a failure. The
+/// host is kept, because the echo provider reaches the greeter through it
+/// on every call.
+fn describe(host: Host) -> Option<&'static LibraryInfo> {
+    if host.abi_version() != guatiao::library::ABI_VERSION {
+        return None;
+    }
+    *HOST.write().unwrap_or_else(PoisonError::into_inner) = Some(host);
     let registered = REGISTERED.get_or_init(|| {
         let alloc = library_alloc();
 
@@ -315,6 +420,7 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
         static SUNDIAL_KINDS: Names<2> =
             Names([Str::borrowed("timekeeper"), Str::borrowed("everything")]);
         static ALMANAC_KINDS: Names<1> = Names([Str::borrowed("everything")]);
+        static ECHO_KINDS: Names<1> = Names([Str::borrowed("echo")]);
 
         let providers = vec![
             ProviderInfo {
@@ -335,6 +441,7 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
                 // No slot: this greeter is available whenever it loaded,
                 // which is the common case and the right default.
                 available: None,
+                tables: KindTables::empty(),
             },
             ProviderInfo {
                 struct_size: size_of::<ProviderInfo>() as u32,
@@ -351,6 +458,7 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
                 version: Str::borrowed("1.0.0"),
                 // And it refuses, with a reason a host can show.
                 available: Some(almanac_available),
+                tables: KindTables::empty(),
             },
             // Claims a kind AND cannot run here, which is the case a host
             // must tell apart from nobody claiming the kind at all: the
@@ -367,6 +475,24 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
                 meta: MaybeNull::null(),
                 version: Str::borrowed(""),
                 available: Some(sundial_available),
+                tables: KindTables::empty(),
+            },
+            // Reaches the greeter through the host's services, which is
+            // the one thing a library could not do before it kept a
+            // `Host`.
+            ProviderInfo {
+                struct_size: size_of::<ProviderInfo>() as u32,
+                vtable_size: size_of::<EchoVtable>() as u32,
+                kinds: Kinds::new(&ECHO_KINDS.0),
+                id: Str::borrowed("hello_library_echo"),
+                display_name: Str::borrowed("Echo"),
+                config: std::ptr::null(),
+                vtable: &ECHO as *const EchoVtable as *const c_void,
+                ctx: std::ptr::null_mut(),
+                meta: MaybeNull::null(),
+                version: Str::borrowed(""),
+                available: None,
+                tables: KindTables::empty(),
             },
         ];
 
