@@ -171,7 +171,7 @@ fn a_scan_reports_every_candidate_it_passed_over() {
 
     // And the library that did load is usable, so the scan produced a
     // registry rather than just a report.
-    assert!(registry.provider("greeter", "hello").is_some());
+    assert!(registry.provider("hello").is_some());
 }
 
 /// An empty directory is an empty report, not an error.

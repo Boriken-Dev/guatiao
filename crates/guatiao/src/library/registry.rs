@@ -17,6 +17,13 @@
 //! library that registers into a copy of a table the host never reads,
 //! where the symptom is a lookup answering "not found" for something that
 //! was definitely registered.
+//!
+//! # What a provider is filed under is the host's choice
+//!
+//! A [`KeyTemplate`] renders one, `%id` by default. A host that wants two
+//! builds of one provider at once passes `%id@%version` to
+//! [`Registry::keyed_by`] and gets two entries where the default would
+//! have refused the second as a duplicate.
 
 #![forbid(unsafe_code)]
 
@@ -24,6 +31,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use super::desc::{ABI_VERSION, HostInfo};
+use super::key::{KeyError, KeyFields, KeyTemplate};
 use super::raw::{LibraryView, ProviderView};
 use crate::value::alloc::Alloc;
 use crate::value::types::MaybeNull;
@@ -49,14 +57,17 @@ pub enum LoadError {
         /// The file.
         path: PathBuf,
     },
-    /// Two libraries offer the same `(kind, id)`. Names both, because
-    /// "duplicate provider" without the second path is a message that
-    /// sends the reader looking through every library they have.
+    /// Two providers land on one key. Names both paths, because
+    /// "duplicate provider" without the second one is a message that sends
+    /// the reader looking through every library they have.
+    ///
+    /// Whether two providers collide is the host's own
+    /// [`KeyTemplate`]'s answer: under the default `%id` two versions of
+    /// one provider are a duplicate, and under `%id@%version` they are the
+    /// arrangement the host asked for.
     Duplicate {
-        /// What they both claim.
-        kind: String,
-        /// What they both claim.
-        id: String,
+        /// What they both render.
+        key: String,
         /// The one already loaded.
         first: PathBuf,
         /// The one that arrived second and was refused.
@@ -75,14 +86,9 @@ impl std::fmt::Display for LoadError {
                 "{} answered the entry symbol with a descriptor this build cannot read",
                 path.display()
             ),
-            LoadError::Duplicate {
-                kind,
-                id,
-                first,
-                second,
-            } => write!(
+            LoadError::Duplicate { key, first, second } => write!(
                 f,
-                "both {} and {} offer {kind}/{id}",
+                "both {} and {} offer `{key}`",
                 first.display(),
                 second.display()
             ),
@@ -117,17 +123,38 @@ pub enum Skipped {
 pub struct Provider {
     view: ProviderView,
     from: PathBuf,
+    library: String,
+    version: String,
+    key: String,
 }
 
 impl Provider {
-    /// What sort of thing it is.
+    /// What it speaks: a capability, so a host can ask for every provider
+    /// that offers one table.
     pub fn kind(&self) -> &str {
         &self.view.kind
     }
 
-    /// Its identifier within that kind.
+    /// Its own identifier, unique across every provider loaded.
     pub fn id(&self) -> &str {
         &self.view.id
+    }
+
+    /// The id of the library offering it.
+    pub fn library(&self) -> &str {
+        &self.library
+    }
+
+    /// The version of the library offering it. Declared semver, compared
+    /// here as a string.
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    /// What this registry filed it under, rendered from the host's
+    /// [`KeyTemplate`]. The argument [`Registry::provider`] takes.
+    pub fn key(&self) -> &str {
+        &self.key
     }
 
     /// A name to show a person. Empty when the library offered none.
@@ -191,6 +218,17 @@ impl Provider {
     pub fn ctx(&self) -> *mut std::ffi::c_void {
         self.view.ctx
     }
+
+    /// Everything a [`KeyTemplate`] can name.
+    fn fields(&self) -> KeyFields<'_> {
+        KeyFields {
+            id: &self.view.id,
+            kind: &self.view.kind,
+            name: &self.view.display_name,
+            library: &self.library,
+            version: &self.version,
+        }
+    }
 }
 
 /// One library that was loaded, and what it offered.
@@ -213,9 +251,11 @@ pub struct Loaded {
 #[derive(Debug)]
 pub struct Registry {
     host: HostInfo,
+    key: KeyTemplate,
     loaded: Vec<Loaded>,
     providers: Vec<Provider>,
-    by_key: BTreeMap<(String, String), usize>,
+    /// A rendered key to an index into `providers`.
+    by_key: BTreeMap<String, usize>,
 }
 
 impl Registry {
@@ -237,10 +277,49 @@ impl Registry {
                 alloc: alloc.map_or(std::ptr::null(), |a| a.as_raw()),
                 meta: MaybeNull::null(),
             },
+            key: KeyTemplate::default(),
             loaded: Vec::new(),
             providers: Vec::new(),
             by_key: BTreeMap::new(),
         }
+    }
+
+    /// Names providers with `template` rather than the default `%id`.
+    ///
+    /// `"%id@%version"` is the one to reach for: it is what lets two
+    /// builds of one provider sit in one registry, where the default makes
+    /// the second a [`LoadError::Duplicate`]. The whole field list is on
+    /// [`KeyTemplate`].
+    ///
+    /// Callable at any point — anything already loaded is re-keyed, and a
+    /// template that would give two of them the same key is refused with
+    /// [`KeyError::Collides`] rather than losing one.
+    pub fn keyed_by(mut self, template: &str) -> Result<Registry, KeyError> {
+        let key = KeyTemplate::parse(template)?;
+        let rendered: Vec<String> = self
+            .providers
+            .iter()
+            .map(|p| key.render(p.fields()))
+            .collect();
+
+        let mut by_key = BTreeMap::new();
+        for (at, one) in rendered.iter().enumerate() {
+            if by_key.insert(one.clone(), at).is_some() {
+                return Err(KeyError::Collides { key: one.clone() });
+            }
+        }
+
+        for (provider, one) in self.providers.iter_mut().zip(rendered) {
+            provider.key = one;
+        }
+        self.by_key = by_key;
+        self.key = key;
+        Ok(self)
+    }
+
+    /// The template this registry files providers under.
+    pub fn key_template(&self) -> &KeyTemplate {
+        &self.key
     }
 
     /// Loads one file the caller named.
@@ -271,25 +350,42 @@ impl Registry {
         // Refuse the whole library before recording any of it, so a
         // duplicate leaves the registry exactly as it was rather than
         // half-populated.
+        let mut keys = Vec::with_capacity(views.len());
         for view in &views {
-            let key = (view.kind.clone(), view.id.clone());
-            if let Some(&first) = self.by_key.get(&key) {
+            let key = self.key.render(KeyFields {
+                id: &view.id,
+                kind: &view.kind,
+                name: &view.display_name,
+                library: &id,
+                version: &version,
+            });
+            // Against what is loaded, and against the rest of this same
+            // library: a template naming no field that varies WITHIN a
+            // library collides there first.
+            let first = self
+                .by_key
+                .get(&key)
+                .map(|&at| self.providers[at].from.clone())
+                .or_else(|| keys.contains(&key).then(|| path.to_path_buf()));
+            if let Some(first) = first {
                 return Err(LoadError::Duplicate {
-                    kind: view.kind.clone(),
-                    id: view.id.clone(),
-                    first: self.providers[first].from.clone(),
+                    key,
+                    first,
                     second: path.to_path_buf(),
                 });
             }
+            keys.push(key);
         }
 
         let count = views.len();
-        for view in views {
-            let key = (view.kind.clone(), view.id.clone());
-            self.by_key.insert(key, self.providers.len());
+        for (view, key) in views.into_iter().zip(keys) {
+            self.by_key.insert(key.clone(), self.providers.len());
             self.providers.push(Provider {
                 view,
                 from: path.to_path_buf(),
+                library: id.clone(),
+                version: version.clone(),
+                key,
             });
         }
         self.loaded.push(Loaded {
@@ -302,16 +398,30 @@ impl Registry {
         Ok(self.loaded.last())
     }
 
-    /// Every provider of one kind, in the order they were loaded.
+    /// Every provider that speaks one kind, in the order they were loaded.
+    ///
+    /// The capability question — "what can render a table?" — as opposed
+    /// to [`provider`](Registry::provider), which is the identity one.
     pub fn providers(&self, kind: &str) -> impl Iterator<Item = &Provider> {
         self.providers.iter().filter(move |p| p.kind() == kind)
     }
 
-    /// One provider by kind and id.
-    pub fn provider(&self, kind: &str, id: &str) -> Option<&Provider> {
-        self.by_key
-            .get(&(kind.to_string(), id.to_string()))
-            .map(|&i| &self.providers[i])
+    /// One provider by the key this registry filed it under.
+    ///
+    /// Under the default template that is its id; under `%id@%version` it
+    /// is `"hello@1.2.0"`. [`Provider::key`] is the other side of this,
+    /// for a host that has a provider and wants the name it answers to.
+    pub fn provider(&self, key: &str) -> Option<&Provider> {
+        self.by_key.get(key).map(|&at| &self.providers[at])
+    }
+
+    /// Every provider with one id, whatever the key template made of it —
+    /// which is every loaded version of it, in the order they loaded.
+    ///
+    /// Which of them is "newest" is the host's to decide, with the semver
+    /// library it already has.
+    pub fn providers_of(&self, id: &str) -> impl Iterator<Item = &Provider> {
+        self.providers.iter().filter(move |p| p.id() == id)
     }
 
     /// Every library loaded so far.

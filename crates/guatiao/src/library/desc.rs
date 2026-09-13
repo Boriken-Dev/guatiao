@@ -142,7 +142,13 @@ pub struct LibraryInfo {
     /// A stable identifier for the library itself, for diagnostics and
     /// for refusing to load the same one twice.
     pub id: Str,
-    /// The library's own version string, uninterpreted.
+    /// Its version, declared **semver**.
+    ///
+    /// A field a host can name in the key it files providers under
+    /// (`%version`), which is what lets two builds of one provider be
+    /// loaded at once. This crate compares it as a string and never parses
+    /// it — ordering is a host's policy, applied with the semver library
+    /// it already has.
     pub version: Str,
     /// Everything it offers. May be empty, which is a library that
     /// loaded and had nothing for this host.
@@ -203,10 +209,20 @@ pub struct ProviderInfo {
     /// Zero when there is no vtable.
     pub vtable_size: u32,
     /// What sort of thing this is: `"greeter"`, `"codec"`, whatever the
-    /// host and the library have agreed. Two providers of different kinds
-    /// may share an id.
+    /// host and the library have agreed.
+    ///
+    /// A **capability**, not a name: it says which vtable this provider
+    /// speaks, so a host can ask for everything that speaks one. What
+    /// identifies the provider is `id`.
     pub kind: Str,
-    /// This provider's own identifier, unique within its kind.
+    /// This provider's own identifier, **unique across all providers**.
+    ///
+    /// Names an implementation rather than a protocol: `"pve"`, `"mdns"`.
+    /// Two providers never share an id, not even of different kinds, which
+    /// is what lets a host resolve one without knowing what it speaks.
+    ///
+    /// What a host files it under is that host's own key template, `%id`
+    /// by default.
     pub id: Str,
     /// A name to show a person. May be empty, and a host that shows
     /// nothing to anybody ignores it.

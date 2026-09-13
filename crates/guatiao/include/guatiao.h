@@ -614,12 +614,22 @@ typedef struct guatiao_provider_info {
   uint32_t vtable_size;
   /*
    What sort of thing this is: `"greeter"`, `"codec"`, whatever the
-   host and the library have agreed. Two providers of different kinds
-   may share an id.
+   host and the library have agreed.
+
+   A **capability**, not a name: it says which vtable this provider
+   speaks, so a host can ask for everything that speaks one. What
+   identifies the provider is `id`.
    */
   struct guatiao_str kind;
   /*
-   This provider's own identifier, unique within its kind.
+   This provider's own identifier, **unique across all providers**.
+
+   Names an implementation rather than a protocol: `"pve"`, `"mdns"`.
+   Two providers never share an id, not even of different kinds, which
+   is what lets a host resolve one without knowing what it speaks.
+
+   What a host files it under is that host's own key template, `%id`
+   by default.
    */
   struct guatiao_str id;
   /*
@@ -708,7 +718,13 @@ typedef struct guatiao_library_info {
    */
   struct guatiao_str id;
   /*
-   The library's own version string, uninterpreted.
+   Its version, declared **semver**.
+
+   A field a host can name in the key it files providers under
+   (`%version`), which is what lets two builds of one provider be
+   loaded at once. This crate compares it as a string and never parses
+   it — ordering is a host's policy, applied with the semver library
+   it already has.
    */
   struct guatiao_str version;
   /*

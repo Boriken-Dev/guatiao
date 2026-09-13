@@ -331,14 +331,39 @@ Host side:
 ```rust
 let mut reg = Registry::new("my-host", "1.0");
 reg.load_file(&path)?;                     // Result<Option<&Loaded>, LoadError>
-reg.providers("greeter")                   // impl Iterator<Item = &Provider>
-reg.provider("greeter", "hello")           // Option<&Provider>
+reg.providers("greeter")                   // by kind: impl Iterator<Item = &Provider>
+reg.provider("hello")                      // by key: Option<&Provider>
+reg.providers_of("hello")                  // every version of one id
 provider.config_schema()                   // Option<&'static Value>
 provider.vtable() -> (*const c_void, usize)
 provider.view().vtable_as::<T>()           // unsafe; checks vtable_size >= size_of::<T>()
 provider.meta()                            // Option<&'static Map>
 loaded.meta                                // Option<&'static Map>
 ```
+
+**What a provider is filed under is the host's choice**, not the loader's:
+
+```rust
+let reg = Registry::new("my-host", "1.0").keyed_by("%id@%version")?;
+reg.provider("hello@1.2.0")                // Option<&Provider>
+provider.key()                             // what it answers to
+```
+
+`KeyTemplate` fields are `%id`, `%kind`, `%name`, `%library`, `%version`;
+`%%` is a literal `%`, everything else is text. The default is `%id` — a
+provider id is unique, so a host loading one build of each needs nothing
+more; `%id@%version` is what makes two builds of one provider coexist
+where the default refuses the second as a `LoadError::Duplicate { key,
+first, second }`. Parsing refuses an unknown field, a `%` that begins
+nothing, and a template naming **no** field (which would key every
+provider the same). `keyed_by` re-keys what is already loaded and refuses
+a template that would collide there (`KeyError::Collides`).
+
+`kind` is a **capability** — which vtable it speaks — and is not part of
+identity. `id` is unique across every provider; `version` is the offering
+library's, declared semver and compared here as a string. Nothing in this
+crate parses or orders a version: "newest wins" is a host's policy, with
+the semver library it already has.
 
 **A loaded library is never unloaded.** Everything it hands over —
 strings, schemas, vtables — points into its mapping, so unloading would

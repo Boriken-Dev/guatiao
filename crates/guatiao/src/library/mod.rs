@@ -56,6 +56,8 @@
 //! its own descriptor is not that.
 
 pub mod desc;
+// What a host files a provider under. A `//` comment, never a `///`.
+pub mod key;
 // The one file here with `unsafe` in it: raw descriptor reads, the entry
 // macro, and the loader. A `//` comment, never a `///`.
 pub mod raw;
@@ -70,6 +72,7 @@ pub mod registry;
 pub mod scan;
 
 pub use desc::{ABI_VERSION, HostInfo, LibraryInfo, ProviderInfo, Providers};
+pub use key::{KeyError, KeyFields, KeyTemplate};
 pub use raw::{ENTRY_SYMBOL, EntryFn, LibraryView, ProviderView, answer, read_host};
 #[cfg(feature = "load")]
 pub use registry::{LoadError, Loaded, Provider, Registry, Skipped};

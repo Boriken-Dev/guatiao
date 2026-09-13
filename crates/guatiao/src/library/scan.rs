@@ -114,8 +114,8 @@ pub fn declares_entry_symbol(path: &Path) -> Result<bool, std::io::Error> {
 /// more than it sounds like it should.
 ///
 /// Files are visited in sorted order, so two runs on the same directory
-/// report the same thing and a duplicate `(kind, id)` names the same
-/// winner each time.
+/// report the same thing and two providers landing on one key name the
+/// same winner each time.
 pub fn scan_dir(registry: &mut Registry, dir: &Path) -> Result<LoadReport, std::io::Error> {
     let mut report = LoadReport::default();
 

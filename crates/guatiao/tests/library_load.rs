@@ -27,7 +27,7 @@
 use std::path::PathBuf;
 
 use guatiao::ReadValue;
-use guatiao::library::Registry;
+use guatiao::library::{KeyError, LoadError, Provider, Registry};
 use guatiao::schema::read::SchemaRef;
 use guatiao::schema::validate_map;
 use guatiao::value::status::Status;
@@ -138,7 +138,7 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
     );
 
     let provider = registry
-        .provider("greeter", "hello")
+        .provider("hello")
         .expect("the provider it registered");
     assert_eq!(provider.display_name(), "Hello");
     assert!(
@@ -161,7 +161,7 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
 fn the_host_validates_a_configuration_against_the_librarys_own_schema() {
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
     registry.load_file(&library_path()).unwrap().unwrap();
-    let provider = registry.provider("greeter", "hello").unwrap();
+    let provider = registry.provider("hello").unwrap();
 
     let declared = provider
         .config_schema()
@@ -194,7 +194,7 @@ fn the_host_validates_a_configuration_against_the_librarys_own_schema() {
 fn a_tree_the_library_built_is_extended_and_freed_by_the_host() {
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
     registry.load_file(&library_path()).unwrap().unwrap();
-    let provider = registry.provider("greeter", "hello").unwrap();
+    let provider = registry.provider("hello").unwrap();
 
     let (ptr, size) = provider.vtable();
     let (greet, outstanding) = read_greeter(ptr, size);
@@ -297,4 +297,79 @@ fn a_library_that_is_not_one_of_ours_is_reported_rather_than_failing() {
     if checked == 0 {
         eprintln!("no non-library library was beside the test binary; nothing to check");
     }
+}
+
+/// A host names its providers, and by default that name is the id.
+///
+/// What this pins is the wiring a real side-by-side arrangement rests on:
+/// the library's own version reaching the provider, the key rendering from
+/// it, and the same provider twice being refused under a key that cannot
+/// tell the two apart.
+#[test]
+fn a_host_files_providers_under_a_key_it_chooses() {
+    let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+    let path = library_path();
+    registry.load_file(&path).unwrap().unwrap();
+
+    assert_eq!(registry.key_template().as_str(), "%id");
+    let provider = registry
+        .provider("hello")
+        .expect("the default key is `%id`");
+    let version = provider.version().to_string();
+    assert_eq!(provider.key(), "hello");
+    assert_eq!(provider.library(), "hello_library");
+    assert!(!version.is_empty(), "the library declares its version");
+    assert_eq!(
+        registry.loaded()[0].version,
+        version,
+        "a provider's version is its library's"
+    );
+
+    assert_eq!(registry.providers_of("hello").count(), 1);
+    assert_eq!(
+        registry.providers_of("nonesuch").count(),
+        0,
+        "an id nobody offers is empty rather than an error"
+    );
+
+    // The same library again renders the same key, which is the case the
+    // default template exists to refuse.
+    let err = registry
+        .load_file(&path)
+        .expect_err("one key cannot name two providers");
+    match err {
+        LoadError::Duplicate { key, first, second } => {
+            assert_eq!(key, "hello");
+            assert_eq!(first, path);
+            assert_eq!(second, path);
+        }
+        other => panic!("expected a duplicate, got {other}"),
+    }
+    assert_eq!(
+        registry.all().len(),
+        1,
+        "a refused library leaves the registry as it was"
+    );
+
+    // A host that wants versions apart says so, and what is already loaded
+    // is re-keyed rather than having to be loaded again.
+    let registry = registry
+        .keyed_by("%id@%version")
+        .expect("one provider cannot collide with itself");
+    let key = format!("hello@{version}");
+    assert_eq!(registry.provider(&key).map(Provider::id), Some("hello"));
+    assert_eq!(registry.all()[0].key(), key);
+    assert!(
+        registry.provider("hello").is_none(),
+        "the old key is not also kept"
+    );
+
+    // A template naming something no descriptor has is refused where it is
+    // written, not at the next load.
+    assert_eq!(
+        registry.keyed_by("%id@%revision").unwrap_err(),
+        KeyError::UnknownField {
+            name: "revision".to_string()
+        }
+    );
 }
