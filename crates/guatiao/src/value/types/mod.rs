@@ -58,11 +58,13 @@
 pub mod buffer;
 pub mod list;
 pub mod map;
+pub mod maybe_null;
 pub mod text;
 
 pub use buffer::{Buffer, Bytes};
 pub use list::{List, Values};
 pub use map::{Entries, Entry, Map};
+pub use maybe_null::MaybeNull;
 pub use text::{Str, Text};
 
 // The node lives beside this directory rather than in it, and every path

@@ -31,7 +31,7 @@ use guatiao::schema::{KindBuilder, OptionBuilder, SchemaBuilder};
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::value::read::str_or;
 use guatiao::value::status::Status;
-use guatiao::value::types::{Str, Value};
+use guatiao::value::types::{Map, MaybeNull, Str, Value};
 
 // --- the kind ----------------------------------------------------------
 
@@ -201,6 +201,11 @@ static GREETER: GreeterVtable = GreeterVtable {
 struct Registered {
     #[allow(dead_code)]
     schema: Box<Value>,
+    /// The metadata this library declares. Boxed for the same reason the
+    /// schema is: the descriptor points at it, so it needs an address
+    /// that does not move when this struct does.
+    #[allow(dead_code)]
+    meta: Box<Map>,
     #[allow(dead_code)]
     providers: Vec<ProviderInfo>,
     desc: LibraryInfo,
@@ -235,6 +240,15 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
                 .expect("a schema this small does not exhaust an allocator"),
         );
 
+        // What the envelope did not think of. A host that does not know
+        // these keys skips them — which is the point of the slot.
+        let mut declared = Map::new_in(alloc);
+        declared
+            .set("built-with", env!("CARGO_PKG_NAME"))
+            .expect("a two-key map does not exhaust an allocator");
+        declared.set("greeting-language", "en").expect("as above");
+        let meta = Box::new(declared);
+
         let providers = vec![ProviderInfo {
             struct_size: size_of::<ProviderInfo>() as u32,
             vtable_size: size_of::<GreeterVtable>() as u32,
@@ -244,6 +258,7 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
             config: &*schema as *const Value,
             vtable: &GREETER as *const GreeterVtable as *const c_void,
             ctx: std::ptr::null_mut(),
+            meta: MaybeNull::null(),
         }];
 
         let desc = LibraryInfo {
@@ -255,10 +270,14 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
                 ptr: providers.as_ptr(),
                 len: providers.len(),
             },
+            // SAFETY-adjacent: the box outlives the process, because
+            // `Registered` is held in a `OnceLock` that is never cleared.
+            meta: MaybeNull::of(unsafe { &*(&*meta as *const Map) }),
         };
 
         Registered {
             schema,
+            meta,
             providers,
             desc,
         }

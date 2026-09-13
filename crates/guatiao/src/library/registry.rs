@@ -24,8 +24,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use super::desc::{ABI_VERSION, HostInfo};
-use super::raw::ProviderView;
+use super::raw::{LibraryView, ProviderView};
 use crate::value::alloc::Alloc;
+use crate::value::types::MaybeNull;
 use crate::value::types::Str;
 
 /// Why a file could not be loaded.
@@ -141,6 +142,14 @@ impl Provider {
         self.view.config
     }
 
+    /// Whatever else this provider declared, or `None`.
+    ///
+    /// A key this host does not recognise is skipped, the same rule the
+    /// value model has for a tag it does not know.
+    pub fn meta(&self) -> Option<&'static crate::value::types::Map> {
+        self.view.meta
+    }
+
     /// The function table and the size the library compiled it at.
     ///
     /// **Deliberately raw, and deliberately not generic.** Whoever
@@ -160,6 +169,16 @@ impl Provider {
         (self.view.vtable, self.view.vtable_size)
     }
 
+    /// The whole descriptor this provider was read from.
+    ///
+    /// [`ProviderView::vtable_as`] is on it, because casting a table to a
+    /// type is the one thing this module cannot do: it carries
+    /// `#![forbid(unsafe_code)]`, which is worth more than the
+    /// convenience of a shorter call.
+    pub fn view(&self) -> &ProviderView {
+        &self.view
+    }
+
     /// The context pointer to hand back to every call through the table.
     pub fn ctx(&self) -> *mut std::ffi::c_void {
         self.view.ctx
@@ -177,6 +196,9 @@ pub struct Loaded {
     pub version: String,
     /// How many providers it registered.
     pub providers: usize,
+    /// Whatever else the library declared, or `None`. Borrowed from its
+    /// image, which is never unloaded.
+    pub meta: Option<&'static crate::value::types::Map>,
 }
 
 /// The host's own table of what it has loaded.
@@ -205,6 +227,7 @@ impl Registry {
                 host_id: Str::borrowed(id),
                 host_version: Str::borrowed(version),
                 alloc: alloc.map_or(std::ptr::null(), |a| a.as_raw()),
+                meta: MaybeNull::null(),
             },
             loaded: Vec::new(),
             providers: Vec::new(),
@@ -227,9 +250,15 @@ impl Registry {
             path: path.to_path_buf(),
             reason: e.to_string(),
         })?;
-        let Some((id, version, views)) = opened else {
+        let Some(lib) = opened else {
             return Ok(None);
         };
+        let LibraryView {
+            id,
+            version,
+            meta,
+            providers: views,
+        } = lib;
 
         // Refuse the whole library before recording any of it, so a
         // duplicate leaves the registry exactly as it was rather than
@@ -260,6 +289,7 @@ impl Registry {
             id,
             version,
             providers: count,
+            meta,
         });
         Ok(self.loaded.last())
     }

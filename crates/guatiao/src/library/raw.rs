@@ -40,7 +40,7 @@ use std::ffi::c_void;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use super::desc::{HostInfo, LibraryInfo, ProviderInfo};
-use crate::value::types::{Str, Value};
+use crate::value::types::{Map, MaybeNull, Str, Value};
 
 /// The symbol a library exports, NUL-terminated for the loader.
 pub const ENTRY_SYMBOL: &[u8] = b"guatiao_library_entry\0";
@@ -127,6 +127,7 @@ pub unsafe fn read_host(raw: *const HostInfo) -> Option<HostInfo> {
             host_id: std::ptr::addr_of!((*raw).host_id).read(),
             host_version: std::ptr::addr_of!((*raw).host_version).read(),
             alloc: std::ptr::null(),
+            meta: MaybeNull::null(),
         }
     };
 
@@ -136,6 +137,10 @@ pub unsafe fn read_host(raw: *const HostInfo) -> Option<HostInfo> {
     if declared >= HostInfo::alloc_end() {
         // SAFETY: the guard just established the field is present.
         info.alloc = unsafe { std::ptr::addr_of!((*raw).alloc).read() };
+    }
+    if declared >= HostInfo::meta_end() {
+        // SAFETY: as above.
+        info.meta = unsafe { std::ptr::addr_of!((*raw).meta).read() };
     }
     Some(info)
 }
@@ -194,6 +199,54 @@ pub struct ProviderView {
     pub vtable_size: usize,
     /// Handed back to every call through the table.
     pub ctx: *mut c_void,
+    /// Whatever else the provider declared, or `None`. See
+    /// [`ProviderInfo::meta`].
+    pub meta: Option<&'static Map>,
+}
+
+impl ProviderView {
+    /// The vtable as `T`, or `None` when the library compiled a shorter
+    /// one than this host knows.
+    ///
+    /// **The check is `vtable_size >= size_of::<T>()`.** A library built
+    /// before the host appended a slot declares a smaller table, and
+    /// casting to `T` anyway hands out a reference whose tail is whatever
+    /// followed the table in that library's image. A host that wants to
+    /// support the older library asks for the smaller `T` it also knows,
+    /// and both answer `Some`.
+    ///
+    /// `None` for a null table, which is what a provider offering no
+    /// behaviour declares.
+    ///
+    /// # Safety
+    ///
+    /// `T` is the vtable type this provider's **kind** defines, laid out
+    /// as the library compiled it. Nothing in the envelope can check that
+    /// — a `kind` is a name, and what it means is agreed between whoever
+    /// defined it and whoever implements it.
+    pub unsafe fn vtable_as<T>(&self) -> Option<&T> {
+        if self.vtable.is_null() || self.vtable_size < size_of::<T>() {
+            return None;
+        }
+        // SAFETY: the caller states `T` is this kind's table; the pointer
+        // is non-null and the library declared at least `size_of::<T>()`
+        // bytes at it; and a loaded library is never unloaded, so the
+        // borrow lives as long as the provider.
+        Some(unsafe { &*self.vtable.cast::<T>() })
+    }
+}
+
+/// One library's descriptor, read out once.
+#[derive(Debug, Clone)]
+pub struct LibraryView {
+    /// The library's own identifier.
+    pub id: String,
+    /// Its version string, uninterpreted.
+    pub version: String,
+    /// Whatever else it declared, or `None`. See [`LibraryInfo::meta`].
+    pub meta: Option<&'static Map>,
+    /// What it offers.
+    pub providers: Vec<ProviderView>,
 }
 
 /// Reads a library descriptor and every provider in it.
@@ -203,9 +256,7 @@ pub struct ProviderView {
 /// `raw` came from a library's entry point and points at a descriptor
 /// that stays valid for the life of the process, which is what never
 /// unloading the library guarantees.
-pub(crate) unsafe fn read_library(
-    raw: *const LibraryInfo,
-) -> Option<(String, String, Vec<ProviderView>)> {
+pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Option<LibraryView> {
     if raw.is_null() {
         return None;
     }
@@ -224,6 +275,16 @@ pub(crate) unsafe fn read_library(
         )
     };
 
+    let mut meta = None;
+    if declared >= LibraryInfo::meta_end() {
+        // SAFETY: the guard established the field is present.
+        let raw_meta = unsafe { std::ptr::addr_of!((*raw).meta).read() };
+        // SAFETY: a non-null `meta` is a well-formed map by the contract
+        // on the field, and a descriptor's storage lives as long as the
+        // library, which is for the life of the process.
+        meta = unsafe { raw_meta.get() };
+    }
+
     let mut out = Vec::with_capacity(providers.len);
     if providers.len > 0 && providers.ptr.is_null() {
         return None;
@@ -234,7 +295,12 @@ pub(crate) unsafe fn read_library(
         // SAFETY: forwarded.
         out.push(unsafe { read_provider(entry) }?);
     }
-    Some((id, version, out))
+    Some(LibraryView {
+        id,
+        version,
+        meta,
+        providers: out,
+    })
 }
 
 /// # Safety
@@ -259,6 +325,14 @@ unsafe fn read_provider(raw: *const ProviderInfo) -> Option<ProviderView> {
             vtable: std::ptr::addr_of!((*raw).vtable).read(),
             vtable_size: std::ptr::addr_of!((*raw).vtable_size).read() as usize,
             ctx: std::ptr::addr_of!((*raw).ctx).read(),
+            meta: if declared >= ProviderInfo::meta_end() {
+                // SAFETY: the guard established the field is present; a
+                // non-null `meta` is a well-formed map by the contract on
+                // the field; and the library is never unloaded.
+                std::ptr::addr_of!((*raw).meta).read().get()
+            } else {
+                None
+            },
         })
     }
 }
@@ -277,7 +351,7 @@ unsafe fn read_provider(raw: *const ProviderInfo) -> Option<ProviderView> {
 pub(crate) unsafe fn open(
     path: &std::path::Path,
     host: &HostInfo,
-) -> Result<Option<(String, String, Vec<ProviderView>)>, libloading::Error> {
+) -> Result<Option<LibraryView>, libloading::Error> {
     // SAFETY: the caller's side of the contract, stated above.
     let library = unsafe { libloading::Library::new(path)? };
 
@@ -322,8 +396,265 @@ pub(crate) unsafe fn open(
 pub(crate) fn open_library(
     path: &std::path::Path,
     host: &HostInfo,
-) -> Result<Option<(String, String, Vec<ProviderView>)>, libloading::Error> {
+) -> Result<Option<LibraryView>, libloading::Error> {
     // SAFETY: naming a file is choosing to run it, which is the contract
     // stated on `Registry::load_file` and on `open` below.
     unsafe { open(path, host) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::library::desc::{LibraryInfo, ProviderInfo, Providers};
+
+    /// The byte every descriptor's tail is filled with.
+    ///
+    /// Non-zero on purpose. A tail of zeroes reads back as a null pointer
+    /// and a zero size, which is exactly what a correct guard answers — so
+    /// a reader with NO guard would pass every assertion below. `0xAA`
+    /// makes the two outcomes different.
+    const TAIL: u8 = 0xAA;
+
+    /// A descriptor of `T`, `declared` bytes of it real and the rest
+    /// filled with [`TAIL`].
+    ///
+    /// Returns the backing store as well: the pointer is into it, so it
+    /// has to outlive the read.
+    fn short_of<T>(value: &T, declared: usize) -> (Vec<u64>, *const T) {
+        assert!(declared <= size_of::<T>());
+        // `u64` for its alignment, which is at least what any of these
+        // descriptors needs: every field is a pointer, a usize or a u32.
+        let words = size_of::<T>().div_ceil(size_of::<u64>());
+        let mut buf = vec![0u64; words];
+        let base = buf.as_mut_ptr().cast::<u8>();
+        // SAFETY: `words * 8` bytes are owned by `buf`.
+        unsafe {
+            std::ptr::write_bytes(base, TAIL, words * size_of::<u64>());
+            std::ptr::copy_nonoverlapping((value as *const T).cast::<u8>(), base, declared);
+        }
+        let ptr = buf.as_ptr().cast::<T>();
+        (buf, ptr)
+    }
+
+    fn a_host(size: usize) -> HostInfo {
+        HostInfo {
+            struct_size: size as u32,
+            abi_version: crate::library::ABI_VERSION,
+            host_id: Str::borrowed("test-host"),
+            host_version: Str::borrowed("1.0"),
+            alloc: std::ptr::null(),
+            meta: MaybeNull::null(),
+        }
+    }
+
+    /// A host from before `alloc` was appended reads as having none.
+    ///
+    /// This is the test the sentinel exists for: with a zero tail it would
+    /// pass against a reader that ignored `struct_size` entirely.
+    #[test]
+    fn a_shorter_host_reads_its_appended_field_as_absent() {
+        let value = a_host(HostInfo::floor());
+        let (_buf, ptr) = short_of(&value, HostInfo::floor());
+        // SAFETY: `_buf` owns the bytes and outlives the call.
+        let read = unsafe { read_host(ptr) }.expect("a floor-sized host is usable");
+
+        assert_eq!(read.struct_size as usize, HostInfo::floor());
+        assert_eq!(read.host_id.len, "test-host".len());
+        assert!(
+            read.alloc.is_null(),
+            "the allocator sits past the declared size, so it is absent — \
+             reading it anyway would hand back {:p}, the sentinel this test \
+             fills the tail with",
+            read.alloc
+        );
+    }
+
+    /// A size that covers only PART of an appended field reads as absent.
+    ///
+    /// The guard is `>=` against offset plus size rather than `>` against
+    /// the offset, so half a pointer is never combined with whatever
+    /// followed it.
+    #[test]
+    fn a_size_that_cuts_the_appended_field_in_half_reads_it_as_absent() {
+        let value = a_host(HostInfo::alloc_end() - 1);
+        let (_buf, ptr) = short_of(&value, HostInfo::alloc_end() - 1);
+        // SAFETY: as above.
+        let read = unsafe { read_host(ptr) }.expect("still above the floor");
+        assert!(read.alloc.is_null(), "half a pointer is not a pointer");
+    }
+
+    /// Below the floor is refused outright.
+    #[test]
+    fn a_host_below_the_floor_is_refused() {
+        for declared in [0usize, 4, HostInfo::floor() - 1] {
+            let value = a_host(declared);
+            let (_buf, ptr) = short_of(&value, size_of::<HostInfo>());
+            // SAFETY: as above.
+            assert!(
+                unsafe { read_host(ptr) }.is_none(),
+                "{declared} is below the floor of {}",
+                HostInfo::floor()
+            );
+        }
+        // SAFETY: null is the other case.
+        assert!(unsafe { read_host(std::ptr::null()) }.is_none());
+    }
+
+    /// A NEWER host is accepted and its unknown tail ignored.
+    ///
+    /// The direction that matters for a library: it must keep working when
+    /// the host grows, or every library needs rebuilding for a host change
+    /// that added a field it does not read.
+    #[test]
+    fn a_newer_host_is_accepted_and_its_unknown_tail_ignored() {
+        let mut value = a_host(size_of::<HostInfo>() + 64);
+        let alloc = crate::value::alloc::rust_alloc();
+        value.alloc = &alloc;
+        let (_buf, ptr) = short_of(&value, size_of::<HostInfo>());
+        // SAFETY: `_buf` covers `size_of::<HostInfo>()`, which is every
+        // field this build knows; the declared 64 extra bytes are never
+        // read, which is the property under test.
+        let read = unsafe { read_host(ptr) }.expect("a newer host is still usable");
+        assert!(
+            !read.alloc.is_null(),
+            "a field this build knows is still read"
+        );
+    }
+
+    fn a_library(size: usize) -> LibraryInfo {
+        LibraryInfo {
+            struct_size: size as u32,
+            abi_version: crate::library::ABI_VERSION,
+            id: Str::borrowed("lib"),
+            version: Str::borrowed("0.1.0"),
+            providers: Providers {
+                ptr: std::ptr::null(),
+                len: 0,
+            },
+            meta: MaybeNull::null(),
+        }
+    }
+
+    #[test]
+    fn a_library_descriptor_below_the_floor_is_refused() {
+        let value = a_library(LibraryInfo::floor() - 1);
+        let (_buf, ptr) = short_of(&value, size_of::<LibraryInfo>());
+        // SAFETY: `_buf` owns the bytes.
+        assert!(unsafe { read_library(ptr) }.is_none());
+
+        let value = a_library(LibraryInfo::floor());
+        let (_buf, ptr) = short_of(&value, LibraryInfo::floor());
+        // SAFETY: as above.
+        let view = unsafe { read_library(ptr) }.expect("a floor-sized descriptor is usable");
+        assert_eq!((view.id.as_str(), view.version.as_str()), ("lib", "0.1.0"));
+        assert!(view.providers.is_empty());
+        assert!(
+            view.meta.is_none(),
+            "a descriptor that predates `meta` declares none"
+        );
+    }
+
+    fn a_provider(size: usize, vtable_size: u32) -> ProviderInfo {
+        ProviderInfo {
+            struct_size: size as u32,
+            vtable_size,
+            kind: Str::borrowed("greeter"),
+            id: Str::borrowed("hello"),
+            display_name: Str::borrowed("Hello"),
+            config: std::ptr::null(),
+            vtable: std::ptr::null(),
+            ctx: std::ptr::null_mut(),
+            meta: MaybeNull::null(),
+        }
+    }
+
+    #[test]
+    fn a_provider_descriptor_below_the_floor_is_refused() {
+        let value = a_provider(ProviderInfo::floor() - 1, 0);
+        let (_buf, ptr) = short_of(&value, size_of::<ProviderInfo>());
+        // SAFETY: `_buf` owns the bytes.
+        assert!(unsafe { read_provider(ptr) }.is_none());
+    }
+
+    /// The slot appended after the guards were written, read both ways.
+    ///
+    /// This is the mechanism doing its job rather than rehearsing it:
+    /// `meta` is the first field genuinely added since, so a descriptor
+    /// sized without it is what every library built before today hands
+    /// over.
+    #[test]
+    fn a_descriptor_from_before_meta_reads_it_as_absent() {
+        // A host.
+        let value = a_host(HostInfo::alloc_end());
+        let (_buf, ptr) = short_of(&value, HostInfo::alloc_end());
+        // SAFETY: `_buf` owns the bytes.
+        let read = unsafe { read_host(ptr) }.expect("above the floor");
+        assert!(
+            read.meta.is_null(),
+            "`meta` sits past the declared size — reading it anyway hands \
+             back the 0xAA tail this test fills with"
+        );
+
+        // A provider.
+        let value = a_provider(ProviderInfo::floor(), 0);
+        let (_buf, ptr) = short_of(&value, ProviderInfo::floor());
+        // SAFETY: as above.
+        let view = unsafe { read_provider(ptr) }.expect("a floor-sized provider");
+        assert!(view.meta.is_none());
+    }
+
+    /// And a descriptor that DOES declare it hands it over.
+    ///
+    /// Without this the test above passes against a reader that never
+    /// reads the field at all.
+    #[test]
+    fn a_descriptor_that_declares_meta_hands_it_over() {
+        let map = Map::new();
+        let mut value = a_host(size_of::<HostInfo>());
+        // SAFETY: `map` outlives the read below.
+        value.meta = MaybeNull::of(unsafe { &*(&map as *const Map) });
+        let (_buf, ptr) = short_of(&value, size_of::<HostInfo>());
+        // SAFETY: `_buf` owns the descriptor, `map` the pointee.
+        let read = unsafe { read_host(ptr) }.expect("a full host");
+        assert!(!read.meta.is_null(), "a declared slot is read");
+        // SAFETY: it points at `map`, which is a well-formed empty map.
+        assert_eq!(unsafe { read.meta.get() }.expect("non-null").len(), 0);
+    }
+
+    /// A provider carries the size its vtable was compiled at, and a host
+    /// that knows a longer one must refuse rather than cast.
+    ///
+    /// The table itself is the sentinel-filled buffer, so a reader that
+    /// skipped the size check would hand back a `&Newer` whose last field
+    /// is 0xAAAA... rather than a function pointer.
+    #[test]
+    fn a_shorter_vtable_is_refused_and_the_size_it_declares_is_kept() {
+        #[repr(C)]
+        struct Older {
+            greet: usize,
+        }
+        #[repr(C)]
+        struct Newer {
+            greet: usize,
+            farewell: usize,
+        }
+
+        let table = [0u64; 4];
+        let mut value = a_provider(size_of::<ProviderInfo>(), size_of::<Older>() as u32);
+        value.vtable = table.as_ptr().cast();
+        let (_buf, ptr) = short_of(&value, size_of::<ProviderInfo>());
+        // SAFETY: `_buf` owns the descriptor and `table` the vtable.
+        let view = unsafe { read_provider(ptr) }.expect("a full descriptor");
+
+        assert_eq!(
+            view.vtable_size,
+            size_of::<Older>(),
+            "the declared size survives the read, because the host needs it \
+             to decide what it may cast to"
+        );
+        assert!(
+            view.vtable_size < size_of::<Newer>(),
+            "this library predates the host's newest slot"
+        );
+    }
 }

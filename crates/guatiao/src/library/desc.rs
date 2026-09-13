@@ -39,7 +39,7 @@ use std::ffi::c_void;
 use std::mem::{offset_of, size_of};
 
 use crate::value::alloc::Allocator;
-use crate::value::types::{Str, Value};
+use crate::value::types::{Map, MaybeNull, Str, Value};
 
 /// The envelope's own version, for a library that wants to refuse a host
 /// it does not understand.
@@ -69,6 +69,31 @@ pub struct HostInfo {
     /// The host's allocator, or null. Borrowed for the call and for as
     /// long as anything built through it lives.
     pub alloc: *const Allocator,
+    /// Anything else this host wants to say, as an ordinary value, or
+    /// null. Conventionally a map.
+    ///
+    /// The escape hatch every envelope needs and no envelope can specify:
+    /// a build id, a capability flag, a vendor's own key. A reader that
+    /// does not know a key skips it, which is the rule the value model
+    /// already has for a tag it does not know.
+    ///
+    /// **A pointer, because this struct is `Copy`** and every reader
+    /// projects its fields with a bitwise read. A [`Map`] held INLINE
+    /// would be copied by each of those reads, and a `Map` frees what it
+    /// owns on drop — so every copy would be a second owner of one
+    /// buffer. A pointer has no drop glue whatever it addresses.
+    ///
+    /// **Non-null means a well-formed map.** Nothing here checks that,
+    /// and a library that writes a non-null pointer to anything else has
+    /// caused undefined behaviour at the read. It is the same class of
+    /// promise as [`vtable`](ProviderInfo::vtable), whose shape only the
+    /// `kind` knows, and as the allocator's outliving everything built
+    /// through it.
+    ///
+    /// Unlike [`config`](ProviderInfo::config), null and an empty map mean
+    /// the same thing here — "nothing to add" has no second reading
+    /// worth keeping apart.
+    pub meta: MaybeNull<Map>,
 }
 
 impl HostInfo {
@@ -85,6 +110,11 @@ impl HostInfo {
     /// Where the `alloc` field ends, for the guard that reads it.
     pub const fn alloc_end() -> usize {
         offset_of!(HostInfo, alloc) + size_of::<*const Allocator>()
+    }
+
+    /// Where the `meta` field ends, for the guard that reads it.
+    pub const fn meta_end() -> usize {
+        offset_of!(HostInfo, meta) + size_of::<MaybeNull<Map>>()
     }
 }
 
@@ -117,12 +147,42 @@ pub struct LibraryInfo {
     /// Everything it offers. May be empty, which is a library that
     /// loaded and had nothing for this host.
     pub providers: Providers,
+    /// Anything else this library wants to say, as an ordinary value, or
+    /// null. Conventionally a map.
+    ///
+    /// The escape hatch every envelope needs and no envelope can specify:
+    /// a build id, a capability flag, a vendor's own key. A reader that
+    /// does not know a key skips it, which is the rule the value model
+    /// already has for a tag it does not know.
+    ///
+    /// **A pointer, because this struct is `Copy`** and every reader
+    /// projects its fields with a bitwise read. A [`Map`] held INLINE
+    /// would be copied by each of those reads, and a `Map` frees what it
+    /// owns on drop — so every copy would be a second owner of one
+    /// buffer. A pointer has no drop glue whatever it addresses.
+    ///
+    /// **Non-null means a well-formed map.** Nothing here checks that,
+    /// and a library that writes a non-null pointer to anything else has
+    /// caused undefined behaviour at the read. It is the same class of
+    /// promise as [`vtable`](ProviderInfo::vtable), whose shape only the
+    /// `kind` knows, and as the allocator's outliving everything built
+    /// through it.
+    ///
+    /// Unlike [`config`](ProviderInfo::config), null and an empty map mean
+    /// the same thing here — "nothing to add" has no second reading
+    /// worth keeping apart.
+    pub meta: MaybeNull<Map>,
 }
 
 impl LibraryInfo {
     /// The smallest usable `struct_size`.
     pub const fn floor() -> usize {
         offset_of!(LibraryInfo, providers) + size_of::<Providers>()
+    }
+
+    /// Where the `meta` field ends, for the guard that reads it.
+    pub const fn meta_end() -> usize {
+        offset_of!(LibraryInfo, meta) + size_of::<MaybeNull<Map>>()
     }
 }
 
@@ -162,12 +222,42 @@ pub struct ProviderInfo {
     pub vtable: *const c_void,
     /// Passed back to every call through the vtable, untouched.
     pub ctx: *mut c_void,
+    /// Anything else this provider wants to say, as an ordinary value, or
+    /// null. Conventionally a map.
+    ///
+    /// The escape hatch every envelope needs and no envelope can specify:
+    /// a build id, a capability flag, a vendor's own key. A reader that
+    /// does not know a key skips it, which is the rule the value model
+    /// already has for a tag it does not know.
+    ///
+    /// **A pointer, because this struct is `Copy`** and every reader
+    /// projects its fields with a bitwise read. A [`Map`] held INLINE
+    /// would be copied by each of those reads, and a `Map` frees what it
+    /// owns on drop — so every copy would be a second owner of one
+    /// buffer. A pointer has no drop glue whatever it addresses.
+    ///
+    /// **Non-null means a well-formed map.** Nothing here checks that,
+    /// and a library that writes a non-null pointer to anything else has
+    /// caused undefined behaviour at the read. It is the same class of
+    /// promise as [`vtable`](ProviderInfo::vtable), whose shape only the
+    /// `kind` knows, and as the allocator's outliving everything built
+    /// through it.
+    ///
+    /// Unlike [`config`](ProviderInfo::config), null and an empty map mean
+    /// the same thing here — "nothing to add" has no second reading
+    /// worth keeping apart.
+    pub meta: MaybeNull<Map>,
 }
 
 impl ProviderInfo {
     /// The smallest usable `struct_size`.
     pub const fn floor() -> usize {
         offset_of!(ProviderInfo, ctx) + size_of::<*mut c_void>()
+    }
+
+    /// Where the `meta` field ends, for the guard that reads it.
+    pub const fn meta_end() -> usize {
+        offset_of!(ProviderInfo, meta) + size_of::<MaybeNull<Map>>()
     }
 }
 

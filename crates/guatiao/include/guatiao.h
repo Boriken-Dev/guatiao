@@ -512,6 +512,26 @@ typedef struct guatiao_entries {
 } guatiao_entries;
 
 /*
+ A `*const T` where **null is a value, not a mistake**.
+
+ Crosses as a plain `const T *` and costs a C caller nothing: this is a
+ `repr(transparent)` newtype, so its size, alignment and calling
+ convention are a pointer's. What it buys is on the Rust side. A bare
+ `*const T` in a descriptor says nothing about whether null is
+ expected, so every reader re-decides and one of them eventually
+ decides wrong; this says it once, in the type.
+
+ # The contract
+
+ **Non-null means a well-formed `T` that outlives the read.** Nothing
+ checks that, and nothing tries: it is the same class of promise as a
+ vtable pointer, whose shape only the `kind` that defined it knows.
+ Writing a non-null pointer to anything that is not a live `T` is
+ undefined behaviour at the read, on whoever wrote it.
+ */
+typedef const struct guatiao_map *guatiao_map_ptr;
+
+/*
  What the host tells a library about itself, on the way in.
 
  The allocator is here because a library that wants to build a tree the
@@ -542,6 +562,33 @@ typedef struct guatiao_host_info {
    long as anything built through it lives.
    */
   const struct guatiao_alloc *alloc;
+  /*
+   Anything else this host wants to say, as an ordinary value, or
+   null. Conventionally a map.
+
+   The escape hatch every envelope needs and no envelope can specify:
+   a build id, a capability flag, a vendor's own key. A reader that
+   does not know a key skips it, which is the rule the value model
+   already has for a tag it does not know.
+
+   **A pointer, because this struct is `Copy`** and every reader
+   projects its fields with a bitwise read. A [`Map`] held INLINE
+   would be copied by each of those reads, and a `Map` frees what it
+   owns on drop — so every copy would be a second owner of one
+   buffer. A pointer has no drop glue whatever it addresses.
+
+   **Non-null means a well-formed map.** Nothing here checks that,
+   and a library that writes a non-null pointer to anything else has
+   caused undefined behaviour at the read. It is the same class of
+   promise as [`vtable`](ProviderInfo::vtable), whose shape only the
+   `kind` knows, and as the allocator's outliving everything built
+   through it.
+
+   Unlike [`config`](ProviderInfo::config), null and an empty map mean
+   the same thing here — "nothing to add" has no second reading
+   worth keeping apart.
+   */
+  guatiao_map_ptr meta;
 } guatiao_host_info;
 
 /*
@@ -596,6 +643,33 @@ typedef struct guatiao_provider_info {
    Passed back to every call through the vtable, untouched.
    */
   void *ctx;
+  /*
+   Anything else this provider wants to say, as an ordinary value, or
+   null. Conventionally a map.
+
+   The escape hatch every envelope needs and no envelope can specify:
+   a build id, a capability flag, a vendor's own key. A reader that
+   does not know a key skips it, which is the rule the value model
+   already has for a tag it does not know.
+
+   **A pointer, because this struct is `Copy`** and every reader
+   projects its fields with a bitwise read. A [`Map`] held INLINE
+   would be copied by each of those reads, and a `Map` frees what it
+   owns on drop — so every copy would be a second owner of one
+   buffer. A pointer has no drop glue whatever it addresses.
+
+   **Non-null means a well-formed map.** Nothing here checks that,
+   and a library that writes a non-null pointer to anything else has
+   caused undefined behaviour at the read. It is the same class of
+   promise as [`vtable`](ProviderInfo::vtable), whose shape only the
+   `kind` knows, and as the allocator's outliving everything built
+   through it.
+
+   Unlike [`config`](ProviderInfo::config), null and an empty map mean
+   the same thing here — "nothing to add" has no second reading
+   worth keeping apart.
+   */
+  guatiao_map_ptr meta;
 } guatiao_provider_info;
 
 /*
@@ -641,6 +715,33 @@ typedef struct guatiao_library_info {
    loaded and had nothing for this host.
    */
   struct guatiao_providers providers;
+  /*
+   Anything else this library wants to say, as an ordinary value, or
+   null. Conventionally a map.
+
+   The escape hatch every envelope needs and no envelope can specify:
+   a build id, a capability flag, a vendor's own key. A reader that
+   does not know a key skips it, which is the rule the value model
+   already has for a tag it does not know.
+
+   **A pointer, because this struct is `Copy`** and every reader
+   projects its fields with a bitwise read. A [`Map`] held INLINE
+   would be copied by each of those reads, and a `Map` frees what it
+   owns on drop — so every copy would be a second owner of one
+   buffer. A pointer has no drop glue whatever it addresses.
+
+   **Non-null means a well-formed map.** Nothing here checks that,
+   and a library that writes a non-null pointer to anything else has
+   caused undefined behaviour at the read. It is the same class of
+   promise as [`vtable`](ProviderInfo::vtable), whose shape only the
+   `kind` knows, and as the allocator's outliving everything built
+   through it.
+
+   Unlike [`config`](ProviderInfo::config), null and an empty map mean
+   the same thing here — "nothing to add" has no second reading
+   worth keeping apart.
+   */
+  guatiao_map_ptr meta;
 } guatiao_library_info;
 
 #ifdef __cplusplus

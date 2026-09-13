@@ -66,6 +66,6 @@ pub mod raw;
 pub mod registry;
 
 pub use desc::{ABI_VERSION, HostInfo, LibraryInfo, ProviderInfo, Providers};
-pub use raw::{ENTRY_SYMBOL, EntryFn, ProviderView, answer, read_host};
+pub use raw::{ENTRY_SYMBOL, EntryFn, LibraryView, ProviderView, answer, read_host};
 #[cfg(feature = "load")]
 pub use registry::{LoadError, Loaded, Provider, Registry, Skipped};

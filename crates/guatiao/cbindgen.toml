@@ -486,6 +486,10 @@ exclude = ["Entry"]
 "Providers" = "guatiao_providers"
 "ABI_VERSION" = "GUATIAO_ABI_VERSION"
 "MergeOverride" = "guatiao_merge_override"
+# cbindgen monomorphises the generic newtype and emits the Rust name.
+# A header shares one flat namespace, so the typedef it introduces has to
+# carry the prefix like every other name here.
+"MaybeNull_Map" = "guatiao_map_ptr"
 
 [parse]
 parse_deps = false

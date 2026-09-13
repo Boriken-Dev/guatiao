@@ -118,10 +118,33 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
     assert_eq!(loaded.id, "hello_library");
     assert_eq!(loaded.providers, 1);
 
+    // The appended `meta` slot, read out of the library's own image.
+    // `ProviderInfo::meta` is null here and `LibraryInfo::meta` is not,
+    // so this pins both answers — an absent slot and a present one are
+    // different outcomes, not one untested path.
+    let meta = loaded.meta.expect("the library declares metadata");
+    assert_eq!(
+        meta.get("built-with").and_then(Value::as_str),
+        Some("hello_library"),
+        "a key the host was never told about crosses intact"
+    );
+    assert_eq!(
+        meta.get("greeting-language").and_then(Value::as_str),
+        Some("en")
+    );
+    assert!(
+        meta.get("a-key-nobody-declared").is_none(),
+        "a key that is not there is absent, not an error"
+    );
+
     let provider = registry
         .provider("greeter", "hello")
         .expect("the provider it registered");
     assert_eq!(provider.display_name(), "Hello");
+    assert!(
+        provider.meta().is_none(),
+        "this provider declares none, and null is how it says so"
+    );
     assert_eq!(provider.from(), path);
     assert_eq!(registry.providers("greeter").count(), 1);
     assert_eq!(
