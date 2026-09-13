@@ -290,6 +290,7 @@ pub const KEYWORDS: &[&str] = &[
     CONST,
     ANY_OF,
     ONE_OF,
+    ADDITIONAL_PROPERTIES,
 ];
 
 /// Every key **this crate** invented, all of them `x-` prefixed.

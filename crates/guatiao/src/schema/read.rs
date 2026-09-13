@@ -185,6 +185,24 @@ impl<'a> SchemaRef<'a> {
     pub fn extra(&self, key: &str) -> Option<&'a Value> {
         self.0.get(key).filter(|_| !vocab::known(key))
     }
+
+    /// Every annotation on the schema as a whole, in document order:
+    /// each key [`vocab::known`] does not claim, with its value.
+    pub fn extras(&self) -> impl Iterator<Item = (&'a str, &'a Value)> {
+        extras_of(self.0)
+    }
+}
+
+/// The entries of a schema map that are annotations rather than
+/// vocabulary, which is what [`SchemaRef::extras`] and
+/// [`FieldRef::extras`] both walk.
+fn extras_of(schema: &Value) -> impl Iterator<Item = (&str, &Value)> {
+    schema
+        .entries()
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|e| e.key_str().map(|k| (k, e.value())))
+        .filter(|(k, _)| !vocab::known(k))
 }
 
 impl<'a> FieldRef<'a> {
@@ -271,6 +289,13 @@ impl<'a> FieldRef<'a> {
     /// An annotation on this field. Carried, never interpreted.
     pub fn extra(&self, key: &str) -> Option<&'a Value> {
         self.schema.get(key).filter(|_| !vocab::known(key))
+    }
+
+    /// Every annotation on this field, in document order -- what a
+    /// consumer keeping its own mirror of a field copies across without
+    /// having to know each key by name.
+    pub fn extras(&self) -> impl Iterator<Item = (&'a str, &'a Value)> {
+        extras_of(self.schema)
     }
 }
 

@@ -406,10 +406,11 @@ Read (borrowed views over the value, no copying):
 
 ```rust
 SchemaRef::new(&value) -> Option<SchemaRef>
-  .dialect() .label() .help() .fields() .find(key) .extra(key) .as_value()
+  .dialect() .label() .help() .fields() .find(key) .extra(key) .extras()
+  .as_value()
 FieldRef::new(key, &schema) -> Option<FieldRef>   // answers is_required() false
 FieldRef: .key() .kind() .label() .help() .section() .default() .order()
-           .is_advanced() .is_sensitive() .is_required() .extra(key)
+           .is_advanced() .is_sensitive() .is_required() .extra(key) .extras()
 Kind: .choices() .alternatives() .arms() .items() .fields() .name()
 ```
 
