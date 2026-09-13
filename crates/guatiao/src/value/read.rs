@@ -77,7 +77,7 @@
 use std::fmt;
 
 use super::convert::MapError;
-use super::mutate::MAX_DEPTH;
+use super::mutate::{MAX_DEPTH, text_bytes};
 use super::types::{Entry, Tag, Value};
 
 /// Reading a value as a Rust type, and saying why not when it is not one.
@@ -273,8 +273,12 @@ fn equal_at(a: &Value, b: &Value, depth: u32) -> bool {
         // Byte equality of the text, which is what makes `1.10` different
         // from `1.1`. Comparing as numbers would be the lossy view, and
         // the whole point of storing text is that it is not taken.
-        Ok(Tag::GUATIAO_NUMBER) => a.as_number_str() == b.as_number_str(),
-        Ok(Tag::GUATIAO_STRING) => a.as_str() == b.as_str(),
+        //
+        // The BYTES, not the `&str`: a string whose content is not UTF-8
+        // reads back as `None`, and two different such strings would then
+        // compare equal to each other on the strength of both being
+        // unreadable.
+        Ok(Tag::GUATIAO_NUMBER | Tag::GUATIAO_STRING) => text_bytes(a) == text_bytes(b),
         Ok(Tag::GUATIAO_BYTES) => a.as_bytes() == b.as_bytes(),
         Ok(Tag::GUATIAO_LIST) => {
             let (x, y) = (a.items().unwrap_or(&[]), b.items().unwrap_or(&[]));

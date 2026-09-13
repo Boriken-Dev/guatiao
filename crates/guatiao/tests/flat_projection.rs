@@ -11,13 +11,13 @@
 
 use std::collections::BTreeMap;
 
-use guatiao::Value;
 use guatiao::schema::FormFieldBuilder;
 use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::schema::flat;
 use guatiao::schema::read::SchemaRef;
 use guatiao::value::alloc::Alloc;
 use guatiao::value::read::str_or;
+use guatiao::{Value, ValueError};
 
 /// A schema with one tagged field: two arms, one of them empty.
 fn schema(alloc: Alloc) -> Value {
@@ -227,14 +227,30 @@ fn an_option_key_containing_the_separator_is_rejected() {
     let good = schema(alloc);
     assert_eq!(flat::check_keys(SchemaRef::new(&good).unwrap()), Ok(()));
 
-    let bad = SchemaBuilder::new_in(alloc)
-        .field(FieldBuilder::new_in(
-            alloc,
-            "auth.username",
-            KindBuilder::string_in(alloc),
-        ))
-        .finish()
+    // The builder refuses it, so the declaration never becomes a schema.
+    assert_eq!(
+        SchemaBuilder::new_in(alloc)
+            .field(FieldBuilder::new_in(
+                alloc,
+                "auth.username",
+                KindBuilder::string_in(alloc),
+            ))
+            .finish()
+            .unwrap_err(),
+        ValueError::WrongKind,
+        "`finish` is where the check runs, so nobody has to remember to call it"
+    );
+
+    // And the check itself still names the offending key, for a schema
+    // that arrived from somewhere else.
+    let mut properties = Value::map_in(alloc);
+    properties
+        .set("auth.username", Value::map_in(alloc))
         .unwrap();
+    let mut bad = Value::map_in(alloc);
+    bad.set("type", Value::string_in(alloc, "object").unwrap())
+        .unwrap();
+    bad.set("properties", properties).unwrap();
     assert_eq!(
         flat::check_keys(SchemaRef::new(&bad).unwrap()),
         Err("auth.username".to_string())

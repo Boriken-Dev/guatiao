@@ -195,10 +195,15 @@ impl Value {
     /// allocates storage *for this tree*, and its own allocator is the
     /// only right answer.
     ///
-    /// Errors for a value that carries no allocator at all: a scalar, or
-    /// a literal some other language built by hand. Growing one of those
-    /// means saying which allocator to adopt, which is what
-    /// [`set_in`](Value::set_in) and [`push_in`](Value::push_in) take.
+    /// **Two different refusals, and they are not the same case.** A
+    /// scalar — null, bool, absent — has no container to have recorded
+    /// one, and answers [`ValueError::WrongKind`]. A container whose
+    /// `alloc` field is null — a literal some other language wrote as a
+    /// brace initialiser — answers
+    /// [`ValueError::Alloc(AllocError::Null)`](crate::value::AllocError).
+    /// Growing either means saying which allocator to adopt, which is
+    /// what [`set_in`](Value::set_in) and [`push_in`](Value::push_in)
+    /// take.
     pub fn alloc(&self) -> Result<Alloc, ValueError> {
         let stored = alloc_of(self).ok_or(ValueError::WrongKind)?;
         // SAFETY: the address a container recorded is an allocator that
@@ -496,11 +501,14 @@ impl Value {
     /// be a line a reader can see rather than something a setter does
     /// quietly.
     ///
-    /// # Safety
-    ///
-    /// This value is a well-formed node.
-    pub unsafe fn clone_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
-        // SAFETY: forwarded.
+    /// Safe, because a `&Value` in safe Rust is a well-formed node — the
+    /// premise every reader here already rests on, and the one
+    /// [`ToValue for Value`](crate::ToValue) discharges to call this.
+    /// Bounded by [`MAX_DEPTH`], so a
+    /// hostile tree is [`ValueError::TooDeep`] rather than a dead process.
+    pub fn clone_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
+        // SAFETY: a `&Value` reaching safe code is a well-formed node,
+        // which is all `value_clone` asks for.
         unsafe { value_clone(alloc, self) }
     }
 
@@ -539,6 +547,13 @@ impl Value {
     /// Copies every entry of `src` into this map, replacing keys that
     /// collide and appending the rest. Answers how many were copied.
     ///
+    /// `src` may be this node or a node inside it: the source is copied
+    /// whole before anything here is touched.
+    ///
+    /// **Not atomic.** A failure at entry *k* leaves entries `0..k`
+    /// applied — nothing is leaked, and nothing is half-written, but the
+    /// map is not the one it started as.
+    ///
     /// # Safety
     ///
     /// Both nodes are well formed.
@@ -549,9 +564,13 @@ impl Value {
 
     /// Appends to a string value in place.
     ///
+    /// `text` may address this value's own bytes; an overlapping source
+    /// is copied out before anything grows.
+    ///
     /// # Safety
     ///
-    /// This value is a well-formed string.
+    /// This value is a well-formed string, and `text` is readable for the
+    /// call.
     pub unsafe fn push_str(&mut self, text: &str, alloc: Alloc) -> Result<(), ValueError> {
         // SAFETY: forwarded.
         unsafe { string_push(self, text, alloc) }
@@ -559,9 +578,13 @@ impl Value {
 
     /// Appends to a bytes value in place.
     ///
+    /// `bytes` may address this value's own buffer, as in
+    /// [`push_str`](Value::push_str).
+    ///
     /// # Safety
     ///
-    /// This value is a well-formed bytes value.
+    /// This value is a well-formed bytes value, and `bytes` is readable
+    /// for the call.
     pub unsafe fn push_bytes(&mut self, bytes: &[u8], alloc: Alloc) -> Result<(), ValueError> {
         // SAFETY: forwarded.
         unsafe { buffer_push(self, bytes, alloc) }

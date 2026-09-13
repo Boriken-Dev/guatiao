@@ -1,3 +1,7 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
 /*
  * guatiao -- the C form of the value model.
  *
@@ -59,13 +63,15 @@ typedef struct guatiao_entry guatiao_entry;
 
 
 /*
- How deep a tree [`Value::clone_in`] will follow.
+ How deep a tree any walk here follows: cloning one, merging two,
+ comparing two for equality, and checking one against a schema.
 
  Configuration trees are a handful of levels deep; this is far above any
  real one and far below what would exhaust a stack. It exists so a
- hostile or corrupt tree is an error rather than a dead process.
+ hostile or corrupt tree is an error rather than a dead process: a stack
+ overflow on Windows is not catchable and takes the host with it.
  */
-#define MAX_DEPTH 128
+#define GUATIAO_MAX_DEPTH 128
 
 /*
  Shallow: top-level keys replace, nested maps are not recursed into.
@@ -144,6 +150,12 @@ enum guatiao_status
    */
   GUATIAO_ERR_NULL = 11,
   /*
+   The thing asked is gone: a host's registry that has been freed,
+   asked through the services a library kept. Nothing freed was
+   touched.
+   */
+  GUATIAO_ERR_GONE = 12,
+  /*
    A callback unwound, or a panic was caught at this boundary. The
    operation did not happen; the process is still usable.
    */
@@ -216,9 +228,14 @@ typedef uint32_t guatiao_tag;
  [`guatiao_registry_free`]. Every other function here takes the pointer
  that gave you.
 
- **Not thread-safe.** One registry is one host's table, and the loading
- it does is not reentrant; a host sharing one across threads guards it
- itself, as it would any other mutable object it owns.
+ **Not thread-safe.** One registry is one host's table; a host sharing
+ one across threads guards it itself, as it would any other mutable
+ object it owns. What a library reaches through its host's `services`
+ is a snapshot the registry publishes after every change, guarded on
+ its own, so a library asking from any thread never contends with the
+ host's own calls — but a library's entry point must not call these
+ functions on the handle that is loading it, which is held exclusively
+ for the whole call.
  */
 typedef struct guatiao_registry guatiao_registry;
 
@@ -279,6 +296,75 @@ typedef struct guatiao_alloc {
    */
   void (*release)(void *ctx);
 } guatiao_alloc;
+
+/*
+ An owned, growable sequence of key/value pairs, in insertion order.
+
+ Lookup is a linear scan, by contract rather than by accident: this is a
+ metadata container holding tens of keys, and at that size a scan over
+ contiguous memory beats hashing every lookup key. Setting an existing
+ key replaces it **in place**, keeping its position.
+ */
+typedef struct guatiao_map {
+  /*
+   First entry.
+   */
+  guatiao_entry *ptr;
+  /*
+   Number of entries.
+   */
+  size_t len;
+  /*
+   Capacity in entries. 0 means the buffer is not owned.
+   */
+  size_t cap;
+  /*
+   The allocator that made this buffer. Null when `cap == 0`.
+   */
+  const struct guatiao_alloc *alloc;
+} guatiao_map;
+
+/*
+ A `*const T` where **null is a value, not a mistake**.
+
+ Crosses as a plain `const T *` and costs a C caller nothing: this is a
+ `repr(transparent)` newtype, so its size, alignment and calling
+ convention are a pointer's. What it buys is on the Rust side. A bare
+ `*const T` in a descriptor says nothing about whether null is
+ expected, so every reader re-decides and one of them eventually
+ decides wrong; this says it once, in the type.
+
+ # The contract
+
+ **Non-null means a well-formed `T` that outlives the read.** Nothing
+ checks that, and nothing tries: it is the same class of promise as a
+ vtable pointer, whose shape only the `kind` that defined it knows.
+ Writing a non-null pointer to anything that is not a live `T` is
+ undefined behaviour at the read, on whoever wrote it.
+ */
+typedef const struct guatiao_map *guatiao_map_ptr;
+
+/*
+ A borrowed sequence of kind names.
+
+ # Why this one carries no stride
+
+ [`Providers`] states its stride because a `ProviderInfo` can grow a
+ field. A [`Str`] cannot: it declares no `struct_size`, so it has no
+ mechanism to grow through and its layout is frozen by definition.
+ Where there is no versioning there is no version skew, and the element
+ size is the same number on both sides of the boundary.
+ */
+typedef struct guatiao_kinds {
+  /*
+   First name. May be null when `len` is 0.
+   */
+  const struct guatiao_str *ptr;
+  /*
+   How many.
+   */
+  size_t len;
+} guatiao_kinds;
 
 /*
  Owned, growable UTF-8 text.
@@ -350,33 +436,6 @@ typedef struct guatiao_list {
    */
   const struct guatiao_alloc *alloc;
 } guatiao_list;
-
-/*
- An owned, growable sequence of key/value pairs, in insertion order.
-
- Lookup is a linear scan, by contract rather than by accident: this is a
- metadata container holding tens of keys, and at that size a scan over
- contiguous memory beats hashing every lookup key. Setting an existing
- key replaces it **in place**, keeping its position.
- */
-typedef struct guatiao_map {
-  /*
-   First entry.
-   */
-  guatiao_entry *ptr;
-  /*
-   Number of entries.
-   */
-  size_t len;
-  /*
-   Capacity in entries. 0 means the buffer is not owned.
-   */
-  size_t cap;
-  /*
-   The allocator that made this buffer. Null when `cap == 0`.
-   */
-  const struct guatiao_alloc *alloc;
-} guatiao_map;
 
 /*
  The payload of a value. Which arm is live is decided by the
@@ -461,171 +520,49 @@ typedef struct guatiao_value {
 } guatiao_value;
 
 /*
- One per-path mode override: what the *declarer* of an option knows
- that whoever merges two maps does not.
+ One kind's function table, on a provider that serves several kinds
+ with a table each.
  */
-typedef struct guatiao_merge_override {
+typedef struct guatiao_kind_table {
   /*
-   The dotted path this governs, matched exactly.
-   */
-  struct guatiao_str path;
-  /*
-   One of the `GUATIAO_MERGE_*` mode constants.
-   */
-  uint32_t mode;
-} guatiao_merge_override;
-
-/*
- Borrowed bytes: any content at all, NULs included.
-
- Same shape and the same check-the-length rule as `guatiao_str`; a
- separate type because "text" and "arbitrary bytes" are different
- promises and collapsing them loses the distinction at every call site.
- */
-typedef struct guatiao_bytes {
-  /*
-   First byte. May be null or dangling when `len` is 0.
-   */
-  const uint8_t *ptr;
-  /*
-   Length in bytes.
-   */
-  size_t len;
-} guatiao_bytes;
-
-/*
- A borrowed sequence of values, in order.
- */
-typedef struct guatiao_values {
-  /*
-   First element. May be null or dangling when `len` is 0.
-   */
-  const struct guatiao_value *ptr;
-  /*
-   Number of elements.
-   */
-  size_t len;
-} guatiao_values;
-
-/*
- A borrowed sequence of key/value pairs, in **insertion order**.
-
- Order is part of the contract, not an artefact: consumers render maps
- as forms, print them as tables and diff them in tests, and all three
- need it stable and meaningful.
- */
-typedef struct guatiao_entries {
-  /*
-   First entry. May be null or dangling when `len` is 0.
-   */
-  const guatiao_entry *ptr;
-  /*
-   Number of entries.
-   */
-  size_t len;
-} guatiao_entries;
-
-/*
- A `*const T` where **null is a value, not a mistake**.
-
- Crosses as a plain `const T *` and costs a C caller nothing: this is a
- `repr(transparent)` newtype, so its size, alignment and calling
- convention are a pointer's. What it buys is on the Rust side. A bare
- `*const T` in a descriptor says nothing about whether null is
- expected, so every reader re-decides and one of them eventually
- decides wrong; this says it once, in the type.
-
- # The contract
-
- **Non-null means a well-formed `T` that outlives the read.** Nothing
- checks that, and nothing tries: it is the same class of promise as a
- vtable pointer, whose shape only the `kind` that defined it knows.
- Writing a non-null pointer to anything that is not a live `T` is
- undefined behaviour at the read, on whoever wrote it.
- */
-typedef const struct guatiao_map *guatiao_map_ptr;
-
-/*
- What the host tells a library about itself, on the way in.
-
- The allocator is here because a library that wants to build a tree the
- host will keep can build it in the host's own arena, and then the host
- frees it with nothing to remember. A library that would rather use its
- own passes its own; every owned container records which it was.
- */
-typedef struct guatiao_host_info {
-  /*
-   `sizeof(guatiao_host_info)` as the host compiled it. Always first.
+   `sizeof(guatiao_kind_table)` as the library compiled it. Always
+   first.
    */
   uint32_t struct_size;
   /*
-   The envelope version the host speaks. See [`ABI_VERSION`].
+   Size of the struct `vtable` points at, as the library compiled it.
    */
-  uint32_t abi_version;
+  uint32_t vtable_size;
   /*
-   Who the host is, for a library that registers different providers
-   for different hosts.
+   The kind this table serves.
    */
-  struct guatiao_str host_id;
+  struct guatiao_str kind;
   /*
-   The host's own version string, uninterpreted.
+   The table, whose shape the kind defines.
    */
-  struct guatiao_str host_version;
-  /*
-   The host's allocator, or null. Borrowed for the call and for as
-   long as anything built through it lives.
-   */
-  const struct guatiao_alloc *alloc;
-  /*
-   Anything else this host wants to say, as an ordinary value, or
-   null. Conventionally a map.
-
-   The escape hatch every envelope needs and no envelope can specify:
-   a build id, a capability flag, a vendor's own key. A reader that
-   does not know a key skips it, which is the rule the value model
-   already has for a tag it does not know.
-
-   **A pointer, because this struct is `Copy`** and every reader
-   projects its fields with a bitwise read. A [`Map`] held INLINE
-   would be copied by each of those reads, and a `Map` frees what it
-   owns on drop — so every copy would be a second owner of one
-   buffer. A pointer has no drop glue whatever it addresses.
-
-   **Non-null means a well-formed map.** Nothing here checks that,
-   and a library that writes a non-null pointer to anything else has
-   caused undefined behaviour at the read. It is the same class of
-   promise as [`vtable`](ProviderInfo::vtable), whose shape only the
-   `kind` knows, and as the allocator's outliving everything built
-   through it.
-
-   Unlike [`config`](ProviderInfo::config), null and an empty map mean
-   the same thing here — "nothing to add" has no second reading
-   worth keeping apart.
-   */
-  guatiao_map_ptr meta;
-} guatiao_host_info;
+  const void *vtable;
+} guatiao_kind_table;
 
 /*
- A borrowed sequence of kind names.
-
- # Why this one carries no stride
-
- [`Providers`] states its stride because a `ProviderInfo` can grow a
- field. A [`Str`] cannot: it declares no `struct_size`, so it has no
- mechanism to grow through and its layout is frozen by definition.
- Where there is no versioning there is no version skew, and the element
- size is the same number on both sides of the boundary.
+ A borrowed array of [`KindTable`], carrying its stride like
+ [`Providers`] and for the same reason: `struct_size` places fields
+ within one element, and only the library knows how far apart the
+ elements are.
  */
-typedef struct guatiao_kinds {
+typedef struct guatiao_kind_tables {
   /*
-   First name. May be null when `len` is 0.
+   First table. May be null when `len` is 0.
    */
-  const struct guatiao_str *ptr;
+  const struct guatiao_kind_table *ptr;
   /*
    How many.
    */
   size_t len;
-} guatiao_kinds;
+  /*
+   `sizeof(guatiao_kind_table)` as the LIBRARY compiled it.
+   */
+  size_t stride;
+} guatiao_kind_tables;
 
 /*
  One thing a library offers.
@@ -785,7 +722,208 @@ typedef struct guatiao_provider_info {
    by value, which is an incomplete type that compiles nowhere.
    */
   bool (*available)(void *ctx, struct guatiao_str *reason);
+  /*
+   One function table per kind, for a provider serving several kinds
+   with a table each. See [`KindTables`]. May be empty: `vtable`
+   above then serves every kind in `kinds`, which is how a provider
+   with one table for everything, or none, declares itself.
+
+   A reader asks [`ProviderView::table_for`](super::raw::ProviderView::table_for):
+   a table here for the kind first, then `vtable` when `kinds` names
+   the kind.
+   */
+  struct guatiao_kind_tables tables;
 } guatiao_provider_info;
+
+/*
+ What a host answers a library that asks it something: the lookups its
+ registry can do, and its allocator, as slots a library calls.
+
+ **Every answer is a pointer to the offering library's own descriptor**,
+ which lives as long as that library, which is for the life of the
+ process. Nothing borrowed from the host's registry escapes, so the
+ registry may change or go away while a library holds an answer.
+
+ A host that has been dropped answers `GUATIAO_ERR_GONE` from every
+ slot and touches nothing it freed.
+
+ Slots are spelled out inline rather than through a type alias: cbindgen
+ renders an aliased function-pointer field as an opaque struct used by
+ value, which is an incomplete type that compiles nowhere.
+ */
+typedef struct guatiao_host_services {
+  /*
+   `sizeof(guatiao_host_services)` as the host compiled it. Always
+   first.
+   */
+  uint32_t struct_size;
+  /*
+   Passed back to every slot below. Opaque to a library.
+   */
+  void *ctx;
+  /*
+   One provider by the key the host files it under, or
+   `GUATIAO_ERR_NOT_FOUND`. Writes the descriptor's address through
+   `out`.
+   */
+  guatiao_status (*get)(void *ctx, struct guatiao_str key, const struct guatiao_provider_info **out);
+  /*
+   Every provider serving `kind` — every one, when `kind` is empty —
+   in the host's own order (`priority DESC, key ASC`), **including
+   providers that are not available**: the caller asks each and
+   chooses. Fills up to `cap` entries at `out` and writes the total
+   through `total`; call with `cap = 0` to size a buffer.
+   */
+  guatiao_status (*list)(void *ctx,
+                         struct guatiao_str kind,
+                         const struct guatiao_provider_info **out,
+                         size_t cap,
+                         size_t *total);
+  /*
+   The same allocator as `HostInfo::alloc`, for code that kept only
+   this table. Null for a host that offers none.
+   */
+  const struct guatiao_alloc *(*alloc)(void *ctx);
+} guatiao_host_services;
+
+/*
+ What the host tells a library about itself, on the way in.
+
+ The allocator is here because a library that wants to build a tree the
+ host will keep can build it in the host's own arena, and then the host
+ frees it with nothing to remember. A library that would rather use its
+ own passes its own; every owned container records which it was.
+
+ **Valid for the life of the process.** A host hands a library a pointer
+ to a block it never frees, so a library may keep the pointer (as a
+ [`Host`](super::raw::Host)) and read it from any later call. What the
+ block answers about the registry changes as the host loads and ranks;
+ once the host's registry is gone, every lookup through it answers
+ `GUATIAO_ERR_GONE` and touches nothing freed.
+ */
+typedef struct guatiao_host_info {
+  /*
+   `sizeof(guatiao_host_info)` as the host compiled it. Always first.
+   */
+  uint32_t struct_size;
+  /*
+   The envelope version the host speaks. See [`ABI_VERSION`].
+   */
+  uint32_t abi_version;
+  /*
+   Who the host is, for a library that registers different providers
+   for different hosts.
+   */
+  struct guatiao_str host_id;
+  /*
+   The host's own version string, uninterpreted.
+   */
+  struct guatiao_str host_version;
+  /*
+   The host's allocator, or null. Valid for the life of the process,
+   like the block it sits in, and it must be: every tree built through
+   it records this address.
+   */
+  const struct guatiao_alloc *alloc;
+  /*
+   Anything else this host wants to say, as an ordinary value, or
+   null. Conventionally a map.
+
+   The escape hatch every envelope needs and no envelope can specify:
+   a build id, a capability flag, a vendor's own key. A reader that
+   does not know a key skips it, which is the rule the value model
+   already has for a tag it does not know.
+
+   **A pointer, because this struct is `Copy`** and every reader
+   projects its fields with a bitwise read. A [`Map`] held INLINE
+   would be copied by each of those reads, and a `Map` frees what it
+   owns on drop — so every copy would be a second owner of one
+   buffer. A pointer has no drop glue whatever it addresses.
+
+   **Non-null means a well-formed map.** Nothing here checks that,
+   and a library that writes a non-null pointer to anything else has
+   caused undefined behaviour at the read. It is the same class of
+   promise as [`vtable`](ProviderInfo::vtable), whose shape only the
+   `kind` knows, and as the allocator's outliving everything built
+   through it.
+
+   Unlike [`config`](ProviderInfo::config), null and an empty map mean
+   the same thing here — "nothing to add" has no second reading
+   worth keeping apart.
+   */
+  guatiao_map_ptr meta;
+  /*
+   What the host will answer a library that asks, or null for a host
+   that answers nothing. See [`HostServices`]. Appended after `meta`;
+   a library reads it only when `struct_size` covers it.
+   */
+  const struct guatiao_host_services *services;
+} guatiao_host_info;
+
+/*
+ One per-path mode override: what the *declarer* of an option knows
+ that whoever merges two maps does not.
+ */
+typedef struct guatiao_merge_override {
+  /*
+   The dotted path this governs, matched exactly.
+   */
+  struct guatiao_str path;
+  /*
+   One of the `GUATIAO_MERGE_*` mode constants.
+   */
+  uint32_t mode;
+} guatiao_merge_override;
+
+/*
+ Borrowed bytes: any content at all, NULs included.
+
+ Same shape and the same check-the-length rule as `guatiao_str`; a
+ separate type because "text" and "arbitrary bytes" are different
+ promises and collapsing them loses the distinction at every call site.
+ */
+typedef struct guatiao_bytes {
+  /*
+   First byte. May be null or dangling when `len` is 0.
+   */
+  const uint8_t *ptr;
+  /*
+   Length in bytes.
+   */
+  size_t len;
+} guatiao_bytes;
+
+/*
+ A borrowed sequence of values, in order.
+ */
+typedef struct guatiao_values {
+  /*
+   First element. May be null or dangling when `len` is 0.
+   */
+  const struct guatiao_value *ptr;
+  /*
+   Number of elements.
+   */
+  size_t len;
+} guatiao_values;
+
+/*
+ A borrowed sequence of key/value pairs, in **insertion order**.
+
+ Order is part of the contract, not an artefact: consumers render maps
+ as forms, print them as tables and diff them in tests, and all three
+ need it stable and meaningful.
+ */
+typedef struct guatiao_entries {
+  /*
+   First entry. May be null or dangling when `len` is 0.
+   */
+  const guatiao_entry *ptr;
+  /*
+   Number of entries.
+   */
+  size_t len;
+} guatiao_entries;
 
 /*
  A borrowed sequence of provider descriptors.
@@ -887,6 +1025,37 @@ typedef struct guatiao_library_info {
   guatiao_map_ptr meta;
 } guatiao_library_info;
 
+/*
+ The first eight bytes of every kind table.
+ */
+typedef struct guatiao_kind_header {
+  /*
+   `sizeof` the table as the library compiled it. Always first.
+   */
+  uint32_t struct_size;
+  /*
+   [`Kind::FLOOR_HASH`] of the declaration the table was built from.
+   */
+  uint32_t floor_hash;
+} guatiao_kind_header;
+
+/*
+ Why a call across a kind failed, as a provider states it.
+
+ A shim writes one through an out-pointer; the proxy hands it back as
+ the `Err` of the trait method. `message` may be empty.
+ */
+typedef struct guatiao_provider_error {
+  /*
+   What went wrong, as a status.
+   */
+  guatiao_status status;
+  /*
+   The provider's own words, possibly empty.
+   */
+  struct guatiao_string message;
+} guatiao_provider_error;
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -915,11 +1084,31 @@ struct guatiao_registry *guatiao_registry_new(struct guatiao_str id,
                                               const struct guatiao_alloc *alloc);
 
 /*
+ How this registry introduces itself to a library: a pointer to a block
+ that outlives the registry, carrying the host's id and version, its
+ allocator, and a `services` table a library calls to ask what is
+ loaded.
+
+ For a host that drives a library itself — calling
+ `guatiao_library_entry` by hand — this is the pointer to pass. The
+ loader passes it on every load. Leaked on first use, never freed, so a
+ library may keep it; after `guatiao_registry_free` its services answer
+ `GUATIAO_ERR_GONE`. Null for a null handle.
+
+ # Safety
+
+ `reg` is a live handle.
+ */
+const struct guatiao_host_info *guatiao_registry_host(struct guatiao_registry *reg);
+
+/*
  Releases a registry. Null is a no-op.
 
  **The libraries it loaded stay mapped.** Nothing in this crate unloads
  one, because every tree, string and vtable they handed over points into
- their images; this frees the host's own table and nothing else.
+ their images; this frees the host's own table and nothing else. The
+ block `guatiao_registry_host` handed out stays too, and answers
+ `GUATIAO_ERR_GONE` from then on.
 
  # Safety
 
@@ -955,10 +1144,14 @@ guatiao_status guatiao_registry_libraries_keyed_by(struct guatiao_registry *reg,
 /*
  Loads one file, writing what happened to `out` as a map.
 
- `{"loaded": <library>}` or `{"skipped": "<why>", "from": "<path>"}`,
- where `from` is present only when the reason has one. **A skip is an
- answer, not a failure**: the file is not a library, the library
- declined this host, or this registry already has it.
+ `{"loaded": <library>}`, `{"skipped": "<why>", "from": "<path>",
+ "abi": <n>}` with `from` and `abi` present only when the reason has
+ one, or `{"failed": "<message>"}`. **A skip is an answer, not a
+ failure**: the file is not a library (`no-entry-symbol`), the library
+ declined this host (`declined-this-host`), speaks another envelope
+ version (`unsupported-abi`), or this registry already has it
+ (`already-loaded`). A failure is a file the loader could not map or a
+ descriptor this build cannot read.
 
  **Mapping a library runs its static initialisers**, which may do
  anything, including abort the process. Name files you are willing to
@@ -1212,6 +1405,13 @@ const struct guatiao_value *guatiao_registry_provider_config(const struct guatia
  be null, and receives a map describing the disagreement when the merge
  fails on one.
 
+ Both `out` and a non-null `out_error` are written the absent marker on
+ entry, so a failed call leaves each ABSENT rather than untouched — a
+ caller that reads one back after a failure reads what the call
+ produced, not what its own local happened to contain.
+
+ A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
+
  # Safety
 
  Every non-null pointer addresses what its type says, `out` addresses
@@ -1235,6 +1435,16 @@ guatiao_status guatiao_merge(uint32_t mode,
  and what would have been accepted — never the value that was refused,
  because a field may be marked sensitive and an error type that
  quotes its input is one that eventually logs a passphrase.
+
+ A non-null `out_error` is written the absent marker on entry, so a
+ call that failed for any other reason — a null pointer, an allocator
+ that could not build the detail — leaves it ABSENT rather than
+ untouched.
+
+ Either tree nested deeper than `GUATIAO_MAX_DEPTH` is
+ `GUATIAO_ERR_BAD_VALUE`: this walks two trees a caller did not write,
+ and an unbounded walk over one is a stack overflow rather than an
+ error.
 
  # Safety
 
@@ -1272,6 +1482,9 @@ const struct guatiao_value *guatiao_schema_resolve(const struct guatiao_value *s
  `properties`, so a bare pointer to a field's schema cannot say what it
  is called. Same for the three below.
 
+ `out` is written the absent marker on entry, so a failed call leaves
+ it ABSENT. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
+
  # Safety
 
  `schema` addresses a well-formed value, `key` a readable view, and
@@ -1288,6 +1501,9 @@ guatiao_status guatiao_schema_flat_keys(const struct guatiao_value *schema,
  `GUATIAO_ERR_WRONG_KIND` when the key names no field, the field is not
  a variant, or the value is not a map — all of which are the same "it
  does not apply" the Rust side reports as `false`.
+
+ `out` is written the absent marker on entry, so a failed call leaves
+ it ABSENT. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
 
  # Safety
 
@@ -1306,6 +1522,9 @@ guatiao_status guatiao_schema_flatten(const struct guatiao_value *schema,
  The reverse of [`guatiao_schema_flatten`], and the round trip is what
  makes the projection usable: a front end reads text, hands it back, and
  gets the value the schema describes.
+
+ `out` is written the absent marker on entry, so a failed call leaves
+ it ABSENT. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
 
  # Safety
 
@@ -1331,6 +1550,10 @@ guatiao_status guatiao_value_free(struct guatiao_value *v);
 
 /*
  Deep-copies `src` into `alloc`, writing the copy through `out`.
+
+ `out` is written the absent marker on entry, so a failed call leaves
+ it ABSENT rather than untouched. A null or unusable allocator is
+ `GUATIAO_ERR_ALLOC`.
 
  # Safety
 
@@ -1383,6 +1606,8 @@ guatiao_status guatiao_value_bool(uint8_t b, struct guatiao_value *out);
 /*
  Writes an empty map through `out`, to be grown through `alloc`.
 
+ A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
+
  # Safety
 
  The pointers are null or valid, and `out` addresses writable storage.
@@ -1391,6 +1616,8 @@ guatiao_status guatiao_value_map(const struct guatiao_alloc *alloc, struct guati
 
 /*
  Writes an empty list through `out`, to be grown through `alloc`.
+
+ A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
 
  # Safety
 
@@ -1451,9 +1678,15 @@ guatiao_status guatiao_value_bytes(const struct guatiao_alloc *alloc,
  the copy: there is no copying variant, so the cost is always a line you
  can see.
 
+ **`node` and `value` must not overlap**, and the same pointer for both
+ is `GUATIAO_ERR_BAD_VALUE`: this moves the 40 bytes at `value` into
+ `node`, which cannot be a slot inside the tree it is moving. A null or
+ unusable allocator is `GUATIAO_ERR_ALLOC`.
+
  # Safety
 
- The pointers are null or valid, and the key's bytes are readable.
+ The pointers are null or valid, the key's bytes are readable, and
+ `value` does not address a node inside `node`.
  */
 guatiao_status guatiao_map_set(const struct guatiao_alloc *alloc,
                                struct guatiao_value *node,
@@ -1484,6 +1717,14 @@ guatiao_status guatiao_map_clear(struct guatiao_value *node);
  **Use this before rebuilding a record**, or every field you do not
  model is dropped on write-back.
 
+ **`dst` and `src` must not overlap**, and the same pointer for both is
+ `GUATIAO_ERR_BAD_VALUE`. `src` may be a node stored inside `dst`: the
+ source is copied whole before `dst` is touched. A null or unusable
+ allocator is `GUATIAO_ERR_ALLOC`.
+
+ Not atomic: a failure part-way leaves the entries already copied in
+ place.
+
  # Safety
 
  The pointers are null or valid.
@@ -1498,9 +1739,14 @@ guatiao_status guatiao_map_copy_from(const struct guatiao_alloc *alloc,
  To append something you only borrowed, call `guatiao_value_clone`
  first and pass the copy.
 
+ **`node` and `value` must not overlap**, and the same pointer for both
+ is `GUATIAO_ERR_BAD_VALUE`, as for `guatiao_map_set`. A null or
+ unusable allocator is `GUATIAO_ERR_ALLOC`.
+
  # Safety
 
- The pointers are null or valid.
+ The pointers are null or valid, and `value` does not address a node
+ inside `node`.
  */
 guatiao_status guatiao_list_push(const struct guatiao_alloc *alloc,
                                  struct guatiao_value *node,
@@ -1527,6 +1773,9 @@ guatiao_status guatiao_list_clear(struct guatiao_value *node);
 /*
  Appends UTF-8 text to a string value.
 
+ `text` may view the node's own bytes; an overlapping source is copied
+ out first. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
+
  # Safety
 
  The pointers are null or valid and the view's bytes are readable.
@@ -1537,6 +1786,9 @@ guatiao_status guatiao_string_push(const struct guatiao_alloc *alloc,
 
 /*
  Appends to a bytes value.
+
+ `bytes` may view the node's own buffer, as in `guatiao_string_push`. A
+ null or unusable allocator is `GUATIAO_ERR_ALLOC`.
 
  # Safety
 
@@ -1832,6 +2084,48 @@ static inline double guatiao_float_or(const guatiao_value *v, double fallback) {
   return parsed;
 }
 
+/* ---- the keys a schema is written with -------------------------------
+ *
+ * A schema IS a value, so reading one is walking a map -- with these key
+ * names, which are JSON Schema's own (2020-12) plus the x- prefixed ones
+ * this crate adds. They are macros rather than a second set of structs
+ * for the same reason the schema is data: a consumer compares a key it
+ * read against one of these and needs nothing linked.
+ *
+ * GUATIAO_KEY_DIALECT is the value of GUATIAO_KEY_SCHEMA on a root
+ * document, not a key. The GUATIAO_KEY_TYPE_* names are the values
+ * GUATIAO_KEY_TYPE takes.
+ */
+
+#define GUATIAO_KEY_SCHEMA "$schema"
+#define GUATIAO_KEY_DIALECT "https://json-schema.org/draft/2020-12/schema"
+#define GUATIAO_KEY_TYPE "type"
+#define GUATIAO_KEY_TITLE "title"
+#define GUATIAO_KEY_DESCRIPTION "description"
+#define GUATIAO_KEY_DEFAULT "default"
+#define GUATIAO_KEY_PROPERTIES "properties"
+#define GUATIAO_KEY_REQUIRED "required"
+#define GUATIAO_KEY_ITEMS "items"
+#define GUATIAO_KEY_MINIMUM "minimum"
+#define GUATIAO_KEY_MAXIMUM "maximum"
+#define GUATIAO_KEY_ENUM "enum"
+#define GUATIAO_KEY_CONST "const"
+#define GUATIAO_KEY_ANY_OF "anyOf"
+#define GUATIAO_KEY_ONE_OF "oneOf"
+#define GUATIAO_KEY_X_SECTION "x-section"
+#define GUATIAO_KEY_X_ORDER "x-order"
+#define GUATIAO_KEY_X_ADVANCED "x-advanced"
+#define GUATIAO_KEY_X_SENSITIVE "x-sensitive"
+#define GUATIAO_KEY_X_ENUM_LABELS "x-enum-labels"
+#define GUATIAO_KEY_X_VARIANT_TAG "x-variant-tag"
+#define GUATIAO_KEY_TYPE_BOOLEAN "boolean"
+#define GUATIAO_KEY_TYPE_INTEGER "integer"
+#define GUATIAO_KEY_TYPE_NUMBER "number"
+#define GUATIAO_KEY_TYPE_STRING "string"
+#define GUATIAO_KEY_TYPE_ARRAY "array"
+#define GUATIAO_KEY_TYPE_OBJECT "object"
+#define GUATIAO_KEY_TYPE_BYTES "bytes"
+
 /* ---- writing a tree as a literal ------------------------------------- */
 
 /*
@@ -1839,6 +2133,14 @@ static inline double guatiao_float_or(const guatiao_value *v, double fallback) {
  allocator, which is what marks the storage as NOT OURS: such a buffer is
  never freed, so a literal tree may be passed to guatiao_value_free()
  safely, and the first append copies out of it and leaves it untouched.
+
+ ONLY GROWTH COPIES OUT. Mutating a literal in place -- guatiao_map_set()
+ over a key it already has, guatiao_map_discard(), guatiao_list_discard(),
+ guatiao_map_clear(), guatiao_list_clear() -- shifts elements and frees
+ values THROUGH THE ARRAY YOU DECLARED, whatever its capacity says. So a
+ literal you intend to mutate must live in writable storage: a static
+ without const, or a local. One in read-only memory may be read, cloned,
+ merged, grown and freed, but not emptied.
 
  C only. A C++ caller builds the same thing with the functions above.
  */

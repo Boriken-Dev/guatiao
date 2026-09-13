@@ -83,7 +83,19 @@ text.as_str() -> Option<&str>          buffer.as_slice() -> &[u8]
 
 Entry::key() -> &[u8]                  // bytes: a key may contain a NUL
 Entry::key_str() -> Option<&str>       Entry::value() -> &Value
+Entry::value_mut() -> &mut Value       // the key is not offered this way
+Text::default() / Buffer::default()    // empty, allocating nothing
 ```
+
+Every name above is at the **crate root**: `guatiao::Text`,
+`guatiao::Entry`, `guatiao::Tag`, `guatiao::Str`, beside `Alloc`,
+`List`, `Map`, `MAX_DEPTH`, `ReadValue`, `Status`, `Value` and
+`ValueError`.
+
+**`guatiao::Bytes` is the conversion marker**, not the borrowed view: it
+is the field type that says "cross as the bytes kind". The borrowed view
+of the same name stays at `guatiao::value::types::Bytes`, with
+`Bytes::borrowed(&'static [u8])` and `Bytes::empty()` mirroring `Str`.
 
 **Setting an existing key replaces it in place**, keeping its position.
 Map order is insertion order and is part of the contract.
@@ -110,7 +122,12 @@ Naming an allocator, all fallible: `Value::string_in`, `bytes_in`,
 `list_in(alloc)` are infallible (an empty container owns nothing).
 
 `absent` is not `null`: absent is the answer to a lookup that found
-nothing, null is a stored value. Absent is never stored in a list.
+nothing, null is a stored value.
+
+**Nothing here stores absent in a list or a map, and nothing refuses one
+that arrives.** It is a convention this crate keeps, not an invariant it
+enforces: a foreign producer can put an absent node anywhere a value
+goes, and every reader treats it as the ordinary kind it is.
 
 ## Ownership
 
@@ -122,6 +139,16 @@ let mut out = Value::absent();
 let status = unsafe { guatiao_merge(..., &mut out, ...) };
 // `out` now owns the result and frees when it goes out of scope.
 ```
+
+**`value.alloc()` refuses two different things.** A scalar — null, bool,
+absent — has no container to have recorded an allocator and answers
+`WrongKind`. A container whose `alloc` field is null — a literal another
+language wrote as a brace initialiser — answers `Alloc(AllocError::Null)`.
+Growing either means naming one to adopt: `set_in`, `push_in`.
+
+**`copy_from` is not atomic.** A failure at entry *k* leaves entries
+`0..k` applied. Nothing leaks, and `src` may be this node or one inside
+it: the source is copied whole before the target is touched.
 
 **Crossing FFI**: a value handed to a foreign caller must be forgotten
 (`std::mem::forget`, `ManuallyDrop`, or a move into `ptr::write`) or Drop
@@ -266,6 +293,21 @@ names a variant's discriminant, because JSON Schema has no discriminator
 keyword and inferring one stops working the moment two properties are
 `const`.
 
+**And one rule is applied that the document does not state.** Validation
+refuses a key nobody declared, while nothing writes
+`additionalProperties: false` — whose JSON Schema default is `true`. So a
+schema from here handed to a general JSON Schema validator accepts what
+`validate_map` rejects. Refusing is deliberate (silently dropping a
+misspelled field is how somebody ends up convinced a setting does
+nothing); emitting the keyword is not done, because it would change what
+every existing document means.
+
+`Schema::schema()` carries **every key of the finished kind** onto the
+root document, not only `properties`/`required`: a tagged enum's
+`schema()` is its `x-variant-tag` and its `oneOf`. `SchemaBuilder::finish`
+refuses a field key containing `.` (`WrongKind`), which is
+`flat::check_keys` run where nobody has to remember it.
+
 Build:
 
 ```rust
@@ -376,6 +418,10 @@ validate_texts(schema, &BTreeMap<String, String>)
 error never quotes the value it refused** — a field may be sensitive —
 it says what would have been accepted.
 
+**Validation is depth-bounded** by `MAX_DEPTH`, like every other walk
+here: it runs over two trees a caller supplied, and either nested past
+the bound is a `BadValue` naming the key rather than a stack overflow.
+
 Flat projection, for a front end that only has `key -> text`:
 `flatten`, `unflatten`, `keys`, `resolve`, `is_sensitive`, `check_keys`,
 separator `.`.
@@ -400,7 +446,10 @@ MergeMode::{Simple, Deep, Substitute}
 by position; **off by default**. `MergeOverrides` is a `path -> mode`
 lookup for per-key control, and `schema::merge` reads the same thing from
 a schema's own `x-merge` annotation (`merge_overrides`, `merge_options`,
-`merge_with_schema`).
+`merge_with_schema`). **Nested objects are walked**: a declaration on a
+field of a nested object governs its dotted path (`tls.ciphers`), which
+is the path the merge matches. A variant's arms are not walked — two arms
+may declare different modes for one path.
 
 **Provenance is keyed by leaf path**, not by top-level key: after a
 recursive merge `tls.ca` and `tls.verify` may come from different layers,
@@ -424,8 +473,9 @@ guatiao::guatiao_library!(describe);   // emits `guatiao_library_entry`
 
 `LibraryInfo { struct_size, abi_version, id, version, providers, meta }`;
 `ProviderInfo { struct_size, vtable_size, kinds, id, display_name, config,
-vtable, ctx, meta, version }`; `HostInfo { struct_size, abi_version,
-host_id, host_version, alloc, meta }`. `ABI_VERSION` is 1.
+vtable, ctx, meta, version, available }`; `HostInfo { struct_size,
+abi_version, host_id, host_version, alloc, meta, services }`;
+`HostServices { struct_size, ctx, get, list, alloc }`. `ABI_VERSION` is 1.
 
 `Providers { ptr, len, stride }` and `Kinds { ptr, len }` — the provider
 array states its stride and the kind array does not, because a `Str`
@@ -458,7 +508,8 @@ reg.available("greeter")                   // the same, that can run here
 reg.best("greeter")                        // the head of that
 reg.set_priority(id, 10) / reg.priority(id)
 reg.provider("acme_net_pve")               // by key: Option<&Provider>
-reg.providers_of("acme_net_pve")           // every version of one id
+reg.providers_of("acme_net_pve")           // every loaded version of one id (>1 only under %id@%version)
+reg.all() / reg.all_ranked()               // everything, load order / best first
 provider.kinds() / provider.supports(kind) // what it serves
 provider.config_schema()                   // Option<&'static Value>
 provider.vtable() -> (*const c_void, usize)
@@ -478,10 +529,24 @@ loaded.meta                                // Option<&'static Map>
   had not reached.
 - **A provider id is globally meaningful**, conventionally
   `{library id}_{name}`. Two libraries may offer one provider — a
-  re-export, a vendored copy — and they agree on its id, which is what
-  makes it detectable: the second is
-  `Skipped::ProviderAlreadyLoaded { id, from }` and **the rest of that
-  library goes on loading**.
+  re-export, a vendored copy, a second build — and they agree on its id,
+  which is what makes it detectable. **The rendered key decides**: when
+  the key a provider renders is already filed and the holder has the same
+  id, the newcomer is `Skipped::ProviderAlreadyLoaded { id, from }` and
+  **the rest of that library goes on loading**; so `%id` keeps one build
+  of a provider and `%id@%version` keeps every build. Same key, different
+  id is `LoadError::Duplicate`.
+- **A file can come to nothing four ways, each reported as itself:**
+  `Skipped::NoEntrySymbol` (not a library), `Skipped::DeclinedThisHost`
+  (its entry point answered null), `Skipped::UnsupportedAbi { declared }`
+  (it speaks another envelope version; the host's `abi_version` is
+  checked by the library, the library's by the loader), and
+  `LoadError::Malformed` (a descriptor this build cannot read: below the
+  floor, non-UTF-8 text, a stride below the floor, an element overlapping
+  its neighbour).
+- **A library's entry point must not call back into the registry loading
+  it.** `load_file` holds the registry exclusively for the whole call; a
+  provider that needs a peer looks it up later, from a vtable call.
 - **A provider serves many kinds.** `kinds` is a list; `providers(kind)`
   filters on `supports(kind)`. One implementation that both discovers
   hosts and opens sessions to them is one provider answering to both, not
@@ -493,6 +558,41 @@ loaded.meta                                // Option<&'static Map>
 - `LoadError` is then only `Open`, `Malformed`, and `Duplicate` for two
   **different** providers landing on one key, which only a host's own
   template can produce.
+
+### A library can reach its host
+
+The entry point receives a `Host` (`Copy + Send + Sync + 'static`), a
+pointer to a block the registry leaks on first use and never frees. Keep
+it in a `OnceLock` of your own.
+
+```rust
+fn describe(host: Host) -> Option<&'static LibraryInfo> { .. }
+host.id() / host.version() / host.abi_version()
+host.alloc() -> Option<Alloc>                // the host's, or None
+host.meta() -> Option<&'static Map>
+host.get(key) -> Result<Option<&'static ProviderInfo>, Status>
+host.list(kind) -> Result<Vec<&'static ProviderInfo>, Status>  // "" lists all
+provider_info.view() -> Option<ProviderView>  // then .vtable_as::<T>(), .id, .ctx
+host.snapshot() -> HostInfo                   // a copy, absent fields nulled
+```
+
+- **Answers are pointers to other libraries' own descriptors**, which
+  live for the process. Nothing borrowed from the registry escapes.
+- `list` returns **every** provider claiming the kind, unavailable ones
+  included, in the host's order. **There is no best-pick**: ask each
+  (`view().available()`) and choose.
+- `Err(GUATIAO_ERR_NULL)`: the host offers no services (older host, or a
+  host that passed none). `Err(GUATIAO_ERR_GONE)`: the registry was
+  dropped; the block is still readable, the lookups are not.
+- A lookup from `describe` sees the libraries registered before this one.
+  A provider that needs a peer looks it up from a vtable call, on every
+  call, never at `describe`.
+- The C side: `guatiao_registry_host(reg)` hands a host the same block,
+  to pass to a `guatiao_library_entry` it drives itself; a library reads
+  `host->services->list(ctx, kind, out, cap, &total)` (call with `cap = 0`
+  to size), `->get(ctx, key, &out)` and `->alloc(ctx)`, guarded by
+  `host->struct_size >= offsetof(services) + sizeof` and
+  `services->struct_size`.
 
 ### Ordering is `(priority DESC, key ASC)`
 
@@ -627,9 +727,13 @@ a map would be a number a caller has to cast back, and reading one is the
 moment a caller takes on the kind's contract.
 
 **A skip is an answer, not a failure.** `load_file` writes `{"loaded":…}`,
-`{"skipped":"already-loaded","from":…}` or `{"failed":"<the loader's own
+`{"skipped":"<why>","from":…,"abi":…}` or `{"failed":"<the loader's own
 message>"}` and returns `GUATIAO_OK` for all three; a non-OK status means
-it could not answer at all.
+it could not answer at all. `why` is one of `no-entry-symbol`,
+`declined-this-host`, `unsupported-abi` (with `abi`), `already-loaded`
+(with `from`), `provider-already-loaded` (with `from` and `id`), or in a
+scan report `not-examinable`. `guatiao_registry_providers` with an empty
+kind lists every provider; both listings are best first.
 
 **These need the `load` feature** — the only part of the C surface that
 does, because loading needs `libloading` and a library author takes no
@@ -700,9 +804,15 @@ Values: `guatiao_value_{free,clone,null,absent,bool,map,list,string,
 number,bytes}`, `guatiao_map_{set,discard,clear,copy_from}`,
 `guatiao_list_{push,discard,clear}`, `guatiao_string_push`,
 `guatiao_buffer_push`, `guatiao_alloc_default`.
-Also `guatiao_merge` and `guatiao_schema_validate`.
+Also `guatiao_merge`, and the schema surface:
+`guatiao_schema_{validate,resolve,flat_keys,flatten,unflatten}`.
 
-Every one returns `Status`:
+Every one returns `Status` **except `guatiao_schema_resolve`**, which
+answers a `const guatiao_value *` borrowed from the schema it was given,
+or null — a function returning a pointer has no way to report a status,
+so null is the only failure it can express.
+
+The statuses:
 
 ```
 GUATIAO_OK 0   BAD_VALUE 7   ALLOC 8   WRONG_KIND 9
@@ -720,6 +830,19 @@ Contracts that are not in the signatures:
   know; it never stops.
 - **`guatiao_map_clear` is the map one** and refuses a list, unlike the
   Rust `Value::clear`, which dispatches on the tag.
+- **Every out-parameter is written `absent` on entry**, before anything
+  can fail, so a caller reading one back after a failure reads what the
+  call produced rather than its own uninitialised local.
+- **A null or unusable allocator is `GUATIAO_ERR_ALLOC`**, in every
+  module, however it is wrong.
+- **The two pointers of `guatiao_map_set`, `guatiao_list_push` and
+  `guatiao_map_copy_from` must not overlap**, and the same pointer for
+  both is `GUATIAO_ERR_BAD_VALUE`. `guatiao_map_copy_from` does accept a
+  `src` stored inside `dst`: it copies the source whole first.
+- **`guatiao_string_push` and `guatiao_buffer_push` accept a view of the
+  node's own buffer**; an overlapping source is copied out first.
+- **The schema vocabulary is in the header** as `GUATIAO_KEY_*` macros,
+  so a C consumer compares keys without spelling them.
 
 ## The allocator
 
@@ -727,6 +850,12 @@ An owned container carries the allocator that made it, so growth and free
 never take one. `cap == 0` means the buffer is **not owned** — a literal
 or a borrow, never freed, copied out of on first growth. So `cap >= len`
 does **not** hold on input.
+
+**Only growth copies out.** Removing, clearing and replacing write
+through the buffer the container already has, whatever its capacity says,
+so a literal that will be mutated must live in **writable storage** — a
+C `static` without `const`, or a local. One in read-only memory may be
+read, cloned, merged, grown and freed, but not emptied.
 
 ```c
 typedef struct guatiao_alloc {

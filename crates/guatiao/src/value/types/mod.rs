@@ -34,6 +34,15 @@
 //! and never be freed. The first growth copies out of it and leaves the
 //! original untouched.
 //!
+//! **Only GROWTH copies out.** Mutation in place — removing an element,
+//! clearing a container, replacing the value under an existing key —
+//! shifts elements and writes through the buffer the container already
+//! has, whatever its capacity says. So a literal that will be mutated
+//! must live in **writable storage**: a C `static` without `const`, or a
+//! local. One in read-only memory may be read, cloned, merged and freed,
+//! and a borrowed buffer emptied this way is changed under whoever still
+//! owns it.
+//!
 //! **`cap >= len` therefore does NOT hold on input.** A literal is
 //! legitimately `len = 5, cap = 0`. Spare capacity is `cap - len` only
 //! after `cap == 0` has been handled, and the arithmetic in
@@ -51,10 +60,10 @@
 // document it, and this allow does not discourage that.
 #![allow(missing_docs)]
 
-// One module per type, each carrying its own definition and, after phase
-// 2, its own impl. A `//` comment, never a `///`: rustdoc merges a `///`
-// on a `mod` line with that module's own `//!` header and then resolves
-// the header's links here.
+// One module per type, each carrying its own definition and its own
+// impl. A `//` comment, never a `///`: rustdoc merges a `///` on a `mod`
+// line with that module's own `//!` header and then resolves the
+// header's links here.
 pub mod buffer;
 pub mod list;
 pub mod map;

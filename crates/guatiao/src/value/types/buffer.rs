@@ -32,6 +32,29 @@ pub struct Bytes {
     pub len: usize,
 }
 
+impl Bytes {
+    /// A view of bytes this program already holds.
+    ///
+    /// `'static` where [`Str::borrowed`](super::Str::borrowed) takes any
+    /// lifetime, because the view keeps no lifetime of its own: it is a
+    /// C struct, and the only borrow that is free of a guarantee somebody
+    /// has to make by hand is one that outlives the program.
+    pub const fn borrowed(bytes: &'static [u8]) -> Bytes {
+        Bytes {
+            ptr: bytes.as_ptr(),
+            len: bytes.len(),
+        }
+    }
+
+    /// An empty view.
+    pub const fn empty() -> Bytes {
+        Bytes {
+            ptr: std::ptr::null(),
+            len: 0,
+        }
+    }
+}
+
 /// Owned, growable bytes. See `guatiao_string` for the `cap` rule.
 #[repr(C)]
 #[derive(Debug)]
@@ -71,6 +94,13 @@ impl Buffer {
         }
         // SAFETY: the first `len` bytes are initialised.
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+}
+
+/// Empty, growing through Rust's allocator. See [`Text::default`](super::Text).
+impl Default for Buffer {
+    fn default() -> Buffer {
+        Buffer::new(&[])
     }
 }
 

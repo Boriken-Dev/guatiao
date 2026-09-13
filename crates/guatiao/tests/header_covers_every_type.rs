@@ -21,6 +21,14 @@
 //! notices the next time somebody adds a type and forgets, which is the
 //! same failure with a different name on it.
 //!
+//! # The same hole exists for macros
+//!
+//! A constant reaches the header as a `#define`, in the same flat
+//! namespace, and `[export.rename]` is the same fix — but a scan for
+//! `typedef` lines cannot see one. `MAX_DEPTH` shipped unprefixed that
+//! way, one entry short in the rename table, in a header a consumer
+//! includes beside its own headers.
+//!
 //! # It also covers the rename table
 //!
 //! The types are named for Rust on the Rust side and for C on the C side,
@@ -257,4 +265,103 @@ fn mentions(header: &str, name: &str) -> bool {
             || t.starts_with(&format!("typedef struct {name} {name};"))
             || t.starts_with(&format!("typedef union {name} {name};"))
     })
+}
+
+/// Every macro the header defines carries this crate's prefix.
+///
+/// A constant is exported as a `#define` into the same flat namespace a
+/// type lands in, and the scan above reads only `typedef` lines — so
+/// `MAX_DEPTH` reached the committed header unprefixed, one line short in
+/// `[export.rename]`, where it would have collided with any consumer that
+/// has a depth bound of its own.
+#[test]
+fn every_macro_the_header_defines_is_prefixed() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let header = std::fs::read_to_string(manifest.join("include/guatiao.h"))
+        .expect("the header is committed");
+
+    let mut names = Vec::new();
+    for line in header.lines() {
+        let Some(rest) = line.trim().strip_prefix("#define ") else {
+            continue;
+        };
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        if !name.is_empty() {
+            names.push(name);
+        }
+    }
+
+    assert!(
+        names.len() >= 8,
+        "found only {} macros in the header, so this scan is not reading it",
+        names.len()
+    );
+
+    let bare: Vec<_> = names
+        .iter()
+        // The include guard is the header's own name, and is already
+        // prefixed by the same rule.
+        .filter(|n| !n.starts_with("GUATIAO_"))
+        .collect();
+    assert!(
+        bare.is_empty(),
+        "these macros reach the header under a bare name and would collide \
+         with whatever else a consumer defines: {bare:?}. Add each to \
+         `[export.rename]` in cbindgen.toml and regenerate."
+    );
+}
+
+/// Every key a schema is written with reaches the header as a macro.
+///
+/// A schema IS a value, so a C consumer reads one by comparing keys — and
+/// a key it has to spell by hand is a key it can misspell. The list is
+/// read out of `vocab.rs` at test time rather than copied here, because a
+/// second copy is the thing that goes stale: a constant added there and
+/// not added to the trailer fails this.
+#[test]
+fn every_schema_key_reaches_the_header_as_a_macro() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let header = std::fs::read_to_string(manifest.join("include/guatiao.h"))
+        .expect("the header is committed");
+    let vocab = std::fs::read_to_string(manifest.join("src/schema/vocab.rs"))
+        .expect("the vocabulary is committed");
+
+    let mut declared = Vec::new();
+    for line in vocab.lines() {
+        // `pub const NAME: &str = "value";`, and nothing else: the
+        // `&[&str]` lists below it are collections of these.
+        let Some(rest) = line.strip_prefix("pub const ") else {
+            continue;
+        };
+        let Some((name, rest)) = rest.split_once(": &str = ") else {
+            continue;
+        };
+        let Some(value) = rest.strip_suffix(';') else {
+            continue;
+        };
+        declared.push((name.to_string(), value.to_string()));
+    }
+
+    assert!(
+        declared.len() >= 20,
+        "found only {} keys in vocab.rs, so this scan is not reading it",
+        declared.len()
+    );
+
+    let missing: Vec<String> = declared
+        .iter()
+        .map(|(name, value)| format!("#define GUATIAO_KEY_{name} {value}"))
+        .filter(|line| !header.lines().any(|l| l.trim() == line))
+        .collect();
+
+    assert!(
+        missing.is_empty(),
+        "these schema keys are declared in Rust and absent from the header, so a \
+         C consumer has to spell them by hand. Add each to the `trailer` in \
+         cbindgen.toml and regenerate:\n  {}",
+        missing.join("\n  ")
+    );
 }

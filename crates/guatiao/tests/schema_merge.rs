@@ -219,3 +219,101 @@ fn annotation_round_trips_through_parse_mode() {
         }
     }
 }
+
+// --- declarations below the top level ------------------------------------
+
+/// A declaration on a field of a NESTED object governs that field's own
+/// dotted path.
+///
+/// It was read from top-level fields only, so `x-merge` two levels down
+/// did nothing at all — silently, which is the worst way for a
+/// declaration to fail. The doc claimed the opposite: that a dotted field
+/// KEY declared a nested path, which `flat::check_keys` refuses at
+/// declaration and `SchemaBuilder::finish` now refuses too.
+#[test]
+fn a_declaration_on_a_nested_field_is_read_as_its_dotted_path() {
+    let alloc = Alloc::rust();
+
+    let schema = SchemaBuilder::new_in(alloc)
+        .field(FieldBuilder::new_in(
+            alloc,
+            "tls",
+            KindBuilder::map_in(
+                alloc,
+                vec![
+                    FieldBuilder::new_in(alloc, "ciphers", KindBuilder::string_in(alloc))
+                        .option(X_MERGE, Value::string("substitute")),
+                    FieldBuilder::new_in(alloc, "roots", KindBuilder::string_in(alloc)),
+                ],
+            ),
+        ))
+        .field(
+            FieldBuilder::new_in(alloc, "tags", KindBuilder::string_in(alloc))
+                .option(X_MERGE, Value::string("deep+mergelists")),
+        )
+        .finish()
+        .expect("a schema this small builds");
+
+    let read = SchemaRef::new(&schema).expect("a schema is a map");
+    let overrides = merge_overrides(read);
+    assert_eq!(
+        overrides.get("tls.ciphers"),
+        Some(MergeMode::Substitute),
+        "a nested field declares the path it occupies"
+    );
+    assert_eq!(overrides.get("tags"), Some(MergeMode::Deep));
+    assert_eq!(
+        overrides.get("tls"),
+        None,
+        "an owner declares nothing of its own"
+    );
+    assert_eq!(overrides.get("tls.roots"), None);
+
+    // And the nested declaration is what the merge then applies: `deep`
+    // would union the two lists, `substitute` replaces them.
+    let earlier = nested("ciphers", &["a", "b"]);
+    let later = nested("ciphers", &["c"]);
+    let merged = merge_with_schema(read, MergeMode::Deep, &earlier, &later, alloc)
+        .expect("the two agree in shape");
+    let tls = merged.get("tls").expect("the nested map survives");
+    assert_eq!(
+        strings_at(tls, "ciphers"),
+        ["c"],
+        "the nested declaration won over the call-site mode"
+    );
+}
+
+/// A `mergelists` asked for below the top level is still asked for.
+#[test]
+fn a_nested_mergelists_declaration_is_resolved_across_the_schema() {
+    let alloc = Alloc::rust();
+    let schema = SchemaBuilder::new_in(alloc)
+        .field(FieldBuilder::new_in(
+            alloc,
+            "tls",
+            KindBuilder::map_in(
+                alloc,
+                vec![
+                    FieldBuilder::new_in(alloc, "ciphers", KindBuilder::string_in(alloc))
+                        .option(X_MERGE, Value::string("deep+mergelists")),
+                ],
+            ),
+        ))
+        .finish()
+        .expect("a schema this small builds");
+
+    let read = SchemaRef::new(&schema).expect("a schema is a map");
+    assert_eq!(
+        merge_options(read),
+        MergeOptions::new().with_mergelists(true)
+    );
+}
+
+/// A map of one nested map holding one list.
+fn nested(key: &str, values: &[&str]) -> Value {
+    let mut inner = Value::map();
+    inner.set(key, list(values)).unwrap();
+    let mut outer = Value::map();
+    outer.set("tls", inner).unwrap();
+    outer
+}

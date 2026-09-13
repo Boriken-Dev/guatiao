@@ -107,6 +107,16 @@ impl Text {
     }
 }
 
+/// Empty, growing through Rust's allocator: [`Text::new`] of `""`.
+///
+/// An empty container owns nothing, so this allocates nothing and cannot
+/// fail.
+impl Default for Text {
+    fn default() -> Text {
+        Text::new("")
+    }
+}
+
 impl From<Text> for Value {
     /// A string value. A NUMBER also stores its digits in a [`Text`], so
     /// that one is spelled [`Value::number`] rather than reached by

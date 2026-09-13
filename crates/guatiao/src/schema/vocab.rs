@@ -60,6 +60,22 @@
 //! presentation extensions [`X_SECTION`], [`X_ORDER`], [`X_ADVANCED`] and
 //! [`X_SENSITIVE`].
 //!
+//! # One rule this crate applies that the document does not state
+//!
+//! **An undeclared key is refused, and nothing writes
+//! `additionalProperties: false`.** JSON Schema's default is `true`, so a
+//! document this crate writes permits what
+//! [`validate`](super::validate) then rejects: a key nobody declared is a
+//! misspelling worth reporting, and silently dropping one is how somebody
+//! ends up convinced a setting does nothing.
+//!
+//! Stated here rather than fixed, because emitting the keyword would
+//! change what every existing document means. A consumer handing one of
+//! these schemas to a general JSON Schema validator gets the laxer
+//! answer, which is the divergence to know about — the same shape as
+//! `type: "bytes"` below, where the document is readable everywhere and
+//! only a strict meta-schema check disagrees.
+//!
 //! # Rules a reader must follow
 //!
 //! **An unrecognised `"type"` means skip that one field**, not reject the

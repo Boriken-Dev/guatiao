@@ -231,9 +231,9 @@ impl Default for Map {
 }
 
 impl From<Map> for Value {
-    /// Safe, and that is a property of an EMPTY container rather than a
-    /// general one: a map straight from [`Map::new`] owns nothing, so
-    /// this promises nothing that could be false.
+    /// Safe for a map holding anything, because it **moves**: the
+    /// container is consumed, the node takes over its buffer, and there
+    /// is never a moment when two structs describe one allocation.
     fn from(map: Map) -> Value {
         let mut v = blank(Tag::GUATIAO_MAP);
         v.payload = Payload {
@@ -261,5 +261,14 @@ impl Entry {
     /// The value stored under it.
     pub fn value(&self) -> &Value {
         &self.value
+    }
+
+    /// The value stored under it, mutably.
+    ///
+    /// The key stays the key: a map is insertion-ordered and looked up by
+    /// exact bytes, so changing one in place would move a value to a key
+    /// nobody searched for. Use `remove` and `set` for that.
+    pub fn value_mut(&mut self) -> &mut Value {
+        &mut self.value
     }
 }
