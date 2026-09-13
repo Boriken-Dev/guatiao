@@ -418,7 +418,7 @@ impl<'a> Kind<'a> {
             // same way an arm with no fields is: it is an object nothing
             // further is declared about. With a tag it is a variant, and a
             // variant with no arms cannot be selected from.
-            vocab::TYPE_OBJECT => match k.get(vocab::X_TAG).and_then(Value::as_str) {
+            vocab::TYPE_OBJECT => match k.get(vocab::X_VARIANT_TAG).and_then(Value::as_str) {
                 Some(tag) => match k.get(vocab::ONE_OF) {
                     Some(arms) => Kind::Variant { tag, arms },
                     None => Kind::Unknown(ty),
@@ -442,7 +442,7 @@ impl<'a> Kind<'a> {
         let (values, labels) = match self {
             Kind::Enum(k) => (
                 k.get(vocab::ENUM).and_then(Value::items).unwrap_or(&[]),
-                k.get(vocab::X_LABELS),
+                k.get(vocab::X_ENUM_LABELS),
             ),
             _ => (&[][..], None),
         };

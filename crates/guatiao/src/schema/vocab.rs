@@ -45,11 +45,11 @@
 //!          | { "type": "integer", "minimum", "maximum" }
 //!          | { "type": "number",  "minimum", "maximum" }
 //!          | { "type": "string" }
-//!          | { "type": "string", "enum": [value, …], "x-labels": {…} }
+//!          | { "type": "string", "enum": [value, …], "x-enum-labels": {…} }
 //!          | { "type": "bytes" }                        (ours)
 //!          | { "type": "array",  "items": schema }
 //!          | { "type": "object", "properties", "required" }
-//!          | { "type": "object", "x-tag": key, "oneOf": [arm, …] }
+//!          | { "type": "object", "x-variant-tag": key, "oneOf": [arm, …] }
 //!          | { "anyOf": [schema, …] }
 //! arm     := { "title", "description",
 //!              "properties": { <tag>: {"const": value}, … },
@@ -86,7 +86,7 @@
 //! are why a builder collects its fields and writes them at `finish`
 //! rather than appending as it goes.
 //!
-//! **A choice's label is keyed, never parallel.** [`X_LABELS`] is a map
+//! **A choice's label is keyed, never parallel.** [`X_ENUM_LABELS`] is a map
 //! from the value in [`ENUM`] to what a person is shown. The shape this
 //! refuses — a labels list beside the values list — lets the two drift in
 //! length or order, which shows a person one alternative while storing
@@ -200,7 +200,15 @@ pub const X_SENSITIVE: &str = "x-sensitive";
 ///
 /// Keyed rather than parallel, so a label cannot come adrift from the value
 /// it belongs to. A value with no entry shows as itself.
-pub const X_LABELS: &str = "x-labels";
+///
+/// **A map, where the earlier emitter in this family wrote a parallel
+/// array** under the same name. That emitter's own documentation called
+/// the array form out as one that "cannot mispair an enum value with its
+/// label, which this text form structurally can" — so the shape is the
+/// fix and the name is kept. An old reader meets a map where it wanted an
+/// array, which fails loudly or yields no labels; it never yields the
+/// wrong ones.
+pub const X_ENUM_LABELS: &str = "x-enum-labels";
 /// The key a variant's discriminant is stored under.
 ///
 /// JSON Schema has no discriminator keyword — OpenAPI's is not JSON
@@ -208,10 +216,18 @@ pub const X_LABELS: &str = "x-labels";
 /// property that is [`CONST`] in every arm, which stops working the moment
 /// two properties are. So it is carried.
 ///
+/// Spelled out rather than `x-tag`: an annotation space is shared with
+/// every vendor, and "tag" is the most overloaded word in the
+/// neighbourhood — a label on a field, a marker on a resource. The
+/// earlier emitter in this family chose the same long name.
+///
+/// **Written even for a variant with no arms**, which is what lets a
+/// reader tell an empty variant from an empty union.
+///
 /// Flattened onto `key -> text` storage — a config map, a URI query — the
 /// discriminant lands at the field's own key and each payload field at
 /// `<key>.<field>`.
-pub const X_TAG: &str = "x-tag";
+pub const X_VARIANT_TAG: &str = "x-variant-tag";
 
 // --- the types --------------------------------------------------------
 
@@ -227,7 +243,7 @@ pub const TYPE_STRING: &str = "string";
 pub const TYPE_ARRAY: &str = "array";
 /// A nested object, whose fields are under [`PROPERTIES`].
 ///
-/// Also what a tagged variant is: an object carrying [`X_TAG`] and
+/// Also what a tagged variant is: an object carrying [`X_VARIANT_TAG`] and
 /// [`ONE_OF`].
 pub const TYPE_OBJECT: &str = "object";
 /// Opaque bytes. **Ours, and not a JSON Schema type.**
@@ -264,7 +280,14 @@ pub const KEYWORDS: &[&str] = &[
 ];
 
 /// Every key **this crate** invented, all of them `x-` prefixed.
-pub const EXTENSIONS: &[&str] = &[X_SECTION, X_ORDER, X_ADVANCED, X_SENSITIVE, X_LABELS, X_TAG];
+pub const EXTENSIONS: &[&str] = &[
+    X_SECTION,
+    X_ORDER,
+    X_ADVANCED,
+    X_SENSITIVE,
+    X_ENUM_LABELS,
+    X_VARIANT_TAG,
+];
 
 /// Every key that has a meaning at all: [`KEYWORDS`] and [`EXTENSIONS`].
 ///
