@@ -568,6 +568,31 @@ impl Value {
         }
     }
 
+    /// The map this value holds, consuming it; `Err` hands the value back
+    /// untouched when it is not a map. What a reader that must take
+    /// ownership of a document's entries reaches for — `remove`-ing keys
+    /// out of a map it was handed by value.
+    pub fn into_map(self) -> Result<Map, Value> {
+        if self.as_map().is_none() {
+            return Err(self);
+        }
+        let (_, payload) = self.into_raw_parts();
+        // SAFETY: the tag was just checked, so `map` is the live arm, and
+        // `into_raw_parts` forgot the node, so this is its only owner.
+        Ok(ManuallyDrop::into_inner(unsafe { payload.map }))
+    }
+
+    /// The list this value holds, consuming it; `Err` hands the value back
+    /// untouched when it is not a list.
+    pub fn into_list(self) -> Result<List, Value> {
+        if self.as_list().is_none() {
+            return Err(self);
+        }
+        let (_, payload) = self.into_raw_parts();
+        // SAFETY: as `into_map`.
+        Ok(ManuallyDrop::into_inner(unsafe { payload.list }))
+    }
+
     /// A deep copy, built through `alloc`.
     ///
     /// Explicit, and deliberately so: an owned tree carries its allocator,

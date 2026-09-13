@@ -188,3 +188,25 @@ fn the_owned_types_are_clone_eq_send_and_sync() {
     .expect("the thread returned the value");
     assert_eq!(sent, value);
 }
+
+/// `into_map` and `into_list` take the container out of a value by
+/// value, and hand a value of another kind back untouched.
+#[test]
+fn a_value_gives_up_its_container_by_value() {
+    use guatiao::{List, Map, Value};
+
+    let mut map = Map::new();
+    map.set("k", "v").unwrap();
+    let value: Value = map.into();
+    let mut map = value.into_map().expect("a map");
+    assert_eq!(map.remove("k").as_ref().and_then(Value::as_str), Some("v"));
+
+    let mut list = List::new();
+    list.push(1).unwrap();
+    let list = Value::from(list).into_list().expect("a list");
+    assert_eq!(list.len(), 1);
+
+    let not_a_map = Value::int(3).into_map().expect_err("an int is not a map");
+    assert_eq!(not_a_map, Value::int(3), "handed back untouched");
+    assert!(Value::string("x").into_list().is_err());
+}

@@ -200,6 +200,7 @@ v.entries() -> Option<&[Entry]>        v.items() -> Option<&[Value]>
 v.get(key) / get_mut(key) / contains_key(key)
 v.set(key, impl Into<Value>) / push(..) / push_into(key, ..)
 v.remove(key) / discard(key) / remove_at(i) / discard_at(i) / clear()
+v.into_map() -> Result<Map, Value>     v.into_list() -> Result<List, Value>   // by value; Err hands it back
 ```
 
 Defaulting getters, mirroring the header's `static inline` helpers:
