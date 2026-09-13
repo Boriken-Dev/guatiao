@@ -24,6 +24,7 @@ use serde::Deserializer;
 use serde::de::{DeserializeSeed, Error as _, MapAccess, SeqAccess, Visitor};
 
 use guatiao::value::alloc::Alloc;
+use guatiao::value::mutate::MAX_DEPTH;
 use guatiao::value::types::Value;
 
 use crate::{Presentation, from_data_uri};
@@ -43,6 +44,14 @@ use crate::{Presentation, from_data_uri};
 pub struct ValueSeed {
     alloc: Alloc,
     how: Presentation,
+    /// How many containers are open above this one.
+    ///
+    /// **A document is somebody else's input**, and a reader that recurses
+    /// once per nested container overflows the stack on one that nests
+    /// deeply enough. `serde_json` caps its own recursion at 128; a serde
+    /// format need not, and this crate exists to read them all. Capped at
+    /// [`MAX_DEPTH`], which is what the value model itself can hold.
+    depth: u32,
 }
 
 impl ValueSeed {
@@ -51,12 +60,36 @@ impl ValueSeed {
         ValueSeed {
             alloc,
             how: Presentation::new(),
+            depth: 0,
         }
     }
 
     /// The same, told how the document was written.
     pub const fn with(alloc: Alloc, how: Presentation) -> ValueSeed {
-        ValueSeed { alloc, how }
+        ValueSeed {
+            alloc,
+            how,
+            depth: 0,
+        }
+    }
+
+    /// The seed for what is inside this container.
+    const fn inside(self) -> ValueSeed {
+        ValueSeed {
+            depth: self.depth + 1,
+            ..self
+        }
+    }
+
+    /// Refuses a container opened past the limit.
+    fn room<E: serde::de::Error>(self) -> Result<(), E> {
+        if self.depth >= MAX_DEPTH {
+            return Err(E::custom(format!(
+                "a document nested more than {MAX_DEPTH} containers deep, \
+                 which is deeper than a value can be built"
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -148,14 +181,18 @@ impl<'de> Visitor<'de> for ValueSeed {
     }
 
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Value, A::Error> {
+        self.room()?;
+        let inside = self.inside();
         let mut list = Value::list_in(self.alloc);
-        while let Some(item) = seq.next_element_seed(self)? {
+        while let Some(item) = seq.next_element_seed(inside)? {
             list.push(item).map_err(A::Error::custom)?;
         }
         Ok(list)
     }
 
     fn visit_map<A: MapAccess<'de>>(self, mut access: A) -> Result<Value, A::Error> {
+        self.room()?;
+        let inside = self.inside();
         let mut map = Value::map_in(self.alloc);
         // A key arrives as a `String` rather than borrowed, because a
         // format may have had to unescape it and a borrowed key would then
@@ -173,15 +210,24 @@ impl<'de> Visitor<'de> for ValueSeed {
         // did not know the token would then quietly turn every number in
         // every document into a map — a bug with no error attached, caused
         // by a dependency this crate never named.
+        //
+        // A MAP WHOSE FIRST KEY IS THAT TOKEN IS READ AS A NUMBER
+        // UNCONDITIONALLY, and the rest of it is not drained. No format
+        // produces such a map by accident -- the token is reserved, names
+        // serde_json's own private module, and is not a key anything
+        // writes -- and the alternative is worse: reading the value first
+        // to decide would mean buffering every map's first value on the
+        // chance that it was a number. A document that spells that key
+        // deliberately gets the number and loses the rest.
         if first == RAW_NUMBER {
             let text: String = access.next_value()?;
             return number(self.alloc, &text);
         }
 
-        let value = access.next_value_seed(self)?;
+        let value = access.next_value_seed(inside)?;
         map.set(&first, value).map_err(A::Error::custom)?;
         while let Some(key) = access.next_key::<String>()? {
-            let value = access.next_value_seed(self)?;
+            let value = access.next_value_seed(inside)?;
             // A repeated key REPLACES, which is what `set` does and what a
             // reader of the resulting map would expect. Refusing would be
             // defensible; silently keeping the first would not.
@@ -342,6 +388,30 @@ mod tests {
         let seed = ValueSeed::new(Alloc::rust());
         assert!(seed.deserialize(&mut de).is_ok());
         assert!(number::<serde_json::Error>(Alloc::rust(), "not a number").is_err());
+    }
+
+    /// **A document nests only as deep as a value can.**
+    ///
+    /// Driven through MessagePack rather than JSON on purpose:
+    /// `serde_json` caps its own recursion at 128 and would refuse this
+    /// before a visitor ever ran, so a JSON test would pin serde_json's
+    /// limit instead of this crate's. A nested one-element array is one
+    /// byte each in MessagePack, and nothing in that reader stops.
+    #[test]
+    fn a_document_nested_past_the_limit_is_refused() {
+        fn read(depth: usize) -> Result<Value, rmp_serde::decode::Error> {
+            // `0x91` opens an array of one element; `0xc0` is nil.
+            let mut packed = vec![0x91u8; depth];
+            packed.push(0xc0);
+            let mut de = rmp_serde::Deserializer::new(&packed[..]);
+            ValueSeed::new(Alloc::rust()).deserialize(&mut de)
+        }
+
+        assert!(read(300).is_err(), "300 containers deep is refused");
+        assert!(
+            read(100).is_ok(),
+            "and the limit is not so eager that an ordinary document trips it"
+        );
     }
 
     #[test]

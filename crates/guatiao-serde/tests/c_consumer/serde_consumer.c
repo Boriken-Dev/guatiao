@@ -1,4 +1,10 @@
 /*
+ * This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/.
+ */
+
+/*
  * Loading and dumping a value from C, in three formats.
  *
  * This is the claim: a program that links no Rust reads a configuration

@@ -53,22 +53,37 @@ FormRef::new(&Value) -> Option<FormRef>
   .section(id) -> Option<SectionRef>
   .hints(path) -> HintsRef                     // empty when none
   .fields() -> impl Iterator<Item = (&str, HintsRef)>
-  .extra(key) / .as_value()
-SectionRef: .id() .label() .help() .extra(key) .as_value()
-HintsRef:   .is_empty() .widget() .placeholder() .visible_when() -> Option<Condition>
-            .extra(key) .as_value()
+  .extra(key) -> Option<&Value>  /  .as_value() -> &Value
+SectionRef: .id() .label() .help() -> &str     // "" when absent
+            .extra(key) -> Option<&Value>  .as_value() -> &Value
+HintsRef:   .is_empty() -> bool  .widget() .placeholder() -> &str
+            .visible_when() -> Option<Condition>
+            .extra(key) -> Option<&Value>
+            .as_value() -> Option<&Value>      // None when the form says nothing
 Condition:  .field() -> &str  .equals() -> &Value
 
 // the judgement
 check(SchemaRef, FormRef) -> Result<(), FormError>
 layout(SchemaRef, FormRef) -> Vec<Group>       // Group { section: Option<SectionRef>, fields: Vec<Placed> }
                                                // Placed { field: FieldRef, hints: HintsRef }
-is_visible(SchemaRef, FormRef, path: &str, values: &Value) -> bool
+is_visible(SchemaRef, FormRef, path: &str, values: &Value) -> Result<bool, FormError>
 
 FormError = Malformed { at, expected } | UnknownField { at, path }
           | DuplicateSection { id } | ConditionRefused { at, field, expected }
-          | CyclicCondition { path }
+          | CyclicCondition { path }              // #[non_exhaustive]
+
+// the keys a form is written with: `pub mod vocab`
+vocab::{SECTIONS, FIELDS}                         // the form
+vocab::{ID, TITLE, DESCRIPTION, DEFAULT_SECTION}  // a section; DEFAULT_SECTION is ""
+vocab::{WIDGET, PLACEHOLDER, VISIBLE_WHEN}        // a field's hints
+vocab::{FIELD, EQUALS}                            // a condition
+vocab::widget::{TEXT, TEXTAREA, PASSWORD, NUMBER, SLIDER,
+                CHECKBOX, TOGGLE, SELECT, RADIO}  // suggestions, an open set
 ```
+
+**`is_visible` answers a `Result`**: a path the schema does not declare —
+including one a condition reads — is the same `UnknownField` `check`
+gives it, rather than `true` for a field that does not exist.
 
 ## The rules the judgement applies
 
@@ -91,8 +106,12 @@ FormError = Malformed { at, expected } | UnknownField { at, path }
   hides everything that waits on it. A field holding nothing reads as its
   schema `default`; with no default the condition is not met. A variant
   named by its own key reads as its **discriminant**, so `equals` is an arm
-  name. A cycle is never shown. `values` is shaped like the schema's
-  values: a variant's value is a map carrying its tag.
+  name. An `owner.member` path is read **only while the arm that declares
+  `member` is the one picked** — a variant's value is one map, so moving
+  between arms leaves keys behind and a stale one is not what the field
+  holds. A cycle is never shown. A path the schema does not declare is an
+  error. `values` is shaped like the schema's values: a variant's value is
+  a map carrying its tag.
 
 ## From C (`include/guatiao_form.h`)
 
@@ -113,8 +132,13 @@ guatiao_status guatiao_form_is_visible(const guatiao_value *schema, const guatia
   "fields": [key, …] }`. **Keys, not copies** — a field's schema is one
   `guatiao_schema_resolve` away and its hints are in the form you passed.
 - `_is_visible`: the answer through `out`.
-- Every function: `GUATIAO_ERR_NULL` for a null required pointer,
-  `GUATIAO_ERR_WRONG_KIND` when the schema or form is not a map, and
+- `_is_visible`: `GUATIAO_ERR_NOT_FOUND` when `key`, or a key a condition
+  reads, names no field the schema declares — and `out` is then not
+  written.
+- Every function: `GUATIAO_ERR_NULL` for a null required pointer, checked
+  before anything else happens; `GUATIAO_ERR_WRONG_KIND` when the schema
+  or form is not a map; **`GUATIAO_ERR_ALLOC` for an allocator that is
+  null or cannot allocate**, the same status `guatiao-serde` gives; and
   `GUATIAO_ERR_INTERNAL` if a panic was caught. Results are built through
   `alloc` and freed with `guatiao_value_free`.
 
@@ -126,3 +150,9 @@ guatiao_status guatiao_form_is_visible(const guatiao_value *schema, const guatia
   for this arm" is already a variant, and hiding them again with a
   condition would give two sources of truth for one rule.
 - `Form::field` twice with one path **replaces**, the way `set` does.
+- `HintsRef::as_value` answers `Option<&Value>` — `None` when the form
+  says nothing about the field — where `FormRef` and `SectionRef` answer a
+  plain `&Value`.
+- **`unsafe` lives in `src/exports.rs` alone**, checked by
+  `tests/unsafe_stays_in_exports.rs`; every other module carries
+  `#![forbid(unsafe_code)]`.

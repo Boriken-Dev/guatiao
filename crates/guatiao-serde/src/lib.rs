@@ -2,23 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! serde for guatiao values: **one pair of impls, every serde format**.
-//!
-//! The core crate carries values and resolves no dependency to do it.
-//! This crate teaches serde to read and write one, which is a better deal
-//! than a format per crate: JSON, MessagePack, CBOR, TOML, YAML, RON and
-//! anything else with a serde data format all work through the same two
-//! types, and a format this crate has never heard of works too.
-//!
-//! ```
-//! use guatiao::value::types::Value;
-//! use guatiao_serde::Serializable;
-//!
-//! let mut map = Value::map();
-//! map.set("port", 5900).unwrap();
-//! let json = serde_json::to_string(&Serializable::from(&map)).unwrap();
-//! assert_eq!(json, r#"{"port":5900}"#);
-//! ```
+// The README is this crate's introduction, so it IS the crate
+// documentation rather than a second copy of it -- and including it makes
+// its example a doctest, so a README that drifted from the API is a red
+// test rather than something a reader finds out by pasting it.
+#![doc = include_str!("../README.md")]
 //!
 //! # Why a wrapper rather than `impl Serialize for Value`
 //!
@@ -41,35 +29,49 @@
 //!
 //! # What survives a round trip
 //!
-//! **Numbers on the way OUT, exactly.** A guatiao number *is* the text
-//! that declared it, and it is written verbatim: `1.10` stays `1.10`, and
-//! a 200-digit integer and `1e400` both survive as numbers rather than as
-//! strings. Nothing here re-formats one.
+//! **Numbers on the way OUT, exactly — under [`Numbers::RawText`].** A
+//! guatiao number *is* the text that declared it, and that policy writes
+//! it verbatim: `1.10` stays `1.10`, and a 200-digit integer and `1e400`
+//! both survive as numbers rather than as strings. [`text::json`] sets it,
+//! because serde_json is the one format with a door for raw text.
 //!
-//! **Numbers on the way IN, as far as the format carries them.** By
-//! default `serde_json` resolves any number past `i64`/`u64` to an `f64`
-//! **before a visitor is ever called**, so `1.10` arrives as `1.1` and a
-//! 200-digit integer arrives rounded — the spelling is gone before this
-//! crate can see it.
+//! **The default [`Presentation`] does not**, and that is deliberate: the
+//! token means nothing to any other format, which writes the struct out
+//! literally and turns `1.5` into a map with a startling key. So
+//! `serde_json::to_string(&Serializable::from(&value))` — the wrapper with
+//! no policy stated — hands the format an `f64` for anything past
+//! `i64`/`u64`, and `1.10` goes out `1.1`. Reach for [`text::json`], or
+//! state the policy, when the spelling matters.
+//! `a_spelling_survives_only_under_the_raw_text_policy` in `src/ser.rs`
+//! pins both halves.
 //!
-//! Turn on the **`arbitrary-numbers`** feature and it is not: the number
-//! arrives as its own text and `1.10` stays `1.10`. That is more than an
-//! arbitrary-precision *number type* preserves, because those hold a
-//! value and normalise the spelling; this model holds the text.
+//! **Numbers on the way IN, as far as the format carries them.** The
+//! **`json`** feature — on by default — turns on
+//! `serde_json/arbitrary_precision`, so a number arrives as its own text
+//! and `1.10` reads back `1.10`. That is more than an arbitrary-precision
+//! *number type* preserves, because those hold a value and normalise the
+//! spelling; this model holds the text.
 //!
-//! It is off by default because cargo unifies features across a build, so
-//! it reaches `serde_json::Value` in every other crate in a consumer's
-//! graph — a decision to take knowingly rather than to inherit.
+//! It rides with the format rather than being offered separately, because
+//! cargo unifies features across a build: turning it on reaches
+//! `serde_json::Value` in every other crate in a consumer's graph. A
+//! consumer who does not want that turns the `json` feature off and hands
+//! a `serde_json::Deserializer` to [`ValueSeed`] themselves.
 //!
-//! **Reading the token is not behind that feature**, and that is
-//! deliberate: because features unify, *any* crate in a graph can turn
+//! **Reading the token is not behind any feature of this crate**, and that
+//! is deliberate: because features unify, *any* crate in a graph can turn
 //! `serde_json/arbitrary_precision` on, and a reader that did not know the
 //! token would then quietly turn every number in every document into a
 //! map. A bug with no error attached, caused by a dependency this crate
 //! never named.
 //!
-//! `a_number_past_u64_loses_its_spelling_on_the_way_in` pins both halves,
-//! so a change to either is a decision rather than a surprise.
+//! `a_number_keeps_its_spelling_through_a_round_trip` in `src/de.rs` pins
+//! both halves, so a change to either is a decision rather than a surprise.
+//!
+//! **A document nests only as deep as a value can.** Reading stops at
+//! `guatiao::value::mutate::MAX_DEPTH` containers with an error, because a
+//! document is somebody else's input and not every serde format caps its
+//! own recursion.
 //!
 //! **Bytes, in a format that has them.** MessagePack and CBOR carry a byte
 //! string natively and get one. JSON does not, so [`Presentation`] decides
@@ -83,7 +85,7 @@
 // NO `forbid(unsafe_code)` HERE, and that is the point of the attribute:
 // it binds child modules, so a root carrying it would bind `exports` too.
 // Every other module in this crate carries it instead, `exports` is the
-// one exemption, and `tests/forbid_unsafe_per_module.rs` is what keeps
+// one exemption, and `tests/unsafe_stays_in_exports.rs` is what keeps
 // that true. Same arrangement as the core crate's `library` module.
 #![deny(missing_docs)]
 

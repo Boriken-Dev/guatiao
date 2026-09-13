@@ -83,8 +83,12 @@ fn try_expand(derive: Derive, input: TokenStream) -> syn::Result<TokenStream> {
     let label = derive.spelled();
     match &ast.data {
         Data::Struct(data) => {
-            let named = named_fields(derive, &ast.ident, &data.fields)?;
             refuse_generics(derive, &ast)?;
+            // The same reader the enum path uses, so a container-level
+            // `#[map(...)]` is refused on a struct rather than ignored --
+            // ignoring one would change the wire shape silently.
+            ContainerAttrs::read(derive, &ast.attrs, false)?;
+            let named = named_fields(derive, &ast.ident, &data.fields)?;
 
             let mut plan: Vec<FieldPlan> = Vec::new();
             for field in &named.named {
@@ -624,33 +628,50 @@ fn emit_schema(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
 
 // --- enums -------------------------------------------------------------
 
-/// What `#[map(...)]` on an enum itself says.
+/// What `#[map(...)]` on the type itself says.
+///
+/// One reader for a struct and an enum, because the two must disagree
+/// about nothing: a key the container does not know is refused either
+/// way, and `tag` -- which only an enum can mean -- is refused by name on
+/// a struct rather than accepted and ignored.
 #[derive(Default)]
-struct EnumAttrs {
+struct ContainerAttrs {
     /// `#[map(tag = "...")]`: the key a variant's name is stored under.
     /// The one wire-format decision an enum can need, so the author makes
     /// it rather than this crate.
     tag: Option<String>,
 }
 
-impl EnumAttrs {
-    fn read(derive: Derive, attrs: &[Attribute]) -> syn::Result<EnumAttrs> {
+impl ContainerAttrs {
+    fn read(derive: Derive, attrs: &[Attribute], is_enum: bool) -> syn::Result<ContainerAttrs> {
         let label = derive.spelled();
-        let mut out = EnumAttrs::default();
+        let mut out = ContainerAttrs::default();
         for attr in attrs {
             if !attr.path().is_ident("map") {
                 continue;
             }
             attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("tag") {
+                if meta.path.is_ident("tag") && is_enum {
                     out.tag = Some(meta.value()?.parse::<LitStr>()?.value());
                     Ok(())
-                } else {
+                } else if meta.path.is_ident("tag") {
+                    Err(meta.error(format!(
+                        "`tag` names the key a VARIANT's name is stored under, so \
+                         {label} has nothing to do with one on a struct: a struct is \
+                         one shape and has no variants to tell apart."
+                    )))
+                } else if is_enum {
                     // Refused rather than ignored: a misspelled `tag`
                     // silently ignored would change the wire shape.
                     Err(meta.error(format!(
                         "unrecognised `#[map(...)]` option on an enum. {label} knows \
                          one: `tag = \"...\"`, the key a variant's name is stored under."
+                    )))
+                } else {
+                    Err(meta.error(format!(
+                        "unrecognised `#[map(...)]` option on a struct. {label} takes \
+                         none here: `rename = \"...\"` and `skip` go on a field, and \
+                         `tag` is an enum's."
                     )))
                 }
             })?;
@@ -777,7 +798,7 @@ fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Resul
         ));
     }
 
-    let tag = EnumAttrs::read(derive, &ast.attrs)?.tag;
+    let tag = ContainerAttrs::read(derive, &ast.attrs, true)?.tag;
 
     // Before reading any variant, so the message is about the decision
     // that is missing rather than about whichever variant came first.
@@ -1143,6 +1164,23 @@ mod tests {
             lifetime.contains("does not support generic"),
             "a lifetime is a generic parameter too: {lifetime}"
         );
+
+        // A container attribute on a STRUCT. Ignored, `tag` would say
+        // nothing and a typo would change the wire shape, so both are
+        // refused where they were written.
+        let tagged_struct = to(quote! { #[map(tag = "kind")] struct S { a: u8 } });
+        assert!(tagged_struct.contains("compile_error"), "{tagged_struct}");
+        assert!(
+            tagged_struct.contains("no variants to tell apart"),
+            "{tagged_struct}"
+        );
+
+        let bogus_struct = to(quote! { #[map(bogus = "x")] struct S { a: u8 } });
+        assert!(bogus_struct.contains("unrecognised"), "{bogus_struct}");
+        assert!(
+            bogus_struct.contains("go on a field"),
+            "the message says where those options belong: {bogus_struct}"
+        );
     }
 
     /// Attribute mistakes get their own messages, for the same reason.
@@ -1191,8 +1229,14 @@ mod tests {
         // Every field shape at once, so the scan below sees every path
         // the expansion is capable of emitting -- a skipped field is the
         // only thing that reaches `core::default`.
+        // Every presentation attribute is here too, because each one is a
+        // different builder call in the `Schema` expansion and the scan
+        // below only sees what was emitted. The default is a LITERAL: a
+        // default expression is the user's own tokens, so one naming a
+        // path would be scanned as though the expansion had emitted it.
         let declaration = quote! {
             struct S {
+                #[schema(label = "A", help = "h", section = "s", order = 2, advanced, sensitive, default = 5900)]
                 a: u8,
                 b: ::core::option::Option<u8>,
                 #[map(skip)] c: u8,
@@ -1210,12 +1254,18 @@ mod tests {
                 B { x: u8, y: ::core::option::Option<u8>, #[map(skip)] z: u8 },
             }
         };
+        // All THREE derives on all three shapes. `Schema` is not optional
+        // here: it is the emitter with the most paths in it, and a scan
+        // that skipped it would have proved nothing about the builders.
         let output = to(declaration.clone())
-            + &from(declaration)
+            + &from(declaration.clone())
+            + &schema(declaration)
             + &to(choice.clone())
-            + &from(choice)
+            + &from(choice.clone())
+            + &schema(choice)
             + &to(tagged.clone())
-            + &from(tagged);
+            + &from(tagged.clone())
+            + &schema(tagged);
 
         // Compared TOKEN by token rather than by substring: `ToMap ::`
         // contains `Map ::`, so a substring search reports a false
@@ -1228,8 +1278,10 @@ mod tests {
             "FromValue",
             "MapError",
             "ToValue",
+            "Schema",
             "Value",
             "Map",
+            "Vec",
             "Option",
             "Result",
             "Default",
@@ -1289,16 +1341,24 @@ mod tests {
         // which is how a check stops checking. What must never happen is
         // a name appearing that is NOT here.
         const ALLOWED: &[&str] = &[
-            // The two crates generated code reaches into, and the std
-            // modules on the way to their items.
+            // The crates generated code reaches into, and the modules on
+            // the way to their items. `std` is here for one call:
+            // `::std::vec::Vec::new()`, which the `Schema` emitters use
+            // instead of `vec![]` so the expansion names no macro the call
+            // site has to resolve. It is the one path that is neither
+            // `::guatiao::` nor `::core::`.
             "guatiao",
             "core",
+            "std",
             "default",
             "option",
             "result",
-            // The one `guatiao` module generated code names, for the two
-            // helpers that have no business at the crate root.
+            "vec",
+            // The `guatiao` modules generated code names: `convert` for
+            // the two helpers that have no business at the crate root, and
+            // `schema` for the builders.
             "convert",
+            "schema",
             // Types and traits from `guatiao`.
             "Alloc",
             "Map",
@@ -1307,11 +1367,17 @@ mod tests {
             "MapError",
             "Value",
             "ToValue",
-            "Value",
-            // Items from `core`.
+            "Schema",
+            "ArmBuilder",
+            "FieldBuilder",
+            "FormBuilder",
+            "FormFieldBuilder",
+            "KindBuilder",
+            // Items from `core` and `std`.
             "Default",
             "Option",
             "Result",
+            "Vec",
         ];
         for segment in &segments {
             assert!(
@@ -1323,11 +1389,17 @@ mod tests {
             );
         }
         // A guard against the guard: if the scan ever found nothing, the
-        // loop above would pass while checking nothing at all.
-        assert!(
-            segments.contains(&"guatiao") && segments.contains(&"core"),
-            "the segment scan found no paths, so it proved nothing: {segments:?}"
-        );
+        // loop above would pass while checking nothing at all. `schema`
+        // and `std` are named because they appear ONLY in the `Schema`
+        // expansion -- this is what says that expansion was scanned, which
+        // for a while it was not.
+        for expected in ["guatiao", "core", "schema", "std"] {
+            assert!(
+                segments.contains(&expected),
+                "the segment scan never saw `{expected}`, so it proved less than it \
+                 looks: {segments:?}"
+            );
+        }
     }
 
     /// The happy path emits what each trait needs,

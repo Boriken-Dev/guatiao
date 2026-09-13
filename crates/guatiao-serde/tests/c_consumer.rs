@@ -141,6 +141,11 @@ fn a_c_program_loads_and_dumps_a_value() {
     let mut compile = Command::new(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
+        // The TOML and YAML declarations are guarded, because a library
+        // built without those features does not export them. This test
+        // runs only with all three on (see the `cfg` at the top), so it
+        // says so the way any consumer would.
+        .args(["-DGUATIAO_SERDE_TOML", "-DGUATIAO_SERDE_YAML"])
         .arg("-I")
         .arg(manifest.join("include"))
         .arg("-I")

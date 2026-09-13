@@ -2,13 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! How a schema is shown: sections, widget hints and conditional
-//! visibility, as a value beside the schema.
-//!
-//! **Three layers, and this is the third.** A value is what is passed. A
-//! schema says what it is and what a valid one looks like. A **form** says
-//! how to show one to a person. A consumer with no screen never needs this
-//! crate, which is the reason it is a crate.
+// The README is this crate's introduction, so it IS the crate
+// documentation rather than a second copy of it -- and including it makes
+// its example a doctest, so a README that drifted from the API is a red
+// test rather than something a reader finds out by pasting it.
+#![doc = include_str!("../README.md")]
 //!
 //! # A form is a value that names fields by path
 //!
@@ -55,7 +53,7 @@
 //! // `ca` shows only while `verify` holds true.
 //! let mut values = guatiao::Map::new();
 //! values.set("verify", false)?;
-//! assert!(!is_visible(s, f, "ca", &values.into()));
+//! assert!(!is_visible(s, f, "ca", &values.into())?);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!

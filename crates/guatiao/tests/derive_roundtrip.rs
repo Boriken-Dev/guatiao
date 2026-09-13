@@ -295,3 +295,27 @@ fn a_key_with_a_nul_in_it_works() {
         assert_eq!(Odd::from_value(&value).unwrap(), Odd { field: 7 });
     });
 }
+
+/// **`#[schema(...)]` compiles on a type that derives only `ToValue`.**
+///
+/// An attribute is registered by the derive that sees it, not by the one
+/// that gives it meaning: a type carrying a presentation hint and no
+/// `Schema` derive would otherwise fail with "cannot find attribute", at
+/// the declaration, for a reason nothing in it explains. So `ToValue` and
+/// `FromValue` both register `schema` and both ignore it.
+#[test]
+fn a_schema_attribute_is_accepted_by_the_other_two_derives() {
+    with_alloc(|alloc| {
+        #[derive(Debug, PartialEq, guatiao::ToValue, guatiao::FromValue)]
+        struct Described {
+            #[schema(label = "x", sensitive)]
+            secret: i64,
+        }
+
+        let value = Described { secret: 1 }.to_value(alloc).unwrap();
+        assert_eq!(
+            Described::from_value(&value).unwrap(),
+            Described { secret: 1 }
+        );
+    });
+}

@@ -337,6 +337,11 @@ fn every_shape_mistake_names_where_it_is() {
             "text",
         ),
         (
+            Form::new().option(vocab::FIELDS, 3).finish().unwrap(),
+            "fields",
+            "a map",
+        ),
+        (
             {
                 let mut fields = Map::new();
                 fields.set("port", true).unwrap();
@@ -449,6 +454,12 @@ fn a_field_waiting_on_itself_is_refused_naming_the_cycle() {
 
 // --- visibility ----------------------------------------------------------------
 
+/// `is_visible` for a path the schema declares, which every case below
+/// is. A path it does not declare is an error, and has its own test.
+fn shown(s: SchemaRef<'_>, f: FormRef<'_>, path: &str, values: &Value) -> bool {
+    is_visible(s, f, path, values).expect("the path names a field the schema declares")
+}
+
 fn values(pairs: Vec<(&str, Value)>) -> Value {
     let mut map = Map::new();
     for (key, value) in pairs {
@@ -462,7 +473,7 @@ fn a_field_with_no_condition_is_shown() {
     let schema = schema();
     let form = Form::new().finish().unwrap();
     let (s, f) = views(&schema, &form);
-    assert!(is_visible(s, f, "host", &values(vec![])));
+    assert!(shown(s, f, "host", &values(vec![])));
 }
 
 #[test]
@@ -474,20 +485,20 @@ fn a_condition_shows_the_field_only_while_it_is_met() {
         .unwrap();
     let (s, f) = views(&schema, &form);
 
-    assert!(is_visible(
+    assert!(shown(
         s,
         f,
         "ca",
         &values(vec![("verify", Value::bool(true))])
     ));
-    assert!(!is_visible(
+    assert!(!shown(
         s,
         f,
         "ca",
         &values(vec![("verify", Value::bool(false))])
     ));
     assert!(
-        is_visible(s, f, "ca", &values(vec![])),
+        shown(s, f, "ca", &values(vec![])),
         "`verify` holds nothing yet, so it reads as its schema default, which is true"
     );
 }
@@ -500,7 +511,7 @@ fn a_field_with_no_value_and_no_default_does_not_meet_a_condition() {
         .finish()
         .unwrap();
     let (s, f) = views(&schema, &form);
-    assert!(!is_visible(s, f, "ca", &values(vec![])));
+    assert!(!shown(s, f, "ca", &values(vec![])));
 }
 
 /// A variant named by its own key reads as the arm a person picked.
@@ -518,17 +529,17 @@ fn a_variant_is_compared_by_its_discriminant() {
     userpass.set("auth", "userpass").unwrap();
     userpass.set("username", "root").unwrap();
     let picked = values(vec![("auth", userpass.into())]);
-    assert!(is_visible(s, f, "ca", &picked));
+    assert!(shown(s, f, "ca", &picked));
     assert!(
-        is_visible(s, f, "host", &picked),
+        shown(s, f, "host", &picked),
         "an arm's field is read inside its variant's value"
     );
 
     let mut ambient = Map::new();
     ambient.set("auth", "ambient").unwrap();
     let other = values(vec![("auth", ambient.into())]);
-    assert!(!is_visible(s, f, "ca", &other));
-    assert!(!is_visible(s, f, "host", &other));
+    assert!(!shown(s, f, "ca", &other));
+    assert!(!shown(s, f, "host", &other));
 }
 
 /// A condition on a hidden field is not met, so hiding a field hides
@@ -547,17 +558,17 @@ fn hiding_a_field_hides_what_waits_on_it() {
         ("verify", Value::bool(false)),
         ("port", Value::int(443)),
     ]);
-    assert!(!is_visible(s, f, "port", &stale));
+    assert!(!shown(s, f, "port", &stale));
     assert!(
-        !is_visible(s, f, "ca", &stale),
+        !shown(s, f, "ca", &stale),
         "`port` holds 443, but `port` is hidden, so `ca` is too"
     );
 
-    let shown = values(vec![
+    let both = values(vec![
         ("verify", Value::bool(true)),
         ("port", Value::int(443)),
     ]);
-    assert!(is_visible(s, f, "ca", &shown));
+    assert!(shown(s, f, "ca", &both));
 }
 
 #[test]
@@ -570,8 +581,8 @@ fn a_cycle_is_never_shown() {
         .unwrap();
     let (s, f) = views(&schema, &form);
     let v = values(vec![("host", Value::string("a")), ("port", Value::int(1))]);
-    assert!(!is_visible(s, f, "host", &v));
-    assert!(!is_visible(s, f, "port", &v));
+    assert!(!shown(s, f, "host", &v));
+    assert!(!shown(s, f, "port", &v));
 }
 
 // --- allocation --------------------------------------------------------------
@@ -638,5 +649,92 @@ fn a_form_built_through_a_named_allocator_frees_every_block() {
         counter.outstanding.get(),
         0,
         "a form is a value, so it frees like one"
+    );
+}
+
+/// **A path the schema does not declare is an error, not `true`.**
+///
+/// The same `UnknownField` `check` gives it. Answering `true` would show a
+/// field that does not exist — a misspelling in a form renders as a
+/// control nothing is behind — and answering `false` would hide it for a
+/// reason the caller cannot tell from a condition being unmet.
+#[test]
+fn a_path_the_schema_does_not_declare_is_refused() {
+    let schema = schema();
+    let form = Form::new().finish().unwrap();
+    let (s, f) = views(&schema, &form);
+
+    assert_eq!(
+        is_visible(s, f, "hots", &values(vec![])),
+        Err(FormError::UnknownField {
+            at: "fields".into(),
+            path: "hots".into()
+        })
+    );
+    assert_eq!(
+        is_visible(s, f, "auth.nonesuch", &values(vec![])),
+        Err(FormError::UnknownField {
+            at: "fields".into(),
+            path: "auth.nonesuch".into()
+        }),
+        "a dotted path is resolved through the arm, and this one resolves to nothing"
+    );
+
+    // And the refusal is not everything-is-an-error: a declared path still
+    // answers.
+    assert_eq!(is_visible(s, f, "host", &values(vec![])), Ok(true));
+}
+
+/// A condition reading a path the schema does not declare is refused where
+/// it is met, not silently unmet.
+#[test]
+fn a_condition_reading_an_unknown_path_is_refused_too() {
+    let schema = schema();
+    let form = Form::new()
+        .field("ca", Hints::new().visible_when("verfy", true))
+        .finish()
+        .unwrap();
+    let (s, f) = views(&schema, &form);
+    assert_eq!(
+        is_visible(s, f, "ca", &values(vec![])),
+        Err(FormError::UnknownField {
+            at: "fields".into(),
+            path: "verfy".into()
+        })
+    );
+}
+
+/// **An arm's field is read only while its arm is the one picked.**
+///
+/// `values[owner][member]` alone would answer with whatever the last arm
+/// left behind: a variant's value is one map, and moving from `userpass`
+/// to `ambient` does not erase `username` from it. The arm that declares
+/// the member is what gives it a meaning, so a stale one reads as nothing
+/// and the field falls back to its schema default.
+#[test]
+fn an_arm_field_is_read_only_while_its_arm_is_picked() {
+    let schema = schema();
+    let form = Form::new()
+        .field("ca", Hints::new().visible_when("auth.username", "root"))
+        .finish()
+        .unwrap();
+    let (s, f) = views(&schema, &form);
+
+    let mut picked = Map::new();
+    picked.set("auth", "userpass").unwrap();
+    picked.set("username", "root").unwrap();
+    assert!(
+        shown(s, f, "ca", &values(vec![("auth", picked.into())])),
+        "`userpass` declares `username`, so the condition reads it"
+    );
+
+    // The same map, with the discriminant moved to an arm that declares no
+    // `username`. The key is still there; it belongs to nothing now.
+    let mut stale = Map::new();
+    stale.set("auth", "ambient").unwrap();
+    stale.set("username", "root").unwrap();
+    assert!(
+        !shown(s, f, "ca", &values(vec![("auth", stale.into())])),
+        "`ambient` declares no `username`, so the value left behind is not read"
     );
 }

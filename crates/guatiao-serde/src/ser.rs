@@ -76,7 +76,11 @@ impl Serialize for Serializable<'_> {
                  the ANSWER to a lookup, not a thing a container holds",
             )),
             Ok(Tag::GUATIAO_NULL) => s.serialize_unit(),
-            Ok(Tag::GUATIAO_BOOL) => s.serialize_bool(self.value.as_bool().unwrap_or(false)),
+            Ok(Tag::GUATIAO_BOOL) => s.serialize_bool(
+                self.value
+                    .as_bool()
+                    .ok_or_else(|| malformed::<S>("a bool"))?,
+            ),
             // VERBATIM, through the format's raw-number door where it has
             // one. A guatiao number IS the text that declared it, so
             // reparsing it into an `f64` to write it back is exactly how a
@@ -88,12 +92,21 @@ impl Serialize for Serializable<'_> {
             // format that cannot gets the text.
             Ok(Tag::GUATIAO_NUMBER) => write_number(
                 s,
-                self.value.as_number_str().unwrap_or("0"),
+                self.value
+                    .as_number_str()
+                    .ok_or_else(|| malformed::<S>("a number"))?,
                 self.how.numbers_as(),
             ),
-            Ok(Tag::GUATIAO_STRING) => s.serialize_str(self.value.as_str().unwrap_or("")),
+            Ok(Tag::GUATIAO_STRING) => s.serialize_str(
+                self.value
+                    .as_str()
+                    .ok_or_else(|| malformed::<S>("a string"))?,
+            ),
             Ok(Tag::GUATIAO_BYTES) => {
-                let bytes = self.value.as_bytes().unwrap_or(&[]);
+                let bytes = self
+                    .value
+                    .as_bytes()
+                    .ok_or_else(|| malformed::<S>("a byte string"))?;
                 // A format WITH a byte string gets one, whatever the
                 // policy says: native bytes round-trip perfectly, and a
                 // spelling could only lose that. The policy is for the
@@ -119,7 +132,7 @@ impl Serialize for Serializable<'_> {
                 }
             }
             Ok(Tag::GUATIAO_LIST) => {
-                let items = self.value.items().unwrap_or(&[]);
+                let items = self.value.items().ok_or_else(|| malformed::<S>("a list"))?;
                 let mut seq = s.serialize_seq(Some(items.len()))?;
                 for item in items {
                     seq.serialize_element(&child(item, self.how))?;
@@ -127,7 +140,10 @@ impl Serialize for Serializable<'_> {
                 seq.end()
             }
             Ok(Tag::GUATIAO_MAP) => {
-                let entries = self.value.entries().unwrap_or(&[]);
+                let entries = self
+                    .value
+                    .entries()
+                    .ok_or_else(|| malformed::<S>("a map"))?;
                 let mut map = s.serialize_map(Some(entries.len()))?;
                 for entry in entries {
                     // A key is raw bytes; a serde map key here is a
@@ -145,6 +161,19 @@ impl Serialize for Serializable<'_> {
             }
         }
     }
+}
+
+/// A node whose tag and payload disagree.
+///
+/// **Refused, the same way an unknown tag is.** A node this build cannot
+/// read is one some other producer built wrong, and writing `0`, `false`
+/// or `""` for it would put a value in the document that a reader
+/// believes -- a silent substitution, where the unknown-tag arm a few
+/// lines up says what actually happened.
+fn malformed<S: Serializer>(what: &str) -> S::Error {
+    S::Error::custom(format!(
+        "a node tagged as {what} whose payload cannot be read, which cannot be written"
+    ))
 }
 
 /// A number, written as exactly as the format can hold it.
@@ -250,6 +279,30 @@ mod tests {
         // And a spelling is preserved rather than normalised: `1.10` is
         // not `1.1`, because nothing re-formatted it.
         assert_eq!(json(&Value::number("1.10").unwrap()), "1.10");
+    }
+
+    /// **Verbatim is a POLICY, not the default.**
+    ///
+    /// `Numbers::RawText` is what splices a number's own text into the
+    /// document, and only `text::json` sets it. The default
+    /// `Presentation` -- which is what `Serializable::from(&value)` carries
+    /// -- hands the format an `f64` for anything past `i64`/`u64`, so
+    /// `1.10` arrives as `1.1`. Both are pinned here because the
+    /// difference is invisible until a document is compared byte for byte.
+    #[test]
+    fn a_spelling_survives_only_under_the_raw_text_policy() {
+        let v = Value::number("1.10").unwrap();
+
+        assert_eq!(
+            crate::text::json::to_string(&v, Presentation::new()).unwrap(),
+            "1.10",
+            "`text::json` sets `Numbers::RawText`, which writes the text itself"
+        );
+        assert_eq!(
+            serde_json::to_string(&Serializable::from(&v)).unwrap(),
+            "1.1",
+            "the default presentation goes through an `f64`, which has no `1.10`"
+        );
     }
 
     #[test]
