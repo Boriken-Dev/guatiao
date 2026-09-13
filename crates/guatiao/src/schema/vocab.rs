@@ -34,23 +34,23 @@
 //! # The shape
 //!
 //! ```text
-//! schema  := { "options": [option…], "sections": [section…], … }
+//! schema  := { "fields": [field…], "sections": [section…], … }
 //! section := { "id", "label", "help" }
-//! option  := { "key", "kind": kind, "label", "help", "section",
+//! field   := { "key", "kind": kind, "label", "help", "section",
 //!              "default": <any>, "order": <number>,
 //!              "advanced": <bool>, "sensitive": <bool>, "required": <bool>, … }
 //! kind    := { "type": "bool"|"int"|"float"|"string"|"enum"|"union"|"variant", … }
 //!              int, float  ->  "min", "max"       (each optional)
 //!              enum        ->  "choices": [ {"value","label"}, … ]
 //!              union       ->  "arms": [kind, …]
-//!              variant     ->  "tag", "arms": [ {"value","label","help","fields":[option…]} ]
+//!              variant     ->  "tag", "arms": [ {"value","label","help","fields":[field…]} ]
 //! ```
 //!
 //! # Rules a reader must follow
 //!
-//! **An unrecognised `"type"` means skip that one option**, not reject the
-//! schema. Refusing the whole document because one option came from a
-//! newer producer hides every option that would have rendered fine. This
+//! **An unrecognised `"type"` means skip that one field**, not reject the
+//! schema. Refusing the whole document because one field came from a
+//! newer producer hides every field that would have rendered fine. This
 //! is the same rule as an unknown value tag, and it is the whole
 //! forward-compatibility story.
 //!
@@ -60,7 +60,7 @@
 //! ignores them. Never make a validation or type behaviour depend on one.
 //!
 //! **A missing `default` and a `default` of null are different things.**
-//! The first means the option has no default; the second means its default
+//! The first means the field has no default; the second means its default
 //! is nothing. Absence is the query answer, which is why the value model
 //! separates absent from null in the first place.
 //!
@@ -74,27 +74,25 @@
 //! **A choice is a row, never a pair of arrays.** `{"value","label"}` per
 //! alternative. The shape this refuses — a values list beside a labels
 //! list — lets the two drift in length or order, which shows a person one
-//! option while setting another.
+//! field while setting another.
 
 #![forbid(unsafe_code)]
 
 // --- the schema -------------------------------------------------------
 
-/// The options a provider declares, as a list of maps.
-pub const OPTIONS: &str = "options";
-/// The sections a consumer may group options into, as a list of maps.
+/// The sections a consumer may group fields into, as a list of maps.
 pub const SECTIONS: &str = "sections";
 
 // --- a section --------------------------------------------------------
 
-/// A section's identifier, which an option's [`SECTION`] refers to.
+/// A section's identifier, which a field's [`SECTION`] refers to.
 pub const ID: &str = "id";
 
-// --- an option --------------------------------------------------------
+// --- a field --------------------------------------------------------
 
-/// The key this option's value is stored under. The one required key.
+/// The key this field's value is stored under. The one required key.
 pub const KEY: &str = "key";
-/// What the option accepts: a nested map, keyed by [`TYPE`].
+/// What the field accepts: a nested map, keyed by [`TYPE`].
 pub const KIND: &str = "kind";
 /// A short human label. Optional.
 pub const LABEL: &str = "label";
@@ -102,24 +100,24 @@ pub const LABEL: &str = "label";
 pub const HELP: &str = "help";
 /// Which section this belongs to. Optional; empty means the default one.
 pub const SECTION: &str = "section";
-/// The default value, of whatever kind the option accepts.
+/// The default value, of whatever kind the field accepts.
 ///
-/// **Absent and null are different.** No `default` key means the option
+/// **Absent and null are different.** No `default` key means the field
 /// has no default; a `default` of null means its default is nothing.
 pub const DEFAULT: &str = "default";
 /// Declaration position, as a number.
 ///
-/// Not a preference. If every option omits it, a consumer has no ordering
+/// Not a preference. If every field omits it, a consumer has no ordering
 /// information and falls back to something arbitrary — alphabetical,
 /// usually — which silently rearranges a carefully grouped form.
 pub const ORDER: &str = "order";
-/// True when the option is advanced: hidden behind a disclosure by
+/// True when the field is advanced: hidden behind a disclosure by
 /// default.
 pub const ADVANCED: &str = "advanced";
 /// True when the value is a secret: masked in a form, encrypted in
 /// storage.
 pub const SENSITIVE: &str = "sensitive";
-/// True when the option must be given.
+/// True when the field must be given.
 ///
 /// It exists because without it a required field and an optional one
 /// produce identical schemas, so a generated schema could not express the
@@ -155,10 +153,10 @@ pub const TYPE_UNION: &str = "union";
 pub const TYPE_BYTES: &str = "bytes";
 /// A sequence of values, every one of the kind under [`ITEMS`].
 pub const TYPE_LIST: &str = "list";
-/// A nested object, whose options are under [`FIELDS`].
+/// A nested object, whose fields are under [`FIELDS`].
 ///
-/// The same spelling a variant arm uses for the options it adds, and
-/// deliberately so: "here are more options" is one idea, and a reader that
+/// The same spelling a variant arm uses for the fields it adds, and
+/// deliberately so: "here are more fields" is one idea, and a reader that
 /// walks an arm's fields walks these with the same code.
 pub const TYPE_MAP: &str = "map";
 /// One of several alternatives, each carrying its own named fields.
@@ -184,14 +182,20 @@ pub const ARMS: &str = "arms";
 /// The key a variant's discriminant is stored under.
 ///
 /// Flattened onto `key -> text` storage — a config map, a URI query — the
-/// discriminant lands at the option's own key and each payload field at
+/// discriminant lands at the field's own key and each payload field at
 /// `<key>.<field>`.
 pub const TAG: &str = "tag";
 /// A choice's or an arm's stored value.
 pub const VALUE: &str = "value";
 /// The kind every element of a list has.
 pub const ITEMS: &str = "items";
-/// The options an arm of a variant adds when it is selected.
+/// The fields something declares: a schema's own, a map kind's, or the
+/// ones an arm of a variant adds when it is selected.
+///
+/// **One key for one idea.** A schema, a map kind and a variant arm are
+/// different objects, and "here are the fields" means the same thing on
+/// all three — so a reader that walks one walks the others with the same
+/// code, and nothing has to know which it is looking at.
 ///
 /// **An arm with no fields is ordinary and complete.** It is the common
 /// case — "use the ambient credential" — so treating an empty list as
@@ -205,8 +209,8 @@ pub const FIELDS: &str = "fields";
 /// not know: anything outside this list is an annotation, and annotations
 /// are carried, never interpreted.
 pub const KEYWORDS: &[&str] = &[
-    OPTIONS, SECTIONS, ID, KEY, KIND, LABEL, HELP, SECTION, DEFAULT, ORDER, ADVANCED, SENSITIVE,
-    REQUIRED, TYPE, MIN, MAX, CHOICES, ARMS, TAG, VALUE, FIELDS, ITEMS,
+    SECTIONS, ID, KEY, KIND, LABEL, HELP, SECTION, DEFAULT, ORDER, ADVANCED, SENSITIVE, REQUIRED,
+    TYPE, MIN, MAX, CHOICES, ARMS, TAG, VALUE, FIELDS, ITEMS,
 ];
 
 /// Every kind name this vocabulary assigns a meaning.

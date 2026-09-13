@@ -4,7 +4,7 @@
 
 //! A tagged value projected onto flat `key -> text` storage.
 //!
-//! The discriminant lands under the option's own key and each payload
+//! The discriminant lands under the field's own key and each payload
 //! field under `<key>.<field>`. That is the URI spelling too —
 //! `?auth=userpass&auth.username=alice` — which is what lets a command
 //! line select an arm at all.
@@ -12,13 +12,14 @@
 use std::collections::BTreeMap;
 
 use guatiao::Value;
+use guatiao::schema::FormFieldBuilder;
 use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::schema::flat;
 use guatiao::schema::read::SchemaRef;
 use guatiao::value::alloc::Alloc;
 use guatiao::value::read::str_or;
 
-/// A schema with one tagged option: two arms, one of them empty.
+/// A schema with one tagged field: two arms, one of them empty.
 fn schema(alloc: Alloc) -> Value {
     SchemaBuilder::new_in(alloc)
         .field(FieldBuilder::new_in(
@@ -159,7 +160,7 @@ fn unflatten_answers_none_when_there_is_no_tagged_value() {
     );
     assert!(
         flat::unflatten(alloc, host, &store_of(&[("host", "x")])).is_none(),
-        "an option that is not tagged at all"
+        "a field that is not tagged at all"
     );
 }
 
@@ -176,7 +177,7 @@ fn keys_enumerates_every_flat_key_the_option_can_occupy() {
     assert_eq!(
         flat::keys(s.find("host").unwrap()),
         ["host"],
-        "an untagged option occupies only its own key"
+        "an untagged field occupies only its own key"
     );
 }
 
@@ -216,8 +217,8 @@ fn resolve_follows_one_level_of_projection() {
     assert!(flat::resolve(s, "nonesuch").is_none());
 }
 
-/// A separator inside an option's own key would make a payload key
-/// ambiguous with an option key, so it is caught at declaration rather
+/// A separator inside a field's own key would make a payload key
+/// ambiguous with a field key, so it is caught at declaration rather
 /// than tolerated at read time.
 #[test]
 fn an_option_key_containing_the_separator_is_rejected() {

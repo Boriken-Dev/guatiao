@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! `x-merge`: an option declaring how its own value combines across
+//! `x-merge`: a field declaring how its own value combines across
 //! config layers.
 //!
 //! # Why a declaration and not just a call-site choice
@@ -13,7 +13,7 @@
 //! enough to be *right*, because **the caller merging two maps does not
 //! know what the values mean.**
 //!
-//! The declarer does. Whoever wrote the option knows whether its list is
+//! The declarer does. Whoever wrote the field knows whether its list is
 //! an unordered tag set — where [`MergeMode::Deep`]'s union is the
 //! correct answer — or an ordered fallback chain, where a later layer
 //! must replace it wholesale or the fallback order becomes nonsense. That
@@ -50,7 +50,7 @@ use crate::value::read::str_or;
 use crate::value::types::Value;
 use crate::{MergeError, MergeMode, MergeOptions, MergeOverrides};
 
-/// The annotation key an option declares its merge mode under.
+/// The annotation key a field declares its merge mode under.
 ///
 /// `x-` prefixed to match the JSON Schema extension convention, so a
 /// schema that round-trips through a text format carries the declaration
@@ -104,33 +104,33 @@ pub fn parse_mode(text: &str) -> Option<DeclaredMerge> {
     })
 }
 
-/// The mode declared on one option, if any.
+/// The mode declared on one field, if any.
 ///
 /// Reads only the `x-merge` annotation and only as a string. A non-string
 /// value is ignored for the same reason an unrecognised spelling is:
 /// falling back to the call-site mode is a defined answer, and refusing
 /// to merge at all because an annotation was the wrong kind would let an
 /// advisory hint break a working config.
-pub fn declared_for(option: FieldRef<'_>) -> Option<DeclaredMerge> {
-    parse_mode(str_or(option.extra(X_MERGE), ""))
+pub fn declared_for(field: FieldRef<'_>) -> Option<DeclaredMerge> {
+    parse_mode(str_or(field.extra(X_MERGE), ""))
 }
 
 /// Every `x-merge` declaration in `schema`, as the lookup
 /// [`MergeMode::merge_with`] takes.
 ///
-/// Keyed by the option's own key, which is the path a top-level option
-/// occupies in a values map. An option whose key is dotted
+/// Keyed by the field's own key, which is the path a top-level field
+/// occupies in a values map. A field whose key is dotted
 /// (`"tls.ciphers"`) therefore declares the mode for that nested path,
 /// which is exactly the spelling the merge matches against.
 ///
-/// Options with no declaration are simply absent, and absent means "take
+/// Fields with no declaration are simply absent, and absent means "take
 /// the call-site mode" — so a schema that declares nothing produces an
 /// empty override set and changes nothing.
 pub fn merge_overrides(schema: SchemaRef<'_>) -> MergeOverrides {
     let mut overrides = MergeOverrides::new();
-    for option in schema.options() {
-        if let Some(declared) = declared_for(option) {
-            overrides.set(option.key(), declared.mode);
+    for field in schema.fields() {
+        if let Some(declared) = declared_for(field) {
+            overrides.set(field.key(), declared.mode);
         }
     }
     overrides
@@ -138,7 +138,7 @@ pub fn merge_overrides(schema: SchemaRef<'_>) -> MergeOverrides {
 
 /// The `mergelists` sub-option, resolved across a whole schema.
 ///
-/// # Why this is one flag rather than one per option
+/// # Why this is one flag rather than one per field
 ///
 /// `mergelists` is carried on [`MergeOptions`], which applies to the
 /// *whole* merge rather than per path. That is not an oversight there: it
@@ -146,14 +146,14 @@ pub fn merge_overrides(schema: SchemaRef<'_>) -> MergeOverrides {
 /// where the answer to "does element 0 merge with element 0?" varied by
 /// which subtree you were in would be very hard to reason about.
 ///
-/// So a schema resolves it once: **on if any option asked for it.** The
-/// alternative — silently ignoring the declaration on options that asked
+/// So a schema resolves it once: **on if any field asked for it.** The
+/// alternative — silently ignoring the declaration on fields that asked
 /// — would make a written declaration do nothing, which is worse than
 /// applying it slightly more widely than asked. A caller that needs the
 /// finer distinction merges the subtrees separately.
 pub fn merge_options(schema: SchemaRef<'_>) -> MergeOptions {
     let any = schema
-        .options()
+        .fields()
         .filter_map(declared_for)
         .any(|d| d.options.mergelists);
     MergeOptions::new().with_mergelists(any)
@@ -178,11 +178,11 @@ pub fn merge_with_schema(
     alloc: Alloc,
 ) -> Result<Value, MergeError> {
     let overrides = merge_overrides(schema);
-    let options = merge_options(schema);
-    call_site_mode.merge_with(earlier, later, alloc, options, Some(&overrides))
+    let fields = merge_options(schema);
+    call_site_mode.merge_with(earlier, later, alloc, fields, Some(&overrides))
 }
 
-/// Declares `mode` on an option, as the string [`parse_mode`] reads.
+/// Declares `mode` on a field, as the string [`parse_mode`] reads.
 ///
 /// Exists so a declaration site never spells the string by hand — a typo
 /// in `"substitue"` would parse as "not declared" and silently fall back

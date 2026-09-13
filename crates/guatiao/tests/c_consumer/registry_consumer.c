@@ -232,9 +232,9 @@ int main(int argc, char **argv) {
     CHECK(schema != NULL, "the greeter declares a configuration schema");
     /* Borrowed from the library's image: read it, never free it. */
     if (schema) {
-      const guatiao_value *options = guatiao_map_find(schema, s("options"));
-      CHECK(guatiao_list_items(options).len == 1,
-            "the schema declares one option");
+      const guatiao_value *fields = guatiao_map_find(schema, s("fields"));
+      CHECK(guatiao_list_items(fields).len == 1,
+            "the schema declares one field");
     }
   }
 

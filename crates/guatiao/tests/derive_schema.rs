@@ -70,7 +70,7 @@ fn the_schema_lists_the_stored_fields_in_declaration_order() {
     alloc_and(|alloc| {
         let declared = Connection::schema(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
-        let keys: Vec<String> = s.options().map(|o| o.key().to_string()).collect();
+        let keys: Vec<String> = s.fields().map(|o| o.key().to_string()).collect();
         assert_eq!(
             keys,
             [
@@ -202,7 +202,7 @@ fn a_sequence_a_blob_and_a_nested_struct_each_have_a_kind() {
         assert_eq!(
             tls.fields().next().unwrap().help(),
             "Whether to check the certificate.",
-            "and its fields are ordinary options, doc comments and all"
+            "and its fields are ordinary fields, doc comments and all"
         );
     });
 }

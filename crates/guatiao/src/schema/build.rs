@@ -26,9 +26,9 @@
 //! # A schema and a form are different questions
 //!
 //! What a value **is** — its kind, its bounds, whether it is required —
-//! is substance, and lives on the builders themselves. How it is
-//! **shown** — a label, some help — is presentation, and lives on
-//! [`FormBuilder`], which all three builders implement.
+//! is substance, and lives here. How it is **shown** — a label, some
+//! help, which section it sits in — is presentation, and lives in
+//! [`super::form`], which all three builders implement.
 //!
 //! # Building names no allocator
 //!
@@ -66,14 +66,17 @@ use crate::value::types::Value;
 
 /// Builds a schema.
 pub struct SchemaBuilder {
-    alloc: Alloc,
-    state: Result<Value, ValueError>,
+    // Reached by `super::form`, which is the other half of this builder
+    // rather than a stranger: the presentation setters live there so the
+    // schema half and the form half can be read apart.
+    pub(super) alloc: Alloc,
+    pub(super) state: Result<Value, ValueError>,
 }
 
-/// Builds one option.
+/// Builds one field.
 pub struct FieldBuilder {
-    alloc: Alloc,
-    state: Result<Value, ValueError>,
+    pub(super) alloc: Alloc,
+    pub(super) state: Result<Value, ValueError>,
 }
 
 /// Builds one kind.
@@ -83,8 +86,8 @@ pub struct KindBuilder {
 
 /// Builds one arm of a tagged kind.
 pub struct ArmBuilder {
-    alloc: Alloc,
-    state: Result<Value, ValueError>,
+    pub(super) alloc: Alloc,
+    pub(super) state: Result<Value, ValueError>,
 }
 
 impl std::fmt::Debug for SchemaBuilder {
@@ -128,7 +131,11 @@ fn debug_state(
 }
 
 /// Sets `key` to `value`, keeping the first error rather than the last.
-fn put(state: &mut Result<Value, ValueError>, key: &str, value: Result<Value, ValueError>) {
+pub(super) fn put(
+    state: &mut Result<Value, ValueError>,
+    key: &str,
+    value: Result<Value, ValueError>,
+) {
     let node = match state {
         Ok(n) => n,
         // Already failed: do nothing further, so the error a caller sees
@@ -153,90 +160,6 @@ fn push(state: &mut Result<Value, ValueError>, key: &str, value: Result<Value, V
     }
 }
 
-/// The presentation half: what a person is SHOWN.
-///
-/// A schema says what a value **is** — its kind, its bounds, whether it
-/// is required. A form says how to **show** it — a label, some help, an
-/// order, a section. The two have always lived in one builder here, and
-/// the presentation half repeats across three of them, which is what a
-/// trait is for.
-///
-/// It is also the seam a form generator wants: code that decorates a
-/// declaration can be generic over this and never know whether it is
-/// labelling a whole schema, one field, or one arm of a variant.
-///
-/// ```
-/// use guatiao::schema::{FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
-///
-/// let schema = SchemaBuilder::new()
-///     .label("Connection")
-///     .help("Where to connect, and how.")
-///     .field(
-///         FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
-///             .label("Port")
-///             .required(),
-///     )
-///     .finish()
-///     .expect("a schema this small does not exhaust an allocator");
-/// ```
-///
-/// **Presentation is optional and substance is not.** Every key here may
-/// be missing and the schema is still correct and still usable; a
-/// consumer with no user interface ignores all of them. Never make a
-/// validation or type decision depend on one.
-pub trait FormBuilder: Sized {
-    /// Sets one presentation key to some text.
-    ///
-    /// The only thing an implementer writes; everything else here is
-    /// provided over it.
-    fn presentation(&mut self, key: &str, text: &str);
-
-    /// A short human label.
-    #[must_use]
-    fn label(mut self, label: &str) -> Self {
-        self.presentation(vocab::LABEL, label);
-        self
-    }
-
-    /// Longer human help: a sentence under the control, or a tooltip.
-    #[must_use]
-    fn help(mut self, help: &str) -> Self {
-        self.presentation(vocab::HELP, help);
-        self
-    }
-
-    /// Which section this belongs to, by whatever id the thing drawing
-    /// the form groups by.
-    ///
-    /// Naming a section nothing declared is not an error: a consumer that
-    /// does not know it puts the field wherever it puts the ungrouped
-    /// ones, which is the same rule the rest of this vocabulary has for
-    /// something it does not recognise.
-    #[must_use]
-    fn section(mut self, section: &str) -> Self {
-        self.presentation(vocab::SECTION, section);
-        self
-    }
-}
-
-impl FormBuilder for SchemaBuilder {
-    fn presentation(&mut self, key: &str, text: &str) {
-        put(&mut self.state, key, Value::string_in(self.alloc, text));
-    }
-}
-
-impl FormBuilder for FieldBuilder {
-    fn presentation(&mut self, key: &str, text: &str) {
-        put(&mut self.state, key, Value::string_in(self.alloc, text));
-    }
-}
-
-impl FormBuilder for ArmBuilder {
-    fn presentation(&mut self, key: &str, text: &str) {
-        put(&mut self.state, key, Value::string_in(self.alloc, text));
-    }
-}
-
 impl SchemaBuilder {
     /// An empty schema, through the crate's own allocator.
     ///
@@ -254,17 +177,28 @@ impl SchemaBuilder {
         }
     }
 
-    /// Declares an option. Order of declaration is the order a consumer
+    /// Declares a field. Order of declaration is the order a consumer
     /// sees.
     pub fn field(mut self, field: FieldBuilder) -> SchemaBuilder {
-        push(&mut self.state, vocab::OPTIONS, field.state);
+        push(&mut self.state, vocab::FIELDS, field.state);
         self
     }
 
-    /// Attaches an annotation to the schema as a whole. Carried, never
-    /// interpreted.
-    pub fn extra(mut self, key: &str, value: Result<Value, ValueError>) -> SchemaBuilder {
-        put(&mut self.state, key, value);
+    /// Sets any key at all: one from [`vocab`], or an annotation nobody
+    /// interprets.
+    ///
+    /// **The general door.** The named setters are conveniences over this
+    /// one, and anything they do not cover goes through here -- a keyword
+    /// this build has no method for, or a vendor's own key. A key outside
+    /// the vocabulary is carried through every reader, every merge and
+    /// every round trip and interpreted by nobody; `x-` prefixed, by
+    /// convention.
+    ///
+    /// Takes a **value**, not a `Result`. Building one names no allocator
+    /// and cannot fail, so there is nothing for a caller to have handled;
+    /// one building into an arena writes `?` at the call site.
+    pub fn option(mut self, key: &str, value: impl Into<Value>) -> SchemaBuilder {
+        put(&mut self.state, key, Ok(value.into()));
         self
     }
 
@@ -282,8 +216,8 @@ impl Default for SchemaBuilder {
 }
 
 impl FieldBuilder {
-    /// An option under `key`, accepting `kind`.
-    /// One option, through the crate's own allocator.
+    /// A field under `key`, accepting `kind`.
+    /// One field, through the crate's own allocator.
     pub fn new(key: &str, kind: KindBuilder) -> FieldBuilder {
         FieldBuilder::new_in(Alloc::rust(), key, kind)
     }
@@ -296,34 +230,25 @@ impl FieldBuilder {
         FieldBuilder { alloc, state }
     }
 
-    /// The default value, of whatever kind the option accepts.
+    /// The default value, of whatever kind the field accepts.
     ///
     /// Setting it to null is different from not setting it: the first says
     /// the default is nothing, the second that there is no default.
-    pub fn default(mut self, value: Result<Value, ValueError>) -> FieldBuilder {
+    pub fn default(mut self, value: impl Into<Value>) -> FieldBuilder {
+        put(&mut self.state, vocab::DEFAULT, Ok(value.into()));
+        self
+    }
+
+    /// The same, for a caller holding a `Result`.
+    ///
+    /// **For generated code**, which converts a Rust expression through
+    /// `ToValue` and has nowhere to put a failure: the builder keeps the
+    /// first error and [`SchemaBuilder::finish`] reports it, which is the
+    /// whole reason a builder collects rather than returns. A caller
+    /// writing by hand wants [`default`](FieldBuilder::default) and an
+    /// infallible constructor.
+    pub fn default_checked(mut self, value: Result<Value, ValueError>) -> FieldBuilder {
         put(&mut self.state, vocab::DEFAULT, value);
-        self
-    }
-
-    /// Declaration position.
-    pub fn order(mut self, order: i64) -> FieldBuilder {
-        put(
-            &mut self.state,
-            vocab::ORDER,
-            Value::int_in(self.alloc, order),
-        );
-        self
-    }
-
-    /// Hidden behind a disclosure by default.
-    pub fn advanced(mut self) -> FieldBuilder {
-        put(&mut self.state, vocab::ADVANCED, Ok(Value::bool(true)));
-        self
-    }
-
-    /// A secret: masked in a form, encrypted in storage.
-    pub fn sensitive(mut self) -> FieldBuilder {
-        put(&mut self.state, vocab::SENSITIVE, Ok(Value::bool(true)));
         self
     }
 
@@ -333,9 +258,10 @@ impl FieldBuilder {
         self
     }
 
-    /// An annotation. Carried, never interpreted.
-    pub fn extra(mut self, key: &str, value: Result<Value, ValueError>) -> FieldBuilder {
-        put(&mut self.state, key, value);
+    /// Sets any key at all: one from [`vocab`], or an annotation nobody
+    /// interprets. See [`SchemaBuilder::option`].
+    pub fn option(mut self, key: &str, value: impl Into<Value>) -> FieldBuilder {
+        put(&mut self.state, key, Ok(value.into()));
         self
     }
 }
@@ -480,7 +406,7 @@ impl KindBuilder {
         k
     }
 
-    /// A nested object with its own options.
+    /// A nested object with its own fields.
     ///
     /// An object with no fields is ordinary and complete -- a map nothing
     /// further is declared about -- exactly as an arm with no fields is.
@@ -505,7 +431,7 @@ impl KindBuilder {
     /// Exactly one of a fixed set of alternatives.
     ///
     /// Each is a row of value and label, never two parallel lists: those
-    /// drift in length or order, which shows a person one option while
+    /// drift in length or order, which shows a person one field while
     /// setting another.
     /// Built through the crate's own allocator. `enumeration_in` names one,
     /// which is what a schema built into a host's arena needs.
@@ -584,9 +510,9 @@ impl ArmBuilder {
         ArmBuilder { alloc, state }
     }
 
-    /// An option this arm adds when selected.
-    pub fn field(mut self, option: FieldBuilder) -> ArmBuilder {
-        push(&mut self.state, vocab::FIELDS, option.state);
+    /// A field this arm adds when selected.
+    pub fn field(mut self, field: FieldBuilder) -> ArmBuilder {
+        push(&mut self.state, vocab::FIELDS, field.state);
         self
     }
 }

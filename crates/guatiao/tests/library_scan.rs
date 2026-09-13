@@ -241,7 +241,7 @@ fn a_macro_exported_schema_is_callable_by_name() {
 
         let schema = SchemaRef::new(&out).expect("what comes back is a schema");
         assert!(
-            schema.options().next().is_some(),
+            schema.fields().next().is_some(),
             "{} describes at least one option",
             String::from_utf8_lossy(name)
         );
@@ -258,7 +258,7 @@ fn a_macro_exported_schema_is_callable_by_name() {
         Status::GUATIAO_OK
     );
     let schema = SchemaRef::new(&out).expect("a schema");
-    let keys: Vec<&str> = schema.options().map(|o| o.key()).collect();
+    let keys: Vec<&str> = schema.fields().map(|o| o.key()).collect();
     assert_eq!(
         keys,
         ["greeting", "seen_by"],

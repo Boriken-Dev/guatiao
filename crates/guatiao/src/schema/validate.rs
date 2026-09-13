@@ -10,9 +10,9 @@
 //!
 //! # Errors never echo the offending value
 //!
-//! [`ValidationError`] carries the option's key and a description of what
+//! [`ValidationError`] carries the field's key and a description of what
 //! *would* have been accepted, and deliberately not what was given. An
-//! option may be marked sensitive, and an error type that quotes its input
+//! field may be marked sensitive, and an error type that quotes its input
 //! is an error type that eventually logs a passphrase. It costs nothing to
 //! leave out: the caller still holds the value it just passed in, and can
 //! decide for itself whether showing it is safe.
@@ -35,7 +35,7 @@ pub const BOOL_WORDS: [&str; 7] = ["1", "0", "true", "false", "yes", "no", ""];
 
 /// Whether a given boolean *value* reads as true.
 ///
-/// Not the same question as what the option defaults to: an option with no
+/// Not the same question as what the field defaults to: a field with no
 /// value at all is absent, and absence is the caller's to resolve.
 pub fn bool_is_true(value: &str) -> bool {
     if value.is_empty() {
@@ -67,9 +67,9 @@ fn bad(key: impl Into<String>, expected: impl Into<String>) -> ValidationError {
     }
 }
 
-/// Whether `option` accepts `text`.
-pub fn validate_text(option: FieldRef<'_>, text: &str) -> Result<(), ValidationError> {
-    against(option.kind(), option.key(), text)
+/// Whether `field` accepts `text`.
+pub fn validate_text(field: FieldRef<'_>, text: &str) -> Result<(), ValidationError> {
+    against(field.kind(), field.key(), text)
 }
 
 /// The arm values of a tagged kind, for a message.
@@ -79,7 +79,7 @@ fn arm_names(kind: Kind<'_>) -> String {
 }
 
 /// Recursive, because a union holds kinds. A free function rather than a
-/// method so the error can name the option's key, which a bare kind does
+/// method so the error can name the field's key, which a bare kind does
 /// not know.
 fn against(kind: Kind<'_>, key: &str, value: &str) -> Result<(), ValidationError> {
     match kind {
@@ -121,7 +121,7 @@ fn against(kind: Kind<'_>, key: &str, value: &str) -> Result<(), ValidationError
                 Err(bad(key, format!("one of {}", names.join(", "))))
             }
         }
-        // THE TEXT FORM OF A TAGGED OPTION IS ITS DISCRIMINANT, and
+        // THE TEXT FORM OF A TAGGED FIELD IS ITS DISCRIMINANT, and
         // nothing else. Behaviourally identical to an enum over the arm
         // values, which is what lets a flat `?auth=userpass` keep
         // validating with no special case anywhere.
@@ -156,11 +156,11 @@ fn against(kind: Kind<'_>, key: &str, value: &str) -> Result<(), ValidationError
         // A kind from a newer producer: this build cannot say whether the
         // value is acceptable, so it does not pretend to. Accepting is the
         // right answer rather than the lenient one — rejecting would make
-        // every value of that option unusable on an older consumer, which
+        // every value of that field unusable on an older consumer, which
         // is worse than letting the provider have the last word, and the
         // provider validates again on entry.
         Kind::Unknown(_) => Ok(()),
-        Kind::Missing => Err(bad(key, "a declared kind — this option declares none")),
+        Kind::Missing => Err(bad(key, "a declared kind — this field declares none")),
     }
 }
 
@@ -200,11 +200,11 @@ fn bounds<T: std::fmt::Display>(min: Option<T>, max: Option<T>) -> String {
     }
 }
 
-/// Whether `option` accepts `value` as a **typed** value.
+/// Whether `field` accepts `value` as a **typed** value.
 ///
 /// # Why this exists beside [`validate_text`]
 ///
-/// The text form of a tagged option carries the discriminant only —
+/// The text form of a tagged field carries the discriminant only —
 /// `auth = "userpass"` and nothing else — so the text check can say which
 /// arm was named and nothing at all about the payload. That is coherent
 /// (it is exactly what a dropdown selects and what a flat `?auth=userpass`
@@ -215,15 +215,15 @@ fn bounds<T: std::fmt::Display>(min: Option<T>, max: Option<T>) -> String {
 /// So this checks the three things the text form structurally cannot: the
 /// discriminant names a declared arm, every key present is declared **by
 /// that arm**, and every required field of that arm is present.
-pub fn validate_value(option: FieldRef<'_>, value: &Value) -> Result<(), ValidationError> {
-    value_against(option.kind(), option.key(), value)
+pub fn validate_value(field: FieldRef<'_>, value: &Value) -> Result<(), ValidationError> {
+    value_against(field.kind(), field.key(), value)
 }
 
 /// The body of [`validate_value`], written over a kind rather than an
-/// option.
+/// field.
 ///
 /// A list's elements have a kind and no key of their own, so the recursion
-/// cannot be written over options. The key is carried along only to build
+/// cannot be written over fields. The key is carried along only to build
 /// the path an error reports.
 fn value_against(kind: Kind<'_>, key: &str, value: &Value) -> Result<(), ValidationError> {
     match kind {
@@ -309,7 +309,7 @@ fn value_against(kind: Kind<'_>, key: &str, value: &Value) -> Result<(), Validat
 
     // A field belonging to an arm that was not selected is an error, not
     // something to drop silently — the same argument the schema makes for
-    // an option key it does not declare.
+    // a field key it does not declare.
     for entry in value.entries().unwrap_or(&[]) {
         let Some(name) = entry.key_str() else {
             return Err(bad(key, "keys that are text"));
@@ -344,24 +344,24 @@ fn value_against(kind: Kind<'_>, key: &str, value: &Value) -> Result<(), Validat
 /// Whether every entry of `values` is accepted by `schema`.
 ///
 /// An undeclared key is an error rather than something to ignore. Silently
-/// dropping a misspelled option is how somebody ends up convinced a
+/// dropping a misspelled field is how somebody ends up convinced a
 /// setting does nothing.
 pub fn validate_texts(
     schema: SchemaRef<'_>,
     values: &BTreeMap<String, String>,
 ) -> Result<(), ValidationError> {
     for (key, value) in values {
-        let Some(option) = super::flat::resolve(schema, key) else {
+        let Some(field) = super::flat::resolve(schema, key) else {
             return Err(ValidationError::UnknownOption {
                 key: key.clone(),
-                known: schema.options().map(|o| o.key().to_string()).collect(),
+                known: schema.fields().map(|o| o.key().to_string()).collect(),
             });
         };
-        validate_text(option, value)?;
+        validate_text(field, value)?;
     }
-    for option in schema.options() {
-        if option.is_required() && !values.contains_key(option.key()) {
-            return Err(bad(option.key(), "a value — it is required"));
+    for field in schema.fields() {
+        if field.is_required() && !values.contains_key(field.key()) {
+            return Err(bad(field.key(), "a value — it is required"));
         }
     }
     Ok(())
@@ -376,17 +376,17 @@ pub fn validate_map(schema: SchemaRef<'_>, values: &Value) -> Result<(), Validat
         let Some(key) = entry.key_str() else {
             return Err(bad("", "keys that are text"));
         };
-        let Some(option) = schema.find(key) else {
+        let Some(field) = schema.find(key) else {
             return Err(ValidationError::UnknownOption {
                 key: key.to_string(),
-                known: schema.options().map(|o| o.key().to_string()).collect(),
+                known: schema.fields().map(|o| o.key().to_string()).collect(),
             });
         };
-        validate_value(option, entry.value())?;
+        validate_value(field, entry.value())?;
     }
-    for option in schema.options() {
-        if option.is_required() && !values.contains_key(option.key()) {
-            return Err(bad(option.key(), "a value — it is required"));
+    for field in schema.fields() {
+        if field.is_required() && !values.contains_key(field.key()) {
+            return Err(bad(field.key(), "a value — it is required"));
         }
     }
     Ok(())

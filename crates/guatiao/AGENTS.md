@@ -38,14 +38,14 @@ foreign allocator refusing is recoverable.
 ```rust
 use guatiao::{Map, ReadValue};
 
-let mut options = Map::new();
-options.set("compression", 6)?;
+let mut fields = Map::new();
+fields.set("compression", 6)?;
 
 let mut map = Map::new();
 map.set("host", "10.0.0.1")?;
 map.set("port", 5900)?;
 map.set("tls", true)?;
-map.set("options", options)?;
+map.set("fields", fields)?;
 ```
 
 `set` and `push` take `impl Into<Value>`, which is implemented for
@@ -143,7 +143,7 @@ and no per-kind readers on a value.
 ```rust
 let host: &str = map.get("host").ok_or_missing()?.try_into()?;
 let port: u16  = map.get("port").ok_or_missing()?.try_into()?;
-let n: i64 = map.get("options").get("compression").ok_or_missing()?.try_into()?;
+let n: i64 = map.get("fields").get("compression").ok_or_missing()?.try_into()?;
 ```
 
 `ReadValue` is implemented for `&Value` **and** for `Option<&Value>`, so a
@@ -242,7 +242,22 @@ field belongs to — a hint carried alongside the field — and what that
 section is CALLED belongs to whatever draws it. A producer that must
 write one uses `extra`, the door every annotation goes through.
 
-**A schema and a form are different questions.** What a value *is* — its
+**A schema and a form are different questions.** Substance lives on the
+builders; presentation lives on two traits in `schema::form`:
+
+| trait | gives | implemented for |
+| --- | --- | --- |
+| `FormBuilder` | `label`, `help`, `section` | `SchemaBuilder`, `FieldBuilder`, `ArmBuilder` |
+| `FormFieldBuilder` | `order`, `advanced`, `sensitive` | `FieldBuilder` |
+
+Two, because a schema has no position among siblings and an arm is not a
+secret — a single trait would hand out methods that mean nothing on two of
+its three implementers. What stays inherent on `FieldBuilder` is the
+substance: `required`, `default`, `extra`.
+
+Import the trait to use its methods. **`#[derive(Schema)]` needs no
+import**: it names them by rooted path, because a trait reached by method
+syntax would have to be in scope at the expansion site. What a value *is* — its
 kind, its bounds, whether it is required — is substance and lives on the
 builders. How it is *shown* — `label`, `help` — is presentation and lives
 on the **`FormBuilder`** trait, which `SchemaBuilder`, `FieldBuilder` and
@@ -253,7 +268,7 @@ be missing and the schema is still correct and still usable. Never make a
 validation or type decision depend on one.
 
 `FieldBuilder` rather than `OptionBuilder`, because the same builder
-produces an entry in a schema's `options` **and** in a map kind's
+produces an entry in a schema's `fields` **and** in a map kind's
 `fields`. The wire keys are unchanged.
 
 **Building names no allocator**, the same rule the value API has. Every
@@ -273,7 +288,7 @@ Read (borrowed views over the value, no copying):
 
 ```rust
 SchemaRef::new(&value) -> Option<SchemaRef>
-  .options() / .sections() / .find(key) / .extra(key) / .as_value()
+  .fields() / .sections() / .find(key) / .extra(key) / .as_value()
 FieldRef: .key() .kind() .label() .help() .section() .default() .order()
            .is_advanced() .is_sensitive() .is_required() .extra(key)
 Kind: .choices() .alternatives() .arms() .items() .fields() .name()
@@ -283,13 +298,13 @@ Validate:
 
 ```rust
 validate_map(schema, &values)   -> Result<(), ValidationError>
-validate_value(option, &value)  -> Result<(), ValidationError>
-validate_text(option, text)     // for a string-typed front end
+validate_value(field, &value)  -> Result<(), ValidationError>
+validate_text(field, text)     // for a string-typed front end
 validate_texts(schema, &BTreeMap<String, String>)
 ```
 
 `ValidationError` is `UnknownOption { .. }` or `BadValue { .. }`. **An
-error never quotes the value it refused** — an option may be sensitive —
+error never quotes the value it refused** — a field may be sensitive —
 it says what would have been accepted.
 
 Flat projection, for a front end that only has `key -> text`:
@@ -303,7 +318,7 @@ separator `.`.
 ```rust
 MergeMode::{Simple, Deep, Substitute}
   .merge(earlier, later, alloc) -> Result<Value, MergeError>
-  .merge_with(earlier, later, alloc, options, overrides)
+  .merge_with(earlier, later, alloc, fields, overrides)
   .merge_layers([("system", &a), ("user", &b)], alloc)
       -> Result<(Value, Provenance), MergeError>
 ```
