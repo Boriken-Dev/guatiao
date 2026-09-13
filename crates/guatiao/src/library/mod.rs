@@ -74,6 +74,9 @@ pub mod key;
 // Carries `unsafe`, listed in `tests/forbid_unsafe_per_module.rs`. A `//`
 // comment, never a `///`.
 pub mod kind;
+// The notices convention on `meta`. Safe code over ordinary values. A
+// `//` comment, never a `///`.
+pub mod notices;
 // The one file here with `unsafe` in it: raw descriptor reads, the entry
 // macro, and the loader. A `//` comment, never a `///`.
 pub mod raw;
@@ -93,6 +96,7 @@ pub use desc::{
 };
 pub use key::{KeyError, KeyFields, KeyTemplate, Subject};
 pub use kind::{Instance, Kind, KindHeader, KindMismatch, Offer, ProviderError, Remote};
+pub use notices::{Notice, declare_notice, notices};
 pub use raw::{
     DECLARES_SYMBOL, ENTRY_SYMBOL, EntryFn, Host, LibraryView, ProviderView, answer, read_host,
 };
