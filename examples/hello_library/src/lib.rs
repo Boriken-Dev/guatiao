@@ -304,8 +304,17 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
         // greeted — one implementation with one identity, which is why it
         // is one provider answering to both rather than two registrations
         // a host would have to know are the same thing.
-        static GREETER_KINDS: Names<2> = Names([Str::borrowed("greeter"), Str::borrowed("writer")]);
-        static SUNDIAL_KINDS: Names<1> = Names([Str::borrowed("timekeeper")]);
+        // Each provider serves its own kinds AND one they share, so a host
+        // ranking several implementations of one kind has a real case to
+        // work on rather than a contrived one.
+        static GREETER_KINDS: Names<3> = Names([
+            Str::borrowed("greeter"),
+            Str::borrowed("writer"),
+            Str::borrowed("everything"),
+        ]);
+        static SUNDIAL_KINDS: Names<2> =
+            Names([Str::borrowed("timekeeper"), Str::borrowed("everything")]);
+        static ALMANAC_KINDS: Names<1> = Names([Str::borrowed("everything")]);
 
         let providers = vec![
             ProviderInfo {
@@ -330,9 +339,7 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
             ProviderInfo {
                 struct_size: size_of::<ProviderInfo>() as u32,
                 vtable_size: 0,
-                // Serves no kind at all: reached by name, carrying data
-                // rather than behaviour.
-                kinds: Kinds::empty(),
+                kinds: Kinds::new(&ALMANAC_KINDS.0),
                 id: Str::borrowed("hello_library_almanac"),
                 display_name: Str::borrowed("Almanac"),
                 config: std::ptr::null(),

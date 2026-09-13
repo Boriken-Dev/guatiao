@@ -229,6 +229,21 @@ impl HostRegistry {
         self.inner.provider(key).map(Provider::available)
     }
 
+    /// Ranks every provider with this id.
+    fn set_priority(&mut self, id: &str, priority: i32) {
+        self.inner.set_priority(id, priority);
+    }
+
+    /// What this host ranked that id.
+    fn priority(&self, id: &str) -> i32 {
+        self.inner.priority(id)
+    }
+
+    /// The best provider serving a kind that can run here, as a map.
+    fn best(&self, kind: &str, alloc: Alloc) -> Option<Result<Value, ValueError>> {
+        self.inner.best(kind).map(|p| provider_value(alloc, p))
+    }
+
     /// One provider's table and the size it was compiled at.
     fn vtable(&self, key: &str) -> Option<(*const c_void, usize)> {
         self.inner.provider(key).map(Provider::vtable)
@@ -630,6 +645,94 @@ pub unsafe extern "C" fn guatiao_registry_provider_available(
     })
 }
 
+/// Ranks every provider with this id, now and whenever one loads.
+///
+/// **This is how a host chooses between two implementations of one
+/// kind.** `guatiao_registry_providers` and `_available` answer best
+/// first, which is `(priority DESC, key ASC)` — the key tiebreak because
+/// load order follows directory iteration, which no filesystem promises
+/// to keep stable, so "whichever loaded first" is not a rule anyone can
+/// reproduce.
+///
+/// Absent means 0, so an unranked provider sorts below any raised one and
+/// alongside every other unranked one. Negative ranks below them all.
+///
+/// A frontend reads its own configuration and calls this; nothing in this
+/// library reads a file.
+///
+/// # Safety
+///
+/// `reg` is a live handle and `id` is readable for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_set_priority(
+    reg: *mut HostRegistry,
+    id: Str,
+    priority: i32,
+) -> Status {
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(id)) =
+            (unsafe { HostRegistry::get_mut(reg) }, unsafe { as_str(id) })
+        else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        registry.set_priority(id, priority);
+        Status::GUATIAO_OK
+    })
+}
+
+/// What this host ranked that id. Zero unless it said otherwise, and zero
+/// for a null handle — a rank is not a lookup, and there is no answer to
+/// distinguish "unranked" from.
+///
+/// # Safety
+///
+/// `reg` is a live handle and `id` is readable for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_priority(reg: *const HostRegistry, id: Str) -> i32 {
+    guard_with(0, || {
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(id)) = (unsafe { HostRegistry::get(reg) }, unsafe { as_str(id) })
+        else {
+            return 0;
+        };
+        registry.priority(id)
+    })
+}
+
+/// The best provider serving `kind` that can actually run here, as a map.
+///
+/// `GUATIAO_ERR_NOT_FOUND` when nothing can. The question a host usually
+/// has; `guatiao_registry_available` is how to see what it passed over,
+/// so a frontend can say "ssh -> openssh (also: putty)".
+///
+/// # Safety
+///
+/// As [`guatiao_registry_providers`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_best(
+    reg: *const HostRegistry,
+    kind: Str,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(kind), Ok(alloc)) = (
+            unsafe { HostRegistry::get(reg) },
+            unsafe { as_str(kind) },
+            unsafe { Alloc::from_raw(alloc) },
+        ) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        match registry.best(kind, alloc) {
+            // SAFETY: as above.
+            Some(built) => unsafe { deliver(out, built) },
+            None => Status::GUATIAO_ERR_NOT_FOUND,
+        }
+    })
+}
+
 /// One provider's function table, and the size the library compiled it at.
 ///
 /// Null when no provider answers to `key`, or when it declares no table.
@@ -787,6 +890,7 @@ fn provider_value(alloc: Alloc, one: &Provider) -> Result<Value, ValueError> {
     // Whether there is something to fetch, rather than the thing itself: a
     // schema is borrowed from the library's image, and copying one into
     // every listing would be a tree per provider nobody asked for.
+    map.set("priority", Value::int(i64::from(one.priority())))?;
     map.set("has_config", Value::bool(one.config_schema().is_some()))?;
     map.set("vtable_size", Value::int(one.vtable().1 as i64))?;
     Ok(map)

@@ -150,7 +150,7 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
 
     // One provider, two kinds. It answers to each of them and is the same
     // provider both times — which is the whole reason a kind is a list.
-    assert_eq!(provider.kinds(), ["greeter", "writer"]);
+    assert_eq!(provider.kinds(), ["greeter", "writer", "everything"]);
     assert!(provider.supports("greeter") && provider.supports("writer"));
     assert!(!provider.supports("codec"));
     for kind in ["greeter", "writer"] {
@@ -168,12 +168,11 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
         "a kind nobody offers is empty rather than an error"
     );
 
-    // And one that serves no kind at all, which no capability question
-    // finds and a lookup by name does.
+    // And one that declares no configuration at all, which is a
+    // different statement from declaring an empty one.
     let almanac = registry
         .provider("hello_library_almanac")
-        .expect("a provider with no kind is still a provider");
-    assert!(almanac.kinds().is_empty());
+        .expect("the almanac registered");
     assert!(almanac.config_schema().is_none());
 }
 
@@ -231,6 +230,103 @@ fn a_provider_says_whether_it_can_run_here() {
         registry.available("timekeeper").count(),
         0,
         "and cannot serve it"
+    );
+}
+
+/// **Ordering is `(priority DESC, key ASC)`, and priority is the HOST's.**
+///
+/// The example library offers three providers, all of which serve
+/// `everything` — so this is the real case a host faces: several
+/// implementations of one kind, and a person who has an opinion about
+/// which should win.
+#[test]
+fn a_host_ranks_providers_and_the_order_follows() {
+    let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+    registry
+        .load_file(&library_path())
+        .unwrap()
+        .loaded()
+        .unwrap();
+
+    let order = |r: &Registry| -> Vec<String> {
+        r.providers("everything")
+            .map(|p| p.id().to_string())
+            .collect()
+    };
+
+    // Unranked, every provider sits at 0 and the KEY decides. Not load
+    // order: that follows directory iteration, which no filesystem
+    // promises to keep stable across runs or machines.
+    assert_eq!(
+        order(&registry),
+        [
+            "hello_library_almanac",
+            "hello_library_greeter",
+            "hello_library_sundial"
+        ],
+        "alphabetical by key, which is deterministic and inspectable"
+    );
+    assert_eq!(registry.priority("hello_library_greeter"), 0);
+
+    // A host says which it wants.
+    registry.set_priority("hello_library_sundial", 10);
+    assert_eq!(registry.priority("hello_library_sundial"), 10);
+    assert_eq!(
+        order(&registry)[0],
+        "hello_library_sundial",
+        "a raised provider goes first"
+    );
+
+    // Negative sorts below the unranked, which is what a retired
+    // implementation wants.
+    registry.set_priority("hello_library_almanac", -10);
+    assert_eq!(
+        order(&registry),
+        [
+            "hello_library_sundial",
+            "hello_library_greeter",
+            "hello_library_almanac"
+        ]
+    );
+
+    // `best` is the head of what can actually RUN, which is a different
+    // question: the sundial ranks highest and refuses, so the greeter
+    // wins — the one provider here that is available at all.
+    assert_eq!(
+        registry.best("everything").map(Provider::id),
+        Some("hello_library_greeter"),
+        "ranking chooses among what can serve, not among what claims to"
+    );
+    assert_eq!(
+        registry.providers("everything").count(),
+        3,
+        "and all three still CLAIM it"
+    );
+}
+
+/// A rank set before anything loads still applies.
+///
+/// Otherwise the order a host ranks and scans in would change the answer,
+/// which is the kind of thing nobody finds until it matters.
+#[test]
+fn a_rank_set_before_loading_still_applies() {
+    let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+    registry.set_priority("hello_library_sundial", 5);
+    registry
+        .load_file(&library_path())
+        .unwrap()
+        .loaded()
+        .unwrap();
+
+    assert_eq!(
+        registry
+            .provider("hello_library_sundial")
+            .map(Provider::priority),
+        Some(5)
+    );
+    assert_eq!(
+        registry.providers("everything").next().map(Provider::id),
+        Some("hello_library_sundial")
     );
 }
 

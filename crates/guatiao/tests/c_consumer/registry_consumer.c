@@ -118,8 +118,8 @@ int main(int argc, char **argv) {
       /* One provider, several kinds: it answers to each. */
       const guatiao_value *kinds = guatiao_map_find(p, s("kinds"));
       guatiao_values ks = guatiao_list_items(kinds);
-      CHECK(ks.len == 2, "expected two kinds, saw %zu", ks.len);
-      if (ks.len == 2) {
+      CHECK(ks.len == 3, "expected three kinds, saw %zu", ks.len);
+      if (ks.len == 3) {
         CHECK(guatiao_str_eq(guatiao_string_text(&ks.ptr[0]), s("greeter")) &&
                   guatiao_str_eq(guatiao_string_text(&ks.ptr[1]), s("writer")),
               "the kinds are not what the library declared");
@@ -155,8 +155,8 @@ int main(int argc, char **argv) {
   CHECK(st == GUATIAO_OK, "provider by key returned %d", (int)st);
   CHECK(text_is(field(&answer, "version"), "1.0.0"),
         "a provider that declares its own version keeps it");
-  CHECK(guatiao_list_items(guatiao_map_find(&answer, s("kinds"))).len == 0,
-        "the almanac serves no kind");
+  CHECK(guatiao_list_items(guatiao_map_find(&answer, s("kinds"))).len == 1,
+        "the almanac serves the kind every provider here shares");
   guatiao_value_free(&answer);
 
   st = guatiao_registry_provider(reg, s("nobody"), &alloc, &answer);
