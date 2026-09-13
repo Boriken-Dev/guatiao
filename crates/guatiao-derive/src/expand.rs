@@ -503,8 +503,7 @@ fn emit_schema(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
         let key = &field.key;
         let ty = &field.ty;
         let mut built = quote! {
-            ::guatiao::schema::OptionBuilder::new(
-                __alloc,
+            ::guatiao::schema::OptionBuilder::new_in(__alloc,
                 #key,
                 <#ty as ::guatiao::Schema>::kind(__alloc),
             )
@@ -556,7 +555,7 @@ fn emit_schema(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
                 // more name that has to resolve at the call site.
                 let mut __fields = ::std::vec::Vec::new();
                 #(#options)*
-                ::guatiao::schema::KindBuilder::map(__alloc, __fields)
+                ::guatiao::schema::KindBuilder::map_in(__alloc, __fields)
             }
         }
     }

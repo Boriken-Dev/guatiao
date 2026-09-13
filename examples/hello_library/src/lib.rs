@@ -280,9 +280,9 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
         // configuration against it with `validate_map`, having never
         // heard of this library.
         let schema = Box::new(
-            SchemaBuilder::new(alloc)
+            SchemaBuilder::new_in(alloc)
                 .option(
-                    OptionBuilder::new(alloc, "name", KindBuilder::string(alloc))
+                    OptionBuilder::new_in(alloc, "name", KindBuilder::string_in(alloc))
                         .label("Name")
                         .help("Who to greet.")
                         .required(),

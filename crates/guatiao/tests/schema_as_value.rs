@@ -64,24 +64,24 @@ fn with_alloc(body: impl FnOnce(Alloc)) {
 #[test]
 fn a_declared_schema_reads_back() {
     with_alloc(|alloc| {
-        let schema = SchemaBuilder::new(alloc)
+        let schema = SchemaBuilder::new_in(alloc)
             .section("net", "Network", "How to reach it")
             .option(
-                OptionBuilder::new(alloc, "host", KindBuilder::string(alloc))
+                OptionBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
                     .label("Host")
                     .section("net")
                     .required()
                     .order(1),
             )
             .option(
-                OptionBuilder::new(alloc, "port", KindBuilder::int_range(alloc, 1, 65535))
+                OptionBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
                     .label("Port")
                     .section("net")
                     .default(Value::int_in(alloc, 5900))
                     .order(2),
             )
             .option(
-                OptionBuilder::new(alloc, "password", KindBuilder::string(alloc))
+                OptionBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
                     .label("Password")
                     .sensitive()
                     .advanced(),
@@ -131,11 +131,11 @@ fn a_declared_schema_reads_back() {
 #[test]
 fn an_enum_carries_rows_not_two_parallel_lists() {
     with_alloc(|alloc| {
-        let schema = SchemaBuilder::new(alloc)
-            .option(OptionBuilder::new(
+        let schema = SchemaBuilder::new_in(alloc)
+            .option(OptionBuilder::new_in(
                 alloc,
                 "level",
-                KindBuilder::enumeration(alloc, &[("off", "Off"), ("on", "On")]),
+                KindBuilder::enumeration_in(alloc, &[("off", "Off"), ("on", "On")]),
             ))
             .finish()
             .unwrap();
@@ -163,35 +163,35 @@ fn an_enum_carries_rows_not_two_parallel_lists() {
 #[test]
 fn a_union_and_a_variant_are_different_features() {
     with_alloc(|alloc| {
-        let schema = SchemaBuilder::new(alloc)
-            .option(OptionBuilder::new(
+        let schema = SchemaBuilder::new_in(alloc)
+            .option(OptionBuilder::new_in(
                 alloc,
                 "port",
-                KindBuilder::union(
+                KindBuilder::union_in(
                     alloc,
-                    vec![KindBuilder::int(alloc), KindBuilder::string(alloc)],
+                    vec![KindBuilder::int_in(alloc), KindBuilder::string_in(alloc)],
                 ),
             ))
-            .option(OptionBuilder::new(
+            .option(OptionBuilder::new_in(
                 alloc,
                 "auth",
-                KindBuilder::variant(
+                KindBuilder::variant_in(
                     alloc,
                     "auth",
                     vec![
                         // An arm with no fields is ordinary and complete:
                         // "use the ambient credential" is the common case.
-                        ArmBuilder::new(alloc, "ambient", "Ambient"),
-                        ArmBuilder::new(alloc, "userpass", "Username and password")
-                            .field(OptionBuilder::new(
+                        ArmBuilder::new_in(alloc, "ambient", "Ambient"),
+                        ArmBuilder::new_in(alloc, "userpass", "Username and password")
+                            .field(OptionBuilder::new_in(
                                 alloc,
                                 "username",
-                                KindBuilder::string(alloc),
+                                KindBuilder::string_in(alloc),
                             ))
-                            .field(OptionBuilder::new(
+                            .field(OptionBuilder::new_in(
                                 alloc,
                                 "password",
-                                KindBuilder::string(alloc),
+                                KindBuilder::string_in(alloc),
                             )),
                     ],
                 ),
@@ -229,8 +229,10 @@ fn a_union_and_a_variant_are_different_features() {
 #[test]
 fn an_unknown_kind_leaves_the_option_readable_and_the_rest_intact() {
     with_alloc(|alloc| {
-        let mut schema = SchemaBuilder::new(alloc)
-            .option(OptionBuilder::new(alloc, "known", KindBuilder::string(alloc)).label("Known"))
+        let mut schema = SchemaBuilder::new_in(alloc)
+            .option(
+                OptionBuilder::new_in(alloc, "known", KindBuilder::string_in(alloc)).label("Known"),
+            )
             .finish()
             .unwrap();
 
@@ -269,8 +271,12 @@ fn an_unknown_kind_leaves_the_option_readable_and_the_rest_intact() {
 #[test]
 fn a_malformed_option_is_skipped_not_fatal() {
     with_alloc(|alloc| {
-        let mut schema = SchemaBuilder::new(alloc)
-            .option(OptionBuilder::new(alloc, "good", KindBuilder::bool(alloc)))
+        let mut schema = SchemaBuilder::new_in(alloc)
+            .option(OptionBuilder::new_in(
+                alloc,
+                "good",
+                KindBuilder::bool_in(alloc),
+            ))
             .finish()
             .unwrap();
 
@@ -294,9 +300,9 @@ fn a_malformed_option_is_skipped_not_fatal() {
 #[test]
 fn an_annotation_is_carried_but_not_interpreted() {
     with_alloc(|alloc| {
-        let schema = SchemaBuilder::new(alloc)
+        let schema = SchemaBuilder::new_in(alloc)
             .option(
-                OptionBuilder::new(alloc, "host", KindBuilder::string(alloc))
+                OptionBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
                     .extra("x-widget", Value::string_in(alloc, "combo")),
             )
             .extra("x-origin", Value::string_in(alloc, "test"))
@@ -323,4 +329,43 @@ fn an_annotation_is_carried_but_not_interpreted() {
         // walks a value.
         assert!(entries(&schema).count() >= 2);
     });
+}
+
+/// **Building a schema names no allocator**, the same rule the value API
+/// has -- and the two forms build the same thing.
+///
+/// The plain form is what a schema written by hand should read like; the
+/// `_in` form is for a schema built into a host's arena, which is what
+/// the example library does.
+#[test]
+fn the_plain_builders_and_the_in_builders_agree() {
+    let by_hand = SchemaBuilder::new()
+        .option(
+            OptionBuilder::new("port", KindBuilder::int_range(1, 65535))
+                .label("Port")
+                .required(),
+        )
+        .option(OptionBuilder::new("name", KindBuilder::string()))
+        .finish()
+        .expect("a schema this small does not exhaust an allocator");
+
+    let alloc = Alloc::rust();
+    let named = SchemaBuilder::new_in(alloc)
+        .option(
+            OptionBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
+                .label("Port")
+                .required(),
+        )
+        .option(OptionBuilder::new_in(
+            alloc,
+            "name",
+            KindBuilder::string_in(alloc),
+        ))
+        .finish()
+        .expect("as above");
+
+    assert!(
+        guatiao::value::read::equal(&by_hand, &named),
+        "the plain form is the `_in` form with the crate's own allocator"
+    );
 }

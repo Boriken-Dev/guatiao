@@ -92,7 +92,7 @@ pub trait Schema {
 
 impl Schema for bool {
     fn kind(alloc: Alloc) -> KindBuilder {
-        KindBuilder::bool(alloc)
+        KindBuilder::bool_in(alloc)
     }
 }
 
@@ -105,8 +105,7 @@ macro_rules! integer_schema {
     ($($t:ty),* $(,)?) => {$(
         impl Schema for $t {
             fn kind(alloc: Alloc) -> KindBuilder {
-                KindBuilder::int_bounds(
-                    alloc,
+                KindBuilder::int_bounds_in(alloc,
                     i64::try_from(<$t>::MIN).ok(),
                     i64::try_from(<$t>::MAX).ok(),
                 )
@@ -121,25 +120,25 @@ integer_schema!(
 
 impl Schema for f64 {
     fn kind(alloc: Alloc) -> KindBuilder {
-        KindBuilder::float(alloc)
+        KindBuilder::float_in(alloc)
     }
 }
 
 impl Schema for String {
     fn kind(alloc: Alloc) -> KindBuilder {
-        KindBuilder::string(alloc)
+        KindBuilder::string_in(alloc)
     }
 }
 
 impl Schema for Bytes {
     fn kind(alloc: Alloc) -> KindBuilder {
-        KindBuilder::bytes(alloc)
+        KindBuilder::bytes_in(alloc)
     }
 }
 
 impl<T: Schema> Schema for Vec<T> {
     fn kind(alloc: Alloc) -> KindBuilder {
-        KindBuilder::list(alloc, T::kind(alloc))
+        KindBuilder::list_in(alloc, T::kind(alloc))
     }
 }
 

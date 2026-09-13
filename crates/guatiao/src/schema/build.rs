@@ -10,6 +10,21 @@
 //! declarations rather than as a wall of string keys, and they cannot
 //! misspell one.
 //!
+//! # Building names no allocator
+//!
+//! `SchemaBuilder::new()`, `KindBuilder::string()` and the rest use the
+//! crate's own allocator, exactly as `Map::new()` and `Value::string()`
+//! do — so a schema written by hand reads as a declaration rather than as
+//! the same argument threaded through every line.
+//!
+//! The `_in` forms name one, and that is what a schema built into a
+//! host's arena uses. **Use them throughout when you use them at all**: a
+//! sub-builder left on the plain form allocates through the crate's
+//! allocator, and the tree then holds some of both. That is sound — every
+//! container carries the allocator that made it, which is what lets a
+//! host free a library's tree — but it is not what somebody building into
+//! an arena meant.
+//!
 //! # Errors are collected, not returned per call
 //!
 //! The allocator belongs to the caller and can fail, so every step could
@@ -119,8 +134,16 @@ fn push(state: &mut Result<Value, ValueError>, key: &str, value: Result<Value, V
 }
 
 impl SchemaBuilder {
-    /// An empty schema.
-    pub fn new(alloc: Alloc) -> SchemaBuilder {
+    /// An empty schema, through the crate's own allocator.
+    ///
+    /// [`new_in`](SchemaBuilder::new_in) names one, which is what a
+    /// schema built into a host's arena needs.
+    pub fn new() -> SchemaBuilder {
+        SchemaBuilder::new_in(Alloc::rust())
+    }
+
+    /// An empty schema, through an allocator you name.
+    pub fn new_in(alloc: Alloc) -> SchemaBuilder {
         SchemaBuilder {
             alloc,
             state: Ok(Value::map_in(alloc)),
@@ -163,9 +186,22 @@ impl SchemaBuilder {
     }
 }
 
+/// The same as [`SchemaBuilder::new`].
+impl Default for SchemaBuilder {
+    fn default() -> SchemaBuilder {
+        SchemaBuilder::new()
+    }
+}
+
 impl OptionBuilder {
     /// An option under `key`, accepting `kind`.
-    pub fn new(alloc: Alloc, key: &str, kind: KindBuilder) -> OptionBuilder {
+    /// One option, through the crate's own allocator.
+    pub fn new(key: &str, kind: KindBuilder) -> OptionBuilder {
+        OptionBuilder::new_in(Alloc::rust(), key, kind)
+    }
+
+    /// The same, through an allocator you name.
+    pub fn new_in(alloc: Alloc, key: &str, kind: KindBuilder) -> OptionBuilder {
         let mut state = Ok(Value::map_in(alloc));
         put(&mut state, vocab::KEY, Value::string_in(alloc, key));
         put(&mut state, vocab::KIND, kind.state);
@@ -255,22 +291,50 @@ impl KindBuilder {
     }
 
     /// True or false.
-    pub fn bool(alloc: Alloc) -> KindBuilder {
+    /// Built through the crate's own allocator. `bool_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn bool() -> KindBuilder {
+        KindBuilder::bool_in(Alloc::rust())
+    }
+
+    /// The same, through an allocator you name.
+    pub fn bool_in(alloc: Alloc) -> KindBuilder {
         KindBuilder::typed(alloc, vocab::TYPE_BOOL)
     }
 
     /// Free text.
-    pub fn string(alloc: Alloc) -> KindBuilder {
+    /// Built through the crate's own allocator. `string_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn string() -> KindBuilder {
+        KindBuilder::string_in(Alloc::rust())
+    }
+
+    /// The same, through an allocator you name.
+    pub fn string_in(alloc: Alloc) -> KindBuilder {
         KindBuilder::typed(alloc, vocab::TYPE_STRING)
     }
 
     /// A whole number, unbounded.
-    pub fn int(alloc: Alloc) -> KindBuilder {
+    /// Built through the crate's own allocator. `int_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn int() -> KindBuilder {
+        KindBuilder::int_in(Alloc::rust())
+    }
+
+    /// The same, through an allocator you name.
+    pub fn int_in(alloc: Alloc) -> KindBuilder {
         KindBuilder::typed(alloc, vocab::TYPE_INT)
     }
 
     /// A whole number between `min` and `max`, both inclusive.
-    pub fn int_range(alloc: Alloc, min: i64, max: i64) -> KindBuilder {
+    /// Built through the crate's own allocator. `int_range_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn int_range(min: i64, max: i64) -> KindBuilder {
+        KindBuilder::int_range_in(Alloc::rust(), min, max)
+    }
+
+    /// The same, through an allocator you name.
+    pub fn int_range_in(alloc: Alloc, min: i64, max: i64) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_INT);
         put(&mut k.state, vocab::MIN, Value::int_in(alloc, min));
         put(&mut k.state, vocab::MAX, Value::int_in(alloc, max));
@@ -283,7 +347,14 @@ impl KindBuilder {
     /// bounds that fit an `i64` sometimes and not always, and a bound that
     /// does not fit must be left off rather than clamped -- a clamped
     /// bound enforces a limit nobody declared.
-    pub fn int_bounds(alloc: Alloc, min: Option<i64>, max: Option<i64>) -> KindBuilder {
+    /// Built through the crate's own allocator. `int_bounds_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn int_bounds(min: Option<i64>, max: Option<i64>) -> KindBuilder {
+        KindBuilder::int_bounds_in(Alloc::rust(), min, max)
+    }
+
+    /// The same, through an allocator you name.
+    pub fn int_bounds_in(alloc: Alloc, min: Option<i64>, max: Option<i64>) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_INT);
         if let Some(min) = min {
             put(&mut k.state, vocab::MIN, Value::int_in(alloc, min));
@@ -295,12 +366,26 @@ impl KindBuilder {
     }
 
     /// A real number, unbounded.
-    pub fn float(alloc: Alloc) -> KindBuilder {
+    /// Built through the crate's own allocator. `float_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn float() -> KindBuilder {
+        KindBuilder::float_in(Alloc::rust())
+    }
+
+    /// The same, through an allocator you name.
+    pub fn float_in(alloc: Alloc) -> KindBuilder {
         KindBuilder::typed(alloc, vocab::TYPE_FLOAT)
     }
 
     /// A real number, bounded on either side or neither.
-    pub fn float_bounds(alloc: Alloc, min: Option<f64>, max: Option<f64>) -> KindBuilder {
+    /// Built through the crate's own allocator. `float_bounds_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn float_bounds(min: Option<f64>, max: Option<f64>) -> KindBuilder {
+        KindBuilder::float_bounds_in(Alloc::rust(), min, max)
+    }
+
+    /// The same, through an allocator you name.
+    pub fn float_bounds_in(alloc: Alloc, min: Option<f64>, max: Option<f64>) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_FLOAT);
         if let Some(min) = min {
             put(&mut k.state, vocab::MIN, Value::float_in(alloc, min));
@@ -312,12 +397,26 @@ impl KindBuilder {
     }
 
     /// Opaque bytes.
-    pub fn bytes(alloc: Alloc) -> KindBuilder {
+    /// Built through the crate's own allocator. `bytes_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn bytes() -> KindBuilder {
+        KindBuilder::bytes_in(Alloc::rust())
+    }
+
+    /// The same, through an allocator you name.
+    pub fn bytes_in(alloc: Alloc) -> KindBuilder {
         KindBuilder::typed(alloc, vocab::TYPE_BYTES)
     }
 
     /// A sequence, every element of `items`.
-    pub fn list(alloc: Alloc, items: KindBuilder) -> KindBuilder {
+    /// Built through the crate's own allocator. `list_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn list(items: KindBuilder) -> KindBuilder {
+        KindBuilder::list_in(Alloc::rust(), items)
+    }
+
+    /// The same, through an allocator you name.
+    pub fn list_in(alloc: Alloc, items: KindBuilder) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_LIST);
         put(&mut k.state, vocab::ITEMS, items.state);
         k
@@ -327,7 +426,14 @@ impl KindBuilder {
     ///
     /// An object with no fields is ordinary and complete -- a map nothing
     /// further is declared about -- exactly as an arm with no fields is.
-    pub fn map(alloc: Alloc, fields: Vec<OptionBuilder>) -> KindBuilder {
+    /// Built through the crate's own allocator. `map_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn map(fields: Vec<OptionBuilder>) -> KindBuilder {
+        KindBuilder::map_in(Alloc::rust(), fields)
+    }
+
+    /// The same, through an allocator you name.
+    pub fn map_in(alloc: Alloc, fields: Vec<OptionBuilder>) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_MAP);
         // Written even when empty, so a reader can tell "an object with no
         // declared fields" from "a kind that forgot to say".
@@ -343,7 +449,14 @@ impl KindBuilder {
     /// Each is a row of value and label, never two parallel lists: those
     /// drift in length or order, which shows a person one option while
     /// setting another.
-    pub fn enumeration(alloc: Alloc, choices: &[(&str, &str)]) -> KindBuilder {
+    /// Built through the crate's own allocator. `enumeration_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn enumeration(choices: &[(&str, &str)]) -> KindBuilder {
+        KindBuilder::enumeration_in(Alloc::rust(), choices)
+    }
+
+    /// The same, through an allocator you name.
+    pub fn enumeration_in(alloc: Alloc, choices: &[(&str, &str)]) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_ENUM);
         for (value, label) in choices {
             let mut built = Ok(Value::map_in(alloc));
@@ -355,7 +468,14 @@ impl KindBuilder {
     }
 
     /// Any one of several kinds. Untagged.
-    pub fn union(alloc: Alloc, arms: Vec<KindBuilder>) -> KindBuilder {
+    /// Built through the crate's own allocator. `union_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn union(arms: Vec<KindBuilder>) -> KindBuilder {
+        KindBuilder::union_in(Alloc::rust(), arms)
+    }
+
+    /// The same, through an allocator you name.
+    pub fn union_in(alloc: Alloc, arms: Vec<KindBuilder>) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_UNION);
         for arm in arms {
             push(&mut k.state, vocab::ARMS, arm.state);
@@ -365,7 +485,14 @@ impl KindBuilder {
 
     /// One of several alternatives, each with its own fields. Tagged: the
     /// discriminant is stored under `tag`.
-    pub fn variant(alloc: Alloc, tag: &str, arms: Vec<ArmBuilder>) -> KindBuilder {
+    /// Built through the crate's own allocator. `variant_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn variant(tag: &str, arms: Vec<ArmBuilder>) -> KindBuilder {
+        KindBuilder::variant_in(Alloc::rust(), tag, arms)
+    }
+
+    /// The same, through an allocator you name.
+    pub fn variant_in(alloc: Alloc, tag: &str, arms: Vec<ArmBuilder>) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_VARIANT);
         put(&mut k.state, vocab::TAG, Value::string_in(alloc, tag));
         for arm in arms {
@@ -386,7 +513,13 @@ impl ArmBuilder {
     /// **An arm with no fields is complete.** It is the common case, so a
     /// design making it exceptional would make the exception the thing
     /// everyone must remember.
-    pub fn new(alloc: Alloc, value: &str, label: &str) -> ArmBuilder {
+    /// One arm, through the crate's own allocator.
+    pub fn new(value: &str, label: &str) -> ArmBuilder {
+        ArmBuilder::new_in(Alloc::rust(), value, label)
+    }
+
+    /// The same, through an allocator you name.
+    pub fn new_in(alloc: Alloc, value: &str, label: &str) -> ArmBuilder {
         let mut state = Ok(Value::map_in(alloc));
         put(&mut state, vocab::VALUE, Value::string_in(alloc, value));
         put(&mut state, vocab::LABEL, Value::string_in(alloc, label));

@@ -26,9 +26,9 @@ use guatiao::{MergeMode, MergeOptions, Value};
 /// Rust-heap string, which is why it arrives already built, wrapped in
 /// the `Ok` the builder's error-carrying signature expects.
 fn schema_with(alloc: Alloc, pairs: &[(&str, &str)]) -> Value {
-    let mut builder = SchemaBuilder::new(alloc);
+    let mut builder = SchemaBuilder::new_in(alloc);
     for (key, declaration) in pairs {
-        let mut option = OptionBuilder::new(alloc, key, KindBuilder::string(alloc));
+        let mut option = OptionBuilder::new_in(alloc, key, KindBuilder::string_in(alloc));
         if !declaration.is_empty() {
             option = option.extra(X_MERGE, Ok(Value::string(declaration)));
         }
@@ -104,9 +104,9 @@ fn an_unrecognised_spelling_falls_back_rather_than_failing() {
 #[test]
 fn a_non_string_annotation_is_ignored() {
     let alloc = Alloc::rust();
-    let schema = SchemaBuilder::new(alloc)
+    let schema = SchemaBuilder::new_in(alloc)
         .option(
-            OptionBuilder::new(alloc, "k", KindBuilder::string(alloc))
+            OptionBuilder::new_in(alloc, "k", KindBuilder::string_in(alloc))
                 .extra(X_MERGE, Ok(Value::int(2))),
         )
         .finish()

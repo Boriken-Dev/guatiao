@@ -24,6 +24,23 @@
 //!
 //! - [`build`] writes one: [`SchemaBuilder`], [`OptionBuilder`],
 //!   [`KindBuilder`], [`ArmBuilder`].
+//!
+//! ```
+//! use guatiao::schema::{KindBuilder, OptionBuilder, SchemaBuilder};
+//!
+//! // Building names no allocator, the same as `Map::new()`.
+//! let schema = SchemaBuilder::new()
+//!     .option(
+//!         OptionBuilder::new("port", KindBuilder::int_range(1, 65535))
+//!             .label("Port")
+//!             .required(),
+//!     )
+//!     .finish()
+//!     .expect("a schema this small does not exhaust an allocator");
+//!
+//! let read = guatiao::schema::read::SchemaRef::new(&schema).expect("a schema is a map");
+//! assert!(read.find("port").expect("it declares `port`").is_required());
+//! ```
 //! - [`read`] reads one back: [`SchemaRef`], [`OptionRef`], [`KindRef`].
 //! - [`validate`] answers whether a value is one the schema accepts.
 //! - [`flat`] projects a tagged option onto flat `key -> text` storage,
