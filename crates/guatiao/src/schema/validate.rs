@@ -185,7 +185,7 @@ fn is_integer_text(text: &str) -> bool {
 /// vocabulary can write down is out there.
 fn within(text: &str, min: Option<i64>, max: Option<i64>) -> bool {
     match text.parse::<i128>() {
-        Ok(n) => !min.is_some_and(|m| n < i128::from(m)) && !max.is_some_and(|m| n > i128::from(m)),
+        Ok(n) => min.is_none_or(|m| n >= i128::from(m)) && max.is_none_or(|m| n <= i128::from(m)),
         Err(_) if text.starts_with('-') => min.is_none(),
         Err(_) => max.is_none(),
     }

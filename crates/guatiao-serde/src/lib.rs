@@ -151,8 +151,7 @@ pub fn from_base64(text: &str) -> Option<Vec<u8>> {
     }
 
     let bytes = text.as_bytes();
-    // is_multiple_of is newer than this workspace's MSRV floor.
-    if bytes.len() % 4 != 0 {
+    if !bytes.len().is_multiple_of(4) {
         return None;
     }
     let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
