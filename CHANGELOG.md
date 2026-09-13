@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `Registry` and `Provider` are `Send` and `Sync`: a host keeps its one
+  registry behind a lock and reads it from any thread. Every pointer they
+  hold addresses a library's image, which is never unloaded.
 - `library::SearchPath` and `scan_path`: a host's search path is a list
   of directories or files on the platform's own separator, each place
   visited once; a file entry is probed and loaded on its own under the

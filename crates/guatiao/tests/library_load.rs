@@ -801,3 +801,13 @@ fn a_lookup_from_another_thread_never_deadlocks_a_load() {
     assert!(calls > 0);
     assert_eq!(host.list("greeter").unwrap().len(), 1);
 }
+
+/// A host keeps its registry behind a lock, or reads it from several
+/// threads, and hands out `&Provider` across them. Asserted at compile
+/// time: removing either impl makes this fail to build, not to run.
+#[test]
+fn a_registry_and_its_providers_cross_threads() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<Registry>();
+    assert_send_sync::<Provider>();
+}
