@@ -930,6 +930,10 @@ pub unsafe fn available_via<T>(
 
 /// A type `#[derive(Provider)]` made a provider of.
 pub trait ProviderDecl {
+    /// The name of every kind this provider serves, so a library can
+    /// declare them at compile time.
+    const KINDS: &'static [&'static str];
+
     /// Builds this provider's descriptor, its tables and its configuration
     /// schema, once. `host` is what the library was loaded by; `alloc` is
     /// what the schema is built through.

@@ -26,7 +26,10 @@
 
 use std::path::{Path, PathBuf};
 
-use guatiao::library::{Registry, Skipped, declares_entry_symbol, scan_dir};
+use guatiao::library::{
+    Order, Registry, ScanRules, Skipped, declares_entry_symbol, probe, scan_dir, scan_dir_rules,
+    scan_dir_with,
+};
 use guatiao::schema::SchemaRef;
 use guatiao::value::alloc::Allocator;
 use guatiao::value::status::Status;
@@ -172,6 +175,131 @@ fn a_scan_reports_every_candidate_it_passed_over() {
     // And the library that did load is usable, so the scan produced a
     // registry rather than just a report.
     assert!(registry.provider("hello_library_greeter").is_some());
+}
+
+/// What a library declares is read as data, before anything is mapped.
+#[test]
+fn a_library_declares_its_kinds_as_data() {
+    let (Some(hand_written), Some(derived), Some(not_a_plugin)) = (
+        built("hello_library"),
+        built("derived_greeter"),
+        built("guatiao_derive"),
+    ) else {
+        println!("skipped: the example libraries are not built beside this test");
+        return;
+    };
+
+    // The hand-written one says so with `declares!`.
+    let hello = probe(&hand_written).expect("parses");
+    assert!(hello.entry);
+    assert_eq!(
+        hello.declared.kinds().collect::<Vec<_>>(),
+        ["greeter", "writer", "everything", "timekeeper", "echo"]
+    );
+    assert!(hello.declared.has("HELLO_EXAMPLE", "1"));
+
+    // The derived one wrote nothing: `providers!` declared for it, and a
+    // kind two providers share is declared once.
+    let greeter = probe(&derived).expect("parses");
+    assert!(greeter.entry);
+    assert_eq!(
+        greeter.declared.kinds().collect::<Vec<_>>(),
+        ["greeter", "counter"]
+    );
+
+    // A real shared library that is not one of ours: no entry, nothing
+    // declared, and not an error.
+    let other = probe(&not_a_plugin).expect("parses");
+    assert!(!other.entry);
+    assert!(other.declared.is_empty());
+}
+
+/// A rule keeps a library out of a scan by what it declares, and the
+/// report names the rule.
+#[test]
+fn a_scan_with_rules_filters_before_mapping() {
+    let (Some(hand_written), Some(derived)) = (built("hello_library"), built("derived_greeter"))
+    else {
+        println!("skipped: the example libraries are not built beside this test");
+        return;
+    };
+    let dir = scratch("scan_rules");
+    let hello = dir.join(dll_name("hello_library"));
+    let greeter = dir.join(dll_name("derived_greeter"));
+    std::fs::copy(&hand_written, &hello).expect("copy");
+    std::fs::copy(&derived, &greeter).expect("copy");
+
+    let scan = |rules: &[&str]| {
+        let rules = ScanRules::parse(rules).expect("rules parse");
+        let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+        scan_dir_rules(&mut registry, &dir, Order::Ascending, &rules).expect("readable")
+    };
+    let names = |paths: &[PathBuf]| {
+        let mut names: Vec<String> = paths
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    };
+
+    // A negative rule: only the one declaring the pair is kept out.
+    let report = scan(&["!kind=echo"]);
+    assert_eq!(names(&report.loaded), [dll_name("derived_greeter")]);
+    assert_eq!(
+        reason_for(&report.skipped, &hello),
+        Some(&Skipped::Filtered {
+            by: "!kind=echo".into()
+        }),
+        "{report:#?}"
+    );
+    assert!(report.failed.is_empty());
+
+    // A positive rule both satisfy.
+    let report = scan(&["kind=greeter"]);
+    assert_eq!(
+        names(&report.loaded),
+        [dll_name("derived_greeter"), dll_name("hello_library")]
+    );
+
+    // A positive rule neither satisfies: both filtered, nothing mapped.
+    let report = scan(&["kind=nonesuch"]);
+    assert!(report.loaded.is_empty(), "{report:#?}");
+    assert_eq!(
+        reason_for(&report.skipped, &greeter),
+        Some(&Skipped::Filtered {
+            by: "kind=nonesuch".into()
+        })
+    );
+    assert_eq!(
+        reason_for(&report.skipped, &hello),
+        Some(&Skipped::Filtered {
+            by: "kind=nonesuch".into()
+        })
+    );
+
+    // No rules: both load, as `scan_dir` always did.
+    let report = scan(&[]);
+    assert_eq!(report.loaded.len(), 2, "{report:#?}");
+
+    // A filter of the host's own sees the same declarations.
+    let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+    let report = scan_dir_with(&mut registry, &dir, Order::Ascending, |declared| {
+        if declared.has("HELLO_EXAMPLE", "1") {
+            Err("no examples today".to_string())
+        } else {
+            Ok(())
+        }
+    })
+    .expect("readable");
+    assert_eq!(names(&report.loaded), [dll_name("derived_greeter")]);
+    assert_eq!(
+        reason_for(&report.skipped, &hello),
+        Some(&Skipped::Filtered {
+            by: "no examples today".into()
+        })
+    );
+    assert!(registry.provider("derived_greeter_hello").is_some());
 }
 
 /// An empty directory is an empty report, not an error.

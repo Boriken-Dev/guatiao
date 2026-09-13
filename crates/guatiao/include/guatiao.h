@@ -1250,6 +1250,28 @@ guatiao_status guatiao_registry_scan_dir(struct guatiao_registry *reg,
                                          struct guatiao_value *out);
 
 /*
+ [`guatiao_registry_scan_dir`] with rules applied to what each library
+ declares, **before it is mapped**.
+
+ `rules` is newline-separated: each line is `KEY=VALUE` to require a
+ declaration or `!KEY=VALUE` to skip a library that declares it; blank
+ lines are ignored. Every kind a library was built with is declared as
+ `kind=<name>`, so `kind=session-backend` scans for that kind alone.
+ A library skipped this way is reported as `{"skipped": "filtered",
+ "by": "<rule>"}`. A line that is not a rule is `GUATIAO_ERR_BAD_VALUE`.
+
+ # Safety
+
+ As [`guatiao_registry_scan_dir`], with `rules` a valid [`Str`].
+ */
+guatiao_status guatiao_registry_scan_dir_rules(struct guatiao_registry *reg,
+                                               struct guatiao_str dir,
+                                               bool descending,
+                                               struct guatiao_str rules,
+                                               const struct guatiao_alloc *alloc,
+                                               struct guatiao_value *out);
+
+/*
  Every library loaded, as a list of maps.
 
  # Safety

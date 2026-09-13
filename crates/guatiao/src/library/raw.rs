@@ -47,6 +47,93 @@ use crate::value::types::{Map, MaybeNull, Str, Value};
 /// The symbol a library exports, NUL-terminated for the loader.
 pub const ENTRY_SYMBOL: &[u8] = b"guatiao_library_entry\0";
 
+/// The data symbol a library declares itself under, NUL-terminated for a
+/// loader that looks it up by name.
+///
+/// Its bytes are `key=value` strings separated by NUL and ended by an
+/// empty string, so the whole declaration ends in two NULs. Every kind
+/// a provider serves is `kind=<name>`; a library adds pairs of its own.
+/// Written by [`declares!`](crate::declares) or
+/// [`providers!`](crate::providers); read by a scanner **as data**,
+/// before the file is mapped, so a host can keep a library out of a scan
+/// by what it declares rather than by its filename.
+pub const DECLARES_SYMBOL: &[u8] = b"guatiao_declares\0";
+
+/// How many bytes a declaration takes: `kind=<name>` for every kind of
+/// every provider, then each extra pair, each NUL-terminated, then the
+/// empty string that ends it. Evaluated at compile time by the macros.
+#[doc(hidden)]
+pub const fn declaration_len(kinds: &[&[&str]], extra: &[&str]) -> usize {
+    let mut n = 1;
+    let mut i = 0;
+    while i < kinds.len() {
+        let mut j = 0;
+        while j < kinds[i].len() {
+            n += "kind=".len() + kinds[i][j].len() + 1;
+            j += 1;
+        }
+        i += 1;
+    }
+    let mut i = 0;
+    while i < extra.len() {
+        n += extra[i].len() + 1;
+        i += 1;
+    }
+    n
+}
+
+/// The bytes of a declaration, sized by [`declaration_len`]. A pair that
+/// is not `KEY=VALUE`, or holds a NUL, is refused at compile time.
+#[doc(hidden)]
+pub const fn declaration<const N: usize>(kinds: &[&[&str]], extra: &[&str]) -> [u8; N] {
+    let mut out = [0u8; N];
+    let mut at = 0;
+    let mut i = 0;
+    while i < kinds.len() {
+        let mut j = 0;
+        while j < kinds[i].len() {
+            at = put(&mut out, at, b"kind=");
+            at = put(&mut out, at, kinds[i][j].as_bytes());
+            at += 1;
+            j += 1;
+        }
+        i += 1;
+    }
+    let mut i = 0;
+    while i < extra.len() {
+        let pair = extra[i].as_bytes();
+        let mut has_eq = false;
+        let mut k = 0;
+        while k < pair.len() {
+            if pair[k] == b'=' && k > 0 {
+                has_eq = true;
+            }
+            if pair[k] == 0 {
+                panic!("a declaration cannot hold a NUL");
+            }
+            k += 1;
+        }
+        if !has_eq {
+            panic!("a declaration is `KEY=VALUE`");
+        }
+        at = put(&mut out, at, pair);
+        at += 1;
+        i += 1;
+    }
+    // `at + 1 == N` by construction; the ending empty string is the zero
+    // already there.
+    out
+}
+
+const fn put(out: &mut [u8], at: usize, bytes: &[u8]) -> usize {
+    let mut k = 0;
+    while k < bytes.len() {
+        out[at + k] = bytes[k];
+        k += 1;
+    }
+    at + bytes.len()
+}
+
 /// The entry point's signature.
 ///
 /// Returning null means **"nothing for this host"**, which is an answer
@@ -104,6 +191,48 @@ macro_rules! guatiao_library {
     };
 }
 
+/// Writes what a library declares, for a scanner to read before mapping
+/// it.
+///
+/// Each argument is a `KEY=VALUE` literal. A host's scan rules match
+/// against these (`guatiao_registry_scan_dir_rules`, `ScanRules`), so a
+/// library that must never be loaded by a scan says so here and the host
+/// writes one rule rather than a filename denylist:
+///
+/// ```ignore
+/// guatiao::declares!("kind=greeter", "kind=writer", "VIEWER=1");
+/// ```
+///
+/// A library built with [`providers!`](crate::providers) declares its
+/// kinds by itself and takes extra pairs through `declares = [..]`; this
+/// is for a hand-written one. A library declaring nothing is loaded by a
+/// plain scan as before, and fails every positive rule.
+#[macro_export]
+macro_rules! declares {
+    ($($pair:expr),* $(,)?) => {
+        $crate::__guatiao_declares!(kinds = [], pairs = [$($pair),*]);
+    };
+}
+
+/// The `static` behind [`declares!`] and [`providers!`].
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __guatiao_declares {
+    (kinds = [$($kinds:expr),*], pairs = [$($pair:expr),*]) => {
+        const __GUATIAO_DECLARED_KINDS: &[&[&str]] = &[$($kinds),*];
+        const __GUATIAO_DECLARED_PAIRS: &[&str] = &[$($pair),*];
+        const __GUATIAO_DECLARES_LEN: usize = $crate::library::declaration_len(
+            __GUATIAO_DECLARED_KINDS,
+            __GUATIAO_DECLARED_PAIRS,
+        );
+        /// What this library declares, read by a scanner as data.
+        #[allow(non_upper_case_globals)]
+        #[unsafe(no_mangle)]
+        pub static guatiao_declares: [u8; __GUATIAO_DECLARES_LEN] =
+            $crate::library::declaration(__GUATIAO_DECLARED_KINDS, __GUATIAO_DECLARED_PAIRS);
+    };
+}
+
 /// Writes a whole library from its provider types.
 ///
 /// `providers!(A, B)` names the types that `#[derive(Provider)]` made
@@ -118,6 +247,12 @@ macro_rules! guatiao_library {
 /// Each provider's descriptor is built once, on the first entry call,
 /// and kept for the process. A provider whose configuration schema cannot
 /// be built makes the library decline the host.
+///
+/// The library also **declares** every kind its providers serve, as
+/// data a scanner reads before mapping it; `providers!(A, B; declares =
+/// ["VIEWER=1"])` (or `declares = [..]` after `providers = [..]` in
+/// the long form) adds pairs of the library's own. See
+/// [`declares!`](crate::declares).
 #[macro_export]
 macro_rules! providers {
     ($($provider:ty),+ $(,)?) => {
@@ -127,7 +262,24 @@ macro_rules! providers {
             providers = [$($provider),+]
         );
     };
-    (id = $id:expr, version = $version:expr, providers = [$($provider:ty),+ $(,)?]) => {
+    ($($provider:ty),+ ; declares = [$($pair:expr),* $(,)?]) => {
+        $crate::providers!(
+            id = env!("CARGO_PKG_NAME"),
+            version = env!("CARGO_PKG_VERSION"),
+            providers = [$($provider),+],
+            declares = [$($pair),*]
+        );
+    };
+    (
+        id = $id:expr,
+        version = $version:expr,
+        providers = [$($provider:ty),+ $(,)?]
+        $(, declares = [$($pair:expr),* $(,)?])? $(,)?
+    ) => {
+        $crate::__guatiao_declares!(
+            kinds = [$(<$provider as $crate::library::kind::ProviderDecl>::KINDS),+],
+            pairs = [$($($pair),*)?]
+        );
         /// What this library offers, built once.
         fn __guatiao_describe(
             host: $crate::library::Host,

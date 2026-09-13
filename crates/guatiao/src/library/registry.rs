@@ -160,6 +160,13 @@ pub enum Skipped {
         /// The `abi_version` the library declared.
         declared: u32,
     },
+    /// It is a library, and a scan rule kept it out **before it was
+    /// mapped**, by what it declared. Names the rule, so a person looking
+    /// for it sees which one.
+    Filtered {
+        /// The rule, as written.
+        by: String,
+    },
 }
 
 /// What one [`Registry::load_file`] did.

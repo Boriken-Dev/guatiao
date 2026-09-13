@@ -57,6 +57,29 @@ static bool text_is(guatiao_str got, const char *want) {
   return guatiao_str_eq(got, s(want));
 }
 
+/* The directory `path` is in, or "." when it names no directory. */
+static void dir_of(const char *path, char *out, size_t cap) {
+  size_t n = strlen(path);
+  while (n > 0 && path[n - 1] != '/' && path[n - 1] != '\\') {
+    n--;
+  }
+  if (n == 0) {
+    snprintf(out, cap, ".");
+    return;
+  }
+  if (n >= cap) {
+    n = cap - 1;
+  }
+  memcpy(out, path, n);
+  out[n] = 0;
+}
+
+/* Whether `text` ends with `tail`. */
+static bool ends_with(guatiao_str text, const char *tail) {
+  size_t n = strlen(tail);
+  return text.len >= n && memcmp(text.ptr + text.len - n, tail, n) == 0;
+}
+
 int main(int argc, char **argv) {
   guatiao_alloc alloc = GUATIAO_ALLOC_MALLOC;
   guatiao_registry *reg = NULL;
@@ -102,6 +125,54 @@ int main(int argc, char **argv) {
   CHECK(guatiao_string_text(guatiao_map_find(&answer, s("from"))).len > 0,
         "an already-loaded skip names where it came from");
   guatiao_value_free(&answer);
+
+  /* ---- a scan with rules keeps a library out BEFORE mapping it ------ */
+
+  {
+    char dir[4096];
+    const char *base = argv[1] + strlen(argv[1]);
+    dir_of(argv[1], dir, sizeof dir);
+    while (base > argv[1] && base[-1] != '/' && base[-1] != '\\') {
+      base--;
+    }
+
+    /* A rule that is not one is refused, not applied. */
+    st = guatiao_registry_scan_dir_rules(reg, s(dir), false, s("nonsense"),
+                                         &alloc, &answer);
+    CHECK(st == GUATIAO_ERR_BAD_VALUE, "a bad rule returned %d", (int)st);
+
+    /* The library declares kind=greeter and HELLO_EXAMPLE=1; a host that
+       wants none of that writes one rule and the file is never mapped
+       (it is already loaded here, and the report says `filtered`, not
+       `already-loaded`, because the rule runs first). The second rule
+       keeps every other library in the directory out too, so this
+       registry stays exactly what the checks below expect. */
+    st = guatiao_registry_scan_dir_rules(reg, s(dir), false,
+                                         s("!HELLO_EXAMPLE=1\nkind=nonesuch\n"),
+                                         &alloc, &answer);
+    CHECK(st == GUATIAO_OK, "scan_dir_rules returned %d", (int)st);
+    if (st == GUATIAO_OK) {
+      guatiao_values loaded =
+          guatiao_list_items(guatiao_map_find(&answer, s("loaded")));
+      CHECK(loaded.len == 0, "nothing passes both rules, saw %zu loaded",
+            loaded.len);
+      guatiao_values skipped =
+          guatiao_list_items(guatiao_map_find(&answer, s("skipped")));
+      bool seen = false;
+      for (size_t i = 0; i < skipped.len; i++) {
+        const guatiao_value *one = &skipped.ptr[i];
+        if (ends_with(field(one, "path"), base)) {
+          seen = true;
+          CHECK(text_is(field(one, "skipped"), "filtered"),
+                "the library should be filtered by its declaration");
+          CHECK(text_is(field(one, "by"), "!HELLO_EXAMPLE=1"),
+                "a filtered skip names the rule");
+        }
+      }
+      CHECK(seen, "the scan report names the filtered library");
+      guatiao_value_free(&answer);
+    }
+  }
 
   /* ---- ask what serves a kind --------------------------------------- */
 

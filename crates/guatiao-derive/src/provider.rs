@@ -355,12 +355,14 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
             #create_shims
 
             impl ::guatiao::library::kind::ProviderDecl for #ty {
+                const KINDS: &'static [&'static str] = &[ #(#kind_names)* ];
+
                 fn provider(
                     host: ::guatiao::library::Host,
                     alloc: ::guatiao::Alloc,
                 ) -> ::core::result::Result<::guatiao::library::kind::ProviderParts, ::guatiao::ValueError> {
                     #instance
-                    let kinds: &[&'static str] = &[ #(#kind_names)* ];
+                    let kinds = <#ty as ::guatiao::library::kind::ProviderDecl>::KINDS;
                     let tables = ::std::vec![ #(#table_entries)* ];
                     let config = #config;
                     ::core::result::Result::Ok(::guatiao::library::kind::ProviderParts::new(

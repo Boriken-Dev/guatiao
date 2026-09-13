@@ -82,6 +82,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     file's export table as data (PE, ELF or Mach-O), and only a file
     declaring the entry symbol is loaded, because mapping runs a library's
     static initialisers.
+  - **A library declares what it is, and a scan filters on that before
+    mapping it.** The data symbol `guatiao_declares` holds `key=value`
+    pairs (`kind=<name>` for every kind, plus the library's own, such as
+    `VIEWER=1`); `guatiao::providers!` writes it from the types,
+    `guatiao::declares!(..)` writes it for a hand-written library, and
+    `probe(path)` reads it as data, clamped to its section and 4 KiB.
+    `scan_dir_rules(reg, dir, order, &ScanRules::parse(&["!VIEWER=1",
+    "kind=session-backend"])?)` keeps a file out as `Skipped::Filtered {
+    by }` naming the rule; `scan_dir_with(.., filter)` takes a closure over
+    `Declared` instead. From C, `guatiao_registry_scan_dir_rules` with
+    newline-separated rules, reported as `{"skipped": "filtered", "by":
+    ..}`. A library declaring nothing loads as before. `ProviderDecl`
+    gained `const KINDS`, which the derive fills.
   - **The registry is the host's.** A repeat load is a skip that names
     where the first came from, not an error. What a library or a provider
     is filed under is a key template the host chooses (`%id` by default;

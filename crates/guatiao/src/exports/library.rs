@@ -54,7 +54,7 @@ use std::path::Path;
 
 use super::{as_str, guard, guard_with};
 use crate::library::{
-    HostInfo, Loading, Order, Provider, Registry, Skipped, WhyNot, scan_dir_ordered,
+    HostInfo, Loading, Order, Provider, Registry, ScanRules, Skipped, WhyNot, scan_dir_rules,
 };
 use crate::value::ValueError;
 use crate::value::alloc::{Alloc, Allocator};
@@ -138,9 +138,15 @@ impl HostRegistry {
     }
 
     /// Scans a directory and reports the three outcomes.
-    fn scan(&mut self, dir: &str, order: Order, alloc: Alloc) -> Result<Value, Status> {
+    fn scan(
+        &mut self,
+        dir: &str,
+        order: Order,
+        rules: &ScanRules,
+        alloc: Alloc,
+    ) -> Result<Value, Status> {
         // The one thing a scan cannot answer: the directory itself.
-        let report = scan_dir_ordered(&mut self.inner, Path::new(dir), order)
+        let report = scan_dir_rules(&mut self.inner, Path::new(dir), order, rules)
             .map_err(|_| Status::GUATIAO_ERR_NOT_FOUND)?;
 
         let mut map = Value::map_in(alloc);
@@ -571,7 +577,52 @@ pub unsafe extern "C" fn guatiao_registry_scan_dir(
             Order::Ascending
         };
         // SAFETY: as above.
-        unsafe { deliver(out, registry.scan(dir, order, alloc)) }
+        unsafe { deliver(out, registry.scan(dir, order, &ScanRules::default(), alloc)) }
+    })
+}
+
+/// [`guatiao_registry_scan_dir`] with rules applied to what each library
+/// declares, **before it is mapped**.
+///
+/// `rules` is newline-separated: each line is `KEY=VALUE` to require a
+/// declaration or `!KEY=VALUE` to skip a library that declares it; blank
+/// lines are ignored. Every kind a library was built with is declared as
+/// `kind=<name>`, so `kind=session-backend` scans for that kind alone.
+/// A library skipped this way is reported as `{"skipped": "filtered",
+/// "by": "<rule>"}`. A line that is not a rule is `GUATIAO_ERR_BAD_VALUE`.
+///
+/// # Safety
+///
+/// As [`guatiao_registry_scan_dir`], with `rules` a valid [`Str`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_scan_dir_rules(
+    reg: *mut HostRegistry,
+    dir: Str,
+    descending: bool,
+    rules: Str,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(dir), Ok(rules), Ok(alloc)) = (
+            unsafe { HostRegistry::get_mut(reg) },
+            unsafe { as_str(dir) },
+            unsafe { as_str(rules) },
+            unsafe { Alloc::from_raw(alloc) },
+        ) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        let Ok(rules) = ScanRules::parse(&rules.lines().collect::<Vec<_>>()) else {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        };
+        let order = if descending {
+            Order::Descending
+        } else {
+            Order::Ascending
+        };
+        // SAFETY: as above.
+        unsafe { deliver(out, registry.scan(dir, order, &rules, alloc)) }
     })
 }
 
@@ -1020,21 +1071,26 @@ fn provider_value(alloc: Alloc, one: &Provider) -> Result<Value, ValueError> {
 /// Why something was passed over, as a map.
 fn skip_value(alloc: Alloc, why: &Skipped) -> Result<Value, ValueError> {
     let mut map = Value::map_in(alloc);
-    let (name, from, id, abi) = match why {
-        Skipped::NoEntrySymbol => ("no-entry-symbol", None, None, None),
-        Skipped::DeclinedThisHost => ("declined-this-host", None, None, None),
-        Skipped::NotExaminable => ("not-examinable", None, None, None),
-        Skipped::UnsupportedAbi { declared } => ("unsupported-abi", None, None, Some(*declared)),
-        Skipped::AlreadyLoaded { from } => ("already-loaded", Some(from), None, None),
+    let (name, from, id, abi, by) = match why {
+        Skipped::NoEntrySymbol => ("no-entry-symbol", None, None, None, None),
+        Skipped::DeclinedThisHost => ("declined-this-host", None, None, None, None),
+        Skipped::NotExaminable => ("not-examinable", None, None, None, None),
+        Skipped::UnsupportedAbi { declared } => {
+            ("unsupported-abi", None, None, Some(*declared), None)
+        }
+        Skipped::AlreadyLoaded { from } => ("already-loaded", Some(from), None, None, None),
         Skipped::ProviderAlreadyLoaded { id, from } => (
             "provider-already-loaded",
             Some(from),
             Some(id.as_str()),
             None,
-        ), // No wildcard arm. `Skipped` is `#[non_exhaustive]` for a
-           // CONSUMER; in here every variant is known, so appending one is a
-           // compile error at this match rather than a reason that silently
-           // crosses the boundary unnamed.
+            None,
+        ),
+        Skipped::Filtered { by } => ("filtered", None, None, None, Some(by.as_str())),
+        // No wildcard arm. `Skipped` is `#[non_exhaustive]` for a
+        // CONSUMER; in here every variant is known, so appending one is a
+        // compile error at this match rather than a reason that silently
+        // crosses the boundary unnamed.
     };
     map.set("skipped", Value::string_in(alloc, name)?)?;
     if let Some(from) = from {
@@ -1045,6 +1101,9 @@ fn skip_value(alloc: Alloc, why: &Skipped) -> Result<Value, ValueError> {
     }
     if let Some(abi) = abi {
         map.set("abi", Value::int(i64::from(abi)))?;
+    }
+    if let Some(by) = by {
+        map.set("by", Value::string_in(alloc, by)?)?;
     }
     Ok(map)
 }
