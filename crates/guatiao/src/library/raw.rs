@@ -534,6 +534,26 @@ pub(crate) struct SnapshotEntry {
 // never unloaded, and a snapshot is only ever read after it is published.
 #[cfg(feature = "load")]
 unsafe impl Send for Snapshot {}
+
+// SAFETY (all four): every raw pointer a registry or a provider holds
+// addresses a loaded library's image -- its descriptors, their text, their
+// tables -- which is never unloaded and never written from this side; the
+// block a registry leaks is already shared across threads by design (a
+// library reads it from any call); and a provider's slots are declared
+// callable from any thread (`ProviderInfo::available`'s contract exists
+// precisely because two threads may ask at once). A host keeping its one
+// registry behind a lock, or reading it from several threads, is the
+// ordinary shape, and without these it could not. Declared here rather
+// than beside the types because this is the file allowed to say
+// `unsafe`.
+#[cfg(feature = "load")]
+unsafe impl Send for super::registry::Registry {}
+#[cfg(feature = "load")]
+unsafe impl Sync for super::registry::Registry {}
+#[cfg(feature = "load")]
+unsafe impl Send for super::registry::Provider {}
+#[cfg(feature = "load")]
+unsafe impl Sync for super::registry::Provider {}
 // SAFETY: as above.
 #[cfg(feature = "load")]
 unsafe impl Sync for Snapshot {}

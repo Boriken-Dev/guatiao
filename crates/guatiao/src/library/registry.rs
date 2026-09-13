@@ -232,10 +232,7 @@ pub struct Provider {
     priority: i32,
 }
 
-// SAFETY: as on `Registry` above -- the pointers address a library's
-// image, which outlives the process and is read-only from here.
-unsafe impl Send for Provider {}
-unsafe impl Sync for Provider {}
+// `Send` and `Sync` for this type are declared in `raw.rs`; see there.
 
 impl Provider {
     /// Every kind it speaks. May be empty, which is a provider reached by
@@ -472,17 +469,8 @@ pub struct Registry {
     block: Option<&'static HostBlock>,
 }
 
-// SAFETY (both impls, and the two on `Provider` below): every raw pointer
-// a registry holds addresses a loaded library's image -- its descriptors,
-// their text, their tables -- which is never unloaded and never written
-// from this side; the block it leaks is already shared across threads by
-// design (a library reads it from any call); and a provider's slots are
-// declared callable from any thread (see `ProviderInfo::available`, whose
-// contract exists precisely because two threads may ask at once). A host
-// keeping its one registry behind a lock, or reading it from several
-// threads, is the ordinary shape, and without these it could not.
-unsafe impl Send for Registry {}
-unsafe impl Sync for Registry {}
+// `Send` and `Sync` for this type are declared in `raw.rs`, the one file
+// here allowed to say `unsafe`; the reasoning is beside them.
 
 impl Registry {
     /// A registry that introduces its host as `id`/`version`, offering
