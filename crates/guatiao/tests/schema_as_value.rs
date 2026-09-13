@@ -263,7 +263,7 @@ fn an_enum_carries_labels_keyed_by_value_not_a_second_list() {
         assert_eq!(str_or(level.get("type"), ""), "string");
         assert_eq!(strings_of(level.get("enum")), ["off", "on"]);
         assert_eq!(
-            str_or(level.get("x-labels").and_then(|m| m.get("off")), ""),
+            str_or(level.get("x-enum-labels").and_then(|m| m.get("off")), ""),
             "Off",
             "the labels are ours, so they carry the prefix"
         );
@@ -352,7 +352,7 @@ fn a_union_and_a_variant_are_different_features() {
 
         let auth = properties.get("auth").unwrap();
         assert_eq!(str_or(auth.get("type"), ""), "object");
-        assert_eq!(str_or(auth.get("x-tag"), ""), "auth");
+        assert_eq!(str_or(auth.get("x-variant-tag"), ""), "auth");
         let one_of = auth.get("oneOf").and_then(Value::items).unwrap();
         assert_eq!(one_of.len(), 2);
         let userpass = &one_of[1];

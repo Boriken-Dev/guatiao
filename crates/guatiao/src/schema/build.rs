@@ -552,7 +552,7 @@ impl KindBuilder {
             put(&mut labels, value, Value::string_in(alloc, label));
         }
         put(&mut k.state, vocab::ENUM, values);
-        put(&mut k.state, vocab::X_LABELS, labels);
+        put(&mut k.state, vocab::X_ENUM_LABELS, labels);
         k
     }
 
@@ -585,7 +585,7 @@ impl KindBuilder {
     ///
     /// An object with `oneOf` arms, each of which pins the discriminant
     /// with a `const` and requires it. The tag itself travels under
-    /// [`vocab::X_TAG`], because JSON Schema has no discriminator keyword
+    /// [`vocab::X_VARIANT_TAG`], because JSON Schema has no discriminator keyword
     /// and inferring one stops working the moment two properties are
     /// `const`.
     /// Built through the crate's own allocator. `variant_in` names one,
@@ -597,7 +597,11 @@ impl KindBuilder {
     /// The same, through an allocator you name.
     pub fn variant_in(alloc: Alloc, tag: &str, arms: Vec<ArmBuilder>) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_OBJECT);
-        put(&mut k.state, vocab::X_TAG, Value::string_in(alloc, tag));
+        put(
+            &mut k.state,
+            vocab::X_VARIANT_TAG,
+            Value::string_in(alloc, tag),
+        );
         // Written even when empty, so a variant that declares no arms is a
         // variant with no arms rather than a kind that forgot to say.
         put(&mut k.state, vocab::ONE_OF, Ok(Value::list_in(alloc)));

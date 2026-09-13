@@ -236,13 +236,15 @@ nothing about schemas.
 
 Keys we added are `x-` prefixed, which is the space the specification
 reserves for exactly that: `x-section`, `x-order`, `x-advanced`,
-`x-sensitive`, `x-labels`, `x-tag`. Everything else is JSON Schema's.
+`x-sensitive`, `x-enum-labels`, `x-variant-tag`. Everything else is
+JSON Schema's.
 
 **Two things are not JSON Schema's, on purpose.** `type: "bytes"` extends
 the type set, so a document using it is readable by anything and fails a
-strict meta-schema check -- the data is unaffected. And `x-tag` names a
-variant's discriminant, because JSON Schema has no discriminator keyword
-and inferring one stops working the moment two properties are `const`.
+strict meta-schema check -- the data is unaffected. And `x-variant-tag`
+names a variant's discriminant, because JSON Schema has no discriminator
+keyword and inferring one stops working the moment two properties are
+`const`.
 
 Build:
 
@@ -322,9 +324,9 @@ Kinds, with what each writes:
 | `bytes` | `type: "bytes"` (ours) |
 | `list(items)` | `type: "array"` + `items` |
 | `map(fields)` | `type: "object"` + `properties`/`required` |
-| `enumeration(choices)` | `type: "string"` + `enum` + `x-labels` |
+| `enumeration(choices)` | `type: "string"` + `enum` + `x-enum-labels` (a map, keyed by value) |
 | `union(arms)` | `anyOf` — **any** arm accepting is enough, and no `type` |
-| `variant(tag, arms)` | `type: "object"` + `x-tag` + `oneOf`, each arm pinning the tag with `const` and requiring it |
+| `variant(tag, arms)` | `type: "object"` + `x-variant-tag` + `oneOf`, each arm pinning the tag with `const` and requiring it |
 
 `anyOf` for a union and `oneOf` for a variant is not cosmetic: a union
 asks only whether the value is acceptable, so `oneOf` would reject a value
