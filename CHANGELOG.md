@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `SchemaRef::extras` and `FieldRef::extras` enumerate every annotation
+  -- each key the vocabulary does not claim, with its value -- so a
+  consumer keeping a mirror of a field copies them across without
+  naming each one.
 - `Value::into_map` and `into_list` take the container out of a value by
   value, handing back a value of another kind untouched.
 - **`Value`, `Map`, `List`, `Text` and `Buffer` are `Clone`, `PartialEq`,

@@ -497,6 +497,36 @@ fn an_annotation_is_carried_but_not_interpreted() {
     });
 }
 
+/// The annotations, enumerated: every key the vocabulary does not claim,
+/// and none it does -- `type` and `x-sensitive` are read through their
+/// own accessors and are not annotations.
+#[test]
+fn every_annotation_is_enumerated_and_nothing_else_is() {
+    let s = SchemaBuilder::new()
+        .field(
+            FieldBuilder::new("host", KindBuilder::string())
+                .sensitive()
+                .option("x-widget", "combo")
+                .option("x-placeholder", "example.org"),
+        )
+        .option("x-origin", "test")
+        .finish()
+        .unwrap();
+    let s = SchemaRef::new(&s).unwrap();
+    let host = s.find("host").unwrap();
+
+    let mut on_field: Vec<(&str, &str)> = host
+        .extras()
+        .map(|(k, v)| (k, str_or(Some(v), "")))
+        .collect();
+    on_field.sort();
+    assert_eq!(on_field, [("x-placeholder", "example.org"), ("x-widget", "combo")]);
+
+    let on_schema: Vec<(&str, &str)> =
+        s.extras().map(|(k, v)| (k, str_or(Some(v), ""))).collect();
+    assert_eq!(on_schema, [("x-origin", "test")]);
+}
+
 /// **Building a schema names no allocator**, the same rule the value API
 /// has -- and the two forms build the same thing.
 ///
