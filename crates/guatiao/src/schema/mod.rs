@@ -4,23 +4,25 @@
 
 //! What a provider needs to be initialised.
 //!
-//! A schema lists the fields something accepts: a key, a kind, an
-//! optional default, presentation fields, and any number of annotations.
-//! It is what a library hands a consumer so the consumer can build a
-//! configuration without having heard of it before.
+//! A schema lists the fields something accepts: a name, what it accepts,
+//! an optional default, presentation hints, and any number of
+//! annotations. It is what a library hands a consumer so the consumer can
+//! build a configuration without having heard of it before.
 //!
-//! # A schema IS a value
+//! # A schema IS a value, and the value IS a JSON Schema
 //!
 //! It is a map, carried by the same containers as everything else, and it
 //! crosses a boundary as a `Value` with no schema-shaped C type
-//! anywhere. The keys it is written with are in [`vocab`], and **that
-//! vocabulary is the contract**; the Rust types here are a typed way to
-//! write and read one, never a second representation of it.
+//! anywhere. The keys it is written with are **JSON Schema's own**, listed
+//! in [`vocab`], and that vocabulary is the contract; the Rust types here
+//! are a typed way to write and read one, never a second representation of
+//! it.
 //!
-//! That is what makes a consumer in another language cheap: it walks a map
-//! it already knows how to walk. A Dart or Python reader needs the key
-//! names and nothing else — no generated structs, no second ABI to keep in
-//! step with the first.
+//! That is what makes a consumer in another language cheap twice over. It
+//! walks a map it already knows how to walk — a Dart or Python reader
+//! needs the key names and nothing else, no generated structs and no
+//! second ABI to keep in step with the first. And the key names are ones
+//! its ecosystem probably already has a library for.
 //!
 //! - [`build`] writes one: [`SchemaBuilder`], [`FieldBuilder`],
 //!   [`KindBuilder`], [`ArmBuilder`].
@@ -57,19 +59,19 @@
 //!
 //! # No serialisation lives here
 //!
-//! There is no JSON Schema emitter and no parser. How a schema is written
-//! down is the consumer's decision, and a crate that shipped one would be
-//! tracking somebody else's specification on behalf of every consumer,
-//! including the ones that wanted a different spelling or no text form at
-//! all. The format crate beside this one does that job and can carry more
-//! than one format.
+//! There is no JSON Schema emitter and no parser, and writing the
+//! specification's keys is what removes the need for either: the value
+//! already IS the document, so `guatiao-serde` writes it in JSON, TOML or
+//! YAML with no knowledge of schemas at all. How a schema is written down
+//! stays the consumer's decision, including the consumers that want no
+//! text form.
 //!
 //! # Presentation is optional; substance is not
 //!
-//! `label`, `help`, `section`, `advanced` and `order` may all be empty or
-//! default and the schema is still correct and still useful. A consumer
-//! with no user interface ignores them entirely. Never make a validation
-//! or type behaviour depend on one.
+//! `title`, `description`, `x-section`, `x-advanced` and `x-order` may all
+//! be empty or default and the schema is still correct and still useful. A
+//! consumer with no user interface ignores them entirely. Never make a
+//! validation or type behaviour depend on one.
 
 #![forbid(unsafe_code)]
 
@@ -91,7 +93,7 @@ pub use build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 pub use describe::Schema;
 pub use flat::{SEPARATOR, flatten, is_sensitive, resolve, unflatten};
 pub use form::{FormBuilder, FormFieldBuilder};
-pub use read::{ArmRef, ChoiceRef, FieldRef, Kind as KindRef, SchemaRef, SectionRef};
+pub use read::{ArmRef, ChoiceRef, FieldRef, Kind as KindRef, SchemaRef};
 pub use validate::{validate_map, validate_text, validate_texts, validate_value};
 
 /// Why a value was rejected by [`validate_value`] or [`validate_map`].

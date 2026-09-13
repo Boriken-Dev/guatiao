@@ -2,11 +2,14 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! A schema is a value, and the builder and the reader agree about it.
+//! A schema is a value, that value is a JSON Schema, and the builder and
+//! the reader agree about it.
 //!
 //! These go through the public API a provider and a consumer each use: one
 //! declares a schema, the other reads it back without having seen the
-//! declaration. That is the whole contract, so it is what gets tested.
+//! declaration. That is the whole contract, so it is what gets tested —
+//! plus the document itself, because "it IS a JSON Schema" is a claim
+//! about the bytes and not only about the round trip.
 
 use std::cell::Cell;
 use std::ffi::c_void;
@@ -18,7 +21,7 @@ use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilde
 use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::schema::vocab;
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
-use guatiao::value::read::entries;
+use guatiao::value::read::{entries, str_or};
 
 // A counting allocator, so every test also proves the schema frees.
 #[derive(Default)]
@@ -63,10 +66,30 @@ fn with_alloc(body: impl FnOnce(Alloc)) {
     );
 }
 
+/// The keys of a map, in order.
+fn keys_of(v: &Value) -> Vec<String> {
+    entries(v)
+        .filter_map(|(k, _)| std::str::from_utf8(k).ok())
+        .map(str::to_string)
+        .collect()
+}
+
+/// The strings in a list.
+fn strings_of(v: Option<&Value>) -> Vec<String> {
+    v.and_then(Value::items)
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::to_string)
+        .collect()
+}
+
 #[test]
 fn a_declared_schema_reads_back() {
     with_alloc(|alloc| {
         let schema = SchemaBuilder::new_in(alloc)
+            .label("Connection")
+            .help("Where to connect, and how.")
             .field(
                 FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
                     .label("Host")
@@ -92,6 +115,10 @@ fn a_declared_schema_reads_back() {
 
         let s = SchemaRef::new(&schema).expect("a schema is a map");
 
+        assert_eq!(s.dialect(), vocab::DIALECT);
+        assert_eq!(s.label(), "Connection");
+        assert_eq!(s.help(), "Where to connect, and how.");
+
         let keys: Vec<_> = s.fields().map(|o| o.key().to_string()).collect();
         assert_eq!(keys, ["host", "port", "password"], "declaration order");
 
@@ -111,6 +138,7 @@ fn a_declared_schema_reads_back() {
                 max: Some(65535)
             }
         ));
+        assert!(!port.is_required(), "only `host` asked to be required");
         assert_eq!(
             guatiao::value::read::int_or(port.default(), -1),
             5900,
@@ -121,17 +149,90 @@ fn a_declared_schema_reads_back() {
         assert!(password.is_sensitive());
         assert!(password.is_advanced());
 
-        // NO section DECLARATION: a schema does not know about forms, so
-        // what a section is called belongs to whatever draws it. A field
-        // still says which one it belongs to, asserted above.
-        assert_eq!(s.sections().count(), 0);
-
         assert!(s.find("nothing").is_none());
     });
 }
 
+/// The claim the whole design rests on: what comes out is a JSON Schema
+/// document, key for key.
+///
+/// Asserted on the value rather than on text, because there is no
+/// serialiser here -- the value IS the document, and `guatiao-serde`
+/// writes it out with no knowledge of schemas at all.
 #[test]
-fn an_enum_carries_rows_not_two_parallel_lists() {
+fn the_document_is_written_in_json_schemas_own_keys() {
+    with_alloc(|alloc| {
+        let schema = SchemaBuilder::new_in(alloc)
+            .label("Connection")
+            .field(
+                FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
+                    .label("Host")
+                    .help("Where to connect.")
+                    .required(),
+            )
+            .field(FieldBuilder::new_in(
+                alloc,
+                "port",
+                KindBuilder::int_range_in(alloc, 1, 65535),
+            ))
+            .field(FieldBuilder::new_in(
+                alloc,
+                "cert",
+                KindBuilder::bytes_in(alloc),
+            ))
+            .finish()
+            .unwrap();
+
+        // The dialect is declared once, on the root, and first.
+        assert_eq!(
+            keys_of(&schema),
+            ["$schema", "type", "title", "properties", "required"],
+            "the document opens by saying what it is"
+        );
+        assert_eq!(str_or(schema.get("$schema"), ""), vocab::DIALECT);
+        assert_eq!(str_or(schema.get("type"), ""), "object");
+
+        // A field's name is its key in `properties`, and appears nowhere
+        // inside the field.
+        let properties = schema.get("properties").expect("an object has properties");
+        assert_eq!(keys_of(properties), ["host", "port", "cert"]);
+        let host = properties.get("host").expect("host is a property");
+        assert_eq!(str_or(host.get("type"), ""), "string");
+        assert_eq!(str_or(host.get("title"), ""), "Host");
+        assert_eq!(str_or(host.get("description"), ""), "Where to connect.");
+        assert!(
+            host.get("key").is_none() && host.get("kind").is_none(),
+            "a field carries neither its own name nor a nested kind"
+        );
+
+        // Requiredness is a name in a list on the OBJECT.
+        assert_eq!(strings_of(schema.get("required")), ["host"]);
+        assert!(
+            host.get("required").is_none(),
+            "and not a flag on the field"
+        );
+
+        let port = properties.get("port").unwrap();
+        assert_eq!(str_or(port.get("type"), ""), "integer");
+        assert_eq!(
+            guatiao::value::read::int_or(port.get("minimum"), -1),
+            1,
+            "bounds are `minimum` and `maximum`"
+        );
+        assert_eq!(guatiao::value::read::int_or(port.get("maximum"), -1), 65535);
+
+        // The one type that is ours. See `vocab::TYPE_BYTES`: this is
+        // readable by anything and fails a strict meta-schema check, which
+        // is a decision rather than a surprise.
+        assert_eq!(
+            str_or(properties.get("cert").unwrap().get("type"), ""),
+            "bytes"
+        );
+    });
+}
+
+#[test]
+fn an_enum_carries_labels_keyed_by_value_not_a_second_list() {
     with_alloc(|alloc| {
         let schema = SchemaBuilder::new_in(alloc)
             .field(FieldBuilder::new_in(
@@ -154,7 +255,17 @@ fn an_enum_carries_rows_not_two_parallel_lists() {
                 ("off".to_string(), "Off".to_string()),
                 ("on".to_string(), "On".to_string())
             ],
-            "each alternative is one row, so its value and its label cannot drift apart"
+            "a label is keyed by its value, so the two cannot drift apart"
+        );
+
+        // And on the wire it is a string narrowed by `enum`.
+        let level = schema.get("properties").unwrap().get("level").unwrap();
+        assert_eq!(str_or(level.get("type"), ""), "string");
+        assert_eq!(strings_of(level.get("enum")), ["off", "on"]);
+        assert_eq!(
+            str_or(level.get("x-labels").and_then(|m| m.get("off")), ""),
+            "Off",
+            "the labels are ours, so they carry the prefix"
         );
     });
 }
@@ -219,39 +330,90 @@ fn a_union_and_a_variant_are_different_features() {
         let arms: Vec<_> = variant.arms().collect();
         assert_eq!(arms.len(), 2);
         assert_eq!(arms[0].value(), "ambient");
+        assert_eq!(arms[0].label(), "Ambient");
         assert_eq!(arms[0].fields().count(), 0, "an empty arm is complete");
         assert_eq!(arms[1].value(), "userpass");
         let fields: Vec<_> = arms[1].fields().map(|f| f.key().to_string()).collect();
-        assert_eq!(fields, ["username", "password"]);
+        assert_eq!(
+            fields,
+            ["username", "password"],
+            "the discriminant is a property of the arm, never one of its fields"
+        );
+
+        // The document: `anyOf` for the untagged one, `oneOf` plus a
+        // `const` discriminant for the tagged one.
+        let properties = schema.get("properties").unwrap();
+        let port = properties.get("port").unwrap();
+        assert_eq!(port.get("anyOf").and_then(Value::items).unwrap().len(), 2);
+        assert!(
+            port.get("type").is_none(),
+            "a union of an integer and a string has no single type to name"
+        );
+
+        let auth = properties.get("auth").unwrap();
+        assert_eq!(str_or(auth.get("type"), ""), "object");
+        assert_eq!(str_or(auth.get("x-tag"), ""), "auth");
+        let one_of = auth.get("oneOf").and_then(Value::items).unwrap();
+        assert_eq!(one_of.len(), 2);
+        let userpass = &one_of[1];
+        assert_eq!(str_or(userpass.get("title"), ""), "Username and password");
+        assert_eq!(
+            keys_of(userpass.get("properties").unwrap()),
+            ["auth", "username", "password"],
+            "the discriminant goes in first, so the arm reads as what it selects"
+        );
+        assert_eq!(
+            str_or(
+                userpass
+                    .get("properties")
+                    .and_then(|p| p.get("auth"))
+                    .and_then(|t| t.get("const")),
+                ""
+            ),
+            "userpass"
+        );
+        assert_eq!(
+            strings_of(userpass.get("required")),
+            ["auth"],
+            "an arm without its discriminant is not that arm"
+        );
     });
 }
 
 /// The whole forward-compatibility story: a kind from a newer producer
 /// leaves its field readable, and every other field untouched.
+///
+/// Built by hand rather than through the builder, because that is what a
+/// newer producer's document looks like arriving here.
 #[test]
-fn an_unknown_kind_leaves_the_option_readable_and_the_rest_intact() {
+fn an_unknown_kind_leaves_the_field_readable_and_the_rest_intact() {
     with_alloc(|alloc| {
-        let mut schema = SchemaBuilder::new_in(alloc)
-            .field(
-                FieldBuilder::new_in(alloc, "known", KindBuilder::string_in(alloc)).label("Known"),
-            )
-            .finish()
+        let mut known = Value::map_in(alloc);
+        known
+            .set(vocab::TYPE, Value::string_in(alloc, "string").unwrap())
+            .unwrap();
+        known
+            .set(vocab::TITLE, Value::string_in(alloc, "Known").unwrap())
             .unwrap();
 
-        // What a newer producer writes: a kind this build has never heard
-        // of, on a field that is otherwise ordinary.
-        let mut kind = Value::map_in(alloc);
-        kind.set(vocab::TYPE, Value::string_in(alloc, "duration").unwrap())
+        // A type this build has never heard of, on a field that is
+        // otherwise ordinary.
+        let mut future = Value::map_in(alloc);
+        future
+            .set(vocab::TYPE, Value::string_in(alloc, "duration").unwrap())
             .unwrap();
-        let mut field = Value::map_in(alloc);
-        field
-            .set(vocab::KEY, Value::string_in(alloc, "timeout").unwrap())
+        future
+            .set(vocab::TITLE, Value::string_in(alloc, "Timeout").unwrap())
             .unwrap();
-        field
-            .set(vocab::LABEL, Value::string_in(alloc, "Timeout").unwrap())
+
+        let mut properties = Value::map_in(alloc);
+        properties.set("known", known).unwrap();
+        properties.set("timeout", future).unwrap();
+        let mut schema = Value::map_in(alloc);
+        schema
+            .set(vocab::TYPE, Value::string_in(alloc, "object").unwrap())
             .unwrap();
-        field.set(vocab::KIND, kind).unwrap();
-        schema.push_into(vocab::FIELDS, field).unwrap();
+        schema.set(vocab::PROPERTIES, properties).unwrap();
 
         let s = SchemaRef::new(&schema).unwrap();
         assert_eq!(s.fields().count(), 2, "both fields are still listed");
@@ -268,32 +430,27 @@ fn an_unknown_kind_leaves_the_option_readable_and_the_rest_intact() {
     });
 }
 
-/// An entry in the fields list that is not a field is skipped, rather
-/// than taking the schema down with it.
+/// A property that is not a schema is skipped, rather than taking the
+/// schema down with it.
 #[test]
-fn a_malformed_option_is_skipped_not_fatal() {
+fn a_malformed_field_is_skipped_not_fatal() {
     with_alloc(|alloc| {
-        let mut schema = SchemaBuilder::new_in(alloc)
-            .field(FieldBuilder::new_in(
-                alloc,
-                "good",
-                KindBuilder::bool_in(alloc),
-            ))
-            .finish()
+        let mut good = Value::map_in(alloc);
+        good.set(vocab::TYPE, Value::string_in(alloc, "boolean").unwrap())
             .unwrap();
 
-        // No key, so it is not a field.
-        let mut keyless = Value::map_in(alloc);
-        keyless
-            .set(vocab::LABEL, Value::string_in(alloc, "orphan").unwrap())
-            .unwrap();
-        schema.push_into(vocab::FIELDS, keyless).unwrap();
-        // Not even a map.
-        schema.push_into(vocab::FIELDS, Value::bool(true)).unwrap();
+        let mut properties = Value::map_in(alloc);
+        properties.set("good", good).unwrap();
+        // Not a map, so not a schema.
+        properties.set("bad", Value::bool(true)).unwrap();
+
+        let mut schema = Value::map_in(alloc);
+        schema.set(vocab::PROPERTIES, properties).unwrap();
 
         let s = SchemaRef::new(&schema).unwrap();
         let keys: Vec<_> = s.fields().map(|o| o.key().to_string()).collect();
         assert_eq!(keys, ["good"], "the readable field still reads");
+        assert!(s.find("bad").is_none());
     });
 }
 
@@ -305,6 +462,7 @@ fn an_annotation_is_carried_but_not_interpreted() {
         let schema = SchemaBuilder::new_in(alloc)
             .field(
                 FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
+                    .sensitive()
                     .option("x-widget", Value::string_in(alloc, "combo").unwrap()),
             )
             .option("x-origin", Value::string_in(alloc, "test").unwrap())
@@ -313,18 +471,17 @@ fn an_annotation_is_carried_but_not_interpreted() {
 
         let s = SchemaRef::new(&schema).unwrap();
         let host = s.find("host").unwrap();
-        assert_eq!(
-            guatiao::value::read::str_or(host.extra("x-widget"), ""),
-            "combo"
-        );
-        assert_eq!(
-            guatiao::value::read::str_or(s.extra("x-origin"), ""),
-            "test"
-        );
+        assert_eq!(str_or(host.extra("x-widget"), ""), "combo");
+        assert_eq!(str_or(s.extra("x-origin"), ""), "test");
 
         assert!(
-            host.extra(vocab::KEY).is_none(),
+            host.extra(vocab::TYPE).is_none(),
             "a keyword is not an annotation, even though it is a key"
+        );
+        assert!(
+            host.is_sensitive() && host.extra(vocab::X_SENSITIVE).is_none(),
+            "and neither is one of OURS: `x-sensitive` is set and this crate reads it, \
+             so it is a keyword that happens to carry the prefix"
         );
 
         // And a schema really is just a map, walkable by anything that

@@ -70,22 +70,27 @@ pub trait Schema {
     /// The kind describing values of this type.
     fn kind(alloc: Alloc) -> KindBuilder;
 
-    /// The whole schema: the fields a consumer fills in.
+    /// The whole schema: the fields a consumer fills in, as a root
+    /// document with its dialect declared.
     ///
     /// Built from [`Schema::kind`], so the two cannot disagree. A type
     /// whose kind is an object contributes its own fields; a type whose
-    /// kind is a scalar has none to offer and answers an empty
-    /// schema rather than inventing a single nameless one.
+    /// kind is a scalar has none to offer and answers an object that
+    /// declares nothing rather than inventing a single nameless field.
     fn schema(alloc: Alloc) -> Result<Value, ValueError> {
         let kind = Self::kind(alloc).finish()?;
         let mut out = Value::map_in(alloc);
-        let mut out_fields = Value::list_in(alloc);
-        if let Some(declared) = kind.get(vocab::FIELDS) {
-            for field in declared.items().unwrap_or(&[]) {
-                out_fields.push(field.to_value(alloc)?)?;
-            }
+        out.set(vocab::SCHEMA, Value::string_in(alloc, vocab::DIALECT)?)?;
+        out.set(vocab::TYPE, Value::string_in(alloc, vocab::TYPE_OBJECT)?)?;
+        match kind.get(vocab::PROPERTIES) {
+            Some(declared) => out.set(vocab::PROPERTIES, declared.to_value(alloc)?)?,
+            None => out.set(vocab::PROPERTIES, Value::map_in(alloc))?,
         }
-        out.set(vocab::FIELDS, out_fields)?;
+        // Absent rather than empty when nothing is required, which is what
+        // the builder writes and what JSON Schema reads the same way.
+        if let Some(required) = kind.get(vocab::REQUIRED) {
+            out.set(vocab::REQUIRED, required.to_value(alloc)?)?;
+        }
         Ok(out)
     }
 }

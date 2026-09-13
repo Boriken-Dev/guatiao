@@ -31,15 +31,20 @@ cannot describe a value it refuses.
 
 **`#[schema(...)]`** — what `Schema` adds. Ignored by the other two.
 
-| key | effect |
-| --- | --- |
-| `label = "..."` | display name |
-| `help = "..."` | help text; a `///` doc comment sets this when absent |
-| `section = "..."` | which section the option belongs to |
-| `order = <int>` | sort position |
-| `advanced` | hide behind an "advanced" toggle |
-| `sensitive` | never render, never log, never quote in an error |
-| `default = <expr>` | the declared default |
+| key | effect | written as |
+| --- | --- | --- |
+| `label = "..."` | display name | `title` |
+| `help = "..."` | help text; a `///` doc comment sets this when absent | `description` |
+| `section = "..."` | which section the field belongs to | `x-section` |
+| `order = <int>` | sort position | `x-order` |
+| `advanced` | hide behind an "advanced" toggle | `x-advanced` |
+| `sensitive` | never render, never log, never quote in an error | `x-sensitive` |
+| `default = <expr>` | the declared default | `default` |
+
+The right-hand column is what lands in the document, because **a schema IS
+a JSON Schema**. The field's own name is its key in `properties`, and
+whether it is required — a field that is not an `Option<T>` — is a name in
+the struct's `required` list. Neither is written inside the field.
 
 ```rust
 #[derive(ToValue, FromValue, Schema, PartialEq, Debug)]

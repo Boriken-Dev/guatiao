@@ -4,11 +4,20 @@
 
 //! Writing a schema as a value.
 //!
-//! A schema is a map written with the keys in [`super::vocab`], so it can
-//! be built with `map_set` and `list_push` and nothing else. These
-//! builders are the typed way to do that: they read as a table of
-//! declarations rather than as a wall of string keys, and they cannot
+//! A schema is a map written with the keys in [`super::vocab`] — JSON
+//! Schema's — so it can be built with `map_set` and `list_push` and nothing
+//! else. These builders are the typed way to do that: they read as a table
+//! of declarations rather than as a wall of string keys, and they cannot
 //! misspell one.
+//!
+//! # A field's name and its requiredness are collected, not written
+//!
+//! JSON Schema puts a field's name in the [`PROPERTIES`](super::vocab::PROPERTIES)
+//! map key and its requiredness in the owner's
+//! [`REQUIRED`](super::vocab::REQUIRED) list — two places, neither of them
+//! inside the field. So a builder **holds its fields** and writes both at
+//! `finish` rather than appending as it goes. That is invisible from the
+//! call site, which still reads `FieldBuilder::new(..).required()`.
 //!
 //! # A schema does not know about forms
 //!
@@ -19,16 +28,14 @@
 //! alongside the field; what a section is CALLED belongs to whatever
 //! draws it.
 //!
-//! A producer that must write one today reaches for
-//! [`SchemaBuilder::extra`], which carries any key without interpreting
-//! it — the same door every other annotation goes through.
+//! [`FormBuilder::section`]: super::FormBuilder::section
 //!
 //! # A schema and a form are different questions
 //!
 //! What a value **is** — its kind, its bounds, whether it is required —
-//! is substance, and lives here. How it is **shown** — a label, some
-//! help, which section it sits in — is presentation, and lives in
-//! [`super::form`], which all three builders implement.
+//! is substance, and lives here. How it is **shown** — a title, some prose,
+//! which section it sits in, whether it hides behind a disclosure, whether
+//! it is a secret — is presentation, and lives in [`super::form`].
 //!
 //! # Building names no allocator
 //!
@@ -64,30 +71,43 @@ use crate::value::alloc::Alloc;
 use crate::value::mutate::ValueError;
 use crate::value::types::Value;
 
-/// Builds a schema.
+/// Builds a schema: the root document, with its dialect declared.
 pub struct SchemaBuilder {
     // Reached by `super::form`, which is the other half of this builder
     // rather than a stranger: the presentation setters live there so the
     // schema half and the form half can be read apart.
     pub(super) alloc: Alloc,
     pub(super) state: Result<Value, ValueError>,
+    fields: Vec<FieldBuilder>,
 }
 
-/// Builds one field.
+/// Builds one field: its name, what it accepts, and whether it is
+/// required.
+///
+/// The name and the requiredness are the owner's to write; everything else
+/// goes onto the field's own subschema, which is what `state` holds.
 pub struct FieldBuilder {
     pub(super) alloc: Alloc,
     pub(super) state: Result<Value, ValueError>,
+    key: String,
+    required: bool,
 }
 
-/// Builds one kind.
+/// Builds one kind: a subschema with no name of its own.
 pub struct KindBuilder {
     state: Result<Value, ValueError>,
 }
 
 /// Builds one arm of a tagged kind.
+///
+/// Holds its discriminant until the variant assembles it, because an arm
+/// does not know which key the discriminant is stored under — that is the
+/// variant's declaration, not the arm's.
 pub struct ArmBuilder {
     pub(super) alloc: Alloc,
     pub(super) state: Result<Value, ValueError>,
+    discriminant: Result<Value, ValueError>,
+    fields: Vec<FieldBuilder>,
 }
 
 impl std::fmt::Debug for SchemaBuilder {
@@ -160,6 +180,59 @@ fn push(state: &mut Result<Value, ValueError>, key: &str, value: Result<Value, V
     }
 }
 
+/// Appends one name to a list being built.
+fn push_name(list: &mut Result<Value, ValueError>, alloc: Alloc, name: &str) {
+    let node = match list {
+        Ok(n) => n,
+        Err(_) => return,
+    };
+    match Value::string_in(alloc, name).and_then(|v| node.push(v)) {
+        Ok(()) => {}
+        Err(e) => *list = Err(e),
+    }
+}
+
+/// Writes `properties` and `required` onto an object schema.
+///
+/// The one place that knows a field's name and its requiredness live
+/// outside the field. `tag` is the discriminant an arm carries: it goes in
+/// first, so the arm reads as the thing it selects, and it is always
+/// required — an arm without its discriminant is not that arm.
+///
+/// `properties` is written even when empty, so a reader can tell an object
+/// that declares nothing from a kind that forgot to say.
+fn seal(
+    state: &mut Result<Value, ValueError>,
+    alloc: Alloc,
+    tag: Option<(&str, Result<Value, ValueError>)>,
+    fields: Vec<FieldBuilder>,
+) {
+    let mut properties = Ok(Value::map_in(alloc));
+    let mut required = Ok(Value::list_in(alloc));
+    let mut any_required = false;
+
+    if let Some((tag, discriminant)) = tag {
+        put(&mut properties, tag, discriminant);
+        push_name(&mut required, alloc, tag);
+        any_required = true;
+    }
+    for field in fields {
+        put(&mut properties, &field.key, field.state);
+        if field.required {
+            push_name(&mut required, alloc, &field.key);
+            any_required = true;
+        }
+    }
+
+    put(state, vocab::PROPERTIES, properties);
+    // Absent means nothing is required, which is what JSON Schema says an
+    // absent `required` means. An empty list would say the same thing in
+    // more bytes.
+    if any_required {
+        put(state, vocab::REQUIRED, required);
+    }
+}
+
 impl SchemaBuilder {
     /// An empty schema, through the crate's own allocator.
     ///
@@ -170,17 +243,33 @@ impl SchemaBuilder {
     }
 
     /// An empty schema, through an allocator you name.
+    ///
+    /// The dialect and the type go in here rather than at `finish`, so
+    /// they come first in the document — which is where a reader looks for
+    /// them.
     pub fn new_in(alloc: Alloc) -> SchemaBuilder {
+        let mut state = Ok(Value::map_in(alloc));
+        put(
+            &mut state,
+            vocab::SCHEMA,
+            Value::string_in(alloc, vocab::DIALECT),
+        );
+        put(
+            &mut state,
+            vocab::TYPE,
+            Value::string_in(alloc, vocab::TYPE_OBJECT),
+        );
         SchemaBuilder {
             alloc,
-            state: Ok(Value::map_in(alloc)),
+            state,
+            fields: Vec::new(),
         }
     }
 
     /// Declares a field. Order of declaration is the order a consumer
-    /// sees.
+    /// sees, because a map here is insertion-ordered by contract.
     pub fn field(mut self, field: FieldBuilder) -> SchemaBuilder {
-        push(&mut self.state, vocab::FIELDS, field.state);
+        self.fields.push(field);
         self
     }
 
@@ -203,7 +292,12 @@ impl SchemaBuilder {
     }
 
     /// The schema, or the first error that stopped it.
-    pub fn finish(self) -> Result<Value, ValueError> {
+    ///
+    /// Where the fields become `properties` and the `required()` calls
+    /// become the `required` list.
+    pub fn finish(mut self) -> Result<Value, ValueError> {
+        let (alloc, fields) = (self.alloc, std::mem::take(&mut self.fields));
+        seal(&mut self.state, alloc, None, fields);
         self.state
     }
 }
@@ -223,11 +317,18 @@ impl FieldBuilder {
     }
 
     /// The same, through an allocator you name.
+    ///
+    /// **The kind's map IS the field's subschema.** There is no nesting
+    /// under a `kind` key, because JSON Schema has none: a field's schema
+    /// says what it accepts, and `title`, `default` and the rest sit on the
+    /// same map.
     pub fn new_in(alloc: Alloc, key: &str, kind: KindBuilder) -> FieldBuilder {
-        let mut state = Ok(Value::map_in(alloc));
-        put(&mut state, vocab::KEY, Value::string_in(alloc, key));
-        put(&mut state, vocab::KIND, kind.state);
-        FieldBuilder { alloc, state }
+        FieldBuilder {
+            alloc,
+            state: kind.state,
+            key: key.to_string(),
+            required: false,
+        }
     }
 
     /// The default value, of whatever kind the field accepts.
@@ -253,8 +354,12 @@ impl FieldBuilder {
     }
 
     /// Must be given.
+    ///
+    /// Recorded on the builder rather than written onto the field: the
+    /// name lands in the **owner's** `required` list when the owner
+    /// finishes, which is where JSON Schema keeps it.
     pub fn required(mut self) -> FieldBuilder {
-        put(&mut self.state, vocab::REQUIRED, Ok(Value::bool(true)));
+        self.required = true;
         self
     }
 
@@ -270,7 +375,6 @@ impl KindBuilder {
     fn typed(alloc: Alloc, ty: &str) -> KindBuilder {
         let mut state = Ok(Value::map_in(alloc));
         put(&mut state, vocab::TYPE, Value::string_in(alloc, ty));
-        let _ = alloc;
         KindBuilder { state }
     }
 
@@ -283,7 +387,7 @@ impl KindBuilder {
 
     /// The same, through an allocator you name.
     pub fn bool_in(alloc: Alloc) -> KindBuilder {
-        KindBuilder::typed(alloc, vocab::TYPE_BOOL)
+        KindBuilder::typed(alloc, vocab::TYPE_BOOLEAN)
     }
 
     /// Free text.
@@ -307,7 +411,7 @@ impl KindBuilder {
 
     /// The same, through an allocator you name.
     pub fn int_in(alloc: Alloc) -> KindBuilder {
-        KindBuilder::typed(alloc, vocab::TYPE_INT)
+        KindBuilder::typed(alloc, vocab::TYPE_INTEGER)
     }
 
     /// A whole number between `min` and `max`, both inclusive.
@@ -319,9 +423,9 @@ impl KindBuilder {
 
     /// The same, through an allocator you name.
     pub fn int_range_in(alloc: Alloc, min: i64, max: i64) -> KindBuilder {
-        let mut k = KindBuilder::typed(alloc, vocab::TYPE_INT);
-        put(&mut k.state, vocab::MIN, Value::int_in(alloc, min));
-        put(&mut k.state, vocab::MAX, Value::int_in(alloc, max));
+        let mut k = KindBuilder::typed(alloc, vocab::TYPE_INTEGER);
+        put(&mut k.state, vocab::MINIMUM, Value::int_in(alloc, min));
+        put(&mut k.state, vocab::MAXIMUM, Value::int_in(alloc, max));
         k
     }
 
@@ -339,12 +443,12 @@ impl KindBuilder {
 
     /// The same, through an allocator you name.
     pub fn int_bounds_in(alloc: Alloc, min: Option<i64>, max: Option<i64>) -> KindBuilder {
-        let mut k = KindBuilder::typed(alloc, vocab::TYPE_INT);
+        let mut k = KindBuilder::typed(alloc, vocab::TYPE_INTEGER);
         if let Some(min) = min {
-            put(&mut k.state, vocab::MIN, Value::int_in(alloc, min));
+            put(&mut k.state, vocab::MINIMUM, Value::int_in(alloc, min));
         }
         if let Some(max) = max {
-            put(&mut k.state, vocab::MAX, Value::int_in(alloc, max));
+            put(&mut k.state, vocab::MAXIMUM, Value::int_in(alloc, max));
         }
         k
     }
@@ -358,7 +462,7 @@ impl KindBuilder {
 
     /// The same, through an allocator you name.
     pub fn float_in(alloc: Alloc) -> KindBuilder {
-        KindBuilder::typed(alloc, vocab::TYPE_FLOAT)
+        KindBuilder::typed(alloc, vocab::TYPE_NUMBER)
     }
 
     /// A real number, bounded on either side or neither.
@@ -370,17 +474,20 @@ impl KindBuilder {
 
     /// The same, through an allocator you name.
     pub fn float_bounds_in(alloc: Alloc, min: Option<f64>, max: Option<f64>) -> KindBuilder {
-        let mut k = KindBuilder::typed(alloc, vocab::TYPE_FLOAT);
+        let mut k = KindBuilder::typed(alloc, vocab::TYPE_NUMBER);
         if let Some(min) = min {
-            put(&mut k.state, vocab::MIN, Value::float_in(alloc, min));
+            put(&mut k.state, vocab::MINIMUM, Value::float_in(alloc, min));
         }
         if let Some(max) = max {
-            put(&mut k.state, vocab::MAX, Value::float_in(alloc, max));
+            put(&mut k.state, vocab::MAXIMUM, Value::float_in(alloc, max));
         }
         k
     }
 
     /// Opaque bytes.
+    ///
+    /// `type: "bytes"`, which is **ours** and not one of JSON Schema's
+    /// seven. See [`vocab::TYPE_BYTES`] for what that costs.
     /// Built through the crate's own allocator. `bytes_in` names one,
     /// which is what a schema built into a host's arena needs.
     pub fn bytes() -> KindBuilder {
@@ -401,15 +508,16 @@ impl KindBuilder {
 
     /// The same, through an allocator you name.
     pub fn list_in(alloc: Alloc, items: KindBuilder) -> KindBuilder {
-        let mut k = KindBuilder::typed(alloc, vocab::TYPE_LIST);
+        let mut k = KindBuilder::typed(alloc, vocab::TYPE_ARRAY);
         put(&mut k.state, vocab::ITEMS, items.state);
         k
     }
 
     /// A nested object with its own fields.
     ///
-    /// An object with no fields is ordinary and complete -- a map nothing
-    /// further is declared about -- exactly as an arm with no fields is.
+    /// An object with no fields is ordinary and complete -- an object
+    /// nothing further is declared about -- exactly as an arm with no
+    /// fields is.
     /// Built through the crate's own allocator. `map_in` names one,
     /// which is what a schema built into a host's arena needs.
     pub fn map(fields: Vec<FieldBuilder>) -> KindBuilder {
@@ -418,21 +526,16 @@ impl KindBuilder {
 
     /// The same, through an allocator you name.
     pub fn map_in(alloc: Alloc, fields: Vec<FieldBuilder>) -> KindBuilder {
-        let mut k = KindBuilder::typed(alloc, vocab::TYPE_MAP);
-        // Written even when empty, so a reader can tell "an object with no
-        // declared fields" from "a kind that forgot to say".
-        put(&mut k.state, vocab::FIELDS, Ok(Value::list_in(alloc)));
-        for field in fields {
-            push(&mut k.state, vocab::FIELDS, field.state);
-        }
+        let mut k = KindBuilder::typed(alloc, vocab::TYPE_OBJECT);
+        seal(&mut k.state, alloc, None, fields);
         k
     }
 
     /// Exactly one of a fixed set of alternatives.
     ///
-    /// Each is a row of value and label, never two parallel lists: those
-    /// drift in length or order, which shows a person one field while
-    /// setting another.
+    /// A `string` with an `enum`, and the labels in a **map** keyed by the
+    /// value — never a second list, which would let the two drift in length
+    /// or order and show a person one alternative while storing another.
     /// Built through the crate's own allocator. `enumeration_in` names one,
     /// which is what a schema built into a host's arena needs.
     pub fn enumeration(choices: &[(&str, &str)]) -> KindBuilder {
@@ -441,17 +544,22 @@ impl KindBuilder {
 
     /// The same, through an allocator you name.
     pub fn enumeration_in(alloc: Alloc, choices: &[(&str, &str)]) -> KindBuilder {
-        let mut k = KindBuilder::typed(alloc, vocab::TYPE_ENUM);
+        let mut k = KindBuilder::typed(alloc, vocab::TYPE_STRING);
+        let mut values = Ok(Value::list_in(alloc));
+        let mut labels = Ok(Value::map_in(alloc));
         for (value, label) in choices {
-            let mut built = Ok(Value::map_in(alloc));
-            put(&mut built, vocab::VALUE, Value::string_in(alloc, value));
-            put(&mut built, vocab::LABEL, Value::string_in(alloc, label));
-            push(&mut k.state, vocab::CHOICES, built);
+            push_name(&mut values, alloc, value);
+            put(&mut labels, value, Value::string_in(alloc, label));
         }
+        put(&mut k.state, vocab::ENUM, values);
+        put(&mut k.state, vocab::X_LABELS, labels);
         k
     }
 
     /// Any one of several kinds. Untagged.
+    ///
+    /// `anyOf`: the question is whether the value is acceptable at all, and
+    /// which arm took it is explicitly not the point.
     /// Built through the crate's own allocator. `union_in` names one,
     /// which is what a schema built into a host's arena needs.
     pub fn union(arms: Vec<KindBuilder>) -> KindBuilder {
@@ -460,15 +568,26 @@ impl KindBuilder {
 
     /// The same, through an allocator you name.
     pub fn union_in(alloc: Alloc, arms: Vec<KindBuilder>) -> KindBuilder {
-        let mut k = KindBuilder::typed(alloc, vocab::TYPE_UNION);
+        // No `type` of its own: `anyOf` alone is what a union is, and a
+        // union of an integer and a string has no single type to name.
+        let mut k = KindBuilder {
+            state: Ok(Value::map_in(alloc)),
+        };
+        put(&mut k.state, vocab::ANY_OF, Ok(Value::list_in(alloc)));
         for arm in arms {
-            push(&mut k.state, vocab::ARMS, arm.state);
+            push(&mut k.state, vocab::ANY_OF, arm.state);
         }
         k
     }
 
     /// One of several alternatives, each with its own fields. Tagged: the
     /// discriminant is stored under `tag`.
+    ///
+    /// An object with `oneOf` arms, each of which pins the discriminant
+    /// with a `const` and requires it. The tag itself travels under
+    /// [`vocab::X_TAG`], because JSON Schema has no discriminator keyword
+    /// and inferring one stops working the moment two properties are
+    /// `const`.
     /// Built through the crate's own allocator. `variant_in` names one,
     /// which is what a schema built into a host's arena needs.
     pub fn variant(tag: &str, arms: Vec<ArmBuilder>) -> KindBuilder {
@@ -477,10 +596,20 @@ impl KindBuilder {
 
     /// The same, through an allocator you name.
     pub fn variant_in(alloc: Alloc, tag: &str, arms: Vec<ArmBuilder>) -> KindBuilder {
-        let mut k = KindBuilder::typed(alloc, vocab::TYPE_VARIANT);
-        put(&mut k.state, vocab::TAG, Value::string_in(alloc, tag));
+        let mut k = KindBuilder::typed(alloc, vocab::TYPE_OBJECT);
+        put(&mut k.state, vocab::X_TAG, Value::string_in(alloc, tag));
+        // Written even when empty, so a variant that declares no arms is a
+        // variant with no arms rather than a kind that forgot to say.
+        put(&mut k.state, vocab::ONE_OF, Ok(Value::list_in(alloc)));
         for arm in arms {
-            push(&mut k.state, vocab::ARMS, arm.state);
+            let mut state = arm.state;
+            seal(
+                &mut state,
+                arm.alloc,
+                Some((tag, arm.discriminant)),
+                arm.fields,
+            );
+            push(&mut k.state, vocab::ONE_OF, state);
         }
         k
     }
@@ -505,14 +634,27 @@ impl ArmBuilder {
     /// The same, through an allocator you name.
     pub fn new_in(alloc: Alloc, value: &str, label: &str) -> ArmBuilder {
         let mut state = Ok(Value::map_in(alloc));
-        put(&mut state, vocab::VALUE, Value::string_in(alloc, value));
-        put(&mut state, vocab::LABEL, Value::string_in(alloc, label));
-        ArmBuilder { alloc, state }
+        put(&mut state, vocab::TITLE, Value::string_in(alloc, label));
+        // Held rather than written: an arm does not know which key its
+        // discriminant is stored under, because that is the variant's
+        // declaration.
+        let mut discriminant = Ok(Value::map_in(alloc));
+        put(
+            &mut discriminant,
+            vocab::CONST,
+            Value::string_in(alloc, value),
+        );
+        ArmBuilder {
+            alloc,
+            state,
+            discriminant,
+            fields: Vec::new(),
+        }
     }
 
     /// A field this arm adds when selected.
     pub fn field(mut self, field: FieldBuilder) -> ArmBuilder {
-        push(&mut self.state, vocab::FIELDS, field.state);
+        self.fields.push(field);
         self
     }
 }

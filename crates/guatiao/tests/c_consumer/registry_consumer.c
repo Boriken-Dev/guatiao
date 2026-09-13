@@ -230,11 +230,21 @@ int main(int argc, char **argv) {
     const guatiao_value *schema =
         guatiao_registry_provider_config(reg, s("hello_library_greeter"));
     CHECK(schema != NULL, "the greeter declares a configuration schema");
-    /* Borrowed from the library's image: read it, never free it. */
+    /* Borrowed from the library's image: read it, never free it.
+
+       A schema IS a JSON Schema, so a C consumer walks the keys the
+       specification already names -- `properties` keyed by the field's
+       own name -- with the header's own map helpers and no library
+       call. */
     if (schema) {
-      const guatiao_value *fields = guatiao_map_find(schema, s("fields"));
-      CHECK(guatiao_list_items(fields).len == 1,
+      CHECK(text_is(field(schema, "type"), "object"),
+            "a schema is an object schema");
+      const guatiao_value *properties =
+          guatiao_map_find(schema, s("properties"));
+      CHECK(guatiao_map_entries(properties).len == 1,
             "the schema declares one field");
+      CHECK(guatiao_map_find(properties, s("name")) != NULL,
+            "and its name is the key it is filed under");
     }
   }
 
