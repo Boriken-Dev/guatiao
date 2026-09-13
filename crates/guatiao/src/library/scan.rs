@@ -277,7 +277,10 @@ impl Declared {
     /// Parses the bytes of a declaration: `key=value` strings separated
     /// by NUL and ended by an empty string. `None` when the terminator is
     /// missing from the window, which is a malformed declaration.
-    fn parse(bytes: &[u8]) -> Option<Declared> {
+    ///
+    /// Public so a host can check its rules against a declaration it
+    /// wrote by hand, with no file involved.
+    pub fn parse(bytes: &[u8]) -> Option<Declared> {
         let mut pairs = Vec::new();
         let mut rest = bytes;
         loop {

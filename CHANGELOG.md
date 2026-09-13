@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `Declared::parse` is public, so a host can check its scan rules
+  against a declaration written by hand.
 - `Registry` and `Provider` are `Send` and `Sync`: a host keeps its one
   registry behind a lock and reads it from any thread. Every pointer they
   hold addresses a library's image, which is never unloaded.
