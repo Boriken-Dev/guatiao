@@ -148,9 +148,9 @@ the expansion of a two-method trait is pinned by
 | `id = "..."` | the provider id | `{CARGO_PKG_NAME}_{type}` in snake case, `-` as `_` |
 | `name = "..."` | display name | the type's ident |
 | `version = "..."` | the provider's own version | empty: the library's |
-| `config = T` | configuration schema through `T: Schema` | none |
-| `new = path` / `new_with_host = path` | `fn() -> Self` / `fn(Host) -> Self` building the one instance | `Default` |
-| `available = path` | `fn(&Self) -> Result<(), &'static str>`, asked on every call | always available |
+| `config = C` | the provider is **built from `C`**: schema through `C: Schema`, decoded through `C: FromValue`, built through `Self: TryFrom<C, Error: Into<ProviderError>>` (`C = Self` is the identity); emits the `create`/`destroy` slots, so a host gets an `Instance` per configuration whose address is the `ctx` | none: the type is its one instance |
+| `new = path` / `new_with_host = path` | `fn() -> Self` / `fn(Host) -> Self` building the default instance (the descriptor's `ctx`); with `config` and neither, there is no default instance | `Default`, except with `config` |
+| `available = path` | `fn(&Self) -> Result<(), &'static str>`, asked on every call of the default instance; refused when there is none | always available |
 
 Emits, inside a `const _` block: one `static` table per kind
 (`<dyn K as Kind>::Vtable::of::<T>()`, reached through the trait so only
