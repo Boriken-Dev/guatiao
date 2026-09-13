@@ -229,12 +229,18 @@ use guatiao::schema::{FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
 
 SchemaBuilder::new()
     .label("Connection")                      // FormBuilder
-    .option(FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
+    .field(FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
         .label("Port").help("...")            // FormBuilder
         .required())                          // inherent: substance
-    .section("net", "Network", "...")
     .finish() -> Result<Value, ValueError>
 ```
+
+**A schema does not know about forms.** There is no way here to DECLARE
+a section: a section exists only to group controls on a screen, so naming
+one is a form's business. `FormBuilder::section` says which section a
+field belongs to — a hint carried alongside the field — and what that
+section is CALLED belongs to whatever draws it. A producer that must
+write one uses `extra`, the door every annotation goes through.
 
 **A schema and a form are different questions.** What a value *is* — its
 kind, its bounds, whether it is required — is substance and lives on the

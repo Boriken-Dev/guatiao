@@ -66,22 +66,21 @@ fn with_alloc(body: impl FnOnce(Alloc)) {
 fn a_declared_schema_reads_back() {
     with_alloc(|alloc| {
         let schema = SchemaBuilder::new_in(alloc)
-            .section("net", "Network", "How to reach it")
-            .option(
+            .field(
                 FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
                     .label("Host")
                     .section("net")
                     .required()
                     .order(1),
             )
-            .option(
+            .field(
                 FieldBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
                     .label("Port")
                     .section("net")
                     .default(Value::int_in(alloc, 5900))
                     .order(2),
             )
-            .option(
+            .field(
                 FieldBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
                     .label("Password")
                     .sensitive()
@@ -121,9 +120,10 @@ fn a_declared_schema_reads_back() {
         assert!(password.is_sensitive());
         assert!(password.is_advanced());
 
-        let section = s.sections().next().expect("one section");
-        assert_eq!(section.id(), "net");
-        assert_eq!(section.label(), "Network");
+        // NO section DECLARATION: a schema does not know about forms, so
+        // what a section is called belongs to whatever draws it. A field
+        // still says which one it belongs to, asserted above.
+        assert_eq!(s.sections().count(), 0);
 
         assert!(s.find("nothing").is_none());
     });
@@ -133,7 +133,7 @@ fn a_declared_schema_reads_back() {
 fn an_enum_carries_rows_not_two_parallel_lists() {
     with_alloc(|alloc| {
         let schema = SchemaBuilder::new_in(alloc)
-            .option(FieldBuilder::new_in(
+            .field(FieldBuilder::new_in(
                 alloc,
                 "level",
                 KindBuilder::enumeration_in(alloc, &[("off", "Off"), ("on", "On")]),
@@ -165,7 +165,7 @@ fn an_enum_carries_rows_not_two_parallel_lists() {
 fn a_union_and_a_variant_are_different_features() {
     with_alloc(|alloc| {
         let schema = SchemaBuilder::new_in(alloc)
-            .option(FieldBuilder::new_in(
+            .field(FieldBuilder::new_in(
                 alloc,
                 "port",
                 KindBuilder::union_in(
@@ -173,7 +173,7 @@ fn a_union_and_a_variant_are_different_features() {
                     vec![KindBuilder::int_in(alloc), KindBuilder::string_in(alloc)],
                 ),
             ))
-            .option(FieldBuilder::new_in(
+            .field(FieldBuilder::new_in(
                 alloc,
                 "auth",
                 KindBuilder::variant_in(
@@ -231,7 +231,7 @@ fn a_union_and_a_variant_are_different_features() {
 fn an_unknown_kind_leaves_the_option_readable_and_the_rest_intact() {
     with_alloc(|alloc| {
         let mut schema = SchemaBuilder::new_in(alloc)
-            .option(
+            .field(
                 FieldBuilder::new_in(alloc, "known", KindBuilder::string_in(alloc)).label("Known"),
             )
             .finish()
@@ -273,7 +273,7 @@ fn an_unknown_kind_leaves_the_option_readable_and_the_rest_intact() {
 fn a_malformed_option_is_skipped_not_fatal() {
     with_alloc(|alloc| {
         let mut schema = SchemaBuilder::new_in(alloc)
-            .option(FieldBuilder::new_in(
+            .field(FieldBuilder::new_in(
                 alloc,
                 "good",
                 KindBuilder::bool_in(alloc),
@@ -302,7 +302,7 @@ fn a_malformed_option_is_skipped_not_fatal() {
 fn an_annotation_is_carried_but_not_interpreted() {
     with_alloc(|alloc| {
         let schema = SchemaBuilder::new_in(alloc)
-            .option(
+            .field(
                 FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
                     .extra("x-widget", Value::string_in(alloc, "combo")),
             )
@@ -341,23 +341,23 @@ fn an_annotation_is_carried_but_not_interpreted() {
 #[test]
 fn the_plain_builders_and_the_in_builders_agree() {
     let by_hand = SchemaBuilder::new()
-        .option(
+        .field(
             FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
                 .label("Port")
                 .required(),
         )
-        .option(FieldBuilder::new("name", KindBuilder::string()))
+        .field(FieldBuilder::new("name", KindBuilder::string()))
         .finish()
         .expect("a schema this small does not exhaust an allocator");
 
     let alloc = Alloc::rust();
     let named = SchemaBuilder::new_in(alloc)
-        .option(
+        .field(
             FieldBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
                 .label("Port")
                 .required(),
         )
-        .option(FieldBuilder::new_in(
+        .field(FieldBuilder::new_in(
             alloc,
             "name",
             KindBuilder::string_in(alloc),

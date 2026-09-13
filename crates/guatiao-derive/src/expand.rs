@@ -525,7 +525,9 @@ fn emit_schema(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
             };
         }
         if let Some(section) = &a.section {
-            built = quote! { #built.section(#section) };
+            built = quote! {
+                ::guatiao::schema::FormBuilder::section(#built, #section)
+            };
         }
         if let Some(order) = a.order {
             built = quote! { #built.order(#order) };

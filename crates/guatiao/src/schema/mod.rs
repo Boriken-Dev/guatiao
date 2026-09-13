@@ -30,7 +30,7 @@
 //!
 //! // Building names no allocator, the same as `Map::new()`.
 //! let schema = SchemaBuilder::new()
-//!     .option(
+//!     .field(
 //!         FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
 //!             .label("Port")
 //!             .required(),

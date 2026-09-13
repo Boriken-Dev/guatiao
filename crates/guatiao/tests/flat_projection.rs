@@ -21,7 +21,7 @@ use guatiao::value::read::str_or;
 /// A schema with one tagged option: two arms, one of them empty.
 fn schema(alloc: Alloc) -> Value {
     SchemaBuilder::new_in(alloc)
-        .option(FieldBuilder::new_in(
+        .field(FieldBuilder::new_in(
             alloc,
             "auth",
             KindBuilder::variant_in(
@@ -44,7 +44,7 @@ fn schema(alloc: Alloc) -> Value {
                 ],
             ),
         ))
-        .option(FieldBuilder::new_in(
+        .field(FieldBuilder::new_in(
             alloc,
             "host",
             KindBuilder::string_in(alloc),
@@ -227,7 +227,7 @@ fn an_option_key_containing_the_separator_is_rejected() {
     assert_eq!(flat::check_keys(SchemaRef::new(&good).unwrap()), Ok(()));
 
     let bad = SchemaBuilder::new_in(alloc)
-        .option(FieldBuilder::new_in(
+        .field(FieldBuilder::new_in(
             alloc,
             "auth.username",
             KindBuilder::string_in(alloc),
