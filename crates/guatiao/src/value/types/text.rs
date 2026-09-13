@@ -84,7 +84,7 @@ impl Drop for Text {
 impl Text {
     /// Text, copied onto Rust's heap.
     ///
-    /// Unlike [`Map::new`] this OWNS a buffer the moment it exists, which
+    /// Unlike [`Map::new`](super::Map::new) this OWNS a buffer the moment it exists, which
     /// is why it can fail at all; it frees that buffer on drop, like every
     /// other container here.
     pub fn new(text: &str) -> Text {

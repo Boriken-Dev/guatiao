@@ -59,7 +59,7 @@ typedef struct guatiao_entry guatiao_entry;
 
 
 /*
- How deep a tree [`value_clone`] will follow.
+ How deep a tree [`Value::clone_in`] will follow.
 
  Configuration trees are a handful of levels deep; this is far above any
  real one and far below what would exhaust a stack. It exists so a

@@ -71,7 +71,7 @@ pub mod json {
     //! integer survives. That reaches `serde_json::Value` everywhere in a
     //! consumer's graph, because cargo unifies features — a consumer who
     //! does not want it turns off this crate's `json` feature and hands a
-    //! `serde_json::Deserializer` to [`ValueSeed`](crate::ValueSeed)
+    //! `serde_json::Deserializer` to [`ValueSeed`]
     //! themselves.
 
     use serde::de::DeserializeSeed;

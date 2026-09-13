@@ -18,10 +18,10 @@
 //!
 //! # Inserting always MOVES
 //!
-//! [`map_set`] and [`list_push`] take `&mut Value` and leave it
+//! `map_set` and `list_push` take `&mut Value` and leave it
 //! **null-tagged**. There is deliberately no copying variant beside each
 //! of them: a caller who wants to insert something it only borrowed calls
-//! [`value_clone`] and hands over the result, which makes the copy a
+//! `value_clone` and hands over the result, which makes the copy a
 //! visible line rather than a hidden cost inside a setter.
 //!
 //! Two spellings of one operation is what that would have been, and the
@@ -53,9 +53,9 @@
 //!
 //! # Depth
 //!
-//! [`value_free`] is iterative, because a tree can arrive from a foreign
+//! `value_free` is iterative, because a tree can arrive from a foreign
 //! caller and recursion on adversarial depth is a stack overflow, which on
-//! Windows is not catchable and kills the host. [`value_clone`] recurses
+//! Windows is not catchable and kills the host. `value_clone` recurses
 //! but is bounded by [`MAX_DEPTH`] and reports [`ValueError::TooDeep`]
 //! rather than overflowing.
 //!
@@ -76,7 +76,7 @@ use super::number::validate_json_number;
 use super::raw::{dangling, release_buffer, reserve};
 use super::types::{Buffer, Entry, List, Map, Payload, Tag, Text, Value};
 
-/// How deep a tree [`value_clone`] will follow.
+/// How deep a tree [`Value::clone_in`] will follow.
 ///
 /// Configuration trees are a handful of levels deep; this is far above any
 /// real one and far below what would exhaust a stack. It exists so a
@@ -90,7 +90,7 @@ pub enum ValueError {
     /// The allocator could not satisfy the request, or was itself unusable.
     Alloc(AllocError),
     /// Text offered as a number did not match the JSON number grammar
-    /// (RFC 8259 section 6). See [`value_number`].
+    /// (RFC 8259 section 6). See [`Value::number`].
     NotANumber,
     /// A key, or the text of a string value, was not valid UTF-8.
     ///

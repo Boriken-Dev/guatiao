@@ -54,7 +54,7 @@ impl Drop for Buffer {
 }
 
 impl Buffer {
-    /// Bytes, copied onto Rust's heap. See [`Text::new`].
+    /// Bytes, copied onto Rust's heap. See [`Text::new`](super::Text::new).
     pub fn new(bytes: &[u8]) -> Buffer {
         or_abort(Buffer::new_in(Alloc::rust(), bytes))
     }

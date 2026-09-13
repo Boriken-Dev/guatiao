@@ -197,8 +197,8 @@ impl Value {
     ///
     /// Errors for a value that carries no allocator at all: a scalar, or
     /// a literal some other language built by hand. Growing one of those
-    /// means saying which allocator to adopt, which is what the raw
-    /// [`map_set`] and [`list_push`] still take.
+    /// means saying which allocator to adopt, which is what
+    /// [`set_in`](Value::set_in) and [`push_in`](Value::push_in) take.
     pub fn alloc(&self) -> Result<Alloc, ValueError> {
         let stored = alloc_of(self).ok_or(ValueError::WrongKind)?;
         // SAFETY: the address a container recorded is an allocator that
