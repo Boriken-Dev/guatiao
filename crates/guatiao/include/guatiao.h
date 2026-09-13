@@ -2162,6 +2162,7 @@ static inline double guatiao_float_or(const guatiao_value *v, double fallback) {
 #define GUATIAO_KEY_DEFAULT "default"
 #define GUATIAO_KEY_PROPERTIES "properties"
 #define GUATIAO_KEY_REQUIRED "required"
+#define GUATIAO_KEY_ADDITIONAL_PROPERTIES "additionalProperties"
 #define GUATIAO_KEY_ITEMS "items"
 #define GUATIAO_KEY_MINIMUM "minimum"
 #define GUATIAO_KEY_MAXIMUM "maximum"

@@ -294,14 +294,12 @@ names a variant's discriminant, because JSON Schema has no discriminator
 keyword and inferring one stops working the moment two properties are
 `const`.
 
-**And one rule is applied that the document does not state.** Validation
-refuses a key nobody declared, while nothing writes
-`additionalProperties: false` — whose JSON Schema default is `true`. So a
-schema from here handed to a general JSON Schema validator accepts what
-`validate_map` rejects. Refusing is deliberate (silently dropping a
-misspelled field is how somebody ends up convinced a setting does
-nothing); emitting the keyword is not done, because it would change what
-every existing document means.
+**An undeclared key is refused, and the document says so.** Every object
+the builders seal — a struct's document and each arm's subschema — carries
+`additionalProperties: false`, so a general JSON Schema validator refuses
+exactly what `validate_map` refuses. Refusing is deliberate: silently
+dropping a misspelled field is how somebody ends up convinced a setting
+does nothing.
 
 `Schema::schema()` carries **every key of the finished kind** onto the
 root document, not only `properties`/`required`: a tagged enum's

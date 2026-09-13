@@ -138,11 +138,22 @@ fn a_validator_accepts_and_rejects_the_same_documents_we_do() {
         "a conforming document is accepted"
     );
 
-    let cases: [(&str, serde_json::Value); 5] = [
+    let cases: [(&str, serde_json::Value); 7] = [
         // `required`, on the object rather than the field.
         (
             "a missing required field",
             serde_json::json!({ "port": 5900 }),
+        ),
+        // `additionalProperties: false`, on the root: the key set is
+        // closed, and the document says so.
+        (
+            "a key nobody declared",
+            serde_json::json!({ "host": "h", "hots": "a misspelling" }),
+        ),
+        // The same, inside an arm.
+        (
+            "a key nobody declared on an arm",
+            serde_json::json!({ "host": "h", "auth": { "auth": "userpass", "username": "ana", "passwrod": "x" } }),
         ),
         // `minimum` / `maximum`.
         (
