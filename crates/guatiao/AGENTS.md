@@ -800,6 +800,66 @@ reports the file as `Skipped::Filtered { by }` and never maps it. That is
 the replacement for a filename denylist: the library says
 `VIEWER=1`, the host writes one rule.
 
+### Where a host looks is a search path
+
+```rust
+let path = SearchPath::parse(&std::env::var("MY_HOST_PLUGIN_PATH").unwrap_or_default())
+    .with(exe_dir.join("plugins"));            // adjacency accumulates, never replaced
+let report = scan_path(&mut reg, &path, Order::Ascending, &rules);
+report.loaded / report.skipped / report.failed / report.unreadable
+```
+
+- **A list of directories or files**, split on the platform's own
+  separator (`SearchPath::SEPARATOR`: `;` on Windows, `:` elsewhere),
+  empty parts dropped, **each place once** — by canonical path when it
+  exists, as written when it does not — so an override that names the
+  directory adjacency already found is one entry.
+- A directory is scanned as `scan_dir_rules` scans it. A **file** is
+  probed and loaded on its own, under the same rules: naming it is
+  asking for it, so its extension is not checked, but what it declares
+  still is.
+- A **bundle** is its binary: `Name.framework` resolves to `Name` inside
+  it, flat (iOS) or under `Versions/Current` (macOS). `bundle_binary` is
+  pure path logic and answers on every platform; a scan of a directory
+  offers a bundle as a candidate too.
+- An entry that **cannot be read** — missing, or not listable — is
+  `LoadReport::unreadable` and the rest of the path is still walked.
+  Reported rather than dropped for the same reason a skip is: a person
+  looking for a plugin that did not appear needs to see the place was
+  considered. A single-directory scan still answers that with its `Err`.
+- A library reachable twice loads once; the second is
+  `Skipped::AlreadyLoaded { from }` naming the first.
+
+In C: `guatiao_registry_scan_path(reg, spec, descending, rules, alloc,
+&answer)`, whose report gains `"unreadable": [{"path", "error"}…]` only
+when there is one.
+
+### Notices ride on `meta`
+
+```rust
+use guatiao::library::{Notice, declare_notice, notices};
+declare_notice(&mut meta, Notice::text("openh264", "OpenH264 Video Codec provided by ..."))?;
+declare_notice(&mut meta, Notice::markdown("", "# Licence\n..."))?;
+for n in notices(provider.meta()) { n.component; n.text; n.is_markdown(); }
+```
+
+`meta["notices"]` is a list of `{component, text, format}` maps, one per
+licence. **A convention, not a field**: a notice is text a host must be
+able to show — some licences require the attribution to be displayed —
+and only the library knows what it links, so it belongs on the escape
+hatch every descriptor already has, under a key named once here rather
+than invented per host.
+
+- `component` says what the licence covers; empty is the whole library
+  or provider, and a host shows the display name.
+- `text` blank contributes nothing: refused on write, dropped on read.
+  Never trimmed — leading indentation is part of a licence.
+- `format` is **declared, never sniffed**: `text` (the default) or
+  `markdown`. Anything else reads as text, the safe direction; a prose
+  licence rendered as Markdown is a licence that was not reproduced.
+- **Read on display, never cached.** A library that loads an optional
+  component on demand owes its attribution only while it is in use.
+
 **A loaded library is never unloaded.** Everything it hands over —
 strings, schemas, vtables — points into its mapping, so unloading would
 dangle every borrow the host holds. That is also why a `ProviderView`

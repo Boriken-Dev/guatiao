@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `library::SearchPath` and `scan_path`: a host's search path is a list
+  of directories or files on the platform's own separator, each place
+  visited once; a file entry is probed and loaded on its own under the
+  same rules; a `.framework` bundle is its binary (`bundle_binary`); an
+  entry that cannot be read goes under the new `LoadReport::unreadable`
+  and the rest of the path is still walked. From C,
+  `guatiao_registry_scan_path`.
+- `library::notices`: legal notices as a convention on `meta` --
+  `notices` is a list of `{component, text, format}` maps, read with
+  `notices(meta)` and written with `declare_notice`. The format is
+  declared, never sniffed, and anything but `markdown` reads as text.
 - `flat::resolve_in` resolves a flat key in a particular store: a payload
   key is checked against the arm the store selects, or the field's
   default. `validate_texts` goes through it, so a field belonging to an
