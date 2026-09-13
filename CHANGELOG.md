@@ -126,6 +126,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   groups and orders the fields; `is_visible` evaluates conditions, where a
   condition on a hidden field is not met. All three are exported to C in
   `include/guatiao_form.h`.
+  - **`#[derive(Form)]`** (`guatiao-form`'s `derive` feature) writes a
+    type's default screen beside `#[derive(Schema)]`: `#[form(section(id,
+    label, help))]` on the type in display order, `#[form(widget,
+    placeholder, visible_when(field, equals), nested)]` on a field, keys
+    following `#[map(rename)]`. It implements the new `Screen` trait
+    (`form(alloc)`, and `hints(prefix, form)` for composing a member's
+    hints under `owner.`). `Form::alloc()` is the builder's allocator.
 - The core crate carries no serialisation: how a value or a schema is
   written down is `guatiao-serde`'s job, or a consumer's own.
 - Licensed under the Mozilla Public License 2.0. Using the library imposes

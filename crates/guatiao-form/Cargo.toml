@@ -26,6 +26,10 @@ path = "src/lib.rs"
 # `extern "C"` surface, which is always compiled -- this is about the file
 # that DECLARES it, which is committed and which most builds only read.
 c-header = ["dep:cbindgen"]
+# `#[derive(Form)]`, re-exported from the crate root beside the `Screen`
+# trait it implements, and `guatiao`'s own derives with it, since a form
+# is declared beside a schema.
+derive = ["dep:guatiao-derive", "guatiao/derive"]
 
 [dependencies]
 # The only dependency, and deliberately so: a form is read against a
@@ -33,6 +37,8 @@ c-header = ["dep:cbindgen"]
 # document; `guatiao-serde` does that for a form exactly as it does for
 # any other value.
 guatiao = { path = "../guatiao", version = "0.1.0" }
+# The proc-macro half of `derive`, with only the form derive turned on.
+guatiao-derive = { path = "../guatiao-derive", version = "0.1.0", optional = true, features = ["form"] }
 
 [build-dependencies]
 # Optional, enabled only by `c-header`, so an ordinary build renders

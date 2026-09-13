@@ -2,7 +2,7 @@
 
 How a guatiao schema is shown: sections, widget hints and conditional
 visibility, as a **value beside the schema**. Depends on `guatiao` and
-nothing else.
+nothing else; the `derive` feature adds `#[derive(Form)]`.
 
 ## The document
 
@@ -61,6 +61,21 @@ HintsRef:   .is_empty() -> bool  .widget() .placeholder() -> &str
             .extra(key) -> Option<&Value>
             .as_value() -> Option<&Value>      // None when the form says nothing
 Condition:  .field() -> &str  .equals() -> &Value
+
+// a type's default screen (`derive` feature); the trait is `Screen`
+// because `Form` is the builder
+#[derive(Schema, Form)]
+#[form(section(id = "net", label = "Network", help = ".."), section(id = "login"))]  // display order
+struct T {
+    #[schema(section = "net")] host: String,              // WHICH section stays the schema's
+    #[form(widget = "password")] token: String,
+    #[form(placeholder = "..", visible_when(field = "verify", equals = true))] ca: Option<String>,
+    #[form(nested)] auth: Auth,                           // `Auth: Screen`; its hints land under `auth.`
+}
+trait Screen { fn form(Alloc) -> Result<Value, ValueError>; fn hints(prefix: &str, into: Form) -> Form; }
+T::form(alloc)                                 // sections, then hints at the root
+Auth::hints("session.auth.", Form::new())      // a member's hints under a prefix; no sections
+Form::alloc() -> Alloc                          // the builder's allocator, for hints built beside it
 
 // the judgement
 check(SchemaRef, FormRef) -> Result<(), FormError>
@@ -150,6 +165,13 @@ guatiao_status guatiao_form_is_visible(const guatiao_value *schema, const guatia
   for this arm" is already a variant, and hiding them again with a
   condition would give two sources of truth for one rule.
 - `Form::field` twice with one path **replaces**, the way `set` does.
+- **`#[derive(Form)]` is one screen, the type's default.** A second
+  screen is a form built or read as a value, and a form beside the derived
+  one overrides it key for key. Keys follow `#[map(rename)]`; a
+  `#[map(skip)]` field cannot carry hints; `#[form(section = ..)]` on a
+  field is refused (that is `#[schema(section)]`); an enum of unit
+  variants is refused (a choice has no fields to place); a tagged enum
+  places its arm fields, composed under `owner.` by the owner's `nested`.
 - `HintsRef::as_value` answers `Option<&Value>` — `None` when the form
   says nothing about the field — where `FormRef` and `SectionRef` answer a
   plain `&Value`.
