@@ -1,9 +1,10 @@
 # guatiao
 
-**One contract for passing configuration and providers between languages.**
+**One contract for passing values between languages.**
 A value model whose C form is plain structs with pointer-and-length strings,
-a schema through which a provider says what it needs to be initialised, and a
-library envelope through which one library registers any number of providers.
+a schema that describes a value — what a provider needs to be configured, or
+a record, capabilities or metadata one library hands another — and a library
+envelope through which one library registers any number of providers.
 Nothing is opaque: a C, C++, Dart or Rust consumer reads a tree, a schema or
 a descriptor with no call into any library.
 
@@ -19,8 +20,9 @@ kin. An ABI is the same agreement between two sides of a boundary.
   that travels with the tree.
 - **One allocator, carried** — every owned container records the allocator
   that made it, so a tree built in a library frees correctly in the host.
-- **Schema as the init contract** — options, kinds, defaults, sections and
-  validity, written as an ordinary value with a documented key vocabulary.
+- **A schema is a JSON Schema** — fields, kinds, defaults and validity,
+  written as an ordinary value in JSON Schema 2020-12's own keys, so a
+  schema written out as text is a document existing tools already read.
   There is no serialisation here: how a schema is written down is the
   consumer's decision.
 - **Rust ergonomics on top** — `#[derive(ToValue, FromValue, Schema)]`,
@@ -82,9 +84,14 @@ one declaration, so the schema cannot describe a value the type refuses.
 | Flag | Adds | Needed for |
 | --- | --- | --- |
 | `derive` | `guatiao-derive` | `#[derive(ToValue, FromValue, Schema)]` |
+| `load` | `libloading`, `object` | loading libraries from disk into a `Registry` |
 | `c-header` | nothing | regenerating the committed C header |
 
 A default build pulls in nothing.
+
+Two sibling crates build on this one: `guatiao-serde` writes and reads a
+value in any serde format, and `guatiao-form` describes how a schema is
+shown to a person.
 
 ## Licence
 

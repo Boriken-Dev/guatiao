@@ -2,12 +2,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! What a provider needs to be initialised.
+//! What a value is, and what a valid one looks like.
 //!
 //! A schema lists the fields something accepts: a name, what it accepts,
 //! an optional default, presentation hints, and any number of
-//! annotations. It is what a library hands a consumer so the consumer can
-//! build a configuration without having heard of it before.
+//! annotations. It is what lets a consumer build or understand a value it
+//! has never heard of — a provider's configuration, a record, a set of
+//! capabilities, metadata one library hands another.
 //!
 //! # A schema IS a value, and the value IS a JSON Schema
 //!

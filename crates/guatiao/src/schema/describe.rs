@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! A Rust type saying what it needs to be configured.
+//! A Rust type describing the values it accepts.
 //!
 //! [`Schema`] is the third derive, beside `ToValue` and `FromValue`. The
 //! first two move a struct across a boundary; this one describes it, so a

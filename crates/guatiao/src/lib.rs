@@ -2,9 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! One contract for passing configuration and providers between languages:
-//! a value model whose C form is plain structs, a schema that says what a
-//! provider needs to be initialised, and an envelope through which a
+//! One contract for passing values between languages: a value model whose
+//! C form is plain structs, a schema that describes a value so a consumer
+//! that did not write it can understand it, and an envelope through which a
 //! library registers the providers it offers.
 //!
 //! # The value model
@@ -49,14 +49,17 @@
 //! # Where things are
 //!
 //! - [`value`] is the model itself: the types, the allocator, the mutation
-//!   functions and the reading helpers. It is the only module containing
-//!   `unsafe`; every other one carries `#![forbid(unsafe_code)]`.
+//!   functions and the reading helpers. Its raw layer is one of the three
+//!   places `unsafe` is allowed, beside the loader and the `extern "C"`
+//!   surface; every other module carries `#![forbid(unsafe_code)]`.
 //! - [`convert`] turns a Rust type into a value and back, which is what
 //!   `#[derive(ToValue)]` and `#[derive(FromValue)]` write for you.
-//! - [`schema`] is how a provider says what it needs to be initialised. A
-//!   schema is an ordinary value with a documented key vocabulary, so a
-//!   consumer in any language reads one by walking a map it already knows
-//!   how to walk. `#[derive(Schema)]` writes it from the declaration.
+//! - [`schema`] describes a value: what a provider needs to be configured,
+//!   and equally a record, a set of capabilities or metadata one library
+//!   hands another. A schema is an ordinary value, and that value is a JSON
+//!   Schema, so a consumer in any language reads one by walking a map it
+//!   already knows how to walk. `#[derive(Schema)]` writes it from the
+//!   declaration.
 //! - [`value::merge`] layers two configurations with provenance. It is
 //!   part of the value model because that is all it touches.
 //! - [`library`] is the envelope a library registers through: one exported
@@ -83,7 +86,8 @@
 // no call into any library, the allocator that travels with an owned
 // tree, the mutation functions and the conversions.
 //
-// This is the only module in the crate that contains `unsafe`.
+// Its raw layer is one of the three places `unsafe` is allowed; the
+// list is `tests/forbid_unsafe_per_module.rs`.
 //
 // A `//` comment, never a `///`: see `merge` below.
 pub mod value;
@@ -96,7 +100,7 @@ pub mod value;
 /// `From`/`TryFrom`, why the error distinguishes its cases, what
 /// `Option<T>` does about the absent-versus-null distinction, and why a
 /// sequence is a `Vec<T>` while bytes are opt-in. Every item is
-/// re-exported at the crate root as well, so `guatiao::ToMap` works and
+/// re-exported at the crate root as well, so `guatiao::ToValue` works and
 /// the module path is documentation rather than an obligation.
 ///
 /// This is a re-export rather than the module itself, which is why the
@@ -106,11 +110,11 @@ pub mod convert {
     pub use crate::value::convert::*;
 }
 
-// How a provider tells a consumer what to hand its init: the options it
+// What a value is and what a valid one looks like: the fields it
 // accepts, what they default to, and what makes a value valid.
 //
-// THIS IS A `//` COMMENT AND MUST STAY ONE, for the reason spelled out
-// over `json` above: a `///` here is MERGED with `schema/mod.rs`'s own
+// THIS IS A `//` COMMENT AND MUST STAY ONE: a `///` here is MERGED with
+// `schema/mod.rs`'s own
 // `//!` header into one doc string, and every intra-doc link in that
 // header would then resolve in the scope of THIS file — the crate root —
 // where `build`, `read` and `SchemaBuilder` are not names. Every one of
@@ -136,7 +140,7 @@ pub mod schema;
 
 pub use convert::{Bytes, FromValue, MapError, ToValue};
 // The names generated code reaches for, at the root where it names them.
-// Keeping the derive's paths rooted here rather than at `ffi::` is what
+// Keeping the derive's paths rooted here rather than at `value::` is what
 // lets the module underneath be rearranged without touching a macro every
 // consumer has already expanded.
 pub use schema::Schema;
