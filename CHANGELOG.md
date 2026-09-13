@@ -168,6 +168,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   false`** — a struct's document and each arm's subschema — so a general
   JSON Schema validator refuses exactly what `validate` refuses. The key
   reaches C as `GUATIAO_KEY_ADDITIONAL_PROPERTIES`.
+- `#[provider(Greeter, config)]` (or `config = Self`) makes a type that
+  derives `Schema` and `FromValue` its own configuration, with no second
+  type and no `TryFrom`; `examples/derived_greeter`'s `Shouter` is written
+  that way.
 - **Breaking**: `describe` takes `Host` instead of `&HostInfo`;
   `HostInfo` gained `services` and `ProviderInfo` gained `tables`, both
   appended under `struct_size`; `ProviderView` gained `raw` and `tables`.
