@@ -12,12 +12,12 @@
 //! # Skipping is the rule, not an error path
 //!
 //! A reader that meets something it does not understand skips that one
-//! thing and carries on. An option with no key is not an option, so
-//! [`SchemaRef::options`] passes over it; a kind whose `type` this build
-//! does not know arrives as [`Kind::Unknown`] so the option's key, label
+//! thing and carries on. A field with no key is not a field, so
+//! [`SchemaRef::fields`] passes over it; a kind whose `type` this build
+//! does not know arrives as [`Kind::Unknown`] so the field's key, label
 //! and help still render.
 //!
-//! Refusing the whole schema instead would hide every option that was
+//! Refusing the whole schema instead would hide every field that was
 //! perfectly readable, which is the opposite of what forward
 //! compatibility is for.
 
@@ -31,11 +31,11 @@ use crate::value::types::{Tag, Value};
 #[derive(Clone, Copy, Debug)]
 pub struct SchemaRef<'a>(&'a Value);
 
-/// One option a provider declares.
+/// One field a provider declares.
 #[derive(Clone, Copy, Debug)]
 pub struct FieldRef<'a>(&'a Value);
 
-/// A named group of options, for a consumer that draws them.
+/// A named group of fields, for a consumer that draws them.
 #[derive(Clone, Copy, Debug)]
 pub struct SectionRef<'a>(&'a Value);
 
@@ -72,14 +72,14 @@ impl<'a> SchemaRef<'a> {
         self.0
     }
 
-    /// Every option, in declaration order.
+    /// Every field, in declaration order.
     ///
     /// Anything in the list that is not a map with a string key is skipped:
-    /// an option with no key is not an option, and dropping the one is
+    /// a field with no key is not a field, and dropping the one is
     /// better than refusing the rest.
-    pub fn options(&self) -> impl Iterator<Item = FieldRef<'a>> {
+    pub fn fields(&self) -> impl Iterator<Item = FieldRef<'a>> {
         self.0
-            .get(vocab::OPTIONS)
+            .get(vocab::FIELDS)
             .and_then(Value::items)
             .unwrap_or(&[])
             .iter()
@@ -97,9 +97,9 @@ impl<'a> SchemaRef<'a> {
             .map(SectionRef)
     }
 
-    /// The option declared under `key`.
+    /// The field declared under `key`.
     pub fn find(&self, key: &str) -> Option<FieldRef<'a>> {
-        self.options().find(|o| o.key() == key)
+        self.fields().find(|o| o.key() == key)
     }
 
     /// An annotation on the schema as a whole.
@@ -112,7 +112,7 @@ impl<'a> SchemaRef<'a> {
 }
 
 impl<'a> SectionRef<'a> {
-    /// The identifier an option's `section` refers to.
+    /// The identifier a field's `section` refers to.
     pub fn id(&self) -> &'a str {
         text(self.0, vocab::ID)
     }
@@ -127,7 +127,7 @@ impl<'a> SectionRef<'a> {
 }
 
 impl<'a> FieldRef<'a> {
-    /// Views `value` as an option, or `None` when it is not a map with a
+    /// Views `value` as a field, or `None` when it is not a map with a
     /// string key.
     pub fn new(value: &'a Value) -> Option<FieldRef<'a>> {
         if !is_map(value) {
@@ -142,13 +142,13 @@ impl<'a> FieldRef<'a> {
         self.0
     }
 
-    /// The key this option's value is stored under. Never empty: an option
+    /// The key this field's value is stored under. Never empty: a field
     /// without one is not constructible through [`FieldRef::new`].
     pub fn key(&self) -> &'a str {
         text(self.0, vocab::KEY)
     }
 
-    /// What this option accepts.
+    /// What this field accepts.
     pub fn kind(&self) -> Kind<'a> {
         Kind::read(self.0.get(vocab::KIND))
     }
@@ -168,7 +168,7 @@ impl<'a> FieldRef<'a> {
         text(self.0, vocab::SECTION)
     }
 
-    /// The default value, or `None` when the option has no default.
+    /// The default value, or `None` when the field has no default.
     ///
     /// **`None` and a default of null are different things**: the first
     /// means there is no default, the second that the default is nothing.
@@ -197,7 +197,7 @@ impl<'a> FieldRef<'a> {
         bool_or(self.0.get(vocab::REQUIRED), false)
     }
 
-    /// An annotation on this option. Carried, never interpreted.
+    /// An annotation on this field. Carried, never interpreted.
     pub fn extra(&self, key: &str) -> Option<&'a Value> {
         self.0.get(key).filter(|_| !vocab::KEYWORDS.contains(&key))
     }
@@ -230,7 +230,7 @@ impl<'a> ArmRef<'a> {
     pub fn help(&self) -> &'a str {
         text(self.0, vocab::HELP)
     }
-    /// The options this arm adds when selected.
+    /// The fields this arm adds when selected.
     ///
     /// **An empty list is ordinary and complete**, not missing data: "use
     /// the ambient credential" is the common case, and treating it as an
@@ -245,12 +245,12 @@ impl<'a> ArmRef<'a> {
     }
 }
 
-/// What an option accepts.
+/// What a field accepts.
 ///
 /// An exhaustive Rust enum over the value form, so a reader matches rather
 /// than comparing strings. [`Kind::Unknown`] carries the name this build
-/// did not recognise, which is what makes skipping one option possible
-/// while every other option still renders.
+/// did not recognise, which is what makes skipping one field possible
+/// while every other field still renders.
 #[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub enum Kind<'a> {
@@ -276,7 +276,7 @@ pub enum Kind<'a> {
     Bytes,
     /// A sequence, every element of one kind.
     List(&'a Value),
-    /// A nested object, with its own options.
+    /// A nested object, with its own fields.
     Map(&'a Value),
     /// Exactly one of a fixed set of alternatives.
     Enum(&'a Value),
@@ -292,10 +292,10 @@ pub enum Kind<'a> {
         /// The arms, as the value holding them.
         arms: &'a Value,
     },
-    /// A kind this build does not know, by name. **Skip the option; do not
+    /// A kind this build does not know, by name. **Skip the field; do not
     /// reject the schema.**
     Unknown(&'a str),
-    /// No kind was declared at all, which is a malformed option rather
+    /// No kind was declared at all, which is a malformed field rather
     /// than a new one.
     Missing,
 }
@@ -393,10 +393,10 @@ impl<'a> Kind<'a> {
         }
     }
 
-    /// The options of a nested object, or nothing for any other kind.
+    /// The fields of a nested object, or nothing for any other kind.
     ///
     /// Reads exactly like [`ArmRef::fields`], because it is the same idea:
-    /// here are more options, keyed under something.
+    /// here are more fields, keyed under something.
     pub fn fields(self) -> impl Iterator<Item = FieldRef<'a>> {
         let list = match self {
             Kind::Map(f) => f.items().unwrap_or(&[]),

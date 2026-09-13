@@ -530,13 +530,19 @@ fn emit_schema(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
             };
         }
         if let Some(order) = a.order {
-            built = quote! { #built.order(#order) };
+            built = quote! {
+                ::guatiao::schema::FormFieldBuilder::order(#built, #order)
+            };
         }
         if a.advanced {
-            built = quote! { #built.advanced() };
+            built = quote! {
+                ::guatiao::schema::FormFieldBuilder::advanced(#built)
+            };
         }
         if a.sensitive {
-            built = quote! { #built.sensitive() };
+            built = quote! {
+                ::guatiao::schema::FormFieldBuilder::sensitive(#built)
+            };
         }
         // Not an `Option<T>` means the value has to be there. The
         // declaration already said so; this is only writing it down.
@@ -546,8 +552,12 @@ fn emit_schema(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
         if let Some(default) = &a.default {
             // Through `ToValue`, so the default is written in Rust and
             // cannot drift from the type it defaults.
+            // `default_checked`, because this has a `Result` and nowhere
+            // to put a failure: the builder keeps it and `finish` reports
+            // it. A hand-written call uses `default` and an infallible
+            // constructor.
             built = quote! {
-                #built.default(
+                #built.default_checked(
                     <#ty as ::guatiao::ToValue>::to_value(&(#default), __alloc),
                 )
             };

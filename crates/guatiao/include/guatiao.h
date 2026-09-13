@@ -98,7 +98,7 @@ typedef struct guatiao_entry guatiao_entry;
 #define GUATIAO_ABI_VERSION 1
 
 /*
- Between an option's key and one of its payload fields.
+ Between a field's key and one of its payload fields.
  */
 #define GUATIAO_PAYLOAD_SEPARATOR '.'
 
@@ -1231,9 +1231,9 @@ guatiao_status guatiao_merge(uint32_t mode,
 /*
  Whether `config` is a value `schema` accepts.
 
- `out_error` may be null, and receives a map carrying the option's key
+ `out_error` may be null, and receives a map carrying the field's key
  and what would have been accepted — never the value that was refused,
- because an option may be marked sensitive and an error type that
+ because a field may be marked sensitive and an error type that
  quotes its input is one that eventually logs a passphrase.
 
  # Safety
@@ -1247,10 +1247,10 @@ guatiao_status guatiao_schema_validate(const struct guatiao_value *schema,
                                        struct guatiao_value *out_error);
 
 /*
- The option governing a flat key, or null.
+ The field governing a flat key, or null.
 
  Follows one level of projection, so `auth.password` answers the arm
- field's own option rather than the `auth` option. Every per-option flag
+ field's own field rather than the `auth` field. Every per-field flag
  a caller wants — required, advanced, sensitive, the label — is read
  off the value this hands back, so the boundary needs one lookup rather
  than one export per flag.
@@ -1265,21 +1265,21 @@ const struct guatiao_value *guatiao_schema_resolve(const struct guatiao_value *s
                                                    struct guatiao_str key);
 
 /*
- The flat keys one option projects onto, as a list of strings.
+ The flat keys one field projects onto, as a list of strings.
 
  # Safety
 
- `option` addresses a well-formed option value and `out` writable
+ `field` addresses a well-formed field value and `out` writable
  storage for one value.
  */
-guatiao_status guatiao_schema_flat_keys(const struct guatiao_value *option,
+guatiao_status guatiao_schema_flat_keys(const struct guatiao_value *field,
                                         const struct guatiao_alloc *alloc,
                                         struct guatiao_value *out);
 
 /*
  Writes a tagged value into a flat store of `key -> text`.
 
- `GUATIAO_ERR_WRONG_KIND` when the option is not a variant or the value
+ `GUATIAO_ERR_WRONG_KIND` when the field is not a variant or the value
  is not a map, which is the same "it does not apply" the Rust side
  reports as `false`.
 
@@ -1288,7 +1288,7 @@ guatiao_status guatiao_schema_flat_keys(const struct guatiao_value *option,
  Every non-null pointer addresses what its type says, and `out`
  addresses writable storage for one value.
  */
-guatiao_status guatiao_schema_flatten(const struct guatiao_value *option,
+guatiao_status guatiao_schema_flatten(const struct guatiao_value *field,
                                       const struct guatiao_value *value,
                                       const struct guatiao_alloc *alloc,
                                       struct guatiao_value *out);
@@ -1305,7 +1305,7 @@ guatiao_status guatiao_schema_flatten(const struct guatiao_value *option,
  As for [`guatiao_schema_flatten`]. `flat` is a map whose values are all
  strings; one that is not answers `GUATIAO_ERR_WRONG_KIND`.
  */
-guatiao_status guatiao_schema_unflatten(const struct guatiao_value *option,
+guatiao_status guatiao_schema_unflatten(const struct guatiao_value *field,
                                         const struct guatiao_value *flat,
                                         const struct guatiao_alloc *alloc,
                                         struct guatiao_value *out);

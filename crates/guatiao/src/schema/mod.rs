@@ -4,7 +4,7 @@
 
 //! What a provider needs to be initialised.
 //!
-//! A schema lists the options something accepts: a key, a kind, an
+//! A schema lists the fields something accepts: a key, a kind, an
 //! optional default, presentation fields, and any number of annotations.
 //! It is what a library hands a consumer so the consumer can build a
 //! configuration without having heard of it before.
@@ -43,14 +43,14 @@
 //! ```
 //! - [`read`] reads one back: [`SchemaRef`], [`FieldRef`], [`KindRef`].
 //! - [`validate`] answers whether a value is one the schema accepts.
-//! - [`flat`] projects a tagged option onto flat `key -> text` storage,
+//! - [`flat`] projects a tagged field onto flat `key -> text` storage,
 //!   which is what a command line or a query string can carry.
 //!
 //! # Anything outside the vocabulary is an annotation
 //!
 //! Carried, and never interpreted. A newer producer's keyword survives a
 //! round trip through an older reader, and a consumer can hang its own
-//! hints on an option without asking for a vocabulary change. What gives
+//! hints on a field without asking for a vocabulary change. What gives
 //! one of those a meaning is whoever reads it — `guatiao::schema::merge`
 //! is an example, reading `x-merge` from over in the merge module because
 //! a schema must not have to know that merging exists.
@@ -74,9 +74,11 @@
 #![forbid(unsafe_code)]
 
 pub mod build;
+// The presentation half. A `//` comment, never a `///`.
 pub mod describe;
 pub mod flat;
-// How a schema declares the way one of its options combines across
+pub mod form;
+// How a schema declares the way one of its fields combines across
 // layers: the `x-merge` annotation. Here rather than under the merge
 // because the merge touches values only — it is this side that
 // knows both halves. A `//` comment, never a `///`.
@@ -85,17 +87,18 @@ pub mod read;
 pub mod validate;
 pub mod vocab;
 
-pub use build::{ArmBuilder, FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
+pub use build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 pub use describe::Schema;
 pub use flat::{SEPARATOR, flatten, is_sensitive, resolve, unflatten};
+pub use form::{FormBuilder, FormFieldBuilder};
 pub use read::{ArmRef, ChoiceRef, FieldRef, Kind as KindRef, SchemaRef, SectionRef};
 pub use validate::{validate_map, validate_text, validate_texts, validate_value};
 
 /// Why a value was rejected by [`validate_value`] or [`validate_map`].
 ///
-/// Deliberately carries the option's **key** and a description of what
-/// *would* have been accepted, but **never the offending value**. Options
-/// are not secrets today, but an option may be marked
+/// Deliberately carries the field's **key** and a description of what
+/// *would* have been accepted, but **never the offending value**. Fields
+/// are not secrets today, but a field may be marked
 /// [`FieldRef::is_sensitive`], and an error type that quotes the input is
 /// an error type that eventually logs a passphrase. Rejecting a value
 /// without echoing it costs nothing here — the caller still has the value
@@ -104,9 +107,9 @@ pub use validate::{validate_map, validate_text, validate_texts, validate_value};
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ValidationError {
-    /// No option is declared under this key. Carries the declared keys so
+    /// No field is declared under this key. Carries the declared keys so
     /// a caller can suggest the one that was meant — silently dropping a
-    /// misspelled option is how a user ends up convinced a setting does
+    /// misspelled field is how a user ends up convinced a setting does
     /// nothing.
     UnknownOption {
         /// The key that was not found.
@@ -114,12 +117,12 @@ pub enum ValidationError {
         /// Every key this schema does declare, in declaration order.
         known: Vec<String>,
     },
-    /// A value was given for a declared option, but the option does not
+    /// A value was given for a declared field, but the field does not
     /// accept it.
     BadValue {
-        /// The option's key.
+        /// The field's key.
         key: String,
-        /// What the option would have accepted, phrased for a person:
+        /// What the field would have accepted, phrased for a person:
         /// `"a number between 0 and 9"`.
         expected: String,
     },
@@ -129,14 +132,14 @@ impl std::fmt::Display for ValidationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ValidationError::UnknownOption { key, known } => {
-                write!(f, "unknown option '{key}'")?;
+                write!(f, "unknown field '{key}'")?;
                 if !known.is_empty() {
-                    write!(f, "; known options are: {}", known.join(", "))?;
+                    write!(f, "; known fields are: {}", known.join(", "))?;
                 }
                 Ok(())
             }
             ValidationError::BadValue { key, expected } => {
-                write!(f, "option '{key}' expects {expected}")
+                write!(f, "field '{key}' expects {expected}")
             }
         }
     }

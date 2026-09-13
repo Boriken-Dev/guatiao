@@ -24,7 +24,7 @@ use guatiao::exports::schema::{
     guatiao_schema_unflatten, guatiao_schema_validate,
 };
 use guatiao::exports::value::guatiao_map_clear;
-use guatiao::schema::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
+use guatiao::schema::{ArmBuilder, FieldBuilder, FormFieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::value::read::{items, str_or};
 use guatiao::value::status::Status;
 use guatiao::value::types::{Str, Value};
@@ -217,7 +217,7 @@ fn the_mergelists_bit_reaches_the_merge() {
     let mut later = Value::list();
     later.push(inner_b).unwrap();
 
-    for (options, expected) in [(0u32, 2usize), (GUATIAO_MERGE_OPT_MERGELISTS, 1usize)] {
+    for (fields, expected) in [(0u32, 2usize), (GUATIAO_MERGE_OPT_MERGELISTS, 1usize)] {
         let mut out = Value::absent();
         // SAFETY: as above.
         let status = unsafe {
@@ -226,7 +226,7 @@ fn the_mergelists_bit_reaches_the_merge() {
                 &earlier,
                 &later,
                 alloc.as_raw(),
-                options,
+                fields,
                 std::ptr::null(),
                 0,
                 &mut out,
@@ -239,7 +239,7 @@ fn the_mergelists_bit_reaches_the_merge() {
         assert_eq!(
             items(&merged).count(),
             expected,
-            "mergelists {options} folds the two records into {expected}"
+            "mergelists {fields} folds the two records into {expected}"
         );
     }
 }
@@ -285,7 +285,7 @@ fn a_failure_reports_its_path_through_the_error_value() {
     );
 }
 
-/// Validation crosses the same way, and its error names the option
+/// Validation crosses the same way, and its error names the field
 /// without ever quoting the value that was refused.
 #[test]
 fn validation_crosses_and_never_quotes_the_refused_value() {
@@ -321,7 +321,7 @@ fn validation_crosses_and_never_quotes_the_refused_value() {
     let message = str_or(detail.get("message"), "");
     assert!(
         !message.contains("hunter2"),
-        "an option may be sensitive, so the error says what would have been \
+        "a field may be sensitive, so the error says what would have been \
          accepted and never what was given: {message}"
     );
 }
@@ -394,7 +394,7 @@ fn the_map_clear_symbol_refuses_a_list() {
 
 // --- the flat projection ------------------------------------------------
 
-/// A schema with a variant option, which is the only shape the projection
+/// A schema with a variant field, which is the only shape the projection
 /// applies to.
 fn variant_schema() -> Value {
     let alloc = Alloc::rust();
@@ -424,7 +424,7 @@ fn variant_schema() -> Value {
         .expect("a schema this small does not exhaust an allocator")
 }
 
-/// A flat key resolves through one level of projection, and the option it
+/// A flat key resolves through one level of projection, and the field it
 /// lands on is the ARM FIELD's, not the parent's.
 #[test]
 fn a_flat_key_resolves_to_the_option_that_governs_it() {
@@ -432,7 +432,7 @@ fn a_flat_key_resolves_to_the_option_that_governs_it() {
 
     // SAFETY: a well-formed schema and a readable view.
     let direct = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
-    assert!(!direct.is_null(), "the option itself resolves");
+    assert!(!direct.is_null(), "the field itself resolves");
 
     // SAFETY: as above.
     let projected = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth.password")) };
@@ -440,7 +440,7 @@ fn a_flat_key_resolves_to_the_option_that_governs_it() {
         !projected.is_null(),
         "a projected key resolves to the arm field it names"
     );
-    assert_ne!(direct, projected, "and not to the parent option");
+    assert_ne!(direct, projected, "and not to the parent field");
 
     // SAFETY: as above.
     let nothing = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth.nonesuch")) };
@@ -457,8 +457,8 @@ fn a_tagged_value_survives_the_round_trip_through_flat_text() {
     let schema = variant_schema();
 
     // SAFETY: a well-formed schema.
-    let option = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
-    assert!(!option.is_null());
+    let field = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
+    assert!(!field.is_null());
 
     let mut chosen = Map::new();
     chosen.set("auth", "userpass").unwrap();
@@ -468,7 +468,7 @@ fn a_tagged_value_survives_the_round_trip_through_flat_text() {
 
     let mut flat = Value::absent();
     // SAFETY: every pointer addresses what its type says.
-    let status = unsafe { guatiao_schema_flatten(option, &chosen, alloc.as_raw(), &mut flat) };
+    let status = unsafe { guatiao_schema_flatten(field, &chosen, alloc.as_raw(), &mut flat) };
     assert_eq!(status, Status::GUATIAO_OK);
 
     assert_eq!(
@@ -484,7 +484,7 @@ fn a_tagged_value_survives_the_round_trip_through_flat_text() {
 
     let mut back = Value::absent();
     // SAFETY: as above; `flat` is a map whose values are all strings.
-    let status = unsafe { guatiao_schema_unflatten(option, &flat, alloc.as_raw(), &mut back) };
+    let status = unsafe { guatiao_schema_unflatten(field, &flat, alloc.as_raw(), &mut back) };
     assert_eq!(status, Status::GUATIAO_OK);
     assert_eq!(back.get("auth").and_then(Value::as_str), Some("userpass"));
     assert_eq!(back.get("username").and_then(Value::as_str), Some("ana"));
@@ -500,7 +500,7 @@ fn a_flat_store_that_is_not_all_text_is_refused() {
     let alloc = Alloc::rust();
     let schema = variant_schema();
     // SAFETY: a well-formed schema.
-    let option = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
+    let field = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
 
     let mut flat = Map::new();
     flat.set("auth", "userpass").unwrap();
@@ -510,7 +510,7 @@ fn a_flat_store_that_is_not_all_text_is_refused() {
 
     let mut back = Value::absent();
     // SAFETY: as above.
-    let status = unsafe { guatiao_schema_unflatten(option, &flat, alloc.as_raw(), &mut back) };
+    let status = unsafe { guatiao_schema_unflatten(field, &flat, alloc.as_raw(), &mut back) };
     assert_eq!(
         status,
         Status::GUATIAO_ERR_WRONG_KIND,
@@ -519,17 +519,17 @@ fn a_flat_store_that_is_not_all_text_is_refused() {
     );
 }
 
-/// The keys an option projects onto, for a renderer laying out a form.
+/// The keys a field projects onto, for a renderer laying out a form.
 #[test]
 fn the_flat_keys_of_an_option_are_listed() {
     let alloc = Alloc::rust();
     let schema = variant_schema();
     // SAFETY: a well-formed schema.
-    let option = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
+    let field = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
 
     let mut keys = Value::absent();
-    // SAFETY: a well-formed option and writable storage.
-    let status = unsafe { guatiao_schema_flat_keys(option, alloc.as_raw(), &mut keys) };
+    // SAFETY: a well-formed field and writable storage.
+    let status = unsafe { guatiao_schema_flat_keys(field, alloc.as_raw(), &mut keys) };
     assert_eq!(status, Status::GUATIAO_OK);
 
     let listed: Vec<&str> = keys
@@ -541,7 +541,7 @@ fn the_flat_keys_of_an_option_are_listed() {
     assert_eq!(
         listed,
         ["auth", "auth.username", "auth.password"],
-        "the option's own key first, then one per arm field, in declaration \
+        "the field's own key first, then one per arm field, in declaration \
          order — which is the order a form renders them in"
     );
 }

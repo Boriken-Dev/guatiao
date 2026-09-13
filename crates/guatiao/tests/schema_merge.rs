@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! An option declaring how its own value layers: the `x-merge` annotation.
+//! A field declaring how its own value layers: the `x-merge` annotation.
 //!
 //! These live out here rather than beside the code because the merge
 //! module forbids `unsafe`, and a test file is free of that rule. The
@@ -18,7 +18,7 @@ use guatiao::value::alloc::Alloc;
 use guatiao::value::read::items;
 use guatiao::{MergeMode, MergeOptions, Value};
 
-/// A schema carrying one string option per pair, annotated whenever the
+/// A schema carrying one string field per pair, annotated whenever the
 /// declaration is not empty.
 ///
 /// The schema builders still name an allocator — a schema is a value a
@@ -28,11 +28,11 @@ use guatiao::{MergeMode, MergeOptions, Value};
 fn schema_with(alloc: Alloc, pairs: &[(&str, &str)]) -> Value {
     let mut builder = SchemaBuilder::new_in(alloc);
     for (key, declaration) in pairs {
-        let mut option = FieldBuilder::new_in(alloc, key, KindBuilder::string_in(alloc));
+        let mut field = FieldBuilder::new_in(alloc, key, KindBuilder::string_in(alloc));
         if !declaration.is_empty() {
-            option = option.extra(X_MERGE, Ok(Value::string(declaration)));
+            field = field.option(X_MERGE, Value::string(declaration));
         }
-        builder = builder.field(option);
+        builder = builder.field(field);
     }
     builder.finish().expect("a schema this small builds")
 }
@@ -107,7 +107,7 @@ fn a_non_string_annotation_is_ignored() {
     let schema = SchemaBuilder::new_in(alloc)
         .field(
             FieldBuilder::new_in(alloc, "k", KindBuilder::string_in(alloc))
-                .extra(X_MERGE, Ok(Value::int(2))),
+                .option(X_MERGE, Value::int(2)),
         )
         .finish()
         .unwrap();
@@ -189,7 +189,7 @@ fn a_key_the_schema_does_not_mention_still_merges() {
     );
 }
 
-/// `mergelists` resolves to one flag for the whole merge, on if any option
+/// `mergelists` resolves to one flag for the whole merge, on if any field
 /// asked. Applying it slightly more widely than asked beats having a
 /// written declaration silently do nothing.
 #[test]

@@ -13,6 +13,7 @@ use std::ffi::c_void;
 
 use guatiao::Value;
 use guatiao::schema::FormBuilder;
+use guatiao::schema::FormFieldBuilder;
 use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::schema::vocab;
@@ -77,7 +78,7 @@ fn a_declared_schema_reads_back() {
                 FieldBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
                     .label("Port")
                     .section("net")
-                    .default(Value::int_in(alloc, 5900))
+                    .default(Value::int_in(alloc, 5900).unwrap())
                     .order(2),
             )
             .field(
@@ -91,7 +92,7 @@ fn a_declared_schema_reads_back() {
 
         let s = SchemaRef::new(&schema).expect("a schema is a map");
 
-        let keys: Vec<_> = s.options().map(|o| o.key().to_string()).collect();
+        let keys: Vec<_> = s.fields().map(|o| o.key().to_string()).collect();
         assert_eq!(keys, ["host", "port", "password"], "declaration order");
 
         let host = s.find("host").expect("host is declared");
@@ -226,7 +227,7 @@ fn a_union_and_a_variant_are_different_features() {
 }
 
 /// The whole forward-compatibility story: a kind from a newer producer
-/// leaves its option readable, and every other option untouched.
+/// leaves its field readable, and every other field untouched.
 #[test]
 fn an_unknown_kind_leaves_the_option_readable_and_the_rest_intact() {
     with_alloc(|alloc| {
@@ -238,24 +239,24 @@ fn an_unknown_kind_leaves_the_option_readable_and_the_rest_intact() {
             .unwrap();
 
         // What a newer producer writes: a kind this build has never heard
-        // of, on an option that is otherwise ordinary.
+        // of, on a field that is otherwise ordinary.
         let mut kind = Value::map_in(alloc);
         kind.set(vocab::TYPE, Value::string_in(alloc, "duration").unwrap())
             .unwrap();
-        let mut option = Value::map_in(alloc);
-        option
+        let mut field = Value::map_in(alloc);
+        field
             .set(vocab::KEY, Value::string_in(alloc, "timeout").unwrap())
             .unwrap();
-        option
+        field
             .set(vocab::LABEL, Value::string_in(alloc, "Timeout").unwrap())
             .unwrap();
-        option.set(vocab::KIND, kind).unwrap();
-        schema.push_into(vocab::OPTIONS, option).unwrap();
+        field.set(vocab::KIND, kind).unwrap();
+        schema.push_into(vocab::FIELDS, field).unwrap();
 
         let s = SchemaRef::new(&schema).unwrap();
-        assert_eq!(s.options().count(), 2, "both options are still listed");
+        assert_eq!(s.fields().count(), 2, "both fields are still listed");
 
-        let future = s.find("timeout").expect("the option is readable");
+        let future = s.find("timeout").expect("the field is readable");
         assert!(matches!(future.kind(), Kind::Unknown("duration")));
         assert_eq!(
             future.label(),
@@ -267,7 +268,7 @@ fn an_unknown_kind_leaves_the_option_readable_and_the_rest_intact() {
     });
 }
 
-/// An entry in the options list that is not an option is skipped, rather
+/// An entry in the fields list that is not a field is skipped, rather
 /// than taking the schema down with it.
 #[test]
 fn a_malformed_option_is_skipped_not_fatal() {
@@ -281,18 +282,18 @@ fn a_malformed_option_is_skipped_not_fatal() {
             .finish()
             .unwrap();
 
-        // No key, so it is not an option.
+        // No key, so it is not a field.
         let mut keyless = Value::map_in(alloc);
         keyless
             .set(vocab::LABEL, Value::string_in(alloc, "orphan").unwrap())
             .unwrap();
-        schema.push_into(vocab::OPTIONS, keyless).unwrap();
+        schema.push_into(vocab::FIELDS, keyless).unwrap();
         // Not even a map.
-        schema.push_into(vocab::OPTIONS, Value::bool(true)).unwrap();
+        schema.push_into(vocab::FIELDS, Value::bool(true)).unwrap();
 
         let s = SchemaRef::new(&schema).unwrap();
-        let keys: Vec<_> = s.options().map(|o| o.key().to_string()).collect();
-        assert_eq!(keys, ["good"], "the readable option still reads");
+        let keys: Vec<_> = s.fields().map(|o| o.key().to_string()).collect();
+        assert_eq!(keys, ["good"], "the readable field still reads");
     });
 }
 
@@ -304,9 +305,9 @@ fn an_annotation_is_carried_but_not_interpreted() {
         let schema = SchemaBuilder::new_in(alloc)
             .field(
                 FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
-                    .extra("x-widget", Value::string_in(alloc, "combo")),
+                    .option("x-widget", Value::string_in(alloc, "combo").unwrap()),
             )
-            .extra("x-origin", Value::string_in(alloc, "test"))
+            .option("x-origin", Value::string_in(alloc, "test").unwrap())
             .finish()
             .unwrap();
 

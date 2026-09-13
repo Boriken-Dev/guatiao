@@ -41,7 +41,7 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! # The kind comes from the type, the option comes from the field
+//! # The kind comes from the type, the field comes from the field
 //!
 //! A **kind** is a property of a type: `u16` is an integer between 0 and
 //! 65535 wherever it appears, so [`Schema::kind`] is an associated
@@ -70,22 +70,22 @@ pub trait Schema {
     /// The kind describing values of this type.
     fn kind(alloc: Alloc) -> KindBuilder;
 
-    /// The whole schema: the options a consumer fills in.
+    /// The whole schema: the fields a consumer fills in.
     ///
     /// Built from [`Schema::kind`], so the two cannot disagree. A type
-    /// whose kind is an object contributes its fields as options; a type
-    /// whose kind is a scalar has no options to offer and answers an empty
+    /// whose kind is an object contributes its own fields; a type whose
+    /// kind is a scalar has none to offer and answers an empty
     /// schema rather than inventing a single nameless one.
     fn schema(alloc: Alloc) -> Result<Value, ValueError> {
         let kind = Self::kind(alloc).finish()?;
         let mut out = Value::map_in(alloc);
-        let mut options = Value::list_in(alloc);
-        if let Some(fields) = kind.get(vocab::FIELDS) {
-            for field in fields.items().unwrap_or(&[]) {
-                options.push(field.to_value(alloc)?)?;
+        let mut out_fields = Value::list_in(alloc);
+        if let Some(declared) = kind.get(vocab::FIELDS) {
+            for field in declared.items().unwrap_or(&[]) {
+                out_fields.push(field.to_value(alloc)?)?;
             }
         }
-        out.set(vocab::OPTIONS, options)?;
+        out.set(vocab::FIELDS, out_fields)?;
         Ok(out)
     }
 }

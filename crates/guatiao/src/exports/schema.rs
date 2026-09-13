@@ -20,13 +20,13 @@
 //!
 //! # The failure crosses as a VALUE
 //!
-//! A status says a configuration was refused; it cannot say which option
+//! A status says a configuration was refused; it cannot say which field
 //! or what would have been accepted. So the detail is written through an
 //! optional out-parameter as an ordinary map, which the caller already
 //! knows how to read.
 //!
-//! It carries the option's **key** and what *would* have been accepted,
-//! and deliberately never the value that was refused: an option may be
+//! It carries the field's **key** and what *would* have been accepted,
+//! and deliberately never the value that was refused: a field may be
 //! marked sensitive, and an error that quotes its input is one that
 //! eventually logs a passphrase.
 
@@ -45,9 +45,9 @@ use crate::value::types::{Str, Value};
 
 /// Whether `config` is a value `schema` accepts.
 ///
-/// `out_error` may be null, and receives a map carrying the option's key
+/// `out_error` may be null, and receives a map carrying the field's key
 /// and what would have been accepted — never the value that was refused,
-/// because an option may be marked sensitive and an error type that
+/// because a field may be marked sensitive and an error type that
 /// quotes its input is one that eventually logs a passphrase.
 ///
 /// # Safety
@@ -146,10 +146,10 @@ fn store_into(alloc: Alloc, store: &BTreeMap<String, String>) -> Option<Value> {
     Some(out)
 }
 
-/// The option governing a flat key, or null.
+/// The field governing a flat key, or null.
 ///
 /// Follows one level of projection, so `auth.password` answers the arm
-/// field's own option rather than the `auth` option. Every per-option flag
+/// field's own field rather than the `auth` field. Every per-field flag
 /// a caller wants — required, advanced, sensitive, the label — is read
 /// off the value this hands back, so the boundary needs one lookup rather
 /// than one export per flag.
@@ -174,30 +174,30 @@ pub unsafe extern "C" fn guatiao_schema_resolve(schema: *const Value, key: Str) 
             return ptr::null();
         };
         match flat::resolve(schema, key) {
-            Some(option) => option.as_value() as *const Value,
+            Some(field) => field.as_value() as *const Value,
             None => ptr::null(),
         }
     })
 }
 
-/// The flat keys one option projects onto, as a list of strings.
+/// The flat keys one field projects onto, as a list of strings.
 ///
 /// # Safety
 ///
-/// `option` addresses a well-formed option value and `out` writable
+/// `field` addresses a well-formed field value and `out` writable
 /// storage for one value.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_schema_flat_keys(
-    option: *const Value,
+    field: *const Value,
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
-    if option.is_null() || out.is_null() {
+    if field.is_null() || out.is_null() {
         return Status::GUATIAO_ERR_NULL;
     }
     super::guard(|| {
         // SAFETY: the caller's contract.
-        let Some(option) = FieldRef::new(unsafe { &*option }) else {
+        let Some(field) = FieldRef::new(unsafe { &*field }) else {
             return Status::GUATIAO_ERR_WRONG_KIND;
         };
         // SAFETY: as above.
@@ -205,7 +205,7 @@ pub unsafe extern "C" fn guatiao_schema_flat_keys(
             return Status::GUATIAO_ERR_BAD_VALUE;
         };
         let mut list = Value::list_in(alloc);
-        for key in flat::keys(option) {
+        for key in flat::keys(field) {
             let Ok(item) = Value::string_in(alloc, &key) else {
                 return Status::GUATIAO_ERR_ALLOC;
             };
@@ -222,7 +222,7 @@ pub unsafe extern "C" fn guatiao_schema_flat_keys(
 
 /// Writes a tagged value into a flat store of `key -> text`.
 ///
-/// `GUATIAO_ERR_WRONG_KIND` when the option is not a variant or the value
+/// `GUATIAO_ERR_WRONG_KIND` when the field is not a variant or the value
 /// is not a map, which is the same "it does not apply" the Rust side
 /// reports as `false`.
 ///
@@ -232,18 +232,18 @@ pub unsafe extern "C" fn guatiao_schema_flat_keys(
 /// addresses writable storage for one value.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_schema_flatten(
-    option: *const Value,
+    field: *const Value,
     value: *const Value,
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
-    if option.is_null() || value.is_null() || out.is_null() {
+    if field.is_null() || value.is_null() || out.is_null() {
         return Status::GUATIAO_ERR_NULL;
     }
     super::guard(|| {
         // SAFETY: the caller's contract.
-        let (option, value) = unsafe { (&*option, &*value) };
-        let Some(option) = FieldRef::new(option) else {
+        let (field, value) = unsafe { (&*field, &*value) };
+        let Some(field) = FieldRef::new(field) else {
             return Status::GUATIAO_ERR_WRONG_KIND;
         };
         // SAFETY: as above.
@@ -252,7 +252,7 @@ pub unsafe extern "C" fn guatiao_schema_flatten(
         };
 
         let mut store = BTreeMap::new();
-        if !flat::flatten(option, value, &mut store) {
+        if !flat::flatten(field, value, &mut store) {
             return Status::GUATIAO_ERR_WRONG_KIND;
         }
         let Some(flat) = store_into(alloc, &store) else {
@@ -276,18 +276,18 @@ pub unsafe extern "C" fn guatiao_schema_flatten(
 /// strings; one that is not answers `GUATIAO_ERR_WRONG_KIND`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_schema_unflatten(
-    option: *const Value,
+    field: *const Value,
     flat: *const Value,
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
-    if option.is_null() || flat.is_null() || out.is_null() {
+    if field.is_null() || flat.is_null() || out.is_null() {
         return Status::GUATIAO_ERR_NULL;
     }
     super::guard(|| {
         // SAFETY: the caller's contract.
-        let (option, flat) = unsafe { (&*option, &*flat) };
-        let Some(option) = FieldRef::new(option) else {
+        let (field, flat) = unsafe { (&*field, &*flat) };
+        let Some(field) = FieldRef::new(field) else {
             return Status::GUATIAO_ERR_WRONG_KIND;
         };
         let Some(store) = store_of(flat) else {
@@ -297,7 +297,7 @@ pub unsafe extern "C" fn guatiao_schema_unflatten(
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_BAD_VALUE;
         };
-        let Some(built) = flat::unflatten(alloc, option, &store) else {
+        let Some(built) = flat::unflatten(alloc, field, &store) else {
             return Status::GUATIAO_ERR_WRONG_KIND;
         };
         // SAFETY: `out` is writable by contract.
