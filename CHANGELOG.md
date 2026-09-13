@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `Value::into_map` and `into_list` take the container out of a value by
+  value, handing back a value of another kind untouched.
 - **`Value`, `Map`, `List`, `Text` and `Buffer` are `Clone`, `PartialEq`,
   `Send` and `Sync`.** A clone is a deep copy through the allocator the
   source recorded; equality is structural. The allocator contract gained
