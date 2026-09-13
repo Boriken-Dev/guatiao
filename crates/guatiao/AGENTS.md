@@ -432,8 +432,12 @@ here: it runs over two trees a caller supplied, and either nested past
 the bound is a `BadValue` naming the key rather than a stack overflow.
 
 Flat projection, for a front end that only has `key -> text`:
-`flatten`, `unflatten`, `keys`, `resolve`, `is_sensitive`, `check_keys`,
-separator `.`.
+`flatten`, `unflatten`, `keys`, `resolve`, `resolve_in`, `is_sensitive`,
+`check_keys`, separator `.`. `resolve` answers for the schema alone;
+`resolve_in(schema, key, selected)` answers for a store, checking a
+payload key against the arm the store selects (or the field's default),
+and `validate_texts` goes through it -- so `auth=sso&auth.username=x` is
+refused in the text form the way it is in the nested one.
 
 ---
 

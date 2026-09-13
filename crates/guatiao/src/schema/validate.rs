@@ -389,17 +389,18 @@ fn value_against(
 /// An undeclared key is an error rather than something to ignore. Silently
 /// dropping a misspelled field is how somebody ends up convinced a
 /// setting does nothing.
+///
+/// A dotted key is a tagged field's payload, checked against the arm the
+/// store selects -- see [`super::flat::resolve_in`]. The flat spelling
+/// carries the discriminant only under the field's own key, so this is
+/// the one place the text form can say what the nested form says: a
+/// field belonging to an unselected arm is refused, not ignored.
 pub fn validate_texts(
     schema: SchemaRef<'_>,
     values: &BTreeMap<String, String>,
 ) -> Result<(), ValidationError> {
     for (key, value) in values {
-        let Some(field) = super::flat::resolve(schema, key) else {
-            return Err(ValidationError::UnknownOption {
-                key: key.clone(),
-                known: schema.fields().map(|o| o.key().to_string()).collect(),
-            });
-        };
+        let field = super::flat::resolve_in(schema, key, |k| values.get(k).cloned())?;
         validate_text(field, value)?;
     }
     for field in schema.fields() {

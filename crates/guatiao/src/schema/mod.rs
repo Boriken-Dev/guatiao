@@ -92,7 +92,7 @@ pub mod vocab;
 
 pub use build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 pub use describe::Schema;
-pub use flat::{SEPARATOR, flatten, is_sensitive, resolve, unflatten};
+pub use flat::{SEPARATOR, flatten, is_sensitive, resolve, resolve_in, unflatten};
 pub use form::{FormBuilder, FormFieldBuilder};
 pub use read::{ArmRef, ChoiceRef, FieldRef, Kind as KindRef, SchemaRef};
 pub use validate::{validate_map, validate_text, validate_texts, validate_value};
