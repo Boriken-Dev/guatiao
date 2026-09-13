@@ -62,7 +62,7 @@ impl Drop for List {
 }
 
 impl List {
-    /// An empty list **container**. See [`Map::new`].
+    /// An empty list **container**. See [`Map::new`](super::Map::new).
     pub fn new() -> List {
         List::new_in(Alloc::rust())
     }
@@ -102,7 +102,7 @@ impl List {
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 
-    /// Appends `value`, **consuming** it. Takes anything [`Map::set`]
+    /// Appends `value`, **consuming** it. Takes anything [`Map::set`](super::Map::set)
     /// does.
     pub fn push(&mut self, value: impl Into<Value>) -> Result<(), ValueError> {
         let alloc = self.alloc()?;
@@ -168,7 +168,7 @@ impl Default for List {
 }
 
 impl From<List> for Value {
-    /// Safe for the same reason [`From<Map>`](Map) is: an empty container
+    /// Safe for the same reason [`From<Map>`](super::Map) is: an empty container
     /// owns nothing.
     fn from(list: List) -> Value {
         let mut v = blank(Tag::GUATIAO_LIST);

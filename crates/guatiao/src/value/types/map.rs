@@ -91,10 +91,10 @@ impl Drop for Map {
 impl Map {
     /// An empty map **container**, growing through Rust's allocator.
     ///
-    /// This is the `repr(C)` struct that sits in a value's payload, not a
-    /// value — [`Map::owned`] is the one to reach for. It owns nothing
-    /// yet, so holding it bare is safe: `cap == 0` never reaches an
-    /// allocator, and a container that owns nothing frees to nothing.
+    /// A container rather than a value: grow it with [`set`](Map::set), and
+    /// `map.into()` makes it a [`Value`] at the point something wants one.
+    /// Creating it allocates nothing — `cap == 0` never reaches an
+    /// allocator — and it frees whatever it grew into on drop.
     pub fn new() -> Map {
         Map::new_in(Alloc::rust())
     }
