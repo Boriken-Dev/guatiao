@@ -110,6 +110,26 @@ pub mod convert {
     pub use crate::value::convert::*;
 }
 
+// The `extern "C"` surface: everything public that is not a Rust
+// convenience, reachable by a caller that cannot link Rust. A `//`
+// comment, never a `///`.
+//
+// UNGATED, on purpose. This is an FFI library and Rust is one of its
+// consumers, not the privileged one; a surface that appears only when
+// somebody remembers a feature flag is a surface a C caller cannot rely
+// on being there. The `c-header` feature renders the declarations, not
+// the symbols.
+//
+// The three below are in alphabetical order because rustfmt sorts `mod`
+// declarations and leaves their comments where they were: a comment that
+// drifts onto the wrong item is what this block already was.
+pub mod exports;
+
+// How one library offers any number of providers to a host that has never
+// heard of it: one entry symbol, descriptors that borrow, and a registry
+// the host owns. A `//` comment, never a `///`.
+pub mod library;
+
 // What a value is and what a valid one looks like: the fields it
 // accepts, what they default to, and what makes a value valid.
 //
@@ -120,22 +140,6 @@ pub mod convert {
 // where `build`, `read` and `SchemaBuilder` are not names. Every one of
 // them silently became a dead link the moment this was a `///`, and
 // rustdoc reports those with no file or line to find them by.
-// How one library offers any number of providers to a host that has never
-// heard of it: one entry symbol, descriptors that borrow, and a registry
-// the host owns. A `//` comment, never a `///`.
-// The `extern "C"` surface: everything public that is not a Rust
-// convenience, reachable by a caller that cannot link Rust. A `//`
-// comment, never a `///`.
-//
-// UNGATED, on purpose. This is an FFI library and Rust is one of its
-// consumers, not the privileged one; a surface that appears only when
-// somebody remembers a feature flag is a surface a C caller cannot rely
-// on being there. The `c-header` feature renders the declarations, not
-// the symbols.
-pub mod exports;
-
-pub mod library;
-
 pub mod schema;
 
 pub use convert::{Bytes, FromValue, MapError, ToValue};
@@ -144,8 +148,21 @@ pub use convert::{Bytes, FromValue, MapError, ToValue};
 // lets the module underneath be rearranged without touching a macro every
 // consumer has already expanded.
 pub use schema::Schema;
-pub use value::{Alloc, List, Map, ReadValue, Status, Value, ValueError};
+// The container types and the node's own vocabulary, beside the four
+// already here: `Text::new`, `Buffer::new`, `Entry::key` and `Tag` are
+// named at this level by the API header and by generated code, so they
+// resolve at this level.
+//
+// `Bytes` above is `convert::Bytes`, the marker that says a field crosses
+// as the bytes kind. The BORROWED view of the same name stays at
+// `value::types::Bytes`, since one name cannot be both.
+pub use value::types::Str;
+pub use value::{
+    Alloc, Buffer, Entry, List, MAX_DEPTH, Map, ReadValue, Status, Tag, Text, Value, ValueError,
+};
 
+#[cfg(feature = "provider")]
+pub use guatiao_derive::kind;
 /// `#[derive(ToValue)]` and `#[derive(FromValue)]`, behind the
 /// `derive` feature.
 ///

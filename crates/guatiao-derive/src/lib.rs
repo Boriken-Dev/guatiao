@@ -89,15 +89,19 @@
 //! # Hygiene: the generated code names everything absolutely
 //!
 //! Every path it emits is rooted — `::guatiao::Value`,
-//! `::core::option::Option` — and it assumes **no** `use` at the call
-//! site. A derive that works only when the caller happens to have
-//! imported the right names is a derive that fails mysteriously in the
-//! one module that did not, and the person hitting it has no way to know
-//! what is missing.
+//! `::core::option::Option`, and `::std::vec::Vec` for the one list a
+//! schema builds — and it assumes **no** `use` at the call site. A derive
+//! that works only when the caller happens to have imported the right
+//! names is a derive that fails mysteriously in the one module that did
+//! not, and the person hitting it has no way to know what is missing.
 //!
-//! The three local bindings it introduces are `__map`, `__value` and
-//! `__alloc`. They cannot collide with anything of yours: the only tokens
-//! of yours that reach the same scope are field names behind `self.`.
+//! The local bindings it introduces are `__alloc`, `__map`, `__value`,
+//! `__field`, `__fields`, `__arms`, `__tag`, `__e`, and `__f0`, `__f1`, …
+//! for the fields of a variant. They cannot collide with anything of
+//! yours: the only tokens of yours that reach the same scope are field
+//! names behind `self.`, and a variant's fields are bound to the
+//! generated `__fN` names precisely so that a field called `__map` cannot
+//! shadow one of these.
 //!
 //! # How this is tested
 //!
@@ -120,9 +124,11 @@
 // only because its `ffi` module cannot compile under an enclosing
 // `forbid`.
 #![forbid(unsafe_code)]
-#![warn(missing_docs)]
+#![deny(missing_docs)]
 
 mod expand;
+#[cfg(feature = "provider")]
+mod kind;
 
 use proc_macro::TokenStream;
 
@@ -137,7 +143,11 @@ use crate::expand::{Derive, expand};
 ///
 /// See the [crate documentation](crate) for the field attributes and the
 /// `Option<T>` rule.
-#[proc_macro_derive(ToValue, attributes(map))]
+///
+/// `#[schema(...)]` is **accepted and ignored** here. It is registered so
+/// that a type deriving only this one still compiles with the attribute on
+/// its fields; what it means is `Schema`'s business.
+#[proc_macro_derive(ToValue, attributes(map, schema))]
 pub fn derive_to_value(input: TokenStream) -> TokenStream {
     expand(Derive::ToValue, input.into()).into()
 }
@@ -183,7 +193,34 @@ pub fn derive_schema(input: TokenStream) -> TokenStream {
 ///
 /// See the [crate documentation](crate) for the field attributes and the
 /// `Option<T>` rule.
-#[proc_macro_derive(FromValue, attributes(map))]
+///
+/// `#[schema(...)]` is **accepted and ignored** here. It is registered so
+/// that a type deriving only this one still compiles with the attribute on
+/// its fields; what it means is `Schema`'s business.
+#[proc_macro_derive(FromValue, attributes(map, schema))]
 pub fn derive_from_value(input: TokenStream) -> TokenStream {
     expand(Derive::FromValue, input.into()).into()
+}
+
+/// Declares a provider kind: a trait the host and a library both compile
+/// against, with the `repr(C)` function table, the shims and the proxy
+/// generated beside it. Reached as `#[guatiao::kind]` with the `provider`
+/// feature.
+///
+/// `#[kind]` names the kind after the trait in snake case (`Greeter` →
+/// `"greeter"`, `SessionBackend` → `"session_backend"`);
+/// `#[kind(name = "...")]` names it explicitly.
+///
+/// The trait names `Send + Sync`, and every method takes `&self`.
+/// Arguments: integers, floats, `bool`, `&str`, `&[u8]`, `&Value`,
+/// `Option<&Value>`, `&Map`, or any other type by value through
+/// `ToValue`. Returns: `()`, the scalars, `Value`, `Map`, `List`, `String`,
+/// or any other type through `FromValue`; each optionally inside
+/// `Result<_, ProviderError>`, which a method that converts must use. A
+/// method with a default body is an appended slot; a required method may
+/// not follow one.
+#[cfg(feature = "provider")]
+#[proc_macro_attribute]
+pub fn kind(attr: TokenStream, item: TokenStream) -> TokenStream {
+    kind::expand(attr.into(), item.into()).into()
 }
