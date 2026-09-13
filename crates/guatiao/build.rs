@@ -31,6 +31,11 @@
 //! build of this crate pulls in nothing.
 
 fn main() {
+    // Where the committed header is, for a consumer whose own header
+    // includes it: readable in that consumer's build script as
+    // `DEP_GUATIAO_INCLUDE`, because `Cargo.toml` says `links = "guatiao"`.
+    let include = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("include");
+    println!("cargo::metadata=include={}", include.display());
     // Cheap and unconditional, so a source edit re-renders even when the
     // feature is off and the render is skipped.
     println!("cargo::rerun-if-changed=src");

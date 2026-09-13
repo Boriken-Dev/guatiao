@@ -1,5 +1,9 @@
 [package]
 name = "guatiao"
+# A build script key, not a native library: it lets `build.rs` publish
+# where the committed header lives, so a consumer's own build script reads
+# `DEP_GUATIAO_INCLUDE` and copies `guatiao.h` beside its own header.
+links = "guatiao"
 description = "A C-struct value model, a JSON Schema that describes a value, and an envelope for providers -- one contract for passing values between languages"
 version.workspace = true
 edition.workspace = true
