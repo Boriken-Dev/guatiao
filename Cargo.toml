@@ -1,14 +1,23 @@
 [workspace]
 resolver = "2"
-members = ["crates/guatiao", "crates/guatiao-derive", "examples/hello_library"]
+members = [
+    "crates/guatiao",
+    "crates/guatiao-derive",
+    "crates/guatiao-serde",
+    "examples/hello_library",
+]
 
-# Two crates plus an example library. The second exists only because a
-# proc-macro crate cannot be anything else, and the third is a real cdylib
-# the test suite builds and loads -- an envelope is not something
-# prose can demonstrate. Everything a consumer names -- the value model, the C
-# type vocabulary, the schema, the envelope, the loader -- is in
-# `guatiao`; `guatiao-derive` is reached through `guatiao = { features =
-# ["derive"] }` and is never named in a consumer's manifest.
+# Three crates plus an example library. `guatiao-derive` exists only
+# because a proc-macro crate cannot be anything else, and is reached
+# through `guatiao = { features = ["derive"] }` rather than named in a
+# consumer's manifest. `guatiao-serde` is separate for the opposite
+# reason: it is the one crate here that resolves dependencies, and the core
+# stays free of them.
+#
+# Everything a consumer names -- the value model, the C type vocabulary,
+# the schema, the envelope, the loader -- is in `guatiao`. The example is a
+# real cdylib the test suite builds and loads; an envelope is not something
+# prose can demonstrate.
 
 [workspace.package]
 version = "0.1.0"
