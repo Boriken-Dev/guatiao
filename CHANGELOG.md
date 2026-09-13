@@ -118,5 +118,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Licensed under the Mozilla Public License 2.0. Using the library imposes
   nothing on your own code; modifying its files does. Contributions need a
   one-time contributor licence agreement.
+- **A library keeps its host.** The entry point receives a `Host`
+  (`Copy + Send + Sync + 'static`): a pointer to a block the registry
+  leaks on first use, carrying the host's id, version, allocator and a
+  `HostServices` table (`get`, `list`, `alloc`). The table answers from a
+  snapshot the registry publishes after every change, so a library asks
+  from any thread, a lookup from an entry point sees every earlier
+  library, and a dropped registry answers `GUATIAO_ERR_GONE`. From C,
+  `guatiao_registry_host` hands the same block to a host driving a
+  library by hand. `hello_library_echo` reaches the greeter through it.
+- **A kind is a trait.** With the `provider` feature, `#[guatiao::kind]`
+  on a trait generates the `repr(C)` table, the shims and the proxy;
+  `#[derive(Provider)] #[provider(Kind, ..)]` makes an implementation a
+  provider; `guatiao::providers!(Type, ..)` is the whole library, with id and
+  version from Cargo. A consumer gets every provider with a valid table as
+  `Offer<dyn Kind>` — the trait itself, plus id, version, priority and a
+  live `available()` — through `Registry::offers`, `offer` and
+  `mismatches`, or `Host::offers` from inside a library; `Remote::from_raw`
+  is the one `unsafe` door for a table from anywhere else. A provider
+  carries one table per kind (`ProviderInfo::tables`); a hand-written
+  `vtable` stays the untyped path and is never mistaken for a typed table.
+  `examples/derived_greeter` is two `impl`s and one line.
+- `Text`, `Buffer`, `Entry`, `Tag`, `Str`, `MAX_DEPTH` at the crate root;
+  `Default` for `Text` and `Buffer`; `Bytes::borrowed`/`empty`;
+  `Entry::value_mut`; `Schema for f32`; `Registry::all_ranked`;
+  `Provider::table_for`; `Skipped::UnsupportedAbi`; the schema keys as
+  `GUATIAO_KEY_*` macros in the header.
+
+### Changed
+
+- **Breaking**: `describe` takes `Host` instead of `&HostInfo`;
+  `HostInfo` gained `services` and `ProviderInfo` gained `tables`, both
+  appended under `struct_size`; `ProviderView` gained `raw` and `tables`.
+  `Provider::key_str` is gone. `guatiao-form`'s `is_visible` returns
+  `Result<bool, FormError>` and refuses a path no field declares. The
+  value model's arm accessors (`as_text_mut` and kin) are crate-private.
+  The header's `MAX_DEPTH` macro is `GUATIAO_MAX_DEPTH`. A null or
+  malformed allocator answers `GUATIAO_ERR_ALLOC` from every export.
+- `Value::clone_in` is safe. Every export with an out-pointer writes
+  `absent` through it at entry, so a failed call leaves nothing
+  uninitialised.
+- A provider is deduplicated by its rendered key, not its id, so
+  `%id@%version` holds two builds of one provider.
+- `guatiao-serde`'s header gates the TOML and YAML declarations behind
+  `GUATIAO_SERDE_TOML` / `GUATIAO_SERDE_YAML`, since a default build
+  exports neither; its docs say `arbitrary_precision` is on with `json`
+  and that a number is verbatim only under `Numbers::RawText`.
+
+### Fixed
+
+- `guatiao_map_copy_from` with the source inside the target was a
+  use-after-free; the source is now copied whole first, and the exports
+  refuse identical pointers. A push from a view of the node's own text
+  copied from freed memory. `equal` called any two non-UTF-8 strings
+  equal. Validation and deserialisation had no depth bound.
+  `Schema::schema()` dropped every key of a non-object kind. An `x-merge`
+  on a nested field was ignored.
+- The loader reported a library that declined the host, a malformed
+  descriptor and a library speaking another envelope version all as "not
+  a library"; each is now its own answer, and the library's `abi_version`
+  is checked. The C `guatiao_registry_providers` listing was not ranked.
+  A corrupt provider array could be allocated for before it was checked.
+- `guatiao-derive` ignored container attributes on a struct;
+  `guatiao-serde` ignored `GUATIAO_PRETTY` and wrote a malformed node as
+  zero; `guatiao-form` answered "visible" for an unknown path and read an
+  arm's field whichever arm was picked. `guatiao-serde` and `guatiao-form`
+  now ship their LICENSE and docs.rs metadata, and their generated headers
+  carry the Exhibit A notice.
 
 [Unreleased]: https://github.com/Boriken-Dev/guatiao/commits/main
