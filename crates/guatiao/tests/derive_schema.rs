@@ -239,3 +239,34 @@ fn a_key_the_schema_does_not_declare_is_refused() {
         assert!(validate_map(s, &value).is_err());
     });
 }
+
+/// A declared default lands in the document as the value itself.
+///
+/// `#[schema(default = <expr>)]` goes out through `ToValue`, so the
+/// default is written in Rust and cannot drift from the type it defaults;
+/// what a consumer reads is the ordinary `default` key JSON Schema
+/// already has.
+#[test]
+fn a_declared_default_lands_in_the_document() {
+    #[derive(Schema, ToValue)]
+    struct Listener {
+        #[schema(default = 5900)]
+        port: u16,
+    }
+
+    alloc_and(|alloc| {
+        let declared = Listener::schema(alloc).unwrap();
+        let s = SchemaRef::new(&declared).unwrap();
+        let port = s.find("port").unwrap();
+
+        assert_eq!(
+            port.as_value()
+                .get(guatiao::schema::vocab::DEFAULT)
+                .and_then(guatiao::Value::as_number_str),
+            Some("5900"),
+            "the document carries `default: 5900`, not a description of one"
+        );
+        let read: u16 = port.default().ok_or_missing().unwrap().try_into().unwrap();
+        assert_eq!(read, 5900);
+    });
+}

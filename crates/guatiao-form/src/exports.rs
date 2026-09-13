@@ -30,8 +30,20 @@
 //!
 //! # The shape of every function here
 //!
-//! The work is the safe Rust API; these convert pointers and call it, and a
-//! panic becomes `GUATIAO_ERR_INTERNAL` rather than unwinding into C.
+//! **Null checks first, then the guard, then the safe Rust API.** Every
+//! pointer a call needs is checked before anything else happens, in one
+//! place per function, so `GUATIAO_ERR_NULL` never depends on how far a
+//! body got; the work is the safe API, and a panic becomes
+//! `GUATIAO_ERR_INTERNAL` rather than unwinding into C.
+//!
+//! # Statuses
+//!
+//! `GUATIAO_ERR_NULL` for a null pointer the call needs,
+//! `GUATIAO_ERR_WRONG_KIND` when the schema or the form is not a map,
+//! `GUATIAO_ERR_ALLOC` for an allocator that is null or cannot allocate,
+//! `GUATIAO_ERR_NOT_FOUND` for a key the schema does not declare,
+//! `GUATIAO_ERR_BAD_VALUE` when a form does not fit its schema, and
+//! `GUATIAO_ERR_INTERNAL` if a panic was caught.
 
 #![allow(non_camel_case_types)]
 
@@ -68,15 +80,13 @@ fn guard(body: impl FnOnce() -> Status) -> Status {
 ///
 /// # Safety
 ///
-/// Each pointer is null or addresses a well-formed value that outlives
-/// the call.
+/// Each pointer is non-null -- every caller checks that first, which is
+/// the one shape at this boundary -- and addresses a well-formed value
+/// that outlives the call.
 unsafe fn views<'a>(
     schema: *const Value,
     form: *const Value,
 ) -> Result<(SchemaRef<'a>, FormRef<'a>), Status> {
-    if schema.is_null() || form.is_null() {
-        return Err(Status::GUATIAO_ERR_NULL);
-    }
     // SAFETY: the caller's contract.
     let (schema, form) = unsafe { (&*schema, &*form) };
     let schema = SchemaRef::new(schema).ok_or(Status::GUATIAO_ERR_WRONG_KIND)?;
@@ -110,6 +120,10 @@ unsafe fn key_text<'a>(key: Str) -> Result<&'a str, Status> {
 /// whichever of `path`, `id`, `field` and `expected` apply, and a
 /// `message`. It never carries a value the form compares with.
 ///
+/// `GUATIAO_ERR_ALLOC` when `out_error` was asked for and `alloc` cannot
+/// build it: the verdict is known, and the allocator is what to fix
+/// first. Pass a null `out_error` for the verdict alone.
+///
 /// # Safety
 ///
 /// Every non-null pointer addresses what its type says, and `out_error`
@@ -121,6 +135,11 @@ pub unsafe extern "C" fn guatiao_form_check(
     alloc: *const Allocator,
     out_error: *mut Value,
 ) -> Status {
+    // `out_error` is the one optional pointer here: a caller that only
+    // wants the verdict passes null and gets no detail.
+    if schema.is_null() || form.is_null() {
+        return Status::GUATIAO_ERR_NULL;
+    }
     guard(|| {
         // SAFETY: forwarded from this function's contract.
         let (schema, form) = match unsafe { views(schema, form) } {
@@ -130,15 +149,21 @@ pub unsafe extern "C" fn guatiao_form_check(
         let Err(e) = check(schema, form) else {
             return Status::GUATIAO_OK;
         };
-        if !out_error.is_null()
-            // SAFETY: the caller's contract on `alloc`.
-            && let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) })
-            && let Some(detail) = describe(&e, alloc)
-        {
-            // SAFETY: `out_error` is writable by contract, and the tree
-            // moves into it.
-            unsafe { out_error.write(detail) };
+        if out_error.is_null() {
+            return Status::GUATIAO_ERR_BAD_VALUE;
         }
+        // SAFETY: the caller's contract on `alloc`.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            // The verdict is known and the detail cannot be built, so the
+            // allocator is what the caller has to fix first.
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        let Some(detail) = describe(&e, alloc) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        // SAFETY: `out_error` is writable by contract, and the tree moves
+        // into it.
+        unsafe { out_error.write(detail) };
         Status::GUATIAO_ERR_BAD_VALUE
     })
 }
@@ -202,7 +227,7 @@ pub unsafe extern "C" fn guatiao_form_layout(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
-    if out.is_null() {
+    if schema.is_null() || form.is_null() || out.is_null() {
         return Status::GUATIAO_ERR_NULL;
     }
     guard(|| {
@@ -211,9 +236,11 @@ pub unsafe extern "C" fn guatiao_form_layout(
             Ok(v) => v,
             Err(status) => return status,
         };
+        // A null or incomplete allocator is `GUATIAO_ERR_ALLOC`: the
+        // caller passed something, and what it passed cannot allocate.
         // SAFETY: the caller's contract on `alloc`.
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
-            return Status::GUATIAO_ERR_BAD_VALUE;
+            return Status::GUATIAO_ERR_ALLOC;
         };
         let Some(built) = layout_value(schema, form, alloc) else {
             return Status::GUATIAO_ERR_ALLOC;
@@ -254,6 +281,9 @@ fn layout_value(schema: SchemaRef<'_>, form: FormRef<'_>, alloc: Alloc) -> Optio
 /// condition is met when the field it reads is itself shown and holds the
 /// value; a field holding nothing reads as its schema default.
 ///
+/// `GUATIAO_ERR_NOT_FOUND` when `key` -- or a key a condition reads --
+/// names no field the schema declares, and `out` is then not written.
+///
 /// # Safety
 ///
 /// Every non-null pointer addresses what its type says, `key` is a readable
@@ -266,7 +296,7 @@ pub unsafe extern "C" fn guatiao_form_is_visible(
     values: *const Value,
     out: *mut bool,
 ) -> Status {
-    if out.is_null() || values.is_null() {
+    if schema.is_null() || form.is_null() || values.is_null() || out.is_null() {
         return Status::GUATIAO_ERR_NULL;
     }
     guard(|| {
@@ -282,8 +312,14 @@ pub unsafe extern "C" fn guatiao_form_is_visible(
         };
         // SAFETY: checked non-null; the caller's contract for the rest.
         let values = unsafe { &*values };
+        let Ok(shown) = is_visible(schema, form, key, values) else {
+            // The only failure the judgement has here: a key naming no
+            // field. `out` stays untouched, so a caller that ignored the
+            // status cannot read an answer that was never given.
+            return Status::GUATIAO_ERR_NOT_FOUND;
+        };
         // SAFETY: `out` is writable by contract.
-        unsafe { out.write(is_visible(schema, form, key, values)) };
+        unsafe { out.write(shown) };
         Status::GUATIAO_OK
     })
 }

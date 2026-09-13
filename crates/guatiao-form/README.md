@@ -9,6 +9,7 @@ repeats it.
 use guatiao::schema::read::SchemaRef;
 use guatiao::schema::{FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
 use guatiao_form::{Form, FormRef, Hints, Section, check, is_visible, layout};
+# fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 let schema = SchemaBuilder::new()
     .field(FieldBuilder::new("host", KindBuilder::string()).section("net"))
@@ -22,9 +23,16 @@ let form = Form::new()
     .finish()?;
 
 let (s, f) = (SchemaRef::new(&schema).unwrap(), FormRef::new(&form).unwrap());
-check(s, f)?;                          // every path names a field; every condition can be met
-for group in layout(s, f) { /* sections in order, fields in order */ }
-let shown = is_visible(s, f, "ca", &entered_so_far);
+check(s, f)?;                       // every path names a field; every condition can be met
+let groups = layout(s, f);          // sections in order, fields in order
+
+let mut entered_so_far = guatiao::Map::new();
+entered_so_far.set("verify", false)?;
+let shown = is_visible(s, f, "ca", &entered_so_far.into())?;
+# assert_eq!(groups.len(), 2, "the default section, then Network");
+# assert!(!shown, "`ca` waits on `verify`, which holds false");
+# Ok(())
+# }
 ```
 
 ## Three layers
@@ -56,6 +64,12 @@ guatiao_form_check(schema, form, alloc, &error);      // does it fit?
 guatiao_form_layout(schema, form, alloc, &groups);    // keys, grouped and ordered
 guatiao_form_is_visible(schema, form, key, values, &shown);
 ```
+
+## Badges
+
+None yet, deliberately: the crate is `publish = false`, so a crates.io or
+docs.rs badge would link to a page that does not exist. They go in with
+the first release.
 
 ## Licence
 

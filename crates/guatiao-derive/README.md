@@ -15,6 +15,12 @@ guatiao = { version = "0.1", features = ["derive"] }
 The traits the generated code implements live in `guatiao`; this crate
 holds only the macros, because a proc-macro crate can export nothing else.
 
+## Badges
+
+None yet, deliberately: the crate is `publish = false`, so a crates.io or
+docs.rs badge would link to a page that does not exist. They go in with
+the first release.
+
 ## Licence
 
 **Mozilla Public License 2.0**, the same as the crate it serves. Per-file

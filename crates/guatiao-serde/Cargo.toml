@@ -10,6 +10,10 @@ license.workspace = true
 readme = "README.md"
 exclude = [".*", "*.local.*"]
 
+# docs.rs documents every feature.
+[package.metadata.docs.rs]
+all-features = true
+
 [lib]
 name = "guatiao_serde"
 # A cdylib as well, because the `extern "C"` surface has to be IN an

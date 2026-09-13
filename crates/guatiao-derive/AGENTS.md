@@ -13,7 +13,10 @@ reason.
 
 ## Exports
 
-| derive | attributes it reads | generates |
+All three register `map` and `schema`, so one declaration compiles under
+any of them; what each derive **acts on** differs.
+
+| derive | attributes it acts on | generates |
 | --- | --- | --- |
 | `ToValue` | `map` | `impl ToValue`: the type as a map |
 | `FromValue` | `map` | `impl FromValue`: the type from a map |
@@ -29,7 +32,9 @@ cannot describe a value it refuses.
 | `rename = "..."` | the key to use instead of the field name |
 | `skip` | the field does not cross; `FromValue` fills it from `Default` |
 
-**`#[schema(...)]`** — what `Schema` adds. Ignored by the other two.
+**`#[schema(...)]`** — what `Schema` adds. Registered by all three, so
+a field carrying one compiles under `ToValue` and `FromValue` alone; those
+two parse it and ignore it.
 
 | key | effect | written as |
 | --- | --- | --- |
@@ -67,9 +72,10 @@ only a label, so its doc comment is the label.
 
 Refused, each with its own message: an enum with no variants; a
 data-carrying enum with no `tag`; a tuple variant; two variants stored
-under one name; a field stored under the tag; a misspelled enum-level
-`#[map(...)]` key (ignoring it would change the wire shape); `#[map(skip)]`
-on a variant.
+under one name; a field stored under the tag; a misspelled container-level
+`#[map(...)]` key (ignoring it would change the wire shape); `tag` on a
+**struct**, which has no variants to tell apart; `#[map(skip)]` on a
+variant.
 
 A value the enum writes is one its own schema accepts, for both shapes —
 `validate_value` over `to_value` is what the test suite checks.
@@ -100,10 +106,11 @@ struct Connection {
   null. Both spellings read back as `None`, so the two agree.
 - **A key may contain a NUL.** Keys are pointer and length, so the derive
   does not invent a restriction the value model does not have.
-- **Every path the expansion emits is rooted** at `::guatiao::` or
-  `::core::`. A test asserts this token by token: generated code that
-  named a third crate would fail in every consumer that expanded it while
-  passing here.
+- **Every path the expansion emits is rooted** at `::guatiao::`,
+  `::core::` or `::std::` — the last for `::std::vec::Vec::new()`, the
+  list a schema's fields are collected into. A test asserts this token by
+  token, over all three derives: generated code that named a third crate
+  would fail in every consumer that expanded it while passing here.
 - Errors are `compile_error!` at the offending span, never a panic.
 
 ## Gotcha

@@ -37,8 +37,11 @@ use crate::vocab;
 pub enum FormError {
     /// Something in the form is not the shape the vocabulary gives it.
     Malformed {
-        /// Where, as a path into the form: `sections[1].id`,
-        /// `fields["port"].widget`. Empty for the form itself.
+        /// Where, as a path into the form: `sections`, `sections[1].id`,
+        /// `fields["port"].widget`. Always names a place inside the form:
+        /// a value that is not a map at all is not a form, which
+        /// [`FormRef::new`](crate::FormRef::new) answers with `None`
+        /// before any of this runs.
         at: String,
         /// What belongs there, phrased for a person.
         expected: &'static str,
@@ -77,9 +80,6 @@ pub enum FormError {
 impl fmt::Display for FormError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FormError::Malformed { at, expected } if at.is_empty() => {
-                write!(f, "the form should be {expected}")
-            }
             FormError::Malformed { at, expected } => write!(f, "{at} should be {expected}"),
             FormError::UnknownField { at, path } => {
                 write!(f, "{at} names '{path}', which the schema does not declare")
@@ -361,9 +361,20 @@ fn order_key(field: FieldRef<'_>) -> (bool, i64) {
 /// - A variant named by its own key reads as its discriminant.
 /// - A cycle is not shown; [`check`] reports it.
 ///
+/// **A path the schema does not declare is an error**, the same
+/// [`FormError::UnknownField`] [`check`] gives it — including a path a
+/// condition reads. Answering `true` would show a field that does not
+/// exist, and answering `false` would hide one for a reason the caller
+/// cannot tell from a condition being unmet.
+///
 /// `values` is a map shaped the way the schema's values are: a variant's
 /// value is a map carrying its tag, an arm's field sits inside it.
-pub fn is_visible(schema: SchemaRef<'_>, form: FormRef<'_>, path: &str, values: &Value) -> bool {
+pub fn is_visible(
+    schema: SchemaRef<'_>,
+    form: FormRef<'_>,
+    path: &str,
+    values: &Value,
+) -> Result<bool, FormError> {
     let mut walked = Vec::new();
     visible(schema, form, path, values, &mut walked)
 }
@@ -374,17 +385,23 @@ fn visible(
     path: &str,
     values: &Value,
     walked: &mut Vec<String>,
-) -> bool {
+) -> Result<bool, FormError> {
+    if flat::resolve(schema, path).is_none() {
+        return Err(FormError::UnknownField {
+            at: vocab::FIELDS.to_string(),
+            path: path.to_string(),
+        });
+    }
     if walked.iter().any(|w| w == path) {
-        return false;
+        return Ok(false);
     }
     let Some(condition) = form.hints(path).visible_when() else {
-        return true;
+        return Ok(true);
     };
     walked.push(path.to_string());
-    visible(schema, form, condition.field(), values, walked)
+    Ok(visible(schema, form, condition.field(), values, walked)?
         && current(schema, values, condition.field())
-            .is_some_and(|held| equal(held, condition.equals()))
+            .is_some_and(|held| equal(held, condition.equals())))
 }
 
 /// What the field at `path` holds now: its value, else its default, and
@@ -401,7 +418,34 @@ fn current<'a>(schema: SchemaRef<'a>, values: &'a Value, path: &str) -> Option<&
         }
         Some((owner, member)) => values
             .get(owner)
+            .filter(|_| declares(schema, values, owner, member))
             .and_then(|o| o.get(member))
             .or_else(|| flat::resolve(schema, path).and_then(|f| f.default())),
     }
+}
+
+/// Whether the arm `values` currently picks for `owner` declares `member`.
+///
+/// A value left behind by another arm is not what the field holds: an
+/// arm's field exists only while that arm is chosen, so reading one the
+/// current arm never declared would answer a condition with a stale
+/// value from a screen the person has moved off.
+fn declares(schema: SchemaRef<'_>, values: &Value, owner: &str, member: &str) -> bool {
+    let Some(field) = schema.find(owner) else {
+        return false;
+    };
+    let Kind::Variant { tag, .. } = field.kind() else {
+        return false;
+    };
+    let Some(picked) = values
+        .get(owner)
+        .and_then(|v| v.get(tag))
+        .and_then(Value::as_str)
+    else {
+        return false;
+    };
+    field
+        .kind()
+        .arms()
+        .any(|arm| arm.value() == picked && arm.fields().any(|f| f.key() == member))
 }
