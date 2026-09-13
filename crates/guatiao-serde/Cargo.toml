@@ -14,12 +14,30 @@ exclude = [".*", "*.local.*"]
 name = "guatiao_serde"
 path = "src/lib.rs"
 
+[features]
+default = []
+
+# Turns on `serde_json/arbitrary_precision`, which makes a number arrive
+# as its TEXT instead of as an `f64` -- so `1.10` and a 200-digit integer
+# survive a read as well as a write.
+#
+# OFF BY DEFAULT, and the reason is not timidity: cargo unifies features
+# across a build, so this reaches `serde_json::Value` in every other crate
+# in a consumer's graph, where numbers stop being `Number` and start being
+# an opaque wrapper. That is a consumer's decision to take knowingly.
+#
+# Reading the token is NOT behind this feature -- see `de::RAW_NUMBER`.
+arbitrary-numbers = ["serde_json/arbitrary_precision"]
+
 [dependencies]
 guatiao = { path = "../guatiao", version = "0.1.0" }
 # `derive` is NOT enabled: nothing here derives anything. The impls are
 # written by hand because they carry a presentation policy and an
 # allocator, neither of which a derive can express.
 serde = { version = "1", default-features = false, features = ["std"] }
+# Optional, and named only by the feature above. The dev-dependency below
+# is what the tests use.
+serde_json = { version = "1", optional = true }
 
 [dev-dependencies]
 # The formats the tests round-trip through. They are DEV dependencies on

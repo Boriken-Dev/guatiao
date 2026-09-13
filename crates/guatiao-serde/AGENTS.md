@@ -58,8 +58,16 @@ the reason.)
   reserved-token protocol) and a binary format gets an `f64`, which is all
   it can hold.
 - **A number comes back only as exactly as the format hands it over.**
-  `serde_json` without `arbitrary_precision` rounds through `f64` before a
-  visitor runs. Not enabled here: cargo unifies features across a build.
+  `serde_json` rounds through `f64` before a visitor runs, unless the
+  **`arbitrary-numbers`** feature is on — then it arrives as its text and
+  `1.10` stays `1.10`. Off by default because cargo unifies features
+  across a build and it would reach every other crate in the graph.
+- **The raw-number token is read whether or not that feature is on.**
+  Any crate in a consumer's graph can enable
+  `serde_json/arbitrary_precision`; a reader that did not know the token
+  would then turn every number into a map, with no error to show for it.
+  Note the two tokens differ: the writer splices raw JSON through
+  `…::RawValue`, a number arrives under `…::Number`.
 - **Bytes go native into a format that has them**, whatever `Presentation`
   says — a native byte string round-trips and a spelling cannot.
 - **A `data:;base64,` string becomes bytes only with

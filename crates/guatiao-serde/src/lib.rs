@@ -46,19 +46,27 @@
 //! a 200-digit integer and `1e400` both survive as numbers rather than as
 //! strings. Nothing here re-formats one.
 //!
-//! **Numbers on the way IN, only as far as the format carries them.** This
-//! is the one place the serde route costs something, and it is worth
-//! knowing before you rely on it: `serde_json` without
-//! `arbitrary_precision` resolves any number past `i64`/`u64` to an `f64`
-//! **before a visitor is ever called**, so `1.10` arrives as `1.1` and the
-//! 200-digit integer arrives rounded. The spelling is gone before this
+//! **Numbers on the way IN, as far as the format carries them.** By
+//! default `serde_json` resolves any number past `i64`/`u64` to an `f64`
+//! **before a visitor is ever called**, so `1.10` arrives as `1.1` and a
+//! 200-digit integer arrives rounded — the spelling is gone before this
 //! crate can see it.
 //!
-//! That feature is deliberately not enabled here. Cargo unifies features
-//! across a build, so turning it on would change `serde_json::Value` for
-//! every other crate in a consumer's graph — a decision that is not this
-//! crate's to make on their behalf. A consumer who needs exactness enables
-//! it themselves, or reads a format that hands the text over.
+//! Turn on the **`arbitrary-numbers`** feature and it is not: the number
+//! arrives as its own text and `1.10` stays `1.10`. That is more than an
+//! arbitrary-precision *number type* preserves, because those hold a
+//! value and normalise the spelling; this model holds the text.
+//!
+//! It is off by default because cargo unifies features across a build, so
+//! it reaches `serde_json::Value` in every other crate in a consumer's
+//! graph — a decision to take knowingly rather than to inherit.
+//!
+//! **Reading the token is not behind that feature**, and that is
+//! deliberate: because features unify, *any* crate in a graph can turn
+//! `serde_json/arbitrary_precision` on, and a reader that did not know the
+//! token would then quietly turn every number in every document into a
+//! map. A bug with no error attached, caused by a dependency this crate
+//! never named.
 //!
 //! `a_number_past_u64_loses_its_spelling_on_the_way_in` pins both halves,
 //! so a change to either is a decision rather than a surprise.
