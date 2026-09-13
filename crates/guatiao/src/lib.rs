@@ -161,8 +161,6 @@ pub use value::{
     Alloc, Buffer, Entry, List, MAX_DEPTH, Map, ReadValue, Status, Tag, Text, Value, ValueError,
 };
 
-#[cfg(feature = "provider")]
-pub use guatiao_derive::kind;
 /// `#[derive(ToValue)]` and `#[derive(FromValue)]`, behind the
 /// `derive` feature.
 ///
@@ -286,4 +284,6 @@ pub use guatiao_derive::kind;
 /// ```
 #[cfg(feature = "derive")]
 pub use guatiao_derive::{FromValue, Schema, ToValue};
+#[cfg(feature = "provider")]
+pub use guatiao_derive::{Provider, kind};
 pub use value::merge::{MergeError, MergeMode, MergeOptions, MergeOverrides, Provenance, Source};

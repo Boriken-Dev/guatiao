@@ -6,6 +6,8 @@ members = [
     "crates/guatiao-serde",
     "crates/guatiao-form",
     "examples/hello_library",
+    "examples/greeter_kind",
+    "examples/derived_greeter",
 ]
 
 # Four crates plus an example library. `guatiao-derive` exists only

@@ -129,6 +129,8 @@
 mod expand;
 #[cfg(feature = "provider")]
 mod kind;
+#[cfg(feature = "provider")]
+mod provider;
 
 use proc_macro::TokenStream;
 
@@ -223,4 +225,20 @@ pub fn derive_from_value(input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn kind(attr: TokenStream, item: TokenStream) -> TokenStream {
     kind::expand(attr.into(), item.into()).into()
+}
+
+/// Makes a type that implements kind traits a provider, with every piece
+/// of glue generated: one table per kind, the instance, the descriptor.
+/// Reached as `guatiao::Provider` with the `provider` feature.
+///
+/// `#[provider(Greeter, Counter)]` names the kinds and defaults the rest;
+/// the long form is `#[provider(kinds(..), id = "..", name = "..",
+/// version = "..", config = T, new = path, new_with_host = path,
+/// available = path)]`. `id` defaults to `{package}_{type}` in snake case,
+/// `name` to the type's ident, `version` to empty (the library's), the
+/// instance to `Default`.
+#[cfg(feature = "provider")]
+#[proc_macro_derive(Provider, attributes(provider))]
+pub fn derive_provider(input: TokenStream) -> TokenStream {
+    provider::expand(input.into()).into()
 }

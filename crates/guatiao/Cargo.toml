@@ -86,6 +86,10 @@ libloading = "0.8"
 # finds a real artifact beside its own test binary rather than shelling
 # out to cargo from inside a cargo run.
 hello_library = { path = "../../examples/hello_library" }
+# A library written with no glue, and the kind crate it and the test
+# share, for `derived_library_load`.
+derived_greeter = { path = "../../examples/derived_greeter" }
+greeter_kind = { path = "../../examples/greeter_kind" }
 
 # docs.rs documents every feature.
 [package.metadata.docs.rs]
