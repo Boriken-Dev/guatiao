@@ -295,7 +295,7 @@ impl PartialEq for Map {
 
 // SAFETY: the buffer is owned outright and reached only through `&self`
 // or `&mut self`, so no two threads share it without the borrow checker
-// saying so; the allocator it recorded is a table that outlives it (D05)
+// saying so; the allocator it recorded is a table that outlives it, by the contract on `Alloc`,
 // and may be called from any thread, which is the contract on
 // `Allocator` — a host handing out an arena synchronises it, as Rust's
 // global allocator does.
