@@ -29,8 +29,9 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        # stable + the declared MSRV; both must pass.
-        toolchain: [stable, "1.85"]
+        # stable + the declared MSRV; both must pass. Keep this in step
+        # with `rust-version` in the workspace Cargo.toml.
+        toolchain: [stable, "1.89"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,7 +44,9 @@ jobs:
       - name: Format check
         run: cargo fmt --all --check
       - name: Clippy
-        run: cargo clippy --workspace --all-features -- -D warnings
+        # `--all-targets`, so tests and examples are linted too -- the same
+        # invocation the local gate runs.
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Build
         # `cargo test` does not build a cdylib for the package under
         # test, and `c_exports` links one. Building first is what keeps
@@ -54,3 +57,12 @@ jobs:
 
       - name: Test
         run: cargo test --workspace --all-features
+
+      - name: Docs
+        # Strict, so a broken intra-doc link fails here rather than
+        # accumulating. `--all-features` because that is the build docs.rs
+        # publishes (`[package.metadata.docs.rs] all-features = true`): a
+        # link to a feature-gated item is only resolvable there.
+        run: cargo doc --workspace --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
