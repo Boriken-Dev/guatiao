@@ -1,0 +1,29 @@
+[package]
+name = "guatiao-serde"
+description = "serde for guatiao values -- one Serialize/DeserializeSeed pair, so every serde data format can carry one"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+license.workspace = true
+readme = "README.md"
+exclude = [".*", "*.local.*"]
+
+[lib]
+name = "guatiao_serde"
+path = "src/lib.rs"
+
+[dependencies]
+guatiao = { path = "../guatiao", version = "0.1.0" }
+# `derive` is NOT enabled: nothing here derives anything. The impls are
+# written by hand because they carry a presentation policy and an
+# allocator, neither of which a derive can express.
+serde = { version = "1", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+# The formats the tests round-trip through. They are DEV dependencies on
+# purpose: this crate speaks serde and takes no position on which format a
+# consumer reaches for.
+serde_json = { version = "1", features = ["raw_value"] }
+rmp-serde = "1"
