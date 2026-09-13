@@ -204,9 +204,29 @@ struct Connection {
 ```
 
 `#[map(rename = "...")]`, `#[map(skip)]`; `#[schema(label, help, section,
-order, advanced, sensitive, default)]`. Named-field structs only —
-enums, unions, tuple structs and generics are refused with a message
-naming the derive you wrote.
+order, advanced, sensitive, default)]`. Unions, tuple structs and generics
+are refused with a message naming the derive you wrote.
+
+Enums, in two shapes:
+
+```rust
+#[derive(ToValue, FromValue, Schema)]
+enum Level { Off, #[map(rename = "warn")] Warning, On }   // "Off" | "warn" | "On"
+
+#[derive(ToValue, FromValue, Schema)]
+#[map(tag = "auth")]
+enum Auth { Ambient, UserPass { username: String } }       // {"auth": "UserPass", "username": ...}
+```
+
+A unit enum is a string and describes itself as a choice; a tagged enum is
+a map and describes itself as a variant. An enum whose variants carry
+fields and names **no** tag is refused: the key that tells variants apart
+is a wire-format decision, and it is yours. A doc comment on a choice is
+its label; on an arm it is help, as on a field.
+
+Generated readers go through `convert::{expect_map, expect_str, expect_key,
+find_key}`; they are public so a hand-written impl reports errors the same
+way.
 
 An `Option<T>` field is omitted when `None` rather than written as null,
 and both spellings read back as `None`.

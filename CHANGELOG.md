@@ -34,14 +34,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Reading from Rust**: `ReadValue` for a lookup that composes, and
   `TryFrom<&Value>` for every scalar, so `try_into` is the conversion.
 - **The schema**, which is how a provider says what it needs to be
-  initialised. It is an ordinary value with a documented key vocabulary,
-  so a consumer in any language reads one by walking a map. Builders,
-  readers, validation and a flat `key -> text` projection.
+  initialised. It is an ordinary value, **and that value is a JSON Schema
+  (2020-12)**: `properties`, `required`, `type`, `enum`, `oneOf` and the
+  rest, spelled the specification's way, so a schema written out as text is
+  a document existing JSON Schema tools already read. What this crate adds
+  is `x-` prefixed. Two things are deliberately not the specification's:
+  `type: "bytes"`, which a strict meta-schema check refuses, and
+  `x-variant-tag`, because JSON Schema has no discriminator keyword.
+  Builders, readers, validation and a flat `key -> text` projection.
 - **Configuration layering**: three merge strategies, per-path overrides a
   schema can declare through `x-merge`, and provenance recorded per leaf
   path.
 - **Three derives**: `ToValue`, `FromValue` and `Schema`, which read one
-  declaration so a type cannot describe a value it refuses.
+  declaration so a type cannot describe a value it refuses. For a struct
+  with named fields, an enum of unit variants (stored as the variant's
+  name, described as a choice), and an enum naming its tag with
+  `#[map(tag = "...")]` (stored as a map, described as a tagged variant).
+  An enum whose variants carry fields and names no tag is refused, because
+  the key that tells variants apart is yours to choose.
 - No serialisation: how a value or a schema is written down belongs to a
   layer above, which can carry more than one format.
 - Licensed under the Mozilla Public License 2.0. Using the library imposes

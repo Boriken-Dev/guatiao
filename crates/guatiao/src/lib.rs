@@ -207,13 +207,34 @@ pub use value::{Alloc, List, Map, ReadValue, Status, Value, ValueError};
 /// struct Endpoint { host: String, port: i64 }
 /// ```
 ///
-/// An enum has no one set of keys, and choosing a tag to tell its
-/// variants apart is a wire-format decision this crate does not make:
+/// An enum whose variants carry fields has no one set of keys, and the key
+/// that tells its variants apart is a wire-format decision this crate does
+/// not make for you:
 ///
 /// ```compile_fail
 /// use guatiao::ToValue;
 /// #[derive(ToValue)]
 /// enum Transport { Tcp { port: i64 }, Unix { path: String } }
+/// ```
+///
+/// Name it and the same declaration is accepted — each value a map with the
+/// variant's name under the tag, beside its fields. An enum of **unit**
+/// variants needs no tag at all: its value is the variant's name.
+///
+/// ```
+/// use guatiao::{FromValue, ToValue};
+/// #[derive(ToValue, FromValue, Debug, PartialEq)]
+/// #[map(tag = "transport")]
+/// enum Transport { Tcp { port: i64 }, Unix { path: String } }
+///
+/// #[derive(ToValue, FromValue, Debug, PartialEq)]
+/// enum Level { Off, #[map(rename = "warn")] Warning, On }
+///
+/// let alloc = guatiao::Alloc::rust();
+/// let tcp = Transport::Tcp { port: 5900 }.to_value(alloc)?;
+/// assert_eq!(tcp.get("transport").and_then(guatiao::Value::as_str), Some("Tcp"));
+/// assert_eq!(Level::Warning.to_value(alloc)?.as_str(), Some("warn"));
+/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
 /// A generic parameter would need a bound the macro cannot infer:

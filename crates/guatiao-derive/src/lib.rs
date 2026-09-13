@@ -22,7 +22,16 @@
 //!
 //! For a struct with named fields, `#[derive(ToValue)]` writes an impl
 //! of `ToValue` that builds a map, and `#[derive(FromValue)]` writes the
-//! reader. **One trait each way, not two.** A map is a value whose tag
+//! reader. An enum is accepted in two shapes:
+//!
+//! | declaration | value | schema kind |
+//! |---|---|---|
+//! | unit variants only | the variant's name, as text | a string `enum` |
+//! | `#[map(tag = "k")]` on the enum | a map: the name under `k`, then the variant's fields | a tagged variant |
+//!
+//! An enum whose variants carry fields and that names no tag is refused.
+//! The key that tells two variants apart is a wire-format decision, and it
+//! is yours to make rather than this crate's. **One trait each way, not two.** A map is a value whose tag
 //! says map, so a struct that converts to a map converts to a value, and
 //! a second pair of map-shaped traits would differ from these in their
 //! name and in nothing else. Nesting needs nothing extra: a field whose
@@ -53,6 +62,11 @@
 //! |---|---|
 //! | `#[map(rename = "...")]` | store under this key instead of the field name |
 //! | `#[map(skip)]` | never store; on read, `Default::default()` |
+//!
+//! On an enum, `#[map(tag = "...")]` names the key a variant's name is
+//! stored under; on a variant, `#[map(rename = "...")]` changes the name
+//! stored. A variant cannot be skipped — a value of it would have no way to
+//! be written.
 //!
 //! A skipped field must implement [`Default`]; nothing here can invent a
 //! value for it, and requiring the bound at the use site is what makes
@@ -114,9 +128,12 @@ use proc_macro::TokenStream;
 
 use crate::expand::{Derive, expand};
 
-/// Derives `guatiao::ToValue` for a struct with named fields.
+/// Derives `guatiao::ToValue` for a struct with named fields, an enum of
+/// unit variants, or an enum with `#[map(tag = "...")]`.
 ///
-/// The value it builds is a map, keyed by field name.
+/// A struct builds a map keyed by field name; a unit enum, its variant's
+/// name; a tagged enum, a map holding the name under the tag beside the
+/// variant's fields.
 ///
 /// See the [crate documentation](crate) for the field attributes and the
 /// `Option<T>` rule.
@@ -125,8 +142,13 @@ pub fn derive_to_value(input: TokenStream) -> TokenStream {
     expand(Derive::ToValue, input.into()).into()
 }
 
-/// Derives `guatiao::Schema` for a struct with named fields: what the
-/// type needs to be configured, as a value a consumer can read.
+/// Derives `guatiao::Schema` for a struct with named fields or an enum:
+/// what the type needs to be configured, as a value a consumer can read.
+///
+/// A unit enum describes itself as a choice and a tagged enum as a
+/// variant. **A doc comment fills the most descriptive slot the thing
+/// has**: a field or an arm has a label and help, so its doc comment is
+/// help; a choice has only a label, so its doc comment is the label.
 ///
 /// The kind of each option comes from the field's **type**, which already
 /// states it -- `u16` is an integer between 0 and 65535 -- and everything
@@ -153,7 +175,11 @@ pub fn derive_schema(input: TokenStream) -> TokenStream {
     expand(Derive::Schema, input.into()).into()
 }
 
-/// Derives `guatiao::FromValue` for a struct with named fields.
+/// Derives `guatiao::FromValue` for a struct with named fields, an enum of
+/// unit variants, or an enum with `#[map(tag = "...")]`.
+///
+/// A name no variant declares is `MapError::BadValue`, naming the
+/// alternatives and never the value it was given.
 ///
 /// See the [crate documentation](crate) for the field attributes and the
 /// `Option<T>` rule.

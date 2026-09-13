@@ -383,6 +383,19 @@ pub fn expect_map(value: &Value) -> Result<(), MapError> {
     }
 }
 
+/// The text a value holds, or [`MapError::WrongType`] naming what it held
+/// instead.
+///
+/// What a generated enum reader calls: a variant is stored as its name, so
+/// the reader needs the text to match on — borrowed, because allocating a
+/// `String` only to compare it against a handful of literals would be the
+/// one allocation in an otherwise copy-free read.
+pub fn expect_str(value: &Value) -> Result<&str, MapError> {
+    value
+        .as_str()
+        .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_STRING, value))
+}
+
 /// The value stored under `key`, or [`MapError::MissingKey`] naming it.
 ///
 /// The other half of what a generated reader needs: a required field that
