@@ -21,6 +21,7 @@ A C, C++ or Dart consumer reads a whole tree through
 | flag | adds | default |
 | --- | --- | --- |
 | `derive` | `#[derive(ToValue, FromValue, Schema)]` | off |
+| `provider` | `#[guatiao::kind]`, `#[derive(Provider)]`, `guatiao::providers!` (implies `derive`; turns on `syn/full` in the derive crate) | off |
 | `c-header` | regenerating the committed `include/guatiao.h` | off |
 
 MSRV 1.89. No required dependencies; `derive` pulls `guatiao-derive`,
@@ -593,6 +594,69 @@ host.snapshot() -> HostInfo                   // a copy, absent fields nulled
   to size), `->get(ctx, key, &out)` and `->alloc(ctx)`, guarded by
   `host->struct_size >= offsetof(services) + sizeof` and
   `services->struct_size`.
+
+### A kind is a trait (feature `provider`)
+
+Declare a kind once, as a trait; the host and every library compile
+against it. The table, the shims and the proxy are generated, and every
+`unsafe` step in them is a call into `guatiao::library::kind`.
+
+```rust
+#[guatiao::kind]                       // name defaults to "greeter"; #[kind(name = "..")]
+pub trait Greeter: Send + Sync {
+    fn greet(&self, name: &str) -> Result<Map, ProviderError>;   // required
+    fn shout(&self, name: &str) -> String { .. }                  // default body = appended slot
+}
+
+#[derive(Default, Provider)]
+#[provider(Greeter, Counter)]          // long form below
+struct Hello;
+impl Greeter for Hello { .. }
+guatiao::providers!(Hello);              // id and version from Cargo; the whole library
+
+// Consuming, from a host or from a library through its Host:
+for offer in registry.offers::<dyn Greeter>() { offer.id(); offer.available(); offer.greet("x")?; }
+registry.offer::<dyn Greeter>("acme_hello")    // Option<Result<Offer, KindMismatch>>
+registry.mismatches::<dyn Greeter>()           // (&Provider, KindMismatch): tables that failed
+provider.as_kind::<dyn Greeter>()              // Result<Remote<dyn Greeter>, KindMismatch>
+host.offers::<dyn Greeter>() / host.offer(key) / host.mismatches()
+unsafe { Remote::<dyn Greeter>::from_raw(table, size, ctx) }   // a table from anywhere else
+```
+
+- **What may cross.** Receiver `&self`; the trait names `Send + Sync`.
+  Arguments: integers, floats, `bool`, `&str`, `&[u8]`, `&Value`,
+  `Option<&Value>`, `&Map`, any other type by value through `ToValue`.
+  Returns: `()`, the scalars, `Value`, `Map`, `List`, `String`, any other
+  type through `FromValue`; each optionally in `Result<_, ProviderError>`.
+  A method that converts must return `Result`. Refused by name: generics,
+  `async`, `&mut self`/`self`, borrowed returns, `impl Trait`, closures,
+  associated items, a required method after a defaulted one.
+- **Versioning.** Slots follow declaration order; a defaulted method is an
+  appended slot an older table may lack (the proxy runs the default). The
+  table header `KindHeader { struct_size, floor_hash }` carries FNV-1a
+  over the required signatures; a mismatch is refused, never called.
+- **Only a per-kind table** (`ProviderInfo::tables`) is validated as a
+  kind. A hand-written `vtable` is neither an offer nor a mismatch; it
+  keeps working through `provider.table_for(kind)` / `vtable_as`.
+- **`Offer<K>`** derefs to `K` and carries `id`, `display_name`,
+  `version`, `library`, `key`, `priority`, `meta`, `config_schema`,
+  `available()` (asked live), `remote()`, `boxed()`, `shared()`.
+  Unavailable providers ARE offered; the consumer chooses. `Remote<K>` is
+  `Copy + Send + Sync + 'static`; `Box<dyn K>: From<Remote<dyn K>>`.
+- **`KindMismatch`**: `NoTable`, `BelowFloor { size, floor }`,
+  `HashMismatch { expected, found }`, `NullRequiredSlot(name)`. A
+  `floor_hash` of `0` passes only through `from_raw`.
+- **`ProviderError { status, message: Text }`** is the one error type
+  both sides share: `From<Status>`, `From<ValueError>`, `message()`.
+- **`#[provider(..)]` long form**: `kinds(A, B)`, `id = ".."` (default
+  `{package}_{type}` snake case), `name = ".."` (default the type),
+  `version = ".."` (default empty: the library's), `config = T` (`T:
+  Schema`), `new = path` (`fn() -> Self`) or `new_with_host = path`
+  (`fn(Host) -> Self`; default `Default`), `available = path` (`fn(&Self)
+  -> Result<(), &'static str>`). `providers!(id = .., version = ..,
+  providers = [A, B])` is the long form of the library line.
+- A provider that cannot build its config schema makes the library
+  decline the host.
 
 ### Ordering is `(priority DESC, key ASC)`
 

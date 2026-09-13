@@ -1,10 +1,13 @@
 # guatiao-derive — API header
 
-Three derive macros for the `guatiao` value model. **Do not depend on this
-crate directly**; it is re-exported from the crate it serves:
+Three derive macros for the `guatiao` value model, and — behind the
+`provider` feature — the attribute and derive that make a provider kind a
+trait. **Do not depend on this crate directly**; it is re-exported from
+the crate it serves:
 
 ```toml
-guatiao = { version = "0.1", features = ["derive"] }
+guatiao = { version = "0.1", features = ["derive"] }     # ToValue, FromValue, Schema
+guatiao = { version = "0.1", features = ["provider"] }   # plus #[guatiao::kind], #[derive(Provider)]
 ```
 
 A macro and a trait live in different namespaces, so `ToValue` names both
@@ -92,6 +95,70 @@ struct Connection {
     password: Option<String>,
 }
 ```
+
+## `#[guatiao::kind]` and `#[derive(Provider)]` (feature `provider`)
+
+`provider = ["syn/full"]`: parsing a whole `trait` item needs the full
+parser, which a consumer deriving only `Schema` should not pay for.
+
+**`#[kind]` on a trait** (`#[kind(name = "...")]` names the kind; the
+default is the trait's ident in snake case, `SessionBackend` →
+`"session_backend"`). Emits the trait verbatim, then:
+
+| item | what |
+| --- | --- |
+| `<Trait>Vtable` | `repr(C)`: `header: KindHeader`, then one `Option<unsafe extern "C" fn>` slot per method, declaration order |
+| `<Trait>Vtable::of::<T>()` | `const fn`, the table for an implementation; `floor()`; `<method>_end()` per slot |
+| `impl Kind for dyn Trait` | `NAME`, `Vtable`, `FLOOR`, `FLOOR_HASH` (FNV-1a over the required signatures), `REQUIRED` |
+| `impl Trait for Remote<dyn Trait>` | the proxy: reads each slot under the table's size, marshals, calls, converts back |
+| `impl From<Remote<dyn Trait>> for Box<dyn Trait>` | `Box` only: `Arc` is not fundamental (`Kind::shared`) |
+
+Accepted method shapes — receiver `&self`, the trait names `Send + Sync`:
+
+| position | crosses as |
+| --- | --- |
+| integers, floats, `bool` | by value |
+| `&str` / `&[u8]` | `Str` / `Bytes` views |
+| `&Value`, `&Map` | non-null pointers |
+| `Option<&Value>` | a pointer that may be null |
+| any other argument type, by value | `*const Value` via `ToValue` (the shim reads it with `FromValue`) |
+| return `()`, scalar, `Value`, `Map`, `List`, `String` | an out-pointer (`String` as `Text`) |
+| any other return type | `*mut Value` via `ToValue`, read back with `FromValue` |
+| `Result<X, ProviderError>` | `X` as above plus `err: *mut ProviderError`; **required** for any method that converts |
+
+A method **with a default body** is an appended slot: an older table
+lacks it and the proxy runs the default. A required method after a
+defaulted one is refused. A method that cannot fail propagates a provider
+failure as a panic. Refused by name, on the author's span: a generic or
+`unsafe` trait, a `where` clause, missing `Send + Sync`, an empty trait,
+associated consts/types, `async`, generic or variadic methods, `&mut
+self`/`self`/no receiver, a `&mut` argument, a borrowed argument of any
+other type, a value type by value as an argument, `impl Trait` anywhere,
+a function argument, a borrowed or `impl Trait` return, a `Result` whose
+error is not `ProviderError`, and an attribute key other than `name`.
+Every message is pinned by text in `kind::tests::kind_rejects_by_name`;
+the expansion of a two-method trait is pinned by
+`src/snapshots/greeter.expected.rs`.
+
+**`#[derive(Provider)]`** with `#[provider(...)]`:
+
+| key | effect | default |
+| --- | --- | --- |
+| a bare path, or `kinds(A, B)` | the kinds this type serves; a `T: Kind` bound is checked per kind | required, at least one |
+| `id = "..."` | the provider id | `{CARGO_PKG_NAME}_{type}` in snake case, `-` as `_` |
+| `name = "..."` | display name | the type's ident |
+| `version = "..."` | the provider's own version | empty: the library's |
+| `config = T` | configuration schema through `T: Schema` | none |
+| `new = path` / `new_with_host = path` | `fn() -> Self` / `fn(Host) -> Self` building the one instance | `Default` |
+| `available = path` | `fn(&Self) -> Result<(), &'static str>`, asked on every call | always available |
+
+Emits, inside a `const _` block: one `static` table per kind
+(`<dyn K as Kind>::Vtable::of::<T>()`, reached through the trait so only
+the trait need be in scope), a `OnceLock<T>` holding the instance, and
+`impl ProviderDecl for T` building a `ProviderParts`. Refused: a generic
+type, no kinds, an unknown key, a key given twice, both `new` and
+`new_with_host`. `guatiao::providers!(A, B)` (in the core crate) then
+writes the whole library.
 
 ## Contract
 
