@@ -444,6 +444,7 @@ include = [
   "LibraryInfo",
   "ProviderInfo",
   "Providers",
+  "Kinds",
   "MergeOverride",
 ]
 # Defined in the trailer instead; see `after_includes`.
@@ -485,6 +486,7 @@ exclude = ["Entry"]
 "LibraryInfo" = "guatiao_library_info"
 "ProviderInfo" = "guatiao_provider_info"
 "Providers" = "guatiao_providers"
+"Kinds" = "guatiao_kinds"
 "ABI_VERSION" = "GUATIAO_ABI_VERSION"
 "MergeOverride" = "guatiao_merge_override"
 # cbindgen monomorphises the generic newtype and emits the Rust name.

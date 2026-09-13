@@ -33,6 +33,65 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// Every type the header introduces carries this crate's prefix.
+///
+/// The coverage test below asks whether a type is *mentioned*, which a
+/// type cbindgen emitted under its bare Rust name satisfies — so it
+/// passes while the header declares `Kinds` into a namespace it shares
+/// with everything a consumer already includes. Both have happened:
+/// `MaybeNull_Map` and `Kinds` each reached the committed header before
+/// anything noticed.
+///
+/// This reads the header instead, so a missing `[export.rename]` entry
+/// fails on the class rather than on the instance.
+#[test]
+fn every_type_the_header_declares_is_prefixed() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let header = std::fs::read_to_string(manifest.join("include/guatiao.h"))
+        .expect("the header is committed");
+
+    let mut names = Vec::new();
+    for line in header.lines() {
+        let line = line.trim();
+        // `typedef struct X {`, and the `} X;` that closes an anonymous
+        // one. Both spellings appear in what cbindgen emits.
+        let named = line
+            .strip_prefix("typedef struct ")
+            .or_else(|| line.strip_prefix("typedef enum "))
+            .or_else(|| line.strip_prefix("typedef union "))
+            .and_then(|rest| rest.split_whitespace().next())
+            .map(|n| n.trim_end_matches(';'))
+            .or_else(|| {
+                line.strip_prefix("} ")
+                    .and_then(|rest| rest.strip_suffix(';'))
+            });
+        if let Some(name) = named
+            && !name.is_empty()
+            && name.chars().all(|c| c.is_alphanumeric() || c == '_')
+        {
+            names.push(name.to_string());
+        }
+    }
+
+    assert!(
+        names.len() >= 12,
+        "found only {} declared types in the header, so this scan is not \
+         reading it correctly",
+        names.len()
+    );
+
+    let bare: Vec<_> = names
+        .iter()
+        .filter(|n| !n.starts_with("guatiao_") && !n.starts_with("GUATIAO_"))
+        .collect();
+    assert!(
+        bare.is_empty(),
+        "these types reach the header under a bare name and would collide \
+         with whatever else a consumer includes: {bare:?}. Add each to \
+         `[export.rename]` in cbindgen.toml and regenerate."
+    );
+}
+
 #[test]
 fn every_repr_c_type_is_in_the_generated_header() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

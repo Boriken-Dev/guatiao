@@ -603,7 +603,7 @@ typedef struct guatiao_host_info {
  Where there is no versioning there is no version skew, and the element
  size is the same number on both sides of the boundary.
  */
-typedef struct Kinds {
+typedef struct guatiao_kinds {
   /*
    First name. May be null when `len` is 0.
    */
@@ -612,7 +612,7 @@ typedef struct Kinds {
    How many.
    */
   size_t len;
-} Kinds;
+} guatiao_kinds;
 
 /*
  One thing a library offers.
@@ -648,7 +648,7 @@ typedef struct guatiao_provider_info {
    What identifies the provider is `id`. Empty is legal and means a
    provider that serves no vtable — pure data, reached by name.
    */
-  struct Kinds kinds;
+  struct guatiao_kinds kinds;
   /*
    This provider's own identifier, **unique across every provider a
    host loads**.
