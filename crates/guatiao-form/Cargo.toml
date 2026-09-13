@@ -1,0 +1,36 @@
+[package]
+name = "guatiao-form"
+description = "how a guatiao schema is shown -- sections, widget hints and conditional visibility, as a value beside the schema"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+license.workspace = true
+readme = "README.md"
+exclude = [".*", "*.local.*"]
+
+[lib]
+name = "guatiao_form"
+# A cdylib as well, because the `extern "C"` surface has to be IN an
+# artifact for a C or Python host to load. An rlib exports nothing.
+crate-type = ["rlib", "cdylib"]
+path = "src/lib.rs"
+
+[features]
+# Renders `include/guatiao_form.h` from the Rust that declares it. NOT the
+# `extern "C"` surface, which is always compiled -- this is about the file
+# that DECLARES it, which is committed and which most builds only read.
+c-header = ["dep:cbindgen"]
+
+[dependencies]
+# The only dependency, and deliberately so: a form is read against a
+# schema, and a schema is a value. Nothing here parses or prints a
+# document; `guatiao-serde` does that for a form exactly as it does for
+# any other value.
+guatiao = { path = "../guatiao", version = "0.1.0" }
+
+[build-dependencies]
+# Optional, enabled only by `c-header`, so an ordinary build renders
+# nothing and pulls in no generator.
+cbindgen = { version = "0.29", optional = true }

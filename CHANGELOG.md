@@ -104,6 +104,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   not only its magnitude: `1.10` reads back as `1.10`. From C:
   `guatiao_json_parse` / `_emit` / `_emit_pretty`, and the same for TOML and
   YAML; emitting answers a value holding a string, freed like any other.
+- **`guatiao-form`**: how a schema is shown, as a value beside it that
+  never repeats it. A form names fields by path (`port`, `auth.username`)
+  and adds only what no single field can say about itself: what a section
+  is called and the order sections come in, which widget draws a field and
+  what an empty one shows, and when a field is visible. `check` says
+  whether a form fits its schema without ever quoting a value; `layout`
+  groups and orders the fields; `is_visible` evaluates conditions, where a
+  condition on a hidden field is not met. All three are exported to C in
+  `include/guatiao_form.h`.
 - The core crate carries no serialisation: how a value or a schema is
   written down is `guatiao-serde`'s job, or a consumer's own.
 - Licensed under the Mozilla Public License 2.0. Using the library imposes

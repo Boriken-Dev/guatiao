@@ -12,14 +12,18 @@ public surface); this file is about the repository.
 | `crates/guatiao/include/guatiao.h` | the C header, rendered by `build.rs` and committed |
 | `guatiao.dll` / `libguatiao.so` | the C ABI artifact, from the same crate — `cargo build` |
 | `crates/guatiao-derive/` | `#[derive(ToValue, FromValue, Schema)]`; reached through `guatiao`'s `derive` feature, never named directly |
+| `crates/guatiao-serde/` | serde for values: JSON, TOML and YAML as features, and a C surface with its own `include/guatiao_serde.h` |
+| `crates/guatiao-form/` | how a schema is shown: sections, widget hints, conditional visibility, as a value beside the schema; C surface in `include/guatiao_form.h` |
+| `examples/hello_library/` | a real cdylib the test suite builds and loads |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 
 ## Commands
 
 ```bash
 cargo test --workspace --all-features
-cargo clippy --workspace --all-features -- -D warnings
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all --check
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 cargo package --list -p guatiao --allow-dirty   # must list AGENTS.md, README.md and no dot-prefixed path
 ```
 
@@ -31,7 +35,13 @@ render is gated rather than unconditional.
 
 ```bash
 GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-header
+GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-serde --features c-header,json,toml,yaml
+GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-form --features c-header
 ```
+
+Each crate with a C surface commits its header and has a test comparing
+the committed copy with a fresh render, so an edit nobody regenerated fails
+the suite rather than shipping.
 
 ## Rules
 
@@ -41,7 +51,10 @@ GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-header
 - **No process-global state in `guatiao`.** No interning table, no static
   registry, no allocator singleton. This is what lets a host and a library
   both link the crate.
-- **`unsafe` lives under `crates/guatiao/src/ffi/` and nowhere else.** Every other
+- **`unsafe` is confined to named places.** In `guatiao`: the value
+  model's raw layer, `library/raw.rs`, and `exports/` — listed in
+  `tests/forbid_unsafe_per_module.rs`. In `guatiao-form`: `exports.rs`
+  alone, checked by its `tests/unsafe_stays_in_exports.rs`. Every other
   module carries `#![forbid(unsafe_code)]`.
 - **Lines are LF** (`.gitattributes`), on every platform, including
   generated files.
