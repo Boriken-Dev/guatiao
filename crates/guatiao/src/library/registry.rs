@@ -345,6 +345,15 @@ impl Provider {
         Remote::from_view(&self.view)
     }
 
+    /// An instance of this provider built from `config`, as `K`. See
+    /// [`Offer::instantiate`].
+    pub fn instantiate<K: ?Sized + Kind>(
+        &self,
+        config: &crate::value::types::Value,
+    ) -> Result<super::kind::Instance<K>, super::kind::ProviderError> {
+        super::kind::Instance::build(&self.view, config)
+    }
+
     /// The same, as an offer carrying what a chooser needs to show.
     pub fn offer<K: ?Sized + Kind>(&self) -> Result<Offer<K>, KindMismatch> {
         let remote = self.as_kind::<K>()?;
@@ -965,6 +974,8 @@ mod tests {
             available: None,
             raw: std::ptr::null(),
             tables: Vec::new(),
+            create: None,
+            destroy: None,
         }
     }
 

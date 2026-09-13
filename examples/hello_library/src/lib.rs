@@ -442,6 +442,8 @@ fn describe(host: Host) -> Option<&'static LibraryInfo> {
                 // which is the common case and the right default.
                 available: None,
                 tables: KindTables::empty(),
+                create: None,
+                destroy: None,
             },
             ProviderInfo {
                 struct_size: size_of::<ProviderInfo>() as u32,
@@ -459,6 +461,8 @@ fn describe(host: Host) -> Option<&'static LibraryInfo> {
                 // And it refuses, with a reason a host can show.
                 available: Some(almanac_available),
                 tables: KindTables::empty(),
+                create: None,
+                destroy: None,
             },
             // Claims a kind AND cannot run here, which is the case a host
             // must tell apart from nobody claiming the kind at all: the
@@ -476,6 +480,8 @@ fn describe(host: Host) -> Option<&'static LibraryInfo> {
                 version: Str::borrowed(""),
                 available: Some(sundial_available),
                 tables: KindTables::empty(),
+                create: None,
+                destroy: None,
             },
             // Reaches the greeter through the host's services, which is
             // the one thing a library could not do before it kept a
@@ -493,6 +499,8 @@ fn describe(host: Host) -> Option<&'static LibraryInfo> {
                 version: Str::borrowed(""),
                 available: None,
                 tables: KindTables::empty(),
+                create: None,
+                destroy: None,
             },
         ];
 

@@ -60,7 +60,7 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
     // path never sees it — neither as an offer nor as a mismatch.
     let offers: Vec<Offer<dyn Greeter>> = registry.offers::<dyn Greeter>().collect();
     let ids: Vec<&str> = offers.iter().map(Offer::id).collect();
-    assert_eq!(ids, ["derived_greeter_hello"]);
+    assert_eq!(ids, ["derived_greeter_hello", "derived_greeter_shouter"]);
     assert_eq!(registry.mismatches::<dyn Greeter>().count(), 0);
     assert!(
         registry
@@ -143,4 +143,67 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
     .unwrap_err();
     assert!(matches!(why, KindMismatch::HashMismatch { .. }), "{why:?}");
     assert_eq!(<dyn Greeter as Kind>::NAME, "greeter");
+
+    // 7. A provider built from a configuration, across the same dlopen:
+    // the host reads its schema, builds a value that fits, and gets an
+    // instance whose `self` is that configuration.
+    let shouter = &offers[1];
+    assert!(shouter.builds_instances());
+    assert!(
+        !offer.builds_instances(),
+        "the hand-made one is its one instance"
+    );
+    let schema = shouter.config_schema().expect("declares what it takes");
+    assert!(
+        schema
+            .get("properties")
+            .and_then(|p| p.get("prefix"))
+            .is_some(),
+        "the schema is ShoutConfig's"
+    );
+    let mut config = Value::map();
+    config.set("prefix", "hey").unwrap();
+    let loud = shouter
+        .instantiate(&config)
+        .expect("a fitting configuration builds");
+    assert_eq!(
+        loud.greet("ana")
+            .unwrap()
+            .get("greeting")
+            .and_then(Value::as_str),
+        Some("hey ANA")
+    );
+    let mut other = Value::map();
+    other.set("prefix", "yo").unwrap();
+    let quiet = shouter.instantiate(&other).unwrap();
+    assert_eq!(
+        quiet
+            .greet("bo")
+            .unwrap()
+            .get("greeting")
+            .and_then(Value::as_str),
+        Some("yo BO"),
+        "two instances, two configurations, one provider"
+    );
+    drop(loud);
+    let e = shouter.instantiate(&Value::map()).unwrap_err();
+    assert_eq!(
+        e.status,
+        Status::GUATIAO_ERR_BAD_VALUE,
+        "the schema's refusal: {e}"
+    );
+    let mut empty = Value::map();
+    empty.set("prefix", "").unwrap();
+    let e = shouter.instantiate(&empty).unwrap_err();
+    assert_eq!(
+        e.message(),
+        "a shouter needs something to shout",
+        "the type's refusal"
+    );
+    let e = offer.instantiate(&config).unwrap_err();
+    assert_eq!(
+        e.status,
+        Status::GUATIAO_ERR_NULL,
+        "no instances from a provider that is its one"
+    );
 }

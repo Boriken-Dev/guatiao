@@ -318,6 +318,85 @@ pub unsafe extern "C" fn guatiao_registry_new(
     })
 }
 
+/// Builds an instance of the provider filed under `key` from `config`.
+///
+/// On `GUATIAO_OK` the instance is written through `out`, and it is the
+/// `ctx` to pass to every slot of that provider's tables for calls on it;
+/// release it with [`guatiao_registry_provider_destroy`]. `err` may be
+/// null; when it is not, a failure writes the provider's own words there
+/// (free the message like any text). `GUATIAO_ERR_NOT_FOUND` for an
+/// unknown key; `GUATIAO_ERR_NULL` for a provider that builds no
+/// instances, which is its one instance.
+///
+/// # Safety
+///
+/// `reg` is a live handle, `key` is readable, `config` addresses a
+/// well-formed value, `out` is writable, `err` is null or writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_provider_create(
+    reg: *const HostRegistry,
+    key: Str,
+    config: *const Value,
+    out: *mut *mut c_void,
+    err: *mut crate::library::ProviderError,
+) -> Status {
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(key), Some(config), false) = (
+            unsafe { HostRegistry::get(reg) },
+            unsafe { as_str(key) },
+            unsafe { config.as_ref() },
+            out.is_null(),
+        ) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        let Some(provider) = registry.inner.provider(key) else {
+            return Status::GUATIAO_ERR_NOT_FOUND;
+        };
+        let view = provider.view();
+        let Some(create) = view.create else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        // SAFETY: the slot is the descriptor's own; the pointers are the
+        // caller's, checked above; the library is never unloaded.
+        unsafe { create(view.ctx, config, out, err) }
+    })
+}
+
+/// Releases an instance [`guatiao_registry_provider_create`] built. Null
+/// is a no-op; an unknown key or a provider that builds no instances does
+/// nothing.
+///
+/// # Safety
+///
+/// `reg` is a live handle, `key` is readable, and `instance` is null or
+/// came from `guatiao_registry_provider_create` under the same key and is
+/// not used again.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_provider_destroy(
+    reg: *const HostRegistry,
+    key: Str,
+    instance: *mut c_void,
+) {
+    guard_with((), || {
+        if instance.is_null() {
+            return;
+        }
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(key)) = (unsafe { HostRegistry::get(reg) }, unsafe { as_str(key) })
+        else {
+            return;
+        };
+        if let Some(provider) = registry.inner.provider(key)
+            && let Some(destroy) = provider.view().destroy
+        {
+            // SAFETY: the slot is the descriptor's own and the instance is
+            // the caller's, from `create`.
+            unsafe { destroy(provider.view().ctx, instance) };
+        }
+    })
+}
+
 /// How this registry introduces itself to a library: a pointer to a block
 /// that outlives the registry, carrying the host's id and version, its
 /// allocator, and a `services` table a library calls to ask what is

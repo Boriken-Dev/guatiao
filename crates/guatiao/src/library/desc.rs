@@ -38,6 +38,7 @@
 use std::ffi::c_void;
 use std::mem::{offset_of, size_of};
 
+use super::kind::ProviderError;
 use crate::value::alloc::Allocator;
 use crate::value::status::Status;
 use crate::value::types::{Map, MaybeNull, Str, Value};
@@ -491,6 +492,26 @@ pub struct ProviderInfo {
     /// a table here for the kind first, then `vtable` when `kinds` names
     /// the kind.
     pub tables: KindTables,
+    /// Builds an **instance** from a configuration, or null for a provider
+    /// that is its one instance.
+    ///
+    /// `ctx` is this descriptor's own `ctx`. `config` is a value fitting
+    /// [`config`](ProviderInfo::config). On `GUATIAO_OK` the instance is
+    /// written through `out`, and **that pointer is the `ctx` every
+    /// kind-table slot takes** for calls on this instance; on any other
+    /// status `err` may carry the provider's own words. A provider may
+    /// still offer a default instance through `ctx` beside the ones it
+    /// builds, or leave `ctx` null: instances only.
+    pub create: Option<
+        unsafe extern "C" fn(
+            ctx: *mut c_void,
+            config: *const Value,
+            out: *mut *mut c_void,
+            err: *mut ProviderError,
+        ) -> Status,
+    >,
+    /// Releases an instance `create` built. Null when `create` is null.
+    pub destroy: Option<unsafe extern "C" fn(ctx: *mut c_void, instance: *mut c_void)>,
 }
 
 /// One kind's function table, on a provider that serves several kinds
@@ -588,6 +609,16 @@ impl ProviderInfo {
     pub const fn tables_end() -> usize {
         offset_of!(ProviderInfo, tables) + size_of::<KindTables>()
     }
+
+    /// Where the `create` field ends, for the guard that reads it.
+    pub const fn create_end() -> usize {
+        offset_of!(ProviderInfo, create) + size_of::<*const c_void>()
+    }
+
+    /// Where the `destroy` field ends, for the guard that reads it.
+    pub const fn destroy_end() -> usize {
+        offset_of!(ProviderInfo, destroy) + size_of::<*const c_void>()
+    }
 }
 
 #[cfg(test)]
@@ -608,7 +639,9 @@ mod tests {
         assert!(LibraryInfo::floor() <= size_of::<LibraryInfo>());
         assert!(ProviderInfo::floor() <= size_of::<ProviderInfo>());
         assert!(ProviderInfo::available_end() < ProviderInfo::tables_end());
-        assert_eq!(ProviderInfo::tables_end(), size_of::<ProviderInfo>());
+        assert!(ProviderInfo::tables_end() < ProviderInfo::create_end());
+        assert!(ProviderInfo::create_end() < ProviderInfo::destroy_end());
+        assert_eq!(ProviderInfo::destroy_end(), size_of::<ProviderInfo>());
         assert_eq!(HostServices::floor(), size_of::<HostServices>());
         assert_eq!(KindTable::floor(), size_of::<KindTable>());
     }

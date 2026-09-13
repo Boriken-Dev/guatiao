@@ -298,75 +298,6 @@ typedef struct guatiao_alloc {
 } guatiao_alloc;
 
 /*
- An owned, growable sequence of key/value pairs, in insertion order.
-
- Lookup is a linear scan, by contract rather than by accident: this is a
- metadata container holding tens of keys, and at that size a scan over
- contiguous memory beats hashing every lookup key. Setting an existing
- key replaces it **in place**, keeping its position.
- */
-typedef struct guatiao_map {
-  /*
-   First entry.
-   */
-  guatiao_entry *ptr;
-  /*
-   Number of entries.
-   */
-  size_t len;
-  /*
-   Capacity in entries. 0 means the buffer is not owned.
-   */
-  size_t cap;
-  /*
-   The allocator that made this buffer. Null when `cap == 0`.
-   */
-  const struct guatiao_alloc *alloc;
-} guatiao_map;
-
-/*
- A `*const T` where **null is a value, not a mistake**.
-
- Crosses as a plain `const T *` and costs a C caller nothing: this is a
- `repr(transparent)` newtype, so its size, alignment and calling
- convention are a pointer's. What it buys is on the Rust side. A bare
- `*const T` in a descriptor says nothing about whether null is
- expected, so every reader re-decides and one of them eventually
- decides wrong; this says it once, in the type.
-
- # The contract
-
- **Non-null means a well-formed `T` that outlives the read.** Nothing
- checks that, and nothing tries: it is the same class of promise as a
- vtable pointer, whose shape only the `kind` that defined it knows.
- Writing a non-null pointer to anything that is not a live `T` is
- undefined behaviour at the read, on whoever wrote it.
- */
-typedef const struct guatiao_map *guatiao_map_ptr;
-
-/*
- A borrowed sequence of kind names.
-
- # Why this one carries no stride
-
- [`Providers`] states its stride because a `ProviderInfo` can grow a
- field. A [`Str`] cannot: it declares no `struct_size`, so it has no
- mechanism to grow through and its layout is frozen by definition.
- Where there is no versioning there is no version skew, and the element
- size is the same number on both sides of the boundary.
- */
-typedef struct guatiao_kinds {
-  /*
-   First name. May be null when `len` is 0.
-   */
-  const struct guatiao_str *ptr;
-  /*
-   How many.
-   */
-  size_t len;
-} guatiao_kinds;
-
-/*
  Owned, growable UTF-8 text.
 
  `cap == 0` means the buffer is **not owned**: a literal or a borrow,
@@ -436,6 +367,33 @@ typedef struct guatiao_list {
    */
   const struct guatiao_alloc *alloc;
 } guatiao_list;
+
+/*
+ An owned, growable sequence of key/value pairs, in insertion order.
+
+ Lookup is a linear scan, by contract rather than by accident: this is a
+ metadata container holding tens of keys, and at that size a scan over
+ contiguous memory beats hashing every lookup key. Setting an existing
+ key replaces it **in place**, keeping its position.
+ */
+typedef struct guatiao_map {
+  /*
+   First entry.
+   */
+  guatiao_entry *ptr;
+  /*
+   Number of entries.
+   */
+  size_t len;
+  /*
+   Capacity in entries. 0 means the buffer is not owned.
+   */
+  size_t cap;
+  /*
+   The allocator that made this buffer. Null when `cap == 0`.
+   */
+  const struct guatiao_alloc *alloc;
+} guatiao_map;
 
 /*
  The payload of a value. Which arm is live is decided by the
@@ -518,6 +476,65 @@ typedef struct guatiao_value {
    */
   union guatiao_payload payload;
 } guatiao_value;
+
+/*
+ Why a call across a kind failed, as a provider states it.
+
+ A shim writes one through an out-pointer; the proxy hands it back as
+ the `Err` of the trait method. `message` may be empty.
+ */
+typedef struct guatiao_provider_error {
+  /*
+   What went wrong, as a status.
+   */
+  guatiao_status status;
+  /*
+   The provider's own words, possibly empty.
+   */
+  struct guatiao_string message;
+} guatiao_provider_error;
+
+/*
+ A `*const T` where **null is a value, not a mistake**.
+
+ Crosses as a plain `const T *` and costs a C caller nothing: this is a
+ `repr(transparent)` newtype, so its size, alignment and calling
+ convention are a pointer's. What it buys is on the Rust side. A bare
+ `*const T` in a descriptor says nothing about whether null is
+ expected, so every reader re-decides and one of them eventually
+ decides wrong; this says it once, in the type.
+
+ # The contract
+
+ **Non-null means a well-formed `T` that outlives the read.** Nothing
+ checks that, and nothing tries: it is the same class of promise as a
+ vtable pointer, whose shape only the `kind` that defined it knows.
+ Writing a non-null pointer to anything that is not a live `T` is
+ undefined behaviour at the read, on whoever wrote it.
+ */
+typedef const struct guatiao_map *guatiao_map_ptr;
+
+/*
+ A borrowed sequence of kind names.
+
+ # Why this one carries no stride
+
+ [`Providers`] states its stride because a `ProviderInfo` can grow a
+ field. A [`Str`] cannot: it declares no `struct_size`, so it has no
+ mechanism to grow through and its layout is frozen by definition.
+ Where there is no versioning there is no version skew, and the element
+ size is the same number on both sides of the boundary.
+ */
+typedef struct guatiao_kinds {
+  /*
+   First name. May be null when `len` is 0.
+   */
+  const struct guatiao_str *ptr;
+  /*
+   How many.
+   */
+  size_t len;
+} guatiao_kinds;
 
 /*
  One kind's function table, on a provider that serves several kinds
@@ -733,6 +750,26 @@ typedef struct guatiao_provider_info {
    the kind.
    */
   struct guatiao_kind_tables tables;
+  /*
+   Builds an **instance** from a configuration, or null for a provider
+   that is its one instance.
+
+   `ctx` is this descriptor's own `ctx`. `config` is a value fitting
+   [`config`](ProviderInfo::config). On `GUATIAO_OK` the instance is
+   written through `out`, and **that pointer is the `ctx` every
+   kind-table slot takes** for calls on this instance; on any other
+   status `err` may carry the provider's own words. A provider may
+   still offer a default instance through `ctx` beside the ones it
+   builds, or leave `ctx` null: instances only.
+   */
+  guatiao_status (*create)(void *ctx,
+                           const struct guatiao_value *config,
+                           void **out,
+                           struct guatiao_provider_error *err);
+  /*
+   Releases an instance `create` built. Null when `create` is null.
+   */
+  void (*destroy)(void *ctx, void *instance);
 } guatiao_provider_info;
 
 /*
@@ -1039,23 +1076,6 @@ typedef struct guatiao_kind_header {
   uint32_t floor_hash;
 } guatiao_kind_header;
 
-/*
- Why a call across a kind failed, as a provider states it.
-
- A shim writes one through an out-pointer; the proxy hands it back as
- the `Err` of the trait method. `message` may be empty.
- */
-typedef struct guatiao_provider_error {
-  /*
-   What went wrong, as a status.
-   */
-  guatiao_status status;
-  /*
-   The provider's own words, possibly empty.
-   */
-  struct guatiao_string message;
-} guatiao_provider_error;
-
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -1082,6 +1102,43 @@ extern "C" {
 struct guatiao_registry *guatiao_registry_new(struct guatiao_str id,
                                               struct guatiao_str version,
                                               const struct guatiao_alloc *alloc);
+
+/*
+ Builds an instance of the provider filed under `key` from `config`.
+
+ On `GUATIAO_OK` the instance is written through `out`, and it is the
+ `ctx` to pass to every slot of that provider's tables for calls on it;
+ release it with [`guatiao_registry_provider_destroy`]. `err` may be
+ null; when it is not, a failure writes the provider's own words there
+ (free the message like any text). `GUATIAO_ERR_NOT_FOUND` for an
+ unknown key; `GUATIAO_ERR_NULL` for a provider that builds no
+ instances, which is its one instance.
+
+ # Safety
+
+ `reg` is a live handle, `key` is readable, `config` addresses a
+ well-formed value, `out` is writable, `err` is null or writable.
+ */
+guatiao_status guatiao_registry_provider_create(const struct guatiao_registry *reg,
+                                                struct guatiao_str key,
+                                                const struct guatiao_value *config,
+                                                void **out,
+                                                struct guatiao_provider_error *err);
+
+/*
+ Releases an instance [`guatiao_registry_provider_create`] built. Null
+ is a no-op; an unknown key or a provider that builds no instances does
+ nothing.
+
+ # Safety
+
+ `reg` is a live handle, `key` is readable, and `instance` is null or
+ came from `guatiao_registry_provider_create` under the same key and is
+ not used again.
+ */
+void guatiao_registry_provider_destroy(const struct guatiao_registry *reg,
+                                       struct guatiao_str key,
+                                       void *instance);
 
 /*
  How this registry introduces itself to a library: a pointer to a block

@@ -21,17 +21,24 @@
 //! - `id` defaults to `{CARGO_PKG_NAME}_{type in snake case}`, with `-` in
 //!   the package name as `_`; `name` to the type's ident; `version` to
 //!   empty, which means the library's.
-//! - `config = T` declares the configuration schema through `T: Schema`.
+//! - `config = C` makes the provider **built from `C`**: the schema comes
+//!   from `C: Schema`, a configuration value is decoded through `C:
+//!   FromValue`, and an instance is `Self: TryFrom<C, Error:
+//!   Into<ProviderError>>` (`C = Self` is the identity `From`). The
+//!   `create`/`destroy` slots are emitted; each instance's address is the
+//!   `ctx` the kind tables call with.
 //! - `new = path` is a `fn() -> Self`; `new_with_host = path` is a
-//!   `fn(Host) -> Self`; neither means `Default`.
+//!   `fn(Host) -> Self`; neither means `Default` — except with `config`,
+//!   where neither means no default instance at all.
 //! - `available = path` is a `fn(&Self) -> Result<(), &'static str>`,
-//!   asked on every call.
+//!   asked on every call of the default instance; refused without one.
 //!
 //! What is emitted: one `static` table per kind (`<Kind>Vtable::of::<T>()`),
-//! a `OnceLock<T>` holding the instance, an `impl ProviderDecl for T`
-//! building a `ProviderParts`, and a compile-time check that `T`
-//! implements every kind named — so a missing `impl` reads as an ordinary
-//! trait error on the type's own span.
+//! a `OnceLock<T>` holding the default instance, the `create`/`destroy`
+//! shims when `config` is given, an `impl ProviderDecl for T` building a
+//! `ProviderParts`, and a compile-time check that `T` implements every
+//! kind named — so a missing `impl` reads as an ordinary trait error on
+//! the type's own span.
 
 #![forbid(unsafe_code)]
 
@@ -82,7 +89,16 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
             "`new` and `new_with_host` are two ways to build the one instance; name one",
         ));
     }
-    Ok(emit(&ast.ident, &decl))
+    let has_default_instance =
+        decl.config.is_none() || decl.new.is_some() || decl.new_with_host.is_some();
+    if decl.available.is_some() && !has_default_instance {
+        return Err(syn::Error::new_spanned(
+            &ast.ident,
+            "`available` asks the provider's default instance, and a provider built only from a \
+             configuration has none; add `new` or `new_with_host`, or drop `available`",
+        ));
+    }
+    Ok(emit(&ast.ident, &decl, has_default_instance))
 }
 
 fn read_attrs(ast: &DeriveInput) -> syn::Result<Decl> {
@@ -172,7 +188,7 @@ fn vtable_type(kind: &Path) -> TokenStream {
     quote! { <dyn #kind as ::guatiao::library::Kind>::Vtable }
 }
 
-fn emit(ty: &Ident, decl: &Decl) -> TokenStream {
+fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
     let snake = snake_case(&ty.to_string());
     let name = decl.name.clone().unwrap_or_else(|| ty.to_string());
     let version = decl.version.clone().unwrap_or_default();
@@ -218,11 +234,72 @@ fn emit(ty: &Ident, decl: &Decl) -> TokenStream {
         (_, Some(new)) => quote! { #new(host) },
         _ => quote! { <#ty as ::core::default::Default>::default() },
     };
+    // The default instance: the one `ctx` of the descriptor. A provider
+    // built only from a configuration has none, and its `ctx` is null.
+    let instance = if has_default_instance {
+        quote! {
+            let instance: *mut ::core::ffi::c_void =
+                (__GUATIAO_INSTANCE.get_or_init(|| #build) as *const #ty as *mut #ty)
+                    .cast::<::core::ffi::c_void>();
+        }
+    } else {
+        quote! {
+            let _ = host;
+            let instance: *mut ::core::ffi::c_void = ::core::ptr::null_mut();
+        }
+    };
     let config = match &decl.config {
         Some(config) => quote! {
             ::core::option::Option::Some(<#config as ::guatiao::Schema>::schema(alloc)?)
         },
         None => quote! { ::core::option::Option::None },
+    };
+    // Instances from a configuration: decode it as `C`, build `Self`
+    // through `TryFrom<C>`, box it. `C = Self` is the identity `From`.
+    let (create_shims, create_slot, destroy_slot) = match &decl.config {
+        Some(config) => (
+            quote! {
+                /// # Safety
+                ///
+                /// Called through the descriptor: `config` is null or a
+                /// well-formed value, `out` and `err` are null or writable.
+                unsafe extern "C" fn __guatiao_create(
+                    _ctx: *mut ::core::ffi::c_void,
+                    config: *const ::guatiao::Value,
+                    out: *mut *mut ::core::ffi::c_void,
+                    err: *mut ::guatiao::library::ProviderError,
+                ) -> ::guatiao::Status {
+                    ::guatiao::library::kind::catch(|| {
+                        // SAFETY: the caller's contract.
+                        let built = unsafe { ::guatiao::library::kind::config_arg::<#config>(config) }
+                            .and_then(|__c| {
+                                <#ty as ::core::convert::TryFrom<#config>>::try_from(__c)
+                                    .map_err(::core::convert::Into::<::guatiao::library::ProviderError>::into)
+                            });
+                        // SAFETY: the caller's contract.
+                        unsafe { ::guatiao::library::kind::instance_out::<#ty>(out, err, built) }
+                    })
+                }
+
+                /// # Safety
+                ///
+                /// `instance` is null or came from `__guatiao_create`.
+                unsafe extern "C" fn __guatiao_destroy(
+                    _ctx: *mut ::core::ffi::c_void,
+                    instance: *mut ::core::ffi::c_void,
+                ) {
+                    // SAFETY: the caller's contract.
+                    unsafe { ::guatiao::library::kind::destroy_instance::<#ty>(instance) }
+                }
+            },
+            quote! { ::core::option::Option::Some(__guatiao_create) },
+            quote! { ::core::option::Option::Some(__guatiao_destroy) },
+        ),
+        None => (
+            quote! {},
+            quote! { ::core::option::Option::None },
+            quote! { ::core::option::Option::None },
+        ),
     };
     let (available_shim, available_slot) = match &decl.available {
         Some(ask) => (
@@ -256,12 +333,14 @@ fn emit(ty: &Ident, decl: &Decl) -> TokenStream {
 
             #available_shim
 
+            #create_shims
+
             impl ::guatiao::library::kind::ProviderDecl for #ty {
                 fn provider(
                     host: ::guatiao::library::Host,
                     alloc: ::guatiao::Alloc,
                 ) -> ::core::result::Result<::guatiao::library::kind::ProviderParts, ::guatiao::ValueError> {
-                    let instance: &'static #ty = __GUATIAO_INSTANCE.get_or_init(|| #build);
+                    #instance
                     let kinds: &[&'static str] = &[ #(#kind_names)* ];
                     let tables = ::std::vec![ #(#table_entries)* ];
                     let config = #config;
@@ -272,8 +351,10 @@ fn emit(ty: &Ident, decl: &Decl) -> TokenStream {
                         kinds,
                         tables,
                         config,
-                        instance as *const #ty as *mut ::core::ffi::c_void,
+                        instance,
                         #available_slot,
+                        #create_slot,
+                        #destroy_slot,
                     ))
                 }
             }
@@ -308,8 +389,35 @@ mod tests {
             "name defaults to the ident, version to empty"
         );
         assert!(
-            out.contains(":: core :: option :: Option :: None ,)"),
-            "no available slot"
+            out.contains(
+                ":: core :: option :: Option :: None , :: core :: option :: Option :: None , \
+                 :: core :: option :: Option :: None ,)"
+            ),
+            "no available, create or destroy slot"
+        );
+        assert!(
+            out.contains("__GUATIAO_INSTANCE . get_or_init"),
+            "a default instance"
+        );
+    }
+
+    #[test]
+    fn a_configuration_builds_instances() {
+        let out = expand_str("#[provider(Greeter, config = HiConfig)] struct Hi;").unwrap();
+        assert!(out.contains("config_arg :: < HiConfig > (config)"));
+        assert!(out.contains("< Hi as :: core :: convert :: TryFrom < HiConfig >> :: try_from"));
+        assert!(out.contains(
+            "Some (__guatiao_create) , :: core :: option :: Option :: Some (__guatiao_destroy) ,)"
+        ));
+        assert!(
+            out.contains(":: core :: ptr :: null_mut ()") && !out.contains("get_or_init"),
+            "no default instance without `new`: {out}"
+        );
+        let out = expand_str("#[provider(Greeter, config = HiConfig, new = Hi::make)] struct Hi;")
+            .unwrap();
+        assert!(
+            out.contains("get_or_init"),
+            "a default instance beside the built ones"
         );
     }
 
@@ -364,6 +472,10 @@ mod tests {
             (
                 "#[provider(Greeter, id = 5)] struct Hello;",
                 "expected string literal",
+            ),
+            (
+                "#[provider(Greeter, config = C, available = Hello::ready)] struct Hello;",
+                "`available` asks the provider's default instance",
             ),
         ];
         for (item, expected) in cases {

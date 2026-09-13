@@ -92,7 +92,7 @@ pub use desc::{
     Providers,
 };
 pub use key::{KeyError, KeyFields, KeyTemplate, Subject};
-pub use kind::{Kind, KindHeader, KindMismatch, Offer, ProviderError, Remote};
+pub use kind::{Instance, Kind, KindHeader, KindMismatch, Offer, ProviderError, Remote};
 pub use raw::{ENTRY_SYMBOL, EntryFn, Host, LibraryView, ProviderView, answer, read_host};
 #[cfg(feature = "load")]
 pub use registry::{LoadError, Loaded, Loading, Provider, Registry, Skipped, WhyNot};

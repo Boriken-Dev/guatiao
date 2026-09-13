@@ -42,4 +42,46 @@ impl Counter for Hello {
     }
 }
 
-guatiao::providers!(Hello);
+/// What a shouter is configured with. A host reads this as the
+/// provider's schema, fills it in, and hands the value to `instantiate`.
+#[derive(guatiao::Schema, guatiao::FromValue)]
+pub struct ShoutConfig {
+    /// What every shout starts with.
+    pub prefix: String,
+}
+
+/// A provider built from a configuration: no default instance, one
+/// instance per configuration, each its own `self`.
+#[derive(Provider)]
+#[provider(Greeter, config = ShoutConfig)]
+pub struct Shouter {
+    prefix: String,
+}
+
+impl TryFrom<ShoutConfig> for Shouter {
+    type Error = ProviderError;
+    fn try_from(config: ShoutConfig) -> Result<Shouter, ProviderError> {
+        if config.prefix.is_empty() {
+            return Err(ProviderError::new(
+                Status::GUATIAO_ERR_BAD_VALUE,
+                "a shouter needs something to shout",
+            ));
+        }
+        Ok(Shouter {
+            prefix: config.prefix,
+        })
+    }
+}
+
+impl Greeter for Shouter {
+    fn greet(&self, name: &str) -> Result<Map, ProviderError> {
+        let mut map = Map::new();
+        map.set(
+            "greeting",
+            format!("{} {}", self.prefix, name.to_uppercase()),
+        )?;
+        Ok(map)
+    }
+}
+
+guatiao::providers!(Hello, Shouter);
