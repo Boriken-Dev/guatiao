@@ -53,7 +53,7 @@ use std::ffi::c_void;
 use std::path::Path;
 
 use super::{as_str, guard, guard_with};
-use crate::library::{Loading, Order, Provider, Registry, Skipped, scan_dir_ordered};
+use crate::library::{Loading, Order, Provider, Registry, Skipped, WhyNot, scan_dir_ordered};
 use crate::value::ValueError;
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::status::Status;
@@ -186,6 +186,47 @@ impl HostRegistry {
     /// One provider by key, or `None` when nothing answers to it.
     fn provider(&self, key: &str, alloc: Alloc) -> Option<Result<Value, ValueError>> {
         self.inner.provider(key).map(|p| provider_value(alloc, p))
+    }
+
+    /// Every provider serving `kind` that can actually run here.
+    fn available(&self, kind: &str, alloc: Alloc) -> Result<Value, ValueError> {
+        let mut list = Value::list_in(alloc);
+        for provider in self.inner.available(kind) {
+            list.push(provider_value(alloc, provider)?)?;
+        }
+        Ok(list)
+    }
+
+    /// Why nothing can serve `kind`, or that something can.
+    fn why_not(&self, kind: &str, alloc: Alloc) -> Result<Value, ValueError> {
+        let mut map = Value::map_in(alloc);
+        let Some(why) = self.inner.why_not(kind) else {
+            map.set("available", Value::bool(true))?;
+            return Ok(map);
+        };
+        map.set("available", Value::bool(false))?;
+        match why {
+            WhyNot::NothingClaimsIt => {
+                map.set("why", Value::string_in(alloc, "nothing-claims-it")?)?;
+            }
+            WhyNot::NoneAvailable(refused) => {
+                map.set("why", Value::string_in(alloc, "none-available")?)?;
+                let mut list = Value::list_in(alloc);
+                for (provider, reason) in refused {
+                    let mut one = Value::map_in(alloc);
+                    one.set("id", Value::string_in(alloc, provider.id())?)?;
+                    one.set("reason", Value::string_in(alloc, reason)?)?;
+                    list.push(one)?;
+                }
+                map.set("providers", list)?;
+            }
+        }
+        Ok(map)
+    }
+
+    /// Whether one provider can run here, and why not when it cannot.
+    fn provider_available(&self, key: &str) -> Option<Result<(), &'static str>> {
+        self.inner.provider(key).map(Provider::available)
     }
 
     /// One provider's table and the size it was compiled at.
@@ -479,6 +520,112 @@ pub unsafe extern "C" fn guatiao_registry_provider(
             // SAFETY: as above.
             Some(built) => unsafe { deliver(out, built) },
             None => Status::GUATIAO_ERR_NOT_FOUND,
+        }
+    })
+}
+
+/// Every provider serving `kind` that **can actually run here**, as a list
+/// of maps.
+///
+/// [`guatiao_registry_providers`] is who CLAIMS the kind; this is who can
+/// serve it now. Each is asked at the moment of the call and nothing is
+/// cached, so a provider whose optional dependency arrived or went away
+/// since the last call answers differently — which is the point.
+///
+/// # Safety
+///
+/// As [`guatiao_registry_providers`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_available(
+    reg: *const HostRegistry,
+    kind: Str,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(kind), Ok(alloc)) = (
+            unsafe { HostRegistry::get(reg) },
+            unsafe { as_str(kind) },
+            unsafe { Alloc::from_raw(alloc) },
+        ) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        // SAFETY: as above.
+        unsafe { deliver(out, registry.available(kind, alloc)) }
+    })
+}
+
+/// Why nothing can serve `kind`, as a map.
+///
+/// `{"available": true}` when something can. Otherwise
+/// `{"available": false, "why": "nothing-claims-it"}` or
+/// `{"available": false, "why": "none-available",
+/// "providers": [{"id", "reason"}…]}`.
+///
+/// **The two refusals are kept apart because the remedies differ**:
+/// install something, versus fix what you already have. A single
+/// "unsupported" leaves a person with no idea which way to go.
+///
+/// # Safety
+///
+/// As [`guatiao_registry_providers`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_why_not(
+    reg: *const HostRegistry,
+    kind: Str,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(kind), Ok(alloc)) = (
+            unsafe { HostRegistry::get(reg) },
+            unsafe { as_str(kind) },
+            unsafe { Alloc::from_raw(alloc) },
+        ) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        // SAFETY: as above.
+        unsafe { deliver(out, registry.why_not(kind, alloc)) }
+    })
+}
+
+/// Whether one provider can run here, writing its reason through `reason`
+/// when it cannot.
+///
+/// `true` when it can, or when no provider answers to `key` — a caller
+/// that cares about the difference has [`guatiao_registry_provider`],
+/// which reports `NOT_FOUND`. `reason` may be null, and is written only on
+/// a refusal; what it points at lives as long as the library.
+///
+/// **Asked every time, never cached.**
+///
+/// # Safety
+///
+/// `reg` is a live handle, `key` is readable for the call, and `reason` is
+/// null or addresses writable storage for one `guatiao_str`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_provider_available(
+    reg: *const HostRegistry,
+    key: Str,
+    reason: *mut Str,
+) -> bool {
+    guard_with(true, || {
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(key)) = (unsafe { HostRegistry::get(reg) }, unsafe { as_str(key) })
+        else {
+            return true;
+        };
+        match registry.provider_available(key) {
+            Some(Err(why)) => {
+                if !reason.is_null() {
+                    // SAFETY: the caller's contract says it is writable.
+                    unsafe { reason.write(Str::borrowed(why)) };
+                }
+                false
+            }
+            _ => true,
         }
     })
 }

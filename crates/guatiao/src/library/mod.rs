@@ -75,6 +75,6 @@ pub use desc::{ABI_VERSION, HostInfo, Kinds, LibraryInfo, ProviderInfo, Provider
 pub use key::{KeyError, KeyFields, KeyTemplate, Subject};
 pub use raw::{ENTRY_SYMBOL, EntryFn, LibraryView, ProviderView, answer, read_host};
 #[cfg(feature = "load")]
-pub use registry::{LoadError, Loaded, Loading, Provider, Registry, Skipped};
+pub use registry::{LoadError, Loaded, Loading, Provider, Registry, Skipped, WhyNot};
 #[cfg(feature = "load")]
 pub use scan::{LoadReport, Order, declares_entry_symbol, scan_dir, scan_dir_ordered};

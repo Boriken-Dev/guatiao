@@ -189,6 +189,48 @@ unsafe extern "C" fn greet(_ctx: *mut c_void, config: *const Value, out: *mut Va
 /// # Safety
 ///
 /// Called through the vtable with the `ctx` this library declared.
+/// The almanac cannot run here, and says why.
+///
+/// A real provider would be asking about a device, a codec or an optional
+/// dependency. This one refuses unconditionally, because what the test
+/// needs to pin is the MECHANISM: a refusal crosses with its reason
+/// intact, and a host can tell it apart from nothing claiming the kind.
+///
+/// The reason is a literal in this library's image, which is never
+/// unloaded — the "immortal, never a shared buffer" half of the contract.
+///
+/// # Safety
+///
+/// Called through the descriptor with the `ctx` this library declared,
+/// and `reason` addresses writable storage for one `Str`.
+unsafe extern "C" fn almanac_available(_ctx: *mut c_void, reason: *mut Str) -> bool {
+    if !reason.is_null() {
+        // SAFETY: the caller's contract says it is writable.
+        unsafe {
+            reason.write(Str::borrowed(
+                "this almanac needs a calendar this host has not set",
+            ))
+        };
+    }
+    false
+}
+
+/// The sundial claims `timekeeper` and cannot run here.
+///
+/// # Safety
+///
+/// As [`almanac_available`].
+unsafe extern "C" fn sundial_available(_ctx: *mut c_void, reason: *mut Str) -> bool {
+    if !reason.is_null() {
+        // SAFETY: the caller's contract says it is writable.
+        unsafe { reason.write(Str::borrowed("the sun is not up")) };
+    }
+    false
+}
+
+/// # Safety
+///
+/// Called through the vtable with the `ctx` this library declared.
 unsafe extern "C" fn outstanding(_ctx: *mut c_void) -> i64 {
     OUTSTANDING.load(Ordering::Relaxed)
 }
@@ -263,6 +305,7 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
         // is one provider answering to both rather than two registrations
         // a host would have to know are the same thing.
         static GREETER_KINDS: Names<2> = Names([Str::borrowed("greeter"), Str::borrowed("writer")]);
+        static SUNDIAL_KINDS: Names<1> = Names([Str::borrowed("timekeeper")]);
 
         let providers = vec![
             ProviderInfo {
@@ -280,6 +323,9 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
                 // Empty: this provider ships in this library and moves
                 // with it, so its version is the library's.
                 version: Str::borrowed(""),
+                // No slot: this greeter is available whenever it loaded,
+                // which is the common case and the right default.
+                available: None,
             },
             ProviderInfo {
                 struct_size: size_of::<ProviderInfo>() as u32,
@@ -296,6 +342,24 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
                 // Its own, because its contract froze while the library
                 // around it went on. This is the case the field exists for.
                 version: Str::borrowed("1.0.0"),
+                // And it refuses, with a reason a host can show.
+                available: Some(almanac_available),
+            },
+            // Claims a kind AND cannot run here, which is the case a host
+            // must tell apart from nobody claiming the kind at all: the
+            // remedy is to fix this one, not to install another.
+            ProviderInfo {
+                struct_size: size_of::<ProviderInfo>() as u32,
+                vtable_size: 0,
+                kinds: Kinds::new(&SUNDIAL_KINDS.0),
+                id: Str::borrowed("hello_library_sundial"),
+                display_name: Str::borrowed("Sundial"),
+                config: std::ptr::null(),
+                vtable: std::ptr::null(),
+                ctx: std::ptr::null_mut(),
+                meta: MaybeNull::null(),
+                version: Str::borrowed(""),
+                available: Some(sundial_available),
             },
         ];
 

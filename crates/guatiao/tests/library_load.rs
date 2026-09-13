@@ -27,7 +27,7 @@
 use std::path::PathBuf;
 
 use guatiao::ReadValue;
-use guatiao::library::{KeyError, Provider, Registry, Skipped, Subject};
+use guatiao::library::{KeyError, Provider, Registry, Skipped, Subject, WhyNot};
 use guatiao::schema::read::SchemaRef;
 use guatiao::schema::validate_map;
 use guatiao::value::status::Status;
@@ -117,7 +117,7 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
         .loaded()
         .expect("it is a library and it did not decline this host");
     assert_eq!(loaded.id, "hello_library");
-    assert_eq!(loaded.providers, 2, "a greeter and an almanac");
+    assert_eq!(loaded.providers, 3, "a greeter, an almanac and a sundial");
 
     // The appended `meta` slot, read out of the library's own image.
     // `ProviderInfo::meta` is null here and `LibraryInfo::meta` is not,
@@ -177,6 +177,63 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
     assert!(almanac.config_schema().is_none());
 }
 
+/// "Can you run here, and if not why" — and the two refusals a host has
+/// to tell apart.
+#[test]
+fn a_provider_says_whether_it_can_run_here() {
+    let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+    registry
+        .load_file(&library_path())
+        .unwrap()
+        .loaded()
+        .unwrap();
+
+    // Declaring no slot means available, which is the common case.
+    let greeter = registry.provider("hello_library_greeter").unwrap();
+    assert_eq!(greeter.available(), Ok(()));
+
+    // And one that refuses carries its own words about why.
+    let almanac = registry.provider("hello_library_almanac").unwrap();
+    assert_eq!(
+        almanac.available(),
+        Err("this almanac needs a calendar this host has not set")
+    );
+
+    // Claiming a kind and being able to serve it are different questions.
+    assert_eq!(registry.providers("greeter").count(), 1);
+    assert_eq!(registry.available("greeter").count(), 1);
+    assert!(
+        registry.why_not("greeter").is_none(),
+        "something can serve it"
+    );
+
+    // THE SPLIT THAT MATTERS. A kind nobody claims and a kind claimed only
+    // by something that cannot run are different answers, because the
+    // remedies differ: install something, versus fix what you have.
+    match registry.why_not("nothing-of-this-kind") {
+        Some(WhyNot::NothingClaimsIt) => {}
+        other => panic!("expected nothing-claims-it, got {other:?}"),
+    }
+    match registry.why_not("timekeeper") {
+        Some(WhyNot::NoneAvailable(refused)) => {
+            assert_eq!(refused.len(), 1);
+            assert_eq!(refused[0].0.id(), "hello_library_sundial");
+            assert_eq!(refused[0].1, "the sun is not up");
+        }
+        other => panic!("expected none-available, got {other:?}"),
+    }
+    assert_eq!(
+        registry.providers("timekeeper").count(),
+        1,
+        "it claims the kind"
+    );
+    assert_eq!(
+        registry.available("timekeeper").count(),
+        0,
+        "and cannot serve it"
+    );
+}
+
 /// A provider's version is its library's unless it says otherwise.
 #[test]
 fn a_provider_versions_with_its_library_or_says_so() {
@@ -225,7 +282,7 @@ fn the_same_library_twice_is_skipped_not_refused() {
     assert_eq!(registry.loaded().len(), 1);
     assert_eq!(
         registry.all().len(),
-        2,
+        3,
         "and nothing was registered a second time"
     );
 }

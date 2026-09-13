@@ -743,6 +743,48 @@ typedef struct guatiao_provider_info {
    library it already has.
    */
   struct guatiao_str version;
+  /*
+   Can this provider actually run **here, right now** — and if not,
+   why not?
+
+   Null means yes. A library that does not implement this is
+   available, which is the right default and the common case: most
+   providers are code that either loaded or did not.
+
+   Otherwise it returns `true` for available and leaves `reason`
+   untouched, or `false` and writes a borrowed [`Str`] through
+   `reason` saying why. **A boolean return rather than an empty
+   string**, so "available" and "unavailable, with nothing to say
+   about it" stay different answers.
+
+   # What this envelope does and does not define
+
+   It defines the **slot**: the signature, when the reason is written,
+   and how long it lives. It does **not** define what "available"
+   means, when a host should ask, or what a host should do with a
+   refusal — those are between a host and a library, like everything
+   else a `kind` agrees.
+
+   What this crate promises is only that it **never caches the
+   answer**. A library may load an optional dependency, lose a device,
+   or fail its own integrity check while a process runs, and a host
+   that asked once at load time would be holding an answer from before
+   any of that.
+
+   # The reason must outlive every reader
+
+   Point it at a literal in the library's image, or at something
+   leaked once. **Never at a buffer shared by callers**: two threads
+   asking the same provider at the same time would each read whatever
+   the other had just written, and what comes back is a fragment with
+   nothing reporting it. Immortal, per-call or per-thread — but not
+   one slot everybody writes.
+
+   Spelled out inline rather than through a type alias: cbindgen
+   renders an aliased function-pointer field as an opaque struct used
+   by value, which is an incomplete type that compiles nowhere.
+   */
+  bool (*available)(void *ctx, struct guatiao_str *reason);
 } guatiao_provider_info;
 
 /*
@@ -998,6 +1040,65 @@ guatiao_status guatiao_registry_provider(const struct guatiao_registry *reg,
                                          struct guatiao_str key,
                                          const struct guatiao_alloc *alloc,
                                          struct guatiao_value *out);
+
+/*
+ Every provider serving `kind` that **can actually run here**, as a list
+ of maps.
+
+ [`guatiao_registry_providers`] is who CLAIMS the kind; this is who can
+ serve it now. Each is asked at the moment of the call and nothing is
+ cached, so a provider whose optional dependency arrived or went away
+ since the last call answers differently — which is the point.
+
+ # Safety
+
+ As [`guatiao_registry_providers`].
+ */
+guatiao_status guatiao_registry_available(const struct guatiao_registry *reg,
+                                          struct guatiao_str kind,
+                                          const struct guatiao_alloc *alloc,
+                                          struct guatiao_value *out);
+
+/*
+ Why nothing can serve `kind`, as a map.
+
+ `{"available": true}` when something can. Otherwise
+ `{"available": false, "why": "nothing-claims-it"}` or
+ `{"available": false, "why": "none-available",
+ "providers": [{"id", "reason"}…]}`.
+
+ **The two refusals are kept apart because the remedies differ**:
+ install something, versus fix what you already have. A single
+ "unsupported" leaves a person with no idea which way to go.
+
+ # Safety
+
+ As [`guatiao_registry_providers`].
+ */
+guatiao_status guatiao_registry_why_not(const struct guatiao_registry *reg,
+                                        struct guatiao_str kind,
+                                        const struct guatiao_alloc *alloc,
+                                        struct guatiao_value *out);
+
+/*
+ Whether one provider can run here, writing its reason through `reason`
+ when it cannot.
+
+ `true` when it can, or when no provider answers to `key` — a caller
+ that cares about the difference has [`guatiao_registry_provider`],
+ which reports `NOT_FOUND`. `reason` may be null, and is written only on
+ a refusal; what it points at lives as long as the library.
+
+ **Asked every time, never cached.**
+
+ # Safety
+
+ `reg` is a live handle, `key` is readable for the call, and `reason` is
+ null or addresses writable storage for one `guatiao_str`.
+ */
+bool guatiao_registry_provider_available(const struct guatiao_registry *reg,
+                                         struct guatiao_str key,
+                                         struct guatiao_str *reason);
 
 /*
  One provider's function table, and the size the library compiled it at.

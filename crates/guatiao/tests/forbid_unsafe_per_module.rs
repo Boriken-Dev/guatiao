@@ -141,6 +141,28 @@ fn unsafe_is_confined_to_one_module() {
             if trimmed.contains("forbid(unsafe_code)") {
                 continue;
             }
+            // A function-pointer TYPE is not unsafe code, and
+            // `forbid(unsafe_code)` allows it: declaring the signature of
+            // a foreign function is exactly what a descriptor in an FFI
+            // envelope is made of. CALLING one is the unsafe part, and
+            // that still has to happen in an exempt file.
+            //
+            // Matched on `unsafe extern "C" fn` inside a type position —
+            // a field, an alias or a parameter — which cannot be a call:
+            // a call site has the callee's name and arguments after it,
+            // never `fn`.
+            //
+            // Relaxing this costs nothing, because `forbid(unsafe_code)`
+            // is the real enforcement and this scan is belt-and-braces:
+            // a genuine `unsafe` block in one of these files does not
+            // fail here, it fails to COMPILE. Measured, by putting one
+            // in `library/desc.rs`.
+            if trimmed.contains("unsafe extern \"C\" fn")
+                && !trimmed.starts_with("unsafe extern")
+                && !trimmed.starts_with("pub unsafe extern")
+            {
+                continue;
+            }
             if line.contains("unsafe") {
                 stray_unsafe.push(format!("{}:{}: {}", file.display(), n + 1, trimmed));
             }

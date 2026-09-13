@@ -368,6 +368,46 @@ pub struct ProviderInfo {
     /// parses it: ordering is a host's policy, applied with the semver
     /// library it already has.
     pub version: Str,
+    /// Can this provider actually run **here, right now** — and if not,
+    /// why not?
+    ///
+    /// Null means yes. A library that does not implement this is
+    /// available, which is the right default and the common case: most
+    /// providers are code that either loaded or did not.
+    ///
+    /// Otherwise it returns `true` for available and leaves `reason`
+    /// untouched, or `false` and writes a borrowed [`Str`] through
+    /// `reason` saying why. **A boolean return rather than an empty
+    /// string**, so "available" and "unavailable, with nothing to say
+    /// about it" stay different answers.
+    ///
+    /// # What this envelope does and does not define
+    ///
+    /// It defines the **slot**: the signature, when the reason is written,
+    /// and how long it lives. It does **not** define what "available"
+    /// means, when a host should ask, or what a host should do with a
+    /// refusal — those are between a host and a library, like everything
+    /// else a `kind` agrees.
+    ///
+    /// What this crate promises is only that it **never caches the
+    /// answer**. A library may load an optional dependency, lose a device,
+    /// or fail its own integrity check while a process runs, and a host
+    /// that asked once at load time would be holding an answer from before
+    /// any of that.
+    ///
+    /// # The reason must outlive every reader
+    ///
+    /// Point it at a literal in the library's image, or at something
+    /// leaked once. **Never at a buffer shared by callers**: two threads
+    /// asking the same provider at the same time would each read whatever
+    /// the other had just written, and what comes back is a fragment with
+    /// nothing reporting it. Immortal, per-call or per-thread — but not
+    /// one slot everybody writes.
+    ///
+    /// Spelled out inline rather than through a type alias: cbindgen
+    /// renders an aliased function-pointer field as an opaque struct used
+    /// by value, which is an incomplete type that compiles nowhere.
+    pub available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
 }
 
 impl ProviderInfo {
@@ -384,6 +424,11 @@ impl ProviderInfo {
     /// Where the `version` field ends, for the guard that reads it.
     pub const fn version_end() -> usize {
         offset_of!(ProviderInfo, version) + size_of::<Str>()
+    }
+
+    /// Where the `available` field ends, for the guard that reads it.
+    pub const fn available_end() -> usize {
+        offset_of!(ProviderInfo, available) + size_of::<*const c_void>()
     }
 }
 

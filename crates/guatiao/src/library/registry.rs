@@ -184,6 +184,18 @@ impl<'a> Loading<'a> {
     }
 }
 
+/// Why nothing can serve a kind.
+///
+/// Two answers rather than one, because a person acts on them
+/// differently: install something, versus fix what you have.
+#[derive(Debug)]
+pub enum WhyNot<'a> {
+    /// No loaded provider claims this kind at all.
+    NothingClaimsIt,
+    /// Providers claim it, and each said why it cannot run here.
+    NoneAvailable(Vec<(&'a Provider, &'a str)>),
+}
+
 /// One provider a loaded library offers.
 #[derive(Debug)]
 pub struct Provider {
@@ -213,6 +225,18 @@ impl Provider {
     /// [`Registry::providers`] is the same question asked of all of them.
     pub fn supports(&self, kind: &str) -> bool {
         self.view.supports(kind)
+    }
+
+    /// Whether it can actually run here, and why not when it cannot.
+    ///
+    /// **Asked every time, never cached** — see
+    /// [`ProviderInfo::available`](super::desc::ProviderInfo::available).
+    /// A provider that declares no slot is available.
+    ///
+    /// What "available" means is between this host and that library. All
+    /// this does is carry the answer, and the reason when there is one.
+    pub fn available(&self) -> Result<(), &'static str> {
+        self.view.available()
     }
 
     /// Its own identifier, unique across every provider loaded.
@@ -643,6 +667,39 @@ impl Registry {
     /// for a host that has a provider and wants the name it answers to.
     pub fn provider(&self, key: &str) -> Option<&Provider> {
         self.by_key.get(key).map(|&at| &self.providers[at])
+    }
+
+    /// Every provider that serves one kind **and can actually run here**.
+    ///
+    /// [`providers`](Registry::providers) is who CLAIMS the kind; this is
+    /// who can serve it now. Each is asked at the moment of the question,
+    /// so a provider whose optional dependency arrived or went away since
+    /// the last call answers differently — which is the point.
+    pub fn available(&self, kind: &str) -> impl Iterator<Item = &Provider> {
+        self.providers(kind).filter(|p| p.available().is_ok())
+    }
+
+    /// Why nothing can serve `kind`, or `None` when something can.
+    ///
+    /// **The two answers are kept apart because the remedies differ.**
+    /// "Nothing claims it" means install something; "everything that
+    /// claims it is unavailable here" means fix what you already have, and
+    /// carries each provider's own words about why. Collapsing them into
+    /// one "unsupported" leaves a person with no idea which way to go.
+    pub fn why_not(&self, kind: &str) -> Option<WhyNot<'_>> {
+        let mut refused = Vec::new();
+        for provider in self.providers(kind) {
+            match provider.available() {
+                // Something can serve it, so there is nothing to explain.
+                Ok(()) => return None,
+                Err(reason) => refused.push((provider, reason)),
+            }
+        }
+        if refused.is_empty() {
+            Some(WhyNot::NothingClaimsIt)
+        } else {
+            Some(WhyNot::NoneAvailable(refused))
+        }
     }
 
     /// Every provider with one id, whatever the key template made of it —

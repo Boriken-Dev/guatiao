@@ -374,6 +374,39 @@ loaded.meta                                // Option<&'static Map>
   **different** providers landing on one key, which only a host's own
   template can produce.
 
+### Can it actually run here?
+
+`ProviderInfo::available` is an optional slot: `true` for yes, or `false`
+with a borrowed reason written through an out-parameter. **Null means
+yes** — a library that does not implement it is available, which is the
+common case and the right default.
+
+```rust
+provider.available()            // Result<(), &'static str>
+reg.providers("codec")          // who CLAIMS the kind
+reg.available("codec")          // who can serve it now
+reg.why_not("codec")            // Option<WhyNot>: NothingClaimsIt | NoneAvailable
+```
+
+**The envelope defines the slot, not the meaning.** What "available" means
+and when to ask are between a host and a library, like everything a `kind`
+agrees. The one promise this crate makes is that it **never caches the
+answer**: a library may load an optional dependency, lose a device, or
+fail its own integrity check while a process runs.
+
+**The reason must outlive every reader** — a literal in the image, or
+something leaked once. Never a buffer shared between callers: two threads
+asking the same provider would each read what the other just wrote, and
+what comes back is a fragment with nothing reporting it.
+
+`why_not` keeps two refusals apart **because the remedies differ**:
+nothing claims it (install something) versus everything claiming it is
+unavailable here (fix what you have), the latter carrying each provider's
+own words. One "unsupported" leaves a person with no idea which way to go.
+
+In C: `guatiao_registry_available`, `guatiao_registry_why_not`, and
+`guatiao_registry_provider_available(reg, key, &reason)`.
+
 ### What things are filed under is the host's choice
 
 ```rust

@@ -205,12 +205,45 @@ pub struct ProviderView {
     /// The version it declared for itself, or `None` to inherit its
     /// library's. See [`ProviderInfo::version`].
     pub version: Option<&'static str>,
+    /// Its runtime-availability slot, or `None` when it declares none —
+    /// which means available. See [`ProviderInfo::available`].
+    pub available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
 }
 
 impl ProviderView {
     /// Whether it serves this kind.
     pub fn supports(&self, kind: &str) -> bool {
         self.kinds.contains(&kind)
+    }
+
+    /// Whether it can actually run here, and why not when it cannot.
+    ///
+    /// **Asked every time, never cached.** A library may load an optional
+    /// dependency, lose a device, or fail its own integrity check while a
+    /// process runs, and an answer kept from load time would predate all
+    /// of that.
+    ///
+    /// A provider declaring no slot is available: that is the common case
+    /// and the right default.
+    ///
+    /// Safe to call, for the same reason the allocator's slots are safe to
+    /// call: reading the descriptor was the unsafe step and it established
+    /// this contract. What "available" MEANS is between a host and a
+    /// library; this only carries the answer.
+    pub fn available(&self) -> Result<(), &'static str> {
+        let Some(ask) = self.available else {
+            return Ok(());
+        };
+        let mut reason = Str::empty();
+        // SAFETY: the slot's signature is this envelope's own, checked
+        // present by `read_provider`'s guard; `reason` is a writable local;
+        // and the library it lives in is never unloaded.
+        if unsafe { ask(self.ctx, &mut reason) } {
+            return Ok(());
+        }
+        // SAFETY: the contract on the field is that a written reason
+        // outlives every reader.
+        Err(unsafe { str_of(reason) }.unwrap_or(""))
     }
 }
 
@@ -365,6 +398,12 @@ unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<Provid
                 // non-null `meta` is a well-formed map by the contract on
                 // the field; and the library is never unloaded.
                 std::ptr::addr_of!((*raw).meta).read().get()
+            } else {
+                None
+            },
+            available: if declared >= ProviderInfo::available_end() {
+                // SAFETY: the guard established the field is present.
+                std::ptr::addr_of!((*raw).available).read()
             } else {
                 None
             },
@@ -685,7 +724,47 @@ mod tests {
             ctx: std::ptr::null_mut(),
             meta: MaybeNull::null(),
             version: Str::borrowed(""),
+            available: None,
         }
+    }
+
+    unsafe extern "C" fn refuses(_ctx: *mut c_void, reason: *mut Str) -> bool {
+        if !reason.is_null() {
+            // SAFETY: the test passes writable storage.
+            unsafe { reason.write(Str::borrowed("no calendar here")) };
+        }
+        false
+    }
+
+    /// A descriptor from before `available` reads as AVAILABLE.
+    ///
+    /// The direction that matters: an older library must not become
+    /// unusable because a host learned to ask a question it never heard.
+    #[test]
+    fn a_descriptor_from_before_available_is_available() {
+        let value = a_provider(ProviderInfo::version_end(), 0);
+        let (_buf, ptr) = short_of(&value, ProviderInfo::version_end());
+        // SAFETY: `_buf` owns the bytes.
+        let view =
+            unsafe { read_provider(ptr, ProviderInfo::version_end()) }.expect("above the floor");
+        assert!(
+            view.available.is_none(),
+            "the slot sits past the declared size, so reading it anyway \
+             hands back the 0xAA tail as a function pointer"
+        );
+        assert_eq!(view.available(), Ok(()));
+    }
+
+    /// And one that declares it is asked, and its reason survives.
+    #[test]
+    fn a_provider_that_refuses_says_why() {
+        let mut value = a_provider(size_of::<ProviderInfo>(), 0);
+        value.available = Some(refuses);
+        let (_buf, ptr) = short_of(&value, size_of::<ProviderInfo>());
+        // SAFETY: `_buf` owns the bytes.
+        let view =
+            unsafe { read_provider(ptr, size_of::<ProviderInfo>()) }.expect("a full descriptor");
+        assert_eq!(view.available(), Err("no calendar here"));
     }
 
     #[test]

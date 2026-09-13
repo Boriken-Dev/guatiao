@@ -87,8 +87,8 @@ int main(int argc, char **argv) {
       CHECK(text_is(field(loaded, "id"), "hello_library"), "wrong library id");
       CHECK(text_is(field(loaded, "key"), "hello_library"),
             "the default library key is %%id");
-      CHECK(guatiao_int_or(guatiao_map_find(loaded, s("providers")), -1) == 2,
-            "expected two providers");
+      CHECK(guatiao_int_or(guatiao_map_find(loaded, s("providers")), -1) == 3,
+            "expected three providers");
     }
   }
   guatiao_value_free(&answer);
@@ -161,6 +161,68 @@ int main(int argc, char **argv) {
 
   st = guatiao_registry_provider(reg, s("nobody"), &alloc, &answer);
   CHECK(st == GUATIAO_ERR_NOT_FOUND, "an unknown key should be NOT_FOUND");
+
+  /* ---- can it actually run here, and if not why ---------------------- */
+
+  {
+    guatiao_str why = {NULL, 0};
+
+    /* No slot means available, which is the common case. */
+    CHECK(guatiao_registry_provider_available(reg, s("hello_library_greeter"),
+                                              &why),
+          "a provider declaring no availability slot is available");
+
+    /* And one that refuses carries its own words about why. */
+    why.ptr = NULL;
+    why.len = 0;
+    CHECK(!guatiao_registry_provider_available(reg, s("hello_library_almanac"),
+                                               &why),
+          "the almanac refuses");
+    CHECK(why.len > 0, "a refusal says why");
+  }
+
+  /* THE SPLIT THAT MATTERS: a kind nobody claims and a kind claimed only
+     by something that cannot run are different answers, because the
+     remedies differ -- install something, versus fix what you have. */
+  st = guatiao_registry_why_not(reg, s("greeter"), &alloc, &answer);
+  CHECK(st == GUATIAO_OK &&
+            guatiao_bool_or(guatiao_map_find(&answer, s("available")), false),
+        "something can serve greeter");
+  guatiao_value_free(&answer);
+
+  st = guatiao_registry_why_not(reg, s("nothing-of-this-kind"), &alloc, &answer);
+  CHECK(st == GUATIAO_OK, "why_not returned %d", (int)st);
+  CHECK(!guatiao_bool_or(guatiao_map_find(&answer, s("available")), true) &&
+            text_is(field(&answer, "why"), "nothing-claims-it"),
+        "a kind nobody claims");
+  guatiao_value_free(&answer);
+
+  st = guatiao_registry_why_not(reg, s("timekeeper"), &alloc, &answer);
+  CHECK(st == GUATIAO_OK, "why_not returned %d", (int)st);
+  CHECK(text_is(field(&answer, "why"), "none-available"),
+        "a kind claimed only by something that cannot run");
+  {
+    guatiao_values refused =
+        guatiao_list_items(guatiao_map_find(&answer, s("providers")));
+    CHECK(refused.len == 1, "one provider refused, saw %zu", refused.len);
+    if (refused.len == 1) {
+      CHECK(text_is(field(&refused.ptr[0], "id"), "hello_library_sundial"),
+            "the refusal names which provider");
+      CHECK(field(&refused.ptr[0], "reason").len > 0,
+            "and carries its reason");
+    }
+  }
+  guatiao_value_free(&answer);
+
+  /* Claiming a kind and being able to serve it are different questions. */
+  st = guatiao_registry_providers(reg, s("timekeeper"), &alloc, &answer);
+  CHECK(st == GUATIAO_OK && guatiao_list_items(&answer).len == 1,
+        "the sundial claims timekeeper");
+  guatiao_value_free(&answer);
+  st = guatiao_registry_available(reg, s("timekeeper"), &alloc, &answer);
+  CHECK(st == GUATIAO_OK && guatiao_list_items(&answer).len == 0,
+        "and cannot serve it");
+  guatiao_value_free(&answer);
 
   /* ---- read the schema it declared, with no library call ------------- */
 
