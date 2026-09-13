@@ -225,12 +225,21 @@ layer above.
 Build:
 
 ```rust
-SchemaBuilder::new(alloc)
-    .option(OptionBuilder::new(alloc, "port", KindBuilder::int_range(alloc, 1, 65535))
+SchemaBuilder::new()
+    .option(OptionBuilder::new("port", KindBuilder::int_range(1, 65535))
         .label("Port").help("...").required())
     .section("net", "Network", "...")
     .finish() -> Result<Value, ValueError>
 ```
+
+**Building names no allocator**, the same rule the value API has. Every
+constructor has an `_in` twin that takes one — `SchemaBuilder::new_in`,
+`KindBuilder::int_range_in` — and that is what a schema built into a
+host's arena uses. **Use them throughout when you use them at all**: a
+sub-builder left on the plain form allocates through the crate's
+allocator, and the tree then holds some of both. Sound, because every
+container carries the allocator that made it, but not what somebody
+building into an arena meant.
 
 Kinds: `bool`, `string`, `int`, `int_range`, `int_bounds`, `float`,
 `float_bounds`, `bytes`, `list(items)`, `map(fields)`,

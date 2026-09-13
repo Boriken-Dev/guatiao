@@ -20,34 +20,34 @@ use guatiao::value::read::str_or;
 
 /// A schema with one tagged option: two arms, one of them empty.
 fn schema(alloc: Alloc) -> Value {
-    SchemaBuilder::new(alloc)
-        .option(OptionBuilder::new(
+    SchemaBuilder::new_in(alloc)
+        .option(OptionBuilder::new_in(
             alloc,
             "auth",
-            KindBuilder::variant(
+            KindBuilder::variant_in(
                 alloc,
                 "auth",
                 vec![
                     // No fields, and that is complete rather than missing:
                     // "use the ambient credential" is the common case.
-                    ArmBuilder::new(alloc, "sso", "Single sign-on"),
-                    ArmBuilder::new(alloc, "userpass", "Username and password")
-                        .field(OptionBuilder::new(
+                    ArmBuilder::new_in(alloc, "sso", "Single sign-on"),
+                    ArmBuilder::new_in(alloc, "userpass", "Username and password")
+                        .field(OptionBuilder::new_in(
                             alloc,
                             "username",
-                            KindBuilder::string(alloc),
+                            KindBuilder::string_in(alloc),
                         ))
                         .field(
-                            OptionBuilder::new(alloc, "password", KindBuilder::string(alloc))
+                            OptionBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
                                 .sensitive(),
                         ),
                 ],
             ),
         ))
-        .option(OptionBuilder::new(
+        .option(OptionBuilder::new_in(
             alloc,
             "host",
-            KindBuilder::string(alloc),
+            KindBuilder::string_in(alloc),
         ))
         .finish()
         .expect("a schema this small does not exhaust an allocator")
@@ -226,11 +226,11 @@ fn an_option_key_containing_the_separator_is_rejected() {
     let good = schema(alloc);
     assert_eq!(flat::check_keys(SchemaRef::new(&good).unwrap()), Ok(()));
 
-    let bad = SchemaBuilder::new(alloc)
-        .option(OptionBuilder::new(
+    let bad = SchemaBuilder::new_in(alloc)
+        .option(OptionBuilder::new_in(
             alloc,
             "auth.username",
-            KindBuilder::string(alloc),
+            KindBuilder::string_in(alloc),
         ))
         .finish()
         .unwrap();

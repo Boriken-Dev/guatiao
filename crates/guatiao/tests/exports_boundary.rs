@@ -290,9 +290,10 @@ fn a_failure_reports_its_path_through_the_error_value() {
 #[test]
 fn validation_crosses_and_never_quotes_the_refused_value() {
     let alloc = Alloc::rust();
-    let schema = SchemaBuilder::new(alloc)
+    let schema = SchemaBuilder::new_in(alloc)
         .option(
-            OptionBuilder::new(alloc, "port", KindBuilder::int_range(alloc, 1, 65535)).required(),
+            OptionBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
+                .required(),
         )
         .finish()
         .unwrap();
@@ -397,23 +398,23 @@ fn the_map_clear_symbol_refuses_a_list() {
 /// applies to.
 fn variant_schema() -> Value {
     let alloc = Alloc::rust();
-    SchemaBuilder::new(alloc)
-        .option(OptionBuilder::new(
+    SchemaBuilder::new_in(alloc)
+        .option(OptionBuilder::new_in(
             alloc,
             "auth",
-            KindBuilder::variant(
+            KindBuilder::variant_in(
                 alloc,
                 "auth",
                 vec![
-                    ArmBuilder::new(alloc, "sso", "Single sign-on"),
-                    ArmBuilder::new(alloc, "userpass", "Username and password")
-                        .field(OptionBuilder::new(
+                    ArmBuilder::new_in(alloc, "sso", "Single sign-on"),
+                    ArmBuilder::new_in(alloc, "userpass", "Username and password")
+                        .field(OptionBuilder::new_in(
                             alloc,
                             "username",
-                            KindBuilder::string(alloc),
+                            KindBuilder::string_in(alloc),
                         ))
                         .field(
-                            OptionBuilder::new(alloc, "password", KindBuilder::string(alloc))
+                            OptionBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
                                 .sensitive(),
                         ),
                 ],
