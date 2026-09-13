@@ -523,11 +523,17 @@ fn a_library_that_is_not_one_of_ours_is_reported_rather_than_failing() {
     // for "some other library that happens to be here".
     let exe = std::env::current_exe().unwrap();
     let deps = exe.parent().unwrap();
-    let ours = format!(
-        "{}hello_library{}",
-        std::env::consts::DLL_PREFIX,
-        std::env::consts::DLL_SUFFIX
-    );
+    // Both libraries this workspace builds beside the test binary.
+    let ours: Vec<String> = ["hello_library", "derived_greeter"]
+        .iter()
+        .map(|name| {
+            format!(
+                "{}{name}{}",
+                std::env::consts::DLL_PREFIX,
+                std::env::consts::DLL_SUFFIX
+            )
+        })
+        .collect();
 
     let mut checked = 0usize;
     for entry in std::fs::read_dir(deps).unwrap().flatten() {
@@ -538,7 +544,10 @@ fn a_library_that_is_not_one_of_ours_is_reported_rather_than_failing() {
         {
             continue;
         }
-        if path.file_name().is_some_and(|n| n == ours.as_str()) {
+        if path
+            .file_name()
+            .is_some_and(|n| ours.iter().any(|o| n == o.as_str()))
+        {
             continue;
         }
         if let Ok(answer) = registry.load_file(&path) {

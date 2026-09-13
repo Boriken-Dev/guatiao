@@ -44,9 +44,10 @@ use std::marker::PhantomData;
 use std::mem::size_of;
 use std::sync::Arc;
 
-use super::desc::ProviderInfo;
+use super::desc::{KindTable, KindTables, LibraryInfo, ProviderInfo};
 use super::raw::{Host, ProviderView};
 use crate::value::ValueError;
+use crate::value::alloc::Alloc;
 use crate::value::status::Status;
 use crate::value::types::{Bytes, Map, Str, Text, Value};
 
@@ -551,8 +552,9 @@ impl Host {
             .collect())
     }
 
-    /// Providers claiming `K` whose table failed validation, each with
-    /// why — so a host can report them rather than lose them.
+    /// Providers claiming `K` whose per-kind table failed validation,
+    /// each with why — so a host can report them rather than lose them.
+    /// One with no per-kind table is neither an offer nor a mismatch.
     pub fn mismatches<K: ?Sized + Kind>(
         &self,
     ) -> Result<Vec<(&'static ProviderInfo, KindMismatch)>, Status> {
@@ -560,6 +562,7 @@ impl Host {
             .list(K::NAME)?
             .into_iter()
             .filter_map(|p| p.as_kind::<K>().err().map(|why| (p, why)))
+            .filter(|(_, why)| *why != KindMismatch::NoTable)
             .collect())
     }
 
@@ -698,6 +701,188 @@ pub fn take_err(written: ProviderError, status: Status) -> ProviderError {
         ProviderError::from(status)
     } else {
         written
+    }
+}
+
+/// The `available` slot over a Rust method: runs `ask` on the instance
+/// behind `ctx`, writes a borrowed reason on refusal. A panic is a
+/// refusal with a reason.
+///
+/// # Safety
+///
+/// `ctx` is null or the `&T` the provider's descriptor declared, and
+/// `reason` is null or writable.
+#[doc(hidden)]
+pub unsafe fn available_via<T>(
+    ctx: *mut c_void,
+    reason: *mut Str,
+    ask: impl FnOnce(&T) -> Result<(), &'static str>,
+) -> bool {
+    // SAFETY: the caller's contract.
+    let Some(this) = (unsafe { ctx_ref::<T>(ctx) }) else {
+        return false;
+    };
+    let answer = crate::exports::guard_with(Err("the provider panicked while asked"), || ask(this));
+    match answer {
+        Ok(()) => true,
+        Err(why) => {
+            if !reason.is_null() {
+                // SAFETY: the caller's contract.
+                unsafe { reason.write(Str::borrowed(why)) };
+            }
+            false
+        }
+    }
+}
+
+// --- what a derived provider and library build --------------------------
+
+/// A type `#[derive(Provider)]` made a provider of.
+pub trait ProviderDecl {
+    /// Builds this provider's descriptor, its tables and its configuration
+    /// schema, once. `host` is what the library was loaded by; `alloc` is
+    /// what the schema is built through.
+    fn provider(host: Host, alloc: Alloc) -> Result<ProviderParts, ValueError>;
+}
+
+/// Everything one provider's descriptor points at, owned in one place so
+/// the descriptor stays valid for as long as this does.
+#[derive(Debug)]
+pub struct ProviderParts {
+    #[allow(dead_code)]
+    id: Box<str>,
+    #[allow(dead_code)]
+    name: Box<str>,
+    #[allow(dead_code)]
+    version: Box<str>,
+    #[allow(dead_code)]
+    kinds: Box<[Str]>,
+    #[allow(dead_code)]
+    tables: Box<[KindTable]>,
+    #[allow(dead_code)]
+    config: Option<Box<Value>>,
+    info: ProviderInfo,
+}
+
+// SAFETY: built once and never written; every pointer in `info` addresses
+// this struct's own boxes, a `static`, or an instance that lives for the
+// process.
+unsafe impl Send for ProviderParts {}
+// SAFETY: as above.
+unsafe impl Sync for ProviderParts {}
+
+impl ProviderParts {
+    /// Owns the parts and builds the descriptor over them.
+    ///
+    /// `ctx` and every table must live for the process, as a `static` or
+    /// a leaked instance does.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: &str,
+        name: &str,
+        version: &str,
+        kinds: &[&'static str],
+        tables: Vec<KindTable>,
+        config: Option<Value>,
+        ctx: *mut c_void,
+        available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
+    ) -> ProviderParts {
+        let id: Box<str> = id.into();
+        let name: Box<str> = name.into();
+        let version: Box<str> = version.into();
+        let kinds: Box<[Str]> = kinds.iter().map(|k| Str::borrowed(k)).collect();
+        let tables: Box<[KindTable]> = tables.into_boxed_slice();
+        let config = config.map(Box::new);
+        // The boxes' heap storage does not move when this struct does.
+        let info = ProviderInfo {
+            struct_size: size_of::<ProviderInfo>() as u32,
+            vtable_size: 0,
+            kinds: super::desc::Kinds {
+                ptr: kinds.as_ptr(),
+                len: kinds.len(),
+            },
+            id: Str::borrowed(&id),
+            display_name: Str::borrowed(&name),
+            config: config
+                .as_deref()
+                .map_or(std::ptr::null(), |v| v as *const Value),
+            vtable: std::ptr::null(),
+            ctx,
+            meta: crate::value::types::MaybeNull::null(),
+            version: Str::borrowed(&version),
+            available,
+            tables: KindTables {
+                ptr: tables.as_ptr(),
+                len: tables.len(),
+                stride: size_of::<KindTable>(),
+            },
+        };
+        ProviderParts {
+            id,
+            name,
+            version,
+            kinds,
+            tables,
+            config,
+            info,
+        }
+    }
+
+    /// The descriptor, pointing into this.
+    pub fn info(&self) -> &ProviderInfo {
+        &self.info
+    }
+}
+
+/// Everything a derived library's descriptor points at.
+#[derive(Debug)]
+pub struct LibraryParts {
+    #[allow(dead_code)]
+    id: Box<str>,
+    #[allow(dead_code)]
+    version: Box<str>,
+    #[allow(dead_code)]
+    providers: Vec<ProviderParts>,
+    #[allow(dead_code)]
+    infos: Box<[ProviderInfo]>,
+    info: LibraryInfo,
+}
+
+// SAFETY: as `ProviderParts`.
+unsafe impl Send for LibraryParts {}
+// SAFETY: as above.
+unsafe impl Sync for LibraryParts {}
+
+impl LibraryParts {
+    /// Owns the providers and builds the library descriptor over them.
+    pub fn new(id: &str, version: &str, providers: Vec<ProviderParts>) -> LibraryParts {
+        let id: Box<str> = id.into();
+        let version: Box<str> = version.into();
+        let infos: Box<[ProviderInfo]> = providers.iter().map(|p| *p.info()).collect();
+        let info = LibraryInfo {
+            struct_size: size_of::<LibraryInfo>() as u32,
+            abi_version: super::desc::ABI_VERSION,
+            id: Str::borrowed(&id),
+            version: Str::borrowed(&version),
+            providers: super::desc::Providers {
+                ptr: infos.as_ptr(),
+                len: infos.len(),
+                stride: size_of::<ProviderInfo>(),
+            },
+            meta: crate::value::types::MaybeNull::null(),
+        };
+        LibraryParts {
+            id,
+            version,
+            providers,
+            infos,
+            info,
+        }
+    }
+
+    /// The descriptor, pointing into this.
+    pub fn info(&self) -> &LibraryInfo {
+        &self.info
     }
 }
 

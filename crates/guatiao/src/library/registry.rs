@@ -848,13 +848,18 @@ impl Registry {
         self.providers(K::NAME).filter_map(|p| p.offer::<K>().ok())
     }
 
-    /// Providers claiming `K` whose table failed validation, each with
-    /// why, so a host can report them rather than lose them.
+    /// Providers claiming `K` whose per-kind table failed validation,
+    /// each with why, so a host can report them rather than lose them.
+    ///
+    /// A provider claiming `K` with no per-kind table — a library written
+    /// before per-kind tables existed, or a pure label — is neither an
+    /// offer nor a mismatch: the typed path never saw a table to judge.
     pub fn mismatches<K: ?Sized + Kind>(
         &self,
     ) -> impl Iterator<Item = (&Provider, KindMismatch)> + '_ {
         self.providers(K::NAME)
             .filter_map(|p| p.as_kind::<K>().err().map(|why| (p, why)))
+            .filter(|(_, why)| *why != KindMismatch::NoTable)
     }
 
     /// One provider by key, as `K`: `None` when nothing answers to the

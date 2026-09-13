@@ -82,7 +82,10 @@ const FORBIDDEN_IN_STATICS: &[&str] = &[
 /// quietly widen to cover a second use that lands in the same file later.
 /// Every entry needs a comment saying why.
 const EXEMPT: &[&str] = &[
-    // This test's own declarations name the forbidden spellings.
+    // The body of `guatiao::providers!`: the `static` it names lands in the
+    // LIBRARY AUTHOR's crate, which may hold whatever state it likes. The
+    // scan reads the macro's text, not where it expands.
+    "static REGISTERED: ::std::sync::OnceLock<::core::option::Option<$crate::library::kind::LibraryParts>> = ::std::sync::OnceLock::new();",
 ];
 
 #[test]

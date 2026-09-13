@@ -1,0 +1,16 @@
+[package]
+name = "derived_greeter"
+description = "An example guatiao library written with no glue: one type, two kinds, one line naming it"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+guatiao = { path = "../../crates/guatiao", features = ["provider"] }
+greeter_kind = { path = "../greeter_kind" }

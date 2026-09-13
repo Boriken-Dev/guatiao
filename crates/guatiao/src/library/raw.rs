@@ -104,6 +104,55 @@ macro_rules! guatiao_library {
     };
 }
 
+/// Writes a whole library from its provider types.
+///
+/// `providers!(A, B)` names the types that `#[derive(Provider)]` made
+/// providers of; the library's id and version default to the crate's own
+/// `CARGO_PKG_NAME` and `CARGO_PKG_VERSION`. The long form overrides them:
+///
+/// ```ignore
+/// guatiao::providers!(Hello);
+/// guatiao::providers!(id = "acme_net", version = "1.2.0", providers = [Hello, Counter]);
+/// ```
+///
+/// Each provider's descriptor is built once, on the first entry call,
+/// and kept for the process. A provider whose configuration schema cannot
+/// be built makes the library decline the host.
+#[macro_export]
+macro_rules! providers {
+    ($($provider:ty),+ $(,)?) => {
+        $crate::providers!(
+            id = env!("CARGO_PKG_NAME"),
+            version = env!("CARGO_PKG_VERSION"),
+            providers = [$($provider),+]
+        );
+    };
+    (id = $id:expr, version = $version:expr, providers = [$($provider:ty),+ $(,)?]) => {
+        /// What this library offers, built once.
+        fn __guatiao_describe(
+            host: $crate::library::Host,
+        ) -> ::core::option::Option<&'static $crate::library::LibraryInfo> {
+            static REGISTERED: ::std::sync::OnceLock<::core::option::Option<$crate::library::kind::LibraryParts>> = ::std::sync::OnceLock::new();
+            REGISTERED
+                .get_or_init(|| {
+                    let alloc = $crate::Alloc::rust();
+                    let mut providers = ::std::vec::Vec::new();
+                    $(
+                        providers.push(
+                            <$provider as $crate::library::kind::ProviderDecl>::provider(host, alloc).ok()?,
+                        );
+                    )+
+                    ::core::option::Option::Some($crate::library::kind::LibraryParts::new(
+                        $id, $version, providers,
+                    ))
+                })
+                .as_ref()
+                .map($crate::library::kind::LibraryParts::info)
+        }
+        $crate::guatiao_library!(__guatiao_describe);
+    };
+}
+
 /// A host, as a library keeps it.
 ///
 /// A pointer to the [`HostInfo`] a host handed its entry point, which the
