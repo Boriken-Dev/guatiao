@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use guatiao::Value;
-use guatiao::schema::build::{ArmBuilder, KindBuilder, OptionBuilder, SchemaBuilder};
+use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::schema::flat;
 use guatiao::schema::read::SchemaRef;
 use guatiao::value::alloc::Alloc;
@@ -21,7 +21,7 @@ use guatiao::value::read::str_or;
 /// A schema with one tagged option: two arms, one of them empty.
 fn schema(alloc: Alloc) -> Value {
     SchemaBuilder::new_in(alloc)
-        .option(OptionBuilder::new_in(
+        .option(FieldBuilder::new_in(
             alloc,
             "auth",
             KindBuilder::variant_in(
@@ -32,19 +32,19 @@ fn schema(alloc: Alloc) -> Value {
                     // "use the ambient credential" is the common case.
                     ArmBuilder::new_in(alloc, "sso", "Single sign-on"),
                     ArmBuilder::new_in(alloc, "userpass", "Username and password")
-                        .field(OptionBuilder::new_in(
+                        .field(FieldBuilder::new_in(
                             alloc,
                             "username",
                             KindBuilder::string_in(alloc),
                         ))
                         .field(
-                            OptionBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
+                            FieldBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
                                 .sensitive(),
                         ),
                 ],
             ),
         ))
-        .option(OptionBuilder::new_in(
+        .option(FieldBuilder::new_in(
             alloc,
             "host",
             KindBuilder::string_in(alloc),
@@ -227,7 +227,7 @@ fn an_option_key_containing_the_separator_is_rejected() {
     assert_eq!(flat::check_keys(SchemaRef::new(&good).unwrap()), Ok(()));
 
     let bad = SchemaBuilder::new_in(alloc)
-        .option(OptionBuilder::new_in(
+        .option(FieldBuilder::new_in(
             alloc,
             "auth.username",
             KindBuilder::string_in(alloc),

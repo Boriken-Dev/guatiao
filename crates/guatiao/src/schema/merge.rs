@@ -43,7 +43,7 @@
 
 #![forbid(unsafe_code)]
 
-use crate::schema::read::{OptionRef, SchemaRef};
+use crate::schema::read::{FieldRef, SchemaRef};
 use crate::value::alloc::Alloc;
 use crate::value::mutate::ValueError;
 use crate::value::read::str_or;
@@ -111,7 +111,7 @@ pub fn parse_mode(text: &str) -> Option<DeclaredMerge> {
 /// falling back to the call-site mode is a defined answer, and refusing
 /// to merge at all because an annotation was the wrong kind would let an
 /// advisory hint break a working config.
-pub fn declared_for(option: OptionRef<'_>) -> Option<DeclaredMerge> {
+pub fn declared_for(option: FieldRef<'_>) -> Option<DeclaredMerge> {
     parse_mode(str_or(option.extra(X_MERGE), ""))
 }
 

@@ -24,7 +24,7 @@
 
 use std::collections::BTreeMap;
 
-use super::read::{Kind, OptionRef, SchemaRef};
+use super::read::{FieldRef, Kind, SchemaRef};
 use super::validate::text_of;
 use crate::value::alloc::Alloc;
 use crate::value::mutate::ValueError;
@@ -35,7 +35,7 @@ use crate::value::types::{Tag, Value};
 pub const SEPARATOR: char = '.';
 
 /// Writes a tagged value into flat storage. Answers whether it applied.
-pub fn flatten(option: OptionRef<'_>, value: &Value, store: &mut BTreeMap<String, String>) -> bool {
+pub fn flatten(option: FieldRef<'_>, value: &Value, store: &mut BTreeMap<String, String>) -> bool {
     let kind = option.kind();
     let Kind::Variant { tag, .. } = kind else {
         return false;
@@ -75,7 +75,7 @@ pub fn flatten(option: OptionRef<'_>, value: &Value, store: &mut BTreeMap<String
 /// stale field some other way still reads back as the arm says it is.
 pub fn unflatten(
     alloc: Alloc,
-    option: OptionRef<'_>,
+    option: FieldRef<'_>,
     store: &BTreeMap<String, String>,
 ) -> Option<Value> {
     let kind = option.kind();
@@ -105,7 +105,7 @@ pub fn unflatten(
 ///
 /// For a caller that has to decide whether a key it is holding belongs to
 /// this option at all — a config reader partitioning a flat record, say.
-pub fn keys(option: OptionRef<'_>) -> Vec<String> {
+pub fn keys(option: FieldRef<'_>) -> Vec<String> {
     let mut out = vec![option.key().to_string()];
     for arm in option.kind().arms() {
         for field in arm.fields() {
@@ -129,7 +129,7 @@ pub fn split(key: &str) -> Option<(&str, &str)> {
 /// which is what lets a field-level encryption path keep working with no
 /// new concept: it already asks the schema whether a key is a secret, and
 /// now the schema can answer for a dotted one.
-pub fn resolve<'a>(schema: SchemaRef<'a>, key: &str) -> Option<OptionRef<'a>> {
+pub fn resolve<'a>(schema: SchemaRef<'a>, key: &str) -> Option<FieldRef<'a>> {
     if let Some(direct) = schema.find(key) {
         return Some(direct);
     }

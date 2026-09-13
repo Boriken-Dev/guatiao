@@ -12,7 +12,8 @@ use std::cell::Cell;
 use std::ffi::c_void;
 
 use guatiao::Value;
-use guatiao::schema::build::{ArmBuilder, KindBuilder, OptionBuilder, SchemaBuilder};
+use guatiao::schema::FormBuilder;
+use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::schema::vocab;
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
@@ -67,21 +68,21 @@ fn a_declared_schema_reads_back() {
         let schema = SchemaBuilder::new_in(alloc)
             .section("net", "Network", "How to reach it")
             .option(
-                OptionBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
+                FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
                     .label("Host")
                     .section("net")
                     .required()
                     .order(1),
             )
             .option(
-                OptionBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
+                FieldBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
                     .label("Port")
                     .section("net")
                     .default(Value::int_in(alloc, 5900))
                     .order(2),
             )
             .option(
-                OptionBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
+                FieldBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
                     .label("Password")
                     .sensitive()
                     .advanced(),
@@ -132,7 +133,7 @@ fn a_declared_schema_reads_back() {
 fn an_enum_carries_rows_not_two_parallel_lists() {
     with_alloc(|alloc| {
         let schema = SchemaBuilder::new_in(alloc)
-            .option(OptionBuilder::new_in(
+            .option(FieldBuilder::new_in(
                 alloc,
                 "level",
                 KindBuilder::enumeration_in(alloc, &[("off", "Off"), ("on", "On")]),
@@ -164,7 +165,7 @@ fn an_enum_carries_rows_not_two_parallel_lists() {
 fn a_union_and_a_variant_are_different_features() {
     with_alloc(|alloc| {
         let schema = SchemaBuilder::new_in(alloc)
-            .option(OptionBuilder::new_in(
+            .option(FieldBuilder::new_in(
                 alloc,
                 "port",
                 KindBuilder::union_in(
@@ -172,7 +173,7 @@ fn a_union_and_a_variant_are_different_features() {
                     vec![KindBuilder::int_in(alloc), KindBuilder::string_in(alloc)],
                 ),
             ))
-            .option(OptionBuilder::new_in(
+            .option(FieldBuilder::new_in(
                 alloc,
                 "auth",
                 KindBuilder::variant_in(
@@ -183,12 +184,12 @@ fn a_union_and_a_variant_are_different_features() {
                         // "use the ambient credential" is the common case.
                         ArmBuilder::new_in(alloc, "ambient", "Ambient"),
                         ArmBuilder::new_in(alloc, "userpass", "Username and password")
-                            .field(OptionBuilder::new_in(
+                            .field(FieldBuilder::new_in(
                                 alloc,
                                 "username",
                                 KindBuilder::string_in(alloc),
                             ))
-                            .field(OptionBuilder::new_in(
+                            .field(FieldBuilder::new_in(
                                 alloc,
                                 "password",
                                 KindBuilder::string_in(alloc),
@@ -231,7 +232,7 @@ fn an_unknown_kind_leaves_the_option_readable_and_the_rest_intact() {
     with_alloc(|alloc| {
         let mut schema = SchemaBuilder::new_in(alloc)
             .option(
-                OptionBuilder::new_in(alloc, "known", KindBuilder::string_in(alloc)).label("Known"),
+                FieldBuilder::new_in(alloc, "known", KindBuilder::string_in(alloc)).label("Known"),
             )
             .finish()
             .unwrap();
@@ -272,7 +273,7 @@ fn an_unknown_kind_leaves_the_option_readable_and_the_rest_intact() {
 fn a_malformed_option_is_skipped_not_fatal() {
     with_alloc(|alloc| {
         let mut schema = SchemaBuilder::new_in(alloc)
-            .option(OptionBuilder::new_in(
+            .option(FieldBuilder::new_in(
                 alloc,
                 "good",
                 KindBuilder::bool_in(alloc),
@@ -302,7 +303,7 @@ fn an_annotation_is_carried_but_not_interpreted() {
     with_alloc(|alloc| {
         let schema = SchemaBuilder::new_in(alloc)
             .option(
-                OptionBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
+                FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
                     .extra("x-widget", Value::string_in(alloc, "combo")),
             )
             .extra("x-origin", Value::string_in(alloc, "test"))
@@ -341,22 +342,22 @@ fn an_annotation_is_carried_but_not_interpreted() {
 fn the_plain_builders_and_the_in_builders_agree() {
     let by_hand = SchemaBuilder::new()
         .option(
-            OptionBuilder::new("port", KindBuilder::int_range(1, 65535))
+            FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
                 .label("Port")
                 .required(),
         )
-        .option(OptionBuilder::new("name", KindBuilder::string()))
+        .option(FieldBuilder::new("name", KindBuilder::string()))
         .finish()
         .expect("a schema this small does not exhaust an allocator");
 
     let alloc = Alloc::rust();
     let named = SchemaBuilder::new_in(alloc)
         .option(
-            OptionBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
+            FieldBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
                 .label("Port")
                 .required(),
         )
-        .option(OptionBuilder::new_in(
+        .option(FieldBuilder::new_in(
             alloc,
             "name",
             KindBuilder::string_in(alloc),
