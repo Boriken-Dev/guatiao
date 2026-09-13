@@ -139,6 +139,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   carries one table per kind (`ProviderInfo::tables`); a hand-written
   `vtable` stays the untyped path and is never mistaken for a typed table.
   `examples/derived_greeter` is two `impl`s and one line.
+- **A provider builds instances from a configuration.** `#[provider(config
+  = C)]` means the type is built from `C` (`FromValue` then `TryFrom<C>`);
+  the host reads the schema, fills it in, and `offer.instantiate(&config)`
+  hands back an `Instance<dyn Kind>` whose address is the context every
+  call on it takes, released on drop. Many instances per provider, each
+  its own configuration; a provider without `config` is its one instance.
+  Two envelope slots, `ProviderInfo::create` and `destroy`, and from C
+  `guatiao_registry_provider_create` / `_destroy`.
 - `Text`, `Buffer`, `Entry`, `Tag`, `Str`, `MAX_DEPTH` at the crate root;
   `Default` for `Text` and `Buffer`; `Bytes::borrowed`/`empty`;
   `Entry::value_mut`; `Schema for f32`; `Registry::all_ranked`;

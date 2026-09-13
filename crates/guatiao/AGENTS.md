@@ -474,7 +474,8 @@ guatiao::guatiao_library!(describe);   // emits `guatiao_library_entry`
 
 `LibraryInfo { struct_size, abi_version, id, version, providers, meta }`;
 `ProviderInfo { struct_size, vtable_size, kinds, id, display_name, config,
-vtable, ctx, meta, version, available }`; `HostInfo { struct_size,
+vtable, ctx, meta, version, available, tables, create, destroy }`;
+`HostInfo { struct_size,
 abi_version, host_id, host_version, alloc, meta, services }`;
 `HostServices { struct_size, ctx, get, list, alloc }`. `ABI_VERSION` is 1.
 
@@ -650,11 +651,28 @@ unsafe { Remote::<dyn Greeter>::from_raw(table, size, ctx) }   // a table from a
   both sides share: `From<Status>`, `From<ValueError>`, `message()`.
 - **`#[provider(..)]` long form**: `kinds(A, B)`, `id = ".."` (default
   `{package}_{type}` snake case), `name = ".."` (default the type),
-  `version = ".."` (default empty: the library's), `config = T` (`T:
-  Schema`), `new = path` (`fn() -> Self`) or `new_with_host = path`
+  `version = ".."` (default empty: the library's), `config = C` (below),
+  `new = path` (`fn() -> Self`) or `new_with_host = path`
   (`fn(Host) -> Self`; default `Default`), `available = path` (`fn(&Self)
   -> Result<(), &'static str>`). `providers!(id = .., version = ..,
   providers = [A, B])` is the long form of the library line.
+- **Instances from a configuration.** `config = C` means the provider is
+  **built from `C`**: `C: Schema + FromValue`, `Self: TryFrom<C, Error:
+  Into<ProviderError>>` (`C = Self` is the identity, so a type deriving
+  `FromValue` and `Schema` itself needs no `TryFrom`). The host reads the
+  schema (`offer.config_schema()`), fills it in, and calls
+  `offer.instantiate(&config) -> Result<Instance<dyn K>, ProviderError>`;
+  the `Instance` derefs to the trait, its address is the `ctx` every call
+  on it takes (what `&self` is in the impl), and dropping it runs the
+  provider's `destroy`. Many instances per provider, each its own
+  configuration. With `config` and no `new`/`new_with_host` there is no
+  default instance (`ctx` null) and `available` is refused. A provider
+  without `config` is its one instance and `instantiate` answers
+  `GUATIAO_ERR_NULL`; `offer.builds_instances()` says which. The envelope
+  slots are `ProviderInfo::create` / `destroy`; from C,
+  `guatiao_registry_provider_create(reg, key, config, &instance, &err)`
+  and `_destroy(reg, key, instance)`, the instance being the `ctx` for
+  that provider's tables.
 - A provider that cannot build its config schema makes the library
   decline the host.
 
