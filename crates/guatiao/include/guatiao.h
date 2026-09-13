@@ -1267,28 +1267,35 @@ const struct guatiao_value *guatiao_schema_resolve(const struct guatiao_value *s
 /*
  The flat keys one field projects onto, as a list of strings.
 
+ Takes the schema and a key rather than a field, because **a field's
+ name is not inside the field**: it is the key it is filed under in
+ `properties`, so a bare pointer to a field's schema cannot say what it
+ is called. Same for the three below.
+
  # Safety
 
- `field` addresses a well-formed field value and `out` writable
- storage for one value.
+ `schema` addresses a well-formed value, `key` a readable view, and
+ `out` writable storage for one value.
  */
-guatiao_status guatiao_schema_flat_keys(const struct guatiao_value *field,
+guatiao_status guatiao_schema_flat_keys(const struct guatiao_value *schema,
+                                        struct guatiao_str key,
                                         const struct guatiao_alloc *alloc,
                                         struct guatiao_value *out);
 
 /*
  Writes a tagged value into a flat store of `key -> text`.
 
- `GUATIAO_ERR_WRONG_KIND` when the field is not a variant or the value
- is not a map, which is the same "it does not apply" the Rust side
- reports as `false`.
+ `GUATIAO_ERR_WRONG_KIND` when the key names no field, the field is not
+ a variant, or the value is not a map — all of which are the same "it
+ does not apply" the Rust side reports as `false`.
 
  # Safety
 
- Every non-null pointer addresses what its type says, and `out`
- addresses writable storage for one value.
+ Every non-null pointer addresses what its type says, `key` is a
+ readable view, and `out` addresses writable storage for one value.
  */
-guatiao_status guatiao_schema_flatten(const struct guatiao_value *field,
+guatiao_status guatiao_schema_flatten(const struct guatiao_value *schema,
+                                      struct guatiao_str key,
                                       const struct guatiao_value *value,
                                       const struct guatiao_alloc *alloc,
                                       struct guatiao_value *out);
@@ -1305,7 +1312,8 @@ guatiao_status guatiao_schema_flatten(const struct guatiao_value *field,
  As for [`guatiao_schema_flatten`]. `flat` is a map whose values are all
  strings; one that is not answers `GUATIAO_ERR_WRONG_KIND`.
  */
-guatiao_status guatiao_schema_unflatten(const struct guatiao_value *field,
+guatiao_status guatiao_schema_unflatten(const struct guatiao_value *schema,
+                                        struct guatiao_str key,
                                         const struct guatiao_value *flat,
                                         const struct guatiao_alloc *alloc,
                                         struct guatiao_value *out);

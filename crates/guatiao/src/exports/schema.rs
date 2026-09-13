@@ -146,6 +146,23 @@ fn store_into(alloc: Alloc, store: &BTreeMap<String, String>) -> Option<Value> {
     Some(out)
 }
 
+/// The field a key names, following one level of projection.
+///
+/// The three exports below all need it, and doing it once is what keeps
+/// them agreeing about what `auth.password` means.
+///
+/// # Safety
+///
+/// `schema` is non-null and addresses a well-formed value, and `key` is a
+/// readable view.
+unsafe fn field_at<'a>(schema: *const Value, key: Str) -> Option<FieldRef<'a>> {
+    // SAFETY: the caller's contract.
+    let schema = SchemaRef::new(unsafe { &*schema })?;
+    // SAFETY: as above.
+    let key = unsafe { super::as_str(key) }.ok()?;
+    flat::resolve(schema, key)
+}
+
 /// The field governing a flat key, or null.
 ///
 /// Follows one level of projection, so `auth.password` answers the arm
@@ -182,22 +199,28 @@ pub unsafe extern "C" fn guatiao_schema_resolve(schema: *const Value, key: Str) 
 
 /// The flat keys one field projects onto, as a list of strings.
 ///
+/// Takes the schema and a key rather than a field, because **a field's
+/// name is not inside the field**: it is the key it is filed under in
+/// `properties`, so a bare pointer to a field's schema cannot say what it
+/// is called. Same for the three below.
+///
 /// # Safety
 ///
-/// `field` addresses a well-formed field value and `out` writable
-/// storage for one value.
+/// `schema` addresses a well-formed value, `key` a readable view, and
+/// `out` writable storage for one value.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_schema_flat_keys(
-    field: *const Value,
+    schema: *const Value,
+    key: Str,
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
-    if field.is_null() || out.is_null() {
+    if schema.is_null() || out.is_null() {
         return Status::GUATIAO_ERR_NULL;
     }
     super::guard(|| {
         // SAFETY: the caller's contract.
-        let Some(field) = FieldRef::new(unsafe { &*field }) else {
+        let Some(field) = (unsafe { field_at(schema, key) }) else {
             return Status::GUATIAO_ERR_WRONG_KIND;
         };
         // SAFETY: as above.
@@ -222,28 +245,30 @@ pub unsafe extern "C" fn guatiao_schema_flat_keys(
 
 /// Writes a tagged value into a flat store of `key -> text`.
 ///
-/// `GUATIAO_ERR_WRONG_KIND` when the field is not a variant or the value
-/// is not a map, which is the same "it does not apply" the Rust side
-/// reports as `false`.
+/// `GUATIAO_ERR_WRONG_KIND` when the key names no field, the field is not
+/// a variant, or the value is not a map — all of which are the same "it
+/// does not apply" the Rust side reports as `false`.
 ///
 /// # Safety
 ///
-/// Every non-null pointer addresses what its type says, and `out`
-/// addresses writable storage for one value.
+/// Every non-null pointer addresses what its type says, `key` is a
+/// readable view, and `out` addresses writable storage for one value.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_schema_flatten(
-    field: *const Value,
+    schema: *const Value,
+    key: Str,
     value: *const Value,
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
-    if field.is_null() || value.is_null() || out.is_null() {
+    if schema.is_null() || value.is_null() || out.is_null() {
         return Status::GUATIAO_ERR_NULL;
     }
     super::guard(|| {
         // SAFETY: the caller's contract.
-        let (field, value) = unsafe { (&*field, &*value) };
-        let Some(field) = FieldRef::new(field) else {
+        let value = unsafe { &*value };
+        // SAFETY: as above.
+        let Some(field) = (unsafe { field_at(schema, key) }) else {
             return Status::GUATIAO_ERR_WRONG_KIND;
         };
         // SAFETY: as above.
@@ -276,18 +301,20 @@ pub unsafe extern "C" fn guatiao_schema_flatten(
 /// strings; one that is not answers `GUATIAO_ERR_WRONG_KIND`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_schema_unflatten(
-    field: *const Value,
+    schema: *const Value,
+    key: Str,
     flat: *const Value,
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
-    if field.is_null() || flat.is_null() || out.is_null() {
+    if schema.is_null() || flat.is_null() || out.is_null() {
         return Status::GUATIAO_ERR_NULL;
     }
     super::guard(|| {
         // SAFETY: the caller's contract.
-        let (field, flat) = unsafe { (&*field, &*flat) };
-        let Some(field) = FieldRef::new(field) else {
+        let flat = unsafe { &*flat };
+        // SAFETY: as above.
+        let Some(field) = (unsafe { field_at(schema, key) }) else {
             return Status::GUATIAO_ERR_WRONG_KIND;
         };
         let Some(store) = store_of(flat) else {

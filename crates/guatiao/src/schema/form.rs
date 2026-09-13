@@ -17,7 +17,8 @@
 //! # Two traits, because the audience differs
 //!
 //! [`FormBuilder`] is what every builder has: a label, some help, which
-//! section it sits in. [`FormFieldBuilder`] is what only a **field** has:
+//! section it sits in. The first two are JSON Schema's own `title` and
+//! `description`; the rest are ours, and `x-` prefixed to say so. [`FormFieldBuilder`] is what only a **field** has:
 //! an order among its siblings, whether it hides behind a disclosure,
 //! whether it is a secret. A schema has no order among siblings and an arm
 //! is not a secret, so granting them those would be a trait handing out
@@ -68,19 +69,20 @@ pub trait FormBuilder: Sized {
     /// else.
     fn form_alloc(&self) -> Alloc;
 
-    /// A short human label.
+    /// A short human label: JSON Schema's `title`.
     #[must_use]
     fn label(mut self, label: &str) -> Self {
         let alloc = self.form_alloc();
-        self.presentation(vocab::LABEL, Value::string_in(alloc, label));
+        self.presentation(vocab::TITLE, Value::string_in(alloc, label));
         self
     }
 
     /// Longer human help: a sentence under the control, or a tooltip.
+    /// JSON Schema's `description`.
     #[must_use]
     fn help(mut self, help: &str) -> Self {
         let alloc = self.form_alloc();
-        self.presentation(vocab::HELP, Value::string_in(alloc, help));
+        self.presentation(vocab::DESCRIPTION, Value::string_in(alloc, help));
         self
     }
 
@@ -94,7 +96,7 @@ pub trait FormBuilder: Sized {
     #[must_use]
     fn section(mut self, section: &str) -> Self {
         let alloc = self.form_alloc();
-        self.presentation(vocab::SECTION, Value::string_in(alloc, section));
+        self.presentation(vocab::X_SECTION, Value::string_in(alloc, section));
         self
     }
 }
@@ -113,14 +115,14 @@ pub trait FormFieldBuilder: FormBuilder {
     #[must_use]
     fn order(mut self, order: i64) -> Self {
         let alloc = self.form_alloc();
-        self.presentation(vocab::ORDER, Value::int_in(alloc, order));
+        self.presentation(vocab::X_ORDER, Value::int_in(alloc, order));
         self
     }
 
     /// Hidden behind a disclosure by default.
     #[must_use]
     fn advanced(mut self) -> Self {
-        self.presentation(vocab::ADVANCED, Ok(Value::bool(true)));
+        self.presentation(vocab::X_ADVANCED, Ok(Value::bool(true)));
         self
     }
 
@@ -131,7 +133,7 @@ pub trait FormFieldBuilder: FormBuilder {
     /// somebody declared it one.
     #[must_use]
     fn sensitive(mut self) -> Self {
-        self.presentation(vocab::SENSITIVE, Ok(Value::bool(true)));
+        self.presentation(vocab::X_SENSITIVE, Ok(Value::bool(true)));
         self
     }
 }

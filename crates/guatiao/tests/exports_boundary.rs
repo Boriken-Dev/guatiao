@@ -456,10 +456,6 @@ fn a_tagged_value_survives_the_round_trip_through_flat_text() {
     let alloc = Alloc::rust();
     let schema = variant_schema();
 
-    // SAFETY: a well-formed schema.
-    let field = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
-    assert!(!field.is_null());
-
     let mut chosen = Map::new();
     chosen.set("auth", "userpass").unwrap();
     chosen.set("username", "ana").unwrap();
@@ -468,7 +464,15 @@ fn a_tagged_value_survives_the_round_trip_through_flat_text() {
 
     let mut flat = Value::absent();
     // SAFETY: every pointer addresses what its type says.
-    let status = unsafe { guatiao_schema_flatten(field, &chosen, alloc.as_raw(), &mut flat) };
+    let status = unsafe {
+        guatiao_schema_flatten(
+            &schema,
+            Str::borrowed("auth"),
+            &chosen,
+            alloc.as_raw(),
+            &mut flat,
+        )
+    };
     assert_eq!(status, Status::GUATIAO_OK);
 
     assert_eq!(
@@ -484,7 +488,15 @@ fn a_tagged_value_survives_the_round_trip_through_flat_text() {
 
     let mut back = Value::absent();
     // SAFETY: as above; `flat` is a map whose values are all strings.
-    let status = unsafe { guatiao_schema_unflatten(field, &flat, alloc.as_raw(), &mut back) };
+    let status = unsafe {
+        guatiao_schema_unflatten(
+            &schema,
+            Str::borrowed("auth"),
+            &flat,
+            alloc.as_raw(),
+            &mut back,
+        )
+    };
     assert_eq!(status, Status::GUATIAO_OK);
     assert_eq!(back.get("auth").and_then(Value::as_str), Some("userpass"));
     assert_eq!(back.get("username").and_then(Value::as_str), Some("ana"));
@@ -499,8 +511,6 @@ fn a_tagged_value_survives_the_round_trip_through_flat_text() {
 fn a_flat_store_that_is_not_all_text_is_refused() {
     let alloc = Alloc::rust();
     let schema = variant_schema();
-    // SAFETY: a well-formed schema.
-    let field = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
 
     let mut flat = Map::new();
     flat.set("auth", "userpass").unwrap();
@@ -510,7 +520,15 @@ fn a_flat_store_that_is_not_all_text_is_refused() {
 
     let mut back = Value::absent();
     // SAFETY: as above.
-    let status = unsafe { guatiao_schema_unflatten(field, &flat, alloc.as_raw(), &mut back) };
+    let status = unsafe {
+        guatiao_schema_unflatten(
+            &schema,
+            Str::borrowed("auth"),
+            &flat,
+            alloc.as_raw(),
+            &mut back,
+        )
+    };
     assert_eq!(
         status,
         Status::GUATIAO_ERR_WRONG_KIND,
@@ -524,12 +542,12 @@ fn a_flat_store_that_is_not_all_text_is_refused() {
 fn the_flat_keys_of_an_option_are_listed() {
     let alloc = Alloc::rust();
     let schema = variant_schema();
-    // SAFETY: a well-formed schema.
-    let field = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
 
     let mut keys = Value::absent();
-    // SAFETY: a well-formed field and writable storage.
-    let status = unsafe { guatiao_schema_flat_keys(field, alloc.as_raw(), &mut keys) };
+    // SAFETY: a well-formed schema and writable storage.
+    let status = unsafe {
+        guatiao_schema_flat_keys(&schema, Str::borrowed("auth"), alloc.as_raw(), &mut keys)
+    };
     assert_eq!(status, Status::GUATIAO_OK);
 
     let listed: Vec<&str> = keys
@@ -557,15 +575,32 @@ fn the_flat_exports_refuse_null() {
     unsafe {
         assert!(guatiao_schema_resolve(std::ptr::null(), Str::borrowed("k")).is_null());
         assert_eq!(
-            guatiao_schema_flat_keys(std::ptr::null(), alloc.as_raw(), &mut out),
+            guatiao_schema_flat_keys(
+                std::ptr::null(),
+                Str::borrowed("auth"),
+                alloc.as_raw(),
+                &mut out
+            ),
             Status::GUATIAO_ERR_NULL
         );
         assert_eq!(
-            guatiao_schema_flatten(std::ptr::null(), &schema, alloc.as_raw(), &mut out),
+            guatiao_schema_flatten(
+                std::ptr::null(),
+                Str::borrowed("auth"),
+                &schema,
+                alloc.as_raw(),
+                &mut out
+            ),
             Status::GUATIAO_ERR_NULL
         );
         assert_eq!(
-            guatiao_schema_unflatten(std::ptr::null(), &schema, alloc.as_raw(), &mut out),
+            guatiao_schema_unflatten(
+                std::ptr::null(),
+                Str::borrowed("auth"),
+                &schema,
+                alloc.as_raw(),
+                &mut out
+            ),
             Status::GUATIAO_ERR_NULL
         );
     }

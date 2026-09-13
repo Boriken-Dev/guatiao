@@ -217,10 +217,32 @@ Generated code names only `::guatiao::` paths, checked by a test.
 
 # Schema
 
-**A schema is an ordinary value**, with a documented key vocabulary in
-`schema::vocab`, so a consumer in any language reads one by walking a map.
-There is no serialisation here: how a schema is written down belongs to a
-layer above.
+**A schema is an ordinary value, and that value IS a JSON Schema
+(2020-12)**, so a consumer in any language reads one by walking a map --
+and the keys it walks are ones its ecosystem probably already has a
+library for. `schema::vocab` is the contract.
+
+There is no serialisation here and no emitter: the value already IS the
+document, so `guatiao-serde` writes it out in JSON, TOML or YAML knowing
+nothing about schemas.
+
+```text
+{ "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": ..., "description": ...,
+  "properties": { "<name>": <schema>, ... },
+  "required": ["<name>", ...] }
+```
+
+Keys we added are `x-` prefixed, which is the space the specification
+reserves for exactly that: `x-section`, `x-order`, `x-advanced`,
+`x-sensitive`, `x-labels`, `x-tag`. Everything else is JSON Schema's.
+
+**Two things are not JSON Schema's, on purpose.** `type: "bytes"` extends
+the type set, so a document using it is readable by anything and fails a
+strict meta-schema check -- the data is unaffected. And `x-tag` names a
+variant's discriminant, because JSON Schema has no discriminator keyword
+and inferring one stops working the moment two properties are `const`.
 
 Build:
 
@@ -235,20 +257,34 @@ SchemaBuilder::new()
     .finish() -> Result<Value, ValueError>
 ```
 
+**A name lives in one place, and so does requiredness.** A field's name
+is its key in `properties` and appears nowhere inside the field; whether
+it is required is a name in the owner's `required` list and appears
+nowhere inside the field either. That is why a builder **collects** its
+fields and writes both at `finish` rather than appending as it goes, and
+why a `FieldRef` carries its name and its requiredness alongside the
+schema it views -- a bare pointer to a field's subschema cannot say what
+it is called.
+
+The same reason the C flat exports take `(schema, key)` rather than a
+field pointer.
+
 **A schema does not know about forms.** There is no way here to DECLARE
 a section: a section exists only to group controls on a screen, so naming
 one is a form's business. `FormBuilder::section` says which section a
 field belongs to — a hint carried alongside the field — and what that
 section is CALLED belongs to whatever draws it. A producer that must
-write one uses `extra`, the door every annotation goes through.
+write one uses `option`, the door every annotation goes through.
 
 **A schema and a form are different questions.** Substance lives on the
 builders; presentation lives on two traits in `schema::form`:
 
 | trait | gives | implemented for |
 | --- | --- | --- |
-| `FormBuilder` | `label`, `help`, `section` | `SchemaBuilder`, `FieldBuilder`, `ArmBuilder` |
-| `FormFieldBuilder` | `order`, `advanced`, `sensitive` | `FieldBuilder` |
+| `FormBuilder` | `label`→`title`, `help`→`description`, `section`→`x-section` | `SchemaBuilder`, `FieldBuilder`, `ArmBuilder` |
+| `FormFieldBuilder` | `order`, `advanced`, `sensitive` (all `x-`) | `FieldBuilder` |
+
+The Rust names stay `label`/`help`; the wire names are JSON Schema's.
 
 Two, because a schema has no position among siblings and an arm is not a
 secret — a single trait would hand out methods that mean nothing on two of
@@ -257,19 +293,14 @@ substance: `required`, `default`, `extra`.
 
 Import the trait to use its methods. **`#[derive(Schema)]` needs no
 import**: it names them by rooted path, because a trait reached by method
-syntax would have to be in scope at the expansion site. What a value *is* — its
-kind, its bounds, whether it is required — is substance and lives on the
-builders. How it is *shown* — `label`, `help` — is presentation and lives
-on the **`FormBuilder`** trait, which `SchemaBuilder`, `FieldBuilder` and
-`ArmBuilder` all implement. Import the trait to use those two.
+syntax would have to be in scope at the expansion site.
 
 Presentation is optional and substance is not: every presentation key may
 be missing and the schema is still correct and still usable. Never make a
 validation or type decision depend on one.
 
 `FieldBuilder` rather than `OptionBuilder`, because the same builder
-produces an entry in a schema's `fields` **and** in a map kind's
-`fields`. The wire keys are unchanged.
+produces an entry in a schema's `properties` **and** in a map kind's.
 
 **Building names no allocator**, the same rule the value API has. Every
 constructor has an `_in` twin that takes one — `SchemaBuilder::new_in`,
@@ -280,15 +311,31 @@ allocator, and the tree then holds some of both. Sound, because every
 container carries the allocator that made it, but not what somebody
 building into an arena meant.
 
-Kinds: `bool`, `string`, `int`, `int_range`, `int_bounds`, `float`,
-`float_bounds`, `bytes`, `list(items)`, `map(fields)`,
-`enumeration(choices)`, `union(arms)`, `variant(tag, arms)`.
+Kinds, with what each writes:
+
+| builder | document |
+| --- | --- |
+| `bool` | `type: "boolean"` |
+| `string` | `type: "string"` |
+| `int`, `int_range`, `int_bounds` | `type: "integer"` + `minimum`/`maximum` |
+| `float`, `float_bounds` | `type: "number"` + `minimum`/`maximum` |
+| `bytes` | `type: "bytes"` (ours) |
+| `list(items)` | `type: "array"` + `items` |
+| `map(fields)` | `type: "object"` + `properties`/`required` |
+| `enumeration(choices)` | `type: "string"` + `enum` + `x-labels` |
+| `union(arms)` | `anyOf` — **any** arm accepting is enough, and no `type` |
+| `variant(tag, arms)` | `type: "object"` + `x-tag` + `oneOf`, each arm pinning the tag with `const` and requiring it |
+
+`anyOf` for a union and `oneOf` for a variant is not cosmetic: a union
+asks only whether the value is acceptable, so `oneOf` would reject a value
+two arms both accept.
 
 Read (borrowed views over the value, no copying):
 
 ```rust
 SchemaRef::new(&value) -> Option<SchemaRef>
-  .fields() / .sections() / .find(key) / .extra(key) / .as_value()
+  .dialect() .label() .help() .fields() .find(key) .extra(key) .as_value()
+FieldRef::new(key, &schema) -> Option<FieldRef>   // answers is_required() false
 FieldRef: .key() .kind() .label() .help() .section() .default() .order()
            .is_advanced() .is_sensitive() .is_required() .extra(key)
 Kind: .choices() .alternatives() .arms() .items() .fields() .name()
