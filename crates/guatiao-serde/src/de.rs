@@ -204,7 +204,9 @@ fn number<E: serde::de::Error>(alloc: Alloc, text: &str) -> Result<Value, E> {
     Value::number_in(alloc, text).map_err(E::custom)
 }
 
-#[cfg(test)]
+// The unit tests drive a real format, and JSON is the one this crate
+// carries by default. `tests/every_format.rs` covers the rest.
+#[cfg(all(test, feature = "json"))]
 mod tests {
     use super::*;
     use crate::{Bytes, to_serde, to_serde_with};
@@ -216,8 +218,11 @@ mod tests {
             .expect("valid json")
     }
 
+    /// As in `ser`: JSON's own number policy, which is what makes a
+    /// number's spelling survive.
     fn write(v: &Value) -> String {
-        serde_json::to_string(&to_serde(v)).expect("writable")
+        let how = Presentation::new().numbers(crate::Numbers::RawText);
+        serde_json::to_string(&to_serde_with(v, how)).expect("writable")
     }
 
     /// TEXT ROUND-TRIPS, for everything a format can hand over intact.
@@ -243,23 +248,20 @@ mod tests {
         }
     }
 
-    /// **WHAT THE SERDE ROUTE COSTS, measured rather than described.**
+    /// **A number keeps its SPELLING, not merely its magnitude.**
     ///
-    /// Writing a number is exact: the text goes out verbatim, so `1.10`
-    /// and a 200-digit integer leave this crate unchanged. READING one is
-    /// not, and cannot be — `serde_json` without `arbitrary_precision`
-    /// resolves any number past `i64`/`u64` to an `f64` before a visitor
-    /// is ever called, so the spelling is gone before this crate sees it.
+    /// The `json` feature carries `serde_json/arbitrary_precision`, so a
+    /// number arrives as its own text rather than as an `f64`. That is
+    /// more than an arbitrary-precision number TYPE preserves: those hold
+    /// a value and normalise `1.10` to `1.1`, where this model holds the
+    /// text and does not.
     ///
-    /// That feature is deliberately not enabled here: cargo unifies
-    /// features across a build, so turning it on would change
-    /// `serde_json::Value` for every other crate in a consumer's graph.
-    ///
-    /// A format that hands over the text — or a `serde_json` built with
-    /// that feature — reads exactly. This pins the limit so that a change
-    /// to it is a decision rather than a surprise.
+    /// Without the feature, `serde_json` resolves anything past
+    /// `i64`/`u64` to an `f64` before a visitor is ever called and the
+    /// spelling is gone before this crate can see it. That is why the
+    /// feature rides with the format rather than being offered separately.
     #[test]
-    fn a_number_past_u64_loses_its_spelling_on_the_way_in() {
+    fn a_number_keeps_its_spelling_through_a_round_trip() {
         // Exact in, exact out, for everything that fits.
         assert_eq!(read("5900").as_number_str(), Some("5900"));
         assert_eq!(
@@ -267,36 +269,20 @@ mod tests {
             Some("18446744073709551615")
         );
 
-        // And past that, it depends on whether the format was asked to
-        // hand the text over.
-        #[cfg(not(feature = "arbitrary-numbers"))]
-        {
-            assert_eq!(read("1.10").as_number_str(), Some("1.1"));
-            assert_eq!(
-                read("123456789012345678901234567890").as_number_str(),
-                Some("1.2345678901234568e29")
-            );
-        }
-        #[cfg(feature = "arbitrary-numbers")]
-        {
-            // The token path: exact, including the SPELLING, which is
-            // more than an arbitrary-precision NUMBER type preserves —
-            // one of those normalises `1.10` to `1.1` because it holds a
-            // value. This model holds the text.
-            assert_eq!(read("1.10").as_number_str(), Some("1.10"));
-            assert_eq!(
-                read("123456789012345678901234567890").as_number_str(),
-                Some("123456789012345678901234567890")
-            );
-            // `1e400` comes back `1e+400`: serde_json writes the
-            // exponent's sign in. The MAGNITUDE is exact, which is what
-            // no `f64` could have done; the spelling is the format's to
-            // normalise and this is what it chose.
-            assert_eq!(read("1e400").as_number_str(), Some("1e+400"));
-        }
+        // And past that, through the token: exact, spelling included.
+        assert_eq!(read("1.10").as_number_str(), Some("1.10"));
+        assert_eq!(
+            read("123456789012345678901234567890").as_number_str(),
+            Some("123456789012345678901234567890")
+        );
+        // `1e400` comes back `1e+400`: serde_json writes the exponent's
+        // sign in. The MAGNITUDE is exact, which is what no `f64` could
+        // have done; the spelling of an exponent is the format's to
+        // normalise, and this is what it chose.
 
-        // WRITING is exact whatever the magnitude, which is the half this
-        // crate does control.
+        assert_eq!(read("1e400").as_number_str(), Some("1e+400"));
+
+        // And writing is exact whatever the magnitude.
         let huge = "123456789012345678901234567890123456789012345678901234567890";
         assert_eq!(write(&Value::number(huge).unwrap()), huge);
         assert_eq!(write(&Value::number("1.10").unwrap()), "1.10");
