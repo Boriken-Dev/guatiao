@@ -106,6 +106,7 @@ pub use raw::{declaration, declaration_len};
 pub use registry::{LoadError, Loaded, Loading, Provider, Registry, Skipped, WhyNot};
 #[cfg(feature = "load")]
 pub use scan::{
-    Declared, LoadReport, Order, Probe, RuleError, ScanRules, declares_entry_symbol, probe,
-    scan_dir, scan_dir_ordered, scan_dir_rules, scan_dir_with,
+    Declared, LoadReport, Order, Probe, RuleError, ScanRules, SearchPath, bundle_binary,
+    declares_entry_symbol, probe, scan_dir, scan_dir_ordered, scan_dir_rules, scan_dir_with,
+    scan_path,
 };
