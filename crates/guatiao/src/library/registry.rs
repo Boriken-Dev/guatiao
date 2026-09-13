@@ -34,8 +34,7 @@ use super::desc::{ABI_VERSION, HostInfo};
 use super::key::{KeyError, KeyFields, KeyTemplate};
 use super::raw::{LibraryView, ProviderView};
 use crate::value::alloc::Alloc;
-use crate::value::types::MaybeNull;
-use crate::value::types::Str;
+use crate::value::types::{MaybeNull, Str, Text};
 
 /// Why a file could not be loaded.
 #[derive(Debug)]
@@ -190,15 +189,21 @@ impl<'a> Loading<'a> {
 pub struct Provider {
     view: ProviderView,
     from: PathBuf,
-    library: String,
-    version: String,
-    key: String,
+    /// Borrowed from the offering library's image, which is never
+    /// unloaded — so no copy is made and a C accessor hands back the
+    /// library's own pointer.
+    library: &'static str,
+    version: &'static str,
+    /// COMPUTED here rather than borrowed, so it is owned. A [`Text`] and
+    /// not a `String`, because it is a string this crate hands to C: it is
+    /// already a `guatiao_string` and needs no conversion at the boundary.
+    key: Text,
 }
 
 impl Provider {
     /// Every kind it speaks. May be empty, which is a provider reached by
     /// name rather than by capability.
-    pub fn kinds(&self) -> &[String] {
+    pub fn kinds(&self) -> &[&'static str] {
         &self.view.kinds
     }
 
@@ -212,29 +217,37 @@ impl Provider {
 
     /// Its own identifier, unique across every provider loaded.
     pub fn id(&self) -> &str {
-        &self.view.id
+        self.view.id
     }
 
     /// The id of the library offering it.
     pub fn library(&self) -> &str {
-        &self.library
+        self.library
     }
 
     /// Its version: the one it declared, or its library's when it declared
     /// none. Declared semver, compared here as a string.
     pub fn version(&self) -> &str {
-        &self.version
+        self.version
     }
 
     /// What this registry filed it under, rendered from the host's
     /// [`KeyTemplate`]. The argument [`Registry::provider`] takes.
     pub fn key(&self) -> &str {
-        &self.key
+        self.key.as_str().unwrap_or_default()
+    }
+
+    /// The key as the C string view it already is, with no conversion.
+    pub fn key_str(&self) -> Str {
+        Str {
+            ptr: self.key.ptr,
+            len: self.key.len,
+        }
     }
 
     /// A name to show a person. Empty when the library offered none.
     pub fn display_name(&self) -> &str {
-        &self.view.display_name
+        self.view.display_name
     }
 
     /// The library it came from.
@@ -297,10 +310,10 @@ impl Provider {
     /// Everything a [`KeyTemplate`] can name.
     fn fields(&self) -> KeyFields<'_> {
         KeyFields {
-            id: &self.view.id,
-            name: &self.view.display_name,
-            library: &self.library,
-            version: &self.version,
+            id: self.view.id,
+            name: self.view.display_name,
+            library: self.library,
+            version: self.version,
         }
     }
 }
@@ -313,11 +326,11 @@ pub struct Loaded {
     /// What this registry filed it under, from the host's library
     /// template. Two libraries rendering one key are the same library as
     /// far as this host is concerned, and the second is skipped.
-    pub key: String,
-    /// The library's own identifier.
-    pub id: String,
-    /// Its version string, uninterpreted.
-    pub version: String,
+    pub key: Text,
+    /// The library's own identifier. Borrowed from its image.
+    pub id: &'static str,
+    /// Its version string, uninterpreted. Borrowed from its image.
+    pub version: &'static str,
     /// How many providers it registered — which is not how many it
     /// offered, when one of them was already loaded from elsewhere.
     pub providers: usize,
@@ -333,7 +346,17 @@ pub struct Loaded {
 /// The host's own table of what it has loaded.
 #[derive(Debug)]
 pub struct Registry {
-    host: HostInfo,
+    /// The host's own name and version, OWNED.
+    ///
+    /// A `Box<str>` rather than a `&'static str`, and the [`HostInfo`] is
+    /// built from them per call rather than stored: a stored one would
+    /// point into this struct, and a self-referential struct cannot be
+    /// moved — which every builder method here does. A library only reads
+    /// the descriptor during its entry call, so building it there is both
+    /// sound and no more work.
+    host_id: Box<str>,
+    host_version: Box<str>,
+    alloc: Option<Alloc>,
     key: KeyTemplate,
     library_key: KeyTemplate,
     loaded: Vec<Loaded>,
@@ -345,22 +368,17 @@ pub struct Registry {
 impl Registry {
     /// A registry that introduces its host as `id`/`version`, offering
     /// libraries no allocator of its own.
-    pub fn new(id: &'static str, version: &'static str) -> Registry {
+    pub fn new(id: &str, version: &str) -> Registry {
         Registry::with_alloc(id, version, None)
     }
 
     /// The same, offering libraries the host's allocator so a tree they
     /// build for it is built in the host's arena.
-    pub fn with_alloc(id: &'static str, version: &'static str, alloc: Option<Alloc>) -> Registry {
+    pub fn with_alloc(id: &str, version: &str, alloc: Option<Alloc>) -> Registry {
         Registry {
-            host: HostInfo {
-                struct_size: size_of::<HostInfo>() as u32,
-                abi_version: ABI_VERSION,
-                host_id: Str::borrowed(id),
-                host_version: Str::borrowed(version),
-                alloc: alloc.map_or(std::ptr::null(), |a| a.as_raw()),
-                meta: MaybeNull::null(),
-            },
+            host_id: id.into(),
+            host_version: version.into(),
+            alloc,
             key: KeyTemplate::default(),
             library_key: KeyTemplate::library("%id").expect("one field and nothing else"),
             loaded: Vec::new(),
@@ -382,25 +400,51 @@ impl Registry {
     /// newest of `libfoo-1.2.0` and `libfoo-1.10.0` scans descending. The
     /// loader sorts names and does not parse versions — ordering a version
     /// is a host's policy, with the semver library it already has.
-    pub fn libraries_keyed_by(mut self, template: &str) -> Result<Registry, KeyError> {
+    pub fn libraries_keyed_by(&mut self, template: &str) -> Result<(), KeyError> {
         let key = KeyTemplate::library(template)?;
         let mut seen: BTreeMap<String, usize> = BTreeMap::new();
         for (at, one) in self.loaded.iter().enumerate() {
-            let rendered = key.render(KeyFields::library(&one.id, &one.version));
+            let rendered = key.render(KeyFields::library(one.id, one.version));
             if seen.insert(rendered.clone(), at).is_some() {
                 return Err(KeyError::Collides { key: rendered });
             }
         }
         for one in &mut self.loaded {
-            one.key = key.render(KeyFields::library(&one.id, &one.version));
+            one.key = Text::new(&key.render(KeyFields::library(one.id, one.version)));
         }
         self.library_key = key;
-        Ok(self)
+        Ok(())
     }
 
     /// The template this registry files libraries under.
     pub fn library_key_template(&self) -> &KeyTemplate {
         &self.library_key
+    }
+
+    /// How this host introduces itself, built fresh for each entry call.
+    ///
+    /// It borrows this registry's own boxed strings, which is why it is
+    /// not stored: a stored one would make this struct self-referential
+    /// and every builder method here moves it.
+    fn host(&self) -> HostInfo {
+        HostInfo {
+            struct_size: size_of::<HostInfo>() as u32,
+            abi_version: ABI_VERSION,
+            host_id: Str::borrowed(&self.host_id),
+            host_version: Str::borrowed(&self.host_version),
+            alloc: self.alloc.map_or(std::ptr::null(), |a| a.as_raw()),
+            meta: MaybeNull::null(),
+        }
+    }
+
+    /// The id this host introduces itself by.
+    pub fn host_id(&self) -> &str {
+        &self.host_id
+    }
+
+    /// The version this host introduces itself by.
+    pub fn host_version(&self) -> &str {
+        &self.host_version
     }
 
     /// Names PROVIDERS with `template` rather than the default `%id`.
@@ -411,8 +455,9 @@ impl Registry {
     ///
     /// Callable at any point — anything already loaded is re-keyed, and a
     /// template that would give two of them the same key is refused with
-    /// [`KeyError::Collides`] rather than losing one.
-    pub fn keyed_by(mut self, template: &str) -> Result<Registry, KeyError> {
+    /// [`KeyError::Collides`] rather than losing one. **A refusal changes
+    /// nothing**: every key is rendered and checked before any is written.
+    pub fn keyed_by(&mut self, template: &str) -> Result<(), KeyError> {
         let key = KeyTemplate::provider(template)?;
         let rendered: Vec<String> = self
             .providers
@@ -428,11 +473,11 @@ impl Registry {
         }
 
         for (provider, one) in self.providers.iter_mut().zip(rendered) {
-            provider.key = one;
+            provider.key = Text::new(&one);
         }
         self.by_key = by_key;
         self.key = key;
-        Ok(self)
+        Ok(())
     }
 
     /// The template this registry files providers under.
@@ -470,7 +515,7 @@ impl Registry {
             return Ok(Loading::Skipped(Skipped::AlreadyLoaded { from }));
         }
 
-        let opened = super::raw::open_library(path, &self.host).map_err(|e| LoadError::Open {
+        let opened = super::raw::open_library(path, &self.host()).map_err(|e| LoadError::Open {
             path: path.to_path_buf(),
             reason: e.to_string(),
         })?;
@@ -488,8 +533,12 @@ impl Registry {
         // library, which is the case a path comparison cannot see and a
         // filename comparison only guesses at. Whether two versions of one
         // library are the same thing is the host's template's answer.
-        let library_key = self.library_key.render(KeyFields::library(&id, &version));
-        if let Some(already) = self.loaded.iter().find(|l| l.key == library_key) {
+        let library_key = self.library_key.render(KeyFields::library(id, version));
+        if let Some(already) = self
+            .loaded
+            .iter()
+            .find(|l| l.key.as_str() == Some(library_key.as_str()))
+        {
             let from = already.path.clone();
             return Ok(Loading::Skipped(Skipped::AlreadyLoaded { from }));
         }
@@ -500,11 +549,11 @@ impl Registry {
         // and refusing the whole library over it would lose every provider
         // that is NOT a repeat.
         let mut skipped = Vec::new();
-        let mut taken: Vec<(ProviderView, String, String)> = Vec::new();
+        let mut taken: Vec<(ProviderView, &'static str, String)> = Vec::new();
         for view in views {
             if let Some(first) = self.providers.iter().find(|p| p.id() == view.id) {
                 skipped.push(Skipped::ProviderAlreadyLoaded {
-                    id: view.id.clone(),
+                    id: view.id.to_string(),
                     from: first.from.clone(),
                 });
                 continue;
@@ -513,7 +562,7 @@ impl Registry {
                 // Twice within ONE library, which is a library bug rather
                 // than a re-export. Still a skip: the first one stands.
                 skipped.push(Skipped::ProviderAlreadyLoaded {
-                    id: first.0.id.clone(),
+                    id: first.0.id.to_string(),
                     from: path.to_path_buf(),
                 });
                 continue;
@@ -521,12 +570,12 @@ impl Registry {
 
             // A provider's own version, or its library's when it declared
             // none.
-            let at = view.version.clone().unwrap_or_else(|| version.clone());
+            let at = view.version.unwrap_or(version);
             let key = self.key.render(KeyFields {
-                id: &view.id,
-                name: &view.display_name,
-                library: &id,
-                version: &at,
+                id: view.id,
+                name: view.display_name,
+                library: id,
+                version: at,
             });
             taken.push((view, at, key));
         }
@@ -560,14 +609,14 @@ impl Registry {
             self.providers.push(Provider {
                 view,
                 from: path.to_path_buf(),
-                library: id.clone(),
+                library: id,
                 version: at,
-                key,
+                key: Text::new(&key),
             });
         }
         self.loaded.push(Loaded {
             path: path.to_path_buf(),
-            key: library_key,
+            key: Text::new(&library_key),
             id,
             version,
             providers: count,

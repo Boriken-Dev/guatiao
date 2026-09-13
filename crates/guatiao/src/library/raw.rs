@@ -186,11 +186,11 @@ pub(crate) unsafe fn str_of(s: Str) -> Option<&'static str> {
 #[derive(Debug, Clone)]
 pub struct ProviderView {
     /// Every kind it serves. May be empty.
-    pub kinds: Vec<String>,
+    pub kinds: Vec<&'static str>,
     /// Its identifier, unique across every provider a host loads.
-    pub id: String,
+    pub id: &'static str,
     /// A name to show a person, possibly empty.
-    pub display_name: String,
+    pub display_name: &'static str,
     /// Its configuration schema, or `None`.
     pub config: Option<&'static Value>,
     /// The function table, whose shape the kind defines.
@@ -204,13 +204,13 @@ pub struct ProviderView {
     pub meta: Option<&'static Map>,
     /// The version it declared for itself, or `None` to inherit its
     /// library's. See [`ProviderInfo::version`].
-    pub version: Option<String>,
+    pub version: Option<&'static str>,
 }
 
 impl ProviderView {
     /// Whether it serves this kind.
     pub fn supports(&self, kind: &str) -> bool {
-        self.kinds.iter().any(|k| k == kind)
+        self.kinds.contains(&kind)
     }
 }
 
@@ -250,9 +250,9 @@ impl ProviderView {
 #[derive(Debug, Clone)]
 pub struct LibraryView {
     /// The library's own identifier.
-    pub id: String,
+    pub id: &'static str,
     /// Its version string, uninterpreted.
-    pub version: String,
+    pub version: &'static str,
     /// Whatever else it declared, or `None`. See [`LibraryInfo::meta`].
     pub meta: Option<&'static Map>,
     /// What it offers.
@@ -279,8 +279,8 @@ pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Option<LibraryView
     // SAFETY: each field lies within `declared` bytes.
     let (id, version, providers) = unsafe {
         (
-            str_of(std::ptr::addr_of!((*raw).id).read())?.to_string(),
-            str_of(std::ptr::addr_of!((*raw).version).read())?.to_string(),
+            str_of(std::ptr::addr_of!((*raw).id).read())?,
+            str_of(std::ptr::addr_of!((*raw).version).read())?,
             std::ptr::addr_of!((*raw).providers).read(),
         )
     };
@@ -347,13 +347,13 @@ unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<Provid
         let mut names = Vec::with_capacity(kinds.len);
         for i in 0..kinds.len {
             // SAFETY: the library declared `len` names at `ptr`.
-            names.push(str_of(kinds.ptr.add(i).read())?.to_string());
+            names.push(str_of(kinds.ptr.add(i).read())?);
         }
 
         Some(ProviderView {
             kinds: names,
-            id: str_of(std::ptr::addr_of!((*raw).id).read())?.to_string(),
-            display_name: str_of(std::ptr::addr_of!((*raw).display_name).read())?.to_string(),
+            id: str_of(std::ptr::addr_of!((*raw).id).read())?,
+            display_name: str_of(std::ptr::addr_of!((*raw).display_name).read())?,
             // A descriptor's value lives as long as the library, which is
             // for the life of the process.
             config: config.as_ref(),
@@ -374,9 +374,7 @@ unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<Provid
                 // different statement from a descriptor that predates the
                 // field — and both land on `None` deliberately, because
                 // both mean the same thing to a reader.
-                str_of(std::ptr::addr_of!((*raw).version).read())
-                    .filter(|v| !v.is_empty())
-                    .map(str::to_string)
+                str_of(std::ptr::addr_of!((*raw).version).read()).filter(|v| !v.is_empty())
             } else {
                 None
             },
@@ -591,7 +589,7 @@ mod tests {
         let (_buf, ptr) = short_of(&value, LibraryInfo::floor());
         // SAFETY: as above.
         let view = unsafe { read_library(ptr) }.expect("a floor-sized descriptor is usable");
-        assert_eq!((view.id.as_str(), view.version.as_str()), ("lib", "0.1.0"));
+        assert_eq!((view.id, view.version), ("lib", "0.1.0"));
         assert!(view.providers.is_empty());
         assert!(
             view.meta.is_none(),

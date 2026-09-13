@@ -70,6 +70,11 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use crate::value::status::Status;
 use crate::value::types::Str;
 
+// Loading needs `libloading`, and the `load` feature exists so a library
+// AUTHOR takes no dependency at all. The artifact a host links turns it
+// on. A `//` comment, never a `///`.
+#[cfg(feature = "load")]
+pub mod library;
 pub mod merge;
 pub mod schema;
 pub mod value;

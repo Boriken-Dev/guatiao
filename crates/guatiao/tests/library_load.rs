@@ -186,13 +186,13 @@ fn a_provider_versions_with_its_library_or_says_so() {
         .unwrap()
         .loaded()
         .unwrap();
-    let library_version = loaded.version.clone();
+    let library_version = loaded.version;
 
     assert_eq!(
         registry
             .provider("hello_library_greeter")
             .map(Provider::version),
-        Some(library_version.as_str()),
+        Some(library_version),
         "declaring nothing means moving with the library"
     );
     assert_eq!(
@@ -399,7 +399,7 @@ fn a_host_files_providers_under_a_key_it_chooses() {
     let version = provider.version().to_string();
     assert_eq!(provider.key(), "hello_library_greeter");
     assert_eq!(provider.library(), "hello_library");
-    assert_eq!(registry.loaded()[0].key, "hello_library");
+    assert_eq!(registry.loaded()[0].key.as_str(), Some("hello_library"));
 
     assert_eq!(registry.providers_of("hello_library_greeter").count(), 1);
     assert_eq!(
@@ -410,7 +410,7 @@ fn a_host_files_providers_under_a_key_it_chooses() {
 
     // A host that wants versions apart says so, and what is already loaded
     // is re-keyed rather than having to be loaded again.
-    let registry = registry
+    registry
         .keyed_by("%id@%version")
         .expect("one provider cannot collide with itself");
     let key = format!("hello_library_greeter@{version}");
@@ -451,12 +451,13 @@ fn a_host_decides_how_many_builds_of_one_library_it_will_hold() {
 
     // Under `%id@%version` the key carries the version — and the same file
     // twice is still the same file, caught by path before anything loads.
-    let mut apart = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"))
+    let mut apart = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+    apart
         .libraries_keyed_by("%id@%version")
         .expect("an empty registry cannot collide");
     let loaded = apart.load_file(&path).unwrap().loaded().unwrap();
     let expected = format!("hello_library@{}", loaded.version);
-    assert_eq!(loaded.key, expected);
+    assert_eq!(loaded.key.as_str(), Some(expected.as_str()));
     assert!(matches!(
         apart.load_file(&path).unwrap().skipped(),
         Some(Skipped::AlreadyLoaded { .. })
@@ -466,6 +467,7 @@ fn a_host_decides_how_many_builds_of_one_library_it_will_hold() {
     assert!(
         Registry::new("guatiao-tests", "1.0")
             .libraries_keyed_by("%id-%name")
-            .is_err()
+            .is_err(),
+        "a library has no display name"
     );
 }

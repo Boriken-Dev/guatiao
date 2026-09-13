@@ -75,6 +75,112 @@ fn shared_library() -> Option<(PathBuf, PathBuf)> {
     None
 }
 
+/// Where cargo put the example library, found the way `library_load` does.
+fn example_library() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let deps = exe.parent()?;
+    let name = format!(
+        "{}hello_library{}",
+        std::env::consts::DLL_PREFIX,
+        std::env::consts::DLL_SUFFIX
+    );
+    for dir in [
+        deps.to_path_buf(),
+        deps.parent().map(PathBuf::from).unwrap_or_default(),
+    ] {
+        let candidate = dir.join(&name);
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// **A HOST written in C**, which is the claim the envelope rests on.
+///
+/// Everything else in this suite drives the registry from Rust. This one
+/// does not: a C program that links no Rust creates a registry, loads the
+/// example library, asks what serves a kind, reads the answer as an
+/// ordinary value tree, calls through the provider's table, and frees a
+/// tree the LIBRARY's allocator built.
+#[test]
+fn a_c_program_is_a_host() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let source = manifest.join("tests/c_consumer/registry_consumer.c");
+    let include = manifest.join("include");
+    assert!(
+        source.exists(),
+        "the C source is missing: {}",
+        source.display()
+    );
+
+    let Some(cc) = find_compiler() else {
+        println!("skipped: no C compiler found. See the other test here for why that is a skip.");
+        return;
+    };
+    let Some((dir, dll)) = shared_library() else {
+        println!(
+            "skipped: the guatiao shared library is not beside this test \
+             binary. Run `cargo build -p guatiao --all-features` first — and \
+             note that the registry exports need the `load` feature, so a \
+             default build of the artifact does not have them."
+        );
+        return;
+    };
+    let Some(library) = example_library() else {
+        println!("skipped: the example library is not built beside this test binary.");
+        return;
+    };
+
+    let out = dir.join(if cfg!(windows) {
+        "guatiao_registry_consumer.exe"
+    } else {
+        "guatiao_registry_consumer"
+    });
+
+    let mut compile = Command::new(&cc);
+    compile
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
+        .arg("-I")
+        .arg(&include)
+        .arg("-o")
+        .arg(&out)
+        .arg(&source);
+    if cfg!(windows) {
+        compile.arg(dll.with_extension("dll.lib"));
+    } else {
+        compile
+            .arg(format!("-L{}", dir.display()))
+            .arg("-lguatiao")
+            .arg("-Wl,-rpath,$ORIGIN");
+    }
+
+    let compiled = compile.output().expect("the compiler runs");
+    assert!(
+        compiled.status.success(),
+        "the C host did not compile or link.\nIf the compile succeeded and the \
+         LINK failed, a registry symbol is missing from the artifact — which \
+         means it was built without the `load` feature.\nstderr:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+
+    let run = Command::new(&out)
+        .arg(&library)
+        .current_dir(&dir)
+        .output()
+        .expect("the host was just built");
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        run.status.success(),
+        "the C host failed its own checks.\nstdout:\n{stdout}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(
+        stdout.contains("all checks passed"),
+        "the host exited 0 without reporting success.\nstdout:\n{stdout}"
+    );
+    println!("{}", stdout.trim());
+}
 #[test]
 fn a_c_program_builds_and_frees_a_tree_through_the_exports() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

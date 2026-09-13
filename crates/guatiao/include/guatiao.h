@@ -210,6 +210,37 @@ typedef uint32_t guatiao_tag;
 #endif // __cplusplus
 
 /*
+ A host's registry of loaded libraries.
+
+ Opaque: create one with [`guatiao_registry_new`] and release it with
+ [`guatiao_registry_free`]. Every other function here takes the pointer
+ that gave you.
+
+ **Not thread-safe.** One registry is one host's table, and the loading
+ it does is not reentrant; a host sharing one across threads guards it
+ itself, as it would any other mutable object it owns.
+ */
+typedef struct guatiao_registry guatiao_registry;
+
+/*
+ Borrowed UTF-8 text: a pointer and a length, no NUL terminator.
+
+ **Check `len` before `ptr`.** An empty view may carry a dangling or
+ null pointer, and the pointer must not be touched when the length is
+ zero.
+ */
+typedef struct guatiao_str {
+  /*
+   First byte. May be null or dangling when `len` is 0.
+   */
+  const uint8_t *ptr;
+  /*
+   Length in bytes.
+   */
+  size_t len;
+} guatiao_str;
+
+/*
  An allocator, as a vtable a foreign caller can fill in.
 
  Every field after `struct_size` is read only when `struct_size` says it
@@ -428,24 +459,6 @@ typedef struct guatiao_value {
    */
   union guatiao_payload payload;
 } guatiao_value;
-
-/*
- Borrowed UTF-8 text: a pointer and a length, no NUL terminator.
-
- **Check `len` before `ptr`.** An empty view may carry a dangling or
- null pointer, and the pointer must not be touched when the length is
- zero.
- */
-typedef struct guatiao_str {
-  /*
-   First byte. May be null or dangling when `len` is 0.
-   */
-  const uint8_t *ptr;
-  /*
-   Length in bytes.
-   */
-  size_t len;
-} guatiao_str;
 
 /*
  One per-path mode override: what the *declarer* of an option knows
@@ -835,6 +848,205 @@ typedef struct guatiao_library_info {
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
+
+/*
+ A new registry introducing its host as `id`/`version`.
+
+ `alloc` may be null, and is the allocator offered to every library, so
+ a tree a library builds for this host is built in the host's own arena.
+ A library may ignore it and use its own; either way the tree carries
+ the allocator that made it, so this host frees it correctly without
+ knowing which.
+
+ The two strings are **copied**, so they need not outlive this call.
+ Returns null when one of them is not UTF-8, or when `alloc` is
+ non-null and incomplete.
+
+ # Safety
+
+ `id` and `version` are views whose bytes are readable for this call,
+ and `alloc` is null or a complete allocator that outlives every tree
+ built through it.
+ */
+struct guatiao_registry *guatiao_registry_new(struct guatiao_str id,
+                                              struct guatiao_str version,
+                                              const struct guatiao_alloc *alloc);
+
+/*
+ Releases a registry. Null is a no-op.
+
+ **The libraries it loaded stay mapped.** Nothing in this crate unloads
+ one, because every tree, string and vtable they handed over points into
+ their images; this frees the host's own table and nothing else.
+
+ # Safety
+
+ `reg` is null or a handle from [`guatiao_registry_new`] that has not
+ already been freed, and nothing else is using it.
+ */
+void guatiao_registry_free(struct guatiao_registry *reg);
+
+/*
+ Names providers with `template` instead of `%id`.
+
+ Anything already loaded is re-keyed. **A refusal changes nothing**: the
+ keys are all rendered and checked before any is written.
+
+ # Safety
+
+ `reg` is a live handle and `template` is readable for this call.
+ */
+guatiao_status guatiao_registry_keyed_by(struct guatiao_registry *reg,
+                                         struct guatiao_str template_);
+
+/*
+ Names libraries with `template` instead of `%id` — the "how many builds
+ of one library may I hold" knob.
+
+ # Safety
+
+ As [`guatiao_registry_keyed_by`].
+ */
+guatiao_status guatiao_registry_libraries_keyed_by(struct guatiao_registry *reg,
+                                                   struct guatiao_str template_);
+
+/*
+ Loads one file, writing what happened to `out` as a map.
+
+ `{"loaded": <library>}` or `{"skipped": "<why>", "from": "<path>"}`,
+ where `from` is present only when the reason has one. **A skip is an
+ answer, not a failure**: the file is not a library, the library
+ declined this host, or this registry already has it.
+
+ **Mapping a library runs its static initialisers**, which may do
+ anything, including abort the process. Name files you are willing to
+ run.
+
+ # Safety
+
+ `reg` is a live handle, `path` and `alloc` are valid for this call, and
+ `out` addresses writable storage for one value, whose previous contents
+ are the caller's to have freed.
+ */
+guatiao_status guatiao_registry_load_file(struct guatiao_registry *reg,
+                                          struct guatiao_str path,
+                                          const struct guatiao_alloc *alloc,
+                                          struct guatiao_value *out);
+
+/*
+ Scans a directory, writing a report to `out` as a map.
+
+ `{"loaded": [path…], "skipped": [{"skipped", "path", "from"?}…],
+ "failed": [{"path", "error"}…]}`.
+
+ Nothing is opened that has not first been shown, **by reading its
+ export table as data**, to declare the entry symbol — so a directory
+ full of ordinary libraries costs no static initialisers.
+
+ `descending` visits names highest-first, which under a `%id` library
+ key is how a host takes the newest of several builds. That is byte
+ order, not version order; nothing here parses a version.
+
+ # Safety
+
+ As [`guatiao_registry_load_file`], with `dir` naming a directory.
+ */
+guatiao_status guatiao_registry_scan_dir(struct guatiao_registry *reg,
+                                         struct guatiao_str dir,
+                                         bool descending,
+                                         const struct guatiao_alloc *alloc,
+                                         struct guatiao_value *out);
+
+/*
+ Every library loaded, as a list of maps.
+
+ # Safety
+
+ `reg` is a live handle, `alloc` is valid, and `out` addresses writable
+ storage for one value.
+ */
+guatiao_status guatiao_registry_libraries(const struct guatiao_registry *reg,
+                                          const struct guatiao_alloc *alloc,
+                                          struct guatiao_value *out);
+
+/*
+ Every provider that serves `kind`, as a list of maps — or **every**
+ provider when `kind` is empty.
+
+ The capability question. [`guatiao_registry_provider`] is the identity
+ one.
+
+ # Safety
+
+ As [`guatiao_registry_libraries`], with `kind` readable for the call.
+ */
+guatiao_status guatiao_registry_providers(const struct guatiao_registry *reg,
+                                          struct guatiao_str kind,
+                                          const struct guatiao_alloc *alloc,
+                                          struct guatiao_value *out);
+
+/*
+ One provider by the key this registry filed it under, as a map.
+
+ `GUATIAO_ERR_NOT_FOUND` when nothing answers to that key.
+
+ # Safety
+
+ As [`guatiao_registry_providers`], with `key` readable for the call.
+ */
+guatiao_status guatiao_registry_provider(const struct guatiao_registry *reg,
+                                         struct guatiao_str key,
+                                         const struct guatiao_alloc *alloc,
+                                         struct guatiao_value *out);
+
+/*
+ One provider's function table, and the size the library compiled it at.
+
+ Null when no provider answers to `key`, or when it declares no table.
+ `size_out` may be null; when it is not, it receives the declared size.
+
+ **This is the moment a caller takes on the kind's contract.** The
+ envelope defines no vtable: check the declared size against the frozen
+ floor of the `kind` you believe this is, project each field through the
+ pointer, and guard every field appended after that floor. A shorter
+ table than you expect is an OLDER library, which is the case the size
+ exists to let you support rather than reject.
+
+ The pointer stays valid for the life of the process, because a loaded
+ library is never unloaded.
+
+ # Safety
+
+ `reg` is a live handle, `key` is readable for the call, and `size_out`
+ is null or addresses writable storage for one `size_t`.
+ */
+const void *guatiao_registry_provider_vtable(const struct guatiao_registry *reg,
+                                             struct guatiao_str key,
+                                             size_t *size_out);
+
+/*
+ The context pointer to hand back to every call through that provider's
+ table. Null is a legitimate answer and means the provider needs none.
+
+ # Safety
+
+ `reg` is a live handle and `key` is readable for the call.
+ */
+void *guatiao_registry_provider_ctx(const struct guatiao_registry *reg, struct guatiao_str key);
+
+/*
+ One provider's configuration schema, **borrowed** from the library's
+ own image, or null when it declares none.
+
+ Read it with the ordinary value readers: a schema is a value. Do not
+ free it — it is not yours, and it lives as long as the process.
+
+ # Safety
+
+ `reg` is a live handle and `key` is readable for the call.
+ */
+const struct guatiao_value *guatiao_registry_provider_config(const struct guatiao_registry *reg,
+                                                             struct guatiao_str key);
 
 /*
  Merges `later` into `earlier`, later winning, and writes a new tree

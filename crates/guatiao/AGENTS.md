@@ -401,7 +401,58 @@ with the semver library it already has.
 
 **A loaded library is never unloaded.** Everything it hands over —
 strings, schemas, vtables — points into its mapping, so unloading would
-dangle every borrow the host holds.
+dangle every borrow the host holds. That is also why a `ProviderView`
+holds `&'static str` rather than `String`: the text is already in the
+image, and copying it would be a waste and would stop a C accessor
+handing back the library's own pointer.
+
+### A host in C, or Python, or anything with an FFI
+
+The whole registry is `extern "C"`, so Rust is one user and not the
+audience:
+
+```c
+guatiao_alloc alloc = GUATIAO_ALLOC_MALLOC;
+guatiao_registry *reg = guatiao_registry_new(guatiao_cstr("my-host"),
+                                             guatiao_cstr("1.0"), &alloc);
+guatiao_value answer;
+guatiao_registry_load_file(reg, guatiao_cstr(path), &alloc, &answer);
+guatiao_registry_scan_dir(reg, dir, /*descending=*/false, &alloc, &answer);
+guatiao_registry_providers(reg, guatiao_cstr("greeter"), &alloc, &answer);
+guatiao_registry_provider(reg, key, &alloc, &answer);
+guatiao_registry_keyed_by(reg, guatiao_cstr("%id@%version"));
+guatiao_registry_libraries_keyed_by(reg, tmpl);
+guatiao_registry_libraries(reg, &alloc, &answer);
+const void *vt = guatiao_registry_provider_vtable(reg, key, &size);
+void *ctx = guatiao_registry_provider_ctx(reg, key);
+const guatiao_value *schema = guatiao_registry_provider_config(reg, key);
+guatiao_registry_free(reg);
+```
+
+`guatiao_registry` is the **one opaque handle** in this crate: it owns
+growable collections and changes over time, which is what a handle is for
+and a `repr(C)` struct is not.
+
+**Answers come back as values**, so there is no accessor per field and a
+language that can already read a value can already read the answer. A
+provider map is `{key, id, version, library, display_name, from, kinds,
+has_config, vtable_size}`; a library map is `{key, id, version, path,
+providers, skipped}`. Free each answer with `guatiao_value_free`.
+
+**The exceptions are what is not data**: the vtable, its size, the `ctx`,
+and the borrowed config schema have their own accessors. A pointer inside
+a map would be a number a caller has to cast back, and reading one is the
+moment a caller takes on the kind's contract.
+
+**A skip is an answer, not a failure.** `load_file` writes `{"loaded":…}`,
+`{"skipped":"already-loaded","from":…}` or `{"failed":"<the loader's own
+message>"}` and returns `GUATIAO_OK` for all three; a non-OK status means
+it could not answer at all.
+
+**These need the `load` feature** — the only part of the C surface that
+does, because loading needs `libloading` and a library author takes no
+dependency. Build the shipped artifact with `--features load` (or
+`--all-features`), or its export table will not have them.
 
 ## Appending to a descriptor
 

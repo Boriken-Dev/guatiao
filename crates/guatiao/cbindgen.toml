@@ -487,6 +487,9 @@ exclude = ["Entry"]
 "ProviderInfo" = "guatiao_provider_info"
 "Providers" = "guatiao_providers"
 "Kinds" = "guatiao_kinds"
+# The one opaque handle. A registry owns growable collections and changes
+# over time, which is what a handle is for and what a repr(C) struct is not.
+"HostRegistry" = "guatiao_registry"
 "ABI_VERSION" = "GUATIAO_ABI_VERSION"
 "MergeOverride" = "guatiao_merge_override"
 # cbindgen monomorphises the generic newtype and emits the Rust name.
