@@ -1,6 +1,6 @@
 [package]
 name = "guatiao"
-description = "A C-struct value model, a schema for what a provider needs to be initialised, and an envelope -- one contract for passing configuration and providers between languages"
+description = "A C-struct value model, a JSON Schema that describes a value, and an envelope for providers -- one contract for passing values between languages"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

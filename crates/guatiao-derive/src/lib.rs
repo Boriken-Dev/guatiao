@@ -143,7 +143,7 @@ pub fn derive_to_value(input: TokenStream) -> TokenStream {
 }
 
 /// Derives `guatiao::Schema` for a struct with named fields or an enum:
-/// what the type needs to be configured, as a value a consumer can read.
+/// the values the type accepts, described as a value a consumer can read.
 ///
 /// A unit enum describes itself as a choice and a tagged enum as a
 /// variant. **A doc comment fills the most descriptive slot the thing

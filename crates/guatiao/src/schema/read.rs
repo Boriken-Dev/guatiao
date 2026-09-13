@@ -34,7 +34,7 @@ use super::vocab;
 use crate::value::read::{bool_or, float_or, int_or};
 use crate::value::types::{Tag, Value};
 
-/// A schema: what a provider needs to be initialised.
+/// A schema: what a value is, and what a valid one looks like.
 #[derive(Clone, Copy, Debug)]
 pub struct SchemaRef<'a>(&'a Value);
 

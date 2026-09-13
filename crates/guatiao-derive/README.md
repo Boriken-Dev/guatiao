@@ -1,7 +1,8 @@
 # guatiao-derive
 
-The proc-macro half of `guatiao`'s `derive` feature: `#[derive(ToMap)]` and
-`#[derive(FromMap)]`.
+The proc-macro half of `guatiao`'s `derive` feature: `#[derive(ToValue)]`,
+`#[derive(FromValue)]` and `#[derive(Schema)]`, for a struct with named
+fields, an enum of unit variants, or an enum that names its tag.
 
 This crate is not meant to be named by a consumer. Enable it through the
 crate it serves:
