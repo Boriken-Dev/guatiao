@@ -35,6 +35,22 @@ let shown = is_visible(s, f, "ca", &entered_so_far.into())?;
 # }
 ```
 
+With the `derive` feature the same form is declared on the type,
+beside its schema:
+
+```rust,ignore
+#[derive(guatiao::Schema, guatiao_form::Form)]
+#[form(section(id = "net", label = "Network"))]
+struct Connection {
+    #[schema(section = "net")]
+    host: String,
+    verify: bool,
+    #[form(placeholder = "/etc/ssl/ca.pem", visible_when(field = "verify", equals = true))]
+    ca: Option<String>,
+}
+let form = Connection::form(guatiao::Alloc::rust())?;   // `guatiao_form::Screen`
+```
+
 ## Three layers
 
 | layer | answers | crate |

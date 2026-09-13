@@ -11,9 +11,9 @@ public surface); this file is about the repository.
 | `crates/guatiao/` | the crate: value model, C type vocabulary, schema, library envelope, loader |
 | `crates/guatiao/include/guatiao.h` | the C header, rendered by `build.rs` and committed |
 | `guatiao.dll` / `libguatiao.so` | the C ABI artifact, from the same crate — `cargo build` |
-| `crates/guatiao-derive/` | `#[derive(ToValue, FromValue, Schema)]`; reached through `guatiao`'s `derive` feature, never named directly |
+| `crates/guatiao-derive/` | `#[derive(ToValue, FromValue, Schema)]`, `#[guatiao::kind]`/`#[derive(Provider)]`, `#[derive(Form)]`; reached through `guatiao`'s `derive`/`provider` features and `guatiao-form`'s `derive`, never named directly |
 | `crates/guatiao-serde/` | serde for values: JSON, TOML and YAML as features, and a C surface with its own `include/guatiao_serde.h` |
-| `crates/guatiao-form/` | how a schema is shown: sections, widget hints, conditional visibility, as a value beside the schema; C surface in `include/guatiao_form.h` |
+| `crates/guatiao-form/` | how a schema is shown: sections, widget hints, conditional visibility, as a value beside the schema, or declared with `#[derive(Form)]`; C surface in `include/guatiao_form.h` |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 

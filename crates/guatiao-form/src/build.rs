@@ -106,6 +106,12 @@ impl Form {
         }
     }
 
+    /// The allocator this form is built through, for hints built beside
+    /// it.
+    pub fn alloc(&self) -> Alloc {
+        self.alloc
+    }
+
     /// Declares a section. **The order of declaration is the order a
     /// person sees.**
     pub fn section(mut self, section: Section) -> Form {

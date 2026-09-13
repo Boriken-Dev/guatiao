@@ -127,6 +127,8 @@
 #![deny(missing_docs)]
 
 mod expand;
+#[cfg(feature = "form")]
+mod form;
 #[cfg(feature = "provider")]
 mod kind;
 #[cfg(feature = "provider")]
@@ -241,4 +243,20 @@ pub fn kind(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_derive(Provider, attributes(provider))]
 pub fn derive_provider(input: TokenStream) -> TokenStream {
     provider::expand(input.into()).into()
+}
+
+/// Derives `guatiao_form::Screen`: the type's default screen, as a form
+/// value beside its schema. Reached as `guatiao_form::Form` with that
+/// crate's `derive` feature.
+///
+/// On the type, `#[form(section(id = "..", label = "..", help = ".."))]`,
+/// repeated in display order. On a field, `#[form(widget = "..",
+/// placeholder = "..", visible_when(field = "..", equals = <value>),
+/// nested)]`; `nested` composes the field type's own hints under
+/// `<key>.`. Keys follow `#[map(rename)]`; which section a field is in
+/// stays `#[schema(section)]`'s.
+#[cfg(feature = "form")]
+#[proc_macro_derive(Form, attributes(form))]
+pub fn derive_form(input: TokenStream) -> TokenStream {
+    form::expand(input.into()).into()
 }
