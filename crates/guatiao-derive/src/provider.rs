@@ -21,10 +21,11 @@
 //! - `id` defaults to `{CARGO_PKG_NAME}_{type in snake case}`, with `-` in
 //!   the package name as `_`; `name` to the type's ident; `version` to
 //!   empty, which means the library's.
-//! - `config = C` makes the provider **built from `C`**: the schema comes
-//!   from `C: Schema`, a configuration value is decoded through `C:
-//!   FromValue`, and an instance is `Self: TryFrom<C, Error:
-//!   Into<ProviderError>>` (`C = Self` is the identity `From`). The
+//! - `config = C` is what an instance is built from: the host reads `C`'s
+//!   schema (`Schema`), decodes the value it sends as `C` (`FromValue`)
+//!   and builds `Self` through `TryFrom<C, Error: Into<ProviderError>>`.
+//!   `config = Self`, or `config` alone, when the type derives `Schema`
+//!   and `FromValue` itself: no second type, no `TryFrom`. The
 //!   `create`/`destroy` slots are emitted; each instance's address is the
 //!   `ctx` the kind tables call with.
 //! - `new = path` is a `fn() -> Self`; `new_with_host = path` is a
@@ -125,7 +126,12 @@ fn read_attrs(ast: &DeriveInput) -> syn::Result<Decl> {
                 "version" => set_str(&meta, &mut decl.version, "version"),
                 "config" => {
                     once(&meta, decl.config.is_some(), "config")?;
-                    decl.config = Some(meta.value()?.parse()?);
+                    // `config` alone: the type is its own configuration.
+                    decl.config = Some(if meta.input.peek(syn::Token![=]) {
+                        meta.value()?.parse()?
+                    } else {
+                        syn::parse_quote!(Self)
+                    });
                     Ok(())
                 }
                 "new" => {
@@ -224,10 +230,23 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
             ),
         }
     });
-    let kind_names = decl
+    let kind_names: Vec<TokenStream> = decl
         .kinds
         .iter()
-        .map(|kind| quote! { <dyn #kind as ::guatiao::library::Kind>::NAME, });
+        .map(|kind| quote! { <dyn #kind as ::guatiao::library::Kind>::NAME, })
+        .collect();
+    // `config = Self`, or `config` alone: the type is its own
+    // configuration. Spelled as the type, since `Self` does not resolve
+    // inside the free shim functions.
+    let config_ty = decl.config.as_ref().map(|c| match c {
+        Type::Path(path) if path.qself.is_none() && path.path.is_ident("Self") => {
+            Type::Path(syn::TypePath {
+                qself: None,
+                path: ty.clone().into(),
+            })
+        }
+        other => other.clone(),
+    });
 
     let build = match (&decl.new, &decl.new_with_host) {
         (Some(new), _) => quote! { #new() },
@@ -248,7 +267,7 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
             let instance: *mut ::core::ffi::c_void = ::core::ptr::null_mut();
         }
     };
-    let config = match &decl.config {
+    let config = match &config_ty {
         Some(config) => quote! {
             ::core::option::Option::Some(<#config as ::guatiao::Schema>::schema(alloc)?)
         },
@@ -256,7 +275,7 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
     };
     // Instances from a configuration: decode it as `C`, build `Self`
     // through `TryFrom<C>`, box it. `C = Self` is the identity `From`.
-    let (create_shims, create_slot, destroy_slot) = match &decl.config {
+    let (create_shims, create_slot, destroy_slot) = match &config_ty {
         Some(config) => (
             quote! {
                 /// # Safety
@@ -419,6 +438,25 @@ mod tests {
             out.contains("get_or_init"),
             "a default instance beside the built ones"
         );
+    }
+
+    #[test]
+    fn a_type_can_be_its_own_configuration() {
+        for attr in [
+            "#[provider(Greeter, config)]",
+            "#[provider(Greeter, config = Self)]",
+        ] {
+            let out = expand_str(&format!("{attr} struct Hi;")).unwrap();
+            assert!(
+                out.contains("config_arg :: < Hi > (config)"),
+                "{attr}: {out}"
+            );
+            assert!(out.contains("< Hi as :: guatiao :: Schema > :: schema (alloc) ?"));
+            assert!(
+                out.contains("< Hi as :: core :: convert :: TryFrom < Hi >> :: try_from"),
+                "the identity conversion: {attr}"
+            );
+        }
     }
 
     #[test]

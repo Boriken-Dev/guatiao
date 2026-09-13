@@ -159,7 +159,7 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
             .get("properties")
             .and_then(|p| p.get("prefix"))
             .is_some(),
-        "the schema is ShoutConfig's"
+        "the schema is Shouter's own"
     );
     let mut config = Value::map();
     config.set("prefix", "hey").unwrap();
@@ -192,13 +192,13 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
         Status::GUATIAO_ERR_BAD_VALUE,
         "the schema's refusal: {e}"
     );
-    let mut empty = Value::map();
-    empty.set("prefix", "").unwrap();
-    let e = shouter.instantiate(&empty).unwrap_err();
+    let mut wrong = Value::map();
+    wrong.set("prefix", 7).unwrap();
+    let e = shouter.instantiate(&wrong).unwrap_err();
     assert_eq!(
-        e.message(),
-        "a shouter needs something to shout",
-        "the type's refusal"
+        e.status,
+        Status::GUATIAO_ERR_BAD_VALUE,
+        "the decode's refusal, since the type is its own configuration: {e}"
     );
     let e = offer.instantiate(&config).unwrap_err();
     assert_eq!(

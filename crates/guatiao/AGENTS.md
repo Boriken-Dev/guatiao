@@ -649,15 +649,17 @@ unsafe { Remote::<dyn Greeter>::from_raw(table, size, ctx) }   // a table from a
   both sides share: `From<Status>`, `From<ValueError>`, `message()`.
 - **`#[provider(..)]` long form**: `kinds(A, B)`, `id = ".."` (default
   `{package}_{type}` snake case), `name = ".."` (default the type),
-  `version = ".."` (default empty: the library's), `config = C` (below),
+  `version = ".."` (default empty: the library's), `config = C` or bare
+  `config` (below),
   `new = path` (`fn() -> Self`) or `new_with_host = path`
   (`fn(Host) -> Self`; default `Default`), `available = path` (`fn(&Self)
   -> Result<(), &'static str>`). `providers!(id = .., version = ..,
   providers = [A, B])` is the long form of the library line.
 - **Instances from a configuration.** `config = C` means the provider is
   **built from `C`**: `C: Schema + FromValue`, `Self: TryFrom<C, Error:
-  Into<ProviderError>>` (`C = Self` is the identity, so a type deriving
-  `FromValue` and `Schema` itself needs no `TryFrom`). The host reads the
+  Into<ProviderError>>`. Bare `config`, or `config = Self`, makes the
+  type **its own configuration**: derive `Schema` and `FromValue` on it
+  and there is no second type and no `TryFrom`. The host reads the
   schema (`offer.config_schema()`), fills it in, and calls
   `offer.instantiate(&config) -> Result<Instance<dyn K>, ProviderError>`;
   the `Instance` derefs to the trait, its address is the `ctx` every call
