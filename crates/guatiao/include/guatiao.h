@@ -1272,6 +1272,30 @@ guatiao_status guatiao_registry_scan_dir_rules(struct guatiao_registry *reg,
                                                struct guatiao_value *out);
 
 /*
+ Walks a search path — directories or files, separated by `;` on
+ Windows and `:` elsewhere, each visited once — under `rules`, and
+ writes one report for the whole path to `out`.
+
+ The report is [`guatiao_registry_scan_dir_rules`]'s, with one more
+ list when it applies: `"unreadable": [{"path", "error"}…]`, the
+ entries that do not exist or could not be listed. Those are reported
+ and the rest of the path is still walked; a search path routinely
+ names a place that is not on this machine. A file entry is probed and
+ loaded on its own, its extension unchecked; a `.framework` bundle is
+ its binary.
+
+ # Safety
+
+ As [`guatiao_registry_scan_dir_rules`], with `spec` a valid [`Str`].
+ */
+guatiao_status guatiao_registry_scan_path(struct guatiao_registry *reg,
+                                          struct guatiao_str spec,
+                                          bool descending,
+                                          struct guatiao_str rules,
+                                          const struct guatiao_alloc *alloc,
+                                          struct guatiao_value *out);
+
+/*
  Every library loaded, as a list of maps.
 
  # Safety

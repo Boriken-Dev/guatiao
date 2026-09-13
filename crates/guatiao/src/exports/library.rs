@@ -54,7 +54,8 @@ use std::path::Path;
 
 use super::{as_str, guard, guard_with};
 use crate::library::{
-    HostInfo, Loading, Order, Provider, Registry, ScanRules, Skipped, WhyNot, scan_dir_rules,
+    HostInfo, LoadReport, Loading, Order, Provider, Registry, ScanRules, SearchPath, Skipped,
+    WhyNot, scan_dir_rules, scan_path,
 };
 use crate::value::ValueError;
 use crate::value::alloc::{Alloc, Allocator};
@@ -148,32 +149,21 @@ impl HostRegistry {
         // The one thing a scan cannot answer: the directory itself.
         let report = scan_dir_rules(&mut self.inner, Path::new(dir), order, rules)
             .map_err(|_| Status::GUATIAO_ERR_NOT_FOUND)?;
+        Ok(report_value(alloc, &report)?)
+    }
 
-        let mut map = Value::map_in(alloc);
-
-        let mut loaded = Value::list_in(alloc);
-        for path in &report.loaded {
-            loaded.push(Value::string_in(alloc, &path.to_string_lossy())?)?;
-        }
-        map.set("loaded", loaded)?;
-
-        let mut skipped = Value::list_in(alloc);
-        for (path, why) in &report.skipped {
-            let mut one = skip_value(alloc, why)?;
-            one.set("path", Value::string_in(alloc, &path.to_string_lossy())?)?;
-            skipped.push(one)?;
-        }
-        map.set("skipped", skipped)?;
-
-        let mut failed = Value::list_in(alloc);
-        for (path, error) in &report.failed {
-            let mut one = Value::map_in(alloc);
-            one.set("path", Value::string_in(alloc, &path.to_string_lossy())?)?;
-            one.set("error", Value::string_in(alloc, &error.to_string())?)?;
-            failed.push(one)?;
-        }
-        map.set("failed", failed)?;
-        Ok(map)
+    /// Walks a search path and reports everything it found, including
+    /// the entries it could not read.
+    fn scan_path(
+        &mut self,
+        spec: &str,
+        order: Order,
+        rules: &ScanRules,
+        alloc: Alloc,
+    ) -> Result<Value, ValueError> {
+        let path = SearchPath::parse(spec);
+        let report = scan_path(&mut self.inner, &path, order, rules);
+        report_value(alloc, &report)
     }
 
     /// Every library loaded, as a list of maps.
@@ -626,6 +616,60 @@ pub unsafe extern "C" fn guatiao_registry_scan_dir_rules(
     })
 }
 
+/// Walks a search path — directories or files, separated by `;` on
+/// Windows and `:` elsewhere, each visited once — under `rules`, and
+/// writes one report for the whole path to `out`.
+///
+/// The report is [`guatiao_registry_scan_dir_rules`]'s, with one more
+/// list when it applies: `"unreadable": [{"path", "error"}…]`, the
+/// entries that do not exist or could not be listed. Those are reported
+/// and the rest of the path is still walked; a search path routinely
+/// names a place that is not on this machine. A file entry is probed and
+/// loaded on its own, its extension unchecked; a `.framework` bundle is
+/// its binary.
+///
+/// # Safety
+///
+/// As [`guatiao_registry_scan_dir_rules`], with `spec` a valid [`Str`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_scan_path(
+    reg: *mut HostRegistry,
+    spec: Str,
+    descending: bool,
+    rules: Str,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(spec), Ok(rules), Ok(alloc)) = (
+            unsafe { HostRegistry::get_mut(reg) },
+            unsafe { as_str(spec) },
+            unsafe { as_str(rules) },
+            unsafe { Alloc::from_raw(alloc) },
+        ) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        let Ok(rules) = ScanRules::parse(&rules.lines().collect::<Vec<_>>()) else {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        };
+        let order = if descending {
+            Order::Descending
+        } else {
+            Order::Ascending
+        };
+        // SAFETY: as above.
+        unsafe {
+            deliver(
+                out,
+                registry
+                    .scan_path(spec, order, &rules, alloc)
+                    .map_err(Status::from),
+            )
+        }
+    })
+}
+
 /// Every library loaded, as a list of maps.
 ///
 /// # Safety
@@ -1065,6 +1109,52 @@ fn provider_value(alloc: Alloc, one: &Provider) -> Result<Value, ValueError> {
     map.set("priority", Value::int(i64::from(one.priority())))?;
     map.set("has_config", Value::bool(one.config_schema().is_some()))?;
     map.set("vtable_size", Value::int(one.vtable().1 as i64))?;
+    Ok(map)
+}
+
+/// A scan's report, as a map: `{"loaded": [path…], "skipped": [{"skipped",
+/// "path", …}…], "failed": [{"path", "error"}…]}`, plus `"unreadable":
+/// [{"path", "error"}…]` when a search path named a place that could not
+/// be read.
+fn report_value(alloc: Alloc, report: &LoadReport) -> Result<Value, ValueError> {
+    let mut map = Value::map_in(alloc);
+
+    let mut loaded = Value::list_in(alloc);
+    for path in &report.loaded {
+        loaded.push(Value::string_in(alloc, &path.to_string_lossy())?)?;
+    }
+    map.set("loaded", loaded)?;
+
+    let mut skipped = Value::list_in(alloc);
+    for (path, why) in &report.skipped {
+        let mut one = skip_value(alloc, why)?;
+        one.set("path", Value::string_in(alloc, &path.to_string_lossy())?)?;
+        skipped.push(one)?;
+    }
+    map.set("skipped", skipped)?;
+
+    let mut failed = Value::list_in(alloc);
+    for (path, error) in &report.failed {
+        let mut one = Value::map_in(alloc);
+        one.set("path", Value::string_in(alloc, &path.to_string_lossy())?)?;
+        one.set("error", Value::string_in(alloc, &error.to_string())?)?;
+        failed.push(one)?;
+    }
+    map.set("failed", failed)?;
+
+    // Only when there is something to say: a single-directory scan never
+    // has any, and a key that is always present and usually empty is a
+    // key every reader has to know about.
+    if !report.unreadable.is_empty() {
+        let mut unreadable = Value::list_in(alloc);
+        for (path, error) in &report.unreadable {
+            let mut one = Value::map_in(alloc);
+            one.set("path", Value::string_in(alloc, &path.to_string_lossy())?)?;
+            one.set("error", Value::string_in(alloc, &error.to_string())?)?;
+            unreadable.push(one)?;
+        }
+        map.set("unreadable", unreadable)?;
+    }
     Ok(map)
 }
 

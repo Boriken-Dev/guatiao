@@ -34,7 +34,8 @@
 //!
 //! No recursion, and no environment variable. Which directories to search
 //! is a host's policy, not a library's — [`scan_dir`] takes one directory
-//! and answers for it.
+//! and answers for it, and [`scan_path`] takes the list a host assembled
+//! from wherever its policy says.
 
 #![forbid(unsafe_code)]
 
@@ -59,6 +60,154 @@ pub struct LoadReport {
     pub skipped: Vec<(PathBuf, Skipped)>,
     /// Files that looked like libraries and could not be used.
     pub failed: Vec<(PathBuf, LoadError)>,
+    /// Entries of a search path that could not be read at all: a
+    /// directory that does not exist, or one this process may not list.
+    /// Reported rather than dropped, for the same reason a skip is — a
+    /// person looking for a plugin that did not appear needs to see that
+    /// the place was considered. Empty for a single-directory scan, which
+    /// answers that with its `Err` instead.
+    pub unreadable: Vec<(PathBuf, std::io::Error)>,
+}
+
+impl LoadReport {
+    /// Whether anything at all loaded.
+    pub fn is_empty(&self) -> bool {
+        self.loaded.is_empty()
+    }
+
+    /// Takes everything `other` found onto the end of this report.
+    pub fn absorb(&mut self, other: LoadReport) {
+        self.loaded.extend(other.loaded);
+        self.skipped.extend(other.skipped);
+        self.failed.extend(other.failed);
+        self.unreadable.extend(other.unreadable);
+    }
+}
+
+/// Where a host looks: directories or files, in order, each once.
+///
+/// A host's search path is routinely the same place twice — an
+/// environment variable pointing at the directory beside the executable,
+/// which the host also adds by itself — so an entry is kept by the place
+/// it names and the first spelling wins. [`SearchPath::parse`] splits on
+/// the platform's own list separator (`;` on Windows, where a path carries
+/// a `:` of its own; `:` elsewhere) and drops empty parts, so a trailing
+/// or doubled separator costs nothing.
+///
+/// Accumulating is the host's choice: parse what the environment says,
+/// then [`push`](SearchPath::push) the place adjacency finds, and the
+/// override is added to the default rather than replacing it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SearchPath {
+    entries: Vec<PathBuf>,
+}
+
+impl SearchPath {
+    /// The character between entries: `;` on Windows, `:` elsewhere.
+    pub const SEPARATOR: char = if cfg!(windows) { ';' } else { ':' };
+
+    /// No entries.
+    pub fn new() -> SearchPath {
+        SearchPath::default()
+    }
+
+    /// Splits `spec` on [`SEPARATOR`](SearchPath::SEPARATOR), trimming
+    /// each part and dropping the empty ones.
+    pub fn parse(spec: &str) -> SearchPath {
+        let mut path = SearchPath::new();
+        for part in spec.split(Self::SEPARATOR) {
+            let part = part.trim();
+            if !part.is_empty() {
+                path.push(part);
+            }
+        }
+        path
+    }
+
+    /// Appends `entry`, unless an earlier entry names the same place.
+    ///
+    /// Sameness is by canonical path when the entry exists — so a
+    /// relative spelling and an absolute one of one directory are one
+    /// entry — and by the text as written when it does not.
+    pub fn push(&mut self, entry: impl Into<PathBuf>) {
+        let entry = entry.into();
+        let place = same_place(&entry);
+        if self.entries.iter().any(|e| same_place(e) == place) {
+            return;
+        }
+        self.entries.push(entry);
+    }
+
+    /// [`push`](SearchPath::push), for building one in an expression.
+    pub fn with(mut self, entry: impl Into<PathBuf>) -> SearchPath {
+        self.push(entry);
+        self
+    }
+
+    /// The entries, in the order given, each once.
+    pub fn entries(&self) -> &[PathBuf] {
+        &self.entries
+    }
+
+    /// Whether there is nowhere to look.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+}
+
+/// A path resolved for comparison: canonical when it exists, as written
+/// when it does not. A place that does not exist cannot be the same
+/// place as one that does.
+fn same_place(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// The binary inside an Apple bundle, or `None` for anything else.
+///
+/// `Name.framework` is a DIRECTORY, and the library is the extension-less
+/// file `Name` inside it — flat on iOS, and on macOS behind
+/// `Versions/Current/`, which this follows when the flat file is absent.
+/// A scan that took only files would walk straight past every framework,
+/// and a search path naming one would have nothing to open.
+///
+/// Pure path logic, so it answers on every platform and is testable on
+/// all of them; whether the binary it names can be mapped is the
+/// loader's business.
+pub fn bundle_binary(path: &Path) -> Option<PathBuf> {
+    if !path.is_dir()
+        || !path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("framework"))
+    {
+        return None;
+    }
+    let name = path.file_stem()?;
+    let flat = path.join(name);
+    if flat.is_file() {
+        return Some(flat);
+    }
+    let versioned = path.join("Versions").join("Current").join(name);
+    versioned.is_file().then_some(versioned)
+}
+
+/// What in a directory is worth probing: a file carrying the platform's
+/// own library extension, or a bundle whose binary is inside it.
+///
+/// The extension and nothing else. A file without it cannot be mapped on
+/// this platform whatever it contains, so it is not a candidate rather
+/// than a skip — and that one rule rejects a build's byproducts (`.pdb`,
+/// `.lib`, `.exp`, `.d`) and a library somebody disabled by renaming it,
+/// with no list to maintain.
+fn candidate(path: PathBuf) -> Option<PathBuf> {
+    if path.is_file() {
+        return has_library_extension(&path).then_some(path);
+    }
+    bundle_binary(&path)
+}
+
+fn has_library_extension(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case(std::env::consts::DLL_EXTENSION))
 }
 
 /// Whether a file on disk declares the entry symbol, decided without
@@ -397,14 +546,7 @@ pub fn scan_dir_with(
     let mut candidates: Vec<PathBuf> = std::fs::read_dir(dir)?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
-        .filter(|p| p.is_file())
-        .filter(|p| {
-            // The platform's own extension and nothing else. A file
-            // without it cannot be mapped on this platform whatever it
-            // contains, so it is not a candidate rather than a skip.
-            p.extension()
-                .is_some_and(|e| e.eq_ignore_ascii_case(std::env::consts::DLL_EXTENSION))
-        })
+        .filter_map(candidate)
         .collect();
     candidates.sort();
     if order == Order::Descending {
@@ -412,41 +554,157 @@ pub fn scan_dir_with(
     }
 
     for path in candidates {
-        match probe(&path) {
-            Ok(Probe {
-                entry: true,
-                declared,
-            }) => {
-                if let Err(by) = filter(&declared) {
-                    report.skipped.push((path, Skipped::Filtered { by }));
-                    continue;
-                }
-            }
-            Ok(Probe { entry: false, .. }) => {
-                report.skipped.push((path, Skipped::NoEntrySymbol));
-                continue;
-            }
-            Err(_) => {
-                // Unreadable, unparseable, or a malformed declaration.
-                // Reported, because a person looking for a plugin that
-                // did not appear needs to see the file was considered.
-                report.skipped.push((path, Skipped::NotExaminable));
-                continue;
-            }
-        }
-
-        match registry.load_file(&path) {
-            Ok(Loading::Loaded(_)) => report.loaded.push(path),
-            Ok(Loading::Skipped(why)) => report.skipped.push((path, why)),
-            Err(e) => report.failed.push((path, e)),
-        }
+        consider(registry, path, &mut report, &mut filter);
     }
     Ok(report)
+}
+
+/// Probes one candidate, applies the filter, and loads it — recording the
+/// outcome, whichever it is, on `report`.
+fn consider(
+    registry: &mut Registry,
+    path: PathBuf,
+    report: &mut LoadReport,
+    filter: &mut impl FnMut(&Declared) -> Result<(), String>,
+) {
+    match probe(&path) {
+        Ok(Probe {
+            entry: true,
+            declared,
+        }) => {
+            if let Err(by) = filter(&declared) {
+                report.skipped.push((path, Skipped::Filtered { by }));
+                return;
+            }
+        }
+        Ok(Probe { entry: false, .. }) => {
+            report.skipped.push((path, Skipped::NoEntrySymbol));
+            return;
+        }
+        Err(_) => {
+            // Unreadable, unparseable, or a malformed declaration.
+            // Reported, because a person looking for a plugin that
+            // did not appear needs to see the file was considered.
+            report.skipped.push((path, Skipped::NotExaminable));
+            return;
+        }
+    }
+
+    match registry.load_file(&path) {
+        Ok(Loading::Loaded(_)) => report.loaded.push(path),
+        Ok(Loading::Skipped(why)) => report.skipped.push((path, why)),
+        Err(e) => report.failed.push((path, e)),
+    }
+}
+
+/// Loads every library along a search path, and reports the rest.
+///
+/// A directory entry is scanned as [`scan_dir_rules`] is, in `order`. A
+/// file entry is probed and loaded on its own, under the same rules and
+/// with the same reporting: naming a file is asking for it, so its
+/// extension is not checked, but what it declares still is. A bundle is
+/// its binary (see [`bundle_binary`]). An entry that cannot be read at
+/// all — missing, or not listable — goes under [`LoadReport::unreadable`]
+/// and the rest of the path is still walked, because a search path
+/// routinely names a place that does not exist on this machine.
+///
+/// One report for the whole path, in the order the entries were given. A
+/// library reachable twice loads once and is [`Skipped::AlreadyLoaded`]
+/// the second time, naming the first — which is what a host wants to see
+/// when an override points at the directory adjacency already found.
+pub fn scan_path(
+    registry: &mut Registry,
+    path: &SearchPath,
+    order: Order,
+    rules: &ScanRules,
+) -> LoadReport {
+    let mut report = LoadReport::default();
+    for entry in path.entries() {
+        let entry = bundle_binary(entry).unwrap_or_else(|| entry.clone());
+        if entry.is_dir() {
+            match scan_dir_rules(registry, &entry, order, rules) {
+                Ok(found) => report.absorb(found),
+                Err(e) => report.unreadable.push((entry, e)),
+            }
+        } else if entry.is_file() {
+            consider(registry, entry, &mut report, &mut |declared| {
+                rules.check(declared).map_err(str::to_string)
+            });
+        } else {
+            report
+                .unreadable
+                .push((entry, std::io::Error::from(std::io::ErrorKind::NotFound)));
+        }
+    }
+    report
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fresh directory under the target dir, for one test.
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("guatiao-scan-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        dir
+    }
+
+    #[test]
+    fn a_search_path_splits_on_the_platform_separator_and_keeps_each_place_once() {
+        let sep = SearchPath::SEPARATOR;
+        let dir = scratch("split");
+        let a = dir.join("a");
+        let b = dir.join("b");
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        // A doubled separator, a blank part, and `a` spelled twice --
+        // once through its own parent, which canonicalises to the same
+        // place.
+        let spec = format!(
+            "{}{sep}{sep} {sep}{}{sep}{}",
+            a.display(),
+            b.display(),
+            dir.join("b").join("..").join("a").display()
+        );
+        let path = SearchPath::parse(&spec);
+        assert_eq!(path.entries(), [a.clone(), b.clone()]);
+
+        // A place that does not exist is kept as written, and once.
+        let path = path.with(dir.join("nowhere")).with(dir.join("nowhere"));
+        assert_eq!(path.entries().len(), 3);
+        assert!(SearchPath::parse("").is_empty());
+        assert!(SearchPath::parse(&format!("{sep}{sep}")).is_empty());
+    }
+
+    #[test]
+    fn a_bundle_resolves_to_the_binary_inside_it() {
+        let dir = scratch("bundle");
+        let flat = dir.join("Flat.framework");
+        std::fs::create_dir_all(&flat).unwrap();
+        std::fs::write(flat.join("Flat"), b"").unwrap();
+        assert_eq!(bundle_binary(&flat), Some(flat.join("Flat")));
+
+        let versioned = dir.join("Deep.framework");
+        std::fs::create_dir_all(versioned.join("Versions").join("Current")).unwrap();
+        std::fs::write(versioned.join("Versions").join("Current").join("Deep"), b"").unwrap();
+        assert_eq!(
+            bundle_binary(&versioned),
+            Some(versioned.join("Versions").join("Current").join("Deep"))
+        );
+
+        // A bundle with no binary, a directory that is not a bundle, and
+        // a plain file spelled like one: none is a bundle.
+        let empty = dir.join("Empty.framework");
+        std::fs::create_dir_all(&empty).unwrap();
+        assert_eq!(bundle_binary(&empty), None);
+        assert_eq!(bundle_binary(&dir), None);
+        let file = dir.join("File.framework");
+        std::fs::write(&file, b"").unwrap();
+        assert_eq!(bundle_binary(&file), None);
+        assert_eq!(bundle_binary(&dir.join("missing.framework")), None);
+    }
 
     #[test]
     fn a_declaration_is_pairs_ended_by_an_empty_string() {

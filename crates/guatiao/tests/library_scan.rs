@@ -27,8 +27,8 @@
 use std::path::{Path, PathBuf};
 
 use guatiao::library::{
-    Order, Registry, ScanRules, Skipped, declares_entry_symbol, probe, scan_dir, scan_dir_rules,
-    scan_dir_with,
+    Order, Registry, ScanRules, SearchPath, Skipped, declares_entry_symbol, probe, scan_dir,
+    scan_dir_rules, scan_dir_with, scan_path,
 };
 use guatiao::schema::SchemaRef;
 use guatiao::value::alloc::Allocator;
@@ -407,4 +407,84 @@ fn a_macro_exported_schema_is_callable_by_name() {
 
     // Never unloaded: everything it handed over points into its mapping.
     std::mem::forget(lib);
+}
+
+/// A search path is walked in order, each place once, and a library
+/// reachable twice loads once.
+///
+/// The path names the scratch directory (holding a copy of the example
+/// library), the example library itself by file, a place that does not
+/// exist, and the scratch directory again. The copy loads first because
+/// the directory comes first; the file is then the same library at
+/// another path and is skipped naming the copy; the missing place is
+/// reported and does not stop the walk; the repeat is not walked at all.
+#[test]
+fn a_search_path_is_walked_once_per_place_and_reports_what_it_could_not_read() {
+    let Some(library) = built("hello_library") else {
+        println!("skipped: the example library is not built beside this test");
+        return;
+    };
+    let dir = scratch("search_path");
+    let copy = dir.join(dll_name("hello_library"));
+    std::fs::copy(&library, &copy).expect("copy the example library");
+    let missing = dir.join("nowhere");
+
+    let spec = [&dir, &library, &missing, &dir]
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(&SearchPath::SEPARATOR.to_string());
+    let path = SearchPath::parse(&spec);
+    assert_eq!(
+        path.entries().len(),
+        3,
+        "the directory named twice is one entry: {:?}",
+        path.entries()
+    );
+
+    let mut registry = Registry::new("scan-test", "1.0");
+    let report = scan_path(
+        &mut registry,
+        &path,
+        Order::Ascending,
+        &ScanRules::default(),
+    );
+
+    assert_eq!(
+        report.loaded,
+        vec![copy.clone()],
+        "the copy in the directory loaded"
+    );
+    let skipped = report
+        .skipped
+        .iter()
+        .find(|(p, _)| *p == library)
+        .map(|(_, why)| why);
+    assert_eq!(
+        skipped,
+        Some(&Skipped::AlreadyLoaded { from: copy.clone() }),
+        "the same library named by file is a skip naming where it came from"
+    );
+    assert_eq!(report.unreadable.len(), 1, "{:?}", report.unreadable);
+    assert_eq!(report.unreadable[0].0, missing);
+    assert_eq!(report.unreadable[0].1.kind(), std::io::ErrorKind::NotFound);
+    assert!(report.failed.is_empty(), "{:?}", report.failed);
+    assert_eq!(registry.loaded().len(), 1, "one library, once");
+
+    // A file entry is still subject to the rules: the example library
+    // declares `HELLO_EXAMPLE=1`, and a rule against it keeps the file out
+    // before it is mapped -- reported as filtered, in a fresh registry.
+    let mut fresh = Registry::new("scan-test", "1.0");
+    let rules = ScanRules::parse(&["!HELLO_EXAMPLE=1"]).expect("a rule");
+    let only_file = SearchPath::new().with(&library);
+    let report = scan_path(&mut fresh, &only_file, Order::Ascending, &rules);
+    assert!(report.loaded.is_empty());
+    assert!(
+        matches!(
+            report.skipped.as_slice(),
+            [(p, Skipped::Filtered { by })] if *p == library && by == "!HELLO_EXAMPLE=1"
+        ),
+        "{:?}",
+        report.skipped
+    );
 }
