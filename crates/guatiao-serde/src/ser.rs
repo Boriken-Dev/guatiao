@@ -9,7 +9,7 @@ use serde::{Serialize, Serializer};
 
 use guatiao::value::types::{Tag, Value};
 
-use crate::{Bytes, Presentation, data_uri};
+use crate::{Bytes, Numbers, Presentation, data_uri};
 
 /// A value, ready for any serde [`Serializer`], carrying the policy for
 /// the kinds a format may not have.
@@ -72,7 +72,11 @@ impl Serialize for Serializable<'_> {
             // used: the text goes out through a newtype every
             // self-describing format renders as a bare number, and a
             // format that cannot gets the text.
-            Ok(Tag::GUATIAO_NUMBER) => write_number(s, self.value.as_number_str().unwrap_or("0")),
+            Ok(Tag::GUATIAO_NUMBER) => write_number(
+                s,
+                self.value.as_number_str().unwrap_or("0"),
+                self.how.numbers_as(),
+            ),
             Ok(Tag::GUATIAO_STRING) => s.serialize_str(self.value.as_str().unwrap_or("")),
             Ok(Tag::GUATIAO_BYTES) => {
                 let bytes = self.value.as_bytes().unwrap_or(&[]);
@@ -144,26 +148,36 @@ impl Serialize for Serializable<'_> {
 ///    Lossy, and unavoidably so: MessagePack and CBOR have nowhere to put
 ///    an arbitrary-precision number, and a string would change the type a
 ///    reader sees.
-fn write_number<S: Serializer>(s: S, text: &str) -> Result<S::Ok, S::Error> {
+fn write_number<S: Serializer>(s: S, text: &str, how: Numbers) -> Result<S::Ok, S::Error> {
+    // An integer that fits goes out native whatever the policy: it is
+    // exact either way, and every format understands it.
     if let Ok(n) = text.parse::<i64>() {
         return s.serialize_i64(n);
     }
     if let Ok(n) = text.parse::<u64>() {
         return s.serialize_u64(n);
     }
-    if s.is_human_readable() {
-        // serde_json's own protocol for "this string IS the document":
-        // a one-field struct whose name and field name are the token.
-        // Anything else human-readable gets that struct, which is visible
-        // rather than silent — and only for a number beyond `u64`.
+
+    if how == Numbers::RawText {
+        // serde_json's own protocol for "this string IS the document": a
+        // one-field struct whose name and field name are the token.
+        //
+        // ONLY serde_json understands it, which is why this is a stated
+        // policy and not a guess from `is_human_readable` — TOML and YAML
+        // are human-readable too, and they wrote the struct out literally,
+        // turning `1.5` into a table with a startling key. Measured.
         let mut raw = s.serialize_struct(RAW_NUMBER, 1)?;
         raw.serialize_field(RAW_NUMBER, text)?;
         return raw.end();
     }
+
     match text.parse::<f64>() {
-        Ok(n) => s.serialize_f64(n),
-        Err(_) => Err(S::Error::custom(format!(
-            "{text} is a number this format cannot hold"
+        // Lossy past 53 bits of mantissa, and unavoidably so: this is
+        // what a format with no arbitrary-precision number can hold.
+        Ok(n) if n.is_finite() => s.serialize_f64(n),
+        _ => Err(S::Error::custom(format!(
+            "{text} is a number this format cannot hold; \
+             `Numbers::RawText` carries one through serde_json"
         ))),
     }
 }
@@ -171,12 +185,19 @@ fn write_number<S: Serializer>(s: S, text: &str) -> Result<S::Ok, S::Error> {
 /// serde_json's reserved token for already-formatted JSON text.
 const RAW_NUMBER: &str = "$serde_json::private::RawValue";
 
-#[cfg(test)]
+// As in `de`: the unit tests drive JSON, and `tests/every_format.rs`
+// covers a format this crate names nowhere.
+#[cfg(all(test, feature = "json"))]
 mod tests {
     use super::*;
+    use crate::Numbers;
 
+    /// JSON, with JSON's own number policy — which `text::json` sets for
+    /// a caller and which a bare `to_serde` deliberately does not, since
+    /// the token means nothing to any other format.
     fn json(v: &Value) -> String {
-        serde_json::to_string(&to_serde(v)).expect("this value is writable")
+        let how = Presentation::new().numbers(Numbers::RawText);
+        serde_json::to_string(&to_serde_with(v, how)).expect("this value is writable")
     }
 
     #[test]

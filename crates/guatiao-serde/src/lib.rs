@@ -85,9 +85,11 @@
 
 mod de;
 mod ser;
+pub mod text;
 
 pub use de::{ValueSeed, from_serde};
 pub use ser::{Serializable, to_serde, to_serde_with};
+pub use text::Error;
 
 /// Standard base64 (RFC 4648 §4), the `A-Za-z0-9+/` alphabet padded to a
 /// multiple of four.
@@ -218,6 +220,31 @@ impl Bytes {
     }
 }
 
+/// How a number is handed to the format.
+///
+/// A guatiao number is arbitrary-precision TEXT, and most formats have no
+/// such thing — so something has to choose, and only the caller knows
+/// which format is on the other end.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum Numbers {
+    /// `i64` or `u64` where it fits, otherwise `f64`.
+    ///
+    /// **The default, because every format understands it.** A number past
+    /// `f64`'s precision is rounded, which is all a format with no
+    /// arbitrary-precision number can do with one.
+    #[default]
+    Native,
+    /// The text itself, spliced in through serde_json's reserved token.
+    ///
+    /// Exact — `1.10` stays `1.10` and a 200-digit integer survives — and
+    /// **only serde_json understands it**. Anything else writes a literal
+    /// one-entry map with a startling key, which is why this is a stated
+    /// policy rather than something guessed from `is_human_readable`.
+    /// [`text::json`] sets it; nothing else should.
+    RawText,
+}
+
 /// What a writer decides and a reader is told.
 ///
 /// Built rather than passed as arguments, so a later question — how a
@@ -233,6 +260,7 @@ impl Bytes {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Presentation {
     bytes: Bytes,
+    numbers: Numbers,
     read_data_uris: bool,
 }
 
@@ -242,6 +270,7 @@ impl Presentation {
     pub const fn new() -> Presentation {
         Presentation {
             bytes: Bytes::DataUri,
+            numbers: Numbers::Native,
             read_data_uris: false,
         }
     }
@@ -260,9 +289,20 @@ impl Presentation {
         self
     }
 
+    /// How a number is handed to the format. See [`Numbers`].
+    pub const fn numbers(mut self, numbers: Numbers) -> Presentation {
+        self.numbers = numbers;
+        self
+    }
+
     /// What it decided about bytes.
     pub const fn bytes_as(self) -> Bytes {
         self.bytes
+    }
+
+    /// What it decided about numbers.
+    pub const fn numbers_as(self) -> Numbers {
+        self.numbers
     }
 
     /// Whether reading turns a data URI back into bytes.
