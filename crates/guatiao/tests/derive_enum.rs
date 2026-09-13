@@ -365,3 +365,43 @@ fn a_struct_holding_both_validates_against_its_own_schema() {
     assert!(s.find("level").unwrap().is_required());
     assert!(!s.find("fallback").unwrap().is_required());
 }
+
+/// A type whose kind is not an object still describes itself.
+///
+/// `T::schema()` is what `export_schema!` hands to C, and it carried only
+/// `properties` and `required` — so a tagged enum arrived as an object
+/// with no fields, its `x-variant-tag` and its arms dropped. Every key the
+/// kind finished with is carried now, which is what makes the document
+/// readable back.
+#[test]
+fn a_tagged_enums_own_schema_carries_its_tag_and_its_arms() {
+    let declared = Auth::schema(alloc()).unwrap();
+
+    assert_eq!(
+        str_or(declared.get("x-variant-tag"), ""),
+        "auth",
+        "the discriminant's key survives"
+    );
+    let arms = declared.get("oneOf").expect("the arms survive");
+    assert_eq!(guatiao::value::read::items(arms).count(), 2);
+
+    // And it reads back as the kind it was built from, through the same
+    // reader a consumer uses.
+    let field = FieldRef::new("auth", &declared).expect("a schema is a map");
+    assert!(matches!(field.kind(), Kind::Variant { tag: "auth", .. }));
+    let names: Vec<&str> = field.kind().arms().map(|a| a.value()).collect();
+    assert_eq!(names, ["Ambient", "userpass"]);
+
+    // A unit enum is the other non-object kind, and keeps its choices.
+    let declared = Level::schema(alloc()).unwrap();
+    let field = FieldRef::new("level", &declared).expect("a schema is a map");
+    assert!(matches!(field.kind(), Kind::Enum(_)));
+    let choices: Vec<&str> = field.kind().choices().map(|c| c.value()).collect();
+    assert_eq!(choices, ["Off", "warn", "On"]);
+
+    // A struct still answers what it always did.
+    let declared = Config::schema(alloc()).unwrap();
+    let s = SchemaRef::new(&declared).expect("a schema is a map");
+    let keys: Vec<&str> = s.fields().map(|f| f.key()).collect();
+    assert_eq!(keys, ["level", "auth", "fallback"]);
+}

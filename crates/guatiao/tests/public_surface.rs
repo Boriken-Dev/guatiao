@@ -1,0 +1,122 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! What a consumer can name, from outside the crate.
+//!
+//! # Two different failures this catches
+//!
+//! **A name the API header promises and the crate does not export.** The
+//! header is what a consuming agent reads instead of the source, so a
+//! name that is only in the header is a name somebody writes and cannot
+//! compile.
+//!
+//! **An internal function that became reachable.** `value::mutate` is a
+//! public module holding one public constant and one public type; every
+//! other item in it is `pub(crate)`, because the arm accessors hand out a
+//! `&mut` to a container chosen by a tag the caller could have lied
+//! about. `as_text_mut` on a NUMBER node is a `&mut Text` over digits,
+//! from safe code, and that is the shape this pins shut.
+//!
+//! The negative half — that the arm accessors do NOT resolve — is a
+//! `compile_fail` doctest on the module itself, because an integration
+//! test cannot assert that something fails to compile.
+
+// --- what `value::mutate` exposes ----------------------------------------
+
+/// The two names that module is public for.
+#[test]
+fn the_mutation_module_exposes_the_depth_bound_and_the_error() {
+    use guatiao::value::mutate::{MAX_DEPTH, ValueError};
+
+    // A value, so the type is named rather than merely imported.
+    let e: ValueError = ValueError::WrongKind;
+    assert_eq!(e, ValueError::WrongKind);
+
+    // The same constant, at the two shorter paths the rest of the crate
+    // uses.
+    assert_eq!(guatiao::MAX_DEPTH, MAX_DEPTH);
+    assert_eq!(guatiao::value::MAX_DEPTH, MAX_DEPTH);
+}
+
+// --- what the crate root exposes -----------------------------------------
+
+/// Every name the API header writes at the crate root resolves there.
+///
+/// `Text::new`, `Buffer::new`, `Entry::key()` and `Tag` were documented at
+/// this level while only `Alloc`, `List`, `Map`, `ReadValue`, `Status`,
+/// `Value` and `ValueError` were re-exported, so each of those lines was
+/// an import that did not compile.
+#[test]
+fn the_root_exports_the_names_the_header_names() {
+    use guatiao::{Alloc, Buffer, Entry, List, Map, Status, Str, Tag, Text, Value, ValueError};
+
+    let text = Text::new("hello");
+    assert_eq!(text.as_str(), Some("hello"));
+    let buffer = Buffer::new(b"\x00\xff");
+    assert_eq!(buffer.as_slice(), b"\x00\xff");
+
+    let mut map = Map::new();
+    map.set("k", "v").unwrap();
+    let entry: &Entry = &map.entries()[0];
+    assert_eq!(entry.key(), b"k");
+    assert_eq!(entry.value().tag(), Ok(Tag::GUATIAO_STRING));
+
+    let mut list = List::new();
+    list.push(1).unwrap();
+    assert_eq!(list.items().len(), 1);
+
+    let view = Str::borrowed("k");
+    assert_eq!(view.len, 1);
+
+    assert_eq!(Value::null().tag(), Ok(Tag::GUATIAO_NULL));
+    assert_eq!(
+        Status::from(ValueError::WrongKind),
+        Status::GUATIAO_ERR_WRONG_KIND
+    );
+    let _ = Alloc::rust();
+}
+
+/// The standard traits a container is expected to have.
+#[test]
+fn the_owned_containers_default_to_empty() {
+    use guatiao::{Buffer, Text};
+
+    assert_eq!(Text::default().as_str(), Some(""));
+    assert_eq!(Buffer::default().as_slice(), b"");
+}
+
+/// The borrowed byte view is constructed the way the borrowed text view
+/// is, rather than by writing its fields out.
+#[test]
+fn the_borrowed_byte_view_has_the_constructors_its_sibling_has() {
+    use guatiao::value::types::Bytes;
+
+    static RAW: &[u8] = &[0x00, 0xff];
+    let view = Bytes::borrowed(RAW);
+    assert_eq!(view.len, 2);
+    assert!(!view.ptr.is_null());
+
+    let empty = Bytes::empty();
+    assert_eq!(empty.len, 0);
+    assert!(empty.ptr.is_null());
+}
+
+/// An entry hands out its value mutably, so a pair can be changed without
+/// being taken apart.
+///
+/// The key is not offered the same way: a map is looked up by exact bytes
+/// and rendered in insertion order, so changing a key in place would move
+/// a value to a key nobody searched for.
+#[test]
+fn an_entry_hands_out_its_value_mutably() {
+    use guatiao::{Entry, Text, Value};
+
+    let mut entry = Entry {
+        key: Text::new("k"),
+        value: Value::int(1),
+    };
+    *entry.value_mut() = Value::string("two");
+    assert_eq!(entry.value().as_str(), Some("two"));
+    assert_eq!(entry.key(), b"k");
+}

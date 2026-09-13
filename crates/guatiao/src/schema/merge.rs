@@ -43,7 +43,8 @@
 
 #![forbid(unsafe_code)]
 
-use crate::schema::read::{FieldRef, SchemaRef};
+use crate::schema::flat::SEPARATOR;
+use crate::schema::read::{FieldRef, Kind, SchemaRef};
 use crate::value::alloc::Alloc;
 use crate::value::mutate::ValueError;
 use crate::value::read::str_or;
@@ -118,22 +119,50 @@ pub fn declared_for(field: FieldRef<'_>) -> Option<DeclaredMerge> {
 /// Every `x-merge` declaration in `schema`, as the lookup
 /// [`MergeMode::merge_with`] takes.
 ///
-/// Keyed by the field's own key, which is the path a top-level field
-/// occupies in a values map. A field whose key is dotted
-/// (`"tls.ciphers"`) therefore declares the mode for that nested path,
-/// which is exactly the spelling the merge matches against.
+/// Keyed by the **path** the field occupies in a values map, which is the
+/// spelling the merge matches against: a top-level field's own key, and a
+/// field of a nested object joined to its owner's with a dot
+/// (`"tls.ciphers"`). A field key may not contain the separator itself —
+/// [`flat::check_keys`](crate::schema::flat::check_keys) refuses that at
+/// declaration — so a path here has exactly one reading.
+///
+/// **Nested objects are walked**, because the declaration lives with the
+/// field and a field two levels down declares just as meaningfully as one
+/// at the top. A variant's arms are not: two arms may declare different
+/// modes for one path, and there is no arm selected at the time a merge
+/// consults this table.
 ///
 /// Fields with no declaration are simply absent, and absent means "take
 /// the call-site mode" — so a schema that declares nothing produces an
 /// empty override set and changes nothing.
 pub fn merge_overrides(schema: SchemaRef<'_>) -> MergeOverrides {
     let mut overrides = MergeOverrides::new();
-    for field in schema.fields() {
+    collect_overrides(schema.fields(), "", &mut overrides);
+    overrides
+}
+
+/// The recursion behind [`merge_overrides`], over one level of fields.
+///
+/// `prefix` is the path of the object these fields belong to, empty at
+/// the root.
+fn collect_overrides<'a>(
+    fields: impl Iterator<Item = FieldRef<'a>>,
+    prefix: &str,
+    overrides: &mut MergeOverrides,
+) {
+    for field in fields {
+        let path = if prefix.is_empty() {
+            field.key().to_string()
+        } else {
+            format!("{prefix}{SEPARATOR}{}", field.key())
+        };
         if let Some(declared) = declared_for(field) {
-            overrides.set(field.key(), declared.mode);
+            overrides.set(path.clone(), declared.mode);
+        }
+        if let Kind::Map(_) = field.kind() {
+            collect_overrides(field.kind().fields(), &path, overrides);
         }
     }
-    overrides
 }
 
 /// The `mergelists` sub-option, resolved across a whole schema.
@@ -152,11 +181,19 @@ pub fn merge_overrides(schema: SchemaRef<'_>) -> MergeOverrides {
 /// applying it slightly more widely than asked. A caller that needs the
 /// finer distinction merges the subtrees separately.
 pub fn merge_options(schema: SchemaRef<'_>) -> MergeOptions {
-    let any = schema
-        .fields()
-        .filter_map(declared_for)
-        .any(|d| d.options.mergelists);
+    let any = any_mergelists(schema.fields());
     MergeOptions::new().with_mergelists(any)
+}
+
+/// Whether any field at or below this level asked for `mergelists`.
+///
+/// Nested objects are walked, for the reason [`merge_overrides`] walks
+/// them: a declaration is a declaration wherever it sits.
+fn any_mergelists<'a>(fields: impl Iterator<Item = FieldRef<'a>>) -> bool {
+    fields.into_iter().any(|field| {
+        declared_for(field).is_some_and(|d| d.options.mergelists)
+            || (matches!(field.kind(), Kind::Map(_)) && any_mergelists(field.kind().fields()))
+    })
 }
 
 /// Merges two values with this schema's declarations applied over

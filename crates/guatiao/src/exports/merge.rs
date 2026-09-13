@@ -35,6 +35,7 @@
 
 use std::ptr;
 
+use super::{entry, out};
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::merge::{MergeError, MergeMode, MergeOptions, MergeOverrides};
 use crate::value::status::Status;
@@ -141,6 +142,13 @@ impl From<&MergeError> for Status {
 /// be null, and receives a map describing the disagreement when the merge
 /// fails on one.
 ///
+/// Both `out` and a non-null `out_error` are written the absent marker on
+/// entry, so a failed call leaves each ABSENT rather than untouched — a
+/// caller that reads one back after a failure reads what the call
+/// produced, not what its own local happened to contain.
+///
+/// A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
+///
 /// # Safety
 ///
 /// Every non-null pointer addresses what its type says, `out` addresses
@@ -158,10 +166,8 @@ pub unsafe extern "C" fn guatiao_merge(
     out: *mut Value,
     out_error: *mut Value,
 ) -> Status {
-    if earlier.is_null() || later.is_null() || out.is_null() {
-        return Status::GUATIAO_ERR_NULL;
-    }
-    super::guard(|| {
+    out!(out, out_error);
+    entry!(earlier, later, out => {
         let Some(mode) = mode_of(mode) else {
             return Status::GUATIAO_ERR_BAD_VALUE;
         };

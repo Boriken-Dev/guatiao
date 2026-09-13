@@ -73,23 +73,29 @@ pub trait Schema {
     /// The whole schema: the fields a consumer fills in, as a root
     /// document with its dialect declared.
     ///
-    /// Built from [`Schema::kind`], so the two cannot disagree. A type
-    /// whose kind is an object contributes its own fields; a type whose
-    /// kind is a scalar has none to offer and answers an object that
-    /// declares nothing rather than inventing a single nameless field.
+    /// Built from [`Schema::kind`], so the two cannot disagree: **every
+    /// key the kind finished with is carried onto the document**, not
+    /// only `properties` and `required`. A tagged enum's kind is its
+    /// `x-variant-tag` and its `oneOf`, and a document that dropped those
+    /// would describe an object with no fields — which is what
+    /// `export_schema!` would then hand to C.
+    ///
+    /// The dialect and `type: "object"` are written first so they read
+    /// first; a kind that names its own `type` replaces that one in
+    /// place. `properties` is written even when the kind declares none,
+    /// so a reader can tell an object that declares nothing from a
+    /// document that forgot to say.
     fn schema(alloc: Alloc) -> Result<Value, ValueError> {
         let kind = Self::kind(alloc).finish()?;
         let mut out = Value::map_in(alloc);
         out.set(vocab::SCHEMA, Value::string_in(alloc, vocab::DIALECT)?)?;
         out.set(vocab::TYPE, Value::string_in(alloc, vocab::TYPE_OBJECT)?)?;
-        match kind.get(vocab::PROPERTIES) {
-            Some(declared) => out.set(vocab::PROPERTIES, declared.to_value(alloc)?)?,
-            None => out.set(vocab::PROPERTIES, Value::map_in(alloc))?,
+        for entry in kind.entries().unwrap_or(&[]) {
+            let key = entry.key_str().ok_or(ValueError::NotUtf8)?;
+            out.set(key, entry.value().to_value(alloc)?)?;
         }
-        // Absent rather than empty when nothing is required, which is what
-        // the builder writes and what JSON Schema reads the same way.
-        if let Some(required) = kind.get(vocab::REQUIRED) {
-            out.set(vocab::REQUIRED, required.to_value(alloc)?)?;
+        if out.get(vocab::PROPERTIES).is_none() {
+            out.set(vocab::PROPERTIES, Value::map_in(alloc))?;
         }
         Ok(out)
     }
@@ -124,6 +130,14 @@ integer_schema!(
 );
 
 impl Schema for f64 {
+    fn kind(alloc: Alloc) -> KindBuilder {
+        KindBuilder::float_in(alloc)
+    }
+}
+
+/// The same kind as [`f64`]: the vocabulary has one real-number type, and
+/// a narrower Rust width is not a bound this schema can write down.
+impl Schema for f32 {
     fn kind(alloc: Alloc) -> KindBuilder {
         KindBuilder::float_in(alloc)
     }

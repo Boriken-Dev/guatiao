@@ -79,12 +79,6 @@ pub mod merge;
 pub mod schema;
 pub mod value;
 
-/// Runs a boundary body, converting a panic into a status rather than an
-/// abort, and forgetting the payload rather than dropping it.
-///
-/// One copy, used by every `extern "C"` body in the crate, so the two
-/// halves of the boundary cannot drift apart on the one rule that keeps a
-/// host alive.
 /// A borrowed `&str` from a view, or a status saying why not.
 ///
 /// # Safety
@@ -119,6 +113,12 @@ pub(crate) fn guard_with<T>(fallback: T, body: impl FnOnce() -> T) -> T {
     }
 }
 
+/// Runs a boundary body, converting a panic into a status rather than an
+/// abort, and forgetting the payload rather than dropping it.
+///
+/// One copy, used by every `extern "C"` body in the crate, so the two
+/// halves of the boundary cannot drift apart on the one rule that keeps a
+/// host alive.
 pub(crate) fn guard(body: impl FnOnce() -> Status) -> Status {
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(s) => s,
@@ -141,4 +141,27 @@ macro_rules! entry {
     }};
 }
 
-pub(crate) use entry;
+/// Writes the absent marker through every non-null out-pointer named.
+///
+/// **The first statement of every function that has one**, before any
+/// check and before [`entry!`], so a caller reading an out-parameter
+/// after a failure reads ABSENT rather than whatever it happened to
+/// contain. Leaving it untouched is the shape that makes a caller's
+/// uninitialised local read as a value it never received.
+///
+/// Absent and not null: absent is what a lookup that found nothing
+/// answers, and that is what a failed call produced. It owns nothing, so
+/// nothing is leaked by writing it and nothing has to be freed if the
+/// caller ignores it.
+macro_rules! out {
+    ($($p:ident),* $(,)?) => {
+        $(if !$p.is_null() {
+            // SAFETY: checked non-null, and by the caller's contract it
+            // addresses writable storage for one value that does not
+            // already hold one the caller still owns.
+            unsafe { ::std::ptr::write($p, $crate::value::types::Value::absent()) };
+        })*
+    };
+}
+
+pub(crate) use {entry, out};

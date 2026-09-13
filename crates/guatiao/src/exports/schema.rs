@@ -36,6 +36,7 @@ use std::ptr;
 
 use std::collections::BTreeMap;
 
+use super::{entry, out};
 use crate::schema::ValidationError;
 use crate::schema::flat;
 use crate::schema::read::{FieldRef, SchemaRef};
@@ -50,6 +51,16 @@ use crate::value::types::{Str, Value};
 /// because a field may be marked sensitive and an error type that
 /// quotes its input is one that eventually logs a passphrase.
 ///
+/// A non-null `out_error` is written the absent marker on entry, so a
+/// call that failed for any other reason — a null pointer, an allocator
+/// that could not build the detail — leaves it ABSENT rather than
+/// untouched.
+///
+/// Either tree nested deeper than `GUATIAO_MAX_DEPTH` is
+/// `GUATIAO_ERR_BAD_VALUE`: this walks two trees a caller did not write,
+/// and an unbounded walk over one is a stack overflow rather than an
+/// error.
+///
 /// # Safety
 ///
 /// Every non-null pointer addresses what its type says, and `out_error`
@@ -61,10 +72,8 @@ pub unsafe extern "C" fn guatiao_schema_validate(
     alloc: *const Allocator,
     out_error: *mut Value,
 ) -> Status {
-    if schema.is_null() || config.is_null() {
-        return Status::GUATIAO_ERR_NULL;
-    }
-    super::guard(|| {
+    out!(out_error);
+    entry!(schema, config => {
         // SAFETY: the caller's contract.
         let (schema, config) = unsafe { (&*schema, &*config) };
         let Some(schema) = SchemaRef::new(schema) else {
@@ -204,6 +213,9 @@ pub unsafe extern "C" fn guatiao_schema_resolve(schema: *const Value, key: Str) 
 /// `properties`, so a bare pointer to a field's schema cannot say what it
 /// is called. Same for the three below.
 ///
+/// `out` is written the absent marker on entry, so a failed call leaves
+/// it ABSENT. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
+///
 /// # Safety
 ///
 /// `schema` addresses a well-formed value, `key` a readable view, and
@@ -215,17 +227,15 @@ pub unsafe extern "C" fn guatiao_schema_flat_keys(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
-    if schema.is_null() || out.is_null() {
-        return Status::GUATIAO_ERR_NULL;
-    }
-    super::guard(|| {
+    out!(out);
+    entry!(schema, out => {
         // SAFETY: the caller's contract.
         let Some(field) = (unsafe { field_at(schema, key) }) else {
             return Status::GUATIAO_ERR_WRONG_KIND;
         };
         // SAFETY: as above.
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
-            return Status::GUATIAO_ERR_BAD_VALUE;
+            return Status::GUATIAO_ERR_ALLOC;
         };
         let mut list = Value::list_in(alloc);
         for key in flat::keys(field) {
@@ -249,6 +259,9 @@ pub unsafe extern "C" fn guatiao_schema_flat_keys(
 /// a variant, or the value is not a map — all of which are the same "it
 /// does not apply" the Rust side reports as `false`.
 ///
+/// `out` is written the absent marker on entry, so a failed call leaves
+/// it ABSENT. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
+///
 /// # Safety
 ///
 /// Every non-null pointer addresses what its type says, `key` is a
@@ -261,10 +274,8 @@ pub unsafe extern "C" fn guatiao_schema_flatten(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
-    if schema.is_null() || value.is_null() || out.is_null() {
-        return Status::GUATIAO_ERR_NULL;
-    }
-    super::guard(|| {
+    out!(out);
+    entry!(schema, value, out => {
         // SAFETY: the caller's contract.
         let value = unsafe { &*value };
         // SAFETY: as above.
@@ -273,7 +284,7 @@ pub unsafe extern "C" fn guatiao_schema_flatten(
         };
         // SAFETY: as above.
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
-            return Status::GUATIAO_ERR_BAD_VALUE;
+            return Status::GUATIAO_ERR_ALLOC;
         };
 
         let mut store = BTreeMap::new();
@@ -295,6 +306,9 @@ pub unsafe extern "C" fn guatiao_schema_flatten(
 /// makes the projection usable: a front end reads text, hands it back, and
 /// gets the value the schema describes.
 ///
+/// `out` is written the absent marker on entry, so a failed call leaves
+/// it ABSENT. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
+///
 /// # Safety
 ///
 /// As for [`guatiao_schema_flatten`]. `flat` is a map whose values are all
@@ -307,10 +321,8 @@ pub unsafe extern "C" fn guatiao_schema_unflatten(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
-    if schema.is_null() || flat.is_null() || out.is_null() {
-        return Status::GUATIAO_ERR_NULL;
-    }
-    super::guard(|| {
+    out!(out);
+    entry!(schema, flat, out => {
         // SAFETY: the caller's contract.
         let flat = unsafe { &*flat };
         // SAFETY: as above.
@@ -322,7 +334,7 @@ pub unsafe extern "C" fn guatiao_schema_unflatten(
         };
         // SAFETY: as above.
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
-            return Status::GUATIAO_ERR_BAD_VALUE;
+            return Status::GUATIAO_ERR_ALLOC;
         };
         let Some(built) = flat::unflatten(alloc, field, &store) else {
             return Status::GUATIAO_ERR_WRONG_KIND;
@@ -351,13 +363,11 @@ pub unsafe fn schema_export<T: crate::schema::Schema>(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
-    if out.is_null() {
-        return Status::GUATIAO_ERR_NULL;
-    }
-    super::guard(|| {
+    out!(out);
+    entry!(out => {
         // SAFETY: the caller's contract on `alloc`.
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
-            return Status::GUATIAO_ERR_BAD_VALUE;
+            return Status::GUATIAO_ERR_ALLOC;
         };
         let Ok(schema) = T::schema(alloc) else {
             return Status::GUATIAO_ERR_ALLOC;
@@ -462,9 +472,10 @@ pub unsafe fn schema_export<T: crate::schema::Schema>(
 /// # What the caller gets
 ///
 /// An **owned** tree, built through the allocator it passed, which it
-/// frees with `guatiao_value_free`. A null allocator is
-/// `GUATIAO_ERR_BAD_VALUE`, a null `out` is `GUATIAO_ERR_NULL`, and a
-/// schema that cannot be built is `GUATIAO_ERR_ALLOC`.
+/// frees with `guatiao_value_free`. A null `out` is `GUATIAO_ERR_NULL`,
+/// and a null allocator, an unusable one, or a schema that cannot be
+/// built are all `GUATIAO_ERR_ALLOC`. A non-null `out` is written the
+/// absent marker on entry, so a failed call leaves it ABSENT.
 ///
 /// # Not the provider path
 ///

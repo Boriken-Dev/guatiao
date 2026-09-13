@@ -24,6 +24,22 @@
 //! written as a brace initialiser carries null and **adopts** the
 //! allocator passed to the first growing call.
 //!
+//! # Growth copies out; mutation in place does not
+//!
+//! **A `cap == 0` buffer is read-only to the growth path and WRITTEN BY
+//! the mutation paths.** [`reserve`] copies out of it and never touches
+//! it again, so a literal that only ever grows is safe wherever it lives.
+//! Removing, clearing and replacing are the other half: `list_remove`,
+//! `map_remove`, `map_clear`, `list_clear` and the replace arm of
+//! `map_set_written` shift elements down and free values **in the
+//! caller's own buffer**, whatever its capacity says.
+//!
+//! So a literal a consumer intends to mutate must live in **writable
+//! storage** — a `static` without `const`, or a local — and a literal in
+//! read-only memory may be read, cloned, merged and freed but not
+//! emptied. A borrowed buffer mutated this way is also changed under
+//! whoever still owns it.
+//!
 //! # `cap >= len` is not an input invariant
 //!
 //! A literal is legitimately `len = 5, cap = 0`. Every computation of
@@ -173,6 +189,15 @@ pub(crate) unsafe fn reserve<C: Container>(
         return Ok(());
     }
 
+    // A container that owns a block recorded the allocator that made it.
+    // `cap > 0` with a null `alloc` is a malformed container — the shape a
+    // C brace initialiser produces by leaving one field out — and the
+    // block would then be freed below through the allocator it ADOPTED
+    // rather than the one that made it.
+    debug_assert!(
+        cap == 0 || !stored.is_null(),
+        "a container with cap > 0 must carry the allocator that made it"
+    );
     let alloc = allocator_for(stored, adopt)?;
 
     // Exponential, with a floor. Growth must never produce `cap == 0` or
@@ -221,6 +246,26 @@ pub(crate) unsafe fn reserve<C: Container>(
 /// after this returns.
 pub(crate) unsafe fn release_buffer<C: Container>(c: &mut C) {
     let (ptr, _len, cap, stored) = c.parts();
+    // Each of the three conditions below can refuse a block this container
+    // owns, and refusing means the block is never freed. All three are
+    // invariant violations rather than states this crate can produce: a
+    // container with `cap > 0` carries a usable allocator and a layout an
+    // allocation already succeeded at.
+    debug_assert!(
+        cap == 0 || !stored.is_null(),
+        "a container with cap > 0 must carry the allocator that made it"
+    );
+    // SAFETY: `from_raw` reads only what `struct_size` covers, and a
+    // non-null `alloc` is the address of an allocator the producer
+    // promised would outlive the tree.
+    debug_assert!(
+        cap == 0 || stored.is_null() || unsafe { Alloc::from_raw(stored) }.is_ok(),
+        "a container with cap > 0 must carry a usable allocator, or its block is lost"
+    );
+    debug_assert!(
+        cap == 0 || array_size::<C::Elem>(cap).is_ok(),
+        "a container's own capacity must describe a layout, or its block is lost"
+    );
     if cap > 0
         && !stored.is_null()
         // SAFETY: `from_raw` reads only what `struct_size` covers, and a

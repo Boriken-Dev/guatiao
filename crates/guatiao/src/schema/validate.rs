@@ -8,6 +8,14 @@
 //! reported where it was typed rather than deep inside a provider. The
 //! provider validates again on entry, because it cannot trust a caller.
 //!
+//! # Bounded, like every other walk over a tree
+//!
+//! Both the schema and the value can come from a foreign producer, and
+//! either nested past [`MAX_DEPTH`] is refused rather than followed. An
+//! unbounded recursion over one is a stack overflow, which on Windows is
+//! not catchable and takes the host down with it -- the failure every
+//! other walk in this crate is bounded to avoid.
+//!
 //! # Errors never echo the offending value
 //!
 //! [`ValidationError`] carries the field's key and a description of what
@@ -23,6 +31,7 @@ use std::collections::BTreeMap;
 
 use super::ValidationError;
 use super::read::{FieldRef, Kind, SchemaRef};
+use crate::value::mutate::MAX_DEPTH;
 use crate::value::read::str_or;
 use crate::value::types::{Tag, Value};
 
@@ -69,7 +78,18 @@ fn bad(key: impl Into<String>, expected: impl Into<String>) -> ValidationError {
 
 /// Whether `field` accepts `text`.
 pub fn validate_text(field: FieldRef<'_>, text: &str) -> Result<(), ValidationError> {
-    against(field.kind(), field.key(), text)
+    against(field.kind(), field.key(), text, 0)
+}
+
+/// What a refusal says when a tree is nested too deep to follow.
+///
+/// Names the key and the bound and, like every other refusal here, not
+/// the value.
+fn too_deep(key: &str) -> ValidationError {
+    bad(
+        key,
+        format!("a value nested no deeper than {MAX_DEPTH} levels"),
+    )
 }
 
 /// The arm values of a tagged kind, for a message.
@@ -81,7 +101,13 @@ fn arm_names(kind: Kind<'_>) -> String {
 /// Recursive, because a union holds kinds. A free function rather than a
 /// method so the error can name the field's key, which a bare kind does
 /// not know.
-fn against(kind: Kind<'_>, key: &str, value: &str) -> Result<(), ValidationError> {
+///
+/// `depth` counts the levels already followed, shared with
+/// [`value_against`] because the two recurse into each other.
+fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), ValidationError> {
+    if depth >= MAX_DEPTH {
+        return Err(too_deep(key));
+    }
     match kind {
         Kind::Str => Ok(()),
         Kind::Bool => {
@@ -139,7 +165,10 @@ fn against(kind: Kind<'_>, key: &str, value: &str) -> Result<(), ValidationError
         // `oneOf`. Knowing which arm took the value is explicitly not the
         // point of a union; that is what a variant is for.
         Kind::Union(_) => {
-            if kind.alternatives().any(|k| against(k, key, value).is_ok()) {
+            if kind
+                .alternatives()
+                .any(|k| against(k, key, value, depth + 1).is_ok())
+            {
                 Ok(())
             } else {
                 Err(bad(key, "one of the accepted forms"))
@@ -216,7 +245,7 @@ fn bounds<T: std::fmt::Display>(min: Option<T>, max: Option<T>) -> String {
 /// discriminant names a declared arm, every key present is declared **by
 /// that arm**, and every required field of that arm is present.
 pub fn validate_value(field: FieldRef<'_>, value: &Value) -> Result<(), ValidationError> {
-    value_against(field.kind(), field.key(), value)
+    value_against(field.kind(), field.key(), value, 0)
 }
 
 /// The body of [`validate_value`], written over a kind rather than an
@@ -225,7 +254,19 @@ pub fn validate_value(field: FieldRef<'_>, value: &Value) -> Result<(), Validati
 /// A list's elements have a kind and no key of their own, so the recursion
 /// cannot be written over fields. The key is carried along only to build
 /// the path an error reports.
-fn value_against(kind: Kind<'_>, key: &str, value: &Value) -> Result<(), ValidationError> {
+///
+/// `depth` bounds the walk: a schema and a value that nest each other
+/// past [`MAX_DEPTH`] are refused rather than followed, because this
+/// recursion runs over two trees a caller did not write.
+fn value_against(
+    kind: Kind<'_>,
+    key: &str,
+    value: &Value,
+    depth: u32,
+) -> Result<(), ValidationError> {
+    if depth >= MAX_DEPTH {
+        return Err(too_deep(key));
+    }
     match kind {
         Kind::Bytes => {
             return if value.tag() == Ok(Tag::GUATIAO_BYTES) {
@@ -240,7 +281,7 @@ fn value_against(kind: Kind<'_>, key: &str, value: &Value) -> Result<(), Validat
             };
             let element = kind.items();
             for (i, item) in items.iter().enumerate() {
-                value_against(element, &format!("{key}[{i}]"), item)?;
+                value_against(element, &format!("{key}[{i}]"), item, depth + 1)?;
             }
             return Ok(());
         }
@@ -266,6 +307,7 @@ fn value_against(kind: Kind<'_>, key: &str, value: &Value) -> Result<(), Validat
                     field.kind(),
                     &format!("{key}{}{name}", super::flat::SEPARATOR),
                     entry.value(),
+                    depth + 1,
                 )?;
             }
             for field in kind.fields() {
@@ -289,7 +331,7 @@ fn value_against(kind: Kind<'_>, key: &str, value: &Value) -> Result<(), Validat
             Ok(Tag::GUATIAO_NULL | Tag::GUATIAO_LIST | Tag::GUATIAO_MAP) => {
                 Err(bad(key, "a single value, not a container"))
             }
-            _ => against(kind, key, &text_of(value)),
+            _ => against(kind, key, &text_of(value), depth),
         };
     };
 
@@ -327,6 +369,7 @@ fn value_against(kind: Kind<'_>, key: &str, value: &Value) -> Result<(), Validat
             field.kind(),
             &format!("{key}{}{name}", super::flat::SEPARATOR),
             entry.value(),
+            depth + 1,
         )?;
     }
 

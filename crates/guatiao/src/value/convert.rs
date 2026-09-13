@@ -507,12 +507,9 @@ impl<T: ToValue> ToValue for Vec<T> {
 /// owned tree carries its allocator with it.
 impl ToValue for Value {
     fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
-        // SAFETY: `Value::clone_in` needs a well-formed node, and a
-        // `&Value` reaching a safe function in this crate is one -- the
-        // same precondition every reader here already relies on. Every
-        // buffer in the tree it hands back came from `alloc`, and nothing
-        // else holds it, so the caller owns the whole copy.
-        unsafe { self.clone_in(alloc) }
+        // Every buffer in the tree this hands back came from `alloc` and
+        // nothing else holds it, so the caller owns the whole copy.
+        self.clone_in(alloc)
     }
 }
 

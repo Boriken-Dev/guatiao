@@ -72,14 +72,15 @@ pub mod value;
 
 pub use alloc::{Alloc, AllocError, Allocator, rust_alloc};
 pub use convert::{Bytes, FromValue, MapError, ToValue};
-pub use mutate::ValueError;
+pub use mutate::{MAX_DEPTH, ValueError};
 pub use read::{
     Dump, ReadValue, bool_or, bytes_or, entries, equal, float_or, int_or, items, keys, str_or,
 };
 pub use status::Status;
-// The BORROWED views -- `Str`, `Bytes`, `Values`, `Entries` -- stay
-// behind `types::`. A Rust caller reads a `&str` or a `&[u8]` instead,
-// they exist for the C signatures, and `types::Bytes` (a borrowed view)
-// would otherwise collide with `convert::Bytes` (a field type that says
-// "cross as the bytes kind").
-pub use types::{Buffer, Entry, List, Map, Payload, Tag, Text, Value};
+// `Str` is here because every C signature in `exports` names it and a
+// caller building one should not have to find the module. The other
+// three BORROWED views -- `Bytes`, `Values`, `Entries` -- stay behind
+// `types::`: a Rust caller reads a `&[u8]` or a slice instead, and
+// `types::Bytes` would collide with `convert::Bytes` (a field type that
+// says "cross as the bytes kind").
+pub use types::{Buffer, Entry, List, Map, Payload, Str, Tag, Text, Value};

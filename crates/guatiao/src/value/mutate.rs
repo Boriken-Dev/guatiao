@@ -66,7 +66,23 @@
 //! [`Entry`]; the `extern "C"` surface in [`crate::exports`] is what
 //! wraps these for a caller that cannot link Rust. Two names are the
 //! exception because they are genuinely public: [`ValueError`] and
-//! [`MAX_DEPTH`].
+//! [`MAX_DEPTH`], both re-exported at [`crate::value`] and at the crate
+//! root.
+//!
+//! Those two resolve:
+//!
+//! ```
+//! use guatiao::value::mutate::{MAX_DEPTH, ValueError};
+//! # let _ = (MAX_DEPTH, ValueError::WrongKind);
+//! ```
+//!
+//! An arm accessor does not, which is what keeps a `&mut Text` off a
+//! NUMBER node in safe code:
+//!
+//! ```compile_fail
+//! let mut v = guatiao::Value::int(1);
+//! let _ = guatiao::value::mutate::as_text_mut(&mut v);
+//! ```
 
 use std::mem::ManuallyDrop;
 use std::ptr;
@@ -76,11 +92,13 @@ use super::number::validate_json_number;
 use super::raw::{dangling, release_buffer, reserve};
 use super::types::{Buffer, Entry, List, Map, Payload, Tag, Text, Value};
 
-/// How deep a tree [`Value::clone_in`] will follow.
+/// How deep a tree any walk here follows: cloning one, merging two,
+/// comparing two for equality, and checking one against a schema.
 ///
 /// Configuration trees are a handful of levels deep; this is far above any
 /// real one and far below what would exhaust a stack. It exists so a
-/// hostile or corrupt tree is an error rather than a dead process.
+/// hostile or corrupt tree is an error rather than a dead process: a stack
+/// overflow on Windows is not catchable and takes the host with it.
 pub const MAX_DEPTH: u32 = 128;
 
 /// Why a mutation was refused.
@@ -273,7 +291,7 @@ pub(crate) fn value_tag(v: &Value) -> Result<Tag, ValueError> {
 macro_rules! arm {
     ($name:ident, $name_mut:ident, $field:ident, $ty:ty, $($tag:pat_param)|+) => {
         /// The live arm, or `None` when the tag selects a different one.
-        pub fn $name(v: &Value) -> Option<&$ty> {
+        pub(crate) fn $name(v: &Value) -> Option<&$ty> {
             match Tag::try_from(v.tag) {
                 // SAFETY: the tag says this arm is the live one, and every
                 // node is born with all 40 bytes initialised, so the arm is
@@ -284,7 +302,7 @@ macro_rules! arm {
         }
 
         /// The live arm, mutably.
-        pub fn $name_mut(v: &mut Value) -> Option<&mut $ty> {
+        pub(crate) fn $name_mut(v: &mut Value) -> Option<&mut $ty> {
             match Tag::try_from(v.tag) {
                 // SAFETY: as above.
                 $(Ok($tag))|+ => Some(unsafe { &mut v.payload.$field }),
@@ -403,6 +421,20 @@ pub(crate) fn take(v: &mut Value) -> Value {
     std::mem::replace(v, value_null())
 }
 
+/// Whether this node's tag selects an arm that owns a buffer.
+///
+/// Absent, null, bool and a tag this build does not know own nothing.
+fn owns_storage(v: &Value) -> bool {
+    matches!(
+        Tag::try_from(v.tag),
+        Ok(Tag::GUATIAO_STRING
+            | Tag::GUATIAO_NUMBER
+            | Tag::GUATIAO_BYTES
+            | Tag::GUATIAO_LIST
+            | Tag::GUATIAO_MAP)
+    )
+}
+
 /// Frees everything a node owns and leaves it null-tagged.
 ///
 /// Safe to call on a node that owns nothing: a literal's buffers have
@@ -420,6 +452,18 @@ pub(crate) fn take(v: &mut Value) -> Value {
 /// buffer came from the allocator the container names, with a layout of
 /// `cap` elements, and the first `len` elements are initialised.
 pub(crate) unsafe fn value_free(v: &mut Value) {
+    // A scalar owns nothing, so null-tagging it IS the whole operation:
+    // no walk, and no heap for the walk's stack. Scalars are most of the
+    // nodes in a tree, and every container's own free calls this once per
+    // element.
+    //
+    // The node is taken and forgotten rather than overwritten in place:
+    // assigning over it would DROP it, and `Drop` is this function.
+    if !owns_storage(v) {
+        let _ = ManuallyDrop::new(take(v));
+        return;
+    }
+
     let mut stack = vec![take(v)];
 
     // **Every node here is held in a `ManuallyDrop`**, and that is not
@@ -975,6 +1019,26 @@ pub(crate) unsafe fn map_clear(node: &mut Value) -> Result<(), ValueError> {
     Ok(())
 }
 
+/// Removes the first entry and hands it back, keeping the order of the
+/// rest.
+///
+/// # Safety
+///
+/// `node` is a well-formed map.
+unsafe fn map_take_first(node: &mut Value) -> Option<Entry> {
+    let m = as_map_mut(node)?;
+    if m.len == 0 {
+        return None;
+    }
+    // SAFETY: the first entry is initialised.
+    let out = unsafe { m.ptr.read() };
+    // SAFETY: closing the hole the removed entry left. At `len == 1` the
+    // source is a legal one-past-the-end pointer and the count is zero.
+    unsafe { ptr::copy(m.ptr.add(1), m.ptr, m.len - 1) };
+    m.len -= 1;
+    Some(out)
+}
+
 /// Copies every entry of `src` into `dst`, replacing keys that collide and
 /// appending the rest. Answers how many were copied.
 ///
@@ -985,6 +1049,15 @@ pub(crate) unsafe fn map_clear(node: &mut Value) -> Result<(), ValueError> {
 /// overriding what you mean to change is the shape that cannot do that,
 /// and it is worth one named function so it gets written.
 ///
+/// **The whole source is copied before `dst` is touched.** `src` may be
+/// `dst` itself, or a node inside it: a slice of `src`'s entries dangles
+/// the moment an append reallocates `dst`'s buffer or a replacement frees
+/// the entry that slice points at. Copying first makes the two cases one
+/// case, at the cost of the copy a caller was paying per entry anyway.
+///
+/// **Not atomic.** A failure at entry *k* leaves entries `0..k` applied;
+/// nothing is leaked and nothing is half-written.
+///
 /// # Safety
 ///
 /// Both are well-formed maps.
@@ -993,29 +1066,63 @@ pub(crate) unsafe fn map_copy_from(
     src: &Value,
     alloc: Alloc,
 ) -> Result<usize, ValueError> {
-    if as_map(dst).is_none() {
+    if as_map(dst).is_none() || as_map(src).is_none() {
         return Err(ValueError::WrongKind);
     }
-    let entries = entries_of(src).ok_or(ValueError::WrongKind)?;
+    // SAFETY: `src` is a well-formed map, checked above.
+    let mut copy = unsafe { value_clone(alloc, src)? };
+
     let mut n = 0;
-    for entry in entries {
-        let key = std::str::from_utf8(key_bytes(entry)).map_err(|_| ValueError::NotUtf8)?;
-        // Clone then move, which is what every caller inserting something
-        // it only borrowed does. There is no copying setter to shortcut
-        // it, and that is the point: the copy is visible here too.
-        // SAFETY: forwarded.
-        let mut copy = unsafe { value_clone(alloc, &entry.value)? };
-        // SAFETY: `dst` is a map, checked above, and `copy` owns its
-        // buffers.
-        unsafe { map_set(dst, key, &mut copy, alloc)? };
-        n += 1;
+    let mut result = Ok(());
+    // Each entry MOVES out of the clone, and the clone's length falls with
+    // it, so whatever is left when this stops is freed below exactly once.
+    // SAFETY: the clone is a well-formed map this function just built.
+    while let Some(entry) = unsafe { map_take_first(&mut copy) } {
+        let Entry { key: mut k, value } = entry;
+        let mut value = value;
+        match k.as_str() {
+            // SAFETY: `dst` is a map, checked above, and the value owns
+            // its buffers.
+            Some(key) => match unsafe { map_set_written(dst, key, value, alloc) } {
+                Ok(()) => n += 1,
+                Err(e) => result = Err(e),
+            },
+            None => {
+                // SAFETY: the value came out of the clone and nothing
+                // else refers to what it owns.
+                unsafe { value_free(&mut value) };
+                result = Err(ValueError::NotUtf8);
+            }
+        }
+        // SAFETY: the key was the entry's own and is not referenced now.
+        unsafe { release_buffer(&mut k) };
+        if result.is_err() {
+            break;
+        }
     }
+    // SAFETY: whatever the loop did not move is still the clone's, and
+    // nothing else refers to it.
+    unsafe { value_free(&mut copy) };
+    result?;
     Ok(n)
 }
 
 // --- appending to text and bytes --------------------------------------
 
+/// Whether two byte ranges share a byte. Empty ranges touch nothing.
+fn overlaps(a: *const u8, a_len: usize, b: *const u8, b_len: usize) -> bool {
+    if a_len == 0 || b_len == 0 {
+        return false;
+    }
+    let (a, b) = (a as usize, b as usize);
+    a < b.saturating_add(b_len) && b < a.saturating_add(a_len)
+}
+
 /// Appends bytes to a string value. Refuses anything that is not UTF-8.
+///
+/// The source may address the node's own text — a C caller can hand this
+/// a view of the value it is appending to — so an overlapping source is
+/// copied out before anything grows.
 ///
 /// # Safety
 ///
@@ -1032,16 +1139,29 @@ pub(crate) unsafe fn string_push(
     if text.is_empty() {
         return Ok(());
     }
+    // Growth frees the buffer the source may be pointing into, and
+    // staying in place would make the copy below overlap itself. Taking
+    // the bytes first makes both cases one case.
+    let staged;
+    let bytes = if overlaps(s.ptr, s.len, text.as_ptr(), text.len()) {
+        staged = text.as_bytes().to_vec();
+        staged.as_slice()
+    } else {
+        text.as_bytes()
+    };
     // SAFETY: the container is consistent.
-    unsafe { reserve(s, text.len(), Some(alloc))? };
-    // SAFETY: `reserve` guaranteed room for `text.len()` more bytes past
-    // `len`, and the source cannot overlap a buffer this crate owns.
-    unsafe { ptr::copy_nonoverlapping(text.as_ptr(), s.ptr.add(s.len), text.len()) };
-    s.len += text.len();
+    unsafe { reserve(s, bytes.len(), Some(alloc))? };
+    // SAFETY: `reserve` guaranteed room for `bytes.len()` more bytes past
+    // `len`, and the source is either disjoint from the buffer or the
+    // staged copy of it.
+    unsafe { ptr::copy_nonoverlapping(bytes.as_ptr(), s.ptr.add(s.len), bytes.len()) };
+    s.len += bytes.len();
     Ok(())
 }
 
 /// Appends to a bytes value.
+///
+/// An overlapping source is copied out first, as in [`string_push`].
 ///
 /// # Safety
 ///
@@ -1055,6 +1175,14 @@ pub(crate) unsafe fn buffer_push(
     if bytes.is_empty() {
         return Ok(());
     }
+    // As in `string_push`: the source may be this buffer.
+    let staged;
+    let bytes = if overlaps(b.ptr, b.len, bytes.as_ptr(), bytes.len()) {
+        staged = bytes.to_vec();
+        staged.as_slice()
+    } else {
+        bytes
+    };
     // SAFETY: the container is consistent.
     unsafe { reserve(b, bytes.len(), Some(alloc))? };
     // SAFETY: as above.

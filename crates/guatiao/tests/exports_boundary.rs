@@ -23,11 +23,14 @@ use guatiao::exports::schema::{
     guatiao_schema_flat_keys, guatiao_schema_flatten, guatiao_schema_resolve,
     guatiao_schema_unflatten, guatiao_schema_validate,
 };
-use guatiao::exports::value::guatiao_map_clear;
+use guatiao::exports::value::{
+    guatiao_list_push, guatiao_map_clear, guatiao_map_copy_from, guatiao_map_set,
+    guatiao_string_push, guatiao_value_clone,
+};
 use guatiao::schema::{ArmBuilder, FieldBuilder, FormFieldBuilder, KindBuilder, SchemaBuilder};
-use guatiao::value::read::{items, str_or};
+use guatiao::value::read::{int_or, items, str_or};
 use guatiao::value::status::Status;
-use guatiao::value::types::{Str, Value};
+use guatiao::value::types::{Str, Tag, Value};
 use guatiao::{Alloc, List, Map, ReadValue};
 
 /// A map of one key holding a list of strings, which is the shape every
@@ -40,6 +43,12 @@ fn list_map(key: &str, values: &[&str]) -> Value {
     let mut map = Value::map();
     map.set(key, list).unwrap();
     map
+}
+
+/// Whether a node is the absent marker, which is what every export
+/// writes through an out-parameter before it can fail.
+fn is_absent(value: &Value) -> bool {
+    value.tag() == Ok(Tag::GUATIAO_ABSENT)
 }
 
 fn strings_at(value: &Value, key: &str) -> Vec<String> {
@@ -604,4 +613,235 @@ fn the_flat_exports_refuse_null() {
             Status::GUATIAO_ERR_NULL
         );
     }
+}
+
+// --- overlapping arguments ----------------------------------------------
+
+/// The same node as both sides of a copy is refused rather than acted on.
+///
+/// **Acting on it was a use-after-free.** The copy walked `src`'s entry
+/// array while `dst` grew, and the first append freed the array the walk
+/// was reading; the map came back with a key renamed to `""`. Copying a
+/// map onto itself is also a caller mistake in its own right: every key
+/// would replace itself with a copy of itself.
+#[test]
+fn a_map_copied_onto_itself_is_refused() {
+    let alloc = Alloc::rust();
+    let mut map = Map::new_in(alloc);
+    map.set("a", 1).unwrap();
+    map.set("b", 2).unwrap();
+    let mut map: Value = map.into();
+
+    // SAFETY: one well-formed map, passed as both arguments, which is the
+    // case under test.
+    let status = unsafe { guatiao_map_copy_from(alloc.as_raw(), &mut map, &map) };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+
+    let keys: Vec<String> = map
+        .entries()
+        .unwrap()
+        .iter()
+        .map(|e| e.key_str().unwrap().to_string())
+        .collect();
+    assert_eq!(keys, ["a", "b"], "a refused call changed nothing");
+}
+
+/// A source stored INSIDE the target still copies correctly.
+///
+/// The shape that reproduced the use-after-free: `src` is a node the
+/// growing `dst` owns, so a snapshot of its entries dangles the moment
+/// `dst` reallocates. The source is copied whole before `dst` is touched,
+/// which is what makes this a plain copy rather than a race.
+#[test]
+fn a_source_inside_the_target_copies_whole() {
+    let alloc = Alloc::rust();
+    let mut child = Map::new_in(alloc);
+    child.set("x", 1).unwrap();
+    child.set("y", 2).unwrap();
+
+    let mut map = Map::new_in(alloc);
+    map.set("child", child).unwrap();
+    map.set("a", 3).unwrap();
+    let mut map: Value = map.into();
+
+    let child_ptr: *const Value = map.get("child").unwrap();
+    // SAFETY: both address well-formed maps; `src` is a node `dst` owns,
+    // which is the case under test.
+    let status = unsafe { guatiao_map_copy_from(alloc.as_raw(), &mut map, child_ptr) };
+    assert_eq!(status, Status::GUATIAO_OK);
+
+    let keys: Vec<String> = map
+        .entries()
+        .unwrap()
+        .iter()
+        .map(|e| e.key_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        keys,
+        ["child", "a", "x", "y"],
+        "the child's keys are appended and nothing is renamed"
+    );
+    assert_eq!(int_or(map.get("x"), 0), 1);
+    assert_eq!(int_or(map.get("y"), 0), 2);
+}
+
+/// Storing a node into itself is refused: the move would read the 40
+/// bytes it is writing.
+#[test]
+fn a_node_stored_into_itself_is_refused() {
+    let alloc = Alloc::rust();
+    let mut map: Value = Map::new_in(alloc).into();
+    // SAFETY: one well-formed node as both arguments, the case under test.
+    let status = unsafe { guatiao_map_set(alloc.as_raw(), &mut map, Str::borrowed("k"), &mut map) };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert_eq!(map.entries().unwrap().len(), 0, "nothing was stored");
+
+    let mut list: Value = List::new_in(alloc).into();
+    // SAFETY: as above.
+    let status = unsafe { guatiao_list_push(alloc.as_raw(), &mut list, &mut list) };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert_eq!(list.items().unwrap().len(), 0, "nothing was appended");
+}
+
+/// Appending a value's own text to itself is a copy, not a
+/// use-after-free.
+///
+/// The source is a view of the node's own buffer, which `reserve` frees
+/// the instant it grows. Only a C caller can produce this — the Rust API
+/// cannot hand out a `&str` and a `&mut Value` over one node at once —
+/// which is exactly why the boundary is where it has to be handled.
+#[test]
+fn a_string_appended_to_itself_copies_its_own_bytes() {
+    let alloc = Alloc::rust();
+    let mut node = Value::string_in(alloc, "abc").unwrap();
+
+    let own = Str {
+        ptr: node.as_str().unwrap().as_ptr(),
+        len: node.as_str().unwrap().len(),
+    };
+    // SAFETY: a well-formed string, and a view of its own bytes, readable
+    // for the call: the aliasing case under test.
+    let status = unsafe { guatiao_string_push(alloc.as_raw(), &mut node, own) };
+    assert_eq!(status, Status::GUATIAO_OK);
+    assert_eq!(node.as_str(), Some("abcabc"));
+}
+
+// --- what a failed call leaves behind ------------------------------------
+
+/// Every out-parameter is written ABSENT on entry, so a failure leaves
+/// the caller reading what the call produced rather than its own
+/// uninitialised local.
+#[test]
+fn a_failed_call_leaves_its_out_parameters_absent() {
+    let alloc = Alloc::rust();
+    let a = Value::map();
+    let b = Value::map();
+
+    // A mode nobody declared: the failure happens after the prologue.
+    let mut out = Value::bool(true);
+    let mut error = Value::bool(true);
+    // SAFETY: every pointer addresses what its type says, and neither
+    // out-parameter holds anything owned.
+    let status = unsafe {
+        guatiao_merge(
+            0,
+            &a,
+            &b,
+            alloc.as_raw(),
+            0,
+            std::ptr::null(),
+            0,
+            &mut out,
+            &mut error,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert!(is_absent(&out), "the result slot is absent, not stale");
+    assert!(is_absent(&error), "so is the detail slot");
+
+    // A null pointer: the failure happens before anything is read.
+    let mut out = Value::bool(true);
+    // SAFETY: passing null is the case under test.
+    let status = unsafe {
+        guatiao_merge(
+            GUATIAO_MERGE_DEEP,
+            std::ptr::null(),
+            &b,
+            alloc.as_raw(),
+            0,
+            std::ptr::null(),
+            0,
+            &mut out,
+            std::ptr::null_mut(),
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_NULL);
+    assert!(is_absent(&out), "a refused call still wrote the slot");
+
+    // The schema and value exports, the same way.
+    let mut error = Value::bool(true);
+    // SAFETY: as above.
+    let status =
+        unsafe { guatiao_schema_validate(std::ptr::null(), &a, alloc.as_raw(), &mut error) };
+    assert_eq!(status, Status::GUATIAO_ERR_NULL);
+    assert!(is_absent(&error));
+
+    let mut out = Value::bool(true);
+    // SAFETY: a null allocator is the case under test.
+    let status = unsafe { guatiao_value_clone(std::ptr::null(), &a, &mut out) };
+    assert_eq!(status, Status::GUATIAO_ERR_ALLOC);
+    assert!(is_absent(&out));
+
+    let mut out = Value::bool(true);
+    // SAFETY: as above.
+    let status = unsafe {
+        guatiao_schema_flat_keys(&a, Str::borrowed("nonesuch"), alloc.as_raw(), &mut out)
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_WRONG_KIND);
+    assert!(is_absent(&out));
+}
+
+// --- depth ---------------------------------------------------------------
+
+/// A schema and a value nested past the bound are refused, not followed.
+///
+/// **Verified as a stack overflow before the bound existed**: the walk
+/// recursed once per level over two trees a caller supplied, and a stack
+/// overflow on Windows is not catchable — it takes the host down rather
+/// than returning a status.
+#[test]
+fn a_tree_nested_past_the_bound_is_refused_rather_than_followed() {
+    let alloc = Alloc::rust();
+    const DEPTH: usize = 300;
+
+    // Innermost first, then wrapped outward: an object whose only field
+    // is another object.
+    let mut kind = KindBuilder::map_in(alloc, Vec::new());
+    for _ in 0..DEPTH {
+        kind = KindBuilder::map_in(alloc, vec![FieldBuilder::new_in(alloc, "next", kind)]);
+    }
+    let schema = SchemaBuilder::new_in(alloc)
+        .field(FieldBuilder::new_in(alloc, "root", kind))
+        .finish()
+        .expect("a schema this size does not exhaust an allocator");
+
+    let mut value = Value::map_in(alloc);
+    for _ in 0..DEPTH {
+        let mut outer = Value::map_in(alloc);
+        outer.set("next", value).unwrap();
+        value = outer;
+    }
+    let mut config = Value::map_in(alloc);
+    config.set("root", value).unwrap();
+
+    let mut error = Value::absent();
+    // SAFETY: both address well-formed values, and `out_error` is
+    // writable storage holding nothing owned.
+    let status = unsafe { guatiao_schema_validate(&schema, &config, alloc.as_raw(), &mut error) };
+    assert_eq!(
+        status,
+        Status::GUATIAO_ERR_BAD_VALUE,
+        "too deep is a refusal, and the process is still here to say so"
+    );
+    assert!(!is_absent(&error), "the detail says which key and what for");
 }

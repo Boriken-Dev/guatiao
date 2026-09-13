@@ -32,7 +32,8 @@ use std::ffi::c_void;
 
 use guatiao::value::alloc::{Alloc, AllocError, Allocator, rust_alloc};
 use guatiao::value::mutate::{MAX_DEPTH, ValueError};
-use guatiao::value::types::{Tag, Text, Value};
+use guatiao::value::read::equal;
+use guatiao::value::types::{Entry, List, Map, Payload, Tag, Text, Value};
 
 // --- a counting allocator ---------------------------------------------
 
@@ -382,7 +383,7 @@ fn inserting_a_borrowed_value_is_clone_then_move() {
         let mut m = Value::map_in(alloc);
         let src = Value::string_in(alloc, "borrowed").unwrap();
 
-        let mut copy = unsafe { src.clone_in(alloc) }.unwrap();
+        let mut copy = src.clone_in(alloc).unwrap();
         unsafe { m.set_in("k", &mut copy, alloc) }.unwrap();
 
         assert_eq!(src.as_str(), Some("borrowed"), "source untouched");
@@ -559,7 +560,7 @@ fn a_clone_is_deep_and_independent() {
             orig.set_in("child", &mut child, alloc).unwrap();
         }
 
-        let copy = unsafe { orig.clone_in(alloc) }.unwrap();
+        let copy = orig.clone_in(alloc).unwrap();
 
         // A nested node is mutated safely: the child map records the
         // allocator that made it, so `set` needs nobody to vouch for one.
@@ -601,7 +602,7 @@ fn an_allocation_failure_leaves_the_target_unchanged_and_leaks_nothing() {
 
     let before = counter.outstanding();
     counter.fail_at.set(counter.allocs.get() + 2);
-    let err = unsafe { subtree.clone_in(alloc) }.unwrap_err();
+    let err = subtree.clone_in(alloc).unwrap_err();
     assert_eq!(err, ValueError::Alloc(AllocError::Failed));
     counter.fail_at.set(0);
 
@@ -741,10 +742,7 @@ fn a_tree_deeper_than_the_limit_is_an_error_rather_than_a_dead_process() {
                 cursor = (*cursor).as_list_mut().and_then(|l| l.get_mut(0)).unwrap();
             }
         }
-        assert_eq!(
-            unsafe { root.clone_in(alloc) }.unwrap_err(),
-            ValueError::TooDeep
-        );
+        assert_eq!(root.clone_in(alloc).unwrap_err(), ValueError::TooDeep);
         // Freeing it is iterative, so this does not overflow the stack.
     });
 }
@@ -936,4 +934,169 @@ fn the_debug_dump_walks_a_tree_and_shows_bytes_as_bytes() {
             "bytes are shown as bytes rather than decoded as text: {text}"
         );
     });
+}
+
+// --- literals that are mutated, not only read ---------------------------
+
+/// Borrowed text, as a C brace initialiser writes it: `cap == 0` and no
+/// allocator, so the buffer is never freed.
+fn text_lit(bytes: &'static [u8]) -> Text {
+    Text {
+        ptr: bytes.as_ptr().cast_mut(),
+        len: bytes.len(),
+        cap: 0,
+        alloc: std::ptr::null(),
+    }
+}
+
+/// A STRING node over borrowed bytes, whatever those bytes are.
+///
+/// Whatever they are is the point for one of the tests below: the
+/// constructors refuse text that is not UTF-8, so the only way to hold a
+/// string a reader cannot decode is to declare one, which a C producer
+/// can do by accident.
+fn string_lit(bytes: &'static [u8]) -> Value {
+    Value {
+        tag: u32::from(Tag::GUATIAO_STRING),
+        _pad: 0,
+        payload: Payload {
+            text: std::mem::ManuallyDrop::new(text_lit(bytes)),
+        },
+    }
+}
+
+/// A LIST and a MAP declared by hand are mutated **in place** and then
+/// freed, with nothing left outstanding.
+///
+/// Only growth copies out of a `cap == 0` buffer. Removing, clearing and
+/// replacing shift elements and free values through the array the caller
+/// declared, which is why these literals are locals rather than `static
+/// const` — and why the header says so to a C caller.
+#[test]
+fn a_literal_list_and_map_are_mutated_in_place_and_free_to_nothing() {
+    static A: &[u8] = b"a";
+    static B: &[u8] = b"b";
+
+    with_alloc(|alloc, counter| {
+        // --- a list of two borrowed strings.
+        //
+        // `ManuallyDrop` because the array stands in for one a C caller
+        // declared, and C has no destructors: a removal shifts the tail
+        // down and leaves the last slot holding a duplicate of what moved,
+        // which Rust would otherwise free a second time. Everything the
+        // node really owns is released through `free` below, and the
+        // counter is what proves it.
+        let mut items = std::mem::ManuallyDrop::new([string_lit(A), string_lit(B)]);
+        let mut list = Value {
+            tag: u32::from(Tag::GUATIAO_LIST),
+            _pad: 0,
+            payload: Payload {
+                list: std::mem::ManuallyDrop::new(List {
+                    ptr: items.as_mut_ptr(),
+                    len: 2,
+                    cap: 0,
+                    alloc: std::ptr::null(),
+                }),
+            },
+        };
+
+        let before = counter.frees.get();
+        assert!(list.discard_at(0), "the first element is removed");
+        assert_eq!(list.items().unwrap().len(), 1);
+        assert_eq!(
+            list.items().unwrap()[0].as_str(),
+            Some("b"),
+            "the tail shifted down"
+        );
+        list.clear().unwrap();
+        assert_eq!(list.items().unwrap().len(), 0);
+        assert_eq!(
+            counter.frees.get(),
+            before,
+            "nothing the caller declared reached the allocator"
+        );
+
+        // Growth is the one path that copies out, and what it allocates
+        // is freed here.
+        let mut item = Value::string_in(alloc, "c").unwrap();
+        // SAFETY: a well-formed list and a well-formed value, moved in.
+        unsafe { list.push_in(&mut item, alloc) }.unwrap();
+        assert_eq!(list.items().unwrap()[0].as_str(), Some("c"));
+        // SAFETY: the node owns what it grew into and nothing else refers
+        // to it.
+        unsafe { list.free() };
+
+        // --- a map of two borrowed entries, `ManuallyDrop` for the
+        // reason above.
+        let mut entries = std::mem::ManuallyDrop::new([
+            Entry {
+                key: text_lit(A),
+                value: string_lit(A),
+            },
+            Entry {
+                key: text_lit(B),
+                value: string_lit(B),
+            },
+        ]);
+        let mut map = Value {
+            tag: u32::from(Tag::GUATIAO_MAP),
+            _pad: 0,
+            payload: Payload {
+                map: std::mem::ManuallyDrop::new(Map {
+                    ptr: entries.as_mut_ptr(),
+                    len: 2,
+                    cap: 0,
+                    alloc: std::ptr::null(),
+                }),
+            },
+        };
+
+        let before = counter.frees.get();
+        // Replacing an existing key writes into the caller's own array
+        // and frees what was there -- which owns nothing, being a literal.
+        let mut replacement = Value::string_in(alloc, "B!").unwrap();
+        // SAFETY: a well-formed map and a well-formed value, moved in.
+        unsafe { map.set_in("b", &mut replacement, alloc) }.unwrap();
+        assert_eq!(map.get("b").and_then(Value::as_str), Some("B!"));
+        assert!(map.discard("a"), "and a key is removed in place");
+        assert_eq!(map.entries().unwrap().len(), 1);
+        assert_eq!(
+            counter.frees.get(),
+            before,
+            "the entry array itself never reached the allocator"
+        );
+
+        // SAFETY: the map owns the replacement it was given; its own
+        // array has `cap == 0` and is left alone.
+        unsafe { map.free() };
+    });
+}
+
+/// Two strings a reader cannot decode are equal only if their BYTES are.
+///
+/// Comparing the decoded text answered `None == None`, which made every
+/// undecodable string equal to every other one -- and to a number whose
+/// digits were equally undecodable.
+#[test]
+fn two_different_unreadable_strings_are_not_equal() {
+    static X: &[u8] = &[0xff, 0x01];
+    static Y: &[u8] = &[0xff, 0x02];
+
+    let x = string_lit(X);
+    let y = string_lit(Y);
+    assert_eq!(x.as_str(), None, "neither decodes, which is the trap");
+    assert_eq!(y.as_str(), None);
+    assert!(!equal(&x, &y), "different bytes are different values");
+    assert!(
+        equal(&x, &string_lit(X)),
+        "the same bytes still compare equal"
+    );
+
+    // A NUMBER stores its digits in the same container and had the same
+    // hole.
+    let mut a = string_lit(X);
+    let mut b = string_lit(Y);
+    a.tag = u32::from(Tag::GUATIAO_NUMBER);
+    b.tag = u32::from(Tag::GUATIAO_NUMBER);
+    assert!(!equal(&a, &b));
 }

@@ -295,10 +295,22 @@ impl SchemaBuilder {
     ///
     /// Where the fields become `properties` and the `required()` calls
     /// become the `required` list.
+    ///
+    /// **A field key containing the flat separator is refused here**, as
+    /// [`ValueError::WrongKind`]: it would make a payload key
+    /// (`auth.password`) ambiguous with a field key, and every reader of
+    /// a dotted path downstream would then have two readings to choose
+    /// between. A declaration bug, caught at declaration.
     pub fn finish(mut self) -> Result<Value, ValueError> {
         let (alloc, fields) = (self.alloc, std::mem::take(&mut self.fields));
         seal(&mut self.state, alloc, None, fields);
-        self.state
+        let schema = self.state?;
+        if let Some(read) = super::read::SchemaRef::new(&schema)
+            && super::flat::check_keys(read).is_err()
+        {
+            return Err(ValueError::WrongKind);
+        }
+        Ok(schema)
     }
 }
 

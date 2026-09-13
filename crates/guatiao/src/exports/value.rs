@@ -17,7 +17,7 @@
 
 use std::ptr;
 
-use super::{as_str, entry};
+use super::{as_str, entry, out};
 
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::status::Status;
@@ -58,6 +58,10 @@ pub unsafe extern "C" fn guatiao_value_free(v: *mut Value) -> Status {
 
 /// Deep-copies `src` into `alloc`, writing the copy through `out`.
 ///
+/// `out` is written the absent marker on entry, so a failed call leaves
+/// it ABSENT rather than untouched. A null or unusable allocator is
+/// `GUATIAO_ERR_ALLOC`.
+///
 /// # Safety
 ///
 /// The pointers are null or valid, and `out` addresses writable storage
@@ -68,12 +72,14 @@ pub unsafe extern "C" fn guatiao_value_clone(
     src: *const Value,
     out: *mut Value,
 ) -> Status {
-    entry!(alloc, src, out => {
+    out!(out);
+    entry!(src, out => {
         // SAFETY: checked non-null.
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
-        // SAFETY: as above; `clone_in` asks only that `src` be well-formed.
+        // SAFETY: checked non-null and well-formed by contract, which is
+        // what the dereference needs; `clone_in` itself is safe.
         match unsafe { (*src).clone_in(a) } {
             Ok(v) => {
                 // SAFETY: `out` is writable and does not already hold a
@@ -150,13 +156,16 @@ pub unsafe extern "C" fn guatiao_value_bool(b: u8, out: *mut Value) -> Status {
 
 /// Writes an empty map through `out`, to be grown through `alloc`.
 ///
+/// A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
+///
 /// # Safety
 ///
 /// The pointers are null or valid, and `out` addresses writable storage.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_value_map(alloc: *const Allocator, out: *mut Value) -> Status {
-    entry!(alloc, out => {
-        // SAFETY: checked non-null.
+    entry!(out => {
+        // SAFETY: null or valid by the caller's contract; `from_raw`
+        // answers `Null` for a null one rather than reading it.
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
@@ -168,13 +177,16 @@ pub unsafe extern "C" fn guatiao_value_map(alloc: *const Allocator, out: *mut Va
 
 /// Writes an empty list through `out`, to be grown through `alloc`.
 ///
+/// A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
+///
 /// # Safety
 ///
 /// The pointers are null or valid, and `out` addresses writable storage.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_value_list(alloc: *const Allocator, out: *mut Value) -> Status {
-    entry!(alloc, out => {
-        // SAFETY: checked non-null.
+    entry!(out => {
+        // SAFETY: null or valid by the caller's contract; `from_raw`
+        // answers `Null` for a null one rather than reading it.
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
@@ -200,8 +212,9 @@ pub unsafe extern "C" fn guatiao_value_string(
     text: Str,
     out: *mut Value,
 ) -> Status {
-    entry!(alloc, out => {
-        // SAFETY: checked non-null.
+    entry!(out => {
+        // SAFETY: null or valid by the caller's contract; `from_raw`
+        // answers `Null` for a null one rather than reading it.
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
@@ -231,8 +244,9 @@ pub unsafe extern "C" fn guatiao_value_number(
     text: Str,
     out: *mut Value,
 ) -> Status {
-    entry!(alloc, out => {
-        // SAFETY: checked non-null.
+    entry!(out => {
+        // SAFETY: null or valid by the caller's contract; `from_raw`
+        // answers `Null` for a null one rather than reading it.
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
@@ -259,8 +273,9 @@ pub unsafe extern "C" fn guatiao_value_bytes(
     bytes: Bytes,
     out: *mut Value,
 ) -> Status {
-    entry!(alloc, out => {
-        // SAFETY: checked non-null.
+    entry!(out => {
+        // SAFETY: null or valid by the caller's contract; `from_raw`
+        // answers `Null` for a null one rather than reading it.
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
@@ -283,9 +298,15 @@ pub unsafe extern "C" fn guatiao_value_bytes(
 /// the copy: there is no copying variant, so the cost is always a line you
 /// can see.
 ///
+/// **`node` and `value` must not overlap**, and the same pointer for both
+/// is `GUATIAO_ERR_BAD_VALUE`: this moves the 40 bytes at `value` into
+/// `node`, which cannot be a slot inside the tree it is moving. A null or
+/// unusable allocator is `GUATIAO_ERR_ALLOC`.
+///
 /// # Safety
 ///
-/// The pointers are null or valid, and the key's bytes are readable.
+/// The pointers are null or valid, the key's bytes are readable, and
+/// `value` does not address a node inside `node`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_map_set(
     alloc: *const Allocator,
@@ -293,8 +314,14 @@ pub unsafe extern "C" fn guatiao_map_set(
     key: Str,
     value: *mut Value,
 ) -> Status {
-    entry!(alloc, node, value => {
-        // SAFETY: checked non-null.
+    entry!(node, value => {
+        // The one overlap that can be checked. A `value` addressing some
+        // deeper node inside `node` cannot be, which is why the contract
+        // above says it and the header repeats it.
+        if std::ptr::eq(node.cast_const(), value.cast_const()) {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        }
+        // SAFETY: null or valid by the caller's contract.
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
@@ -358,6 +385,14 @@ pub unsafe extern "C" fn guatiao_map_clear(node: *mut Value) -> Status {
 /// **Use this before rebuilding a record**, or every field you do not
 /// model is dropped on write-back.
 ///
+/// **`dst` and `src` must not overlap**, and the same pointer for both is
+/// `GUATIAO_ERR_BAD_VALUE`. `src` may be a node stored inside `dst`: the
+/// source is copied whole before `dst` is touched. A null or unusable
+/// allocator is `GUATIAO_ERR_ALLOC`.
+///
+/// Not atomic: a failure part-way leaves the entries already copied in
+/// place.
+///
 /// # Safety
 ///
 /// The pointers are null or valid.
@@ -367,8 +402,13 @@ pub unsafe extern "C" fn guatiao_map_copy_from(
     dst: *mut Value,
     src: *const Value,
 ) -> Status {
-    entry!(alloc, dst, src => {
-        // SAFETY: checked non-null.
+    entry!(dst, src => {
+        // Copying a map onto itself is a caller mistake rather than a
+        // no-op: every key would replace itself with a copy of itself.
+        if std::ptr::eq(dst.cast_const(), src) {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        }
+        // SAFETY: null or valid by the caller's contract.
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
@@ -388,17 +428,26 @@ pub unsafe extern "C" fn guatiao_map_copy_from(
 /// To append something you only borrowed, call `guatiao_value_clone`
 /// first and pass the copy.
 ///
+/// **`node` and `value` must not overlap**, and the same pointer for both
+/// is `GUATIAO_ERR_BAD_VALUE`, as for `guatiao_map_set`. A null or
+/// unusable allocator is `GUATIAO_ERR_ALLOC`.
+///
 /// # Safety
 ///
-/// The pointers are null or valid.
+/// The pointers are null or valid, and `value` does not address a node
+/// inside `node`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_list_push(
     alloc: *const Allocator,
     node: *mut Value,
     value: *mut Value,
 ) -> Status {
-    entry!(alloc, node, value => {
-        // SAFETY: checked non-null.
+    entry!(node, value => {
+        // As in `guatiao_map_set`: the one overlap that can be checked.
+        if std::ptr::eq(node.cast_const(), value.cast_const()) {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        }
+        // SAFETY: null or valid by the caller's contract.
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
@@ -457,6 +506,9 @@ pub unsafe extern "C" fn guatiao_list_clear(node: *mut Value) -> Status {
 
 /// Appends UTF-8 text to a string value.
 ///
+/// `text` may view the node's own bytes; an overlapping source is copied
+/// out first. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
+///
 /// # Safety
 ///
 /// The pointers are null or valid and the view's bytes are readable.
@@ -466,8 +518,8 @@ pub unsafe extern "C" fn guatiao_string_push(
     node: *mut Value,
     text: Str,
 ) -> Status {
-    entry!(alloc, node => {
-        // SAFETY: checked non-null.
+    entry!(node => {
+        // SAFETY: null or valid by the caller's contract.
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
@@ -484,6 +536,9 @@ pub unsafe extern "C" fn guatiao_string_push(
 
 /// Appends to a bytes value.
 ///
+/// `bytes` may view the node's own buffer, as in `guatiao_string_push`. A
+/// null or unusable allocator is `GUATIAO_ERR_ALLOC`.
+///
 /// # Safety
 ///
 /// The pointers are null or valid and the view's bytes are readable.
@@ -493,8 +548,8 @@ pub unsafe extern "C" fn guatiao_buffer_push(
     node: *mut Value,
     bytes: Bytes,
 ) -> Status {
-    entry!(alloc, node => {
-        // SAFETY: checked non-null.
+    entry!(node => {
+        // SAFETY: null or valid by the caller's contract.
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };

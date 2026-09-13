@@ -10,6 +10,10 @@ usize_is_size_t = true
 line_endings = "LF"
 
 header = """
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
 /*
  * guatiao -- the C form of the value model.
  *
@@ -345,6 +349,48 @@ static inline double guatiao_float_or(const guatiao_value *v, double fallback) {
   return parsed;
 }
 
+/* ---- the keys a schema is written with -------------------------------
+ *
+ * A schema IS a value, so reading one is walking a map -- with these key
+ * names, which are JSON Schema's own (2020-12) plus the x- prefixed ones
+ * this crate adds. They are macros rather than a second set of structs
+ * for the same reason the schema is data: a consumer compares a key it
+ * read against one of these and needs nothing linked.
+ *
+ * GUATIAO_KEY_DIALECT is the value of GUATIAO_KEY_SCHEMA on a root
+ * document, not a key. The GUATIAO_KEY_TYPE_* names are the values
+ * GUATIAO_KEY_TYPE takes.
+ */
+
+#define GUATIAO_KEY_SCHEMA "$schema"
+#define GUATIAO_KEY_DIALECT "https://json-schema.org/draft/2020-12/schema"
+#define GUATIAO_KEY_TYPE "type"
+#define GUATIAO_KEY_TITLE "title"
+#define GUATIAO_KEY_DESCRIPTION "description"
+#define GUATIAO_KEY_DEFAULT "default"
+#define GUATIAO_KEY_PROPERTIES "properties"
+#define GUATIAO_KEY_REQUIRED "required"
+#define GUATIAO_KEY_ITEMS "items"
+#define GUATIAO_KEY_MINIMUM "minimum"
+#define GUATIAO_KEY_MAXIMUM "maximum"
+#define GUATIAO_KEY_ENUM "enum"
+#define GUATIAO_KEY_CONST "const"
+#define GUATIAO_KEY_ANY_OF "anyOf"
+#define GUATIAO_KEY_ONE_OF "oneOf"
+#define GUATIAO_KEY_X_SECTION "x-section"
+#define GUATIAO_KEY_X_ORDER "x-order"
+#define GUATIAO_KEY_X_ADVANCED "x-advanced"
+#define GUATIAO_KEY_X_SENSITIVE "x-sensitive"
+#define GUATIAO_KEY_X_ENUM_LABELS "x-enum-labels"
+#define GUATIAO_KEY_X_VARIANT_TAG "x-variant-tag"
+#define GUATIAO_KEY_TYPE_BOOLEAN "boolean"
+#define GUATIAO_KEY_TYPE_INTEGER "integer"
+#define GUATIAO_KEY_TYPE_NUMBER "number"
+#define GUATIAO_KEY_TYPE_STRING "string"
+#define GUATIAO_KEY_TYPE_ARRAY "array"
+#define GUATIAO_KEY_TYPE_OBJECT "object"
+#define GUATIAO_KEY_TYPE_BYTES "bytes"
+
 /* ---- writing a tree as a literal ------------------------------------- */
 
 /*
@@ -352,6 +398,14 @@ static inline double guatiao_float_or(const guatiao_value *v, double fallback) {
  allocator, which is what marks the storage as NOT OURS: such a buffer is
  never freed, so a literal tree may be passed to guatiao_value_free()
  safely, and the first append copies out of it and leaves it untouched.
+
+ ONLY GROWTH COPIES OUT. Mutating a literal in place -- guatiao_map_set()
+ over a key it already has, guatiao_map_discard(), guatiao_list_discard(),
+ guatiao_map_clear(), guatiao_list_clear() -- shifts elements and frees
+ values THROUGH THE ARRAY YOU DECLARED, whatever its capacity says. So a
+ literal you intend to mutate must live in writable storage: a static
+ without const, or a local. One in read-only memory may be read, cloned,
+ merged, grown and freed, but not emptied.
 
  C only. A C++ caller builds the same thing with the functions above.
  */
@@ -441,10 +495,15 @@ include = [
   "Entry",
   "Allocator",
   "HostInfo",
+  "HostServices",
   "LibraryInfo",
   "ProviderInfo",
   "Providers",
   "Kinds",
+  "KindTable",
+  "KindTables",
+  "KindHeader",
+  "ProviderError",
   "MergeOverride",
 ]
 # Defined in the trailer instead; see `after_includes`.
@@ -458,6 +517,7 @@ exclude = ["Entry"]
 # `flat::SEPARATOR`.
 [export.rename]
 "SEPARATOR" = "GUATIAO_PAYLOAD_SEPARATOR"
+"MAX_DEPTH" = "GUATIAO_MAX_DEPTH"
 
 # The types are named for Rust on the Rust side — `Value`, `Map`, `List`
 # — and for C on the C side. A header shares one flat namespace with
@@ -483,10 +543,15 @@ exclude = ["Entry"]
 "Allocator" = "guatiao_alloc"
 "Status" = "guatiao_status"
 "HostInfo" = "guatiao_host_info"
+"HostServices" = "guatiao_host_services"
 "LibraryInfo" = "guatiao_library_info"
 "ProviderInfo" = "guatiao_provider_info"
 "Providers" = "guatiao_providers"
 "Kinds" = "guatiao_kinds"
+"KindTable" = "guatiao_kind_table"
+"KindTables" = "guatiao_kind_tables"
+"KindHeader" = "guatiao_kind_header"
+"ProviderError" = "guatiao_provider_error"
 # The one opaque handle. A registry owns growable collections and changes
 # over time, which is what a handle is for and what a repr(C) struct is not.
 "HostRegistry" = "guatiao_registry"
@@ -495,17 +560,7 @@ exclude = ["Entry"]
 # cbindgen monomorphises the generic newtype and emits the Rust name.
 # A header shares one flat namespace, so the typedef it introduces has to
 # carry the prefix like every other name here.
-  "HostServices",
 "MaybeNull_Map" = "guatiao_map_ptr"
 
 [parse]
 parse_deps = false
-  "KindTable",
-  "KindTables",
-  "KindHeader",
-  "ProviderError",
-"HostServices" = "guatiao_host_services"
-"KindTable" = "guatiao_kind_table"
-"KindTables" = "guatiao_kind_tables"
-"KindHeader" = "guatiao_kind_header"
-"ProviderError" = "guatiao_provider_error"
