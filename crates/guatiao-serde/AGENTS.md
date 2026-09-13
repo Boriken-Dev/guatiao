@@ -11,8 +11,8 @@ which format you should use.
 
 ```rust
 // writing
-to_serde(&Value) -> Serializable<'_>                 // default presentation
-to_serde_with(&Value, Presentation) -> Serializable<'_>
+impl From<&Value> for Serializable<'_>               // default presentation
+Serializable::new(&Value, Presentation) -> Serializable<'_>
 impl Serialize for Serializable<'_>
 
 // reading

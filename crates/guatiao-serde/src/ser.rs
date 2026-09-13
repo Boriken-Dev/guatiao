@@ -22,6 +22,14 @@ pub struct Serializable<'a> {
 }
 
 impl<'a> Serializable<'a> {
+    /// A value, written the way you say.
+    ///
+    /// [`From`] is the same thing with the default presentation, and is
+    /// what to reach for when you have no policy to state.
+    pub fn new(value: &'a Value, how: Presentation) -> Serializable<'a> {
+        Serializable { value, how }
+    }
+
     /// What it will write.
     pub fn value(&self) -> &'a Value {
         self.value
@@ -34,13 +42,17 @@ impl<'a> Serializable<'a> {
 }
 
 /// A value with the default presentation.
-pub fn to_serde(value: &Value) -> Serializable<'_> {
-    to_serde_with(value, Presentation::new())
-}
-
-/// A value, written the way you say.
-pub fn to_serde_with(value: &Value, how: Presentation) -> Serializable<'_> {
-    Serializable { value, how }
+///
+/// The standard trait rather than a `to_serde` of our own, so
+/// `serde_json::to_string(&value.into())` works and anything taking
+/// `impl Into<Serializable>` takes a bare value.
+impl<'a> From<&'a Value> for Serializable<'a> {
+    fn from(value: &'a Value) -> Serializable<'a> {
+        Serializable {
+            value,
+            how: Presentation::new(),
+        }
+    }
 }
 
 impl Serialize for Serializable<'_> {
@@ -195,11 +207,11 @@ mod tests {
     use crate::Numbers;
 
     /// JSON, with JSON's own number policy — which `text::json` sets for
-    /// a caller and which a bare `to_serde` deliberately does not, since
-    /// the token means nothing to any other format.
+    /// a caller and which the default deliberately does not, since the
+    /// token means nothing to any other format.
     fn json(v: &Value) -> String {
         let how = Presentation::new().numbers(Numbers::RawText);
-        serde_json::to_string(&to_serde_with(v, how)).expect("this value is writable")
+        serde_json::to_string(&Serializable::new(v, how)).expect("this value is writable")
     }
 
     #[test]
@@ -250,7 +262,7 @@ mod tests {
     #[test]
     fn bytes_take_the_presentation_they_are_given() {
         let v = Value::bytes(&[0xde, 0xad]);
-        let one = |how| serde_json::to_string(&to_serde_with(&v, how)).ok();
+        let one = |how| serde_json::to_string(&Serializable::new(&v, how)).ok();
         assert_eq!(
             one(Presentation::new()).as_deref(),
             Some("\"data:;base64,3q0=\"")
@@ -271,9 +283,11 @@ mod tests {
     fn a_binary_format_gets_native_bytes() {
         let v = Value::bytes(&[0xde, 0xad]);
         // MessagePack's bin8: 0xc4, length, then the bytes.
-        let packed =
-            rmp_serde::to_vec(&to_serde_with(&v, Presentation::new().bytes(Bytes::Refuse)))
-                .expect("a format with bytes never reaches the policy");
+        let packed = rmp_serde::to_vec(&Serializable::new(
+            &v,
+            Presentation::new().bytes(Bytes::Refuse),
+        ))
+        .expect("a format with bytes never reaches the policy");
         assert_eq!(packed, vec![0xc4, 0x02, 0xde, 0xad]);
     }
 
@@ -282,6 +296,6 @@ mod tests {
     fn an_absent_value_has_no_spelling() {
         let mut list = Value::list();
         list.push(Value::absent()).unwrap();
-        assert!(serde_json::to_string(&to_serde(&list)).is_err());
+        assert!(serde_json::to_string(&Serializable::from(&list)).is_err());
     }
 }

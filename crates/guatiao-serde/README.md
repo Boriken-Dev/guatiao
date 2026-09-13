@@ -5,14 +5,14 @@ format**.
 
 ```rust
 use guatiao::value::types::Value;
-use guatiao_serde::{to_serde, ValueSeed};
+use guatiao_serde::{Serializable, ValueSeed};
 use serde::de::DeserializeSeed;
 
 let mut map = Value::map();
 map.set("port", 5900)?;
 
-let json = serde_json::to_string(&to_serde(&map))?;          // {"port":5900}
-let packed = rmp_serde::to_vec(&to_serde(&map))?;            // MessagePack
+let json = serde_json::to_string(&Serializable::from(&map))?;          // {"port":5900}
+let packed = rmp_serde::to_vec(&Serializable::from(&map))?;            // MessagePack
 
 let mut de = serde_json::Deserializer::from_str(&json);
 let back = ValueSeed::new(Alloc::rust()).deserialize(&mut de)?;

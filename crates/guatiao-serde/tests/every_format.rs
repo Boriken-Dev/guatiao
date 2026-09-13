@@ -10,7 +10,7 @@
 
 use guatiao::value::alloc::Alloc;
 use guatiao::value::types::Value;
-use guatiao_serde::{Presentation, ValueSeed, to_serde};
+use guatiao_serde::{Presentation, Serializable, ValueSeed};
 use serde::de::DeserializeSeed;
 
 /// A map with something of most kinds in it.
@@ -156,7 +156,7 @@ fn yaml_round_trips() {
 #[test]
 fn a_format_the_crate_never_heard_of_round_trips() {
     let original = a_configuration();
-    let packed = rmp_serde::to_vec(&to_serde(&original)).unwrap();
+    let packed = rmp_serde::to_vec(&Serializable::from(&original)).unwrap();
     let mut de = rmp_serde::Deserializer::new(&packed[..]);
     let back = ValueSeed::new(Alloc::rust()).deserialize(&mut de).unwrap();
     check("messagepack", &back);
