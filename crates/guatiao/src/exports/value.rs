@@ -17,28 +17,11 @@
 
 use std::ptr;
 
-use super::entry;
+use super::{as_str, entry};
 
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::status::Status;
 use crate::value::types::{Bytes, Str, Value};
-
-/// A borrowed `&str` from a view, or a status saying why not.
-///
-/// # Safety
-///
-/// `s` is a view whose `len` bytes are readable for the call.
-unsafe fn as_str<'a>(s: Str) -> Result<&'a str, Status> {
-    if s.len == 0 {
-        return Ok("");
-    }
-    if s.ptr.is_null() {
-        return Err(Status::GUATIAO_ERR_NULL);
-    }
-    // SAFETY: the caller guarantees `len` readable bytes at `ptr`.
-    let bytes = unsafe { std::slice::from_raw_parts(s.ptr, s.len) };
-    std::str::from_utf8(bytes).map_err(|_| Status::GUATIAO_ERR_BAD_VALUE)
-}
 
 /// # Safety
 ///

@@ -19,9 +19,12 @@ use guatiao::exports::merge::{
     GUATIAO_MERGE_DEEP, GUATIAO_MERGE_OPT_MERGELISTS, GUATIAO_MERGE_SUBSTITUTE, MergeOverride,
     guatiao_merge,
 };
-use guatiao::exports::schema::guatiao_schema_validate;
+use guatiao::exports::schema::{
+    guatiao_schema_flat_keys, guatiao_schema_flatten, guatiao_schema_resolve,
+    guatiao_schema_unflatten, guatiao_schema_validate,
+};
 use guatiao::exports::value::guatiao_map_clear;
-use guatiao::schema::{KindBuilder, OptionBuilder, SchemaBuilder};
+use guatiao::schema::{ArmBuilder, KindBuilder, OptionBuilder, SchemaBuilder};
 use guatiao::value::read::{items, str_or};
 use guatiao::value::status::Status;
 use guatiao::value::types::{Str, Value};
@@ -386,4 +389,183 @@ fn the_map_clear_symbol_refuses_a_list() {
     // SAFETY: null is the other case this symbol has to survive.
     let status = unsafe { guatiao_map_clear(std::ptr::null_mut()) };
     assert_eq!(status, Status::GUATIAO_ERR_NULL);
+}
+
+// --- the flat projection ------------------------------------------------
+
+/// A schema with a variant option, which is the only shape the projection
+/// applies to.
+fn variant_schema() -> Value {
+    let alloc = Alloc::rust();
+    SchemaBuilder::new(alloc)
+        .option(OptionBuilder::new(
+            alloc,
+            "auth",
+            KindBuilder::variant(
+                alloc,
+                "auth",
+                vec![
+                    ArmBuilder::new(alloc, "sso", "Single sign-on"),
+                    ArmBuilder::new(alloc, "userpass", "Username and password")
+                        .field(OptionBuilder::new(
+                            alloc,
+                            "username",
+                            KindBuilder::string(alloc),
+                        ))
+                        .field(
+                            OptionBuilder::new(alloc, "password", KindBuilder::string(alloc))
+                                .sensitive(),
+                        ),
+                ],
+            ),
+        ))
+        .finish()
+        .expect("a schema this small does not exhaust an allocator")
+}
+
+/// A flat key resolves through one level of projection, and the option it
+/// lands on is the ARM FIELD's, not the parent's.
+#[test]
+fn a_flat_key_resolves_to_the_option_that_governs_it() {
+    let schema = variant_schema();
+
+    // SAFETY: a well-formed schema and a readable view.
+    let direct = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
+    assert!(!direct.is_null(), "the option itself resolves");
+
+    // SAFETY: as above.
+    let projected = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth.password")) };
+    assert!(
+        !projected.is_null(),
+        "a projected key resolves to the arm field it names"
+    );
+    assert_ne!(direct, projected, "and not to the parent option");
+
+    // SAFETY: as above.
+    let nothing = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth.nonesuch")) };
+    assert!(
+        nothing.is_null(),
+        "a key nobody declared resolves to nothing"
+    );
+}
+
+/// A value goes out flat and comes back whole.
+#[test]
+fn a_tagged_value_survives_the_round_trip_through_flat_text() {
+    let alloc = Alloc::rust();
+    let schema = variant_schema();
+
+    // SAFETY: a well-formed schema.
+    let option = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
+    assert!(!option.is_null());
+
+    let mut chosen = Map::new();
+    chosen.set("auth", "userpass").unwrap();
+    chosen.set("username", "ana").unwrap();
+    chosen.set("password", "hunter2").unwrap();
+    let chosen: Value = chosen.into();
+
+    let mut flat = Value::absent();
+    // SAFETY: every pointer addresses what its type says.
+    let status = unsafe { guatiao_schema_flatten(option, &chosen, alloc.as_raw(), &mut flat) };
+    assert_eq!(status, Status::GUATIAO_OK);
+
+    assert_eq!(
+        flat.get("auth").and_then(Value::as_str),
+        Some("userpass"),
+        "the tag crosses as text"
+    );
+    assert_eq!(
+        flat.get("auth.password").and_then(Value::as_str),
+        Some("hunter2"),
+        "and the arm's fields are projected under it"
+    );
+
+    let mut back = Value::absent();
+    // SAFETY: as above; `flat` is a map whose values are all strings.
+    let status = unsafe { guatiao_schema_unflatten(option, &flat, alloc.as_raw(), &mut back) };
+    assert_eq!(status, Status::GUATIAO_OK);
+    assert_eq!(back.get("auth").and_then(Value::as_str), Some("userpass"));
+    assert_eq!(back.get("username").and_then(Value::as_str), Some("ana"));
+    assert_eq!(
+        back.get("password").and_then(Value::as_str),
+        Some("hunter2")
+    );
+}
+
+/// A store holding anything but text is refused rather than stringified.
+#[test]
+fn a_flat_store_that_is_not_all_text_is_refused() {
+    let alloc = Alloc::rust();
+    let schema = variant_schema();
+    // SAFETY: a well-formed schema.
+    let option = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
+
+    let mut flat = Map::new();
+    flat.set("auth", "userpass").unwrap();
+    // A number, where the projection's contract says text.
+    flat.set("username", 5900).unwrap();
+    let flat: Value = flat.into();
+
+    let mut back = Value::absent();
+    // SAFETY: as above.
+    let status = unsafe { guatiao_schema_unflatten(option, &flat, alloc.as_raw(), &mut back) };
+    assert_eq!(
+        status,
+        Status::GUATIAO_ERR_WRONG_KIND,
+        "a flat store holds text by definition, so a number in one is a \
+         mistake worth hearing about at the boundary rather than two layers in"
+    );
+}
+
+/// The keys an option projects onto, for a renderer laying out a form.
+#[test]
+fn the_flat_keys_of_an_option_are_listed() {
+    let alloc = Alloc::rust();
+    let schema = variant_schema();
+    // SAFETY: a well-formed schema.
+    let option = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
+
+    let mut keys = Value::absent();
+    // SAFETY: a well-formed option and writable storage.
+    let status = unsafe { guatiao_schema_flat_keys(option, alloc.as_raw(), &mut keys) };
+    assert_eq!(status, Status::GUATIAO_OK);
+
+    let listed: Vec<&str> = keys
+        .items()
+        .expect("a list")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert_eq!(
+        listed,
+        ["auth", "auth.username", "auth.password"],
+        "the option's own key first, then one per arm field, in declaration \
+         order — which is the order a form renders them in"
+    );
+}
+
+/// Null is refused rather than dereferenced, here as everywhere.
+#[test]
+fn the_flat_exports_refuse_null() {
+    let alloc = Alloc::rust();
+    let schema = variant_schema();
+    let mut out = Value::absent();
+
+    // SAFETY: passing null is the case under test.
+    unsafe {
+        assert!(guatiao_schema_resolve(std::ptr::null(), Str::borrowed("k")).is_null());
+        assert_eq!(
+            guatiao_schema_flat_keys(std::ptr::null(), alloc.as_raw(), &mut out),
+            Status::GUATIAO_ERR_NULL
+        );
+        assert_eq!(
+            guatiao_schema_flatten(std::ptr::null(), &schema, alloc.as_raw(), &mut out),
+            Status::GUATIAO_ERR_NULL
+        );
+        assert_eq!(
+            guatiao_schema_unflatten(std::ptr::null(), &schema, alloc.as_raw(), &mut out),
+            Status::GUATIAO_ERR_NULL
+        );
+    }
 }

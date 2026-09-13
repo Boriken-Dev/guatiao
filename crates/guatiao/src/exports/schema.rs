@@ -34,11 +34,14 @@
 
 use std::ptr;
 
+use std::collections::BTreeMap;
+
 use crate::schema::ValidationError;
-use crate::schema::read::SchemaRef;
+use crate::schema::flat;
+use crate::schema::read::{OptionRef, SchemaRef};
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::status::Status;
-use crate::value::types::Value;
+use crate::value::types::{Str, Value};
 
 /// Whether `config` is a value `schema` accepts.
 ///
@@ -104,4 +107,201 @@ fn describe_validation(error: &ValidationError, alloc: Alloc) -> Option<Value> {
     out.set("message", Value::string_in(alloc, &error.to_string()).ok()?)
         .ok()?;
     Some(out)
+}
+
+// --- the flat projection ------------------------------------------------
+//
+// A front end that only has `key -> text` — an INI file, a web form, a
+// command line — is the consumer least likely to be written in Rust, so
+// this is the half of the schema API that most needed a boundary.
+//
+// **The store is an ordinary map of strings.** Not a new type: a C caller
+// builds one with `guatiao_map_set` and frees it with
+// `guatiao_value_free`, like everything else it holds.
+
+/// A map of `key -> text` as a `BTreeMap`, or `None` if any value is not
+/// a string.
+///
+/// Strict about the kind rather than stringifying whatever it finds: a
+/// flat store holds text by definition, and a caller that put a number in
+/// one has made a mistake worth hearing about at the boundary instead of
+/// two layers in.
+fn store_of(v: &Value) -> Option<BTreeMap<String, String>> {
+    let mut out = BTreeMap::new();
+    for entry in v.entries()? {
+        out.insert(
+            entry.key_str()?.to_string(),
+            entry.value().as_str()?.to_string(),
+        );
+    }
+    Some(out)
+}
+
+/// The same, back into a value.
+fn store_into(alloc: Alloc, store: &BTreeMap<String, String>) -> Option<Value> {
+    let mut out = Value::map_in(alloc);
+    for (k, v) in store {
+        out.set(k, Value::string_in(alloc, v).ok()?).ok()?;
+    }
+    Some(out)
+}
+
+/// The option governing a flat key, or null.
+///
+/// Follows one level of projection, so `auth.password` answers the arm
+/// field's own option rather than the `auth` option. Every per-option flag
+/// a caller wants — required, advanced, sensitive, the label — is read
+/// off the value this hands back, so the boundary needs one lookup rather
+/// than one export per flag.
+///
+/// The result **borrows from `schema`** and is valid for as long as it is.
+///
+/// # Safety
+///
+/// `schema` addresses a well-formed value, and `key` a readable view.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_schema_resolve(schema: *const Value, key: Str) -> *const Value {
+    if schema.is_null() {
+        return ptr::null();
+    }
+    super::guard_with(ptr::null(), || {
+        // SAFETY: the caller's contract.
+        let Some(schema) = SchemaRef::new(unsafe { &*schema }) else {
+            return ptr::null();
+        };
+        // SAFETY: as above.
+        let Ok(key) = (unsafe { super::as_str(key) }) else {
+            return ptr::null();
+        };
+        match flat::resolve(schema, key) {
+            Some(option) => option.as_value() as *const Value,
+            None => ptr::null(),
+        }
+    })
+}
+
+/// The flat keys one option projects onto, as a list of strings.
+///
+/// # Safety
+///
+/// `option` addresses a well-formed option value and `out` writable
+/// storage for one value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_schema_flat_keys(
+    option: *const Value,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    if option.is_null() || out.is_null() {
+        return Status::GUATIAO_ERR_NULL;
+    }
+    super::guard(|| {
+        // SAFETY: the caller's contract.
+        let Some(option) = OptionRef::new(unsafe { &*option }) else {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        };
+        // SAFETY: as above.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        };
+        let mut list = Value::list_in(alloc);
+        for key in flat::keys(option) {
+            let Ok(item) = Value::string_in(alloc, &key) else {
+                return Status::GUATIAO_ERR_ALLOC;
+            };
+            if list.push(item).is_err() {
+                return Status::GUATIAO_ERR_ALLOC;
+            }
+        }
+        // SAFETY: `out` is writable by contract, and the tree moves into
+        // it rather than being copied.
+        unsafe { ptr::write(out, list) };
+        Status::GUATIAO_OK
+    })
+}
+
+/// Writes a tagged value into a flat store of `key -> text`.
+///
+/// `GUATIAO_ERR_WRONG_KIND` when the option is not a variant or the value
+/// is not a map, which is the same "it does not apply" the Rust side
+/// reports as `false`.
+///
+/// # Safety
+///
+/// Every non-null pointer addresses what its type says, and `out`
+/// addresses writable storage for one value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_schema_flatten(
+    option: *const Value,
+    value: *const Value,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    if option.is_null() || value.is_null() || out.is_null() {
+        return Status::GUATIAO_ERR_NULL;
+    }
+    super::guard(|| {
+        // SAFETY: the caller's contract.
+        let (option, value) = unsafe { (&*option, &*value) };
+        let Some(option) = OptionRef::new(option) else {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        };
+        // SAFETY: as above.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        };
+
+        let mut store = BTreeMap::new();
+        if !flat::flatten(option, value, &mut store) {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        }
+        let Some(flat) = store_into(alloc, &store) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        // SAFETY: `out` is writable by contract.
+        unsafe { ptr::write(out, flat) };
+        Status::GUATIAO_OK
+    })
+}
+
+/// Rebuilds a tagged value from a flat store.
+///
+/// The reverse of [`guatiao_schema_flatten`], and the round trip is what
+/// makes the projection usable: a front end reads text, hands it back, and
+/// gets the value the schema describes.
+///
+/// # Safety
+///
+/// As for [`guatiao_schema_flatten`]. `flat` is a map whose values are all
+/// strings; one that is not answers `GUATIAO_ERR_WRONG_KIND`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_schema_unflatten(
+    option: *const Value,
+    flat: *const Value,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    if option.is_null() || flat.is_null() || out.is_null() {
+        return Status::GUATIAO_ERR_NULL;
+    }
+    super::guard(|| {
+        // SAFETY: the caller's contract.
+        let (option, flat) = unsafe { (&*option, &*flat) };
+        let Some(option) = OptionRef::new(option) else {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        };
+        let Some(store) = store_of(flat) else {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        };
+        // SAFETY: as above.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        };
+        let Some(built) = flat::unflatten(alloc, option, &store) else {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        };
+        // SAFETY: `out` is writable by contract.
+        unsafe { ptr::write(out, built) };
+        Status::GUATIAO_OK
+    })
 }

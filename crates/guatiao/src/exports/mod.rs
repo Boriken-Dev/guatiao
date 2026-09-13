@@ -68,6 +68,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use crate::value::status::Status;
+use crate::value::types::Str;
 
 pub mod merge;
 pub mod schema;
@@ -79,6 +80,40 @@ pub mod value;
 /// One copy, used by every `extern "C"` body in the crate, so the two
 /// halves of the boundary cannot drift apart on the one rule that keeps a
 /// host alive.
+/// A borrowed `&str` from a view, or a status saying why not.
+///
+/// # Safety
+///
+/// `s` is a view whose `len` bytes are readable for the call.
+pub(crate) unsafe fn as_str<'a>(s: Str) -> Result<&'a str, Status> {
+    if s.len == 0 {
+        return Ok("");
+    }
+    if s.ptr.is_null() {
+        return Err(Status::GUATIAO_ERR_NULL);
+    }
+    // SAFETY: the caller guarantees `len` readable bytes at `ptr`.
+    let bytes = unsafe { std::slice::from_raw_parts(s.ptr, s.len) };
+    std::str::from_utf8(bytes).map_err(|_| Status::GUATIAO_ERR_BAD_VALUE)
+}
+
+/// [`guard`] for a body that answers something other than a status.
+///
+/// A function returning a POINTER cannot report an internal failure as a
+/// status, so it reports it the only way its signature allows: by handing
+/// back `fallback`, which for a pointer is null.
+pub(crate) fn guard_with<T>(fallback: T, body: impl FnOnce() -> T) -> T {
+    match catch_unwind(AssertUnwindSafe(body)) {
+        Ok(v) => v,
+        Err(payload) => {
+            // As in `guard`: dropping the payload can panic, and a second
+            // panic inside an `extern "C"` body is an abort.
+            std::mem::forget(payload);
+            fallback
+        }
+    }
+}
+
 pub(crate) fn guard(body: impl FnOnce() -> Status) -> Status {
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(s) => s,

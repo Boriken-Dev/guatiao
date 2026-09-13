@@ -796,6 +796,70 @@ guatiao_status guatiao_schema_validate(const struct guatiao_value *schema,
                                        struct guatiao_value *out_error);
 
 /*
+ The option governing a flat key, or null.
+
+ Follows one level of projection, so `auth.password` answers the arm
+ field's own option rather than the `auth` option. Every per-option flag
+ a caller wants — required, advanced, sensitive, the label — is read
+ off the value this hands back, so the boundary needs one lookup rather
+ than one export per flag.
+
+ The result **borrows from `schema`** and is valid for as long as it is.
+
+ # Safety
+
+ `schema` addresses a well-formed value, and `key` a readable view.
+ */
+const struct guatiao_value *guatiao_schema_resolve(const struct guatiao_value *schema,
+                                                   struct guatiao_str key);
+
+/*
+ The flat keys one option projects onto, as a list of strings.
+
+ # Safety
+
+ `option` addresses a well-formed option value and `out` writable
+ storage for one value.
+ */
+guatiao_status guatiao_schema_flat_keys(const struct guatiao_value *option,
+                                        const struct guatiao_alloc *alloc,
+                                        struct guatiao_value *out);
+
+/*
+ Writes a tagged value into a flat store of `key -> text`.
+
+ `GUATIAO_ERR_WRONG_KIND` when the option is not a variant or the value
+ is not a map, which is the same "it does not apply" the Rust side
+ reports as `false`.
+
+ # Safety
+
+ Every non-null pointer addresses what its type says, and `out`
+ addresses writable storage for one value.
+ */
+guatiao_status guatiao_schema_flatten(const struct guatiao_value *option,
+                                      const struct guatiao_value *value,
+                                      const struct guatiao_alloc *alloc,
+                                      struct guatiao_value *out);
+
+/*
+ Rebuilds a tagged value from a flat store.
+
+ The reverse of [`guatiao_schema_flatten`], and the round trip is what
+ makes the projection usable: a front end reads text, hands it back, and
+ gets the value the schema describes.
+
+ # Safety
+
+ As for [`guatiao_schema_flatten`]. `flat` is a map whose values are all
+ strings; one that is not answers `GUATIAO_ERR_WRONG_KIND`.
+ */
+guatiao_status guatiao_schema_unflatten(const struct guatiao_value *option,
+                                        const struct guatiao_value *flat,
+                                        const struct guatiao_alloc *alloc,
+                                        struct guatiao_value *out);
+
+/*
  Frees everything `v` owns and leaves it null-tagged.
 
  Safe to call twice, and safe on a value that owns nothing.
