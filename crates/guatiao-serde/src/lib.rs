@@ -80,10 +80,18 @@
 //! list is refused rather than written as null, because "nothing" and
 //! "nothing, deliberately" are different statements.
 
-#![forbid(unsafe_code)]
+// NO `forbid(unsafe_code)` HERE, and that is the point of the attribute:
+// it binds child modules, so a root carrying it would bind `exports` too.
+// Every other module in this crate carries it instead, `exports` is the
+// one exemption, and `tests/forbid_unsafe_per_module.rs` is what keeps
+// that true. Same arrangement as the core crate's `library` module.
 #![deny(missing_docs)]
 
 mod de;
+// The `extern "C"` surface. Always compiled, like the core's: this is
+// an FFI library, and a surface that appears only when somebody
+// remembers a flag is one a C caller cannot rely on.
+pub mod exports;
 mod ser;
 pub mod text;
 

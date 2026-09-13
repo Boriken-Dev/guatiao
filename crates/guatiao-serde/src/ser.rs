@@ -4,6 +4,8 @@
 
 //! Writing a value into any serde data format.
 
+#![forbid(unsafe_code)]
+
 use serde::ser::{Error as _, SerializeMap, SerializeSeq, SerializeStruct};
 use serde::{Serialize, Serializer};
 
