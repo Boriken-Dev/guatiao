@@ -1,0 +1,7 @@
+# Line endings are LF, everywhere, on every platform. `text=auto` lets git
+# decide what is text; `eol=lf` pins the working-tree ending so a checkout on
+# Windows cannot hand a tool a CRLF file to half-convert. Without this line a
+# single edit that writes CRLF into an LF file produces a MIXED file, which is
+# the state that actually costs time: it defeats diffs and hides real changes
+# inside whitespace churn.
+* text=auto eol=lf

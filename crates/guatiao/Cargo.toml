@@ -1,0 +1,55 @@
+[package]
+name = "guatiao"
+description = "A C-struct value model, a schema for what a provider needs to be initialised, and an envelope -- one contract for passing configuration and providers between languages"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+license.workspace = true
+readme = "README.md"
+# A category beats a list: `.*` drops every dot-prefixed directory at
+# any depth, and `*.local.*` catches the unshared override that a dotfile
+# pattern does not match (`AGENTS.local.md` does not start with a dot).
+exclude = [".*", "*.local.*"]
+
+[lib]
+name = "guatiao"
+path = "src/lib.rs"
+
+# A DEFAULT BUILD PULLS IN NOTHING, and that is the property to preserve:
+# a consumer must not take on a transitive dependency to read a value or a
+# schema. Every dependency below is optional and default-off, so a feature
+# nobody turns on costs such a consumer nothing.
+[features]
+default = []
+
+# `#[derive(ToValue)]`, `#[derive(FromValue)]` and `#[derive(Schema)]`,
+# re-exported from the crate
+# root so a consumer writes `guatiao = { features = ["derive"] }` and never
+# names the proc-macro crate -- serde's arrangement for `serde_derive`.
+derive = ["dep:guatiao-derive"]
+
+# `#[unsafe(no_mangle)] extern "C"` wrappers of the mutation API, for C and
+# Dart callers. Exported by whichever artifact enables the feature; a Rust
+# consumer calls the same functions directly and needs none of them.
+c-exports = []
+
+# `Registry::load_file`: mapping a library and calling its entry point.
+# Off by default, so a library AUTHOR -- who needs the descriptors and the
+# macro and never loads anything -- builds with no dependency at all.
+load = ["dep:libloading"]
+
+[dependencies]
+guatiao-derive = { path = "../guatiao-derive", version = "0.1.0", optional = true }
+libloading = { version = "0.8", optional = true }
+
+[dev-dependencies]
+# Builds the example library as part of `cargo test`, so `library_load`
+# finds a real artifact beside its own test binary rather than shelling
+# out to cargo from inside a cargo run.
+hello_library = { path = "../../examples/hello_library" }
+
+# docs.rs documents every feature.
+[package.metadata.docs.rs]
+all-features = true

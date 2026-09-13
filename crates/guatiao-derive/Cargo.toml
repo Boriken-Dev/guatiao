@@ -1,0 +1,27 @@
+[package]
+name = "guatiao-derive"
+description = "`#[derive(ToValue)]` and `#[derive(FromValue)]` for guatiao -- the proc-macro half, re-exported by `guatiao = { features = [\"derive\"] }`"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+license.workspace = true
+readme = "README.md"
+exclude = [".*", "*.local.*"]
+
+[lib]
+name = "guatiao_derive"
+path = "src/lib.rs"
+# A proc-macro crate can export nothing but macros, which is why the traits
+# the generated code names live in `guatiao` and not here.
+proc-macro = true
+
+# Deliberately only these three. A proc-macro crate is compiled for the
+# HOST on every cross build, so its dependency list is paid by every
+# consumer on every target. `syn`'s default features are the derive-shaped
+# ones; `full` is not enabled and should not be.
+[dependencies]
+syn = "2"
+quote = "1"
+proc-macro2 = "1"

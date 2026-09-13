@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = ["crates/guatiao", "crates/guatiao-derive", "examples/hello_library"]
+
+# Two crates plus an example library. The second exists only because a
+# proc-macro crate cannot be anything else, and the third is a real cdylib
+# the test suite builds and loads -- an envelope is not something
+# prose can demonstrate. Everything a consumer names -- the value model, the C
+# type vocabulary, the schema, the envelope, the loader -- is in
+# `guatiao`; `guatiao-derive` is reached through `guatiao = { features =
+# ["derive"] }` and is never named in a consumer's manifest.
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+# MSRV floor: edition 2024 needs 1.85, and cargo refuses to build below it.
+rust-version = "1.85"
+repository = "https://github.com/Boriken-Dev/guatiao"
+license = "MPL-2.0"
+
+# `publish = false` even though the licence is settled, and the two are
+# unrelated: the licence says what a recipient may do, this says the crate
+# is not offered on a registry yet. Lift it when the repository goes
+# public, not before.
+publish = false

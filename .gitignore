@@ -1,0 +1,30 @@
+# Category rule: nothing dot-prefixed at the repo root gets tracked except the
+# git config files and CI re-included below (a category beats a list -- the
+# same philosophy as Cargo's exclude = [".*"]). Root-anchored on purpose;
+# nested dotfiles are governed by the specific rules below.
+/.*
+!/.gitignore
+!/.gitattributes
+!/.github/
+
+# Private agent config, always excluded. No trailing slash on purpose: a
+# linked .agents is a symlink, which git treats as a file, so a directory-only
+# `.agents/` would NOT ignore it. These stay even though /.* covers them at
+# the root: they also catch nested copies. *.local.* is the unshared override
+# (machine- or user-specific) and must never be committed.
+.agents
+*.local.*
+CLAUDE*
+.claude
+
+# Rust
+/target/
+**/*.rs.bk
+# A library workspace: consumers resolve their own lockfile.
+Cargo.lock
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

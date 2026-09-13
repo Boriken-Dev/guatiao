@@ -1,0 +1,199 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! What a library says about itself, and what a host says about itself.
+//!
+//! Three `repr(C)` structs and one view. A C library fills them in as
+//! static data; a Rust library fills them in behind the `guatiao_library!`
+//! macro. Neither needs this crate's mutation functions to do it.
+//!
+//! # Everything here is BORROWED
+//!
+//! Not one field is an owned container. A descriptor is data the library
+//! owns for as long as it is loaded, nobody else grows it, and nothing
+//! frees it — so there is no allocator in any of these and no question
+//! about who releases what. The values a provider *produces* are owned
+//! and carry their allocator; the description of the provider is not.
+//!
+//! # `struct_size` first, and appended fields only
+//!
+//! Exactly the arrangement [`crate::value::Allocator`] uses, for the same
+//! reason and with the same rule: the leading `u32` is the size of the
+//! struct **as the side that wrote it compiled it**, a frozen `floor()`
+//! says how much must be present to be usable at all, and each field
+//! added later carries its own guard.
+//!
+//! **A slot is appended, never changed.** `struct_size` cannot version a
+//! signature: there is no size at which an old caller stops short of a
+//! changed argument list, so the field is present, the pointer is called,
+//! and a two-argument callback invoked with three arguments is silent
+//! memory corruption in every already-compiled consumer. Adding a second
+//! slot beside the first, with null meaning "use the old one", is the
+//! only change that is safe.
+
+#![forbid(unsafe_code)]
+#![allow(non_camel_case_types)]
+
+use std::ffi::c_void;
+use std::mem::{offset_of, size_of};
+
+use crate::value::alloc::Allocator;
+use crate::value::types::{Str, Value};
+
+/// The envelope's own version, for a library that wants to refuse a host
+/// it does not understand.
+///
+/// Bumped only for a change no `struct_size` guard can express. Appending
+/// a field is not such a change.
+pub const ABI_VERSION: u32 = 1;
+
+/// What the host tells a library about itself, on the way in.
+///
+/// The allocator is here because a library that wants to build a tree the
+/// host will keep can build it in the host's own arena, and then the host
+/// frees it with nothing to remember. A library that would rather use its
+/// own passes its own; every owned container records which it was.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct HostInfo {
+    /// `sizeof(guatiao_host_info)` as the host compiled it. Always first.
+    pub struct_size: u32,
+    /// The envelope version the host speaks. See [`ABI_VERSION`].
+    pub abi_version: u32,
+    /// Who the host is, for a library that registers different providers
+    /// for different hosts.
+    pub host_id: Str,
+    /// The host's own version string, uninterpreted.
+    pub host_version: Str,
+    /// The host's allocator, or null. Borrowed for the call and for as
+    /// long as anything built through it lives.
+    pub alloc: *const Allocator,
+}
+
+impl HostInfo {
+    /// The smallest `struct_size` that can be used at all.
+    ///
+    /// Frozen at the first field added after v1, and never moved. A floor
+    /// that tracked the newest field would refuse every host compiled
+    /// before it existed, which is the failure the guard exists to
+    /// prevent rather than to cause.
+    pub const fn floor() -> usize {
+        offset_of!(HostInfo, host_version) + size_of::<Str>()
+    }
+
+    /// Where the `alloc` field ends, for the guard that reads it.
+    pub const fn alloc_end() -> usize {
+        offset_of!(HostInfo, alloc) + size_of::<*const Allocator>()
+    }
+}
+
+/// A borrowed sequence of provider descriptors.
+///
+/// A view, like every other `{ptr, len}` in this crate: the library owns
+/// the array.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct Providers {
+    /// First descriptor. May be null when `len` is 0.
+    pub ptr: *const ProviderInfo,
+    /// How many.
+    pub len: usize,
+}
+
+/// What a library says about itself, on the way out.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct LibraryInfo {
+    /// `sizeof(guatiao_library_info)` as the library compiled it.
+    pub struct_size: u32,
+    /// The envelope version the library speaks.
+    pub abi_version: u32,
+    /// A stable identifier for the library itself, for diagnostics and
+    /// for refusing to load the same one twice.
+    pub id: Str,
+    /// The library's own version string, uninterpreted.
+    pub version: Str,
+    /// Everything it offers. May be empty, which is a library that
+    /// loaded and had nothing for this host.
+    pub providers: Providers,
+}
+
+impl LibraryInfo {
+    /// The smallest usable `struct_size`.
+    pub const fn floor() -> usize {
+        offset_of!(LibraryInfo, providers) + size_of::<Providers>()
+    }
+}
+
+/// One thing a library offers.
+///
+/// The envelope defines **no vtable of its own**. Whoever defines a
+/// `kind` defines what its vtable looks like, and this carries the
+/// pointer and the size the library compiled it at — so a host that knows
+/// the kind can check the size the same way it checks an allocator's, and
+/// a host that does not know the kind can list the provider without ever
+/// looking at the pointer.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct ProviderInfo {
+    /// `sizeof(guatiao_provider_info)` as the library compiled it.
+    pub struct_size: u32,
+    /// Size of the struct `vtable` points at, as the library compiled it.
+    /// Zero when there is no vtable.
+    pub vtable_size: u32,
+    /// What sort of thing this is: `"greeter"`, `"codec"`, whatever the
+    /// host and the library have agreed. Two providers of different kinds
+    /// may share an id.
+    pub kind: Str,
+    /// This provider's own identifier, unique within its kind.
+    pub id: Str,
+    /// A name to show a person. May be empty, and a host that shows
+    /// nothing to anybody ignores it.
+    pub display_name: Str,
+    /// The schema for this provider's configuration, as an ordinary
+    /// value, or null when it takes none.
+    ///
+    /// Null rather than an empty map, so "declares no configuration" and
+    /// "declares an empty one" stay different statements.
+    pub config: *const Value,
+    /// The function table, whose shape is the `kind`'s business. Null
+    /// when the kind is pure data.
+    pub vtable: *const c_void,
+    /// Passed back to every call through the vtable, untouched.
+    pub ctx: *mut c_void,
+}
+
+impl ProviderInfo {
+    /// The smallest usable `struct_size`.
+    pub const fn floor() -> usize {
+        offset_of!(ProviderInfo, ctx) + size_of::<*mut c_void>()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A floor must sit at or below the current size, or appending a
+    /// field locks out every caller compiled before it.
+    ///
+    /// The same assertion `Allocator` carries, for the same reason and in
+    /// the same shape.
+    #[test]
+    fn every_floor_sits_within_its_struct() {
+        assert!(HostInfo::floor() <= size_of::<HostInfo>());
+        assert!(HostInfo::alloc_end() <= size_of::<HostInfo>());
+        assert!(LibraryInfo::floor() <= size_of::<LibraryInfo>());
+        assert!(ProviderInfo::floor() <= size_of::<ProviderInfo>());
+    }
+
+    /// The leading field is at offset zero in every one of them, because
+    /// a reader that cannot find `struct_size` cannot find anything.
+    #[test]
+    fn struct_size_is_first() {
+        assert_eq!(offset_of!(HostInfo, struct_size), 0);
+        assert_eq!(offset_of!(LibraryInfo, struct_size), 0);
+        assert_eq!(offset_of!(ProviderInfo, struct_size), 0);
+    }
+}

@@ -1,0 +1,48 @@
+name: Test
+
+# On-demand test workflow, kept separate from any future release workflow:
+# workflow_dispatch (with a ref input) plus throwaway "ci-*" tags, deleted
+# after the run. Not triggered by push/PR on branches by default.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to test (branch, tag, or SHA)"
+        required: false
+        default: ""
+  push:
+    tags:
+      - "ci-*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.toolchain }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        # stable + the declared MSRV; both must pass.
+        toolchain: [stable, "1.85"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format check
+        run: cargo fmt --all --check
+      - name: Clippy
+        run: cargo clippy --workspace --all-features -- -D warnings
+      - name: Run tests
+        run: cargo test --workspace --all-features

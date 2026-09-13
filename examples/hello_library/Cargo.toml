@@ -1,0 +1,19 @@
+[package]
+name = "hello_library"
+description = "An example guatiao library: one provider, one vtable, built and loaded by the test suite"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+# `cdylib` is what a host loads. `rlib` as well, so the test can name the
+# vtable type this library defines -- which is the arrangement a real kind
+# has anyway: whoever defines a kind publishes its table, and both the
+# library and the host compile against that one declaration.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+guatiao = { path = "../../crates/guatiao" }
