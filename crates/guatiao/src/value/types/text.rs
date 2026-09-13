@@ -63,14 +63,14 @@ impl Str {
 pub struct Text {
     /// First byte. Never null for an owned buffer; dangling-but-aligned
     /// when the container is empty.
-    pub ptr: *mut u8,
+    pub(crate) ptr: *mut u8,
     /// Length in bytes.
-    pub len: usize,
+    pub(crate) len: usize,
     /// Capacity in bytes. 0 means the buffer is not owned.
-    pub cap: usize,
+    pub(crate) cap: usize,
     /// The allocator that made this buffer, and the only one that may
     /// grow or free it. Null when `cap == 0`.
-    pub alloc: *const Allocator,
+    pub(crate) alloc: *const Allocator,
 }
 
 impl Drop for Text {
@@ -82,6 +82,46 @@ impl Drop for Text {
 }
 
 impl Text {
+    /// A text over storage described by hand: `len` initialised UTF-8
+    /// bytes at `ptr`, in a block of `cap` bytes from `alloc`, or a
+    /// borrowed buffer when `cap` is 0.
+    ///
+    /// The one door for a literal or a buffer another language owns.
+    /// Everything else builds through [`Text::new`].
+    ///
+    /// # Safety
+    ///
+    /// The four describe one consistent storage: the first `len` bytes are
+    /// initialised and readable for as long as this lives; `cap > 0` means
+    /// the block came from `alloc` with that layout and is owned by this
+    /// text alone; `cap == 0` means the bytes are somebody else's and, if
+    /// this text is mutated in place, writable.
+    pub unsafe fn from_raw_parts(
+        ptr: *mut u8,
+        len: usize,
+        cap: usize,
+        alloc: *const Allocator,
+    ) -> Text {
+        Text {
+            ptr,
+            len,
+            cap,
+            alloc,
+        }
+    }
+
+    /// The four fields, with ownership: this text no longer frees them.
+    pub fn into_raw_parts(self) -> (*mut u8, usize, usize, *const Allocator) {
+        let this = std::mem::ManuallyDrop::new(self);
+        (this.ptr, this.len, this.cap, this.alloc)
+    }
+
+    /// How many bytes the storage holds before it must grow. Zero for a
+    /// buffer this text does not own.
+    pub fn capacity(&self) -> usize {
+        self.cap
+    }
+
     /// Text, copied onto Rust's heap.
     ///
     /// Unlike [`Map::new`](super::Map::new) this OWNS a buffer the moment it exists, which

@@ -34,13 +34,13 @@ pub struct Values {
 #[derive(Debug)]
 pub struct List {
     /// First element.
-    pub ptr: *mut Value,
+    pub(crate) ptr: *mut Value,
     /// Number of elements.
-    pub len: usize,
+    pub(crate) len: usize,
     /// Capacity in elements. 0 means the buffer is not owned.
-    pub cap: usize,
+    pub(crate) cap: usize,
     /// The allocator that made this buffer. Null when `cap == 0`.
-    pub alloc: *const Allocator,
+    pub(crate) alloc: *const Allocator,
 }
 
 impl Drop for List {
@@ -62,6 +62,43 @@ impl Drop for List {
 }
 
 impl List {
+    /// A list over storage described by hand. See
+    /// [`Text::from_raw_parts`](super::Text::from_raw_parts); the elements
+    /// are nodes.
+    ///
+    /// # Safety
+    ///
+    /// The first `len` nodes at `ptr` are well formed and readable for as
+    /// long as this lives; `cap > 0` means the block came from `alloc`
+    /// with a layout of `cap` nodes and is owned by this list alone;
+    /// `cap == 0` means the array is somebody else's and, if this list is
+    /// mutated in place, writable.
+    pub unsafe fn from_raw_parts(
+        ptr: *mut Value,
+        len: usize,
+        cap: usize,
+        alloc: *const Allocator,
+    ) -> List {
+        List {
+            ptr,
+            len,
+            cap,
+            alloc,
+        }
+    }
+
+    /// The four fields, with ownership: this list no longer frees them.
+    pub fn into_raw_parts(self) -> (*mut Value, usize, usize, *const Allocator) {
+        let this = std::mem::ManuallyDrop::new(self);
+        (this.ptr, this.len, this.cap, this.alloc)
+    }
+
+    /// How many nodes the storage holds before it must grow. Zero for an
+    /// array this list does not own.
+    pub fn capacity(&self) -> usize {
+        self.cap
+    }
+
     /// An empty list **container**. See [`Map::new`](super::Map::new).
     pub fn new() -> List {
         List::new_in(Alloc::rust())

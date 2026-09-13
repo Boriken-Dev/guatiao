@@ -26,6 +26,44 @@
 //! would double every accessor and force a copy merely to read an owned
 //! tree through the view API.
 //!
+//! # The fields are private, and that is the safety argument
+//!
+//! Every `SAFETY:` comment in this crate assumes a node reached in safe
+//! code is well formed. That holds because safe code cannot build one by
+//! hand: the fields of [`Value`], [`Payload`], [`Entry`], [`Text`],
+//! [`Buffer`], [`List`] and [`Map`] are crate-private, and the one door
+//! for a literal or a buffer another language owns is `unsafe fn
+//! from_raw_parts`. The borrowed views keep public fields; they own
+//! nothing. The C header is unchanged, since cbindgen renders private
+//! fields.
+//!
+//! A forged node does not compile:
+//!
+//! ```compile_fail
+//! let v = guatiao::Value { tag: 7, _pad: 0, payload: unreachable!() };
+//! ```
+//!
+//! Nor does a length written by hand:
+//!
+//! ```compile_fail
+//! let mut m = guatiao::Map::new();
+//! m.len = 4096;
+//! ```
+//!
+//! Nor a second owner copied out of a live container:
+//!
+//! ```compile_fail
+//! let a = guatiao::Text::new("hello");
+//! let b = guatiao::Text { ptr: a.ptr, len: a.len, cap: a.cap, alloc: a.alloc };
+//! ```
+//!
+//! Nor a stolen arm:
+//!
+//! ```compile_fail
+//! let mut v = guatiao::Value::int(1);
+//! let t = guatiao::value::mutate::as_text_mut(&mut v);
+//! ```
+//!
 //! # `cap == 0` means the buffer is not owned
 //!
 //! That is `Vec`'s own rule rather than an invention: a capacity of zero

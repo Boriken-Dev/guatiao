@@ -60,13 +60,13 @@ impl Bytes {
 #[derive(Debug)]
 pub struct Buffer {
     /// First byte.
-    pub ptr: *mut u8,
+    pub(crate) ptr: *mut u8,
     /// Length in bytes.
-    pub len: usize,
+    pub(crate) len: usize,
     /// Capacity in bytes. 0 means the buffer is not owned.
-    pub cap: usize,
+    pub(crate) cap: usize,
     /// The allocator that made this buffer. Null when `cap == 0`.
-    pub alloc: *const Allocator,
+    pub(crate) alloc: *const Allocator,
 }
 
 impl Drop for Buffer {
@@ -77,6 +77,39 @@ impl Drop for Buffer {
 }
 
 impl Buffer {
+    /// A buffer over storage described by hand. See
+    /// [`Text::from_raw_parts`](super::Text::from_raw_parts), which this
+    /// is for bytes.
+    ///
+    /// # Safety
+    ///
+    /// As `Text::from_raw_parts`, without the UTF-8 requirement.
+    pub unsafe fn from_raw_parts(
+        ptr: *mut u8,
+        len: usize,
+        cap: usize,
+        alloc: *const Allocator,
+    ) -> Buffer {
+        Buffer {
+            ptr,
+            len,
+            cap,
+            alloc,
+        }
+    }
+
+    /// The four fields, with ownership: this buffer no longer frees them.
+    pub fn into_raw_parts(self) -> (*mut u8, usize, usize, *const Allocator) {
+        let this = std::mem::ManuallyDrop::new(self);
+        (this.ptr, this.len, this.cap, this.alloc)
+    }
+
+    /// How many bytes the storage holds before it must grow. Zero for a
+    /// buffer this does not own.
+    pub fn capacity(&self) -> usize {
+        self.cap
+    }
+
     /// Bytes, copied onto Rust's heap. See [`Text::new`](super::Text::new).
     pub fn new(bytes: &[u8]) -> Buffer {
         or_abort(Buffer::new_in(Alloc::rust(), bytes))

@@ -45,13 +45,13 @@ pub struct Entries {
 #[derive(Debug)]
 pub struct Map {
     /// First entry.
-    pub ptr: *mut Entry,
+    pub(crate) ptr: *mut Entry,
     /// Number of entries.
-    pub len: usize,
+    pub(crate) len: usize,
     /// Capacity in entries. 0 means the buffer is not owned.
-    pub cap: usize,
+    pub(crate) cap: usize,
     /// The allocator that made this buffer. Null when `cap == 0`.
-    pub alloc: *const Allocator,
+    pub(crate) alloc: *const Allocator,
 }
 
 /// One key/value pair of a map. The value is held **inline**, not by
@@ -60,9 +60,9 @@ pub struct Map {
 pub struct Entry {
     /// The key. Raw bytes: no case folding, no normalisation, no trimming.
     /// `"Host"` and `"host"` are two keys.
-    pub key: Text,
+    pub(crate) key: Text,
     /// The value.
-    pub value: Value,
+    pub(crate) value: Value,
 }
 
 impl fmt::Debug for Entry {
@@ -89,6 +89,39 @@ impl Drop for Map {
 }
 
 impl Map {
+    /// A map over storage described by hand. See
+    /// [`List::from_raw_parts`](super::List::from_raw_parts); the elements
+    /// are entries.
+    ///
+    /// # Safety
+    ///
+    /// As `List::from_raw_parts`, over entries.
+    pub unsafe fn from_raw_parts(
+        ptr: *mut Entry,
+        len: usize,
+        cap: usize,
+        alloc: *const Allocator,
+    ) -> Map {
+        Map {
+            ptr,
+            len,
+            cap,
+            alloc,
+        }
+    }
+
+    /// The four fields, with ownership: this map no longer frees them.
+    pub fn into_raw_parts(self) -> (*mut Entry, usize, usize, *const Allocator) {
+        let this = std::mem::ManuallyDrop::new(self);
+        (this.ptr, this.len, this.cap, this.alloc)
+    }
+
+    /// How many entries the storage holds before it must grow. Zero for
+    /// an array this map does not own.
+    pub fn capacity(&self) -> usize {
+        self.cap
+    }
+
     /// An empty map **container**, growing through Rust's allocator.
     ///
     /// A container rather than a value: grow it with [`set`](Map::set), and
@@ -244,6 +277,17 @@ impl From<Map> for Value {
 }
 
 impl Entry {
+    /// An entry from an owned key and an owned value. Safe: both are
+    /// whole, and the entry now owns them.
+    pub fn new(key: Text, value: Value) -> Entry {
+        Entry { key, value }
+    }
+
+    /// The key and the value, with ownership.
+    pub fn into_parts(self) -> (Text, Value) {
+        (self.key, self.value)
+    }
+
     /// The key, as bytes.
     ///
     /// Bytes rather than text, because a key may contain a NUL and

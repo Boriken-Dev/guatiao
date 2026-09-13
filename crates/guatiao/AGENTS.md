@@ -185,7 +185,7 @@ or exponent spelling is refused rather than rounded.
 Inherent readers on `Value`:
 
 ```rust
-v.tag() -> Result<Tag, ValueError>     // the FIELD `v.tag` is the raw u32
+v.tag() -> Result<Tag, ValueError>     // `into_raw_parts().0` is the raw u32
 v.as_bool() / as_str() / as_bytes() / as_number_str()
 v.as_map() / as_map_mut() / as_list() / as_list_mut()
 v.entries() -> Option<&[Entry]>        v.items() -> Option<&[Value]>
@@ -969,9 +969,15 @@ An implementer must guarantee, and `struct_size` cannot express:
 
 - **A `Value` is not `Copy`**, and neither are the four containers. They
   have `Drop`.
-- **Copying one container's fields into another is a double free.** Both
-  then describe one allocation and both free it. Transfer with
-  `ManuallyDrop` and say so.
+- **The fields of `Value`, `Payload`, `Entry` and the four containers are
+  private.** Safe code cannot forge a node, corrupt a length, or copy a
+  container's fields into a second owner; the compiler refuses all three
+  (pinned as `compile_fail` doctests). The one door for a literal or a
+  buffer another language owns is `unsafe fn from_raw_parts` on each
+  container and on `Value` (with `Payload::text/bytes/list/map/bool`),
+  and `into_raw_parts` is its safe inverse. The borrowed views (`Str`,
+  `Bytes`, `Values`, `Entries`) keep public fields: they own nothing. The
+  C header is unchanged — cbindgen renders private fields.
 - **`try_into` on a value needs `TryFrom`, not a bespoke trait.** A trait
   method named `try_into` is ambiguous against std's blanket impl at
   every call site: it compiles inside the crate and fails in a doctest.

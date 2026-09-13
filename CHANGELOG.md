@@ -155,6 +155,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking: the fields of `Value`, `Payload`, `Entry`, `Text`, `Buffer`,
+  `List` and `Map` are private.** Safe code can no longer forge a node,
+  write a length, or copy a container into a second owner. The one door
+  for a literal or a buffer another language owns is `unsafe fn
+  from_raw_parts` on each container and on `Value` (with
+  `Payload::text/bytes/list/map/bool`); `into_raw_parts` is the safe
+  inverse, `Entry::new`/`into_parts` and `capacity()` on the containers
+  are the safe conveniences. The views keep public fields; the C header
+  is unchanged.
 - **Every object the schema builders seal carries `additionalProperties:
   false`** — a struct's document and each arm's subschema — so a general
   JSON Schema validator refuses exactly what `validate` refuses. The key

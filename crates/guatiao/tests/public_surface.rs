@@ -112,10 +112,7 @@ fn the_borrowed_byte_view_has_the_constructors_its_sibling_has() {
 fn an_entry_hands_out_its_value_mutably() {
     use guatiao::{Entry, Text, Value};
 
-    let mut entry = Entry {
-        key: Text::new("k"),
-        value: Value::int(1),
-    };
+    let mut entry = Entry::new(Text::new("k"), Value::int(1));
     *entry.value_mut() = Value::string("two");
     assert_eq!(entry.value().as_str(), Some("two"));
     assert_eq!(entry.key(), b"k");
