@@ -39,6 +39,7 @@ use std::ffi::c_void;
 use std::mem::{offset_of, size_of};
 
 use crate::value::alloc::Allocator;
+use crate::value::status::Status;
 use crate::value::types::{Map, MaybeNull, Str, Value};
 
 /// The envelope's own version, for a library that wants to refuse a host
@@ -54,6 +55,13 @@ pub const ABI_VERSION: u32 = 1;
 /// host will keep can build it in the host's own arena, and then the host
 /// frees it with nothing to remember. A library that would rather use its
 /// own passes its own; every owned container records which it was.
+///
+/// **Valid for the life of the process.** A host hands a library a pointer
+/// to a block it never frees, so a library may keep the pointer (as a
+/// [`Host`](super::raw::Host)) and read it from any later call. What the
+/// block answers about the registry changes as the host loads and ranks;
+/// once the host's registry is gone, every lookup through it answers
+/// `GUATIAO_ERR_GONE` and touches nothing freed.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct HostInfo {
@@ -66,8 +74,9 @@ pub struct HostInfo {
     pub host_id: Str,
     /// The host's own version string, uninterpreted.
     pub host_version: Str,
-    /// The host's allocator, or null. Borrowed for the call and for as
-    /// long as anything built through it lives.
+    /// The host's allocator, or null. Valid for the life of the process,
+    /// like the block it sits in, and it must be: every tree built through
+    /// it records this address.
     pub alloc: *const Allocator,
     /// Anything else this host wants to say, as an ordinary value, or
     /// null. Conventionally a map.
@@ -94,6 +103,10 @@ pub struct HostInfo {
     /// the same thing here — "nothing to add" has no second reading
     /// worth keeping apart.
     pub meta: MaybeNull<Map>,
+    /// What the host will answer a library that asks, or null for a host
+    /// that answers nothing. See [`HostServices`]. Appended after `meta`;
+    /// a library reads it only when `struct_size` covers it.
+    pub services: *const HostServices,
 }
 
 impl HostInfo {
@@ -115,6 +128,67 @@ impl HostInfo {
     /// Where the `meta` field ends, for the guard that reads it.
     pub const fn meta_end() -> usize {
         offset_of!(HostInfo, meta) + size_of::<MaybeNull<Map>>()
+    }
+
+    /// Where the `services` field ends, for the guard that reads it.
+    pub const fn services_end() -> usize {
+        offset_of!(HostInfo, services) + size_of::<*const HostServices>()
+    }
+}
+
+/// What a host answers a library that asks it something: the lookups its
+/// registry can do, and its allocator, as slots a library calls.
+///
+/// **Every answer is a pointer to the offering library's own descriptor**,
+/// which lives as long as that library, which is for the life of the
+/// process. Nothing borrowed from the host's registry escapes, so the
+/// registry may change or go away while a library holds an answer.
+///
+/// A host that has been dropped answers `GUATIAO_ERR_GONE` from every
+/// slot and touches nothing it freed.
+///
+/// Slots are spelled out inline rather than through a type alias: cbindgen
+/// renders an aliased function-pointer field as an opaque struct used by
+/// value, which is an incomplete type that compiles nowhere.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct HostServices {
+    /// `sizeof(guatiao_host_services)` as the host compiled it. Always
+    /// first.
+    pub struct_size: u32,
+    /// Passed back to every slot below. Opaque to a library.
+    pub ctx: *mut c_void,
+    /// One provider by the key the host files it under, or
+    /// `GUATIAO_ERR_NOT_FOUND`. Writes the descriptor's address through
+    /// `out`.
+    pub get: Option<
+        unsafe extern "C" fn(ctx: *mut c_void, key: Str, out: *mut *const ProviderInfo) -> Status,
+    >,
+    /// Every provider serving `kind` — every one, when `kind` is empty —
+    /// in the host's own order (`priority DESC, key ASC`), **including
+    /// providers that are not available**: the caller asks each and
+    /// chooses. Fills up to `cap` entries at `out` and writes the total
+    /// through `total`; call with `cap = 0` to size a buffer.
+    pub list: Option<
+        unsafe extern "C" fn(
+            ctx: *mut c_void,
+            kind: Str,
+            out: *mut *const ProviderInfo,
+            cap: usize,
+            total: *mut usize,
+        ) -> Status,
+    >,
+    /// The same allocator as `HostInfo::alloc`, for code that kept only
+    /// this table. Null for a host that offers none.
+    pub alloc: Option<unsafe extern "C" fn(ctx: *mut c_void) -> *const Allocator>,
+}
+
+impl HostServices {
+    /// The smallest usable `struct_size`: the three slots the table was
+    /// born with. **Frozen.**
+    pub const fn floor() -> usize {
+        offset_of!(HostServices, alloc)
+            + size_of::<Option<unsafe extern "C" fn(ctx: *mut c_void) -> *const Allocator>>()
     }
 }
 
@@ -408,6 +482,84 @@ pub struct ProviderInfo {
     /// renders an aliased function-pointer field as an opaque struct used
     /// by value, which is an incomplete type that compiles nowhere.
     pub available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
+    /// One function table per kind, for a provider serving several kinds
+    /// with a table each. See [`KindTables`]. May be empty: `vtable`
+    /// above then serves every kind in `kinds`, which is how a provider
+    /// with one table for everything, or none, declares itself.
+    ///
+    /// A reader asks [`ProviderView::table_for`](super::raw::ProviderView::table_for):
+    /// a table here for the kind first, then `vtable` when `kinds` names
+    /// the kind.
+    pub tables: KindTables,
+}
+
+/// One kind's function table, on a provider that serves several kinds
+/// with a table each.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct KindTable {
+    /// `sizeof(guatiao_kind_table)` as the library compiled it. Always
+    /// first.
+    pub struct_size: u32,
+    /// Size of the struct `vtable` points at, as the library compiled it.
+    pub vtable_size: u32,
+    /// The kind this table serves.
+    pub kind: Str,
+    /// The table, whose shape the kind defines.
+    pub vtable: *const c_void,
+}
+
+impl KindTable {
+    /// A table for `kind`, with the size this build lays it out at.
+    pub const fn new(kind: &'static str, vtable: *const c_void, vtable_size: usize) -> KindTable {
+        KindTable {
+            struct_size: size_of::<KindTable>() as u32,
+            vtable_size: vtable_size as u32,
+            kind: Str::borrowed(kind),
+            vtable,
+        }
+    }
+
+    /// The smallest usable `struct_size`: every field it was born with.
+    /// **Frozen.**
+    pub const fn floor() -> usize {
+        offset_of!(KindTable, vtable) + size_of::<*const c_void>()
+    }
+}
+
+/// A borrowed array of [`KindTable`], carrying its stride like
+/// [`Providers`] and for the same reason: `struct_size` places fields
+/// within one element, and only the library knows how far apart the
+/// elements are.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct KindTables {
+    /// First table. May be null when `len` is 0.
+    pub ptr: *const KindTable,
+    /// How many.
+    pub len: usize,
+    /// `sizeof(guatiao_kind_table)` as the LIBRARY compiled it.
+    pub stride: usize,
+}
+
+impl KindTables {
+    /// A borrowed array, with the stride this build lays it out at.
+    pub const fn new(tables: &'static [KindTable]) -> KindTables {
+        KindTables {
+            ptr: tables.as_ptr(),
+            len: tables.len(),
+            stride: size_of::<KindTable>(),
+        }
+    }
+
+    /// No per-kind tables: `vtable` serves every kind.
+    pub const fn empty() -> KindTables {
+        KindTables {
+            ptr: std::ptr::null(),
+            len: 0,
+            stride: size_of::<KindTable>(),
+        }
+    }
 }
 
 impl ProviderInfo {
@@ -428,7 +580,13 @@ impl ProviderInfo {
 
     /// Where the `available` field ends, for the guard that reads it.
     pub const fn available_end() -> usize {
-        offset_of!(ProviderInfo, available) + size_of::<*const c_void>()
+        offset_of!(ProviderInfo, available)
+            + size_of::<Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>>()
+    }
+
+    /// Where the `tables` field ends, for the guard that reads it.
+    pub const fn tables_end() -> usize {
+        offset_of!(ProviderInfo, tables) + size_of::<KindTables>()
     }
 }
 
@@ -445,8 +603,14 @@ mod tests {
     fn every_floor_sits_within_its_struct() {
         assert!(HostInfo::floor() <= size_of::<HostInfo>());
         assert!(HostInfo::alloc_end() <= size_of::<HostInfo>());
+        assert!(HostInfo::meta_end() < HostInfo::services_end());
+        assert_eq!(HostInfo::services_end(), size_of::<HostInfo>());
         assert!(LibraryInfo::floor() <= size_of::<LibraryInfo>());
         assert!(ProviderInfo::floor() <= size_of::<ProviderInfo>());
+        assert!(ProviderInfo::available_end() < ProviderInfo::tables_end());
+        assert_eq!(ProviderInfo::tables_end(), size_of::<ProviderInfo>());
+        assert_eq!(HostServices::floor(), size_of::<HostServices>());
+        assert_eq!(KindTable::floor(), size_of::<KindTable>());
     }
 
     /// The leading field is at offset zero in every one of them, because
@@ -456,5 +620,7 @@ mod tests {
         assert_eq!(offset_of!(HostInfo, struct_size), 0);
         assert_eq!(offset_of!(LibraryInfo, struct_size), 0);
         assert_eq!(offset_of!(ProviderInfo, struct_size), 0);
+        assert_eq!(offset_of!(HostServices, struct_size), 0);
+        assert_eq!(offset_of!(KindTable, struct_size), 0);
     }
 }

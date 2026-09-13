@@ -27,13 +27,27 @@
 use std::path::PathBuf;
 
 use guatiao::ReadValue;
-use guatiao::library::{KeyError, Provider, Registry, Skipped, Subject, WhyNot};
+use guatiao::library::{KeyError, Provider, ProviderInfo, Registry, Skipped, Subject, WhyNot};
 use guatiao::schema::read::SchemaRef;
 use guatiao::schema::validate_map;
 use guatiao::value::status::Status;
-use guatiao::value::types::Value;
+use guatiao::value::types::{Str, Value};
 
-use hello_library::GreeterVtable;
+use hello_library::{EchoVtable, GreeterVtable};
+
+/// One load at a time across this binary's tests.
+///
+/// The example library keeps the `Host` of its LATEST entry call, and
+/// `cargo test` runs these tests on parallel threads in one process where
+/// the library is mapped once. A test that loads it while another is
+/// mid-load or already dropped would have its echo provider ask the wrong
+/// host. A process has one host; these tests take turns being it.
+fn one_at_a_time() -> std::sync::MutexGuard<'static, ()> {
+    static LOADS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOADS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 /// Where cargo put the example library.
 ///
@@ -108,6 +122,7 @@ fn read_greeter(
 
 #[test]
 fn a_library_on_disk_offers_a_provider_a_host_can_use() {
+    let _one_at_a_time = one_at_a_time();
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
     let path = library_path();
 
@@ -117,7 +132,10 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
         .loaded()
         .expect("it is a library and it did not decline this host");
     assert_eq!(loaded.id, "hello_library");
-    assert_eq!(loaded.providers, 3, "a greeter, an almanac and a sundial");
+    assert_eq!(
+        loaded.providers, 4,
+        "a greeter, an almanac, a sundial and an echo"
+    );
 
     // The appended `meta` slot, read out of the library's own image.
     // `ProviderInfo::meta` is null here and `LibraryInfo::meta` is not,
@@ -180,6 +198,7 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
 /// to tell apart.
 #[test]
 fn a_provider_says_whether_it_can_run_here() {
+    let _one_at_a_time = one_at_a_time();
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
     registry
         .load_file(&library_path())
@@ -241,6 +260,7 @@ fn a_provider_says_whether_it_can_run_here() {
 /// which should win.
 #[test]
 fn a_host_ranks_providers_and_the_order_follows() {
+    let _one_at_a_time = one_at_a_time();
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
     registry
         .load_file(&library_path())
@@ -310,6 +330,7 @@ fn a_host_ranks_providers_and_the_order_follows() {
 /// which is the kind of thing nobody finds until it matters.
 #[test]
 fn a_rank_set_before_loading_still_applies() {
+    let _one_at_a_time = one_at_a_time();
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
     registry.set_priority("hello_library_sundial", 5);
     registry
@@ -333,6 +354,7 @@ fn a_rank_set_before_loading_still_applies() {
 /// A provider's version is its library's unless it says otherwise.
 #[test]
 fn a_provider_versions_with_its_library_or_says_so() {
+    let _one_at_a_time = one_at_a_time();
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
     let loaded = registry
         .load_file(&library_path())
@@ -366,6 +388,7 @@ fn a_provider_versions_with_its_library_or_says_so() {
 /// executable are routinely the same place.
 #[test]
 fn the_same_library_twice_is_skipped_not_refused() {
+    let _one_at_a_time = one_at_a_time();
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
     let path = library_path();
     registry.load_file(&path).unwrap().loaded().unwrap();
@@ -378,7 +401,7 @@ fn the_same_library_twice_is_skipped_not_refused() {
     assert_eq!(registry.loaded().len(), 1);
     assert_eq!(
         registry.all().len(),
-        3,
+        4,
         "and nothing was registered a second time"
     );
 }
@@ -388,6 +411,7 @@ fn the_same_library_twice_is_skipped_not_refused() {
 /// library before.
 #[test]
 fn the_host_validates_a_configuration_against_the_librarys_own_schema() {
+    let _one_at_a_time = one_at_a_time();
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
     registry
         .load_file(&library_path())
@@ -425,6 +449,7 @@ fn the_host_validates_a_configuration_against_the_librarys_own_schema() {
 /// it. The library's own counter is back where it started.
 #[test]
 fn a_tree_the_library_built_is_extended_and_freed_by_the_host() {
+    let _one_at_a_time = one_at_a_time();
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
     registry
         .load_file(&library_path())
@@ -490,6 +515,7 @@ fn a_tree_the_library_built_is_extended_and_freed_by_the_host() {
 /// every library in a directory without filtering by name first.
 #[test]
 fn a_library_that_is_not_one_of_ours_is_reported_rather_than_failing() {
+    let _one_at_a_time = one_at_a_time();
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
 
     // This test binary's own directory holds the libraries cargo built
@@ -540,6 +566,7 @@ fn a_library_that_is_not_one_of_ours_is_reported_rather_than_failing() {
 /// A host names what it loads, and by default that name is the id.
 #[test]
 fn a_host_files_providers_under_a_key_it_chooses() {
+    let _one_at_a_time = one_at_a_time();
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
     let path = library_path();
     registry.load_file(&path).unwrap().loaded().unwrap();
@@ -592,6 +619,7 @@ fn a_host_files_providers_under_a_key_it_chooses() {
 /// there.
 #[test]
 fn a_host_decides_how_many_builds_of_one_library_it_will_hold() {
+    let _one_at_a_time = one_at_a_time();
     let path = library_path();
 
     // Under the default, the second is the same library and is skipped.
@@ -623,4 +651,144 @@ fn a_host_decides_how_many_builds_of_one_library_it_will_hold() {
             .is_err(),
         "a library has no display name"
     );
+}
+
+// --- a library can reach its host ----------------------------------------
+
+/// The `Host` a library keeps outlives the registry that handed it over.
+///
+/// The block is leaked, so the id reads back after the drop; the lookups
+/// answer `GONE` rather than touching what was freed.
+#[test]
+fn the_host_a_library_keeps_outlives_the_registry() {
+    let _one_at_a_time = one_at_a_time();
+    let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+    registry
+        .load_file(&library_path())
+        .unwrap()
+        .loaded()
+        .unwrap();
+    let host = registry.host();
+    assert_eq!(host.id(), "guatiao-tests");
+    assert_eq!(host.version(), env!("CARGO_PKG_VERSION"));
+    assert!(host.alloc().is_none(), "this registry offers no allocator");
+
+    // Through the services: the same answers the host sees, as pointers
+    // to the library's own descriptors.
+    let greeters = host.list("greeter").expect("the services answer");
+    assert_eq!(greeters.len(), 1);
+    let view = greeters[0].view().expect("a readable descriptor");
+    assert_eq!(view.id, "hello_library_greeter");
+    assert_eq!(
+        host.get("hello_library_greeter")
+            .expect("the services answer")
+            .map(|p| p as *const ProviderInfo),
+        Some(greeters[0] as *const ProviderInfo),
+        "get and list hand back the same descriptor"
+    );
+    assert!(matches!(host.get("nobody"), Ok(None)));
+
+    // Unavailable providers ARE listed: the caller asks and chooses.
+    let everything: Vec<&str> = host
+        .list("everything")
+        .unwrap()
+        .into_iter()
+        .filter_map(ProviderInfo::view)
+        .map(|v| v.id)
+        .collect();
+    let seen: Vec<&str> = registry.providers("everything").map(Provider::id).collect();
+    assert_eq!(everything, seen, "the library sees the host's order");
+    assert_eq!(
+        host.list("").unwrap().len(),
+        registry.all().len(),
+        "an empty kind lists everything"
+    );
+
+    // Ranking changes what the services answer, on the next call.
+    registry.set_priority("hello_library_sundial", 10);
+    let first = host.list("everything").unwrap()[0].view().unwrap().id;
+    assert_eq!(first, "hello_library_sundial");
+
+    drop(registry);
+    assert_eq!(host.id(), "guatiao-tests", "the block is still there");
+    assert_eq!(host.list("greeter").err(), Some(Status::GUATIAO_ERR_GONE));
+    assert_eq!(
+        host.get("hello_library_greeter").err(),
+        Some(Status::GUATIAO_ERR_GONE)
+    );
+}
+
+/// One provider reaches another across a real `dlopen`, through the host.
+#[test]
+fn a_provider_reaches_another_through_the_host() {
+    let _one_at_a_time = one_at_a_time();
+    let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+    registry
+        .load_file(&library_path())
+        .unwrap()
+        .loaded()
+        .unwrap();
+    let echo = registry
+        .provider("hello_library_echo")
+        .expect("the echo registered");
+    assert_eq!(echo.kinds(), ["echo"]);
+
+    let (ptr, size) = echo.vtable();
+    assert!(size >= size_of::<EchoVtable>());
+    // SAFETY: `echo` claims the `echo` kind, whose table the example
+    // declares, and the size check above established the slot is present.
+    let table = unsafe { &*(ptr as *const EchoVtable) };
+    let call = table.echo.expect("an echo declares its slot");
+
+    let mut out = Value::absent();
+    // SAFETY: the slot's contract: a readable name and a writable node.
+    let status = unsafe { call(echo.ctx(), Str::borrowed("ana"), &mut out) };
+    assert_eq!(status, Status::GUATIAO_OK);
+    assert_eq!(
+        out.get("greeting").ok_or_missing().unwrap().try_into(),
+        Ok("hello, ana"),
+        "the echo found the greeter through the host and called it"
+    );
+}
+
+/// A load on one thread while another asks the host in a loop finishes:
+/// no lock is held across the entry call, and a lookup never blocks
+/// behind a load.
+#[test]
+fn a_lookup_from_another_thread_never_deadlocks_a_load() {
+    let _one_at_a_time = one_at_a_time();
+    let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+    let host = registry.host();
+
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let asker = {
+        let stop = stop.clone();
+        std::thread::spawn(move || {
+            let mut calls = 0usize;
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                let _ = host.list("greeter");
+                calls += 1;
+            }
+            calls
+        })
+    };
+
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    registry
+        .load_file(&library_path())
+        .unwrap()
+        .loaded()
+        .unwrap();
+    for _ in 0..50 {
+        registry.set_priority("hello_library_greeter", 1);
+        registry.set_priority("hello_library_greeter", 0);
+    }
+    assert!(
+        std::time::Instant::now() < deadline,
+        "the load did not finish in time"
+    );
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    let calls = asker.join().expect("the asking thread did not panic");
+    assert!(calls > 0);
+    assert_eq!(host.list("greeter").unwrap().len(), 1);
 }

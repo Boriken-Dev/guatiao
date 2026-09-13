@@ -58,6 +58,24 @@ const FORBIDDEN: &[&str] = &[
     "AtomicPtr",
 ];
 
+/// Spellings that are interior mutability, and are forbidden only in a
+/// `static`.
+///
+/// A `Mutex` inside a value the host owns is that value's own state and
+/// is fine; the same `Mutex` behind a `static` is a table two linkages
+/// hold two copies of. So these are checked on `static` declarations
+/// alone, where the spellings in [`FORBIDDEN`] are checked everywhere
+/// because they have no other use.
+const FORBIDDEN_IN_STATICS: &[&str] = &[
+    "Mutex",
+    "RwLock",
+    "RefCell",
+    "Cell<",
+    "UnsafeCell",
+    "Lazy",
+    "Atomic",
+];
+
 /// Lines exempt from the scan, by exact trimmed text.
 ///
 /// Keyed on the whole line rather than on a file, so an exemption cannot
@@ -96,6 +114,25 @@ fn the_crate_holds_no_process_global_mutable_state() {
                         bad.trim(),
                         trimmed
                     ));
+                }
+            }
+            // A `static` whose declared type is interior-mutable. The
+            // declaration line carries the type in every case this crate
+            // has, so one line is what is examined.
+            let is_static = trimmed.starts_with("static ")
+                || trimmed.starts_with("pub static ")
+                || trimmed.starts_with("pub(crate) static ");
+            if is_static {
+                for bad in FORBIDDEN_IN_STATICS {
+                    if trimmed.contains(bad) {
+                        hits.push(format!(
+                            "{}:{}: a static holding {} — {}",
+                            file.display(),
+                            n + 1,
+                            bad.trim_end_matches('<'),
+                            trimmed
+                        ));
+                    }
                 }
             }
         }

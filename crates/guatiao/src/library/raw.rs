@@ -39,7 +39,9 @@
 use std::ffi::c_void;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-use super::desc::{HostInfo, LibraryInfo, ProviderInfo};
+use super::desc::{HostInfo, HostServices, KindTable, LibraryInfo, ProviderInfo};
+use crate::value::alloc::Alloc;
+use crate::value::status::Status;
 use crate::value::types::{Map, MaybeNull, Str, Value};
 
 /// The symbol a library exports, NUL-terminated for the loader.
@@ -54,14 +56,16 @@ pub type EntryFn = unsafe extern "C" fn(*const HostInfo) -> *const LibraryInfo;
 
 /// Writes a library's entry point.
 ///
-/// Give it a function taking `&HostInfo` and answering
+/// Give it a function taking a [`Host`] and answering
 /// `Option<&'static LibraryInfo>`; it emits the `extern "C"` symbol a
 /// loader looks for, catches a panic rather than letting one cross the
-/// boundary, and answers null for "nothing for this host".
+/// boundary, and answers null for "nothing for this host". The `Host` is
+/// `Copy + Send + Sync + 'static`, so a library keeps it in a `OnceLock`
+/// of its own and asks the host for a provider from any later call.
 ///
 /// ```ignore
-/// fn describe(host: &guatiao::library::HostInfo) -> Option<&'static guatiao::library::LibraryInfo> {
-///     // build a descriptor, keep it in a `OnceLock` of your own
+/// fn describe(host: guatiao::library::Host) -> Option<&'static guatiao::library::LibraryInfo> {
+///     // build a descriptor, keep it and `host` in a `OnceLock` of your own
 /// }
 /// guatiao::guatiao_library!(describe);
 /// ```
@@ -89,14 +93,428 @@ macro_rules! guatiao_library {
             host: *const $crate::library::HostInfo,
         ) -> *const $crate::library::LibraryInfo {
             // SAFETY: the loader's side of the contract is that `host` is
-            // null or points at a host descriptor declaring its own size.
-            let info = unsafe { $crate::library::read_host(host) };
-            let Some(info) = info else {
+            // null or points at a host descriptor declaring its own size
+            // that stays valid for the life of the process.
+            let host = unsafe { $crate::library::Host::from_raw(host) };
+            let Some(host) = host else {
                 return ::core::ptr::null();
             };
-            $crate::library::answer(|| $describe(&info))
+            $crate::library::answer(|| $describe(host))
         }
     };
+}
+
+/// A host, as a library keeps it.
+///
+/// A pointer to the [`HostInfo`] a host handed its entry point, which the
+/// host keeps valid for the life of the process. `Copy`, `Send`, `Sync`
+/// and `'static`, so it goes in a library's own `OnceLock` and is read
+/// from any later call. Every field is read on demand under the host's
+/// declared `struct_size`, so a host built before a field existed reads
+/// as not having it.
+#[derive(Debug, Clone, Copy)]
+pub struct Host {
+    raw: *const HostInfo,
+}
+
+// SAFETY: the pointee is never written after the host hands it over, and
+// every answer it gives comes from a slot the host guards itself.
+unsafe impl Send for Host {}
+// SAFETY: as above.
+unsafe impl Sync for Host {}
+
+impl Host {
+    /// Wraps the pointer a host passed to the entry point.
+    ///
+    /// `None` for null, or for a descriptor below the floor.
+    ///
+    /// # Safety
+    ///
+    /// `raw` is null, or points at `raw->struct_size` readable, aligned
+    /// bytes that stay valid and unchanged for the life of the process.
+    pub unsafe fn from_raw(raw: *const HostInfo) -> Option<Host> {
+        if raw.is_null() {
+            return None;
+        }
+        // SAFETY: the caller guarantees the first four bytes are readable.
+        let declared = unsafe { std::ptr::addr_of!((*raw).struct_size).read() } as usize;
+        if declared < HostInfo::floor() {
+            return None;
+        }
+        Some(Host { raw })
+    }
+
+    /// The pointer as it was handed over, for a caller that speaks C.
+    pub fn as_raw(&self) -> *const HostInfo {
+        self.raw
+    }
+
+    fn declared(&self) -> usize {
+        // SAFETY: `from_raw` established the leading word is readable.
+        unsafe { std::ptr::addr_of!((*self.raw).struct_size).read() as usize }
+    }
+
+    /// The envelope version the host speaks.
+    pub fn abi_version(&self) -> u32 {
+        // SAFETY: within the floor.
+        unsafe { std::ptr::addr_of!((*self.raw).abi_version).read() }
+    }
+
+    /// Who the host is. Empty when it said nothing readable.
+    pub fn id(&self) -> &'static str {
+        // SAFETY: within the floor; the text lives in the host's block.
+        unsafe { str_of(std::ptr::addr_of!((*self.raw).host_id).read()) }.unwrap_or("")
+    }
+
+    /// The host's own version string, uninterpreted.
+    pub fn version(&self) -> &'static str {
+        // SAFETY: as `id`.
+        unsafe { str_of(std::ptr::addr_of!((*self.raw).host_version).read()) }.unwrap_or("")
+    }
+
+    /// The host's allocator, or `None` when it offers none or predates
+    /// the field.
+    pub fn alloc(&self) -> Option<Alloc> {
+        if self.declared() < HostInfo::alloc_end() {
+            return None;
+        }
+        // SAFETY: the guard established the field is present, and the
+        // allocator it names outlives the process by the block's contract.
+        let raw = unsafe { std::ptr::addr_of!((*self.raw).alloc).read() };
+        unsafe { Alloc::from_raw(raw) }.ok()
+    }
+
+    /// Whatever else the host declared, or `None`.
+    pub fn meta(&self) -> Option<&'static Map> {
+        if self.declared() < HostInfo::meta_end() {
+            return None;
+        }
+        // SAFETY: the guard established the field is present; non-null
+        // means a well-formed map by the contract on the field; the block
+        // lives for the process.
+        unsafe { std::ptr::addr_of!((*self.raw).meta).read().get() }
+    }
+
+    /// A copy of the descriptor as it reads today, with absent fields
+    /// nulled. For a caller that wants a snapshot rather than a handle.
+    pub fn snapshot(&self) -> HostInfo {
+        // SAFETY: `from_raw` established the contract `read_host` needs.
+        unsafe { read_host(self.raw) }.expect("a Host was built from a readable descriptor")
+    }
+
+    /// The services table, or `None` for a host that offers none or
+    /// predates the field.
+    fn services(&self) -> Option<&'static HostServices> {
+        if self.declared() < HostInfo::services_end() {
+            return None;
+        }
+        // SAFETY: the guard established the field is present.
+        let table = unsafe { std::ptr::addr_of!((*self.raw).services).read() };
+        if table.is_null() {
+            return None;
+        }
+        // SAFETY: a non-null table points at one the host keeps for the
+        // process, declaring its own size; the leading word is readable.
+        let size = unsafe { std::ptr::addr_of!((*table).struct_size).read() } as usize;
+        if size < HostServices::floor() {
+            return None;
+        }
+        // SAFETY: at least the floor is present, which is every field
+        // this build reads.
+        Some(unsafe { &*table })
+    }
+
+    /// One provider by the key the host files it under.
+    ///
+    /// `Ok(None)` when nothing answers to the key. `Err` when the host
+    /// offers no services (`GUATIAO_ERR_NULL`) or its registry is gone
+    /// (`GUATIAO_ERR_GONE`).
+    pub fn get(&self, key: &str) -> Result<Option<&'static ProviderInfo>, Status> {
+        let table = self.services().ok_or(Status::GUATIAO_ERR_NULL)?;
+        let get = table.get.ok_or(Status::GUATIAO_ERR_NULL)?;
+        let mut out: *const ProviderInfo = std::ptr::null();
+        // SAFETY: the slot is the host's own, read under its guard; `out`
+        // is a writable local; `key` is readable for the call.
+        match unsafe { get(table.ctx, Str::borrowed(key), &mut out) } {
+            Status::GUATIAO_OK if !out.is_null() => {
+                // SAFETY: the host answers with a descriptor the offering
+                // library keeps for the life of the process.
+                Ok(Some(unsafe { &*out }))
+            }
+            Status::GUATIAO_OK | Status::GUATIAO_ERR_NOT_FOUND => Ok(None),
+            other => Err(other),
+        }
+    }
+
+    /// Every provider serving `kind` — every provider when it is empty —
+    /// in the host's own order, unavailable ones included. The caller asks
+    /// each and chooses.
+    ///
+    /// `Err` when the host offers no services or its registry is gone.
+    pub fn list(&self, kind: &str) -> Result<Vec<&'static ProviderInfo>, Status> {
+        let table = self.services().ok_or(Status::GUATIAO_ERR_NULL)?;
+        let list = table.list.ok_or(Status::GUATIAO_ERR_NULL)?;
+        let kind = Str::borrowed(kind);
+        let mut total = 0usize;
+        // SAFETY: as `get`; a zero capacity asks for the count alone.
+        match unsafe { list(table.ctx, kind, std::ptr::null_mut(), 0, &mut total) } {
+            Status::GUATIAO_OK => {}
+            other => return Err(other),
+        }
+        let mut found: Vec<*const ProviderInfo> = vec![std::ptr::null(); total];
+        let mut written = 0usize;
+        // SAFETY: `found` has room for `total` entries.
+        match unsafe {
+            list(
+                table.ctx,
+                kind,
+                found.as_mut_ptr(),
+                found.len(),
+                &mut written,
+            )
+        } {
+            Status::GUATIAO_OK => {}
+            other => return Err(other),
+        }
+        // The registry may have grown between the two calls; what was
+        // written is what is real.
+        found.truncate(written.min(total));
+        Ok(found
+            .into_iter()
+            .filter(|p| !p.is_null())
+            // SAFETY: each is a descriptor its library keeps for the life
+            // of the process.
+            .map(|p| unsafe { &*p })
+            .collect())
+    }
+}
+
+// --- what a host keeps for its libraries -------------------------------
+
+/// Everything a library reached through a [`Host`] points into: the
+/// descriptor, the services table, the text the descriptor names, and a
+/// weak handle to the registry's published state.
+///
+/// **Leaked once per registry, never freed.** That is what lets a library
+/// keep the pointer; the registry itself may go, and the block then
+/// answers [`Status::GUATIAO_ERR_GONE`].
+#[cfg(feature = "load")]
+#[derive(Debug)]
+pub(crate) struct HostBlock {
+    info: HostInfo,
+    services: HostServices,
+    #[allow(dead_code)]
+    id: Box<str>,
+    #[allow(dead_code)]
+    version: Box<str>,
+    state: std::sync::Weak<Shared>,
+}
+
+/// What the registry publishes for its services to read: the providers
+/// it holds, already in its order, with each descriptor's address.
+#[cfg(feature = "load")]
+#[derive(Debug, Default)]
+pub(crate) struct Snapshot {
+    /// In `(priority DESC, key ASC)` order.
+    pub(crate) entries: Vec<SnapshotEntry>,
+    /// Rendered key to an index into `entries`.
+    pub(crate) by_key: std::collections::BTreeMap<String, usize>,
+}
+
+/// One provider as the services see it.
+#[cfg(feature = "load")]
+#[derive(Debug)]
+pub(crate) struct SnapshotEntry {
+    pub(crate) kinds: Vec<&'static str>,
+    pub(crate) raw: *const ProviderInfo,
+}
+
+// SAFETY: `raw` addresses a descriptor inside a library image that is
+// never unloaded, and a snapshot is only ever read after it is published.
+#[cfg(feature = "load")]
+unsafe impl Send for Snapshot {}
+// SAFETY: as above.
+#[cfg(feature = "load")]
+unsafe impl Sync for Snapshot {}
+
+/// The state a registry shares with the block it leaked. The registry
+/// holds the `Arc`; the block holds a `Weak`, so dropping the registry is
+/// what makes every later lookup answer `GONE`.
+#[cfg(feature = "load")]
+#[derive(Debug, Default)]
+pub(crate) struct Shared {
+    pub(crate) snapshot: std::sync::RwLock<Snapshot>,
+}
+
+#[cfg(feature = "load")]
+impl Shared {
+    /// The published snapshot, whatever a poisoned lock says: a panic
+    /// while publishing leaves the last complete snapshot in place.
+    fn read(&self) -> std::sync::RwLockReadGuard<'_, Snapshot> {
+        self.snapshot
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+/// Leaks the block a registry hands its libraries.
+///
+/// The descriptor's text points into the block's own boxes, and the
+/// services' `ctx` is the block itself, so nothing here borrows from the
+/// registry.
+#[cfg(feature = "load")]
+pub(crate) fn leak_host_block(
+    id: &str,
+    version: &str,
+    alloc: Option<Alloc>,
+    state: std::sync::Weak<Shared>,
+) -> &'static HostBlock {
+    let id: Box<str> = id.into();
+    let version: Box<str> = version.into();
+    let block = Box::leak(Box::new(HostBlock {
+        info: HostInfo {
+            struct_size: size_of::<HostInfo>() as u32,
+            abi_version: super::desc::ABI_VERSION,
+            // The boxes' heap storage does not move when the block does.
+            host_id: Str::borrowed(&id),
+            host_version: Str::borrowed(&version),
+            alloc: alloc.map_or(std::ptr::null(), |a| a.as_raw()),
+            meta: MaybeNull::null(),
+            services: std::ptr::null(),
+        },
+        services: HostServices {
+            struct_size: size_of::<HostServices>() as u32,
+            ctx: std::ptr::null_mut(),
+            get: Some(services_get),
+            list: Some(services_list),
+            alloc: Some(services_alloc),
+        },
+        id,
+        version,
+        state,
+    }));
+    block.services.ctx = (block as *mut HostBlock).cast::<c_void>();
+    block.info.services = &block.services;
+    block
+}
+
+#[cfg(feature = "load")]
+impl HostBlock {
+    /// The descriptor a library is handed.
+    pub(crate) fn host(&'static self) -> Host {
+        Host { raw: &self.info }
+    }
+}
+
+/// The block behind a services `ctx`, or `None` for null.
+///
+/// # Safety
+///
+/// `ctx` is null or the `ctx` this crate wrote into a block it leaked.
+#[cfg(feature = "load")]
+unsafe fn block_of<'a>(ctx: *mut c_void) -> Option<&'a HostBlock> {
+    // SAFETY: the caller's contract; the block is never freed.
+    unsafe { ctx.cast::<HostBlock>().as_ref() }
+}
+
+/// The `get` slot: one provider by key.
+///
+/// # Safety
+///
+/// `ctx` is a leaked block's, `key` is readable for the call, `out` is
+/// null or writable.
+#[cfg(feature = "load")]
+unsafe extern "C" fn services_get(
+    ctx: *mut c_void,
+    key: Str,
+    out: *mut *const ProviderInfo,
+) -> Status {
+    crate::exports::guard(|| {
+        // SAFETY: the caller's contract.
+        let (Some(block), false) = (unsafe { block_of(ctx) }, out.is_null()) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        let Some(shared) = block.state.upgrade() else {
+            return Status::GUATIAO_ERR_GONE;
+        };
+        // SAFETY: the caller's contract.
+        let Ok(key) = (unsafe { crate::exports::as_str(key) }) else {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        };
+        let snapshot = shared.read();
+        match snapshot.by_key.get(key) {
+            Some(&i) => {
+                // SAFETY: `out` is writable by the caller's contract.
+                unsafe { out.write(snapshot.entries[i].raw) };
+                Status::GUATIAO_OK
+            }
+            None => Status::GUATIAO_ERR_NOT_FOUND,
+        }
+    })
+}
+
+/// The `list` slot: every provider serving a kind, in the host's order.
+///
+/// # Safety
+///
+/// `ctx` is a leaked block's, `kind` is readable, `out` addresses `cap`
+/// writable slots (or is null with `cap` zero), `total` is writable.
+#[cfg(feature = "load")]
+unsafe extern "C" fn services_list(
+    ctx: *mut c_void,
+    kind: Str,
+    out: *mut *const ProviderInfo,
+    cap: usize,
+    total: *mut usize,
+) -> Status {
+    crate::exports::guard(|| {
+        // SAFETY: the caller's contract.
+        let (Some(block), false) = (unsafe { block_of(ctx) }, total.is_null()) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        if cap > 0 && out.is_null() {
+            return Status::GUATIAO_ERR_NULL;
+        }
+        let Some(shared) = block.state.upgrade() else {
+            return Status::GUATIAO_ERR_GONE;
+        };
+        // SAFETY: the caller's contract.
+        let Ok(kind) = (unsafe { crate::exports::as_str(kind) }) else {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        };
+        let snapshot = shared.read();
+        let mut n = 0usize;
+        for entry in snapshot
+            .entries
+            .iter()
+            .filter(|e| kind.is_empty() || e.kinds.contains(&kind))
+        {
+            if n < cap {
+                // SAFETY: `n < cap` and `out` addresses `cap` slots.
+                unsafe { out.add(n).write(entry.raw) };
+            }
+            n += 1;
+        }
+        // SAFETY: `total` is writable by the caller's contract.
+        unsafe { total.write(n) };
+        Status::GUATIAO_OK
+    })
+}
+
+/// The `alloc` slot: the host's allocator, or null.
+///
+/// # Safety
+///
+/// `ctx` is a leaked block's.
+#[cfg(feature = "load")]
+unsafe extern "C" fn services_alloc(ctx: *mut c_void) -> *const crate::value::alloc::Allocator {
+    crate::exports::guard_with(std::ptr::null(), || {
+        // SAFETY: the caller's contract.
+        match unsafe { block_of(ctx) } {
+            Some(block) => block.info.alloc,
+            None => std::ptr::null(),
+        }
+    })
 }
 
 /// Reads a host descriptor, honouring its declared size.
@@ -128,6 +546,7 @@ pub unsafe fn read_host(raw: *const HostInfo) -> Option<HostInfo> {
             host_version: std::ptr::addr_of!((*raw).host_version).read(),
             alloc: std::ptr::null(),
             meta: MaybeNull::null(),
+            services: std::ptr::null(),
         }
     };
 
@@ -141,6 +560,10 @@ pub unsafe fn read_host(raw: *const HostInfo) -> Option<HostInfo> {
     if declared >= HostInfo::meta_end() {
         // SAFETY: as above.
         info.meta = unsafe { std::ptr::addr_of!((*raw).meta).read() };
+    }
+    if declared >= HostInfo::services_end() {
+        // SAFETY: as above.
+        info.services = unsafe { std::ptr::addr_of!((*raw).services).read() };
     }
     Some(info)
 }
@@ -208,12 +631,33 @@ pub struct ProviderView {
     /// Its runtime-availability slot, or `None` when it declares none —
     /// which means available. See [`ProviderInfo::available`].
     pub available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
+    /// The descriptor this was read from, in the library's image, which is
+    /// never unloaded. What a host's services hand a library that asks.
+    pub raw: *const ProviderInfo,
+    /// One table per kind, as `(kind, vtable, vtable_size)`, for a
+    /// provider serving several kinds with a table each. Empty when
+    /// `vtable` serves them all. See [`ProviderInfo::tables`].
+    pub tables: Vec<(&'static str, *const c_void, usize)>,
 }
 
 impl ProviderView {
     /// Whether it serves this kind.
     pub fn supports(&self, kind: &str) -> bool {
         self.kinds.contains(&kind)
+    }
+
+    /// The function table this provider speaks `kind` through, and the
+    /// size it was compiled at: a per-kind table first, then `vtable`
+    /// when `kinds` names the kind. `None` when neither — a kind this
+    /// provider does not serve, or serves as a pure label.
+    pub fn table_for(&self, kind: &str) -> Option<(*const c_void, usize)> {
+        if let Some(&(_, table, size)) = self.tables.iter().find(|(k, _, _)| *k == kind) {
+            return (!table.is_null()).then_some((table, size));
+        }
+        if self.supports(kind) && !self.vtable.is_null() {
+            return Some((self.vtable, self.vtable_size));
+        }
+        None
     }
 
     /// Whether it can actually run here, and why not when it cannot.
@@ -292,6 +736,22 @@ pub struct LibraryView {
     pub providers: Vec<ProviderView>,
 }
 
+/// Why a descriptor a library handed back could not be used.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Rejected {
+    /// Too small, text that is not UTF-8, a null array with a length, a
+    /// stride below the floor, or an element overlapping its neighbour.
+    Malformed,
+    /// The library speaks an envelope version this build does not.
+    /// Appending a field never changes the version; only a change no
+    /// `struct_size` guard can express does, and such a change makes
+    /// every field after it mean something else.
+    UnsupportedAbi {
+        /// What the library declared.
+        declared: u32,
+    },
+}
+
 /// Reads a library descriptor and every provider in it.
 ///
 /// # Safety
@@ -299,21 +759,27 @@ pub struct LibraryView {
 /// `raw` came from a library's entry point and points at a descriptor
 /// that stays valid for the life of the process, which is what never
 /// unloading the library guarantees.
-pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Option<LibraryView> {
+pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Result<LibraryView, Rejected> {
     if raw.is_null() {
-        return None;
+        return Err(Rejected::Malformed);
     }
     // SAFETY: the caller guarantees the leading word is readable.
     let declared = unsafe { std::ptr::addr_of!((*raw).struct_size).read() } as usize;
     if declared < LibraryInfo::floor() {
-        return None;
+        return Err(Rejected::Malformed);
+    }
+
+    // SAFETY: `abi_version` lies within the floor.
+    let abi = unsafe { std::ptr::addr_of!((*raw).abi_version).read() };
+    if abi != super::desc::ABI_VERSION {
+        return Err(Rejected::UnsupportedAbi { declared: abi });
     }
 
     // SAFETY: each field lies within `declared` bytes.
     let (id, version, providers) = unsafe {
         (
-            str_of(std::ptr::addr_of!((*raw).id).read())?,
-            str_of(std::ptr::addr_of!((*raw).version).read())?,
+            str_of(std::ptr::addr_of!((*raw).id).read()).ok_or(Rejected::Malformed)?,
+            str_of(std::ptr::addr_of!((*raw).version).read()).ok_or(Rejected::Malformed)?,
             std::ptr::addr_of!((*raw).providers).read(),
         )
     };
@@ -328,29 +794,47 @@ pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Option<LibraryView
         meta = unsafe { raw_meta.get() };
     }
 
-    let mut out = Vec::with_capacity(providers.len);
-    if providers.len > 0 && providers.ptr.is_null() {
-        return None;
-    }
-    // The library's own element size, never this build's. See
-    // [`Providers`] for what assuming it costs.
+    // Every check on the array runs before anything is allocated for it:
+    // `len` is the library's number, and a corrupt one must be refused,
+    // never reserved for.
     let stride = providers.stride;
-    if providers.len > 0 && stride < ProviderInfo::floor() {
-        return None;
+    if providers.len > 0 && (providers.ptr.is_null() || stride < ProviderInfo::floor()) {
+        return Err(Rejected::Malformed);
     }
+    // The array's byte extent must be addressable at all.
+    let extent = providers
+        .len
+        .checked_mul(stride)
+        .filter(|&bytes| bytes <= isize::MAX as usize)
+        .ok_or(Rejected::Malformed)?;
+    let mut out = Vec::with_capacity(extent / stride.max(1));
     for i in 0..providers.len {
         // SAFETY: the library declared `len` descriptors of `stride` bytes
-        // at `ptr`, so byte arithmetic is what reaches element `i`.
+        // at `ptr`, `i * stride` is within `extent`, and byte arithmetic is
+        // what reaches element `i` at the library's own layout.
         let entry = unsafe { providers.ptr.cast::<u8>().add(i * stride) }.cast::<ProviderInfo>();
         // SAFETY: forwarded.
-        out.push(unsafe { read_provider(entry, stride) }?);
+        out.push(unsafe { read_provider(entry, stride) }.ok_or(Rejected::Malformed)?);
     }
-    Some(LibraryView {
+    Ok(LibraryView {
         id,
         version,
         meta,
         providers: out,
     })
+}
+
+impl ProviderInfo {
+    /// Reads this descriptor out, honouring its declared size.
+    ///
+    /// For a descriptor a host's services handed over: it lives as long as
+    /// the library that declared it, which is for the life of the process.
+    /// `None` when it is below the floor or names text that is not UTF-8.
+    pub fn view(&'static self) -> Option<ProviderView> {
+        // SAFETY: a `&'static ProviderInfo` is a readable descriptor whose
+        // declared size is its own limit.
+        unsafe { read_provider(self, self.struct_size as usize) }
+    }
 }
 
 /// `limit` is how many bytes this descriptor may claim: the array's
@@ -417,42 +901,100 @@ unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<Provid
             } else {
                 None
             },
+            raw,
+            tables: if declared >= ProviderInfo::tables_end() {
+                // SAFETY: the guard established the field is present.
+                read_kind_tables(std::ptr::addr_of!((*raw).tables).read())?
+            } else {
+                Vec::new()
+            },
         })
     }
 }
 
-/// Opens a library, calls its entry point, and **forgets the handle**.
+/// Walks a provider's per-kind tables at the library's stride, refusing
+/// the array the way [`read_library`] refuses a provider array.
 ///
-/// Answers `Ok(None)` when the file has no entry symbol or when the
-/// library declined this host: both are "not a library for us" rather than
-/// failures.
+/// # Safety
+///
+/// `tables` came from a descriptor that lives for the process.
+unsafe fn read_kind_tables(
+    tables: super::desc::KindTables,
+) -> Option<Vec<(&'static str, *const c_void, usize)>> {
+    if tables.len == 0 {
+        return Some(Vec::new());
+    }
+    if tables.ptr.is_null() || tables.stride < KindTable::floor() {
+        return None;
+    }
+    let extent = tables
+        .len
+        .checked_mul(tables.stride)
+        .filter(|&bytes| bytes <= isize::MAX as usize)?;
+    let mut out = Vec::with_capacity(extent / tables.stride);
+    for i in 0..tables.len {
+        // SAFETY: the library declared `len` tables of `stride` bytes at
+        // `ptr`, and `i * stride` is within `extent`.
+        let entry = unsafe { tables.ptr.cast::<u8>().add(i * tables.stride) }.cast::<KindTable>();
+        // SAFETY: the leading word is readable.
+        let declared = unsafe { std::ptr::addr_of!((*entry).struct_size).read() } as usize;
+        if declared < KindTable::floor() || declared > tables.stride {
+            return None;
+        }
+        // SAFETY: each field lies within `declared` bytes.
+        let (kind, vtable, size) = unsafe {
+            (
+                str_of(std::ptr::addr_of!((*entry).kind).read())?,
+                std::ptr::addr_of!((*entry).vtable).read(),
+                std::ptr::addr_of!((*entry).vtable_size).read() as usize,
+            )
+        };
+        out.push((kind, vtable, size));
+    }
+    Some(out)
+}
+
+/// What opening one file came to. Four outcomes, because the registry
+/// reports each differently and a caller acts on each differently.
+#[cfg(feature = "load")]
+#[derive(Debug)]
+pub(crate) enum Opened {
+    /// It mapped, and exports no entry symbol: not a library.
+    NoEntrySymbol,
+    /// Its entry point answered null: a library with nothing for this
+    /// host.
+    Declined,
+    /// Its entry point answered a descriptor this build cannot use.
+    Rejected(Rejected),
+    /// A descriptor, read out.
+    Loaded(LibraryView),
+}
+
+/// Opens a library, calls its entry point, and **forgets the handle**.
 ///
 /// # Safety
 ///
 /// Mapping a library runs its static initialisers, which may do anything.
 /// The caller is responsible for only naming files it is willing to run.
 #[cfg(feature = "load")]
-pub(crate) unsafe fn open(
-    path: &std::path::Path,
-    host: &HostInfo,
-) -> Result<Option<LibraryView>, libloading::Error> {
+pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, libloading::Error> {
     // SAFETY: the caller's side of the contract, stated above.
     let library = unsafe { libloading::Library::new(path)? };
 
-    // SAFETY: the symbol either is absent, which is an error we report,
-    // or has the signature this crate defines for it.
+    // SAFETY: the symbol either is absent, which is an answer, or has the
+    // signature this crate defines for it.
     let entry = unsafe { library.get::<EntryFn>(ENTRY_SYMBOL) };
     let Ok(entry) = entry else {
-        // No entry symbol: not a library. The mapping still stays, because
-        // it has already run whatever it was going to run and unmapping
-        // buys nothing back.
+        // The mapping still stays: it has already run whatever it was
+        // going to run and unmapping buys nothing back.
         std::mem::forget(library);
-        return Ok(None);
+        return Ok(Opened::NoEntrySymbol);
     };
 
     // SAFETY: the library's side of the contract is that its entry point
-    // reads a host descriptor and returns a descriptor or null.
-    let desc = unsafe { entry(host as *const HostInfo) };
+    // reads a host descriptor and returns a descriptor or null. The
+    // descriptor is a block the host keeps for the life of the process.
+    let desc = unsafe { entry(host.as_raw()) };
 
     // FORGOTTEN, NOT DROPPED. Everything the library just handed back
     // points into this mapping: the descriptor, its text, its vtables,
@@ -460,11 +1002,14 @@ pub(crate) unsafe fn open(
     std::mem::forget(library);
 
     if desc.is_null() {
-        return Ok(None);
+        return Ok(Opened::Declined);
     }
     // SAFETY: non-null, from the entry point, and the mapping is
     // permanent.
-    Ok(unsafe { read_library(desc) })
+    Ok(match unsafe { read_library(desc) } {
+        Ok(view) => Opened::Loaded(view),
+        Err(why) => Opened::Rejected(why),
+    })
 }
 
 /// Loads one file the caller named, which is the caller's choice to run
@@ -479,8 +1024,8 @@ pub(crate) unsafe fn open(
 #[cfg(feature = "load")]
 pub(crate) fn open_library(
     path: &std::path::Path,
-    host: &HostInfo,
-) -> Result<Option<LibraryView>, libloading::Error> {
+    host: Host,
+) -> Result<Opened, libloading::Error> {
     // SAFETY: naming a file is choosing to run it, which is the contract
     // stated on `Registry::load_file` and on `open` below.
     unsafe { open(path, host) }
@@ -529,7 +1074,24 @@ mod tests {
             host_version: Str::borrowed("1.0"),
             alloc: std::ptr::null(),
             meta: MaybeNull::null(),
+            services: std::ptr::null(),
         }
+    }
+
+    /// A host from before `services` was appended reads as offering none,
+    /// through both readers.
+    #[test]
+    fn a_host_from_before_services_offers_none() {
+        let value = a_host(HostInfo::meta_end());
+        let (_buf, ptr) = short_of(&value, HostInfo::meta_end());
+        // SAFETY: `_buf` owns the bytes.
+        let read = unsafe { read_host(ptr) }.expect("above the floor");
+        assert!(read.services.is_null(), "past the declared size, so absent");
+        // SAFETY: as above.
+        let host = unsafe { Host::from_raw(ptr) }.expect("above the floor");
+        assert_eq!(host.get("anything").err(), Some(Status::GUATIAO_ERR_NULL));
+        assert_eq!(host.list("anything").err(), Some(Status::GUATIAO_ERR_NULL));
+        assert_eq!(host.id(), "test-host");
     }
 
     /// A host from before `alloc` was appended reads as having none.
@@ -622,7 +1184,7 @@ mod tests {
         let value = a_library(LibraryInfo::floor() - 1);
         let (_buf, ptr) = short_of(&value, size_of::<LibraryInfo>());
         // SAFETY: `_buf` owns the bytes.
-        assert!(unsafe { read_library(ptr) }.is_none());
+        assert!(unsafe { read_library(ptr) }.is_err());
 
         let value = a_library(LibraryInfo::floor());
         let (_buf, ptr) = short_of(&value, LibraryInfo::floor());
@@ -633,6 +1195,22 @@ mod tests {
         assert!(
             view.meta.is_none(),
             "a descriptor that predates `meta` declares none"
+        );
+    }
+
+    /// A library speaking another envelope version is refused by name,
+    /// before any field past the floor is read.
+    #[test]
+    fn a_library_declaring_another_abi_version_is_refused() {
+        let mut value = a_library(size_of::<LibraryInfo>());
+        value.abi_version = crate::library::ABI_VERSION + 1;
+        let (_buf, ptr) = short_of(&value, size_of::<LibraryInfo>());
+        // SAFETY: `_buf` owns the bytes.
+        assert_eq!(
+            unsafe { read_library(ptr) }.unwrap_err(),
+            Rejected::UnsupportedAbi {
+                declared: crate::library::ABI_VERSION + 1
+            }
         );
     }
 
@@ -701,7 +1279,7 @@ mod tests {
         };
         let (_buf, ptr) = short_of(&value, size_of::<LibraryInfo>());
         // SAFETY: `_buf` owns the descriptor and `one` the element.
-        assert!(unsafe { read_library(ptr) }.is_none());
+        assert!(unsafe { read_library(ptr) }.is_err());
     }
 
     /// A `Str` array cannot be a `static` without saying why: it holds a
@@ -725,7 +1303,61 @@ mod tests {
             meta: MaybeNull::null(),
             version: Str::borrowed(""),
             available: None,
+            tables: super::super::desc::KindTables::empty(),
         }
+    }
+
+    /// A provider with a table per kind hands each back by kind, and the
+    /// shared `vtable` answers for the kinds without one.
+    #[test]
+    fn a_provider_with_a_table_per_kind_hands_each_back_by_kind() {
+        use super::super::desc::KindTables;
+
+        struct Tables([KindTable; 2]);
+        // SAFETY: a constant never written; the pointers are sentinels
+        // that are never dereferenced.
+        unsafe impl Sync for Tables {}
+        static TABLES: Tables = Tables([
+            KindTable::new("greeter", 0x10 as *const c_void, 16),
+            KindTable::new("counter", 0x20 as *const c_void, 24),
+        ]);
+
+        let mut value = a_provider(size_of::<ProviderInfo>(), 8);
+        value.vtable = 0x30 as *const c_void;
+        value.tables = KindTables::new(&TABLES.0);
+        let (_buf, ptr) = short_of(&value, size_of::<ProviderInfo>());
+        // SAFETY: `_buf` owns the descriptor; `TABLES` is static.
+        let view =
+            unsafe { read_provider(ptr, size_of::<ProviderInfo>()) }.expect("a full descriptor");
+
+        assert_eq!(view.table_for("greeter"), Some((0x10 as *const c_void, 16)));
+        assert_eq!(view.table_for("counter"), Some((0x20 as *const c_void, 24)));
+        assert_eq!(
+            view.table_for("everything"),
+            None,
+            "the shared vtable answers only for a kind in `kinds`"
+        );
+        assert_eq!(view.table_for("nonesuch"), None);
+
+        // A descriptor from before `tables` reads as having none, and the
+        // shared vtable serves what `kinds` names.
+        let (_buf, ptr) = short_of(&value, ProviderInfo::available_end());
+        let mut older = a_provider(ProviderInfo::available_end(), 8);
+        older.vtable = 0x30 as *const c_void;
+        let (_buf2, ptr2) = short_of(&older, ProviderInfo::available_end());
+        let _ = ptr;
+        // SAFETY: as above.
+        let view =
+            unsafe { read_provider(ptr2, ProviderInfo::available_end()) }.expect("above the floor");
+        assert!(view.tables.is_empty());
+        assert_eq!(view.table_for("greeter"), Some((0x30 as *const c_void, 8)));
+
+        // A stride below the floor refuses the descriptor.
+        let mut bad = value;
+        bad.tables.stride = KindTable::floor() - 1;
+        let (_buf3, ptr3) = short_of(&bad, size_of::<ProviderInfo>());
+        // SAFETY: as above.
+        assert!(unsafe { read_provider(ptr3, size_of::<ProviderInfo>()) }.is_none());
     }
 
     unsafe extern "C" fn refuses(_ctx: *mut c_void, reason: *mut Str) -> bool {

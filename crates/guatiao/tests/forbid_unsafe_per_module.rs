@@ -72,6 +72,9 @@ const UNSAFE_PATHS: &[&str] = &[
     "value/value.rs",
     // The loader, which maps a library and calls a symbol out of it.
     "library/raw.rs",
+    // The kind runtime: every `unsafe` a generated shim or proxy needs,
+    // written once.
+    "library/kind.rs",
     // The `extern "C"` surface.
     "exports",
 ];
@@ -156,11 +159,11 @@ fn unsafe_is_confined_to_one_module() {
             // is the real enforcement and this scan is belt-and-braces:
             // a genuine `unsafe` block in one of these files does not
             // fail here, it fails to COMPILE. Measured, by putting one
-            // in `library/desc.rs`.
-            if trimmed.contains("unsafe extern \"C\" fn")
-                && !trimmed.starts_with("unsafe extern")
-                && !trimmed.starts_with("pub unsafe extern")
-            {
+            // in `library/desc.rs`. The skip is line-based, so a block
+            // sharing a line with such a type would slip past the scan
+            // and still fail to compile.
+            // A type position is `fn(`; a definition is `fn name(`.
+            if trimmed.contains("unsafe extern \"C\" fn(") {
                 continue;
             }
             if line.contains("unsafe") {
