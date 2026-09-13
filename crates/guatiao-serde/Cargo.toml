@@ -12,6 +12,9 @@ exclude = [".*", "*.local.*"]
 
 [lib]
 name = "guatiao_serde"
+# A cdylib as well, because the `extern "C"` surface has to be IN an
+# artifact for a C or Python host to load. An rlib exports nothing.
+crate-type = ["rlib", "cdylib"]
 path = "src/lib.rs"
 
 [features]
@@ -38,6 +41,11 @@ toml = ["dep:toml"]
 # for reading a document somebody else wrote at an FFI boundary.
 yaml = ["dep:serde-saphyr"]
 
+# Renders `include/guatiao_serde.h` from the Rust that declares it. NOT the
+# `extern "C"` surface, which is always compiled -- this is about the file
+# that DECLARES it, which is committed and which most builds only read.
+c-header = ["dep:cbindgen"]
+
 [dependencies]
 guatiao = { path = "../guatiao", version = "0.1.0" }
 # `derive` is NOT enabled: nothing here derives anything. The impls are
@@ -50,6 +58,11 @@ serde = { version = "1", default-features = false, features = ["std"] }
 serde_json = { version = "1", optional = true }
 toml = { version = "1", optional = true }
 serde-saphyr = { version = "1", optional = true }
+
+[build-dependencies]
+# Optional, enabled only by `c-header`, so an ordinary build renders
+# nothing and pulls in no generator.
+cbindgen = { version = "0.29", optional = true }
 
 [dev-dependencies]
 # The formats the tests round-trip through. They are DEV dependencies on

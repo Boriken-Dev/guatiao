@@ -16,6 +16,8 @@
 //! arena, which is the reason the core's constructors have an `_in` form
 //! at all.
 
+#![forbid(unsafe_code)]
+
 use std::fmt;
 
 use serde::Deserializer;

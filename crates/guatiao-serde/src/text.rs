@@ -15,6 +15,8 @@
 //! serialiser. These exist because a caller usually has a string and
 //! wants a value.
 
+#![forbid(unsafe_code)]
+
 use std::fmt;
 
 /// Why a document could not be read or written.
