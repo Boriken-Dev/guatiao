@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   source recorded; equality is structural. The allocator contract gained
   the line that makes the last two sound: an `Allocator` may be called
   from any thread.
+- `Cargo.toml` says `links = "guatiao"` and the build script publishes
+  the committed header's directory as `DEP_GUATIAO_INCLUDE`, so a
+  consumer whose own header `#include`s `guatiao.h` copies it from there.
 - Workspace scaffold: the `guatiao` crate, its `guatiao-derive`
   proc-macro companion and the `guatiao-serde` format crate; feature flags
   `derive`, `c-header` and `load`; and a test workflow over Linux, macOS and
