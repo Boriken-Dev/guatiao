@@ -70,3 +70,7 @@ cbindgen = { version = "0.29", optional = true }
 # consumer reaches for.
 serde_json = { version = "1", features = ["raw_value"] }
 rmp-serde = "1"
+# A real JSON Schema 2020-12 validator, so "a schema IS a JSON Schema" is
+# something a third party checked rather than something we assert. A DEV
+# dependency of this crate and never of guatiao, which has none at all.
+boon = "0.6"
