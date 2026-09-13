@@ -322,6 +322,21 @@ impl Alloc {
             .expect("the constant vtable this crate writes is complete")
     }
 
+    /// The allocator a container recorded, or the crate's own when it
+    /// recorded none: a literal another language wrote, or an empty
+    /// container that has not grown yet.
+    ///
+    /// What `Clone` grows a copy through, so a copy lives where its
+    /// source did.
+    pub(crate) fn recorded_or_rust(raw: *const Allocator) -> Alloc {
+        if raw.is_null() {
+            return Alloc::rust();
+        }
+        // SAFETY: a non-null address a container recorded is an allocator
+        // that outlives the container, by the contract on `Alloc`.
+        unsafe { Alloc::from_raw(raw) }.unwrap_or_else(|_| Alloc::rust())
+    }
+
     /// The allocator's own address, which is what an owned container
     /// stores.
     pub fn as_raw(&self) -> *const Allocator {

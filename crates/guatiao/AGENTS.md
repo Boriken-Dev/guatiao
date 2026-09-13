@@ -151,6 +151,14 @@ Growing either means naming one to adopt: `set_in`, `push_in`.
 `0..k` applied. Nothing leaks, and `src` may be this node or one inside
 it: the source is copied whole before the target is touched.
 
+**`Value`, `Map`, `List`, `Text` and `Buffer` are `Clone`, `PartialEq`,
+`Send` and `Sync`.** `clone()` is a deep copy through the allocator the
+source recorded (the crate's own for a scalar or a literal), and panics
+where the short constructors do; `clone_in(alloc)` is the fallible form
+that names one. Equality is structural, the same as `equal`. `Send` and
+`Sync` rest on the allocator contract below: an `Allocator` may be
+called from any thread.
+
 **Crossing FFI**: a value handed to a foreign caller must be forgotten
 (`std::mem::forget`, `ManuallyDrop`, or a move into `ptr::write`) or Drop
 will free what the far side now owns. The far side frees with
@@ -954,6 +962,11 @@ Contracts that are not in the signatures:
   so a C consumer compares keys without spelling them.
 
 ## The allocator
+
+**An `Allocator` may be called from any thread**, the way Rust's global
+allocator can, because a value built through it is `Send` and `Sync` and
+is freed wherever it ends up. A host handing out an arena synchronises
+it; the crate does not lock on the host's behalf.
 
 An owned container carries the allocator that made it, so growth and free
 never take one. `cap == 0` means the buffer is **not owned** — a literal

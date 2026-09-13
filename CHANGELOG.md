@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`Value`, `Map`, `List`, `Text` and `Buffer` are `Clone`, `PartialEq`,
+  `Send` and `Sync`.** A clone is a deep copy through the allocator the
+  source recorded; equality is structural. The allocator contract gained
+  the line that makes the last two sound: an `Allocator` may be called
+  from any thread.
 - Workspace scaffold: the `guatiao` crate, its `guatiao-derive`
   proc-macro companion and the `guatiao-serde` format crate; feature flags
   `derive`, `c-header` and `load`; and a test workflow over Linux, macOS and

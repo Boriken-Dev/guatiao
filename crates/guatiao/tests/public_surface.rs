@@ -117,3 +117,74 @@ fn an_entry_hands_out_its_value_mutably() {
     assert_eq!(entry.value().as_str(), Some("two"));
     assert_eq!(entry.key(), b"k");
 }
+
+// --- the standard traits the owned types carry ----------------------------
+
+/// `Value`, `Map`, `List`, `Text` and `Buffer` are `Clone` (a deep copy
+/// through the source's own allocator), `PartialEq` (structural), `Send`
+/// and `Sync`: what lets a record type derive `Clone, PartialEq` over them
+/// and a registry hold a schema value behind an `Arc<dyn Trait + Send +
+/// Sync>`.
+#[test]
+fn the_owned_types_are_clone_eq_send_and_sync() {
+    use guatiao::{Buffer, List, Map, Text, Value};
+
+    fn is_send_sync<T: Send + Sync>() {}
+    is_send_sync::<Value>();
+    is_send_sync::<Map>();
+    is_send_sync::<List>();
+    is_send_sync::<Text>();
+    is_send_sync::<Buffer>();
+
+    let mut inner = List::new();
+    inner.push(1).unwrap();
+    inner.push("two").unwrap();
+    let mut map = Map::new();
+    map.set("k", "v").unwrap();
+    map.set("l", inner).unwrap();
+
+    let copy = map.clone();
+    assert_eq!(copy, map);
+    assert_eq!(copy.get("k").and_then(Value::as_str), Some("v"));
+    assert_eq!(
+        copy.get("l").and_then(Value::as_list).map(List::len),
+        Some(2)
+    );
+
+    let mut other = map.clone();
+    other.set("k", "w").unwrap();
+    assert_ne!(other, map, "a changed copy is a different map");
+    drop(other);
+    assert_eq!(copy, map, "and dropping it touched neither");
+
+    let value: Value = map.into();
+    let twin = value.clone();
+    assert_eq!(value, twin);
+    assert_ne!(value, Value::null());
+    assert_eq!(
+        Value::int(3).clone(),
+        Value::int(3),
+        "a scalar has no allocator and still clones"
+    );
+    assert_eq!(
+        Value::number("1.10").unwrap(),
+        Value::number("1.10").unwrap()
+    );
+    assert_ne!(
+        Value::number("1.10").unwrap(),
+        Value::number("1.1").unwrap(),
+        "a number is its text"
+    );
+
+    assert_eq!(Text::new("a").clone(), Text::new("a"));
+    assert_eq!(Buffer::new(b"\x00\xff").clone(), Buffer::new(b"\x00\xff"));
+
+    // Across a thread, and back.
+    let sent = std::thread::spawn(move || {
+        assert_eq!(twin.get("k").and_then(Value::as_str), Some("v"));
+        twin
+    })
+    .join()
+    .expect("the thread returned the value");
+    assert_eq!(sent, value);
+}
