@@ -31,6 +31,12 @@ default = []
 # names the proc-macro crate -- serde's arrangement for `serde_derive`.
 derive = ["dep:guatiao-derive"]
 
+# `#[guatiao::kind]` and `#[derive(Provider)]`: a provider kind as a Rust
+# trait, with the table, the shims and the proxy generated. Turns on
+# `syn/full` in the derive crate, which a consumer deriving only `Schema`
+# should not pay for.
+provider = ["derive", "guatiao-derive/provider"]
+
 # Renders `include/guatiao.h` from the Rust that declares it.
 #
 # NOT the `extern "C"` surface — that is always compiled, because this is

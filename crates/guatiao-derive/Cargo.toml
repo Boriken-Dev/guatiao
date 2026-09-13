@@ -29,3 +29,13 @@ proc-macro = true
 syn = "2"
 quote = "1"
 proc-macro2 = "1"
+
+# `#[guatiao::kind]` parses a whole `trait` item, which needs `syn/full`
+# -- measured at about a third more build time for this crate, so it is
+# paid only by a consumer that turns it on (`guatiao/provider`).
+[features]
+provider = ["syn/full"]
+
+[dev-dependencies]
+# Renders the kind expansion for its snapshot test.
+prettyplease = "0.2"
