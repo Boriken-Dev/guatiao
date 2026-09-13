@@ -132,15 +132,15 @@ pub union Payload {
     /// rather than being defended against at every read. It is the same
     /// reason the tag is a `u32` and not an enum, and it costs a C caller
     /// nothing: `.b = true` still stores 1.
-    pub b: u8,
+    pub(crate) b: u8,
     /// Live when the tag is `GUATIAO_STRING` **or** `GUATIAO_NUMBER`.
-    pub text: ManuallyDrop<Text>,
+    pub(crate) text: ManuallyDrop<Text>,
     /// Live when the tag is `GUATIAO_BYTES`.
-    pub bytes: ManuallyDrop<Buffer>,
+    pub(crate) bytes: ManuallyDrop<Buffer>,
     /// Live when the tag is `GUATIAO_LIST`.
-    pub list: ManuallyDrop<List>,
+    pub(crate) list: ManuallyDrop<List>,
     /// Live when the tag is `GUATIAO_MAP`.
-    pub map: ManuallyDrop<Map>,
+    pub(crate) map: ManuallyDrop<Map>,
 }
 
 /// One value: a tag and its payload.
@@ -150,12 +150,12 @@ pub union Payload {
 #[repr(C)]
 pub struct Value {
     /// One of the `GUATIAO_*` tag constants.
-    pub tag: u32,
+    pub(crate) tag: u32,
     /// Reserved. Always written as zero, so the whole node is
     /// byte-comparable and a C caller has a named field to initialise.
-    pub _pad: u32,
+    pub(crate) _pad: u32,
     /// The payload the tag selects.
-    pub payload: Payload,
+    pub(crate) payload: Payload,
 }
 
 impl fmt::Debug for Payload {
@@ -187,7 +187,81 @@ impl fmt::Debug for Value {
     }
 }
 
+impl Payload {
+    /// A payload holding text. Safe: the arm is a whole owned container,
+    /// and every other arm is the same bytes.
+    pub fn text(text: Text) -> Payload {
+        Payload {
+            text: ManuallyDrop::new(text),
+        }
+    }
+
+    /// A payload holding bytes.
+    pub fn bytes(buffer: Buffer) -> Payload {
+        Payload {
+            bytes: ManuallyDrop::new(buffer),
+        }
+    }
+
+    /// A payload holding a list.
+    pub fn list(list: List) -> Payload {
+        Payload {
+            list: ManuallyDrop::new(list),
+        }
+    }
+
+    /// A payload holding a map.
+    pub fn map(map: Map) -> Payload {
+        Payload {
+            map: ManuallyDrop::new(map),
+        }
+    }
+
+    /// A payload holding a boolean byte: any byte, since a producer may
+    /// write any and a reader treats non-zero as true. The other arms are
+    /// initialised too, so a node built over this is whole whatever its
+    /// tag.
+    pub fn bool(byte: u8) -> Payload {
+        let mut payload = crate::value::mutate::value_null().into_raw_parts().1;
+        payload.b = byte;
+        payload
+    }
+}
+
 impl Value {
+    /// A node from a tag and a payload described by hand: the one door for
+    /// a literal another language declared. Everything else builds through
+    /// the constructors on the kind.
+    ///
+    /// # Safety
+    ///
+    /// `tag` selects the arm `payload` was built with (a string or a
+    /// number over [`Payload::text`], bytes over [`Payload::bytes`], a
+    /// list over [`Payload::list`], a map over [`Payload::map`]), so every
+    /// read of the node reads the arm that is live. The raw `u32`, so a
+    /// producer's tag this build does not know can be declared: such a
+    /// node owns nothing as far as this build can tell, and is passed
+    /// through and never freed into. A boolean, a null or an absent node
+    /// takes [`Payload::bool`].
+    pub unsafe fn from_raw_parts(tag: u32, payload: Payload) -> Value {
+        Value {
+            tag,
+            _pad: 0,
+            payload,
+        }
+    }
+
+    /// The raw tag and the payload, with ownership: this node no longer
+    /// frees them. The tag is the integer, which may be one this build
+    /// does not know.
+    pub fn into_raw_parts(self) -> (u32, Payload) {
+        let this = ManuallyDrop::new(self);
+        // SAFETY: a bitwise copy out of a node that is never dropped, so
+        // the arms have exactly one owner.
+        let payload = unsafe { std::ptr::read(&this.payload) };
+        (this.tag, payload)
+    }
+
     /// The allocator this tree grows through.
     ///
     /// **An owned container records the allocator that made it**, which

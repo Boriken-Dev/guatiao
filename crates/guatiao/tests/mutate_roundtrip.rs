@@ -326,13 +326,13 @@ fn clear_empties_a_map_but_keeps_its_capacity() {
             let mut v = Value::string_in(alloc, key).unwrap();
             unsafe { root.set_in(key, &mut v, alloc) }.unwrap();
         }
-        let cap_before = m.as_map().unwrap().cap;
+        let cap_before = m.as_map().unwrap().capacity();
         assert!(cap_before > 0);
 
         m.clear().unwrap();
         assert_eq!(m.entries().unwrap().len(), 0);
         assert_eq!(
-            m.as_map().unwrap().cap,
+            m.as_map().unwrap().capacity(),
             cap_before,
             "clear keeps the buffer; freeing the node would not"
         );
@@ -633,17 +633,17 @@ fn a_literal_tree_is_readable_growable_and_safe_to_free() {
     static TEXT: &[u8; 5] = b"hello";
 
     with_alloc(|alloc, counter| {
-        let mut literal = Value {
-            tag: u32::from(Tag::GUATIAO_STRING),
-            _pad: 0,
-            payload: guatiao::value::types::Payload {
-                text: std::mem::ManuallyDrop::new(Text {
-                    ptr: TEXT.as_ptr().cast_mut(),
-                    len: 5,
-                    cap: 0,
-                    alloc: std::ptr::null(),
-                }),
-            },
+        let mut literal = // SAFETY: a borrowed literal: `cap == 0`, five readable UTF-8 bytes,
+        // never written, and the tag selects the text arm.
+        unsafe {
+            Value::from_raw_parts(u32::from(Tag::GUATIAO_STRING),
+                Payload::text(Text::from_raw_parts(
+                    TEXT.as_ptr().cast_mut(),
+                    5,
+                    0,
+                    std::ptr::null(),
+                )),
+            )
         };
 
         assert_eq!(literal.as_str(), Some("hello"), "readable as it stands");
@@ -657,17 +657,17 @@ fn a_literal_tree_is_readable_growable_and_safe_to_free() {
         assert_eq!(*TEXT, *b"hello", "the static storage is untouched");
 
         // And a second literal can be grown, adopting the allocator.
-        let mut growable = Value {
-            tag: u32::from(Tag::GUATIAO_STRING),
-            _pad: 0,
-            payload: guatiao::value::types::Payload {
-                text: std::mem::ManuallyDrop::new(Text {
-                    ptr: TEXT.as_ptr().cast_mut(),
-                    len: 5,
-                    cap: 0,
-                    alloc: std::ptr::null(),
-                }),
-            },
+        let mut growable = // SAFETY: a borrowed literal: `cap == 0`, five readable UTF-8 bytes,
+        // never written, and the tag selects the text arm.
+        unsafe {
+            Value::from_raw_parts(u32::from(Tag::GUATIAO_STRING),
+                Payload::text(Text::from_raw_parts(
+                    TEXT.as_ptr().cast_mut(),
+                    5,
+                    0,
+                    std::ptr::null(),
+                )),
+            )
         };
         unsafe { growable.push_str(" world", alloc) }.unwrap();
         assert_eq!(growable.as_str(), Some("hello world"));
@@ -683,16 +683,17 @@ fn a_literal_tree_is_readable_growable_and_safe_to_free() {
 #[test]
 fn a_bool_byte_a_producer_should_not_have_written_is_still_defined() {
     with_alloc(|_alloc, _| {
-        let mut v = Value::bool(false);
-        // What a foreign producer can put there.
-        v.payload.b = 2;
+        // What a foreign producer can put there, through the raw door.
+        // SAFETY: a boolean node owns nothing; any byte is a valid arm.
+        let v = unsafe { Value::from_raw_parts(u32::from(Tag::GUATIAO_BOOL), Payload::bool(2)) };
         assert_eq!(
             v.as_bool(),
             Some(true),
             "any non-zero byte is true, and reading it is defined"
         );
 
-        v.payload.b = 0;
+        // SAFETY: as above.
+        let v = unsafe { Value::from_raw_parts(u32::from(Tag::GUATIAO_BOOL), Payload::bool(0)) };
         assert_eq!(v.as_bool(), Some(false));
     });
 }
@@ -709,8 +710,9 @@ fn an_unknown_tag_is_skippable_rather_than_fatal() {
         let mut known = Value::string_in(alloc, "readable").unwrap();
         unsafe { m.set_in("known", &mut known, alloc) }.unwrap();
 
-        let mut from_the_future = Value::null();
-        from_the_future.tag = 4242;
+        // SAFETY: a tag this build does not know owns nothing it can see,
+        // over a payload every arm of which is initialised.
+        let mut from_the_future = unsafe { Value::from_raw_parts(4242, Payload::bool(0)) };
         unsafe { m.set_in("future", &mut from_the_future, alloc) }.unwrap();
 
         let unknown = m.get("future").unwrap();
@@ -941,12 +943,9 @@ fn the_debug_dump_walks_a_tree_and_shows_bytes_as_bytes() {
 /// Borrowed text, as a C brace initialiser writes it: `cap == 0` and no
 /// allocator, so the buffer is never freed.
 fn text_lit(bytes: &'static [u8]) -> Text {
-    Text {
-        ptr: bytes.as_ptr().cast_mut(),
-        len: bytes.len(),
-        cap: 0,
-        alloc: std::ptr::null(),
-    }
+    // SAFETY: a borrowed literal: `cap == 0`, `len` readable bytes that
+    // live for the program, never written through this text.
+    unsafe { Text::from_raw_parts(bytes.as_ptr().cast_mut(), bytes.len(), 0, std::ptr::null()) }
 }
 
 /// A STRING node over borrowed bytes, whatever those bytes are.
@@ -956,12 +955,13 @@ fn text_lit(bytes: &'static [u8]) -> Text {
 /// string a reader cannot decode is to declare one, which a C producer
 /// can do by accident.
 fn string_lit(bytes: &'static [u8]) -> Value {
-    Value {
-        tag: u32::from(Tag::GUATIAO_STRING),
-        _pad: 0,
-        payload: Payload {
-            text: std::mem::ManuallyDrop::new(text_lit(bytes)),
-        },
+    // SAFETY: the tag selects the text arm the payload was built with.
+    // The bytes need not be UTF-8: that is what the raw door is for.
+    unsafe {
+        Value::from_raw_parts(
+            u32::from(Tag::GUATIAO_STRING),
+            Payload::text(text_lit(bytes)),
+        )
     }
 }
 
@@ -987,17 +987,18 @@ fn a_literal_list_and_map_are_mutated_in_place_and_free_to_nothing() {
         // node really owns is released through `free` below, and the
         // counter is what proves it.
         let mut items = std::mem::ManuallyDrop::new([string_lit(A), string_lit(B)]);
-        let mut list = Value {
-            tag: u32::from(Tag::GUATIAO_LIST),
-            _pad: 0,
-            payload: Payload {
-                list: std::mem::ManuallyDrop::new(List {
-                    ptr: items.as_mut_ptr(),
-                    len: 2,
-                    cap: 0,
-                    alloc: std::ptr::null(),
-                }),
-            },
+        // SAFETY: two well-formed nodes in a writable local array, borrowed
+        // (`cap == 0`), and the tag selects the list arm.
+        let mut list = unsafe {
+            Value::from_raw_parts(
+                u32::from(Tag::GUATIAO_LIST),
+                Payload::list(List::from_raw_parts(
+                    items.as_mut_ptr(),
+                    2,
+                    0,
+                    std::ptr::null(),
+                )),
+            )
         };
 
         let before = counter.frees.get();
@@ -1029,26 +1030,20 @@ fn a_literal_list_and_map_are_mutated_in_place_and_free_to_nothing() {
         // --- a map of two borrowed entries, `ManuallyDrop` for the
         // reason above.
         let mut entries = std::mem::ManuallyDrop::new([
-            Entry {
-                key: text_lit(A),
-                value: string_lit(A),
-            },
-            Entry {
-                key: text_lit(B),
-                value: string_lit(B),
-            },
+            Entry::new(text_lit(A), string_lit(A)),
+            Entry::new(text_lit(B), string_lit(B)),
         ]);
-        let mut map = Value {
-            tag: u32::from(Tag::GUATIAO_MAP),
-            _pad: 0,
-            payload: Payload {
-                map: std::mem::ManuallyDrop::new(Map {
-                    ptr: entries.as_mut_ptr(),
-                    len: 2,
-                    cap: 0,
-                    alloc: std::ptr::null(),
-                }),
-            },
+        // SAFETY: as for the list, over entries.
+        let mut map = unsafe {
+            Value::from_raw_parts(
+                u32::from(Tag::GUATIAO_MAP),
+                Payload::map(Map::from_raw_parts(
+                    entries.as_mut_ptr(),
+                    2,
+                    0,
+                    std::ptr::null(),
+                )),
+            )
         };
 
         let before = counter.frees.get();
@@ -1094,9 +1089,19 @@ fn two_different_unreadable_strings_are_not_equal() {
 
     // A NUMBER stores its digits in the same container and had the same
     // hole.
-    let mut a = string_lit(X);
-    let mut b = string_lit(Y);
-    a.tag = u32::from(Tag::GUATIAO_NUMBER);
-    b.tag = u32::from(Tag::GUATIAO_NUMBER);
+    // SAFETY: the text arm is the live one under a NUMBER tag too; the
+    // digits need not parse for `equal` to compare them.
+    let a = unsafe {
+        Value::from_raw_parts(
+            u32::from(Tag::GUATIAO_NUMBER),
+            string_lit(X).into_raw_parts().1,
+        )
+    };
+    let b = unsafe {
+        Value::from_raw_parts(
+            u32::from(Tag::GUATIAO_NUMBER),
+            string_lit(Y).into_raw_parts().1,
+        )
+    };
     assert!(!equal(&a, &b));
 }
