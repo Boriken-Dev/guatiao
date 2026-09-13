@@ -220,9 +220,9 @@ fn a_macro_exported_schema_is_callable_by_name() {
         // A second invocation in the same crate, which is the case that
         // would collide if the macro named its Rust function.
         b"hello_library_ledger_schema\0".as_slice(),
-        // And the versioned arm: MAJOR only, the way a soname is
-        // `libfoo.so.<major>`.
-        b"hello_library_v0_ledger_schema\0".as_slice(),
+        // The versioned arm. `minor` here because the example is a 0.x
+        // crate, where the major is always 0 and separates nothing.
+        b"hello_library_v0_1_ledger_schema\0".as_slice(),
     ] {
         // SAFETY: the symbol has the signature the macro emits.
         let f = unsafe { lib.get::<SchemaFn>(name) }

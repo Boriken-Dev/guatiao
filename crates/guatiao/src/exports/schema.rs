@@ -373,16 +373,49 @@ pub unsafe fn schema_export<T: crate::schema::Schema>(
 /// expansion site, with `-` written as `_` the way Cargo already writes it
 /// for a library target.
 ///
-/// Two other forms, for when that is not what you want:
+/// # Two builds side by side
+///
+/// Loading two versions of one library into a process needs their symbols
+/// to differ, so how much of the version appears is an argument:
 ///
 /// ```ignore
-/// // Version in the symbol, so two versions coexist in one process.
-/// guatiao::export_schema!(Connection, "connection", versioned);
-/// // -> acme_net_v0_connection_schema
-///
-/// // Or say the whole thing yourself.
-/// guatiao::export_schema!(Connection, symbol = "acme_conn_v2");
+/// guatiao::export_schema!(Connection, "connection", version = major);
+/// // -> acme_net_v1_connection_schema
+/// guatiao::export_schema!(Connection, "connection", version = minor);
+/// // -> acme_net_v1_2_connection_schema
+/// guatiao::export_schema!(Connection, "connection", version = patch);
+/// // -> acme_net_v1_2_3_connection_schema
 /// ```
+///
+/// **`major` is the one to reach for**, because it is what C already
+/// models: a soname is `libfoo.so.<major>`, major versions are presumed
+/// ABI incompatible and minor ones presumed compatible, and the real
+/// filename carries major.minor so builds coexist on disk. A symbol that
+/// changed on every minor bump would break exactly what that convention
+/// protects.
+///
+/// `minor` and `patch` are for when that is not enough — two builds semver
+/// calls compatible that still must not share a symbol, and **anything
+/// below 1.0**, where the major is always 0 and `major` separates nothing.
+/// Cargo treats 0.y as the compatibility unit and C has no equivalent, so
+/// a pre-1.0 library keeping two builds apart wants `minor` at least.
+///
+/// # Any other shape
+///
+/// `symbol` takes an expression, not just a literal, so `concat!` composes
+/// whatever the host expects — including the `@` an ELF consumer may look
+/// up, which no C identifier could hold:
+///
+/// ```ignore
+/// guatiao::export_schema!(
+///     Connection,
+///     symbol = concat!("acme_net@v", env!("CARGO_PKG_VERSION"), "_connection")
+/// );
+/// ```
+///
+/// That is legal in an export table and unusable from a C header, which is
+/// the right trade when the host resolves it by name at run time rather
+/// than linking against it.
 ///
 /// `versioned` uses the **major** version and nothing else, which is what
 /// a C library already does: a soname is `libfoo.so.<major>`, because
@@ -420,7 +453,7 @@ macro_rules! export_schema {
             ::core::concat!(::core::env!("CARGO_PKG_NAME"), "_", $label, "_schema")
         );
     };
-    ($ty:ty, $label:literal, versioned) => {
+    ($ty:ty, $label:literal, version = major) => {
         $crate::export_schema!(
             @emit $ty,
             ::core::concat!(
@@ -433,7 +466,39 @@ macro_rules! export_schema {
             )
         );
     };
-    ($ty:ty, symbol = $symbol:literal) => {
+    ($ty:ty, $label:literal, version = minor) => {
+        $crate::export_schema!(
+            @emit $ty,
+            ::core::concat!(
+                ::core::env!("CARGO_PKG_NAME"),
+                "_v",
+                ::core::env!("CARGO_PKG_VERSION_MAJOR"),
+                "_",
+                ::core::env!("CARGO_PKG_VERSION_MINOR"),
+                "_",
+                $label,
+                "_schema"
+            )
+        );
+    };
+    ($ty:ty, $label:literal, version = patch) => {
+        $crate::export_schema!(
+            @emit $ty,
+            ::core::concat!(
+                ::core::env!("CARGO_PKG_NAME"),
+                "_v",
+                ::core::env!("CARGO_PKG_VERSION_MAJOR"),
+                "_",
+                ::core::env!("CARGO_PKG_VERSION_MINOR"),
+                "_",
+                ::core::env!("CARGO_PKG_VERSION_PATCH"),
+                "_",
+                $label,
+                "_schema"
+            )
+        );
+    };
+    ($ty:ty, symbol = $symbol:expr) => {
         $crate::export_schema!(@emit $ty, $symbol);
     };
     (@emit $ty:ty, $name:expr) => {

@@ -317,5 +317,7 @@ guatiao::export_schema!(Greeting, "greeting");
 // Two in one crate, which is the case that would collide if the macro
 // named the Rust function rather than only the symbol.
 guatiao::export_schema!(Ledger, "ledger");
-// And the version in the name, so two of these can sit in one process.
-guatiao::export_schema!(Ledger, "ledger", versioned);
+// And the version in the name, so two builds of this library can sit in
+// one process. `minor` rather than `major` because this is a 0.x crate —
+// below 1.0 the major is always 0 and separates nothing.
+guatiao::export_schema!(Ledger, "ledger", version = minor);
