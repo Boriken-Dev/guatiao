@@ -269,6 +269,9 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
             providers: Providers {
                 ptr: providers.as_ptr(),
                 len: providers.len(),
+                // The size THIS build lays the array out at, which is what
+                // lets a newer host walk it correctly.
+                stride: size_of::<ProviderInfo>(),
             },
             // SAFETY-adjacent: the box outlives the process, because
             // `Registered` is held in a `OnceLock` that is never cleared.

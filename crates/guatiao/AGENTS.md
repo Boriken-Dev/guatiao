@@ -382,6 +382,14 @@ The guard is `>=` against offset-plus-size, not `>` against the offset, so
 a descriptor declaring only PART of a slot reads it as absent rather than
 splicing half a pointer with whatever followed.
 
+**`struct_size` cannot version an ARRAY's element size.** It places the
+fields within one element; finding element `i` needs the size the library
+laid the array out at. So `Providers` carries `{ptr, len, stride}`, a
+reader walks by bytes, and it refuses a stride below `ProviderInfo::floor()`
+or an element whose own `struct_size` exceeds the stride (which would
+overlap its neighbour). `Providers::new(&SLICE)` sets the stride for you —
+a hand-set one is a number to get wrong exactly once.
+
 Appending `meta` is what this machinery is for, and it did not move
 `ABI_VERSION` or any `floor()`: a library built before it declares a
 shorter `struct_size`, and the host reads `meta` as absent.

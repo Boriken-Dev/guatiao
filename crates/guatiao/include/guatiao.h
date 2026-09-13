@@ -688,6 +688,19 @@ typedef struct guatiao_provider_info {
 
  A view, like every other `{ptr, len}` in this crate: the library owns
  the array.
+
+ # Why it carries a stride
+
+ **`struct_size` cannot version an array's element size.** Every
+ descriptor here declares its own size and a reader guards each
+ appended field against it — but that only places the fields *within*
+ an element. Finding element `i` needs the size the LIBRARY laid the
+ array out at, and a reader that assumed its own would land inside an
+ element built before its newest slot existed, read whatever sits at
+ that offset as a `struct_size`, and guard every field against a number
+ it invented.
+
+ So the library states the stride and a reader walks by bytes.
  */
 typedef struct guatiao_providers {
   /*
@@ -698,6 +711,15 @@ typedef struct guatiao_providers {
    How many.
    */
   size_t len;
+  /*
+   `sizeof(guatiao_provider_info)` as the LIBRARY compiled it, which
+   is the array's stride in bytes.
+
+   Always the element size, even for one element: a reader refuses a
+   stride below [`ProviderInfo::floor`], and refuses an element whose
+   own `struct_size` exceeds it, which would overlap its neighbour.
+   */
+  size_t stride;
 } guatiao_providers;
 
 /*

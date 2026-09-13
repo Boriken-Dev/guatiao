@@ -122,6 +122,19 @@ impl HostInfo {
 ///
 /// A view, like every other `{ptr, len}` in this crate: the library owns
 /// the array.
+///
+/// # Why it carries a stride
+///
+/// **`struct_size` cannot version an array's element size.** Every
+/// descriptor here declares its own size and a reader guards each
+/// appended field against it — but that only places the fields *within*
+/// an element. Finding element `i` needs the size the LIBRARY laid the
+/// array out at, and a reader that assumed its own would land inside an
+/// element built before its newest slot existed, read whatever sits at
+/// that offset as a `struct_size`, and guard every field against a number
+/// it invented.
+///
+/// So the library states the stride and a reader walks by bytes.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Providers {
@@ -129,6 +142,37 @@ pub struct Providers {
     pub ptr: *const ProviderInfo,
     /// How many.
     pub len: usize,
+    /// `sizeof(guatiao_provider_info)` as the LIBRARY compiled it, which
+    /// is the array's stride in bytes.
+    ///
+    /// Always the element size, even for one element: a reader refuses a
+    /// stride below [`ProviderInfo::floor`], and refuses an element whose
+    /// own `struct_size` exceeds it, which would overlap its neighbour.
+    pub stride: usize,
+}
+
+impl Providers {
+    /// A borrowed array, with the stride this build lays it out at.
+    ///
+    /// The way to write one: a hand-set stride is a number to get wrong
+    /// exactly once.
+    pub const fn new(providers: &'static [ProviderInfo]) -> Providers {
+        Providers {
+            ptr: providers.as_ptr(),
+            len: providers.len(),
+            stride: size_of::<ProviderInfo>(),
+        }
+    }
+
+    /// No providers, which is a library that loaded and had nothing for
+    /// this host.
+    pub const fn empty() -> Providers {
+        Providers {
+            ptr: std::ptr::null(),
+            len: 0,
+            stride: size_of::<ProviderInfo>(),
+        }
+    }
 }
 
 /// What a library says about itself, on the way out.

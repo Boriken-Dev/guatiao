@@ -289,11 +289,18 @@ pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Option<LibraryView
     if providers.len > 0 && providers.ptr.is_null() {
         return None;
     }
+    // The library's own element size, never this build's. See
+    // [`Providers`] for what assuming it costs.
+    let stride = providers.stride;
+    if providers.len > 0 && stride < ProviderInfo::floor() {
+        return None;
+    }
     for i in 0..providers.len {
-        // SAFETY: the library declared `len` descriptors at `ptr`.
-        let entry = unsafe { providers.ptr.add(i) };
+        // SAFETY: the library declared `len` descriptors of `stride` bytes
+        // at `ptr`, so byte arithmetic is what reaches element `i`.
+        let entry = unsafe { providers.ptr.cast::<u8>().add(i * stride) }.cast::<ProviderInfo>();
         // SAFETY: forwarded.
-        out.push(unsafe { read_provider(entry) }?);
+        out.push(unsafe { read_provider(entry, stride) }?);
     }
     Some(LibraryView {
         id,
@@ -303,13 +310,19 @@ pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Option<LibraryView
     })
 }
 
+/// `limit` is how many bytes this descriptor may claim: the array's
+/// stride, or its own size when it stands alone.
+///
 /// # Safety
 ///
 /// `raw` points at a provider descriptor declaring its own size.
-unsafe fn read_provider(raw: *const ProviderInfo) -> Option<ProviderView> {
+unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<ProviderView> {
     // SAFETY: the caller guarantees the leading word is readable.
     let declared = unsafe { std::ptr::addr_of!((*raw).struct_size).read() } as usize;
-    if declared < ProviderInfo::floor() {
+    // Above the floor, and not past its neighbour: an element claiming
+    // more than the stride overlaps the next one, and every field it
+    // reads beyond the stride belongs to that one.
+    if declared < ProviderInfo::floor() || declared > limit {
         return None;
     }
     // SAFETY: each field lies within `declared` bytes.
@@ -527,10 +540,7 @@ mod tests {
             abi_version: crate::library::ABI_VERSION,
             id: Str::borrowed("lib"),
             version: Str::borrowed("0.1.0"),
-            providers: Providers {
-                ptr: std::ptr::null(),
-                len: 0,
-            },
+            providers: Providers::empty(),
             meta: MaybeNull::null(),
         }
     }
@@ -554,6 +564,74 @@ mod tests {
         );
     }
 
+    /// Two providers laid out at a SMALLER stride than this build's.
+    ///
+    /// **Two, because element 0 lands correctly whatever the stride.** A
+    /// reader walking at its own element size passes every one-provider
+    /// test there is and lands inside element 1 here, where it reads the
+    /// 0xAA tail as a `struct_size` and guards every field against it.
+    #[test]
+    fn a_provider_array_is_walked_at_the_librarys_stride() {
+        let stride = ProviderInfo::floor();
+        assert!(
+            stride < size_of::<ProviderInfo>(),
+            "a slot has been appended since v1, so the old element is smaller"
+        );
+
+        let first = a_provider(stride, 0);
+        let mut second = a_provider(stride, 0);
+        second.id = Str::borrowed("second");
+
+        let words = (stride * 2).div_ceil(size_of::<u64>());
+        let mut array = vec![0u64; words];
+        let base = array.as_mut_ptr().cast::<u8>();
+        // SAFETY: `array` owns `words * 8` bytes, which covers both
+        // elements; the tail is the sentinel so a misread is visible.
+        unsafe {
+            std::ptr::write_bytes(base, TAIL, words * size_of::<u64>());
+            std::ptr::copy_nonoverlapping(
+                (&first as *const ProviderInfo).cast::<u8>(),
+                base,
+                stride,
+            );
+            std::ptr::copy_nonoverlapping(
+                (&second as *const ProviderInfo).cast::<u8>(),
+                base.add(stride),
+                stride,
+            );
+        }
+
+        let mut value = a_library(size_of::<LibraryInfo>());
+        value.providers = Providers {
+            ptr: array.as_ptr().cast(),
+            len: 2,
+            stride,
+        };
+        let (_buf, ptr) = short_of(&value, size_of::<LibraryInfo>());
+        // SAFETY: `_buf` owns the descriptor and `array` the elements.
+        let view = unsafe { read_library(ptr) }.expect("both providers are readable");
+
+        assert_eq!(view.providers.len(), 2);
+        assert_eq!(view.providers[0].id, "hello");
+        assert_eq!(view.providers[1].id, "second");
+    }
+
+    /// A stride below the floor cannot be an element, so the array is not
+    /// walked at all.
+    #[test]
+    fn a_provider_array_whose_stride_is_below_the_floor_is_refused() {
+        let one = a_provider(ProviderInfo::floor(), 0);
+        let mut value = a_library(size_of::<LibraryInfo>());
+        value.providers = Providers {
+            ptr: &one,
+            len: 1,
+            stride: ProviderInfo::floor() - 1,
+        };
+        let (_buf, ptr) = short_of(&value, size_of::<LibraryInfo>());
+        // SAFETY: `_buf` owns the descriptor and `one` the element.
+        assert!(unsafe { read_library(ptr) }.is_none());
+    }
+
     fn a_provider(size: usize, vtable_size: u32) -> ProviderInfo {
         ProviderInfo {
             struct_size: size as u32,
@@ -573,7 +651,7 @@ mod tests {
         let value = a_provider(ProviderInfo::floor() - 1, 0);
         let (_buf, ptr) = short_of(&value, size_of::<ProviderInfo>());
         // SAFETY: `_buf` owns the bytes.
-        assert!(unsafe { read_provider(ptr) }.is_none());
+        assert!(unsafe { read_provider(ptr, size_of::<ProviderInfo>()) }.is_none());
     }
 
     /// The slot appended after the guards were written, read both ways.
@@ -599,7 +677,8 @@ mod tests {
         let value = a_provider(ProviderInfo::floor(), 0);
         let (_buf, ptr) = short_of(&value, ProviderInfo::floor());
         // SAFETY: as above.
-        let view = unsafe { read_provider(ptr) }.expect("a floor-sized provider");
+        let view =
+            unsafe { read_provider(ptr, ProviderInfo::floor()) }.expect("a floor-sized provider");
         assert!(view.meta.is_none());
     }
 
@@ -644,7 +723,8 @@ mod tests {
         value.vtable = table.as_ptr().cast();
         let (_buf, ptr) = short_of(&value, size_of::<ProviderInfo>());
         // SAFETY: `_buf` owns the descriptor and `table` the vtable.
-        let view = unsafe { read_provider(ptr) }.expect("a full descriptor");
+        let view =
+            unsafe { read_provider(ptr, size_of::<ProviderInfo>()) }.expect("a full descriptor");
 
         assert_eq!(
             view.vtable_size,
