@@ -19,9 +19,13 @@
 //!
 //! # Skipping
 //!
-//! With no C compiler the test prints a stated skip and passes. A missing
-//! toolchain is an environment fact; failing over it would make the suite
-//! red on machines where nothing is wrong.
+//! With no C compiler the COMPILE test prints a stated skip and passes: a
+//! missing toolchain is an environment fact, and failing over it would
+//! make the suite red on machines where nothing is wrong.
+//!
+//! The header-drift test below never skips. `build.rs` renders the header
+//! on every build, so the comparison needs nothing installed — and a
+//! check that can skip is off on exactly the machine that needed it.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -131,16 +135,26 @@ fn the_c_consumer_reads_a_literal_tree_with_nothing_linked() {
     println!("{}", stdout.trim());
 }
 
-/// The committed header is what a fresh render produces.
+/// The committed header is what this build rendered.
 ///
 /// Without this, an edit to the Rust that nobody regenerated ships a
 /// header describing a different ABI — and the consumer that finds out is
 /// somebody else's.
+///
+/// `build.rs` renders into `OUT_DIR` on every build and hands the path
+/// over in `GUATIAO_GENERATED_HEADER`, so this compares two files and has
+/// no skip in it. A check that can skip is a check that is off on exactly
+/// the machine that needed it.
+// Gated on the feature because `build.rs` only renders under it, so
+// `GUATIAO_GENERATED_HEADER` only exists there. Not the same kind of
+// conditional as a tool on PATH: CI runs `--all-features`, so this
+// runs on every push rather than on whichever machine happened to
+// have cbindgen installed.
+#[cfg(feature = "c-exports")]
 #[test]
-fn the_committed_header_is_what_cbindgen_produces() {
+fn the_committed_header_is_what_this_build_rendered() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let committed = manifest.join("include/guatiao.h");
-    let config = manifest.join("cbindgen.toml");
 
     let text = std::fs::read_to_string(&committed).expect("the header is committed");
     assert!(
@@ -150,38 +164,19 @@ fn the_committed_header_is_what_cbindgen_produces() {
          regeneration a diff"
     );
 
-    if Command::new("cbindgen").arg("--version").output().is_err() {
-        println!(
-            "skipped: cbindgen is not on PATH, so the committed header could \
-             not be compared against a fresh render. Install it with \
-             `cargo install cbindgen` to close this hole."
-        );
-        return;
-    }
+    let rendered = env!("GUATIAO_GENERATED_HEADER");
+    let fresh = std::fs::read_to_string(rendered).expect("build.rs rendered the header");
 
-    let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("guatiao_fresh.h");
-    let render = Command::new("cbindgen")
-        .arg("--config")
-        .arg(&config)
-        .args(["--crate", "guatiao", "--output"])
-        .arg(&out)
-        .current_dir(&manifest)
-        .output()
-        .expect("cbindgen answered --version");
-    assert!(
-        render.status.success(),
-        "cbindgen failed:\n{}",
-        String::from_utf8_lossy(&render.stderr)
-    );
-
-    let fresh = std::fs::read_to_string(&out).expect("cbindgen wrote its output");
     assert_eq!(
         first_difference(&text, &fresh),
         None,
-        "the committed header is not what the current source renders. \
-         Regenerate it:\n  cbindgen --config {} --crate guatiao --output {}",
-        config.display(),
-        committed.display()
+        "the committed header is not what this build renders. Regenerate it:\n  \
+         GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-exports"
+    );
+    assert_eq!(
+        text.len(),
+        fresh.len(),
+        "the two agree line by line but differ in length, so one ends early"
     );
 }
 

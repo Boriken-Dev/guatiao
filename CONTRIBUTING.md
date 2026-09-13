@@ -43,11 +43,11 @@ layout and the rules that the test suite enforces rather than describes:
 
 ## The C header is generated
 
-`crates/guatiao/include/guatiao.h` is produced by cbindgen from the Rust
+`crates/guatiao/include/guatiao.h` is rendered by `build.rs` from the Rust
 source and committed. Do not hand-edit it. Change the Rust, then:
 
 ```bash
-cbindgen --config crates/guatiao/cbindgen.toml --crate guatiao --output crates/guatiao/include/guatiao.h
+GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-exports
 ```
 
 A test compares the committed header against a fresh render, so a change to
