@@ -158,6 +158,26 @@ impl<'de> Visitor<'de> for ValueSeed {
         // A key arrives as a `String` rather than borrowed, because a
         // format may have had to unescape it and a borrowed key would then
         // point at a buffer that does not outlive the call.
+        let Some(first) = access.next_key::<String>()? else {
+            return Ok(map);
+        };
+
+        // A NUMBER WEARING A MAP'S CLOTHES. With
+        // `serde_json/arbitrary_precision` on, `deserialize_any` reports
+        // every number as a one-entry map under this reserved key, whose
+        // value is the number's text. Reading it is NOT behind a feature
+        // of this crate, and that is the point: cargo unifies features, so
+        // ANY crate in a consumer's graph can turn that on. A reader that
+        // did not know the token would then quietly turn every number in
+        // every document into a map — a bug with no error attached, caused
+        // by a dependency this crate never named.
+        if first == RAW_NUMBER {
+            let text: String = access.next_value()?;
+            return number(self.alloc, &text);
+        }
+
+        let value = access.next_value_seed(self)?;
+        map.set(&first, value).map_err(A::Error::custom)?;
         while let Some(key) = access.next_key::<String>()? {
             let value = access.next_value_seed(self)?;
             // A repeated key REPLACES, which is what `set` does and what a
@@ -168,6 +188,16 @@ impl<'de> Visitor<'de> for ValueSeed {
         Ok(map)
     }
 }
+
+/// serde_json's reserved key for a number carried as its own text.
+///
+/// **Not the token the writer uses**, which is the mistake this comment
+/// exists to stop somebody repeating. The writer splices raw JSON through
+/// `$serde_json::private::RawValue`, which may hold any document at all;
+/// an arbitrary-precision NUMBER arrives under the token below, and only
+/// that one can safely be read as a number. Measured, after assuming they
+/// were the same and watching every number become a map.
+const RAW_NUMBER: &str = "$serde_json::private::Number";
 
 /// A number from its text, or the error saying it is not one.
 fn number<E: serde::de::Error>(alloc: Alloc, text: &str) -> Result<Value, E> {
@@ -237,12 +267,33 @@ mod tests {
             Some("18446744073709551615")
         );
 
-        // And past that, an f64's shortest round-tripping spelling.
-        assert_eq!(read("1.10").as_number_str(), Some("1.1"));
-        assert_eq!(
-            read("123456789012345678901234567890").as_number_str(),
-            Some("1.2345678901234568e29")
-        );
+        // And past that, it depends on whether the format was asked to
+        // hand the text over.
+        #[cfg(not(feature = "arbitrary-numbers"))]
+        {
+            assert_eq!(read("1.10").as_number_str(), Some("1.1"));
+            assert_eq!(
+                read("123456789012345678901234567890").as_number_str(),
+                Some("1.2345678901234568e29")
+            );
+        }
+        #[cfg(feature = "arbitrary-numbers")]
+        {
+            // The token path: exact, including the SPELLING, which is
+            // more than an arbitrary-precision NUMBER type preserves —
+            // one of those normalises `1.10` to `1.1` because it holds a
+            // value. This model holds the text.
+            assert_eq!(read("1.10").as_number_str(), Some("1.10"));
+            assert_eq!(
+                read("123456789012345678901234567890").as_number_str(),
+                Some("123456789012345678901234567890")
+            );
+            // `1e400` comes back `1e+400`: serde_json writes the
+            // exponent's sign in. The MAGNITUDE is exact, which is what
+            // no `f64` could have done; the spelling is the format's to
+            // normalise and this is what it chose.
+            assert_eq!(read("1e400").as_number_str(), Some("1e+400"));
+        }
 
         // WRITING is exact whatever the magnitude, which is the half this
         // crate does control.
