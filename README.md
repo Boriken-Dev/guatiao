@@ -46,7 +46,7 @@ Optional features:
 | Flag | Adds | Needed for |
 | --- | --- | --- |
 | `derive` | `guatiao-derive` | `#[derive(ToValue, FromValue, Schema)]` |
-| `c-exports` | nothing | exporting the C mutation functions from your artifact |
+| `c-exports` | nothing | the `extern "C"` surface, and a `cdylib` a C consumer links |
 
 A default build pulls in nothing.
 

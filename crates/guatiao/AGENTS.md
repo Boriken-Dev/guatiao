@@ -369,8 +369,17 @@ compiled before the last field was appended does not have.
 
 # The C surface (feature `c-exports`)
 
-Enabling the feature adds `#[unsafe(no_mangle)] extern "C"` wrappers;
-whichever artifact enables it exports them. The header at
+Enabling the feature adds `#[unsafe(no_mangle)] extern "C"` wrappers. The
+crate is `crate-type = ["rlib", "cdylib"]`, so one package is both the
+Rust library and the artifact a C consumer links — `guatiao.dll` /
+`libguatiao.so`, which `cargo build --features c-exports` produces. An
+rlib exports nothing, which is why the cdylib exists at all.
+
+Note that **`cargo test` does not build a cdylib for the package under
+test**, only for a dev-dependency, so `tests/c_exports.rs` needs a
+`cargo build` first and states a skip otherwise. CI builds before testing.
+
+The header at
 `include/guatiao.h` is rendered by `build.rs` on every build with this
 feature on, committed so a C consumer needs no Rust toolchain, and
 compared byte for byte by a test that cannot skip. Refresh the committed

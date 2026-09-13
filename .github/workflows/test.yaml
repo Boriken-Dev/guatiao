@@ -44,5 +44,11 @@ jobs:
         run: cargo fmt --all --check
       - name: Clippy
         run: cargo clippy --workspace --all-features -- -D warnings
-      - name: Run tests
+      - name: Build
+        # `cargo test` does not build a cdylib for the package under
+        # test, and `c_exports` links one. Building first is what keeps
+        # that test from turning into a stated skip on every run.
+        run: cargo build --workspace --all-features
+
+      - name: Test
         run: cargo test --workspace --all-features

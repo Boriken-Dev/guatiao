@@ -10,6 +10,7 @@ public surface); this file is about the repository.
 | --- | --- |
 | `crates/guatiao/` | the crate: value model, C type vocabulary, schema, library envelope, loader |
 | `crates/guatiao/include/guatiao.h` | the C header, rendered by `build.rs` and committed |
+| `guatiao.dll` / `libguatiao.so` | the C ABI artifact, from the same crate — `cargo build --features c-exports` |
 | `crates/guatiao-derive/` | `#[derive(ToValue, FromValue, Schema)]`; reached through `guatiao`'s `derive` feature, never named directly |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 

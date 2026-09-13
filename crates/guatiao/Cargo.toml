@@ -15,6 +15,7 @@ exclude = [".*", "*.local.*"]
 
 [lib]
 name = "guatiao"
+crate-type = ["rlib", "cdylib"]
 path = "src/lib.rs"
 
 # A DEFAULT BUILD PULLS IN NOTHING, and that is the property to preserve:
