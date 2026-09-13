@@ -2,44 +2,72 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! What a host files a provider under.
+//! What a host files a library and a provider under.
 //!
 //! # The key is the host's policy, not the loader's
 //!
-//! A provider id is unique, so `%id` is enough for a host that loads one
-//! build of each. A host that wants two builds of one provider in one
-//! process says `%id@%version` and gets two entries where the default
-//! would have given it a duplicate.
+//! Both halves get one. A library key of `%id` means one build of a
+//! library at a time and a second is skipped; `%id@%version` means two
+//! builds coexist. A provider key of `%id` is enough because an id is
+//! unique on its own; `%id@%version` keeps two versions of one provider
+//! apart.
 //!
-//! Neither answer is the loader's to pick: the same set of libraries is a
+//! Neither answer is the loader's to pick: the same set of files is a
 //! conflict for one host and a deliberate arrangement for another, and the
 //! only one that can tell them apart is the host.
+//!
+//! # Which fields exist depends on what is being named
+//!
+//! A library has no display name and does not belong to another library,
+//! so `%name` and `%library` are not fields of a library key — and naming
+//! one is refused where it is written rather than rendering as empty.
 
 #![forbid(unsafe_code)]
 
 use std::fmt;
-use std::str::FromStr;
+
+/// Which descriptor a template names the fields of.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Subject {
+    /// A library: `%id`, `%version`.
+    Library,
+    /// A provider: `%id`, `%name`, `%library`, `%version`.
+    Provider,
+}
+
+impl Subject {
+    /// What a template for this may name, for a diagnostic.
+    fn fields(self) -> &'static str {
+        match self {
+            Subject::Library => "%id, %version",
+            Subject::Provider => "%id, %name, %library, %version",
+        }
+    }
+}
 
 /// A field of the descriptor a key can be built from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Field {
     Id,
-    Kind,
     Name,
     Library,
     Version,
 }
 
 impl Field {
-    fn parse(name: &str) -> Option<Field> {
-        match name {
-            "id" => Some(Field::Id),
-            "kind" => Some(Field::Kind),
-            "name" => Some(Field::Name),
-            "library" => Some(Field::Library),
-            "version" => Some(Field::Version),
-            _ => None,
-        }
+    fn parse(name: &str, subject: Subject) -> Option<Field> {
+        let field = match name {
+            "id" => Field::Id,
+            "name" => Field::Name,
+            "library" => Field::Library,
+            "version" => Field::Version,
+            _ => return None,
+        };
+        let allowed = match subject {
+            Subject::Library => matches!(field, Field::Id | Field::Version),
+            Subject::Provider => true,
+        };
+        allowed.then_some(field)
     }
 }
 
@@ -49,37 +77,51 @@ enum Part {
     Field(Field),
 }
 
-/// What a template can be built from: one provider, and the library that
-/// offered it.
+/// What a template can be built from.
+///
+/// A library fills `id` and `version` and leaves the rest empty; a
+/// template for a library cannot name the rest, so they are never read.
 #[derive(Debug, Clone, Copy)]
 pub struct KeyFields<'a> {
-    /// `%id` — the provider's own identifier.
+    /// `%id` — the library's or the provider's own identifier.
     pub id: &'a str,
-    /// `%kind` — what it speaks.
-    pub kind: &'a str,
-    /// `%name` — its display name, which may be empty.
+    /// `%name` — a provider's display name, which may be empty.
     pub name: &'a str,
-    /// `%library` — the id of the library that offered it.
+    /// `%library` — the id of the library offering this provider.
     pub library: &'a str,
-    /// `%version` — that library's version.
+    /// `%version` — its version.
     pub version: &'a str,
+}
+
+impl<'a> KeyFields<'a> {
+    /// The two fields a library has.
+    pub fn library(id: &'a str, version: &'a str) -> KeyFields<'a> {
+        KeyFields {
+            id,
+            name: "",
+            library: id,
+            version,
+        }
+    }
 }
 
 /// Why a template could not be used.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum KeyError {
-    /// It names something no descriptor has.
+    /// It names something this subject has no field for.
     UnknownField {
         /// What it named.
         name: String,
+        /// What it was naming a field of.
+        subject: Subject,
     },
     /// A `%` that begins nothing. `%%` is how a literal one is written.
     DanglingPercent,
-    /// It names no field at all, so every provider would land on one key
-    /// and the second one loaded would be a duplicate of the first.
+    /// It names no field at all, so everything would land on one key and
+    /// the second one loaded would look like a repeat of the first.
     NoFields,
-    /// Two providers already loaded render the same key under it.
+    /// Two already loaded render the same key under it.
     Collides {
         /// The key they both render.
         key: String,
@@ -89,20 +131,24 @@ pub enum KeyError {
 impl fmt::Display for KeyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            KeyError::UnknownField { name } => write!(
+            KeyError::UnknownField { name, subject } => write!(
                 f,
-                "`%{name}` is not a field; known ones are \
-                 %id, %kind, %name, %library, %version"
+                "`%{name}` is not a field of a {}; known ones are {}",
+                match subject {
+                    Subject::Library => "library",
+                    Subject::Provider => "provider",
+                },
+                subject.fields()
             ),
             KeyError::DanglingPercent => {
                 write!(f, "a `%` names no field; write `%%` for a literal one")
             }
             KeyError::NoFields => write!(
                 f,
-                "a key template naming no field keys every provider the same"
+                "a key template naming no field gives everything the same key"
             ),
             KeyError::Collides { key } => {
-                write!(f, "two providers already loaded both render `{key}`")
+                write!(f, "two already loaded both render `{key}`")
             }
         }
     }
@@ -110,15 +156,14 @@ impl fmt::Display for KeyError {
 
 impl std::error::Error for KeyError {}
 
-/// How a host names the providers it loads.
+/// How a host names what it loads.
 ///
-/// | field | what it is |
-/// |---|---|
-/// | `%id` | the provider's own identifier |
-/// | `%kind` | what it speaks |
-/// | `%name` | its display name, which may be empty |
-/// | `%library` | the id of the library that offered it |
-/// | `%version` | that library's version |
+/// | field | library | provider |
+/// |---|---|---|
+/// | `%id` | yes | yes |
+/// | `%version` | yes | yes |
+/// | `%name` | — | its display name, which may be empty |
+/// | `%library` | — | the id of the library offering it |
 ///
 /// `%%` is a literal `%`. Anything else is text and appears as written.
 ///
@@ -128,19 +173,25 @@ impl std::error::Error for KeyError {}
 /// let default: KeyTemplate = Default::default();
 /// assert_eq!(default.as_str(), "%id");
 ///
-/// let side_by_side: KeyTemplate = "%id@%version".parse().unwrap();
+/// let side_by_side = KeyTemplate::library("%id@%version").unwrap();
 /// assert_eq!(side_by_side.as_str(), "%id@%version");
+///
+/// // A library has no display name, so naming one is refused here and
+/// // accepted for a provider.
+/// assert!(KeyTemplate::library("%id-%name").is_err());
+/// assert!(KeyTemplate::provider("%id-%name").is_ok());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyTemplate {
+    subject: Subject,
     source: String,
     parts: Vec<Part>,
 }
 
 impl KeyTemplate {
-    /// Parses one, refusing a field nobody has and a template that names
-    /// no field at all.
-    pub fn parse(source: &str) -> Result<KeyTemplate, KeyError> {
+    /// Parses one, refusing a field this subject does not have and a
+    /// template that names no field at all.
+    pub fn parse(subject: Subject, source: &str) -> Result<KeyTemplate, KeyError> {
         let mut parts: Vec<Part> = Vec::new();
         let mut text = String::new();
         let mut rest = source;
@@ -163,8 +214,9 @@ impl KeyTemplate {
                 return Err(KeyError::DanglingPercent);
             }
             let name = &rest[..end];
-            let field = Field::parse(name).ok_or_else(|| KeyError::UnknownField {
+            let field = Field::parse(name, subject).ok_or_else(|| KeyError::UnknownField {
                 name: name.to_string(),
+                subject,
             })?;
             rest = &rest[end..];
 
@@ -184,9 +236,25 @@ impl KeyTemplate {
         }
 
         Ok(KeyTemplate {
+            subject,
             source: source.to_string(),
             parts,
         })
+    }
+
+    /// A template naming a library.
+    pub fn library(source: &str) -> Result<KeyTemplate, KeyError> {
+        KeyTemplate::parse(Subject::Library, source)
+    }
+
+    /// A template naming a provider.
+    pub fn provider(source: &str) -> Result<KeyTemplate, KeyError> {
+        KeyTemplate::parse(Subject::Provider, source)
+    }
+
+    /// What it names the fields of.
+    pub fn subject(&self) -> Subject {
+        self.subject
     }
 
     /// The template as it was written.
@@ -194,14 +262,13 @@ impl KeyTemplate {
         &self.source
     }
 
-    /// The key one provider lands on.
+    /// The key one library or provider lands on.
     pub fn render(&self, fields: KeyFields<'_>) -> String {
         let mut out = String::with_capacity(self.source.len() + 16);
         for part in &self.parts {
             match part {
                 Part::Text(text) => out.push_str(text),
                 Part::Field(Field::Id) => out.push_str(fields.id),
-                Part::Field(Field::Kind) => out.push_str(fields.kind),
                 Part::Field(Field::Name) => out.push_str(fields.name),
                 Part::Field(Field::Library) => out.push_str(fields.library),
                 Part::Field(Field::Version) => out.push_str(fields.version),
@@ -211,19 +278,11 @@ impl KeyTemplate {
     }
 }
 
-/// `%id`: a provider id is unique on its own, so a host that loads one
-/// build of each needs nothing more.
+/// `%id` over a provider: an id is unique on its own, so a host that
+/// loads one build of each needs nothing more.
 impl Default for KeyTemplate {
     fn default() -> KeyTemplate {
-        KeyTemplate::parse("%id").expect("`%id` is one field and nothing else")
-    }
-}
-
-impl FromStr for KeyTemplate {
-    type Err = KeyError;
-
-    fn from_str(s: &str) -> Result<KeyTemplate, KeyError> {
-        KeyTemplate::parse(s)
+        KeyTemplate::provider("%id").expect("`%id` is one field and nothing else")
     }
 }
 
@@ -239,8 +298,7 @@ mod tests {
 
     fn fields() -> KeyFields<'static> {
         KeyFields {
-            id: "hello",
-            kind: "greeter",
+            id: "hello_greeter",
             name: "Hello",
             library: "hello_library",
             version: "0.1.0",
@@ -248,39 +306,65 @@ mod tests {
     }
 
     #[test]
-    fn the_default_is_the_provider_id() {
-        assert_eq!(KeyTemplate::default().render(fields()), "hello");
+    fn the_default_is_the_id() {
+        assert_eq!(KeyTemplate::default().render(fields()), "hello_greeter");
+        assert_eq!(KeyTemplate::default().subject(), Subject::Provider);
     }
 
     #[test]
-    fn every_field_renders() {
-        let t: KeyTemplate = "%id %kind %name %library %version".parse().unwrap();
+    fn every_provider_field_renders() {
+        let t = KeyTemplate::provider("%id %name %library %version").unwrap();
         assert_eq!(
             t.render(fields()),
-            "hello greeter Hello hello_library 0.1.0"
+            "hello_greeter Hello hello_library 0.1.0"
         );
     }
 
     #[test]
+    fn a_library_names_its_two_fields() {
+        let t = KeyTemplate::library("%id@%version").unwrap();
+        assert_eq!(
+            t.render(KeyFields::library("hello_library", "0.1.0")),
+            "hello_library@0.1.0"
+        );
+    }
+
+    /// A library has no display name and belongs to no library, so naming
+    /// either is refused where it is written rather than rendering empty.
+    #[test]
+    fn a_library_template_cannot_name_a_providers_fields() {
+        for source in ["%id-%name", "%library"] {
+            match KeyTemplate::library(source) {
+                Err(KeyError::UnknownField { subject, .. }) => {
+                    assert_eq!(subject, Subject::Library);
+                }
+                other => panic!("expected an unknown field for {source}, got {other:?}"),
+            }
+        }
+        // And the same spellings are fine for a provider.
+        assert!(KeyTemplate::provider("%id-%name").is_ok());
+        assert!(KeyTemplate::provider("%library").is_ok());
+    }
+
+    #[test]
     fn text_around_a_field_survives() {
-        let t: KeyTemplate = "%id@%version".parse().unwrap();
-        assert_eq!(t.render(fields()), "hello@0.1.0");
-        let t: KeyTemplate = "provider:%id/v%version!".parse().unwrap();
-        assert_eq!(t.render(fields()), "provider:hello/v0.1.0!");
+        let t = KeyTemplate::provider("provider:%id/v%version!").unwrap();
+        assert_eq!(t.render(fields()), "provider:hello_greeter/v0.1.0!");
     }
 
     #[test]
     fn a_doubled_percent_is_a_literal_one() {
-        let t: KeyTemplate = "%%%id%%".parse().unwrap();
-        assert_eq!(t.render(fields()), "%hello%");
+        let t = KeyTemplate::provider("%%%id%%").unwrap();
+        assert_eq!(t.render(fields()), "%hello_greeter%");
     }
 
     #[test]
     fn a_field_nobody_has_is_refused() {
         assert_eq!(
-            "%id@%revision".parse::<KeyTemplate>(),
+            KeyTemplate::provider("%id@%revision"),
             Err(KeyError::UnknownField {
-                name: "revision".to_string()
+                name: "revision".to_string(),
+                subject: Subject::Provider,
             })
         );
     }
@@ -288,21 +372,21 @@ mod tests {
     #[test]
     fn a_percent_that_begins_nothing_is_refused() {
         assert_eq!(
-            "%id-%".parse::<KeyTemplate>(),
+            KeyTemplate::provider("%id-%"),
             Err(KeyError::DanglingPercent)
         );
         assert_eq!(
-            "%id %2".parse::<KeyTemplate>(),
+            KeyTemplate::provider("%id %2"),
             Err(KeyError::DanglingPercent)
         );
     }
 
-    /// A template of pure text keys every provider the same, so the second
-    /// one loaded would be a duplicate of the first. Refused here rather
-    /// than reported as a conflict between two unrelated libraries.
+    /// A template of pure text gives everything one key, so the second
+    /// thing loaded looks like a repeat of the first. Refused here rather
+    /// than reported later as a conflict between two unrelated files.
     #[test]
     fn a_template_with_no_field_is_refused() {
-        assert_eq!("provider".parse::<KeyTemplate>(), Err(KeyError::NoFields));
-        assert_eq!("100%%".parse::<KeyTemplate>(), Err(KeyError::NoFields));
+        assert_eq!(KeyTemplate::provider("provider"), Err(KeyError::NoFields));
+        assert_eq!(KeyTemplate::library("100%%"), Err(KeyError::NoFields));
     }
 }

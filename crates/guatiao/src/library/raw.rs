@@ -185,9 +185,9 @@ pub(crate) unsafe fn str_of(s: Str) -> Option<&'static str> {
 /// to hold a raw pointer to read a name.
 #[derive(Debug, Clone)]
 pub struct ProviderView {
-    /// What sort of thing it is.
-    pub kind: String,
-    /// Its identifier within that kind.
+    /// Every kind it serves. May be empty.
+    pub kinds: Vec<String>,
+    /// Its identifier, unique across every provider a host loads.
     pub id: String,
     /// A name to show a person, possibly empty.
     pub display_name: String,
@@ -202,6 +202,16 @@ pub struct ProviderView {
     /// Whatever else the provider declared, or `None`. See
     /// [`ProviderInfo::meta`].
     pub meta: Option<&'static Map>,
+    /// The version it declared for itself, or `None` to inherit its
+    /// library's. See [`ProviderInfo::version`].
+    pub version: Option<String>,
+}
+
+impl ProviderView {
+    /// Whether it serves this kind.
+    pub fn supports(&self, kind: &str) -> bool {
+        self.kinds.iter().any(|k| k == kind)
+    }
 }
 
 impl ProviderView {
@@ -328,8 +338,20 @@ unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<Provid
     // SAFETY: each field lies within `declared` bytes.
     unsafe {
         let config = std::ptr::addr_of!((*raw).config).read();
+        // A fixed stride, unlike the provider array: a `Str` declares no
+        // `struct_size`, so it has no way to grow and no skew to survive.
+        let kinds = std::ptr::addr_of!((*raw).kinds).read();
+        if kinds.len > 0 && kinds.ptr.is_null() {
+            return None;
+        }
+        let mut names = Vec::with_capacity(kinds.len);
+        for i in 0..kinds.len {
+            // SAFETY: the library declared `len` names at `ptr`.
+            names.push(str_of(kinds.ptr.add(i).read())?.to_string());
+        }
+
         Some(ProviderView {
-            kind: str_of(std::ptr::addr_of!((*raw).kind).read())?.to_string(),
+            kinds: names,
             id: str_of(std::ptr::addr_of!((*raw).id).read())?.to_string(),
             display_name: str_of(std::ptr::addr_of!((*raw).display_name).read())?.to_string(),
             // A descriptor's value lives as long as the library, which is
@@ -343,6 +365,18 @@ unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<Provid
                 // non-null `meta` is a well-formed map by the contract on
                 // the field; and the library is never unloaded.
                 std::ptr::addr_of!((*raw).meta).read().get()
+            } else {
+                None
+            },
+            version: if declared >= ProviderInfo::version_end() {
+                // SAFETY: the guard established the field is present.
+                // Empty is how a provider says "my library's", which is a
+                // different statement from a descriptor that predates the
+                // field — and both land on `None` deliberately, because
+                // both mean the same thing to a reader.
+                str_of(std::ptr::addr_of!((*raw).version).read())
+                    .filter(|v| !v.is_empty())
+                    .map(str::to_string)
             } else {
                 None
             },
@@ -418,6 +452,7 @@ pub(crate) fn open_library(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::library::desc::Kinds;
     use crate::library::desc::{LibraryInfo, ProviderInfo, Providers};
 
     /// The byte every descriptor's tail is filled with.
@@ -632,17 +667,26 @@ mod tests {
         assert!(unsafe { read_library(ptr) }.is_none());
     }
 
+    /// A `Str` array cannot be a `static` without saying why: it holds a
+    /// raw pointer. These address string literals in this image.
+    struct Names([Str; 1]);
+    // SAFETY: a constant that is never written, whose pointer addresses a
+    // string literal in this binary.
+    unsafe impl Sync for Names {}
+    static KINDS: Names = Names([Str::borrowed("greeter")]);
+
     fn a_provider(size: usize, vtable_size: u32) -> ProviderInfo {
         ProviderInfo {
             struct_size: size as u32,
             vtable_size,
-            kind: Str::borrowed("greeter"),
+            kinds: Kinds::new(&KINDS.0),
             id: Str::borrowed("hello"),
             display_name: Str::borrowed("Hello"),
             config: std::ptr::null(),
             vtable: std::ptr::null(),
             ctx: std::ptr::null_mut(),
             meta: MaybeNull::null(),
+            version: Str::borrowed(""),
         }
     }
 

@@ -306,9 +306,14 @@ guatiao::guatiao_library!(describe);   // emits `guatiao_library_entry`
 ```
 
 `LibraryInfo { struct_size, abi_version, id, version, providers, meta }`;
-`ProviderInfo { struct_size, vtable_size, kind, id, display_name, config,
-vtable, ctx, meta }`; `HostInfo { struct_size, abi_version, host_id,
-host_version, alloc, meta }`. `ABI_VERSION` is 1.
+`ProviderInfo { struct_size, vtable_size, kinds, id, display_name, config,
+vtable, ctx, meta, version }`; `HostInfo { struct_size, abi_version,
+host_id, host_version, alloc, meta }`. `ABI_VERSION` is 1.
+
+`Providers { ptr, len, stride }` and `Kinds { ptr, len }` — the provider
+array states its stride and the kind array does not, because a `Str`
+declares no `struct_size` and so has no way to grow. Build them with
+`Providers::new(&SLICE)` / `Kinds::new(&SLICE)` rather than by hand.
 
 `meta` is a `MaybeNull<Map>` on all three — an open-ended map for
 whatever the envelope did not think of, and the escape hatch that keeps a
@@ -330,10 +335,11 @@ Host side:
 
 ```rust
 let mut reg = Registry::new("my-host", "1.0");
-reg.load_file(&path)?;                     // Result<Option<&Loaded>, LoadError>
+reg.load_file(&path)?;                     // Result<Loading, LoadError>
 reg.providers("greeter")                   // by kind: impl Iterator<Item = &Provider>
-reg.provider("hello")                      // by key: Option<&Provider>
-reg.providers_of("hello")                  // every version of one id
+reg.provider("acme_net_pve")               // by key: Option<&Provider>
+reg.providers_of("acme_net_pve")           // every version of one id
+provider.kinds() / provider.supports(kind) // what it serves
 provider.config_schema()                   // Option<&'static Value>
 provider.vtable() -> (*const c_void, usize)
 provider.view().vtable_as::<T>()           // unsafe; checks vtable_size >= size_of::<T>()
@@ -341,29 +347,57 @@ provider.meta()                            // Option<&'static Map>
 loaded.meta                                // Option<&'static Map>
 ```
 
-**What a provider is filed under is the host's choice**, not the loader's:
+### A library is a collection; a provider is a thing in it
+
+- **A library loads once.** By canonical path first (which costs no
+  `dlopen`), then by its rendered library key. A repeat is
+  `Loading::Skipped(Skipped::AlreadyLoaded { from })` **naming where it
+  came from** — not an error. A host's search path and the directory
+  beside its executable are routinely the same place, so this is the
+  common path, and refusing it silently disables whatever the first load
+  had not reached.
+- **A provider id is globally meaningful**, conventionally
+  `{library id}_{name}`. Two libraries may offer one provider — a
+  re-export, a vendored copy — and they agree on its id, which is what
+  makes it detectable: the second is
+  `Skipped::ProviderAlreadyLoaded { id, from }` and **the rest of that
+  library goes on loading**.
+- **A provider serves many kinds.** `kinds` is a list; `providers(kind)`
+  filters on `supports(kind)`. One implementation that both discovers
+  hosts and opens sessions to them is one provider answering to both, not
+  two registrations a host has to know are the same. An empty list is a
+  provider reached by name rather than by capability.
+- **A provider carries its own version**, empty meaning its library's —
+  which is the common case, because a provider shipped in its own library
+  moves with it.
+- `LoadError` is then only `Open`, `Malformed`, and `Duplicate` for two
+  **different** providers landing on one key, which only a host's own
+  template can produce.
+
+### What things are filed under is the host's choice
 
 ```rust
-let reg = Registry::new("my-host", "1.0").keyed_by("%id@%version")?;
-reg.provider("hello@1.2.0")                // Option<&Provider>
-provider.key()                             // what it answers to
+let reg = Registry::new("my-host", "1.0")
+    .libraries_keyed_by("%id@%version")?    // hold two builds of a library
+    .keyed_by("%id@%version")?;             // and tell their providers apart
+reg.provider("acme_net_pve@1.2.0")
+provider.key()  /  loaded.key               // what each answers to
 ```
 
-`KeyTemplate` fields are `%id`, `%kind`, `%name`, `%library`, `%version`;
-`%%` is a literal `%`, everything else is text. The default is `%id` — a
-provider id is unique, so a host loading one build of each needs nothing
-more; `%id@%version` is what makes two builds of one provider coexist
-where the default refuses the second as a `LoadError::Duplicate { key,
-first, second }`. Parsing refuses an unknown field, a `%` that begins
-nothing, and a template naming **no** field (which would key every
-provider the same). `keyed_by` re-keys what is already loaded and refuses
-a template that would collide there (`KeyError::Collides`).
+`KeyTemplate` fields: a **library** has `%id` and `%version`; a
+**provider** adds `%name` (display name) and `%library`. `%%` is a literal
+`%`, everything else is text. Naming a field the subject does not have is
+refused where it is written, as is a `%` beginning nothing and a template
+naming **no** field (which would give everything one key). Both `keyed_by`
+methods re-key what is already loaded and refuse a template that would
+collide there (`KeyError::Collides`).
 
-`kind` is a **capability** — which vtable it speaks — and is not part of
-identity. `id` is unique across every provider; `version` is the offering
-library's, declared semver and compared here as a string. Nothing in this
-crate parses or orders a version: "newest wins" is a host's policy, with
-the semver library it already has.
+The library key is the "how many builds may I hold" knob. With `%id` and
+`scan_dir`, **which** build survives is the scan's order —
+`scan_dir_ordered(reg, dir, Order::Descending)` offers the
+highest-sorting name first. That is byte order, not version order:
+nothing here parses a version, because ordering one is a host's policy
+with the semver library it already has.
 
 **A loaded library is never unloaded.** Everything it hands over —
 strings, schemas, vtables — points into its mapping, so unloading would

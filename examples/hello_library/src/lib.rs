@@ -26,7 +26,7 @@ use std::ffi::c_void;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicI64, Ordering};
 
-use guatiao::library::{HostInfo, LibraryInfo, ProviderInfo, Providers};
+use guatiao::library::{HostInfo, Kinds, LibraryInfo, ProviderInfo, Providers};
 use guatiao::schema::{KindBuilder, OptionBuilder, SchemaBuilder};
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::value::read::str_or;
@@ -132,6 +132,15 @@ struct VTable(Allocator);
 // `ctx` is null so nothing is shared through it, and the two functions it
 // names are thread-safe.
 unsafe impl Sync for VTable {}
+
+/// A `Str` holds a `*const u8`, so an array of them is not `Sync` and
+/// cannot be a `static` without saying why either.
+struct Names<const N: usize>([Str; N]);
+
+// SAFETY: a compile-time constant that is never written, whose every
+// pointer addresses a string literal in this library's own image — which
+// is never unloaded, so the borrow outlives every reader.
+unsafe impl<const N: usize> Sync for Names<N> {}
 
 fn library_alloc() -> Alloc {
     // SAFETY: `LIBRARY_ALLOC.0` is a fully initialised constant that lives
@@ -249,17 +258,46 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
         declared.set("greeting-language", "en").expect("as above");
         let meta = Box::new(declared);
 
-        let providers = vec![ProviderInfo {
-            struct_size: size_of::<ProviderInfo>() as u32,
-            vtable_size: size_of::<GreeterVtable>() as u32,
-            kind: Str::borrowed("greeter"),
-            id: Str::borrowed("hello"),
-            display_name: Str::borrowed("Hello"),
-            config: &*schema as *const Value,
-            vtable: &GREETER as *const GreeterVtable as *const c_void,
-            ctx: std::ptr::null_mut(),
-            meta: MaybeNull::null(),
-        }];
+        // One provider, two kinds. It greets, and it writes what it
+        // greeted — one implementation with one identity, which is why it
+        // is one provider answering to both rather than two registrations
+        // a host would have to know are the same thing.
+        static GREETER_KINDS: Names<2> = Names([Str::borrowed("greeter"), Str::borrowed("writer")]);
+
+        let providers = vec![
+            ProviderInfo {
+                struct_size: size_of::<ProviderInfo>() as u32,
+                vtable_size: size_of::<GreeterVtable>() as u32,
+                kinds: Kinds::new(&GREETER_KINDS.0),
+                // `{library id}_{name}`, the convention that makes an id
+                // unique without a central register.
+                id: Str::borrowed("hello_library_greeter"),
+                display_name: Str::borrowed("Hello"),
+                config: &*schema as *const Value,
+                vtable: &GREETER as *const GreeterVtable as *const c_void,
+                ctx: std::ptr::null_mut(),
+                meta: MaybeNull::null(),
+                // Empty: this provider ships in this library and moves
+                // with it, so its version is the library's.
+                version: Str::borrowed(""),
+            },
+            ProviderInfo {
+                struct_size: size_of::<ProviderInfo>() as u32,
+                vtable_size: 0,
+                // Serves no kind at all: reached by name, carrying data
+                // rather than behaviour.
+                kinds: Kinds::empty(),
+                id: Str::borrowed("hello_library_almanac"),
+                display_name: Str::borrowed("Almanac"),
+                config: std::ptr::null(),
+                vtable: std::ptr::null(),
+                ctx: std::ptr::null_mut(),
+                meta: MaybeNull::null(),
+                // Its own, because its contract froze while the library
+                // around it went on. This is the case the field exists for.
+                version: Str::borrowed("1.0.0"),
+            },
+        ];
 
         let desc = LibraryInfo {
             struct_size: size_of::<LibraryInfo>() as u32,

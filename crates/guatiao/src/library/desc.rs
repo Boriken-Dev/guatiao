@@ -151,6 +151,42 @@ pub struct Providers {
     pub stride: usize,
 }
 
+/// A borrowed sequence of kind names.
+///
+/// # Why this one carries no stride
+///
+/// [`Providers`] states its stride because a `ProviderInfo` can grow a
+/// field. A [`Str`] cannot: it declares no `struct_size`, so it has no
+/// mechanism to grow through and its layout is frozen by definition.
+/// Where there is no versioning there is no version skew, and the element
+/// size is the same number on both sides of the boundary.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct Kinds {
+    /// First name. May be null when `len` is 0.
+    pub ptr: *const Str,
+    /// How many.
+    pub len: usize,
+}
+
+impl Kinds {
+    /// A borrowed array of names.
+    pub const fn new(kinds: &'static [Str]) -> Kinds {
+        Kinds {
+            ptr: kinds.as_ptr(),
+            len: kinds.len(),
+        }
+    }
+
+    /// No kinds: a provider that serves no vtable, reached by name alone.
+    pub const fn empty() -> Kinds {
+        Kinds {
+            ptr: std::ptr::null(),
+            len: 0,
+        }
+    }
+}
+
 impl Providers {
     /// A borrowed array, with the stride this build lays it out at.
     ///
@@ -252,18 +288,31 @@ pub struct ProviderInfo {
     /// Size of the struct `vtable` points at, as the library compiled it.
     /// Zero when there is no vtable.
     pub vtable_size: u32,
-    /// What sort of thing this is: `"greeter"`, `"codec"`, whatever the
+    /// What sorts of thing this is: `"greeter"`, `"codec"`, whatever the
     /// host and the library have agreed.
     ///
-    /// A **capability**, not a name: it says which vtable this provider
-    /// speaks, so a host can ask for everything that speaks one. What
-    /// identifies the provider is `id`.
-    pub kind: Str,
-    /// This provider's own identifier, **unique across all providers**.
+    /// **A list, because one provider commonly serves several.** A crate
+    /// that both discovers hosts and opens sessions to them is one
+    /// implementation with one identity, and registering it twice to say
+    /// so would make it two providers a host has to know are the same.
     ///
-    /// Names an implementation rather than a protocol: `"pve"`, `"mdns"`.
-    /// Two providers never share an id, not even of different kinds, which
-    /// is what lets a host resolve one without knowing what it speaks.
+    /// Each is a **capability**, never a name: it says which vtable this
+    /// provider speaks, so a host can ask for everything that speaks one.
+    /// What identifies the provider is `id`. Empty is legal and means a
+    /// provider that serves no vtable — pure data, reached by name.
+    pub kinds: Kinds,
+    /// This provider's own identifier, **unique across every provider a
+    /// host loads**.
+    ///
+    /// Names an implementation rather than a protocol: `"pve_qemu"`,
+    /// `"mdns"`. Conventionally `{library id}_{name}`, where the name is
+    /// whatever the implementation is called in its own source — which is
+    /// what makes an id unique without any central register.
+    ///
+    /// **A re-export keeps the ORIGINAL id.** Two libraries offering one
+    /// provider is an ordinary thing; that they agree on its id is what
+    /// lets a host notice it already has it and skip the second, rather
+    /// than loading one implementation twice under two names.
     ///
     /// What a host files it under is that host's own key template, `%id`
     /// by default.
@@ -307,6 +356,18 @@ pub struct ProviderInfo {
     /// the same thing here — "nothing to add" has no second reading
     /// worth keeping apart.
     pub meta: MaybeNull<Map>,
+    /// This provider's own version, or **empty to inherit the library's**.
+    ///
+    /// Empty is the common case and the right default: a provider shipped
+    /// in its own library versions with it, and saying so twice is two
+    /// numbers to keep in step. A provider states its own when it does not
+    /// move with its library — a re-exported one, or one whose contract
+    /// froze while the library around it went on.
+    ///
+    /// Declared **semver**. This crate compares it as a string and never
+    /// parses it: ordering is a host's policy, applied with the semver
+    /// library it already has.
+    pub version: Str,
 }
 
 impl ProviderInfo {
@@ -318,6 +379,11 @@ impl ProviderInfo {
     /// Where the `meta` field ends, for the guard that reads it.
     pub const fn meta_end() -> usize {
         offset_of!(ProviderInfo, meta) + size_of::<MaybeNull<Map>>()
+    }
+
+    /// Where the `version` field ends, for the guard that reads it.
+    pub const fn version_end() -> usize {
+        offset_of!(ProviderInfo, version) + size_of::<Str>()
     }
 }
 

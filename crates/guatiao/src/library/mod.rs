@@ -71,10 +71,10 @@ pub mod registry;
 #[cfg(feature = "load")]
 pub mod scan;
 
-pub use desc::{ABI_VERSION, HostInfo, LibraryInfo, ProviderInfo, Providers};
-pub use key::{KeyError, KeyFields, KeyTemplate};
+pub use desc::{ABI_VERSION, HostInfo, Kinds, LibraryInfo, ProviderInfo, Providers};
+pub use key::{KeyError, KeyFields, KeyTemplate, Subject};
 pub use raw::{ENTRY_SYMBOL, EntryFn, LibraryView, ProviderView, answer, read_host};
 #[cfg(feature = "load")]
-pub use registry::{LoadError, Loaded, Provider, Registry, Skipped};
+pub use registry::{LoadError, Loaded, Loading, Provider, Registry, Skipped};
 #[cfg(feature = "load")]
-pub use scan::{LoadReport, declares_entry_symbol, scan_dir};
+pub use scan::{LoadReport, Order, declares_entry_symbol, scan_dir, scan_dir_ordered};

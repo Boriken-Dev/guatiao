@@ -41,7 +41,7 @@
 use std::path::{Path, PathBuf};
 
 use super::raw::ENTRY_SYMBOL;
-use super::registry::{LoadError, Registry, Skipped};
+use super::registry::{LoadError, Loading, Registry, Skipped};
 
 /// What a scan found.
 ///
@@ -107,16 +107,52 @@ pub fn declares_entry_symbol(path: &Path) -> Result<bool, std::io::Error> {
         .any(|s| s.name_bytes().is_ok_and(|n| n == wanted)))
 }
 
+/// The order a scan visits file names in.
+///
+/// It decides **which build wins** when a host's library template gives
+/// two files one key: the first to claim it keeps it, so the order is the
+/// policy. Nothing here parses a version — ordering one is a host's job,
+/// with the semver library it already has — but a directory whose names
+/// carry versions sorts usefully on the bytes alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Order {
+    /// By name, ascending. The default, and what two runs of a scan must
+    /// agree on for a report to be reproducible.
+    #[default]
+    Ascending,
+    /// By name, descending — so `libfoo-1.10.0` is offered before
+    /// `libfoo-1.2.0` and, under a `%id` library key, is the one that
+    /// loads.
+    ///
+    /// **Byte order, not version order.** It agrees with semver only while
+    /// the names agree with it; `1.10.0` sorts above `1.2.0` here because
+    /// `1` is above `2` at the fourth byte, which is luck rather than
+    /// arithmetic. A host that needs real ordering scans with a library
+    /// key of `%id@%version`, loads every build, and picks.
+    Descending,
+}
+
 /// Loads every guatiao library in one directory, and reports the rest.
+///
+/// Visits names ascending. [`scan_dir_ordered`] takes the order.
+pub fn scan_dir(registry: &mut Registry, dir: &Path) -> Result<LoadReport, std::io::Error> {
+    scan_dir_ordered(registry, dir, Order::Ascending)
+}
+
+/// The same, in a stated order.
 ///
 /// Not recursive, and it opens nothing that has not already been shown to
 /// declare the entry symbol. See this module's header for why that matters
 /// more than it sounds like it should.
 ///
-/// Files are visited in sorted order, so two runs on the same directory
-/// report the same thing and two providers landing on one key name the
-/// same winner each time.
-pub fn scan_dir(registry: &mut Registry, dir: &Path) -> Result<LoadReport, std::io::Error> {
+/// Files are visited in a **sorted** order whichever is asked for, so two
+/// runs on the same directory report the same thing and the same build
+/// wins each time.
+pub fn scan_dir_ordered(
+    registry: &mut Registry,
+    dir: &Path,
+    order: Order,
+) -> Result<LoadReport, std::io::Error> {
     let mut report = LoadReport::default();
 
     let mut candidates: Vec<PathBuf> = std::fs::read_dir(dir)?
@@ -132,6 +168,9 @@ pub fn scan_dir(registry: &mut Registry, dir: &Path) -> Result<LoadReport, std::
         })
         .collect();
     candidates.sort();
+    if order == Order::Descending {
+        candidates.reverse();
+    }
 
     for path in candidates {
         match declares_entry_symbol(&path) {
@@ -150,8 +189,8 @@ pub fn scan_dir(registry: &mut Registry, dir: &Path) -> Result<LoadReport, std::
         }
 
         match registry.load_file(&path) {
-            Ok(Some(_)) => report.loaded.push(path),
-            Ok(None) => report.skipped.push((path, Skipped::DeclinedThisHost)),
+            Ok(Loading::Loaded(_)) => report.loaded.push(path),
+            Ok(Loading::Skipped(why)) => report.skipped.push((path, why)),
             Err(e) => report.failed.push((path, e)),
         }
     }

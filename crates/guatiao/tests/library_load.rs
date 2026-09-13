@@ -27,7 +27,7 @@
 use std::path::PathBuf;
 
 use guatiao::ReadValue;
-use guatiao::library::{KeyError, LoadError, Provider, Registry};
+use guatiao::library::{KeyError, Provider, Registry, Skipped, Subject};
 use guatiao::schema::read::SchemaRef;
 use guatiao::schema::validate_map;
 use guatiao::value::status::Status;
@@ -114,9 +114,10 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
     let loaded = registry
         .load_file(&path)
         .expect("the example library loads")
+        .loaded()
         .expect("it is a library and it did not decline this host");
     assert_eq!(loaded.id, "hello_library");
-    assert_eq!(loaded.providers, 1);
+    assert_eq!(loaded.providers, 2, "a greeter and an almanac");
 
     // The appended `meta` slot, read out of the library's own image.
     // `ProviderInfo::meta` is null here and `LibraryInfo::meta` is not,
@@ -138,7 +139,7 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
     );
 
     let provider = registry
-        .provider("hello")
+        .provider("hello_library_greeter")
         .expect("the provider it registered");
     assert_eq!(provider.display_name(), "Hello");
     assert!(
@@ -146,11 +147,86 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
         "this provider declares none, and null is how it says so"
     );
     assert_eq!(provider.from(), path);
-    assert_eq!(registry.providers("greeter").count(), 1);
+
+    // One provider, two kinds. It answers to each of them and is the same
+    // provider both times — which is the whole reason a kind is a list.
+    assert_eq!(provider.kinds(), ["greeter", "writer"]);
+    assert!(provider.supports("greeter") && provider.supports("writer"));
+    assert!(!provider.supports("codec"));
+    for kind in ["greeter", "writer"] {
+        let mut found = registry.providers(kind);
+        assert_eq!(
+            found.next().map(Provider::id),
+            Some("hello_library_greeter"),
+            "it answers to {kind}"
+        );
+        assert!(found.next().is_none());
+    }
     assert_eq!(
         registry.providers("nothing-of-this-kind").count(),
         0,
         "a kind nobody offers is empty rather than an error"
+    );
+
+    // And one that serves no kind at all, which no capability question
+    // finds and a lookup by name does.
+    let almanac = registry
+        .provider("hello_library_almanac")
+        .expect("a provider with no kind is still a provider");
+    assert!(almanac.kinds().is_empty());
+    assert!(almanac.config_schema().is_none());
+}
+
+/// A provider's version is its library's unless it says otherwise.
+#[test]
+fn a_provider_versions_with_its_library_or_says_so() {
+    let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+    let loaded = registry
+        .load_file(&library_path())
+        .unwrap()
+        .loaded()
+        .unwrap();
+    let library_version = loaded.version.clone();
+
+    assert_eq!(
+        registry
+            .provider("hello_library_greeter")
+            .map(Provider::version),
+        Some(library_version.as_str()),
+        "declaring nothing means moving with the library"
+    );
+    assert_eq!(
+        registry
+            .provider("hello_library_almanac")
+            .map(Provider::version),
+        Some("1.0.0"),
+        "and a provider whose contract froze says so"
+    );
+    assert_ne!(
+        library_version, "1.0.0",
+        "the test is vacuous if the two agree by accident"
+    );
+}
+
+/// The same library twice is a SKIP naming where it came from, not an
+/// error — because a host's search path and the directory beside its
+/// executable are routinely the same place.
+#[test]
+fn the_same_library_twice_is_skipped_not_refused() {
+    let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+    let path = library_path();
+    registry.load_file(&path).unwrap().loaded().unwrap();
+
+    let again = registry.load_file(&path).expect("a repeat is not an error");
+    match again.skipped() {
+        Some(Skipped::AlreadyLoaded { from }) => assert_eq!(from, &path),
+        other => panic!("expected an already-loaded skip, got {other:?}"),
+    }
+    assert_eq!(registry.loaded().len(), 1);
+    assert_eq!(
+        registry.all().len(),
+        2,
+        "and nothing was registered a second time"
     );
 }
 
@@ -160,8 +236,12 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
 #[test]
 fn the_host_validates_a_configuration_against_the_librarys_own_schema() {
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
-    registry.load_file(&library_path()).unwrap().unwrap();
-    let provider = registry.provider("hello").unwrap();
+    registry
+        .load_file(&library_path())
+        .unwrap()
+        .loaded()
+        .unwrap();
+    let provider = registry.provider("hello_library_greeter").unwrap();
 
     let declared = provider
         .config_schema()
@@ -193,8 +273,12 @@ fn the_host_validates_a_configuration_against_the_librarys_own_schema() {
 #[test]
 fn a_tree_the_library_built_is_extended_and_freed_by_the_host() {
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
-    registry.load_file(&library_path()).unwrap().unwrap();
-    let provider = registry.provider("hello").unwrap();
+    registry
+        .load_file(&library_path())
+        .unwrap()
+        .loaded()
+        .unwrap();
+    let provider = registry.provider("hello_library_greeter").unwrap();
 
     let (ptr, size) = provider.vtable();
     let (greet, outstanding) = read_greeter(ptr, size);
@@ -279,8 +363,9 @@ fn a_library_that_is_not_one_of_ours_is_reported_rather_than_failing() {
             continue;
         }
         if let Ok(answer) = registry.load_file(&path) {
-            assert!(
-                answer.is_none(),
+            assert_eq!(
+                answer.skipped(),
+                Some(&Skipped::NoEntrySymbol),
                 "{} is not a guatiao library and must not register anything",
                 path.display()
             );
@@ -299,56 +384,28 @@ fn a_library_that_is_not_one_of_ours_is_reported_rather_than_failing() {
     }
 }
 
-/// A host names its providers, and by default that name is the id.
-///
-/// What this pins is the wiring a real side-by-side arrangement rests on:
-/// the library's own version reaching the provider, the key rendering from
-/// it, and the same provider twice being refused under a key that cannot
-/// tell the two apart.
+/// A host names what it loads, and by default that name is the id.
 #[test]
 fn a_host_files_providers_under_a_key_it_chooses() {
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
     let path = library_path();
-    registry.load_file(&path).unwrap().unwrap();
+    registry.load_file(&path).unwrap().loaded().unwrap();
 
     assert_eq!(registry.key_template().as_str(), "%id");
+    assert_eq!(registry.library_key_template().as_str(), "%id");
     let provider = registry
-        .provider("hello")
+        .provider("hello_library_greeter")
         .expect("the default key is `%id`");
     let version = provider.version().to_string();
-    assert_eq!(provider.key(), "hello");
+    assert_eq!(provider.key(), "hello_library_greeter");
     assert_eq!(provider.library(), "hello_library");
-    assert!(!version.is_empty(), "the library declares its version");
-    assert_eq!(
-        registry.loaded()[0].version,
-        version,
-        "a provider's version is its library's"
-    );
+    assert_eq!(registry.loaded()[0].key, "hello_library");
 
-    assert_eq!(registry.providers_of("hello").count(), 1);
+    assert_eq!(registry.providers_of("hello_library_greeter").count(), 1);
     assert_eq!(
         registry.providers_of("nonesuch").count(),
         0,
         "an id nobody offers is empty rather than an error"
-    );
-
-    // The same library again renders the same key, which is the case the
-    // default template exists to refuse.
-    let err = registry
-        .load_file(&path)
-        .expect_err("one key cannot name two providers");
-    match err {
-        LoadError::Duplicate { key, first, second } => {
-            assert_eq!(key, "hello");
-            assert_eq!(first, path);
-            assert_eq!(second, path);
-        }
-        other => panic!("expected a duplicate, got {other}"),
-    }
-    assert_eq!(
-        registry.all().len(),
-        1,
-        "a refused library leaves the registry as it was"
     );
 
     // A host that wants versions apart says so, and what is already loaded
@@ -356,11 +413,13 @@ fn a_host_files_providers_under_a_key_it_chooses() {
     let registry = registry
         .keyed_by("%id@%version")
         .expect("one provider cannot collide with itself");
-    let key = format!("hello@{version}");
-    assert_eq!(registry.provider(&key).map(Provider::id), Some("hello"));
-    assert_eq!(registry.all()[0].key(), key);
+    let key = format!("hello_library_greeter@{version}");
+    assert_eq!(
+        registry.provider(&key).map(Provider::id),
+        Some("hello_library_greeter")
+    );
     assert!(
-        registry.provider("hello").is_none(),
+        registry.provider("hello_library_greeter").is_none(),
         "the old key is not also kept"
     );
 
@@ -369,7 +428,44 @@ fn a_host_files_providers_under_a_key_it_chooses() {
     assert_eq!(
         registry.keyed_by("%id@%revision").unwrap_err(),
         KeyError::UnknownField {
-            name: "revision".to_string()
+            name: "revision".to_string(),
+            subject: Subject::Provider,
         }
+    );
+}
+
+/// The library key is the other half of the same knob: `%id` means one
+/// build of a library at a time, `%id@%version` means as many as are
+/// there.
+#[test]
+fn a_host_decides_how_many_builds_of_one_library_it_will_hold() {
+    let path = library_path();
+
+    // Under the default, the second is the same library and is skipped.
+    let mut one = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+    one.load_file(&path).unwrap().loaded().unwrap();
+    assert!(matches!(
+        one.load_file(&path).unwrap().skipped(),
+        Some(Skipped::AlreadyLoaded { .. })
+    ));
+
+    // Under `%id@%version` the key carries the version — and the same file
+    // twice is still the same file, caught by path before anything loads.
+    let mut apart = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"))
+        .libraries_keyed_by("%id@%version")
+        .expect("an empty registry cannot collide");
+    let loaded = apart.load_file(&path).unwrap().loaded().unwrap();
+    let expected = format!("hello_library@{}", loaded.version);
+    assert_eq!(loaded.key, expected);
+    assert!(matches!(
+        apart.load_file(&path).unwrap().skipped(),
+        Some(Skipped::AlreadyLoaded { .. })
+    ));
+
+    // A library has no display name, so a library template cannot name one.
+    assert!(
+        Registry::new("guatiao-tests", "1.0")
+            .libraries_keyed_by("%id-%name")
+            .is_err()
     );
 }
