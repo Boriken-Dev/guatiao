@@ -80,7 +80,7 @@ pub mod json {
     use guatiao::value::types::Value;
 
     use super::Error;
-    use crate::{Numbers, Presentation, ValueSeed, to_serde_with};
+    use crate::{Numbers, Presentation, Serializable, ValueSeed};
 
     /// The format's name, for a diagnostic.
     pub const NAME: &str = "json";
@@ -94,7 +94,7 @@ pub mod json {
 
     /// A value as compact JSON.
     pub fn to_string(value: &Value, how: Presentation) -> Result<String, Error> {
-        serde_json::to_string(&to_serde_with(value, exact(how))).map_err(|e| Error::Format {
+        serde_json::to_string(&Serializable::new(value, exact(how))).map_err(|e| Error::Format {
             format: NAME,
             detail: e.to_string(),
         })
@@ -102,9 +102,11 @@ pub mod json {
 
     /// The same, indented for a person to read.
     pub fn to_string_pretty(value: &Value, how: Presentation) -> Result<String, Error> {
-        serde_json::to_string_pretty(&to_serde_with(value, exact(how))).map_err(|e| Error::Format {
-            format: NAME,
-            detail: e.to_string(),
+        serde_json::to_string_pretty(&Serializable::new(value, exact(how))).map_err(|e| {
+            Error::Format {
+                format: NAME,
+                detail: e.to_string(),
+            }
         })
     }
 
@@ -146,7 +148,7 @@ pub mod toml {
     use guatiao::value::types::{Tag, Value};
 
     use super::Error;
-    use crate::{Presentation, ValueSeed, to_serde_with};
+    use crate::{Presentation, Serializable, ValueSeed};
 
     /// The format's name, for a diagnostic.
     pub const NAME: &str = "toml";
@@ -159,7 +161,7 @@ pub mod toml {
                 detail: "a TOML document is a table, so only a map can be one".to_string(),
             });
         }
-        ::toml::to_string(&to_serde_with(value, how)).map_err(|e| Error::Format {
+        ::toml::to_string(&Serializable::new(value, how)).map_err(|e| Error::Format {
             format: NAME,
             detail: e.to_string(),
         })
@@ -200,14 +202,14 @@ pub mod yaml {
     use guatiao::value::types::Value;
 
     use super::Error;
-    use crate::{Presentation, ValueSeed, to_serde_with};
+    use crate::{Presentation, Serializable, ValueSeed};
 
     /// The format's name, for a diagnostic.
     pub const NAME: &str = "yaml";
 
     /// A value as YAML.
     pub fn to_string(value: &Value, how: Presentation) -> Result<String, Error> {
-        serde_saphyr::to_string(&to_serde_with(value, how)).map_err(|e| Error::Format {
+        serde_saphyr::to_string(&Serializable::new(value, how)).map_err(|e| Error::Format {
             format: NAME,
             detail: e.to_string(),
         })

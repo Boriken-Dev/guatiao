@@ -211,7 +211,7 @@ fn number<E: serde::de::Error>(alloc: Alloc, text: &str) -> Result<Value, E> {
 #[cfg(all(test, feature = "json"))]
 mod tests {
     use super::*;
-    use crate::{Bytes, to_serde, to_serde_with};
+    use crate::{Bytes, Serializable};
 
     fn read(json: &str) -> Value {
         let mut de = serde_json::Deserializer::from_str(json);
@@ -224,7 +224,7 @@ mod tests {
     /// number's spelling survive.
     fn write(v: &Value) -> String {
         let how = Presentation::new().numbers(crate::Numbers::RawText);
-        serde_json::to_string(&to_serde_with(v, how)).expect("writable")
+        serde_json::to_string(&Serializable::new(v, how)).expect("writable")
     }
 
     /// TEXT ROUND-TRIPS, for everything a format can hand over intact.
@@ -309,7 +309,7 @@ mod tests {
     fn bytes_round_trip_through_json_when_both_sides_agree() {
         let how = Presentation::new().reading_data_uris();
         let original = Value::bytes(&[1, 2, 255]);
-        let text = serde_json::to_string(&to_serde_with(&original, how)).unwrap();
+        let text = serde_json::to_string(&Serializable::new(&original, how)).unwrap();
 
         let mut de = serde_json::Deserializer::from_str(&text);
         let back = ValueSeed::with(Alloc::rust(), how)
@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn bytes_round_trip_through_a_binary_format() {
         let original = Value::bytes(&[1, 2, 255]);
-        let packed = rmp_serde::to_vec(&to_serde(&original)).unwrap();
+        let packed = rmp_serde::to_vec(&Serializable::from(&original)).unwrap();
         let mut de = rmp_serde::Deserializer::new(&packed[..]);
         let back = ValueSeed::new(Alloc::rust()).deserialize(&mut de).unwrap();
         assert_eq!(back.as_bytes(), Some(&[1u8, 2, 255][..]));
@@ -349,9 +349,11 @@ mod tests {
         // Unambiguous to write, and honest about what comes back: the
         // reader sees a list, because that is what the document says.
         let v = Value::bytes(&[1, 2]);
-        let text =
-            serde_json::to_string(&to_serde_with(&v, Presentation::new().bytes(Bytes::Array)))
-                .unwrap();
+        let text = serde_json::to_string(&Serializable::new(
+            &v,
+            Presentation::new().bytes(Bytes::Array),
+        ))
+        .unwrap();
         assert_eq!(text, "[1,2]");
         assert_eq!(read(&text).items().map(<[_]>::len), Some(2));
     }

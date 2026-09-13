@@ -12,11 +12,11 @@
 //!
 //! ```
 //! use guatiao::value::types::Value;
-//! use guatiao_serde::{Presentation, to_serde};
+//! use guatiao_serde::Serializable;
 //!
 //! let mut map = Value::map();
 //! map.set("port", 5900).unwrap();
-//! let json = serde_json::to_string(&to_serde(&map)).unwrap();
+//! let json = serde_json::to_string(&Serializable::from(&map)).unwrap();
 //! assert_eq!(json, r#"{"port":5900}"#);
 //! ```
 //!
@@ -96,7 +96,7 @@ mod ser;
 pub mod text;
 
 pub use de::{ValueSeed, from_serde};
-pub use ser::{Serializable, to_serde, to_serde_with};
+pub use ser::Serializable;
 pub use text::Error;
 
 /// Standard base64 (RFC 4648 §4), the `A-Za-z0-9+/` alphabet padded to a
