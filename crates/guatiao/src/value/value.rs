@@ -680,6 +680,41 @@ impl Value {
     }
 }
 
+impl Clone for Value {
+    /// A deep copy, grown through the allocator this tree recorded — the
+    /// crate's own for a scalar, or for a literal that recorded none — so
+    /// a copy lives where its source did.
+    ///
+    /// Panics if the allocator refuses or the tree is deeper than
+    /// [`MAX_DEPTH`], the same policy as the short constructors;
+    /// [`clone_in`](Value::clone_in) is the fallible form and the one
+    /// that names an allocator.
+    fn clone(&self) -> Value {
+        let alloc = self.alloc().unwrap_or_else(|_| Alloc::rust());
+        self.clone_in(alloc)
+            .expect("a well-formed tree clones through a working allocator")
+    }
+}
+
+impl PartialEq for Value {
+    /// Structural: the same kind and the same contents, whatever
+    /// allocator either side lives in. [`equal`](crate::value::read::equal)
+    /// is the same comparison as a function.
+    fn eq(&self, other: &Value) -> bool {
+        crate::value::read::equal(self, other)
+    }
+}
+
+// SAFETY: the buffer is owned outright and reached only through `&self`
+// or `&mut self`, so no two threads share it without the borrow checker
+// saying so; the allocator it recorded is a table that outlives it (D05)
+// and may be called from any thread, which is the contract on
+// `Allocator` — a host handing out an arena synchronises it, as Rust's
+// global allocator does.
+unsafe impl Send for Value {}
+// SAFETY: as above.
+unsafe impl Sync for Value {}
+
 impl Drop for Value {
     /// A value frees what it owns.
     ///

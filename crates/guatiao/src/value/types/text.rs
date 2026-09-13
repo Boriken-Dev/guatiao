@@ -157,6 +157,33 @@ impl Default for Text {
     }
 }
 
+impl Clone for Text {
+    /// A copy through the allocator this text recorded, or the crate's own
+    /// when it has none. Panics as [`Value::clone`] does, and on text that
+    /// is not UTF-8 — a foreign producer's, since nothing here writes one.
+    fn clone(&self) -> Text {
+        let alloc = Alloc::recorded_or_rust(self.alloc);
+        Text::new_in(alloc, self.as_str().expect("text is UTF-8"))
+            .expect("a text clones through a working allocator")
+    }
+}
+
+impl PartialEq for Text {
+    fn eq(&self, other: &Text) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+// SAFETY: the buffer is owned outright and reached only through `&self`
+// or `&mut self`, so no two threads share it without the borrow checker
+// saying so; the allocator it recorded is a table that outlives it (D05)
+// and may be called from any thread, which is the contract on
+// `Allocator` — a host handing out an arena synchronises it, as Rust's
+// global allocator does.
+unsafe impl Send for Text {}
+// SAFETY: as above.
+unsafe impl Sync for Text {}
+
 impl From<Text> for Value {
     /// A string value. A NUMBER also stores its digits in a [`Text`], so
     /// that one is spelled [`Value::number`] rather than reached by

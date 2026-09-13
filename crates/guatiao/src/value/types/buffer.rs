@@ -69,6 +69,31 @@ pub struct Buffer {
     pub(crate) alloc: *const Allocator,
 }
 
+impl Clone for Buffer {
+    /// A copy through the allocator this buffer recorded, or the crate's
+    /// own when it has none. Panics as [`Value::clone`] does.
+    fn clone(&self) -> Buffer {
+        let alloc = Alloc::recorded_or_rust(self.alloc);
+        Buffer::new_in(alloc, self.as_slice()).expect("a buffer clones through a working allocator")
+    }
+}
+
+impl PartialEq for Buffer {
+    fn eq(&self, other: &Buffer) -> bool {
+        self.as_slice() == other.as_slice()
+    }
+}
+
+// SAFETY: the buffer is owned outright and reached only through `&self`
+// or `&mut self`, so no two threads share it without the borrow checker
+// saying so; the allocator it recorded is a table that outlives it (D05)
+// and may be called from any thread, which is the contract on
+// `Allocator` — a host handing out an arena synchronises it, as Rust's
+// global allocator does.
+unsafe impl Send for Buffer {}
+// SAFETY: as above.
+unsafe impl Sync for Buffer {}
+
 impl Drop for Buffer {
     fn drop(&mut self) {
         // SAFETY: as for `Text`.

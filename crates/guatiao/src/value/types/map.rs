@@ -257,6 +257,52 @@ impl Map {
     }
 }
 
+impl Map {
+    /// This container as a node, for the tree walks that take one: a
+    /// bitwise copy of the header that is never dropped, so the buffer
+    /// keeps exactly one owner.
+    fn view_node(&self) -> ManuallyDrop<Value> {
+        // SAFETY: a bitwise copy of a well-formed header, wrapped so it is
+        // never dropped; every reader below takes `&Value`.
+        ManuallyDrop::new(unsafe {
+            Value::from_raw_parts(u32::from(Tag::GUATIAO_MAP), Payload::map(ptr::read(self)))
+        })
+    }
+}
+
+impl Clone for Map {
+    /// A deep copy through the allocator this container recorded, or the
+    /// crate's own when it has none yet. Panics as [`Value::clone`] does.
+    fn clone(&self) -> Map {
+        let alloc = Alloc::recorded_or_rust(self.alloc);
+        let (_, payload) = self
+            .view_node()
+            .clone_in(alloc)
+            .expect("a well-formed container clones through a working allocator")
+            .into_raw_parts();
+        // SAFETY: the clone of a node with this tag is a node with this
+        // tag, so the arm read is the live one.
+        ManuallyDrop::into_inner(unsafe { payload.map })
+    }
+}
+
+impl PartialEq for Map {
+    /// Structural, as [`Value`]'s is.
+    fn eq(&self, other: &Map) -> bool {
+        crate::value::read::equal(&self.view_node(), &other.view_node())
+    }
+}
+
+// SAFETY: the buffer is owned outright and reached only through `&self`
+// or `&mut self`, so no two threads share it without the borrow checker
+// saying so; the allocator it recorded is a table that outlives it (D05)
+// and may be called from any thread, which is the contract on
+// `Allocator` — a host handing out an arena synchronises it, as Rust's
+// global allocator does.
+unsafe impl Send for Map {}
+// SAFETY: as above.
+unsafe impl Sync for Map {}
+
 impl Default for Map {
     fn default() -> Map {
         Map::new()
