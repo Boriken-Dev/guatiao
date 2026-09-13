@@ -10,6 +10,19 @@
 //! declarations rather than as a wall of string keys, and they cannot
 //! misspell one.
 //!
+//! # A schema does not know about forms
+//!
+//! **There is no way here to DECLARE a section**, and that is deliberate:
+//! a section exists only to group controls on a screen, so declaring one
+//! is a form's business and not a schema's. [`FormBuilder::section`] says
+//! which section a field belongs to, because that is a hint carried
+//! alongside the field; what a section is CALLED belongs to whatever
+//! draws it.
+//!
+//! A producer that must write one today reaches for
+//! [`SchemaBuilder::extra`], which carries any key without interpreting
+//! it — the same door every other annotation goes through.
+//!
 //! # A schema and a form are different questions
 //!
 //! What a value **is** — its kind, its bounds, whether it is required —
@@ -158,7 +171,7 @@ fn push(state: &mut Result<Value, ValueError>, key: &str, value: Result<Value, V
 /// let schema = SchemaBuilder::new()
 ///     .label("Connection")
 ///     .help("Where to connect, and how.")
-///     .option(
+///     .field(
 ///         FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
 ///             .label("Port")
 ///             .required(),
@@ -189,6 +202,19 @@ pub trait FormBuilder: Sized {
     #[must_use]
     fn help(mut self, help: &str) -> Self {
         self.presentation(vocab::HELP, help);
+        self
+    }
+
+    /// Which section this belongs to, by whatever id the thing drawing
+    /// the form groups by.
+    ///
+    /// Naming a section nothing declared is not an error: a consumer that
+    /// does not know it puts the field wherever it puts the ungrouped
+    /// ones, which is the same rule the rest of this vocabulary has for
+    /// something it does not recognise.
+    #[must_use]
+    fn section(mut self, section: &str) -> Self {
+        self.presentation(vocab::SECTION, section);
         self
     }
 }
@@ -230,24 +256,8 @@ impl SchemaBuilder {
 
     /// Declares an option. Order of declaration is the order a consumer
     /// sees.
-    pub fn option(mut self, option: FieldBuilder) -> SchemaBuilder {
-        push(&mut self.state, vocab::OPTIONS, option.state);
-        self
-    }
-
-    /// Declares a section a consumer may group options into.
-    pub fn section(mut self, id: &str, label: &str, help: &str) -> SchemaBuilder {
-        let mut built = Ok(Value::map_in(self.alloc));
-        put(&mut built, vocab::ID, Value::string_in(self.alloc, id));
-        put(
-            &mut built,
-            vocab::LABEL,
-            Value::string_in(self.alloc, label),
-        );
-        if !help.is_empty() {
-            put(&mut built, vocab::HELP, Value::string_in(self.alloc, help));
-        }
-        push(&mut self.state, vocab::SECTIONS, built);
+    pub fn field(mut self, field: FieldBuilder) -> SchemaBuilder {
+        push(&mut self.state, vocab::OPTIONS, field.state);
         self
     }
 
@@ -284,16 +294,6 @@ impl FieldBuilder {
         put(&mut state, vocab::KEY, Value::string_in(alloc, key));
         put(&mut state, vocab::KIND, kind.state);
         FieldBuilder { alloc, state }
-    }
-
-    /// Which section this belongs to.
-    pub fn section(mut self, section: &str) -> FieldBuilder {
-        put(
-            &mut self.state,
-            vocab::SECTION,
-            Value::string_in(self.alloc, section),
-        );
-        self
     }
 
     /// The default value, of whatever kind the option accepts.

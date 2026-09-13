@@ -291,7 +291,7 @@ fn a_failure_reports_its_path_through_the_error_value() {
 fn validation_crosses_and_never_quotes_the_refused_value() {
     let alloc = Alloc::rust();
     let schema = SchemaBuilder::new_in(alloc)
-        .option(
+        .field(
             FieldBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
                 .required(),
         )
@@ -399,7 +399,7 @@ fn the_map_clear_symbol_refuses_a_list() {
 fn variant_schema() -> Value {
     let alloc = Alloc::rust();
     SchemaBuilder::new_in(alloc)
-        .option(FieldBuilder::new_in(
+        .field(FieldBuilder::new_in(
             alloc,
             "auth",
             KindBuilder::variant_in(

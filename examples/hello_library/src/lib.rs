@@ -281,7 +281,7 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
         // heard of this library.
         let schema = Box::new(
             SchemaBuilder::new_in(alloc)
-                .option(
+                .field(
                     FieldBuilder::new_in(alloc, "name", KindBuilder::string_in(alloc))
                         .label("Name")
                         .help("Who to greet.")

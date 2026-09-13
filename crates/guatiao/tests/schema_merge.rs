@@ -32,7 +32,7 @@ fn schema_with(alloc: Alloc, pairs: &[(&str, &str)]) -> Value {
         if !declaration.is_empty() {
             option = option.extra(X_MERGE, Ok(Value::string(declaration)));
         }
-        builder = builder.option(option);
+        builder = builder.field(option);
     }
     builder.finish().expect("a schema this small builds")
 }
@@ -105,7 +105,7 @@ fn an_unrecognised_spelling_falls_back_rather_than_failing() {
 fn a_non_string_annotation_is_ignored() {
     let alloc = Alloc::rust();
     let schema = SchemaBuilder::new_in(alloc)
-        .option(
+        .field(
             FieldBuilder::new_in(alloc, "k", KindBuilder::string_in(alloc))
                 .extra(X_MERGE, Ok(Value::int(2))),
         )
