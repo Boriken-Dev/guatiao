@@ -38,7 +38,7 @@ use std::collections::BTreeMap;
 
 use crate::schema::ValidationError;
 use crate::schema::flat;
-use crate::schema::read::{OptionRef, SchemaRef};
+use crate::schema::read::{FieldRef, SchemaRef};
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::status::Status;
 use crate::value::types::{Str, Value};
@@ -197,7 +197,7 @@ pub unsafe extern "C" fn guatiao_schema_flat_keys(
     }
     super::guard(|| {
         // SAFETY: the caller's contract.
-        let Some(option) = OptionRef::new(unsafe { &*option }) else {
+        let Some(option) = FieldRef::new(unsafe { &*option }) else {
             return Status::GUATIAO_ERR_WRONG_KIND;
         };
         // SAFETY: as above.
@@ -243,7 +243,7 @@ pub unsafe extern "C" fn guatiao_schema_flatten(
     super::guard(|| {
         // SAFETY: the caller's contract.
         let (option, value) = unsafe { (&*option, &*value) };
-        let Some(option) = OptionRef::new(option) else {
+        let Some(option) = FieldRef::new(option) else {
             return Status::GUATIAO_ERR_WRONG_KIND;
         };
         // SAFETY: as above.
@@ -287,7 +287,7 @@ pub unsafe extern "C" fn guatiao_schema_unflatten(
     super::guard(|| {
         // SAFETY: the caller's contract.
         let (option, flat) = unsafe { (&*option, &*flat) };
-        let Some(option) = OptionRef::new(option) else {
+        let Some(option) = FieldRef::new(option) else {
             return Status::GUATIAO_ERR_WRONG_KIND;
         };
         let Some(store) = store_of(flat) else {

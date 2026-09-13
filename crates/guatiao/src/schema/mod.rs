@@ -22,16 +22,16 @@
 //! names and nothing else — no generated structs, no second ABI to keep in
 //! step with the first.
 //!
-//! - [`build`] writes one: [`SchemaBuilder`], [`OptionBuilder`],
+//! - [`build`] writes one: [`SchemaBuilder`], [`FieldBuilder`],
 //!   [`KindBuilder`], [`ArmBuilder`].
 //!
 //! ```
-//! use guatiao::schema::{KindBuilder, OptionBuilder, SchemaBuilder};
+//! use guatiao::schema::{FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
 //!
 //! // Building names no allocator, the same as `Map::new()`.
 //! let schema = SchemaBuilder::new()
 //!     .option(
-//!         OptionBuilder::new("port", KindBuilder::int_range(1, 65535))
+//!         FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
 //!             .label("Port")
 //!             .required(),
 //!     )
@@ -41,7 +41,7 @@
 //! let read = guatiao::schema::read::SchemaRef::new(&schema).expect("a schema is a map");
 //! assert!(read.find("port").expect("it declares `port`").is_required());
 //! ```
-//! - [`read`] reads one back: [`SchemaRef`], [`OptionRef`], [`KindRef`].
+//! - [`read`] reads one back: [`SchemaRef`], [`FieldRef`], [`KindRef`].
 //! - [`validate`] answers whether a value is one the schema accepts.
 //! - [`flat`] projects a tagged option onto flat `key -> text` storage,
 //!   which is what a command line or a query string can carry.
@@ -85,10 +85,10 @@ pub mod read;
 pub mod validate;
 pub mod vocab;
 
-pub use build::{ArmBuilder, KindBuilder, OptionBuilder, SchemaBuilder};
+pub use build::{ArmBuilder, FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
 pub use describe::Schema;
 pub use flat::{SEPARATOR, flatten, is_sensitive, resolve, unflatten};
-pub use read::{ArmRef, ChoiceRef, Kind as KindRef, OptionRef, SchemaRef, SectionRef};
+pub use read::{ArmRef, ChoiceRef, FieldRef, Kind as KindRef, SchemaRef, SectionRef};
 pub use validate::{validate_map, validate_text, validate_texts, validate_value};
 
 /// Why a value was rejected by [`validate_value`] or [`validate_map`].
@@ -96,7 +96,7 @@ pub use validate::{validate_map, validate_text, validate_texts, validate_value};
 /// Deliberately carries the option's **key** and a description of what
 /// *would* have been accepted, but **never the offending value**. Options
 /// are not secrets today, but an option may be marked
-/// [`OptionRef::is_sensitive`], and an error type that quotes the input is
+/// [`FieldRef::is_sensitive`], and an error type that quotes the input is
 /// an error type that eventually logs a passphrase. Rejecting a value
 /// without echoing it costs nothing here — the caller still has the value
 /// it just passed in, and can decide for itself whether showing it is

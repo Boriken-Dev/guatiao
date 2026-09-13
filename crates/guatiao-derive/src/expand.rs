@@ -503,17 +503,26 @@ fn emit_schema(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
         let key = &field.key;
         let ty = &field.ty;
         let mut built = quote! {
-            ::guatiao::schema::OptionBuilder::new_in(__alloc,
+            ::guatiao::schema::FieldBuilder::new_in(__alloc,
                 #key,
                 <#ty as ::guatiao::Schema>::kind(__alloc),
             )
         };
         let a = &field.schema;
+        // Qualified, not `.label(..)`. These are trait methods now, and
+        // method syntax would need `FormBuilder` in scope at the
+        // EXPANSION site -- somebody else's crate, which generated code
+        // may not assume anything about. The same reason every path here
+        // is rooted at `::guatiao`.
         if let Some(label) = &a.label {
-            built = quote! { #built.label(#label) };
+            built = quote! {
+                ::guatiao::schema::FormBuilder::label(#built, #label)
+            };
         }
         if let Some(help) = &a.help {
-            built = quote! { #built.help(#help) };
+            built = quote! {
+                ::guatiao::schema::FormBuilder::help(#built, #help)
+            };
         }
         if let Some(section) = &a.section {
             built = quote! { #built.section(#section) };

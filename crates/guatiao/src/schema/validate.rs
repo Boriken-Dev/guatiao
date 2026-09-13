@@ -22,7 +22,7 @@
 use std::collections::BTreeMap;
 
 use super::ValidationError;
-use super::read::{Kind, OptionRef, SchemaRef};
+use super::read::{FieldRef, Kind, SchemaRef};
 use crate::value::read::str_or;
 use crate::value::types::{Tag, Value};
 
@@ -68,7 +68,7 @@ fn bad(key: impl Into<String>, expected: impl Into<String>) -> ValidationError {
 }
 
 /// Whether `option` accepts `text`.
-pub fn validate_text(option: OptionRef<'_>, text: &str) -> Result<(), ValidationError> {
+pub fn validate_text(option: FieldRef<'_>, text: &str) -> Result<(), ValidationError> {
     against(option.kind(), option.key(), text)
 }
 
@@ -215,7 +215,7 @@ fn bounds<T: std::fmt::Display>(min: Option<T>, max: Option<T>) -> String {
 /// So this checks the three things the text form structurally cannot: the
 /// discriminant names a declared arm, every key present is declared **by
 /// that arm**, and every required field of that arm is present.
-pub fn validate_value(option: OptionRef<'_>, value: &Value) -> Result<(), ValidationError> {
+pub fn validate_value(option: FieldRef<'_>, value: &Value) -> Result<(), ValidationError> {
     value_against(option.kind(), option.key(), value)
 }
 

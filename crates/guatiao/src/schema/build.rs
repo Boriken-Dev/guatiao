@@ -10,6 +10,13 @@
 //! declarations rather than as a wall of string keys, and they cannot
 //! misspell one.
 //!
+//! # A schema and a form are different questions
+//!
+//! What a value **is** — its kind, its bounds, whether it is required —
+//! is substance, and lives on the builders themselves. How it is
+//! **shown** — a label, some help — is presentation, and lives on
+//! [`FormBuilder`], which all three builders implement.
+//!
 //! # Building names no allocator
 //!
 //! `SchemaBuilder::new()`, `KindBuilder::string()` and the rest use the
@@ -51,7 +58,7 @@ pub struct SchemaBuilder {
 }
 
 /// Builds one option.
-pub struct OptionBuilder {
+pub struct FieldBuilder {
     alloc: Alloc,
     state: Result<Value, ValueError>,
 }
@@ -73,9 +80,9 @@ impl std::fmt::Debug for SchemaBuilder {
     }
 }
 
-impl std::fmt::Debug for OptionBuilder {
+impl std::fmt::Debug for FieldBuilder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        debug_state(f, "OptionBuilder", &self.state)
+        debug_state(f, "FieldBuilder", &self.state)
     }
 }
 
@@ -133,6 +140,77 @@ fn push(state: &mut Result<Value, ValueError>, key: &str, value: Result<Value, V
     }
 }
 
+/// The presentation half: what a person is SHOWN.
+///
+/// A schema says what a value **is** — its kind, its bounds, whether it
+/// is required. A form says how to **show** it — a label, some help, an
+/// order, a section. The two have always lived in one builder here, and
+/// the presentation half repeats across three of them, which is what a
+/// trait is for.
+///
+/// It is also the seam a form generator wants: code that decorates a
+/// declaration can be generic over this and never know whether it is
+/// labelling a whole schema, one field, or one arm of a variant.
+///
+/// ```
+/// use guatiao::schema::{FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
+///
+/// let schema = SchemaBuilder::new()
+///     .label("Connection")
+///     .help("Where to connect, and how.")
+///     .option(
+///         FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
+///             .label("Port")
+///             .required(),
+///     )
+///     .finish()
+///     .expect("a schema this small does not exhaust an allocator");
+/// ```
+///
+/// **Presentation is optional and substance is not.** Every key here may
+/// be missing and the schema is still correct and still usable; a
+/// consumer with no user interface ignores all of them. Never make a
+/// validation or type decision depend on one.
+pub trait FormBuilder: Sized {
+    /// Sets one presentation key to some text.
+    ///
+    /// The only thing an implementer writes; everything else here is
+    /// provided over it.
+    fn presentation(&mut self, key: &str, text: &str);
+
+    /// A short human label.
+    #[must_use]
+    fn label(mut self, label: &str) -> Self {
+        self.presentation(vocab::LABEL, label);
+        self
+    }
+
+    /// Longer human help: a sentence under the control, or a tooltip.
+    #[must_use]
+    fn help(mut self, help: &str) -> Self {
+        self.presentation(vocab::HELP, help);
+        self
+    }
+}
+
+impl FormBuilder for SchemaBuilder {
+    fn presentation(&mut self, key: &str, text: &str) {
+        put(&mut self.state, key, Value::string_in(self.alloc, text));
+    }
+}
+
+impl FormBuilder for FieldBuilder {
+    fn presentation(&mut self, key: &str, text: &str) {
+        put(&mut self.state, key, Value::string_in(self.alloc, text));
+    }
+}
+
+impl FormBuilder for ArmBuilder {
+    fn presentation(&mut self, key: &str, text: &str) {
+        put(&mut self.state, key, Value::string_in(self.alloc, text));
+    }
+}
+
 impl SchemaBuilder {
     /// An empty schema, through the crate's own allocator.
     ///
@@ -152,7 +230,7 @@ impl SchemaBuilder {
 
     /// Declares an option. Order of declaration is the order a consumer
     /// sees.
-    pub fn option(mut self, option: OptionBuilder) -> SchemaBuilder {
+    pub fn option(mut self, option: FieldBuilder) -> SchemaBuilder {
         push(&mut self.state, vocab::OPTIONS, option.state);
         self
     }
@@ -193,43 +271,23 @@ impl Default for SchemaBuilder {
     }
 }
 
-impl OptionBuilder {
+impl FieldBuilder {
     /// An option under `key`, accepting `kind`.
     /// One option, through the crate's own allocator.
-    pub fn new(key: &str, kind: KindBuilder) -> OptionBuilder {
-        OptionBuilder::new_in(Alloc::rust(), key, kind)
+    pub fn new(key: &str, kind: KindBuilder) -> FieldBuilder {
+        FieldBuilder::new_in(Alloc::rust(), key, kind)
     }
 
     /// The same, through an allocator you name.
-    pub fn new_in(alloc: Alloc, key: &str, kind: KindBuilder) -> OptionBuilder {
+    pub fn new_in(alloc: Alloc, key: &str, kind: KindBuilder) -> FieldBuilder {
         let mut state = Ok(Value::map_in(alloc));
         put(&mut state, vocab::KEY, Value::string_in(alloc, key));
         put(&mut state, vocab::KIND, kind.state);
-        OptionBuilder { alloc, state }
-    }
-
-    /// A short human label.
-    pub fn label(mut self, label: &str) -> OptionBuilder {
-        put(
-            &mut self.state,
-            vocab::LABEL,
-            Value::string_in(self.alloc, label),
-        );
-        self
-    }
-
-    /// Longer human help.
-    pub fn help(mut self, help: &str) -> OptionBuilder {
-        put(
-            &mut self.state,
-            vocab::HELP,
-            Value::string_in(self.alloc, help),
-        );
-        self
+        FieldBuilder { alloc, state }
     }
 
     /// Which section this belongs to.
-    pub fn section(mut self, section: &str) -> OptionBuilder {
+    pub fn section(mut self, section: &str) -> FieldBuilder {
         put(
             &mut self.state,
             vocab::SECTION,
@@ -242,13 +300,13 @@ impl OptionBuilder {
     ///
     /// Setting it to null is different from not setting it: the first says
     /// the default is nothing, the second that there is no default.
-    pub fn default(mut self, value: Result<Value, ValueError>) -> OptionBuilder {
+    pub fn default(mut self, value: Result<Value, ValueError>) -> FieldBuilder {
         put(&mut self.state, vocab::DEFAULT, value);
         self
     }
 
     /// Declaration position.
-    pub fn order(mut self, order: i64) -> OptionBuilder {
+    pub fn order(mut self, order: i64) -> FieldBuilder {
         put(
             &mut self.state,
             vocab::ORDER,
@@ -258,25 +316,25 @@ impl OptionBuilder {
     }
 
     /// Hidden behind a disclosure by default.
-    pub fn advanced(mut self) -> OptionBuilder {
+    pub fn advanced(mut self) -> FieldBuilder {
         put(&mut self.state, vocab::ADVANCED, Ok(Value::bool(true)));
         self
     }
 
     /// A secret: masked in a form, encrypted in storage.
-    pub fn sensitive(mut self) -> OptionBuilder {
+    pub fn sensitive(mut self) -> FieldBuilder {
         put(&mut self.state, vocab::SENSITIVE, Ok(Value::bool(true)));
         self
     }
 
     /// Must be given.
-    pub fn required(mut self) -> OptionBuilder {
+    pub fn required(mut self) -> FieldBuilder {
         put(&mut self.state, vocab::REQUIRED, Ok(Value::bool(true)));
         self
     }
 
     /// An annotation. Carried, never interpreted.
-    pub fn extra(mut self, key: &str, value: Result<Value, ValueError>) -> OptionBuilder {
+    pub fn extra(mut self, key: &str, value: Result<Value, ValueError>) -> FieldBuilder {
         put(&mut self.state, key, value);
         self
     }
@@ -428,12 +486,12 @@ impl KindBuilder {
     /// further is declared about -- exactly as an arm with no fields is.
     /// Built through the crate's own allocator. `map_in` names one,
     /// which is what a schema built into a host's arena needs.
-    pub fn map(fields: Vec<OptionBuilder>) -> KindBuilder {
+    pub fn map(fields: Vec<FieldBuilder>) -> KindBuilder {
         KindBuilder::map_in(Alloc::rust(), fields)
     }
 
     /// The same, through an allocator you name.
-    pub fn map_in(alloc: Alloc, fields: Vec<OptionBuilder>) -> KindBuilder {
+    pub fn map_in(alloc: Alloc, fields: Vec<FieldBuilder>) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_MAP);
         // Written even when empty, so a reader can tell "an object with no
         // declared fields" from "a kind that forgot to say".
@@ -526,18 +584,8 @@ impl ArmBuilder {
         ArmBuilder { alloc, state }
     }
 
-    /// Longer human help.
-    pub fn help(mut self, help: &str) -> ArmBuilder {
-        put(
-            &mut self.state,
-            vocab::HELP,
-            Value::string_in(self.alloc, help),
-        );
-        self
-    }
-
     /// An option this arm adds when selected.
-    pub fn field(mut self, option: OptionBuilder) -> ArmBuilder {
+    pub fn field(mut self, option: FieldBuilder) -> ArmBuilder {
         push(&mut self.state, vocab::FIELDS, option.state);
         self
     }

@@ -24,7 +24,7 @@ use guatiao::exports::schema::{
     guatiao_schema_unflatten, guatiao_schema_validate,
 };
 use guatiao::exports::value::guatiao_map_clear;
-use guatiao::schema::{ArmBuilder, KindBuilder, OptionBuilder, SchemaBuilder};
+use guatiao::schema::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::value::read::{items, str_or};
 use guatiao::value::status::Status;
 use guatiao::value::types::{Str, Value};
@@ -292,7 +292,7 @@ fn validation_crosses_and_never_quotes_the_refused_value() {
     let alloc = Alloc::rust();
     let schema = SchemaBuilder::new_in(alloc)
         .option(
-            OptionBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
+            FieldBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
                 .required(),
         )
         .finish()
@@ -399,7 +399,7 @@ fn the_map_clear_symbol_refuses_a_list() {
 fn variant_schema() -> Value {
     let alloc = Alloc::rust();
     SchemaBuilder::new_in(alloc)
-        .option(OptionBuilder::new_in(
+        .option(FieldBuilder::new_in(
             alloc,
             "auth",
             KindBuilder::variant_in(
@@ -408,13 +408,13 @@ fn variant_schema() -> Value {
                 vec![
                     ArmBuilder::new_in(alloc, "sso", "Single sign-on"),
                     ArmBuilder::new_in(alloc, "userpass", "Username and password")
-                        .field(OptionBuilder::new_in(
+                        .field(FieldBuilder::new_in(
                             alloc,
                             "username",
                             KindBuilder::string_in(alloc),
                         ))
                         .field(
-                            OptionBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
+                            FieldBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
                                 .sensitive(),
                         ),
                 ],

@@ -225,12 +225,30 @@ layer above.
 Build:
 
 ```rust
+use guatiao::schema::{FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
+
 SchemaBuilder::new()
-    .option(OptionBuilder::new("port", KindBuilder::int_range(1, 65535))
-        .label("Port").help("...").required())
+    .label("Connection")                      // FormBuilder
+    .option(FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
+        .label("Port").help("...")            // FormBuilder
+        .required())                          // inherent: substance
     .section("net", "Network", "...")
     .finish() -> Result<Value, ValueError>
 ```
+
+**A schema and a form are different questions.** What a value *is* — its
+kind, its bounds, whether it is required — is substance and lives on the
+builders. How it is *shown* — `label`, `help` — is presentation and lives
+on the **`FormBuilder`** trait, which `SchemaBuilder`, `FieldBuilder` and
+`ArmBuilder` all implement. Import the trait to use those two.
+
+Presentation is optional and substance is not: every presentation key may
+be missing and the schema is still correct and still usable. Never make a
+validation or type decision depend on one.
+
+`FieldBuilder` rather than `OptionBuilder`, because the same builder
+produces an entry in a schema's `options` **and** in a map kind's
+`fields`. The wire keys are unchanged.
 
 **Building names no allocator**, the same rule the value API has. Every
 constructor has an `_in` twin that takes one — `SchemaBuilder::new_in`,
@@ -250,7 +268,7 @@ Read (borrowed views over the value, no copying):
 ```rust
 SchemaRef::new(&value) -> Option<SchemaRef>
   .options() / .sections() / .find(key) / .extra(key) / .as_value()
-OptionRef: .key() .kind() .label() .help() .section() .default() .order()
+FieldRef: .key() .kind() .label() .help() .section() .default() .order()
            .is_advanced() .is_sensitive() .is_required() .extra(key)
 Kind: .choices() .alternatives() .arms() .items() .fields() .name()
 ```

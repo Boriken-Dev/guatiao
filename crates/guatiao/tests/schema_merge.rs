@@ -8,7 +8,7 @@
 //! module forbids `unsafe`, and a test file is free of that rule. The
 //! thing under test contains no `unsafe` at all.
 
-use guatiao::schema::build::{KindBuilder, OptionBuilder, SchemaBuilder};
+use guatiao::schema::build::{FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::schema::merge::{
     DeclaredMerge, X_MERGE, annotation, declared_for, merge_options, merge_overrides,
     merge_with_schema, parse_mode,
@@ -28,7 +28,7 @@ use guatiao::{MergeMode, MergeOptions, Value};
 fn schema_with(alloc: Alloc, pairs: &[(&str, &str)]) -> Value {
     let mut builder = SchemaBuilder::new_in(alloc);
     for (key, declaration) in pairs {
-        let mut option = OptionBuilder::new_in(alloc, key, KindBuilder::string_in(alloc));
+        let mut option = FieldBuilder::new_in(alloc, key, KindBuilder::string_in(alloc));
         if !declaration.is_empty() {
             option = option.extra(X_MERGE, Ok(Value::string(declaration)));
         }
@@ -106,7 +106,7 @@ fn a_non_string_annotation_is_ignored() {
     let alloc = Alloc::rust();
     let schema = SchemaBuilder::new_in(alloc)
         .option(
-            OptionBuilder::new_in(alloc, "k", KindBuilder::string_in(alloc))
+            FieldBuilder::new_in(alloc, "k", KindBuilder::string_in(alloc))
                 .extra(X_MERGE, Ok(Value::int(2))),
         )
         .finish()

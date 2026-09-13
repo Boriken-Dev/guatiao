@@ -33,7 +33,7 @@ pub struct SchemaRef<'a>(&'a Value);
 
 /// One option a provider declares.
 #[derive(Clone, Copy, Debug)]
-pub struct OptionRef<'a>(&'a Value);
+pub struct FieldRef<'a>(&'a Value);
 
 /// A named group of options, for a consumer that draws them.
 #[derive(Clone, Copy, Debug)]
@@ -77,13 +77,13 @@ impl<'a> SchemaRef<'a> {
     /// Anything in the list that is not a map with a string key is skipped:
     /// an option with no key is not an option, and dropping the one is
     /// better than refusing the rest.
-    pub fn options(&self) -> impl Iterator<Item = OptionRef<'a>> {
+    pub fn options(&self) -> impl Iterator<Item = FieldRef<'a>> {
         self.0
             .get(vocab::OPTIONS)
             .and_then(Value::items)
             .unwrap_or(&[])
             .iter()
-            .filter_map(OptionRef::new)
+            .filter_map(FieldRef::new)
     }
 
     /// Every section, in declaration order.
@@ -98,7 +98,7 @@ impl<'a> SchemaRef<'a> {
     }
 
     /// The option declared under `key`.
-    pub fn find(&self, key: &str) -> Option<OptionRef<'a>> {
+    pub fn find(&self, key: &str) -> Option<FieldRef<'a>> {
         self.options().find(|o| o.key() == key)
     }
 
@@ -126,15 +126,15 @@ impl<'a> SectionRef<'a> {
     }
 }
 
-impl<'a> OptionRef<'a> {
+impl<'a> FieldRef<'a> {
     /// Views `value` as an option, or `None` when it is not a map with a
     /// string key.
-    pub fn new(value: &'a Value) -> Option<OptionRef<'a>> {
+    pub fn new(value: &'a Value) -> Option<FieldRef<'a>> {
         if !is_map(value) {
             return None;
         }
         value.get(vocab::KEY).and_then(Value::as_str)?;
-        Some(OptionRef(value))
+        Some(FieldRef(value))
     }
 
     /// The value this is a view of.
@@ -143,7 +143,7 @@ impl<'a> OptionRef<'a> {
     }
 
     /// The key this option's value is stored under. Never empty: an option
-    /// without one is not constructible through [`OptionRef::new`].
+    /// without one is not constructible through [`FieldRef::new`].
     pub fn key(&self) -> &'a str {
         text(self.0, vocab::KEY)
     }
@@ -235,13 +235,13 @@ impl<'a> ArmRef<'a> {
     /// **An empty list is ordinary and complete**, not missing data: "use
     /// the ambient credential" is the common case, and treating it as an
     /// error would make the common case the exception.
-    pub fn fields(&self) -> impl Iterator<Item = OptionRef<'a>> {
+    pub fn fields(&self) -> impl Iterator<Item = FieldRef<'a>> {
         self.0
             .get(vocab::FIELDS)
             .and_then(Value::items)
             .unwrap_or(&[])
             .iter()
-            .filter_map(OptionRef::new)
+            .filter_map(FieldRef::new)
     }
 }
 
@@ -397,12 +397,12 @@ impl<'a> Kind<'a> {
     ///
     /// Reads exactly like [`ArmRef::fields`], because it is the same idea:
     /// here are more options, keyed under something.
-    pub fn fields(self) -> impl Iterator<Item = OptionRef<'a>> {
+    pub fn fields(self) -> impl Iterator<Item = FieldRef<'a>> {
         let list = match self {
             Kind::Map(f) => f.items().unwrap_or(&[]),
             _ => &[],
         };
-        list.iter().filter_map(OptionRef::new)
+        list.iter().filter_map(FieldRef::new)
     }
 
     /// The name this kind is written with, for a diagnostic.

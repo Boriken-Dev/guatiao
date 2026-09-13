@@ -27,7 +27,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use guatiao::library::{HostInfo, Kinds, LibraryInfo, ProviderInfo, Providers};
-use guatiao::schema::{KindBuilder, OptionBuilder, SchemaBuilder};
+use guatiao::schema::{FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::value::read::str_or;
 use guatiao::value::status::Status;
@@ -282,7 +282,7 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
         let schema = Box::new(
             SchemaBuilder::new_in(alloc)
                 .option(
-                    OptionBuilder::new_in(alloc, "name", KindBuilder::string_in(alloc))
+                    FieldBuilder::new_in(alloc, "name", KindBuilder::string_in(alloc))
                         .label("Name")
                         .help("Who to greet.")
                         .required(),
