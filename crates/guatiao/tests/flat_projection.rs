@@ -250,21 +250,39 @@ fn resolve_in_a_store_follows_the_selected_arm() {
 
     // No selection and no default: the payload cannot be checked yet,
     // and the message says what to give.
-    let undecided = flat::resolve_in(s, "auth.username", selected(&[]))
-        .expect_err("nothing chose an arm");
-    assert!(undecided.to_string().contains("sso, userpass"), "{undecided}");
+    let undecided =
+        flat::resolve_in(s, "auth.username", selected(&[])).expect_err("nothing chose an arm");
+    assert!(
+        undecided.to_string().contains("sso, userpass"),
+        "{undecided}"
+    );
 
     // A dotted key whose stem is not tagged at all is unknown, listing
     // what does exist.
     let unknown = flat::resolve_in(s, "host.min", selected(&[])).expect_err("host is text");
-    assert!(matches!(unknown, guatiao::schema::ValidationError::UnknownOption { .. }));
+    assert!(matches!(
+        unknown,
+        guatiao::schema::ValidationError::UnknownOption { .. }
+    ));
 
     // And a whole store, through the validator a front end calls.
     use guatiao::schema::validate_texts;
-    assert!(validate_texts(s, &store_of(&[("auth", "userpass"), ("auth.username", "alice")])).is_ok());
+    assert!(
+        validate_texts(
+            s,
+            &store_of(&[("auth", "userpass"), ("auth.username", "alice")])
+        )
+        .is_ok()
+    );
     assert!(validate_texts(s, &store_of(&[("auth", "sso")])).is_ok());
     assert!(validate_texts(s, &store_of(&[("auth", "sso"), ("auth.username", "alice")])).is_err());
-    assert!(validate_texts(s, &store_of(&[("auth", "userpass"), ("auth.usernme", "alice")])).is_err());
+    assert!(
+        validate_texts(
+            s,
+            &store_of(&[("auth", "userpass"), ("auth.usernme", "alice")])
+        )
+        .is_err()
+    );
 }
 
 #[test]
