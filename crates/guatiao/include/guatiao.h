@@ -1101,6 +1101,57 @@ bool guatiao_registry_provider_available(const struct guatiao_registry *reg,
                                          struct guatiao_str *reason);
 
 /*
+ Ranks every provider with this id, now and whenever one loads.
+
+ **This is how a host chooses between two implementations of one
+ kind.** `guatiao_registry_providers` and `_available` answer best
+ first, which is `(priority DESC, key ASC)` — the key tiebreak because
+ load order follows directory iteration, which no filesystem promises
+ to keep stable, so "whichever loaded first" is not a rule anyone can
+ reproduce.
+
+ Absent means 0, so an unranked provider sorts below any raised one and
+ alongside every other unranked one. Negative ranks below them all.
+
+ A frontend reads its own configuration and calls this; nothing in this
+ library reads a file.
+
+ # Safety
+
+ `reg` is a live handle and `id` is readable for this call.
+ */
+guatiao_status guatiao_registry_set_priority(struct guatiao_registry *reg,
+                                             struct guatiao_str id,
+                                             int32_t priority);
+
+/*
+ What this host ranked that id. Zero unless it said otherwise, and zero
+ for a null handle — a rank is not a lookup, and there is no answer to
+ distinguish "unranked" from.
+
+ # Safety
+
+ `reg` is a live handle and `id` is readable for this call.
+ */
+int32_t guatiao_registry_priority(const struct guatiao_registry *reg, struct guatiao_str id);
+
+/*
+ The best provider serving `kind` that can actually run here, as a map.
+
+ `GUATIAO_ERR_NOT_FOUND` when nothing can. The question a host usually
+ has; `guatiao_registry_available` is how to see what it passed over,
+ so a frontend can say "ssh -> openssh (also: putty)".
+
+ # Safety
+
+ As [`guatiao_registry_providers`].
+ */
+guatiao_status guatiao_registry_best(const struct guatiao_registry *reg,
+                                     struct guatiao_str kind,
+                                     const struct guatiao_alloc *alloc,
+                                     struct guatiao_value *out);
+
+/*
  One provider's function table, and the size the library compiled it at.
 
  Null when no provider answers to `key`, or when it declares no table.

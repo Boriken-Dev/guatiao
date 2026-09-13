@@ -210,6 +210,9 @@ pub struct Provider {
     /// not a `String`, because it is a string this crate hands to C: it is
     /// already a `guatiao_string` and needs no conversion at the boundary.
     key: Text,
+    /// What this host ranked it, resolved when it loaded and again
+    /// whenever the ranking changes. Absent means 0.
+    priority: i32,
 }
 
 impl Provider {
@@ -225,6 +228,16 @@ impl Provider {
     /// [`Registry::providers`] is the same question asked of all of them.
     pub fn supports(&self, kind: &str) -> bool {
         self.view.supports(kind)
+    }
+
+    /// What this host ranked it. Zero unless somebody said otherwise.
+    ///
+    /// **Host policy, not a property of the provider** — which is why it
+    /// is here and not in the descriptor. A library does not know how a
+    /// person ranks it against the others they installed, and two machines
+    /// with the same libraries can rank them differently.
+    pub fn priority(&self) -> i32 {
+        self.priority
     }
 
     /// Whether it can actually run here, and why not when it cannot.
@@ -387,6 +400,12 @@ pub struct Registry {
     providers: Vec<Provider>,
     /// A rendered key to an index into `providers`.
     by_key: BTreeMap<String, usize>,
+    /// Provider id to the rank this host gave it.
+    ///
+    /// Kept beside the registry rather than on the descriptor because it
+    /// is the HOST's opinion. Absent means 0, so an unranked provider
+    /// sorts below any raised one and alongside every other unranked one.
+    priorities: BTreeMap<String, i32>,
 }
 
 impl Registry {
@@ -408,7 +427,55 @@ impl Registry {
             loaded: Vec::new(),
             providers: Vec::new(),
             by_key: BTreeMap::new(),
+            priorities: BTreeMap::new(),
         }
+    }
+
+    /// Ranks every provider with this id, now and whenever one loads.
+    ///
+    /// **This is how a host chooses between two implementations of one
+    /// kind**, and it is a host's call rather than a library's: a library
+    /// does not know what else is installed, and two machines with the
+    /// same set can rank them differently. A frontend reads its own
+    /// configuration and calls this; nothing here reads a file.
+    ///
+    /// Takes effect immediately for what is already loaded, and is
+    /// remembered for anything that loads later — so the order in which a
+    /// host ranks and scans does not change the answer.
+    pub fn set_priority(&mut self, id: &str, priority: i32) {
+        self.priorities.insert(id.to_string(), priority);
+        for provider in &mut self.providers {
+            if provider.view.id == id {
+                provider.priority = priority;
+            }
+        }
+    }
+
+    /// What this host ranked that id. Zero unless it said otherwise.
+    pub fn priority(&self, id: &str) -> i32 {
+        self.priorities.get(id).copied().unwrap_or(0)
+    }
+
+    /// Every provider serving one kind, best first.
+    ///
+    /// **`(priority DESC, key ASC)`**. The key tiebreak is deliberate:
+    /// load order follows directory iteration, which no filesystem
+    /// promises to keep stable across runs or machines, so "whichever
+    /// loaded first" is not a rule anyone can document or reproduce. A key
+    /// is arbitrary but **deterministic and inspectable**, and a host that
+    /// wants a different winner says so with a priority rather than
+    /// depending on an order nothing guarantees.
+    ///
+    /// Collected rather than lazy, because sorting needs every candidate
+    /// first. A registry holds tens of providers, not millions.
+    fn ranked<'a>(&'a self, of: impl Iterator<Item = &'a Provider>) -> Vec<&'a Provider> {
+        let mut found: Vec<&Provider> = of.collect();
+        found.sort_by(|a, b| {
+            b.priority
+                .cmp(&a.priority)
+                .then_with(|| a.key().cmp(b.key()))
+        });
+        found
     }
 
     /// Names LIBRARIES with `template` rather than the default `%id`.
@@ -629,6 +696,9 @@ impl Registry {
 
         let count = taken.len();
         for (view, at, key) in taken {
+            // What this host already said about that id, if anything —
+            // read BEFORE the view moves into the provider.
+            let priority = self.priorities.get(view.id).copied().unwrap_or(0);
             self.by_key.insert(key.clone(), self.providers.len());
             self.providers.push(Provider {
                 view,
@@ -636,6 +706,7 @@ impl Registry {
                 library: id,
                 version: at,
                 key: Text::new(&key),
+                priority,
             });
         }
         self.loaded.push(Loaded {
@@ -657,7 +728,8 @@ impl Registry {
     /// provider serving several kinds answers to each of them, which is
     /// why it is one provider rather than one per kind.
     pub fn providers(&self, kind: &str) -> impl Iterator<Item = &Provider> {
-        self.providers.iter().filter(move |p| p.supports(kind))
+        self.ranked(self.providers.iter().filter(move |p| p.supports(kind)))
+            .into_iter()
     }
 
     /// One provider by the key this registry filed it under.
@@ -677,6 +749,18 @@ impl Registry {
     /// the last call answers differently — which is the point.
     pub fn available(&self, kind: &str) -> impl Iterator<Item = &Provider> {
         self.providers(kind).filter(|p| p.available().is_ok())
+    }
+
+    /// The best provider serving one kind that can actually run here, or
+    /// `None`.
+    ///
+    /// The question a host usually has. It is
+    /// [`available`](Registry::available) taking the head, which is
+    /// `(priority DESC, key ASC)` — and a host that wants to see what it
+    /// passed over, to say "ssh -> openssh (also: putty)", iterates
+    /// instead.
+    pub fn best(&self, kind: &str) -> Option<&Provider> {
+        self.available(kind).next()
     }
 
     /// Why nothing can serve `kind`, or `None` when something can.
@@ -708,7 +792,8 @@ impl Registry {
     /// Which of them is "newest" is the host's to decide, with the semver
     /// library it already has.
     pub fn providers_of(&self, id: &str) -> impl Iterator<Item = &Provider> {
-        self.providers.iter().filter(move |p| p.id() == id)
+        self.ranked(self.providers.iter().filter(move |p| p.id() == id))
+            .into_iter()
     }
 
     /// Every library loaded so far.

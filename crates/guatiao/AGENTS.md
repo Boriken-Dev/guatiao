@@ -336,7 +336,10 @@ Host side:
 ```rust
 let mut reg = Registry::new("my-host", "1.0");
 reg.load_file(&path)?;                     // Result<Loading, LoadError>
-reg.providers("greeter")                   // by kind: impl Iterator<Item = &Provider>
+reg.providers("greeter")                   // by kind, BEST FIRST
+reg.available("greeter")                   // the same, that can run here
+reg.best("greeter")                        // the head of that
+reg.set_priority(id, 10) / reg.priority(id)
 reg.provider("acme_net_pve")               // by key: Option<&Provider>
 reg.providers_of("acme_net_pve")           // every version of one id
 provider.kinds() / provider.supports(kind) // what it serves
@@ -373,6 +376,35 @@ loaded.meta                                // Option<&'static Map>
 - `LoadError` is then only `Open`, `Malformed`, and `Duplicate` for two
   **different** providers landing on one key, which only a host's own
   template can produce.
+
+### Ordering is `(priority DESC, key ASC)`
+
+`providers`, `available` and `providers_of` all answer **best first**.
+
+**Priority is the HOST's**, kept beside the registry rather than in a
+descriptor: a library does not know how a person ranks it against the
+others they installed, and two machines with the same libraries can rank
+them differently. A frontend reads its own configuration and calls
+`set_priority`; nothing in this crate reads a file.
+
+Absent means 0, so an unranked provider sorts below any raised one and
+alongside every other unranked one; negative sorts below them all. A rank
+set **before** anything loads still applies, so the order a host ranks and
+scans in does not change the answer.
+
+The **key** tiebreak is deliberate. Load order follows directory
+iteration, which no filesystem promises to keep stable across runs or
+machines, so "whichever loaded first" is not a rule anyone can document or
+reproduce. A key is arbitrary but deterministic and inspectable, and a
+host that wants a different winner says so with a priority.
+
+`best(kind)` is the head of what can actually **run**, which is a
+different question from what ranks highest: a provider that ranks first
+and refuses is passed over. Iterate `available` instead to show what was
+passed over — "ssh → openssh (also: putty)".
+
+In C: `guatiao_registry_set_priority`, `_priority`, `_best`; and every
+provider map carries its `priority`.
 
 ### Can it actually run here?
 
