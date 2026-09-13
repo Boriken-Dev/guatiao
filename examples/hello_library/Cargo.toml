@@ -16,4 +16,4 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-guatiao = { path = "../../crates/guatiao" }
+guatiao = { path = "../../crates/guatiao", features = ["derive"] }

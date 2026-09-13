@@ -27,6 +27,10 @@
 use std::path::{Path, PathBuf};
 
 use guatiao::library::{Registry, Skipped, declares_entry_symbol, scan_dir};
+use guatiao::schema::SchemaRef;
+use guatiao::value::alloc::Allocator;
+use guatiao::value::status::Status;
+use guatiao::{Alloc, Value};
 
 /// A built artefact beside this test binary.
 ///
@@ -185,4 +189,94 @@ fn an_empty_directory_is_not_a_failure() {
     // hearing about.
     let missing = dir.join("nowhere");
     assert!(scan_dir(&mut registry, &missing).is_err());
+}
+
+/// A schema exported by `export_schema!`, fetched and called.
+///
+/// The macro's whole claim is that a caller with no Rust can ask a library
+/// what one of its types looks like. This is that call, made the way such
+/// a caller makes it: look the symbol up by name, hand over an allocator,
+/// read the tree that comes back.
+///
+/// Not a provider's configuration. `Greeting` is an ordinary type the
+/// example library can describe — which is what a schema is for, config
+/// being one of the things it describes rather than the only one.
+#[test]
+fn a_macro_exported_schema_is_callable_by_name() {
+    let Some(library) = built("hello_library") else {
+        println!("skipped: the example library is not built beside this test");
+        return;
+    };
+
+    type SchemaFn = unsafe extern "C" fn(*const Allocator, *mut Value) -> Status;
+
+    // SAFETY: mapping a library runs its initialisers, and this is the
+    // example library the suite builds itself. It is never unloaded.
+    let lib = unsafe { libloading::Library::new(&library) }.expect("the example library maps");
+
+    for name in [
+        // The default: the calling crate's name is the prefix.
+        b"hello_library_greeting_schema\0".as_slice(),
+        // A second invocation in the same crate, which is the case that
+        // would collide if the macro named its Rust function.
+        b"hello_library_ledger_schema\0".as_slice(),
+        // And the versioned arm: MAJOR only, the way a soname is
+        // `libfoo.so.<major>`.
+        b"hello_library_v0_ledger_schema\0".as_slice(),
+    ] {
+        // SAFETY: the symbol has the signature the macro emits.
+        let f = unsafe { lib.get::<SchemaFn>(name) }
+            .unwrap_or_else(|e| panic!("{} is not exported: {e}", String::from_utf8_lossy(name)));
+
+        let mut out = Value::absent();
+        // SAFETY: a complete allocator that outlives the tree, and
+        // writable storage for one value.
+        let status = unsafe { f(Alloc::rust().as_raw(), &mut out) };
+        assert_eq!(
+            status,
+            Status::GUATIAO_OK,
+            "{}",
+            String::from_utf8_lossy(name)
+        );
+
+        let schema = SchemaRef::new(&out).expect("what comes back is a schema");
+        assert!(
+            schema.options().next().is_some(),
+            "{} describes at least one option",
+            String::from_utf8_lossy(name)
+        );
+    }
+
+    // The greeting's own options, so this checks the SCHEMA and not just
+    // that something came back.
+    // SAFETY: as above.
+    let f = unsafe { lib.get::<SchemaFn>(b"hello_library_greeting_schema\0") }.expect("exported");
+    let mut out = Value::absent();
+    // SAFETY: as above.
+    assert_eq!(
+        unsafe { f(Alloc::rust().as_raw(), &mut out) },
+        Status::GUATIAO_OK
+    );
+    let schema = SchemaRef::new(&out).expect("a schema");
+    let keys: Vec<&str> = schema.options().map(|o| o.key()).collect();
+    assert_eq!(
+        keys,
+        ["greeting", "seen_by"],
+        "the fields, in declaration order"
+    );
+    assert_eq!(
+        schema.find("greeting").expect("the option").help(),
+        "The text to show.",
+        "the doc comment reached a caller that has no Rust"
+    );
+
+    // A null out-parameter is refused rather than written through.
+    // SAFETY: passing null is the case under test.
+    assert_eq!(
+        unsafe { f(Alloc::rust().as_raw(), std::ptr::null_mut()) },
+        Status::GUATIAO_ERR_NULL
+    );
+
+    // Never unloaded: everything it handed over points into its mapping.
+    std::mem::forget(lib);
 }

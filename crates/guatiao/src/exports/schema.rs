@@ -305,3 +305,156 @@ pub unsafe extern "C" fn guatiao_schema_unflatten(
         Status::GUATIAO_OK
     })
 }
+
+// --- exporting a type's own schema --------------------------------------
+
+/// The body every arm of [`export_schema`](crate::export_schema) expands
+/// to.
+///
+/// Written once here rather than three times in the macro: an arm that
+/// only chooses a symbol name should not also be a place the unwind
+/// policy or the out-parameter contract could drift.
+///
+/// # Safety
+///
+/// `alloc` is null or addresses a complete allocator vtable that outlives
+/// the tree written through `out`, and `out` addresses writable storage
+/// for one value.
+pub unsafe fn schema_export<T: crate::schema::Schema>(
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    if out.is_null() {
+        return Status::GUATIAO_ERR_NULL;
+    }
+    super::guard(|| {
+        // SAFETY: the caller's contract on `alloc`.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        };
+        let Ok(schema) = T::schema(alloc) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        // SAFETY: `out` is writable by contract, and the tree MOVES into
+        // it rather than being copied, so nothing here frees what the
+        // caller now owns.
+        unsafe { ptr::write(out, schema) };
+        Status::GUATIAO_OK
+    })
+}
+
+/// Exports a type's schema as a C symbol.
+///
+/// A schema describes **any** value being passed — a record, a batch of
+/// metadata, a set of capabilities — and not every schema belongs to a
+/// provider or came out of a builder. A library with a type it can
+/// describe says so to a caller that has no Rust, without writing the
+/// wrapper by hand and without pretending to be a provider.
+///
+/// ```ignore
+/// #[derive(guatiao::Schema)]
+/// struct Connection { host: String, port: u16 }
+///
+/// guatiao::export_schema!(Connection, "connection");
+/// ```
+///
+/// emits, in a crate called `acme-net`:
+///
+/// ```c
+/// guatiao_status acme_net_connection_schema(const guatiao_alloc *alloc,
+///                                           guatiao_value *out);
+/// ```
+///
+/// # The symbol carries your crate's name
+///
+/// A C namespace is flat and shared with everything the caller already
+/// links, and `connection_schema` is a name two libraries will both want.
+/// So the default prefix is the **calling crate's** name, read at the
+/// expansion site, with `-` written as `_` the way Cargo already writes it
+/// for a library target.
+///
+/// Two other forms, for when that is not what you want:
+///
+/// ```ignore
+/// // Version in the symbol, so two versions coexist in one process.
+/// guatiao::export_schema!(Connection, "connection", versioned);
+/// // -> acme_net_v0_connection_schema
+///
+/// // Or say the whole thing yourself.
+/// guatiao::export_schema!(Connection, symbol = "acme_conn_v2");
+/// ```
+///
+/// `versioned` uses the **major** version and nothing else, which is what
+/// a C library already does: a soname is `libfoo.so.<major>`, because
+/// major versions are presumed ABI incompatible and minor ones presumed
+/// compatible. The real filename carries major.minor so builds coexist on
+/// disk, while the linking identity stays major — and a symbol that
+/// changed on every minor bump would break exactly what that convention
+/// protects.
+///
+/// **Below 1.0 this separates nothing**, since the major is always 0.
+/// That is a real gap rather than an oversight: Cargo treats 0.y as the
+/// compatibility unit and C has no equivalent, so the two cannot both be
+/// honoured in one name. A pre-1.0 library that genuinely needs two
+/// schemas in one process should name them itself with `symbol = `, the
+/// way a C library hand-picks `_v2` when a signature changes.
+///
+/// # What the caller gets
+///
+/// An **owned** tree, built through the allocator it passed, which it
+/// frees with `guatiao_value_free`. A null allocator is
+/// `GUATIAO_ERR_BAD_VALUE`, a null `out` is `GUATIAO_ERR_NULL`, and a
+/// schema that cannot be built is `GUATIAO_ERR_ALLOC`.
+///
+/// # Not the provider path
+///
+/// A provider hands its schema over through `ProviderInfo::config`, a
+/// pointer to a value it keeps alive for as long as it is loaded — no
+/// symbol and no allocator. This is for the other case, and the two do not
+/// overlap.
+#[macro_export]
+macro_rules! export_schema {
+    ($ty:ty, $label:literal) => {
+        $crate::export_schema!(
+            @emit $ty,
+            ::core::concat!(::core::env!("CARGO_PKG_NAME"), "_", $label, "_schema")
+        );
+    };
+    ($ty:ty, $label:literal, versioned) => {
+        $crate::export_schema!(
+            @emit $ty,
+            ::core::concat!(
+                ::core::env!("CARGO_PKG_NAME"),
+                "_v",
+                ::core::env!("CARGO_PKG_VERSION_MAJOR"),
+                "_",
+                $label,
+                "_schema"
+            )
+        );
+    };
+    ($ty:ty, symbol = $symbol:literal) => {
+        $crate::export_schema!(@emit $ty, $symbol);
+    };
+    (@emit $ty:ty, $name:expr) => {
+        // An anonymous const, so two invocations in one crate do not
+        // collide on the Rust-side name. The symbol is what matters and
+        // `export_name` sets that independently.
+        const _: () = {
+            /// The schema of a type this library describes.
+            ///
+            /// # Safety
+            ///
+            /// `alloc` is null or a complete allocator vtable outliving
+            /// the tree, and `out` is writable storage for one value.
+            #[unsafe(export_name = $name)]
+            pub unsafe extern "C" fn schema_export(
+                alloc: *const $crate::value::alloc::Allocator,
+                out: *mut $crate::Value,
+            ) -> $crate::Status {
+                // SAFETY: forwarded from this function's own contract.
+                unsafe { $crate::exports::schema::schema_export::<$ty>(alloc, out) }
+            }
+        };
+    };
+}

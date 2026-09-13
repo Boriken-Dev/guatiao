@@ -73,6 +73,9 @@ object = { version = "0.40", optional = true, default-features = false, features
 cbindgen = { version = "0.29", optional = true }
 
 [dev-dependencies]
+# The scan tests look a macro-generated symbol up by name and call it,
+# which needs the loader whether or not the `load` feature is on.
+libloading = "0.8"
 # Builds the example library as part of `cargo test`, so `library_load`
 # finds a real artifact beside its own test binary rather than shelling
 # out to cargo from inside a cargo run.

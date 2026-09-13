@@ -286,3 +286,36 @@ fn describe(_host: &HostInfo) -> Option<&'static LibraryInfo> {
 }
 
 guatiao::guatiao_library!(describe);
+
+// --- a described type, reachable from any language ----------------------
+//
+// Nothing here is a provider's configuration. These are ordinary types
+// this library can describe, exported so a caller with no Rust can ask
+// what they look like — which is what a schema is for, config being only
+// one of the things it describes.
+
+/// What a greeting comes back as.
+#[derive(guatiao::Schema)]
+#[allow(dead_code)]
+struct Greeting {
+    /// The text to show.
+    greeting: String,
+    /// Who asked.
+    seen_by: Option<String>,
+}
+
+/// Something this library knows about that is not configuration at all.
+#[derive(guatiao::Schema)]
+#[allow(dead_code)]
+struct Ledger {
+    /// How many greetings have been handed out.
+    count: i64,
+}
+
+// The default: the calling crate's name is the prefix.
+guatiao::export_schema!(Greeting, "greeting");
+// Two in one crate, which is the case that would collide if the macro
+// named the Rust function rather than only the symbol.
+guatiao::export_schema!(Ledger, "ledger");
+// And the version in the name, so two of these can sit in one process.
+guatiao::export_schema!(Ledger, "ledger", versioned);
