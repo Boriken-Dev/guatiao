@@ -486,6 +486,66 @@ fn copy_from_preserves_the_keys_the_consumer_does_not_model() {
     });
 }
 
+/// **A node reached through `get_mut` is grown, trimmed and cleared with
+/// no `unsafe`**, and frees exactly what it allocated.
+///
+/// Sound because every container records the allocator that made it: a
+/// write into a nested node allocates for that node's own tree, so nobody
+/// has to vouch for which allocator that is. The one door that still takes
+/// `unsafe` is `set_in`/`push_in`, for a node that records none.
+#[test]
+fn a_nested_node_is_mutated_without_unsafe() {
+    with_alloc(|alloc, counter| {
+        let mut root = Value::map_in(alloc);
+        root.set("tls", Value::map_in(alloc)).unwrap();
+        root.set("tags", Value::list_in(alloc)).unwrap();
+
+        let tls = root.get_mut("tls").expect("tls was set");
+        tls.set("ca", Value::string_in(alloc, "/etc/ca.pem").unwrap())
+            .unwrap();
+        tls.set("verify", Value::bool(true)).unwrap();
+        tls.push_into(
+            "ciphers",
+            Value::string_in(alloc, "TLS_AES_256_GCM_SHA384").unwrap(),
+        )
+        .unwrap();
+        assert!(tls.remove("verify").is_some());
+
+        let tags = root.get_mut("tags").expect("tags was set");
+        for tag in ["a", "b", "c"] {
+            tags.push(Value::string_in(alloc, tag).unwrap()).unwrap();
+        }
+        assert!(tags.discard_at(1));
+
+        let keys: Vec<&str> = root
+            .get("tls")
+            .and_then(Value::entries)
+            .unwrap()
+            .iter()
+            .filter_map(|e| e.key_str())
+            .collect();
+        assert_eq!(keys, ["ca", "ciphers"]);
+        let tags: Vec<&str> = root
+            .get("tags")
+            .and_then(Value::items)
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        assert_eq!(tags, ["a", "c"]);
+
+        assert!(
+            counter.outstanding() > 0,
+            "the nested writes went through the tree's own allocator, which is counting"
+        );
+        root.get_mut("tls").unwrap().clear().unwrap();
+        assert_eq!(
+            root.get("tls").and_then(Value::entries).map(<[_]>::len),
+            Some(0)
+        );
+    });
+}
+
 // --- cloning -----------------------------------------------------------
 
 #[test]
@@ -501,9 +561,11 @@ fn a_clone_is_deep_and_independent() {
 
         let copy = unsafe { orig.clone_in(alloc) }.unwrap();
 
-        let mut after = Value::string_in(alloc, "after").unwrap();
+        // A nested node is mutated safely: the child map records the
+        // allocator that made it, so `set` needs nobody to vouch for one.
+        let after = Value::string_in(alloc, "after").unwrap();
         let orig_child = orig.get_mut("child").unwrap();
-        unsafe { orig_child.set_in("v", &mut after, alloc) }.unwrap();
+        orig_child.set("v", after).unwrap();
 
         let copied_child = copy.get("child").unwrap();
         assert_eq!(

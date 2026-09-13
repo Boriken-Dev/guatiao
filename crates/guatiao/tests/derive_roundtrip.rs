@@ -193,10 +193,7 @@ fn an_error_inside_a_list_names_the_index() {
         let tags = value.get_mut("tags").expect("tags was written");
         // A number where a string belongs, at a known position.
         assert!(tags.discard_at(1));
-        let mut seven = Value::int_in(alloc, 7).unwrap();
-        // SAFETY: `seven` is a well-formed node built through `alloc`,
-        // the same allocator the list carries; `push_in` moves out of it.
-        unsafe { tags.push_in(&mut seven, alloc) }.unwrap();
+        tags.push(Value::int_in(alloc, 7).unwrap()).unwrap();
 
         let e = Connection::from_value(&value).unwrap_err();
         assert_eq!(e.key(), "tags[1]");
