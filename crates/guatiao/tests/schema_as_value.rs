@@ -520,10 +520,12 @@ fn every_annotation_is_enumerated_and_nothing_else_is() {
         .map(|(k, v)| (k, str_or(Some(v), "")))
         .collect();
     on_field.sort();
-    assert_eq!(on_field, [("x-placeholder", "example.org"), ("x-widget", "combo")]);
+    assert_eq!(
+        on_field,
+        [("x-placeholder", "example.org"), ("x-widget", "combo")]
+    );
 
-    let on_schema: Vec<(&str, &str)> =
-        s.extras().map(|(k, v)| (k, str_or(Some(v), ""))).collect();
+    let on_schema: Vec<(&str, &str)> = s.extras().map(|(k, v)| (k, str_or(Some(v), ""))).collect();
     assert_eq!(on_schema, [("x-origin", "test")]);
 }
 
