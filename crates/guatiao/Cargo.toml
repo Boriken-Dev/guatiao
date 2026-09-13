@@ -40,14 +40,30 @@ derive = ["dep:guatiao-derive"]
 # generator to build a header it will not read.
 c-exports = ["dep:cbindgen"]
 
-# `Registry::load_file`: mapping a library and calling its entry point.
+# `Registry::load_file` and `scan_dir`: mapping a library and calling its
+# entry point, and finding which files are worth mapping.
 # Off by default, so a library AUTHOR -- who needs the descriptors and the
 # macro and never loads anything -- builds with no dependency at all.
-load = ["dep:libloading"]
+#
+# `object` is here rather than beside `libloading` by accident: a scan
+# decides whether a file exports the entry symbol by READING its export
+# table, never by mapping it, because mapping runs static initialisers
+# that can abort the process. See `src/library/scan.rs`.
+load = ["dep:libloading", "dep:object"]
 
 [dependencies]
 guatiao-derive = { path = "../guatiao-derive", version = "0.1.0", optional = true }
 libloading = { version = "0.8", optional = true }
+# Parses PE, ELF and Mach-O export tables as DATA. Default features off:
+# this reads three formats and writes none, and a scan should not drag in
+# a linker's worth of code.
+object = { version = "0.40", optional = true, default-features = false, features = [
+    "read_core",
+    "pe",
+    "elf",
+    "macho",
+    "std",
+] }
 
 [build-dependencies]
 # Renders `include/guatiao.h`. Optional, and enabled only by `c-exports`,

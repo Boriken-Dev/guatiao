@@ -102,6 +102,14 @@ pub enum Skipped {
     /// Its entry point answered null, which is a library saying it has
     /// nothing for this host.
     DeclinedThisHost,
+    /// Its bytes could not be read, or could not be parsed as an object
+    /// file at all.
+    ///
+    /// Neither a library nor a broken one — a text file with a library's
+    /// extension is simply not a library. Reported rather than dropped,
+    /// because somebody looking for a plugin that did not appear needs to
+    /// see that the file was considered.
+    NotExaminable,
 }
 
 /// One provider a loaded library offers.

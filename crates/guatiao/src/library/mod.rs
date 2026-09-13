@@ -64,8 +64,14 @@ pub mod raw;
 // no dependency at all. A `//` comment, never a `///`.
 #[cfg(feature = "load")]
 pub mod registry;
+// Finding libraries without running them. Behind `load` with the loader
+// it feeds. A `//` comment, never a `///`.
+#[cfg(feature = "load")]
+pub mod scan;
 
 pub use desc::{ABI_VERSION, HostInfo, LibraryInfo, ProviderInfo, Providers};
 pub use raw::{ENTRY_SYMBOL, EntryFn, LibraryView, ProviderView, answer, read_host};
 #[cfg(feature = "load")]
 pub use registry::{LoadError, Loaded, Provider, Registry, Skipped};
+#[cfg(feature = "load")]
+pub use scan::{LoadReport, declares_entry_symbol, scan_dir};
