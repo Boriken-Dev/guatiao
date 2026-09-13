@@ -93,8 +93,15 @@ pub use desc::{
 };
 pub use key::{KeyError, KeyFields, KeyTemplate, Subject};
 pub use kind::{Instance, Kind, KindHeader, KindMismatch, Offer, ProviderError, Remote};
-pub use raw::{ENTRY_SYMBOL, EntryFn, Host, LibraryView, ProviderView, answer, read_host};
+pub use raw::{
+    DECLARES_SYMBOL, ENTRY_SYMBOL, EntryFn, Host, LibraryView, ProviderView, answer, read_host,
+};
+#[doc(hidden)]
+pub use raw::{declaration, declaration_len};
 #[cfg(feature = "load")]
 pub use registry::{LoadError, Loaded, Loading, Provider, Registry, Skipped, WhyNot};
 #[cfg(feature = "load")]
-pub use scan::{LoadReport, Order, declares_entry_symbol, scan_dir, scan_dir_ordered};
+pub use scan::{
+    Declared, LoadReport, Order, Probe, RuleError, ScanRules, declares_entry_symbol, probe,
+    scan_dir, scan_dir_ordered, scan_dir_rules, scan_dir_with,
+};

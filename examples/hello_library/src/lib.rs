@@ -533,6 +533,17 @@ fn describe(host: Host) -> Option<&'static LibraryInfo> {
 
 guatiao::guatiao_library!(describe);
 
+// What a scanner reads before mapping this file: the kinds above, and a
+// pair a host may write a rule against.
+guatiao::declares!(
+    "kind=greeter",
+    "kind=writer",
+    "kind=everything",
+    "kind=timekeeper",
+    "kind=echo",
+    "HELLO_EXAMPLE=1",
+);
+
 // --- a described type, reachable from any language ----------------------
 //
 // Nothing here is a provider's configuration. These are ordinary types

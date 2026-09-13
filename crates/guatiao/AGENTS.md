@@ -536,14 +536,15 @@ loaded.meta                                // Option<&'static Map>
   **the rest of that library goes on loading**; so `%id` keeps one build
   of a provider and `%id@%version` keeps every build. Same key, different
   id is `LoadError::Duplicate`.
-- **A file can come to nothing four ways, each reported as itself:**
-  `Skipped::NoEntrySymbol` (not a library), `Skipped::DeclinedThisHost`
-  (its entry point answered null), `Skipped::UnsupportedAbi { declared }`
-  (it speaks another envelope version; the host's `abi_version` is
-  checked by the library, the library's by the loader), and
-  `LoadError::Malformed` (a descriptor this build cannot read: below the
-  floor, non-UTF-8 text, a stride below the floor, an element overlapping
-  its neighbour).
+- **A file can come to nothing five ways, each reported as itself:**
+  `Skipped::NoEntrySymbol` (not a library), `Skipped::Filtered { by }`
+  (a scan rule kept it out by what it declares, before it was mapped),
+  `Skipped::DeclinedThisHost` (its entry point answered null),
+  `Skipped::UnsupportedAbi { declared }` (it speaks another envelope
+  version; the host's `abi_version` is checked by the library, the
+  library's by the loader), and `LoadError::Malformed` (a descriptor this
+  build cannot read: below the floor, non-UTF-8 text, a stride below the
+  floor, an element overlapping its neighbour).
 - **A library's entry point must not call back into the registry loading
   it.** `load_file` holds the registry exclusively for the whole call; a
   provider that needs a peer looks it up later, from a vtable call.
@@ -654,7 +655,11 @@ unsafe { Remote::<dyn Greeter>::from_raw(table, size, ctx) }   // a table from a
   `new = path` (`fn() -> Self`) or `new_with_host = path`
   (`fn(Host) -> Self`; default `Default`), `available = path` (`fn(&Self)
   -> Result<(), &'static str>`). `providers!(id = .., version = ..,
-  providers = [A, B])` is the long form of the library line.
+  providers = [A, B], declares = [".."])` is the long form of the library
+  line; `providers!(A, B; declares = ["VIEWER=1"])` the short one
+  with extra declarations. The library declares every kind its providers
+  serve (`ProviderDecl::KINDS`) for a scanner to read before mapping it;
+  `guatiao::declares!(..)` does the same for a hand-written library.
 - **Instances from a configuration.** `config = C` means the provider is
   **built from `C`**: `C: Schema + FromValue`, `Self: TryFrom<C, Error:
   Into<ProviderError>>`. Bare `config`, or `config = Self`, makes the
@@ -763,6 +768,24 @@ highest-sorting name first. That is byte order, not version order:
 nothing here parses a version, because ordering one is a host's policy
 with the semver library it already has.
 
+**A library declares what it is, and a scan reads that before mapping
+it.** The data symbol `guatiao_declares` (`DECLARES_SYMBOL`) holds
+`key=value` strings, NUL-separated, ended by an empty string: `kind=<name>`
+for every kind a provider serves, written by `providers!`, plus whatever
+`guatiao::declares!("kind=greeter", "VIEWER=1")` or `providers!(A,
+B; declares = ["VIEWER=1"])` adds. `probe(path) -> Probe { entry,
+declared: Declared }` reads it as data (clamped to its section and 4 KiB;
+malformed is `NotExaminable`); `declared.has(k, v)`, `values(k)`,
+`kinds()`. A host filters with
+`scan_dir_rules(reg, dir, order, &ScanRules::parse(&["!VIEWER=1",
+"kind=session-backend"])?)` — `!KEY=VALUE` skips a file declaring the
+pair, `KEY=VALUE` skips one that does not, a file declaring nothing
+passes every `!` rule and fails every positive one — or with
+`scan_dir_with(reg, dir, order, |declared| Ok(()) | Err(why))`. Either
+reports the file as `Skipped::Filtered { by }` and never maps it. That is
+the replacement for a filename denylist: the library says
+`VIEWER=1`, the host writes one rule.
+
 **A loaded library is never unloaded.** Everything it hands over —
 strings, schemas, vtables — points into its mapping, so unloading would
 dangle every borrow the host holds. That is also why a `ProviderView`
@@ -782,6 +805,9 @@ guatiao_registry *reg = guatiao_registry_new(guatiao_cstr("my-host"),
 guatiao_value answer;
 guatiao_registry_load_file(reg, guatiao_cstr(path), &alloc, &answer);
 guatiao_registry_scan_dir(reg, dir, /*descending=*/false, &alloc, &answer);
+guatiao_registry_scan_dir_rules(reg, dir, false,
+                                guatiao_cstr("!VIEWER=1\nkind=session-backend"),
+                                &alloc, &answer);       // rules, one per line
 guatiao_registry_providers(reg, guatiao_cstr("greeter"), &alloc, &answer);
 guatiao_registry_provider(reg, key, &alloc, &answer);
 guatiao_registry_keyed_by(reg, guatiao_cstr("%id@%version"));
@@ -814,7 +840,8 @@ message>"}` and returns `GUATIAO_OK` for all three; a non-OK status means
 it could not answer at all. `why` is one of `no-entry-symbol`,
 `declined-this-host`, `unsupported-abi` (with `abi`), `already-loaded`
 (with `from`), `provider-already-loaded` (with `from` and `id`), or in a
-scan report `not-examinable`. `guatiao_registry_providers` with an empty
+scan report `not-examinable` and `filtered` (with `by`, the rule). A rule
+that is not `[!]KEY=VALUE` is `GUATIAO_ERR_BAD_VALUE`. `guatiao_registry_providers` with an empty
 kind lists every provider; both listings are best first.
 
 **These need the `load` feature** — the only part of the C surface that
