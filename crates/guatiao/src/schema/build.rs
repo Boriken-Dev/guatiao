@@ -547,12 +547,21 @@ impl KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_STRING);
         let mut values = Ok(Value::list_in(alloc));
         let mut labels = Ok(Value::map_in(alloc));
+        let mut any_label = false;
         for (value, label) in choices {
             push_name(&mut values, alloc, value);
-            put(&mut labels, value, Value::string_in(alloc, label));
+            // A label that says nothing the value does not is left off: a
+            // reader shows the value when there is no label, so writing it
+            // would only put `"off": ""` or `"off": "off"` in the document.
+            if !label.is_empty() && label != value {
+                put(&mut labels, value, Value::string_in(alloc, label));
+                any_label = true;
+            }
         }
         put(&mut k.state, vocab::ENUM, values);
-        put(&mut k.state, vocab::X_ENUM_LABELS, labels);
+        if any_label {
+            put(&mut k.state, vocab::X_ENUM_LABELS, labels);
+        }
         k
     }
 
@@ -638,7 +647,12 @@ impl ArmBuilder {
     /// The same, through an allocator you name.
     pub fn new_in(alloc: Alloc, value: &str, label: &str) -> ArmBuilder {
         let mut state = Ok(Value::map_in(alloc));
-        put(&mut state, vocab::TITLE, Value::string_in(alloc, label));
+        // Left off when it says nothing the value does not, for the reason
+        // `enumeration_in` gives: a reader shows the value when there is no
+        // title.
+        if !label.is_empty() && label != value {
+            put(&mut state, vocab::TITLE, Value::string_in(alloc, label));
+        }
         // Held rather than written: an arm does not know which key its
         // discriminant is stored under, because that is the variant's
         // declaration.

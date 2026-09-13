@@ -19,12 +19,27 @@
 //! messages by their text. That is deliberate: a message is only useful
 //! if it survives, and nothing else in a build would notice it being
 //! replaced by `syn`'s default.
+//!
+//! # Three shapes
+//!
+//! | declaration | value | schema kind |
+//! | --- | --- | --- |
+//! | struct with named fields | a map, one key per field | an object |
+//! | enum of unit variants | the variant's name, as text | a string `enum` |
+//! | enum with `#[map(tag = "k")]` | a map: the name under `k`, then the variant's fields | a tagged variant |
+//!
+//! An enum whose variants carry fields and that names no tag is refused:
+//! the key that tells two variants apart is a wire-format decision, and
+//! the author makes it rather than this crate.
 
 #![forbid(unsafe_code)]
 
 use proc_macro2::TokenStream;
-use quote::quote;
-use syn::{Data, DeriveInput, Field, Fields, GenericArgument, Ident, LitStr, PathArguments, Type};
+use quote::{format_ident, quote};
+use syn::{
+    Attribute, Data, DataEnum, DeriveInput, Field, Fields, FieldsNamed, GenericArgument, Ident,
+    LitStr, PathArguments, Type, Variant,
+};
 
 /// Which of the three derives is being expanded.
 ///
@@ -65,81 +80,87 @@ pub(crate) fn expand(derive: Derive, input: TokenStream) -> TokenStream {
 
 fn try_expand(derive: Derive, input: TokenStream) -> syn::Result<TokenStream> {
     let ast: DeriveInput = syn::parse2(input)?;
-    let fields = named_fields(derive, &ast)?;
-
-    // Generic parameters are refused rather than guessed at. A generated
-    // impl would have to invent the bound for each parameter (`T: ToValue`?
-    // `T: ToMap`? both?), and inventing it wrong produces an error inside
-    // the expansion -- exactly the class of message this file exists to
-    // avoid. Refusing at the declaration costs the user a hand-written
-    // impl and tells them so at the point they can act.
-    if !ast.generics.params.is_empty() {
-        return Err(syn::Error::new_spanned(
-            &ast.generics,
-            format!(
-                "{} does not support generic parameters. The bound to place on each \
-                 parameter cannot be inferred here, and guessing it wrong reports an \
-                 error inside the expansion rather than on your declaration. Write the \
-                 impl by hand.",
-                derive.spelled()
-            ),
-        ));
-    }
-
-    let mut plan: Vec<FieldPlan> = Vec::new();
-    for field in fields {
-        plan.push(FieldPlan::read(derive, field)?);
-    }
-    reject_duplicate_keys(&plan)?;
-
-    let name = &ast.ident;
-    Ok(match derive {
-        Derive::ToValue => emit_to(name, &plan),
-        Derive::FromValue => emit_from(name, &plan),
-        Derive::Schema => emit_schema(name, &plan),
-    })
-}
-
-/// The named fields of a plain struct, or a message explaining why this
-/// particular shape has no map to be.
-fn named_fields(derive: Derive, ast: &DeriveInput) -> syn::Result<impl Iterator<Item = &Field>> {
     let label = derive.spelled();
     match &ast.data {
-        Data::Struct(data) => match &data.fields {
-            Fields::Named(named) => Ok(named.named.iter()),
-            Fields::Unnamed(unnamed) => Err(syn::Error::new_spanned(
-                unnamed,
-                format!(
-                    "{label} needs named fields: a map is keyed by name, and a tuple \
-                     struct has no names to key it by. Give the fields names, or write \
-                     the impl by hand and choose the keys yourself."
-                ),
-            )),
-            Fields::Unit => Err(syn::Error::new_spanned(
-                &ast.ident,
-                format!(
-                    "{label} needs named fields, and a unit struct has none. A type \
-                     carrying nothing converts to an empty map, which is \
-                     `Map::new()` -- no derive required."
-                ),
-            )),
-        },
-        Data::Enum(data) => Err(syn::Error::new_spanned(
-            data.enum_token,
-            format!(
-                "{label} supports structs with named fields only. An enum has no one \
-                 set of keys -- two variants describe two different maps -- and picking \
-                 a tag key to tell them apart (\"type\", \"kind\", a field name) is a \
-                 wire-format decision this crate deliberately does not make for you. \
-                 Write the impl by hand and choose the tag."
-            ),
-        )),
+        Data::Struct(data) => {
+            let named = named_fields(derive, &ast.ident, &data.fields)?;
+            refuse_generics(derive, &ast)?;
+
+            let mut plan: Vec<FieldPlan> = Vec::new();
+            for field in &named.named {
+                plan.push(FieldPlan::read(derive, field)?);
+            }
+            reject_duplicate_keys(&plan)?;
+
+            let name = &ast.ident;
+            Ok(match derive {
+                Derive::ToValue => emit_to(name, &plan),
+                Derive::FromValue => emit_from(name, &plan),
+                Derive::Schema => emit_schema(name, &plan),
+            })
+        }
+        Data::Enum(data) => {
+            refuse_generics(derive, &ast)?;
+            expand_enum(derive, &ast, data)
+        }
         Data::Union(data) => Err(syn::Error::new_spanned(
             data.union_token,
             format!(
-                "{label} supports structs with named fields only. A union has no \
+                "{label} supports structs with named fields and enums. A union has no \
                  readable field: which arm is live is not knowable from the type, so \
                  nothing here could decide what to store."
+            ),
+        )),
+    }
+}
+
+/// Generic parameters are refused rather than guessed at.
+///
+/// A generated impl would have to invent the bound for each parameter
+/// (`T: ToValue`? `T: Schema`? both?), and inventing it wrong produces an
+/// error inside the expansion -- exactly the class of message this file
+/// exists to avoid. Refusing at the declaration costs the user a
+/// hand-written impl and tells them so at the point they can act.
+fn refuse_generics(derive: Derive, ast: &DeriveInput) -> syn::Result<()> {
+    if ast.generics.params.is_empty() {
+        return Ok(());
+    }
+    Err(syn::Error::new_spanned(
+        &ast.generics,
+        format!(
+            "{} does not support generic parameters. The bound to place on each \
+             parameter cannot be inferred here, and guessing it wrong reports an \
+             error inside the expansion rather than on your declaration. Write the \
+             impl by hand.",
+            derive.spelled()
+        ),
+    ))
+}
+
+/// A struct's named fields, or a message explaining why this particular
+/// shape has no map to be.
+fn named_fields<'a>(
+    derive: Derive,
+    ident: &Ident,
+    fields: &'a Fields,
+) -> syn::Result<&'a FieldsNamed> {
+    let label = derive.spelled();
+    match fields {
+        Fields::Named(named) => Ok(named),
+        Fields::Unnamed(unnamed) => Err(syn::Error::new_spanned(
+            unnamed,
+            format!(
+                "{label} needs named fields: a map is keyed by name, and a tuple \
+                 struct has no names to key it by. Give the fields names, or write \
+                 the impl by hand and choose the keys yourself."
+            ),
+        )),
+        Fields::Unit => Err(syn::Error::new_spanned(
+            ident,
+            format!(
+                "{label} needs named fields, and a unit struct has none. A type \
+                 carrying nothing converts to an empty map, which is \
+                 `Map::new()` -- no derive required."
             ),
         )),
     }
@@ -168,7 +189,7 @@ impl FieldPlan {
         let ident = field
             .ident
             .clone()
-            .expect("named_fields yields only named fields");
+            .expect("only named fields reach a FieldPlan");
         let attrs = FieldAttrs::read(derive, field)?;
         Ok(FieldPlan {
             key: attrs.rename.unwrap_or_else(|| ident.to_string()),
@@ -221,7 +242,7 @@ impl FieldAttrs {
         let mut out = FieldAttrs::default();
         let mut rename_span = None;
 
-        out.schema.help = doc_comment(field);
+        out.schema.help = doc_comment(&field.attrs);
 
         for attr in &field.attrs {
             if attr.path().is_ident("schema") {
@@ -296,15 +317,15 @@ impl SchemaAttrs {
     }
 }
 
-/// A field's doc comment, as one line of help text.
+/// A doc comment, as one line of text.
 ///
 /// Doc comments arrive as `#[doc = "..."]` attributes, one per line, each
 /// keeping the leading space the source had. They are joined with spaces
-/// rather than newlines: this is help text for a label or a tooltip, and a
+/// rather than newlines: this is text for a label or a tooltip, and a
 /// consumer that wants to wrap it can.
-fn doc_comment(field: &Field) -> Option<String> {
+fn doc_comment(attrs: &[Attribute]) -> Option<String> {
     let mut lines: Vec<String> = Vec::new();
-    for attr in &field.attrs {
+    for attr in attrs {
         if !attr.path().is_ident("doc") {
             continue;
         }
@@ -384,43 +405,158 @@ fn option_inner(ty: &Type) -> Option<&Type> {
     }
 }
 
-fn emit_to(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
-    let sets = plan.iter().filter(|f| !f.skip).map(|field| {
-        let ident = &field.ident;
-        let key = &field.key;
-        // Written as qualified `<Ty as ToValue>::to_value` rather than
-        // the inherent-looking `ToValue::to_value`, purely for the
-        // DIAGNOSTIC: the qualified form carries the field type's own
-        // span, so a field whose type has no conversion is reported at
-        // that field. The unqualified form reports it on the
-        // `#[derive(..)]` attribute, which tells the reader that
-        // something in the struct is wrong and not which thing.
-        if let Some(inner) = &field.inner {
-            // `None` omits the key entirely rather than storing a null.
-            // The contract and its argument live in `guatiao`'s `convert`
-            // module; this is the half that implements it.
-            //
-            // The bound lands on the INNER type because the value in
-            // hand has already been unwrapped.
-            quote! {
-                if let ::core::option::Option::Some(__value) = &self.#ident {
-                    ::guatiao::Value::set(
-                        &mut __map,
-                        #key,
-                        <#inner as ::guatiao::ToValue>::to_value(__value, __alloc)?,
-                    )?;
-                }
-            }
-        } else {
-            let ty = &field.ty;
-            quote! {
+// --- one field, three ways ---------------------------------------------
+//
+// A struct's fields and a tagged variant's fields are the same thing, so
+// they are emitted by the same three functions. What differs is only how
+// the field is reached: `&self.name` in a struct, a pattern binding in a
+// variant.
+
+/// Writes one field into `__map`. `access` borrows the field.
+fn set_field(field: &FieldPlan, access: &TokenStream) -> TokenStream {
+    let key = &field.key;
+    // Written as qualified `<Ty as ToValue>::to_value` rather than the
+    // inherent-looking `ToValue::to_value`, purely for the DIAGNOSTIC: the
+    // qualified form carries the field type's own span, so a field whose
+    // type has no conversion is reported at that field. The unqualified
+    // form reports it on the `#[derive(..)]` attribute, which tells the
+    // reader that something in the struct is wrong and not which thing.
+    if let Some(inner) = &field.inner {
+        // `None` omits the key entirely rather than storing a null. The
+        // contract and its argument live in `guatiao`'s `convert` module;
+        // this is the half that implements it.
+        //
+        // The bound lands on the INNER type because the value in hand has
+        // already been unwrapped.
+        quote! {
+            if let ::core::option::Option::Some(__value) = #access {
                 ::guatiao::Value::set(
                     &mut __map,
                     #key,
-                    <#ty as ::guatiao::ToValue>::to_value(&self.#ident, __alloc)?,
+                    <#inner as ::guatiao::ToValue>::to_value(__value, __alloc)?,
                 )?;
             }
         }
+    } else {
+        let ty = &field.ty;
+        quote! {
+            ::guatiao::Value::set(
+                &mut __map,
+                #key,
+                <#ty as ::guatiao::ToValue>::to_value(#access, __alloc)?,
+            )?;
+        }
+    }
+}
+
+/// Reads one field out of the map `__value`, as a struct-literal member.
+fn read_field(field: &FieldPlan) -> TokenStream {
+    let ident = &field.ident;
+    let ty = &field.ty;
+    let key = &field.key;
+    if field.skip {
+        // Nothing here can invent a value, so `Default` is required -- and
+        // requiring it at the use site is what makes the error name the
+        // user's own type rather than the expansion.
+        return quote! { #ident: ::core::default::Default::default(), };
+    }
+    // `under` is what turns a leaf error into a dotted path: the value
+    // being read does not know its own key, so the reader that knows it
+    // adds it here, on the way out.
+    if field.optional() {
+        quote! {
+            #ident: match ::guatiao::convert::find_key(__value, #key) {
+                ::core::option::Option::Some(__field) =>
+                    <#ty as ::guatiao::FromValue>::from_value(__field)
+                        .map_err(|__e| ::guatiao::MapError::under(__e, #key))?,
+                // Absent reads as `None`, exactly as a stored null does.
+                // See `guatiao`'s `convert` module.
+                ::core::option::Option::None => ::core::option::Option::None,
+            },
+        }
+    } else {
+        quote! {
+            #ident: <#ty as ::guatiao::FromValue>::from_value(
+                ::guatiao::convert::expect_key(__value, #key)?,
+            ).map_err(|__e| ::guatiao::MapError::under(__e, #key))?,
+        }
+    }
+}
+
+/// One field as a `FieldBuilder` expression.
+///
+/// Emitted as calls into `guatiao::schema`'s builders rather than as raw
+/// map building, so the vocabulary lives in one place and generated code
+/// cannot spell a keyword the reader does not know.
+fn field_builder(field: &FieldPlan) -> TokenStream {
+    let key = &field.key;
+    let ty = &field.ty;
+    let mut built = quote! {
+        ::guatiao::schema::FieldBuilder::new_in(__alloc,
+            #key,
+            <#ty as ::guatiao::Schema>::kind(__alloc),
+        )
+    };
+    let a = &field.schema;
+    // Qualified, not `.label(..)`. These are trait methods, and method
+    // syntax would need `FormBuilder` in scope at the EXPANSION site --
+    // somebody else's crate, which generated code may not assume anything
+    // about. The same reason every path here is rooted at `::guatiao`.
+    if let Some(label) = &a.label {
+        built = quote! {
+            ::guatiao::schema::FormBuilder::label(#built, #label)
+        };
+    }
+    if let Some(help) = &a.help {
+        built = quote! {
+            ::guatiao::schema::FormBuilder::help(#built, #help)
+        };
+    }
+    if let Some(section) = &a.section {
+        built = quote! {
+            ::guatiao::schema::FormBuilder::section(#built, #section)
+        };
+    }
+    if let Some(order) = a.order {
+        built = quote! {
+            ::guatiao::schema::FormFieldBuilder::order(#built, #order)
+        };
+    }
+    if a.advanced {
+        built = quote! {
+            ::guatiao::schema::FormFieldBuilder::advanced(#built)
+        };
+    }
+    if a.sensitive {
+        built = quote! {
+            ::guatiao::schema::FormFieldBuilder::sensitive(#built)
+        };
+    }
+    // Not an `Option<T>` means the value has to be there. The declaration
+    // already said so; this is only writing it down.
+    if !field.optional() {
+        built = quote! { #built.required() };
+    }
+    if let Some(default) = &a.default {
+        // Through `ToValue`, so the default is written in Rust and cannot
+        // drift from the type it defaults. `default_checked`, because this
+        // has a `Result` and nowhere to put a failure: the builder keeps it
+        // and `finish` reports it.
+        built = quote! {
+            #built.default_checked(
+                <#ty as ::guatiao::ToValue>::to_value(&(#default), __alloc),
+            )
+        };
+    }
+    built
+}
+
+// --- structs -----------------------------------------------------------
+
+fn emit_to(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
+    let sets = plan.iter().filter(|f| !f.skip).map(|field| {
+        let ident = &field.ident;
+        set_field(field, &quote! { &self.#ident })
     });
 
     quote! {
@@ -442,38 +578,7 @@ fn emit_to(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
 }
 
 fn emit_from(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
-    let reads = plan.iter().map(|field| {
-        let ident = &field.ident;
-        let ty = &field.ty;
-        let key = &field.key;
-        if field.skip {
-            // Nothing here can invent a value, so `Default` is required
-            // -- and requiring it at the use site is what makes the error
-            // name the user's own type rather than the expansion.
-            return quote! { #ident: ::core::default::Default::default(), };
-        }
-        // `under` is what turns a leaf error into a dotted path: the
-        // value being read does not know its own key, so the reader that
-        // knows it adds it here, on the way out.
-        if field.optional() {
-            quote! {
-                #ident: match ::guatiao::convert::find_key(__value, #key) {
-                    ::core::option::Option::Some(__field) =>
-                        <#ty as ::guatiao::FromValue>::from_value(__field)
-                            .map_err(|__e| ::guatiao::MapError::under(__e, #key))?,
-                    // Absent reads as `None`, exactly as a stored null
-                    // does. See `guatiao`'s `convert` module.
-                    ::core::option::Option::None => ::core::option::Option::None,
-                },
-            }
-        } else {
-            quote! {
-                #ident: <#ty as ::guatiao::FromValue>::from_value(
-                    ::guatiao::convert::expect_key(__value, #key)?,
-                ).map_err(|__e| ::guatiao::MapError::under(__e, #key))?,
-            }
-        }
-    });
+    let reads = plan.iter().map(read_field);
 
     quote! {
         #[automatically_derived]
@@ -494,74 +599,9 @@ fn emit_from(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
 }
 
 /// The schema, as builder calls.
-///
-/// Emitted as calls into `guatiao::schema`'s builders rather than as raw
-/// map building, so the vocabulary lives in one place and generated code
-/// cannot spell a keyword the reader does not know.
 fn emit_schema(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
-    let options = plan.iter().filter(|f| !f.skip).map(|field| {
-        let key = &field.key;
-        let ty = &field.ty;
-        let mut built = quote! {
-            ::guatiao::schema::FieldBuilder::new_in(__alloc,
-                #key,
-                <#ty as ::guatiao::Schema>::kind(__alloc),
-            )
-        };
-        let a = &field.schema;
-        // Qualified, not `.label(..)`. These are trait methods now, and
-        // method syntax would need `FormBuilder` in scope at the
-        // EXPANSION site -- somebody else's crate, which generated code
-        // may not assume anything about. The same reason every path here
-        // is rooted at `::guatiao`.
-        if let Some(label) = &a.label {
-            built = quote! {
-                ::guatiao::schema::FormBuilder::label(#built, #label)
-            };
-        }
-        if let Some(help) = &a.help {
-            built = quote! {
-                ::guatiao::schema::FormBuilder::help(#built, #help)
-            };
-        }
-        if let Some(section) = &a.section {
-            built = quote! {
-                ::guatiao::schema::FormBuilder::section(#built, #section)
-            };
-        }
-        if let Some(order) = a.order {
-            built = quote! {
-                ::guatiao::schema::FormFieldBuilder::order(#built, #order)
-            };
-        }
-        if a.advanced {
-            built = quote! {
-                ::guatiao::schema::FormFieldBuilder::advanced(#built)
-            };
-        }
-        if a.sensitive {
-            built = quote! {
-                ::guatiao::schema::FormFieldBuilder::sensitive(#built)
-            };
-        }
-        // Not an `Option<T>` means the value has to be there. The
-        // declaration already said so; this is only writing it down.
-        if !field.optional() {
-            built = quote! { #built.required() };
-        }
-        if let Some(default) = &a.default {
-            // Through `ToValue`, so the default is written in Rust and
-            // cannot drift from the type it defaults.
-            // `default_checked`, because this has a `Result` and nowhere
-            // to put a failure: the builder keeps it and `finish` reports
-            // it. A hand-written call uses `default` and an infallible
-            // constructor.
-            built = quote! {
-                #built.default_checked(
-                    <#ty as ::guatiao::ToValue>::to_value(&(#default), __alloc),
-                )
-            };
-        }
+    let fields = plan.iter().filter(|f| !f.skip).map(|field| {
+        let built = field_builder(field);
         quote! { __fields.push(#built); }
     });
 
@@ -575,8 +615,466 @@ fn emit_schema(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
                 // expansion emits is rooted, and a macro invocation is one
                 // more name that has to resolve at the call site.
                 let mut __fields = ::std::vec::Vec::new();
-                #(#options)*
+                #(#fields)*
                 ::guatiao::schema::KindBuilder::map_in(__alloc, __fields)
+            }
+        }
+    }
+}
+
+// --- enums -------------------------------------------------------------
+
+/// What `#[map(...)]` on an enum itself says.
+#[derive(Default)]
+struct EnumAttrs {
+    /// `#[map(tag = "...")]`: the key a variant's name is stored under.
+    /// The one wire-format decision an enum can need, so the author makes
+    /// it rather than this crate.
+    tag: Option<String>,
+}
+
+impl EnumAttrs {
+    fn read(derive: Derive, attrs: &[Attribute]) -> syn::Result<EnumAttrs> {
+        let label = derive.spelled();
+        let mut out = EnumAttrs::default();
+        for attr in attrs {
+            if !attr.path().is_ident("map") {
+                continue;
+            }
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("tag") {
+                    out.tag = Some(meta.value()?.parse::<LitStr>()?.value());
+                    Ok(())
+                } else {
+                    // Refused rather than ignored: a misspelled `tag`
+                    // silently ignored would change the wire shape.
+                    Err(meta.error(format!(
+                        "unrecognised `#[map(...)]` option on an enum. {label} knows \
+                         one: `tag = \"...\"`, the key a variant's name is stored under."
+                    )))
+                }
+            })?;
+        }
+        Ok(out)
+    }
+}
+
+/// One variant, read once and shared by all three derives.
+struct VariantPlan {
+    ident: Ident,
+    /// What is stored for it: the variant's own name, or its
+    /// `#[map(rename = "...")]`.
+    stored: String,
+    /// A unit variant, which is constructed and matched without braces.
+    unit: bool,
+    /// Named fields, in declaration order. Empty for a unit variant.
+    fields: Vec<FieldPlan>,
+    label: Option<String>,
+    help: Option<String>,
+}
+
+impl VariantPlan {
+    /// `tagged` decides what a doc comment is. **A doc comment fills the
+    /// most descriptive human slot the thing has**: an arm has a label and
+    /// help, so its doc comment is help, the same as a struct field's; a
+    /// choice has only a label, so its doc comment is the label.
+    fn read(derive: Derive, variant: &Variant, tagged: bool) -> syn::Result<VariantPlan> {
+        let label = derive.spelled();
+        let mut rename = None;
+        let mut explicit_label = None;
+        let mut explicit_help = None;
+
+        for attr in &variant.attrs {
+            if attr.path().is_ident("map") {
+                attr.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("rename") {
+                        rename = Some(meta.value()?.parse::<LitStr>()?.value());
+                        Ok(())
+                    } else {
+                        Err(meta.error(format!(
+                            "unrecognised `#[map(...)]` option on a variant. {label} \
+                             knows one: `rename = \"...\"`. A variant cannot be skipped: \
+                             a value of that variant would have no way to be written."
+                        )))
+                    }
+                })?;
+            } else if attr.path().is_ident("schema") {
+                attr.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("label") {
+                        explicit_label = Some(meta.value()?.parse::<LitStr>()?.value());
+                        Ok(())
+                    } else if tagged && meta.path.is_ident("help") {
+                        explicit_help = Some(meta.value()?.parse::<LitStr>()?.value());
+                        Ok(())
+                    } else if tagged {
+                        Err(meta.error(format!(
+                            "unrecognised `#[schema(...)]` option on a variant. {label} \
+                             knows `label` and `help`: a variant is an arm, and the \
+                             other options describe fields, which go on its fields."
+                        )))
+                    } else {
+                        Err(meta.error(format!(
+                            "unrecognised `#[schema(...)]` option on a variant. {label} \
+                             knows `label`: a unit variant is one choice among several, \
+                             and a choice has a label and nothing else."
+                        )))
+                    }
+                })?;
+            }
+        }
+
+        let doc = doc_comment(&variant.attrs);
+        let (label_text, help_text) = if tagged {
+            (explicit_label, explicit_help.or(doc))
+        } else {
+            (explicit_label.or(doc), None)
+        };
+
+        let fields = match &variant.fields {
+            Fields::Unit => Vec::new(),
+            Fields::Named(named) => {
+                let mut plan = Vec::new();
+                for field in &named.named {
+                    plan.push(FieldPlan::read(derive, field)?);
+                }
+                reject_duplicate_keys(&plan)?;
+                plan
+            }
+            Fields::Unnamed(unnamed) => {
+                return Err(syn::Error::new_spanned(
+                    unnamed,
+                    format!(
+                        "{label} needs a variant's fields to have names: they are stored \
+                         beside the tag under their own keys, and a tuple variant has no \
+                         names to key them by. Give the fields names."
+                    ),
+                ));
+            }
+        };
+
+        Ok(VariantPlan {
+            stored: rename.unwrap_or_else(|| variant.ident.to_string()),
+            unit: matches!(variant.fields, Fields::Unit),
+            ident: variant.ident.clone(),
+            fields,
+            label: label_text,
+            help: help_text,
+        })
+    }
+}
+
+fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Result<TokenStream> {
+    let label = derive.spelled();
+    let name = &ast.ident;
+
+    if data.variants.is_empty() {
+        return Err(syn::Error::new_spanned(
+            name,
+            format!(
+                "{label} needs at least one variant. An enum with none has no value to \
+                 store and none to read back, and its schema would accept nothing."
+            ),
+        ));
+    }
+
+    let tag = EnumAttrs::read(derive, &ast.attrs)?.tag;
+
+    // Before reading any variant, so the message is about the decision
+    // that is missing rather than about whichever variant came first.
+    if tag.is_none()
+        && let Some(carrying) = data
+            .variants
+            .iter()
+            .find(|v| !matches!(v.fields, Fields::Unit))
+    {
+        return Err(syn::Error::new_spanned(
+            &carrying.ident,
+            format!(
+                "{label} needs `#[map(tag = \"...\")]` on an enum whose variants carry \
+                 fields. Two variants describe two different maps, and the key that \
+                 tells them apart (\"type\", \"kind\", a field name) is a wire-format \
+                 decision this crate deliberately does not make for you. Name it, and \
+                 each value is a map holding the variant's name under that key beside \
+                 its fields."
+            ),
+        ));
+    }
+
+    let mut variants = Vec::new();
+    for variant in &data.variants {
+        variants.push(VariantPlan::read(derive, variant, tag.is_some())?);
+    }
+    reject_duplicate_variants(&variants)?;
+
+    let Some(tag) = tag else {
+        return Ok(match derive {
+            Derive::ToValue => emit_choice_to(name, &variants),
+            Derive::FromValue => emit_choice_from(name, &variants),
+            Derive::Schema => emit_choice_schema(name, &variants),
+        });
+    };
+    reject_fields_on_the_tag(&tag, &variants)?;
+    Ok(match derive {
+        Derive::ToValue => emit_arm_to(name, &tag, &variants),
+        Derive::FromValue => emit_arm_from(name, &tag, &variants),
+        Derive::Schema => emit_arm_schema(name, &tag, &variants),
+    })
+}
+
+/// Two variants stored as one name could not be told apart on the way
+/// back, so neither could be read.
+fn reject_duplicate_variants(variants: &[VariantPlan]) -> syn::Result<()> {
+    for (i, variant) in variants.iter().enumerate() {
+        if let Some(earlier) = variants[..i].iter().find(|v| v.stored == variant.stored) {
+            return Err(syn::Error::new(
+                variant.ident.span(),
+                format!(
+                    "two variants are stored as \"{}\": `{}` and `{}`. A value reading \
+                     \"{}\" could be either, so neither could be read back. Rename one \
+                     with `#[map(rename = \"...\")]`.",
+                    variant.stored, earlier.ident, variant.ident, variant.stored
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// A field stored under the tag would overwrite the variant's name, and
+/// the value could no longer say which variant it is.
+fn reject_fields_on_the_tag(tag: &str, variants: &[VariantPlan]) -> syn::Result<()> {
+    for variant in variants {
+        if let Some(field) = variant.fields.iter().find(|f| !f.skip && f.key == tag) {
+            return Err(syn::Error::new(
+                field.ident.span(),
+                format!(
+                    "the field `{}` of `{}` is stored under \"{tag}\", which is the tag. \
+                     It would overwrite the variant's name, and the value could no longer \
+                     say which variant it is. Rename the field with \
+                     `#[map(rename = \"...\")]`, or choose another tag.",
+                    field.ident, variant.ident
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// What a reader expected, phrased the way `schema::validate` phrases it.
+///
+/// Names the alternatives and never the value that was given: a value may
+/// be a secret, and the caller still holds it.
+fn one_of(variants: &[VariantPlan]) -> String {
+    let names: Vec<&str> = variants.iter().map(|v| v.stored.as_str()).collect();
+    format!("one of {}", names.join(", "))
+}
+
+// --- an enum of unit variants: a choice --------------------------------
+
+fn emit_choice_to(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
+    let arms = variants.iter().map(|v| {
+        let ident = &v.ident;
+        let stored = &v.stored;
+        quote! { Self::#ident => #stored, }
+    });
+    quote! {
+        #[automatically_derived]
+        impl ::guatiao::ToValue for #name {
+            fn to_value(
+                &self,
+                __alloc: ::guatiao::Alloc,
+            ) -> ::core::result::Result<
+                ::guatiao::Value,
+                ::guatiao::ValueError,
+            > {
+                // `*self`: every pattern is a unit variant, so nothing is
+                // moved out of the borrow.
+                ::guatiao::Value::string_in(__alloc, match *self {
+                    #(#arms)*
+                })
+            }
+        }
+    }
+}
+
+fn emit_choice_from(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
+    let arms = variants.iter().map(|v| {
+        let ident = &v.ident;
+        let stored = &v.stored;
+        quote! { #stored => ::core::result::Result::Ok(Self::#ident), }
+    });
+    let expected = one_of(variants);
+    quote! {
+        #[automatically_derived]
+        impl ::guatiao::FromValue for #name {
+            fn from_value(
+                __value: &::guatiao::Value,
+            ) -> ::core::result::Result<Self, ::guatiao::MapError> {
+                match ::guatiao::convert::expect_str(__value)? {
+                    #(#arms)*
+                    _ => ::core::result::Result::Err(
+                        ::guatiao::MapError::bad_value(#expected),
+                    ),
+                }
+            }
+        }
+    }
+}
+
+fn emit_choice_schema(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
+    let rows = variants.iter().map(|v| {
+        let stored = &v.stored;
+        // No label is written as empty, and the builder leaves an empty
+        // one off: a reader shows the value when there is no label.
+        let label = v.label.as_deref().unwrap_or("");
+        quote! { (#stored, #label), }
+    });
+    quote! {
+        #[automatically_derived]
+        impl ::guatiao::Schema for #name {
+            fn kind(
+                __alloc: ::guatiao::Alloc,
+            ) -> ::guatiao::schema::KindBuilder {
+                ::guatiao::schema::KindBuilder::enumeration_in(__alloc, &[
+                    #(#rows)*
+                ])
+            }
+        }
+    }
+}
+
+// --- an enum with a tag: a variant --------------------------------------
+
+fn emit_arm_to(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStream {
+    let arms = variants.iter().map(|v| {
+        let ident = &v.ident;
+        let stored = &v.stored;
+        // Bound to generated names, never to the user's field names: a
+        // field called `__map` or `__alloc` would otherwise shadow the
+        // expansion's own locals. A struct never has this problem, because
+        // it reaches its fields through `self.`.
+        let bound: Vec<(&FieldPlan, Ident)> = v
+            .fields
+            .iter()
+            .filter(|f| !f.skip)
+            .enumerate()
+            .map(|(i, f)| (f, format_ident!("__f{i}")))
+            .collect();
+        let pattern = if v.unit {
+            quote! { Self::#ident }
+        } else {
+            let members = bound.iter().map(|(field, binding)| {
+                let member = &field.ident;
+                quote! { #member: #binding }
+            });
+            quote! { Self::#ident { #(#members,)* .. } }
+        };
+        let sets = bound
+            .iter()
+            .map(|(field, binding)| set_field(field, &quote! { #binding }));
+        quote! {
+            #pattern => {
+                ::guatiao::Value::set(
+                    &mut __map,
+                    #tag,
+                    ::guatiao::Value::string_in(__alloc, #stored)?,
+                )?;
+                #(#sets)*
+            }
+        }
+    });
+    quote! {
+        #[automatically_derived]
+        impl ::guatiao::ToValue for #name {
+            fn to_value(
+                &self,
+                __alloc: ::guatiao::Alloc,
+            ) -> ::core::result::Result<
+                ::guatiao::Value,
+                ::guatiao::ValueError,
+            > {
+                let mut __map = ::guatiao::Value::map_in(__alloc);
+                // The tag goes in first, so the value reads as the variant
+                // it is before its payload -- and re-emits byte-stable,
+                // because a map is insertion-ordered by contract.
+                match self {
+                    #(#arms)*
+                }
+                ::core::result::Result::Ok(__map)
+            }
+        }
+    }
+}
+
+fn emit_arm_from(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStream {
+    let arms = variants.iter().map(|v| {
+        let ident = &v.ident;
+        let stored = &v.stored;
+        if v.unit {
+            quote! { #stored => ::core::result::Result::Ok(Self::#ident), }
+        } else {
+            let reads = v.fields.iter().map(read_field);
+            quote! { #stored => ::core::result::Result::Ok(Self::#ident { #(#reads)* }), }
+        }
+    });
+    let expected = one_of(variants);
+    quote! {
+        #[automatically_derived]
+        impl ::guatiao::FromValue for #name {
+            fn from_value(
+                __value: &::guatiao::Value,
+            ) -> ::core::result::Result<Self, ::guatiao::MapError> {
+                ::guatiao::convert::expect_map(__value)?;
+                let __tag = ::guatiao::convert::expect_str(
+                    ::guatiao::convert::expect_key(__value, #tag)?,
+                )
+                .map_err(|__e| ::guatiao::MapError::under(__e, #tag))?;
+                // A key the chosen variant does not declare is not refused
+                // here, exactly as a struct's reader does not refuse one:
+                // reading is lenient and `schema::validate` is the strict
+                // check.
+                match __tag {
+                    #(#arms)*
+                    _ => ::core::result::Result::Err(::guatiao::MapError::under(
+                        ::guatiao::MapError::bad_value(#expected),
+                        #tag,
+                    )),
+                }
+            }
+        }
+    }
+}
+
+fn emit_arm_schema(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStream {
+    let arms = variants.iter().map(|v| {
+        let stored = &v.stored;
+        let label = v.label.as_deref().unwrap_or("");
+        let mut built = quote! {
+            ::guatiao::schema::ArmBuilder::new_in(__alloc, #stored, #label)
+        };
+        if let Some(help) = &v.help {
+            built = quote! {
+                ::guatiao::schema::FormBuilder::help(#built, #help)
+            };
+        }
+        // The same builder a struct's fields go through, so `#[map]` and
+        // `#[schema]` on a variant's field mean what they mean on a
+        // struct's.
+        for field in v.fields.iter().filter(|f| !f.skip) {
+            let field = field_builder(field);
+            built = quote! { #built.field(#field) };
+        }
+        quote! { __arms.push(#built); }
+    });
+    quote! {
+        #[automatically_derived]
+        impl ::guatiao::Schema for #name {
+            fn kind(
+                __alloc: ::guatiao::Alloc,
+            ) -> ::guatiao::schema::KindBuilder {
+                let mut __arms = ::std::vec::Vec::new();
+                #(#arms)*
+                ::guatiao::schema::KindBuilder::variant_in(__alloc, #tag, __arms)
             }
         }
     }
@@ -617,9 +1115,15 @@ mod tests {
         assert!(unit.contains("unit struct has none"), "{unit}");
         assert!(unit.contains("Map::new()"), "{unit}");
 
-        let enumeration = from(quote! { enum E { A, B } });
+        // A data-carrying enum with no tag. A UNIT enum is accepted, so
+        // the refusal is about the one decision this crate will not make.
+        let enumeration = from(quote! { enum E { A { x: u8 }, B } });
         assert!(enumeration.contains("compile_error"), "{enumeration}");
-        assert!(enumeration.contains("no one set of keys"), "{enumeration}");
+        assert!(enumeration.contains("two different maps"), "{enumeration}");
+        assert!(
+            enumeration.contains("#[map(tag = "),
+            "the refusal names the way out: {enumeration}"
+        );
         // It must name the derive the user wrote, not the other one.
         assert!(
             enumeration.contains("#[derive(FromValue)]"),
@@ -694,7 +1198,24 @@ mod tests {
                 #[map(skip)] c: u8,
             }
         };
-        let output = to(declaration.clone()) + &from(declaration);
+        // And both enum shapes, which reach different helpers: a choice
+        // goes through `expect_str`, an arm through all four.
+        let choice = quote! {
+            enum C { A, #[map(rename = "b")] B }
+        };
+        let tagged = quote! {
+            #[map(tag = "t")]
+            enum T {
+                A,
+                B { x: u8, y: ::core::option::Option<u8>, #[map(skip)] z: u8 },
+            }
+        };
+        let output = to(declaration.clone())
+            + &from(declaration)
+            + &to(choice.clone())
+            + &from(choice)
+            + &to(tagged.clone())
+            + &from(tagged);
 
         // Compared TOKEN by token rather than by substring: `ToMap ::`
         // contains `Map ::`, so a substring search reports a false
@@ -873,5 +1394,143 @@ mod tests {
         let output = to(quote! { struct S {} });
         assert!(!output.contains("compile_error"), "{output}");
         assert!(output.contains("Value :: map_in (__alloc)"), "{output}");
+    }
+
+    fn schema(input: TokenStream) -> String {
+        rendered(Derive::Schema, input)
+    }
+
+    /// A unit enum is a choice: its value is the variant's name, and no
+    /// wire-format decision was needed to say so.
+    #[test]
+    fn a_unit_enum_is_a_choice() {
+        let decl = quote! {
+            enum Level {
+                /// Nothing at all.
+                Off,
+                #[map(rename = "warn")]
+                #[schema(label = "Warnings only")]
+                Warning,
+                On,
+            }
+        };
+
+        let to_side = to(decl.clone());
+        assert!(!to_side.contains("compile_error"), "{to_side}");
+        assert!(to_side.contains("Value :: string_in"), "{to_side}");
+        assert!(
+            to_side.contains("Self :: Warning => \"warn\""),
+            "a rename reaches the stored spelling: {to_side}"
+        );
+
+        let from_side = from(decl.clone());
+        assert!(from_side.contains("expect_str"), "{from_side}");
+        assert!(
+            from_side.contains("\"one of Off, warn, On\""),
+            "an unknown spelling names the alternatives: {from_side}"
+        );
+
+        let schema_side = schema(decl);
+        assert!(schema_side.contains("enumeration_in"), "{schema_side}");
+        assert!(
+            schema_side.contains("(\"Off\" , \"Nothing at all.\")"),
+            "a choice has only a label, so its doc comment IS the label: {schema_side}"
+        );
+        assert!(
+            schema_side.contains("(\"warn\" , \"Warnings only\")"),
+            "an explicit label wins: {schema_side}"
+        );
+        assert!(
+            schema_side.contains("(\"On\" , \"\")"),
+            "no label at all is written empty, and the builder leaves it off: {schema_side}"
+        );
+    }
+
+    /// A tagged enum is a variant: a map holding the name under the tag,
+    /// then the variant's own fields.
+    #[test]
+    fn a_tagged_enum_is_a_variant() {
+        let decl = quote! {
+            #[map(tag = "auth")]
+            enum Auth {
+                /// The ambient credential.
+                Ambient,
+                #[map(rename = "userpass")]
+                UserPass { username: String, password: Option<String>, #[map(skip)] cache: u8 },
+            }
+        };
+
+        let to_side = to(decl.clone());
+        assert!(!to_side.contains("compile_error"), "{to_side}");
+        assert!(
+            to_side.contains("username : __f0"),
+            "fields are bound to generated names, never the user's: {to_side}"
+        );
+        assert!(
+            !to_side.contains("cache :"),
+            "a skipped field is not bound: {to_side}"
+        );
+
+        let from_side = from(decl.clone());
+        assert!(
+            from_side.contains("expect_key (__value , \"auth\")"),
+            "{from_side}"
+        );
+        assert!(
+            from_side.contains("cache : :: core :: default :: Default :: default ()"),
+            "a skipped field is defaulted, as in a struct: {from_side}"
+        );
+
+        let schema_side = schema(decl);
+        assert!(
+            schema_side.contains("variant_in (__alloc , \"auth\""),
+            "{schema_side}"
+        );
+        assert!(
+            schema_side.contains("FormBuilder :: help"),
+            "an arm has help as well as a label, so its doc comment is help: {schema_side}"
+        );
+        assert!(
+            schema_side.contains("FieldBuilder :: new_in (__alloc , \"username\""),
+            "an arm's fields go through the same builder a struct's do: {schema_side}"
+        );
+    }
+
+    /// The enum-specific refusals, each by its message.
+    #[test]
+    fn enum_mistakes_are_named() {
+        let empty = to(quote! { enum Never {} });
+        assert!(empty.contains("at least one variant"), "{empty}");
+
+        let tuple = to(quote! { #[map(tag = "k")] enum E { A(u8) } });
+        assert!(tuple.contains("tuple variant"), "{tuple}");
+
+        let same = to(quote! { enum E { A, #[map(rename = "A")] B } });
+        assert!(same.contains("two variants are stored as"), "{same}");
+
+        let on_tag = to(quote! {
+            #[map(tag = "kind")]
+            enum E { A { #[map(rename = "kind")] k: u8 } }
+        });
+        assert!(on_tag.contains("which is the tag"), "{on_tag}");
+
+        let typo = to(quote! { #[map(tags = "k")] enum E { A } });
+        assert!(
+            typo.contains("unrecognised") && typo.contains("tag = "),
+            "a misspelled tag is refused, never ignored -- ignoring it would change \
+             the wire shape: {typo}"
+        );
+
+        let skip = to(quote! { enum E { #[map(skip)] A } });
+        assert!(skip.contains("cannot be skipped"), "{skip}");
+
+        let help = schema(quote! { enum E { #[schema(help = "x")] A } });
+        assert!(
+            help.contains("a choice has a label and nothing else"),
+            "{help}"
+        );
+
+        let generic = to(quote! { enum E<T> { A(T) } });
+        assert!(generic.contains("does not support generic"), "{generic}");
     }
 }

@@ -1,0 +1,367 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! The derives on an enum.
+//!
+//! Two shapes, and the test that matters most for each is the one where
+//! two derives read one declaration and must agree: a value the enum
+//! WRITES is one the schema the same enum DECLARES accepts. If those ever
+//! disagree, a provider rejects the exact configuration its own schema
+//! asked for.
+
+#![cfg(feature = "derive")]
+
+use std::collections::BTreeMap;
+
+use guatiao::schema::flat;
+use guatiao::schema::read::{FieldRef, Kind, SchemaRef};
+use guatiao::schema::validate::{validate_map, validate_value};
+use guatiao::value::alloc::Alloc;
+use guatiao::value::read::str_or;
+use guatiao::{FromValue, MapError, Schema, ToValue, Value};
+
+/// A choice: every variant is a unit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ToValue, FromValue, Schema)]
+enum Level {
+    /// Nothing at all.
+    Off,
+    #[map(rename = "warn")]
+    #[schema(label = "Warnings only")]
+    Warning,
+    On,
+}
+
+/// A variant: the tag names which one, and each carries its own fields.
+#[derive(Debug, Clone, PartialEq, Eq, ToValue, FromValue, Schema)]
+#[map(tag = "auth")]
+enum Auth {
+    /// The ambient credential.
+    Ambient,
+    #[map(rename = "userpass")]
+    #[schema(label = "Username and password")]
+    UserPass {
+        username: String,
+        #[schema(sensitive)]
+        password: Option<String>,
+        #[map(skip)]
+        attempts: u32,
+    },
+}
+
+/// Both, held by a struct, which is where an enum usually lives.
+#[derive(Debug, Clone, PartialEq, Eq, ToValue, FromValue, Schema)]
+struct Config {
+    level: Level,
+    auth: Auth,
+    fallback: Option<Level>,
+}
+
+fn alloc() -> Alloc {
+    Alloc::rust()
+}
+
+/// A kind as the field a caller would validate against.
+fn field_of<T: Schema>(key: &'static str) -> (Value, &'static str) {
+    (T::kind(alloc()).finish().expect("a kind builds"), key)
+}
+
+// --- a choice ---------------------------------------------------------
+
+#[test]
+fn a_unit_enum_is_stored_as_its_name() {
+    for (level, stored) in [
+        (Level::Off, "Off"),
+        (Level::Warning, "warn"),
+        (Level::On, "On"),
+    ] {
+        let value = level.to_value(alloc()).unwrap();
+        assert_eq!(
+            value.as_str(),
+            Some(stored),
+            "a rename changes the spelling"
+        );
+        assert_eq!(Level::from_value(&value).unwrap(), level, "and reads back");
+    }
+}
+
+#[test]
+fn a_spelling_no_variant_declares_names_the_alternatives_but_not_itself() {
+    let error = Level::from_value(&Value::string("hunter2")).unwrap_err();
+    assert!(
+        matches!(&error, MapError::BadValue { expected, .. } if expected == "one of Off, warn, On"),
+        "the right kind with the wrong value is BadValue: {error:?}"
+    );
+    assert!(
+        !error.to_string().contains("hunter2"),
+        "an error never quotes what it refused -- the value may be a secret: {error}"
+    );
+
+    // The variant's own Rust name is not a spelling once it is renamed.
+    assert!(Level::from_value(&Value::string("Warning")).is_err());
+}
+
+#[test]
+fn a_choice_that_is_not_text_is_the_wrong_kind() {
+    let error = Level::from_value(&Value::int(1)).unwrap_err();
+    assert!(
+        matches!(error, MapError::WrongType { .. }),
+        "a number where a name belongs is a disagreement about kind, not value: {error:?}"
+    );
+}
+
+#[test]
+fn a_unit_enum_describes_itself_as_a_choice() {
+    let (kind, _) = field_of::<Level>("level");
+    let field = FieldRef::new("level", &kind).unwrap();
+    assert!(matches!(field.kind(), Kind::Enum(_)));
+
+    let choices: Vec<(String, String)> = field
+        .kind()
+        .choices()
+        .map(|c| (c.value().to_string(), c.label().to_string()))
+        .collect();
+    assert_eq!(
+        choices,
+        [
+            // A choice has only a label, so its doc comment is the label.
+            ("Off".to_string(), "Nothing at all.".to_string()),
+            // An explicit label wins over the rename.
+            ("warn".to_string(), "Warnings only".to_string()),
+            // No label at all reads as the value.
+            ("On".to_string(), "On".to_string()),
+        ]
+    );
+
+    // And the unlabelled one wrote nothing, rather than `"On": ""`.
+    let labels = kind.get("x-enum-labels").expect("two choices have labels");
+    assert!(
+        labels.get("On").is_none(),
+        "a label saying nothing is left off"
+    );
+}
+
+#[test]
+fn a_choice_it_writes_is_one_its_schema_accepts() {
+    let (kind, key) = field_of::<Level>("level");
+    let field = FieldRef::new(key, &kind).unwrap();
+    for level in [Level::Off, Level::Warning, Level::On] {
+        let value = level.to_value(alloc()).unwrap();
+        validate_value(field, &value)
+            .unwrap_or_else(|e| panic!("{level:?} wrote a value its own schema refuses: {e}"));
+    }
+    assert!(
+        validate_value(field, &Value::string("Warning")).is_err(),
+        "and the schema refuses what the reader refuses"
+    );
+}
+
+// --- a variant ----------------------------------------------------------
+
+fn userpass() -> Auth {
+    Auth::UserPass {
+        username: "ana".to_string(),
+        password: Some("hunter2".to_string()),
+        attempts: 0,
+    }
+}
+
+#[test]
+fn a_tagged_enum_is_a_map_with_its_name_under_the_tag() {
+    let value = userpass().to_value(alloc()).unwrap();
+    let keys: Vec<&str> = value
+        .entries()
+        .unwrap()
+        .iter()
+        .filter_map(|e| e.key_str())
+        .collect();
+    assert_eq!(
+        keys,
+        ["auth", "username", "password"],
+        "the tag first, then the fields -- and a skipped field not at all"
+    );
+    assert_eq!(str_or(value.get("auth"), ""), "userpass");
+
+    let ambient = Auth::Ambient.to_value(alloc()).unwrap();
+    assert_eq!(
+        ambient.entries().unwrap().len(),
+        1,
+        "a unit arm is its tag and nothing else"
+    );
+}
+
+#[test]
+fn a_tagged_enum_round_trips() {
+    let absent_password = Auth::UserPass {
+        username: "ana".to_string(),
+        password: None,
+        attempts: 0,
+    };
+    for auth in [Auth::Ambient, userpass(), absent_password.clone()] {
+        let value = auth.to_value(alloc()).unwrap();
+        assert_eq!(Auth::from_value(&value).unwrap(), auth);
+    }
+    assert!(
+        absent_password
+            .to_value(alloc())
+            .unwrap()
+            .get("password")
+            .is_none(),
+        "None omits the key, exactly as it does in a struct"
+    );
+}
+
+#[test]
+fn a_skipped_field_reads_back_as_its_default() {
+    let written = Auth::UserPass {
+        username: "ana".to_string(),
+        password: None,
+        attempts: 7,
+    };
+    let read = Auth::from_value(&written.to_value(alloc()).unwrap()).unwrap();
+    assert!(
+        matches!(read, Auth::UserPass { attempts: 0, .. }),
+        "never stored, so `Default::default()` on the way back: {read:?}"
+    );
+}
+
+#[test]
+fn a_missing_wrong_or_unknown_tag_is_named_under_the_tag() {
+    let mut no_tag = Value::map();
+    no_tag.set("username", "ana").unwrap();
+    assert_eq!(
+        Auth::from_value(&no_tag).unwrap_err(),
+        MapError::missing("auth"),
+        "no tag says which key is missing"
+    );
+
+    let mut numeric = Value::map();
+    numeric.set("auth", 3).unwrap();
+    let error = Auth::from_value(&numeric).unwrap_err();
+    assert!(
+        matches!(&error, MapError::WrongType { key, .. } if key == "auth"),
+        "{error:?}"
+    );
+
+    let mut unknown = Value::map();
+    unknown.set("auth", "kerberos").unwrap();
+    let error = Auth::from_value(&unknown).unwrap_err();
+    assert!(
+        matches!(&error, MapError::BadValue { key, expected }
+            if key == "auth" && expected == "one of Ambient, userpass"),
+        "{error:?}"
+    );
+
+    let error = Auth::from_value(&Value::string("userpass")).unwrap_err();
+    assert!(
+        matches!(error, MapError::WrongType { .. }),
+        "a tagged enum is a map, so bare text is the wrong kind: {error:?}"
+    );
+}
+
+#[test]
+fn a_tagged_enum_describes_itself_as_a_variant() {
+    let (kind, key) = field_of::<Auth>("auth");
+    let field = FieldRef::new(key, &kind).unwrap();
+    assert!(matches!(field.kind(), Kind::Variant { tag: "auth", .. }));
+
+    let arms: Vec<_> = field.kind().arms().collect();
+    assert_eq!(arms.len(), 2);
+
+    assert_eq!(arms[0].value(), "Ambient");
+    assert_eq!(
+        arms[0].help(),
+        "The ambient credential.",
+        "an arm has help as well as a label, so its doc comment is help"
+    );
+    assert_eq!(
+        arms[0].label(),
+        "Ambient",
+        "and with no label it shows its value"
+    );
+
+    assert_eq!(arms[1].value(), "userpass");
+    assert_eq!(arms[1].label(), "Username and password");
+    let fields: Vec<(String, bool, bool)> = arms[1]
+        .fields()
+        .map(|f| (f.key().to_string(), f.is_required(), f.is_sensitive()))
+        .collect();
+    assert_eq!(
+        fields,
+        [
+            ("username".to_string(), true, false),
+            // Optional because `Option<T>`, sensitive because it said so --
+            // the same rules a struct field follows.
+            ("password".to_string(), false, true),
+        ],
+        "and never the skipped one"
+    );
+}
+
+/// **The invariant the whole tagged shape rests on.**
+///
+/// `schema::validate` fixed what a variant's value looks like before this
+/// derive existed: a map carrying the tag plus the chosen arm's fields.
+/// The derive has to produce exactly that, or `validate_value` rejects
+/// what the enum wrote.
+#[test]
+fn a_variant_it_writes_is_one_its_schema_accepts() {
+    let (kind, key) = field_of::<Auth>("auth");
+    let field = FieldRef::new(key, &kind).unwrap();
+    for auth in [Auth::Ambient, userpass()] {
+        let value = auth.to_value(alloc()).unwrap();
+        validate_value(field, &value)
+            .unwrap_or_else(|e| panic!("{auth:?} wrote a value its own schema refuses: {e}"));
+    }
+
+    let mut foreign = userpass().to_value(alloc()).unwrap();
+    foreign.set("realm", "EXAMPLE").unwrap();
+    assert!(
+        validate_value(field, &foreign).is_err(),
+        "a key the chosen arm does not declare is the validator's to refuse"
+    );
+}
+
+#[test]
+fn a_variant_survives_the_flat_projection() {
+    let (kind, key) = field_of::<Auth>("auth");
+    let field = FieldRef::new(key, &kind).unwrap();
+    let written = userpass().to_value(alloc()).unwrap();
+
+    let mut store = BTreeMap::new();
+    assert!(flat::flatten(field, &written, &mut store));
+    assert_eq!(store.get("auth").map(String::as_str), Some("userpass"));
+    assert_eq!(
+        store.get("auth.username").map(String::as_str),
+        Some("ana"),
+        "an arm's field lands under the owner's key"
+    );
+
+    let back = flat::unflatten(alloc(), field, &store).expect("it reads back");
+    assert_eq!(Auth::from_value(&back).unwrap(), userpass());
+}
+
+// --- held by a struct -----------------------------------------------------
+
+#[test]
+fn a_struct_holding_both_validates_against_its_own_schema() {
+    let config = Config {
+        level: Level::Warning,
+        auth: userpass(),
+        fallback: Some(Level::Off),
+    };
+    let value = config.to_value(alloc()).unwrap();
+    let schema = Config::schema(alloc()).unwrap();
+    let s = SchemaRef::new(&schema).unwrap();
+
+    validate_map(s, &value).unwrap_or_else(|e| panic!("its own schema refuses it: {e}"));
+    assert_eq!(Config::from_value(&value).unwrap(), config);
+
+    assert!(matches!(s.find("level").unwrap().kind(), Kind::Enum(_)));
+    assert!(matches!(
+        s.find("auth").unwrap().kind(),
+        Kind::Variant { tag: "auth", .. }
+    ));
+    assert!(s.find("level").unwrap().is_required());
+    assert!(!s.find("fallback").unwrap().is_required());
+}
