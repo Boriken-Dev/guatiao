@@ -155,6 +155,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Every object the schema builders seal carries `additionalProperties:
+  false`** — a struct's document and each arm's subschema — so a general
+  JSON Schema validator refuses exactly what `validate` refuses. The key
+  reaches C as `GUATIAO_KEY_ADDITIONAL_PROPERTIES`.
 - **Breaking**: `describe` takes `Host` instead of `&HostInfo`;
   `HostInfo` gained `services` and `ProviderInfo` gained `tables`, both
   appended under `struct_size`; `ProviderView` gained `raw` and `tables`.

@@ -186,7 +186,14 @@ fn the_document_is_written_in_json_schemas_own_keys() {
         // The dialect is declared once, on the root, and first.
         assert_eq!(
             keys_of(&schema),
-            ["$schema", "type", "title", "properties", "required"],
+            [
+                "$schema",
+                "type",
+                "title",
+                "properties",
+                "additionalProperties",
+                "required"
+            ],
             "the document opens by saying what it is"
         );
         assert_eq!(str_or(schema.get("$schema"), ""), vocab::DIALECT);

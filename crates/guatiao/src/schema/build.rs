@@ -225,6 +225,9 @@ fn seal(
     }
 
     put(state, vocab::PROPERTIES, properties);
+    // The key set is closed, and the document says so: what `validate`
+    // refuses, a general validator now refuses too.
+    put(state, vocab::ADDITIONAL_PROPERTIES, Ok(Value::bool(false)));
     // Absent means nothing is required, which is what JSON Schema says an
     // absent `required` means. An empty list would say the same thing in
     // more bytes.

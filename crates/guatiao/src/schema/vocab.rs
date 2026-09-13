@@ -60,21 +60,14 @@
 //! presentation extensions [`X_SECTION`], [`X_ORDER`], [`X_ADVANCED`] and
 //! [`X_SENSITIVE`].
 //!
-//! # One rule this crate applies that the document does not state
+//! # An undeclared key is refused, and the document says so
 //!
-//! **An undeclared key is refused, and nothing writes
-//! `additionalProperties: false`.** JSON Schema's default is `true`, so a
-//! document this crate writes permits what
-//! [`validate`](super::validate) then rejects: a key nobody declared is a
-//! misspelling worth reporting, and silently dropping one is how somebody
-//! ends up convinced a setting does nothing.
-//!
-//! Stated here rather than fixed, because emitting the keyword would
-//! change what every existing document means. A consumer handing one of
-//! these schemas to a general JSON Schema validator gets the laxer
-//! answer, which is the divergence to know about — the same shape as
-//! `type: "bytes"` below, where the document is readable everywhere and
-//! only a strict meta-schema check disagrees.
+//! Every object the builders seal carries [`ADDITIONAL_PROPERTIES`]
+//! `: false` — a struct's document and each arm's subschema — so a general
+//! JSON Schema validator refuses exactly what [`validate`](super::validate)
+//! refuses. A key nobody declared is a misspelling worth reporting, and
+//! silently dropping one is how somebody ends up convinced a setting does
+//! nothing.
 //!
 //! # Rules a reader must follow
 //!
@@ -159,6 +152,10 @@ pub const PROPERTIES: &str = "properties";
 /// hide it by collecting `required()` calls and writing the list at
 /// `finish`.
 pub const REQUIRED: &str = "required";
+/// `additionalProperties`: written as `false` on every object the
+/// builders seal, because [`validate`](super::validate) refuses an
+/// undeclared key and the document should say so.
+pub const ADDITIONAL_PROPERTIES: &str = "additionalProperties";
 
 // --- an array ---------------------------------------------------------
 
