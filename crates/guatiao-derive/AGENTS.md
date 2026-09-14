@@ -109,7 +109,7 @@ default is the trait's ident in snake case, `SessionBackend` →
 | --- | --- |
 | `<Trait>Vtable` | `repr(C)`: `header: KindHeader`, then one `Option<unsafe extern "C" fn>` slot per method, declaration order |
 | `<Trait>Vtable::of::<T>()` | `const fn`, the table for an implementation; `floor()`; `<method>_end()` per slot |
-| `impl Kind for dyn Trait` | `NAME`, `Vtable`, `FLOOR`, `FLOOR_HASH` (FNV-1a over the required signatures), `REQUIRED` |
+| `impl Kind for dyn Trait` | `NAME`, `Vtable`, `FLOOR`, `FLOOR_HASH` (FNV-1a over `provider;` or `object;` and the required signatures), `REQUIRED`, `OBJECT`, `as_dyn`/`as_dyn_mut` |
 | `impl Trait for Remote<dyn Trait>` | the proxy: reads each slot under the table's size, marshals, calls, converts back |
 | `impl From<Remote<dyn Trait>> for Box<dyn Trait>` | `Box` only: `Arc` is not fundamental (`Kind::shared`) |
 
@@ -122,9 +122,11 @@ Accepted method shapes — receiver `&self`, the trait names `Send + Sync`:
 | `&Value`, `&Map` | non-null pointers |
 | `Option<&Value>` | a pointer that may be null |
 | any other argument type, by value | `*const Value` via `ToValue` (the shim reads it with `FromValue`) |
+| `Object<dyn K>` (`K` an object kind) | an `ObjectRaw` by value; **ownership crosses with the call**, the callee destroys it — taken first in the shim, before anything can fail |
 | return `()`, scalar, `Value`, `Map`, `List`, `String` | an out-pointer (`String` as `Text`) |
 | any other return type | `*mut Value` via `ToValue`, read back with `FromValue` |
-| `Result<X, ProviderError>` | `X` as above plus `err: *mut ProviderError`; **required** for any method that converts |
+| return `Object<dyn K>` | `out: *mut ObjectRaw`; the caller owns what it receives |
+| `Result<X, ProviderError>` | `X` as above plus `err: *mut ProviderError`; **required** for any method that converts or passes an `Object` |
 
 A method **with a default body** is an appended slot: an older table
 lacks it and the proxy runs the default. A required method after a
@@ -135,10 +137,29 @@ associated consts/types, `async`, generic or variadic methods, `&mut
 self`/`self`/no receiver, a `&mut` argument, a borrowed argument of any
 other type, a value type by value as an argument, `impl Trait` anywhere,
 a function argument, a borrowed or `impl Trait` return, a `Result` whose
-error is not `ProviderError`, and an attribute key other than `name`.
-Every message is pinned by text in `kind::tests::kind_rejects_by_name`;
-the expansion of a two-method trait is pinned by
-`src/snapshots/greeter.expected.rs`.
+error is not `ProviderError`, and an attribute key other than `name`
+and `object`. Every message is pinned by text in
+`kind::tests::kind_rejects_by_name`; the expansion of a two-method trait
+is pinned by `src/snapshots/greeter.expected.rs`.
+
+**`#[kind(object)]` on a trait** — an **object kind**: a handle one
+caller owns (a session, a scan, a stream), never offered by a registry.
+The trait names `Send` (`Sync` optional); methods may take `&mut self`;
+a `&mut [u8]` argument crosses as a `BytesMut` out-buffer (the one
+`&mut` argument allowed, and only here). What differs in the expansion:
+
+| item | what |
+| --- | --- |
+| `<Trait>Vtable` | `header`, then **`destroy: Option<unsafe extern "C" fn(ctx)>`**, then the slots; `destroy_end()`; `destroy` is the first entry of `REQUIRED` |
+| `Kind::OBJECT` | `true`; the hash is over `object;` + the required signatures, so an object table never passes for a provider table with the same methods |
+| the trait | gains `fn into_object(self) -> Object<dyn Trait> where Self: Sized + Send + 'static`: boxes the value beside a table `of::<Self>()` (an `ObjectCell`) and hands back the handle |
+| the shims | address the value through that cell (`object_mut`), `&mut` for every method; `__guatiao_destroy::<T>` frees the cell |
+
+A Rust implementation becomes a handle with `value.into_object()`; the
+receiving side drives it through `Object<dyn Trait>` (`Deref`/`DerefMut`
+to the trait) and drops it, which calls `destroy` exactly once. A C
+implementation fills the same table and hands `{table, size, ctx}` as a
+`guatiao_object`.
 
 **`#[derive(Provider)]`** with `#[provider(...)]`:
 

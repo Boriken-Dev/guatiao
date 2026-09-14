@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Object kinds**: `#[guatiao::kind(object)]` declares a kind whose
+  instances are handles one caller owns -- a session, a scan, a stream
+  -- rather than providers a registry offers. The trait names `Send`,
+  its methods may take `&mut self`, a `&mut [u8]` argument crosses as an
+  out-buffer (`library::BytesMut`), and the table carries a `destroy`
+  slot after its header. The attribute appends `into_object(self) ->
+  Object<dyn Trait>` to the trait; `library::Object<K>` is the handle
+  (`Deref`/`DerefMut` to the trait, `destroy` on drop, `into_raw` /
+  `from_raw` as `library::ObjectRaw`). Any kind's method may return an
+  `Object<dyn K>` or take one as an argument: ownership crosses with the
+  call, so a host implementing an object kind and handing it in is how a
+  callback crosses. A shim takes its object arguments before anything
+  else can fail, so a refused call never leaks what it was handed.
+  `Kind` gains `OBJECT` and `as_dyn_mut`; the floor hash now covers the
+  shape (`provider;` or `object;`) as well as the signatures, so every
+  existing table's hash changes. In C: `guatiao_object`,
+  `guatiao_bytes_mut`. `examples/greeter_kind` declares `Conversation`
+  and `Listener`, `derived_greeter` starts one, and `greeter_host` drives
+  it and hands the listener in.
 - `examples/greeter_host`: the host side as a program. It scans a search
   path under a kind rule, prints the report, offers every `dyn Greeter`
   it found, calls the one that is its own instance through both of its
