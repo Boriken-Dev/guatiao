@@ -635,7 +635,17 @@ registry.mismatches::<dyn Greeter>()           // (&Provider, KindMismatch): tab
 provider.as_kind::<dyn Greeter>()              // Result<Remote<dyn Greeter>, KindMismatch>
 host.offers::<dyn Greeter>() / host.offer(key) / host.mismatches()
 unsafe { Remote::<dyn Greeter>::from_raw(table, size, ctx) }   // a table from anywhere else
+
+// Building a configured provider, from the host's own type:
+#[derive(ToValue, Schema)] struct Settings { prefix: String }
+let config = Settings { prefix: "hey".into() }.to_value(Alloc::rust())?;
+validate_map(SchemaRef::new(offer.config_schema()?)?, &config)?;   // the provider's schema
+let instance = offer.instantiate(&config)?;   // derefs to dyn Greeter; drop runs `destroy`
 ```
+
+The whole host side, as a program that scans a search path and does the
+above against a library on disk, is `examples/greeter_host` in the
+repository (`cargo run -p greeter_host` after a workspace build).
 
 - **What may cross.** Receiver `&self`; the trait names `Send + Sync`.
   Arguments: integers, floats, `bool`, `&str`, `&[u8]`, `&Value`,

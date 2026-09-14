@@ -14,7 +14,10 @@ public surface); this file is about the repository.
 | `crates/guatiao-derive/` | `#[derive(ToValue, FromValue, Schema)]`, `#[guatiao::kind]`/`#[derive(Provider)]`, `#[derive(Form)]`; reached through `guatiao`'s `derive`/`provider` features and `guatiao-form`'s `derive`, never named directly |
 | `crates/guatiao-serde/` | serde for values: JSON, TOML and YAML as features, and a C surface with its own `include/guatiao_serde.h` |
 | `crates/guatiao-form/` | how a schema is shown: sections, widget hints, conditional visibility, as a value beside the schema, or declared with `#[derive(Form)]`; C surface in `include/guatiao_form.h` |
-| `examples/hello_library/` | a real cdylib the test suite builds and loads |
+| `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
+| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against |
+| `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
+| `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 
 ## Commands
