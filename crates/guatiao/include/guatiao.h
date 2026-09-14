@@ -1076,6 +1076,48 @@ typedef struct guatiao_kind_header {
   uint32_t floor_hash;
 } guatiao_kind_header;
 
+/*
+ An object as it crosses the boundary: its table, the table's size, and
+ the context every slot takes. **Ownership crosses with it**: whoever
+ receives one destroys it, through the table's `destroy` slot.
+
+ The out-parameter of a method returning [`Object`], and the argument
+ type of a method taking one. All three fields null or zero is "no
+ object".
+ */
+typedef struct guatiao_object {
+  /*
+   The object kind's table.
+   */
+  const void *table;
+  /*
+   `sizeof` that table as the library compiled it.
+   */
+  size_t size;
+  /*
+   What the table's slots take.
+   */
+  void *ctx;
+} guatiao_object;
+
+/*
+ Borrowed **writable** bytes: a pointer and a length. The out-buffer
+ argument an object kind's `&mut [u8]` crosses as.
+
+ Check `len` before `ptr`, as with [`Bytes`]: an empty buffer may carry
+ a null pointer.
+ */
+typedef struct guatiao_bytes_mut {
+  /*
+   First byte. May be null when `len` is 0.
+   */
+  uint8_t *ptr;
+  /*
+   Length in bytes.
+   */
+  size_t len;
+} guatiao_bytes_mut;
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus

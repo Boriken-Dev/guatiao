@@ -100,6 +100,18 @@ fn every_type_the_header_declares_is_prefixed() {
     );
 }
 
+/// `repr(C)` for its LAYOUT, never for a C consumer: each of these is
+/// generic over Rust types, so no C spelling exists, and nothing across
+/// the boundary names one — a C object carries its own `ctx`.
+///
+/// - `ObjectCell<V, T>`: an object kind's table followed by the Rust
+///   value it addresses; `repr(C)` pins the table at offset 0, which is
+///   what lets one pointer serve as both the table and the `ctx`.
+///
+/// Listed by hand, with the reason, so an entry here is a decision and
+/// not a way to make the test go green.
+const RUST_ONLY: &[&str] = &["ObjectCell"];
+
 #[test]
 fn every_repr_c_type_is_in_the_generated_header() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -121,6 +133,7 @@ fn every_repr_c_type_is_in_the_generated_header() {
         let text = std::fs::read_to_string(&path).expect("a source file is readable");
         declared.extend(repr_c_types(&text));
     }
+    declared.retain(|name| !RUST_ONLY.contains(&name.as_str()));
     declared.sort();
     declared.dedup();
 

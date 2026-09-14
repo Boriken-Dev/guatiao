@@ -13,8 +13,10 @@
 
 use std::ffi::c_void;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
-use greeter_kind::{Counter, Greeter, GreeterVtable};
+use greeter_kind::{Counter, Greeter, GreeterVtable, Listener};
 use guatiao::library::{Kind, KindMismatch, Offer, Registry, Remote};
 use guatiao::{Status, Value};
 
@@ -205,5 +207,136 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
         e.status,
         Status::GUATIAO_ERR_NULL,
         "no instances from a provider that is its one"
+    );
+}
+
+/// A host-side listener: an object kind implemented here, handed to the
+/// library, called back from it, and destroyed by it.
+struct Tape {
+    heard: Arc<Mutex<Vec<String>>>,
+    dropped: Arc<AtomicBool>,
+}
+
+impl Listener for Tape {
+    fn heard(&mut self, what: &str) {
+        self.heard.lock().unwrap().push(what.to_string());
+    }
+}
+
+impl Drop for Tape {
+    fn drop(&mut self) {
+        self.dropped.store(true, Ordering::SeqCst);
+    }
+}
+
+#[test]
+fn objects_cross_both_ways_and_are_destroyed_by_whoever_holds_them_last() {
+    let registry = loaded();
+    let offer = registry
+        .offer::<dyn Greeter>("derived_greeter_hello")
+        .expect("filed under its id")
+        .expect("a valid table");
+
+    // 1. The host hands an object IN and gets one OUT, across the dlopen.
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    let dropped = Arc::new(AtomicBool::new(false));
+    let listener = Tape {
+        heard: Arc::clone(&heard),
+        dropped: Arc::clone(&dropped),
+    }
+    .into_object();
+    let mut chat = offer
+        .start(listener)
+        .expect("the derived greeter holds conversations");
+    assert_eq!(chat.turns(), 0);
+
+    // 2. `&mut self` calls drive the object; the library calls the host's
+    // listener back from inside them.
+    chat.say("hi").unwrap();
+    chat.say("there").unwrap();
+    assert_eq!(chat.turns(), 2);
+    assert_eq!(*heard.lock().unwrap(), ["hi", "there"]);
+
+    // 3. A ProviderError crosses out of an object method like any other.
+    let e = chat.say("").unwrap_err();
+    assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert_eq!(e.message(), "nothing to say");
+
+    // 4. An out-buffer: the object writes into the host's own memory and
+    // says how much; a short buffer is filled and not overrun.
+    let mut buffer = [0u8; 64];
+    let n = chat.read(&mut buffer);
+    assert_eq!(&buffer[..n as usize], b"hi\nthere");
+    let mut short = [0u8; 3];
+    assert_eq!(chat.read(&mut short), 3);
+    assert_eq!(&short, b"hi\n");
+
+    // 5. Dropping the handle runs the library's `destroy`, which drops the
+    // conversation, which drops the listener the library owned -- whose
+    // `destroy` is the host's. Both crossed once, in opposite directions.
+    assert!(
+        !dropped.load(Ordering::SeqCst),
+        "held while the conversation lives"
+    );
+    drop(chat);
+    assert!(
+        dropped.load(Ordering::SeqCst),
+        "the host's listener was destroyed by the library"
+    );
+
+    // 6. A greeter built before `start` existed: the table ends before
+    // the slot, so the PROXY runs the default body here, and the listener
+    // it was handed is dropped on this side. Nothing crossed.
+    let remote = offer.remote();
+    let truncated: &'static [u8] = Box::leak(
+        // SAFETY: the table is `GreeterVtable`-sized bytes the library
+        // keeps for the process; copying them is a read.
+        unsafe { std::slice::from_raw_parts(remote.table().cast::<u8>(), remote.size()) }
+            .to_vec()
+            .into_boxed_slice(),
+    );
+    // SAFETY: a byte-for-byte copy of a validated table, presented as
+    // ending after `greet`; `ctx` is the library's instance.
+    let old = unsafe {
+        Remote::<dyn Greeter>::from_raw(
+            truncated.as_ptr().cast::<c_void>(),
+            GreeterVtable::floor(),
+            remote.ctx(),
+        )
+    }
+    .unwrap();
+    let dropped = Arc::new(AtomicBool::new(false));
+    let listener = Tape {
+        heard: Arc::new(Mutex::new(Vec::new())),
+        dropped: Arc::clone(&dropped),
+    }
+    .into_object();
+    let e = old.start(listener).unwrap_err();
+    assert_eq!(e.status, Status::GUATIAO_ERR_NULL, "{e}");
+    assert_eq!(e.message(), "this greeter holds no conversations");
+    assert!(
+        dropped.load(Ordering::SeqCst),
+        "the default body dropped the listener on this side"
+    );
+
+    // 7. A provider with no default instance refuses the call before it
+    // runs anything -- and still destroys the object it was handed,
+    // because ownership crossed with the call. The one leak an early
+    // return could cause, and the reason objects are taken first.
+    let shouter = registry
+        .offer::<dyn Greeter>("derived_greeter_shouter")
+        .unwrap()
+        .unwrap();
+    let dropped = Arc::new(AtomicBool::new(false));
+    let listener = Tape {
+        heard: Arc::new(Mutex::new(Vec::new())),
+        dropped: Arc::clone(&dropped),
+    }
+    .into_object();
+    let e = shouter.start(listener).unwrap_err();
+    assert_eq!(e.status, Status::GUATIAO_ERR_NULL, "{e}");
+    assert!(
+        dropped.load(Ordering::SeqCst),
+        "the shim destroyed the listener before refusing"
     );
 }

@@ -95,7 +95,10 @@ pub use desc::{
     Providers,
 };
 pub use key::{KeyError, KeyFields, KeyTemplate, Subject};
-pub use kind::{Instance, Kind, KindHeader, KindMismatch, Offer, ProviderError, Remote};
+pub use kind::{
+    BytesMut, Instance, Kind, KindHeader, KindMismatch, Object, ObjectRaw, Offer, ProviderError,
+    Remote,
+};
 pub use notices::{Notice, declare_notice, notices};
 pub use raw::{
     DECLARES_SYMBOL, ENTRY_SYMBOL, EntryFn, Host, LibraryView, ProviderView, answer, read_host,

@@ -23,6 +23,10 @@
 //!    with its own derived type -- `#[derive(ToValue, Schema)]` on a
 //!    struct the host owns -- checked against the schema the provider
 //!    declared, and handed to `instantiate`. The instance is the trait.
+//! 4. **Objects cross both ways**: the host implements `Listener` (an
+//!    object kind) and hands one in; the provider hands a `Conversation`
+//!    back; the host drives it with `&mut` calls, reads into its own
+//!    buffer, and drops it. Each side destroys what it holds last.
 //!
 //! ```text
 //! cargo build --workspace            # puts derived_greeter beside this binary
@@ -32,8 +36,10 @@
 
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
-use greeter_kind::{Counter, Greeter};
+use greeter_kind::{Counter, Greeter, Listener};
 use guatiao::library::{Kind, Offer, Order, Registry, ScanRules, SearchPath, Skipped, scan_path};
 use guatiao::schema::{SchemaRef, validate_map};
 use guatiao::{Alloc, Schema, ToValue, Value};
@@ -198,7 +204,70 @@ fn main() -> ExitCode {
             println!("{} given nothing: {e}", offer.id());
         }
     }
+
+    // 4. An object: the host hands a listener IN (an object kind this
+    // program implements, owned by the library from then on), gets a
+    // conversation OUT (an object kind the library implements, owned by
+    // this program), drives it, reads into its own buffer, drops it --
+    // and both objects are destroyed on the side that holds them last.
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    let listener_dropped = Arc::new(AtomicBool::new(false));
+    for offer in offers.iter().filter(|o| !o.builds_instances()) {
+        let listener = Echo {
+            heard: Arc::clone(&heard),
+            dropped: Arc::clone(&listener_dropped),
+        }
+        .into_object();
+        match offer.start(listener) {
+            Ok(mut chat) => {
+                for line in ["good morning", "how are you"] {
+                    if let Err(e) = chat.say(line) {
+                        println!("{} would not hear \"{line}\": {e}", offer.id());
+                    }
+                }
+                let mut buffer = [0u8; 64];
+                let n = chat.read(&mut buffer);
+                let transcript = String::from_utf8_lossy(&buffer[..n.max(0) as usize]).into_owned();
+                println!(
+                    "\n{} held a conversation of {} turn(s); the transcript read back into a {}-byte buffer:",
+                    offer.id(),
+                    chat.turns(),
+                    buffer.len()
+                );
+                println!("{}", indent(&transcript));
+                drop(chat);
+                println!(
+                    "the listener heard {:?} and was dropped with the conversation: {}",
+                    heard.lock().map(|h| h.clone()).unwrap_or_default(),
+                    listener_dropped.load(Ordering::SeqCst)
+                );
+            }
+            Err(e) => println!("\n{} holds no conversations: {e}", offer.id()),
+        }
+    }
     status
+}
+
+/// This program's listener: an object kind implemented on the HOST side
+/// and handed to the library, which calls it back across the boundary
+/// and destroys it when the conversation ends.
+struct Echo {
+    heard: Arc<Mutex<Vec<String>>>,
+    dropped: Arc<AtomicBool>,
+}
+
+impl Listener for Echo {
+    fn heard(&mut self, what: &str) {
+        if let Ok(mut heard) = self.heard.lock() {
+            heard.push(what.to_string());
+        }
+    }
+}
+
+impl Drop for Echo {
+    fn drop(&mut self) {
+        self.dropped.store(true, Ordering::SeqCst);
+    }
 }
 
 /// The arguments, else `GREETER_HOST_PATH`, else beside this executable.

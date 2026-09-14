@@ -127,12 +127,16 @@ impl ::guatiao::library::Kind for dyn Greeter {
     type Vtable = GreeterVtable;
     const FLOOR: usize = GreeterVtable::floor();
     const FLOOR_HASH: u32 = ::guatiao::library::kind::fnv1a(
-        "greet(&str)->Result<String,ProviderError>",
+        "provider;greet(&str)->Result<String,ProviderError>",
     );
     const REQUIRED: &'static [(&'static str, usize)] = &[
         ("greet", GreeterVtable::greet_end()),
     ];
+    const OBJECT: bool = false;
     fn as_dyn(remote: &::guatiao::library::Remote<Self>) -> &Self {
+        remote
+    }
+    fn as_dyn_mut(remote: &mut ::guatiao::library::Remote<Self>) -> &mut Self {
         remote
     }
     fn boxed(remote: ::guatiao::library::Remote<Self>) -> ::std::boxed::Box<Self> {

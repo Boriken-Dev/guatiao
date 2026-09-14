@@ -84,6 +84,21 @@ fn the_host_scans_offers_and_builds_a_configured_greeter() {
         stdout.contains("derived_greeter_shouter given nothing:"),
         "{stdout}"
     );
+    // 4. A conversation crossed back as an object the host drove; the
+    // transcript came through the host's own buffer; the listener the
+    // host handed in was called from the library and dropped with the
+    // conversation -- both destroys ran, across the boundary.
+    assert!(
+        stdout.contains("derived_greeter_hello held a conversation of 2 turn(s)"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("  good morning\n  how are you"), "{stdout}");
+    assert!(
+        stdout.contains(
+            "the listener heard [\"good morning\", \"how are you\"] and was dropped with the conversation: true"
+        ),
+        "{stdout}"
+    );
 }
 
 #[test]
