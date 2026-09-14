@@ -8,9 +8,10 @@ members = [
     "examples/hello_library",
     "examples/greeter_kind",
     "examples/derived_greeter",
+    "examples/greeter_host",
 ]
 
-# Four crates plus an example library. `guatiao-derive` exists only
+# Four crates plus the examples. `guatiao-derive` exists only
 # because a proc-macro crate cannot be anything else, and is reached
 # through `guatiao = { features = ["derive"] }` rather than named in a
 # consumer's manifest. `guatiao-serde` is separate for the opposite
@@ -19,9 +20,12 @@ members = [
 # that draws a screen needs it.
 #
 # Everything a consumer names -- the value model, the C type vocabulary,
-# the schema, the envelope, the loader -- is in `guatiao`. The example is a
-# real cdylib the test suite builds and loads; an envelope is not something
-# prose can demonstrate.
+# the schema, the envelope, the loader -- is in `guatiao`. The examples are
+# real: two cdylibs the test suite builds and loads (`hello_library` by
+# hand, `derived_greeter` from the derives), the kind crate both compile
+# against (`greeter_kind`), and a host program that scans for them and
+# builds one from a configuration (`greeter_host`); an envelope is not
+# something prose can demonstrate.
 
 [workspace.package]
 version = "0.1.0"
