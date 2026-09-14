@@ -8,8 +8,8 @@
 
 use std::sync::atomic::{AtomicI64, Ordering};
 
-use greeter_kind::{Counter, Greeter};
-use guatiao::library::ProviderError;
+use greeter_kind::{Conversation, Counter, Greeter, Listener};
+use guatiao::library::{Object, ProviderError};
 use guatiao::{Map, Provider, Status};
 
 /// One provider serving two kinds.
@@ -33,6 +33,56 @@ impl Greeter for Hello {
         let mut map = Map::new();
         map.set("greeting", format!("hello, {name}"))?;
         Ok(map)
+    }
+
+    /// A conversation: an object this library builds and hands back,
+    /// holding the listener the host handed in.
+    fn start(
+        &self,
+        listener: Object<dyn Listener>,
+    ) -> Result<Object<dyn Conversation>, ProviderError> {
+        Ok(Chat {
+            listener,
+            transcript: String::new(),
+            turns: 0,
+        }
+        .into_object())
+    }
+}
+
+/// One conversation. Plain Rust; `into_object()` makes it a handle.
+struct Chat {
+    listener: Object<dyn Listener>,
+    transcript: String,
+    turns: i64,
+}
+
+impl Conversation for Chat {
+    fn say(&mut self, what: &str) -> Result<(), ProviderError> {
+        if what.is_empty() {
+            return Err(ProviderError::new(
+                Status::GUATIAO_ERR_BAD_VALUE,
+                "nothing to say",
+            ));
+        }
+        if !self.transcript.is_empty() {
+            self.transcript.push('\n');
+        }
+        self.transcript.push_str(what);
+        self.turns += 1;
+        // Across the boundary and back: the listener is the host's.
+        self.listener.heard(what);
+        Ok(())
+    }
+
+    fn read(&mut self, dst: &mut [u8]) -> i64 {
+        let n = self.transcript.len().min(dst.len());
+        dst[..n].copy_from_slice(&self.transcript.as_bytes()[..n]);
+        n as i64
+    }
+
+    fn turns(&self) -> i64 {
+        self.turns
     }
 }
 

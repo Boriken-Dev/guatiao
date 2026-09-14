@@ -770,17 +770,27 @@ fn a_lookup_from_another_thread_never_deadlocks_a_load() {
     let host = registry.host();
 
     let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    // The asker says when it has started asking, so the load below runs
+    // WHILE it asks rather than before the thread was scheduled at all —
+    // which is what the test is about, and what `calls > 0` used to
+    // assume on a machine that scheduled the thread promptly.
+    let started = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let asker = {
         let stop = stop.clone();
+        let started = started.clone();
         std::thread::spawn(move || {
             let mut calls = 0usize;
             while !stop.load(std::sync::atomic::Ordering::Relaxed) {
                 let _ = host.list("greeter");
                 calls += 1;
+                started.store(true, std::sync::atomic::Ordering::Relaxed);
             }
             calls
         })
     };
+    while !started.load(std::sync::atomic::Ordering::Relaxed) {
+        std::thread::yield_now();
+    }
 
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     registry

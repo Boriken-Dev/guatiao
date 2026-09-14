@@ -301,3 +301,146 @@ fn each_mismatch_is_named() {
         KindMismatch::NullRequiredSlot("greet")
     );
 }
+
+// --- object kinds, in one process ------------------------------------------
+
+/// A handle one caller owns: `&mut self`, an out-buffer, a `destroy`.
+#[guatiao::kind(object)]
+pub trait Tally: Send {
+    /// Adds and answers the running total.
+    fn add(&mut self, n: i64) -> i64;
+    /// Copies the total's decimal text into `dst`; answers bytes written.
+    fn render(&mut self, dst: &mut [u8]) -> i64;
+    /// Appended: an older table lacks it.
+    fn total(&self) -> i64 {
+        -1
+    }
+}
+
+struct Sum {
+    total: i64,
+    dropped: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl Tally for Sum {
+    fn add(&mut self, n: i64) -> i64 {
+        self.total += n;
+        self.total
+    }
+    fn render(&mut self, dst: &mut [u8]) -> i64 {
+        let text = self.total.to_string();
+        let n = text.len().min(dst.len());
+        dst[..n].copy_from_slice(&text.as_bytes()[..n]);
+        n as i64
+    }
+    fn total(&self) -> i64 {
+        self.total
+    }
+}
+
+impl Drop for Sum {
+    fn drop(&mut self) {
+        self.dropped
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+fn dropped_flag() -> std::sync::Arc<std::sync::atomic::AtomicBool> {
+    std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))
+}
+
+#[test]
+fn an_object_kind_declares_itself() {
+    const { assert!(<dyn Tally as Kind>::OBJECT) };
+    const { assert!(!<dyn Greeter as Kind>::OBJECT) };
+    assert_eq!(
+        <dyn Tally as Kind>::REQUIRED
+            .iter()
+            .map(|(name, _)| *name)
+            .collect::<Vec<_>>(),
+        ["destroy", "add", "render"],
+        "destroy is the first required slot"
+    );
+    assert_eq!(TallyVtable::destroy_end(), 8 + size_of::<usize>());
+    assert_eq!(<dyn Tally as Kind>::FLOOR, TallyVtable::render_end());
+    assert_ne!(
+        <dyn Tally as Kind>::FLOOR_HASH,
+        <dyn Greeter as Kind>::FLOOR_HASH
+    );
+}
+
+#[test]
+fn an_object_is_driven_through_its_handle_and_destroyed_once() {
+    let dropped = dropped_flag();
+    let mut tally = Sum {
+        total: 0,
+        dropped: dropped.clone(),
+    }
+    .into_object();
+    assert_eq!(tally.add(2), 2);
+    assert_eq!(tally.add(40), 42);
+    assert_eq!(
+        tally.total(),
+        42,
+        "the appended slot is present in a full table"
+    );
+    let mut buffer = [0u8; 8];
+    assert_eq!(tally.render(&mut buffer), 2);
+    assert_eq!(&buffer[..2], b"42");
+    let mut short = [0u8; 1];
+    assert_eq!(
+        tally.render(&mut short),
+        1,
+        "a short buffer is filled, not overrun"
+    );
+    assert!(!dropped.load(std::sync::atomic::Ordering::SeqCst));
+    drop(tally);
+    assert!(
+        dropped.load(std::sync::atomic::Ordering::SeqCst),
+        "destroy ran once"
+    );
+}
+
+#[test]
+fn an_object_crosses_as_raw_parts_and_a_mismatch_destroys_it() {
+    use guatiao::library::Object;
+
+    // Out and back: what a shim writes and a proxy reads.
+    let dropped = dropped_flag();
+    let tally = Sum {
+        total: 7,
+        dropped: dropped.clone(),
+    }
+    .into_object();
+    let raw = tally.into_raw();
+    assert_eq!(raw.size, size_of::<TallyVtable>());
+    // SAFETY: `raw` came from `into_raw` on a handle for this kind.
+    let mut back = unsafe { Object::<dyn Tally>::from_raw(raw) }.expect("the same table");
+    assert_eq!(back.add(1), 8);
+    drop(back);
+    assert!(dropped.load(std::sync::atomic::Ordering::SeqCst));
+
+    // Presented as the wrong kind: refused, and destroyed rather than
+    // leaked, since whoever received it owned it.
+    let dropped = dropped_flag();
+    let raw = Sum {
+        total: 0,
+        dropped: dropped.clone(),
+    }
+    .into_object()
+    .into_raw();
+    // SAFETY: the table is a real one; the kind is deliberately wrong,
+    // which is what the hash check is for.
+    let why = unsafe { Object::<dyn Greeter>::from_raw(raw) }.unwrap_err();
+    assert!(matches!(why, KindMismatch::HashMismatch { .. }), "{why:?}");
+    assert!(
+        dropped.load(std::sync::atomic::Ordering::SeqCst),
+        "destroyed on refusal"
+    );
+
+    // All-null is "no object", refused as no table, nothing to destroy.
+    // SAFETY: null everywhere is the documented "no object".
+    let why =
+        unsafe { Object::<dyn Tally>::from_raw(guatiao::library::ObjectRaw::null()) }.unwrap_err();
+    assert_eq!(why, KindMismatch::NoTable);
+}

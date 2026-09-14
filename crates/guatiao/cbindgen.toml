@@ -505,6 +505,8 @@ include = [
   "KindTables",
   "KindHeader",
   "ProviderError",
+  "ObjectRaw",
+  "BytesMut",
   "MergeOverride",
 ]
 # Defined in the trailer instead; see `after_includes`.
@@ -553,6 +555,8 @@ exclude = ["Entry"]
 "KindTables" = "guatiao_kind_tables"
 "KindHeader" = "guatiao_kind_header"
 "ProviderError" = "guatiao_provider_error"
+"ObjectRaw" = "guatiao_object"
+"BytesMut" = "guatiao_bytes_mut"
 # The one opaque handle. A registry owns growable collections and changes
 # over time, which is what a handle is for and what a repr(C) struct is not.
 "HostRegistry" = "guatiao_registry"

@@ -29,6 +29,20 @@
 //! `Result<_, ProviderError>`. A method converting through `ToValue` or
 //! `FromValue` must return a `Result`, because the conversion can fail.
 //!
+//! # Object kinds
+//!
+//! `#[guatiao::kind(object)]` declares a kind whose instances are
+//! **handles one caller owns** — a session, a scan, a stream — rather
+//! than providers a registry offers. The trait names `Send` (not
+//! necessarily `Sync`); its methods may take `&mut self`; a `&mut [u8]`
+//! argument crosses as an out-buffer (`BytesMut`); and the table carries
+//! a `destroy` slot right after the header, which dropping the handle
+//! calls. The trait gains `into_object(self) -> Object<dyn Trait>`, the
+//! way a Rust implementation becomes a handle. Any kind's method may
+//! return `Object<dyn K>` for an object kind `K`, or take one as an
+//! argument (ownership crosses with it) — a host implementing an object
+//! kind and handing it in is how a callback crosses.
+//!
 //! # Versioning
 //!
 //! Slots follow declaration order. A method **with a default body** is an
@@ -58,18 +72,27 @@ pub(crate) fn expand(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 fn try_expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> {
     let tr: ItemTrait = syn::parse2(item)?;
-    let name = parse_name(attr, &tr.ident)?;
-    check_trait(&tr)?;
-    let methods = plan_methods(&tr)?;
-    Ok(emit(&tr, &name, &methods))
+    let attr = parse_attr(attr, &tr.ident)?;
+    check_trait(&tr, attr.object)?;
+    let methods = plan_methods(&tr, attr.object)?;
+    Ok(emit(&tr, &attr, &methods))
 }
 
 // --- what the attribute takes ---------------------------------------------
 
-/// `#[kind]` or `#[kind(name = "...")]`. The name defaults to the trait's
-/// ident in snake case.
-fn parse_name(attr: TokenStream, ident: &Ident) -> syn::Result<String> {
+/// What `#[kind(...)]` was given.
+struct KindAttr {
+    /// The kind's name in a descriptor.
+    name: String,
+    /// `object`: a handle one caller owns, not a provider.
+    object: bool,
+}
+
+/// `#[kind]`, `#[kind(name = "...")]`, `#[kind(object)]`, or both. The
+/// name defaults to the trait's ident in snake case.
+fn parse_attr(attr: TokenStream, ident: &Ident) -> syn::Result<KindAttr> {
     let mut name = None;
+    let mut object = false;
     if !attr.is_empty() {
         let parser = syn::meta::parser(|meta| {
             if meta.path.is_ident("name") {
@@ -79,13 +102,22 @@ fn parse_name(attr: TokenStream, ident: &Ident) -> syn::Result<String> {
                 }
                 name = Some(lit.value());
                 Ok(())
+            } else if meta.path.is_ident("object") {
+                if meta.input.peek(syn::Token![=]) {
+                    return Err(meta.error("`object` takes no value; write `#[kind(object)]`"));
+                }
+                object = true;
+                Ok(())
             } else {
-                Err(meta.error("#[kind] takes only `name = \"...\"`"))
+                Err(meta.error("#[kind] takes only `name = \"...\"` and `object`"))
             }
         });
         syn::parse::Parser::parse2(parser, attr)?;
     }
-    Ok(name.unwrap_or_else(|| snake_case(&ident.to_string())))
+    Ok(KindAttr {
+        name: name.unwrap_or_else(|| snake_case(&ident.to_string())),
+        object,
+    })
 }
 
 /// `Greeter` → `greeter`, `SessionBackend` → `session_backend`.
@@ -110,7 +142,7 @@ pub(crate) fn snake_case(ident: &str) -> String {
 
 // --- what the trait may look like ----------------------------------------
 
-fn check_trait(tr: &ItemTrait) -> syn::Result<()> {
+fn check_trait(tr: &ItemTrait, object: bool) -> syn::Result<()> {
     if let Some(u) = &tr.unsafety {
         return Err(syn::Error::new_spanned(
             u,
@@ -131,7 +163,15 @@ fn check_trait(tr: &ItemTrait) -> syn::Result<()> {
     }
     let names_send = tr.supertraits.iter().any(|b| bound_is(b, "Send"));
     let names_sync = tr.supertraits.iter().any(|b| bound_is(b, "Sync"));
-    if !(names_send && names_sync) {
+    if object {
+        if !names_send {
+            return Err(syn::Error::new_spanned(
+                &tr.ident,
+                "an object kind must name `Send` as a supertrait: a handle is handed to another \
+                 thread",
+            ));
+        }
+    } else if !(names_send && names_sync) {
         return Err(syn::Error::new_spanned(
             &tr.ident,
             "a kind must name `Send + Sync` as supertraits: a provider is called from any thread",
@@ -167,6 +207,11 @@ enum ArgKind {
     /// Any other type by value, built into a value with `ToValue` and
     /// read back with `FromValue`.
     Owned(Type),
+    /// `&mut [u8]` on an object kind, as a writable `BytesMut` view.
+    BytesMut,
+    /// `Object<dyn K>`: an object kind's handle, ownership crossing with
+    /// it. Holds the `dyn K` inside.
+    Object(Type),
 }
 
 /// How a return crosses.
@@ -181,6 +226,9 @@ enum RetKind {
     Text,
     /// Any other type, as a value through `FromValue`.
     Owned(Type),
+    /// `Object<dyn K>`, as an `ObjectRaw` the caller then owns. Holds the
+    /// `dyn K` inside.
+    Object(Type),
 }
 
 struct ArgPlan {
@@ -196,12 +244,14 @@ struct MethodPlan {
     /// The declared return type, verbatim, for the proxy's signature.
     ret_ty: ReturnType,
     fallible: bool,
+    /// `&mut self` (object kinds only).
+    mutable: bool,
     default: Option<Block>,
     /// The normalised signature the hash covers.
     signature: String,
 }
 
-fn plan_methods(tr: &ItemTrait) -> syn::Result<Vec<MethodPlan>> {
+fn plan_methods(tr: &ItemTrait, object: bool) -> syn::Result<Vec<MethodPlan>> {
     let mut plans = Vec::new();
     let mut seen_default = false;
     for item in &tr.items {
@@ -226,7 +276,7 @@ fn plan_methods(tr: &ItemTrait) -> syn::Result<Vec<MethodPlan>> {
                 ));
             }
         };
-        let plan = plan_method(f)?;
+        let plan = plan_method(f, object)?;
         if plan.default.is_some() {
             seen_default = true;
         } else if seen_default {
@@ -247,7 +297,7 @@ fn plan_methods(tr: &ItemTrait) -> syn::Result<Vec<MethodPlan>> {
     Ok(plans)
 }
 
-fn plan_method(f: &TraitItemFn) -> syn::Result<MethodPlan> {
+fn plan_method(f: &TraitItemFn, object: bool) -> syn::Result<MethodPlan> {
     let sig = &f.sig;
     if let Some(a) = &sig.asyncness {
         return Err(syn::Error::new_spanned(
@@ -273,13 +323,15 @@ fn plan_method(f: &TraitItemFn) -> syn::Result<MethodPlan> {
             "a kind method cannot be variadic",
         ));
     }
-    match sig.receiver() {
-        Some(r) if r.reference.is_some() && r.mutability.is_none() => {}
+    let mutable = match sig.receiver() {
+        Some(r) if r.reference.is_some() && r.mutability.is_none() => false,
+        Some(r) if r.reference.is_some() && object => true,
         Some(r) => {
             return Err(syn::Error::new_spanned(
                 r,
                 "a kind method takes `&self`: a provider is shared between callers, so `&mut \
-                 self` and `self` cannot cross",
+                 self` and `self` cannot cross; only an object kind (`#[kind(object)]`, a handle \
+                 one caller owns) may take `&mut self`",
             ));
         }
         None => {
@@ -288,7 +340,7 @@ fn plan_method(f: &TraitItemFn) -> syn::Result<MethodPlan> {
                 "a kind method takes `&self`; an associated function has no provider to call",
             ));
         }
-    }
+    };
 
     let mut args = Vec::new();
     for input in sig.inputs.iter().skip(1) {
@@ -304,7 +356,7 @@ fn plan_method(f: &TraitItemFn) -> syn::Result<MethodPlan> {
                 ));
             }
         };
-        let kind = arg_kind(&pat.ty)?;
+        let kind = arg_kind(&pat.ty, object)?;
         args.push(ArgPlan {
             ident,
             kind,
@@ -313,13 +365,16 @@ fn plan_method(f: &TraitItemFn) -> syn::Result<MethodPlan> {
     }
 
     let (ret, fallible) = ret_kind(&sig.output)?;
-    let converts = args.iter().any(|a| matches!(a.kind, ArgKind::Owned(_)))
-        || matches!(ret, RetKind::Owned(_));
+    let converts = args
+        .iter()
+        .any(|a| matches!(a.kind, ArgKind::Owned(_) | ArgKind::Object(_)))
+        || matches!(ret, RetKind::Owned(_) | RetKind::Object(_));
     if converts && !fallible {
         return Err(syn::Error::new_spanned(
             &sig.ident,
-            "a method converting an argument or its return through `ToValue`/`FromValue` must \
-             return `Result<_, ProviderError>`, because the conversion can fail",
+            "a method converting an argument or its return through `ToValue`/`FromValue`, or \
+             passing an `Object`, must return `Result<_, ProviderError>`, because the conversion \
+             or the validation can fail",
         ));
     }
 
@@ -330,9 +385,29 @@ fn plan_method(f: &TraitItemFn) -> syn::Result<MethodPlan> {
         ret,
         ret_ty: sig.output.clone(),
         fallible,
+        mutable,
         default: f.default.clone(),
         signature,
     })
+}
+
+/// The `dyn K` inside an `Object<dyn K>` path, or `None` for any other
+/// type.
+fn object_inner(ty: &Type) -> Option<Type> {
+    let Type::Path(p) = ty else {
+        return None;
+    };
+    let last = p.path.segments.last()?;
+    if last.ident != "Object" {
+        return None;
+    }
+    let PathArguments::AngleBracketed(a) = &last.arguments else {
+        return None;
+    };
+    match a.args.first()? {
+        GenericArgument::Type(inner) => Some(inner.clone()),
+        _ => None,
+    }
 }
 
 /// The last path segment's ident, for a plain path type.
@@ -364,15 +439,28 @@ fn is_scalar(ident: &Ident) -> bool {
     )
 }
 
-fn arg_kind(ty: &Type) -> syn::Result<ArgKind> {
+fn arg_kind(ty: &Type, object: bool) -> syn::Result<ArgKind> {
+    if let Some(inner) = object_inner(ty) {
+        return Ok(ArgKind::Object(inner));
+    }
     match ty {
+        Type::Reference(TypeReference {
+            mutability: Some(_),
+            elem,
+            ..
+        }) if object
+            && matches!(&**elem, Type::Slice(s) if last_ident(&s.elem).is_some_and(|i| i == "u8")) =>
+        {
+            Ok(ArgKind::BytesMut)
+        }
         Type::Reference(TypeReference {
             mutability: Some(m),
             ..
         }) => Err(syn::Error::new_spanned(
             m,
             "a `&mut` argument cannot cross: the callee would write into memory the caller \
-             still describes",
+             still describes; the one exception is `&mut [u8]` on an object kind, which crosses \
+             as an out-buffer",
         )),
         Type::Reference(TypeReference { elem, .. }) => match &**elem {
             Type::Path(_) if last_ident(elem).is_some_and(|i| i == "str") => Ok(ArgKind::Str),
@@ -464,6 +552,9 @@ fn ret_kind(output: &ReturnType) -> syn::Result<(RetKind, bool)> {
 }
 
 fn plain_ret(ty: &Type) -> syn::Result<RetKind> {
+    if let Some(inner) = object_inner(ty) {
+        return Ok(RetKind::Object(inner));
+    }
     match ty {
         Type::Tuple(t) if t.elems.is_empty() => Ok(RetKind::Unit),
         Type::Reference(_) => Err(syn::Error::new_spanned(
@@ -528,19 +619,56 @@ fn strip(tokens: &TokenStream) -> String {
 
 // --- the expansion ---------------------------------------------------------
 
-fn emit(tr: &ItemTrait, name: &str, methods: &[MethodPlan]) -> TokenStream {
+fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream {
     let trait_ident = &tr.ident;
     let vis = &tr.vis;
+    let name = &attr.name;
+    let object = attr.object;
     let table = format_ident!("{}Vtable", trait_ident);
 
     let required: Vec<&MethodPlan> = methods.iter().filter(|m| m.default.is_none()).collect();
-    let hash_input = required
-        .iter()
-        .map(|m| m.signature.clone())
+    // An object kind's hash names the shape, so a provider table and an
+    // object table with the same methods can never pass for each other.
+    let hash_input = std::iter::once(if object { "object" } else { "provider" }.to_string())
+        .chain(required.iter().map(|m| m.signature.clone()))
         .collect::<Vec<_>>()
         .join(";");
-    let last_required = required.last().expect("at least one required method");
-    let floor_end = end_ident(&last_required.ident);
+    // The floor: one past the last required slot, or past `destroy` for
+    // an object kind whose methods all have defaults.
+    let floor_end = match required.last() {
+        Some(last) => end_ident(&last.ident),
+        None => format_ident!("destroy_end"),
+    };
+
+    // An object kind's table starts with `destroy`, right after the header.
+    let destroy_field = object.then(|| {
+        quote! { pub destroy: ::core::option::Option<unsafe extern "C" fn(ctx: *mut ::core::ffi::c_void)>, }
+    });
+    let destroy_init = object.then(|| {
+        quote! { destroy: ::core::option::Option::Some(Self::__guatiao_destroy::<__T>), }
+    });
+    let destroy_items = object.then(|| {
+        quote! {
+            #[doc(hidden)]
+            pub const fn destroy_end() -> usize {
+                ::core::mem::offset_of!(Self, destroy) + ::core::mem::size_of::<usize>()
+            }
+
+            /// # Safety
+            ///
+            /// `ctx` is null or the cell `into_object` boxed for a `__T`,
+            /// not used again.
+            #[doc(hidden)]
+            pub unsafe extern "C" fn __guatiao_destroy<__T: #trait_ident>(ctx: *mut ::core::ffi::c_void) {
+                ::guatiao::library::kind::catch(|| {
+                    // SAFETY: the caller's contract.
+                    unsafe { ::guatiao::library::kind::destroy_object::<Self, __T>(ctx) };
+                    ::guatiao::Status::GUATIAO_OK
+                });
+            }
+        }
+    });
+    let destroy_required = object.then(|| quote! { ("destroy", #table::destroy_end()), });
 
     let slot_fields = methods.iter().map(|m| {
         let ident = &m.ident;
@@ -562,13 +690,39 @@ fn emit(tr: &ItemTrait, name: &str, methods: &[MethodPlan]) -> TokenStream {
             }
         }
     });
-    let shims = methods.iter().map(|m| emit_shim(trait_ident, m));
+    let shims = methods
+        .iter()
+        .map(|m| emit_shim(trait_ident, &table, object, m));
     let required_slots = required.iter().map(|m| {
         let name = m.ident.to_string();
         let end = end_ident(&m.ident);
         quote! { (#name, #table::#end()), }
     });
     let proxies = methods.iter().map(|m| emit_proxy(&table, m));
+
+    // The trait, with `into_object` appended for an object kind: the way
+    // an implementation becomes a handle. `where Self: Sized` keeps it off
+    // the trait object, so it is not a slot.
+    let mut tr = tr.clone();
+    if object {
+        let into_object: TraitItem = syn::parse_quote! {
+            /// This implementation as a handle: boxed beside its table,
+            /// destroyed when the handle is dropped.
+            fn into_object(self) -> ::guatiao::library::Object<dyn #trait_ident>
+            where
+                Self: Sized + Send + 'static,
+            {
+                ::guatiao::library::Object::from_cell(::std::boxed::Box::new(
+                    ::guatiao::library::kind::ObjectCell {
+                        table: #table::of::<Self>(),
+                        value: self,
+                    },
+                ))
+                .expect("a table the kind attribute built fits its own kind")
+            }
+        };
+        tr.items.push(into_object);
+    }
 
     quote! {
         #tr
@@ -578,6 +732,7 @@ fn emit(tr: &ItemTrait, name: &str, methods: &[MethodPlan]) -> TokenStream {
         #[allow(non_snake_case)]
         #vis struct #table {
             pub header: ::guatiao::library::KindHeader,
+            #destroy_field
             #(#slot_fields)*
         }
 
@@ -591,6 +746,7 @@ fn emit(tr: &ItemTrait, name: &str, methods: &[MethodPlan]) -> TokenStream {
                         ::core::mem::size_of::<Self>(),
                         <dyn #trait_ident as ::guatiao::library::Kind>::FLOOR_HASH,
                     ),
+                    #destroy_init
                     #(#slot_inits)*
                 }
             }
@@ -600,6 +756,8 @@ fn emit(tr: &ItemTrait, name: &str, methods: &[MethodPlan]) -> TokenStream {
             pub const fn floor() -> usize {
                 Self::#floor_end()
             }
+
+            #destroy_items
 
             #(#end_fns)*
 
@@ -611,9 +769,13 @@ fn emit(tr: &ItemTrait, name: &str, methods: &[MethodPlan]) -> TokenStream {
             type Vtable = #table;
             const FLOOR: usize = #table::floor();
             const FLOOR_HASH: u32 = ::guatiao::library::kind::fnv1a(#hash_input);
-            const REQUIRED: &'static [(&'static str, usize)] = &[ #(#required_slots)* ];
+            const REQUIRED: &'static [(&'static str, usize)] = &[ #destroy_required #(#required_slots)* ];
+            const OBJECT: bool = #object;
 
             fn as_dyn(remote: &::guatiao::library::Remote<Self>) -> &Self {
+                remote
+            }
+            fn as_dyn_mut(remote: &mut ::guatiao::library::Remote<Self>) -> &mut Self {
                 remote
             }
             fn boxed(remote: ::guatiao::library::Remote<Self>) -> ::std::boxed::Box<Self> {
@@ -657,6 +819,8 @@ fn arg_c_type(kind: &ArgKind) -> TokenStream {
             quote!(*const ::guatiao::Value)
         }
         ArgKind::MapRef => quote!(*const ::guatiao::Map),
+        ArgKind::BytesMut => quote!(::guatiao::library::BytesMut),
+        ArgKind::Object(_) => quote!(::guatiao::library::ObjectRaw),
     }
 }
 
@@ -670,6 +834,7 @@ fn ret_c_type(ret: &RetKind) -> Option<TokenStream> {
         RetKind::Map => Some(quote!(*mut ::guatiao::Map)),
         RetKind::List => Some(quote!(*mut ::guatiao::List)),
         RetKind::Text => Some(quote!(*mut ::guatiao::Text)),
+        RetKind::Object(_) => Some(quote!(*mut ::guatiao::library::ObjectRaw)),
     }
 }
 
@@ -691,7 +856,7 @@ fn slot_type(m: &MethodPlan) -> TokenStream {
 
 /// The shim: reads its arguments, calls the implementation, writes the
 /// answer. Every `unsafe` is a call into the runtime.
-fn emit_shim(trait_ident: &Ident, m: &MethodPlan) -> TokenStream {
+fn emit_shim(trait_ident: &Ident, table: &Ident, object: bool, m: &MethodPlan) -> TokenStream {
     let shim = shim_ident(&m.ident);
     let method = &m.ident;
     let params = m.args.iter().map(|a| {
@@ -717,10 +882,34 @@ fn emit_shim(trait_ident: &Ident, m: &MethodPlan) -> TokenStream {
         }
     };
 
+    // An object argument is OWNED the moment the call is made: whatever
+    // happens next, this side must destroy it. So objects are taken first,
+    // before `ctx` is checked and before any other argument can fail —
+    // once bound, an early `return` drops the handle and that runs the
+    // destroy. A provider with no instance (`ctx` null) refusing a call
+    // must not leak what it was handed.
+    let object_reads = m.args.iter().filter_map(|a| {
+        let ident = &a.ident;
+        let ArgKind::Object(inner) = &a.kind else {
+            return None;
+        };
+        // Always fallible: the plan requires `Result` for an object.
+        Some(quote! {
+            // SAFETY: the proxy passes an object it handed across.
+            let #ident = match unsafe { ::guatiao::library::kind::object_arg::<#inner>(#ident) } {
+                ::core::result::Result::Ok(__v) => __v,
+                // SAFETY: the proxy passes a writable error slot.
+                ::core::result::Result::Err(__e) => {
+                    return unsafe { ::guatiao::library::kind::write_err(err, __e) };
+                }
+            };
+        })
+    });
+
     let reads = m.args.iter().map(|a| {
         let ident = &a.ident;
         match &a.kind {
-            ArgKind::Scalar(_) => quote!(),
+            ArgKind::Scalar(_) | ArgKind::Object(_) => quote!(),
             ArgKind::Str => {
                 let f = fail(quote!(__s));
                 quote! {
@@ -783,11 +972,45 @@ fn emit_shim(trait_ident: &Ident, m: &MethodPlan) -> TokenStream {
                     };
                 }
             }
+            ArgKind::BytesMut => {
+                let f = fail(quote!(__s));
+                quote! {
+                    // SAFETY: the proxy passes a writable view it holds for the call.
+                    let #ident = match unsafe { ::guatiao::library::kind::bytes_mut_arg(#ident) } {
+                        ::core::result::Result::Ok(__v) => __v,
+                        ::core::result::Result::Err(__s) => { #f }
+                    };
+                }
+            }
         }
     });
 
     let arg_idents = m.args.iter().map(|a| &a.ident);
     let call = quote!(__this.#method(#(#arg_idents),*));
+
+    // Who `ctx` is: a provider's `&T`, or the cell an object was boxed in.
+    let this = if object {
+        quote! {
+            // SAFETY: the table was built for `__T` and an object's `ctx`
+            // is the cell `into_object` boxed; the handle is the one
+            // reference to it.
+            let ::core::option::Option::Some(__this) =
+                (unsafe { ::guatiao::library::kind::object_mut::<#table, __T>(ctx) })
+            else {
+                return ::guatiao::Status::GUATIAO_ERR_NULL;
+            };
+        }
+    } else {
+        quote! {
+            // SAFETY: the table was built for `__T` and the descriptor's
+            // `ctx` is a `&__T`.
+            let ::core::option::Option::Some(__this) =
+                (unsafe { ::guatiao::library::kind::ctx_ref::<__T>(ctx) })
+            else {
+                return ::guatiao::Status::GUATIAO_ERR_NULL;
+            };
+        }
+    };
 
     // What the implementation answered, as the status the shim returns.
     let write = |answer: TokenStream| match &m.ret {
@@ -809,6 +1032,10 @@ fn emit_shim(trait_ident: &Ident, m: &MethodPlan) -> TokenStream {
                     ::guatiao::library::kind::write_err(err, ::guatiao::library::ProviderError::from(__e))
                 },
             }
+        },
+        RetKind::Object(inner) => quote! {
+            // SAFETY: the proxy passes a writable out slot.
+            unsafe { ::guatiao::library::kind::object_out::<#inner>(out, #answer) }
         },
     };
     let body = if m.fallible {
@@ -837,13 +1064,8 @@ fn emit_shim(trait_ident: &Ident, m: &MethodPlan) -> TokenStream {
             #err_param
         ) -> ::guatiao::Status {
             ::guatiao::library::kind::catch(|| {
-                // SAFETY: the table was built for `__T` and the descriptor's
-                // `ctx` is a `&__T`.
-                let ::core::option::Option::Some(__this) =
-                    (unsafe { ::guatiao::library::kind::ctx_ref::<__T>(ctx) })
-                else {
-                    return ::guatiao::Status::GUATIAO_ERR_NULL;
-                };
+                #(#object_reads)*
+                #this
                 #(#reads)*
                 #body
             })
@@ -905,6 +1127,11 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
                     let #name = &#name as *const ::guatiao::Value;
                 }
             }
+            ArgKind::BytesMut => quote! {
+                let #name = ::guatiao::library::BytesMut { ptr: #ident.as_mut_ptr(), len: #ident.len() };
+            },
+            // Ownership crosses with the call: the callee destroys it.
+            ArgKind::Object(_) => quote! { let #name = #ident.into_raw(); },
         }
     });
     let arg_names = m.args.iter().map(|a| format_ident!("__arg_{}", a.ident));
@@ -918,6 +1145,7 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
         RetKind::Map => quote! { let mut __out = ::guatiao::Map::new(); },
         RetKind::List => quote! { let mut __out = ::guatiao::List::new(); },
         RetKind::Text => quote! { let mut __out = ::guatiao::Text::new(""); },
+        RetKind::Object(_) => quote! { let mut __out = ::guatiao::library::ObjectRaw::null(); },
     };
     let out_arg = if matches!(m.ret, RetKind::Unit) {
         quote!()
@@ -945,6 +1173,9 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
     };
 
     let answer = match &m.ret {
+        // A unit answer in an infallible method is the block's own end;
+        // spelling `()` there is what clippy calls an unneeded unit.
+        RetKind::Unit if !m.fallible => quote!(),
         RetKind::Unit => quote!(()),
         RetKind::Scalar(_) | RetKind::Value | RetKind::Map | RetKind::List => quote!(__out),
         RetKind::Text => quote!(::std::string::ToString::to_string(
@@ -959,6 +1190,17 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
                 match <#ty as ::guatiao::FromValue>::from_value(&__out) {
                     ::core::result::Result::Ok(__v) => __v,
                     ::core::result::Result::Err(__e) => { #f }
+                }
+            }
+        }
+        RetKind::Object(inner) => {
+            // Always fallible: the plan requires `Result` for an object.
+            quote! {
+                // SAFETY: the shim wrote an object it handed across, or left
+                // the slot null.
+                match unsafe { ::guatiao::library::kind::object_ret::<#inner>(__out) } {
+                    ::core::result::Result::Ok(__v) => __v,
+                    ::core::result::Result::Err(__e) => { return ::core::result::Result::Err(__e); }
                 }
             }
         }
@@ -999,8 +1241,13 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
         },
     };
 
+    let receiver = if m.mutable {
+        quote!(&mut self)
+    } else {
+        quote!(&self)
+    };
     quote! {
-        fn #method(&self #(, #params)*) #ret_ty {
+        fn #method(#receiver #(, #params)*) #ret_ty {
             #body
         }
     }
@@ -1059,10 +1306,90 @@ mod tests {
         );
         assert!(out.contains("const NAME : & 'static str = \"greeter\""));
         assert!(
-            out.contains("fnv1a (\"greet(&str)->Result<String,ProviderError>\")"),
-            "only the required method is hashed, normalised: {out}"
+            out.contains("fnv1a (\"provider;greet(&str)->Result<String,ProviderError>\")"),
+            "only the required method is hashed, normalised, behind the shape: {out}"
         );
         assert!(out.contains("(\"greet\" , GreeterVtable :: greet_end ())"));
+        assert!(out.contains("const OBJECT : bool = false"));
+        assert!(
+            !out.contains("destroy"),
+            "a provider kind has no destroy slot"
+        );
+    }
+
+    const CONVERSATION: &str = r#"
+        pub trait Conversation: Send {
+            fn say(&mut self, what: &str) -> Result<(), ProviderError>;
+            fn read(&mut self, dst: &mut [u8]) -> i64;
+            fn turns(&self) -> i64 { 0 }
+        }
+    "#;
+
+    #[test]
+    fn an_object_kind_carries_destroy_first_and_gains_into_object() {
+        let out = expand_str("object", CONVERSATION).expect("expands");
+        let file: syn::File = syn::parse_str(&out).expect("the expansion parses as Rust");
+        // The trait was emitted with `into_object` appended, off the table.
+        let tr = file
+            .items
+            .iter()
+            .find_map(|i| match i {
+                syn::Item::Trait(t) => Some(t),
+                _ => None,
+            })
+            .expect("the trait");
+        let names: Vec<String> = tr
+            .items
+            .iter()
+            .filter_map(|i| match i {
+                syn::TraitItem::Fn(f) => Some(f.sig.ident.to_string()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(names, ["say", "read", "turns", "into_object"]);
+        // The table: header, destroy, then the slots in order.
+        let table = file
+            .items
+            .iter()
+            .find_map(|i| match i {
+                syn::Item::Struct(s) if s.ident == "ConversationVtable" => Some(s),
+                _ => None,
+            })
+            .expect("the table");
+        let fields: Vec<String> = table
+            .fields
+            .iter()
+            .map(|f| f.ident.as_ref().unwrap().to_string())
+            .collect();
+        assert_eq!(fields, ["header", "destroy", "say", "read", "turns"]);
+        assert!(out.contains("const OBJECT : bool = true"));
+        assert!(out.contains("(\"destroy\" , ConversationVtable :: destroy_end ())"));
+        assert!(
+            out.contains(
+                "fnv1a (\"object;say(&str)->Result<(),ProviderError>;read(&mut[u8])->i64\")"
+            ),
+            "{out}"
+        );
+        // `&mut self` reaches the proxy; the out-buffer crosses as BytesMut.
+        assert!(out.contains("fn say (& mut self , what : & str)"));
+        assert!(out.contains("dst : :: guatiao :: library :: BytesMut"));
+        assert!(out.contains("object_mut :: < ConversationVtable , __T >"));
+        assert!(out.contains("destroy_object :: < Self , __T >"));
+    }
+
+    #[test]
+    fn an_object_crosses_as_an_argument_and_as_a_return() {
+        let out = expand_str(
+            "",
+            "pub trait Greeter: Send + Sync { fn start(&self, listener: Object<dyn Listener>) -> Result<Object<dyn Conversation>, ProviderError>; }",
+        )
+        .expect("expands");
+        assert!(out.contains("listener : :: guatiao :: library :: ObjectRaw"));
+        assert!(out.contains("out : * mut :: guatiao :: library :: ObjectRaw"));
+        assert!(out.contains("object_arg :: < dyn Listener >"));
+        assert!(out.contains("object_out :: < dyn Conversation >"));
+        assert!(out.contains("object_ret :: < dyn Conversation >"));
+        assert!(out.contains("let __arg_listener = listener . into_raw ()"));
     }
 
     #[test]
@@ -1201,12 +1528,37 @@ mod tests {
             (
                 "",
                 "pub trait G: Send + Sync { fn f(&self, x: Config) -> i64; }",
-                "must return `Result<_, ProviderError>`, because the conversion can fail",
+                "must return `Result<_, ProviderError>`, because the conversion or the validation can fail",
             ),
             (
                 "",
                 "pub trait G: Send + Sync { fn f(&self) -> Config; }",
-                "must return `Result<_, ProviderError>`, because the conversion can fail",
+                "must return `Result<_, ProviderError>`, because the conversion or the validation can fail",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self) -> Object<dyn K>; }",
+                "or passing an `Object`, must return `Result<_, ProviderError>`",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, dst: &mut [u8]) -> i64; }",
+                "the one exception is `&mut [u8]` on an object kind",
+            ),
+            (
+                "object",
+                "pub trait G: Send { fn f(&mut self, dst: &mut Vec<u8>) -> i64; }",
+                "a `&mut` argument cannot cross",
+            ),
+            (
+                "object",
+                "pub trait G { fn f(&mut self) -> i64; }",
+                "an object kind must name `Send` as a supertrait",
+            ),
+            (
+                "object = 1",
+                "pub trait G: Send { fn f(&mut self) -> i64; }",
+                "`object` takes no value",
             ),
             (
                 "",
