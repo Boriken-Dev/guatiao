@@ -647,6 +647,33 @@ The whole host side, as a program that scans a search path and does the
 above against a library on disk, is `examples/greeter_host` in the
 repository (`cargo run -p greeter_host` after a workspace build).
 
+- **Object kinds: a handle one caller owns.** `#[guatiao::kind(object)]`
+  on a trait naming `Send` declares what a provider hands BACK (a
+  session, a scan, a stream) or a host hands IN (a callback): never
+  offered by a registry, driven through `&mut self`, destroyed by
+  whoever holds it last. The table carries `destroy` right after its
+  header; `&mut [u8]` crosses as an out-buffer (`BytesMut`, object kinds
+  only). A Rust implementation becomes one with `value.into_object()`
+  (the attribute appends that method); the receiver holds
+  `Object<dyn K>` — `Deref`/`DerefMut` to the trait, `destroy` on drop,
+  `into_raw()`/`unsafe from_raw(ObjectRaw)` for a C caller
+  (`guatiao_object { table, size, ctx }`). Any kind's method may return
+  `Object<dyn K>` or take one; both need `Result<_, ProviderError>`
+  (validation can fail), and **ownership crosses with the call**: the
+  callee destroys an argument it was handed, even when it refuses the
+  call, and the caller owns a return. `Kind::OBJECT` says which a kind
+  is; an object table's hash covers `object;` so it never passes for a
+  provider table.
+
+```rust
+#[guatiao::kind(object)]
+pub trait Session: Send { fn poll(&mut self) -> Result<(), ProviderError>; fn read(&mut self, dst: &mut [u8]) -> i64; }
+fn open(&self, uri: &Value, observer: Object<dyn Observer>) -> Result<Object<dyn Session>, ProviderError>;  // on a provider kind
+let mut s = backend.open(&uri, MyObserver { .. }.into_object())?;   // the host; the library now owns the observer
+s.poll()?; let n = s.read(&mut buf);                                 // &mut through the handle
+drop(s);                                                             // the library's destroy runs, and drops the observer -- the host's destroy
+```
+
 - **What may cross.** Receiver `&self`; the trait names `Send + Sync`.
   Arguments: integers, floats, `bool`, `&str`, `&[u8]`, `&Value`,
   `Option<&Value>`, `&Map`, any other type by value through `ToValue`.
