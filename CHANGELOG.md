@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `examples/greeter_host`: the host side as a program. It scans a search
+  path under a kind rule, prints the report, offers every `dyn Greeter`
+  it found, calls the one that is its own instance through both of its
+  kinds, and builds the configured one from a struct the host declared
+  with `#[derive(ToValue, Schema)]`, checked against the provider's
+  schema with `validate_map` before `instantiate`. Run by `cargo test`.
 - `Declared::parse` is public, so a host can check its scan rules
   against a declaration written by hand.
 - `Registry` and `Provider` are `Send` and `Sync`: a host keeps its one
