@@ -369,6 +369,31 @@ fn an_object_kind_declares_itself() {
     );
 }
 
+/// The hash the attribute wrote as a literal (so a C header can carry
+/// it) is the hash the runtime computes: the two implementations of
+/// FNV-1a agree, on this exact input.
+#[test]
+fn the_literal_floor_hash_is_the_runtime_hash() {
+    use guatiao::library::kind::fnv1a;
+    assert_eq!(
+        TallyVtable::FLOOR_HASH,
+        fnv1a("object;add(i64)->i64;render(&mut[u8])->i64")
+    );
+    assert_eq!(<dyn Tally as Kind>::FLOOR_HASH, TallyVtable::FLOOR_HASH);
+    assert_eq!(
+        GreeterVtable::FLOOR_HASH,
+        fnv1a(
+            "provider;greet(&str)->Result<String,ProviderError>;\
+             shapes(bool,u32,f64,&[u8],&Value,Option<&Value>,&Map,Greeting)->Result<Greeting,ProviderError>;\
+             describe(&str)->Result<Map,ProviderError>;count()->i64"
+        )
+    );
+    // The known vectors, so a wrong constant on either side shows here
+    // and not only as a mismatch between the two.
+    assert_eq!(fnv1a(""), 0x811c_9dc5);
+    assert_eq!(fnv1a("a"), 0xe40c_292c);
+}
+
 #[test]
 fn an_object_is_driven_through_its_handle_and_destroyed_once() {
     let dropped = dropped_flag();

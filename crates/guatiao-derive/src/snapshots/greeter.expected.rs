@@ -45,6 +45,10 @@ impl GreeterVtable {
     pub const fn floor() -> usize {
         Self::greet_end()
     }
+    /// FNV-1a over the shape and the required signatures, as a
+    /// literal, so a C header generator can render it: what a C
+    /// implementation writes into the table's header.
+    pub const FLOOR_HASH: u32 = 4109485502;
     #[doc(hidden)]
     pub const fn greet_end() -> usize {
         ::core::mem::offset_of!(Self, greet) + ::core::mem::size_of::<usize>()
@@ -126,9 +130,7 @@ impl ::guatiao::library::Kind for dyn Greeter {
     const NAME: &'static str = "greeter";
     type Vtable = GreeterVtable;
     const FLOOR: usize = GreeterVtable::floor();
-    const FLOOR_HASH: u32 = ::guatiao::library::kind::fnv1a(
-        "provider;greet(&str)->Result<String,ProviderError>",
-    );
+    const FLOOR_HASH: u32 = GreeterVtable::FLOOR_HASH;
     const REQUIRED: &'static [(&'static str, usize)] = &[
         ("greet", GreeterVtable::greet_end()),
     ];

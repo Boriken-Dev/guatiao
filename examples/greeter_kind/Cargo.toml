@@ -7,6 +7,21 @@ rust-version.workspace = true
 repository.workspace = true
 license.workspace = true
 publish = false
+build = "build.rs"
 
 [dependencies]
 guatiao = { path = "../../crates/guatiao", features = ["provider"] }
+
+[features]
+# Renders `include/greeter_kind.h`: the kind tables as C structs, so a
+# library written in C can fill one. Off by default for the same reason
+# guatiao's own `c-header` is: the header is committed, and a build that
+# only reads it should not compile a code generator. See `build.rs` for
+# what the render needs, and why.
+c-header = ["dep:cbindgen"]
+
+[build-dependencies]
+cbindgen = { version = "0.29", optional = true }
+
+[dev-dependencies]
+guatiao = { path = "../../crates/guatiao", features = ["provider", "load"] }
