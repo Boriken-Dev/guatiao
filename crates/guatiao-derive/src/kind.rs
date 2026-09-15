@@ -633,6 +633,12 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         .chain(required.iter().map(|m| m.signature.clone()))
         .collect::<Vec<_>>()
         .join(";");
+    // Computed HERE and written as a literal, not left to the runtime's
+    // `fnv1a` at compile time: a C header generator renders an
+    // associated constant only when its value is a literal, and the hash
+    // is what a C implementation writes into its table's header.
+    let floor_hash = fnv1a(&hash_input);
+    let floor_hash = syn::LitInt::new(&floor_hash.to_string(), proc_macro2::Span::call_site());
     // The floor: one past the last required slot, or past `destroy` for
     // an object kind whose methods all have defaults.
     let floor_end = match required.last() {
@@ -757,6 +763,11 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
                 Self::#floor_end()
             }
 
+            /// FNV-1a over the shape and the required signatures, as a
+            /// literal, so a C header generator can render it: what a C
+            /// implementation writes into the table's header.
+            pub const FLOOR_HASH: u32 = #floor_hash;
+
             #destroy_items
 
             #(#end_fns)*
@@ -768,7 +779,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             const NAME: &'static str = #name;
             type Vtable = #table;
             const FLOOR: usize = #table::floor();
-            const FLOOR_HASH: u32 = ::guatiao::library::kind::fnv1a(#hash_input);
+            const FLOOR_HASH: u32 = #table::FLOOR_HASH;
             const REQUIRED: &'static [(&'static str, usize)] = &[ #destroy_required #(#required_slots)* ];
             const OBJECT: bool = #object;
 
@@ -803,6 +814,17 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
 
 fn end_ident(method: &Ident) -> Ident {
     format_ident!("{}_end", method)
+}
+
+/// FNV-1a, 32-bit: the same function as `guatiao::library::kind::fnv1a`,
+/// which a proc macro cannot call. The two agree by test, on both sides.
+pub(crate) fn fnv1a(s: &str) -> u32 {
+    let mut hash: u32 = 0x811c_9dc5;
+    for byte in s.bytes() {
+        hash ^= byte as u32;
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    hash
 }
 
 fn shim_ident(method: &Ident) -> Ident {
@@ -1305,10 +1327,15 @@ mod tests {
             ]
         );
         assert!(out.contains("const NAME : & 'static str = \"greeter\""));
+        // Only the required method is hashed, normalised, behind the
+        // shape -- and written as a literal on the table, where a C
+        // header generator can read it.
+        let literal = fnv1a("provider;greet(&str)->Result<String,ProviderError>");
         assert!(
-            out.contains("fnv1a (\"provider;greet(&str)->Result<String,ProviderError>\")"),
-            "only the required method is hashed, normalised, behind the shape: {out}"
+            out.contains(&format!("pub const FLOOR_HASH : u32 = {literal} ;")),
+            "{out}"
         );
+        assert!(out.contains("const FLOOR_HASH : u32 = GreeterVtable :: FLOOR_HASH ;"));
         assert!(out.contains("(\"greet\" , GreeterVtable :: greet_end ())"));
         assert!(out.contains("const OBJECT : bool = false"));
         assert!(
@@ -1364,12 +1391,15 @@ mod tests {
         assert_eq!(fields, ["header", "destroy", "say", "read", "turns"]);
         assert!(out.contains("const OBJECT : bool = true"));
         assert!(out.contains("(\"destroy\" , ConversationVtable :: destroy_end ())"));
+        let literal = fnv1a("object;say(&str)->Result<(),ProviderError>;read(&mut[u8])->i64");
         assert!(
-            out.contains(
-                "fnv1a (\"object;say(&str)->Result<(),ProviderError>;read(&mut[u8])->i64\")"
-            ),
+            out.contains(&format!("pub const FLOOR_HASH : u32 = {literal} ;")),
             "{out}"
         );
+        // The known FNV-1a vectors, so the constant here matches the
+        // runtime's (which `kind_roundtrip` checks from the other side).
+        assert_eq!(fnv1a(""), 0x811c_9dc5);
+        assert_eq!(fnv1a("a"), 0xe40c_292c);
         // `&mut self` reaches the proxy; the out-buffer crosses as BytesMut.
         assert!(out.contains("fn say (& mut self , what : & str)"));
         assert!(out.contains("dst : :: guatiao :: library :: BytesMut"));
