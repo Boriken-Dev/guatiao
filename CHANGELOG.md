@@ -41,6 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   envelope and linking nothing; `tests/c_library.rs` compiles it into a
   shared library, loads it, and calls it as `dyn Greeter` -- the slots it
   leaves null run the trait's default bodies on the host.
+- `Registry::register_local(name, describe)`: a library the host LINKS
+  rather than loads -- its providers compiled into the host, `describe`
+  what its entry point would have called -- goes through the same
+  absorb as a loaded file: the same keys, dedup, refusals and `Loaded`
+  record, from `<name>` instead of a path. `guatiao::local_providers!`
+  writes the `library` function to hand it, and nothing else: no entry
+  symbol and no declaration, so the host's own binary never looks like
+  a plugin to a scan. The host example carries a built-in greeter this
+  way, offered beside the ones it loads.
+- `guatiao-form` says `links = "guatiao-form"` and publishes its header
+  path as `DEP_GUATIAO_FORM_INCLUDE`, as `guatiao` does.
 - `examples/greeter_host`: the host side as a program. It scans a search
   path under a kind rule, prints the report, offers every `dyn Greeter`
   it found, calls the one that is its own instance through both of its
