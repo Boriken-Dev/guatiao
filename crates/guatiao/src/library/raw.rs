@@ -280,8 +280,65 @@ macro_rules! providers {
             kinds = [$(<$provider as $crate::library::kind::ProviderDecl>::KINDS),+],
             pairs = [$($($pair),*)?]
         );
-        /// What this library offers, built once.
-        fn __guatiao_describe(
+        $crate::__guatiao_describe!(
+            #[doc(hidden)]
+            fn __guatiao_describe;
+            id = $id, version = $version, providers = [$($provider),+]
+        );
+        $crate::guatiao_library!(__guatiao_describe);
+    };
+}
+
+/// Writes a library the host **links** rather than loads.
+///
+/// The same as [`providers!`](crate::providers) without the two exported symbols: no entry
+/// point, no declaration, so the artifact this ends up in — a host's own
+/// binary, or an engine that carries one provider compiled in — does not
+/// look like a plugin to a scan of its directory. What it writes instead
+/// is one function, `library`, which the host hands to
+/// [`Registry::register_local`](crate::library::Registry::register_local):
+///
+/// ```ignore
+/// guatiao::local_providers!(Remote);                       // in the host's crate
+/// registry.register_local("engine", crate::library)?;      // beside what it loads
+/// ```
+///
+/// The providers are built once, on the first call, and kept for the
+/// process, as a loaded library's are.
+#[macro_export]
+macro_rules! local_providers {
+    ($($provider:ty),+ $(,)?) => {
+        $crate::local_providers!(
+            id = env!("CARGO_PKG_NAME"),
+            version = env!("CARGO_PKG_VERSION"),
+            providers = [$($provider),+]
+        );
+    };
+    (
+        id = $id:expr,
+        version = $version:expr,
+        providers = [$($provider:ty),+ $(,)?] $(,)?
+    ) => {
+        $crate::__guatiao_describe!(
+            /// What this crate offers as a library the host links: hand
+            /// it to `Registry::register_local`.
+            pub fn library;
+            id = $id, version = $version, providers = [$($provider),+]
+        );
+    };
+}
+
+/// The describe function behind [`providers!`](crate::providers) and
+/// [`local_providers!`](crate::local_providers).
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __guatiao_describe {
+    (
+        $(#[$attr:meta])* $vis:vis fn $name:ident;
+        id = $id:expr, version = $version:expr, providers = [$($provider:ty),+]
+    ) => {
+        $(#[$attr])*
+        $vis fn $name(
             host: $crate::library::Host,
         ) -> ::core::option::Option<&'static $crate::library::LibraryInfo> {
             static REGISTERED: ::std::sync::OnceLock<::core::option::Option<$crate::library::kind::LibraryParts>> = ::std::sync::OnceLock::new();
@@ -301,7 +358,6 @@ macro_rules! providers {
                 .as_ref()
                 .map($crate::library::kind::LibraryParts::info)
         }
-        $crate::guatiao_library!(__guatiao_describe);
     };
 }
 
@@ -1255,6 +1311,26 @@ pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, 
         Ok(view) => Opened::Loaded(view),
         Err(why) => Opened::Rejected(why),
     })
+}
+
+/// What a library the host LINKS came to: its describe function's answer,
+/// read the way a loaded library's entry answer is read.
+///
+/// Safe to call, because a `&'static LibraryInfo` is the whole contract
+/// an entry point makes and a Rust reference already states it: the
+/// descriptor is well-formed for its own `struct_size` and lives for the
+/// process.
+#[cfg(feature = "load")]
+pub(crate) fn open_local(described: Option<&'static LibraryInfo>) -> Opened {
+    let Some(info) = described else {
+        return Opened::Declined;
+    };
+    // SAFETY: a `'static` reference to a descriptor the library built and
+    // keeps for the process, which is what an entry point promises.
+    match unsafe { read_library(info) } {
+        Ok(view) => Opened::Loaded(view),
+        Err(why) => Opened::Rejected(why),
+    }
 }
 
 /// Loads one file the caller named, which is the caller's choice to run

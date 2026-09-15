@@ -723,6 +723,36 @@ impl Registry {
         self.absorb(path, opened)
     }
 
+    /// Registers a library the host **links** rather than loads: its
+    /// providers are compiled into the host, and `describe` is what its
+    /// entry point would have called.
+    ///
+    /// The same absorb as [`load_file`](Registry::load_file) — the same
+    /// keys, the same dedup, the same refusals, the same `Loaded` record
+    /// — over a descriptor that came from this process instead of a
+    /// file. `name` stands in for the path in every report (`<name>`),
+    /// and a second registration under the same name is
+    /// [`Skipped::AlreadyLoaded`] like a second load of one file.
+    ///
+    /// `describe` is what `guatiao::local_providers!` writes as
+    /// `library`, or a hand-written library's own `describe`; it sees
+    /// this registry's [`Host`] exactly as a loaded library's entry would.
+    /// A `None` is the library declining this host.
+    pub fn register_local(
+        &mut self,
+        name: &str,
+        describe: fn(Host) -> Option<&'static super::desc::LibraryInfo>,
+    ) -> Result<Loading<'_>, LoadError> {
+        let path = PathBuf::from(format!("<{name}>"));
+        if let Some(already) = self.loaded_from_path(&path) {
+            let from = already.path.clone();
+            return Ok(Loading::Skipped(Skipped::AlreadyLoaded { from }));
+        }
+        let host = self.host();
+        let opened = super::raw::open_local(describe(host));
+        self.absorb(&path, opened)
+    }
+
     /// Records what opening `path` came to. Everything after the `dlopen`,
     /// so it is testable without one.
     pub(crate) fn absorb(&mut self, path: &Path, opened: Opened) -> Result<Loading<'_>, LoadError> {
