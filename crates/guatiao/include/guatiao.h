@@ -898,71 +898,6 @@ typedef struct guatiao_host_info {
 } guatiao_host_info;
 
 /*
- One per-path mode override: what the *declarer* of an option knows
- that whoever merges two maps does not.
- */
-typedef struct guatiao_merge_override {
-  /*
-   The dotted path this governs, matched exactly.
-   */
-  struct guatiao_str path;
-  /*
-   One of the `GUATIAO_MERGE_*` mode constants.
-   */
-  uint32_t mode;
-} guatiao_merge_override;
-
-/*
- Borrowed bytes: any content at all, NULs included.
-
- Same shape and the same check-the-length rule as `guatiao_str`; a
- separate type because "text" and "arbitrary bytes" are different
- promises and collapsing them loses the distinction at every call site.
- */
-typedef struct guatiao_bytes {
-  /*
-   First byte. May be null or dangling when `len` is 0.
-   */
-  const uint8_t *ptr;
-  /*
-   Length in bytes.
-   */
-  size_t len;
-} guatiao_bytes;
-
-/*
- A borrowed sequence of values, in order.
- */
-typedef struct guatiao_values {
-  /*
-   First element. May be null or dangling when `len` is 0.
-   */
-  const struct guatiao_value *ptr;
-  /*
-   Number of elements.
-   */
-  size_t len;
-} guatiao_values;
-
-/*
- A borrowed sequence of key/value pairs, in **insertion order**.
-
- Order is part of the contract, not an artefact: consumers render maps
- as forms, print them as tables and diff them in tests, and all three
- need it stable and meaningful.
- */
-typedef struct guatiao_entries {
-  /*
-   First entry. May be null or dangling when `len` is 0.
-   */
-  const guatiao_entry *ptr;
-  /*
-   Number of entries.
-   */
-  size_t len;
-} guatiao_entries;
-
-/*
  A borrowed sequence of provider descriptors.
 
  A view, like every other `{ptr, len}` in this crate: the library owns
@@ -1061,6 +996,71 @@ typedef struct guatiao_library_info {
    */
   guatiao_map_ptr meta;
 } guatiao_library_info;
+
+/*
+ One per-path mode override: what the *declarer* of an option knows
+ that whoever merges two maps does not.
+ */
+typedef struct guatiao_merge_override {
+  /*
+   The dotted path this governs, matched exactly.
+   */
+  struct guatiao_str path;
+  /*
+   One of the `GUATIAO_MERGE_*` mode constants.
+   */
+  uint32_t mode;
+} guatiao_merge_override;
+
+/*
+ Borrowed bytes: any content at all, NULs included.
+
+ Same shape and the same check-the-length rule as `guatiao_str`; a
+ separate type because "text" and "arbitrary bytes" are different
+ promises and collapsing them loses the distinction at every call site.
+ */
+typedef struct guatiao_bytes {
+  /*
+   First byte. May be null or dangling when `len` is 0.
+   */
+  const uint8_t *ptr;
+  /*
+   Length in bytes.
+   */
+  size_t len;
+} guatiao_bytes;
+
+/*
+ A borrowed sequence of values, in order.
+ */
+typedef struct guatiao_values {
+  /*
+   First element. May be null or dangling when `len` is 0.
+   */
+  const struct guatiao_value *ptr;
+  /*
+   Number of elements.
+   */
+  size_t len;
+} guatiao_values;
+
+/*
+ A borrowed sequence of key/value pairs, in **insertion order**.
+
+ Order is part of the contract, not an artefact: consumers render maps
+ as forms, print them as tables and diff them in tests, and all three
+ need it stable and meaningful.
+ */
+typedef struct guatiao_entries {
+  /*
+   First entry. May be null or dangling when `len` is 0.
+   */
+  const guatiao_entry *ptr;
+  /*
+   Number of entries.
+   */
+  size_t len;
+} guatiao_entries;
 
 /*
  The first eight bytes of every kind table.
@@ -1266,6 +1266,26 @@ guatiao_status guatiao_registry_load_file(struct guatiao_registry *reg,
                                           struct guatiao_str path,
                                           const struct guatiao_alloc *alloc,
                                           struct guatiao_value *out);
+
+/*
+ Registers a library the host LINKS rather than loads: `entry` is its
+ `guatiao_library_entry`, called with this registry's host block, and
+ `name` stands in for the path (`<name>`) in every report. The report
+ is [`guatiao_registry_load_file`]'s: `loaded`, `skipped` or `failed`.
+
+ # Safety
+
+ `reg` is a live handle, `name` and `alloc` are valid for this call,
+ `entry` is null or behaves as `guatiao_library_entry` -- answering
+ null or a descriptor well-formed for its own `struct_size` that lives
+ for the process -- and `out` addresses writable storage for one value,
+ whose previous contents are the caller's to have freed.
+ */
+guatiao_status guatiao_registry_register_entry(struct guatiao_registry *reg,
+                                               struct guatiao_str name,
+                                               const struct guatiao_library_info *(*entry)(const struct guatiao_host_info*),
+                                               const struct guatiao_alloc *alloc,
+                                               struct guatiao_value *out);
 
 /*
  Scans a directory, writing a report to `out` as a map.

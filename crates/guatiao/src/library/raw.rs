@@ -1333,6 +1333,29 @@ pub(crate) fn open_local(described: Option<&'static LibraryInfo>) -> Opened {
     }
 }
 
+/// What a library the host LINKS and that speaks C came to: its entry
+/// point's answer, read exactly as a loaded library's is.
+///
+/// Safe to CALL for the reason [`open_library`] is: handing over an
+/// entry point is choosing to run it, which is the contract
+/// [`crate::library::Registry::register_entry`] states, and what it
+/// answers is read under the same guards as a loaded library's answer.
+#[cfg(feature = "load")]
+pub(crate) fn open_entry(entry: EntryFn, host: Host) -> Opened {
+    // SAFETY: the caller chose to run this entry point, which is the
+    // contract stated on `Registry::register_entry`; its answer is null
+    // or a descriptor read under `read_library`'s own guards.
+    let desc = unsafe { entry(host.as_raw()) };
+    if desc.is_null() {
+        return Opened::Declined;
+    }
+    // SAFETY: non-null, from an entry point that keeps it for the process.
+    match unsafe { read_library(desc) } {
+        Ok(view) => Opened::Loaded(view),
+        Err(why) => Opened::Rejected(why),
+    }
+}
+
 /// Loads one file the caller named, which is the caller's choice to run
 /// whatever is in it.
 ///
@@ -1498,6 +1521,40 @@ mod tests {
             providers: Providers::empty(),
             meta: MaybeNull::null(),
         }
+    }
+
+    /// A library registered through its C entry point lands as a file's
+    /// would, under `<name>`; null is a decline; a second registration
+    /// under the name is a skip.
+    #[cfg(feature = "load")]
+    #[test]
+    fn a_linked_library_registers_through_its_entry_point() {
+        use crate::library::{Registry, Skipped};
+        use std::path::{Path, PathBuf};
+
+        unsafe extern "C" fn describing(_host: *const HostInfo) -> *const LibraryInfo {
+            Box::leak(Box::new(a_library(size_of::<LibraryInfo>())))
+        }
+        unsafe extern "C" fn declining(_host: *const HostInfo) -> *const LibraryInfo {
+            std::ptr::null()
+        }
+
+        let mut r = Registry::new("test-host", "1.0");
+        let loaded = r.register_entry("cli", describing).unwrap();
+        assert_eq!(
+            loaded.loaded().map(|l| l.path.as_path()),
+            Some(Path::new("<cli>"))
+        );
+        assert_eq!(
+            r.register_entry("cli", describing).unwrap().skipped(),
+            Some(&Skipped::AlreadyLoaded {
+                from: PathBuf::from("<cli>")
+            })
+        );
+        assert_eq!(
+            r.register_entry("shy", declining).unwrap().skipped(),
+            Some(&Skipped::DeclinedThisHost)
+        );
     }
 
     #[test]

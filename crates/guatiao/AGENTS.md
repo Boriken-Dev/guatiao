@@ -521,6 +521,8 @@ reg.register_local("engine", crate::library)?;   // a library the host LINKS: th
                                                  // dedup and `Loaded` record, from `<engine>` instead
                                                  // of a file; `library` is what `local_providers!`
                                                  // writes (or a hand-written `describe`)
+reg.register_entry("engine", entry)?;          // the same from a C entry point (`EntryFn`): a linked
+                                                 // C library; C hosts: guatiao_registry_register_entry
 reg.providers("greeter")                   // by kind, BEST FIRST
 reg.available("greeter")                   // the same, that can run here
 reg.best("greeter")                        // the head of that

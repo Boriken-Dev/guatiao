@@ -34,7 +34,8 @@ use std::sync::Arc;
 use super::key::{KeyError, KeyFields, KeyTemplate};
 use super::kind::{Kind, KindMismatch, Offer, Remote};
 use super::raw::{
-    Host, HostBlock, LibraryView, Opened, ProviderView, Rejected, Shared, Snapshot, SnapshotEntry,
+    EntryFn, Host, HostBlock, LibraryView, Opened, ProviderView, Rejected, Shared, Snapshot,
+    SnapshotEntry,
 };
 use crate::value::alloc::Alloc;
 use crate::value::types::Text;
@@ -750,6 +751,29 @@ impl Registry {
         }
         let host = self.host();
         let opened = super::raw::open_local(describe(host));
+        self.absorb(&path, opened)
+    }
+
+    /// [`register_local`](Registry::register_local) for a library that
+    /// speaks C: `entry` is what its `guatiao_library_entry` would be --
+    /// a library written in C and linked into a Rust host, or anything a
+    /// host written in C links (`guatiao_registry_register_entry`). The
+    /// same absorb, keys, dedup, refusals and `<name>` path.
+    ///
+    /// **Handing over an entry point is choosing to run it**, as naming a
+    /// file is for [`load_file`](Registry::load_file): `entry` is called
+    /// with this registry's host block and is expected to answer null or
+    /// a descriptor well-formed for its own `struct_size` that lives for
+    /// the process -- exactly what a loaded library's entry point promises,
+    /// and read under the same guards.
+    pub fn register_entry(&mut self, name: &str, entry: EntryFn) -> Result<Loading<'_>, LoadError> {
+        let path = PathBuf::from(format!("<{name}>"));
+        if let Some(already) = self.loaded_from_path(&path) {
+            let from = already.path.clone();
+            return Ok(Loading::Skipped(Skipped::AlreadyLoaded { from }));
+        }
+        let host = self.host();
+        let opened = super::raw::open_entry(entry, host);
         self.absorb(&path, opened)
     }
 
