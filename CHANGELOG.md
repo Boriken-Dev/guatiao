@@ -28,6 +28,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `guatiao_bytes_mut`. `examples/greeter_kind` declares `Conversation`
   and `Listener`, `derived_greeter` starts one, and `greeter_host` drives
   it and hands the listener in.
+- **A kind's table renders to C.** `<Trait>Vtable::FLOOR_HASH` is a
+  literal the attribute computes at expansion time, so cbindgen renders
+  it as `#define <table>_FLOOR_HASH n` -- the number a C implementation
+  writes into its table's header. `examples/greeter_kind` renders
+  `include/greeter_kind.h` from its own `build.rs` through cbindgen's
+  macro expansion (`parse.expand`, `RUSTC_BOOTSTRAP=1` and
+  `CARGO_EXPAND_TARGET_DIR` set around the render, every table named in
+  `export.include`, guatiao's types renamed onto `guatiao.h`'s) and
+  commits it; a test compares the two. `tests/c_consumer/greeter_in_c.c`
+  is a greeter written in C against that header, offered through the
+  envelope and linking nothing; `tests/c_library.rs` compiles it into a
+  shared library, loads it, and calls it as `dyn Greeter` -- the slots it
+  leaves null run the trait's default bodies on the host.
 - `examples/greeter_host`: the host side as a program. It scans a search
   path under a kind rule, prints the report, offers every `dyn Greeter`
   it found, calls the one that is its own instance through both of its

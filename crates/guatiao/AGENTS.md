@@ -665,6 +665,31 @@ repository (`cargo run -p greeter_host` after a workspace build).
   is; an object table's hash covers `object;` so it never passes for a
   provider table.
 
+- **A kind is a C ABI, and its table renders to C.** cbindgen cannot see
+  a macro-generated struct unless it expands macros, so a kind crate
+  renders its own header with three settings (the pattern is
+  `examples/greeter_kind/{build.rs,cbindgen.toml}`, header
+  `include/greeter_kind.h`): `[parse.expand] crates = ["<kind crate>"]`
+  with `RUSTC_BOOTSTRAP=1` and `CARGO_EXPAND_TARGET_DIR` set by the
+  build script around the render (the stable compiler refuses
+  `-Zunpretty=expanded` otherwise; the expansion re-enters cargo and
+  needs its own target directory); `[export] include` naming every
+  table, since a kind crate exports no function that references one;
+  `parse_deps = false` plus an `[export.rename]` table mapping this
+  crate's type names onto `guatiao.h`'s (`KindHeader` →
+  `guatiao_kind_header`, `Str` → `guatiao_str`, …), so the tables are
+  declared against the header that already defines those types. Each
+  table carries `<Trait>Vtable::FLOOR_HASH` as a **literal** (computed
+  by the attribute at expansion time), which renders as
+  `#define <table>_FLOOR_HASH n` — the number a C implementation writes
+  into its table's `header.floor_hash`, beside `sizeof` the table as
+  `struct_size`. A C library then offers its table through a
+  `guatiao_provider_info` from its own `guatiao_library_entry`, exports
+  `guatiao_declares`, and links nothing; the registry validates it and a
+  Rust host calls it through the same proxy a Rust table is called
+  through. `tests/c_consumer/greeter_in_c.c` is one, compiled and
+  loaded by `tests/c_library.rs`.
+
 ```rust
 #[guatiao::kind(object)]
 pub trait Session: Send { fn poll(&mut self) -> Result<(), ProviderError>; fn read(&mut self, dst: &mut [u8]) -> i64; }
