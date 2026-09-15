@@ -517,6 +517,10 @@ Host side:
 ```rust
 let mut reg = Registry::new("my-host", "1.0");
 reg.load_file(&path)?;                     // Result<Loading, LoadError>
+reg.register_local("engine", crate::library)?;   // a library the host LINKS: the same absorb, keys,
+                                                 // dedup and `Loaded` record, from `<engine>` instead
+                                                 // of a file; `library` is what `local_providers!`
+                                                 // writes (or a hand-written `describe`)
 reg.providers("greeter")                   // by kind, BEST FIRST
 reg.available("greeter")                   // the same, that can run here
 reg.best("greeter")                        // the head of that
@@ -627,6 +631,8 @@ pub trait Greeter: Send + Sync {
 struct Hello;
 impl Greeter for Hello { .. }
 guatiao::providers!(Hello);              // id and version from Cargo; the whole library
+guatiao::local_providers!(Hello);        // the same, for a library the HOST LINKS: writes `library`,
+                                         // no entry symbol, no declaration -- see register_local
 
 // Consuming, from a host or from a library through its Host:
 for offer in registry.offers::<dyn Greeter>() { offer.id(); offer.available(); offer.greet("x")?; }

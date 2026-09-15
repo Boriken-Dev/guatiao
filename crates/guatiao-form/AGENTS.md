@@ -130,6 +130,12 @@ gives it, rather than `true` for a field that does not exist.
 
 ## From C (`include/guatiao_form.h`)
 
+Where the header is, for a consumer's own build script:
+`DEP_GUATIAO_FORM_INCLUDE` (this crate says `links = "guatiao-form"` and
+its `build.rs` publishes `include=`), the arrangement `guatiao` has with
+`DEP_GUATIAO_INCLUDE`. Copy the file beside your own header from there
+rather than hard-coding a path into a checkout.
+
 ```c
 guatiao_status guatiao_form_check(const guatiao_value *schema, const guatiao_value *form,
                                   const guatiao_alloc *alloc, guatiao_value *out_error);
