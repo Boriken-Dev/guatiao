@@ -54,8 +54,8 @@ use std::path::Path;
 
 use super::{as_str, guard, guard_with};
 use crate::library::{
-    HostInfo, LoadReport, Loading, Order, Provider, Registry, ScanRules, SearchPath, Skipped,
-    WhyNot, scan_dir_rules, scan_path,
+    EntryFn, HostInfo, LibraryInfo, LoadReport, Loading, Order, Provider, Registry, ScanRules,
+    SearchPath, Skipped, WhyNot, scan_dir_rules, scan_path,
 };
 use crate::value::ValueError;
 use crate::value::alloc::{Alloc, Allocator};
@@ -128,6 +128,21 @@ impl HostRegistry {
     fn load(&mut self, path: &str, alloc: Alloc) -> Result<Value, Status> {
         let mut map = Value::map_in(alloc);
         match self.inner.load_file(Path::new(path)) {
+            Ok(Loading::Loaded(one)) => {
+                let described = library_value(alloc, one)?;
+                map.set("loaded", described)?;
+            }
+            Ok(Loading::Skipped(why)) => return Ok(skip_value(alloc, &why)?),
+            Err(e) => map.set("failed", e.to_string().as_str())?,
+        }
+        Ok(map)
+    }
+
+    /// [`load`](HostRegistry::load) for a library the host links: its
+    /// entry point, called with this registry's host block.
+    fn register(&mut self, name: &str, entry: EntryFn, alloc: Alloc) -> Result<Value, Status> {
+        let mut map = Value::map_in(alloc);
+        match self.inner.register_entry(name, entry) {
             Ok(Loading::Loaded(one)) => {
                 let described = library_value(alloc, one)?;
                 map.set("loaded", described)?;
@@ -525,6 +540,41 @@ pub unsafe extern "C" fn guatiao_registry_load_file(
         };
         // SAFETY: as above.
         unsafe { deliver(out, registry.load(path, alloc)) }
+    })
+}
+
+/// Registers a library the host LINKS rather than loads: `entry` is its
+/// `guatiao_library_entry`, called with this registry's host block, and
+/// `name` stands in for the path (`<name>`) in every report. The report
+/// is [`guatiao_registry_load_file`]'s: `loaded`, `skipped` or `failed`.
+///
+/// # Safety
+///
+/// `reg` is a live handle, `name` and `alloc` are valid for this call,
+/// `entry` is null or behaves as `guatiao_library_entry` -- answering
+/// null or a descriptor well-formed for its own `struct_size` that lives
+/// for the process -- and `out` addresses writable storage for one value,
+/// whose previous contents are the caller's to have freed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_register_entry(
+    reg: *mut HostRegistry,
+    name: Str,
+    entry: Option<unsafe extern "C" fn(*const HostInfo) -> *const LibraryInfo>,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(name), Some(entry), Ok(alloc)) = (
+            unsafe { HostRegistry::get_mut(reg) },
+            unsafe { as_str(name) },
+            entry,
+            unsafe { Alloc::from_raw(alloc) },
+        ) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        // SAFETY: as above.
+        unsafe { deliver(out, registry.register(name, entry, alloc)) }
     })
 }
 

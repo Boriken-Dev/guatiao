@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A host registers a library it links through its C entry point**:
+  `Registry::register_entry(name, entry)` beside `register_local`, and
+  `guatiao_registry_register_entry` in C -- for a library written in C
+  and linked into a Rust host, or a host written in C registering
+  anything it links. The same absorb, keys, dedup and `<name>` path.
+  Safe to call, as `load_file` is: handing over an entry point is
+  choosing to run it. `library::EntryFn` names the entry point's type.
 - **Object kinds**: `#[guatiao::kind(object)]` declares a kind whose
   instances are handles one caller owns -- a session, a scan, a stream
   -- rather than providers a registry offers. The trait names `Send`,
