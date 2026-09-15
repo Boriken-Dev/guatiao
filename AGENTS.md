@@ -40,6 +40,7 @@ render is gated rather than unconditional.
 GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-header
 GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-serde --features c-header,json,toml,yaml
 GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-form --features c-header
+GUATIAO_WRITE_HEADER=1 cargo build -p greeter_kind --features c-header   # the kind tables, via macro expansion
 ```
 
 Each crate with a C surface commits its header and has a test comparing
