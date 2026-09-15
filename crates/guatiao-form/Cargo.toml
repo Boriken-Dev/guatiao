@@ -1,5 +1,10 @@
 [package]
 name = "guatiao-form"
+# A build script key, not a native library: it lets `build.rs` publish
+# where the committed header lives, so a consumer's own build script reads
+# `DEP_GUATIAO_FORM_INCLUDE` and copies `guatiao_form.h` beside its own
+# header -- the arrangement `guatiao` itself has.
+links = "guatiao-form"
 description = "how a guatiao schema is shown -- sections, widget hints and conditional visibility, as a value beside the schema"
 version.workspace = true
 edition.workspace = true

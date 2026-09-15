@@ -16,6 +16,12 @@
 //! ```
 
 fn main() {
+    // Where the committed header is, for a consumer whose own header or
+    // build includes it: readable in that consumer's build script as
+    // `DEP_GUATIAO_FORM_INCLUDE`, because `Cargo.toml` says
+    // `links = "guatiao-form"` -- the arrangement `guatiao` itself has.
+    let include = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("include");
+    println!("cargo::metadata=include={}", include.display());
     println!("cargo::rerun-if-changed=src");
     println!("cargo::rerun-if-changed=cbindgen.toml");
     println!("cargo::rerun-if-changed=Cargo.toml");

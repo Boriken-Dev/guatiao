@@ -57,6 +57,16 @@ fn the_host_scans_offers_and_builds_a_configured_greeter() {
 
     // 1. It looked where it was told, and the report names the library.
     assert!(stdout.contains("derived_greeter"), "{stdout}");
+    // 0. The provider the host carries itself is registered beside the
+    // loaded ones and offered like them, from `<greeter_host>`.
+    assert!(
+        stdout.contains("  builtin [greeter] from greeter_host"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("builtin greets: hi from the host, ana"),
+        "{stdout}"
+    );
     // 2. The unconfigured provider answered as the trait, through both
     // of its kinds.
     assert!(

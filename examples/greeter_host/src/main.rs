@@ -40,9 +40,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use greeter_kind::{Counter, Greeter, Listener};
-use guatiao::library::{Kind, Offer, Order, Registry, ScanRules, SearchPath, Skipped, scan_path};
+use guatiao::library::{
+    Kind, Offer, Order, ProviderError, Registry, ScanRules, SearchPath, Skipped, scan_path,
+};
 use guatiao::schema::{SchemaRef, validate_map};
-use guatiao::{Alloc, Schema, ToValue, Value};
+use guatiao::{Alloc, Map, Provider, Schema, ToValue, Value};
 
 /// What this host wants a shouting greeter to start with.
 ///
@@ -67,6 +69,13 @@ fn main() -> ExitCode {
     // The host's registry: its own id and version, and its own allocator
     // for every value that crosses back (`None` is the Rust one).
     let mut registry = Registry::with_alloc("greeter_host", env!("CARGO_PKG_VERSION"), None);
+
+    // A provider this program carries compiled in, registered beside
+    // what it loads: same keys, same dedup, same offers, no file. It is
+    // offered first only because its key sorts first.
+    if let Err(e) = registry.register_local("greeter_host", library) {
+        println!("the built-in greeter was refused: {e}");
+    }
 
     // Only libraries that declare a greeter are mapped. The declaration is
     // read out of the file as data before anything in it runs, so a
@@ -247,6 +256,23 @@ fn main() -> ExitCode {
     }
     status
 }
+
+/// A greeter this program carries itself. `local_providers!` writes the
+/// `library` function `register_local` takes and nothing else: no entry
+/// symbol, no declaration, so this executable never looks like a plugin.
+#[derive(Default, Provider)]
+#[provider(Greeter, id = "builtin", name = "Built-in greeter")]
+struct Builtin;
+
+impl Greeter for Builtin {
+    fn greet(&self, name: &str) -> Result<Map, ProviderError> {
+        let mut map = Map::new();
+        map.set("greeting", format!("hi from the host, {name}"))?;
+        Ok(map)
+    }
+}
+
+guatiao::local_providers!(Builtin);
 
 /// This program's listener: an object kind implemented on the HOST side
 /// and handed to the library, which calls it back across the boundary
