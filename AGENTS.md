@@ -8,7 +8,7 @@ public surface); this file is about the repository.
 
 | path | what |
 | --- | --- |
-| `crates/guatiao/` | the crate: value model, C type vocabulary, schema, library envelope, loader |
+| `crates/guatiao/` | the crate: value model (every operation on its container, `Value` thin), C type vocabulary, schema, library envelope, loader |
 | `crates/guatiao/include/guatiao.h` | the C header, rendered by `build.rs` and committed |
 | `guatiao.dll` / `libguatiao.so` | the C ABI artifact, from the same crate — `cargo build` |
 | `crates/guatiao-derive/` | `#[derive(ToValue, FromValue, Schema)]`, `#[guatiao::kind]`/`#[derive(Provider)]`, `#[derive(Form)]`; reached through `guatiao`'s `derive`/`provider` features and `guatiao-form`'s `derive`, never named directly |
