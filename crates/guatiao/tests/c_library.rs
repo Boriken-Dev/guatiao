@@ -50,6 +50,15 @@ fn build_c_greeter(cc: &Path) -> PathBuf {
     ));
     let compile = Command::new(cc)
         .args(["-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"])
+        // Position-independent code, or a linker whose default is not
+        // PIC refuses the shared object outright: `read-only segment has
+        // dynamic relocations`. Not passed on Windows, where a DLL needs
+        // no such flag and clang warns the argument is unused.
+        .args(if cfg!(windows) {
+            &[][..]
+        } else {
+            &["-fPIC"][..]
+        })
         .arg("-I")
         .arg(&guatiao_include)
         .arg("-I")

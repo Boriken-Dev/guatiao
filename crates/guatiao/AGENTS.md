@@ -639,9 +639,10 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   could not close, in which case it is retired. Every refusal leaves the
   library registered and mapped.
 - **Whether the image really leaves the address space is the loader's
-  call.** The library is out of the registry on every platform; measured
-  in CI, Windows unmaps and macOS does not. A host that unloads to
-  reclaim memory gets that only where the loader gives it.
+  call.** The library is out of the registry on every platform. Measured:
+  Windows and Linux unmap, macOS keeps the image mapped and its statics
+  alive, so a host that unloads to reclaim memory, or to pick up a new
+  build of the same file, gets neither there.
 - **`unsafe Registry::unload_unchecked(key)` is the host insisting** on a
   library with no slot. A library that HAS a slot is still asked, and its
   refusal still stands.

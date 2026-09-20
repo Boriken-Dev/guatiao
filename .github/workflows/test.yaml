@@ -68,15 +68,36 @@ jobs:
           RUSTDOCFLAGS: -D warnings
 
   python:
-    name: Python bindings (${{ matrix.python-version }})
-    runs-on: ubuntu-latest
-    # The stable ubuntu-latest build only: this is a binding, not a Rust
-    # legs matrix, and the native libraries are identical across the
-    # toolchains the `test` job already covers.
+    name: Python bindings (py${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # The same suite on the three platforms, because this is where a
+    # binding breaks: the library's filename, how it is found, and how
+    # ctypes lays out a struct are each per platform. Every supported
+    # version on Linux, the edges on Windows and macOS.
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.14"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.9"
+          - os: ubuntu-latest
+            python-version: "3.10"
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: ubuntu-latest
+            python-version: "3.14"
+          - os: windows-latest
+            python-version: "3.9"
+          - os: windows-latest
+            python-version: "3.14"
+          - os: macos-latest
+            python-version: "3.9"
+          - os: macos-latest
+            python-version: "3.14"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -84,6 +105,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build native libraries
+        # The bindings drive a shared library, and `--all-features` is
+        # what exports the registry surface and the serde formats.
         run: cargo build --workspace --all-features
       - uses: actions/setup-python@v5
         with:
