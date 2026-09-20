@@ -5,13 +5,15 @@
 [![License: MPL 2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](https://github.com/Boriken-Dev/guatiao/blob/main/LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/Boriken-Dev/guatiao/test.yaml)](https://github.com/Boriken-Dev/guatiao/actions/workflows/test.yaml)
 
-Python bindings for [guatiao](https://github.com/Boriken-Dev/guatiao/): **one value model for passing data
-between languages**, a JSON Schema that describes a value, and a registry
-that loads plugin libraries. Pure Python over `ctypes`: no dependencies,
-nothing to compile, driving the same C ABI a C, C++ or Dart program uses.
+Python bindings for the [guatiao](https://github.com/Boriken-Dev/guatiao/)
+ABI: **one value model for passing data between languages**, a JSON
+Schema that describes a value, and a registry that loads plugin
+libraries. Pure Python over `ctypes`, with no dependencies and nothing to
+compile. It works with any shared library that exports the ABI, whether
+that is `guatiao` itself or an application that carries it.
 
-> **Status: alpha.** The wheel is pure Python and does not carry the
-> native library yet; you build that from the repository.
+> **Status: alpha.** The wheel does not carry a native library; you
+> point it at one.
 
 ## Features
 
@@ -34,27 +36,30 @@ nothing to compile, driving the same C ABI a C, C++ or Dart program uses.
 pip install guatiao
 ```
 
-The package needs the native library, built from a checkout of the
-[repository](https://github.com/Boriken-Dev/guatiao/):
+The package drives a shared library that exports the guatiao ABI. Say
+where it is:
 
 ```bash
-cargo build --workspace --all-features
-export GUATIAO_LIBRARY=/path/to/guatiao/target/debug     # a directory, or the file itself
+export GUATIAO_LIBRARY=/opt/myapp/lib             # a directory holding guatiao.dll / libguatiao.so / libguatiao.dylib
+export GUATIAO_LIBRARY=/opt/myapp/myapp.dll       # or the file itself, whatever it is called
 ```
 
-`--all-features` matters: the registry functions are only exported with
-the `load` feature, and TOML and YAML only with theirs. Without
-`GUATIAO_LIBRARY` the package tries the system's library search
-(`ctypes.util.find_library`) and then its own `_native/` directory; with
-nothing found, the first native call raises `guatiao.LibraryNotFound`.
-`guatiao_serde` and `guatiao_form` are found the same way, only when
-`guatiao.serde` or `guatiao.form` is first used.
+Without the variable the package tries the system's library search
+(`ctypes.util.find_library("guatiao")`) and then its own `_native/`
+directory. Nothing is loaded at import time: `import guatiao` always
+succeeds, and the first native call raises `guatiao.LibraryNotFound`,
+naming every place it looked. A library that exports only part of the ABI
+is fine: calling a function it lacks raises `guatiao.MissingSymbol`
+naming it, and everything else works.
 
-| Native library | Needed for |
+| Exports from | Needed for |
 | --- | --- |
 | `guatiao` | values, the registry, provider tables |
-| `guatiao_serde` | `guatiao.serde` (JSON; TOML and YAML when built with those features) |
+| `guatiao_serde` | `guatiao.serde`: JSON, and TOML and YAML when the library has them |
 | `guatiao_form` | `guatiao.form` |
+
+`guatiao_serde` and `guatiao_form` are looked for the same way, in the
+same directory, only when `guatiao.serde` or `guatiao.form` is first used.
 
 ## Quick start
 
@@ -102,14 +107,14 @@ is not `None`. A `float` that is `nan` or infinite raises `ValueError`.
 from guatiao import Registry
 
 with Registry("my-host", "1.0") as reg:
-    report = reg.scan_dir("target/debug", rules="kind=greeter")
+    report = reg.scan_dir("/opt/myapp/plugins", rules="kind=greeter")
     for p in reg.providers("greeter"):           # best first
         print(p["key"], p["version"], p["from"])
 
     reg.why_not("codec")                         # why nothing serves a kind
 
-    schema = reg.provider_config("derived_greeter_shouter")   # borrowed; do not close
-    with reg.create("derived_greeter_shouter", {"prefix": "hey"}) as instance:
+    schema = reg.provider_config("acme_shouter")   # borrowed; do not close
+    with reg.create("acme_shouter", {"prefix": "hey"}) as instance:
         ...
 ```
 
@@ -123,13 +128,13 @@ kind's C header declares and let the package check it:
 ```python
 from guatiao import kinds
 
-table_ptr, size, ctx = reg.provider_table("hello_library_greeter")
+table_ptr, size, ctx = reg.provider_table("acme_greeter")
 greeter = kinds.table(table_ptr, size, GreeterVtable, floor_hash=FLOOR_HASH)
 greeter.greet(ctx, name, out_map, err)
 ```
 
 [`tests/test_greeter.py`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/tests/test_greeter.py)
-is a complete worked example against `examples/hello_library`.
+is a complete worked example.
 
 ### JSON, TOML, YAML and forms
 
@@ -145,8 +150,8 @@ sections = form.layout(schema, form_doc)
 shown = form.is_visible(schema, form_doc, "tls.verify", values)
 ```
 
-A format the loaded library was not built with raises
-`NotImplementedError` naming the feature.
+A format the loaded library does not export raises
+`NotImplementedError` naming it.
 
 ### Errors
 
@@ -157,11 +162,10 @@ provider's own words when it gave any.
 
 ## Known limits
 
-- **A provider written with `#[derive(Provider)]` cannot be called from
-  Python yet.** It files its tables per kind, and the C ABI has no
-  function to fetch one by kind; `provider_table` only reaches the single
-  table a hand-written provider declares. Listing, configuring and
-  instantiating derived providers all work.
+- **A provider that files one table per kind cannot be called yet.**
+  The ABI has no function to fetch a table by kind; `provider_table`
+  reaches the single table a provider declares for everything. Listing,
+  configuring and instantiating such providers all work.
 - Reading JSON writes an exponent's sign: `1e400` parses as `1e+400`.
   Everything else about a number's text survives a round trip.
 - `List.insert` and `list[i] = x` rebuild the list, because the C ABI
@@ -185,18 +189,17 @@ by [`guatiao.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao
 
 ## Development
 
-From the repository root, in a virtual environment:
-
 ```bash
-cargo build --workspace --all-features
-pip install -e "bindings/python[dev]"
+pip install -e "bindings/python[dev]"     # from the repository root, in a virtual environment
 pytest bindings/python/tests -rs
 ```
 
-`conftest.py` points `GUATIAO_LIBRARY` at the repository's `target/debug`
-when the variable is unset. After a full build nothing should skip; a
-test that needs a missing library skips and says which. CI runs the suite
-on Python 3.9 and 3.14.
+The tests need the three libraries and the repository's example plugins
+in one directory. `conftest.py` points `GUATIAO_LIBRARY` at the
+repository's build output when the variable is unset; the repository's
+own `AGENTS.md` says how to produce it. With everything present nothing
+skips; a test that needs a missing library skips and says which. CI runs
+the suite on Python 3.9 and 3.14.
 
 ## License
 
