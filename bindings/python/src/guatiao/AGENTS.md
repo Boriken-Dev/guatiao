@@ -150,6 +150,6 @@ one of its subclasses: `BadValue`, `AllocFailed`, `WrongKind`,
 
 ## Threading
 
-A `Registry` is used from one thread at a time, like the Rust and C
-handles it wraps. A `Value` is not shared across threads without the
+A `Registry` is used from one thread at a time, like the C handle
+it wraps. A `Value` is not shared across threads without the
 caller's own lock.
