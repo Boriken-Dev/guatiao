@@ -37,7 +37,7 @@ crate's own allocator and abort on allocation failure, exactly as
 foreign allocator refusing is recoverable.
 
 ```rust
-use guatiao::{Map, ReadValue};
+use guatiao::Map;
 
 let mut fields = Map::new();
 fields.set("compression", 6)?;
@@ -50,11 +50,11 @@ map.set("fields", fields)?;
 ```
 
 `set` and `push` take `impl Into<Value>`, which is implemented for
-`&str`, `String`, `&String`, `bool`, every integer width (`i8`..`i128`,
-`u8`..`u128`, `isize`, `usize`), `Map`, `List`, `Text`, `Buffer`, and
-`Option<T: Into<Value>>` (`None` stores a null). Floats convert through
-`TryFrom<f64>`/`TryFrom<f32>`, because `NaN` and the infinities have no
-representation here.
+`&str`, `String`, `&String`, `&[u8]`, `Vec<u8>`, `bool`, every integer
+width (`i8`..`i128`, `u8`..`u128`, `isize`, `usize`), `Number`, `Map`,
+`List`, `Text`, `Buffer`, and `Option<T: Into<Value>>` (`None` stores a
+null). Floats convert through `TryFrom<f64>`/`TryFrom<f32>`, because
+`NaN` and the infinities have no representation here.
 
 ## Containers
 
@@ -68,19 +68,34 @@ Map::new_in(alloc: Alloc) -> Map       List::new_in(alloc: Alloc) -> List
 map.alloc() -> Result<Alloc, ValueError>
 map.len() / map.is_empty() / map.entries() -> &[Entry]
 map.set(key: &str, value: impl Into<Value>) -> Result<(), ValueError>
+map.set_in(key, impl Into<Value>, alloc) -> Result<(), ValueError>
 map.get(key) -> Option<&Value>         map.get_mut(key) -> Option<&mut Value>
+map.required(key) -> Result<&Value, MapError>   // names the key it lacks
 map.contains_key(key) -> bool
+map.push_into(key, impl Into<Value>)   // appends to the list under `key`
 map.remove(key) -> Option<Value>       // handed back, frees on drop
-map.clear()
+map.discard(key) -> bool               map.clear()
+map.copy_from(&Map) / copy_from_in(&Map, alloc) -> Result<usize, ValueError>
+map.iter() / map.keys() / map.values()          // &Map is IntoIterator
+map.clone_in(alloc) -> Result<Map, ValueError>
 
 list.items() -> &[Value]               list.push(impl Into<Value>)
+list.push_in(impl Into<Value>, alloc)  list.iter()   // &List is IntoIterator
 list.get(i) / list.get_mut(i)          list.remove(i) / list.pop()
-list.clear()
+list.discard(i) -> bool                list.clear()
+list.clone_in(alloc) -> Result<List, ValueError>
 
 Text::new(&str) -> Text                Buffer::new(&[u8]) -> Buffer
 Text::new_in(alloc, &str) -> Result<Text, ValueError>
 Buffer::new_in(alloc, &[u8]) -> Result<Buffer, ValueError>
 text.as_str() -> Option<&str>          buffer.as_slice() -> &[u8]
+text.as_bytes() -> &[u8]
+text.push_str(&str) / push_str_in(&str, alloc)
+buffer.push(&[u8]) / push_in(&[u8], alloc)
+
+Number::new(&str) -> Result<Number, ValueError>     // the JSON grammar
+Number::new_in(alloc, &str)            Number::float_in(alloc, f64)
+number.as_str() -> &str                number.as_bytes() -> &[u8]
 
 Entry::key() -> &[u8]                  // bytes: a key may contain a NUL
 Entry::key_str() -> Option<&str>       Entry::value() -> &Value
@@ -89,9 +104,14 @@ Text::default() / Buffer::default()    // empty, allocating nothing
 ```
 
 Every name above is at the **crate root**: `guatiao::Text`,
-`guatiao::Entry`, `guatiao::Tag`, `guatiao::Str`, beside `Alloc`,
-`List`, `Map`, `MAX_DEPTH`, `ReadValue`, `Status`, `Value` and
-`ValueError`.
+`guatiao::Entry`, `guatiao::Tag`, `guatiao::Str`, `guatiao::Number`,
+beside `Alloc`, `Buffer`, `List`, `Map`, `MAX_DEPTH`, `Status`,
+`TryAsMut`, `TryAsRef`, `Value` and `ValueError`.
+
+**The short form uses the allocator the container recorded**; the `_in`
+form adopts one and is what a literal with a null `alloc` field needs.
+Both are safe: a `&mut Map` in safe code is a well-formed container, and
+the value is consumed.
 
 **`guatiao::Bytes` is the conversion marker**, not the borrowed view: it
 is the field type that says "cross as the bytes kind". The borrowed view
@@ -103,24 +123,32 @@ Map order is insertion order and is part of the contract.
 
 ## Values
 
-Infallible, on Rust's heap:
+**A node is what a container becomes.** `Value` carries only what has no
+container to live on:
 
 ```rust
-Value::null()      Value::absent()     Value::bool(b: bool)
-Value::string(&str)                    Value::bytes(&[u8])
-Value::int(i64)                        Value::map()    Value::list()
+Value::null()      Value::absent()     Value::default()   // = null
+v.tag() -> Result<Tag, ValueError>     v.alloc() -> Result<Alloc, ValueError>
+v.clone_in(alloc) -> Result<Value, ValueError>
+Value::from_raw_parts(tag: u32, Payload)   v.into_raw_parts() -> (u32, Payload)
+unsafe { v.free() }                    // the boundary's spelling of drop
 ```
 
-Fallible because the **argument** may be wrong, not the memory:
+Everything else is a conversion:
 
 ```rust
-Value::number(text: &str) -> Result<Value, ValueError>   // JSON grammar
-Value::float(v: f64)      -> Result<Value, ValueError>   // NaN/inf refused
+Value::from(Map::new())     Value::from(List::new())
+Value::from(Text::new("x")) Value::from(Buffer::new(b"x"))
+Value::from("x")            Value::from(String)    Value::from(&String)
+Value::from(&b"x"[..])      Value::from(Vec<u8>)   Value::from(true)
+Value::from(5900i64)        // every integer width, through `Number`
+Value::try_from(1.5f64)?    Value::try_from(1.5f32)?   // NaN/inf refused
 ```
 
-Naming an allocator, all fallible: `Value::string_in`, `bytes_in`,
-`number_in`, `int_in`, `float_in`; `Value::map_in(alloc)` and
-`list_in(alloc)` are infallible (an empty container owns nothing).
+`impl<T: Into<Number>> From<T> for Value` is the **one** blanket impl in
+this crate, and it has to be the only one: a second blanket over another
+`Into` overlaps with it, because a downstream type may implement both.
+Every other kind gets a concrete impl.
 
 `absent` is not `null`: absent is the answer to a lookup that found
 nothing, null is a stored value.
@@ -145,17 +173,19 @@ let status = unsafe { guatiao_merge(..., &mut out, ...) };
 absent — has no container to have recorded an allocator and answers
 `WrongKind`. A container whose `alloc` field is null — a literal another
 language wrote as a brace initialiser — answers `Alloc(AllocError::Null)`.
-Growing either means naming one to adopt: `set_in`, `push_in`.
+Growing either means naming one to adopt: the `_in` form of any
+operation.
 
-**`copy_from` is not atomic.** A failure at entry *k* leaves entries
-`0..k` applied. Nothing leaks, and `src` may be this node or one inside
-it: the source is copied whole before the target is touched.
+**`Map::copy_from` is not atomic.** A failure at entry *k* leaves entries
+`0..k` applied. Nothing leaks, and the source is copied whole before the
+target is touched.
 
-**`Value`, `Map`, `List`, `Text` and `Buffer` are `Clone`, `PartialEq`,
-`Send` and `Sync`.** `clone()` is a deep copy through the allocator the
-source recorded (the crate's own for a scalar or a literal), and panics
-where the short constructors do; `clone_in(alloc)` is the fallible form
-that names one. Equality is structural, the same as `equal`. `Send` and
+**`Value`, `Map`, `List`, `Text`, `Buffer` and `Number` are `Clone`,
+`PartialEq`, `Send` and `Sync`.** `clone()` is a deep copy through the
+allocator the source recorded (the crate's own for a scalar or a
+literal), and panics where the short constructors do; `clone_in(alloc)`
+is the fallible form that names one. Equality is structural and bounded
+by `MAX_DEPTH`, on the node and on the container alike. `Send` and
 `Sync` rest on the allocator contract below: an `Allocator` may be
 called from any thread.
 
@@ -177,35 +207,49 @@ Get the value, then convert it. There are no per-kind getters on a map
 and no per-kind readers on a value.
 
 ```rust
-let host: &str = map.get("host").ok_or_missing()?.try_into()?;
-let port: u16  = map.get("port").ok_or_missing()?.try_into()?;
-let n: i64 = map.get("fields").get("compression").ok_or_missing()?.try_into()?;
+let host: &str = map.required("host")?.try_into()?;
+let port: u16  = map.required("port")?.try_into()?;
+let fields: &Map = map.required("fields")?.try_into()?;
+let n: i64 = fields.required("compression")?.try_into()?;
 ```
 
-`ReadValue` is implemented for `&Value` **and** for `Option<&Value>`, so a
-path chains and a missing key does not need unwrapping at each step.
-`ok_or_missing()` is `Option::ok_or` with the one error it could be.
+`Map::required` is the step from a lookup to a value, and it **names the
+key**. `Map::get` stays `Option<&Value>` like std's.
 
 `TryFrom<&Value>` exists for every scalar plus `&str`, `&[u8]`,
-`&[Value]` and `&[Entry]`. Integer reads **never truncate**: a fractional
-or exponent spelling is refused rather than rounded.
+`&[Value]`, `&[Entry]`, `&Map` and `&List`. Integer reads **never
+truncate**: a fractional or exponent spelling is refused rather than
+rounded.
 
-Inherent readers on `Value`:
+The kind a node holds comes out through two traits, `AsRef`/`AsMut` with
+the refusal this model needs. The type parameter is on the **trait**, so
+a binding carries it:
 
 ```rust
-v.tag() -> Result<Tag, ValueError>     // `into_raw_parts().0` is the raw u32
-v.as_bool() / as_str() / as_bytes() / as_number_str()
-v.as_map() / as_map_mut() / as_list() / as_list_mut()
-v.entries() -> Option<&[Entry]>        v.items() -> Option<&[Value]>
-v.get(key) / get_mut(key) / contains_key(key)
-v.set(key, impl Into<Value>) / push(..) / push_into(key, ..)
-v.remove(key) / discard(key) / remove_at(i) / discard_at(i) / clear()
-v.into_map() -> Result<Map, Value>     v.into_list() -> Result<List, Value>   // by value; Err hands it back
+let m: &Map = v.try_as_ref()?;                    // or TryAsRef::<Map>::try_as_ref(&v)
+let l: &mut List = v.try_as_mut()?;
+// T in Map | List | Text | Number | Buffer | str | [u8]
 ```
 
+There is no `TryAsRef<bool>`: the arm is a `u8`, so no `&bool` over it
+would be sound. `bool::try_from(&v)` is the door.
+
+Taking the container out of the node consumes it, and the error is **the
+value handed back untouched**:
+
+```rust
+let map = Map::try_from(v)?;    // Err(v) for any other kind
+// also List, Text, Number, Buffer
+```
+
+A NUMBER and a STRING share the `text` arm and do **not** share a type:
+`TryAsRef::<Text>` answers `None` for a number, and `TryAsRef::<Number>`
+answers `None` for a string.
+
 Defaulting getters, mirroring the header's `static inline` helpers:
-`bool_or`, `int_or`, `float_or`, `str_or`, `bytes_or`. Iterators:
-`entries(v)`, `keys(v)`, `items(v)`. Structural comparison: `equal(a, b)`.
+`bool_or`, `int_or`, `float_or`, `str_or`, `bytes_or`. Iteration is the
+containers': `map.iter()`, `map.keys()`, `map.values()`, `list.iter()`.
+Structural comparison is `PartialEq` on both the node and the container.
 `Dump(&v)` is a bounded `Debug` tree for diagnostics.
 
 **Numbers are the exact text that declared them.** `1.10` reads back as

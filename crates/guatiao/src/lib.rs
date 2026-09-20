@@ -49,10 +49,12 @@
 //!
 //! # Where things are
 //!
-//! - [`value`] is the model itself: the types, the allocator, the mutation
-//!   functions and the reading helpers. Its raw layer is one of the three
-//!   places `unsafe` is allowed, beside the loader and the `extern "C"`
-//!   surface; every other module carries `#![forbid(unsafe_code)]`.
+//! - [`value`] is the model itself: the containers, which carry every
+//!   operation on what they hold, the node they become, the allocator
+//!   that travels with an owned tree, and the reading helpers. Its raw
+//!   layer is one of the three places `unsafe` is allowed, beside the
+//!   loader and the `extern "C"` surface; every other module carries
+//!   `#![forbid(unsafe_code)]`.
 //! - [`convert`] turns a Rust type into a value and back, which is what
 //!   `#[derive(ToValue)]` and `#[derive(FromValue)]` write for you.
 //! - [`schema`] describes a value: what a provider needs to be configured,
@@ -85,7 +87,7 @@
 
 // The value model: plain `repr(C)` structs a foreign consumer reads with
 // no call into any library, the allocator that travels with an owned
-// tree, the mutation functions and the conversions.
+// tree, and the conversions.
 //
 // Its raw layer is one of the three places `unsafe` is allowed; the
 // list is `tests/forbid_unsafe_per_module.rs`.
