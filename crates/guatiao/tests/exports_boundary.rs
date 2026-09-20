@@ -28,21 +28,22 @@ use guatiao::exports::value::{
     guatiao_string_push, guatiao_value_clone,
 };
 use guatiao::schema::{ArmBuilder, FieldBuilder, FormFieldBuilder, KindBuilder, SchemaBuilder};
-use guatiao::value::read::{int_or, items, str_or};
+use guatiao::value::convert::TryAsRef;
+use guatiao::value::read::{int_or, str_or};
 use guatiao::value::status::Status;
-use guatiao::value::types::{Str, Tag, Value};
-use guatiao::{Alloc, List, Map, ReadValue};
+use guatiao::value::types::{Str, Tag, Text, Value};
+use guatiao::{Alloc, List, Map};
 
 /// A map of one key holding a list of strings, which is the shape every
 /// merge case below needs.
 fn list_map(key: &str, values: &[&str]) -> Value {
-    let mut list = Value::list();
+    let mut list = List::new();
     for v in values {
-        list.push(Value::string(v)).unwrap();
+        list.push(Value::from(Text::new(v))).unwrap();
     }
-    let mut map = Value::map();
+    let mut map = Map::new();
     map.set(key, list).unwrap();
-    map
+    map.into()
 }
 
 /// Whether a node is the absent marker, which is what every export
@@ -52,10 +53,13 @@ fn is_absent(value: &Value) -> bool {
 }
 
 fn strings_at(value: &Value, key: &str) -> Vec<String> {
-    let Some(list) = value.get(key) else {
+    let Some(list) = TryAsRef::<Map>::try_as_ref(value)
+        .and_then(|m| m.get(key))
+        .and_then(TryAsRef::<List>::try_as_ref)
+    else {
         return Vec::new();
     };
-    items(list)
+    list.iter()
         .map(|v| str_or(Some(v), "").to_string())
         .collect()
 }
@@ -105,8 +109,8 @@ fn a_merge_crosses_and_the_caller_owns_what_comes_back() {
 #[test]
 fn a_mode_nobody_declared_is_refused() {
     let alloc = Alloc::rust();
-    let a = Value::map();
-    let b = Value::map();
+    let a = Value::from(Map::new());
+    let b = Value::from(Map::new());
     let mut out = Value::absent();
 
     for bad in [0u32, 4, 99, u32::MAX] {
@@ -137,22 +141,23 @@ fn a_mode_nobody_declared_is_refused() {
 #[test]
 fn an_override_array_changes_the_mode_for_that_path_only() {
     let alloc = Alloc::rust();
-    let mut earlier = Value::map();
-    let mut later = Value::map();
+    let mut earlier = Map::new();
+    let mut later = Map::new();
     for (key, values) in [("tags", &["prod"][..]), ("fallbacks", &["a"][..])] {
-        let mut list = Value::list();
+        let mut list = List::new();
         for v in values {
-            list.push(Value::string(v)).unwrap();
+            list.push(Value::from(Text::new(v))).unwrap();
         }
         earlier.set(key, list).unwrap();
     }
     for (key, values) in [("tags", &["canary"][..]), ("fallbacks", &["b"][..])] {
-        let mut list = Value::list();
+        let mut list = List::new();
         for v in values {
-            list.push(Value::string(v)).unwrap();
+            list.push(Value::from(Text::new(v))).unwrap();
         }
         later.set(key, list).unwrap();
     }
+    let (earlier, later) = (Value::from(earlier), Value::from(later));
 
     let overrides = [MergeOverride {
         path: Str::borrowed("tags"),
@@ -216,15 +221,17 @@ fn an_override_array_changes_the_mode_for_that_path_only() {
 #[test]
 fn the_mergelists_bit_reaches_the_merge() {
     let alloc = Alloc::rust();
-    let mut inner_a = Value::map();
+    let mut inner_a = Map::new();
     inner_a.set("a", Value::from(1i64)).unwrap();
-    let mut earlier = Value::list();
+    let mut earlier = List::new();
     earlier.push(inner_a).unwrap();
 
-    let mut inner_b = Value::map();
+    let mut inner_b = Map::new();
     inner_b.set("a", Value::from(2i64)).unwrap();
-    let mut later = Value::list();
+    let mut later = List::new();
     later.push(inner_b).unwrap();
+
+    let (earlier, later) = (Value::from(earlier), Value::from(later));
 
     for (fields, expected) in [(0u32, 2usize), (GUATIAO_MERGE_OPT_MERGELISTS, 1usize)] {
         let mut out = Value::absent();
@@ -246,7 +253,10 @@ fn the_mergelists_bit_reaches_the_merge() {
         // An owned tree, freed when this binding ends.
         let merged = out;
         assert_eq!(
-            items(&merged).count(),
+            TryAsRef::<List>::try_as_ref(&merged)
+                .map(List::items)
+                .unwrap_or(&[])
+                .len(),
             expected,
             "mergelists {fields} folds the two records into {expected}"
         );
@@ -258,10 +268,11 @@ fn the_mergelists_bit_reaches_the_merge() {
 #[test]
 fn a_failure_reports_its_path_through_the_error_value() {
     let alloc = Alloc::rust();
-    let mut earlier = Value::map();
-    earlier.set("k", Value::list()).unwrap();
-    let mut later = Value::map();
-    later.set("k", Value::map()).unwrap();
+    let mut earlier = Map::new();
+    earlier.set("k", List::new()).unwrap();
+    let mut later = Map::new();
+    later.set("k", Map::new()).unwrap();
+    let (earlier, later) = (Value::from(earlier), Value::from(later));
 
     let mut out = Value::absent();
     let mut error = Value::absent();
@@ -284,12 +295,20 @@ fn a_failure_reports_its_path_through_the_error_value() {
     // An owned map, freed when this binding ends.
     let detail = error;
     assert_eq!(
-        detail.get("path").ok_or_missing().unwrap().try_into(),
+        TryAsRef::<Map>::try_as_ref(&detail)
+            .unwrap()
+            .required("path")
+            .unwrap()
+            .try_into(),
         Ok("k"),
         "the status cannot say WHICH path disagreed; the value can"
     );
     assert!(
-        !str_or(detail.get("message"), "").is_empty(),
+        !str_or(
+            TryAsRef::<Map>::try_as_ref(&detail).and_then(|m| m.get("message")),
+            ""
+        )
+        .is_empty(),
         "and it carries a sentence a person can read"
     );
 }
@@ -307,15 +326,17 @@ fn validation_crosses_and_never_quotes_the_refused_value() {
         .finish()
         .unwrap();
 
-    let mut good = Value::map();
+    let mut good = Map::new();
     good.set("port", Value::from(5900i64)).unwrap();
+    let good = Value::from(good);
     // SAFETY: both are well-formed values.
     let status =
         unsafe { guatiao_schema_validate(&schema, &good, alloc.as_raw(), std::ptr::null_mut()) };
     assert_eq!(status, Status::GUATIAO_OK);
 
-    let mut bad = Value::map();
-    bad.set("port", Value::string("hunter2")).unwrap();
+    let mut bad = Map::new();
+    bad.set("port", Value::from(Text::new("hunter2"))).unwrap();
+    let bad = Value::from(bad);
     let mut error = Value::absent();
     // SAFETY: as above, and `error` is writable.
     let status = unsafe { guatiao_schema_validate(&schema, &bad, alloc.as_raw(), &mut error) };
@@ -324,10 +345,17 @@ fn validation_crosses_and_never_quotes_the_refused_value() {
     // An owned map, freed when this binding ends.
     let detail = error;
     assert_eq!(
-        detail.get("key").ok_or_missing().unwrap().try_into(),
+        TryAsRef::<Map>::try_as_ref(&detail)
+            .unwrap()
+            .required("key")
+            .unwrap()
+            .try_into(),
         Ok("port")
     );
-    let message = str_or(detail.get("message"), "");
+    let message = str_or(
+        TryAsRef::<Map>::try_as_ref(&detail).and_then(|m| m.get("message")),
+        "",
+    );
     assert!(
         !message.contains("hunter2"),
         "a field may be sensitive, so the error says what would have been \
@@ -339,7 +367,7 @@ fn validation_crosses_and_never_quotes_the_refused_value() {
 #[test]
 fn a_null_is_refused_rather_than_dereferenced() {
     let alloc = Alloc::rust();
-    let map = Value::map();
+    let map = Value::from(Map::new());
     let mut out = Value::absent();
 
     // SAFETY: passing null is the case under test; every other pointer is
@@ -381,7 +409,14 @@ fn the_map_clear_symbol_refuses_a_list() {
     // SAFETY: a well-formed map, and the pointer is valid for the call.
     let status = unsafe { guatiao_map_clear(&mut map) };
     assert_eq!(status, Status::GUATIAO_OK);
-    assert_eq!(map.entries().unwrap().len(), 0, "the map is emptied");
+    assert_eq!(
+        TryAsRef::<Map>::try_as_ref(&map)
+            .map(Map::entries)
+            .unwrap()
+            .len(),
+        0,
+        "the map is emptied"
+    );
 
     let mut list = List::new();
     list.push("x").unwrap();
@@ -391,7 +426,10 @@ fn the_map_clear_symbol_refuses_a_list() {
     let status = unsafe { guatiao_map_clear(&mut list) };
     assert_eq!(status, Status::GUATIAO_ERR_WRONG_KIND);
     assert_eq!(
-        list.items().unwrap().len(),
+        TryAsRef::<List>::try_as_ref(&list)
+            .map(List::items)
+            .unwrap()
+            .len(),
         1,
         "a refused call leaves the value untouched"
     );
@@ -485,12 +523,16 @@ fn a_tagged_value_survives_the_round_trip_through_flat_text() {
     assert_eq!(status, Status::GUATIAO_OK);
 
     assert_eq!(
-        flat.get("auth").and_then(Value::as_str),
+        TryAsRef::<Map>::try_as_ref(&flat)
+            .and_then(|m| m.get("auth"))
+            .and_then(TryAsRef::<str>::try_as_ref),
         Some("userpass"),
         "the tag crosses as text"
     );
     assert_eq!(
-        flat.get("auth.password").and_then(Value::as_str),
+        TryAsRef::<Map>::try_as_ref(&flat)
+            .and_then(|m| m.get("auth.password"))
+            .and_then(TryAsRef::<str>::try_as_ref),
         Some("hunter2"),
         "and the arm's fields are projected under it"
     );
@@ -507,10 +549,22 @@ fn a_tagged_value_survives_the_round_trip_through_flat_text() {
         )
     };
     assert_eq!(status, Status::GUATIAO_OK);
-    assert_eq!(back.get("auth").and_then(Value::as_str), Some("userpass"));
-    assert_eq!(back.get("username").and_then(Value::as_str), Some("ana"));
     assert_eq!(
-        back.get("password").and_then(Value::as_str),
+        TryAsRef::<Map>::try_as_ref(&back)
+            .and_then(|m| m.get("auth"))
+            .and_then(TryAsRef::<str>::try_as_ref),
+        Some("userpass")
+    );
+    assert_eq!(
+        TryAsRef::<Map>::try_as_ref(&back)
+            .and_then(|m| m.get("username"))
+            .and_then(TryAsRef::<str>::try_as_ref),
+        Some("ana")
+    );
+    assert_eq!(
+        TryAsRef::<Map>::try_as_ref(&back)
+            .and_then(|m| m.get("password"))
+            .and_then(TryAsRef::<str>::try_as_ref),
         Some("hunter2")
     );
 }
@@ -559,11 +613,11 @@ fn the_flat_keys_of_an_option_are_listed() {
     };
     assert_eq!(status, Status::GUATIAO_OK);
 
-    let listed: Vec<&str> = keys
-        .items()
+    let listed: Vec<&str> = TryAsRef::<List>::try_as_ref(&keys)
+        .map(List::items)
         .expect("a list")
         .iter()
-        .filter_map(Value::as_str)
+        .filter_map(TryAsRef::<str>::try_as_ref)
         .collect();
     assert_eq!(
         listed,
@@ -637,8 +691,8 @@ fn a_map_copied_onto_itself_is_refused() {
     let status = unsafe { guatiao_map_copy_from(alloc.as_raw(), &mut map, &map) };
     assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
 
-    let keys: Vec<String> = map
-        .entries()
+    let keys: Vec<String> = TryAsRef::<Map>::try_as_ref(&map)
+        .map(Map::entries)
         .unwrap()
         .iter()
         .map(|e| e.key_str().unwrap().to_string())
@@ -664,14 +718,16 @@ fn a_source_inside_the_target_copies_whole() {
     map.set("a", 3).unwrap();
     let mut map: Value = map.into();
 
-    let child_ptr: *const Value = map.get("child").unwrap();
+    let child_ptr: *const Value = TryAsRef::<Map>::try_as_ref(&map)
+        .and_then(|m| m.get("child"))
+        .unwrap();
     // SAFETY: both address well-formed maps; `src` is a node `dst` owns,
     // which is the case under test.
     let status = unsafe { guatiao_map_copy_from(alloc.as_raw(), &mut map, child_ptr) };
     assert_eq!(status, Status::GUATIAO_OK);
 
-    let keys: Vec<String> = map
-        .entries()
+    let keys: Vec<String> = TryAsRef::<Map>::try_as_ref(&map)
+        .map(Map::entries)
         .unwrap()
         .iter()
         .map(|e| e.key_str().unwrap().to_string())
@@ -681,8 +737,20 @@ fn a_source_inside_the_target_copies_whole() {
         ["child", "a", "x", "y"],
         "the child's keys are appended and nothing is renamed"
     );
-    assert_eq!(int_or(map.get("x"), 0), 1);
-    assert_eq!(int_or(map.get("y"), 0), 2);
+    assert_eq!(
+        int_or(
+            TryAsRef::<Map>::try_as_ref(&map).and_then(|m| m.get("x")),
+            0
+        ),
+        1
+    );
+    assert_eq!(
+        int_or(
+            TryAsRef::<Map>::try_as_ref(&map).and_then(|m| m.get("y")),
+            0
+        ),
+        2
+    );
 }
 
 /// Storing a node into itself is refused: the move would read the 40
@@ -694,13 +762,27 @@ fn a_node_stored_into_itself_is_refused() {
     // SAFETY: one well-formed node as both arguments, the case under test.
     let status = unsafe { guatiao_map_set(alloc.as_raw(), &mut map, Str::borrowed("k"), &mut map) };
     assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
-    assert_eq!(map.entries().unwrap().len(), 0, "nothing was stored");
+    assert_eq!(
+        TryAsRef::<Map>::try_as_ref(&map)
+            .map(Map::entries)
+            .unwrap()
+            .len(),
+        0,
+        "nothing was stored"
+    );
 
     let mut list: Value = List::new_in(alloc).into();
     // SAFETY: as above.
     let status = unsafe { guatiao_list_push(alloc.as_raw(), &mut list, &mut list) };
     assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
-    assert_eq!(list.items().unwrap().len(), 0, "nothing was appended");
+    assert_eq!(
+        TryAsRef::<List>::try_as_ref(&list)
+            .map(List::items)
+            .unwrap()
+            .len(),
+        0,
+        "nothing was appended"
+    );
 }
 
 /// Appending a value's own text to itself is a copy, not a
@@ -713,17 +795,17 @@ fn a_node_stored_into_itself_is_refused() {
 #[test]
 fn a_string_appended_to_itself_copies_its_own_bytes() {
     let alloc = Alloc::rust();
-    let mut node = Value::string_in(alloc, "abc").unwrap();
+    let mut node = Text::new_in(alloc, "abc").map(Value::from).unwrap();
 
     let own = Str {
-        ptr: node.as_str().unwrap().as_ptr(),
-        len: node.as_str().unwrap().len(),
+        ptr: TryAsRef::<str>::try_as_ref(&node).unwrap().as_ptr(),
+        len: TryAsRef::<str>::try_as_ref(&node).unwrap().len(),
     };
     // SAFETY: a well-formed string, and a view of its own bytes, readable
     // for the call: the aliasing case under test.
     let status = unsafe { guatiao_string_push(alloc.as_raw(), &mut node, own) };
     assert_eq!(status, Status::GUATIAO_OK);
-    assert_eq!(node.as_str(), Some("abcabc"));
+    assert_eq!(TryAsRef::<str>::try_as_ref(&node), Some("abcabc"));
 }
 
 // --- what a failed call leaves behind ------------------------------------
@@ -734,12 +816,12 @@ fn a_string_appended_to_itself_copies_its_own_bytes() {
 #[test]
 fn a_failed_call_leaves_its_out_parameters_absent() {
     let alloc = Alloc::rust();
-    let a = Value::map();
-    let b = Value::map();
+    let a = Value::from(Map::new());
+    let b = Value::from(Map::new());
 
     // A mode nobody declared: the failure happens after the prologue.
-    let mut out = Value::bool(true);
-    let mut error = Value::bool(true);
+    let mut out = Value::from(true);
+    let mut error = Value::from(true);
     // SAFETY: every pointer addresses what its type says, and neither
     // out-parameter holds anything owned.
     let status = unsafe {
@@ -760,7 +842,7 @@ fn a_failed_call_leaves_its_out_parameters_absent() {
     assert!(is_absent(&error), "so is the detail slot");
 
     // A null pointer: the failure happens before anything is read.
-    let mut out = Value::bool(true);
+    let mut out = Value::from(true);
     // SAFETY: passing null is the case under test.
     let status = unsafe {
         guatiao_merge(
@@ -779,20 +861,20 @@ fn a_failed_call_leaves_its_out_parameters_absent() {
     assert!(is_absent(&out), "a refused call still wrote the slot");
 
     // The schema and value exports, the same way.
-    let mut error = Value::bool(true);
+    let mut error = Value::from(true);
     // SAFETY: as above.
     let status =
         unsafe { guatiao_schema_validate(std::ptr::null(), &a, alloc.as_raw(), &mut error) };
     assert_eq!(status, Status::GUATIAO_ERR_NULL);
     assert!(is_absent(&error));
 
-    let mut out = Value::bool(true);
+    let mut out = Value::from(true);
     // SAFETY: a null allocator is the case under test.
     let status = unsafe { guatiao_value_clone(std::ptr::null(), &a, &mut out) };
     assert_eq!(status, Status::GUATIAO_ERR_ALLOC);
     assert!(is_absent(&out));
 
-    let mut out = Value::bool(true);
+    let mut out = Value::from(true);
     // SAFETY: as above.
     let status = unsafe {
         guatiao_schema_flat_keys(&a, Str::borrowed("nonesuch"), alloc.as_raw(), &mut out)
@@ -825,14 +907,15 @@ fn a_tree_nested_past_the_bound_is_refused_rather_than_followed() {
         .finish()
         .expect("a schema this size does not exhaust an allocator");
 
-    let mut value = Value::map_in(alloc);
+    let mut value = Map::new_in(alloc);
     for _ in 0..DEPTH {
-        let mut outer = Value::map_in(alloc);
+        let mut outer = Map::new_in(alloc);
         outer.set("next", value).unwrap();
         value = outer;
     }
-    let mut config = Value::map_in(alloc);
+    let mut config = Map::new_in(alloc);
     config.set("root", value).unwrap();
+    let config = Value::from(config);
 
     let mut error = Value::absent();
     // SAFETY: both address well-formed values, and `out_error` is

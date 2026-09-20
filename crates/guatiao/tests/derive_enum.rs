@@ -12,6 +12,8 @@
 
 #![cfg(feature = "derive")]
 
+use guatiao::List;
+use guatiao::value::convert::{TryAsMut, TryAsRef};
 use std::collections::BTreeMap;
 
 use guatiao::schema::flat;
@@ -19,7 +21,7 @@ use guatiao::schema::read::{FieldRef, Kind, SchemaRef};
 use guatiao::schema::validate::{validate_map, validate_value};
 use guatiao::value::alloc::Alloc;
 use guatiao::value::read::str_or;
-use guatiao::{FromValue, MapError, Schema, ToValue, Value};
+use guatiao::{FromValue, Map, MapError, Schema, Text, ToValue, Value, ValueError};
 
 /// A choice: every variant is a unit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ToValue, FromValue, Schema)]
@@ -77,7 +79,7 @@ fn a_unit_enum_is_stored_as_its_name() {
     ] {
         let value = level.to_value(alloc()).unwrap();
         assert_eq!(
-            value.as_str(),
+            TryAsRef::<str>::try_as_ref(&value),
             Some(stored),
             "a rename changes the spelling"
         );
@@ -87,7 +89,7 @@ fn a_unit_enum_is_stored_as_its_name() {
 
 #[test]
 fn a_spelling_no_variant_declares_names_the_alternatives_but_not_itself() {
-    let error = Level::from_value(&Value::string("hunter2")).unwrap_err();
+    let error = Level::from_value(&Value::from(Text::new("hunter2"))).unwrap_err();
     assert!(
         matches!(&error, MapError::BadValue { expected, .. } if expected == "one of Off, warn, On"),
         "the right kind with the wrong value is BadValue: {error:?}"
@@ -98,7 +100,7 @@ fn a_spelling_no_variant_declares_names_the_alternatives_but_not_itself() {
     );
 
     // The variant's own Rust name is not a spelling once it is renamed.
-    assert!(Level::from_value(&Value::string("Warning")).is_err());
+    assert!(Level::from_value(&Value::from(Text::new("Warning"))).is_err());
 }
 
 #[test]
@@ -134,9 +136,13 @@ fn a_unit_enum_describes_itself_as_a_choice() {
     );
 
     // And the unlabelled one wrote nothing, rather than `"On": ""`.
-    let labels = kind.get("x-enum-labels").expect("two choices have labels");
+    let labels = TryAsRef::<Map>::try_as_ref(&kind)
+        .and_then(|m| m.get("x-enum-labels"))
+        .expect("two choices have labels");
     assert!(
-        labels.get("On").is_none(),
+        TryAsRef::<Map>::try_as_ref(labels)
+            .and_then(|m| m.get("On"))
+            .is_none(),
         "a label saying nothing is left off"
     );
 }
@@ -151,7 +157,7 @@ fn a_choice_it_writes_is_one_its_schema_accepts() {
             .unwrap_or_else(|e| panic!("{level:?} wrote a value its own schema refuses: {e}"));
     }
     assert!(
-        validate_value(field, &Value::string("Warning")).is_err(),
+        validate_value(field, &Value::from(Text::new("Warning"))).is_err(),
         "and the schema refuses what the reader refuses"
     );
 }
@@ -169,8 +175,8 @@ fn userpass() -> Auth {
 #[test]
 fn a_tagged_enum_is_a_map_with_its_name_under_the_tag() {
     let value = userpass().to_value(alloc()).unwrap();
-    let keys: Vec<&str> = value
-        .entries()
+    let keys: Vec<&str> = TryAsRef::<Map>::try_as_ref(&value)
+        .map(Map::entries)
         .unwrap()
         .iter()
         .filter_map(|e| e.key_str())
@@ -180,11 +186,20 @@ fn a_tagged_enum_is_a_map_with_its_name_under_the_tag() {
         ["auth", "username", "password"],
         "the tag first, then the fields -- and a skipped field not at all"
     );
-    assert_eq!(str_or(value.get("auth"), ""), "userpass");
+    assert_eq!(
+        str_or(
+            TryAsRef::<Map>::try_as_ref(&value).and_then(|m| m.get("auth")),
+            ""
+        ),
+        "userpass"
+    );
 
     let ambient = Auth::Ambient.to_value(alloc()).unwrap();
     assert_eq!(
-        ambient.entries().unwrap().len(),
+        TryAsRef::<Map>::try_as_ref(&ambient)
+            .map(Map::entries)
+            .unwrap()
+            .len(),
         1,
         "a unit arm is its tag and nothing else"
     );
@@ -202,10 +217,8 @@ fn a_tagged_enum_round_trips() {
         assert_eq!(Auth::from_value(&value).unwrap(), auth);
     }
     assert!(
-        absent_password
-            .to_value(alloc())
-            .unwrap()
-            .get("password")
+        TryAsRef::<Map>::try_as_ref(&absent_password.to_value(alloc()).unwrap())
+            .and_then(|m| m.get("password"))
             .is_none(),
         "None omits the key, exactly as it does in a struct"
     );
@@ -227,32 +240,32 @@ fn a_skipped_field_reads_back_as_its_default() {
 
 #[test]
 fn a_missing_wrong_or_unknown_tag_is_named_under_the_tag() {
-    let mut no_tag = Value::map();
+    let mut no_tag = Map::new();
     no_tag.set("username", "ana").unwrap();
     assert_eq!(
-        Auth::from_value(&no_tag).unwrap_err(),
+        Auth::from_value(&Value::from(no_tag)).unwrap_err(),
         MapError::missing("auth"),
         "no tag says which key is missing"
     );
 
-    let mut numeric = Value::map();
+    let mut numeric = Map::new();
     numeric.set("auth", 3).unwrap();
-    let error = Auth::from_value(&numeric).unwrap_err();
+    let error = Auth::from_value(&Value::from(numeric)).unwrap_err();
     assert!(
         matches!(&error, MapError::WrongType { key, .. } if key == "auth"),
         "{error:?}"
     );
 
-    let mut unknown = Value::map();
+    let mut unknown = Map::new();
     unknown.set("auth", "kerberos").unwrap();
-    let error = Auth::from_value(&unknown).unwrap_err();
+    let error = Auth::from_value(&Value::from(unknown)).unwrap_err();
     assert!(
         matches!(&error, MapError::BadValue { key, expected }
             if key == "auth" && expected == "one of Ambient, userpass"),
         "{error:?}"
     );
 
-    let error = Auth::from_value(&Value::string("userpass")).unwrap_err();
+    let error = Auth::from_value(&Value::from(Text::new("userpass"))).unwrap_err();
     assert!(
         matches!(error, MapError::WrongType { .. }),
         "a tagged enum is a map, so bare text is the wrong kind: {error:?}"
@@ -315,7 +328,10 @@ fn a_variant_it_writes_is_one_its_schema_accepts() {
     }
 
     let mut foreign = userpass().to_value(alloc()).unwrap();
-    foreign.set("realm", "EXAMPLE").unwrap();
+    TryAsMut::<Map>::try_as_mut(&mut foreign)
+        .ok_or(ValueError::WrongKind)
+        .and_then(|m| m.set("realm", "EXAMPLE"))
+        .unwrap();
     assert!(
         validate_value(field, &foreign).is_err(),
         "a key the chosen arm does not declare is the validator's to refuse"
@@ -378,12 +394,23 @@ fn a_tagged_enums_own_schema_carries_its_tag_and_its_arms() {
     let declared = Auth::schema(alloc()).unwrap();
 
     assert_eq!(
-        str_or(declared.get("x-variant-tag"), ""),
+        str_or(
+            TryAsRef::<Map>::try_as_ref(&declared).and_then(|m| m.get("x-variant-tag")),
+            ""
+        ),
         "auth",
         "the discriminant's key survives"
     );
-    let arms = declared.get("oneOf").expect("the arms survive");
-    assert_eq!(guatiao::value::read::items(arms).count(), 2);
+    let arms = TryAsRef::<Map>::try_as_ref(&declared)
+        .and_then(|m| m.get("oneOf"))
+        .expect("the arms survive");
+    assert_eq!(
+        TryAsRef::<List>::try_as_ref(arms)
+            .map(List::items)
+            .unwrap_or(&[])
+            .len(),
+        2
+    );
 
     // And it reads back as the kind it was built from, through the same
     // reader a consumer uses.

@@ -14,12 +14,13 @@
 
 #![cfg(all(feature = "provider", feature = "load"))]
 
+use guatiao::value::convert::TryAsRef;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use greeter_kind::{Greeter, GreeterVtable, Listener};
+use guatiao::Status;
 use guatiao::library::{Kind, Registry};
-use guatiao::{Status, Value};
 
 /// The C compilers worth trying, in order (as `c_consumer.rs`).
 fn find_compiler() -> Option<PathBuf> {
@@ -104,7 +105,7 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     // that allocator, which the value carries.
     let answer = offer.greet("ana").expect("the C greeter answers");
     assert_eq!(
-        answer.get("greeting").and_then(Value::as_str),
+        answer.get("greeting").and_then(TryAsRef::<str>::try_as_ref),
         Some("hello from C, ana")
     );
     drop(answer);

@@ -9,55 +9,69 @@
 //! survives TOML, YAML and MessagePack without a line written per format.
 
 use guatiao::value::alloc::Alloc;
-use guatiao::value::types::{Number, Value};
+use guatiao::value::convert::TryAsRef;
+use guatiao::value::types::{List, Map, Number, Text, Value};
 use guatiao_serde::{Presentation, Serializable, ValueSeed};
 use serde::de::DeserializeSeed;
 
 /// A map with something of most kinds in it.
 fn a_configuration() -> Value {
-    let mut inner = Value::map();
+    let mut inner = Map::new();
     inner.set("timeout", 30).unwrap();
     inner.set("verify", true).unwrap();
 
-    let mut hosts = Value::list();
+    let mut hosts = List::new();
     hosts.push("alpha").unwrap();
     hosts.push("beta").unwrap();
 
-    let mut map = Value::map();
+    let mut map = Map::new();
     map.set("name", "example").unwrap();
     map.set("port", 5900).unwrap();
     map.set("ratio", Number::new("1.5").unwrap()).unwrap();
     map.set("hosts", hosts).unwrap();
     map.set("tls", inner).unwrap();
-    map
+    map.into()
 }
 
 /// What a reader should find, whatever the document was written in.
 fn check(what: &str, v: &Value) {
     assert_eq!(
-        v.get("name").and_then(Value::as_str),
+        TryAsRef::<Map>::try_as_ref(v)
+            .and_then(|m| m.get("name"))
+            .and_then(TryAsRef::<str>::try_as_ref),
         Some("example"),
         "{what}"
     );
     assert_eq!(
-        v.get("port").and_then(Value::as_number_str),
+        TryAsRef::<Map>::try_as_ref(v)
+            .and_then(|m| m.get("port"))
+            .and_then(TryAsRef::<Number>::try_as_ref)
+            .map(Number::as_str),
         Some("5900"),
         "{what}"
     );
     assert_eq!(
-        v.get("ratio").and_then(Value::as_number_str),
+        TryAsRef::<Map>::try_as_ref(v)
+            .and_then(|m| m.get("ratio"))
+            .and_then(TryAsRef::<Number>::try_as_ref)
+            .map(Number::as_str),
         Some("1.5"),
         "{what}"
     );
     assert_eq!(
-        v.get("hosts").and_then(Value::items).map(<[_]>::len),
+        TryAsRef::<Map>::try_as_ref(v)
+            .and_then(|m| m.get("hosts"))
+            .and_then(TryAsRef::<List>::try_as_ref)
+            .map(List::items)
+            .map(<[_]>::len),
         Some(2),
         "{what}"
     );
     assert_eq!(
-        v.get("tls")
-            .and_then(|t| t.get("verify"))
-            .and_then(Value::as_bool),
+        TryAsRef::<Map>::try_as_ref(v)
+            .and_then(|m| m.get("tls"))
+            .and_then(|t| TryAsRef::<Map>::try_as_ref(t).and_then(|m| m.get("verify")))
+            .and_then(|v| bool::try_from(v).ok()),
         Some(true),
         "{what}"
     );
@@ -96,7 +110,11 @@ fn json_keeps_a_numbers_spelling() {
         let doc = json::to_string(&v, Presentation::new()).unwrap();
         assert_eq!(doc, text, "written verbatim");
         let back = json::from_str(&doc, Alloc::rust(), Presentation::new()).unwrap();
-        assert_eq!(back.as_number_str(), Some(text), "and read back verbatim");
+        assert_eq!(
+            TryAsRef::<Number>::try_as_ref(&back).map(Number::as_str),
+            Some(text),
+            "and read back verbatim"
+        );
     }
 }
 
@@ -129,7 +147,11 @@ fn toml_round_trips() {
 fn toml_refuses_what_it_cannot_spell() {
     use guatiao_serde::text::toml;
 
-    for v in [Value::string("bare"), Value::from(1i64), Value::list()] {
+    for v in [
+        Value::from(Text::new("bare")),
+        Value::from(1i64),
+        List::new().into(),
+    ] {
         let e = toml::to_string(&v, Presentation::new()).expect_err("not a table");
         assert_eq!(e.format(), "toml");
     }

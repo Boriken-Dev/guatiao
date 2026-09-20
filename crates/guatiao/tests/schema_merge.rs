@@ -15,8 +15,9 @@ use guatiao::schema::merge::{
 };
 use guatiao::schema::read::SchemaRef;
 use guatiao::value::alloc::Alloc;
-use guatiao::value::read::items;
-use guatiao::{MergeMode, MergeOptions, Value};
+use guatiao::value::convert::TryAsRef;
+
+use guatiao::{List, Map, MergeMode, MergeOptions, Text, Value};
 
 /// A schema carrying one string field per pair, annotated whenever the
 /// declaration is not empty.
@@ -30,7 +31,7 @@ fn schema_with(alloc: Alloc, pairs: &[(&str, &str)]) -> Value {
     for (key, declaration) in pairs {
         let mut field = FieldBuilder::new_in(alloc, key, KindBuilder::string_in(alloc));
         if !declaration.is_empty() {
-            field = field.option(X_MERGE, Value::string(declaration));
+            field = field.option(X_MERGE, Value::from(Text::new(declaration)));
         }
         builder = builder.field(field);
     }
@@ -40,25 +41,29 @@ fn schema_with(alloc: Alloc, pairs: &[(&str, &str)]) -> Value {
 /// A map holding one list per pair, which is the shape every merge case
 /// below needs.
 fn map_of_lists(pairs: &[(&str, &[&str])]) -> Value {
-    let mut built = Value::map();
+    let mut built = Map::new();
     for (key, values) in pairs {
         built.set(key, list(values)).unwrap();
     }
-    built
+    built.into()
 }
 
 fn list(values: &[&str]) -> Value {
-    let mut built = Value::list();
+    let mut built = List::new();
     for value in values {
-        built.push(Value::string(value)).unwrap();
+        built.push(Value::from(Text::new(value))).unwrap();
     }
-    built
+    built.into()
 }
 
 /// The strings of the list under `key`.
 fn strings_at(value: &Value, key: &str) -> Vec<String> {
-    items(value.get(key).expect("the key was merged"))
-        .map(|v| v.as_str().unwrap_or("").to_string())
+    TryAsRef::<Map>::try_as_ref(value)
+        .and_then(|m| m.get(key))
+        .and_then(TryAsRef::<List>::try_as_ref)
+        .expect("the key was merged")
+        .iter()
+        .map(|v| TryAsRef::<str>::try_as_ref(v).unwrap_or("").to_string())
         .collect()
 }
 
@@ -213,7 +218,7 @@ fn annotation_round_trips_through_parse_mode() {
                 options: MergeOptions::new().with_mergelists(mergelists),
             };
             let written = annotation(alloc, declared).unwrap();
-            let text = written.as_str().expect("a string annotation");
+            let text = TryAsRef::<str>::try_as_ref(&written).expect("a string annotation");
             let parsed = parse_mode(text).unwrap();
             assert_eq!(parsed, declared, "{text} must parse back to what wrote it");
         }
@@ -242,14 +247,14 @@ fn a_declaration_on_a_nested_field_is_read_as_its_dotted_path() {
                 alloc,
                 vec![
                     FieldBuilder::new_in(alloc, "ciphers", KindBuilder::string_in(alloc))
-                        .option(X_MERGE, Value::string("substitute")),
+                        .option(X_MERGE, Value::from(Text::new("substitute"))),
                     FieldBuilder::new_in(alloc, "roots", KindBuilder::string_in(alloc)),
                 ],
             ),
         ))
         .field(
             FieldBuilder::new_in(alloc, "tags", KindBuilder::string_in(alloc))
-                .option(X_MERGE, Value::string("deep+mergelists")),
+                .option(X_MERGE, Value::from(Text::new("deep+mergelists"))),
         )
         .finish()
         .expect("a schema this small builds");
@@ -275,7 +280,9 @@ fn a_declaration_on_a_nested_field_is_read_as_its_dotted_path() {
     let later = nested("ciphers", &["c"]);
     let merged = merge_with_schema(read, MergeMode::Deep, &earlier, &later, alloc)
         .expect("the two agree in shape");
-    let tls = merged.get("tls").expect("the nested map survives");
+    let tls = TryAsRef::<Map>::try_as_ref(&merged)
+        .and_then(|m| m.get("tls"))
+        .expect("the nested map survives");
     assert_eq!(
         strings_at(tls, "ciphers"),
         ["c"],
@@ -295,7 +302,7 @@ fn a_nested_mergelists_declaration_is_resolved_across_the_schema() {
                 alloc,
                 vec![
                     FieldBuilder::new_in(alloc, "ciphers", KindBuilder::string_in(alloc))
-                        .option(X_MERGE, Value::string("deep+mergelists")),
+                        .option(X_MERGE, Value::from(Text::new("deep+mergelists"))),
                 ],
             ),
         ))
@@ -311,9 +318,9 @@ fn a_nested_mergelists_declaration_is_resolved_across_the_schema() {
 
 /// A map of one nested map holding one list.
 fn nested(key: &str, values: &[&str]) -> Value {
-    let mut inner = Value::map();
+    let mut inner = Map::new();
     inner.set(key, list(values)).unwrap();
-    let mut outer = Value::map();
+    let mut outer = Map::new();
     outer.set("tls", inner).unwrap();
-    outer
+    outer.into()
 }

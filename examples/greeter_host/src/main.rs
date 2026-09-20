@@ -34,6 +34,7 @@
 //! cargo run -p greeter_host -- /some/dir /some/lib.so
 //! ```
 
+use guatiao::value::convert::TryAsRef;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -146,7 +147,7 @@ fn main() -> ExitCode {
                 offer.id(),
                 answer
                     .get("greeting")
-                    .and_then(Value::as_str)
+                    .and_then(TryAsRef::<str>::try_as_ref)
                     .unwrap_or("?")
             ),
             Err(e) => println!("\n{} refused: {e}", offer.id()),
@@ -196,7 +197,7 @@ fn main() -> ExitCode {
                     settings,
                     answer
                         .get("greeting")
-                        .and_then(Value::as_str)
+                        .and_then(TryAsRef::<str>::try_as_ref)
                         .unwrap_or("?")
                 ),
                 Err(e) => println!("{} refused: {e}", offer.id()),
@@ -208,7 +209,7 @@ fn main() -> ExitCode {
         }
         // And what the provider says to a value that does not fit -- the
         // refusal comes from the provider's decode, across the boundary.
-        let empty = Value::map();
+        let empty = Value::from(Map::new());
         if let Err(e) = offer.instantiate(&empty) {
             println!("{} given nothing: {e}", offer.id());
         }

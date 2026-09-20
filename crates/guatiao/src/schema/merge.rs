@@ -48,7 +48,7 @@ use crate::schema::read::{FieldRef, Kind, SchemaRef};
 use crate::value::alloc::Alloc;
 use crate::value::error::ValueError;
 use crate::value::read::str_or;
-use crate::value::types::Value;
+use crate::value::types::{Text, Value};
 use crate::{MergeError, MergeMode, MergeOptions, MergeOverrides};
 
 /// The annotation key a field declares its merge mode under.
@@ -236,8 +236,8 @@ pub fn annotation(alloc: Alloc, declared: DeclaredMerge) -> Result<Value, ValueE
         _ => "substitute",
     };
     if declared.options.mergelists {
-        Value::string_in(alloc, &format!("{name}{MERGELISTS_SUFFIX}"))
+        Text::new_in(alloc, &format!("{name}{MERGELISTS_SUFFIX}")).map(Value::from)
     } else {
-        Value::string_in(alloc, name)
+        Text::new_in(alloc, name).map(Value::from)
     }
 }

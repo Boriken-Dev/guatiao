@@ -12,19 +12,20 @@
 
 #![cfg(feature = "json")]
 
+use guatiao::value::convert::TryAsRef;
 use std::ptr;
 
 use guatiao::value::alloc::{Allocator, rust_alloc};
 use guatiao::value::status::Status;
-use guatiao::value::types::Value;
+use guatiao::value::types::{Map, Value};
 use guatiao_serde::exports::{GUATIAO_PRETTY, guatiao_json_emit};
 
 /// A value worth indenting: flat output has no newline in it.
 fn a_map() -> Value {
-    let mut map = Value::map();
+    let mut map = Map::new();
     map.set("port", 5900).unwrap();
     map.set("host", "example.test").unwrap();
-    map
+    map.into()
 }
 
 fn emit(value: &Value, how: u32, alloc: *const Allocator) -> (Status, Option<String>) {
@@ -33,7 +34,7 @@ fn emit(value: &Value, how: u32, alloc: *const Allocator) -> (Status, Option<Str
     // and `out` is a writable value whose previous contents are a null —
     // which owns nothing, so overwriting it frees nothing.
     let status = unsafe { guatiao_json_emit(value, how, alloc, &mut out) };
-    let text = out.as_str().map(str::to_string);
+    let text = TryAsRef::<str>::try_as_ref(&out).map(str::to_string);
     (status, text)
 }
 

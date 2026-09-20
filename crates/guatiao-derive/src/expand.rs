@@ -434,20 +434,22 @@ fn set_field(field: &FieldPlan, access: &TokenStream) -> TokenStream {
         // already been unwrapped.
         quote! {
             if let ::core::option::Option::Some(__value) = #access {
-                ::guatiao::Value::set(
+                ::guatiao::Map::set_in(
                     &mut __map,
                     #key,
                     <#inner as ::guatiao::ToValue>::to_value(__value, __alloc)?,
+                    __alloc,
                 )?;
             }
         }
     } else {
         let ty = &field.ty;
         quote! {
-            ::guatiao::Value::set(
+            ::guatiao::Map::set_in(
                 &mut __map,
                 #key,
                 <#ty as ::guatiao::ToValue>::to_value(#access, __alloc)?,
+                __alloc,
             )?;
         }
     }
@@ -469,7 +471,7 @@ fn read_field(field: &FieldPlan) -> TokenStream {
     // adds it here, on the way out.
     if field.optional() {
         quote! {
-            #ident: match ::guatiao::convert::find_key(__value, #key) {
+            #ident: match __map.get(#key) {
                 ::core::option::Option::Some(__field) =>
                     <#ty as ::guatiao::FromValue>::from_value(__field)
                         .map_err(|__e| ::guatiao::MapError::under(__e, #key))?,
@@ -481,7 +483,7 @@ fn read_field(field: &FieldPlan) -> TokenStream {
     } else {
         quote! {
             #ident: <#ty as ::guatiao::FromValue>::from_value(
-                ::guatiao::convert::expect_key(__value, #key)?,
+                ::guatiao::Map::required(__map, #key)?,
             ).map_err(|__e| ::guatiao::MapError::under(__e, #key))?,
         }
     }
@@ -573,9 +575,9 @@ fn emit_to(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
                 ::guatiao::Value,
                 ::guatiao::ValueError,
             > {
-                let mut __map = ::guatiao::Value::map_in(__alloc);
+                let mut __map = ::guatiao::Map::new_in(__alloc);
                 #(#sets)*
-                ::core::result::Result::Ok(__map)
+                ::core::result::Result::Ok(::guatiao::Value::from(__map))
             }
         }
     }
@@ -593,7 +595,9 @@ fn emit_from(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
                 // First, so handing this a string reports THAT rather
                 // than reporting every field missing. The error names no
                 // key; whoever recursed adds one.
-                ::guatiao::convert::expect_map(__value)?;
+                let __map = <&::guatiao::Map as ::core::convert::TryFrom<
+                    &::guatiao::Value,
+                >>::try_from(__value)?;
                 ::core::result::Result::Ok(#name {
                     #(#reads)*
                 })
@@ -910,9 +914,11 @@ fn emit_choice_to(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
             > {
                 // `*self`: every pattern is a unit variant, so nothing is
                 // moved out of the borrow.
-                ::guatiao::Value::string_in(__alloc, match *self {
-                    #(#arms)*
-                })
+                ::core::result::Result::Ok(::guatiao::Value::from(
+                    ::guatiao::Text::new_in(__alloc, match *self {
+                        #(#arms)*
+                    })?,
+                ))
             }
         }
     }
@@ -931,7 +937,9 @@ fn emit_choice_from(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
             fn from_value(
                 __value: &::guatiao::Value,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
-                match ::guatiao::convert::expect_str(__value)? {
+                match <&str as ::core::convert::TryFrom<&::guatiao::Value>>::try_from(
+                    __value,
+                )? {
                     #(#arms)*
                     _ => ::core::result::Result::Err(
                         ::guatiao::MapError::bad_value(#expected),
@@ -995,10 +1003,11 @@ fn emit_arm_to(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStream
             .map(|(field, binding)| set_field(field, &quote! { #binding }));
         quote! {
             #pattern => {
-                ::guatiao::Value::set(
+                ::guatiao::Map::set_in(
                     &mut __map,
                     #tag,
-                    ::guatiao::Value::string_in(__alloc, #stored)?,
+                    ::guatiao::Text::new_in(__alloc, #stored)?,
+                    __alloc,
                 )?;
                 #(#sets)*
             }
@@ -1014,14 +1023,14 @@ fn emit_arm_to(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStream
                 ::guatiao::Value,
                 ::guatiao::ValueError,
             > {
-                let mut __map = ::guatiao::Value::map_in(__alloc);
+                let mut __map = ::guatiao::Map::new_in(__alloc);
                 // The tag goes in first, so the value reads as the variant
                 // it is before its payload -- and re-emits byte-stable,
                 // because a map is insertion-ordered by contract.
                 match self {
                     #(#arms)*
                 }
-                ::core::result::Result::Ok(__map)
+                ::core::result::Result::Ok(::guatiao::Value::from(__map))
             }
         }
     }
@@ -1045,9 +1054,11 @@ fn emit_arm_from(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStre
             fn from_value(
                 __value: &::guatiao::Value,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
-                ::guatiao::convert::expect_map(__value)?;
-                let __tag = ::guatiao::convert::expect_str(
-                    ::guatiao::convert::expect_key(__value, #tag)?,
+                let __map = <&::guatiao::Map as ::core::convert::TryFrom<
+                    &::guatiao::Value,
+                >>::try_from(__value)?;
+                let __tag = <&str as ::core::convert::TryFrom<&::guatiao::Value>>::try_from(
+                    ::guatiao::Map::required(__map, #tag)?,
                 )
                 .map_err(|__e| ::guatiao::MapError::under(__e, #tag))?;
                 // A key the chosen variant does not declare is not refused
@@ -1243,7 +1254,7 @@ mod tests {
             }
         };
         // And both enum shapes, which reach different helpers: a choice
-        // goes through `expect_str`, an arm through all four.
+        // goes through the `&str` conversion, an arm through all four.
         let choice = quote! {
             enum C { A, #[map(rename = "b")] B }
         };
@@ -1354,14 +1365,14 @@ mod tests {
             "option",
             "result",
             "vec",
-            // The `guatiao` modules generated code names: `convert` for
-            // the two helpers that have no business at the crate root, and
-            // `schema` for the builders.
+            // The `guatiao` module generated code names: `schema`, for
+            // the builders. `convert` is `core`'s, for `TryFrom`.
             "convert",
             "schema",
             // Types and traits from `guatiao`.
             "Alloc",
             "Map",
+            "Text",
             "ValueError",
             "FromValue",
             "MapError",
@@ -1377,6 +1388,7 @@ mod tests {
             "Default",
             "Option",
             "Result",
+            "TryFrom",
             "Vec",
         ];
         for segment in &segments {
@@ -1448,11 +1460,11 @@ mod tests {
             "a skipped field is defaulted on read: {from_side}"
         );
         assert!(
-            from_side.contains("expect_key"),
+            from_side.contains("Map :: required"),
             "a required field reports a missing key: {from_side}"
         );
         assert!(
-            from_side.contains("expect_map"),
+            from_side.contains(":: guatiao :: Map as :: core :: convert :: TryFrom"),
             "a value that is not a map is rejected as that, not as every field \
              missing: {from_side}"
         );
@@ -1465,7 +1477,7 @@ mod tests {
     fn an_empty_named_struct_is_accepted() {
         let output = to(quote! { struct S {} });
         assert!(!output.contains("compile_error"), "{output}");
-        assert!(output.contains("Value :: map_in (__alloc)"), "{output}");
+        assert!(output.contains("Map :: new_in (__alloc)"), "{output}");
     }
 
     fn schema(input: TokenStream) -> String {
@@ -1489,14 +1501,17 @@ mod tests {
 
         let to_side = to(decl.clone());
         assert!(!to_side.contains("compile_error"), "{to_side}");
-        assert!(to_side.contains("Value :: string_in"), "{to_side}");
+        assert!(to_side.contains("Text :: new_in"), "{to_side}");
         assert!(
             to_side.contains("Self :: Warning => \"warn\""),
             "a rename reaches the stored spelling: {to_side}"
         );
 
         let from_side = from(decl.clone());
-        assert!(from_side.contains("expect_str"), "{from_side}");
+        assert!(
+            from_side.contains("& str as :: core :: convert :: TryFrom"),
+            "{from_side}"
+        );
         assert!(
             from_side.contains("\"one of Off, warn, On\""),
             "an unknown spelling names the alternatives: {from_side}"
@@ -1545,7 +1560,7 @@ mod tests {
 
         let from_side = from(decl.clone());
         assert!(
-            from_side.contains("expect_key (__value , \"auth\")"),
+            from_side.contains("Map :: required (__map , \"auth\")"),
             "{from_side}"
         );
         assert!(

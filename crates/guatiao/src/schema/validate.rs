@@ -27,13 +27,14 @@
 
 #![forbid(unsafe_code)]
 
+use crate::value::convert::TryAsRef;
 use std::collections::BTreeMap;
 
 use super::ValidationError;
 use super::read::{FieldRef, Kind, SchemaRef};
 use crate::value::error::MAX_DEPTH;
 use crate::value::read::str_or;
-use crate::value::types::{Tag, Value};
+use crate::value::types::{List, Map, Number, Tag, Value};
 
 /// The text spellings a boolean accepts.
 ///
@@ -60,10 +61,13 @@ pub fn bool_is_true(value: &str) -> bool {
 pub fn text_of(value: &Value) -> String {
     match value.tag() {
         Ok(Tag::GUATIAO_BOOL) => crate::value::read::bool_or(Some(value), false).to_string(),
-        Ok(Tag::GUATIAO_NUMBER) => value.as_number_str().unwrap_or("").to_string(),
-        Ok(Tag::GUATIAO_STRING) => value.as_str().unwrap_or("").to_string(),
+        Ok(Tag::GUATIAO_NUMBER) => TryAsRef::<Number>::try_as_ref(value)
+            .map(Number::as_str)
+            .unwrap_or("")
+            .to_string(),
+        Ok(Tag::GUATIAO_STRING) => TryAsRef::<str>::try_as_ref(value).unwrap_or("").to_string(),
         Ok(Tag::GUATIAO_BYTES) => {
-            String::from_utf8_lossy(value.as_bytes().unwrap_or(&[])).into_owned()
+            String::from_utf8_lossy(TryAsRef::<[u8]>::try_as_ref(value).unwrap_or(&[])).into_owned()
         }
         _ => String::new(),
     }
@@ -276,7 +280,7 @@ fn value_against(
             };
         }
         Kind::List(_) => {
-            let Some(items) = value.items() else {
+            let Some(items) = TryAsRef::<List>::try_as_ref(value).map(List::items) else {
                 return Err(bad(key, "a list"));
             };
             let element = kind.items();
@@ -293,7 +297,10 @@ fn value_against(
             // same reason: a key nobody declared is a mistake worth
             // reporting rather than something to drop, and a required
             // field that is absent is the other half of the same check.
-            for entry in value.entries().unwrap_or(&[]) {
+            for entry in TryAsRef::<Map>::try_as_ref(value)
+                .map(Map::entries)
+                .unwrap_or(&[])
+            {
                 let Some(name) = entry.key_str() else {
                     return Err(bad(key, "keys that are text"));
                 };
@@ -311,7 +318,10 @@ fn value_against(
                 )?;
             }
             for field in kind.fields() {
-                if field.is_required() && !value.contains_key(field.key()) {
+                if field.is_required()
+                    && !TryAsRef::<Map>::try_as_ref(value)
+                        .is_some_and(|m| m.contains_key(field.key()))
+                {
                     return Err(bad(
                         format!("{key}{}{}", super::flat::SEPARATOR, field.key()),
                         "a value — it is required",
@@ -341,7 +351,10 @@ fn value_against(
             format!("an object carrying a '{tag}' discriminant"),
         ));
     }
-    let chosen = str_or(value.get(tag), "");
+    let chosen = str_or(
+        TryAsRef::<Map>::try_as_ref(value).and_then(|m| m.get(tag)),
+        "",
+    );
     let Some(arm) = kind.arms().find(|a| a.value() == chosen) else {
         return Err(bad(
             key,
@@ -352,7 +365,10 @@ fn value_against(
     // A field belonging to an arm that was not selected is an error, not
     // something to drop silently — the same argument the schema makes for
     // a field key it does not declare.
-    for entry in value.entries().unwrap_or(&[]) {
+    for entry in TryAsRef::<Map>::try_as_ref(value)
+        .map(Map::entries)
+        .unwrap_or(&[])
+    {
         let Some(name) = entry.key_str() else {
             return Err(bad(key, "keys that are text"));
         };
@@ -374,7 +390,9 @@ fn value_against(
     }
 
     for field in arm.fields() {
-        if field.is_required() && !value.contains_key(field.key()) {
+        if field.is_required()
+            && !TryAsRef::<Map>::try_as_ref(value).is_some_and(|m| m.contains_key(field.key()))
+        {
             return Err(bad(
                 format!("{key}{}{}", super::flat::SEPARATOR, field.key()),
                 format!("a value — it is required by the '{chosen}' arm"),
@@ -416,7 +434,10 @@ pub fn validate_map(schema: SchemaRef<'_>, values: &Value) -> Result<(), Validat
     if values.tag() != Ok(Tag::GUATIAO_MAP) {
         return Err(bad("", "a map of values"));
     }
-    for entry in values.entries().unwrap_or(&[]) {
+    for entry in TryAsRef::<Map>::try_as_ref(values)
+        .map(Map::entries)
+        .unwrap_or(&[])
+    {
         let Some(key) = entry.key_str() else {
             return Err(bad("", "keys that are text"));
         };
@@ -429,7 +450,9 @@ pub fn validate_map(schema: SchemaRef<'_>, values: &Value) -> Result<(), Validat
         validate_value(field, entry.value())?;
     }
     for field in schema.fields() {
-        if field.is_required() && !values.contains_key(field.key()) {
+        if field.is_required()
+            && !TryAsRef::<Map>::try_as_ref(values).is_some_and(|m| m.contains_key(field.key()))
+        {
             return Err(bad(field.key(), "a value — it is required"));
         }
     }

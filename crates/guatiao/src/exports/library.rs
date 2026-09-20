@@ -60,7 +60,7 @@ use crate::library::{
 use crate::value::ValueError;
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::status::Status;
-use crate::value::types::{Str, Text, Value};
+use crate::value::types::{List, Map, Str, Text, Value};
 
 /// A host's registry of loaded libraries.
 ///
@@ -126,7 +126,7 @@ impl HostRegistry {
     /// status code could. The `Err` arm is reserved for not being able to
     /// answer at all.
     fn load(&mut self, path: &str, alloc: Alloc) -> Result<Value, Status> {
-        let mut map = Value::map_in(alloc);
+        let mut map = Map::new_in(alloc);
         match self.inner.load_file(Path::new(path)) {
             Ok(Loading::Loaded(one)) => {
                 let described = library_value(alloc, one)?;
@@ -135,13 +135,13 @@ impl HostRegistry {
             Ok(Loading::Skipped(why)) => return Ok(skip_value(alloc, &why)?),
             Err(e) => map.set("failed", e.to_string().as_str())?,
         }
-        Ok(map)
+        Ok(map.into())
     }
 
     /// [`load`](HostRegistry::load) for a library the host links: its
     /// entry point, called with this registry's host block.
     fn register(&mut self, name: &str, entry: EntryFn, alloc: Alloc) -> Result<Value, Status> {
-        let mut map = Value::map_in(alloc);
+        let mut map = Map::new_in(alloc);
         match self.inner.register_entry(name, entry) {
             Ok(Loading::Loaded(one)) => {
                 let described = library_value(alloc, one)?;
@@ -150,7 +150,7 @@ impl HostRegistry {
             Ok(Loading::Skipped(why)) => return Ok(skip_value(alloc, &why)?),
             Err(e) => map.set("failed", e.to_string().as_str())?,
         }
-        Ok(map)
+        Ok(map.into())
     }
 
     /// Scans a directory and reports the three outcomes.
@@ -183,17 +183,17 @@ impl HostRegistry {
 
     /// Every library loaded, as a list of maps.
     fn libraries(&self, alloc: Alloc) -> Result<Value, ValueError> {
-        let mut list = Value::list_in(alloc);
+        let mut list = List::new_in(alloc);
         for one in self.inner.loaded() {
             list.push(library_value(alloc, one)?)?;
         }
-        Ok(list)
+        Ok(list.into())
     }
 
     /// Every provider serving `kind`, or all of them when it is empty,
     /// best first.
     fn providers(&self, kind: &str, alloc: Alloc) -> Result<Value, ValueError> {
-        let mut list = Value::list_in(alloc);
+        let mut list = List::new_in(alloc);
         let ranked: Vec<&Provider> = if kind.is_empty() {
             self.inner.all_ranked().collect()
         } else {
@@ -202,7 +202,7 @@ impl HostRegistry {
         for provider in ranked {
             list.push(provider_value(alloc, provider)?)?;
         }
-        Ok(list)
+        Ok(list.into())
     }
 
     /// One provider by key, or `None` when nothing answers to it.
@@ -212,38 +212,44 @@ impl HostRegistry {
 
     /// Every provider serving `kind` that can actually run here.
     fn available(&self, kind: &str, alloc: Alloc) -> Result<Value, ValueError> {
-        let mut list = Value::list_in(alloc);
+        let mut list = List::new_in(alloc);
         for provider in self.inner.available(kind) {
             list.push(provider_value(alloc, provider)?)?;
         }
-        Ok(list)
+        Ok(list.into())
     }
 
     /// Why nothing can serve `kind`, or that something can.
     fn why_not(&self, kind: &str, alloc: Alloc) -> Result<Value, ValueError> {
-        let mut map = Value::map_in(alloc);
+        let mut map = Map::new_in(alloc);
         let Some(why) = self.inner.why_not(kind) else {
-            map.set("available", Value::bool(true))?;
-            return Ok(map);
+            map.set("available", Value::from(true))?;
+            return Ok(map.into());
         };
-        map.set("available", Value::bool(false))?;
+        map.set("available", Value::from(false))?;
         match why {
             WhyNot::NothingClaimsIt => {
-                map.set("why", Value::string_in(alloc, "nothing-claims-it")?)?;
+                map.set(
+                    "why",
+                    Text::new_in(alloc, "nothing-claims-it").map(Value::from)?,
+                )?;
             }
             WhyNot::NoneAvailable(refused) => {
-                map.set("why", Value::string_in(alloc, "none-available")?)?;
-                let mut list = Value::list_in(alloc);
+                map.set(
+                    "why",
+                    Text::new_in(alloc, "none-available").map(Value::from)?,
+                )?;
+                let mut list = List::new_in(alloc);
                 for (provider, reason) in refused {
-                    let mut one = Value::map_in(alloc);
-                    one.set("id", Value::string_in(alloc, provider.id())?)?;
-                    one.set("reason", Value::string_in(alloc, reason)?)?;
+                    let mut one = Map::new_in(alloc);
+                    one.set("id", Text::new_in(alloc, provider.id()).map(Value::from)?)?;
+                    one.set("reason", Text::new_in(alloc, reason).map(Value::from)?)?;
                     list.push(one)?;
                 }
                 map.set("providers", list)?;
             }
         }
-        Ok(map)
+        Ok(map.into())
     }
 
     /// Whether one provider can run here, and why not when it cannot.
@@ -1112,44 +1118,56 @@ unsafe fn deliver<E: Into<Status>>(out: *mut Value, built: Result<Value, E>) -> 
 
 /// One loaded library, as a map.
 fn library_value(alloc: Alloc, one: &crate::library::Loaded) -> Result<Value, ValueError> {
-    let mut map = Value::map_in(alloc);
+    let mut map = Map::new_in(alloc);
     map.set("key", text_value(alloc, &one.key)?)?;
-    map.set("id", Value::string_in(alloc, one.id)?)?;
-    map.set("version", Value::string_in(alloc, one.version)?)?;
+    map.set("id", Text::new_in(alloc, one.id).map(Value::from)?)?;
+    map.set(
+        "version",
+        Text::new_in(alloc, one.version).map(Value::from)?,
+    )?;
     map.set(
         "path",
-        Value::string_in(alloc, &one.path.to_string_lossy())?,
+        Text::new_in(alloc, &one.path.to_string_lossy()).map(Value::from)?,
     )?;
     map.set("providers", one.providers)?;
 
     // What it offered that this host already had. Empty on an ordinary
     // load, and written even then: absent and empty would otherwise be the
     // same answer.
-    let mut skipped = Value::list_in(alloc);
+    let mut skipped = List::new_in(alloc);
     for why in &one.skipped {
         skipped.push(skip_value(alloc, why)?)?;
     }
     map.set("skipped", skipped)?;
-    Ok(map)
+    Ok(map.into())
 }
 
 /// One provider, as a map. Everything about it that is data; the vtable
 /// and `ctx` have their own accessors because they are not.
 fn provider_value(alloc: Alloc, one: &Provider) -> Result<Value, ValueError> {
-    let mut map = Value::map_in(alloc);
-    map.set("key", Value::string_in(alloc, one.key())?)?;
-    map.set("id", Value::string_in(alloc, one.id())?)?;
-    map.set("version", Value::string_in(alloc, one.version())?)?;
-    map.set("library", Value::string_in(alloc, one.library())?)?;
-    map.set("display_name", Value::string_in(alloc, one.display_name())?)?;
+    let mut map = Map::new_in(alloc);
+    map.set("key", Text::new_in(alloc, one.key()).map(Value::from)?)?;
+    map.set("id", Text::new_in(alloc, one.id()).map(Value::from)?)?;
+    map.set(
+        "version",
+        Text::new_in(alloc, one.version()).map(Value::from)?,
+    )?;
+    map.set(
+        "library",
+        Text::new_in(alloc, one.library()).map(Value::from)?,
+    )?;
+    map.set(
+        "display_name",
+        Text::new_in(alloc, one.display_name()).map(Value::from)?,
+    )?;
     map.set(
         "from",
-        Value::string_in(alloc, &one.from().to_string_lossy())?,
+        Text::new_in(alloc, &one.from().to_string_lossy()).map(Value::from)?,
     )?;
 
-    let mut kinds = Value::list_in(alloc);
+    let mut kinds = List::new_in(alloc);
     for kind in one.kinds() {
-        kinds.push(Value::string_in(alloc, kind)?)?;
+        kinds.push(Text::new_in(alloc, kind).map(Value::from)?)?;
     }
     map.set("kinds", kinds)?;
 
@@ -1157,9 +1175,9 @@ fn provider_value(alloc: Alloc, one: &Provider) -> Result<Value, ValueError> {
     // schema is borrowed from the library's image, and copying one into
     // every listing would be a tree per provider nobody asked for.
     map.set("priority", one.priority())?;
-    map.set("has_config", Value::bool(one.config_schema().is_some()))?;
+    map.set("has_config", Value::from(one.config_schema().is_some()))?;
     map.set("vtable_size", one.vtable().1)?;
-    Ok(map)
+    Ok(map.into())
 }
 
 /// A scan's report, as a map: `{"loaded": [path…], "skipped": [{"skipped",
@@ -1167,27 +1185,33 @@ fn provider_value(alloc: Alloc, one: &Provider) -> Result<Value, ValueError> {
 /// [{"path", "error"}…]` when a search path named a place that could not
 /// be read.
 fn report_value(alloc: Alloc, report: &LoadReport) -> Result<Value, ValueError> {
-    let mut map = Value::map_in(alloc);
+    let mut map = Map::new_in(alloc);
 
-    let mut loaded = Value::list_in(alloc);
+    let mut loaded = List::new_in(alloc);
     for path in &report.loaded {
-        loaded.push(Value::string_in(alloc, &path.to_string_lossy())?)?;
+        loaded.push(Text::new_in(alloc, &path.to_string_lossy()).map(Value::from)?)?;
     }
     map.set("loaded", loaded)?;
 
-    let mut skipped = Value::list_in(alloc);
+    let mut skipped = List::new_in(alloc);
     for (path, why) in &report.skipped {
-        let mut one = skip_value(alloc, why)?;
-        one.set("path", Value::string_in(alloc, &path.to_string_lossy())?)?;
+        let mut one = Map::try_from(skip_value(alloc, why)?).map_err(|_| ValueError::WrongKind)?;
+        one.set_in("path", Text::new_in(alloc, &path.to_string_lossy())?, alloc)?;
         skipped.push(one)?;
     }
     map.set("skipped", skipped)?;
 
-    let mut failed = Value::list_in(alloc);
+    let mut failed = List::new_in(alloc);
     for (path, error) in &report.failed {
-        let mut one = Value::map_in(alloc);
-        one.set("path", Value::string_in(alloc, &path.to_string_lossy())?)?;
-        one.set("error", Value::string_in(alloc, &error.to_string())?)?;
+        let mut one = Map::new_in(alloc);
+        one.set(
+            "path",
+            Text::new_in(alloc, &path.to_string_lossy()).map(Value::from)?,
+        )?;
+        one.set(
+            "error",
+            Text::new_in(alloc, &error.to_string()).map(Value::from)?,
+        )?;
         failed.push(one)?;
     }
     map.set("failed", failed)?;
@@ -1196,21 +1220,27 @@ fn report_value(alloc: Alloc, report: &LoadReport) -> Result<Value, ValueError> 
     // has any, and a key that is always present and usually empty is a
     // key every reader has to know about.
     if !report.unreadable.is_empty() {
-        let mut unreadable = Value::list_in(alloc);
+        let mut unreadable = List::new_in(alloc);
         for (path, error) in &report.unreadable {
-            let mut one = Value::map_in(alloc);
-            one.set("path", Value::string_in(alloc, &path.to_string_lossy())?)?;
-            one.set("error", Value::string_in(alloc, &error.to_string())?)?;
+            let mut one = Map::new_in(alloc);
+            one.set(
+                "path",
+                Text::new_in(alloc, &path.to_string_lossy()).map(Value::from)?,
+            )?;
+            one.set(
+                "error",
+                Text::new_in(alloc, &error.to_string()).map(Value::from)?,
+            )?;
             unreadable.push(one)?;
         }
         map.set("unreadable", unreadable)?;
     }
-    Ok(map)
+    Ok(map.into())
 }
 
 /// Why something was passed over, as a map.
 fn skip_value(alloc: Alloc, why: &Skipped) -> Result<Value, ValueError> {
-    let mut map = Value::map_in(alloc);
+    let mut map = Map::new_in(alloc);
     let (name, from, id, abi, by) = match why {
         Skipped::NoEntrySymbol => ("no-entry-symbol", None, None, None, None),
         Skipped::DeclinedThisHost => ("declined-this-host", None, None, None, None),
@@ -1232,20 +1262,23 @@ fn skip_value(alloc: Alloc, why: &Skipped) -> Result<Value, ValueError> {
         // compile error at this match rather than a reason that silently
         // crosses the boundary unnamed.
     };
-    map.set("skipped", Value::string_in(alloc, name)?)?;
+    map.set("skipped", Text::new_in(alloc, name).map(Value::from)?)?;
     if let Some(from) = from {
-        map.set("from", Value::string_in(alloc, &from.to_string_lossy())?)?;
+        map.set(
+            "from",
+            Text::new_in(alloc, &from.to_string_lossy()).map(Value::from)?,
+        )?;
     }
     if let Some(id) = id {
-        map.set("id", Value::string_in(alloc, id)?)?;
+        map.set("id", Text::new_in(alloc, id).map(Value::from)?)?;
     }
     if let Some(abi) = abi {
         map.set("abi", abi)?;
     }
     if let Some(by) = by {
-        map.set("by", Value::string_in(alloc, by)?)?;
+        map.set("by", Text::new_in(alloc, by).map(Value::from)?)?;
     }
-    Ok(map)
+    Ok(map.into())
 }
 
 /// A [`Text`] this crate owns, copied into the caller's allocator.
@@ -1253,5 +1286,5 @@ fn skip_value(alloc: Alloc, why: &Skipped) -> Result<Value, ValueError> {
 /// The copy is the point: the answer is the caller's to free, and it must
 /// not borrow a key the registry may re-render.
 fn text_value(alloc: Alloc, text: &Text) -> Result<Value, ValueError> {
-    Value::string_in(alloc, text.as_str().unwrap_or_default())
+    Text::new_in(alloc, text.as_str().unwrap_or_default()).map(Value::from)
 }

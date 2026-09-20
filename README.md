@@ -58,7 +58,7 @@ says so with the `_in` constructors. Get the value and convert it: there
 are no per-kind getters on a map.
 
 ```rust
-use guatiao::{Map, ReadValue};
+use guatiao::Map;
 
 let mut options = Map::new();
 options.set("compression", 6)?;
@@ -68,8 +68,8 @@ map.set("host", "10.0.0.1")?;
 map.set("port", 5900)?;
 map.set("options", options)?;
 
-let host: &str = map.get("host").ok_or_missing()?.try_into()?;
-let port: u16 = map.get("port").ok_or_missing()?.try_into()?;
+let host: &str = map.required("host")?.try_into()?;
+let port: u16 = map.required("port")?.try_into()?;
 assert_eq!((host, port), ("10.0.0.1", 5900));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```

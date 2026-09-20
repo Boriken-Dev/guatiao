@@ -11,12 +11,13 @@
 
 #![cfg(feature = "derive")]
 
+use guatiao::value::convert::{TryAsMut, TryAsRef};
 use std::cell::Cell;
 use std::ffi::c_void;
 
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
-use guatiao::value::read::{entries, str_or};
-use guatiao::{Bytes, FromValue, MapError, Number, ToValue, Value};
+use guatiao::value::read::str_or;
+use guatiao::{Bytes, FromValue, List, Map, MapError, Number, Text, ToValue, Value, ValueError};
 
 // A counting allocator, so every test also proves the tree frees.
 #[derive(Default)]
@@ -124,7 +125,11 @@ fn a_struct_round_trips_through_a_map() {
 fn the_map_holds_exactly_the_keys_the_declaration_asks_for() {
     with_alloc(|alloc| {
         let value = sample().to_value(alloc).unwrap();
-        let keys: Vec<String> = entries(&value)
+        let keys: Vec<String> = TryAsRef::<Map>::try_as_ref(&value)
+            .map(Map::entries)
+            .unwrap_or(&[])
+            .iter()
+            .map(|e| (e.key(), e.value()))
             .map(|(k, _)| String::from_utf8_lossy(k).into_owned())
             .collect();
         assert_eq!(
@@ -152,14 +157,19 @@ fn none_omits_the_key_and_both_spellings_read_back_as_none() {
         quiet.motd = None;
         let value = quiet.to_value(alloc).unwrap();
         assert!(
-            value.get("motd").is_none(),
+            TryAsRef::<Map>::try_as_ref(&value)
+                .and_then(|m| m.get("motd"))
+                .is_none(),
             "None stores nothing at all, not a null"
         );
         assert_eq!(Connection::from_value(&value).unwrap().motd, None);
 
         // The other spelling: a producer that writes an explicit null.
         let mut loud = sample().to_value(alloc).unwrap();
-        loud.set("motd", Value::null()).unwrap();
+        TryAsMut::<Map>::try_as_mut(&mut loud)
+            .ok_or(ValueError::WrongKind)
+            .and_then(|m| m.set("motd", Value::null()))
+            .unwrap();
         assert_eq!(Connection::from_value(&loud).unwrap().motd, None);
     });
 }
@@ -170,8 +180,10 @@ fn none_omits_the_key_and_both_spellings_read_back_as_none() {
 fn an_error_inside_a_nested_struct_names_the_dotted_path() {
     with_alloc(|alloc| {
         let mut value = sample().to_value(alloc).unwrap();
-        let tls = value.get_mut("tls").expect("tls was written");
-        assert!(tls.discard("verify"));
+        let tls = TryAsMut::<Map>::try_as_mut(&mut value)
+            .and_then(|m| m.get_mut("tls"))
+            .expect("tls was written");
+        assert!(TryAsMut::<Map>::try_as_mut(tls).is_some_and(|m| m.discard("verify")));
 
         let e = Connection::from_value(&value).unwrap_err();
         assert_eq!(
@@ -190,15 +202,21 @@ fn an_error_inside_a_nested_struct_names_the_dotted_path() {
 fn an_error_inside_a_list_names_the_index() {
     with_alloc(|alloc| {
         let mut value = sample().to_value(alloc).unwrap();
-        let tags = value.get_mut("tags").expect("tags was written");
+        let tags = TryAsMut::<Map>::try_as_mut(&mut value)
+            .and_then(|m| m.get_mut("tags"))
+            .expect("tags was written");
         // A number where a string belongs, at a known position.
-        assert!(tags.discard_at(1));
-        tags.push(
-            Number::new_in(alloc, &7.to_string())
-                .map(Value::from)
-                .unwrap(),
-        )
-        .unwrap();
+        assert!(TryAsMut::<List>::try_as_mut(tags).is_some_and(|l| l.discard(1)));
+        TryAsMut::<List>::try_as_mut(tags)
+            .ok_or(ValueError::WrongKind)
+            .and_then(|l| {
+                l.push(
+                    Number::new_in(alloc, &7.to_string())
+                        .map(Value::from)
+                        .unwrap(),
+                )
+            })
+            .unwrap();
 
         let e = Connection::from_value(&value).unwrap_err();
         assert_eq!(e.key(), "tags[1]");
@@ -212,7 +230,7 @@ fn an_error_inside_a_list_names_the_index() {
 #[test]
 fn a_value_that_is_not_a_map_is_rejected_as_that() {
     with_alloc(|alloc| {
-        let text = Value::string_in(alloc, "not a map").unwrap();
+        let text = Text::new_in(alloc, "not a map").map(Value::from).unwrap();
         let e = Connection::from_value(&text).unwrap_err();
         assert!(matches!(e, MapError::WrongType { .. }), "{e:?}");
         assert_eq!(e.key(), "", "the top-level value has no key to name");
@@ -229,22 +247,28 @@ fn a_value_that_is_not_a_map_is_rejected_as_that() {
 fn a_number_that_does_not_fit_is_bad_value_not_wrong_type() {
     with_alloc(|alloc| {
         let mut value = sample().to_value(alloc).unwrap();
-        value
-            .set(
-                "port",
-                Value::from(Number::new_in(alloc, "9223372036854775808").unwrap()),
-            )
+        TryAsMut::<Map>::try_as_mut(&mut value)
+            .ok_or(ValueError::WrongKind)
+            .and_then(|m| {
+                m.set(
+                    "port",
+                    Value::from(Number::new_in(alloc, "9223372036854775808").unwrap()),
+                )
+            })
             .unwrap();
         let e = Connection::from_value(&value).unwrap_err();
         assert!(matches!(e, MapError::BadValue { .. }), "{e:?}");
         assert_eq!(e.key(), "port");
 
         // ... and a fractional spelling is refused rather than truncated.
-        value
-            .set(
-                "port",
-                Value::from(Number::new_in(alloc, "5900.5").unwrap()),
-            )
+        TryAsMut::<Map>::try_as_mut(&mut value)
+            .ok_or(ValueError::WrongKind)
+            .and_then(|m| {
+                m.set(
+                    "port",
+                    Value::from(Number::new_in(alloc, "5900.5").unwrap()),
+                )
+            })
             .unwrap();
         let e = Connection::from_value(&value).unwrap_err();
         assert!(matches!(e, MapError::BadValue { .. }), "{e:?}");
@@ -270,11 +294,18 @@ fn bytes_and_a_sequence_are_different_kinds() {
         let value = original.to_value(alloc).unwrap();
 
         assert_eq!(
-            guatiao::value::read::bytes_or(value.get("blob"), &[]),
+            guatiao::value::read::bytes_or(
+                TryAsRef::<Map>::try_as_ref(&value).and_then(|m| m.get("blob")),
+                &[]
+            ),
             &[1u8, 2, 3]
         );
         assert_eq!(
-            guatiao::value::read::items(value.get("numbers").unwrap()).count(),
+            TryAsRef::<Map>::try_as_ref(&value)
+                .and_then(|m| m.get("numbers"))
+                .and_then(TryAsRef::<List>::try_as_ref)
+                .unwrap()
+                .len(),
             3,
             "a Vec<u8> is a list like any other Vec<T>"
         );
@@ -296,7 +327,10 @@ fn a_key_with_a_nul_in_it_works() {
 
         let value = Odd { field: 7 }.to_value(alloc).unwrap();
         assert_eq!(
-            str_or(value.get("a\0b"), ""),
+            str_or(
+                TryAsRef::<Map>::try_as_ref(&value).and_then(|m| m.get("a\0b")),
+                ""
+            ),
             "",
             "the key holds the NUL; the value is a number, so this reads as the fallback"
         );

@@ -12,7 +12,8 @@
 
 #![forbid(unsafe_code)]
 
-use guatiao::value::types::{Tag, Value};
+use guatiao::value::convert::TryAsRef;
+use guatiao::value::types::{List, Map, Tag, Value};
 
 use crate::vocab;
 
@@ -41,12 +42,17 @@ fn is_map(v: &Value) -> bool {
 }
 
 fn text<'a>(v: &'a Value, key: &str) -> &'a str {
-    v.get(key).and_then(Value::as_str).unwrap_or("")
+    TryAsRef::<Map>::try_as_ref(v)
+        .and_then(|m| m.get(key))
+        .and_then(TryAsRef::<str>::try_as_ref)
+        .unwrap_or("")
 }
 
 /// The value under `key`, unless this vocabulary gives that key a meaning.
 fn annotation<'a>(v: &'a Value, key: &str, known: &[&str]) -> Option<&'a Value> {
-    v.get(key).filter(|_| !known.contains(&key))
+    TryAsRef::<Map>::try_as_ref(v)
+        .and_then(|m| m.get(key))
+        .filter(|_| !known.contains(&key))
 }
 
 impl<'a> FormRef<'a> {
@@ -62,12 +68,18 @@ impl<'a> FormRef<'a> {
 
     /// Every section, in the order a person sees them.
     pub fn sections(&self) -> impl Iterator<Item = SectionRef<'a>> {
-        self.0
-            .get(vocab::SECTIONS)
-            .and_then(Value::items)
+        TryAsRef::<Map>::try_as_ref(self.0)
+            .and_then(|m| m.get(vocab::SECTIONS))
+            .and_then(TryAsRef::<List>::try_as_ref)
+            .map(List::items)
             .unwrap_or(&[])
             .iter()
-            .filter(|s| is_map(s) && s.get(vocab::ID).and_then(Value::as_str).is_some())
+            .filter(|s| {
+                TryAsRef::<Map>::try_as_ref(*s)
+                    .and_then(|m| m.get(vocab::ID))
+                    .and_then(TryAsRef::<str>::try_as_ref)
+                    .is_some()
+            })
             .map(SectionRef)
     }
 
@@ -80,8 +92,9 @@ impl<'a> FormRef<'a> {
     /// The hints for the field at `path`. Empty when there are none.
     pub fn hints(&self, path: &str) -> HintsRef<'a> {
         HintsRef(
-            self.0
-                .get(vocab::FIELDS)
+            TryAsRef::<Map>::try_as_ref(self.0)
+                .and_then(|m| m.get(vocab::FIELDS))
+                .and_then(TryAsRef::<Map>::try_as_ref)
                 .and_then(|fields| fields.get(path))
                 .filter(|h| is_map(h)),
         )
@@ -90,9 +103,10 @@ impl<'a> FormRef<'a> {
     /// Every path the form gives hints to, with its hints, in the order
     /// they were written.
     pub fn fields(&self) -> impl Iterator<Item = (&'a str, HintsRef<'a>)> {
-        self.0
-            .get(vocab::FIELDS)
-            .and_then(Value::entries)
+        TryAsRef::<Map>::try_as_ref(self.0)
+            .and_then(|m| m.get(vocab::FIELDS))
+            .and_then(TryAsRef::<Map>::try_as_ref)
+            .map(Map::entries)
             .unwrap_or(&[])
             .iter()
             .filter_map(|e| {
@@ -137,8 +151,11 @@ impl<'a> SectionRef<'a> {
 impl<'a> HintsRef<'a> {
     /// Whether the form says anything at all about this field.
     pub fn is_empty(&self) -> bool {
-        self.0
-            .is_none_or(|h| h.entries().is_none_or(<[_]>::is_empty))
+        self.0.is_none_or(|h| {
+            TryAsRef::<Map>::try_as_ref(h)
+                .map(Map::entries)
+                .is_none_or(<[_]>::is_empty)
+        })
     }
 
     /// Which control to draw, or `""` for the kind's default.
@@ -156,10 +173,13 @@ impl<'a> HintsRef<'a> {
     /// `None` for a condition with no text `field` or no `equals` as well
     /// as for no condition at all; `check` tells those apart.
     pub fn visible_when(&self) -> Option<Condition<'a>> {
-        let condition = self.0?.get(vocab::VISIBLE_WHEN)?;
+        let condition =
+            TryAsRef::<Map>::try_as_ref(self.0?).and_then(|m| m.get(vocab::VISIBLE_WHEN))?;
         Some(Condition {
-            field: condition.get(vocab::FIELD).and_then(Value::as_str)?,
-            equals: condition.get(vocab::EQUALS)?,
+            field: TryAsRef::<Map>::try_as_ref(condition)
+                .and_then(|m| m.get(vocab::FIELD))
+                .and_then(TryAsRef::<str>::try_as_ref)?,
+            equals: TryAsRef::<Map>::try_as_ref(condition).and_then(|m| m.get(vocab::EQUALS))?,
         })
     }
 
