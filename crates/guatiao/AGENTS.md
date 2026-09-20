@@ -577,7 +577,7 @@ reg.providers_of("acme_net_pve")           // every loaded version of one id (>1
 reg.all() / reg.all_ranked()               // everything, load order / best first
 reg.retire(library_key)                    // Result<Retired, UnloadError>: out of the registry,
                                            // still mapped
-unsafe { reg.unload(library_key) }?        // asks the library, then unmaps it
+unsafe { reg.unload(library_key) }?        // asks the library, then closes it
 provider.kinds() -> &[String] / provider.supports(kind)   // what it serves
 provider.config_schema()                   // Option<&Value>, the registry's copy
 provider.vtable() -> (*const c_void, usize)
@@ -638,6 +638,10 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   the host LINKS; `NotFound`; and `Close { key, reason }` when the loader
   could not close, in which case it is retired. Every refusal leaves the
   library registered and mapped.
+- **Whether the image really leaves the address space is the loader's
+  call.** The library is out of the registry on every platform; measured
+  in CI, Windows unmaps and macOS does not. A host that unloads to
+  reclaim memory gets that only where the loader gives it.
 - **`unsafe Registry::unload_unchecked(key)` is the host insisting** on a
   library with no slot. A library that HAS a slot is still asked, and its
   refusal still stands.
@@ -1056,7 +1060,7 @@ guatiao_registry_scan_dir_rules(reg, dir, false,
 guatiao_registry_providers(reg, guatiao_cstr("greeter"), &alloc, &answer);
 guatiao_registry_provider(reg, key, &alloc, &answer);
 guatiao_registry_retire(reg, guatiao_cstr("hello_library"));   // out of the registry, still mapped
-guatiao_registry_unload(reg, guatiao_cstr("hello_library"));   // asks the library, then unmaps it
+guatiao_registry_unload(reg, guatiao_cstr("hello_library"));   // asks the library, then closes it
 guatiao_registry_unload_unchecked(reg, key);                   // a library with no unload slot: the host insists
 guatiao_registry_keyed_by(reg, guatiao_cstr("%id@%version"));
 guatiao_registry_libraries_keyed_by(reg, tmpl);

@@ -6,6 +6,10 @@
 //!
 //! Both claims here are about a library's first mapping: whether closing
 //! it really unmaps, and which allocator its descriptor was built in.
+//!
+//! **Only Windows is asserted to unmap.** Whether closing frees the
+//! address space is the loader's call rather than this crate's: measured
+//! in CI, Windows does and macOS does not.
 //! Each is decided by state a library initialises on its first entry
 //! call, so a second loader anywhere in the same process answers from the
 //! first one's run and the measurement says nothing.
@@ -95,14 +99,16 @@ fn an_unloaded_library_is_really_unmapped() {
     let after = entry_calls(&path);
     println!("entry calls after an unload and a fresh load: {after}");
 
-    if cfg!(any(windows, target_os = "macos")) {
+    // Whether a close really unmaps is the platform loader's call, and
+    // both answers are correct behaviour for `unload`: the library is out
+    // of the registry either way. Measured in CI 2026-09-20: Windows 1,
+    // the image went; macOS 2, its `dlclose` kept it.
+    if cfg!(windows) {
         assert_eq!(
             after, 1,
             "the image went away, so its statics started again"
         );
     } else {
-        // Not measured on this platform, so this records which answer
-        // the loader gave rather than asserting one.
         assert!(
             after == 1 || after == 2,
             "a loader either dropped the image (1) or kept it (2), not {after}"
