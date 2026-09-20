@@ -110,6 +110,38 @@ own C header declares (`greeter_vtable` and friends): checks `size`
 against `sizeof(struct_type)` and the header's `floor_hash`, then casts.
 Raises `guatiao.kinds.FloorMismatch` on either failure.
 
+## serde: JSON, TOML, YAML
+
+```python
+from guatiao import serde
+
+text = serde.dumps(value, format="json", pretty=True)   # or "toml", "yaml"
+value = serde.loads(text, format="json")
+```
+
+`toml`/`yaml` raise `NotImplementedError` naming the feature when the
+loaded `guatiao_serde` was not built with it. A TOML document must be a
+map (`WrongKind` otherwise).
+
+**A number with a `.`/`e`/`E`, or one too big for `i64`/`u64`, does not
+survive `format="json"` with its exact text today.** `guatiao-serde`'s
+`json` feature enables serde_json's `arbitrary_precision` but not
+`raw_value`; without the latter, the sentinel struct its `RawText` path
+writes (`ser.rs`'s `RAW_NUMBER`) serialises literally as
+`{"$serde_json::private::RawValue": "1.10"}` instead of the bare token.
+Integers that fit `i64`/`u64` are unaffected (a different, native path).
+Fix belongs in `crates/guatiao-serde/Cargo.toml`, not here.
+
+## form
+
+```python
+from guatiao import form
+
+form.check(schema, form_doc)             # None, or an error map
+form.layout(schema, form_doc)            # [{"section": ..., "fields": [...]}, ...]
+form.is_visible(schema, form_doc, "key", values)   # bool
+```
+
 ## Errors
 
 Every failing `guatiao_status` raises `guatiao.GuatiaoError` (`.status`

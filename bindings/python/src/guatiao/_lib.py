@@ -10,7 +10,10 @@ whatever the platform's default promotion happens to produce. This
 declares the 50 real, linkable exports of `guatiao.h` -- not the 22
 `static inline` helpers alongside them, which have no symbol in any
 library and are reimplemented in `value.py` instead -- plus the 7 of
-`guatiao_serde.h` and the 3 of `guatiao_form.h`.
+`guatiao_serde.h` and the 3 of `guatiao_form.h`, each of which also
+re-exports `guatiao_alloc_default`: any cdylib linking the `guatiao`
+crate carries its plain value-level functions along, and `Library.alloc`
+(Q5: one allocator per loaded library) needs its own copy of that one.
 """
 
 from __future__ import annotations
@@ -304,9 +307,15 @@ _SERDE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
         c_uint32,
         "yaml",
     ),
+    # Every cdylib that links the `guatiao` crate re-exports its plain
+    # value-level functions too, since Rust compiles them into the same
+    # object; `Library.alloc` (Q5: one allocator per loaded library)
+    # needs this one from whichever library it belongs to.
+    "guatiao_alloc_default": ([_P(Alloc)], c_uint32, None),
 }
 
 _FORM_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
+    "guatiao_alloc_default": ([_P(Alloc)], c_uint32, None),
     "guatiao_form_check": (
         [_P(Value), _P(Value), _P(Alloc), _P(Value)],
         c_uint32,
