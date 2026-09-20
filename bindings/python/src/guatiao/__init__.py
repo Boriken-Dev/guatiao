@@ -22,6 +22,7 @@ from .errors import (
     WrongKind,
 )
 from ._lib import LibraryNotFound, MissingSymbol
+from .registry import Instance, Registry
 from .value import ABSENT, List, Map, Ref, Value
 
 __version__ = "0.1.0"
@@ -33,6 +34,8 @@ __all__ = [
     "Ref",
     "Map",
     "List",
+    "Registry",
+    "Instance",
     "GuatiaoError",
     "BadValue",
     "AllocFailed",
