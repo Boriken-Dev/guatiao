@@ -420,8 +420,8 @@ pub struct Offer<K: ?Sized + Kind> {
     remote: Remote<K>,
     view: ProviderView,
     key: Option<String>,
-    library: Option<&'static str>,
-    version: &'static str,
+    library: Option<String>,
+    version: String,
     priority: i32,
 }
 
@@ -440,8 +440,8 @@ impl<K: ?Sized + Kind> Offer<K> {
         remote: Remote<K>,
         view: ProviderView,
         key: Option<String>,
-        library: Option<&'static str>,
-        version: &'static str,
+        library: Option<String>,
+        version: String,
         priority: i32,
     ) -> Offer<K> {
         Offer {
@@ -456,23 +456,23 @@ impl<K: ?Sized + Kind> Offer<K> {
 
     /// The provider's identifier.
     pub fn id(&self) -> &str {
-        self.view.id
+        &self.view.id
     }
 
     /// A name to show a person, possibly empty.
     pub fn display_name(&self) -> &str {
-        self.view.display_name
+        &self.view.display_name
     }
 
     /// Its version: its own, or its library's when it declared none.
     pub fn version(&self) -> &str {
-        self.version
+        &self.version
     }
 
     /// The library offering it, when known: a registry knows, a host's
     /// services hand over the descriptor alone.
     pub fn library(&self) -> Option<&str> {
-        self.library
+        self.library.as_deref()
     }
 
     /// What the registry filed it under, when it came from one.
@@ -486,13 +486,13 @@ impl<K: ?Sized + Kind> Offer<K> {
     }
 
     /// Whatever else it declared.
-    pub fn meta(&self) -> Option<&'static Map> {
-        self.view.meta
+    pub fn meta(&self) -> Option<&Map> {
+        self.view.meta.as_ref()
     }
 
     /// The schema for its configuration, or `None`.
-    pub fn config_schema(&self) -> Option<&'static Value> {
-        self.view.config
+    pub fn config_schema(&self) -> Option<&Value> {
+        self.view.config.as_ref()
     }
 
     /// Whether it can run here, and why not when it cannot. Asked live,
@@ -889,7 +889,7 @@ impl ProviderInfo {
     pub fn offer<K: ?Sized + Kind>(&'static self) -> Result<Offer<K>, KindMismatch> {
         let view = self.view().ok_or(KindMismatch::NoTable)?;
         let remote = Remote::from_view(&view)?;
-        let version = view.version.unwrap_or("");
+        let version = view.version.clone().unwrap_or_default();
         Ok(Offer::new(remote, view, None, None, version, 0))
     }
 
@@ -1705,9 +1705,9 @@ mod tests {
         assert!(remote_of(headerless, ctx, size_of::<GreeterVtable>()).is_ok());
 
         let view = ProviderView {
-            kinds: vec!["greeter"],
-            id: "x",
-            display_name: "",
+            kinds: vec!["greeter".to_string()],
+            id: "x".to_string(),
+            display_name: String::new(),
             config: None,
             vtable: std::ptr::null(),
             vtable_size: 0,
@@ -1719,7 +1719,7 @@ mod tests {
             create: None,
             destroy: None,
             tables: vec![(
-                "greeter",
+                "greeter".to_string(),
                 headerless as *const GreeterVtable as *const c_void,
                 size_of::<GreeterVtable>(),
             )],
@@ -1738,7 +1738,7 @@ mod tests {
             tables: Vec::new(),
             vtable: &HELLO_TABLE as *const GreeterVtable as *const c_void,
             vtable_size: size_of::<GreeterVtable>(),
-            ..view
+            ..view.clone()
         };
         assert_eq!(
             Remote::<dyn Greeter>::from_view(&legacy).unwrap_err(),
@@ -1766,10 +1766,10 @@ mod tests {
 
         let ctx = (&HELLO as *const Hello).cast_mut().cast::<c_void>();
         let table = &HELLO_TABLE as *const GreeterVtable as *const c_void;
-        let provider = |id: &'static str, size: usize, available| ProviderView {
-            kinds: vec!["greeter"],
-            id,
-            display_name: "",
+        let provider = |id: &str, size: usize, available| ProviderView {
+            kinds: vec!["greeter".to_string()],
+            id: id.to_string(),
+            display_name: String::new(),
             config: None,
             vtable: std::ptr::null(),
             vtable_size: 0,
@@ -1780,23 +1780,26 @@ mod tests {
             raw: std::ptr::null(),
             create: None,
             destroy: None,
-            tables: vec![("greeter", table, size)],
+            tables: vec![("greeter".to_string(), table, size)],
         };
 
         let mut registry = Registry::new("kind-tests", "1.0");
         registry
             .absorb(
                 Path::new("kinds.so"),
-                Opened::Loaded(LibraryView {
-                    id: "kinds",
-                    version: "1.0.0",
-                    meta: None,
-                    providers: vec![
-                        provider("kinds_short", GREET_END - 1, None),
-                        provider("kinds_refuses", size_of::<GreeterVtable>(), Some(refuses)),
-                        provider("kinds_ok", size_of::<GreeterVtable>(), None),
-                    ],
-                }),
+                Opened::Loaded(
+                    LibraryView {
+                        id: "kinds".to_string(),
+                        version: "1.0.0".to_string(),
+                        meta: None,
+                        providers: vec![
+                            provider("kinds_short", GREET_END - 1, None),
+                            provider("kinds_refuses", size_of::<GreeterVtable>(), Some(refuses)),
+                            provider("kinds_ok", size_of::<GreeterVtable>(), None),
+                        ],
+                    },
+                    super::super::raw::Origin::Linked,
+                ),
             )
             .unwrap();
 

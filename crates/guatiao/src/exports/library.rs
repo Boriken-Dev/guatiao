@@ -282,8 +282,8 @@ impl HostRegistry {
         self.inner.provider(key).map(Provider::ctx)
     }
 
-    /// One provider's configuration schema, borrowed from its library.
-    fn config(&self, key: &str) -> Option<&'static Value> {
+    /// One provider's configuration schema, the copy this registry owns.
+    fn config(&self, key: &str) -> Option<&Value> {
         self.inner.provider(key).and_then(Provider::config_schema)
     }
 }
@@ -1066,11 +1066,13 @@ pub unsafe extern "C" fn guatiao_registry_provider_ctx(
     })
 }
 
-/// One provider's configuration schema, **borrowed** from the library's
-/// own image, or null when it declares none.
+/// One provider's configuration schema, **borrowed** from the registry,
+/// or null when the provider declares none.
 ///
 /// Read it with the ordinary value readers: a schema is a value. Do not
-/// free it — it is not yours, and it lives as long as the process.
+/// free it — it is not yours. It is the registry's own copy of what the
+/// library declared, valid until that provider's library is retired or
+/// the registry is freed.
 ///
 /// # Safety
 ///
@@ -1120,10 +1122,10 @@ unsafe fn deliver<E: Into<Status>>(out: *mut Value, built: Result<Value, E>) -> 
 fn library_value(alloc: Alloc, one: &crate::library::Loaded) -> Result<Value, ValueError> {
     let mut map = Map::new_in(alloc);
     map.set("key", text_value(alloc, &one.key)?)?;
-    map.set("id", Text::new_in(alloc, one.id).map(Value::from)?)?;
+    map.set("id", Text::new_in(alloc, &one.id).map(Value::from)?)?;
     map.set(
         "version",
-        Text::new_in(alloc, one.version).map(Value::from)?,
+        Text::new_in(alloc, &one.version).map(Value::from)?,
     )?;
     map.set(
         "path",

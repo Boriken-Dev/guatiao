@@ -1506,11 +1506,13 @@ const void *guatiao_registry_provider_vtable(const struct guatiao_registry *reg,
 void *guatiao_registry_provider_ctx(const struct guatiao_registry *reg, struct guatiao_str key);
 
 /*
- One provider's configuration schema, **borrowed** from the library's
- own image, or null when it declares none.
+ One provider's configuration schema, **borrowed** from the registry,
+ or null when the provider declares none.
 
  Read it with the ordinary value readers: a schema is a value. Do not
- free it — it is not yours, and it lives as long as the process.
+ free it — it is not yours. It is the registry's own copy of what the
+ library declared, valid until that provider's library is retired or
+ the registry is freed.
 
  # Safety
 

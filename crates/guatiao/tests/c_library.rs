@@ -87,7 +87,8 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
         .expect("a shared library the compiler just wrote")
         .loaded()
         .expect("the C entry accepted this host")
-        .id;
+        .id
+        .clone();
     assert_eq!(loaded, "c_greeter_library");
 
     // 1. The C table is an offer of the Rust trait: its hash is the one

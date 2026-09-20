@@ -582,18 +582,20 @@ pub(crate) struct Snapshot {
 #[cfg(feature = "load")]
 #[derive(Debug)]
 pub(crate) struct SnapshotEntry {
-    pub(crate) kinds: Vec<&'static str>,
+    pub(crate) kinds: Vec<String>,
     pub(crate) raw: *const ProviderInfo,
 }
 
-// SAFETY: `raw` addresses a descriptor inside a library image that is
-// never unloaded, and a snapshot is only ever read after it is published.
+// SAFETY: `raw` addresses a descriptor inside a library image the
+// registry holds the mapping of until that library is retired, and a
+// snapshot is only ever read after it is published.
 #[cfg(feature = "load")]
 unsafe impl Send for Snapshot {}
 
 // SAFETY (all four): every raw pointer a registry or a provider holds
-// addresses a loaded library's image -- its descriptors, their text, their
-// tables -- which is never unloaded and never written from this side; the
+// addresses a loaded library's image -- its descriptors and their tables --
+// which stays mapped until that library is retired and is never written
+// from this side; the
 // block a registry leaks is already shared across threads by design (a
 // library reads it from any call); and a provider's slots are declared
 // callable from any thread (`ProviderInfo::available`'s contract exists
@@ -764,7 +766,7 @@ unsafe extern "C" fn services_list(
         for entry in snapshot
             .entries
             .iter()
-            .filter(|e| kind.is_empty() || e.kinds.contains(&kind))
+            .filter(|e| kind.is_empty() || e.kinds.iter().any(|k| k == kind))
         {
             if n < cap {
                 // SAFETY: `n < cap` and `out` addresses `cap` slots.
@@ -883,28 +885,34 @@ pub(crate) unsafe fn str_of(s: Str) -> Option<&'static str> {
 
 /// One provider, read out of a descriptor once so nothing downstream has
 /// to hold a raw pointer to read a name.
+///
+/// **Every string and every value here is OWNED**, copied out of the
+/// library's image at the read. That is what lets a library be unmapped
+/// while a host still holds what it said about itself. The code pointers
+/// below are not copied and cannot be: they address the image.
 #[derive(Debug, Clone)]
 pub struct ProviderView {
     /// Every kind it serves. May be empty.
-    pub kinds: Vec<&'static str>,
+    pub kinds: Vec<String>,
     /// Its identifier, unique across every provider a host loads.
-    pub id: &'static str,
+    pub id: String,
     /// A name to show a person, possibly empty.
-    pub display_name: &'static str,
-    /// Its configuration schema, or `None`.
-    pub config: Option<&'static Value>,
+    pub display_name: String,
+    /// Its configuration schema, or `None`. A copy in this process's own
+    /// heap, not the library's.
+    pub config: Option<Value>,
     /// The function table, whose shape the kind defines.
     pub vtable: *const c_void,
     /// The size the library compiled that table at.
     pub vtable_size: usize,
     /// Handed back to every call through the table.
     pub ctx: *mut c_void,
-    /// Whatever else the provider declared, or `None`. See
-    /// [`ProviderInfo::meta`].
-    pub meta: Option<&'static Map>,
+    /// Whatever else the provider declared, or `None`. A copy, as
+    /// [`config`](ProviderView::config) is. See [`ProviderInfo::meta`].
+    pub meta: Option<Map>,
     /// The version it declared for itself, or `None` to inherit its
     /// library's. See [`ProviderInfo::version`].
-    pub version: Option<&'static str>,
+    pub version: Option<String>,
     /// Its runtime-availability slot, or `None` when it declares none —
     /// which means available. See [`ProviderInfo::available`].
     pub available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
@@ -914,7 +922,7 @@ pub struct ProviderView {
     /// One table per kind, as `(kind, vtable, vtable_size)`, for a
     /// provider serving several kinds with a table each. Empty when
     /// `vtable` serves them all. See [`ProviderInfo::tables`].
-    pub tables: Vec<(&'static str, *const c_void, usize)>,
+    pub tables: Vec<(String, *const c_void, usize)>,
     /// Builds an instance from a configuration, or `None`. See
     /// [`ProviderInfo::create`].
     pub create: Option<
@@ -932,7 +940,7 @@ pub struct ProviderView {
 impl ProviderView {
     /// Whether it serves this kind.
     pub fn supports(&self, kind: &str) -> bool {
-        self.kinds.contains(&kind)
+        self.kinds.iter().any(|k| k == kind)
     }
 
     /// The function table this provider speaks `kind` through, and the
@@ -940,7 +948,7 @@ impl ProviderView {
     /// when `kinds` names the kind. `None` when neither — a kind this
     /// provider does not serve, or serves as a pure label.
     pub fn table_for(&self, kind: &str) -> Option<(*const c_void, usize)> {
-        if let Some(&(_, table, size)) = self.tables.iter().find(|(k, _, _)| *k == kind) {
+        if let Some(&(_, table, size)) = self.tables.iter().find(|(k, _, _)| k == kind) {
             return (!table.is_null()).then_some((table, size));
         }
         if self.supports(kind) && !self.vtable.is_null() {
@@ -1012,15 +1020,17 @@ impl ProviderView {
     }
 }
 
-/// One library's descriptor, read out once.
+/// One library's descriptor, read out once. Owned, like
+/// [`ProviderView`] and for the same reason.
 #[derive(Debug, Clone)]
 pub struct LibraryView {
     /// The library's own identifier.
-    pub id: &'static str,
+    pub id: String,
     /// Its version string, uninterpreted.
-    pub version: &'static str,
-    /// Whatever else it declared, or `None`. See [`LibraryInfo::meta`].
-    pub meta: Option<&'static Map>,
+    pub version: String,
+    /// Whatever else it declared, or `None`. A copy. See
+    /// [`LibraryInfo::meta`].
+    pub meta: Option<Map>,
     /// What it offers.
     pub providers: Vec<ProviderView>,
 }
@@ -1067,8 +1077,12 @@ pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Result<LibraryView
     // SAFETY: each field lies within `declared` bytes.
     let (id, version, providers) = unsafe {
         (
-            str_of(std::ptr::addr_of!((*raw).id).read()).ok_or(Rejected::Malformed)?,
-            str_of(std::ptr::addr_of!((*raw).version).read()).ok_or(Rejected::Malformed)?,
+            str_of(std::ptr::addr_of!((*raw).id).read())
+                .ok_or(Rejected::Malformed)?
+                .to_string(),
+            str_of(std::ptr::addr_of!((*raw).version).read())
+                .ok_or(Rejected::Malformed)?
+                .to_string(),
             std::ptr::addr_of!((*raw).providers).read(),
         )
     };
@@ -1078,9 +1092,11 @@ pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Result<LibraryView
         // SAFETY: the guard established the field is present.
         let raw_meta = unsafe { std::ptr::addr_of!((*raw).meta).read() };
         // SAFETY: a non-null `meta` is a well-formed map by the contract
-        // on the field, and a descriptor's storage lives as long as the
-        // library, which is for the life of the process.
-        meta = unsafe { raw_meta.get() };
+        // on the field, and it is readable for this call.
+        meta = unsafe { raw_meta.get() }
+            .map(|m| m.clone_in(Alloc::rust()))
+            .transpose()
+            .map_err(|_| Rejected::Malformed)?;
     }
 
     // Every check on the array runs before anything is allocated for it:
@@ -1153,24 +1169,33 @@ unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<Provid
         let mut names = Vec::with_capacity(kinds.len);
         for i in 0..kinds.len {
             // SAFETY: the library declared `len` names at `ptr`.
-            names.push(str_of(kinds.ptr.add(i).read())?);
+            names.push(str_of(kinds.ptr.add(i).read())?.to_string());
         }
 
         Some(ProviderView {
             kinds: names,
-            id: str_of(std::ptr::addr_of!((*raw).id).read())?,
-            display_name: str_of(std::ptr::addr_of!((*raw).display_name).read())?,
-            // A descriptor's value lives as long as the library, which is
-            // for the life of the process.
-            config: config.as_ref(),
+            id: str_of(std::ptr::addr_of!((*raw).id).read())?.to_string(),
+            display_name: str_of(std::ptr::addr_of!((*raw).display_name).read())?.to_string(),
+            // Copied out of the image, so the schema outlives the library
+            // it was read from.
+            config: config
+                .as_ref()
+                .map(|v| v.clone_in(Alloc::rust()))
+                .transpose()
+                .ok()?,
             vtable: std::ptr::addr_of!((*raw).vtable).read(),
             vtable_size: std::ptr::addr_of!((*raw).vtable_size).read() as usize,
             ctx: std::ptr::addr_of!((*raw).ctx).read(),
             meta: if declared >= ProviderInfo::meta_end() {
-                // SAFETY: the guard established the field is present; a
-                // non-null `meta` is a well-formed map by the contract on
-                // the field; and the library is never unloaded.
-                std::ptr::addr_of!((*raw).meta).read().get()
+                // SAFETY: the guard established the field is present, and
+                // a non-null `meta` is a well-formed map by the contract
+                // on the field.
+                std::ptr::addr_of!((*raw).meta)
+                    .read()
+                    .get()
+                    .map(|m| m.clone_in(Alloc::rust()))
+                    .transpose()
+                    .ok()?
             } else {
                 None
             },
@@ -1186,7 +1211,9 @@ unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<Provid
                 // different statement from a descriptor that predates the
                 // field — and both land on `None` deliberately, because
                 // both mean the same thing to a reader.
-                str_of(std::ptr::addr_of!((*raw).version).read()).filter(|v| !v.is_empty())
+                str_of(std::ptr::addr_of!((*raw).version).read())
+                    .filter(|v| !v.is_empty())
+                    .map(str::to_string)
             } else {
                 None
             },
@@ -1221,7 +1248,7 @@ unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<Provid
 /// `tables` came from a descriptor that lives for the process.
 unsafe fn read_kind_tables(
     tables: super::desc::KindTables,
-) -> Option<Vec<(&'static str, *const c_void, usize)>> {
+) -> Option<Vec<(String, *const c_void, usize)>> {
     if tables.len == 0 {
         return Some(Vec::new());
     }
@@ -1245,7 +1272,7 @@ unsafe fn read_kind_tables(
         // SAFETY: each field lies within `declared` bytes.
         let (kind, vtable, size) = unsafe {
             (
-                str_of(std::ptr::addr_of!((*entry).kind).read())?,
+                str_of(std::ptr::addr_of!((*entry).kind).read())?.to_string(),
                 std::ptr::addr_of!((*entry).vtable).read(),
                 std::ptr::addr_of!((*entry).vtable_size).read() as usize,
             )
@@ -1253,6 +1280,23 @@ unsafe fn read_kind_tables(
         out.push((kind, vtable, size));
     }
     Some(out)
+}
+
+/// Where a registered library's code lives: a mapping this registry
+/// holds the handle to, or the host's own binary.
+///
+/// The handle is what `Registry::unload` closes; `Linked` is what it
+/// refuses, because there is nothing to unmap.
+#[cfg(feature = "load")]
+#[derive(Debug)]
+// The handle is held, not read, until `retire` and `unload` decide what
+// becomes of it.
+#[allow(dead_code)]
+pub(crate) enum Origin {
+    /// A file this registry mapped and can close.
+    Mapped(libloading::Library),
+    /// Code in the host's own binary: `register_local`, `register_entry`.
+    Linked,
 }
 
 /// What opening one file came to. Four outcomes, because the registry
@@ -1267,11 +1311,17 @@ pub(crate) enum Opened {
     Declined,
     /// Its entry point answered a descriptor this build cannot use.
     Rejected(Rejected),
-    /// A descriptor, read out.
-    Loaded(LibraryView),
+    /// A descriptor, read out, and the mapping it was read from.
+    Loaded(LibraryView, Origin),
 }
 
-/// Opens a library, calls its entry point, and **forgets the handle**.
+/// Opens a library, calls its entry point, and hands the mapping back
+/// with what it said.
+///
+/// The handle travels to the registry, which holds it until the host
+/// retires or unloads that library. A file that came to nothing keeps its
+/// mapping: it has already run whatever it was going to run, and the
+/// descriptor a rejected library handed back may still be read.
 ///
 /// # Safety
 ///
@@ -1286,8 +1336,6 @@ pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, 
     // signature this crate defines for it.
     let entry = unsafe { library.get::<EntryFn>(ENTRY_SYMBOL) };
     let Ok(entry) = entry else {
-        // The mapping still stays: it has already run whatever it was
-        // going to run and unmapping buys nothing back.
         std::mem::forget(library);
         return Ok(Opened::NoEntrySymbol);
     };
@@ -1297,20 +1345,19 @@ pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, 
     // descriptor is a block the host keeps for the life of the process.
     let desc = unsafe { entry(host.as_raw()) };
 
-    // FORGOTTEN, NOT DROPPED. Everything the library just handed back
-    // points into this mapping: the descriptor, its text, its vtables,
-    // and the allocator inside any tree it later builds.
-    std::mem::forget(library);
-
     if desc.is_null() {
+        std::mem::forget(library);
         return Ok(Opened::Declined);
     }
-    // SAFETY: non-null, from the entry point, and the mapping is
-    // permanent.
-    Ok(match unsafe { read_library(desc) } {
-        Ok(view) => Opened::Loaded(view),
-        Err(why) => Opened::Rejected(why),
-    })
+    // SAFETY: non-null, from the entry point, and the mapping is held for
+    // the whole read.
+    match unsafe { read_library(desc) } {
+        Ok(view) => Ok(Opened::Loaded(view, Origin::Mapped(library))),
+        Err(why) => {
+            std::mem::forget(library);
+            Ok(Opened::Rejected(why))
+        }
+    }
 }
 
 /// What a library the host LINKS came to: its describe function's answer,
@@ -1328,7 +1375,7 @@ pub(crate) fn open_local(described: Option<&'static LibraryInfo>) -> Opened {
     // SAFETY: a `'static` reference to a descriptor the library built and
     // keeps for the process, which is what an entry point promises.
     match unsafe { read_library(info) } {
-        Ok(view) => Opened::Loaded(view),
+        Ok(view) => Opened::Loaded(view, Origin::Linked),
         Err(why) => Opened::Rejected(why),
     }
 }
@@ -1351,7 +1398,7 @@ pub(crate) fn open_entry(entry: EntryFn, host: Host) -> Opened {
     }
     // SAFETY: non-null, from an entry point that keeps it for the process.
     match unsafe { read_library(desc) } {
-        Ok(view) => Opened::Loaded(view),
+        Ok(view) => Opened::Loaded(view, Origin::Linked),
         Err(why) => Opened::Rejected(why),
     }
 }
@@ -1568,7 +1615,7 @@ mod tests {
         let (_buf, ptr) = short_of(&value, LibraryInfo::floor());
         // SAFETY: as above.
         let view = unsafe { read_library(ptr) }.expect("a floor-sized descriptor is usable");
-        assert_eq!((view.id, view.version), ("lib", "0.1.0"));
+        assert_eq!((view.id.as_str(), view.version.as_str()), ("lib", "0.1.0"));
         assert!(view.providers.is_empty());
         assert!(
             view.meta.is_none(),
