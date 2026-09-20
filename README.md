@@ -1,6 +1,10 @@
 # guatiao
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Boriken-Dev/guatiao/test.yaml)](https://github.com/Boriken-Dev/guatiao/actions/workflows/test.yaml)
+[![Crate](https://img.shields.io/crates/v/guatiao.svg)](https://crates.io/crates/guatiao)
+[![PyPI](https://img.shields.io/pypi/v/guatiao.svg)](https://pypi.org/project/guatiao/)
+[![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://boriken-dev.github.io/guatiao/)
+[![License: MPL 2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
 
 **One contract for passing configuration and providers between languages.**
 A value model whose C form is plain structs with pointer-and-length strings,

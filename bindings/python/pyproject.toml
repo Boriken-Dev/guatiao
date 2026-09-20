@@ -23,6 +23,9 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["build", "pytest"]
+# The repository's docs site: a narrative landing page and this
+# package's API rendered from its own docstrings.
+docs = ["mkdocs", "mkdocs-material", "mkdocstrings[python]"]
 
 [project.urls]
 Homepage = "https://github.com/Boriken-Dev/guatiao/"

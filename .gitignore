@@ -17,6 +17,9 @@
 CLAUDE*
 .claude
 
+# The built docs site: rustdoc output plus the mkdocs build.
+/site/
+
 # Rust
 /target/
 **/*.rs.bk
