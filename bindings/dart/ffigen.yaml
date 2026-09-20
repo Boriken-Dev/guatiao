@@ -24,6 +24,11 @@ headers:
 
 compiler-opts:
   - '-I../../crates/guatiao/include'
+  # guatiao_serde.h guards its TOML and YAML entry points behind these;
+  # without them ffigen binds only the JSON half, and `serde.dart` then
+  # has nothing to call for a format the loaded library may well export.
+  - '-DGUATIAO_SERDE_TOML'
+  - '-DGUATIAO_SERDE_YAML'
 
 preamble: |
   // This Source Code Form is subject to the terms of the Mozilla Public

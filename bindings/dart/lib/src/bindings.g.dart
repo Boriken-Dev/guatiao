@@ -1216,6 +1216,56 @@ class GuatiaoBindings {
       int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
           guatiao_str)>();
 
+  int guatiao_toml_emit(
+    ffi.Pointer<guatiao_value> value,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_toml_emit(
+      value,
+      how,
+      alloc,
+      out,
+    );
+  }
+
+  late final _guatiao_toml_emitPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status$1 Function(
+              ffi.Pointer<guatiao_value>,
+              ffi.Uint32,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_toml_emit');
+  late final _guatiao_toml_emit = _guatiao_toml_emitPtr.asFunction<
+      int Function(ffi.Pointer<guatiao_value>, int, ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>)>();
+
+  int guatiao_toml_parse(
+    guatiao_str text,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_toml_parse(
+      text,
+      how,
+      alloc,
+      out,
+    );
+  }
+
+  late final _guatiao_toml_parsePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status$1 Function(
+              guatiao_str,
+              ffi.Uint32,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_toml_parse');
+  late final _guatiao_toml_parse = _guatiao_toml_parsePtr.asFunction<
+      int Function(guatiao_str, int, ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>)>();
+
   int guatiao_value_absent(
     ffi.Pointer<guatiao_value> out,
   ) {
@@ -1392,6 +1442,56 @@ class GuatiaoBindings {
               ffi.Pointer<guatiao_value>)>>('guatiao_value_string');
   late final _guatiao_value_string = _guatiao_value_stringPtr.asFunction<
       int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
+          ffi.Pointer<guatiao_value>)>();
+
+  int guatiao_yaml_emit(
+    ffi.Pointer<guatiao_value> value,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_yaml_emit(
+      value,
+      how,
+      alloc,
+      out,
+    );
+  }
+
+  late final _guatiao_yaml_emitPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status$1 Function(
+              ffi.Pointer<guatiao_value>,
+              ffi.Uint32,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_yaml_emit');
+  late final _guatiao_yaml_emit = _guatiao_yaml_emitPtr.asFunction<
+      int Function(ffi.Pointer<guatiao_value>, int, ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>)>();
+
+  int guatiao_yaml_parse(
+    guatiao_str text,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_yaml_parse(
+      text,
+      how,
+      alloc,
+      out,
+    );
+  }
+
+  late final _guatiao_yaml_parsePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status$1 Function(
+              guatiao_str,
+              ffi.Uint32,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_yaml_parse');
+  late final _guatiao_yaml_parse = _guatiao_yaml_parsePtr.asFunction<
+      int Function(guatiao_str, int, ffi.Pointer<guatiao_alloc>,
           ffi.Pointer<guatiao_value>)>();
 }
 
