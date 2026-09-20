@@ -11,10 +11,10 @@ lazily, on first use, in this order:
 1. `GUATIAO_LIBRARY` — a file, or a directory holding
    `guatiao.dll` / `libguatiao.so` / `libguatiao.dylib`.
 2. `ctypes.util.find_library("guatiao")`.
-3. This package's own `_native/` directory (empty until a build step
-   populates it).
 
-Not found raises `guatiao.LibraryNotFound` naming the three places it
+The package is pure Python and carries no native library.
+
+Not found raises `guatiao.LibraryNotFound` naming both places it
 looked. `guatiao_serde` and `guatiao_form` resolve the same way,
 independently, only when `guatiao.serde` / `guatiao.form` is first used.
 

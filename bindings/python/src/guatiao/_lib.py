@@ -44,14 +44,13 @@ _P = ctypes.POINTER
 
 
 class LibraryNotFound(RuntimeError):
-    """No `basename` library was found by any of the three routes."""
+    """No `basename` library was found by either route."""
 
     def __init__(self, basename: str) -> None:
         super().__init__(
             f"could not find {dll_filename(basename)}: checked the "
-            "GUATIAO_LIBRARY environment variable, "
-            f"ctypes.util.find_library({basename!r}), and this package's "
-            "own _native/ directory (empty until a build step populates it)"
+            "GUATIAO_LIBRARY environment variable and "
+            f"ctypes.util.find_library({basename!r})"
         )
         self.basename = basename
 
@@ -81,10 +80,6 @@ def dll_filename(basename: str) -> str:
     return f"lib{basename}.so"
 
 
-def _native_dir() -> Path:
-    return Path(__file__).resolve().parent / "_native"
-
-
 def resolve(basename: str) -> Path:
     """Where `basename`'s library is, trying each route in order (Q2)."""
     filename = dll_filename(basename)
@@ -107,9 +102,6 @@ def resolve(basename: str) -> Path:
     found = ctypes.util.find_library(basename)
     if found:
         return Path(found)
-    candidate = _native_dir() / filename
-    if candidate.is_file():
-        return candidate
     raise LibraryNotFound(basename)
 
 
