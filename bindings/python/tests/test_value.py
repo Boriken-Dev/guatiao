@@ -161,3 +161,13 @@ def test_value_constructs_like_the_builtins():
         assert v.is_absent()
     with pytest.raises(TypeError):
         Value([1], port=1)
+
+
+def test_a_nested_value_is_copied_in():
+    from guatiao import Value
+
+    inner = Value(a="b")
+    with Value(host="h", test=inner, more=[Value(1)]) as v:
+        inner.as_map()["a"] = "changed"
+        inner.close()
+        assert v.to_python() == {"host": "h", "test": {"a": "b"}, "more": [1]}
