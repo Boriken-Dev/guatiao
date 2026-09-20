@@ -1,59 +1,63 @@
 # guatiao for Python
 
-Python bindings for [guatiao](https://github.com/Boriken-Dev/guatiao/): one
-value model for passing data between languages, a JSON Schema that
-describes a value, and a registry that loads plugin libraries.
+[![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/Boriken-Dev/guatiao)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/pyproject.toml)
+[![License: MPL 2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](https://github.com/Boriken-Dev/guatiao/blob/main/LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/Boriken-Dev/guatiao/test.yaml)](https://github.com/Boriken-Dev/guatiao/actions/workflows/test.yaml)
 
-The package is pure Python over `ctypes`. It has no dependencies and
-compiles nothing; it drives the same C ABI a C, C++ or Dart program
-uses. With it a Python program can:
+Python bindings for [guatiao](https://github.com/Boriken-Dev/guatiao/): **one value model for passing data
+between languages**, a JSON Schema that describes a value, and a registry
+that loads plugin libraries. Pure Python over `ctypes`: no dependencies,
+nothing to compile, driving the same C ABI a C, C++ or Dart program uses.
 
-- build, read and change a guatiao value tree, and convert it to and from
-  plain `dict`/`list` data;
-- be a **host**: scan a directory for plugin libraries, list the
-  providers they offer, build an instance from a configuration, and call
-  a provider through its function table;
-- read and write JSON, TOML and YAML, and check a form against its
-  schema, through the `guatiao-serde` and `guatiao-form` libraries.
+> **Status: alpha.** Not on PyPI yet, and no wheel carries the native
+> library; you build that from the repository.
 
-Python 3.9 or newer. Windows, Linux and macOS.
+## Features
 
-## Get the native library
+- **Value trees as Python objects** — build, read and change a tree in
+  place, or convert it to and from plain `dict`/`list` data.
+- **Numbers keep their exact text** — `1.10` stays `1.10` and an integer
+  of any size survives; you choose `int`/`float`, `Decimal` or `str` when
+  reading.
+- **Be a plugin host** — scan a directory, filter on what a library
+  declares before loading it, list providers best first, build an
+  instance from a configuration, call a provider through its table.
+- **JSON, TOML and YAML**, and **form checks against a schema**, through
+  the `guatiao-serde` and `guatiao-form` libraries when they are present.
+- **Importing never fails** — a native library is looked for on first
+  use, and a missing one says every place that was searched.
 
-The package does not bundle the native library yet, so build it from a
-checkout of the repository:
+## Installation
+
+```bash
+pip install -e "bindings/python"          # from a checkout of the repository
+```
+
+The package needs the native library, built from the same checkout:
 
 ```bash
 cargo build --workspace --all-features
-```
-
-That leaves `guatiao`, `guatiao_serde` and `guatiao_form` in
-`target/debug/` (`.dll`, `lib*.so` or `lib*.dylib`). `--all-features`
-matters: the registry functions are only exported with the `load`
-feature, and TOML and YAML only with theirs.
-
-Then tell the package where they are:
-
-```bash
 export GUATIAO_LIBRARY=/path/to/guatiao/target/debug     # a directory, or the file itself
 ```
 
-Without the variable the package tries the system's library search
-(`ctypes.util.find_library`) and then its own `_native/` directory.
-Nothing is loaded at import time: `import guatiao` always succeeds, and
-the first native call raises `guatiao.LibraryNotFound`, naming every
-place it looked, if there is nothing to load. `guatiao_serde` and
-`guatiao_form` are found the same way, and only when `guatiao.serde` or
-`guatiao.form` is first used.
+`--all-features` matters: the registry functions are only exported with
+the `load` feature, and TOML and YAML only with theirs. Without
+`GUATIAO_LIBRARY` the package tries the system's library search
+(`ctypes.util.find_library`) and then its own `_native/` directory; with
+nothing found, the first native call raises `guatiao.LibraryNotFound`.
+`guatiao_serde` and `guatiao_form` are found the same way, only when
+`guatiao.serde` or `guatiao.form` is first used.
 
-## Install
+| Native library | Needed for |
+| --- | --- |
+| `guatiao` | values, the registry, provider tables |
+| `guatiao_serde` | `guatiao.serde` (JSON; TOML and YAML when built with those features) |
+| `guatiao_form` | `guatiao.form` |
 
-```bash
-pip install -e "bindings/python"          # from the repository root
-pip install -e "bindings/python[dev]"     # with pytest and build
-```
+## Quick start
 
-## Values
+### Values
 
 ```python
 from guatiao import Value
@@ -89,7 +93,7 @@ v.to_python(numbers="str")       # '1.10'
 map. A missing value reads back as `guatiao.ABSENT`, which is falsy and
 is not `None`. A `float` that is `nan` or infinite raises `ValueError`.
 
-## Hosting plugins
+### Hosting plugins
 
 ```python
 from guatiao import Registry
@@ -121,10 +125,10 @@ greeter = kinds.table(table_ptr, size, GreeterVtable, floor_hash=FLOOR_HASH)
 greeter.greet(ctx, name, out_map, err)
 ```
 
-`tests/greeter_table.py` and `tests/test_greeter.py` are a complete
-worked example against `examples/hello_library`.
+[`tests/test_greeter.py`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/tests/test_greeter.py)
+is a complete worked example against `examples/hello_library`.
 
-## JSON, TOML, YAML and forms
+### JSON, TOML, YAML and forms
 
 ```python
 from guatiao import serde, form
@@ -141,7 +145,7 @@ shown = form.is_visible(schema, form_doc, "tls.verify", values)
 A format the loaded library was not built with raises
 `NotImplementedError` naming the feature.
 
-## Errors
+### Errors
 
 A failed native call raises `guatiao.GuatiaoError`, as one of `BadValue`,
 `AllocFailed`, `WrongKind`, `NotFound`, `NullArgument`, `Gone` or
@@ -163,23 +167,36 @@ provider's own words when it gave any.
   only appends and removes. `append` and `del list[i]` are direct.
 - A `Registry` is used from one thread at a time, and a `Value` is not
   shared between threads without a lock of your own.
-- No wheel carries the native library yet.
 
-## Tests
+## API overview
+
+| Module | Purpose |
+| --- | --- |
+| `guatiao` | `Value`, `Ref`, `Map`, `List`, `ABSENT`, `Registry`, `Instance`, the error classes |
+| `guatiao.registry` | the plugin host: load, scan, list, rank, configure, instantiate |
+| `guatiao.kinds` | check and cast a provider's function table |
+| `guatiao.serde` | `loads` / `dumps` for JSON, TOML, YAML |
+| `guatiao.form` | `check`, `layout`, `is_visible` |
+
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/src/guatiao/AGENTS.md) is
+the full API reference and ships inside the wheel. The C ABI is described
+by [`guatiao.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao/include/guatiao.h).
+
+## Development
+
+From the repository root, in a virtual environment:
 
 ```bash
 cargo build --workspace --all-features
+pip install -e "bindings/python[dev]"
 pytest bindings/python/tests -rs
 ```
 
 `conftest.py` points `GUATIAO_LIBRARY` at the repository's `target/debug`
 when the variable is unset. After a full build nothing should skip; a
-test that needs a missing library skips and says which.
+test that needs a missing library skips and says which. CI runs the suite
+on Python 3.9 and 3.14.
 
-## More
+## License
 
-[`src/guatiao/AGENTS.md`](src/guatiao/AGENTS.md) is the full API
-reference, and ships inside the wheel. The C ABI itself is documented in
-the repository's `crates/guatiao/AGENTS.md` and `include/guatiao.h`.
-
-Licensed under MPL 2.0, as the rest of the repository.
+MPL 2.0 — see [LICENSE](https://github.com/Boriken-Dev/guatiao/blob/main/LICENSE).
