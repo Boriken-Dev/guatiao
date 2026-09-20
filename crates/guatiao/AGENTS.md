@@ -1007,6 +1007,17 @@ const guatiao_value *schema = guatiao_registry_provider_config(reg, key);
 guatiao_registry_free(reg);
 ```
 
+`bindings/python/` wraps the same calls over ctypes (its own `AGENTS.md`
+is the API reference):
+
+```python
+from guatiao.registry import Registry
+
+with Registry("my-host", "1.0") as reg:
+    reg.scan_dir("/path/to/plugins", rules="kind=greeter")
+    reg.best("greeter")   # a plain dict, already freed
+```
+
 `guatiao_registry` is the **one opaque handle** in this crate: it owns
 growable collections and changes over time, which is what a handle is for
 and a `repr(C)` struct is not.
