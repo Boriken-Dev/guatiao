@@ -1,7 +1,7 @@
 # guatiao for Python
 
-[![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)](https://github.com/Boriken-Dev/guatiao)
-[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/pyproject.toml)
+[![PyPI version](https://img.shields.io/pypi/v/guatiao.svg)](https://pypi.org/project/guatiao/)
+[![Python versions](https://img.shields.io/pypi/pyversions/guatiao.svg)](https://pypi.org/project/guatiao/)
 [![License: MPL 2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](https://github.com/Boriken-Dev/guatiao/blob/main/LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/Boriken-Dev/guatiao/test.yaml)](https://github.com/Boriken-Dev/guatiao/actions/workflows/test.yaml)
 
@@ -10,8 +10,8 @@ between languages**, a JSON Schema that describes a value, and a registry
 that loads plugin libraries. Pure Python over `ctypes`: no dependencies,
 nothing to compile, driving the same C ABI a C, C++ or Dart program uses.
 
-> **Status: alpha.** Not on PyPI yet, and no wheel carries the native
-> library; you build that from the repository.
+> **Status: alpha.** The wheel is pure Python and does not carry the
+> native library yet; you build that from the repository.
 
 ## Features
 
@@ -31,10 +31,11 @@ nothing to compile, driving the same C ABI a C, C++ or Dart program uses.
 ## Installation
 
 ```bash
-pip install -e "bindings/python"          # from a checkout of the repository
+pip install guatiao
 ```
 
-The package needs the native library, built from the same checkout:
+The package needs the native library, built from a checkout of the
+[repository](https://github.com/Boriken-Dev/guatiao/):
 
 ```bash
 cargo build --workspace --all-features
