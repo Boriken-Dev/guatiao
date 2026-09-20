@@ -47,8 +47,8 @@ impl<T> MaybeNull<T> {
     /// # Safety
     ///
     /// If non-null, it addresses a live, well-formed `T` valid for `'a`.
-    /// For a descriptor read out of a loaded library that holds because
-    /// the library is never unloaded.
+    /// For a descriptor read out of a loaded library that holds while the
+    /// library is mapped.
     pub unsafe fn get<'a>(self) -> Option<&'a T> {
         // SAFETY: the caller states a non-null pointer is a live `T`.
         unsafe { self.0.as_ref() }

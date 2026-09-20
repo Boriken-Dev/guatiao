@@ -29,15 +29,17 @@
 //! symptom is a lookup answering "not found" for something that was
 //! definitely registered.
 //!
-//! # A loaded library is never unloaded
+//! # A library lives until it is retired
 //!
-//! Everything a library hands over points into its mapping: the
-//! descriptor, the text inside it, the vtables, and the allocator
-//! recorded inside every tree it builds. Unloading invalidates all of
-//! them at once, and the first symptom would be a free through an
-//! unmapped function pointer at teardown. So the handle is forgotten and
-//! the mapping stays — which is the same rule [`crate::value::Alloc`]
-//! states: an allocator outlives everything built through it.
+//! The registry copies out every string and value a descriptor names, so
+//! [`Registry::retire`] — which takes a library's providers out and
+//! leaves the mapping in place — is safe and dangles nothing. A vtable,
+//! a `ctx` and a descriptor pointer address the mapping itself, so
+//! unmapping is [`Registry::unload`], and it is `unsafe`: what must be
+//! released first is the host's word. Either way the mapping stays until
+//! the host says otherwise, which is the same rule
+//! [`crate::value::Alloc`] states — an allocator outlives everything
+//! built through it.
 //!
 //! # Writing a library
 //!

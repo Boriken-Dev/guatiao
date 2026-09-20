@@ -225,7 +225,8 @@ impl std::error::Error for KindMismatch {}
 ///
 /// Implements the kind's trait (the macro writes that impl), so a
 /// consumer holds it as `dyn Trait`. `Copy`, `Send`, `Sync` and
-/// `'static`: the table lives in a library that is never unloaded.
+/// `'static`: the table lives in a library's mapping, and unloading that
+/// library is the host's word that nothing like this is still held.
 pub struct Remote<K: ?Sized + Kind> {
     table: *const c_void,
     size: usize,
@@ -250,9 +251,9 @@ impl<K: ?Sized + Kind> std::fmt::Debug for Remote<K> {
     }
 }
 
-// SAFETY: the table and `ctx` address a library that is never unloaded,
-// and the kind's trait names `Send + Sync`, which the shims uphold by
-// calling a `&self` method.
+// SAFETY: the table and `ctx` address a mapping the registry holds, and
+// the kind's trait names `Send + Sync`, which the shims uphold by calling
+// a `&self` method.
 unsafe impl<K: ?Sized + Kind> Send for Remote<K> {}
 // SAFETY: as above.
 unsafe impl<K: ?Sized + Kind> Sync for Remote<K> {}
@@ -289,8 +290,8 @@ impl<K: ?Sized + Kind> Remote<K> {
             .map(|&(_, table, size)| (table, size))
             .ok_or(KindMismatch::NoTable)?;
         // SAFETY: the view was read from a descriptor under its guards,
-        // and the library declared this table as K::NAME's; the library
-        // is never unloaded.
+        // and the library declared this table as K::NAME's; the mapping
+        // is the registry's until the host unloads it.
         unsafe { Remote::validate(table, size, view.ctx, false) }
     }
 
@@ -591,7 +592,7 @@ impl<K: ?Sized + Kind> Instance<K> {
         let mut err = ProviderError::none();
         // SAFETY: the slot is the descriptor's own, read under its guard;
         // `config` is a well-formed value; the out-slots are writable
-        // locals; the library is never unloaded.
+        // locals; the library is mapped for the call.
         let status = unsafe { create(view.ctx, config, &mut instance, &mut err) };
         if status != Status::GUATIAO_OK {
             return Err(take_err(err, status));
