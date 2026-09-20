@@ -37,7 +37,7 @@
 use super::build::{ArmBuilder, FieldBuilder, SchemaBuilder, put};
 use super::vocab;
 use crate::value::alloc::Alloc;
-use crate::value::mutate::ValueError;
+use crate::value::error::ValueError;
 use crate::value::types::{Number, Value};
 
 /// What a person is shown about anything a schema declares.

@@ -11,23 +11,17 @@
 //! name that is only in the header is a name somebody writes and cannot
 //! compile.
 //!
-//! **An internal function that became reachable.** `value::mutate` is a
-//! public module holding one public constant and one public type; every
-//! other item in it is `pub(crate)`, because the arm accessors hand out a
-//! `&mut` to a container chosen by a tag the caller could have lied
-//! about. `as_text_mut` on a NUMBER node is a `&mut Text` over digits,
-//! from safe code, and that is the shape this pins shut.
-//!
-//! The negative half — that the arm accessors do NOT resolve — is a
-//! `compile_fail` doctest on the module itself, because an integration
-//! test cannot assert that something fails to compile.
+//! **A refusal and a bound are public; the arms are not.** `value::error`
+//! holds the two names a consumer needs, and the arm a tag selects is
+//! reached only through [`TryAsRef`]/[`TryAsMut`], which answer `None`
+//! rather than handing out a `&mut Text` over a number's digits.
 
-// --- what `value::mutate` exposes ----------------------------------------
+// --- what `value::error` exposes ----------------------------------------
 
-/// The two names that module is public for.
+/// The two names that module is public for, at every path that names them.
 #[test]
-fn the_mutation_module_exposes_the_depth_bound_and_the_error() {
-    use guatiao::value::mutate::{MAX_DEPTH, ValueError};
+fn the_error_module_exposes_the_depth_bound_and_the_error() {
+    use guatiao::value::error::{MAX_DEPTH, ValueError};
 
     // A value, so the type is named rather than merely imported.
     let e: ValueError = ValueError::WrongKind;
@@ -37,6 +31,11 @@ fn the_mutation_module_exposes_the_depth_bound_and_the_error() {
     // uses.
     assert_eq!(guatiao::MAX_DEPTH, MAX_DEPTH);
     assert_eq!(guatiao::value::MAX_DEPTH, MAX_DEPTH);
+
+    // And the crate-root spelling of the error, which is what a consumer
+    // writes in its own signatures.
+    let root: guatiao::ValueError = e;
+    assert_eq!(root, ValueError::WrongKind);
 }
 
 // --- what the crate root exposes -----------------------------------------

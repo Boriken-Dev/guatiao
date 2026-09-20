@@ -28,7 +28,7 @@ use super::ValidationError;
 use super::read::{FieldRef, Kind, SchemaRef};
 use super::validate::text_of;
 use crate::value::alloc::Alloc;
-use crate::value::mutate::ValueError;
+use crate::value::error::ValueError;
 use crate::value::read::str_or;
 use crate::value::types::{Tag, Value};
 

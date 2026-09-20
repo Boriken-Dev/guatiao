@@ -41,7 +41,9 @@ pub mod convert;
 // schema that can declare a mode for one of its options. A `//`
 // comment, never a `///`.
 pub mod merge;
-pub mod mutate;
+// Why a write was refused, and how deep a walk follows. A `//` comment,
+// never a `///`.
+pub mod error;
 mod raw;
 // What a call across the boundary reports. Ungated, so a library can name
 // it without exporting anything. A `//` comment, never a `///`.
@@ -68,7 +70,7 @@ pub mod value;
 
 pub use alloc::{Alloc, AllocError, Allocator, rust_alloc};
 pub use convert::{Bytes, FromValue, MapError, ToValue, TryAsMut, TryAsRef};
-pub use mutate::{MAX_DEPTH, ValueError};
+pub use error::{MAX_DEPTH, ValueError};
 pub use read::{
     Dump, ReadValue, bool_or, bytes_or, entries, equal, float_or, int_or, items, keys, str_or,
 };

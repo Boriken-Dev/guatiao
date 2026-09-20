@@ -104,6 +104,19 @@ container!(Buffer, u8);
 container!(List, Value);
 container!(Map, Entry);
 
+/// Whether two byte ranges share a byte. Empty ranges touch nothing.
+///
+/// An append's source may address the buffer it is appending to -- a C
+/// caller can hand one a view of the value itself -- and growth frees that
+/// buffer. Staging the bytes first makes both cases one case.
+pub(crate) fn overlaps(a: *const u8, a_len: usize, b: *const u8, b_len: usize) -> bool {
+    if a_len == 0 || b_len == 0 {
+        return false;
+    }
+    let (a, b) = (a as usize, b as usize);
+    a < b.saturating_add(b_len) && b < a.saturating_add(a_len)
+}
+
 /// The pointer an empty container holds: dangling but **aligned**, never
 /// null.
 ///

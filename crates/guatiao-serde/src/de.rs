@@ -24,7 +24,7 @@ use serde::Deserializer;
 use serde::de::{DeserializeSeed, Error as _, MapAccess, SeqAccess, Visitor};
 
 use guatiao::value::alloc::Alloc;
-use guatiao::value::mutate::MAX_DEPTH;
+use guatiao::value::error::MAX_DEPTH;
 use guatiao::value::types::{Number, Value};
 
 use crate::{Presentation, from_data_uri};

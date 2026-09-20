@@ -131,7 +131,7 @@
 use std::fmt;
 
 use super::alloc::Alloc;
-use super::mutate::ValueError;
+use super::error::ValueError;
 use super::types::{Entry, Number, Tag, Value};
 
 /// Why a value could not be read as a particular Rust type.

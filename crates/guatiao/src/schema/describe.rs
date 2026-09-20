@@ -59,7 +59,7 @@ use super::build::KindBuilder;
 use super::vocab;
 use crate::value::alloc::Alloc;
 use crate::value::convert::{Bytes, ToValue};
-use crate::value::mutate::ValueError;
+use crate::value::error::ValueError;
 use crate::value::types::Value;
 
 /// A type that can describe itself to a consumer that has never seen it.

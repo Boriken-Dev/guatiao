@@ -68,7 +68,7 @@
 
 use super::vocab;
 use crate::value::alloc::Alloc;
-use crate::value::mutate::ValueError;
+use crate::value::error::ValueError;
 use crate::value::types::{Number, Value};
 
 /// Builds a schema: the root document, with its dialect declared.

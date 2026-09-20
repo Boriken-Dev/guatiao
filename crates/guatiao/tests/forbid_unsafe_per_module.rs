@@ -66,7 +66,6 @@ const UNSAFE_PATHS: &[&str] = &[
     // The value model.
     "value/alloc.rs",
     "value/convert.rs",
-    "value/mutate.rs",
     "value/raw.rs",
     "value/types",
     "value/value.rs",

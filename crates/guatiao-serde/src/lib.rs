@@ -69,7 +69,7 @@
 //! both halves, so a change to either is a decision rather than a surprise.
 //!
 //! **A document nests only as deep as a value can.** Reading stops at
-//! `guatiao::value::mutate::MAX_DEPTH` containers with an error, because a
+//! `guatiao::value::error::MAX_DEPTH` containers with an error, because a
 //! document is somebody else's input and not every serde format caps its
 //! own recursion.
 //!

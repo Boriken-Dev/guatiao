@@ -23,9 +23,10 @@ use std::mem::ManuallyDrop;
 // The raw layer this crate keeps to itself: the free walk, the
 // allocator-taking mutators and the private helpers. Imported whole
 // because the impl below calls into it at almost every line.
-use crate::value::alloc::Alloc;
+use crate::value::alloc::{Alloc, Allocator};
 use crate::value::convert::{MapError, TryAsMut, TryAsRef};
-use crate::value::mutate::*;
+use crate::value::error::{MAX_DEPTH, ValueError};
+use crate::value::raw::{dangling, release_buffer};
 
 use super::types::{Buffer, Entry, List, Map, Number, Text};
 
@@ -229,7 +230,7 @@ impl Payload {
     /// initialised too, so a node built over this is whole whatever its
     /// tag.
     pub fn bool(byte: u8) -> Payload {
-        let mut payload = crate::value::mutate::value_null().into_raw_parts().1;
+        let mut payload = Value::null().into_raw_parts().1;
         payload.b = byte;
         payload
     }
@@ -269,124 +270,116 @@ impl Value {
         (this.tag, payload)
     }
 
+    /// A node with every one of its bytes initialised.
+    ///
+    /// The only way a node is created here. Writing a single union arm
+    /// leaves the rest of the payload uninitialised, and reading a wide
+    /// arm off that is undefined behaviour rather than garbage; nothing in
+    /// the toolchain warns about it.
+    pub(crate) fn blank(tag: Tag) -> Value {
+        Value {
+            tag: u32::from(tag),
+            _pad: 0,
+            // The widest arm, fully written. Every other arm is the same
+            // 32 bytes, so this initialises all of them at once.
+            payload: Payload::map(Map {
+                ptr: dangling::<Entry>(),
+                len: 0,
+                cap: 0,
+                alloc: std::ptr::null(),
+            }),
+        }
+    }
+
     /// The allocator this tree grows through.
     ///
     /// **An owned container records the allocator that made it**, which
-    /// is why nothing below has to be told one: a write into this tree
-    /// allocates storage *for this tree*, and its own allocator is the
-    /// only right answer.
+    /// is why nothing else has to be told one: a write into this tree
+    /// allocates storage *for this tree*.
     ///
-    /// **Two different refusals, and they are not the same case.** A
-    /// scalar — null, bool, absent — has no container to have recorded
-    /// one, and answers [`ValueError::WrongKind`]. A container whose
-    /// `alloc` field is null — a literal some other language wrote as a
-    /// brace initialiser — answers
-    /// [`ValueError::Alloc(AllocError::Null)`](crate::value::AllocError).
-    /// Growing either means saying which allocator to adopt, which is
-    /// what [`set_in`](Value::set_in) and [`push_in`](Value::push_in)
-    /// take.
+    /// **Two different refusals.** A scalar — null, bool, absent — has no
+    /// container to have recorded one, and answers
+    /// [`ValueError::WrongKind`]. A container whose `alloc` field is null
+    /// — a literal some other language wrote as a brace initialiser —
+    /// answers
+    /// [`ValueError::Alloc(AllocError::Null)`](crate::value::AllocError);
+    /// growing one means naming the allocator it adopts, which is what the
+    /// `_in` operations take.
     pub fn alloc(&self) -> Result<Alloc, ValueError> {
-        let stored = alloc_of(self).ok_or(ValueError::WrongKind)?;
+        let stored = self.recorded_alloc().ok_or(ValueError::WrongKind)?;
         // SAFETY: the address a container recorded is an allocator that
         // outlives it, by the contract on `Alloc`.
         Ok(unsafe { Alloc::from_raw(stored) }?)
     }
 
-    /// Stores `value` under `key`, **consuming** it.
-    ///
-    /// Takes anything a value can be made from, so the common case is one
-    /// call and no allocator:
-    ///
-    /// ```
-    /// # use guatiao::{Map, Value};
-    /// let mut map = Value::map();
-    /// map.set("host", "10.0.0.1")?;
-    /// map.set("port", 5900)?;
-    /// map.set("options", Value::map())?;
-    /// # Ok::<(), guatiao::ValueError>(())
-    /// ```
-    ///
-    /// Safe, and that is the point: both sides are well-formed trees by
-    /// construction and the one being stored is consumed here, so neither
-    /// the malformed-input nor the double-owner case a raw call has to
-    /// worry about can arise.
-    pub fn set(&mut self, key: &str, value: impl Into<Value>) -> Result<(), ValueError> {
-        let alloc = self.alloc()?;
-        let mut value = value.into();
-        // SAFETY: `self` and `value` are both well-formed trees built
-        // through allocators that outlive them, and `value` is consumed
-        // here so nothing else refers to what it owned.
-        unsafe { map_set(self, key, &mut value, alloc) }
-    }
-
-    /// Appends `value`, **consuming** it. Takes anything [`set`] does.
-    ///
-    /// [`set`]: Value::set
-    pub fn push(&mut self, value: impl Into<Value>) -> Result<(), ValueError> {
-        let alloc = self.alloc()?;
-        let mut value = value.into();
-        // SAFETY: as for `set`.
-        unsafe { list_push(self, &mut value, alloc) }
-    }
-
-    /// Appends `value` to the list under `key`, creating the list when
-    /// there is none.
-    ///
-    /// The operation every nested structure needs, and the reason it is
-    /// here rather than left to a caller: without it, building a list of
-    /// maps means reaching into a borrowed node with the raw functions,
-    /// which is exactly the `unsafe` this type exists to remove.
-    pub fn push_into(&mut self, key: &str, value: impl Into<Value>) -> Result<(), ValueError> {
-        let alloc = self.alloc()?;
-        if !self.contains_key(key) {
-            // A LIST, not a map. The key names a sequence being appended
-            // to — getting this wrong builds a map that the push below
-            // then refuses, one call after the mistake.
-            self.set(key, Value::list_in(alloc))?;
+    /// The allocator a live container recorded, if this node has one.
+    fn recorded_alloc(&self) -> Option<*const Allocator> {
+        // SAFETY: each arm is read only under the tag that selects it.
+        unsafe {
+            Some(match self.tag().ok()? {
+                Tag::GUATIAO_MAP => self.payload.map.alloc,
+                Tag::GUATIAO_LIST => self.payload.list.alloc,
+                Tag::GUATIAO_STRING | Tag::GUATIAO_NUMBER => self.payload.text.alloc,
+                Tag::GUATIAO_BYTES => self.payload.bytes.alloc,
+                _ => return None,
+            })
         }
-        let mut value = value.into();
-        let list = self.get_mut(key).ok_or(ValueError::WrongKind)?;
-        // SAFETY: `list` is the list ensured immediately above, and
-        // `value` is a well-formed tree consumed here, so nothing else
-        // refers to what it owned.
-        unsafe { list_push(list, &mut value, alloc) }
+    }
+
+    /// Stores `value` under `key`, **consuming** it. See [`Map::set`].
+    pub fn set(&mut self, key: &str, value: impl Into<Value>) -> Result<(), ValueError> {
+        self.map_mut()?.set(key, value)
+    }
+
+    /// Appends `value`, **consuming** it. See [`List::push`].
+    pub fn push(&mut self, value: impl Into<Value>) -> Result<(), ValueError> {
+        self.list_mut()?.push(value)
+    }
+
+    /// Appends `value` to the list under `key`. See [`Map::push_into`].
+    pub fn push_into(&mut self, key: &str, value: impl Into<Value>) -> Result<(), ValueError> {
+        self.map_mut()?.push_into(key, value)
     }
 
     /// The value under `key`.
     pub fn get(&self, key: &str) -> Option<&Value> {
-        map_get(self, key)
+        self.as_map()?.get(key)
     }
 
     /// The value under `key`, mutably.
     pub fn get_mut(&mut self, key: &str) -> Option<&mut Value> {
-        map_get_mut(self, key)
+        self.as_map_mut()?.get_mut(key)
     }
 
     /// Whether `key` is present.
-    ///
-    /// Named as the standard library names it, because it answers the
-    /// same question and a second name for one idea is one more thing to
-    /// look up.
     pub fn contains_key(&self, key: &str) -> bool {
-        self.get(key).is_some()
+        self.as_map().is_some_and(|m| m.contains_key(key))
+    }
+
+    fn map_mut(&mut self) -> Result<&mut Map, ValueError> {
+        self.try_as_mut().ok_or(ValueError::WrongKind)
+    }
+
+    fn list_mut(&mut self) -> Result<&mut List, ValueError> {
+        self.try_as_mut().ok_or(ValueError::WrongKind)
     }
 }
 
 impl Value {
     /// The stored nothing. Owns nothing, so it needs no allocator.
     pub fn null() -> Value {
-        value_null()
+        Value::blank(Tag::GUATIAO_NULL)
     }
 
     /// The absent sentinel: a value that says there is no value, which is
     /// a different statement from null.
     pub fn absent() -> Value {
-        value_absent()
+        Value::blank(Tag::GUATIAO_ABSENT)
     }
 
     /// A boolean. Owns nothing.
     pub fn bool(b: bool) -> Value {
-        value_bool(b)
+        Value::from(b)
     }
 
     /// Text, copied onto Rust's heap.
@@ -440,22 +433,31 @@ impl Value {
     /// this build can act on. An unknown one means skip this value, never
     /// stop.
     pub fn tag(&self) -> Result<Tag, ValueError> {
-        value_tag(self)
+        Tag::try_from(self.tag)
     }
 
     /// The boolean, or `None` for any other kind.
+    ///
+    /// Any non-zero byte reads as `true`, matching C's own rule. The arm
+    /// is a `u8`, which has no invalid bit patterns, so every byte a
+    /// producer could have written is a valid value of it.
     pub fn as_bool(&self) -> Option<bool> {
-        as_bool(self)
+        match self.tag() {
+            // SAFETY: the tag says the `b` arm is live, and a node is born
+            // with all 40 of its bytes initialised.
+            Ok(Tag::GUATIAO_BOOL) => Some(unsafe { self.payload.b } != 0),
+            _ => None,
+        }
     }
 
     /// The text of a string value.
     pub fn as_str(&self) -> Option<&str> {
-        str_of(self)
+        self.try_as_ref()
     }
 
     /// The bytes of a bytes value. Any content at all, NULs included.
     pub fn as_bytes(&self) -> Option<&[u8]> {
-        bytes_of(self)
+        self.try_as_ref()
     }
 
     /// A number's **exact text**, as it was written down.
@@ -464,101 +466,86 @@ impl Value {
     /// `u64::MAX` survives. Convert with `TryInto` when you want a machine
     /// width, and the refusal is then visible.
     pub fn as_number_str(&self) -> Option<&str> {
-        number_str(self)
+        Some(TryAsRef::<Number>::try_as_ref(self)?.as_str())
     }
 
     /// The map container, or `None` for any other kind.
     pub fn as_map(&self) -> Option<&Map> {
-        as_map(self)
+        self.try_as_ref()
     }
 
     /// The same, mutably.
     pub fn as_map_mut(&mut self) -> Option<&mut Map> {
-        as_map_mut(self)
+        self.try_as_mut()
     }
 
     /// The list container, or `None` for any other kind.
     pub fn as_list(&self) -> Option<&List> {
-        as_list(self)
+        self.try_as_ref()
     }
 
     /// The same, mutably.
     pub fn as_list_mut(&mut self) -> Option<&mut List> {
-        as_list_mut(self)
+        self.try_as_mut()
     }
 
     /// A map's entries, in insertion order, which is part of the contract.
     pub fn entries(&self) -> Option<&[Entry]> {
-        entries_of(self)
+        Some(self.as_map()?.entries())
     }
 
     /// A list's elements, in order.
     pub fn items(&self) -> Option<&[Value]> {
-        items_of(self)
+        Some(self.as_list()?.items())
     }
 
     /// Removes `key` from a map and hands back its value.
-    ///
-    /// The value frees itself when it goes out of scope, so dropping it
-    /// on the floor is a release rather than a leak.
     pub fn remove(&mut self, key: &str) -> Option<Value> {
-        // SAFETY: a `&mut Value` in safe code is a well-formed node.
-        unsafe { map_remove(self, key) }
+        self.as_map_mut()?.remove(key)
     }
 
     /// Removes `key` and frees its value. Answers whether it was there.
     pub fn discard(&mut self, key: &str) -> bool {
-        // SAFETY: as above.
-        unsafe { map_discard(self, key) }
+        self.as_map_mut().is_some_and(|m| m.discard(key))
     }
 
     /// Removes the element at `index` from a list, keeping the order of
     /// the rest.
     pub fn remove_at(&mut self, index: usize) -> Option<Value> {
-        // SAFETY: as above.
-        unsafe { list_remove(self, index) }
+        self.as_list_mut()?.remove(index)
     }
 
     /// Removes and frees the element at `index`.
     pub fn discard_at(&mut self, index: usize) -> bool {
-        // SAFETY: as above.
-        unsafe { list_discard(self, index) }
+        self.as_list_mut().is_some_and(|l| l.discard(index))
     }
 
     /// Frees every entry or element, **keeping the capacity** already
     /// paid for. Errors for a kind that holds neither.
     pub fn clear(&mut self) -> Result<(), ValueError> {
-        // SAFETY: as above.
-        match Tag::try_from(self.tag) {
-            Ok(Tag::GUATIAO_MAP) => unsafe { map_clear(self) },
-            Ok(Tag::GUATIAO_LIST) => unsafe { list_clear(self) },
+        match self.tag() {
+            Ok(Tag::GUATIAO_MAP) => {
+                self.map_mut()?.clear();
+                Ok(())
+            }
+            Ok(Tag::GUATIAO_LIST) => {
+                self.list_mut()?.clear();
+                Ok(())
+            }
             _ => Err(ValueError::WrongKind),
         }
     }
 
     /// The map this value holds, consuming it; `Err` hands the value back
-    /// untouched when it is not a map. What a reader that must take
-    /// ownership of a document's entries reaches for — `remove`-ing keys
-    /// out of a map it was handed by value.
+    /// untouched when it is not a map.
     pub fn into_map(self) -> Result<Map, Value> {
-        if self.as_map().is_none() {
-            return Err(self);
-        }
-        let (_, payload) = self.into_raw_parts();
-        // SAFETY: the tag was just checked, so `map` is the live arm, and
-        // `into_raw_parts` forgot the node, so this is its only owner.
-        Ok(ManuallyDrop::into_inner(unsafe { payload.map }))
+        Map::try_from(self)
     }
 
     /// The list this value holds, consuming it; `Err` hands the value back
     /// untouched when it is not a list.
     pub fn into_list(self) -> Result<List, Value> {
-        if self.as_list().is_none() {
-            return Err(self);
-        }
-        let (_, payload) = self.into_raw_parts();
-        // SAFETY: as `into_map`.
-        Ok(ManuallyDrop::into_inner(unsafe { payload.list }))
+        List::try_from(self)
     }
 
     /// A deep copy, built through `alloc`.
@@ -568,15 +555,91 @@ impl Value {
     /// be a line a reader can see rather than something a setter does
     /// quietly.
     ///
-    /// Safe, because a `&Value` in safe Rust is a well-formed node — the
-    /// premise every reader here already rests on, and the one
-    /// [`ToValue for Value`](crate::ToValue) discharges to call this.
-    /// Bounded by [`MAX_DEPTH`], so a
-    /// hostile tree is [`ValueError::TooDeep`] rather than a dead process.
+    /// Bounded by [`MAX_DEPTH`], so a hostile tree is
+    /// [`ValueError::TooDeep`] rather than a dead process. The copy is
+    /// complete or it does not exist: a failure part-way frees everything
+    /// already built.
     pub fn clone_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
-        // SAFETY: a `&Value` reaching safe code is a well-formed node,
-        // which is all `value_clone` asks for.
-        unsafe { value_clone(alloc, self) }
+        self.clone_at(alloc, 0)
+    }
+
+    pub(crate) fn clone_at(&self, alloc: Alloc, depth: u32) -> Result<Value, ValueError> {
+        if depth >= MAX_DEPTH {
+            return Err(ValueError::TooDeep);
+        }
+        match self.tag()? {
+            Tag::GUATIAO_ABSENT => Ok(Value::absent()),
+            Tag::GUATIAO_NULL => Ok(Value::null()),
+            Tag::GUATIAO_BOOL => Ok(Value::from(self.as_bool().unwrap_or(false))),
+            Tag::GUATIAO_STRING => {
+                let text = self.text_arm().ok_or(ValueError::NotUtf8)?;
+                Ok(text.clone_in(alloc)?.into())
+            }
+            Tag::GUATIAO_NUMBER => {
+                let text = self.text_arm().ok_or(ValueError::NotUtf8)?;
+                Ok(Number::from_text(text.clone_in(alloc)?).into())
+            }
+            Tag::GUATIAO_BYTES => {
+                // SAFETY: the tag says the bytes arm is live.
+                let buffer = unsafe { &*self.payload.bytes };
+                Ok(buffer.clone_in(alloc)?.into())
+            }
+            Tag::GUATIAO_LIST => {
+                // SAFETY: the tag says the list arm is live.
+                let list = unsafe { &*self.payload.list };
+                Ok(list.clone_at(alloc, depth)?.into())
+            }
+            Tag::GUATIAO_MAP => {
+                // SAFETY: the tag says the map arm is live.
+                let map = unsafe { &*self.payload.map };
+                Ok(map.clone_at(alloc, depth)?.into())
+            }
+        }
+    }
+
+    /// The text arm, under either tag that selects it.
+    fn text_arm(&self) -> Option<&Text> {
+        match self.tag() {
+            // SAFETY: the tag says the text arm is live.
+            Ok(Tag::GUATIAO_STRING | Tag::GUATIAO_NUMBER) => Some(unsafe { &self.payload.text }),
+            _ => None,
+        }
+    }
+
+    /// Whether two trees hold the same thing, following no deeper than
+    /// [`MAX_DEPTH`].
+    ///
+    /// Two trees nested deeper compare **unequal** without being walked
+    /// further: the input can come from a foreign producer, and an
+    /// unbounded recursion over one is a stack overflow, which on Windows
+    /// is not catchable. A caller using this for uniqueness keeps an item
+    /// it might have discarded, which is a value kept rather than lost.
+    pub(crate) fn eq_at(&self, other: &Value, depth: u32) -> bool {
+        if self.tag != other.tag {
+            return false;
+        }
+        if depth >= MAX_DEPTH {
+            return false;
+        }
+        match self.tag() {
+            Ok(Tag::GUATIAO_ABSENT | Tag::GUATIAO_NULL) => true,
+            Ok(Tag::GUATIAO_BOOL) => self.as_bool() == other.as_bool(),
+            // Byte equality of the text, which is what makes `1.10`
+            // different from `1.1`.
+            Ok(Tag::GUATIAO_NUMBER | Tag::GUATIAO_STRING) => self.text_arm() == other.text_arm(),
+            Ok(Tag::GUATIAO_BYTES) => self.as_bytes() == other.as_bytes(),
+            Ok(Tag::GUATIAO_LIST) => match (self.as_list(), other.as_list()) {
+                (Some(x), Some(y)) => x.eq_at(y, depth),
+                _ => false,
+            },
+            Ok(Tag::GUATIAO_MAP) => match (self.as_map(), other.as_map()) {
+                (Some(x), Some(y)) => x.eq_at(y, depth),
+                _ => false,
+            },
+            // Two values this build cannot read are equal exactly when
+            // their tags are, which the first line already established.
+            Err(_) => true,
+        }
     }
 
     /// Stores `value` under `key`, **moving** it and leaving the source
@@ -597,8 +660,8 @@ impl Value {
         value: &mut Value,
         alloc: Alloc,
     ) -> Result<(), ValueError> {
-        // SAFETY: forwarded.
-        unsafe { map_set(self, key, value, alloc) }
+        let map = self.map_mut()?;
+        map.set_in(key, std::mem::take(value), alloc)
     }
 
     /// Appends `value`, **moving** it. See [`set_in`](Value::set_in).
@@ -607,54 +670,42 @@ impl Value {
     ///
     /// As for [`set_in`](Value::set_in).
     pub unsafe fn push_in(&mut self, value: &mut Value, alloc: Alloc) -> Result<(), ValueError> {
-        // SAFETY: forwarded.
-        unsafe { list_push(self, value, alloc) }
+        let list = self.list_mut()?;
+        list.push_in(std::mem::take(value), alloc)
     }
 
     /// Copies every entry of `src` into this map, replacing keys that
     /// collide and appending the rest. Answers how many were copied.
     ///
-    /// `src` may be this node or a node inside it: the source is copied
-    /// whole before anything here is touched.
-    ///
-    /// **Not atomic.** A failure at entry *k* leaves entries `0..k`
-    /// applied — nothing is leaked, and nothing is half-written, but the
-    /// map is not the one it started as.
-    ///
     /// # Safety
     ///
-    /// Both nodes are well formed.
+    /// Both nodes are well formed, and `src` does not address this node or
+    /// one inside it.
     pub unsafe fn copy_from(&mut self, src: &Value, alloc: Alloc) -> Result<usize, ValueError> {
-        // SAFETY: forwarded.
-        unsafe { map_copy_from(self, src, alloc) }
+        let copy = src.as_map().ok_or(ValueError::WrongKind)?.clone_in(alloc)?;
+        self.map_mut()?.absorb(copy, alloc)
     }
 
     /// Appends to a string value in place.
-    ///
-    /// `text` may address this value's own bytes; an overlapping source
-    /// is copied out before anything grows.
     ///
     /// # Safety
     ///
     /// This value is a well-formed string, and `text` is readable for the
     /// call.
     pub unsafe fn push_str(&mut self, text: &str, alloc: Alloc) -> Result<(), ValueError> {
-        // SAFETY: forwarded.
-        unsafe { string_push(self, text, alloc) }
+        let arm: &mut Text = self.try_as_mut().ok_or(ValueError::WrongKind)?;
+        arm.push_str_in(text, alloc)
     }
 
     /// Appends to a bytes value in place.
-    ///
-    /// `bytes` may address this value's own buffer, as in
-    /// [`push_str`](Value::push_str).
     ///
     /// # Safety
     ///
     /// This value is a well-formed bytes value, and `bytes` is readable
     /// for the call.
     pub unsafe fn push_bytes(&mut self, bytes: &[u8], alloc: Alloc) -> Result<(), ValueError> {
-        // SAFETY: forwarded.
-        unsafe { buffer_push(self, bytes, alloc) }
+        let arm: &mut Buffer = self.try_as_mut().ok_or(ValueError::WrongKind)?;
+        arm.push_in(bytes, alloc)
     }
 
     /// Frees everything this value owns and leaves it null-tagged.
@@ -668,8 +719,7 @@ impl Value {
     /// The node's containers describe their own storage, and nothing else
     /// refers to what they own.
     pub unsafe fn free(&mut self) {
-        // SAFETY: forwarded.
-        unsafe { value_free(self) }
+        drop(std::mem::take(self));
     }
 }
 
@@ -832,14 +882,22 @@ impl Clone for Value {
     }
 }
 
-impl PartialEq for Value {
-    /// Structural: the same kind and the same contents, whatever
-    /// allocator either side lives in. [`equal`](crate::value::read::equal)
-    /// is the same comparison as a function.
-    fn eq(&self, other: &Value) -> bool {
-        crate::value::read::equal(self, other)
+/// Null, so `mem::take` leaves a node that owns nothing.
+impl Default for Value {
+    fn default() -> Value {
+        Value::null()
     }
 }
+
+impl PartialEq for Value {
+    /// Structural: the same kind and the same contents, whatever
+    /// allocator either side lives in.
+    fn eq(&self, other: &Value) -> bool {
+        self.eq_at(other, 0)
+    }
+}
+
+impl Eq for Value {}
 
 // SAFETY: the buffer is owned outright and reached only through `&self`
 // or `&mut self`, so no two threads share it without the borrow checker
@@ -865,16 +923,92 @@ impl Drop for Value {
     /// a literal some other language declared with `cap == 0` — frees to
     /// nothing, so this is safe on every value however it was made.
     fn drop(&mut self) {
-        // SAFETY: a `Value` reaching Rust either was built through an
-        // allocator that outlives it, which is the contract on `Alloc`,
-        // or owns nothing at all.
-        unsafe { value_free(self) }
+        // A scalar owns nothing, so leaving it null-tagged IS the whole
+        // operation: no walk, and no heap for the walk's stack. Scalars
+        // are most of the nodes in a tree.
+        if !self.owns_storage() {
+            self.tag = u32::from(Tag::GUATIAO_NULL);
+            return;
+        }
+
+        // **Iterative on purpose.** A tree may have arrived from a foreign
+        // caller, and recursion on adversarial depth is a stack overflow,
+        // which on Windows is not catchable.
+        //
+        // Every node here is held in a `ManuallyDrop`: a node this loop
+        // has already dismantled would otherwise be freed a second time
+        // when its binding ended.
+        let mut stack = vec![std::mem::take(self)];
+        while let Some(node) = stack.pop() {
+            let mut node = ManuallyDrop::new(node);
+            match Tag::try_from(node.tag) {
+                Ok(Tag::GUATIAO_STRING | Tag::GUATIAO_NUMBER) => {
+                    // SAFETY: the tag says the text arm is live, and it
+                    // describes its own storage.
+                    unsafe { release_buffer(&mut *node.payload.text) };
+                }
+                Ok(Tag::GUATIAO_BYTES) => {
+                    // SAFETY: as above, for the bytes arm.
+                    unsafe { release_buffer(&mut *node.payload.bytes) };
+                }
+                Ok(Tag::GUATIAO_LIST) => {
+                    // SAFETY: the tag says the list arm is live.
+                    let l = unsafe { &mut *node.payload.list };
+                    for i in 0..l.len {
+                        // SAFETY: the first `len` elements are initialised.
+                        stack.push(std::mem::take(unsafe { &mut *l.ptr.add(i) }));
+                    }
+                    l.len = 0;
+                    // SAFETY: the elements have been moved out, so nothing
+                    // reads the buffer again.
+                    unsafe { release_buffer(l) };
+                }
+                Ok(Tag::GUATIAO_MAP) => {
+                    // SAFETY: the tag says the map arm is live.
+                    let m = unsafe { &mut *node.payload.map };
+                    for i in 0..m.len {
+                        // SAFETY: the first `len` entries are initialised.
+                        let entry = unsafe { &mut *m.ptr.add(i) };
+                        // SAFETY: the key is an owned text container.
+                        unsafe { release_buffer(&mut entry.key) };
+                        stack.push(std::mem::take(&mut entry.value));
+                    }
+                    m.len = 0;
+                    // SAFETY: as above.
+                    unsafe { release_buffer(m) };
+                }
+                // Absent, null, bool, and any tag this build does not
+                // know: nothing is owned. An unknown tag is deliberately
+                // not an error -- refusing to free a tree because one node
+                // came from a newer producer would leak the whole tree to
+                // punish the one node.
+                _ => {}
+            }
+        }
+    }
+}
+
+impl Value {
+    /// Whether this node's tag selects an arm that owns a buffer.
+    fn owns_storage(&self) -> bool {
+        matches!(
+            self.tag(),
+            Ok(Tag::GUATIAO_STRING
+                | Tag::GUATIAO_NUMBER
+                | Tag::GUATIAO_BYTES
+                | Tag::GUATIAO_LIST
+                | Tag::GUATIAO_MAP)
+        )
     }
 }
 
 impl From<bool> for Value {
+    /// Stores 1 or 0. The arm is a byte rather than a `bool` so that a
+    /// value written by somebody else is still readable.
     fn from(b: bool) -> Value {
-        Value::bool(b)
+        let mut v = Value::blank(Tag::GUATIAO_BOOL);
+        v.payload.b = u8::from(b);
+        v
     }
 }
 
@@ -918,7 +1052,7 @@ impl<T: Into<Value>> From<Option<T>> for Value {
 /// kind gets a concrete impl below.
 impl<T: Into<Number>> From<T> for Value {
     fn from(v: T) -> Value {
-        let mut node = blank(Tag::GUATIAO_NUMBER);
+        let mut node = Value::blank(Tag::GUATIAO_NUMBER);
         node.payload = Payload::number(v.into());
         node
     }

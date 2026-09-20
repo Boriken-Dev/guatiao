@@ -31,7 +31,7 @@ use std::collections::BTreeMap;
 
 use super::ValidationError;
 use super::read::{FieldRef, Kind, SchemaRef};
-use crate::value::mutate::MAX_DEPTH;
+use crate::value::error::MAX_DEPTH;
 use crate::value::read::str_or;
 use crate::value::types::{Tag, Value};
 

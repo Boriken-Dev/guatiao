@@ -4,9 +4,8 @@
 
 //! Reading a value comfortably from Rust.
 //!
-//! The primitives are in [`super::mutate`]; this is the layer a program
-//! actually reads with — iteration, comparison, a debug view, and the
-//! getters that take a caller's default.
+//! Iteration, comparison, a debug view, and the getters that take a
+//! caller's default.
 //!
 //! # The defaulting getters, and the one that matters
 //!
@@ -77,7 +76,6 @@
 use std::fmt;
 
 use super::convert::MapError;
-use super::mutate::{MAX_DEPTH, text_bytes};
 use super::types::{Entry, Tag, Value};
 
 /// Reading a value as a Rust type, and saying why not when it is not one.
@@ -234,67 +232,9 @@ pub fn items(v: &Value) -> impl Iterator<Item = &Value> {
 
 /// Whether two trees hold the same thing.
 ///
-/// **Order is significant for a map**, because insertion order is part of
-/// the contract rather than an artefact: consumers render maps as forms,
-/// print them as tables and diff them in tests, and all three need it
-/// stable and meaningful. Two maps with the same pairs in a different
-/// order are two different values here, and saying otherwise would make
-/// this function disagree with every consumer that renders one.
-///
-/// A tag this build does not know compares equal only to the same unknown
-/// tag, which is the most anyone can say about it.
-///
-/// # Bounded, like every other walk here
-///
-/// Two trees nested deeper than [`MAX_DEPTH`] compare **unequal** without
-/// being walked further. The input can come from a foreign producer, and
-/// an unbounded recursion over one is a stack overflow — which on Windows
-/// is not catchable and takes the host down with it. Answering "not equal"
-/// is the conservative half of that trade: a caller using this for
-/// uniqueness keeps an item it might have discarded, which is a value kept
-/// rather than a value lost.
-///
-/// Nothing this crate can build reaches that depth anyway:
-/// [`Value::clone_in`] refuses past the same bound.
+/// The same comparison as `a == b`; see [`PartialEq for Value`](Value).
 pub fn equal(a: &Value, b: &Value) -> bool {
-    equal_at(a, b, 0)
-}
-
-fn equal_at(a: &Value, b: &Value, depth: u32) -> bool {
-    if a.tag != b.tag {
-        return false;
-    }
-    if depth >= MAX_DEPTH {
-        return false;
-    }
-    match a.tag() {
-        Ok(Tag::GUATIAO_ABSENT | Tag::GUATIAO_NULL) => true,
-        Ok(Tag::GUATIAO_BOOL) => a.as_bool() == b.as_bool(),
-        // Byte equality of the text, which is what makes `1.10` different
-        // from `1.1`. Comparing as numbers would be the lossy view, and
-        // the whole point of storing text is that it is not taken.
-        //
-        // The BYTES, not the `&str`: a string whose content is not UTF-8
-        // reads back as `None`, and two different such strings would then
-        // compare equal to each other on the strength of both being
-        // unreadable.
-        Ok(Tag::GUATIAO_NUMBER | Tag::GUATIAO_STRING) => text_bytes(a) == text_bytes(b),
-        Ok(Tag::GUATIAO_BYTES) => a.as_bytes() == b.as_bytes(),
-        Ok(Tag::GUATIAO_LIST) => {
-            let (x, y) = (a.items().unwrap_or(&[]), b.items().unwrap_or(&[]));
-            x.len() == y.len() && x.iter().zip(y).all(|(p, q)| equal_at(p, q, depth + 1))
-        }
-        Ok(Tag::GUATIAO_MAP) => {
-            let (x, y) = (a.entries().unwrap_or(&[]), b.entries().unwrap_or(&[]));
-            x.len() == y.len()
-                && x.iter()
-                    .zip(y)
-                    .all(|(p, q)| p.key() == q.key() && equal_at(p.value(), q.value(), depth + 1))
-        }
-        // Two values this build cannot read are equal exactly when their
-        // tags are, which the first line already established.
-        Err(_) => true,
-    }
+    a == b
 }
 
 // --- a debug view -----------------------------------------------------

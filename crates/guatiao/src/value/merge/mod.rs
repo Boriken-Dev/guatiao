@@ -137,7 +137,7 @@ use std::collections::BTreeMap;
 
 use crate::value::alloc::Alloc;
 use crate::value::convert::ToValue;
-use crate::value::mutate::{MAX_DEPTH, ValueError};
+use crate::value::error::{MAX_DEPTH, ValueError};
 use crate::value::read::{entries, equal, items};
 use crate::value::types::{Tag, Value};
 
