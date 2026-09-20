@@ -576,6 +576,7 @@ reg.providers_of("acme_net_pve")           // every loaded version of one id (>1
 reg.all() / reg.all_ranked()               // everything, load order / best first
 reg.retire(library_key)                    // Result<Retired, UnloadError>: out of the registry,
                                            // still mapped
+unsafe { reg.unload(library_key) }?        // the same, then the library's say, then unmapped
 provider.kinds() -> &[String] / provider.supports(kind)   // what it serves
 provider.config_schema()                   // Option<&Value>, the registry's copy
 provider.vtable() -> (*const c_void, usize)
@@ -626,6 +627,27 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   it. Safe, because it dangles nothing. `Retired { key, id, version,
   providers }` says what left; `UnloadError::NotFound { key }` is the
   only refusal.
+- **And unloaded, on the host's word.** `unsafe Registry::unload(key)`
+  is `retire`, then the library's own `unload` slot, then the loader's
+  close. `unsafe` because nothing can check it: when it returns, the
+  library's code, descriptors and allocator are gone, so the host must
+  first have dropped every value that library built through **its own**
+  allocator, every `Remote`/`Offer`/`Instance`/`Object` and raw
+  vtable/`ctx`/descriptor pointer taken from it, and every descriptor
+  another library fetched from it through the services. A registry made
+  with `with_alloc` reduces the first of those to nothing: a library
+  handed a host allocator builds the host's trees in the host's arena.
+  `UnloadError::Linked { key }` for a library the host LINKS (nothing to
+  unmap; retiring it works), `Refused { key, status }` when the library
+  says no — it stays registered and mapped — and `Close { key, reason }`
+  when the loader could not close, in which case it is retired.
+- **`LibraryInfo::unload`** is the library's say, an appended slot:
+  `Option<unsafe extern "C" fn() -> Status>`, `GUATIAO_OK` to agree.
+  Null, or a descriptor from before the slot, means "unmap me without
+  asking". `providers!(id = .., version = .., providers = [..], unload =
+  <fn>)` fills it; a hand-written descriptor sets the field. It is the
+  one thing only the library knows: a thread of its own still running, a
+  callback registered elsewhere, values of its still outstanding.
 - **A library's entry point must not call back into the registry loading
   it.** `load_file` holds the registry exclusively for the whole call; a
   provider that needs a peer looks it up later, from a vtable call.
@@ -991,9 +1013,10 @@ than invented per host.
 - **Read on display, never cached.** A library that loads an optional
   component on demand owes its attribution only while it is in use.
 
-**A loaded library is never unloaded.** The registry copies out every
-string and value it reads, but a vtable, a `ctx` and a descriptor pointer
-address the mapping itself, so unloading would dangle those.
+**A loaded library stays mapped until the host unloads it.** The registry
+copies out every string and value it reads, but a vtable, a `ctx` and a
+descriptor pointer address the mapping itself — which is why `retire`
+(which keeps the mapping) is safe and `unload` is the host's word.
 
 ### A host in C, or Python, or anything with an FFI
 
@@ -1013,6 +1036,7 @@ guatiao_registry_scan_dir_rules(reg, dir, false,
 guatiao_registry_providers(reg, guatiao_cstr("greeter"), &alloc, &answer);
 guatiao_registry_provider(reg, key, &alloc, &answer);
 guatiao_registry_retire(reg, guatiao_cstr("hello_library"));   // out of the registry, still mapped
+guatiao_registry_unload(reg, guatiao_cstr("hello_library"));   // the same, then unmapped
 guatiao_registry_keyed_by(reg, guatiao_cstr("%id@%version"));
 guatiao_registry_libraries_keyed_by(reg, tmpl);
 guatiao_registry_libraries(reg, &alloc, &answer);

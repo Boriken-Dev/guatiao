@@ -431,6 +431,24 @@ pub struct Loaded {
     /// The mapping, when this registry made one. Dropping it is what
     /// unmaps the library, which only `unload` does.
     origin: Origin,
+    /// Its say in being unmapped, or `None` for a library that declares
+    /// none. See [`LibraryInfo::unload`](super::desc::LibraryInfo::unload).
+    unload: Option<unsafe extern "C" fn() -> crate::value::status::Status>,
+}
+
+impl Loaded {
+    /// Whether there is a mapping to close at all, or this is code the
+    /// host links.
+    pub(crate) fn is_mapped(&self) -> bool {
+        self.origin.is_mapped()
+    }
+
+    /// Its say in being unmapped, for `unload` to ask.
+    pub(crate) fn unload_slot(
+        &self,
+    ) -> Option<unsafe extern "C" fn() -> crate::value::status::Status> {
+        self.unload
+    }
 }
 
 /// What one library taking its leave came to.
@@ -867,6 +885,7 @@ impl Registry {
             id,
             version,
             meta,
+            unload,
             providers: views,
         } = lib;
 
@@ -965,6 +984,7 @@ impl Registry {
             meta,
             canonical: Registry::canonical(path),
             origin,
+            unload,
         });
         self.publish();
         Ok(Loading::Loaded(self.loaded.last().expect("just pushed")))
@@ -982,17 +1002,27 @@ impl Registry {
     /// pointer, a descriptor another library fetched through this host's
     /// services — keeps working, because the mapping stays.
     ///
-    /// Safe for that reason: retiring dangles nothing. `unload` is the
-    /// one that unmaps.
+    /// Safe for that reason: retiring dangles nothing.
+    /// [`unload`](Registry::unload) is the one that unmaps, and it is
+    /// `unsafe`; it is written in `raw.rs`, the file here allowed to say
+    /// so.
     pub fn retire(&mut self, key: &str) -> Result<Retired, UnloadError> {
         let (retired, origin) = self.take_library(key)?;
         origin.keep();
         Ok(retired)
     }
 
+    /// The record one library key answers to.
+    ///
+    /// For `unload`, which lives in `raw.rs` because this module carries
+    /// `#![forbid(unsafe_code)]`.
+    pub(crate) fn library(&self, key: &str) -> Option<&Loaded> {
+        self.loaded.iter().find(|l| l.key.as_str() == Some(key))
+    }
+
     /// Removes a library and hands back its record and its mapping.
     /// Whoever calls decides what becomes of the handle.
-    fn take_library(&mut self, key: &str) -> Result<(Retired, Origin), UnloadError> {
+    pub(crate) fn take_library(&mut self, key: &str) -> Result<(Retired, Origin), UnloadError> {
         let at = self
             .loaded
             .iter()
@@ -1185,6 +1215,7 @@ mod tests {
                 id: id.to_string(),
                 version: version.to_string(),
                 meta: None,
+                unload: None,
                 providers,
             },
             Origin::Linked,

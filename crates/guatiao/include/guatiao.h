@@ -959,6 +959,23 @@ typedef struct guatiao_library_info {
    worth keeping apart.
    */
   guatiao_map_ptr meta;
+  /*
+   The library's say in being unmapped, or null for one that may be
+   unmapped without notice.
+
+   A host calls this before it closes the mapping. `GUATIAO_OK` means
+   go ahead; any other status refuses, and the host leaves the library
+   registered and mapped. **This is the one thing the host cannot
+   see**: a thread still running, a callback still registered
+   elsewhere, values this library's allocator made that somebody still
+   holds.
+
+   Appended after `meta`; a host reads it only when `struct_size`
+   covers it, and a library that predates it is unmapped without being
+   asked. Takes no context: a library asking about itself already has
+   its own state.
+   */
+  guatiao_status (*unload)(void);
 } guatiao_library_info;
 
 /*
@@ -1182,6 +1199,40 @@ const struct guatiao_host_info *guatiao_registry_host(struct guatiao_registry *r
  `reg` is a live handle and `key` is readable for this call.
  */
 guatiao_status guatiao_registry_retire(struct guatiao_registry *reg, struct guatiao_str key);
+
+/*
+ Takes one library out of this registry **and unmaps it**.
+
+ `guatiao_registry_retire`, then the library's own say, then the
+ loader's close. `GUATIAO_ERR_NOT_FOUND` for an unknown key,
+ `GUATIAO_ERR_WRONG_KIND` for a library the host LINKS (there is
+ nothing to unmap) and for a library that refuses — either way it is
+ left registered and mapped — and `GUATIAO_ERR_INTERNAL` when the
+ loader could not close the mapping, in which case it is retired.
+
+ # Safety
+
+ `reg` is a live handle and `key` is readable for this call.
+
+ **And the caller states what nothing here can check.** When this
+ returns, the library's code, its descriptors and its allocator are
+ gone from the address space, so before calling, every one of these
+ must have been released:
+
+ - every value this library built through **its own** allocator — each
+   records that allocator's address and calls back into it to grow and
+   to free. A registry created with a host allocator
+   (`guatiao_registry_new`) makes this the common case rather than the
+   rule: a library handed one builds the host's trees in the host's
+   arena, where they outlive the mapping;
+ - every vtable pointer, `ctx` and instance taken from it, and every
+   descriptor another library fetched from it through the host's
+   services.
+
+ The library must also have no thread of its own still running. That
+ is what its `unload` slot is for: it is the only side that can know.
+ */
+guatiao_status guatiao_registry_unload(struct guatiao_registry *reg, struct guatiao_str key);
 
 /*
  Releases a registry. Null is a no-op.

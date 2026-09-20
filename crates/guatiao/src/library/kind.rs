@@ -1395,6 +1395,7 @@ impl LibraryParts {
                 stride: size_of::<ProviderInfo>(),
             },
             meta: crate::value::types::MaybeNull::null(),
+            unload: None,
         };
         LibraryParts {
             id,
@@ -1403,6 +1404,12 @@ impl LibraryParts {
             infos,
             info,
         }
+    }
+
+    /// The library's say in being unmapped. See [`LibraryInfo::unload`].
+    pub fn unloading(mut self, unload: Option<unsafe extern "C" fn() -> Status>) -> LibraryParts {
+        self.info.unload = unload;
+        self
     }
 
     /// The descriptor, pointing into this.
@@ -1792,6 +1799,7 @@ mod tests {
                         id: "kinds".to_string(),
                         version: "1.0.0".to_string(),
                         meta: None,
+                        unload: None,
                         providers: vec![
                             provider("kinds_short", GREET_END - 1, None),
                             provider("kinds_refuses", size_of::<GreeterVtable>(), Some(refuses)),
