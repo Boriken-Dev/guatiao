@@ -339,7 +339,8 @@ fn a_macro_exported_schema_is_callable_by_name() {
     type SchemaFn = unsafe extern "C" fn(*const Allocator, *mut Value) -> Status;
 
     // SAFETY: mapping a library runs its initialisers, and this is the
-    // example library the suite builds itself. It is never unloaded.
+    // example library the suite builds itself. The handle lives as long
+    // as the symbols read through it.
     let lib = unsafe { libloading::Library::new(&library) }.expect("the example library maps");
 
     for name in [

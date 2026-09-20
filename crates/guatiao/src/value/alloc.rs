@@ -186,8 +186,9 @@ impl Alloc {
     /// 1. `raw` is null, or points at `raw->struct_size` readable,
     ///    aligned bytes. Nothing past `struct_size` is read.
     /// 2. **The allocator outlives every value built through it.** A
-    ///    vtable inside a loaded library therefore means that library is
-    ///    never unloaded while the host holds a tree it made.
+    ///    vtable inside a loaded library therefore means that library
+    ///    stays mapped while the host holds a tree it made -- which is
+    ///    what `Registry::unload`'s contract asks the host to state.
     pub unsafe fn from_raw(raw: *const Allocator) -> Result<Alloc, AllocError> {
         if raw.is_null() {
             return Err(AllocError::Null);

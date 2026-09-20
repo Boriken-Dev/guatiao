@@ -9,17 +9,13 @@
 //! point, in one place — so the module around it stays provably safe and
 //! an auditor's scope is this file.
 //!
-//! # A library that has been loaded is never unloaded
+//! # The mapping is the registry's, and stays until the host says
 //!
-//! Every tree a library builds records the address of the allocator that
-//! made it, the descriptor's text points into the library's read-only
-//! data, and a vtable points at its code. Unloading invalidates all three
-//! at once, and the first symptom is a free through an unmapped function
-//! pointer at teardown — a long way from the mistake.
-//!
-//! So the handle is **forgotten**, deliberately, and the mapping stays
-//! for the life of the process. That is the same answer [`crate::value::Alloc`] states
-//! as a rule: an allocator outlives everything built through it.
+//! `open` hands the handle back and the registry holds it, so a
+//! library stays mapped until the host retires or unloads it. A tree a
+//! library built through its own allocator, and every vtable, `ctx` and
+//! descriptor pointer taken from it, address that mapping — which is why
+//! retiring keeps it and only `unload` closes it, on the host's word.
 //!
 //! # Loading is an irreversible probe
 //!
@@ -908,7 +904,7 @@ pub(crate) unsafe fn str_of(s: Str) -> Option<&'static str> {
         return None;
     }
     // SAFETY: the caller guarantees `len` readable bytes at `ptr`, and the
-    // library they are in is never unloaded.
+    // library they are in is mapped for the call.
     let bytes = unsafe { std::slice::from_raw_parts(s.ptr, s.len) };
     std::str::from_utf8(bytes).ok()
 }
@@ -946,8 +942,9 @@ pub struct ProviderView {
     /// Its runtime-availability slot, or `None` when it declares none —
     /// which means available. See [`ProviderInfo::available`].
     pub available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
-    /// The descriptor this was read from, in the library's image, which is
-    /// never unloaded. What a host's services hand a library that asks.
+    /// The descriptor this was read from, in the library's image, valid
+    /// until that library is unloaded. What a host's services hand a
+    /// library that asks.
     pub raw: *const ProviderInfo,
     /// One table per kind, as `(kind, vtable, vtable_size)`, for a
     /// provider serving several kinds with a table each. Empty when
@@ -1007,8 +1004,9 @@ impl ProviderView {
         };
         let mut reason = Str::empty();
         // SAFETY: the slot's signature is this envelope's own, checked
-        // present by `read_provider`'s guard; `reason` is a writable local;
-        // and the library it lives in is never unloaded.
+        // present by `read_provider`'s guard; `reason` is a writable
+        // local; and a provider is only asked while its library is
+        // registered, which means mapped.
         if unsafe { ask(self.ctx, &mut reason) } {
             return Ok(());
         }
@@ -1044,8 +1042,8 @@ impl ProviderView {
         }
         // SAFETY: the caller states `T` is this kind's table; the pointer
         // is non-null and the library declared at least `size_of::<T>()`
-        // bytes at it; and a loaded library is never unloaded, so the
-        // borrow lives as long as the provider.
+        // bytes at it; and the borrow lives as long as the mapping, which
+        // only `unload` closes.
         Some(unsafe { &*self.vtable.cast::<T>() })
     }
 }

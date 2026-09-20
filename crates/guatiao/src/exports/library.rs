@@ -388,7 +388,7 @@ pub unsafe extern "C" fn guatiao_registry_provider_create(
             return Status::GUATIAO_ERR_NULL;
         };
         // SAFETY: the slot is the descriptor's own; the pointers are the
-        // caller's, checked above; the library is never unloaded.
+        // caller's, checked above; the library is mapped for the call.
         unsafe { create(view.ctx, config, out, err) }
     })
 }
@@ -535,10 +535,10 @@ pub unsafe extern "C" fn guatiao_registry_unload(reg: *mut HostRegistry, key: St
 
 /// Releases a registry. Null is a no-op.
 ///
-/// **The libraries it loaded stay mapped.** Nothing in this crate unloads
-/// one, because every tree, string and vtable they handed over points into
-/// their images; this frees the host's own table and nothing else. The
-/// block `guatiao_registry_host` handed out stays too, and answers
+/// **The libraries it loaded stay mapped.** This frees the host's own
+/// table and nothing else; `guatiao_registry_unload` is how a library is
+/// unmapped, one at a time and on the caller's word. The block
+/// `guatiao_registry_host` handed out stays too, and answers
 /// `GUATIAO_ERR_GONE` from then on.
 ///
 /// # Safety
@@ -1111,8 +1111,7 @@ pub unsafe extern "C" fn guatiao_registry_best(
 /// table than you expect is an OLDER library, which is the case the size
 /// exists to let you support rather than reject.
 ///
-/// The pointer stays valid for the life of the process, because a loaded
-/// library is never unloaded.
+/// The pointer stays valid until that provider's library is unloaded.
 ///
 /// # Safety
 ///

@@ -108,7 +108,7 @@ fn read_greeter(
     let table = ptr as *const GreeterVtable;
 
     // SAFETY: the size check above established that `greet` is present,
-    // and the mapping it lives in is never unloaded.
+    // and the registry holds the mapping it lives in.
     let greet = unsafe { std::ptr::addr_of!((*table).greet).read() }
         .expect("a greeter that declares no greet slot is not a greeter");
 

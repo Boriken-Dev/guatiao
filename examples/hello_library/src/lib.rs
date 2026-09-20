@@ -115,8 +115,8 @@ unsafe extern "C" fn counted_free(_ctx: *mut c_void, p: *mut c_void, size: usize
 ///
 /// A `static` rather than a local, because **every tree built through it
 /// records this address** and calls back into it to grow and to free. It
-/// therefore has to outlive every such tree, which for a library that is
-/// never unloaded means the life of the process.
+/// therefore has to outlive every such tree, which is why this library
+/// refuses to be unloaded while one is still out.
 static LIBRARY_ALLOC: VTable = VTable(Allocator {
     struct_size: size_of::<Allocator>() as u32,
     ctx: std::ptr::null_mut(),
@@ -139,8 +139,8 @@ unsafe impl Sync for VTable {}
 struct Names<const N: usize>([Str; N]);
 
 // SAFETY: a compile-time constant that is never written, whose every
-// pointer addresses a string literal in this library's own image — which
-// is never unloaded, so the borrow outlives every reader.
+// pointer addresses a string literal in this library's own image, which
+// is mapped for as long as anything reads it.
 unsafe impl<const N: usize> Sync for Names<N> {}
 
 fn library_alloc() -> Alloc {
