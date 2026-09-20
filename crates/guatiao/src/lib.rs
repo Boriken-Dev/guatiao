@@ -158,7 +158,8 @@ pub use schema::Schema;
 // `value::types::Bytes`, since one name cannot be both.
 pub use value::types::Str;
 pub use value::{
-    Alloc, Buffer, Entry, List, MAX_DEPTH, Map, ReadValue, Status, Tag, Text, Value, ValueError,
+    Alloc, Buffer, Entry, List, MAX_DEPTH, Map, Number, ReadValue, Status, Tag, Text, Value,
+    ValueError,
 };
 
 /// `#[derive(ToValue)]` and `#[derive(FromValue)]`, behind the

@@ -26,7 +26,7 @@ use std::mem::ManuallyDrop;
 use crate::value::alloc::Alloc;
 use crate::value::mutate::*;
 
-use super::types::{Buffer, Entry, List, Map, Text};
+use super::types::{Buffer, Entry, List, Map, Number, Text};
 
 /// The kind of a stored value.
 ///
@@ -194,6 +194,12 @@ impl Payload {
         Payload {
             text: ManuallyDrop::new(text),
         }
+    }
+
+    /// A payload holding a number: the same arm as text, since a number
+    /// is stored as the text that declared it.
+    pub fn number(number: Number) -> Payload {
+        Payload::text(number.into_text())
     }
 
     /// A payload holding bytes.

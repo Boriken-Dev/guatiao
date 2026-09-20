@@ -42,10 +42,6 @@ pub mod convert;
 // comment, never a `///`.
 pub mod merge;
 pub mod mutate;
-// What counts as a number: the JSON grammar, checked at construction.
-// Private because it is the value model's own rule rather than a service
-// a caller needs.
-mod number;
 mod raw;
 // What a call across the boundary reports. Ungated, so a library can name
 // it without exporting anything. A `//` comment, never a `///`.
@@ -83,4 +79,4 @@ pub use status::Status;
 // `types::`: a Rust caller reads a `&[u8]` or a slice instead, and
 // `types::Bytes` would collide with `convert::Bytes` (a field type that
 // says "cross as the bytes kind").
-pub use types::{Buffer, Entry, List, Map, Payload, Str, Tag, Text, Value};
+pub use types::{Buffer, Entry, List, Map, Number, Payload, Str, Tag, Text, Value};

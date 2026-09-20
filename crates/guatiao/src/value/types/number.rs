@@ -1,0 +1,320 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! A number: the exact text that declared it.
+//!
+//! What counts as one is RFC 8259 section 6 and nothing else, so a
+//! producer and a consumer that agree about JSON agree about this. The
+//! check is at construction, never at read.
+//!
+//! `f64::from_str` is a different grammar in both directions: it takes
+//! `inf`, `NaN`, `.5`, `5.` and `+1`, and it rounds, which throws away the
+//! reason the text is kept. A 200-digit integer is a number here and there
+//! is no `f64` for it.
+
+#![allow(missing_docs)]
+#![forbid(unsafe_code)]
+
+use std::fmt;
+use std::str::FromStr;
+
+use crate::value::alloc::Alloc;
+use crate::value::mutate::{ValueError, blank};
+
+use super::{Payload, Tag, Text, Value};
+
+/// A JSON number, stored as its exact text.
+///
+/// `1.10` reads back as `1.10` and `u64::MAX` survives, because nothing
+/// converts. A machine width is reached with `TryInto` on the value, where
+/// the refusal is visible.
+///
+/// Wraps a [`Text`] rather than carrying its own fields: the node's
+/// `text` arm is the same storage for a string and a number, and one
+/// container means one growth path and one free.
+#[repr(transparent)]
+#[derive(Debug)]
+pub struct Number(Text);
+
+impl Number {
+    /// A number from its exact text, refusing anything outside the JSON
+    /// grammar.
+    ///
+    /// Fallible in the short form too, and the refusal is about the
+    /// **text**: `"1,5"` is not a JSON number. Allocation failure aborts,
+    /// as [`Text::new`] does.
+    pub fn new(text: &str) -> Result<Number, ValueError> {
+        validate_json_number(text.as_bytes()).map_err(|_| ValueError::NotANumber)?;
+        Ok(Number(Text::new(text)))
+    }
+
+    /// The same, through an allocator you name.
+    ///
+    /// The grammar is checked before anything is allocated, so a refused
+    /// number costs nothing.
+    pub fn new_in(alloc: Alloc, text: &str) -> Result<Number, ValueError> {
+        validate_json_number(text.as_bytes()).map_err(|_| ValueError::NotANumber)?;
+        Ok(Number(Text::new_in(alloc, text)?))
+    }
+
+    /// The text this number was written as.
+    ///
+    /// Infallible: the grammar is ASCII, so a number built here is UTF-8.
+    /// A NUMBER node a foreign producer wrote with other bytes reads as
+    /// `""`, which every conversion then refuses.
+    pub fn as_str(&self) -> &str {
+        self.0.as_str().unwrap_or("")
+    }
+
+    /// The bytes, for a reader that must tell "not UTF-8" from empty.
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+
+    /// The text, with ownership.
+    pub(crate) fn into_text(self) -> Text {
+        self.0
+    }
+}
+
+impl Clone for Number {
+    fn clone(&self) -> Number {
+        Number(self.0.clone())
+    }
+}
+
+impl PartialEq for Number {
+    /// Byte equality of the text, which is what makes `1.10` different
+    /// from `1.1`. Comparing as numbers would be the lossy view.
+    fn eq(&self, other: &Number) -> bool {
+        self.as_bytes() == other.as_bytes()
+    }
+}
+
+impl Eq for Number {}
+
+impl fmt::Display for Number {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for Number {
+    type Err = ValueError;
+
+    fn from_str(text: &str) -> Result<Number, ValueError> {
+        Number::new(text)
+    }
+}
+
+/// Every integer width, written as its **decimal text**.
+///
+/// Not squeezed through an `i64` on the way: `u64::MAX` and `i128::MIN`
+/// cross as themselves rather than wrapping, because there is no machine
+/// width at the boundary to overflow.
+macro_rules! number_from_integer {
+    ($($t:ty),* $(,)?) => {$(
+        impl From<$t> for Number {
+            fn from(v: $t) -> Number {
+                // An integer's decimal text is a JSON number by
+                // construction, so the only refusal `new` can make is one
+                // this cannot reach.
+                Number::new(&v.to_string()).expect("an integer's decimal text is a JSON number")
+            }
+        }
+    )*};
+}
+
+number_from_integer!(
+    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
+);
+
+/// A float converts **fallibly**: `NaN` and the infinities have no JSON
+/// spelling, so keeping the refusal here keeps it out of every consumer's
+/// own formatting.
+impl TryFrom<f64> for Number {
+    type Error = ValueError;
+
+    fn try_from(v: f64) -> Result<Number, ValueError> {
+        if !v.is_finite() {
+            return Err(ValueError::NotANumber);
+        }
+        Number::new(&v.to_string())
+    }
+}
+
+impl TryFrom<f32> for Number {
+    type Error = ValueError;
+
+    fn try_from(v: f32) -> Result<Number, ValueError> {
+        Number::try_from(f64::from(v))
+    }
+}
+
+impl From<Number> for Value {
+    /// A number value: the same `text` arm a string uses, under the
+    /// number tag.
+    ///
+    /// ```
+    /// # use guatiao::{Number, Tag, Value};
+    /// let v = Value::from(Number::from(5u64));
+    /// assert_eq!(v.tag(), Ok(Tag::GUATIAO_NUMBER));
+    /// assert_eq!(v.as_number_str(), Some("5"));
+    /// ```
+    fn from(number: Number) -> Value {
+        let mut v = blank(Tag::GUATIAO_NUMBER);
+        v.payload = Payload::number(number);
+        v
+    }
+}
+
+/// Checks `bytes` against RFC 8259 section 6, answering the byte offset at
+/// which it stopped conforming.
+///
+/// The offset equals the text's length when the text ended early (`"1."`,
+/// `"1e"`, `""`).
+pub(crate) fn validate_json_number(bytes: &[u8]) -> Result<(), usize> {
+    let mut i = 0usize;
+
+    if bytes.first() == Some(&b'-') {
+        i += 1;
+    }
+
+    // int = "0" / ( digit1-9 *DIGIT ). A leading zero may not be followed
+    // by more digits, which is what rejects `01`.
+    match bytes.get(i) {
+        Some(b'0') => i += 1,
+        Some(b'1'..=b'9') => {
+            i += 1;
+            while matches!(bytes.get(i), Some(b'0'..=b'9')) {
+                i += 1;
+            }
+        }
+        _ => return Err(i),
+    }
+
+    // frac = "." 1*DIGIT -- at least one digit, so `5.` is not a number.
+    if bytes.get(i) == Some(&b'.') {
+        i += 1;
+        if !matches!(bytes.get(i), Some(b'0'..=b'9')) {
+            return Err(i);
+        }
+        while matches!(bytes.get(i), Some(b'0'..=b'9')) {
+            i += 1;
+        }
+    }
+
+    // exp = ("e" / "E") [ "-" / "+" ] 1*DIGIT. The sign IS allowed here,
+    // unlike the leading `+` the grammar refuses.
+    if matches!(bytes.get(i), Some(b'e' | b'E')) {
+        i += 1;
+        if matches!(bytes.get(i), Some(b'+' | b'-')) {
+            i += 1;
+        }
+        if !matches!(bytes.get(i), Some(b'0'..=b'9')) {
+            return Err(i);
+        }
+        while matches!(bytes.get(i), Some(b'0'..=b'9')) {
+            i += 1;
+        }
+    }
+
+    // Trailing anything -- `1_000`, `0x1F`, `5 ` -- is not a number.
+    if i != bytes.len() {
+        return Err(i);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every shape RFC 8259 section 6 allows, and the ones a `f64` check
+    /// would take or reject wrongly.
+    ///
+    /// **This test bites.** Deleting the leading-zero rule makes `01`
+    /// pass; deleting the `1*DIGIT` after `.` makes `5.` pass; deferring
+    /// to `parse::<f64>()` makes `.5`, `+1`, `inf` and `NaN` pass and
+    /// makes a 200-digit integer round.
+    #[test]
+    fn the_json_number_grammar_is_accepted_exactly() {
+        for text in [
+            "0",
+            "-0",
+            "1",
+            "-1",
+            "1234567890",
+            "1.0",
+            "1.10", // a trailing zero survives, because the text is the value
+            "-2.5",
+            "1e10",
+            "1E10",
+            "1e+10",
+            "1e-10",
+            "-2.5E-3",
+            "1e400", // no finite f64, still a number
+            "0.0000000000000000000000000001",
+        ] {
+            assert_eq!(
+                validate_json_number(text.as_bytes()),
+                Ok(()),
+                "{text} is a JSON number and must be accepted"
+            );
+        }
+
+        // A 200-digit integer: bigger than i64, bigger than f64's exact
+        // range, and still just text.
+        let big = "9".repeat(200);
+        assert_eq!(validate_json_number(big.as_bytes()), Ok(()));
+
+        for (text, position) in [
+            ("", 0usize),
+            ("+1", 0),
+            (".5", 0),
+            ("5.", 2),
+            ("01", 1),
+            ("00", 1),
+            ("-01", 2),
+            ("0x1F", 1),
+            ("Infinity", 0),
+            ("-Infinity", 1),
+            ("NaN", 0),
+            ("nan", 0),
+            ("inf", 0),
+            ("1_000", 1),
+            ("1e", 2),
+            ("1e+", 3),
+            ("1.2.3", 3),
+            ("--1", 1),
+            (" 5", 0),
+            ("5 ", 1),
+            ("0b101", 1),
+            ("1,000", 1),
+        ] {
+            assert_eq!(
+                validate_json_number(text.as_bytes()),
+                Err(position),
+                "{text} is not a JSON number, and the offset must say where"
+            );
+        }
+    }
+
+    /// The type carries the grammar: a refusal is a refusal whichever
+    /// door it comes through.
+    #[test]
+    fn a_number_keeps_the_text_it_was_given() {
+        assert_eq!(Number::new("1.10").expect("a JSON number").as_str(), "1.10");
+        assert_eq!(Number::from(u64::MAX).as_str(), "18446744073709551615");
+        assert_eq!(Number::from(i128::MIN).as_str(), &i128::MIN.to_string());
+        assert_eq!(Number::new("1,5"), Err(ValueError::NotANumber));
+        assert_eq!("5".parse::<Number>().expect("a JSON number").as_str(), "5");
+        assert_eq!(Number::try_from(f64::NAN), Err(ValueError::NotANumber));
+        assert_eq!(Number::try_from(f32::INFINITY), Err(ValueError::NotANumber));
+        assert_ne!(
+            Number::new("1.10").expect("a JSON number"),
+            Number::new("1.1").expect("a JSON number")
+        );
+    }
+}

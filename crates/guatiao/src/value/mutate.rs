@@ -88,8 +88,8 @@ use std::mem::ManuallyDrop;
 use std::ptr;
 
 use super::alloc::{Alloc, AllocError, Allocator};
-use super::number::validate_json_number;
 use super::raw::{dangling, release_buffer, reserve};
+use super::types::number::validate_json_number;
 use super::types::{Buffer, Entry, List, Map, Payload, Tag, Text, Value};
 
 /// How deep a tree any walk here follows: cloning one, merging two,

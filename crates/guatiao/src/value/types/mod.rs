@@ -106,12 +106,14 @@ pub mod buffer;
 pub mod list;
 pub mod map;
 pub mod maybe_null;
+pub mod number;
 pub mod text;
 
 pub use buffer::{Buffer, Bytes};
 pub use list::{List, Values};
 pub use map::{Entries, Entry, Map};
 pub use maybe_null::MaybeNull;
+pub use number::Number;
 pub use text::{Str, Text};
 
 // The node lives beside this directory rather than in it, and every path
@@ -133,6 +135,9 @@ const _: () = {
     assert!(size_of::<Values>() == 16);
     assert!(size_of::<Entries>() == 16);
 
+    // `Number` is a `Text` under a different tag, so it is the same
+    // storage and the same 32 bytes; nothing new crosses the boundary.
+    assert!(size_of::<Number>() == 32);
     assert!(size_of::<Text>() == 32);
     assert!(size_of::<Buffer>() == 32);
     assert!(size_of::<List>() == 32);
