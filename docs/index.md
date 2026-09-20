@@ -37,6 +37,13 @@ pip install guatiao
 export GUATIAO_LIBRARY=/path/to/the/library
 ```
 
+A Dart consumer adds the package and points it at the same library:
+
+```bash
+dart pub add guatiao
+export GUATIAO_LIBRARY=/path/to/the/library
+```
+
 A C consumer includes `guatiao.h` and links nothing to read a value.
 
 ## 30-second tour
@@ -78,4 +85,6 @@ let greeter = registry.best("greeter").expect("something serves it");
 - [Rust API reference](https://boriken-dev.github.io/guatiao/rust/guatiao/index.html), built by rustdoc
   from the crates in this workspace.
 - [Python API reference](api/python.md), for the ctypes bindings.
+- [Dart API reference](api/dart.md), for the `dart:ffi` bindings -- a plain
+  Dart package, so a Flutter app uses the same one.
 - [Changelog](changelog.md).

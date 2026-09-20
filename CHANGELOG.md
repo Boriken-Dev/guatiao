@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Dart bindings**, `bindings/dart/`: `dart:ffi` over the same C ABI,
+  with `package:ffi` as the only dependency and no Flutter dependency, so
+  one package serves a Flutter app and a command-line program. `Value`,
+  `Ref`, `MapRef` and `ListRef` for the value tree; `Registry` and
+  `Instance` for hosting plugins; `kindTable` for a provider's function
+  table, checked against the floor hash the kind's C header declares;
+  `package:guatiao/serde.dart` and `.../form.dart` for the two optional
+  libraries. `lib/src/bindings.g.dart` is ffigen output from the three
+  committed headers. CI runs `dart analyze`, `dart format` and `dart
+  test` on Linux, Windows and macOS, and the docs site carries the
+  generated reference under `/dart/`.
 - **A host registers a library it links through its C entry point**:
   `Registry::register_entry(name, entry)` beside `register_local`, and
   `guatiao_registry_register_entry` in C -- for a library written in C
