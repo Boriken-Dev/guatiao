@@ -486,6 +486,53 @@ pub unsafe extern "C" fn guatiao_registry_retire(reg: *mut HostRegistry, key: St
     })
 }
 
+/// Takes one library out of this registry **and unmaps it**.
+///
+/// `guatiao_registry_retire`, then the library's own say, then the
+/// loader's close. `GUATIAO_ERR_NOT_FOUND` for an unknown key,
+/// `GUATIAO_ERR_WRONG_KIND` for a library the host LINKS (there is
+/// nothing to unmap) and for a library that refuses — either way it is
+/// left registered and mapped — and `GUATIAO_ERR_INTERNAL` when the
+/// loader could not close the mapping, in which case it is retired.
+///
+/// # Safety
+///
+/// `reg` is a live handle and `key` is readable for this call.
+///
+/// **And the caller states what nothing here can check.** When this
+/// returns, the library's code, its descriptors and its allocator are
+/// gone from the address space, so before calling, every one of these
+/// must have been released:
+///
+/// - every value this library built through **its own** allocator — each
+///   records that allocator's address and calls back into it to grow and
+///   to free. A registry created with a host allocator
+///   (`guatiao_registry_new`) makes this the common case rather than the
+///   rule: a library handed one builds the host's trees in the host's
+///   arena, where they outlive the mapping;
+/// - every vtable pointer, `ctx` and instance taken from it, and every
+///   descriptor another library fetched from it through the host's
+///   services.
+///
+/// The library must also have no thread of its own still running. That
+/// is what its `unload` slot is for: it is the only side that can know.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_unload(reg: *mut HostRegistry, key: Str) -> Status {
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(key)) = (unsafe { HostRegistry::get_mut(reg) }, unsafe {
+            as_str(key)
+        }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        // SAFETY: forwarded -- the caller stated the contract above.
+        match unsafe { registry.inner.unload(key) } {
+            Ok(()) => Status::GUATIAO_OK,
+            Err(why) => unload_status(&why),
+        }
+    })
+}
+
 /// Releases a registry. Null is a no-op.
 ///
 /// **The libraries it loaded stay mapped.** Nothing in this crate unloads

@@ -246,6 +246,166 @@ fn a_second_registration_of_the_same_file_is_still_skipped_until_it_retires() {
     );
 }
 
+/// The library says no while anything it allocated is still out, and yes
+/// once it is gone. Its `unload` slot is the only side that can know.
+#[test]
+fn a_library_with_values_outstanding_refuses_and_then_agrees() {
+    let _one = one_at_a_time();
+    let path = library_path();
+    let mut registry = Registry::new("unload-tests", "1.0");
+    registry
+        .load_file(&path)
+        .expect("the example library loads")
+        .loaded()
+        .expect("it accepts this host");
+
+    // A tree the library built through its own counted allocator. While
+    // it is alive the library refuses to be unmapped -- freeing it would
+    // call an allocator that is no longer there.
+    let answer = greet(&registry, "ada");
+    // SAFETY: the host states the contract; here it is deliberately
+    // false, which is what the library's own slot is for.
+    let why = unsafe { registry.unload("hello_library") }.expect_err("a value is still out");
+    assert!(
+        matches!(
+            why,
+            UnloadError::Refused { ref key, status }
+                if key == "hello_library" && status == Status::GUATIAO_ERR_WRONG_KIND
+        ),
+        "{why:?}"
+    );
+    assert!(
+        registry.provider("hello_library_greeter").is_some(),
+        "a refusal leaves the registry exactly as it was"
+    );
+
+    drop(answer);
+    // SAFETY: the tree is gone, nothing else was taken from the library,
+    // and this test holds the only registry that loaded it.
+    unsafe { registry.unload("hello_library") }.expect("nothing is outstanding now");
+    assert!(registry.loaded().is_empty());
+}
+
+/// A library the host LINKS cannot be unmapped, and says so rather than
+/// pretending.
+#[test]
+fn a_linked_library_cannot_be_unloaded() {
+    let _one = one_at_a_time();
+    let mut registry = Registry::new("unload-tests", "1.0");
+    registry
+        .register_entry("cli", describing)
+        .expect("a linked library registers")
+        .loaded()
+        .expect("it accepts this host");
+
+    // SAFETY: there is nothing mapped to unmap, which is the answer.
+    let why = unsafe { registry.unload("linked_library") }.expect_err("it is linked");
+    assert!(matches!(why, UnloadError::Linked { key } if key == "linked_library"));
+    assert!(
+        registry.provider("linked_greeter").is_some(),
+        "a refusal leaves it registered"
+    );
+
+    // And retiring it, which never unmaps anything, works.
+    registry.retire("linked_library").expect("it is loaded");
+}
+
+/// An unknown key is `NOT_FOUND` before anything is asked.
+#[test]
+fn unloading_an_unknown_key_is_not_found() {
+    let _one = one_at_a_time();
+    let mut registry = Registry::new("unload-tests", "1.0");
+    // SAFETY: nothing is unmapped, since nothing answers to the key.
+    let why = unsafe { registry.unload("nonesuch") }.expect_err("nothing answers");
+    assert!(matches!(why, UnloadError::NotFound { key } if key == "nonesuch"));
+}
+
+/// Unloading through the C surface: the library's refusal is
+/// `GUATIAO_ERR_WRONG_KIND`, an unknown key is `GUATIAO_ERR_NOT_FOUND`.
+#[test]
+fn the_c_surface_unloads() {
+    use guatiao::value::types::Str;
+
+    let _one = one_at_a_time();
+    let path = library_path();
+    let path = path.to_string_lossy().into_owned();
+
+    // SAFETY: the names are readable for the call and the allocator is
+    // this crate's own.
+    let reg = unsafe {
+        guatiao::exports::library::guatiao_registry_new(
+            Str::borrowed("c-unload"),
+            Str::borrowed("1.0"),
+            guatiao::Alloc::rust().as_raw(),
+        )
+    };
+    assert!(!reg.is_null());
+    let mut answer = guatiao::value::types::Value::absent();
+    // SAFETY: `reg` is live, the path is readable, `answer` is writable.
+    let status = unsafe {
+        guatiao::exports::library::guatiao_registry_load_file(
+            reg,
+            Str::borrowed(&path),
+            guatiao::Alloc::rust().as_raw(),
+            &mut answer,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_OK);
+    drop(answer);
+
+    // SAFETY: as above; the key is readable. Nothing this test built is
+    // outstanding, so the library agrees.
+    assert_eq!(
+        unsafe {
+            guatiao::exports::library::guatiao_registry_unload(reg, Str::borrowed("hello_library"))
+        },
+        Status::GUATIAO_OK
+    );
+    // SAFETY: as above.
+    assert_eq!(
+        unsafe {
+            guatiao::exports::library::guatiao_registry_unload(reg, Str::borrowed("hello_library"))
+        },
+        Status::GUATIAO_ERR_NOT_FOUND
+    );
+    // SAFETY: the handle is live and used nowhere else.
+    unsafe { guatiao::exports::library::guatiao_registry_free(reg) };
+}
+
+/// `{"greeting": ...}` from the example library's greeter, built through
+/// the library's own allocator.
+///
+/// Read the way the crate documents a table: check the size the library
+/// compiled it at against a frozen floor, then project the slot through
+/// the raw pointer.
+fn greet(registry: &Registry, name: &str) -> guatiao::Value {
+    use guatiao::value::types::{Map, Text};
+    use hello_library::GreeterVtable;
+
+    let provider = registry
+        .provider("hello_library_greeter")
+        .expect("the greeter is loaded");
+    let (ptr, size) = provider.vtable();
+    assert!(size >= GreeterVtable::floor());
+    // SAFETY: the provider claims the `greeter` kind, whose table this
+    // test's dev-dependency declares, and the size check established
+    // `greet` is present.
+    let greet = unsafe { std::ptr::addr_of!((*(ptr as *const GreeterVtable)).greet).read() }
+        .expect("a greeter has a greet slot");
+
+    let mut config = Map::new();
+    config
+        .set("name", Text::new(name))
+        .expect("a one-key map does not exhaust the allocator");
+    let config = guatiao::Value::from(config);
+    let mut answer = guatiao::Value::absent();
+    // SAFETY: the greeter's contract; `config` is well formed and
+    // `answer` is a writable local.
+    let status = unsafe { greet(provider.ctx(), &config, &mut answer) };
+    assert_eq!(status, Status::GUATIAO_OK);
+    answer
+}
+
 // --- a library this binary links, for the `Linked` cases ---------------
 
 /// A `Str` array holds raw pointers, so it is not `Sync` without saying
@@ -306,6 +466,7 @@ unsafe extern "C" fn describing(_host: *const guatiao::library::HostInfo) -> *co
                 stride: size_of::<ProviderInfo>(),
             },
             meta: MaybeNull::null(),
+            unload: None,
         };
         Described { providers, desc }
     });

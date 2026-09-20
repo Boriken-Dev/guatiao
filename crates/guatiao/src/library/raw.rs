@@ -253,6 +253,11 @@ macro_rules! __guatiao_declares {
 /// ["VIEWER=1"])` (or `declares = [..]` after `providers = [..]` in
 /// the long form) adds pairs of the library's own. See
 /// [`declares!`](crate::declares).
+///
+/// The long form also takes `unload = <fn>`, an
+/// `unsafe extern "C" fn() -> Status` the host calls before it unmaps
+/// this library. See [`LibraryInfo::unload`]. Without one the library
+/// may be unmapped without notice.
 #[macro_export]
 macro_rules! providers {
     ($($provider:ty),+ $(,)?) => {
@@ -274,6 +279,25 @@ macro_rules! providers {
         id = $id:expr,
         version = $version:expr,
         providers = [$($provider:ty),+ $(,)?]
+        $(, declares = [$($pair:expr),* $(,)?])?,
+        unload = $unload:expr $(,)?
+    ) => {
+        $crate::__guatiao_declares!(
+            kinds = [$(<$provider as $crate::library::kind::ProviderDecl>::KINDS),+],
+            pairs = [$($($pair),*)?]
+        );
+        $crate::__guatiao_describe!(
+            #[doc(hidden)]
+            fn __guatiao_describe;
+            id = $id, version = $version, providers = [$($provider),+],
+            unload = ::core::option::Option::Some($unload)
+        );
+        $crate::guatiao_library!(__guatiao_describe);
+    };
+    (
+        id = $id:expr,
+        version = $version:expr,
+        providers = [$($provider:ty),+ $(,)?]
         $(, declares = [$($pair:expr),* $(,)?])? $(,)?
     ) => {
         $crate::__guatiao_declares!(
@@ -283,7 +307,8 @@ macro_rules! providers {
         $crate::__guatiao_describe!(
             #[doc(hidden)]
             fn __guatiao_describe;
-            id = $id, version = $version, providers = [$($provider),+]
+            id = $id, version = $version, providers = [$($provider),+],
+            unload = ::core::option::Option::None
         );
         $crate::guatiao_library!(__guatiao_describe);
     };
@@ -323,7 +348,8 @@ macro_rules! local_providers {
             /// What this crate offers as a library the host links: hand
             /// it to `Registry::register_local`.
             pub fn library;
-            id = $id, version = $version, providers = [$($provider),+]
+            id = $id, version = $version, providers = [$($provider),+],
+            unload = ::core::option::Option::None
         );
     };
 }
@@ -335,7 +361,8 @@ macro_rules! local_providers {
 macro_rules! __guatiao_describe {
     (
         $(#[$attr:meta])* $vis:vis fn $name:ident;
-        id = $id:expr, version = $version:expr, providers = [$($provider:ty),+]
+        id = $id:expr, version = $version:expr, providers = [$($provider:ty),+],
+        unload = $unload:expr
     ) => {
         $(#[$attr])*
         $vis fn $name(
@@ -351,9 +378,10 @@ macro_rules! __guatiao_describe {
                             <$provider as $crate::library::kind::ProviderDecl>::provider(host, alloc).ok()?,
                         );
                     )+
-                    ::core::option::Option::Some($crate::library::kind::LibraryParts::new(
-                        $id, $version, providers,
-                    ))
+                    ::core::option::Option::Some(
+                        $crate::library::kind::LibraryParts::new($id, $version, providers)
+                            .unloading($unload),
+                    )
                 })
                 .as_ref()
                 .map($crate::library::kind::LibraryParts::info)
@@ -1031,6 +1059,9 @@ pub struct LibraryView {
     /// Whatever else it declared, or `None`. A copy. See
     /// [`LibraryInfo::meta`].
     pub meta: Option<Map>,
+    /// Its say in being unmapped, or `None` when it declares none or
+    /// predates the slot. See [`LibraryInfo::unload`].
+    pub unload: Option<unsafe extern "C" fn() -> Status>,
     /// What it offers.
     pub providers: Vec<ProviderView>,
 }
@@ -1099,6 +1130,12 @@ pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Result<LibraryView
             .map_err(|_| Rejected::Malformed)?;
     }
 
+    let mut unload = None;
+    if declared >= LibraryInfo::unload_end() {
+        // SAFETY: the guard established the field is present.
+        unload = unsafe { std::ptr::addr_of!((*raw).unload).read() };
+    }
+
     // Every check on the array runs before anything is allocated for it:
     // `len` is the library's number, and a corrupt one must be refused,
     // never reserved for.
@@ -1125,6 +1162,7 @@ pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Result<LibraryView
         id,
         version,
         meta,
+        unload,
         providers: out,
     })
 }
@@ -1298,11 +1336,25 @@ pub(crate) enum Origin {
 
 #[cfg(feature = "load")]
 impl Origin {
+    /// Whether there is a mapping to close at all.
+    pub(crate) fn is_mapped(&self) -> bool {
+        matches!(self, Origin::Mapped(_))
+    }
+
     /// Gives up the handle and leaves the mapping in place, so every
     /// image address the library already handed out stays valid.
     pub(crate) fn keep(self) {
         if let Origin::Mapped(library) = self {
             std::mem::forget(library);
+        }
+    }
+
+    /// Closes the mapping. A close error leaves the handle given up, as
+    /// `libloading` does.
+    pub(crate) fn close(self) -> Result<(), libloading::Error> {
+        match self {
+            Origin::Mapped(library) => library.close(),
+            Origin::Linked => Ok(()),
         }
     }
 }
@@ -1408,6 +1460,83 @@ pub(crate) fn open_entry(entry: EntryFn, host: Host) -> Opened {
     match unsafe { read_library(desc) } {
         Ok(view) => Opened::Loaded(view, Origin::Linked),
         Err(why) => Opened::Rejected(why),
+    }
+}
+
+/// `unload` lives here, and not beside `retire`, because
+/// `library/registry.rs` carries `#![forbid(unsafe_code)]` and this is
+/// the file allowed to say it.
+#[cfg(feature = "load")]
+impl super::registry::Registry {
+    /// Takes one library out of this registry **and unmaps it**.
+    ///
+    /// [`retire`](super::registry::Registry::retire), then the library's
+    /// own say, then the loader's close, in that order: a library that
+    /// refuses is left exactly as it was, registered and mapped
+    /// ([`UnloadError::Refused`](super::registry::UnloadError::Refused)).
+    /// A library the host LINKS has no mapping and answers
+    /// [`Linked`](super::registry::UnloadError::Linked); retiring it
+    /// works.
+    ///
+    /// # Safety
+    ///
+    /// **Nothing in this crate can check this, which is why it is the
+    /// caller's word.** When this returns, the library's code, its
+    /// descriptors and its allocator are gone from the address space.
+    /// Before calling, the host must have dropped:
+    ///
+    /// - every value this library built through **its own** allocator —
+    ///   each records that allocator's address and calls back into it to
+    ///   grow and to free;
+    /// - every [`Remote`](super::kind::Remote),
+    ///   [`Offer`](super::kind::Offer),
+    ///   [`Instance`](super::kind::Instance) and
+    ///   [`Object`](super::kind::Object) taken from it, and every raw
+    ///   vtable, `ctx` or descriptor pointer read out of it;
+    /// - every descriptor pointer another loaded library fetched from
+    ///   this one through the host's services.
+    ///
+    /// A registry created with
+    /// [`with_alloc`](super::registry::Registry::with_alloc) makes the
+    /// first of those the common case rather than the rule: a library
+    /// handed a host allocator builds the host's trees in the host's
+    /// arena, where they outlive the mapping.
+    ///
+    /// The library must also have no thread of its own still running and
+    /// nothing registered elsewhere that points into it. That is what its
+    /// `unload` slot is for: it is the only side that can know.
+    pub unsafe fn unload(&mut self, key: &str) -> Result<(), super::registry::UnloadError> {
+        let one = self
+            .library(key)
+            .ok_or_else(|| super::registry::UnloadError::NotFound {
+                key: key.to_string(),
+            })?;
+        if !one.is_mapped() {
+            return Err(super::registry::UnloadError::Linked {
+                key: key.to_string(),
+            });
+        }
+        // Asked FIRST, so a refusal leaves the registry untouched. A
+        // panic crossing back is caught here, as at every other boundary.
+        if let Some(ask) = one.unload_slot() {
+            // SAFETY: the slot is the library's own, read under its
+            // `struct_size` guard, and the library is still mapped.
+            let status =
+                crate::exports::guard_with(Status::GUATIAO_ERR_INTERNAL, || unsafe { ask() });
+            if status != Status::GUATIAO_OK {
+                return Err(super::registry::UnloadError::Refused {
+                    key: key.to_string(),
+                    status,
+                });
+            }
+        }
+        let (_, origin) = self.take_library(key)?;
+        origin
+            .close()
+            .map_err(|e| super::registry::UnloadError::Close {
+                key: key.to_string(),
+                reason: e.to_string(),
+            })
     }
 }
 
@@ -1575,6 +1704,7 @@ mod tests {
             version: Str::borrowed("0.1.0"),
             providers: Providers::empty(),
             meta: MaybeNull::null(),
+            unload: None,
         }
     }
 
@@ -1629,6 +1759,43 @@ mod tests {
             view.meta.is_none(),
             "a descriptor that predates `meta` declares none"
         );
+        assert!(view.unload.is_none());
+    }
+
+    /// A library built before `unload` was appended still loads, and is
+    /// read as declaring no say in being unmapped.
+    ///
+    /// The direction that matters: appending a slot must not lock out a
+    /// library compiled before it existed.
+    #[test]
+    fn a_library_from_before_unload_reads_it_as_absent_and_still_loads() {
+        unsafe extern "C" fn refuse() -> Status {
+            Status::GUATIAO_ERR_WRONG_KIND
+        }
+
+        let mut value = a_library(LibraryInfo::meta_end());
+        value.unload = Some(refuse);
+        let (_buf, ptr) = short_of(&value, LibraryInfo::meta_end());
+        // SAFETY: `_buf` owns the bytes.
+        let view = unsafe { read_library(ptr) }.expect("above the floor");
+        assert!(
+            view.unload.is_none(),
+            "the slot sits past the declared size, so reading it anyway \
+             hands back the 0xAA tail as a function pointer"
+        );
+
+        // And one that DOES declare it hands it over, or the test above
+        // passes against a reader that never reads the field.
+        let value = a_library(size_of::<LibraryInfo>());
+        let mut value = LibraryInfo {
+            unload: Some(refuse),
+            ..value
+        };
+        value.struct_size = size_of::<LibraryInfo>() as u32;
+        let (_buf, ptr) = short_of(&value, size_of::<LibraryInfo>());
+        // SAFETY: as above.
+        let view = unsafe { read_library(ptr) }.expect("a full descriptor");
+        assert!(view.unload.is_some());
     }
 
     /// A library speaking another envelope version is refused by name,

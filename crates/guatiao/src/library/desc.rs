@@ -333,6 +333,21 @@ pub struct LibraryInfo {
     /// the same thing here — "nothing to add" has no second reading
     /// worth keeping apart.
     pub meta: MaybeNull<Map>,
+    /// The library's say in being unmapped, or null for one that may be
+    /// unmapped without notice.
+    ///
+    /// A host calls this before it closes the mapping. `GUATIAO_OK` means
+    /// go ahead; any other status refuses, and the host leaves the library
+    /// registered and mapped. **This is the one thing the host cannot
+    /// see**: a thread still running, a callback still registered
+    /// elsewhere, values this library's allocator made that somebody still
+    /// holds.
+    ///
+    /// Appended after `meta`; a host reads it only when `struct_size`
+    /// covers it, and a library that predates it is unmapped without being
+    /// asked. Takes no context: a library asking about itself already has
+    /// its own state.
+    pub unload: Option<unsafe extern "C" fn() -> Status>,
 }
 
 impl LibraryInfo {
@@ -344,6 +359,11 @@ impl LibraryInfo {
     /// Where the `meta` field ends, for the guard that reads it.
     pub const fn meta_end() -> usize {
         offset_of!(LibraryInfo, meta) + size_of::<MaybeNull<Map>>()
+    }
+
+    /// Where the `unload` field ends, for the guard that reads it.
+    pub const fn unload_end() -> usize {
+        offset_of!(LibraryInfo, unload) + size_of::<Option<unsafe extern "C" fn() -> Status>>()
     }
 }
 
@@ -637,6 +657,8 @@ mod tests {
         assert!(HostInfo::meta_end() < HostInfo::services_end());
         assert_eq!(HostInfo::services_end(), size_of::<HostInfo>());
         assert!(LibraryInfo::floor() <= size_of::<LibraryInfo>());
+        assert!(LibraryInfo::meta_end() < LibraryInfo::unload_end());
+        assert_eq!(LibraryInfo::unload_end(), size_of::<LibraryInfo>());
         assert!(ProviderInfo::floor() <= size_of::<ProviderInfo>());
         assert!(ProviderInfo::available_end() < ProviderInfo::tables_end());
         assert!(ProviderInfo::tables_end() < ProviderInfo::create_end());

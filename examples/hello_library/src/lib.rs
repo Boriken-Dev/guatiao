@@ -23,7 +23,7 @@
 #![allow(non_camel_case_types)]
 
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::{OnceLock, PoisonError, RwLock};
 
 use guatiao::library::{Host, KindTables, Kinds, LibraryInfo, ProviderInfo, Providers};
@@ -239,6 +239,44 @@ unsafe extern "C" fn outstanding(_ctx: *mut c_void) -> i64 {
     OUTSTANDING.load(Ordering::Relaxed)
 }
 
+// --- being unmapped -----------------------------------------------------
+
+/// How many times a host has called this library's entry point.
+///
+/// **The observable for "was it really unmapped?"** A fresh mapping
+/// starts this at zero, so a host that unloads and loads again reads 1 if
+/// the image went away and 2 if the loader kept it.
+static ENTRY_CALLS: AtomicU64 = AtomicU64::new(0);
+
+/// How many times this mapping has been entered. Exported so a test can
+/// read it without asking this library for anything.
+#[unsafe(no_mangle)]
+pub extern "C" fn hello_library_entry_calls() -> u64 {
+    ENTRY_CALLS.load(Ordering::Relaxed)
+}
+
+/// What the descriptor itself costs: the schema and the metadata, built
+/// once through this library's allocator and kept for as long as it is
+/// mapped. Anything above this is a tree a host still holds.
+static DESCRIPTOR_BLOCKS: AtomicI64 = AtomicI64::new(0);
+
+/// This library's say in being unmapped: not while a tree it allocated is
+/// still out.
+///
+/// A host has no way to see that, which is what the slot is for. The
+/// refusal is `GUATIAO_ERR_WRONG_KIND`, and the host leaves this library
+/// registered and mapped.
+///
+/// # Safety
+///
+/// Called by a host that is about to close this library's mapping.
+unsafe extern "C" fn unload() -> Status {
+    if OUTSTANDING.load(Ordering::Relaxed) > DESCRIPTOR_BLOCKS.load(Ordering::Relaxed) {
+        return Status::GUATIAO_ERR_WRONG_KIND;
+    }
+    Status::GUATIAO_OK
+}
+
 static GREETER: GreeterVtable = GreeterVtable {
     struct_size: size_of::<GreeterVtable>() as u32,
     greet: Some(greet),
@@ -380,6 +418,7 @@ static REGISTERED: OnceLock<Registered> = OnceLock::new();
 /// host is kept, because the echo provider reaches the greeter through it
 /// on every call.
 fn describe(host: Host) -> Option<&'static LibraryInfo> {
+    ENTRY_CALLS.fetch_add(1, Ordering::Relaxed);
     if host.abi_version() != guatiao::library::ABI_VERSION {
         return None;
     }
@@ -526,7 +565,11 @@ fn describe(host: Host) -> Option<&'static LibraryInfo> {
             // SAFETY-adjacent: the box outlives the process, because
             // `Registered` is held in a `OnceLock` that is never cleared.
             meta: MaybeNull::of(unsafe { &*(&*meta as *const Map) }),
+            unload: Some(unload),
         };
+
+        // Everything above this is a host's, not the descriptor's.
+        DESCRIPTOR_BLOCKS.store(OUTSTANDING.load(Ordering::Relaxed), Ordering::Relaxed);
 
         Registered {
             schema,
