@@ -136,6 +136,15 @@ impl Text {
         Ok(owned_text(alloc, text)?)
     }
 
+    /// The bytes, whether or not they are valid UTF-8.
+    pub fn as_bytes(&self) -> &[u8] {
+        if self.len == 0 {
+            return &[];
+        }
+        // SAFETY: the first `len` bytes are initialised.
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+
     /// The text itself, or `None` if it is not valid UTF-8.
     pub fn as_str(&self) -> Option<&str> {
         if self.len == 0 {

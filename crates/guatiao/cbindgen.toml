@@ -509,8 +509,11 @@ include = [
   "BytesMut",
   "MergeOverride",
 ]
-# Defined in the trailer instead; see `after_includes`.
-exclude = ["Entry"]
+# `Entry` is defined in the trailer instead; see `after_includes`.
+# `Number` is a Rust-only newtype over `Text`: C reads a number off the
+# `text` arm under the number tag, so a second typedef for the same 32
+# bytes would be a name with no meaning on that side.
+exclude = ["Entry", "Number"]
 
 # A public C header shares one flat namespace with everything a consumer
 # already includes, so every name it introduces carries this crate's
