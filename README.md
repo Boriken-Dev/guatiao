@@ -54,6 +54,16 @@ Optional features:
 
 A default build pulls in nothing.
 
+Bindings over the same C ABI, for a consumer that is not Rust:
+
+| Language | Package | Install |
+| --- | --- | --- |
+| Python | [`bindings/python/`](bindings/python/README.md) | `pip install guatiao` |
+| Dart | [`bindings/dart/`](bindings/dart/README.md) | `dart pub add guatiao` |
+
+Each drives a shared library that exports the ABI — `guatiao` itself, or
+an application that carries it — named by `GUATIAO_LIBRARY`.
+
 ## Quick start
 
 Build a value, then read it back. Building in Rust names no allocator —

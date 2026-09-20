@@ -117,3 +117,44 @@ jobs:
         run: pytest bindings/python/tests -rs
         env:
           GUATIAO_LIBRARY: target/debug
+
+  dart:
+    name: Dart bindings (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # The same three platforms as the Python job, for the same reason: a
+    # binding breaks where the platforms differ -- the library's filename,
+    # how it is found, and how the loader treats an unmapped image.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build native libraries
+        # The bindings drive a shared library, and `--all-features` is
+        # what exports the registry surface and the serde formats.
+        run: cargo build --workspace --all-features
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Install
+        run: dart pub get
+        working-directory: bindings/dart
+      - name: Analyze
+        # `--fatal-infos`, because a lint at info level is still a lint.
+        run: dart analyze --fatal-infos
+        working-directory: bindings/dart
+      - name: Format check
+        run: dart format --output=none --set-exit-if-changed .
+        working-directory: bindings/dart
+      - name: Test
+        run: dart test
+        working-directory: bindings/dart
+        env:
+          # Absolute: the job runs from the package directory, so a path
+          # relative to the workspace would not resolve.
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug

@@ -34,6 +34,7 @@ nav:
       # page mkdocs knows about, and a relative one would fail --strict.
       - Rust: https://boriken-dev.github.io/guatiao/rust/guatiao/index.html
       - Python: api/python.md
+      - Dart: api/dart.md
   - Changelog: changelog.md
 
 plugins:

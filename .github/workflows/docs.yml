@@ -15,6 +15,7 @@ on:
       - "CHANGELOG.md"
       - "crates/**/*.rs"
       - "bindings/python/src/**"
+      - "bindings/dart/lib/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -41,6 +42,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
       - uses: actions/configure-pages@v5
         with:
           enablement: true
@@ -50,6 +54,11 @@ jobs:
         run: cargo doc --workspace --no-deps --all-features
         env:
           RUSTDOCFLAGS: -D warnings
+      - name: Build the Dart API reference
+        # Into the package's own default output; mkdocs owns `site/`
+        # until it has run, so the copy happens after it.
+        run: dart pub get && dart doc
+        working-directory: bindings/dart
       - name: Install the Python package and the docs tooling
         # Editable, because mkdocstrings renders the package by importing
         # it -- which needs no native library, by design.
@@ -63,6 +72,11 @@ jobs:
           mkdir -p site/rust
           cp -r target/doc/. site/rust/
           printf '%s' '<!doctype html><meta http-equiv="refresh" content="0; url=guatiao/index.html">' > site/rust/index.html
+      - name: Add the Dart reference under /dart/
+        # `dart doc` writes its own root index, so no redirect is needed.
+        run: |
+          mkdir -p site/dart
+          cp -r bindings/dart/doc/api/. site/dart/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/
