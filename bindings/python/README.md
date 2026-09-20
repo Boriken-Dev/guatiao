@@ -130,7 +130,7 @@ kind's C header declares and let the package check it:
 ```python
 from guatiao import kinds
 
-table_ptr, size, ctx = reg.provider_table("acme_greeter")
+table_ptr, size, ctx = reg.provider_table("acme_greeter", kind="greeter")
 greeter = kinds.table(table_ptr, size, GreeterVtable, floor_hash=FLOOR_HASH)
 greeter.greet(ctx, name, out_map, err)
 ```
@@ -164,10 +164,6 @@ provider's own words when it gave any.
 
 ## Known limits
 
-- **A provider that files one table per kind cannot be called yet.**
-  The ABI has no function to fetch a table by kind; `provider_table`
-  reaches the single table a provider declares for everything. Listing,
-  configuring and instantiating such providers all work.
 - Reading JSON writes an exponent's sign: `1e400` parses as `1e+400`.
   Everything else about a number's text survives a round trip.
 - `List.insert` and `list[i] = x` rebuild the list, because the C ABI

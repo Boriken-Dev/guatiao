@@ -86,7 +86,7 @@ with Registry("my-host", "1.0") as reg:
     reg.best("greeter")             # dict: key, id, version, library, display_name,
                                      # from, kinds, has_config, vtable_size
     reg.why_not("codec")            # {"available": False, "why": "nothing-claims-it", ...}
-    table, size, ctx = reg.provider_table("acme_hello")  # a single-`vtable` provider's table
+    table, size, ctx = reg.provider_table("acme_hello", kind="greeter")
     instance = reg.create("acme_shouter", {"prefix": "hey"})
     instance.close()
 ```
@@ -99,11 +99,10 @@ never `.close()` it), `host()` (the raw `host_info` pointer, for driving
 a `guatiao_library_entry` by hand). Every answer that is data comes back
 as a plain `dict`/`list`, already freed.
 
-**`provider_table` reads the provider's single `vtable` field only.** A
-provider that files one table per kind (under `tables` in its descriptor)
-is not reachable: the ABI exports no lookup by kind. Such a provider
-answers a null table and size 0; listing, configuring and instantiating
-it all work.
+`provider_table(key, kind="greeter")` answers the table the provider
+speaks that kind through (its per-kind table, else its single table when
+it claims the kind); `provider_table(key)` answers its single table only.
+A null table and size 0 mean there is none.
 
 `Registry.retire(library_key)` takes a library out of the registry and
 leaves it mapped; `Registry.unload(library_key)` is that, then the

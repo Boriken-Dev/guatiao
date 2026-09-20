@@ -210,14 +210,21 @@ class Registry:
 
     # ---- a provider's table and configuration ------------------------
 
-    def provider_table(self, key: str) -> "tuple[Any, int, Any]":
-        """`(table, size, ctx)`. `table` is null when `key` names no
-        provider, or the provider declares none."""
+    def provider_table(self, key: str, kind: "str | None" = None) -> "tuple[Any, int, Any]":
+        """`(table, size, ctx)` for the table `key` speaks `kind` through.
+        Without `kind`, the provider's single table. `table` is null when
+        there is no such provider or table."""
         self._check_open()
         view, _buf = _make_str(key.encode("utf-8"))
         lib = _lib.core()
         size = ctypes.c_size_t(0)
-        table = lib.guatiao_registry_provider_vtable(self._handle, view, ctypes.byref(size))
+        if kind is None:
+            table = lib.guatiao_registry_provider_vtable(self._handle, view, ctypes.byref(size))
+        else:
+            kind_view, _kbuf = _make_str(kind.encode("utf-8"))
+            table = lib.guatiao_registry_provider_table(
+                self._handle, view, kind_view, ctypes.byref(size)
+            )
         ctx = lib.guatiao_registry_provider_ctx(self._handle, view)
         return table, size.value, ctx
 

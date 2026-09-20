@@ -2,30 +2,9 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""A provider's kind table, called from Python -- proof the C surface
-carries a consumer that is not Rust or C.
-
-**Deviation from the sub-plan's literal steps, discovered while writing
-this test, recorded here rather than silently worked around:**
-`#[derive(Provider)]` always files its kind tables under
-`ProviderInfo.tables` (`crates/guatiao-derive/src/provider.rs`), never
-the legacy single `vtable` field. `guatiao_registry_provider_vtable` --
-the only C export for a provider's table, and what `Registry.provider_table`
-wraps -- reads `vtable` alone; there is no export that fetches
-`tables[i]` by kind name. So `derived_greeter`'s `greeter_vtable`
-(`examples/greeter_kind/include/greeter_kind.h`, the shape this slice
-was written against) is not reachable through this binding as the C ABI
-stands today -- confirmed below, not hidden. Not fixable from
-`bindings/python/`.
-
-`hello_library`'s table IS reachable: it is hand-written straight into
-`vtable` (`examples/hello_library/src/lib.rs`'s own `GreeterVtable` --
-`struct_size`, `greet`, `outstanding`; no `KindHeader`/`floor_hash`, a
-different, older shape than `greeter_kind.h`'s). It stands in for the
-end-to-end call this slice asks for, appended slot included, and its
-greeting text is the same `"hello, <name>"` pattern
-`derived_library_load.rs` asserts for the kind-macro path.
-"""
+"""A provider's kind table, called from Python: a table fetched by kind
+and checked against the kind's header, and a provider that declares one
+single table of its own shape."""
 
 from __future__ import annotations
 
@@ -74,15 +53,26 @@ def test_floor_hash_is_parsed_and_the_struct_matches_the_header():
     assert _floor_hash() > 0
 
 
-def test_a_derived_providers_table_is_not_reachable_via_provider_table():
-    reg = Registry("py-tests", "0.1")
-    try:
+def test_a_table_is_fetched_by_kind_and_called():
+    from guatiao import kinds
+    from guatiao.value import _make_str
+
+    with Registry("py-tests", "0.1") as reg:
         reg.scan_dir(_TARGET_DEBUG, rules="kind=greeter")
-        for key in ("derived_greeter_hello", "derived_greeter_shouter"):
-            table, _size, _ctx = reg.provider_table(key)
-            assert not table, f"{key}: expected unreachable, got a table"
-    finally:
-        reg.close()
+        key = "derived_greeter_hello"
+        assert not reg.provider_table(key)[0], "it declares no single table"
+        assert not reg.provider_table(key, kind="codec")[0]
+
+        raw, size, ctx = reg.provider_table(key, kind="greeter")
+        greeter = kinds.table(raw, size, greeter_table.GreeterVtable, floor_hash=_floor_hash())
+
+        name, _keep = _make_str(b"ana")
+        out = _abi.Map()
+        err = _abi.ProviderError()
+        assert greeter.greet(ctx, name, ctypes.byref(out), ctypes.byref(err)) == 0
+        node = _abi.Value(tag=int(_abi.Tag.MAP), payload=_abi.Payload(map=out))
+        with Value(_raw=node) as answer:
+            assert answer.to_python() == {"greeting": "hello, ana"}
 
 
 class _HelloGreeterVtable(ctypes.Structure):

@@ -1048,7 +1048,8 @@ guatiao_registry_unload(reg, guatiao_cstr("hello_library"));   // the same, then
 guatiao_registry_keyed_by(reg, guatiao_cstr("%id@%version"));
 guatiao_registry_libraries_keyed_by(reg, tmpl);
 guatiao_registry_libraries(reg, &alloc, &answer);
-const void *vt = guatiao_registry_provider_vtable(reg, key, &size);
+const void *vt = guatiao_registry_provider_table(reg, key, guatiao_cstr("greeter"), &size);  // by kind
+const void *one = guatiao_registry_provider_vtable(reg, key, &size);                       // its single table
 void *ctx = guatiao_registry_provider_ctx(reg, key);
 const guatiao_value *schema = guatiao_registry_provider_config(reg, key);
 guatiao_registry_free(reg);
