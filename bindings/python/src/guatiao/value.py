@@ -17,6 +17,7 @@ from __future__ import annotations
 import ctypes
 import decimal
 import math
+from collections.abc import Mapping
 from typing import Any, Iterator, Union
 
 from . import _abi, _lib
@@ -245,7 +246,7 @@ def _write_python(raw: "_abi.Value", obj: Any, alloc: "_abi.Alloc") -> None:
             _write_python(tmp, item, alloc)
             check(lib.guatiao_list_push(ctypes.byref(alloc), ctypes.byref(raw), ctypes.byref(tmp)))
         return
-    if isinstance(obj, dict):
+    if isinstance(obj, Mapping):
         check(lib.guatiao_value_map(ctypes.byref(alloc), ctypes.byref(raw)))
         for key, item in obj.items():
             if not isinstance(key, str):
@@ -493,14 +494,40 @@ class List(Ref):
         self._rebuild(elements)
 
 
+_UNSET: Any = object()
+
+
 class Value(Ref):
     """Owns a root `guatiao_value`, freed on `close()`/`__del__`/`__exit__`."""
 
-    def __init__(self, *, _raw: "_abi.Value | None" = None, alloc: "_abi.Alloc | None" = None) -> None:
+    def __init__(
+        self,
+        obj: Any = _UNSET,
+        /,
+        *,
+        _raw: "_abi.Value | None" = None,
+        alloc: "_abi.Alloc | None" = None,
+        **fields: Any,
+    ) -> None:
+        """`Value(obj)` converts as `from_python` does; `Value(k=v, ...)` is a
+        map, and `Value(mapping, k=v)` adds to one, as `dict` does. `Value()`
+        is absent. `alloc` is reserved, so it cannot be a keyword field."""
         self._raw = _raw if _raw is not None else _abi.Value()
         self._alloc_override = alloc
         self._closed = False
         Ref.__init__(self, self, ())
+        if obj is _UNSET and not fields:
+            return
+        if _raw is not None:
+            raise TypeError("_raw takes no content")
+        if fields:
+            if obj is _UNSET:
+                obj = fields
+            elif isinstance(obj, Mapping):
+                obj = {**obj, **fields}
+            else:
+                raise TypeError("keyword fields need a mapping, or nothing, to add to")
+        _write_python(self._raw, obj, self._ensure_alloc())
 
     def _check_open(self) -> None:
         if self._closed:
@@ -598,9 +625,7 @@ class Value(Ref):
 
     @classmethod
     def from_python(cls, obj: Any, *, alloc: "_abi.Alloc | None" = None) -> "Value":
-        value = cls(alloc=alloc)
-        _write_python(value._raw, obj, value._ensure_alloc())
-        return value
+        return cls(obj, alloc=alloc)
 
     def __repr__(self) -> str:
         if self._closed:

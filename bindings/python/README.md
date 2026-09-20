@@ -62,7 +62,7 @@ nothing found, the first native call raises `guatiao.LibraryNotFound`.
 ```python
 from guatiao import Value
 
-with Value.from_python({"host": "10.0.0.1", "port": 5900, "tags": ["a", "b"]}) as v:
+with Value(host="10.0.0.1", port=5900, tags=["a", "b"]) as v:
     m = v.as_map()
     m["port"] = 5901
     m["tags"].as_list().append("c")
@@ -89,6 +89,8 @@ v.to_python(numbers="decimal")   # Decimal('1.10')
 v.to_python(numbers="str")       # '1.10'
 ```
 
+`Value(1)`, `Value(True)`, `Value("x")`, `Value([1, 2])` and
+`Value({"host": "h"}, port=1)` all work, as the builtins would.
 `None` becomes null, `bytes` the bytes kind, a `dict` with `str` keys a
 map. A missing value reads back as `guatiao.ABSENT`, which is falsy and
 is not `None`. A `float` that is `nan` or infinite raises `ValueError`.
@@ -159,10 +161,8 @@ provider's own words when it gave any.
   function to fetch one by kind; `provider_table` only reaches the single
   table a hand-written provider declares. Listing, configuring and
   instantiating derived providers all work.
-- **JSON output loses the exact text of a non-integer number**: `1.10`
-  is written as an object instead of a bare number. Integers, TOML and
-  YAML are unaffected. This is a defect in `guatiao-serde`, pinned here
-  by an expected-failure test.
+- Reading JSON writes an exponent's sign: `1e400` parses as `1e+400`.
+  Everything else about a number's text survives a round trip.
 - `List.insert` and `list[i] = x` rebuild the list, because the C ABI
   only appends and removes. `append` and `del list[i]` are direct.
 - A `Registry` is used from one thread at a time, and a `Value` is not
