@@ -151,6 +151,16 @@ enum guatiao_status
    */
   GUATIAO_ERR_GONE = 12,
   /*
+   What was asked is not something this side offers: a library with
+   no `unload` slot, asked to unload.
+   */
+  GUATIAO_ERR_UNSUPPORTED = 13,
+  /*
+   Not now: something is still in use. A library answers this from
+   its `unload` slot while anything it handed out is alive.
+   */
+  GUATIAO_ERR_BUSY = 14,
+  /*
    A callback unwound, or a panic was caught here. The operation did
    not happen; the process is still usable.
    */
@@ -1209,38 +1219,42 @@ const struct guatiao_host_info *guatiao_registry_host(struct guatiao_registry *r
 guatiao_status guatiao_registry_retire(struct guatiao_registry *reg, struct guatiao_str key);
 
 /*
- Takes one library out of this registry **and unmaps it**.
+ Takes one library out of this registry **and unmaps it**, when the
+ library agrees.
 
- `guatiao_registry_retire`, then the library's own say, then the
- loader's close. `GUATIAO_ERR_NOT_FOUND` for an unknown key,
- `GUATIAO_ERR_WRONG_KIND` for a library the host LINKS (there is
- nothing to unmap) and for a library that refuses — either way it is
- left registered and mapped — and `GUATIAO_ERR_INTERNAL` when the
- loader could not close the mapping, in which case it is retired.
+ The library's `unload` slot is asked first: its promise that what it
+ can account for is released. `GUATIAO_ERR_UNSUPPORTED` when it has no
+ slot ([`guatiao_registry_unload_unchecked`] is the caller insisting);
+ the library's own status when it refuses, `GUATIAO_ERR_BUSY` from one
+ with an instance or object still alive; `GUATIAO_ERR_WRONG_KIND` for a
+ library the host LINKS; `GUATIAO_ERR_NOT_FOUND` for an unknown key.
+ Every one of those leaves it registered and mapped.
+ `GUATIAO_ERR_INTERNAL` when the loader could not close the mapping, in
+ which case it is retired.
 
  # Safety
 
- `reg` is a live handle and `key` is readable for this call.
-
- **And the caller states what nothing here can check.** When this
- returns, the library's code, its descriptors and its allocator are
- gone from the address space, so before calling, every one of these
- must have been released:
-
- - every value this library built through **its own** allocator — each
-   records that allocator's address and calls back into it to grow and
-   to free. A registry created with a host allocator
-   (`guatiao_registry_new`) makes this the common case rather than the
-   rule: a library handed one builds the host's trees in the host's
-   arena, where they outlive the mapping;
- - every vtable pointer, `ctx` and instance taken from it, and every
-   descriptor another library fetched from it through the host's
-   services.
-
- The library must also have no thread of its own still running. That
- is what its `unload` slot is for: it is the only side that can know.
+ `reg` is a live handle and `key` is readable for this call. What no
+ library can count is the caller's word: no vtable pointer, `ctx` or
+ descriptor taken from it, no value it built through its own allocator
+ that its slot does not track, and no descriptor another library
+ fetched from it through the host's services, is used again.
  */
 guatiao_status guatiao_registry_unload(struct guatiao_registry *reg, struct guatiao_str key);
+
+/*
+ [`guatiao_registry_unload`] for a library with no `unload` slot: the
+ caller's word alone. A library that has a slot is still asked, and its
+ refusal still stands.
+
+ # Safety
+
+ As [`guatiao_registry_unload`], and nothing the library handed out is
+ alive at all: no instance, no object, no value from its allocator, and
+ no thread of its own still running.
+ */
+guatiao_status guatiao_registry_unload_unchecked(struct guatiao_registry *reg,
+                                                 struct guatiao_str key);
 
 /*
  Releases a registry. Null is a no-op.

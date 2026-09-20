@@ -128,6 +128,20 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     // 5. The hash C wrote is the literal the attribute wrote, on both
     // sides of the boundary.
     assert_eq!(<dyn Greeter as Kind>::FLOOR_HASH, GreeterVtable::FLOOR_HASH);
+
+    // 6. A C library with no `unload` slot promises nothing, so the host
+    // is refused until it insists.
+    drop(offer);
+    // SAFETY: nothing taken from the library is held any more.
+    let why = unsafe { registry.unload("c_greeter_library") }.expect_err("it has no slot");
+    assert!(
+        matches!(why, guatiao::library::UnloadError::NotSupported { .. }),
+        "{why:?}"
+    );
+    assert_eq!(registry.loaded().len(), 1, "a refusal changes nothing");
+    // SAFETY: as above, and the library handed out nothing that is alive.
+    unsafe { registry.unload_unchecked("c_greeter_library") }.expect("the host insisted");
+    assert!(registry.loaded().is_empty());
 }
 
 /// A listener nobody will hear from: what `start`'s default body drops.

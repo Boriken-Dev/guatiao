@@ -105,15 +105,16 @@ it claims the kind); `provider_table(key)` answers its single table only.
 A null table and size 0 mean there is none.
 
 `Registry.retire(library_key)` takes a library out of the registry and
-leaves it mapped; `Registry.unload(library_key)` is that, then the
-library's own say, then unmapping it. **Both take the LIBRARY key** --
-`libraries_keyed_by`'s template, `%id` by default -- not a provider key.
-`unload` is the caller's word that nothing taken from that library is
-still held: every value it built through its own allocator, every table,
-`ctx` and `Instance`. `NotFound` for an unknown key; `WrongKind` when the
-library refuses or is linked into the host rather than mapped, and it
-then stays loaded. A core library built without them raises
-`guatiao.MissingSymbol`, as any other optional export does.
+leaves it mapped. `Registry.unload(library_key)` unmaps it **when the
+library agrees**: its own `unload` function is asked first, and is its
+promise that what it can account for is released. `Busy` while an
+instance or object it handed out is alive; `Unsupported` when it has no
+such function; `WrongKind` when it is linked into the host rather than
+mapped; `NotFound` for an unknown key. A refusal leaves it loaded.
+`unload(key, unchecked=True)` is the caller insisting on a library with no
+`unload` function. **Both take the LIBRARY key** -- `libraries_keyed_by`'s
+template, `%id` by default -- not a provider key. Either way no table,
+`ctx` or borrowed schema taken from the library is used again.
 
 `guatiao.kinds.table(table_ptr, size, struct_type, floor_hash=...)`
 turns a `provider_table()` answer into the `ctypes.Structure` a kind's
@@ -153,7 +154,7 @@ form.is_visible(schema, form_doc, "key", values)   # bool
 Every failing `guatiao_status` raises `guatiao.GuatiaoError` (`.status`
 the raw code, `.message` a provider's own words when there were any), as
 one of its subclasses: `BadValue`, `AllocFailed`, `WrongKind`,
-`NotFound`, `NullArgument`, `Gone`, `Internal`.
+`NotFound`, `NullArgument`, `Gone`, `Unsupported`, `Busy`, `Internal`.
 
 ## Threading
 

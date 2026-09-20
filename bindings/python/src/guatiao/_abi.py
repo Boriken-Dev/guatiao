@@ -48,6 +48,8 @@ class Status(enum.IntEnum):
     ERR_NOT_FOUND = 10
     ERR_NULL = 11
     ERR_GONE = 12
+    ERR_UNSUPPORTED = 13
+    ERR_BUSY = 14
     ERR_INTERNAL = 100
 
 

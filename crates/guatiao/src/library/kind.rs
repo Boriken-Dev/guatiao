@@ -73,6 +73,15 @@ pub trait Kind: 'static {
     /// methods, never offered by a registry. See [`Object`].
     const OBJECT: bool = false;
 
+    /// How many objects of this kind, and of the kinds its methods hand
+    /// back, this image has made and not yet seen destroyed. `seen` stops
+    /// a cycle of kinds. What a derived library's `unload` refuses on; a
+    /// hand-written kind counts nothing.
+    #[doc(hidden)]
+    fn live_objects(_seen: &mut Vec<&'static str>) -> usize {
+        0
+    }
+
     /// The trait object over a proxy. The macro writes `remote`, because
     /// only it knows the trait.
     fn as_dyn(remote: &Remote<Self>) -> &Self;
@@ -1258,6 +1267,13 @@ pub trait ProviderDecl {
     /// schema, once. `host` is what the library was loaded by; `alloc` is
     /// what the schema is built through.
     fn provider(host: Host, alloc: Alloc) -> Result<ProviderParts, ValueError>;
+
+    /// How many instances and objects this provider has handed out and
+    /// not seen destroyed. See [`Kind::live_objects`].
+    #[doc(hidden)]
+    fn live(_seen: &mut Vec<&'static str>) -> usize {
+        0
+    }
 }
 
 /// Everything one provider's descriptor points at, owned in one place so
