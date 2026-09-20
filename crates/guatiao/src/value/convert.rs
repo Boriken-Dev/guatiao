@@ -79,7 +79,7 @@
 //!
 //! So `Option<T>` deliberately cannot tell "the producer said nothing"
 //! from "the producer said explicitly nothing". That distinction is real,
-//! and the way to keep it is to read the map directly — [`Value::get`]
+//! and the way to keep it is to read the map directly — [`Map::get`](crate::Map::get)
 //! answers `None` only for an absent key, and a stored null arrives as a
 //! value whose tag says so.
 //!
@@ -114,9 +114,8 @@
 //! where a generic caller already is.
 //!
 //! A lookup answers an `Option`, which has no `TryFrom` to offer either
-//! — `ok_or_missing()` on [`ReadValue`](super::read::ReadValue) is the
-//! step from one to the other:
-//! `map.get("port").ok_or_missing()?.try_into()?`.
+//! — [`Map::required`] is the step from one to the other, and it names
+//! the key: `map.required("port")?.try_into()?`.
 //!
 //! # There is no `FromValue` for an owned subtree
 //!
@@ -125,14 +124,14 @@
 //! allocator, because the tree it is going into may not be on the heap it
 //! came from. Reading one back would have to
 //! allocate, and [`FromValue`] deliberately takes no allocator. A field
-//! that needs the raw thing reads it with [`Value::get`] and clones it
+//! that needs the raw thing reads it with [`Map::get`](crate::Map::get) and clones it
 //! explicitly, which is one line and says what it costs.
 
 use std::fmt;
 
 use super::alloc::Alloc;
 use super::error::ValueError;
-use super::types::{Entry, Number, Tag, Value};
+use super::types::{Buffer, Entry, List, Map, Number, Tag, Text, Value};
 
 /// Why a value could not be read as a particular Rust type.
 ///
@@ -351,7 +350,7 @@ pub trait TryAsRef<T: ?Sized> {
 /// The mutable half of [`TryAsRef`].
 ///
 /// A NUMBER and a STRING share one arm and do **not** share a type: the
-/// reader for a [`Text`](crate::Text) answers `None` for a number, which
+/// reader for a [`Text`] answers `None` for a number, which
 /// is what keeps the grammar from being edited away.
 ///
 /// ```
@@ -419,55 +418,11 @@ pub trait FromValue: Sized {
     fn from_value(value: &Value) -> Result<Self, MapError>;
 }
 
-/// Refuses a value that is not a map, naming the kind it found.
-///
-/// What a generated [`FromValue`] calls first, so handing a string to a
-/// struct's reader reports *that* rather than reporting every field
-/// missing.
-pub fn expect_map(value: &Value) -> Result<(), MapError> {
-    if value.tag() == Ok(Tag::GUATIAO_MAP) {
-        Ok(())
-    } else {
-        Err(MapError::wrong_type(Tag::GUATIAO_MAP, value))
-    }
-}
-
-/// The text a value holds, or [`MapError::WrongType`] naming what it held
-/// instead.
-///
-/// What a generated enum reader calls: a variant is stored as its name, so
-/// the reader needs the text to match on — borrowed, because allocating a
-/// `String` only to compare it against a handful of literals would be the
-/// one allocation in an otherwise copy-free read.
-pub fn expect_str(value: &Value) -> Result<&str, MapError> {
-    value
-        .as_str()
-        .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_STRING, value))
-}
-
-/// The value stored under `key`, or [`MapError::MissingKey`] naming it.
-///
-/// The other half of what a generated reader needs: a required field that
-/// is absent must say so, and say which key.
-pub fn expect_key<'a>(map: &'a Value, key: &str) -> Result<&'a Value, MapError> {
-    map.get(key).ok_or_else(|| MapError::missing(key))
-}
-
-/// The value stored under `key`, if any.
-///
-/// The optional-field half of [`expect_key`]. It exists so generated code
-/// names one module and not two, and so the absent-versus-null rule is
-/// read off one place: this answers `None` only for an absent key, and a
-/// stored null arrives as a value whose tag says so.
-pub fn find_key<'a>(map: &'a Value, key: &str) -> Option<&'a Value> {
-    map.get(key)
-}
-
 // --- ToValue ----------------------------------------------------------
 
 impl ToValue for bool {
     fn to_value(&self, _alloc: Alloc) -> Result<Value, ValueError> {
-        Ok(Value::bool(*self))
+        Ok(Value::from(*self))
     }
 }
 
@@ -499,19 +454,19 @@ impl ToValue for f64 {
 
 impl ToValue for str {
     fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
-        Value::string_in(alloc, self)
+        Ok(Text::new_in(alloc, self)?.into())
     }
 }
 
 impl ToValue for String {
     fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
-        Value::string_in(alloc, self)
+        Ok(Text::new_in(alloc, self)?.into())
     }
 }
 
 impl ToValue for Bytes {
     fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
-        Value::bytes_in(alloc, &self.0)
+        Ok(Buffer::new_in(alloc, &self.0)?.into())
     }
 }
 
@@ -537,11 +492,11 @@ impl<T: ToValue> ToValue for Option<T> {
 
 impl<T: ToValue> ToValue for [T] {
     fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
-        let mut list = Value::list_in(alloc);
+        let mut list = List::new_in(alloc);
         for item in self {
-            list.push(item.to_value(alloc)?)?;
+            list.push_in(item.to_value(alloc)?, alloc)?;
         }
-        Ok(list)
+        Ok(list.into())
     }
 }
 
@@ -606,8 +561,7 @@ impl<'a> TryFrom<&'a Value> for &'a str {
     type Error = MapError;
 
     fn try_from(value: &'a Value) -> Result<&'a str, MapError> {
-        value
-            .as_str()
+        TryAsRef::<str>::try_as_ref(value)
             .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_STRING, value))
     }
 }
@@ -617,8 +571,7 @@ impl<'a> TryFrom<&'a Value> for &'a [u8] {
     type Error = MapError;
 
     fn try_from(value: &'a Value) -> Result<&'a [u8], MapError> {
-        value
-            .as_bytes()
+        TryAsRef::<[u8]>::try_as_ref(value)
             .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_BYTES, value))
     }
 }
@@ -628,9 +581,7 @@ impl<'a> TryFrom<&'a Value> for &'a [Value] {
     type Error = MapError;
 
     fn try_from(value: &'a Value) -> Result<&'a [Value], MapError> {
-        value
-            .items()
-            .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_LIST, value))
+        Ok(<&List>::try_from(value)?.items())
     }
 }
 
@@ -639,9 +590,7 @@ impl<'a> TryFrom<&'a Value> for &'a [Entry] {
     type Error = MapError;
 
     fn try_from(value: &'a Value) -> Result<&'a [Entry], MapError> {
-        value
-            .entries()
-            .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_MAP, value))
+        Ok(<&Map>::try_from(value)?.entries())
     }
 }
 
@@ -657,9 +606,9 @@ impl FromValue for bool {
 
 /// The number as text, or the error saying it was not a number at all.
 fn number_text(value: &Value) -> Result<&str, MapError> {
-    value
-        .as_number_str()
-        .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_NUMBER, value))
+    Ok(TryAsRef::<Number>::try_as_ref(value)
+        .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_NUMBER, value))?
+        .as_str())
 }
 
 /// An integer read **never truncates**: a fractional or exponent spelling
@@ -705,19 +654,13 @@ impl FromValue for f64 {
 
 impl FromValue for String {
     fn from_value(value: &Value) -> Result<String, MapError> {
-        value
-            .as_str()
-            .map(str::to_string)
-            .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_STRING, value))
+        Ok(<&str>::try_from(value)?.to_string())
     }
 }
 
 impl FromValue for Bytes {
     fn from_value(value: &Value) -> Result<Bytes, MapError> {
-        value
-            .as_bytes()
-            .map(|b| Bytes(b.to_vec()))
-            .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_BYTES, value))
+        Ok(Bytes(<&[u8]>::try_from(value)?.to_vec()))
     }
 }
 
@@ -725,9 +668,7 @@ impl FromValue for Bytes {
 /// rather than only which field.
 impl<T: FromValue> FromValue for Vec<T> {
     fn from_value(value: &Value) -> Result<Vec<T>, MapError> {
-        let items = value
-            .items()
-            .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_LIST, value))?;
+        let items = <&List>::try_from(value)?.items();
         let mut out = Vec::with_capacity(items.len());
         for (i, item) in items.iter().enumerate() {
             out.push(T::from_value(item).map_err(|e| e.at(i))?);

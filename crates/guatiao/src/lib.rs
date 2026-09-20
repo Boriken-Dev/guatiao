@@ -27,7 +27,7 @@
 //! is Rust's own, for a consumer that has no opinion.
 //!
 //! ```
-//! use guatiao::{Map, ReadValue};
+//! use guatiao::Map;
 //!
 //! let mut tls = Map::new();
 //! tls.set("verify", true)?;
@@ -39,9 +39,10 @@
 //!
 //! // Get the value, then convert it: no per-kind getters on a map and no
 //! // per-kind readers on a value, just a lookup and `TryInto`.
-//! let host: &str = map.get("host").ok_or_missing()?.try_into()?;
-//! let port: u16 = map.get("port").ok_or_missing()?.try_into()?;
-//! let verify: bool = map.get("tls").get("verify").ok_or_missing()?.try_into()?;
+//! let host: &str = map.required("host")?.try_into()?;
+//! let port: u16 = map.required("port")?.try_into()?;
+//! let tls: &Map = map.required("tls")?.try_into()?;
+//! let verify: bool = tls.required("verify")?.try_into()?;
 //! assert_eq!((host, port, verify), ("10.0.0.1", 5900, true));
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
@@ -158,8 +159,7 @@ pub use schema::Schema;
 // `value::types::Bytes`, since one name cannot be both.
 pub use value::types::Str;
 pub use value::{
-    Alloc, Buffer, Entry, List, MAX_DEPTH, Map, Number, ReadValue, Status, Tag, Text, Value,
-    ValueError,
+    Alloc, Buffer, Entry, List, MAX_DEPTH, Map, Number, Status, Tag, Text, Value, ValueError,
 };
 
 /// `#[derive(ToValue)]` and `#[derive(FromValue)]`, behind the
@@ -192,14 +192,15 @@ pub use value::{
 ///     motd: None,
 /// };
 ///
-/// let map = original.to_value(alloc)?;
+/// let node = original.to_value(alloc)?;
+/// let map: &guatiao::Map = (&node).try_into()?;
 /// assert_eq!(str_or(map.get("host"), ""), "10.0.0.1");
 /// assert_eq!(int_or(map.get("port"), 0), 5900);
 /// assert!(bool_or(map.get("view-only"), false));
 /// // `None` omits the key rather than storing a null.
 /// assert!(map.get("motd").is_none());
 ///
-/// assert_eq!(Connection::from_value(&map)?, original);
+/// assert_eq!(Connection::from_value(&node)?, original);
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
@@ -252,8 +253,11 @@ pub use value::{
 ///
 /// let alloc = guatiao::Alloc::rust();
 /// let tcp = Transport::Tcp { port: 5900 }.to_value(alloc)?;
-/// assert_eq!(tcp.get("transport").and_then(guatiao::Value::as_str), Some("Tcp"));
-/// assert_eq!(Level::Warning.to_value(alloc)?.as_str(), Some("warn"));
+/// let tcp: &guatiao::Map = (&tcp).try_into()?;
+/// let tag: &str = tcp.required("transport")?.try_into()?;
+/// assert_eq!(tag, "Tcp");
+/// let level = Level::Warning.to_value(alloc)?;
+/// assert_eq!(<&str>::try_from(&level)?, "warn");
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///

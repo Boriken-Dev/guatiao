@@ -71,9 +71,7 @@ pub mod value;
 pub use alloc::{Alloc, AllocError, Allocator, rust_alloc};
 pub use convert::{Bytes, FromValue, MapError, ToValue, TryAsMut, TryAsRef};
 pub use error::{MAX_DEPTH, ValueError};
-pub use read::{
-    Dump, ReadValue, bool_or, bytes_or, entries, equal, float_or, int_or, items, keys, str_or,
-};
+pub use read::{Dump, bool_or, bytes_or, float_or, int_or, str_or};
 pub use status::Status;
 // `Str` is here because every C signature in `exports` names it and a
 // caller building one should not have to find the module. The other

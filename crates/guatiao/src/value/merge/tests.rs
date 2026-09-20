@@ -32,9 +32,11 @@
 //! what that grows through.
 
 use super::*;
+use crate::value::convert::TryAsRef;
 
 use crate::value::alloc::Alloc;
-use crate::value::read::{entries, int_or, str_or};
+use crate::value::read::{int_or, str_or};
+use crate::value::types::{Buffer, List, Map, Text};
 
 /// The allocator a merge builds its result through. The values handed to
 /// it need none — they are already on Rust's heap.
@@ -44,25 +46,25 @@ fn alloc() -> Alloc {
 
 /// Builds a map from `(key, value)` pairs.
 fn m(pairs: impl IntoIterator<Item = (&'static str, Value)>) -> Value {
-    let mut built = Value::map();
+    let mut built = Map::new();
     for (key, value) in pairs {
         built.set(key, value).expect("a test map is small");
     }
-    built
+    built.into()
 }
 
 /// Builds a list from values.
 fn l(values: impl IntoIterator<Item = Value>) -> Value {
-    let mut built = Value::list();
+    let mut built = List::new();
     for value in values {
         built.push(value).expect("a test list is small");
     }
-    built
+    built.into()
 }
 
 /// A string value, for brevity in the cases below.
 fn s(text: &str) -> Value {
-    Value::string(text)
+    Value::from(Text::new(text))
 }
 
 /// A number value from an integer, for brevity in the cases below.
@@ -82,7 +84,7 @@ fn null() -> Value {
 
 /// A boolean value.
 fn b(value: bool) -> Value {
-    Value::bool(value)
+    Value::from(value)
 }
 
 /// The absent sentinel, which the C form can store in a container and the
@@ -108,30 +110,42 @@ fn merge_with(
 }
 
 /// Structural equality: order-significant for a map, byte-exact for a
-/// number. There is no `PartialEq` on a value, and there should not be —
-/// comparing two trees is a walk, not a field comparison.
+/// Structural equality, which is what a merge's result is judged on.
 fn same(left: &Value, right: &Value) -> bool {
-    equal(left, right)
+    left == right
 }
 
 /// The integer under `key`, or zero.
 fn int_at(value: &Value, key: &str) -> i64 {
-    int_or(value.get(key), 0)
+    int_or(
+        TryAsRef::<Map>::try_as_ref(value).and_then(|m| m.get(key)),
+        0,
+    )
 }
 
 /// The text under `key`, or the empty string.
 fn str_at<'v>(value: &'v Value, key: &str) -> &'v str {
-    str_or(value.get(key), "")
+    str_or(
+        TryAsRef::<Map>::try_as_ref(value).and_then(|m| m.get(key)),
+        "",
+    )
 }
 
 /// How many entries a map has.
 fn len_of(value: &Value) -> usize {
-    entries(value).count()
+    TryAsRef::<Map>::try_as_ref(value)
+        .map(Map::entries)
+        .unwrap_or(&[])
+        .len()
 }
 
 /// The elements of a list, for comparison.
 fn elements(value: &Value) -> Vec<&Value> {
-    items(value).collect()
+    TryAsRef::<List>::try_as_ref(value)
+        .map(List::items)
+        .unwrap_or(&[])
+        .iter()
+        .collect()
 }
 
 /// Asserts a merge produced exactly `expected`, printing both when it did
@@ -259,7 +273,9 @@ mod port_of_the_reference_suite {
         assert_eq!(int_at(&merged, "c"), 3);
         // A child of a merged tree is a borrowed `Value` just as the root
         // is, so the same `int_at` reads both.
-        let b = merged.get("b").expect("the merged map keeps `b`");
+        let b = TryAsRef::<Map>::try_as_ref(&merged)
+            .and_then(|m| m.get("b"))
+            .expect("the merged map keeps `b`");
         assert_eq!(
             int_at(b, "x"),
             10,
@@ -322,7 +338,9 @@ mod port_of_the_reference_suite {
         let merged = merge(MergeMode::Deep, &earlier, &later).unwrap();
         // A nested map is a borrowed `Value` like any other, so `int_at`
         // reaches it directly.
-        let b = merged.get("b").expect("the merged map keeps `b`");
+        let b = TryAsRef::<Map>::try_as_ref(&merged)
+            .and_then(|m| m.get("b"))
+            .expect("the merged map keeps `b`");
         assert_eq!(
             (int_at(b, "x"), int_at(b, "y"), int_at(b, "z")),
             (10, 99, 30)
@@ -376,8 +394,20 @@ mod port_of_the_reference_suite {
         .unwrap();
         let got = elements(&merged);
         assert_eq!(got.len(), 2, "two maps, appended rather than merged");
-        assert_eq!(int_or(got[0].get("k"), 0), 1);
-        assert_eq!(int_or(got[1].get("k"), 0), 2);
+        assert_eq!(
+            int_or(
+                TryAsRef::<Map>::try_as_ref(got[0]).and_then(|m| m.get("k")),
+                0
+            ),
+            1
+        );
+        assert_eq!(
+            int_or(
+                TryAsRef::<Map>::try_as_ref(got[1]).and_then(|m| m.get("k")),
+                0
+            ),
+            2
+        );
     }
 
     /// Reference: `test_mergelists_true_merges_matching_dicts` — the maps
@@ -396,7 +426,13 @@ mod port_of_the_reference_suite {
         .unwrap();
         let got = elements(&merged);
         assert_eq!(got.len(), 1, "sharing a key means one record, not two");
-        assert_eq!(str_or(got[0].get("v"), ""), "b");
+        assert_eq!(
+            str_or(
+                TryAsRef::<Map>::try_as_ref(got[0]).and_then(|m| m.get("v")),
+                ""
+            ),
+            "b"
+        );
     }
 }
 
@@ -430,8 +466,20 @@ fn mergelists_on_appends_a_positional_map_with_no_overlapping_key() {
         2,
         "no shared key means no positional merge: {got:?}"
     );
-    assert_eq!(str_or(got[0].get("name"), ""), "alpha");
-    assert_eq!(str_or(got[1].get("other"), ""), "beta");
+    assert_eq!(
+        str_or(
+            TryAsRef::<Map>::try_as_ref(got[0]).and_then(|m| m.get("name")),
+            ""
+        ),
+        "alpha"
+    );
+    assert_eq!(
+        str_or(
+            TryAsRef::<Map>::try_as_ref(got[1]).and_then(|m| m.get("other")),
+            ""
+        ),
+        "beta"
+    );
 }
 
 /// `mergelists` on and off over the SAME input, so the sub-option's whole
@@ -462,7 +510,13 @@ fn mergelists_on_and_off_over_the_same_input() {
 
     assert_eq!(elements(&off).len(), 2, "off: appended");
     assert_eq!(elements(&on).len(), 1, "on: merged by position");
-    assert_eq!(str_or(elements(&on)[0].get("v"), ""), "new");
+    assert_eq!(
+        str_or(
+            TryAsRef::<Map>::try_as_ref(elements(&on)[0]).and_then(|m| m.get("v")),
+            ""
+        ),
+        "new"
+    );
 }
 
 /// The map axis and the list axis are **independent**, and conflating
@@ -477,22 +531,46 @@ fn each_modes_map_and_list_axes_are_independent() {
     // Map axis: Simple is shallow (the whole inner map is replaced, so
     // `kept` is GONE); Substitute and Deep recurse (so `kept` stands).
     let simple = merge(MergeMode::Simple, &map_earlier, &map_later).unwrap();
-    let outer = simple.get("outer").expect("the outer key survives");
+    let outer = TryAsRef::<Map>::try_as_ref(&simple)
+        .and_then(|m| m.get("outer"))
+        .expect("the outer key survives");
     // The reference asserted `ValueType::Absent` here; this model spells
     // the same thing as the key simply not being in the map, since a
     // merge never writes the stored-absent sentinel.
-    assert!(outer.get("kept").is_none(), "Simple is shallow");
-    assert_eq!(int_or(outer.get("changed"), 0), 99);
+    assert!(
+        TryAsRef::<Map>::try_as_ref(outer)
+            .and_then(|m| m.get("kept"))
+            .is_none(),
+        "Simple is shallow"
+    );
+    assert_eq!(
+        int_or(
+            TryAsRef::<Map>::try_as_ref(outer).and_then(|m| m.get("changed")),
+            0
+        ),
+        99
+    );
 
     for mode in [MergeMode::Substitute, MergeMode::Deep] {
         let merged = merge(mode, &map_earlier, &map_later).unwrap();
-        let outer = merged.get("outer").expect("the outer key survives");
+        let outer = TryAsRef::<Map>::try_as_ref(&merged)
+            .and_then(|m| m.get("outer"))
+            .expect("the outer key survives");
         assert_eq!(
-            int_or(outer.get("kept"), 0),
+            int_or(
+                TryAsRef::<Map>::try_as_ref(outer).and_then(|m| m.get("kept")),
+                0
+            ),
             1,
             "{mode:?} recurses, so `kept` survives"
         );
-        assert_eq!(int_or(outer.get("changed"), 0), 99);
+        assert_eq!(
+            int_or(
+                TryAsRef::<Map>::try_as_ref(outer).and_then(|m| m.get("changed")),
+                0
+            ),
+            99
+        );
     }
 
     // List axis: three different answers to the same input.
@@ -529,18 +607,30 @@ fn simple_and_substitute_each_get_a_case_the_other_gets_right() {
     let later = m([("tls", m([("verify", b(false))]))]);
 
     let substituted = merge(MergeMode::Substitute, &earlier, &later).unwrap();
-    let tls = substituted.get("tls").expect("the tls key survives");
+    let tls = TryAsRef::<Map>::try_as_ref(&substituted)
+        .and_then(|m| m.get("tls"))
+        .expect("the tls key survives");
     assert_eq!(
-        str_or(tls.get("ca"), ""),
+        str_or(
+            TryAsRef::<Map>::try_as_ref(tls).and_then(|m| m.get("ca")),
+            ""
+        ),
         "/etc/ca.pem",
         "the sibling survives"
     );
-    assert!(!crate::value::read::bool_or(tls.get("verify"), true));
+    assert!(!crate::value::read::bool_or(
+        TryAsRef::<Map>::try_as_ref(tls).and_then(|m| m.get("verify")),
+        true
+    ));
 
     let simple = merge(MergeMode::Simple, &earlier, &later).unwrap();
-    let tls = simple.get("tls").expect("the tls key survives");
+    let tls = TryAsRef::<Map>::try_as_ref(&simple)
+        .and_then(|m| m.get("tls"))
+        .expect("the tls key survives");
     assert!(
-        tls.get("ca").is_none(),
+        TryAsRef::<Map>::try_as_ref(tls)
+            .and_then(|m| m.get("ca"))
+            .is_none(),
         "Simple's shallow update DELETES the sibling -- the case it gets wrong"
     );
 
@@ -679,7 +769,11 @@ fn substitute_names_the_earlier_kind_it_was_given_and_agrees_with_deep() {
         (b(true), Tag::GUATIAO_BOOL, true),
         (n(1), Tag::GUATIAO_NUMBER, true),
         (s("text"), Tag::GUATIAO_STRING, true),
-        (Value::bytes(&[0xde, 0xad]), Tag::GUATIAO_BYTES, true),
+        (
+            Value::from(Buffer::new(&[0xde, 0xad])),
+            Tag::GUATIAO_BYTES,
+            true,
+        ),
         (l([n(1)]), Tag::GUATIAO_LIST, true),
     ] {
         let err = merge(MergeMode::Substitute, &earlier, &later)
@@ -772,7 +866,9 @@ fn a_stored_null_on_the_later_side_overwrites_rather_than_being_ignored() {
     // A key that is not there answers `None`, which is a different
     // statement from a key holding a stored null.
     assert_eq!(
-        merged.get("k").and_then(kind),
+        TryAsRef::<Map>::try_as_ref(&merged)
+            .and_then(|m| m.get("k"))
+            .and_then(kind),
         Some(Tag::GUATIAO_NULL),
         "a caller who wrote null meant it -- unlike an absent key"
     );
@@ -789,7 +885,11 @@ fn merging_preserves_the_earlier_maps_key_order() {
         &m([("bravo", n(99)), ("delta", n(4))]),
     )
     .unwrap();
-    let keys: Vec<String> = entries(&merged)
+    let keys: Vec<String> = TryAsRef::<Map>::try_as_ref(&merged)
+        .map(Map::entries)
+        .unwrap_or(&[])
+        .iter()
+        .map(|e| (e.key(), e.value()))
         .map(|(key, _)| String::from_utf8_lossy(key).into_owned())
         .collect();
     assert_eq!(
@@ -827,16 +927,18 @@ fn a_per_path_override_beats_the_call_site_mode_for_that_key_only() {
     )
     .unwrap();
 
-    let tags = merged.get("tags").expect("the merge keeps `tags`");
+    let tags = TryAsRef::<Map>::try_as_ref(&merged)
+        .and_then(|m| m.get("tags"))
+        .expect("the merge keeps `tags`");
     assert!(
-        equal(tags, &l([s("prod"), s("eu"), s("canary")])),
+        tags == &l([s("prod"), s("eu"), s("canary")]),
         "the declared Deep mode unions this key"
     );
-    let fallbacks = merged
-        .get("fallbacks")
+    let fallbacks = TryAsRef::<Map>::try_as_ref(&merged)
+        .and_then(|m| m.get("fallbacks"))
         .expect("the merge keeps `fallbacks`");
     assert!(
-        equal(fallbacks, &l([s("c")])),
+        fallbacks == &l([s("c")]),
         "every other key stays on the call-site Substitute"
     );
 }
@@ -857,9 +959,13 @@ fn an_override_applies_at_a_nested_path() {
     )
     .unwrap();
 
-    let tls = merged.get("tls").expect("the merge keeps `tls`");
-    let ciphers = tls.get("ciphers").expect("the merge keeps `tls.ciphers`");
-    assert!(equal(ciphers, &l([s("aes"), s("chacha")])));
+    let tls = TryAsRef::<Map>::try_as_ref(&merged)
+        .and_then(|m| m.get("tls"))
+        .expect("the merge keeps `tls`");
+    let ciphers = TryAsRef::<Map>::try_as_ref(tls)
+        .and_then(|m| m.get("ciphers"))
+        .expect("the merge keeps `tls.ciphers`");
+    assert!(ciphers == &l([s("aes"), s("chacha")]));
 }
 
 /// A merge with no overrides at all is fully usable — the property that
@@ -901,11 +1007,20 @@ fn provenance_is_per_leaf_and_reports_mixed_for_an_interior_node() {
         .merge_layers([("system", &system), ("user", &user)], alloc())
         .unwrap();
 
-    let tls = merged
-        .get("tls")
+    let tls = TryAsRef::<Map>::try_as_ref(&merged)
+        .and_then(|m| m.get("tls"))
         .expect("the merged map still carries `tls`");
-    assert!(!crate::value::read::bool_or(tls.get("verify"), true));
-    assert_eq!(str_or(tls.get("ca"), ""), "/etc/ca.pem");
+    assert!(!crate::value::read::bool_or(
+        TryAsRef::<Map>::try_as_ref(tls).and_then(|m| m.get("verify")),
+        true
+    ));
+    assert_eq!(
+        str_or(
+            TryAsRef::<Map>::try_as_ref(tls).and_then(|m| m.get("ca")),
+            ""
+        ),
+        "/etc/ca.pem"
+    );
 
     assert_eq!(provenance.source_of("tls.verify"), Source::Layer("user"));
     assert_eq!(provenance.source_of("tls.ca"), Source::Layer("system"));
