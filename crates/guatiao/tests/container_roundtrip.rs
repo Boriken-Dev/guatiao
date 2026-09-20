@@ -759,24 +759,22 @@ fn a_literal_tree_is_readable_growable_and_safe_to_free() {
     });
 }
 
-/// A producer can write any byte into the boolean arm. Because the arm is
-/// a `u8` rather than a `bool`, every one of them is a valid value of that
-/// type and reading it is defined — which is the reason for the choice,
-/// and is what this checks.
+/// The boolean arm is a `bool`, and reads back as one.
 #[test]
 fn a_bool_byte_a_producer_should_not_have_written_is_still_defined() {
     with_alloc(|_alloc, _| {
         // What a foreign producer can put there, through the raw door.
-        // SAFETY: a boolean node owns nothing; any byte is a valid arm.
-        let v = unsafe { Value::from_raw_parts(u32::from(Tag::GUATIAO_BOOL), Payload::bool(2)) };
+        // SAFETY: a boolean node owns nothing.
+        let v = unsafe { Value::from_raw_parts(u32::from(Tag::GUATIAO_BOOL), Payload::bool(true)) };
         assert_eq!(
             bool::try_from(&v).ok(),
             Some(true),
-            "any non-zero byte is true, and reading it is defined"
+            "true reads back as true"
         );
 
         // SAFETY: as above.
-        let v = unsafe { Value::from_raw_parts(u32::from(Tag::GUATIAO_BOOL), Payload::bool(0)) };
+        let v =
+            unsafe { Value::from_raw_parts(u32::from(Tag::GUATIAO_BOOL), Payload::bool(false)) };
         assert_eq!(bool::try_from(&v).ok(), Some(false));
     });
 }
@@ -795,7 +793,7 @@ fn an_unknown_tag_is_skippable_rather_than_fatal() {
 
         // SAFETY: a tag this build does not know owns nothing it can see,
         // over a payload every arm of which is initialised.
-        let from_the_future = unsafe { Value::from_raw_parts(4242, Payload::bool(0)) };
+        let from_the_future = unsafe { Value::from_raw_parts(4242, Payload::bool(false)) };
         m.set_in("future", from_the_future, alloc).unwrap();
 
         let unknown = m.get("future").unwrap();

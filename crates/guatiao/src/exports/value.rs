@@ -130,27 +130,16 @@ pub unsafe extern "C" fn guatiao_value_absent(out: *mut Value) -> Status {
     })
 }
 
-/// Writes a boolean through `out`. Any non-zero `b` is true.
-///
-/// # Why this takes a byte and not a `bool`
-///
-/// A Rust `bool` must be 0 or 1, and a value outside that is undefined
-/// behaviour **at the moment it arrives**, before this function's body
-/// runs and before anything could reject it. A C caller can produce one
-/// without trying: through a cast, a union, or an uninitialised local.
-///
-/// So the boundary takes the primitive and this crate decides, which is
-/// the same rule the tag follows. It costs a C caller nothing —
-/// `guatiao_value_bool(true, &v)` still compiles and still means true.
+/// Writes a boolean through `out`.
 ///
 /// # Safety
 ///
 /// `out` addresses writable storage for one value.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn guatiao_value_bool(b: u8, out: *mut Value) -> Status {
+pub unsafe extern "C" fn guatiao_value_bool(b: bool, out: *mut Value) -> Status {
     entry!(out => {
         // SAFETY: checked non-null and writable by contract.
-        unsafe { ptr::write(out, Value::from(b != 0)) };
+        unsafe { ptr::write(out, Value::from(b)) };
         Status::GUATIAO_OK
     })
 }

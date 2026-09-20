@@ -314,7 +314,7 @@ static void build_and_free_by_hand(void) {
 static void an_unknown_tag_does_not_stop_the_rest(void) {
   static guatiao_entry ENTRIES[] = {
       GUATIAO_ENTRY_LIT("known", GUATIAO_VALUE_STRING_LIT("readable")),
-      GUATIAO_ENTRY_LIT("future", {4242u, 0, {.b = 0}}),
+      GUATIAO_ENTRY_LIT("future", {4242u, 0, {.b = false}}),
   };
   static guatiao_value M = GUATIAO_VALUE_MAP_LIT(ENTRIES);
   const guatiao_value *unknown = guatiao_map_find(&M, guatiao_cstr("future"));
@@ -327,18 +327,15 @@ static void an_unknown_tag_does_not_stop_the_rest(void) {
         "and every other value still reads");
 }
 
-/* A producer can write any byte into the boolean arm. Because the arm is
-   a uint8_t rather than a _Bool, every one of them is a valid value of
-   that type and this read is defined -- which is the reason for the
-   choice, and is what this checks. */
-static void a_foreign_bool_byte_is_read_as_true(void) {
+/* The boolean arm is a bool, and reads back as one. */
+static void a_bool_reads_back(void) {
   guatiao_value v;
   memset(&v, 0, sizeof(v));
   v.tag = (uint32_t)GUATIAO_BOOL;
-  v.payload.b = 2;
-  CHECK(guatiao_bool_or(&v, false), "any non-zero byte is true");
-  v.payload.b = 0;
-  CHECK(!guatiao_bool_or(&v, true), "and zero is false");
+  v.payload.b = true;
+  CHECK(guatiao_bool_or(&v, false), "true is true");
+  v.payload.b = false;
+  CHECK(!guatiao_bool_or(&v, true), "and false is false");
 }
 
 int main(void) {
@@ -347,7 +344,7 @@ int main(void) {
   keys_are_bytes_not_c_strings();
   build_and_free_by_hand();
   an_unknown_tag_does_not_stop_the_rest();
-  a_foreign_bool_byte_is_read_as_true();
+  a_bool_reads_back();
 
   if (failures == 0) {
     printf("c_consumer: all checks passed\n");

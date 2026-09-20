@@ -21,6 +21,7 @@ import enum
 c_void_p = ctypes.c_void_p
 c_size_t = ctypes.c_size_t
 c_uint8 = ctypes.c_uint8
+c_bool = ctypes.c_bool
 c_uint32 = ctypes.c_uint32
 
 
@@ -135,8 +136,9 @@ class Payload(ctypes.Union):
     """`guatiao_payload`: which arm is live is decided by the tag alone."""
 
     _fields_ = [
-        ("b", c_uint8),
+        ("b", c_bool),
         ("text", String),
+        ("number", String),
         ("bytes", Buffer),
         ("list", List),
         ("map", Map),

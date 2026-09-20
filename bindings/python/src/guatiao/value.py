@@ -67,7 +67,7 @@ def _buffer_view(b: "_abi.Buffer") -> bytes:
 def _number_text(node: "_abi.Value | None") -> bytes:
     if node is None or node.tag != _abi.Tag.NUMBER:
         return b""
-    return _string_view(node.payload.text)
+    return _string_view(node.payload.number)
 
 
 def _list_at(node: "_abi.Value | None", index: int) -> "_abi.Value | None":
@@ -161,7 +161,7 @@ def _node_to_python(node: "_abi.Value | None", numbers: str) -> Any:
     if node.tag == _abi.Tag.BOOL:
         return bool(node.payload.b)
     if node.tag == _abi.Tag.NUMBER:
-        return _number_to_python(_string_view(node.payload.text), numbers)
+        return _number_to_python(_string_view(node.payload.number), numbers)
     if node.tag == _abi.Tag.STRING:
         return _string_view(node.payload.text).decode("utf-8")
     if node.tag == _abi.Tag.BYTES:
@@ -225,7 +225,7 @@ def _write_python(raw: "_abi.Value", obj: Any, alloc: "_abi.Alloc") -> None:
         check(lib.guatiao_value_clone(ctypes.byref(alloc), ctypes.byref(node), ctypes.byref(raw)))
         return
     if isinstance(obj, bool):
-        check(lib.guatiao_value_bool(1 if obj else 0, ctypes.byref(raw)))
+        check(lib.guatiao_value_bool(bool(obj), ctypes.byref(raw)))
         return
     if isinstance(obj, (int, float, decimal.Decimal)):
         view, _buf = _make_str(_number_text_for(obj).encode("ascii"))
@@ -573,7 +573,7 @@ class Value(Ref):
     @classmethod
     def bool(cls, b: bool) -> "Value":
         raw = _abi.Value()
-        check(_lib.core().guatiao_value_bool(1 if b else 0, ctypes.byref(raw)))
+        check(_lib.core().guatiao_value_bool(bool(b), ctypes.byref(raw)))
         return cls(_raw=raw)
 
     @classmethod

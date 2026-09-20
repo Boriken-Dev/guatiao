@@ -98,18 +98,14 @@ impl From<Tag> for u32 {
 /// invite a silent double free. A header generator erases the wrapper.
 #[repr(C)]
 pub union Payload {
-    /// Live when the tag is `GUATIAO_BOOL`. Zero is false, **any**
-    /// non-zero byte is true.
-    ///
-    /// A byte, not a `bool`: a `bool` must be 0 or 1, so any other byte
-    /// would be undefined to read at that type, at the read, before a
-    /// check could reject it — and a producer can write one without
-    /// trying. `u8` has no invalid bit patterns, so the hazard does not
-    /// exist rather than being defended against. `.b = true` still
-    /// stores 1.
-    pub(crate) b: u8,
-    /// Live when the tag is `GUATIAO_STRING` **or** `GUATIAO_NUMBER`.
+    /// Live when the tag is `GUATIAO_BOOL`. A `bool`: 0 or 1. A producer
+    /// that writes any other byte has broken the contract.
+    pub(crate) b: bool,
+    /// Live when the tag is `GUATIAO_STRING`.
     pub(crate) text: ManuallyDrop<Text>,
+    /// Live when the tag is `GUATIAO_NUMBER`. The same 32 bytes as `text`:
+    /// a number is the exact text that declared it.
+    pub(crate) number: ManuallyDrop<Number>,
     /// Live when the tag is `GUATIAO_BYTES`.
     pub(crate) bytes: ManuallyDrop<Buffer>,
     /// Live when the tag is `GUATIAO_LIST`.
@@ -164,10 +160,11 @@ impl Payload {
         }
     }
 
-    /// A payload holding a number: the text arm, since a number is
-    /// stored as the text that declared it.
+    /// A payload holding a number.
     pub fn number(number: Number) -> Payload {
-        Payload::text(number.into_text())
+        Payload {
+            number: ManuallyDrop::new(number),
+        }
     }
 
     /// A payload holding bytes.
@@ -191,12 +188,11 @@ impl Payload {
         }
     }
 
-    /// A payload holding a boolean byte: any byte, since a producer may
-    /// write any. The other arms are initialised too, so a node built
-    /// over this is whole whatever its tag.
-    pub fn bool(byte: u8) -> Payload {
+    /// A payload holding a boolean. The other arms are initialised too,
+    /// so a node built over this is whole whatever its tag.
+    pub fn bool(b: bool) -> Payload {
         let mut payload = Value::null().into_raw_parts().1;
-        payload.b = byte;
+        payload.b = b;
         payload
     }
 }
@@ -298,14 +294,12 @@ impl Value {
         Tag::try_from(self.tag)
     }
 
-    /// The boolean, or `None` for any other kind. Any non-zero byte is
-    /// `true`. There is no `TryAsRef<bool>`, because no `&bool` over that
-    /// byte would be sound; `bool::try_from(&value)` is the public door.
+    /// The boolean, or `None` for any other kind.
     pub(crate) fn as_bool(&self) -> Option<bool> {
         match self.tag() {
             // SAFETY: the tag says the `b` arm is live, and a node is born
             // with all 40 of its bytes initialised.
-            Ok(Tag::GUATIAO_BOOL) => Some(unsafe { self.payload.b } != 0),
+            Ok(Tag::GUATIAO_BOOL) => Some(unsafe { self.payload.b }),
             _ => None,
         }
     }
@@ -414,31 +408,7 @@ arm_as!(Map, map, Tag::GUATIAO_MAP);
 arm_as!(List, list, Tag::GUATIAO_LIST);
 arm_as!(Buffer, bytes, Tag::GUATIAO_BYTES);
 arm_as!(Text, text, Tag::GUATIAO_STRING);
-
-impl TryAsRef<Number> for Value {
-    fn try_as_ref(&self) -> Option<&Number> {
-        let text: &Text = match Tag::try_from(self.tag) {
-            // SAFETY: the tag says the text arm is live.
-            Ok(Tag::GUATIAO_NUMBER) => unsafe { &self.payload.text },
-            _ => return None,
-        };
-        // SAFETY: `Number` is `repr(transparent)` over `Text`, so this
-        // reinterprets the reference rather than dereferencing it twice.
-        Some(unsafe { &*std::ptr::from_ref(text).cast::<Number>() })
-    }
-}
-
-impl TryAsMut<Number> for Value {
-    fn try_as_mut(&mut self) -> Option<&mut Number> {
-        let text: &mut Text = match Tag::try_from(self.tag) {
-            // SAFETY: the tag says the text arm is live.
-            Ok(Tag::GUATIAO_NUMBER) => unsafe { &mut self.payload.text },
-            _ => return None,
-        };
-        // SAFETY: as above.
-        Some(unsafe { &mut *std::ptr::from_mut(text).cast::<Number>() })
-    }
-}
+arm_as!(Number, number, Tag::GUATIAO_NUMBER);
 
 impl TryAsRef<str> for Value {
     /// A STRING's text. A number is not a string, so this answers `None`
@@ -487,21 +457,7 @@ arm_into!(Map, map, Tag::GUATIAO_MAP);
 arm_into!(List, list, Tag::GUATIAO_LIST);
 arm_into!(Buffer, bytes, Tag::GUATIAO_BYTES);
 arm_into!(Text, text, Tag::GUATIAO_STRING);
-
-impl TryFrom<Value> for Number {
-    type Error = Value;
-
-    fn try_from(value: Value) -> Result<Number, Value> {
-        if Tag::try_from(value.tag) != Ok(Tag::GUATIAO_NUMBER) {
-            return Err(value);
-        }
-        let (_, payload) = value.into_raw_parts();
-        // SAFETY: as `arm_into!`; a number's digits live in the text arm.
-        Ok(Number::from_text(ManuallyDrop::into_inner(unsafe {
-            payload.text
-        })))
-    }
-}
+arm_into!(Number, number, Tag::GUATIAO_NUMBER);
 
 /// A borrowed container, with the error a reader wants: which kind was
 /// needed and which was there.
@@ -615,7 +571,7 @@ impl From<bool> for Value {
     /// value written by somebody else is still readable.
     fn from(b: bool) -> Value {
         let mut v = Value::blank(Tag::GUATIAO_BOOL);
-        v.payload.b = u8::from(b);
+        v.payload.b = b;
         v
     }
 }

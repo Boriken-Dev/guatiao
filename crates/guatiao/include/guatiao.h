@@ -311,6 +311,16 @@ typedef struct guatiao_string {
 } guatiao_string;
 
 /*
+ A JSON number, stored as its exact text: `1.10` reads back as `1.10`
+ and `u64::MAX` survives, because nothing converts. A machine width is
+ reached with `TryInto`, where the refusal is visible.
+
+ Wraps a [`Text`], so it has the layout of one and its own arm in the
+ node.
+ */
+typedef struct guatiao_string guatiao_number;
+
+/*
  Owned, growable bytes. See `guatiao_string` for the `cap` rule.
  */
 typedef struct guatiao_buffer {
@@ -397,21 +407,19 @@ typedef struct guatiao_map {
  */
 typedef union guatiao_payload {
   /*
-   Live when the tag is `GUATIAO_BOOL`. Zero is false, **any**
-   non-zero byte is true.
-
-   A byte, not a `bool`: a `bool` must be 0 or 1, so any other byte
-   would be undefined to read at that type, at the read, before a
-   check could reject it — and a producer can write one without
-   trying. `u8` has no invalid bit patterns, so the hazard does not
-   exist rather than being defended against. `.b = true` still
-   stores 1.
+   Live when the tag is `GUATIAO_BOOL`. A `bool`: 0 or 1. A producer
+   that writes any other byte has broken the contract.
    */
-  uint8_t b;
+  bool b;
   /*
-   Live when the tag is `GUATIAO_STRING` **or** `GUATIAO_NUMBER`.
+   Live when the tag is `GUATIAO_STRING`.
    */
   struct guatiao_string text;
+  /*
+   Live when the tag is `GUATIAO_NUMBER`. The same 32 bytes as `text`:
+   a number is the exact text that declared it.
+   */
+  guatiao_number number;
   /*
    Live when the tag is `GUATIAO_BYTES`.
    */
@@ -1784,24 +1792,13 @@ guatiao_status guatiao_value_null(struct guatiao_value *out);
 guatiao_status guatiao_value_absent(struct guatiao_value *out);
 
 /*
- Writes a boolean through `out`. Any non-zero `b` is true.
-
- # Why this takes a byte and not a `bool`
-
- A Rust `bool` must be 0 or 1, and a value outside that is undefined
- behaviour **at the moment it arrives**, before this function's body
- runs and before anything could reject it. A C caller can produce one
- without trying: through a cast, a union, or an uninitialised local.
-
- So the boundary takes the primitive and this crate decides, which is
- the same rule the tag follows. It costs a C caller nothing —
- `guatiao_value_bool(true, &v)` still compiles and still means true.
+ Writes a boolean through `out`.
 
  # Safety
 
  `out` addresses writable storage for one value.
  */
-guatiao_status guatiao_value_bool(uint8_t b, struct guatiao_value *out);
+guatiao_status guatiao_value_bool(bool b, struct guatiao_value *out);
 
 /*
  Writes an empty map through `out`, to be grown through `alloc`.
@@ -2113,7 +2110,7 @@ static inline guatiao_str guatiao_number_text(const guatiao_value *v) {
   out.ptr = NULL;
   out.len = 0;
   if (v && v->tag == (uint32_t)GUATIAO_NUMBER) {
-    out = guatiao_string_view(&v->payload.text);
+    out = guatiao_string_view(&v->payload.number);
   }
   return out;
 }
@@ -2213,14 +2210,11 @@ static inline const guatiao_value *guatiao_list_at(const guatiao_value *v,
    guatiao_number_text(), which hands back the exact text whatever its
    magnitude. */
 
-/* Any non-zero byte is true. The arm is a uint8_t rather than a _Bool
-   precisely so that this read is defined for every byte a producer could
-   have put there; see the field's note above. */
 static inline bool guatiao_bool_or(const guatiao_value *v, bool fallback) {
   if (!v || v->tag != (uint32_t)GUATIAO_BOOL) {
     return fallback;
   }
-  return v->payload.b != 0;
+  return v->payload.b;
 }
 
 /*
@@ -2357,10 +2351,10 @@ static inline double guatiao_float_or(const guatiao_value *v, double fallback) {
   { (uint32_t)GUATIAO_NUMBER, 0, { .text = GUATIAO_STRING_LIT(lit) } }
 
 #define GUATIAO_VALUE_BOOL_LIT(v) \
-  { (uint32_t)GUATIAO_BOOL, 0, { .b = (uint8_t)((v) ? 1 : 0) } }
+  { (uint32_t)GUATIAO_BOOL, 0, { .b = (v) ? true : false } }
 
 #define GUATIAO_VALUE_NULL_LIT \
-  { (uint32_t)GUATIAO_NULL, 0, { .b = 0 } }
+  { (uint32_t)GUATIAO_NULL, 0, { .b = false } }
 
 /* A map or list over an array you declared yourself. */
 #define GUATIAO_VALUE_MAP_LIT(arr) \
