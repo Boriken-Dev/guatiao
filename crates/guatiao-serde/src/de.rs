@@ -25,20 +25,23 @@ use serde::de::{DeserializeSeed, Error as _, MapAccess, SeqAccess, Visitor};
 
 use guatiao::value::alloc::Alloc;
 use guatiao::value::error::MAX_DEPTH;
-use guatiao::value::types::{Number, Value};
+use guatiao::value::types::{Buffer, List, Map, Number, Text, Value};
 
 use crate::{Presentation, from_data_uri};
 
 /// Reads one value, building it through an allocator.
 ///
 /// ```
+/// use guatiao::Map;
 /// use guatiao::value::alloc::Alloc;
 /// use guatiao_serde::ValueSeed;
 /// use serde::de::DeserializeSeed;
 ///
 /// let mut de = serde_json::Deserializer::from_str(r#"{"port":5900}"#);
 /// let value = ValueSeed::new(Alloc::rust()).deserialize(&mut de).unwrap();
-/// assert_eq!(value.get("port").and_then(|v| v.as_number_str()), Some("5900"));
+/// let map: &Map = (&value).try_into().unwrap();
+/// let port: u32 = map.required("port").unwrap().try_into().unwrap();
+/// assert_eq!(port, 5900);
 /// ```
 #[derive(Debug, Clone, Copy)]
 pub struct ValueSeed {
@@ -128,7 +131,7 @@ impl<'de> Visitor<'de> for ValueSeed {
     }
 
     fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<Value, E> {
-        Ok(Value::bool(v))
+        Ok(Value::from(v))
     }
 
     // Every integer and float arrives as text, which is what a guatiao
@@ -171,34 +174,40 @@ impl<'de> Visitor<'de> for ValueSeed {
         if self.how.reads_data_uris()
             && let Some(bytes) = from_data_uri(v)
         {
-            return Value::bytes_in(self.alloc, &bytes).map_err(E::custom);
+            return Buffer::new_in(self.alloc, &bytes)
+                .map(Value::from)
+                .map_err(E::custom);
         }
-        Value::string_in(self.alloc, v).map_err(E::custom)
+        Text::new_in(self.alloc, v)
+            .map(Value::from)
+            .map_err(E::custom)
     }
 
     fn visit_bytes<E: serde::de::Error>(self, v: &[u8]) -> Result<Value, E> {
-        Value::bytes_in(self.alloc, v).map_err(E::custom)
+        Buffer::new_in(self.alloc, v)
+            .map(Value::from)
+            .map_err(E::custom)
     }
 
     fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Value, A::Error> {
         self.room()?;
         let inside = self.inside();
-        let mut list = Value::list_in(self.alloc);
+        let mut list = List::new_in(self.alloc);
         while let Some(item) = seq.next_element_seed(inside)? {
             list.push(item).map_err(A::Error::custom)?;
         }
-        Ok(list)
+        Ok(list.into())
     }
 
     fn visit_map<A: MapAccess<'de>>(self, mut access: A) -> Result<Value, A::Error> {
         self.room()?;
         let inside = self.inside();
-        let mut map = Value::map_in(self.alloc);
+        let mut map = Map::new_in(self.alloc);
         // A key arrives as a `String` rather than borrowed, because a
         // format may have had to unescape it and a borrowed key would then
         // point at a buffer that does not outlive the call.
         let Some(first) = access.next_key::<String>()? else {
-            return Ok(map);
+            return Ok(map.into());
         };
 
         // A NUMBER WEARING A MAP'S CLOTHES. With
@@ -233,7 +242,7 @@ impl<'de> Visitor<'de> for ValueSeed {
             // defensible; silently keeping the first would not.
             map.set(&key, value).map_err(A::Error::custom)?;
         }
-        Ok(map)
+        Ok(map.into())
     }
 }
 
@@ -260,6 +269,7 @@ fn number<E: serde::de::Error>(alloc: Alloc, text: &str) -> Result<Value, E> {
 mod tests {
     use super::*;
     use crate::{Bytes, Serializable};
+    use guatiao::value::convert::TryAsRef;
 
     fn read(json: &str) -> Value {
         let mut de = serde_json::Deserializer::from_str(json);
@@ -313,16 +323,23 @@ mod tests {
     #[test]
     fn a_number_keeps_its_spelling_through_a_round_trip() {
         // Exact in, exact out, for everything that fits.
-        assert_eq!(read("5900").as_number_str(), Some("5900"));
         assert_eq!(
-            read("18446744073709551615").as_number_str(),
+            TryAsRef::<Number>::try_as_ref(&read("5900")).map(Number::as_str),
+            Some("5900")
+        );
+        assert_eq!(
+            TryAsRef::<Number>::try_as_ref(&read("18446744073709551615")).map(Number::as_str),
             Some("18446744073709551615")
         );
 
         // And past that, through the token: exact, spelling included.
-        assert_eq!(read("1.10").as_number_str(), Some("1.10"));
         assert_eq!(
-            read("123456789012345678901234567890").as_number_str(),
+            TryAsRef::<Number>::try_as_ref(&read("1.10")).map(Number::as_str),
+            Some("1.10")
+        );
+        assert_eq!(
+            TryAsRef::<Number>::try_as_ref(&read("123456789012345678901234567890"))
+                .map(Number::as_str),
             Some("123456789012345678901234567890")
         );
         // `1e400` comes back `1e+400`: serde_json writes the exponent's
@@ -330,7 +347,10 @@ mod tests {
         // have done; the spelling of an exponent is the format's to
         // normalise, and this is what it chose.
 
-        assert_eq!(read("1e400").as_number_str(), Some("1e+400"));
+        assert_eq!(
+            TryAsRef::<Number>::try_as_ref(&read("1e400")).map(Number::as_str),
+            Some("1e+400")
+        );
 
         // And writing is exact whatever the magnitude.
         let huge = "123456789012345678901234567890123456789012345678901234567890";
@@ -343,44 +363,67 @@ mod tests {
     #[test]
     fn a_data_uri_becomes_bytes_only_when_asked() {
         let text = r#""data:;base64,3q0=""#;
-        assert_eq!(read(text).as_str(), Some("data:;base64,3q0="));
+        assert_eq!(
+            TryAsRef::<str>::try_as_ref(&read(text)),
+            Some("data:;base64,3q0=")
+        );
 
         let mut de = serde_json::Deserializer::from_str(text);
         let asked = ValueSeed::with(Alloc::rust(), Presentation::new().reading_data_uris())
             .deserialize(&mut de)
             .unwrap();
-        assert_eq!(asked.as_bytes(), Some(&[0xde, 0xad][..]));
+        assert_eq!(
+            TryAsRef::<[u8]>::try_as_ref(&asked),
+            Some(&[0xde, 0xad][..])
+        );
     }
 
     /// With that on, a byte string survives a JSON round trip.
     #[test]
     fn bytes_round_trip_through_json_when_both_sides_agree() {
         let how = Presentation::new().reading_data_uris();
-        let original = Value::bytes(&[1, 2, 255]);
+        let original = Value::from(Buffer::new(&[1, 2, 255]));
         let text = serde_json::to_string(&Serializable::new(&original, how)).unwrap();
 
         let mut de = serde_json::Deserializer::from_str(&text);
         let back = ValueSeed::with(Alloc::rust(), how)
             .deserialize(&mut de)
             .unwrap();
-        assert_eq!(back.as_bytes(), Some(&[1u8, 2, 255][..]));
+        assert_eq!(
+            TryAsRef::<[u8]>::try_as_ref(&back),
+            Some(&[1u8, 2, 255][..])
+        );
     }
 
     /// And through a binary format with no agreement needed at all.
     #[test]
     fn bytes_round_trip_through_a_binary_format() {
-        let original = Value::bytes(&[1, 2, 255]);
+        let original = Value::from(Buffer::new(&[1, 2, 255]));
         let packed = rmp_serde::to_vec(&Serializable::from(&original)).unwrap();
         let mut de = rmp_serde::Deserializer::new(&packed[..]);
         let back = ValueSeed::new(Alloc::rust()).deserialize(&mut de).unwrap();
-        assert_eq!(back.as_bytes(), Some(&[1u8, 2, 255][..]));
+        assert_eq!(
+            TryAsRef::<[u8]>::try_as_ref(&back),
+            Some(&[1u8, 2, 255][..])
+        );
     }
 
     #[test]
     fn a_repeated_key_replaces_rather_than_duplicating() {
         let v = read(r#"{"a":1,"a":2}"#);
-        assert_eq!(v.entries().map(<[_]>::len), Some(1));
-        assert_eq!(v.get("a").and_then(Value::as_number_str), Some("2"));
+        assert_eq!(
+            TryAsRef::<Map>::try_as_ref(&v)
+                .map(Map::entries)
+                .map(<[_]>::len),
+            Some(1)
+        );
+        assert_eq!(
+            TryAsRef::<Map>::try_as_ref(&v)
+                .and_then(|m| m.get("a"))
+                .and_then(TryAsRef::<Number>::try_as_ref)
+                .map(Number::as_str),
+            Some("2")
+        );
     }
 
     #[test]
@@ -420,13 +463,18 @@ mod tests {
     fn bytes_as_an_array_reads_back_as_a_list_of_numbers() {
         // Unambiguous to write, and honest about what comes back: the
         // reader sees a list, because that is what the document says.
-        let v = Value::bytes(&[1, 2]);
+        let v = Value::from(Buffer::new(&[1, 2]));
         let text = serde_json::to_string(&Serializable::new(
             &v,
             Presentation::new().bytes(Bytes::Array),
         ))
         .unwrap();
         assert_eq!(text, "[1,2]");
-        assert_eq!(read(&text).items().map(<[_]>::len), Some(2));
+        assert_eq!(
+            TryAsRef::<List>::try_as_ref(&read(&text))
+                .map(List::items)
+                .map(<[_]>::len),
+            Some(2)
+        );
     }
 }

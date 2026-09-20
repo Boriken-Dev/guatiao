@@ -9,6 +9,7 @@
 #![allow(dead_code)] // the types exist to be described, not built
 
 use guatiao::schema::read::SchemaRef;
+use guatiao::value::convert::TryAsRef;
 use guatiao::{Alloc, Map, Schema, Value};
 use guatiao_form::{Form, FormRef, Screen, check, is_visible, layout, vocab};
 
@@ -86,7 +87,7 @@ fn a_derived_form_fits_its_derived_schema() {
     assert_eq!(f.hints("ca-file").placeholder(), "/etc/ssl/ca.pem");
     let when = f.hints("ca-file").visible_when().expect("guarded");
     assert_eq!(when.field(), "verify");
-    assert_eq!(when.equals().as_bool(), Some(true));
+    assert_eq!(when.equals().try_into().ok(), Some(true));
     assert_eq!(f.hints("auth.password").widget(), "password");
     assert!(f.hints("auth.username").is_empty(), "nothing was said");
     assert!(f.hints("host").is_empty());
@@ -131,7 +132,9 @@ fn a_member_s_hints_compose_under_its_key() {
     let f = FormRef::new(&form).expect("a form");
     assert_eq!(f.hints("session.auth.password").widget(), "password");
     assert!(
-        form.get(vocab::SECTIONS).is_none(),
+        TryAsRef::<Map>::try_as_ref(&form)
+            .and_then(|m| m.get(vocab::SECTIONS))
+            .is_none(),
         "a member adds no sections"
     );
 }

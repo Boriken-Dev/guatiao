@@ -31,7 +31,7 @@
 #[test]
 fn the_readme_example_compiles_and_holds() -> Result<(), Box<dyn std::error::Error>> {
     // README-EXAMPLE-BEGIN
-    use guatiao::{Map, ReadValue};
+    use guatiao::Map;
 
     let mut options = Map::new();
     options.set("compression", 6)?;
@@ -43,20 +43,17 @@ fn the_readme_example_compiles_and_holds() -> Result<(), Box<dyn std::error::Err
     map.set("options", options)?;
 
     // Get the value, then convert it: no per-kind getters on a map, and no
-    // per-kind readers on a value. `ok_or_missing` is `Option::ok_or` with
-    // the one error it could be already filled in, and the rest is `TryInto`.
-    let host: &str = map.get("host").ok_or_missing()?.try_into()?;
-    let port: u16 = map.get("port").ok_or_missing()?.try_into()?;
-    let compression: i64 = map
-        .get("options")
-        .get("compression")
-        .ok_or_missing()?
-        .try_into()?;
+    // per-kind readers on a value. `required` is the step from a lookup to a
+    // value and it names the key it did not find; the rest is `TryInto`.
+    let host: &str = map.required("host")?.try_into()?;
+    let port: u16 = map.required("port")?.try_into()?;
+    let options: &Map = map.required("options")?.try_into()?;
+    let compression: i64 = options.required("compression")?.try_into()?;
     assert_eq!((host, port, compression), ("10.0.0.1", 5900, 6));
 
     // A key that is absent and a value of another kind each say which it was.
-    assert!(map.get("missing").ok_or_missing().is_err());
-    assert!(TryInto::<i64>::try_into(map.get("host").ok_or_missing()?).is_err());
+    assert!(map.required("missing").is_err());
+    assert!(TryInto::<i64>::try_into(map.required("host")?).is_err());
     // README-EXAMPLE-END
     Ok(())
 }

@@ -5,14 +5,15 @@ format**.
 
 ```rust
 use guatiao::value::alloc::Alloc;
-use guatiao::Value;
+use guatiao::{Map, Value};
 use guatiao_serde::{Serializable, ValueSeed, text::json};
 use serde::de::DeserializeSeed;
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 # use guatiao_serde::Presentation;
 
-let mut map = Value::map();
+let mut map = Map::new();
 map.set("port", 5900)?;
+let map = Value::from(map);
 
 let text = json::to_string(&map, Presentation::new())?;        // {"port":5900}
 let packed = rmp_serde::to_vec(&Serializable::from(&map))?;    // MessagePack
@@ -21,7 +22,9 @@ let mut de = serde_json::Deserializer::from_str(&text);
 let back = ValueSeed::new(Alloc::rust()).deserialize(&mut de)?;
 # assert_eq!(text, r#"{"port":5900}"#);
 # assert!(!packed.is_empty());
-# assert_eq!(back.get("port").and_then(Value::as_number_str), Some("5900"));
+# let back: &Map = (&back).try_into()?;
+# let port: u32 = back.required("port")?.try_into()?;
+# assert_eq!(port, 5900);
 # Ok(())
 # }
 ```

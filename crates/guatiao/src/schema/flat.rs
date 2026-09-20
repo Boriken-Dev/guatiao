@@ -22,6 +22,7 @@
 
 #![forbid(unsafe_code)]
 
+use crate::value::convert::TryAsRef;
 use std::collections::BTreeMap;
 
 use super::ValidationError;
@@ -30,7 +31,7 @@ use super::validate::text_of;
 use crate::value::alloc::Alloc;
 use crate::value::error::ValueError;
 use crate::value::read::str_or;
-use crate::value::types::{Tag, Value};
+use crate::value::types::{Map, Tag, Text, Value};
 
 /// Between a field's key and one of its payload fields.
 pub const SEPARATOR: char = '.';
@@ -44,7 +45,10 @@ pub fn flatten(field: FieldRef<'_>, value: &Value, store: &mut BTreeMap<String, 
     if value.tag() != Ok(Tag::GUATIAO_MAP) {
         return false;
     }
-    let chosen = str_or(value.get(tag), "");
+    let chosen = str_or(
+        TryAsRef::<Map>::try_as_ref(value).and_then(|m| m.get(tag)),
+        "",
+    );
     let Some(arm) = kind.arms().find(|a| a.value() == chosen) else {
         return false;
     };
@@ -55,7 +59,7 @@ pub fn flatten(field: FieldRef<'_>, value: &Value, store: &mut BTreeMap<String, 
 
     store.insert(field.key().to_string(), chosen.to_string());
     for member in arm.fields() {
-        if let Some(present) = value.get(member.key())
+        if let Some(present) = TryAsRef::<Map>::try_as_ref(value).and_then(|m| m.get(member.key()))
             && let Some(text) = scalar_text(present)
         {
             store.insert(format!("{prefix}{}", member.key()), text);
@@ -86,19 +90,20 @@ pub fn unflatten(
     let chosen = store.get(field.key())?;
     let arm = kind.arms().find(|a| a.value() == chosen)?;
 
-    let mut map = Value::map_in(alloc);
+    let mut map = Map::new_in(alloc);
     // The discriminant goes in FIRST, so re-emission is byte-stable: a map
     // is insertion-ordered by contract.
-    map.set(tag, Value::string_in(alloc, chosen).ok()?).ok()?;
+    map.set(tag, Text::new_in(alloc, chosen).map(Value::from).ok()?)
+        .ok()?;
     let prefix = format!("{}{SEPARATOR}", field.key());
     for member in arm.fields() {
         if let Some(text) = store.get(&format!("{prefix}{}", member.key()))
-            && let Ok(v) = Value::string_in(alloc, text)
+            && let Ok(v) = Text::new_in(alloc, text).map(Value::from)
         {
             let _ = map.set(member.key(), v);
         }
     }
-    Some(map)
+    Some(map.into())
 }
 
 /// Every flat key this field can occupy: its own, plus one per field of

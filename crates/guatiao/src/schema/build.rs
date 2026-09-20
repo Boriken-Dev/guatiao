@@ -68,8 +68,9 @@
 
 use super::vocab;
 use crate::value::alloc::Alloc;
+use crate::value::convert::TryAsMut;
 use crate::value::error::ValueError;
-use crate::value::types::{Number, Value};
+use crate::value::types::{List, Map, Number, Text, Value};
 
 /// Builds a schema: the root document, with its dialect declared.
 pub struct SchemaBuilder {
@@ -162,7 +163,11 @@ pub(super) fn put(
         // is the first one, which is the one that explains the rest.
         Err(_) => return,
     };
-    match value.and_then(|v| node.set(key, v)) {
+    match value.and_then(|v| {
+        TryAsMut::<Map>::try_as_mut(node)
+            .ok_or(ValueError::WrongKind)
+            .and_then(|m| m.set(key, v))
+    }) {
         Ok(()) => {}
         Err(e) => *state = Err(e),
     }
@@ -174,7 +179,11 @@ fn push(state: &mut Result<Value, ValueError>, key: &str, value: Result<Value, V
         Ok(n) => n,
         Err(_) => return,
     };
-    match value.and_then(|v| node.push_into(key, v)) {
+    match value.and_then(|v| {
+        TryAsMut::<Map>::try_as_mut(node)
+            .ok_or(ValueError::WrongKind)
+            .and_then(|m| m.push_into(key, v))
+    }) {
         Ok(()) => {}
         Err(e) => *state = Err(e),
     }
@@ -186,7 +195,11 @@ fn push_name(list: &mut Result<Value, ValueError>, alloc: Alloc, name: &str) {
         Ok(n) => n,
         Err(_) => return,
     };
-    match Value::string_in(alloc, name).and_then(|v| node.push(v)) {
+    match Text::new_in(alloc, name).map(Value::from).and_then(|v| {
+        TryAsMut::<List>::try_as_mut(node)
+            .ok_or(ValueError::WrongKind)
+            .and_then(|l| l.push(v))
+    }) {
         Ok(()) => {}
         Err(e) => *list = Err(e),
     }
@@ -207,8 +220,8 @@ fn seal(
     tag: Option<(&str, Result<Value, ValueError>)>,
     fields: Vec<FieldBuilder>,
 ) {
-    let mut properties = Ok(Value::map_in(alloc));
-    let mut required = Ok(Value::list_in(alloc));
+    let mut properties = Ok(Map::new_in(alloc).into());
+    let mut required = Ok(List::new_in(alloc).into());
     let mut any_required = false;
 
     if let Some((tag, discriminant)) = tag {
@@ -227,7 +240,7 @@ fn seal(
     put(state, vocab::PROPERTIES, properties);
     // The key set is closed, and the document says so: what `validate`
     // refuses, a general validator now refuses too.
-    put(state, vocab::ADDITIONAL_PROPERTIES, Ok(Value::bool(false)));
+    put(state, vocab::ADDITIONAL_PROPERTIES, Ok(Value::from(false)));
     // Absent means nothing is required, which is what JSON Schema says an
     // absent `required` means. An empty list would say the same thing in
     // more bytes.
@@ -251,16 +264,16 @@ impl SchemaBuilder {
     /// they come first in the document — which is where a reader looks for
     /// them.
     pub fn new_in(alloc: Alloc) -> SchemaBuilder {
-        let mut state = Ok(Value::map_in(alloc));
+        let mut state = Ok(Map::new_in(alloc).into());
         put(
             &mut state,
             vocab::SCHEMA,
-            Value::string_in(alloc, vocab::DIALECT),
+            Text::new_in(alloc, vocab::DIALECT).map(Value::from),
         );
         put(
             &mut state,
             vocab::TYPE,
-            Value::string_in(alloc, vocab::TYPE_OBJECT),
+            Text::new_in(alloc, vocab::TYPE_OBJECT).map(Value::from),
         );
         SchemaBuilder {
             alloc,
@@ -388,8 +401,12 @@ impl FieldBuilder {
 
 impl KindBuilder {
     fn typed(alloc: Alloc, ty: &str) -> KindBuilder {
-        let mut state = Ok(Value::map_in(alloc));
-        put(&mut state, vocab::TYPE, Value::string_in(alloc, ty));
+        let mut state = Ok(Map::new_in(alloc).into());
+        put(
+            &mut state,
+            vocab::TYPE,
+            Text::new_in(alloc, ty).map(Value::from),
+        );
         KindBuilder { state }
     }
 
@@ -584,8 +601,8 @@ impl KindBuilder {
     /// The same, through an allocator you name.
     pub fn enumeration_in(alloc: Alloc, choices: &[(&str, &str)]) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_STRING);
-        let mut values = Ok(Value::list_in(alloc));
-        let mut labels = Ok(Value::map_in(alloc));
+        let mut values = Ok(List::new_in(alloc).into());
+        let mut labels = Ok(Map::new_in(alloc).into());
         let mut any_label = false;
         for (value, label) in choices {
             push_name(&mut values, alloc, value);
@@ -593,7 +610,11 @@ impl KindBuilder {
             // reader shows the value when there is no label, so writing it
             // would only put `"off": ""` or `"off": "off"` in the document.
             if !label.is_empty() && label != value {
-                put(&mut labels, value, Value::string_in(alloc, label));
+                put(
+                    &mut labels,
+                    value,
+                    Text::new_in(alloc, label).map(Value::from),
+                );
                 any_label = true;
             }
         }
@@ -619,9 +640,9 @@ impl KindBuilder {
         // No `type` of its own: `anyOf` alone is what a union is, and a
         // union of an integer and a string has no single type to name.
         let mut k = KindBuilder {
-            state: Ok(Value::map_in(alloc)),
+            state: Ok(Map::new_in(alloc).into()),
         };
-        put(&mut k.state, vocab::ANY_OF, Ok(Value::list_in(alloc)));
+        put(&mut k.state, vocab::ANY_OF, Ok(List::new_in(alloc).into()));
         for arm in arms {
             push(&mut k.state, vocab::ANY_OF, arm.state);
         }
@@ -648,11 +669,11 @@ impl KindBuilder {
         put(
             &mut k.state,
             vocab::X_VARIANT_TAG,
-            Value::string_in(alloc, tag),
+            Text::new_in(alloc, tag).map(Value::from),
         );
         // Written even when empty, so a variant that declares no arms is a
         // variant with no arms rather than a kind that forgot to say.
-        put(&mut k.state, vocab::ONE_OF, Ok(Value::list_in(alloc)));
+        put(&mut k.state, vocab::ONE_OF, Ok(List::new_in(alloc).into()));
         for arm in arms {
             let mut state = arm.state;
             seal(
@@ -685,21 +706,25 @@ impl ArmBuilder {
 
     /// The same, through an allocator you name.
     pub fn new_in(alloc: Alloc, value: &str, label: &str) -> ArmBuilder {
-        let mut state = Ok(Value::map_in(alloc));
+        let mut state = Ok(Map::new_in(alloc).into());
         // Left off when it says nothing the value does not, for the reason
         // `enumeration_in` gives: a reader shows the value when there is no
         // title.
         if !label.is_empty() && label != value {
-            put(&mut state, vocab::TITLE, Value::string_in(alloc, label));
+            put(
+                &mut state,
+                vocab::TITLE,
+                Text::new_in(alloc, label).map(Value::from),
+            );
         }
         // Held rather than written: an arm does not know which key its
         // discriminant is stored under, because that is the variant's
         // declaration.
-        let mut discriminant = Ok(Value::map_in(alloc));
+        let mut discriminant = Ok(Map::new_in(alloc).into());
         put(
             &mut discriminant,
             vocab::CONST,
-            Value::string_in(alloc, value),
+            Text::new_in(alloc, value).map(Value::from),
         );
         ArmBuilder {
             alloc,

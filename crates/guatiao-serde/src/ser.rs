@@ -6,10 +6,11 @@
 
 #![forbid(unsafe_code)]
 
+use guatiao::value::convert::TryAsRef;
 use serde::ser::{Error as _, SerializeMap, SerializeSeq, SerializeStruct};
 use serde::{Serialize, Serializer};
 
-use guatiao::value::types::{Tag, Value};
+use guatiao::value::types::{List, Map, Number, Tag, Value};
 
 use crate::{Bytes, Numbers, Presentation, data_uri};
 
@@ -76,11 +77,9 @@ impl Serialize for Serializable<'_> {
                  the ANSWER to a lookup, not a thing a container holds",
             )),
             Ok(Tag::GUATIAO_NULL) => s.serialize_unit(),
-            Ok(Tag::GUATIAO_BOOL) => s.serialize_bool(
-                self.value
-                    .as_bool()
-                    .ok_or_else(|| malformed::<S>("a bool"))?,
-            ),
+            Ok(Tag::GUATIAO_BOOL) => {
+                s.serialize_bool(bool::try_from(self.value).map_err(|_| malformed::<S>("a bool"))?)
+            }
             // VERBATIM, through the format's raw-number door where it has
             // one. A guatiao number IS the text that declared it, so
             // reparsing it into an `f64` to write it back is exactly how a
@@ -92,20 +91,17 @@ impl Serialize for Serializable<'_> {
             // format that cannot gets the text.
             Ok(Tag::GUATIAO_NUMBER) => write_number(
                 s,
-                self.value
-                    .as_number_str()
+                TryAsRef::<Number>::try_as_ref(self.value)
+                    .map(Number::as_str)
                     .ok_or_else(|| malformed::<S>("a number"))?,
                 self.how.numbers_as(),
             ),
             Ok(Tag::GUATIAO_STRING) => s.serialize_str(
-                self.value
-                    .as_str()
+                TryAsRef::<str>::try_as_ref(self.value)
                     .ok_or_else(|| malformed::<S>("a string"))?,
             ),
             Ok(Tag::GUATIAO_BYTES) => {
-                let bytes = self
-                    .value
-                    .as_bytes()
+                let bytes = TryAsRef::<[u8]>::try_as_ref(self.value)
                     .ok_or_else(|| malformed::<S>("a byte string"))?;
                 // A format WITH a byte string gets one, whatever the
                 // policy says: native bytes round-trip perfectly, and a
@@ -132,7 +128,9 @@ impl Serialize for Serializable<'_> {
                 }
             }
             Ok(Tag::GUATIAO_LIST) => {
-                let items = self.value.items().ok_or_else(|| malformed::<S>("a list"))?;
+                let items = TryAsRef::<List>::try_as_ref(self.value)
+                    .map(List::items)
+                    .ok_or_else(|| malformed::<S>("a list"))?;
                 let mut seq = s.serialize_seq(Some(items.len()))?;
                 for item in items {
                     seq.serialize_element(&child(item, self.how))?;
@@ -140,9 +138,8 @@ impl Serialize for Serializable<'_> {
                 seq.end()
             }
             Ok(Tag::GUATIAO_MAP) => {
-                let entries = self
-                    .value
-                    .entries()
+                let entries = TryAsRef::<Map>::try_as_ref(self.value)
+                    .map(Map::entries)
                     .ok_or_else(|| malformed::<S>("a map"))?;
                 let mut map = s.serialize_map(Some(entries.len()))?;
                 for entry in entries {
@@ -232,7 +229,7 @@ const RAW_NUMBER: &str = "$serde_json::private::RawValue";
 // covers a format this crate names nowhere.
 #[cfg(all(test, feature = "json"))]
 mod tests {
-    use guatiao::value::types::Number;
+    use guatiao::value::types::{Buffer, Number, Text};
 
     use super::*;
     use crate::Numbers;
@@ -248,14 +245,14 @@ mod tests {
     #[test]
     fn the_shapes_a_document_is_made_of() {
         assert_eq!(json(&Value::null()), "null");
-        assert_eq!(json(&Value::bool(true)), "true");
+        assert_eq!(json(&Value::from(true)), "true");
         assert_eq!(json(&Value::from(5900i64)), "5900");
-        assert_eq!(json(&Value::string("hi")), "\"hi\"");
+        assert_eq!(json(&Value::from(Text::new("hi"))), "\"hi\"");
 
-        let mut list = Value::list();
+        let mut list = List::new();
         list.push(1).unwrap();
         list.push("two").unwrap();
-        assert_eq!(json(&list), "[1,\"two\"]");
+        assert_eq!(json(&Value::from(list)), "[1,\"two\"]");
     }
 
     /// A map is written in the order keys were set, never sorted.
@@ -265,10 +262,10 @@ mod tests {
     /// it back.
     #[test]
     fn a_map_keeps_the_order_it_was_built_in() {
-        let mut map = Value::map();
+        let mut map = Map::new();
         map.set("zebra", 1).unwrap();
         map.set("aardvark", 2).unwrap();
-        assert_eq!(json(&map), r#"{"zebra":1,"aardvark":2}"#);
+        assert_eq!(json(&Value::from(map)), r#"{"zebra":1,"aardvark":2}"#);
     }
 
     /// THE PROPERTY THIS MODEL EXISTS FOR. A number is its text, and no
@@ -309,14 +306,14 @@ mod tests {
 
     #[test]
     fn escaping_is_serdes_and_needs_no_second_answer() {
-        assert_eq!(json(&Value::string("a\"b\\c")), r#""a\"b\\c""#);
-        assert_eq!(json(&Value::string("tab\there")), r#""tab\there""#);
-        assert_eq!(json(&Value::string("café ☕")), "\"café ☕\"");
+        assert_eq!(json(&Value::from(Text::new("a\"b\\c"))), r#""a\"b\\c""#);
+        assert_eq!(json(&Value::from(Text::new("tab\there"))), r#""tab\there""#);
+        assert_eq!(json(&Value::from(Text::new("café ☕"))), "\"café ☕\"");
     }
 
     #[test]
     fn bytes_take_the_presentation_they_are_given() {
-        let v = Value::bytes(&[0xde, 0xad]);
+        let v = Value::from(Buffer::new(&[0xde, 0xad]));
         let one = |how| serde_json::to_string(&Serializable::new(&v, how)).ok();
         assert_eq!(
             one(Presentation::new()).as_deref(),
@@ -336,7 +333,7 @@ mod tests {
     /// A format WITH a byte string gets one, whatever the policy says.
     #[test]
     fn a_binary_format_gets_native_bytes() {
-        let v = Value::bytes(&[0xde, 0xad]);
+        let v = Value::from(Buffer::new(&[0xde, 0xad]));
         // MessagePack's bin8: 0xc4, length, then the bytes.
         let packed = rmp_serde::to_vec(&Serializable::new(
             &v,
@@ -349,8 +346,9 @@ mod tests {
     /// Absent is the answer to a lookup, not something a container holds.
     #[test]
     fn an_absent_value_has_no_spelling() {
-        let mut list = Value::list();
+        let mut list = List::new();
         list.push(Value::absent()).unwrap();
+        let list = Value::from(list);
         assert!(serde_json::to_string(&Serializable::from(&list)).is_err());
     }
 }

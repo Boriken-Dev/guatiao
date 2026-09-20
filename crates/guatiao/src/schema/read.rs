@@ -31,8 +31,9 @@
 #![forbid(unsafe_code)]
 
 use super::vocab;
+use crate::value::convert::TryAsRef;
 use crate::value::read::{bool_or, float_or, int_or};
-use crate::value::types::{Tag, Value};
+use crate::value::types::{List, Map, Number, Tag, Value};
 
 /// A schema: what a value is, and what a valid one looks like.
 #[derive(Clone, Copy, Debug)]
@@ -70,7 +71,10 @@ pub struct ArmRef<'a> {
 /// error. A caller that needs to tell "absent" from "set to empty" asks
 /// the value itself.
 fn text<'a>(v: &'a Value, key: &str) -> &'a str {
-    v.get(key).and_then(Value::as_str).unwrap_or("")
+    TryAsRef::<Map>::try_as_ref(v)
+        .and_then(|m| m.get(key))
+        .and_then(TryAsRef::<str>::try_as_ref)
+        .unwrap_or("")
 }
 
 /// Whether `v` is a map, which every part of a schema is.
@@ -84,12 +88,13 @@ fn is_map(v: &Value) -> bool {
 /// a set would. An object's field count is a handful, so the scan is
 /// cheaper than the allocation would be.
 fn is_required_in(owner: &Value, key: &str) -> bool {
-    owner
-        .get(vocab::REQUIRED)
-        .and_then(Value::items)
+    TryAsRef::<Map>::try_as_ref(owner)
+        .and_then(|m| m.get(vocab::REQUIRED))
+        .and_then(TryAsRef::<List>::try_as_ref)
+        .map(List::items)
         .unwrap_or(&[])
         .iter()
-        .filter_map(Value::as_str)
+        .filter_map(TryAsRef::<str>::try_as_ref)
         .any(|n| n == key)
 }
 
@@ -101,9 +106,10 @@ fn is_required_in(owner: &Value, key: &str) -> bool {
 /// Anything whose name is not text, or whose schema is not a map, is
 /// skipped — dropping the one is better than refusing the rest.
 fn fields_of(owner: &Value) -> impl Iterator<Item = FieldRef<'_>> {
-    owner
-        .get(vocab::PROPERTIES)
-        .and_then(Value::entries)
+    TryAsRef::<Map>::try_as_ref(owner)
+        .and_then(|m| m.get(vocab::PROPERTIES))
+        .and_then(TryAsRef::<Map>::try_as_ref)
+        .map(Map::entries)
         .unwrap_or(&[])
         .iter()
         .filter_map(move |e| {
@@ -162,9 +168,10 @@ impl<'a> SchemaRef<'a> {
     /// it. The cost is the same either way — a map here is an
     /// insertion-ordered association list, so `get` is a scan too.
     pub fn find(&self, key: &str) -> Option<FieldRef<'a>> {
-        self.0
-            .get(vocab::PROPERTIES)
-            .and_then(Value::entries)
+        TryAsRef::<Map>::try_as_ref(self.0)
+            .and_then(|m| m.get(vocab::PROPERTIES))
+            .and_then(TryAsRef::<Map>::try_as_ref)
+            .map(Map::entries)
             .unwrap_or(&[])
             .iter()
             .find(|e| e.key_str() == Some(key))
@@ -183,7 +190,9 @@ impl<'a> SchemaRef<'a> {
     /// Anything [`vocab::known`] does not claim is an annotation: carried,
     /// and never interpreted by this crate.
     pub fn extra(&self, key: &str) -> Option<&'a Value> {
-        self.0.get(key).filter(|_| !vocab::known(key))
+        TryAsRef::<Map>::try_as_ref(self.0)
+            .and_then(|m| m.get(key))
+            .filter(|_| !vocab::known(key))
     }
 
     /// Every annotation on the schema as a whole, in document order:
@@ -197,8 +206,8 @@ impl<'a> SchemaRef<'a> {
 /// vocabulary, which is what [`SchemaRef::extras`] and
 /// [`FieldRef::extras`] both walk.
 fn extras_of(schema: &Value) -> impl Iterator<Item = (&str, &Value)> {
-    schema
-        .entries()
+    TryAsRef::<Map>::try_as_ref(schema)
+        .map(Map::entries)
         .unwrap_or(&[])
         .iter()
         .filter_map(|e| e.key_str().map(|k| (k, e.value())))
@@ -259,23 +268,32 @@ impl<'a> FieldRef<'a> {
     /// **`None` and a default of null are different things**: the first
     /// means there is no default, the second that the default is nothing.
     pub fn default(&self) -> Option<&'a Value> {
-        self.schema.get(vocab::DEFAULT)
+        TryAsRef::<Map>::try_as_ref(self.schema).and_then(|m| m.get(vocab::DEFAULT))
     }
 
     /// Declaration position. 0 when unset, which a consumer should read as
     /// "no ordering information" rather than "first".
     pub fn order(&self) -> i64 {
-        int_or(self.schema.get(vocab::X_ORDER), 0)
+        int_or(
+            TryAsRef::<Map>::try_as_ref(self.schema).and_then(|m| m.get(vocab::X_ORDER)),
+            0,
+        )
     }
 
     /// Hidden behind a disclosure by default.
     pub fn is_advanced(&self) -> bool {
-        bool_or(self.schema.get(vocab::X_ADVANCED), false)
+        bool_or(
+            TryAsRef::<Map>::try_as_ref(self.schema).and_then(|m| m.get(vocab::X_ADVANCED)),
+            false,
+        )
     }
 
     /// A secret: masked in a form, and not somewhere to put in a log.
     pub fn is_sensitive(&self) -> bool {
-        bool_or(self.schema.get(vocab::X_SENSITIVE), false)
+        bool_or(
+            TryAsRef::<Map>::try_as_ref(self.schema).and_then(|m| m.get(vocab::X_SENSITIVE)),
+            false,
+        )
     }
 
     /// Must be given.
@@ -288,7 +306,9 @@ impl<'a> FieldRef<'a> {
 
     /// An annotation on this field. Carried, never interpreted.
     pub fn extra(&self, key: &str) -> Option<&'a Value> {
-        self.schema.get(key).filter(|_| !vocab::known(key))
+        TryAsRef::<Map>::try_as_ref(self.schema)
+            .and_then(|m| m.get(key))
+            .filter(|_| !vocab::known(key))
     }
 
     /// Every annotation on this field, in document order -- what a
@@ -319,11 +339,13 @@ impl<'a> ArmRef<'a> {
     /// The discriminant stored when this arm is selected: the `const` its
     /// tag property pins.
     pub fn value(&self) -> &'a str {
-        self.schema
-            .get(vocab::PROPERTIES)
+        TryAsRef::<Map>::try_as_ref(self.schema)
+            .and_then(|m| m.get(vocab::PROPERTIES))
+            .and_then(TryAsRef::<Map>::try_as_ref)
             .and_then(|p| p.get(self.tag))
+            .and_then(TryAsRef::<Map>::try_as_ref)
             .and_then(|t| t.get(vocab::CONST))
-            .and_then(Value::as_str)
+            .and_then(TryAsRef::<str>::try_as_ref)
             .unwrap_or("")
     }
     /// What is shown. Falls back to the value.
@@ -413,13 +435,21 @@ impl<'a> Kind<'a> {
         let Some(k) = schema.filter(|v| is_map(v)) else {
             return Kind::Missing;
         };
-        let Some(ty) = k.get(vocab::TYPE).and_then(Value::as_str) else {
+        let Some(ty) = TryAsRef::<Map>::try_as_ref(k)
+            .and_then(|m| m.get(vocab::TYPE))
+            .and_then(TryAsRef::<str>::try_as_ref)
+        else {
             // No `type` is not automatically malformed: `anyOf` alone is
             // what an untagged union is, and a bare `enum` is a schema
             // somebody else wrote that still says exactly what it accepts.
-            return if let Some(any_of) = k.get(vocab::ANY_OF) {
+            return if let Some(any_of) =
+                TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(vocab::ANY_OF))
+            {
                 Kind::Union(any_of)
-            } else if k.get(vocab::ENUM).is_some() {
+            } else if TryAsRef::<Map>::try_as_ref(k)
+                .and_then(|m| m.get(vocab::ENUM))
+                .is_some()
+            {
                 Kind::Enum(k)
             } else {
                 Kind::Missing
@@ -429,25 +459,38 @@ impl<'a> Kind<'a> {
             vocab::TYPE_BOOLEAN => Kind::Bool,
             // An `enum` narrows the type it sits on, so it is read first:
             // `{"type":"string","enum":[…]}` is a choice, not free text.
-            vocab::TYPE_STRING if k.get(vocab::ENUM).is_some() => Kind::Enum(k),
+            vocab::TYPE_STRING
+                if TryAsRef::<Map>::try_as_ref(k)
+                    .and_then(|m| m.get(vocab::ENUM))
+                    .is_some() =>
+            {
+                Kind::Enum(k)
+            }
             vocab::TYPE_STRING => Kind::Str,
             vocab::TYPE_BYTES => Kind::Bytes,
             // An array with no element schema says nothing about what it
             // holds, which is a kind this build cannot use rather than an
             // array of anything.
-            vocab::TYPE_ARRAY => match k.get(vocab::ITEMS) {
-                Some(i) => Kind::List(i),
-                None => Kind::Unknown(ty),
-            },
+            vocab::TYPE_ARRAY => {
+                match TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(vocab::ITEMS)) {
+                    Some(i) => Kind::List(i),
+                    None => Kind::Unknown(ty),
+                }
+            }
             // An object with no properties is ordinary and complete, the
             // same way an arm with no fields is: it is an object nothing
             // further is declared about. With a tag it is a variant, and a
             // variant with no arms cannot be selected from.
-            vocab::TYPE_OBJECT => match k.get(vocab::X_VARIANT_TAG).and_then(Value::as_str) {
-                Some(tag) => match k.get(vocab::ONE_OF) {
-                    Some(arms) => Kind::Variant { tag, arms },
-                    None => Kind::Unknown(ty),
-                },
+            vocab::TYPE_OBJECT => match TryAsRef::<Map>::try_as_ref(k)
+                .and_then(|m| m.get(vocab::X_VARIANT_TAG))
+                .and_then(TryAsRef::<str>::try_as_ref)
+            {
+                Some(tag) => {
+                    match TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(vocab::ONE_OF)) {
+                        Some(arms) => Kind::Variant { tag, arms },
+                        None => Kind::Unknown(ty),
+                    }
+                }
                 None => Kind::Map(k),
             },
             vocab::TYPE_INTEGER => Kind::Int {
@@ -464,20 +507,29 @@ impl<'a> Kind<'a> {
 
     /// The alternatives of an enumeration, or nothing for any other kind.
     pub fn choices(self) -> impl Iterator<Item = ChoiceRef<'a>> {
-        let (values, labels) = match self {
+        let (values, labels): (&[Value], Option<&Map>) = match self {
             Kind::Enum(k) => (
-                k.get(vocab::ENUM).and_then(Value::items).unwrap_or(&[]),
-                k.get(vocab::X_ENUM_LABELS),
+                TryAsRef::<Map>::try_as_ref(k)
+                    .and_then(|m| m.get(vocab::ENUM))
+                    .and_then(TryAsRef::<List>::try_as_ref)
+                    .map(List::items)
+                    .unwrap_or(&[]),
+                TryAsRef::<Map>::try_as_ref(k)
+                    .and_then(|m| m.get(vocab::X_ENUM_LABELS))
+                    .and_then(TryAsRef::<Map>::try_as_ref),
             ),
             _ => (&[][..], None),
         };
-        values.iter().filter_map(Value::as_str).map(move |value| {
-            let label = labels
-                .and_then(|m| m.get(value))
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            ChoiceRef { value, label }
-        })
+        values
+            .iter()
+            .filter_map(TryAsRef::<str>::try_as_ref)
+            .map(move |value| {
+                let label = labels
+                    .and_then(|m| m.get(value))
+                    .and_then(TryAsRef::<str>::try_as_ref)
+                    .unwrap_or("");
+                ChoiceRef { value, label }
+            })
     }
 
     /// The arms of a **union**, as kinds.
@@ -488,7 +540,9 @@ impl<'a> Kind<'a> {
     /// payload.
     pub fn alternatives(self) -> impl Iterator<Item = Kind<'a>> {
         let list = match self {
-            Kind::Union(a) => a.items().unwrap_or(&[]),
+            Kind::Union(a) => TryAsRef::<List>::try_as_ref(a)
+                .map(List::items)
+                .unwrap_or(&[]),
             _ => &[],
         };
         list.iter().map(|v| Kind::read(Some(v)))
@@ -497,7 +551,12 @@ impl<'a> Kind<'a> {
     /// The arms of a **variant**, each with its own fields.
     pub fn arms(self) -> impl Iterator<Item = ArmRef<'a>> {
         let (tag, list) = match self {
-            Kind::Variant { tag, arms } => (tag, arms.items().unwrap_or(&[])),
+            Kind::Variant { tag, arms } => (
+                tag,
+                TryAsRef::<List>::try_as_ref(arms)
+                    .map(List::items)
+                    .unwrap_or(&[]),
+            ),
             _ => ("", &[][..]),
         };
         list.iter()
@@ -544,17 +603,19 @@ impl<'a> Kind<'a> {
 }
 
 fn opt_int(k: &Value, key: &str) -> Option<i64> {
-    let v = k.get(key)?;
+    let v = TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(key))?;
     // A bound written outside `i64` is no bound this build can apply, and
     // silently clamping it would enforce a limit nobody declared.
-    v.as_number_str()?;
+    TryAsRef::<Number>::try_as_ref(v).map(Number::as_str)?;
     let got = int_or(Some(v), i64::MIN);
-    (got != i64::MIN || v.as_number_str() == Some("-9223372036854775808")).then_some(got)
+    (got != i64::MIN
+        || TryAsRef::<Number>::try_as_ref(v).map(Number::as_str) == Some("-9223372036854775808"))
+    .then_some(got)
 }
 
 fn opt_float(k: &Value, key: &str) -> Option<f64> {
-    let v = k.get(key)?;
-    v.as_number_str()?;
+    let v = TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(key))?;
+    TryAsRef::<Number>::try_as_ref(v).map(Number::as_str)?;
     let got = float_or(Some(v), f64::NAN);
     got.is_finite().then_some(got)
 }
@@ -562,7 +623,8 @@ fn opt_float(k: &Value, key: &str) -> Option<f64> {
 /// Every entry of a map, as `(key, value)`, for a caller walking
 /// annotations.
 pub fn annotations(v: &Value) -> impl Iterator<Item = (&[u8], &Value)> {
-    v.entries()
+    TryAsRef::<Map>::try_as_ref(v)
+        .map(Map::entries)
         .unwrap_or(&[])
         .iter()
         .map(|e| (e.key(), e.value()))

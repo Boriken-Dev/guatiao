@@ -15,7 +15,7 @@ use guatiao::schema::{
 };
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::value::read::str_or;
-use guatiao::{Map, Value};
+use guatiao::{Map, Text, Value};
 use guatiao_form::{Form, FormError, FormRef, Hints, Section, check, is_visible, layout, vocab};
 
 /// A schema with a bit of everything: sections, an order, a boolean that
@@ -123,7 +123,7 @@ fn a_built_form_reads_back() {
     assert_eq!(ca.placeholder(), "/etc/ssl/ca.pem");
     let condition = ca.visible_when().expect("ca has a condition");
     assert_eq!(condition.field(), "verify");
-    assert_eq!(condition.equals().as_bool(), Some(true));
+    assert_eq!(condition.equals().try_into().ok(), Some(true));
 
     assert!(
         f.hints("host").is_empty(),
@@ -399,10 +399,10 @@ fn a_condition_on_a_field_the_schema_does_not_declare_is_refused() {
 fn a_condition_the_field_could_never_meet_is_refused_without_quoting_it() {
     let schema = schema();
     let cases = [
-        ("port", Value::string("hunter2")),
+        ("port", Value::from(Text::new("hunter2"))),
         ("port", Value::from(70000i64)),
-        ("auth", Value::string("kerberos")),
-        ("auth", Value::bool(true)),
+        ("auth", Value::from(Text::new("kerberos"))),
+        ("auth", Value::from(true)),
     ];
     for (field, equals) in cases {
         let form = Form::new()
@@ -489,13 +489,13 @@ fn a_condition_shows_the_field_only_while_it_is_met() {
         s,
         f,
         "ca",
-        &values(vec![("verify", Value::bool(true))])
+        &values(vec![("verify", Value::from(true))])
     ));
     assert!(!shown(
         s,
         f,
         "ca",
-        &values(vec![("verify", Value::bool(false))])
+        &values(vec![("verify", Value::from(false))])
     ));
     assert!(
         shown(s, f, "ca", &values(vec![])),
@@ -555,7 +555,7 @@ fn hiding_a_field_hides_what_waits_on_it() {
     let (s, f) = views(&schema, &form);
 
     let stale = values(vec![
-        ("verify", Value::bool(false)),
+        ("verify", Value::from(false)),
         ("port", Value::from(443i64)),
     ]);
     assert!(!shown(s, f, "port", &stale));
@@ -565,7 +565,7 @@ fn hiding_a_field_hides_what_waits_on_it() {
     );
 
     let both = values(vec![
-        ("verify", Value::bool(true)),
+        ("verify", Value::from(true)),
         ("port", Value::from(443i64)),
     ]);
     assert!(shown(s, f, "ca", &both));
@@ -581,7 +581,7 @@ fn a_cycle_is_never_shown() {
         .unwrap();
     let (s, f) = views(&schema, &form);
     let v = values(vec![
-        ("host", Value::string("a")),
+        ("host", Value::from(Text::new("a"))),
         ("port", Value::from(1i64)),
     ]);
     assert!(!shown(s, f, "host", &v));
@@ -636,7 +636,7 @@ fn a_form_built_through_a_named_allocator_frees_every_block() {
                 "ca",
                 Hints::new_in(alloc)
                     .placeholder("/etc/ssl/ca.pem")
-                    .visible_when("verify", Value::bool(true)),
+                    .visible_when("verify", Value::from(true)),
             )
             .finish()
             .unwrap();

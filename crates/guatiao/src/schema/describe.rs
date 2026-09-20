@@ -60,7 +60,7 @@ use super::vocab;
 use crate::value::alloc::Alloc;
 use crate::value::convert::{Bytes, ToValue};
 use crate::value::error::ValueError;
-use crate::value::types::Value;
+use crate::value::types::{Map, Text, Value};
 
 /// A type that can describe itself to a consumer that has never seen it.
 ///
@@ -87,17 +87,23 @@ pub trait Schema {
     /// document that forgot to say.
     fn schema(alloc: Alloc) -> Result<Value, ValueError> {
         let kind = Self::kind(alloc).finish()?;
-        let mut out = Value::map_in(alloc);
-        out.set(vocab::SCHEMA, Value::string_in(alloc, vocab::DIALECT)?)?;
-        out.set(vocab::TYPE, Value::string_in(alloc, vocab::TYPE_OBJECT)?)?;
-        for entry in kind.entries().unwrap_or(&[]) {
+        let mut out = Map::new_in(alloc);
+        out.set(
+            vocab::SCHEMA,
+            Text::new_in(alloc, vocab::DIALECT).map(Value::from)?,
+        )?;
+        out.set(
+            vocab::TYPE,
+            Text::new_in(alloc, vocab::TYPE_OBJECT).map(Value::from)?,
+        )?;
+        for entry in <&Map>::try_from(&kind).map(Map::entries).unwrap_or(&[]) {
             let key = entry.key_str().ok_or(ValueError::NotUtf8)?;
             out.set(key, entry.value().to_value(alloc)?)?;
         }
         if out.get(vocab::PROPERTIES).is_none() {
-            out.set(vocab::PROPERTIES, Value::map_in(alloc))?;
+            out.set(vocab::PROPERTIES, Map::new_in(alloc))?;
         }
-        Ok(out)
+        Ok(out.into())
     }
 }
 

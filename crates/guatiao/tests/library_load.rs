@@ -24,14 +24,16 @@
 
 #![cfg(feature = "load")]
 
+use guatiao::ValueError;
+use guatiao::value::convert::TryAsMut;
+use guatiao::value::convert::TryAsRef;
 use std::path::PathBuf;
 
-use guatiao::ReadValue;
 use guatiao::library::{KeyError, Provider, ProviderInfo, Registry, Skipped, Subject, WhyNot};
 use guatiao::schema::read::SchemaRef;
 use guatiao::schema::validate_map;
 use guatiao::value::status::Status;
-use guatiao::value::types::{Str, Value};
+use guatiao::value::types::{Map, Str, Text, Value};
 
 use hello_library::{EchoVtable, GreeterVtable};
 
@@ -143,12 +145,13 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
     // different outcomes, not one untested path.
     let meta = loaded.meta.expect("the library declares metadata");
     assert_eq!(
-        meta.get("built-with").and_then(Value::as_str),
+        meta.get("built-with").and_then(TryAsRef::<str>::try_as_ref),
         Some("hello_library"),
         "a key the host was never told about crosses intact"
     );
     assert_eq!(
-        meta.get("greeting-language").and_then(Value::as_str),
+        meta.get("greeting-language")
+            .and_then(TryAsRef::<str>::try_as_ref),
         Some("en")
     );
     assert!(
@@ -428,14 +431,14 @@ fn the_host_validates_a_configuration_against_the_librarys_own_schema() {
     assert!(name.is_required());
     assert_eq!(name.help(), "Who to greet.");
 
-    let mut config = Value::map();
-    config.set("name", Value::string("ana")).unwrap();
-    assert_eq!(validate_map(schema, &config), Ok(()));
+    let mut config = Map::new();
+    config.set("name", Value::from(Text::new("ana"))).unwrap();
+    assert_eq!(validate_map(schema, &Value::from(config)), Ok(()));
 
-    let mut wrong = Value::map();
-    wrong.set("nonesuch", Value::bool(true)).unwrap();
+    let mut wrong = Map::new();
+    wrong.set("nonesuch", Value::from(true)).unwrap();
     assert!(
-        validate_map(schema, &wrong).is_err(),
+        validate_map(schema, &Value::from(wrong)).is_err(),
         "a key the schema does not declare is refused"
     );
 }
@@ -465,8 +468,9 @@ fn a_tree_the_library_built_is_extended_and_freed_by_the_host() {
     // SAFETY: the slot came from a table whose declared size covers it.
     let before = unsafe { outstanding(provider.ctx()) };
 
-    let mut config = Value::map();
-    config.set("name", Value::string("ana")).unwrap();
+    let mut config = Map::new();
+    config.set("name", Value::from(Text::new("ana"))).unwrap();
+    let config = Value::from(config);
 
     let mut out = Value::absent();
     // SAFETY: `config` is a well-formed value, `out` is a writable node,
@@ -480,7 +484,11 @@ fn a_tree_the_library_built_is_extended_and_freed_by_the_host() {
 
     let mut greeting = out;
     assert_eq!(
-        greeting.get("greeting").ok_or_missing().unwrap().try_into(),
+        TryAsRef::<Map>::try_as_ref(&greeting)
+            .ok_or(guatiao::MapError::missing("greeting"))
+            .and_then(|m| m.required("greeting"))
+            .unwrap()
+            .try_into(),
         Ok("hello, ana"),
         "the library read the configuration the host built"
     );
@@ -492,11 +500,16 @@ fn a_tree_the_library_built_is_extended_and_freed_by_the_host() {
 
     // THE POINT: the host extends a tree it did not allocate, using its
     // own copy of `set`, and never names the library's allocator.
-    greeting
-        .set("seen_by", Value::string("the host"))
+    TryAsMut::<Map>::try_as_mut(&mut greeting)
+        .ok_or(ValueError::WrongKind)
+        .and_then(|m| m.set("seen_by", Value::from(Text::new("the host"))))
         .expect("the host can add to a map the library built");
     assert_eq!(
-        greeting.get("seen_by").ok_or_missing().unwrap().try_into(),
+        TryAsRef::<Map>::try_as_ref(&greeting)
+            .ok_or(guatiao::MapError::missing("seen_by"))
+            .and_then(|m| m.required("seen_by"))
+            .unwrap()
+            .try_into(),
         Ok("the host")
     );
 
@@ -754,7 +767,11 @@ fn a_provider_reaches_another_through_the_host() {
     let status = unsafe { call(echo.ctx(), Str::borrowed("ana"), &mut out) };
     assert_eq!(status, Status::GUATIAO_OK);
     assert_eq!(
-        out.get("greeting").ok_or_missing().unwrap().try_into(),
+        TryAsRef::<Map>::try_as_ref(&out)
+            .ok_or(guatiao::MapError::missing("greeting"))
+            .and_then(|m| m.required("greeting"))
+            .unwrap()
+            .try_into(),
         Ok("hello, ana"),
         "the echo found the greeter through the host and called it"
     );

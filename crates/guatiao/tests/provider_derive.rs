@@ -9,7 +9,7 @@
 
 use guatiao::library::kind::{ProviderDecl, ProviderParts};
 use guatiao::library::{Host, ProviderError, Registry};
-use guatiao::{Alloc, FromValue, Provider, Schema};
+use guatiao::{Alloc, FromValue, Map, Provider, Schema};
 
 #[guatiao::kind]
 pub trait Greeter: Send + Sync {
@@ -148,19 +148,23 @@ fn a_provider_builds_instances_from_a_configuration() {
         "the schema is the configuration's, so a host can ask before building"
     );
 
-    let mut config = Value::map();
+    let mut config = Map::new();
     config.set("prefix", "hey").unwrap();
     config.set("bangs", 2).unwrap();
+    let config = Value::from(config);
     let before = SHOUTERS_ALIVE.load(std::sync::atomic::Ordering::SeqCst);
     let one = parts
         .info()
         .instantiate::<dyn Greeter>(&config)
         .expect("a fitting configuration builds");
     assert_eq!(one.greet("ana").unwrap(), "hey ANA!!");
-    let mut other = Value::map();
+    let mut other = Map::new();
     other.set("prefix", "yo").unwrap();
     other.set("bangs", 1).unwrap();
-    let two = parts.info().instantiate::<dyn Greeter>(&other).unwrap();
+    let two = parts
+        .info()
+        .instantiate::<dyn Greeter>(&Value::from(other))
+        .unwrap();
     assert_eq!(two.greet("bo").unwrap(), "yo BO!");
     assert_eq!(
         SHOUTERS_ALIVE.load(std::sync::atomic::Ordering::SeqCst),
@@ -176,14 +180,17 @@ fn a_provider_builds_instances_from_a_configuration() {
     );
 
     // A configuration the type refuses, and one the schema refuses.
-    let mut bad = Value::map();
+    let mut bad = Map::new();
     bad.set("prefix", "x").unwrap();
     bad.set("bangs", 0).unwrap();
-    let e = parts.info().instantiate::<dyn Greeter>(&bad).unwrap_err();
+    let e = parts
+        .info()
+        .instantiate::<dyn Greeter>(&Value::from(bad))
+        .unwrap_err();
     assert_eq!(e.message(), "a shout needs at least one bang");
     let e = parts
         .info()
-        .instantiate::<dyn Greeter>(&Value::map())
+        .instantiate::<dyn Greeter>(&Value::from(Map::new()))
         .unwrap_err();
     assert_eq!(e.status, guatiao::Status::GUATIAO_ERR_BAD_VALUE, "{e}");
 

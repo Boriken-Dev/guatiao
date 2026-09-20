@@ -24,8 +24,9 @@
 #![forbid(unsafe_code)]
 
 use guatiao::value::alloc::Alloc;
+use guatiao::value::convert::{TryAsMut, TryAsRef};
 use guatiao::value::error::ValueError;
-use guatiao::value::types::Value;
+use guatiao::value::types::{Map, Text, Value};
 
 use crate::vocab;
 
@@ -84,7 +85,11 @@ fn put(state: &mut Result<Value, ValueError>, key: &str, value: Result<Value, Va
         Ok(n) => n,
         Err(_) => return,
     };
-    if let Err(e) = value.and_then(|v| node.set(key, v)) {
+    if let Err(e) = value.and_then(|v| {
+        TryAsMut::<Map>::try_as_mut(node)
+            .ok_or(ValueError::WrongKind)
+            .and_then(|m| m.set(key, v))
+    }) {
         *state = Err(e);
     }
 }
@@ -102,7 +107,7 @@ impl Form {
     pub fn new_in(alloc: Alloc) -> Form {
         Form {
             alloc,
-            state: Ok(Value::map_in(alloc)),
+            state: Ok(Map::new_in(alloc).into()),
         }
     }
 
@@ -119,10 +124,11 @@ impl Form {
             Ok(n) => n,
             Err(_) => return self,
         };
-        if let Err(e) = section
-            .state
-            .and_then(|s| node.push_into(vocab::SECTIONS, s))
-        {
+        if let Err(e) = section.state.and_then(|s| {
+            TryAsMut::<Map>::try_as_mut(node)
+                .ok_or(ValueError::WrongKind)
+                .and_then(|m| m.push_into(vocab::SECTIONS, s))
+        }) {
             self.state = Err(e);
         }
         self
@@ -140,14 +146,18 @@ impl Form {
             Err(_) => return self,
         };
         let written = hints.state.and_then(|hints| {
-            if !node.contains_key(vocab::FIELDS) {
-                node.set(vocab::FIELDS, Value::map_in(alloc))?;
+            if !TryAsRef::<Map>::try_as_ref(node).is_some_and(|m| m.contains_key(vocab::FIELDS)) {
+                TryAsMut::<Map>::try_as_mut(node)
+                    .ok_or(ValueError::WrongKind)
+                    .and_then(|m| m.set(vocab::FIELDS, Map::new_in(alloc)))?;
             }
             // Present, because it was just ensured; a caller who put
             // something that is not a map there through `option` gets
             // `WrongKind` from the `set` below rather than a silent loss.
-            match node.get_mut(vocab::FIELDS) {
-                Some(fields) => fields.set(path, hints),
+            match TryAsMut::<Map>::try_as_mut(node).and_then(|m| m.get_mut(vocab::FIELDS)) {
+                Some(fields) => TryAsMut::<Map>::try_as_mut(fields)
+                    .ok_or(ValueError::WrongKind)
+                    .and_then(|m| m.set(path, hints)),
                 None => Err(ValueError::WrongKind),
             }
         });
@@ -188,8 +198,12 @@ impl Section {
 
     /// The same, through an allocator you name.
     pub fn new_in(alloc: Alloc, id: &str) -> Section {
-        let mut state = Ok(Value::map_in(alloc));
-        put(&mut state, vocab::ID, Value::string_in(alloc, id));
+        let mut state = Ok(Map::new_in(alloc).into());
+        put(
+            &mut state,
+            vocab::ID,
+            Text::new_in(alloc, id).map(Value::from),
+        );
         Section { alloc, state }
     }
 
@@ -198,7 +212,7 @@ impl Section {
         put(
             &mut self.state,
             vocab::TITLE,
-            Value::string_in(self.alloc, label),
+            Text::new_in(self.alloc, label).map(Value::from),
         );
         self
     }
@@ -208,7 +222,7 @@ impl Section {
         put(
             &mut self.state,
             vocab::DESCRIPTION,
-            Value::string_in(self.alloc, help),
+            Text::new_in(self.alloc, help).map(Value::from),
         );
         self
     }
@@ -230,7 +244,7 @@ impl Hints {
     pub fn new_in(alloc: Alloc) -> Hints {
         Hints {
             alloc,
-            state: Ok(Value::map_in(alloc)),
+            state: Ok(Map::new_in(alloc).into()),
         }
     }
 
@@ -240,7 +254,7 @@ impl Hints {
         put(
             &mut self.state,
             vocab::WIDGET,
-            Value::string_in(self.alloc, widget),
+            Text::new_in(self.alloc, widget).map(Value::from),
         );
         self
     }
@@ -250,7 +264,7 @@ impl Hints {
         put(
             &mut self.state,
             vocab::PLACEHOLDER,
-            Value::string_in(self.alloc, text),
+            Text::new_in(self.alloc, text).map(Value::from),
         );
         self
     }
@@ -260,11 +274,11 @@ impl Hints {
     /// For a variant named by its own key, `equals` is the name of an arm.
     pub fn visible_when(mut self, path: &str, equals: impl Into<Value>) -> Hints {
         let alloc = self.alloc;
-        let mut condition = Value::map_in(alloc);
-        let built = Value::string_in(alloc, path)
+        let mut condition = Map::new_in(alloc);
+        let built = Text::new_in(alloc, path)
             .and_then(|p| condition.set(vocab::FIELD, p))
             .and_then(|()| condition.set(vocab::EQUALS, equals.into()))
-            .map(|()| condition);
+            .map(|()| Value::from(condition));
         put(&mut self.state, vocab::VISIBLE_WHEN, built);
         self
     }

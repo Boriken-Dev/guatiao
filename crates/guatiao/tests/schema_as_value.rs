@@ -11,6 +11,7 @@
 //! plus the document itself, because "it IS a JSON Schema" is a claim
 //! about the bytes and not only about the round trip.
 
+use guatiao::value::convert::TryAsRef;
 use std::cell::Cell;
 use std::ffi::c_void;
 
@@ -20,8 +21,8 @@ use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilde
 use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::schema::vocab;
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
-use guatiao::value::read::{entries, str_or};
-use guatiao::{Number, Value};
+use guatiao::value::read::str_or;
+use guatiao::{List, Map, Number, Text, Value};
 
 // A counting allocator, so every test also proves the schema frees.
 #[derive(Default)]
@@ -68,7 +69,11 @@ fn with_alloc(body: impl FnOnce(Alloc)) {
 
 /// The keys of a map, in order.
 fn keys_of(v: &Value) -> Vec<String> {
-    entries(v)
+    TryAsRef::<Map>::try_as_ref(v)
+        .map(Map::entries)
+        .unwrap_or(&[])
+        .iter()
+        .map(|e| (e.key(), e.value()))
         .filter_map(|(k, _)| std::str::from_utf8(k).ok())
         .map(str::to_string)
         .collect()
@@ -76,12 +81,18 @@ fn keys_of(v: &Value) -> Vec<String> {
 
 /// The strings in a list.
 fn strings_of(v: Option<&Value>) -> Vec<String> {
-    v.and_then(Value::items)
+    v.and_then(TryAsRef::<List>::try_as_ref)
+        .map(List::items)
         .unwrap_or(&[])
         .iter()
-        .filter_map(Value::as_str)
+        .filter_map(TryAsRef::<str>::try_as_ref)
         .map(str::to_string)
         .collect()
+}
+
+/// The value under `key`, when `v` is a map.
+fn at<'a>(v: &'a Value, key: &str) -> Option<&'a Value> {
+    TryAsRef::<Map>::try_as_ref(v).and_then(|m| m.get(key))
 }
 
 #[test]
@@ -200,43 +211,43 @@ fn the_document_is_written_in_json_schemas_own_keys() {
             ],
             "the document opens by saying what it is"
         );
-        assert_eq!(str_or(schema.get("$schema"), ""), vocab::DIALECT);
-        assert_eq!(str_or(schema.get("type"), ""), "object");
+        assert_eq!(str_or(at(&schema, "$schema"), ""), vocab::DIALECT);
+        assert_eq!(str_or(at(&schema, "type"), ""), "object");
 
         // A field's name is its key in `properties`, and appears nowhere
         // inside the field.
-        let properties = schema.get("properties").expect("an object has properties");
+        let properties = at(&schema, "properties").expect("an object has properties");
         assert_eq!(keys_of(properties), ["host", "port", "cert"]);
-        let host = properties.get("host").expect("host is a property");
-        assert_eq!(str_or(host.get("type"), ""), "string");
-        assert_eq!(str_or(host.get("title"), ""), "Host");
-        assert_eq!(str_or(host.get("description"), ""), "Where to connect.");
+        let host = at(properties, "host").expect("host is a property");
+        assert_eq!(str_or(at(host, "type"), ""), "string");
+        assert_eq!(str_or(at(host, "title"), ""), "Host");
+        assert_eq!(str_or(at(host, "description"), ""), "Where to connect.");
         assert!(
-            host.get("key").is_none() && host.get("kind").is_none(),
+            at(host, "key").is_none() && at(host, "kind").is_none(),
             "a field carries neither its own name nor a nested kind"
         );
 
         // Requiredness is a name in a list on the OBJECT.
-        assert_eq!(strings_of(schema.get("required")), ["host"]);
+        assert_eq!(strings_of(at(&schema, "required")), ["host"]);
         assert!(
-            host.get("required").is_none(),
+            at(host, "required").is_none(),
             "and not a flag on the field"
         );
 
-        let port = properties.get("port").unwrap();
-        assert_eq!(str_or(port.get("type"), ""), "integer");
+        let port = at(properties, "port").unwrap();
+        assert_eq!(str_or(at(port, "type"), ""), "integer");
         assert_eq!(
-            guatiao::value::read::int_or(port.get("minimum"), -1),
+            guatiao::value::read::int_or(at(port, "minimum"), -1),
             1,
             "bounds are `minimum` and `maximum`"
         );
-        assert_eq!(guatiao::value::read::int_or(port.get("maximum"), -1), 65535);
+        assert_eq!(guatiao::value::read::int_or(at(port, "maximum"), -1), 65535);
 
         // The one type that is ours. See `vocab::TYPE_BYTES`: this is
         // readable by anything and fails a strict meta-schema check, which
         // is a decision rather than a surprise.
         assert_eq!(
-            str_or(properties.get("cert").unwrap().get("type"), ""),
+            str_or(at(at(properties, "cert").unwrap(), "type"), ""),
             "bytes"
         );
     });
@@ -270,11 +281,11 @@ fn an_enum_carries_labels_keyed_by_value_not_a_second_list() {
         );
 
         // And on the wire it is a string narrowed by `enum`.
-        let level = schema.get("properties").unwrap().get("level").unwrap();
-        assert_eq!(str_or(level.get("type"), ""), "string");
-        assert_eq!(strings_of(level.get("enum")), ["off", "on"]);
+        let level = at(at(&schema, "properties").unwrap(), "level").unwrap();
+        assert_eq!(str_or(at(level, "type"), ""), "string");
+        assert_eq!(strings_of(at(level, "enum")), ["off", "on"]);
         assert_eq!(
-            str_or(level.get("x-enum-labels").and_then(|m| m.get("off")), ""),
+            str_or(at(level, "x-enum-labels").and_then(|m| at(m, "off")), ""),
             "Off",
             "the labels are ours, so they carry the prefix"
         );
@@ -353,38 +364,47 @@ fn a_union_and_a_variant_are_different_features() {
 
         // The document: `anyOf` for the untagged one, `oneOf` plus a
         // `const` discriminant for the tagged one.
-        let properties = schema.get("properties").unwrap();
-        let port = properties.get("port").unwrap();
-        assert_eq!(port.get("anyOf").and_then(Value::items).unwrap().len(), 2);
+        let properties = at(&schema, "properties").unwrap();
+        let port = at(properties, "port").unwrap();
+        assert_eq!(
+            at(port, "anyOf")
+                .and_then(TryAsRef::<List>::try_as_ref)
+                .map(List::items)
+                .unwrap()
+                .len(),
+            2
+        );
         assert!(
-            port.get("type").is_none(),
+            at(port, "type").is_none(),
             "a union of an integer and a string has no single type to name"
         );
 
-        let auth = properties.get("auth").unwrap();
-        assert_eq!(str_or(auth.get("type"), ""), "object");
-        assert_eq!(str_or(auth.get("x-variant-tag"), ""), "auth");
-        let one_of = auth.get("oneOf").and_then(Value::items).unwrap();
+        let auth = at(properties, "auth").unwrap();
+        assert_eq!(str_or(at(auth, "type"), ""), "object");
+        assert_eq!(str_or(at(auth, "x-variant-tag"), ""), "auth");
+        let one_of = at(auth, "oneOf")
+            .and_then(TryAsRef::<List>::try_as_ref)
+            .map(List::items)
+            .unwrap();
         assert_eq!(one_of.len(), 2);
         let userpass = &one_of[1];
-        assert_eq!(str_or(userpass.get("title"), ""), "Username and password");
+        assert_eq!(str_or(at(userpass, "title"), ""), "Username and password");
         assert_eq!(
-            keys_of(userpass.get("properties").unwrap()),
+            keys_of(at(userpass, "properties").unwrap()),
             ["auth", "username", "password"],
             "the discriminant goes in first, so the arm reads as what it selects"
         );
         assert_eq!(
             str_or(
-                userpass
-                    .get("properties")
-                    .and_then(|p| p.get("auth"))
-                    .and_then(|t| t.get("const")),
+                at(userpass, "properties")
+                    .and_then(|p| at(p, "auth"))
+                    .and_then(|t| at(t, "const")),
                 ""
             ),
             "userpass"
         );
         assert_eq!(
-            strings_of(userpass.get("required")),
+            strings_of(at(userpass, "required")),
             ["auth"],
             "an arm without its discriminant is not that arm"
         );
@@ -399,33 +419,49 @@ fn a_union_and_a_variant_are_different_features() {
 #[test]
 fn an_unknown_kind_leaves_the_field_readable_and_the_rest_intact() {
     with_alloc(|alloc| {
-        let mut known = Value::map_in(alloc);
+        let mut known = Map::new_in(alloc);
         known
-            .set(vocab::TYPE, Value::string_in(alloc, "string").unwrap())
+            .set(
+                vocab::TYPE,
+                Text::new_in(alloc, "string").map(Value::from).unwrap(),
+            )
             .unwrap();
         known
-            .set(vocab::TITLE, Value::string_in(alloc, "Known").unwrap())
+            .set(
+                vocab::TITLE,
+                Text::new_in(alloc, "Known").map(Value::from).unwrap(),
+            )
             .unwrap();
 
         // A type this build has never heard of, on a field that is
         // otherwise ordinary.
-        let mut future = Value::map_in(alloc);
+        let mut future = Map::new_in(alloc);
         future
-            .set(vocab::TYPE, Value::string_in(alloc, "duration").unwrap())
+            .set(
+                vocab::TYPE,
+                Text::new_in(alloc, "duration").map(Value::from).unwrap(),
+            )
             .unwrap();
         future
-            .set(vocab::TITLE, Value::string_in(alloc, "Timeout").unwrap())
+            .set(
+                vocab::TITLE,
+                Text::new_in(alloc, "Timeout").map(Value::from).unwrap(),
+            )
             .unwrap();
 
-        let mut properties = Value::map_in(alloc);
+        let mut properties = Map::new_in(alloc);
         properties.set("known", known).unwrap();
         properties.set("timeout", future).unwrap();
-        let mut schema = Value::map_in(alloc);
+        let mut schema = Map::new_in(alloc);
         schema
-            .set(vocab::TYPE, Value::string_in(alloc, "object").unwrap())
+            .set(
+                vocab::TYPE,
+                Text::new_in(alloc, "object").map(Value::from).unwrap(),
+            )
             .unwrap();
         schema.set(vocab::PROPERTIES, properties).unwrap();
 
+        let schema = Value::from(schema);
         let s = SchemaRef::new(&schema).unwrap();
         assert_eq!(s.fields().count(), 2, "both fields are still listed");
 
@@ -446,18 +482,22 @@ fn an_unknown_kind_leaves_the_field_readable_and_the_rest_intact() {
 #[test]
 fn a_malformed_field_is_skipped_not_fatal() {
     with_alloc(|alloc| {
-        let mut good = Value::map_in(alloc);
-        good.set(vocab::TYPE, Value::string_in(alloc, "boolean").unwrap())
-            .unwrap();
+        let mut good = Map::new_in(alloc);
+        good.set(
+            vocab::TYPE,
+            Text::new_in(alloc, "boolean").map(Value::from).unwrap(),
+        )
+        .unwrap();
 
-        let mut properties = Value::map_in(alloc);
+        let mut properties = Map::new_in(alloc);
         properties.set("good", good).unwrap();
         // Not a map, so not a schema.
-        properties.set("bad", Value::bool(true)).unwrap();
+        properties.set("bad", Value::from(true)).unwrap();
 
-        let mut schema = Value::map_in(alloc);
+        let mut schema = Map::new_in(alloc);
         schema.set(vocab::PROPERTIES, properties).unwrap();
 
+        let schema = Value::from(schema);
         let s = SchemaRef::new(&schema).unwrap();
         let keys: Vec<_> = s.fields().map(|o| o.key().to_string()).collect();
         assert_eq!(keys, ["good"], "the readable field still reads");
@@ -474,9 +514,15 @@ fn an_annotation_is_carried_but_not_interpreted() {
             .field(
                 FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
                     .sensitive()
-                    .option("x-widget", Value::string_in(alloc, "combo").unwrap()),
+                    .option(
+                        "x-widget",
+                        Text::new_in(alloc, "combo").map(Value::from).unwrap(),
+                    ),
             )
-            .option("x-origin", Value::string_in(alloc, "test").unwrap())
+            .option(
+                "x-origin",
+                Text::new_in(alloc, "test").map(Value::from).unwrap(),
+            )
             .finish()
             .unwrap();
 
@@ -497,7 +543,13 @@ fn an_annotation_is_carried_but_not_interpreted() {
 
         // And a schema really is just a map, walkable by anything that
         // walks a value.
-        assert!(entries(&schema).count() >= 2);
+        assert!(
+            TryAsRef::<Map>::try_as_ref(&schema)
+                .map(Map::entries)
+                .unwrap_or(&[])
+                .len()
+                >= 2
+        );
     });
 }
 
@@ -567,7 +619,7 @@ fn the_plain_builders_and_the_in_builders_agree() {
         .expect("as above");
 
     assert!(
-        guatiao::value::read::equal(&by_hand, &named),
+        by_hand == named,
         "the plain form is the `_in` form with the crate's own allocator"
     );
 }

@@ -38,7 +38,7 @@ use super::build::{ArmBuilder, FieldBuilder, SchemaBuilder, put};
 use super::vocab;
 use crate::value::alloc::Alloc;
 use crate::value::error::ValueError;
-use crate::value::types::{Number, Value};
+use crate::value::types::{Number, Text, Value};
 
 /// What a person is shown about anything a schema declares.
 ///
@@ -73,7 +73,7 @@ pub trait FormBuilder: Sized {
     #[must_use]
     fn label(mut self, label: &str) -> Self {
         let alloc = self.form_alloc();
-        self.presentation(vocab::TITLE, Value::string_in(alloc, label));
+        self.presentation(vocab::TITLE, Text::new_in(alloc, label).map(Value::from));
         self
     }
 
@@ -82,7 +82,10 @@ pub trait FormBuilder: Sized {
     #[must_use]
     fn help(mut self, help: &str) -> Self {
         let alloc = self.form_alloc();
-        self.presentation(vocab::DESCRIPTION, Value::string_in(alloc, help));
+        self.presentation(
+            vocab::DESCRIPTION,
+            Text::new_in(alloc, help).map(Value::from),
+        );
         self
     }
 
@@ -96,7 +99,10 @@ pub trait FormBuilder: Sized {
     #[must_use]
     fn section(mut self, section: &str) -> Self {
         let alloc = self.form_alloc();
-        self.presentation(vocab::X_SECTION, Value::string_in(alloc, section));
+        self.presentation(
+            vocab::X_SECTION,
+            Text::new_in(alloc, section).map(Value::from),
+        );
         self
     }
 }
@@ -125,7 +131,7 @@ pub trait FormFieldBuilder: FormBuilder {
     /// Hidden behind a disclosure by default.
     #[must_use]
     fn advanced(mut self) -> Self {
-        self.presentation(vocab::X_ADVANCED, Ok(Value::bool(true)));
+        self.presentation(vocab::X_ADVANCED, Ok(Value::from(true)));
         self
     }
 
@@ -136,7 +142,7 @@ pub trait FormFieldBuilder: FormBuilder {
     /// somebody declared it one.
     #[must_use]
     fn sensitive(mut self) -> Self {
-        self.presentation(vocab::X_SENSITIVE, Ok(Value::bool(true)));
+        self.presentation(vocab::X_SENSITIVE, Ok(Value::from(true)));
         self
     }
 }

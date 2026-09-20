@@ -29,9 +29,10 @@ use std::sync::{OnceLock, PoisonError, RwLock};
 use guatiao::library::{Host, KindTables, Kinds, LibraryInfo, ProviderInfo, Providers};
 use guatiao::schema::{FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
+use guatiao::value::convert::TryAsRef;
 use guatiao::value::read::str_or;
 use guatiao::value::status::Status;
-use guatiao::value::types::{Map, MaybeNull, Str, Value};
+use guatiao::value::types::{Map, MaybeNull, Str, Text, Value};
 
 // --- the kind ----------------------------------------------------------
 
@@ -164,13 +165,16 @@ unsafe extern "C" fn greet(_ctx: *mut c_void, config: *const Value, out: *mut Va
     // SAFETY: the caller's side of the contract is that `config` is null
     // or addresses a well-formed value.
     let name = match unsafe { config.as_ref() } {
-        Some(c) => str_or(c.get("name"), "world"),
+        Some(c) => str_or(
+            TryAsRef::<Map>::try_as_ref(c).and_then(|m| m.get("name")),
+            "world",
+        ),
         None => "world",
     };
 
     let alloc = library_alloc();
-    let mut answer = Value::map_in(alloc);
-    let text = match Value::string_in(alloc, &format!("hello, {name}")) {
+    let mut answer = Map::new_in(alloc);
+    let text = match Text::new_in(alloc, &format!("hello, {name}")).map(Value::from) {
         Ok(t) => t,
         Err(e) => return Status::from(e),
     };
@@ -182,7 +186,7 @@ unsafe extern "C" fn greet(_ctx: *mut c_void, config: *const Value, out: *mut Va
     // now and will free it through the allocator recorded inside it.
     // SAFETY: `out` is writable, and whatever it held is the caller's to
     // have dealt with.
-    unsafe { out.write(answer) };
+    unsafe { out.write(answer.into()) };
     Status::GUATIAO_OK
 }
 
@@ -312,8 +316,8 @@ unsafe extern "C" fn echo(_ctx: *mut c_void, name: Str, out: *mut Value) -> Stat
         return Status::GUATIAO_ERR_BAD_VALUE;
     };
     let alloc = library_alloc();
-    let mut config = Value::map_in(alloc);
-    let text = match Value::string_in(alloc, name) {
+    let mut config = Map::new_in(alloc);
+    let text = match Text::new_in(alloc, name).map(Value::from) {
         Ok(t) => t,
         Err(e) => return Status::from(e),
     };
@@ -321,6 +325,9 @@ unsafe extern "C" fn echo(_ctx: *mut c_void, name: Str, out: *mut Value) -> Stat
         return Status::from(e);
     }
     let mut answer = Value::absent();
+    // SAFETY: the greeter's contract, as declared on `greet` above; the
+    // config is a well-formed value and `answer` is a writable local.
+    let config = Value::from(config);
     // SAFETY: the greeter's contract, as declared on `greet` above; the
     // config is a well-formed value and `answer` is a writable local.
     let status = unsafe { greet(greeter.ctx, &config, &mut answer) };

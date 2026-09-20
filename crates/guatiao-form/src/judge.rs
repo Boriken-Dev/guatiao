@@ -18,6 +18,7 @@
 
 #![forbid(unsafe_code)]
 
+use guatiao::value::convert::TryAsRef;
 use std::fmt;
 
 use guatiao::schema::ValidationError;
@@ -25,8 +26,8 @@ use guatiao::schema::flat;
 use guatiao::schema::read::{FieldRef, Kind, SchemaRef};
 use guatiao::schema::validate::{validate_text, validate_value};
 use guatiao::schema::vocab as schema_vocab;
-use guatiao::value::read::equal;
-use guatiao::value::types::{Tag, Value};
+
+use guatiao::value::types::{List, Map, Tag, Value};
 
 use crate::read::{FormRef, HintsRef, SectionRef};
 use crate::vocab;
@@ -119,8 +120,10 @@ fn is_map(v: &Value) -> bool {
 
 /// A key that must be text when it is there at all.
 fn text_if_present(v: &Value, key: &str, at: &str) -> Result<(), FormError> {
-    match v.get(key) {
-        Some(x) if x.as_str().is_none() => Err(malformed(format!("{at}.{key}"), "text")),
+    match TryAsRef::<Map>::try_as_ref(v).and_then(|m| m.get(key)) {
+        Some(x) if TryAsRef::<str>::try_as_ref(x).is_none() => {
+            Err(malformed(format!("{at}.{key}"), "text"))
+        }
         _ => Ok(()),
     }
 }
@@ -140,9 +143,9 @@ fn field_at(path: &str) -> String {
 pub fn check(schema: SchemaRef<'_>, form: FormRef<'_>) -> Result<(), FormError> {
     let doc = form.as_value();
 
-    if let Some(sections) = doc.get(vocab::SECTIONS) {
-        let items = sections
-            .items()
+    if let Some(sections) = TryAsRef::<Map>::try_as_ref(doc).and_then(|m| m.get(vocab::SECTIONS)) {
+        let items = TryAsRef::<List>::try_as_ref(sections)
+            .map(List::items)
             .ok_or_else(|| malformed(vocab::SECTIONS, "a list"))?;
         let mut seen: Vec<&str> = Vec::new();
         for (i, item) in items.iter().enumerate() {
@@ -150,7 +153,10 @@ pub fn check(schema: SchemaRef<'_>, form: FormRef<'_>) -> Result<(), FormError> 
             if !is_map(item) {
                 return Err(malformed(at, "a map"));
             }
-            let Some(id) = item.get(vocab::ID).and_then(Value::as_str) else {
+            let Some(id) = TryAsRef::<Map>::try_as_ref(item)
+                .and_then(|m| m.get(vocab::ID))
+                .and_then(TryAsRef::<str>::try_as_ref)
+            else {
                 return Err(malformed(format!("{at}.{}", vocab::ID), "text"));
             };
             text_if_present(item, vocab::TITLE, &at)?;
@@ -162,9 +168,9 @@ pub fn check(schema: SchemaRef<'_>, form: FormRef<'_>) -> Result<(), FormError> 
         }
     }
 
-    if let Some(fields) = doc.get(vocab::FIELDS) {
-        let entries = fields
-            .entries()
+    if let Some(fields) = TryAsRef::<Map>::try_as_ref(doc).and_then(|m| m.get(vocab::FIELDS)) {
+        let entries = TryAsRef::<Map>::try_as_ref(fields)
+            .map(Map::entries)
             .ok_or_else(|| malformed(vocab::FIELDS, "a map"))?;
         for entry in entries {
             let Some(path) = entry.key_str() else {
@@ -183,7 +189,9 @@ pub fn check(schema: SchemaRef<'_>, form: FormRef<'_>) -> Result<(), FormError> 
             }
             text_if_present(hints, vocab::WIDGET, &at)?;
             text_if_present(hints, vocab::PLACEHOLDER, &at)?;
-            if let Some(condition) = hints.get(vocab::VISIBLE_WHEN) {
+            if let Some(condition) =
+                TryAsRef::<Map>::try_as_ref(hints).and_then(|m| m.get(vocab::VISIBLE_WHEN))
+            {
                 check_condition(schema, condition, format!("{at}.{}", vocab::VISIBLE_WHEN))?;
             }
         }
@@ -204,10 +212,14 @@ fn check_condition(schema: SchemaRef<'_>, condition: &Value, at: String) -> Resu
     if !is_map(condition) {
         return Err(malformed(at, "a map holding `field` and `equals`"));
     }
-    let Some(field) = condition.get(vocab::FIELD).and_then(Value::as_str) else {
+    let Some(field) = TryAsRef::<Map>::try_as_ref(condition)
+        .and_then(|m| m.get(vocab::FIELD))
+        .and_then(TryAsRef::<str>::try_as_ref)
+    else {
         return Err(malformed(format!("{at}.{}", vocab::FIELD), "text"));
     };
-    let Some(equals) = condition.get(vocab::EQUALS) else {
+    let Some(equals) = TryAsRef::<Map>::try_as_ref(condition).and_then(|m| m.get(vocab::EQUALS))
+    else {
         return Err(malformed(
             format!("{at}.{}", vocab::EQUALS),
             "a value to compare with",
@@ -224,7 +236,7 @@ fn check_condition(schema: SchemaRef<'_>, condition: &Value, at: String) -> Resu
     // so what must be acceptable is the text form, which for a variant is
     // exactly the name of an arm.
     let accepted = match (referenced.kind(), flat::split(field)) {
-        (Kind::Variant { .. }, None) => match equals.as_str() {
+        (Kind::Variant { .. }, None) => match TryAsRef::<str>::try_as_ref(equals) {
             Some(arm) => validate_text(referenced, arm),
             None => {
                 return Err(FormError::ConditionRefused {
@@ -343,7 +355,7 @@ pub fn layout<'a>(schema: SchemaRef<'a>, form: FormRef<'a>) -> Vec<Group<'a>> {
 
 /// Explicit orders first and ascending, then everything without one.
 fn order_key(field: FieldRef<'_>) -> (bool, i64) {
-    match field.as_value().get(schema_vocab::X_ORDER) {
+    match TryAsRef::<Map>::try_as_ref(field.as_value()).and_then(|m| m.get(schema_vocab::X_ORDER)) {
         Some(_) => (false, field.order()),
         None => (true, 0),
     }
@@ -401,7 +413,7 @@ fn visible(
     walked.push(path.to_string());
     Ok(visible(schema, form, condition.field(), values, walked)?
         && current(schema, values, condition.field())
-            .is_some_and(|held| equal(held, condition.equals())))
+            .is_some_and(|held| held == condition.equals()))
 }
 
 /// What the field at `path` holds now: its value, else its default, and
@@ -410,16 +422,20 @@ fn current<'a>(schema: SchemaRef<'a>, values: &'a Value, path: &str) -> Option<&
     match flat::split(path) {
         None => {
             let field = schema.find(path)?;
-            let held = values.get(path).or_else(|| field.default())?;
+            let held = TryAsRef::<Map>::try_as_ref(values)
+                .and_then(|m| m.get(path))
+                .or_else(|| field.default())?;
             match field.kind() {
-                Kind::Variant { tag, .. } if is_map(held) => held.get(tag),
+                Kind::Variant { tag, .. } if is_map(held) => {
+                    TryAsRef::<Map>::try_as_ref(held).and_then(|m| m.get(tag))
+                }
                 _ => Some(held),
             }
         }
-        Some((owner, member)) => values
-            .get(owner)
+        Some((owner, member)) => TryAsRef::<Map>::try_as_ref(values)
+            .and_then(|m| m.get(owner))
             .filter(|_| declares(schema, values, owner, member))
-            .and_then(|o| o.get(member))
+            .and_then(|o| TryAsRef::<Map>::try_as_ref(o).and_then(|m| m.get(member)))
             .or_else(|| flat::resolve(schema, path).and_then(|f| f.default())),
     }
 }
@@ -437,10 +453,10 @@ fn declares(schema: SchemaRef<'_>, values: &Value, owner: &str, member: &str) ->
     let Kind::Variant { tag, .. } = field.kind() else {
         return false;
     };
-    let Some(picked) = values
-        .get(owner)
-        .and_then(|v| v.get(tag))
-        .and_then(Value::as_str)
+    let Some(picked) = TryAsRef::<Map>::try_as_ref(values)
+        .and_then(|m| m.get(owner))
+        .and_then(|v| TryAsRef::<Map>::try_as_ref(v).and_then(|m| m.get(tag)))
+        .and_then(TryAsRef::<str>::try_as_ref)
     else {
         return false;
     };

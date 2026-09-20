@@ -14,6 +14,7 @@
 
 use guatiao::Map;
 use guatiao::library::{Object, ProviderError};
+use guatiao::value::convert::TryAsRef;
 
 /// Greets by name.
 #[guatiao::kind]
@@ -27,7 +28,7 @@ pub trait Greeter: Send + Sync {
             .ok()
             .and_then(|m| {
                 m.get("greeting")
-                    .and_then(|v| v.as_str().map(str::to_uppercase))
+                    .and_then(|v| TryAsRef::<str>::try_as_ref(v).map(str::to_uppercase))
             })
             .unwrap_or_default()
     }

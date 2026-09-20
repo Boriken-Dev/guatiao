@@ -39,7 +39,7 @@ use super::{entry, out};
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::merge::{MergeError, MergeMode, MergeOptions, MergeOverrides};
 use crate::value::status::Status;
-use crate::value::types::{Number, Str, Value};
+use crate::value::types::{Map, Number, Str, Text, Value};
 
 /// Shallow: top-level keys replace, nested maps are not recursed into.
 pub const GUATIAO_MERGE_SIMPLE: u32 = 1;
@@ -93,7 +93,7 @@ fn mode_number(mode: MergeMode) -> i64 {
 /// the caller still gets the status. An explanation that could not be
 /// built is not worth turning a reportable failure into a different one.
 fn describe(error: &MergeError, alloc: Alloc) -> Option<Value> {
-    let mut out = Value::map_in(alloc);
+    let mut out = Map::new_in(alloc);
     match error {
         MergeError::Kind {
             path,
@@ -101,7 +101,8 @@ fn describe(error: &MergeError, alloc: Alloc) -> Option<Value> {
             later,
             mode,
         } => {
-            out.set("path", Value::string_in(alloc, path).ok()?).ok()?;
+            out.set("path", Text::new_in(alloc, path).map(Value::from).ok()?)
+                .ok()?;
             out.set(
                 "mode",
                 Number::new_in(alloc, &mode_number(*mode).to_string()).ok()?,
@@ -123,12 +124,18 @@ fn describe(error: &MergeError, alloc: Alloc) -> Option<Value> {
             }
         }
         MergeError::Build(_) => {
-            out.set("path", Value::string_in(alloc, "").ok()?).ok()?;
+            out.set("path", Text::new_in(alloc, "").map(Value::from).ok()?)
+                .ok()?;
         }
     }
-    out.set("message", Value::string_in(alloc, &error.to_string()).ok()?)
-        .ok()?;
-    Some(out)
+    out.set(
+        "message",
+        Text::new_in(alloc, &error.to_string())
+            .map(Value::from)
+            .ok()?,
+    )
+    .ok()?;
+    Some(out.into())
 }
 
 impl From<&MergeError> for Status {

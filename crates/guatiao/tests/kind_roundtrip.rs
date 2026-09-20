@@ -10,6 +10,7 @@
 // `shapes` takes every crossing shape at once, which is the point.
 #![allow(clippy::too_many_arguments)]
 
+use guatiao::value::convert::TryAsRef;
 use std::ffi::c_void;
 
 use guatiao::library::{Kind, KindMismatch, ProviderError, Remote};
@@ -72,8 +73,8 @@ impl Greeter for Hello {
         map: &Map,
         greeting: Greeting,
     ) -> Result<Greeting, ProviderError> {
-        let port: i64 = config
-            .get("port")
+        let port: i64 = TryAsRef::<Map>::try_as_ref(config)
+            .and_then(|m| m.get("port"))
             .and_then(|v| i64::try_from(v).ok())
             .unwrap_or(0);
         Ok(Greeting {
@@ -189,10 +190,14 @@ fn a_call_round_trips_through_the_proxy() {
     assert_eq!(e.message(), "nobody to greet");
 
     let described = r.describe("ana").unwrap();
-    assert_eq!(described.get("name").and_then(Value::as_str), Some("ana"));
+    assert_eq!(
+        described.get("name").and_then(TryAsRef::<str>::try_as_ref),
+        Some("ana")
+    );
 
-    let mut config = Value::map();
+    let mut config = Map::new();
     config.set("port", 5900).unwrap();
+    let config = Value::from(config);
     let mut map = Map::new();
     map.set("a", 1).unwrap();
     let got = r

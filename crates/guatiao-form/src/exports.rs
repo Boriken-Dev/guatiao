@@ -53,7 +53,7 @@ use guatiao::ToValue;
 use guatiao::schema::read::SchemaRef;
 use guatiao::value::alloc::{Alloc, Allocator};
 use guatiao::value::status::Status;
-use guatiao::value::types::{Str, Value};
+use guatiao::value::types::{List, Map, Str, Text, Value};
 
 use crate::judge::{FormError, check, is_visible, layout};
 use crate::read::FormRef;
@@ -170,9 +170,10 @@ pub unsafe extern "C" fn guatiao_form_check(
 
 /// The failure as a map a C caller already knows how to read.
 fn describe(error: &FormError, alloc: Alloc) -> Option<Value> {
-    let mut out = Value::map_in(alloc);
+    let mut out = Map::new_in(alloc);
     let mut text = |key: &str, text: &str| -> Option<()> {
-        out.set(key, Value::string_in(alloc, text).ok()?).ok()
+        out.set(key, Text::new_in(alloc, text).map(Value::from).ok()?)
+            .ok()
     };
     match error {
         FormError::Malformed { at, expected } => {
@@ -205,7 +206,7 @@ fn describe(error: &FormError, alloc: Alloc) -> Option<Value> {
         }
     }
     text("message", &error.to_string())?;
-    Some(out)
+    Some(out.into())
 }
 
 /// The schema's fields grouped into sections and put in order.
@@ -252,7 +253,7 @@ pub unsafe extern "C" fn guatiao_form_layout(
 }
 
 fn layout_value(schema: SchemaRef<'_>, form: FormRef<'_>, alloc: Alloc) -> Option<Value> {
-    let mut groups = Value::list_in(alloc);
+    let mut groups = List::new_in(alloc);
     for group in layout(schema, form) {
         let section = match group.section {
             // A copy of the section as the form wrote it, annotations and
@@ -261,17 +262,21 @@ fn layout_value(schema: SchemaRef<'_>, form: FormRef<'_>, alloc: Alloc) -> Optio
             Some(section) => section.as_value().to_value(alloc).ok()?,
             None => Value::null(),
         };
-        let mut keys = Value::list_in(alloc);
+        let mut keys = List::new_in(alloc);
         for placed in &group.fields {
-            keys.push(Value::string_in(alloc, placed.field.key()).ok()?)
-                .ok()?;
+            keys.push(
+                Text::new_in(alloc, placed.field.key())
+                    .map(Value::from)
+                    .ok()?,
+            )
+            .ok()?;
         }
-        let mut entry = Value::map_in(alloc);
+        let mut entry = Map::new_in(alloc);
         entry.set(GROUP_SECTION, section).ok()?;
         entry.set(GROUP_FIELDS, keys).ok()?;
         groups.push(entry).ok()?;
     }
-    Some(groups)
+    Some(groups.into())
 }
 
 /// Whether the field under `key` is shown, given the `values` entered so

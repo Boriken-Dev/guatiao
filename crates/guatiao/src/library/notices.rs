@@ -49,7 +49,8 @@
 #![forbid(unsafe_code)]
 
 use crate::value::ValueError;
-use crate::value::types::{Map, Value};
+use crate::value::convert::TryAsRef;
+use crate::value::types::{List, Map, Text, Value};
 
 /// The key under `meta` that holds the list.
 pub const NOTICES_KEY: &str = "notices";
@@ -115,28 +116,29 @@ impl<'a> Notice<'a> {
 pub fn notices(meta: Option<&Map>) -> Vec<Notice<'_>> {
     let Some(list) = meta
         .and_then(|m| m.get(NOTICES_KEY))
-        .and_then(Value::as_list)
+        .and_then(TryAsRef::<List>::try_as_ref)
     else {
         return Vec::new();
     };
-    list.items()
-        .iter()
-        .filter_map(Value::as_map)
+    list.iter()
+        .filter_map(TryAsRef::<Map>::try_as_ref)
         .filter_map(|one| {
-            let text = one.get(TEXT_KEY).and_then(Value::as_str)?;
+            let text = str_of(one, TEXT_KEY)?;
             if text.trim().is_empty() {
                 return None;
             }
             Some(Notice {
-                component: one.get(COMPONENT_KEY).and_then(Value::as_str).unwrap_or(""),
+                component: str_of(one, COMPONENT_KEY).unwrap_or(""),
                 text,
-                format: one
-                    .get(FORMAT_KEY)
-                    .and_then(Value::as_str)
-                    .unwrap_or(FORMAT_TEXT),
+                format: str_of(one, FORMAT_KEY).unwrap_or(FORMAT_TEXT),
             })
         })
         .collect()
+}
+
+/// The text under `key`, or `None` for an absent key or another kind.
+fn str_of<'a>(one: &'a Map, key: &str) -> Option<&'a str> {
+    one.get(key).and_then(TryAsRef::<str>::try_as_ref)
 }
 
 /// Appends `notice` to `meta`'s list, creating the list on the first
@@ -151,18 +153,18 @@ pub fn declare_notice(meta: &mut Map, notice: Notice<'_>) -> Result<(), ValueErr
         return Err(ValueError::WrongKind);
     }
     let alloc = meta.alloc()?;
-    let mut one = Value::map_in(alloc);
-    one.set(COMPONENT_KEY, Value::string_in(alloc, notice.component)?)?;
-    one.set(TEXT_KEY, Value::string_in(alloc, notice.text)?)?;
-    one.set(FORMAT_KEY, Value::string_in(alloc, notice.format)?)?;
+    let mut one = Map::new_in(alloc);
+    one.set(
+        COMPONENT_KEY,
+        Text::new_in(alloc, notice.component).map(Value::from)?,
+    )?;
+    one.set(TEXT_KEY, Text::new_in(alloc, notice.text).map(Value::from)?)?;
+    one.set(
+        FORMAT_KEY,
+        Text::new_in(alloc, notice.format).map(Value::from)?,
+    )?;
 
-    if meta.get(NOTICES_KEY).and_then(Value::as_list).is_none() {
-        meta.set(NOTICES_KEY, Value::list_in(alloc))?;
-    }
-    meta.get_mut(NOTICES_KEY)
-        .and_then(Value::as_list_mut)
-        .ok_or(ValueError::WrongKind)?
-        .push(one)
+    meta.push_into(NOTICES_KEY, one)
 }
 
 #[cfg(test)]
@@ -174,7 +176,8 @@ mod tests {
         assert!(notices(None).is_empty());
         assert!(notices(Some(&Map::new())).is_empty());
         let mut meta = Map::new();
-        meta.set(NOTICES_KEY, Value::string("not a list")).unwrap();
+        meta.set(NOTICES_KEY, Value::from(Text::new("not a list")))
+            .unwrap();
         assert!(
             notices(Some(&meta)).is_empty(),
             "a list is the only shape read"
@@ -211,12 +214,12 @@ mod tests {
 
         // A list somebody else wrote, holding a blank entry, an entry
         // that is not a map, and one with an unknown format.
-        let mut list = Value::list();
-        let mut blank = Value::map();
+        let mut list = List::new();
+        let mut blank = Map::new();
         blank.set(TEXT_KEY, "   ").unwrap();
         list.push(blank).unwrap();
         list.push(Value::from(7i64)).unwrap();
-        let mut odd = Value::map();
+        let mut odd = Map::new();
         odd.set(TEXT_KEY, "some text").unwrap();
         odd.set(FORMAT_KEY, "rtf").unwrap();
         list.push(odd).unwrap();

@@ -15,13 +15,14 @@
 
 #![allow(non_camel_case_types)]
 
+use crate::value::convert::{TryAsMut, TryAsRef};
 use std::ptr;
 
 use super::{as_str, entry, out};
 
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::status::Status;
-use crate::value::types::{Bytes, Number, Str, Value};
+use crate::value::types::{Buffer, Bytes, List, Map, Number, Str, Tag, Text, Value};
 
 /// # Safety
 ///
@@ -149,7 +150,7 @@ pub unsafe extern "C" fn guatiao_value_absent(out: *mut Value) -> Status {
 pub unsafe extern "C" fn guatiao_value_bool(b: u8, out: *mut Value) -> Status {
     entry!(out => {
         // SAFETY: checked non-null and writable by contract.
-        unsafe { ptr::write(out, Value::bool(b != 0)) };
+        unsafe { ptr::write(out, Value::from(b != 0)) };
         Status::GUATIAO_OK
     })
 }
@@ -170,7 +171,7 @@ pub unsafe extern "C" fn guatiao_value_map(alloc: *const Allocator, out: *mut Va
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: checked non-null and writable by contract.
-        unsafe { ptr::write(out, Value::map_in(a)) };
+        unsafe { ptr::write(out, Map::new_in(a).into()) };
         Status::GUATIAO_OK
     })
 }
@@ -191,7 +192,7 @@ pub unsafe extern "C" fn guatiao_value_list(alloc: *const Allocator, out: *mut V
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: checked non-null and writable by contract.
-        unsafe { ptr::write(out, Value::list_in(a)) };
+        unsafe { ptr::write(out, List::new_in(a).into()) };
         Status::GUATIAO_OK
     })
 }
@@ -220,7 +221,7 @@ pub unsafe extern "C" fn guatiao_value_string(
         };
         // SAFETY: the caller guarantees the view's bytes.
         let t = match unsafe { as_str(text) } { Ok(t) => t, Err(s) => return s };
-        match Value::string_in(a, t) {
+        match Text::new_in(a, t).map(Value::from) {
             // SAFETY: checked non-null and writable by contract.
             Ok(v) => { unsafe { ptr::write(out, v) }; Status::GUATIAO_OK }
             Err(e) => e.into(),
@@ -281,7 +282,7 @@ pub unsafe extern "C" fn guatiao_value_bytes(
         };
         // SAFETY: the caller guarantees the view's bytes.
         let b = match unsafe { as_bytes(bytes) } { Ok(b) => b, Err(s) => return s };
-        match Value::bytes_in(a, b) {
+        match Buffer::new_in(a, b).map(Value::from) {
             // SAFETY: checked non-null and writable by contract.
             Ok(v) => { unsafe { ptr::write(out, v) }; Status::GUATIAO_OK }
             Err(e) => e.into(),
@@ -327,11 +328,17 @@ pub unsafe extern "C" fn guatiao_map_set(
         };
         // SAFETY: the caller guarantees the key's bytes.
         let k = match unsafe { as_str(key) } { Ok(k) => k, Err(s) => return s };
-        // SAFETY: checked non-null and well-formed by contract, which is
-        // what `set_in` asks for.
-        match unsafe { (*node).set_in(k, &mut *value, a) } {
-            Ok(()) => Status::GUATIAO_OK,
-            Err(e) => e.into(),
+        // SAFETY: checked non-null and well-formed by contract; the
+        // dereference is the only unsafety left.
+        match unsafe { TryAsMut::<Map>::try_as_mut(&mut *node) } {
+            // SAFETY: `value` is a well-formed node the caller hands
+            // over; taking it leaves the caller's null-tagged, which is
+            // what the contract promises.
+            Some(m) => match m.set_in(k, unsafe { std::mem::take(&mut *value) }, a) {
+                Ok(()) => Status::GUATIAO_OK,
+                Err(e) => e.into(),
+            },
+            None => Status::GUATIAO_ERR_WRONG_KIND,
         }
     })
 }
@@ -348,7 +355,7 @@ pub unsafe extern "C" fn guatiao_map_discard(node: *mut Value, key: Str) -> Stat
         let k = match unsafe { as_str(key) } { Ok(k) => k, Err(s) => return s };
         // SAFETY: checked non-null and well-formed by contract; the
         // dereference is the only unsafety left.
-        if unsafe { (*node).discard(k) } {
+        if unsafe { TryAsMut::<Map>::try_as_mut(&mut *node).is_some_and(|m| m.discard(k)) } {
             Status::GUATIAO_OK
         } else {
             Status::GUATIAO_ERR_NOT_FOUND
@@ -370,7 +377,7 @@ pub unsafe extern "C" fn guatiao_map_clear(node: *mut Value) -> Status {
         //
         // SAFETY: checked non-null and well-formed by contract; the
         // dereference is the only unsafety left.
-        match unsafe { (*node).as_map_mut() } {
+        match unsafe { TryAsMut::<Map>::try_as_mut(&mut *node) } {
             Some(m) => {
                 m.clear();
                 Status::GUATIAO_OK
@@ -412,11 +419,28 @@ pub unsafe extern "C" fn guatiao_map_copy_from(
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
-        // SAFETY: checked non-null and well-formed by contract, which is
-        // what `copy_from` asks for.
-        match unsafe { (*dst).copy_from(&*src, a) } {
-            Ok(_) => Status::GUATIAO_OK,
-            Err(e) => e.into(),
+        // SAFETY: checked non-null and well-formed by contract.
+        if unsafe { (*dst).tag() } != Ok(Tag::GUATIAO_MAP) {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        }
+        // The whole source is copied BEFORE `dst` is touched, so `src`
+        // may be a node stored inside `dst`.
+        //
+        // SAFETY: as above; the shared borrow ends with the copy.
+        let copy = match unsafe { TryAsRef::<Map>::try_as_ref(&*src) } {
+            Some(m) => match m.clone_in(a) {
+                Ok(c) => c,
+                Err(e) => return e.into(),
+            },
+            None => return Status::GUATIAO_ERR_WRONG_KIND,
+        };
+        // SAFETY: as above.
+        match unsafe { TryAsMut::<Map>::try_as_mut(&mut *dst) } {
+            Some(m) => match m.absorb(copy, a) {
+                Ok(_) => Status::GUATIAO_OK,
+                Err(e) => e.into(),
+            },
+            None => Status::GUATIAO_ERR_WRONG_KIND,
         }
     })
 }
@@ -451,11 +475,15 @@ pub unsafe extern "C" fn guatiao_list_push(
         let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
-        // SAFETY: checked non-null and well-formed by contract, which is
-        // what `push_in` asks for.
-        match unsafe { (*node).push_in(&mut *value, a) } {
-            Ok(()) => Status::GUATIAO_OK,
-            Err(e) => e.into(),
+        // SAFETY: checked non-null and well-formed by contract; the
+        // dereference is the only unsafety left.
+        match unsafe { TryAsMut::<List>::try_as_mut(&mut *node) } {
+            // SAFETY: as in `guatiao_map_set`.
+            Some(l) => match l.push_in(unsafe { std::mem::take(&mut *value) }, a) {
+                Ok(()) => Status::GUATIAO_OK,
+                Err(e) => e.into(),
+            },
+            None => Status::GUATIAO_ERR_WRONG_KIND,
         }
     })
 }
@@ -470,7 +498,7 @@ pub unsafe extern "C" fn guatiao_list_discard(node: *mut Value, index: usize) ->
     entry!(node => {
         // SAFETY: checked non-null and well-formed by contract; the
         // dereference is the only unsafety left.
-        if unsafe { (*node).discard_at(index) } {
+        if unsafe { TryAsMut::<List>::try_as_mut(&mut *node).is_some_and(|l| l.discard(index)) } {
             Status::GUATIAO_OK
         } else {
             Status::GUATIAO_ERR_NOT_FOUND
@@ -492,7 +520,7 @@ pub unsafe extern "C" fn guatiao_list_clear(node: *mut Value) -> Status {
         //
         // SAFETY: checked non-null and well-formed by contract; the
         // dereference is the only unsafety left.
-        match unsafe { (*node).as_list_mut() } {
+        match unsafe { TryAsMut::<List>::try_as_mut(&mut *node) } {
             Some(l) => {
                 l.clear();
                 Status::GUATIAO_OK
@@ -525,11 +553,16 @@ pub unsafe extern "C" fn guatiao_string_push(
         };
         // SAFETY: the caller guarantees the view's bytes.
         let t = match unsafe { as_str(text) } { Ok(t) => t, Err(s) => return s };
-        // SAFETY: checked non-null and well-formed by contract, which is
-        // what `push_str` asks for.
-        match unsafe { (*node).push_str(t, a) } {
-            Ok(()) => Status::GUATIAO_OK,
-            Err(e) => e.into(),
+        // A STRING only: `TryAsMut<Text>` refuses a NUMBER, whose digits
+        // share the arm and not the type.
+        //
+        // SAFETY: checked non-null and well-formed by contract.
+        match unsafe { TryAsMut::<Text>::try_as_mut(&mut *node) } {
+            Some(s) => match s.push_str_in(t, a) {
+                Ok(()) => Status::GUATIAO_OK,
+                Err(e) => e.into(),
+            },
+            None => Status::GUATIAO_ERR_WRONG_KIND,
         }
     })
 }
@@ -555,11 +588,13 @@ pub unsafe extern "C" fn guatiao_buffer_push(
         };
         // SAFETY: the caller guarantees the view's bytes.
         let b = match unsafe { as_bytes(bytes) } { Ok(b) => b, Err(s) => return s };
-        // SAFETY: checked non-null and well-formed by contract, which is
-        // what `push_bytes` asks for.
-        match unsafe { (*node).push_bytes(b, a) } {
-            Ok(()) => Status::GUATIAO_OK,
-            Err(e) => e.into(),
+        // SAFETY: checked non-null and well-formed by contract.
+        match unsafe { TryAsMut::<Buffer>::try_as_mut(&mut *node) } {
+            Some(buffer) => match buffer.push_in(b, a) {
+                Ok(()) => Status::GUATIAO_OK,
+                Err(e) => e.into(),
+            },
+            None => Status::GUATIAO_ERR_WRONG_KIND,
         }
     })
 }

@@ -54,7 +54,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use guatiao::value::alloc::{Alloc, Allocator};
 use guatiao::value::status::Status;
-use guatiao::value::types::{Str, Value};
+use guatiao::value::types::{Str, Text, Value};
 
 use crate::text::Error;
 use crate::{Bytes, Presentation};
@@ -208,7 +208,7 @@ unsafe fn deliver(out: *mut Value, built: Result<Value, Error>) -> Status {
 /// As [`deliver`].
 unsafe fn deliver_text(out: *mut Value, built: Result<String, Error>, alloc: Alloc) -> Status {
     match built {
-        Ok(text) => match Value::string_in(alloc, &text) {
+        Ok(text) => match Text::new_in(alloc, &text).map(Value::from) {
             Ok(value) => {
                 // SAFETY: the caller's contract.
                 unsafe { out.write(value) };

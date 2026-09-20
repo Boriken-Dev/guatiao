@@ -11,6 +11,7 @@
 
 #![cfg(all(feature = "provider", feature = "load"))]
 
+use guatiao::value::convert::TryAsRef;
 use std::ffi::c_void;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -18,7 +19,7 @@ use std::sync::{Arc, Mutex};
 
 use greeter_kind::{Counter, Greeter, GreeterVtable, Listener};
 use guatiao::library::{Kind, KindMismatch, Offer, Registry, Remote};
-use guatiao::{Status, Value};
+use guatiao::{Map, Status, Value};
 
 /// Where cargo put a dev-dependency cdylib: beside this binary, or one up.
 fn library_path(name: &str) -> PathBuf {
@@ -83,7 +84,7 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
     assert_eq!(offer.available(), Ok(()));
     let answer = offer.greet("ana").expect("the derived greeter answers");
     assert_eq!(
-        answer.get("greeting").and_then(Value::as_str),
+        answer.get("greeting").and_then(TryAsRef::<str>::try_as_ref),
         Some("hello, ana")
     );
 
@@ -157,14 +158,15 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
     );
     let schema = shouter.config_schema().expect("declares what it takes");
     assert!(
-        schema
-            .get("properties")
-            .and_then(|p| p.get("prefix"))
+        TryAsRef::<Map>::try_as_ref(schema)
+            .and_then(|m| m.get("properties"))
+            .and_then(|p| TryAsRef::<Map>::try_as_ref(p).and_then(|m| m.get("prefix")))
             .is_some(),
         "the schema is Shouter's own"
     );
-    let mut config = Value::map();
+    let mut config = Map::new();
     config.set("prefix", "hey").unwrap();
+    let config = Value::from(config);
     let loud = shouter
         .instantiate(&config)
         .expect("a fitting configuration builds");
@@ -172,31 +174,31 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
         loud.greet("ana")
             .unwrap()
             .get("greeting")
-            .and_then(Value::as_str),
+            .and_then(TryAsRef::<str>::try_as_ref),
         Some("hey ANA")
     );
-    let mut other = Value::map();
+    let mut other = Map::new();
     other.set("prefix", "yo").unwrap();
-    let quiet = shouter.instantiate(&other).unwrap();
+    let quiet = shouter.instantiate(&Value::from(other)).unwrap();
     assert_eq!(
         quiet
             .greet("bo")
             .unwrap()
             .get("greeting")
-            .and_then(Value::as_str),
+            .and_then(TryAsRef::<str>::try_as_ref),
         Some("yo BO"),
         "two instances, two configurations, one provider"
     );
     drop(loud);
-    let e = shouter.instantiate(&Value::map()).unwrap_err();
+    let e = shouter.instantiate(&Value::from(Map::new())).unwrap_err();
     assert_eq!(
         e.status,
         Status::GUATIAO_ERR_BAD_VALUE,
         "the schema's refusal: {e}"
     );
-    let mut wrong = Value::map();
+    let mut wrong = Map::new();
     wrong.set("prefix", 7).unwrap();
-    let e = shouter.instantiate(&wrong).unwrap_err();
+    let e = shouter.instantiate(&Value::from(wrong)).unwrap_err();
     assert_eq!(
         e.status,
         Status::GUATIAO_ERR_BAD_VALUE,

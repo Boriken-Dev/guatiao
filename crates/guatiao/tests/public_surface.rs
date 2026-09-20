@@ -109,11 +109,12 @@ fn the_borrowed_byte_view_has_the_constructors_its_sibling_has() {
 /// a value to a key nobody searched for.
 #[test]
 fn an_entry_hands_out_its_value_mutably() {
+    use guatiao::value::convert::TryAsRef;
     use guatiao::{Entry, Text, Value};
 
     let mut entry = Entry::new(Text::new("k"), Value::from(1i64));
-    *entry.value_mut() = Value::string("two");
-    assert_eq!(entry.value().as_str(), Some("two"));
+    *entry.value_mut() = Value::from(Text::new("two"));
+    assert_eq!(TryAsRef::<str>::try_as_ref(entry.value()), Some("two"));
     assert_eq!(entry.key(), b"k");
 }
 
@@ -126,6 +127,7 @@ fn an_entry_hands_out_its_value_mutably() {
 /// Sync>`.
 #[test]
 fn the_owned_types_are_clone_eq_send_and_sync() {
+    use guatiao::value::convert::TryAsRef;
     use guatiao::{Buffer, List, Map, Number, Text, Value};
 
     fn is_send_sync<T: Send + Sync>() {}
@@ -144,9 +146,14 @@ fn the_owned_types_are_clone_eq_send_and_sync() {
 
     let copy = map.clone();
     assert_eq!(copy, map);
-    assert_eq!(copy.get("k").and_then(Value::as_str), Some("v"));
     assert_eq!(
-        copy.get("l").and_then(Value::as_list).map(List::len),
+        copy.get("k").and_then(TryAsRef::<str>::try_as_ref),
+        Some("v")
+    );
+    assert_eq!(
+        copy.get("l")
+            .and_then(TryAsRef::<List>::try_as_ref)
+            .map(List::len),
         Some(2)
     );
 
@@ -180,7 +187,12 @@ fn the_owned_types_are_clone_eq_send_and_sync() {
 
     // Across a thread, and back.
     let sent = std::thread::spawn(move || {
-        assert_eq!(twin.get("k").and_then(Value::as_str), Some("v"));
+        assert_eq!(
+            TryAsRef::<Map>::try_as_ref(&twin)
+                .and_then(|m| m.get("k"))
+                .and_then(TryAsRef::<str>::try_as_ref),
+            Some("v")
+        );
         twin
     })
     .join()
@@ -192,22 +204,26 @@ fn the_owned_types_are_clone_eq_send_and_sync() {
 /// value, and hand a value of another kind back untouched.
 #[test]
 fn a_value_gives_up_its_container_by_value() {
-    use guatiao::{List, Map, Value};
+    use guatiao::value::convert::TryAsRef;
+    use guatiao::{List, Map, Text, Value};
 
     let mut map = Map::new();
     map.set("k", "v").unwrap();
     let value: Value = map.into();
-    let mut map = value.into_map().expect("a map");
-    assert_eq!(map.remove("k").as_ref().and_then(Value::as_str), Some("v"));
+    let mut map = Map::try_from(value).expect("a map");
+    assert_eq!(
+        map.remove("k")
+            .as_ref()
+            .and_then(TryAsRef::<str>::try_as_ref),
+        Some("v")
+    );
 
     let mut list = List::new();
     list.push(1).unwrap();
-    let list = Value::from(list).into_list().expect("a list");
+    let list = List::try_from(Value::from(list)).expect("a list");
     assert_eq!(list.len(), 1);
 
-    let not_a_map = Value::from(3i64)
-        .into_map()
-        .expect_err("an int is not a map");
+    let not_a_map = Map::try_from(Value::from(3i64)).expect_err("an int is not a map");
     assert_eq!(not_a_map, Value::from(3i64), "handed back untouched");
-    assert!(Value::string("x").into_list().is_err());
+    assert!(List::try_from(Value::from(Text::new("x"))).is_err());
 }

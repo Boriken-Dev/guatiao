@@ -9,6 +9,7 @@
 //! `?auth=userpass&auth.username=alice` — which is what lets a command
 //! line select an arm at all.
 
+use guatiao::value::convert::TryAsRef;
 use std::collections::BTreeMap;
 
 use guatiao::schema::FormFieldBuilder;
@@ -17,7 +18,7 @@ use guatiao::schema::flat;
 use guatiao::schema::read::SchemaRef;
 use guatiao::value::alloc::Alloc;
 use guatiao::value::read::str_or;
-use guatiao::{Value, ValueError};
+use guatiao::{Map, Text, Value, ValueError};
 
 /// A schema with one tagged field: two arms, one of them empty.
 fn schema(alloc: Alloc) -> Value {
@@ -56,12 +57,12 @@ fn schema(alloc: Alloc) -> Value {
 
 /// A tagged value: the discriminant plus whatever fields are given.
 fn tagged(chosen: &str, fields: &[(&str, &str)]) -> Value {
-    let mut m = Value::map();
+    let mut m = Map::new();
     m.set("auth", chosen).unwrap();
     for (k, v) in fields {
         m.set(k, *v).unwrap();
     }
-    m
+    m.into()
 }
 
 fn store_of(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
@@ -135,9 +136,20 @@ fn unflatten_drops_fields_the_arm_does_not_declare() {
         ("auth.password", "s3cret"),
     ]);
     let back = flat::unflatten(alloc, auth, &store).expect("the discriminant names an arm");
-    assert_eq!(str_or(back.get("auth"), ""), "sso");
+    assert_eq!(
+        str_or(
+            TryAsRef::<Map>::try_as_ref(&back).and_then(|m| m.get("auth")),
+            ""
+        ),
+        "sso"
+    );
     assert!(
-        back.get("username").is_none() && back.get("password").is_none(),
+        TryAsRef::<Map>::try_as_ref(&back)
+            .and_then(|m| m.get("username"))
+            .is_none()
+            && TryAsRef::<Map>::try_as_ref(&back)
+                .and_then(|m| m.get("password"))
+                .is_none(),
         "neither field is declared by the sso arm"
     );
 }
@@ -308,16 +320,17 @@ fn an_option_key_containing_the_separator_is_rejected() {
 
     // And the check itself still names the offending key, for a schema
     // that arrived from somewhere else.
-    let mut properties = Value::map_in(alloc);
-    properties
-        .set("auth.username", Value::map_in(alloc))
-        .unwrap();
-    let mut bad = Value::map_in(alloc);
-    bad.set("type", Value::string_in(alloc, "object").unwrap())
-        .unwrap();
+    let mut properties = Map::new_in(alloc);
+    properties.set("auth.username", Map::new_in(alloc)).unwrap();
+    let mut bad = Map::new_in(alloc);
+    bad.set(
+        "type",
+        Text::new_in(alloc, "object").map(Value::from).unwrap(),
+    )
+    .unwrap();
     bad.set("properties", properties).unwrap();
     assert_eq!(
-        flat::check_keys(SchemaRef::new(&bad).unwrap()),
+        flat::check_keys(SchemaRef::new(&Value::from(bad)).unwrap()),
         Err("auth.username".to_string())
     );
 }

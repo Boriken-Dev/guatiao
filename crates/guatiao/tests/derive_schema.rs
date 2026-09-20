@@ -14,7 +14,8 @@
 use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::schema::validate::validate_map;
 use guatiao::value::alloc::Alloc;
-use guatiao::{Bytes, ReadValue, Schema, ToValue};
+use guatiao::value::convert::{TryAsMut, TryAsRef};
+use guatiao::{Bytes, Map, Number, Schema, Text, ToValue, ValueError};
 
 fn alloc_and<R>(body: impl FnOnce(Alloc) -> R) -> R {
     let alloc = Alloc::rust();
@@ -166,12 +167,7 @@ fn the_presentation_attributes_reach_the_option() {
 
         let timeout = s.find("timeout").unwrap();
         assert!(timeout.is_advanced());
-        let default: i64 = timeout
-            .default()
-            .ok_or_missing()
-            .unwrap()
-            .try_into()
-            .unwrap();
+        let default: i64 = timeout.default().unwrap().try_into().unwrap();
         assert_eq!(
             default, 30,
             "a default is written in Rust and crosses as a value"
@@ -235,7 +231,10 @@ fn a_key_the_schema_does_not_declare_is_refused() {
         let s = SchemaRef::new(&declared).unwrap();
 
         let mut value = sample().to_value(alloc).unwrap();
-        value.set("nonesuch", guatiao::Value::string("x")).unwrap();
+        TryAsMut::<Map>::try_as_mut(&mut value)
+            .ok_or(ValueError::WrongKind)
+            .and_then(|m| m.set("nonesuch", guatiao::Value::from(Text::new("x"))))
+            .unwrap();
         assert!(validate_map(s, &value).is_err());
     });
 }
@@ -260,13 +259,14 @@ fn a_declared_default_lands_in_the_document() {
         let port = s.find("port").unwrap();
 
         assert_eq!(
-            port.as_value()
-                .get(guatiao::schema::vocab::DEFAULT)
-                .and_then(guatiao::Value::as_number_str),
+            TryAsRef::<Map>::try_as_ref(port.as_value())
+                .and_then(|m| m.get(guatiao::schema::vocab::DEFAULT))
+                .and_then(TryAsRef::<Number>::try_as_ref)
+                .map(Number::as_str),
             Some("5900"),
             "the document carries `default: 5900`, not a description of one"
         );
-        let read: u16 = port.default().ok_or_missing().unwrap().try_into().unwrap();
+        let read: u16 = port.default().unwrap().try_into().unwrap();
         assert_eq!(read, 5900);
     });
 }

@@ -32,6 +32,7 @@
 
 #![allow(non_camel_case_types)]
 
+use crate::value::convert::TryAsRef;
 use std::ptr;
 
 use std::collections::BTreeMap;
@@ -42,7 +43,7 @@ use crate::schema::flat;
 use crate::schema::read::{FieldRef, SchemaRef};
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::status::Status;
-use crate::value::types::{Str, Value};
+use crate::value::types::{List, Map, Str, Text, Value};
 
 /// Whether `config` is a value `schema` accepts.
 ///
@@ -97,25 +98,36 @@ pub unsafe extern "C" fn guatiao_schema_validate(
 
 /// The validation failure as a value, in the same shape as the merge's.
 fn describe_validation(error: &ValidationError, alloc: Alloc) -> Option<Value> {
-    let mut out = Value::map_in(alloc);
+    let mut out = Map::new_in(alloc);
     match error {
         ValidationError::UnknownOption { key, known } => {
-            out.set("key", Value::string_in(alloc, key).ok()?).ok()?;
-            let mut list = Value::list_in(alloc);
+            out.set("key", Text::new_in(alloc, key).map(Value::from).ok()?)
+                .ok()?;
+            let mut list = List::new_in(alloc);
             for name in known {
-                list.push(Value::string_in(alloc, name).ok()?).ok()?;
+                list.push(Text::new_in(alloc, name).map(Value::from).ok()?)
+                    .ok()?;
             }
             out.set("known", list).ok()?;
         }
         ValidationError::BadValue { key, expected } => {
-            out.set("key", Value::string_in(alloc, key).ok()?).ok()?;
-            out.set("expected", Value::string_in(alloc, expected).ok()?)
+            out.set("key", Text::new_in(alloc, key).map(Value::from).ok()?)
                 .ok()?;
+            out.set(
+                "expected",
+                Text::new_in(alloc, expected).map(Value::from).ok()?,
+            )
+            .ok()?;
         }
     }
-    out.set("message", Value::string_in(alloc, &error.to_string()).ok()?)
-        .ok()?;
-    Some(out)
+    out.set(
+        "message",
+        Text::new_in(alloc, &error.to_string())
+            .map(Value::from)
+            .ok()?,
+    )
+    .ok()?;
+    Some(out.into())
 }
 
 // --- the flat projection ------------------------------------------------
@@ -137,10 +149,10 @@ fn describe_validation(error: &ValidationError, alloc: Alloc) -> Option<Value> {
 /// two layers in.
 fn store_of(v: &Value) -> Option<BTreeMap<String, String>> {
     let mut out = BTreeMap::new();
-    for entry in v.entries()? {
+    for entry in TryAsRef::<Map>::try_as_ref(v).map(Map::entries)? {
         out.insert(
             entry.key_str()?.to_string(),
-            entry.value().as_str()?.to_string(),
+            TryAsRef::<str>::try_as_ref(entry.value())?.to_string(),
         );
     }
     Some(out)
@@ -148,11 +160,12 @@ fn store_of(v: &Value) -> Option<BTreeMap<String, String>> {
 
 /// The same, back into a value.
 fn store_into(alloc: Alloc, store: &BTreeMap<String, String>) -> Option<Value> {
-    let mut out = Value::map_in(alloc);
+    let mut out = Map::new_in(alloc);
     for (k, v) in store {
-        out.set(k, Value::string_in(alloc, v).ok()?).ok()?;
+        out.set(k, Text::new_in(alloc, v).map(Value::from).ok()?)
+            .ok()?;
     }
-    Some(out)
+    Some(out.into())
 }
 
 /// The field a key names, following one level of projection.
@@ -237,9 +250,9 @@ pub unsafe extern "C" fn guatiao_schema_flat_keys(
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
-        let mut list = Value::list_in(alloc);
+        let mut list = List::new_in(alloc);
         for key in flat::keys(field) {
-            let Ok(item) = Value::string_in(alloc, &key) else {
+            let Ok(item) = Text::new_in(alloc, &key).map(Value::from) else {
                 return Status::GUATIAO_ERR_ALLOC;
             };
             if list.push(item).is_err() {
@@ -248,7 +261,7 @@ pub unsafe extern "C" fn guatiao_schema_flat_keys(
         }
         // SAFETY: `out` is writable by contract, and the tree moves into
         // it rather than being copied.
-        unsafe { ptr::write(out, list) };
+        unsafe { ptr::write(out, list.into()) };
         Status::GUATIAO_OK
     })
 }
