@@ -207,6 +207,22 @@ Object? _nodeToDart(Pointer<guatiao_value> node, Numbers numbers) {
   }
 }
 
+/// Reads `node` as plain Dart, then frees its tree and the box it sits in.
+///
+/// For an answer a native call filled into a `calloc`-allocated root that
+/// nothing else will ever address.
+Object? takeValue(
+  Pointer<guatiao_value> node, {
+  Numbers numbers = Numbers.auto,
+}) {
+  try {
+    return _nodeToDart(node, numbers);
+  } finally {
+    native.core().bindings.guatiao_value_free(node);
+    calloc.free(node);
+  }
+}
+
 // ---- writing, through the loaded library ------------------------------
 
 /// A `guatiao_str` over a copy of `data`, valid until `arena` is released.
