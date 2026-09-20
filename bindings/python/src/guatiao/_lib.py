@@ -129,6 +129,11 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
         "load",
     ),
     "guatiao_registry_host": ([c_void_p], c_void_p, "load"),
+    # Appended to the C surface after the rest: a library built before
+    # them resolves to a stub that raises `MissingSymbol` naming the one
+    # that is absent, which is what every optional export here does.
+    "guatiao_registry_retire": ([c_void_p, Str], c_uint32, "load"),
+    "guatiao_registry_unload": ([c_void_p, Str], c_uint32, "load"),
     "guatiao_registry_free": ([c_void_p], None, "load"),
     "guatiao_registry_keyed_by": ([c_void_p, Str], c_uint32, "load"),
     "guatiao_registry_libraries_keyed_by": ([c_void_p, Str], c_uint32, "load"),

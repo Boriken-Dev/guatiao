@@ -105,8 +105,16 @@ is not reachable: the ABI exports no lookup by kind. Such a provider
 answers a null table and size 0; listing, configuring and instantiating
 it all work.
 
-`Registry.retire`/`Registry.unload` are not implemented in this binding
-until the library exports `guatiao_registry_unload`.
+`Registry.retire(library_key)` takes a library out of the registry and
+leaves it mapped; `Registry.unload(library_key)` is that, then the
+library's own say, then unmapping it. **Both take the LIBRARY key** --
+`libraries_keyed_by`'s template, `%id` by default -- not a provider key.
+`unload` is the caller's word that nothing taken from that library is
+still held: every value it built through its own allocator, every table,
+`ctx` and `Instance`. `NotFound` for an unknown key; `WrongKind` when the
+library refuses or is linked into the host rather than mapped, and it
+then stays loaded. A core library built without them raises
+`guatiao.MissingSymbol`, as any other optional export does.
 
 `guatiao.kinds.table(table_ptr, size, struct_type, floor_hash=...)`
 turns a `provider_table()` answer into the `ctypes.Structure` a kind's

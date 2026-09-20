@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from guatiao import _lib
+from guatiao import _lib, errors
 
 try:
     _lib.core()
@@ -98,12 +98,48 @@ def test_provider_config_is_a_borrowed_schema():
         assert reg.provider_config("derived_greeter_hello") is None
 
 
-def test_retire_and_unload_are_guarded_until_exported():
+def test_retire_takes_a_librarys_providers_and_frees_its_key():
     with _scanned() as reg:
-        with pytest.raises(NotImplementedError, match="guatiao_registry_retire"):
+        before = {p["id"] for p in reg.providers("greeter")}
+        assert "derived_greeter_hello" in before
+
+        reg.retire("derived_greeter")
+        after = {p["id"] for p in reg.providers("greeter")}
+        assert "derived_greeter_hello" not in after
+        assert "hello_library_greeter" in after, "only that library left"
+        assert not any(
+            lib["id"] == "derived_greeter" for lib in reg.libraries()
+        )
+
+        # The key is free: a retired library is not "already-loaded".
+        report = reg.scan_dir(_TARGET_DEBUG, rules="kind=greeter")
+        assert any("derived_greeter" in path for path in report.get("loaded", []))
+
+
+def test_retire_takes_the_library_key_not_a_provider_key():
+    with _scanned() as reg:
+        with pytest.raises(errors.NotFound):
             reg.retire("derived_greeter_hello")
-        with pytest.raises(NotImplementedError, match="guatiao_registry_unload"):
-            reg.unload("derived_greeter_hello")
+        assert any(lib["id"] == "derived_greeter" for lib in reg.libraries())
+
+
+def test_unload_unmaps_a_library():
+    with _scanned() as reg:
+        reg.unload("derived_greeter")
+        assert not any(
+            lib["id"] == "derived_greeter" for lib in reg.libraries()
+        )
+        assert "derived_greeter_hello" not in {
+            p["id"] for p in reg.providers("greeter")
+        }
+        with pytest.raises(errors.NotFound):
+            reg.unload("derived_greeter")
+
+
+def test_both_symbols_are_declared():
+    lib = _lib.core()
+    assert "guatiao_registry_retire" not in lib.symbols_missing()
+    assert "guatiao_registry_unload" not in lib.symbols_missing()
 
 
 def test_closed_registry_raises_on_use():
