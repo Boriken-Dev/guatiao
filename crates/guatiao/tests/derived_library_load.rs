@@ -342,3 +342,58 @@ fn objects_cross_both_ways_and_are_destroyed_by_whoever_holds_them_last() {
         "the shim destroyed the listener before refusing"
     );
 }
+
+/// A C host reaches a derived provider's table by kind, and it is the
+/// table the typed path validates.
+#[test]
+fn the_c_surface_hands_back_a_table_by_kind() {
+    use guatiao::exports::library::{
+        guatiao_registry_free, guatiao_registry_load_file, guatiao_registry_new,
+        guatiao_registry_provider_table, guatiao_registry_provider_vtable,
+    };
+    use guatiao::library::KindHeader;
+    use guatiao::value::status::Status;
+    use guatiao::value::types::{Str, Value};
+
+    let path = library_path("derived_greeter");
+    let path = path.to_string_lossy().into_owned();
+    let alloc = guatiao::Alloc::rust().as_raw();
+    // SAFETY: the names are readable for the call; the allocator is ours.
+    let reg =
+        unsafe { guatiao_registry_new(Str::borrowed("c-tables"), Str::borrowed("1.0"), alloc) };
+    assert!(!reg.is_null());
+    let mut answer = Value::absent();
+    // SAFETY: `reg` is live, the path readable, `answer` writable.
+    let status =
+        unsafe { guatiao_registry_load_file(reg, Str::borrowed(&path), alloc, &mut answer) };
+    assert_eq!(status, Status::GUATIAO_OK);
+    drop(answer);
+
+    let key = Str::borrowed("derived_greeter_hello");
+    let mut size = 0usize;
+    // SAFETY: `reg` is live, the texts readable, `size` writable.
+    let table =
+        unsafe { guatiao_registry_provider_table(reg, key, Str::borrowed("greeter"), &mut size) };
+    assert!(
+        !table.is_null(),
+        "a derived provider's greeter table is reachable"
+    );
+    assert!(size >= std::mem::size_of::<greeter_kind::GreeterVtable>());
+    // SAFETY: non-null, and a kind table leads with its header.
+    let header = unsafe { &*table.cast::<KindHeader>() };
+    assert_eq!(header.floor_hash, greeter_kind::GreeterVtable::FLOOR_HASH);
+
+    // The single-table accessor still answers nothing for it, and a kind
+    // it does not serve has no table.
+    let mut legacy = 1usize;
+    // SAFETY: as above.
+    assert!(unsafe { guatiao_registry_provider_vtable(reg, key, &mut legacy) }.is_null());
+    // SAFETY: as above.
+    let none =
+        unsafe { guatiao_registry_provider_table(reg, key, Str::borrowed("codec"), &mut size) };
+    assert!(none.is_null());
+    assert_eq!(size, 0);
+
+    // SAFETY: `reg` came from `guatiao_registry_new` and is not used again.
+    unsafe { guatiao_registry_free(reg) };
+}

@@ -277,6 +277,11 @@ impl HostRegistry {
         self.inner.provider(key).map(Provider::vtable)
     }
 
+    /// The table one provider speaks `kind` through.
+    fn table_for(&self, key: &str, kind: &str) -> Option<(*const c_void, usize)> {
+        self.inner.provider(key)?.table_for(kind)
+    }
+
     /// One provider's context pointer.
     fn ctx(&self, key: &str) -> Option<*mut c_void> {
         self.inner.provider(key).map(Provider::ctx)
@@ -1130,6 +1135,49 @@ pub unsafe extern "C" fn guatiao_registry_provider_vtable(
             return std::ptr::null();
         };
         let (ptr, size) = registry.vtable(key).unwrap_or((std::ptr::null(), 0));
+        if !size_out.is_null() {
+            // SAFETY: the caller's contract says it is writable.
+            unsafe { size_out.write(size) };
+        }
+        ptr
+    })
+}
+
+/// The table one provider speaks `kind` through, and the size the library
+/// compiled it at: its per-kind table when it declares one, else its single
+/// table when it claims the kind.
+///
+/// Null when no provider answers to `key`, or it does not serve `kind`
+/// through a table. `size_out` may be null. Check the table's
+/// `floor_hash` against `<table>_FLOOR_HASH` from the kind's header, and
+/// the size against the fields you read, before calling through it; pass
+/// [`guatiao_registry_provider_ctx`] as every slot's `ctx`.
+///
+/// The pointer stays valid until that provider's library is unloaded.
+///
+/// # Safety
+///
+/// `reg` is a live handle, `key` and `kind` are readable for the call, and
+/// `size_out` is null or addresses writable storage for one `size_t`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_provider_table(
+    reg: *const HostRegistry,
+    key: Str,
+    kind: Str,
+    size_out: *mut usize,
+) -> *const c_void {
+    guard_with(std::ptr::null(), || {
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(key), Ok(kind)) = (
+            unsafe { HostRegistry::get(reg) },
+            unsafe { as_str(key) },
+            unsafe { as_str(kind) },
+        ) else {
+            return std::ptr::null();
+        };
+        let (ptr, size) = registry
+            .table_for(key, kind)
+            .unwrap_or((std::ptr::null(), 0));
         if !size_out.is_null() {
             // SAFETY: the caller's contract says it is writable.
             unsafe { size_out.write(size) };

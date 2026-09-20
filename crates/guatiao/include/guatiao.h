@@ -1576,6 +1576,29 @@ const void *guatiao_registry_provider_vtable(const struct guatiao_registry *reg,
                                              size_t *size_out);
 
 /*
+ The table one provider speaks `kind` through, and the size the library
+ compiled it at: its per-kind table when it declares one, else its single
+ table when it claims the kind.
+
+ Null when no provider answers to `key`, or it does not serve `kind`
+ through a table. `size_out` may be null. Check the table's
+ `floor_hash` against `<table>_FLOOR_HASH` from the kind's header, and
+ the size against the fields you read, before calling through it; pass
+ [`guatiao_registry_provider_ctx`] as every slot's `ctx`.
+
+ The pointer stays valid until that provider's library is unloaded.
+
+ # Safety
+
+ `reg` is a live handle, `key` and `kind` are readable for the call, and
+ `size_out` is null or addresses writable storage for one `size_t`.
+ */
+const void *guatiao_registry_provider_table(const struct guatiao_registry *reg,
+                                            struct guatiao_str key,
+                                            struct guatiao_str kind,
+                                            size_t *size_out);
+
+/*
  The context pointer to hand back to every call through that provider's
  table. Null is a legitimate answer and means the provider needs none.
 
