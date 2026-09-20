@@ -67,7 +67,7 @@ pub mod types;
 pub mod value;
 
 pub use alloc::{Alloc, AllocError, Allocator, rust_alloc};
-pub use convert::{Bytes, FromValue, MapError, ToValue};
+pub use convert::{Bytes, FromValue, MapError, ToValue, TryAsMut, TryAsRef};
 pub use mutate::{MAX_DEPTH, ValueError};
 pub use read::{
     Dump, ReadValue, bool_or, bytes_or, entries, equal, float_or, int_or, items, keys, str_or,

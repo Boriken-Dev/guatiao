@@ -321,6 +321,55 @@ fn describe(tag: Option<Tag>) -> &'static str {
     }
 }
 
+/// A borrowed read that can say no: the kind the value holds, or `None`.
+///
+/// Mirrors [`AsRef`], with the failure the value model needs. The type
+/// parameter is on the **trait** rather than on the method, so a binding
+/// carries it and a turbofish is available where one does not:
+///
+/// ```
+/// use guatiao::{List, Map, TryAsRef, Value};
+///
+/// let mut map = Map::new();
+/// map.set("host", "10.0.0.1")?;
+/// let v = Value::from(map);
+///
+/// let m: &Map = v.try_as_ref().unwrap();
+/// assert_eq!(m.len(), 1);
+/// assert!(TryAsRef::<List>::try_as_ref(&v).is_none());
+/// assert_eq!(TryAsRef::<str>::try_as_ref(&v), None);
+/// # Ok::<(), guatiao::ValueError>(())
+/// ```
+///
+/// A `bool` is deliberately absent: the arm is a `u8`, so no `&bool` over
+/// it would be sound. Read one with `TryFrom<&Value>`.
+pub trait TryAsRef<T: ?Sized> {
+    /// The value seen as a `T`, or `None` when it holds another kind.
+    fn try_as_ref(&self) -> Option<&T>;
+}
+
+/// The mutable half of [`TryAsRef`].
+///
+/// A NUMBER and a STRING share one arm and do **not** share a type: the
+/// reader for a [`Text`](crate::Text) answers `None` for a number, which
+/// is what keeps the grammar from being edited away.
+///
+/// ```
+/// use guatiao::{Map, Text, TryAsMut, Value};
+///
+/// let mut number = Value::from(1i64);
+/// assert!(TryAsMut::<Text>::try_as_mut(&mut number).is_none());
+///
+/// let mut v = Value::from(Map::new());
+/// let m: &mut Map = v.try_as_mut().unwrap();
+/// m.set("port", 5900)?;
+/// # Ok::<(), guatiao::ValueError>(())
+/// ```
+pub trait TryAsMut<T: ?Sized> {
+    /// The value seen as a `T`, mutably, or `None` for another kind.
+    fn try_as_mut(&mut self) -> Option<&mut T>;
+}
+
 /// Bytes, as a field type.
 ///
 /// `Vec<u8>` is a list of numbers like any other `Vec<T>`; a field that

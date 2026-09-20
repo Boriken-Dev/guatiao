@@ -57,11 +57,14 @@
 //! let b = guatiao::Text { ptr: a.ptr, len: a.len, cap: a.cap, alloc: a.alloc };
 //! ```
 //!
-//! Nor a stolen arm:
+//! Nor a stolen arm. A NUMBER and a STRING share the `text` arm and do
+//! not share a type, so the reader for a [`Text`] answers `None` for a
+//! number:
 //!
-//! ```compile_fail
-//! let mut v = guatiao::Value::from(1i64);
-//! let t = guatiao::value::mutate::as_text_mut(&mut v);
+//! ```
+//! use guatiao::{Text, TryAsMut, Value};
+//! let mut v = Value::from(1i64);
+//! assert!(TryAsMut::<Text>::try_as_mut(&mut v).is_none());
 //! ```
 //!
 //! # `cap == 0` means the buffer is not owned
