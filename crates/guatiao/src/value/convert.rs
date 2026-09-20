@@ -248,9 +248,6 @@ fn describe(tag: Option<Tag>) -> &'static str {
 /// assert_eq!(TryAsRef::<str>::try_as_ref(&v), None);
 /// # Ok::<(), guatiao::ValueError>(())
 /// ```
-///
-/// A `bool` is deliberately absent: the arm is a `u8`, so no `&bool` over
-/// it would be sound. Read one with `TryFrom<&Value>`.
 pub trait TryAsRef<T: ?Sized> {
     /// The value seen as a `T`, or `None` when it holds another kind.
     fn try_as_ref(&self) -> Option<&T>;
@@ -478,8 +475,8 @@ impl<'a> TryFrom<&'a Value> for &'a [Entry] {
 
 impl FromValue for bool {
     fn from_value(value: &Value) -> Result<bool, MapError> {
-        value
-            .as_bool()
+        TryAsRef::<bool>::try_as_ref(value)
+            .copied()
             .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_BOOL, value))
     }
 }
