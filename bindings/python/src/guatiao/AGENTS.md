@@ -104,6 +104,16 @@ the hand-written and the single-kind derived case.
 `Registry.retire`/`Registry.unload` are not implemented in this binding
 until the library exports `guatiao_registry_unload`.
 
+**`provider_table` cannot reach a `#[derive(Provider)]` library's kind
+table.** The derive always files its tables under `ProviderInfo.tables`
+(`crates/guatiao-derive/src/provider.rs`), never the legacy single
+`vtable` field `guatiao_registry_provider_vtable` reads -- and no C
+export fetches `tables[i]` by kind name. It works only for a
+hand-written provider using the single-`vtable` shape (`hello_library`
+in this repo's examples). `tests/greeter_table.py` and
+`tests/test_greeter.py` in this package record the gap with a
+reproduction; fixing it needs a new Rust export, not a binding change.
+
 `guatiao.kinds.table(table_ptr, size, struct_type, floor_hash=...)`
 turns a `provider_table()` answer into the `ctypes.Structure` a kind's
 own C header declares (`greeter_vtable` and friends): checks `size`
