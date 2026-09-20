@@ -12,8 +12,8 @@ libraries. Pure Python over `ctypes`, with no dependencies and nothing to
 compile. It works with any shared library that exports the ABI, whether
 that is `guatiao` itself or an application that carries it.
 
-> **Status: alpha.** The wheel does not carry a native library; you
-> point it at one.
+> **Status: alpha.** A pure Python package: it carries no native
+> library, you point it at one.
 
 ## Features
 
@@ -45,8 +45,7 @@ export GUATIAO_LIBRARY=/opt/myapp/myapp.dll       # or the file itself, whatever
 ```
 
 Without the variable the package tries the system's library search
-(`ctypes.util.find_library("guatiao")`) and then its own `_native/`
-directory. Nothing is loaded at import time: `import guatiao` always
+(`ctypes.util.find_library("guatiao")`). Nothing is loaded at import time: `import guatiao` always
 succeeds, and the first native call raises `guatiao.LibraryNotFound`,
 naming every place it looked. A library that exports only part of the ABI
 is fine: calling a function it lacks raises `guatiao.MissingSymbol`

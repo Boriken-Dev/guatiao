@@ -31,10 +31,9 @@ def test_serde_and_form_load_with_all_features_built():
     assert _lib.form().symbols_missing() == frozenset()
 
 
-def test_unknown_basename_reports_the_three_places():
+def test_unknown_basename_reports_where_it_looked():
     with pytest.raises(_lib.LibraryNotFound) as excinfo:
         _lib.resolve("not_a_real_guatiao_library")
     message = str(excinfo.value)
     assert "GUATIAO_LIBRARY" in message
     assert "find_library" in message
-    assert "_native" in message
