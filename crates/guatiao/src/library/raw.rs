@@ -371,7 +371,9 @@ macro_rules! __guatiao_describe {
             static REGISTERED: ::std::sync::OnceLock<::core::option::Option<$crate::library::kind::LibraryParts>> = ::std::sync::OnceLock::new();
             REGISTERED
                 .get_or_init(|| {
-                    let alloc = $crate::Alloc::rust();
+                    // The host's arena when it offers one, so what this
+                    // library builds for the host outlives this mapping.
+                    let alloc = host.alloc().unwrap_or_else($crate::Alloc::rust);
                     let mut providers = ::std::vec::Vec::new();
                     $(
                         providers.push(

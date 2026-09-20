@@ -641,6 +641,13 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   unmap; retiring it works), `Refused { key, status }` when the library
   says no — it stays registered and mapped — and `Close { key, reason }`
   when the loader could not close, in which case it is retired.
+- **A derived library builds its descriptor in the host's arena** when
+  the host offers one: `providers!`/`local_providers!` take
+  `host.alloc()` and fall back to their own. So the configuration schema
+  a library declares outlives that library's mapping wherever the host
+  passed `guatiao_registry_new` an allocator. What a provider CALL
+  returns is still built by whatever allocator that provider used, which
+  is what `unload`'s contract covers.
 - **`LibraryInfo::unload`** is the library's say, an appended slot:
   `Option<unsafe extern "C" fn() -> Status>`, `GUATIAO_OK` to agree.
   Null, or a descriptor from before the slot, means "unmap me without
