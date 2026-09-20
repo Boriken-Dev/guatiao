@@ -86,7 +86,8 @@ without tracking down past contributors.
 ## CI and release
 
 Two workflows. `test.yaml` runs on `workflow_dispatch` or a `ci-*` tag; push
-a uniquely named `ci-*` tag, watch the run, then delete the tag. `cla.yaml`
-gates pull requests. There is no release workflow and `publish = false`
-everywhere: the licence is settled, but the crate is not offered on a
-registry yet.
+a uniquely named `ci-*` tag, watch the run, then delete the tag. Its `python`
+job builds the workspace once, then runs `bindings/python`'s tests on 3.9
+and 3.14. `cla.yaml` gates pull requests. There is no release workflow and
+`publish = false` everywhere: the licence is settled, but the crate is not
+offered on a registry yet.
