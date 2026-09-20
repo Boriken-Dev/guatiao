@@ -2,23 +2,20 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Why a write was refused, and how deep any walk follows.
-//!
-//! A write fails because the allocator refused or the argument was not a
-//! value this model can hold. Reading fails for a different question
-//! entirely and reports [`MapError`](super::convert::MapError).
+//! Why a write was refused, and how deep any walk follows. Reading fails
+//! for a different question and reports
+//! [`MapError`](super::convert::MapError).
 
 #![forbid(unsafe_code)]
 
 use super::alloc::AllocError;
 
-/// How deep a tree any walk here follows: cloning one, merging two,
-/// comparing two for equality, and checking one against a schema.
+/// How deep any walk here follows: cloning, merging, comparing and
+/// schema checking.
 ///
-/// Configuration trees are a handful of levels deep; this is far above any
-/// real one and far below what would exhaust a stack. It exists so a
-/// hostile or corrupt tree is an error rather than a dead process: a stack
-/// overflow on Windows is not catchable and takes the host with it.
+/// Far above any real configuration tree and far below what would
+/// exhaust a stack, so a hostile one is an error rather than a dead
+/// process: a stack overflow on Windows is not catchable.
 pub const MAX_DEPTH: u32 = 128;
 
 /// Why a mutation was refused.
@@ -31,10 +28,8 @@ pub enum ValueError {
     /// (RFC 8259 section 6). See [`Number::new`](crate::Number::new).
     NotANumber,
     /// A key, or the text of a string value, was not valid UTF-8.
-    ///
-    /// Refused at the point it is offered rather than accepted and fixed
-    /// up later: a lossy conversion does not fail, it **renames the key**,
-    /// producing a map that is quietly not the one it came from.
+    /// Refused where it is offered, because a lossy conversion does not
+    /// fail -- it **renames the key**.
     NotUtf8,
     /// The operation does not apply to this value's kind — pushing to
     /// something that is not a list, say.

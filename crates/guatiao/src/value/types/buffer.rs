@@ -14,9 +14,8 @@ use super::{Payload, Tag, Value, or_abort};
 
 /// Borrowed bytes: any content at all, NULs included.
 ///
-/// Same shape and the same check-the-length rule as `guatiao_str`; a
-/// separate type because "text" and "arbitrary bytes" are different
-/// promises and collapsing them loses the distinction at every call site.
+/// Same shape and check-the-length rule as `guatiao_str`, and a separate
+/// type because "text" and "arbitrary bytes" are different promises.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Bytes {
@@ -27,12 +26,9 @@ pub struct Bytes {
 }
 
 impl Bytes {
-    /// A view of bytes this program already holds.
-    ///
-    /// `'static` where [`Str::borrowed`](super::Str::borrowed) takes any
-    /// lifetime, because the view keeps no lifetime of its own: it is a
-    /// C struct, and the only borrow that is free of a guarantee somebody
-    /// has to make by hand is one that outlives the program.
+    /// A view of bytes this program already holds. `'static` where
+    /// [`Str::borrowed`](super::Str::borrowed) takes any lifetime: the
+    /// view is a C struct and keeps no lifetime of its own.
     pub const fn borrowed(bytes: &'static [u8]) -> Bytes {
         Bytes {
             ptr: bytes.as_ptr(),
@@ -82,11 +78,8 @@ impl PartialEq for Buffer {
 impl Eq for Buffer {}
 
 // SAFETY: the buffer is owned outright and reached only through `&self`
-// or `&mut self`, so no two threads share it without the borrow checker
-// saying so; the allocator it recorded is a table that outlives it, by the contract on `Alloc`,
-// and may be called from any thread, which is the contract on
-// `Allocator` — a host handing out an arena synchronises it, as Rust's
-// global allocator does.
+// or `&mut self`; the allocator it recorded outlives it and may be
+// called from any thread, which is the contract on `Allocator`.
 unsafe impl Send for Buffer {}
 // SAFETY: as above.
 unsafe impl Sync for Buffer {}
@@ -180,8 +173,7 @@ impl Buffer {
     }
 
     /// The same, adopting `alloc` for a buffer that carries none.
-    ///
-    /// `bytes` may address this buffer's own storage; an overlapping
+    /// `bytes` may address this buffer's own storage, and an overlapping
     /// source is copied out before anything grows.
     pub fn push_in(&mut self, bytes: &[u8], alloc: Alloc) -> Result<(), ValueError> {
         if bytes.is_empty() {

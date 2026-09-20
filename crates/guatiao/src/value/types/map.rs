@@ -17,11 +17,9 @@ use crate::value::raw::{dangling, release_buffer, reserve};
 
 use super::{List, Payload, Tag, Text, Value};
 
-/// A borrowed sequence of key/value pairs, in **insertion order**.
-///
-/// Order is part of the contract, not an artefact: consumers render maps
-/// as forms, print them as tables and diff them in tests, and all three
-/// need it stable and meaningful.
+/// A borrowed sequence of key/value pairs, in **insertion order**, which
+/// is part of the contract: consumers render maps as forms, print them
+/// as tables and diff them in tests.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Entries {
@@ -33,10 +31,10 @@ pub struct Entries {
 
 /// An owned, growable sequence of key/value pairs, in insertion order.
 ///
-/// Lookup is a linear scan, by contract rather than by accident: this is a
-/// metadata container holding tens of keys, and at that size a scan over
-/// contiguous memory beats hashing every lookup key. Setting an existing
-/// key replaces it **in place**, keeping its position.
+/// Lookup is a linear scan by contract: this is a metadata container of
+/// tens of keys, and at that size a scan over contiguous memory beats
+/// hashing every lookup key. Setting an existing key replaces it **in
+/// place**, keeping its position.
 #[repr(C)]
 #[derive(Debug)]
 pub struct Map {
@@ -50,12 +48,11 @@ pub struct Map {
     pub(crate) alloc: *const Allocator,
 }
 
-/// One key/value pair of a map. The value is held **inline**, not by
-/// pointer, so a map is one contiguous array.
+/// One key/value pair. The value is held **inline**, not by pointer, so
+/// a map is one contiguous array.
 #[repr(C)]
 pub struct Entry {
-    /// The key. Raw bytes: no case folding, no normalisation, no trimming.
-    /// `"Host"` and `"host"` are two keys.
+    /// The key. Raw bytes: `"Host"` and `"host"` are two keys.
     pub(crate) key: Text,
     /// The value.
     pub(crate) value: Value,
@@ -85,13 +82,11 @@ impl Drop for Map {
 }
 
 impl Map {
-    /// A map over storage described by hand. See
-    /// [`List::from_raw_parts`](super::List::from_raw_parts); the elements
-    /// are entries.
+    /// A map over storage described by hand, the elements being entries.
     ///
     /// # Safety
     ///
-    /// As `List::from_raw_parts`, over entries.
+    /// As [`List::from_raw_parts`](super::List::from_raw_parts).
     pub unsafe fn from_raw_parts(
         ptr: *mut Entry,
         len: usize,
@@ -112,18 +107,14 @@ impl Map {
         (this.ptr, this.len, this.cap, this.alloc)
     }
 
-    /// How many entries the storage holds before it must grow. Zero for
-    /// an array this map does not own.
+    /// How many entries the storage holds before it must grow.
     pub fn capacity(&self) -> usize {
         self.cap
     }
 
-    /// An empty map **container**, growing through Rust's allocator.
-    ///
-    /// A container rather than a value: grow it with [`set`](Map::set), and
-    /// `map.into()` makes it a [`Value`] at the point something wants one.
-    /// Creating it allocates nothing — `cap == 0` never reaches an
-    /// allocator — and it frees whatever it grew into on drop.
+    /// An empty map **container**: grow it with [`set`](Map::set), and
+    /// `map.into()` makes it a [`Value`] where one is wanted. Creating it
+    /// allocates nothing and it frees what it grew into on drop.
     pub fn new() -> Map {
         Map::new_in(Alloc::rust())
     }
@@ -164,10 +155,9 @@ impl Map {
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 
-    /// Stores `value` under `key`, **consuming** it.
-    ///
-    /// Takes anything a value can be made from, so the common case is one
-    /// call and no allocator:
+    /// Stores `value` under `key`, **consuming** it. Takes anything a
+    /// value can be made from, so the common case is one call and no
+    /// allocator:
     ///
     /// ```
     /// # use guatiao::Map;
@@ -178,9 +168,8 @@ impl Map {
     /// # Ok::<(), guatiao::ValueError>(())
     /// ```
     ///
-    /// Replacing an existing key keeps its position, because the ordinary
-    /// use is "build a map, then override two fields" and moving a
-    /// replaced key to the end would re-order a caller's rendered form.
+    /// Replacing an existing key keeps its position: moving it to the end
+    /// would re-order a caller's rendered form.
     pub fn set(&mut self, key: &str, value: impl Into<Value>) -> Result<(), ValueError> {
         let alloc = self.alloc()?;
         self.set_in(key, value, alloc)
@@ -211,10 +200,8 @@ impl Map {
         }
     }
 
-    /// Appends an entry under a key known to be absent.
-    ///
-    /// The key copy is made before anything is touched, so a failure
-    /// there leaves the map exactly as it was.
+    /// Appends an entry under a key known to be absent. The key copy is
+    /// made first, so a failure there leaves the map as it was.
     fn insert_node(&mut self, key: &str, value: Value, alloc: Alloc) -> Result<(), ValueError> {
         let key_owned = match Text::new_in(alloc, key) {
             Ok(k) => k,
@@ -241,10 +228,8 @@ impl Map {
         Ok(())
     }
 
-    /// The position of `key`, by exact byte comparison.
-    ///
-    /// Bytes, not `strcmp`: a key may contain a NUL, and comparing only to
-    /// the first one would make two different keys look identical.
+    /// The position of `key`, by exact byte comparison -- not `strcmp`,
+    /// since a key may contain a NUL.
     fn position(&self, key: &str) -> Option<usize> {
         self.entries()
             .iter()
@@ -264,9 +249,8 @@ impl Map {
         Some(unsafe { &mut (*self.ptr.add(i)).value })
     }
 
-    /// The value under `key`, or [`MapError::MissingKey`] **naming it**.
-    ///
-    /// The step from a lookup to a value, so a read is one expression:
+    /// The value under `key`, or [`MapError::MissingKey`] **naming it**:
+    /// the step from a lookup to a value, so a read is one expression.
     ///
     /// ```
     /// # use guatiao::Map;
@@ -288,9 +272,6 @@ impl Map {
 
     /// Appends `value` to the list under `key`, creating the list when
     /// there is none.
-    ///
-    /// The operation every nested structure needs: without it, building a
-    /// list of maps means reaching into a borrowed node.
     pub fn push_into(&mut self, key: &str, value: impl Into<Value>) -> Result<(), ValueError> {
         let alloc = self.alloc()?;
         if !self.contains_key(key) {
@@ -305,7 +286,7 @@ impl Map {
     }
 
     /// Removes `key` and hands back its value, keeping the order of the
-    /// rest. The value frees itself when it goes out of scope.
+    /// rest.
     pub fn remove(&mut self, key: &str) -> Option<Value> {
         let i = self.position(key)?;
         // SAFETY: `i < len`, so the entry is initialised.
@@ -348,13 +329,11 @@ impl Map {
     }
 
     /// Copies every entry of `src` into this map, replacing keys that
-    /// collide and appending the rest. Answers how many were copied.
+    /// collide and appending the rest, and answers how many.
     ///
     /// **Use this before rebuilding a record**, or every field you do not
-    /// model is dropped on write-back.
-    ///
-    /// **Not atomic.** A failure at entry *k* leaves entries `0..k`
-    /// applied; nothing is leaked and nothing is half-written.
+    /// model is dropped on write-back. **Not atomic**: a failure at entry
+    /// *k* leaves `0..k` applied, leaking nothing.
     pub fn copy_from(&mut self, src: &Map) -> Result<usize, ValueError> {
         let alloc = self.alloc()?;
         self.copy_from_in(src, alloc)
@@ -365,10 +344,9 @@ impl Map {
         self.absorb(src.clone_in(alloc)?, alloc)
     }
 
-    /// Moves every entry of `from` into this map.
-    ///
-    /// Each entry MOVES out, and `from`'s length falls with it, so
-    /// whatever is left when this stops is freed with `from` exactly once.
+    /// Moves every entry of `from` into this map. Each MOVES out and
+    /// `from`'s length falls with it, so whatever is left when this stops
+    /// is freed with `from` exactly once.
     pub(crate) fn absorb(&mut self, from: Map, alloc: Alloc) -> Result<usize, ValueError> {
         let mut from = from;
         let mut n = 0;
@@ -426,12 +404,9 @@ impl Map {
         Ok(out)
     }
 
-    /// Pairwise, in order, each value through [`Value`]'s own comparison.
-    ///
-    /// **Order is significant**, because insertion order is part of the
-    /// contract: two maps with the same pairs in a different order are two
-    /// different values, and saying otherwise would disagree with every
-    /// consumer that renders one.
+    /// Pairwise, in order, each value through [`Value`]'s own
+    /// comparison. **Order is significant**: two maps with the same pairs
+    /// in a different order are two different values.
     pub(crate) fn eq_at(&self, other: &Map, depth: u32) -> bool {
         let (x, y) = (self.entries(), other.entries());
         x.len() == y.len()
@@ -470,11 +445,8 @@ impl PartialEq for Map {
 impl Eq for Map {}
 
 // SAFETY: the buffer is owned outright and reached only through `&self`
-// or `&mut self`, so no two threads share it without the borrow checker
-// saying so; the allocator it recorded is a table that outlives it, by the contract on `Alloc`,
-// and may be called from any thread, which is the contract on
-// `Allocator` — a host handing out an arena synchronises it, as Rust's
-// global allocator does.
+// or `&mut self`; the allocator it recorded outlives it and may be
+// called from any thread, which is the contract on `Allocator`.
 unsafe impl Send for Map {}
 // SAFETY: as above.
 unsafe impl Sync for Map {}
@@ -497,8 +469,7 @@ impl From<Map> for Value {
 }
 
 impl Entry {
-    /// An entry from an owned key and an owned value. Safe: both are
-    /// whole, and the entry now owns them.
+    /// An entry from an owned key and an owned value.
     pub fn new(key: Text, value: Value) -> Entry {
         Entry { key, value }
     }
@@ -508,11 +479,9 @@ impl Entry {
         (self.key, self.value)
     }
 
-    /// The key, as bytes.
-    ///
-    /// Bytes rather than text, because a key may contain a NUL and
-    /// comparing only to the first one would make two different keys look
-    /// identical. [`key_str`](Entry::key_str) is the checked reading.
+    /// The key, as bytes: a key may contain a NUL, and comparing only to
+    /// the first would make two different keys look identical.
+    /// [`key_str`](Entry::key_str) is the checked reading.
     pub fn key(&self) -> &[u8] {
         self.key.as_bytes()
     }
@@ -527,11 +496,9 @@ impl Entry {
         &self.value
     }
 
-    /// The value stored under it, mutably.
-    ///
-    /// The key stays the key: a map is insertion-ordered and looked up by
-    /// exact bytes, so changing one in place would move a value to a key
-    /// nobody searched for. Use `remove` and `set` for that.
+    /// The value stored under it, mutably. The key stays the key:
+    /// changing one in place would move a value to a key nobody searched
+    /// for. Use `remove` and `set` for that.
     pub fn value_mut(&mut self) -> &mut Value {
         &mut self.value
     }
