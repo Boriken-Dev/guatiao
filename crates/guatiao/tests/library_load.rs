@@ -409,6 +409,27 @@ fn the_same_library_twice_is_skipped_not_refused() {
     );
 }
 
+/// A retired library is not one of those skips: its key is free, and
+/// loading the same file again registers it a second time.
+#[test]
+fn a_retired_library_loads_again() {
+    let _one_at_a_time = one_at_a_time();
+    let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
+    let path = library_path();
+    registry.load_file(&path).unwrap().loaded().unwrap();
+
+    let retired = registry.retire("hello_library").expect("it is loaded");
+    assert_eq!(retired.providers, 4);
+    assert!(registry.loaded().is_empty() && registry.all().is_empty());
+
+    let again = registry.load_file(&path).expect("it loads");
+    assert!(
+        again.loaded().is_some(),
+        "a retired key is free, so this is not `AlreadyLoaded`"
+    );
+    assert_eq!(registry.all().len(), 4);
+}
+
 /// The provider declared what configuration it takes, and the host checks
 /// a configuration against that declaration having never heard of this
 /// library before.

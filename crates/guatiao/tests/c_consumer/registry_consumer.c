@@ -473,6 +473,43 @@ int main(int argc, char **argv) {
     guatiao_value_free(&answer);
   }
 
+  /* ---- taking a library back out ------------------------------------ */
+
+  /* Both take the LIBRARY key -- the template `libraries_keyed_by` sets,
+     `%id` by default -- not a provider key. The re-key above moved the
+     PROVIDER keys and left this one alone. */
+  st = guatiao_registry_retire(reg, s("nonesuch"));
+  CHECK(st == GUATIAO_ERR_NOT_FOUND, "retiring an unknown library returned %d",
+        (int)st);
+  st = guatiao_registry_retire(reg, s("hello_library_greeter"));
+  CHECK(st == GUATIAO_ERR_NOT_FOUND, "a provider key is not a library key");
+
+  st = guatiao_registry_retire(reg, s("hello_library"));
+  CHECK(st == GUATIAO_OK, "retire returned %d", (int)st);
+  st = guatiao_registry_provider(reg, s("hello_library_almanac@1.0.0"), &alloc,
+                                 &answer);
+  CHECK(st == GUATIAO_ERR_NOT_FOUND, "its providers left with it");
+  CHECK(guatiao_registry_provider_config(reg, s("hello_library_greeter")) ==
+            NULL,
+        "and the schema the registry held for them");
+
+  /* A retired library is not "already loaded": its key is free. */
+  st = guatiao_registry_load_file(reg, s(argv[1]), &alloc, &answer);
+  CHECK(st == GUATIAO_OK, "load_file after a retire returned %d", (int)st);
+  if (st == GUATIAO_OK) {
+    CHECK(guatiao_map_find(&answer, s("loaded")) != NULL,
+          "a retired library loads again rather than being skipped");
+    guatiao_value_free(&answer);
+  }
+
+  /* And unloading it: the library is asked first, and agrees here because
+     the greeting above was freed. Nothing this host still holds came from
+     it. */
+  st = guatiao_registry_unload(reg, s("hello_library"));
+  CHECK(st == GUATIAO_OK, "unload returned %d", (int)st);
+  st = guatiao_registry_unload(reg, s("hello_library"));
+  CHECK(st == GUATIAO_ERR_NOT_FOUND, "it left with the first call");
+
   guatiao_registry_free(reg);
   /* Freeing twice is not offered; freeing NULL is a no-op. */
   guatiao_registry_free(NULL);
