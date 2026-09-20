@@ -241,6 +241,18 @@ impl List {
     }
 
     /// Element by element, each through [`Value`]'s own comparison.
+    /// Moves every element onto `stack` and frees the storage, so a
+    /// value's drop takes a tree apart without recursing.
+    pub(crate) fn dismantle_into(&mut self, stack: &mut Vec<Value>) {
+        for i in 0..self.len {
+            // SAFETY: the first `len` elements are initialised.
+            stack.push(std::mem::take(unsafe { &mut *self.ptr.add(i) }));
+        }
+        self.len = 0;
+        // SAFETY: the elements have been moved out.
+        unsafe { release_buffer(self) }
+    }
+
     pub(crate) fn eq_at(&self, other: &List, depth: u32) -> bool {
         let (x, y) = (self.items(), other.items());
         x.len() == y.len() && x.iter().zip(y).all(|(p, q)| p.eq_at(q, depth + 1))

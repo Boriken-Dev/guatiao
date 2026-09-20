@@ -159,6 +159,13 @@ impl Buffer {
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 
+    /// Frees the storage and leaves this empty. Idempotent: `cap == 0`
+    /// afterwards, which frees nothing.
+    pub(crate) fn release(&mut self) {
+        // SAFETY: this container describes its own storage.
+        unsafe { release_buffer(self) }
+    }
+
     /// The allocator this buffer grows through.
     pub fn alloc(&self) -> Result<Alloc, ValueError> {
         // SAFETY: the address a container recorded is an allocator that

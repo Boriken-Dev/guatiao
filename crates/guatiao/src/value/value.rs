@@ -16,10 +16,10 @@
 use std::fmt;
 use std::mem::ManuallyDrop;
 
-use crate::value::alloc::{Alloc, Allocator};
+use crate::value::alloc::Alloc;
 use crate::value::convert::{MapError, TryAsMut, TryAsRef};
 use crate::value::error::{MAX_DEPTH, ValueError};
-use crate::value::raw::{dangling, release_buffer};
+use crate::value::raw::dangling;
 
 use super::types::{Buffer, Entry, List, Map, Number, Text};
 
@@ -201,6 +201,14 @@ impl Payload {
     }
 }
 
+/// The live arm as `T`, for a dispatch that has already read the tag.
+fn arm<T: ?Sized>(v: &Value) -> Result<&T, ValueError>
+where
+    Value: TryAsRef<T>,
+{
+    v.try_as_ref().ok_or(ValueError::WrongKind)
+}
+
 impl Value {
     /// A node from a tag and a payload described by hand: the one door
     /// for a literal another language declared.
@@ -258,23 +266,13 @@ impl Value {
     /// and growing it means naming the allocator it adopts: the `_in`
     /// form of any operation.
     pub fn alloc(&self) -> Result<Alloc, ValueError> {
-        let stored = self.recorded_alloc().ok_or(ValueError::WrongKind)?;
-        // SAFETY: the address a container recorded is an allocator that
-        // outlives it, by the contract on `Alloc`.
-        Ok(unsafe { Alloc::from_raw(stored) }?)
-    }
-
-    /// The allocator a live container recorded, if this node has one.
-    fn recorded_alloc(&self) -> Option<*const Allocator> {
-        // SAFETY: each arm is read only under the tag that selects it.
-        unsafe {
-            Some(match self.tag().ok()? {
-                Tag::GUATIAO_MAP => self.payload.map.alloc,
-                Tag::GUATIAO_LIST => self.payload.list.alloc,
-                Tag::GUATIAO_STRING | Tag::GUATIAO_NUMBER => self.payload.text.alloc,
-                Tag::GUATIAO_BYTES => self.payload.bytes.alloc,
-                _ => return None,
-            })
+        match self.tag()? {
+            Tag::GUATIAO_MAP => arm::<Map>(self)?.alloc(),
+            Tag::GUATIAO_LIST => arm::<List>(self)?.alloc(),
+            Tag::GUATIAO_STRING => arm::<Text>(self)?.alloc(),
+            Tag::GUATIAO_NUMBER => arm::<Number>(self)?.alloc(),
+            Tag::GUATIAO_BYTES => arm::<Buffer>(self)?.alloc(),
+            _ => Err(ValueError::WrongKind),
         }
     }
 }
@@ -322,47 +320,22 @@ impl Value {
         self.clone_at(alloc, 0)
     }
 
+    /// Hands off to the live container's own copy; `depth` bounds the walk
+    /// at [`MAX_DEPTH`].
     pub(crate) fn clone_at(&self, alloc: Alloc, depth: u32) -> Result<Value, ValueError> {
         if depth >= MAX_DEPTH {
             return Err(ValueError::TooDeep);
         }
-        match self.tag()? {
-            Tag::GUATIAO_ABSENT => Ok(Value::absent()),
-            Tag::GUATIAO_NULL => Ok(Value::null()),
-            Tag::GUATIAO_BOOL => Ok(Value::from(self.as_bool().unwrap_or(false))),
-            Tag::GUATIAO_STRING => {
-                let text = self.text_arm().ok_or(ValueError::NotUtf8)?;
-                Ok(text.clone_in(alloc)?.into())
-            }
-            Tag::GUATIAO_NUMBER => {
-                let text = self.text_arm().ok_or(ValueError::NotUtf8)?;
-                Ok(Number::from_text(text.clone_in(alloc)?).into())
-            }
-            Tag::GUATIAO_BYTES => {
-                // SAFETY: the tag says the bytes arm is live.
-                let buffer = unsafe { &*self.payload.bytes };
-                Ok(buffer.clone_in(alloc)?.into())
-            }
-            Tag::GUATIAO_LIST => {
-                // SAFETY: the tag says the list arm is live.
-                let list = unsafe { &*self.payload.list };
-                Ok(list.clone_at(alloc, depth)?.into())
-            }
-            Tag::GUATIAO_MAP => {
-                // SAFETY: the tag says the map arm is live.
-                let map = unsafe { &*self.payload.map };
-                Ok(map.clone_at(alloc, depth)?.into())
-            }
-        }
-    }
-
-    /// The text arm, under either tag that selects it.
-    fn text_arm(&self) -> Option<&Text> {
-        match self.tag() {
-            // SAFETY: the tag says the text arm is live.
-            Ok(Tag::GUATIAO_STRING | Tag::GUATIAO_NUMBER) => Some(unsafe { &self.payload.text }),
-            _ => None,
-        }
+        Ok(match self.tag()? {
+            Tag::GUATIAO_ABSENT => Value::absent(),
+            Tag::GUATIAO_NULL => Value::null(),
+            Tag::GUATIAO_BOOL => Value::from(self.as_bool().unwrap_or(false)),
+            Tag::GUATIAO_STRING => arm::<Text>(self)?.clone_in(alloc)?.into(),
+            Tag::GUATIAO_NUMBER => arm::<Number>(self)?.clone_in(alloc)?.into(),
+            Tag::GUATIAO_BYTES => arm::<Buffer>(self)?.clone_in(alloc)?.into(),
+            Tag::GUATIAO_LIST => arm::<List>(self)?.clone_at(alloc, depth)?.into(),
+            Tag::GUATIAO_MAP => arm::<Map>(self)?.clone_at(alloc, depth)?.into(),
+        })
     }
 
     /// Whether two trees hold the same thing, following no deeper than
@@ -370,41 +343,26 @@ impl Value {
     /// overflowing a stack: a caller using this for uniqueness keeps an
     /// item it might have discarded.
     pub(crate) fn eq_at(&self, other: &Value, depth: u32) -> bool {
-        if self.tag != other.tag {
-            return false;
+        /// Both sides as `T`, compared by `T`'s own rule.
+        fn same<T: ?Sized>(a: &Value, b: &Value, eq: impl Fn(&T, &T) -> bool) -> bool
+        where
+            Value: TryAsRef<T>,
+        {
+            matches!((a.try_as_ref(), b.try_as_ref()), (Some(x), Some(y)) if eq(x, y))
         }
-        if depth >= MAX_DEPTH {
+
+        if self.tag != other.tag || depth >= MAX_DEPTH {
             return false;
         }
         match self.tag() {
             Ok(Tag::GUATIAO_ABSENT | Tag::GUATIAO_NULL) => true,
             Ok(Tag::GUATIAO_BOOL) => self.as_bool() == other.as_bool(),
-            // Byte equality of the text, which is what makes `1.10`
-            // different from `1.1`.
-            Ok(Tag::GUATIAO_NUMBER | Tag::GUATIAO_STRING) => self.text_arm() == other.text_arm(),
-            Ok(Tag::GUATIAO_BYTES) => {
-                TryAsRef::<[u8]>::try_as_ref(self) == TryAsRef::<[u8]>::try_as_ref(other)
-            }
-            Ok(Tag::GUATIAO_LIST) => {
-                match (
-                    TryAsRef::<List>::try_as_ref(self),
-                    TryAsRef::<List>::try_as_ref(other),
-                ) {
-                    (Some(x), Some(y)) => x.eq_at(y, depth),
-                    _ => false,
-                }
-            }
-            Ok(Tag::GUATIAO_MAP) => {
-                match (
-                    TryAsRef::<Map>::try_as_ref(self),
-                    TryAsRef::<Map>::try_as_ref(other),
-                ) {
-                    (Some(x), Some(y)) => x.eq_at(y, depth),
-                    _ => false,
-                }
-            }
-            // Two values this build cannot read are equal exactly when
-            // their tags are, which the first line already established.
+            Ok(Tag::GUATIAO_STRING) => same::<Text>(self, other, Text::eq),
+            Ok(Tag::GUATIAO_NUMBER) => same::<Number>(self, other, Number::eq),
+            Ok(Tag::GUATIAO_BYTES) => same::<Buffer>(self, other, Buffer::eq),
+            Ok(Tag::GUATIAO_LIST) => same::<List>(self, other, |x, y| x.eq_at(y, depth)),
+            Ok(Tag::GUATIAO_MAP) => same::<Map>(self, other, |x, y| x.eq_at(y, depth)),
+            // Unknown to this build: equal exactly when the tags are.
             Err(_) => true,
         }
     }
@@ -620,46 +578,19 @@ impl Drop for Value {
         let mut stack = vec![std::mem::take(self)];
         while let Some(node) = stack.pop() {
             let mut node = ManuallyDrop::new(node);
-            match Tag::try_from(node.tag) {
-                Ok(Tag::GUATIAO_STRING | Tag::GUATIAO_NUMBER) => {
-                    // SAFETY: the tag says the text arm is live, and it
-                    // describes its own storage.
-                    unsafe { release_buffer(&mut *node.payload.text) };
-                }
-                Ok(Tag::GUATIAO_BYTES) => {
-                    // SAFETY: as above, for the bytes arm.
-                    unsafe { release_buffer(&mut *node.payload.bytes) };
-                }
-                Ok(Tag::GUATIAO_LIST) => {
-                    // SAFETY: the tag says the list arm is live.
-                    let l = unsafe { &mut *node.payload.list };
-                    for i in 0..l.len {
-                        // SAFETY: the first `len` elements are initialised.
-                        stack.push(std::mem::take(unsafe { &mut *l.ptr.add(i) }));
-                    }
-                    l.len = 0;
-                    // SAFETY: the elements have been moved out, so nothing
-                    // reads the buffer again.
-                    unsafe { release_buffer(l) };
-                }
-                Ok(Tag::GUATIAO_MAP) => {
-                    // SAFETY: the tag says the map arm is live.
-                    let m = unsafe { &mut *node.payload.map };
-                    for i in 0..m.len {
-                        // SAFETY: the first `len` entries are initialised.
-                        let entry = unsafe { &mut *m.ptr.add(i) };
-                        // SAFETY: the key is an owned text container.
-                        unsafe { release_buffer(&mut entry.key) };
-                        stack.push(std::mem::take(&mut entry.value));
-                    }
-                    m.len = 0;
-                    // SAFETY: as above.
-                    unsafe { release_buffer(m) };
-                }
-                // Absent, null, bool and any unknown tag own nothing.
-                // An unknown tag is not an error: refusing to free the
-                // tree would leak all of it to punish one node.
-                _ => {}
+            let node: &mut Value = &mut node;
+            // Each container takes itself apart. An unknown tag owns
+            // nothing this build can name, and is not an error.
+            if let Some(list) = TryAsMut::<List>::try_as_mut(node) {
+                list.dismantle_into(&mut stack);
+            } else if let Some(map) = TryAsMut::<Map>::try_as_mut(node) {
+                map.dismantle_into(&mut stack);
+            } else if let Some(text) = TryAsMut::<Text>::try_as_mut(node) {
+                text.release();
+            } else if let Some(number) = TryAsMut::<Number>::try_as_mut(node) {
+                number.release();
+            } else if let Some(buffer) = TryAsMut::<Buffer>::try_as_mut(node) {
+                buffer.release();
             }
         }
     }
