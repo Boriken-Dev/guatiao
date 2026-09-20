@@ -77,6 +77,11 @@ impl Number {
         Number::new_in(alloc, &float_text(v)?)
     }
 
+    /// Wraps text a tag already says is a number.
+    pub(crate) fn from_text(text: Text) -> Number {
+        Number(text)
+    }
+
     /// The text, with ownership.
     pub(crate) fn into_text(self) -> Text {
         self.0

@@ -24,6 +24,7 @@ use std::mem::ManuallyDrop;
 // allocator-taking mutators and the private helpers. Imported whole
 // because the impl below calls into it at almost every line.
 use crate::value::alloc::Alloc;
+use crate::value::convert::{MapError, TryAsMut, TryAsRef};
 use crate::value::mutate::*;
 
 use super::types::{Buffer, Entry, List, Map, Number, Text};
@@ -671,6 +672,149 @@ impl Value {
         unsafe { value_free(self) }
     }
 }
+
+// --- the value seen as the kind it holds --------------------------------
+
+/// One `TryAsRef`/`TryAsMut` pair per arm, guarded by the tags that select
+/// it. `Number` and `Text` share the `text` arm and are listed separately,
+/// because sharing storage is not sharing a type.
+macro_rules! arm_as {
+    ($ty:ty, $field:ident, $($tag:pat_param)|+) => {
+        impl TryAsRef<$ty> for Value {
+            fn try_as_ref(&self) -> Option<&$ty> {
+                match Tag::try_from(self.tag) {
+                    // SAFETY: the tag says this arm is live, and a node is
+                    // born with all 40 bytes initialised.
+                    $(Ok($tag))|+ => Some(unsafe { &self.payload.$field }),
+                    _ => None,
+                }
+            }
+        }
+
+        impl TryAsMut<$ty> for Value {
+            fn try_as_mut(&mut self) -> Option<&mut $ty> {
+                match Tag::try_from(self.tag) {
+                    // SAFETY: as above.
+                    $(Ok($tag))|+ => Some(unsafe { &mut self.payload.$field }),
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+
+arm_as!(Map, map, Tag::GUATIAO_MAP);
+arm_as!(List, list, Tag::GUATIAO_LIST);
+arm_as!(Buffer, bytes, Tag::GUATIAO_BYTES);
+arm_as!(Text, text, Tag::GUATIAO_STRING);
+
+impl TryAsRef<Number> for Value {
+    fn try_as_ref(&self) -> Option<&Number> {
+        let text: &Text = match Tag::try_from(self.tag) {
+            // SAFETY: the tag says the text arm is live.
+            Ok(Tag::GUATIAO_NUMBER) => unsafe { &self.payload.text },
+            _ => return None,
+        };
+        // SAFETY: `Number` is `repr(transparent)` over `Text`, so the two
+        // have one layout and this reinterprets the reference rather than
+        // dereferencing it a second time.
+        Some(unsafe { &*std::ptr::from_ref(text).cast::<Number>() })
+    }
+}
+
+impl TryAsMut<Number> for Value {
+    fn try_as_mut(&mut self) -> Option<&mut Number> {
+        let text: &mut Text = match Tag::try_from(self.tag) {
+            // SAFETY: the tag says the text arm is live.
+            Ok(Tag::GUATIAO_NUMBER) => unsafe { &mut self.payload.text },
+            _ => return None,
+        };
+        // SAFETY: as above.
+        Some(unsafe { &mut *std::ptr::from_mut(text).cast::<Number>() })
+    }
+}
+
+impl TryAsRef<str> for Value {
+    /// A STRING's text. A number is not a string, so this answers `None`
+    /// for one.
+    fn try_as_ref(&self) -> Option<&str> {
+        TryAsRef::<Text>::try_as_ref(self)?.as_str()
+    }
+}
+
+impl TryAsRef<[u8]> for Value {
+    fn try_as_ref(&self) -> Option<&[u8]> {
+        Some(TryAsRef::<Buffer>::try_as_ref(self)?.as_slice())
+    }
+}
+
+// --- taking the container out of the node -------------------------------
+
+/// Consuming conversions. The error is the **value handed back
+/// untouched**: it owns a tree, so a refusal that dropped it would free
+/// what the caller still wanted.
+///
+/// ```
+/// # use guatiao::{Map, Tag, Value};
+/// let refused = Map::try_from(Value::null()).unwrap_err();
+/// assert_eq!(refused.tag(), Ok(Tag::GUATIAO_NULL));
+/// ```
+macro_rules! arm_into {
+    ($ty:ty, $field:ident, $tag:path) => {
+        impl TryFrom<Value> for $ty {
+            type Error = Value;
+
+            fn try_from(value: Value) -> Result<$ty, Value> {
+                if Tag::try_from(value.tag) != Ok($tag) {
+                    return Err(value);
+                }
+                let (_, payload) = value.into_raw_parts();
+                // SAFETY: the tag was just checked, and `into_raw_parts`
+                // forgot the node, so this is the arm's only owner.
+                Ok(ManuallyDrop::into_inner(unsafe { payload.$field }))
+            }
+        }
+    };
+}
+
+arm_into!(Map, map, Tag::GUATIAO_MAP);
+arm_into!(List, list, Tag::GUATIAO_LIST);
+arm_into!(Buffer, bytes, Tag::GUATIAO_BYTES);
+arm_into!(Text, text, Tag::GUATIAO_STRING);
+
+impl TryFrom<Value> for Number {
+    type Error = Value;
+
+    fn try_from(value: Value) -> Result<Number, Value> {
+        if Tag::try_from(value.tag) != Ok(Tag::GUATIAO_NUMBER) {
+            return Err(value);
+        }
+        let (_, payload) = value.into_raw_parts();
+        // SAFETY: as `arm_into!`; a number's digits live in the text arm.
+        Ok(Number::from_text(ManuallyDrop::into_inner(unsafe {
+            payload.text
+        })))
+    }
+}
+
+/// A borrowed container, with the error a reader wants: which kind was
+/// needed and which was there.
+macro_rules! arm_borrowed {
+    ($ty:ty, $tag:path) => {
+        impl<'a> TryFrom<&'a Value> for &'a $ty {
+            type Error = MapError;
+
+            fn try_from(value: &'a Value) -> Result<&'a $ty, MapError> {
+                value
+                    .try_as_ref()
+                    .ok_or_else(|| MapError::wrong_type($tag, value))
+            }
+        }
+    };
+}
+
+arm_borrowed!(Map, Tag::GUATIAO_MAP);
+arm_borrowed!(List, Tag::GUATIAO_LIST);
 
 impl Clone for Value {
     /// A deep copy, grown through the allocator this tree recorded — the

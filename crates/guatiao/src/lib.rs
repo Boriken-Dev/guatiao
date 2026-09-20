@@ -142,7 +142,7 @@ pub mod library;
 // rustdoc reports those with no file or line to find them by.
 pub mod schema;
 
-pub use convert::{Bytes, FromValue, MapError, ToValue};
+pub use convert::{Bytes, FromValue, MapError, ToValue, TryAsMut, TryAsRef};
 // The names generated code reaches for, at the root where it names them.
 // Keeping the derive's paths rooted here rather than at `value::` is what
 // lets the module underneath be rearranged without touching a macro every
