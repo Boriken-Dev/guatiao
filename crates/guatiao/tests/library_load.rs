@@ -143,7 +143,7 @@ fn a_library_on_disk_offers_a_provider_a_host_can_use() {
     // `ProviderInfo::meta` is null here and `LibraryInfo::meta` is not,
     // so this pins both answers — an absent slot and a present one are
     // different outcomes, not one untested path.
-    let meta = loaded.meta.expect("the library declares metadata");
+    let meta = loaded.meta.as_ref().expect("the library declares metadata");
     assert_eq!(
         meta.get("built-with").and_then(TryAsRef::<str>::try_as_ref),
         Some("hello_library"),
@@ -364,13 +364,13 @@ fn a_provider_versions_with_its_library_or_says_so() {
         .unwrap()
         .loaded()
         .unwrap();
-    let library_version = loaded.version;
+    let library_version = loaded.version.clone();
 
     assert_eq!(
         registry
             .provider("hello_library_greeter")
             .map(Provider::version),
-        Some(library_version),
+        Some(library_version.as_str()),
         "declaring nothing means moving with the library"
     );
     assert_eq!(
@@ -711,14 +711,17 @@ fn the_host_a_library_keeps_outlives_the_registry() {
     assert!(matches!(host.get("nobody"), Ok(None)));
 
     // Unavailable providers ARE listed: the caller asks and chooses.
-    let everything: Vec<&str> = host
+    let everything: Vec<String> = host
         .list("everything")
         .unwrap()
         .into_iter()
         .filter_map(ProviderInfo::view)
         .map(|v| v.id)
         .collect();
-    let seen: Vec<&str> = registry.providers("everything").map(Provider::id).collect();
+    let seen: Vec<String> = registry
+        .providers("everything")
+        .map(|p| p.id().to_string())
+        .collect();
     assert_eq!(everything, seen, "the library sees the host's order");
     assert_eq!(
         host.list("").unwrap().len(),

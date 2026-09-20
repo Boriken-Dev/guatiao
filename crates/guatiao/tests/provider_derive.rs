@@ -221,7 +221,11 @@ fn a_derived_provider_describes_itself_with_the_defaults() {
     assert_eq!(view.kinds, ["greeter", "tally"]);
     assert!(view.config.is_none());
     assert_eq!(view.available(), Ok(()));
-    let sizes: Vec<(&str, usize)> = view.tables.iter().map(|&(k, _, s)| (k, s)).collect();
+    let sizes: Vec<(&str, usize)> = view
+        .tables
+        .iter()
+        .map(|(k, _, s)| (k.as_str(), *s))
+        .collect();
     assert_eq!(
         sizes,
         [
@@ -256,7 +260,7 @@ fn a_derived_provider_takes_every_override() {
     let view = parts.info().view().unwrap();
     assert_eq!(view.id, "acme_loud");
     assert_eq!(view.display_name, "Loud");
-    assert_eq!(view.version, Some("2.0.0"));
+    assert_eq!(view.version.as_deref(), Some("2.0.0"));
     assert_eq!(view.kinds, ["greeter"]);
     assert!(
         view.config.is_none(),

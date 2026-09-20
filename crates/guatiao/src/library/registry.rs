@@ -34,8 +34,8 @@ use std::sync::Arc;
 use super::key::{KeyError, KeyFields, KeyTemplate};
 use super::kind::{Kind, KindMismatch, Offer, Remote};
 use super::raw::{
-    EntryFn, Host, HostBlock, LibraryView, Opened, ProviderView, Rejected, Shared, Snapshot,
-    SnapshotEntry,
+    EntryFn, Host, HostBlock, LibraryView, Opened, Origin, ProviderView, Rejected, Shared,
+    Snapshot, SnapshotEntry,
 };
 use crate::value::alloc::Alloc;
 use crate::value::types::Text;
@@ -219,11 +219,10 @@ pub enum WhyNot<'a> {
 pub struct Provider {
     view: ProviderView,
     from: PathBuf,
-    /// Borrowed from the offering library's image, which is never
-    /// unloaded — so no copy is made and a C accessor hands back the
-    /// library's own pointer.
-    library: &'static str,
-    version: &'static str,
+    /// Copied out of the offering library's descriptor, so retiring that
+    /// library leaves nothing here pointing into its image.
+    library: String,
+    version: String,
     /// COMPUTED here rather than borrowed, so it is owned. A [`Text`] and
     /// not a `String`, because it is a string this crate hands to C: it is
     /// already a `guatiao_string` and needs no conversion at the boundary.
@@ -238,7 +237,7 @@ pub struct Provider {
 impl Provider {
     /// Every kind it speaks. May be empty, which is a provider reached by
     /// name rather than by capability.
-    pub fn kinds(&self) -> &[&'static str] {
+    pub fn kinds(&self) -> &[String] {
         &self.view.kinds
     }
 
@@ -274,18 +273,18 @@ impl Provider {
 
     /// Its own identifier, unique across every provider loaded.
     pub fn id(&self) -> &str {
-        self.view.id
+        &self.view.id
     }
 
     /// The id of the library offering it.
     pub fn library(&self) -> &str {
-        self.library
+        &self.library
     }
 
     /// Its version: the one it declared, or its library's when it declared
     /// none. Declared semver, compared here as a string.
     pub fn version(&self) -> &str {
-        self.version
+        &self.version
     }
 
     /// What this registry filed it under, rendered from the host's
@@ -296,7 +295,7 @@ impl Provider {
 
     /// A name to show a person. Empty when the library offered none.
     pub fn display_name(&self) -> &str {
-        self.view.display_name
+        &self.view.display_name
     }
 
     /// The library it came from.
@@ -310,16 +309,16 @@ impl Provider {
     /// Read it with [`crate::schema::read::SchemaRef`] and check a
     /// configuration against it with [`crate::schema::validate_map`] —
     /// the provider declared it; nothing here interprets it.
-    pub fn config_schema(&self) -> Option<&'static crate::value::types::Value> {
-        self.view.config
+    pub fn config_schema(&self) -> Option<&crate::value::types::Value> {
+        self.view.config.as_ref()
     }
 
     /// Whatever else this provider declared, or `None`.
     ///
     /// A key this host does not recognise is skipped, the same rule the
     /// value model has for a tag it does not know.
-    pub fn meta(&self) -> Option<&'static crate::value::types::Map> {
-        self.view.meta
+    pub fn meta(&self) -> Option<&crate::value::types::Map> {
+        self.view.meta.as_ref()
     }
 
     /// The function table and the size the library compiled it at.
@@ -371,8 +370,8 @@ impl Provider {
             remote,
             self.view.clone(),
             Some(self.key().to_string()),
-            Some(self.library),
-            self.version,
+            Some(self.library.clone()),
+            self.version.clone(),
             self.priority,
         ))
     }
@@ -395,10 +394,10 @@ impl Provider {
     /// Everything a [`KeyTemplate`] can name.
     fn fields(&self) -> KeyFields<'_> {
         KeyFields {
-            id: self.view.id,
-            name: self.view.display_name,
-            library: self.library,
-            version: self.version,
+            id: &self.view.id,
+            name: &self.view.display_name,
+            library: &self.library,
+            version: &self.version,
         }
     }
 }
@@ -412,10 +411,10 @@ pub struct Loaded {
     /// template. Two libraries rendering one key are the same library as
     /// far as this host is concerned, and the second is skipped.
     pub key: Text,
-    /// The library's own identifier. Borrowed from its image.
-    pub id: &'static str,
-    /// Its version string, uninterpreted. Borrowed from its image.
-    pub version: &'static str,
+    /// The library's own identifier. Copied out of its descriptor.
+    pub id: String,
+    /// Its version string, uninterpreted. Copied out of its descriptor.
+    pub version: String,
     /// How many providers it registered — which is not how many it
     /// offered, when one of them was already loaded from elsewhere.
     pub providers: usize,
@@ -423,12 +422,16 @@ pub struct Loaded {
     /// ordinary load; non-empty when this library re-exports something a
     /// host already had.
     pub skipped: Vec<Skipped>,
-    /// Whatever else the library declared, or `None`. Borrowed from its
-    /// image, which is never unloaded.
-    pub meta: Option<&'static crate::value::types::Map>,
+    /// Whatever else the library declared, or `None`. A copy in this
+    /// process's own heap.
+    pub meta: Option<crate::value::types::Map>,
     /// `path` resolved once at load time, for the dedup that runs before
     /// anything is opened. Falls back to `path` when it cannot be resolved.
     canonical: PathBuf,
+    /// The mapping, when this registry made one. Dropping it is what
+    /// unmaps the library, which only `unload` does.
+    #[allow(dead_code)]
+    origin: Origin,
 }
 
 /// The host's own table of what it has loaded.
@@ -557,7 +560,7 @@ impl Registry {
     pub fn set_priority(&mut self, id: &str, priority: i32) {
         self.priorities.insert(id.to_string(), priority);
         for provider in &mut self.providers {
-            if provider.view.id == id {
+            if provider.view.id == *id {
                 provider.priority = priority;
             }
         }
@@ -608,13 +611,13 @@ impl Registry {
         let key = KeyTemplate::library(template)?;
         let mut seen: BTreeMap<String, usize> = BTreeMap::new();
         for (at, one) in self.loaded.iter().enumerate() {
-            let rendered = key.render(KeyFields::library(one.id, one.version));
+            let rendered = key.render(KeyFields::library(&one.id, &one.version));
             if seen.insert(rendered.clone(), at).is_some() {
                 return Err(KeyError::Collides { key: rendered });
             }
         }
         for one in &mut self.loaded {
-            one.key = Text::new(&key.render(KeyFields::library(one.id, one.version)));
+            one.key = Text::new(&key.render(KeyFields::library(&one.id, &one.version)));
         }
         self.library_key = key;
         Ok(())
@@ -780,7 +783,7 @@ impl Registry {
     /// Records what opening `path` came to. Everything after the `dlopen`,
     /// so it is testable without one.
     pub(crate) fn absorb(&mut self, path: &Path, opened: Opened) -> Result<Loading<'_>, LoadError> {
-        let lib = match opened {
+        let (lib, origin) = match opened {
             Opened::NoEntrySymbol => return Ok(Loading::Skipped(Skipped::NoEntrySymbol)),
             Opened::Declined => return Ok(Loading::Skipped(Skipped::DeclinedThisHost)),
             Opened::Rejected(Rejected::UnsupportedAbi { declared }) => {
@@ -791,7 +794,7 @@ impl Registry {
                     path: path.to_path_buf(),
                 });
             }
-            Opened::Loaded(view) => view,
+            Opened::Loaded(view, origin) => (view, origin),
         };
         let LibraryView {
             id,
@@ -804,7 +807,7 @@ impl Registry {
         // library, which is the case a path comparison cannot see and a
         // filename comparison only guesses at. Whether two versions of one
         // library are the same thing is the host's template's answer.
-        let library_key = self.library_key.render(KeyFields::library(id, version));
+        let library_key = self.library_key.render(KeyFields::library(&id, &version));
         if let Some(already) = self
             .loaded
             .iter()
@@ -823,34 +826,39 @@ impl Registry {
         // is the host's template failing, refused before anything is
         // recorded so the registry is left exactly as it was.
         let mut skipped = Vec::new();
-        let mut taken: Vec<(ProviderView, &'static str, String)> = Vec::new();
+        let mut taken: Vec<(ProviderView, String, String)> = Vec::new();
         for view in views {
             // A provider's own version, or its library's when it declared
             // none.
-            let at = view.version.unwrap_or(version);
+            let at = view.version.clone().unwrap_or_else(|| version.clone());
             let key = self.key.render(KeyFields {
-                id: view.id,
-                name: view.display_name,
-                library: id,
-                version: at,
+                id: &view.id,
+                name: &view.display_name,
+                library: &id,
+                version: &at,
             });
 
             // Whoever holds that key already: registered earlier, or
             // earlier in this same library.
-            let holder: Option<(&'static str, PathBuf)> = self
+            let holder: Option<(String, PathBuf)> = self
                 .by_key
                 .get(&key)
-                .map(|&i| (self.providers[i].view.id, self.providers[i].from.clone()))
+                .map(|&i| {
+                    (
+                        self.providers[i].view.id.clone(),
+                        self.providers[i].from.clone(),
+                    )
+                })
                 .or_else(|| {
                     taken
                         .iter()
                         .find(|(_, _, earlier)| *earlier == key)
-                        .map(|(v, _, _)| (v.id, path.to_path_buf()))
+                        .map(|(v, _, _)| (v.id.clone(), path.to_path_buf()))
                 });
             match holder {
                 Some((held_by, from)) if held_by == view.id => {
                     skipped.push(Skipped::ProviderAlreadyLoaded {
-                        id: view.id.to_string(),
+                        id: view.id.clone(),
                         from,
                     });
                 }
@@ -869,12 +877,12 @@ impl Registry {
         for (view, at, key) in taken {
             // What this host already said about that id, if anything —
             // read BEFORE the view moves into the provider.
-            let priority = self.priorities.get(view.id).copied().unwrap_or(0);
+            let priority = self.priorities.get(&view.id).copied().unwrap_or(0);
             self.by_key.insert(key.clone(), self.providers.len());
             self.providers.push(Provider {
                 view,
                 from: path.to_path_buf(),
-                library: id,
+                library: id.clone(),
                 version: at,
                 key: Text::new(&key),
                 priority,
@@ -889,6 +897,7 @@ impl Registry {
             skipped,
             meta,
             canonical: Registry::canonical(path),
+            origin,
         });
         self.publish();
         Ok(Loading::Loaded(self.loaded.last().expect("just pushed")))
@@ -1026,17 +1035,17 @@ mod tests {
     use super::*;
     use std::ffi::c_void;
 
-    fn provider(id: &'static str, version: Option<&'static str>) -> ProviderView {
+    fn provider(id: &str, version: Option<&str>) -> ProviderView {
         ProviderView {
-            kinds: vec!["thing"],
-            id,
-            display_name: "",
+            kinds: vec!["thing".to_string()],
+            id: id.to_string(),
+            display_name: String::new(),
             config: None,
             vtable: std::ptr::null(),
             vtable_size: 0,
             ctx: std::ptr::null_mut::<c_void>(),
             meta: None,
-            version,
+            version: version.map(str::to_string),
             available: None,
             raw: std::ptr::null(),
             tables: Vec::new(),
@@ -1045,13 +1054,16 @@ mod tests {
         }
     }
 
-    fn library(id: &'static str, version: &'static str, providers: Vec<ProviderView>) -> Opened {
-        Opened::Loaded(LibraryView {
-            id,
-            version,
-            meta: None,
-            providers,
-        })
+    fn library(id: &str, version: &str, providers: Vec<ProviderView>) -> Opened {
+        Opened::Loaded(
+            LibraryView {
+                id: id.to_string(),
+                version: version.to_string(),
+                meta: None,
+                providers,
+            },
+            Origin::Linked,
+        )
     }
 
     fn registry() -> Registry {

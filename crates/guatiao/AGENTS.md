@@ -574,13 +574,19 @@ reg.set_priority(id, 10) / reg.priority(id)
 reg.provider("acme_net_pve")               // by key: Option<&Provider>
 reg.providers_of("acme_net_pve")           // every loaded version of one id (>1 only under %id@%version)
 reg.all() / reg.all_ranked()               // everything, load order / best first
-provider.kinds() / provider.supports(kind) // what it serves
-provider.config_schema()                   // Option<&'static Value>
+provider.kinds() -> &[String] / provider.supports(kind)   // what it serves
+provider.config_schema()                   // Option<&Value>, the registry's copy
 provider.vtable() -> (*const c_void, usize)
 provider.view().vtable_as::<T>()           // unsafe; checks vtable_size >= size_of::<T>()
-provider.meta()                            // Option<&'static Map>
-loaded.meta                                // Option<&'static Map>
+provider.meta()                            // Option<&Map>, the registry's copy
+loaded.meta                                // Option<Map>, the registry's copy
 ```
+
+**Everything a registry reports is OWNED.** `ProviderView` and
+`LibraryView` copy every string (`String`) and every value (`Value`,
+`Map`) out of the library's descriptor at the read, so nothing a host
+holds points into the image but the code pointers — `vtable`, `ctx`,
+`available`, `create`, `destroy`, and `ProviderView::raw`.
 
 ### A library is a collection; a provider is a thing in it
 
@@ -974,12 +980,9 @@ than invented per host.
 - **Read on display, never cached.** A library that loads an optional
   component on demand owes its attribution only while it is in use.
 
-**A loaded library is never unloaded.** Everything it hands over —
-strings, schemas, vtables — points into its mapping, so unloading would
-dangle every borrow the host holds. That is also why a `ProviderView`
-holds `&'static str` rather than `String`: the text is already in the
-image, and copying it would be a waste and would stop a C accessor
-handing back the library's own pointer.
+**A loaded library is never unloaded.** The registry copies out every
+string and value it reads, but a vtable, a `ctx` and a descriptor pointer
+address the mapping itself, so unloading would dangle those.
 
 ### A host in C, or Python, or anything with an FFI
 
