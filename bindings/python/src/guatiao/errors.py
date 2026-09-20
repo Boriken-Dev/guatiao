@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import ctypes
 
-from . import _abi
+from . import _abi, _lib
 
 
 class GuatiaoError(RuntimeError):
@@ -71,10 +71,13 @@ def raise_for_status(status: int, message: str = "") -> None:
 
 
 def check(status: int, err: "_abi.ProviderError | None" = None) -> None:
-    """Raises unless `status` is `GUATIAO_OK`, reading `err.message` first."""
+    """Raises unless `status` is `GUATIAO_OK`, reading and freeing
+    `err.message` first -- it is an owned string the provider built."""
     message = ""
     if err is not None and err.message.len:
         message = ctypes.string_at(err.message.ptr, err.message.len).decode(
             "utf-8", "replace"
         )
+        wrapper = _abi.Value(tag=int(_abi.Tag.STRING), payload=_abi.Payload(text=err.message))
+        _lib.core().guatiao_value_free(ctypes.byref(wrapper))
     raise_for_status(status, message)

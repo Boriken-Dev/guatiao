@@ -70,6 +70,46 @@ and `insert` are built from what exists (clone every element, clear,
 push back in the new order) and are O(n); `append` and `del list[i]` use
 their own direct export.
 
+## Registry
+
+```python
+from guatiao.registry import Registry
+
+with Registry("my-host", "1.0") as reg:
+    reg.scan_dir("/path/to/plugins", rules="kind=greeter")  # rules: newline-separated
+    reg.providers("greeter")        # list of dicts, best first
+    reg.best("greeter")             # dict: key, id, version, library, display_name,
+                                     # from, kinds, has_config, vtable_size
+    reg.why_not("codec")            # {"available": False, "why": "nothing-claims-it", ...}
+    table, size, ctx = reg.provider_table("acme_hello")  # a single-`vtable` provider's table
+    instance = reg.create("acme_shouter", {"prefix": "hey"})
+    instance.close()
+```
+
+Also: `load_file`, `scan_path`, `register_entry(name, EntryFn(...))`, `libraries()`,
+`provider(key)`, `available(kind)`, `provider_available(key)`,
+`keyed_by`/`libraries_keyed_by`, `set_priority`/`priority`,
+`provider_config(key)` (a borrowed, read-only `Ref` onto the schema --
+never `.close()` it), `host()` (the raw `host_info` pointer, for driving
+a `guatiao_library_entry` by hand). Every answer that is data comes back
+as a plain `dict`/`list`, already freed.
+
+**`provider_table` reads the provider's single `vtable` field only.** A
+provider serving several kinds files each kind's table under `tables`
+instead (see the crate's own `AGENTS.md`, "Only a per-kind table..."),
+which this accessor does not reach -- the C surface exports no lookup
+for it. It works for a provider with one table for everything, which is
+the hand-written and the single-kind derived case.
+
+`Registry.retire`/`Registry.unload` are not implemented in this binding
+until the library exports `guatiao_registry_unload`.
+
+`guatiao.kinds.table(table_ptr, size, struct_type, floor_hash=...)`
+turns a `provider_table()` answer into the `ctypes.Structure` a kind's
+own C header declares (`greeter_vtable` and friends): checks `size`
+against `sizeof(struct_type)` and the header's `floor_hash`, then casts.
+Raises `guatiao.kinds.FloorMismatch` on either failure.
+
 ## Errors
 
 Every failing `guatiao_status` raises `guatiao.GuatiaoError` (`.status`
