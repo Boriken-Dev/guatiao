@@ -1162,6 +1162,28 @@ void guatiao_registry_provider_destroy(const struct guatiao_registry *reg,
 const struct guatiao_host_info *guatiao_registry_host(struct guatiao_registry *reg);
 
 /*
+ Takes one library out of this registry and **leaves it mapped**.
+
+ `key` is the library key — the template `guatiao_registry_libraries_keyed_by`
+ sets, `%id` by default. Its providers leave the registry and the
+ snapshot other libraries read, and the key may be loaded again.
+ Everything a caller already took from it — a vtable pointer, a `ctx`,
+ a descriptor fetched through the host's services — keeps working,
+ because nothing is unmapped. Its configuration schema, which this
+ registry owned, does not: `guatiao_registry_provider_config` answers
+ null for a retired provider.
+
+ `GUATIAO_ERR_NOT_FOUND` when no library answers to `key`.
+ `guatiao_registry_unload` is the same, followed by closing the
+ mapping.
+
+ # Safety
+
+ `reg` is a live handle and `key` is readable for this call.
+ */
+guatiao_status guatiao_registry_retire(struct guatiao_registry *reg, struct guatiao_str key);
+
+/*
  Releases a registry. Null is a no-op.
 
  **The libraries it loaded stay mapped.** Nothing in this crate unloads

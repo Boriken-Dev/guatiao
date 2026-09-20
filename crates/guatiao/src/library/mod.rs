@@ -106,7 +106,9 @@ pub use raw::{
 #[doc(hidden)]
 pub use raw::{declaration, declaration_len};
 #[cfg(feature = "load")]
-pub use registry::{LoadError, Loaded, Loading, Provider, Registry, Skipped, WhyNot};
+pub use registry::{
+    LoadError, Loaded, Loading, Provider, Registry, Retired, Skipped, UnloadError, WhyNot,
+};
 #[cfg(feature = "load")]
 pub use scan::{
     Declared, LoadReport, Order, Probe, RuleError, ScanRules, SearchPath, bundle_binary,

@@ -574,6 +574,8 @@ reg.set_priority(id, 10) / reg.priority(id)
 reg.provider("acme_net_pve")               // by key: Option<&Provider>
 reg.providers_of("acme_net_pve")           // every loaded version of one id (>1 only under %id@%version)
 reg.all() / reg.all_ranked()               // everything, load order / best first
+reg.retire(library_key)                    // Result<Retired, UnloadError>: out of the registry,
+                                           // still mapped
 provider.kinds() -> &[String] / provider.supports(kind)   // what it serves
 provider.config_schema()                   // Option<&Value>, the registry's copy
 provider.vtable() -> (*const c_void, usize)
@@ -615,6 +617,15 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   library's by the loader), and `LoadError::Malformed` (a descriptor this
   build cannot read: below the floor, non-UTF-8 text, a stride below the
   floor, an element overlapping its neighbour).
+- **A library can be retired.** `Registry::retire(library_key)` takes its
+  providers out of the registry and out of the snapshot other libraries
+  read, drops its `Loaded` record, and frees the key — a retired library
+  is not `AlreadyLoaded` and may be loaded again. **The mapping stays**,
+  so every vtable pointer, `ctx` and descriptor already handed out keeps
+  working; the registry's own copies (`config_schema`, `meta`) go with
+  it. Safe, because it dangles nothing. `Retired { key, id, version,
+  providers }` says what left; `UnloadError::NotFound { key }` is the
+  only refusal.
 - **A library's entry point must not call back into the registry loading
   it.** `load_file` holds the registry exclusively for the whole call; a
   provider that needs a peer looks it up later, from a vtable call.
@@ -1001,6 +1012,7 @@ guatiao_registry_scan_dir_rules(reg, dir, false,
                                 &alloc, &answer);       // rules, one per line
 guatiao_registry_providers(reg, guatiao_cstr("greeter"), &alloc, &answer);
 guatiao_registry_provider(reg, key, &alloc, &answer);
+guatiao_registry_retire(reg, guatiao_cstr("hello_library"));   // out of the registry, still mapped
 guatiao_registry_keyed_by(reg, guatiao_cstr("%id@%version"));
 guatiao_registry_libraries_keyed_by(reg, tmpl);
 guatiao_registry_libraries(reg, &alloc, &answer);

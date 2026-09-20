@@ -55,7 +55,7 @@ use std::path::Path;
 use super::{as_str, guard, guard_with};
 use crate::library::{
     EntryFn, HostInfo, LibraryInfo, LoadReport, Loading, Order, Provider, Registry, ScanRules,
-    SearchPath, Skipped, WhyNot, scan_dir_rules, scan_path,
+    SearchPath, Skipped, UnloadError, WhyNot, scan_dir_rules, scan_path,
 };
 use crate::value::ValueError;
 use crate::value::alloc::{Alloc, Allocator};
@@ -288,6 +288,19 @@ impl HostRegistry {
     }
 }
 
+/// What a refusal to retire or unload crosses as.
+///
+/// No wildcard arm: [`UnloadError`] is `#[non_exhaustive]` for a
+/// CONSUMER, so appending a variant is a compile error here rather than a
+/// reason that crosses the boundary unnamed.
+fn unload_status(why: &UnloadError) -> Status {
+    match why {
+        UnloadError::NotFound { .. } => Status::GUATIAO_ERR_NOT_FOUND,
+        UnloadError::Linked { .. } | UnloadError::Refused { .. } => Status::GUATIAO_ERR_WRONG_KIND,
+        UnloadError::Close { .. } => Status::GUATIAO_ERR_INTERNAL,
+    }
+}
+
 // --- the boundary: convert pointers, call the impl ----------------------
 
 /// A new registry introducing its host as `id`/`version`.
@@ -435,6 +448,40 @@ pub unsafe extern "C" fn guatiao_registry_host(reg: *mut HostRegistry) -> *const
         match unsafe { HostRegistry::get_mut(reg) } {
             Some(registry) => registry.inner.host().as_raw(),
             None => std::ptr::null(),
+        }
+    })
+}
+
+/// Takes one library out of this registry and **leaves it mapped**.
+///
+/// `key` is the library key — the template `guatiao_registry_libraries_keyed_by`
+/// sets, `%id` by default. Its providers leave the registry and the
+/// snapshot other libraries read, and the key may be loaded again.
+/// Everything a caller already took from it — a vtable pointer, a `ctx`,
+/// a descriptor fetched through the host's services — keeps working,
+/// because nothing is unmapped. Its configuration schema, which this
+/// registry owned, does not: `guatiao_registry_provider_config` answers
+/// null for a retired provider.
+///
+/// `GUATIAO_ERR_NOT_FOUND` when no library answers to `key`.
+/// `guatiao_registry_unload` is the same, followed by closing the
+/// mapping.
+///
+/// # Safety
+///
+/// `reg` is a live handle and `key` is readable for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_retire(reg: *mut HostRegistry, key: Str) -> Status {
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let (Some(registry), Ok(key)) = (unsafe { HostRegistry::get_mut(reg) }, unsafe {
+            as_str(key)
+        }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        match registry.inner.retire(key) {
+            Ok(_) => Status::GUATIAO_OK,
+            Err(why) => unload_status(&why),
         }
     })
 }
