@@ -1,0 +1,83 @@
+name: Docs
+
+# The only workflow that deploys Pages, so the site can be rebuilt without
+# cutting a release: on a published release (its docs ship with it), on a
+# push to main that touches a docs source, and on demand for any ref.
+on:
+  release:
+    types: [published]
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "CHANGELOG.md"
+      - "crates/**/*.rs"
+      - "bindings/python/src/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the documentation site
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # `configure-pages` needs this to turn Pages on by itself, so a
+      # fresh clone or fork does not depend on a setting somebody clicked.
+      pages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Build the Rust API reference
+        # Strict, so a broken intra-doc link fails here rather than
+        # shipping. `--all-features` is what docs.rs would publish.
+        run: cargo doc --workspace --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - name: Install the Python package and the docs tooling
+        # Editable, because mkdocstrings renders the package by importing
+        # it -- which needs no native library, by design.
+        run: pip install -e "bindings/python[docs]"
+      - name: Build the narrative site and the Python reference
+        run: mkdocs build --strict
+      - name: Add the Rust reference under /rust/
+        # `cargo doc` writes no root index for a workspace, so the crate a
+        # consumer starts from gets one.
+        run: |
+          mkdir -p site/rust
+          cp -r target/doc/. site/rust/
+          printf '%s' '<!doctype html><meta http-equiv="refresh" content="0; url=guatiao/index.html">' > site/rust/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
