@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "guatiao"
+version = "0.1.0"
+authors = [{ name = "jose-pr" }]
+description = "ctypes bindings over the guatiao C ABI"
+readme = "README.md"
+requires-python = ">=3.9"
+# PEP 639: SPDX license expression. The licence file itself is the repo's
+# own LICENSE, two levels up -- not shipped inside this sub-package.
+license = "MPL-2.0"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
+# Zero required runtime deps: this is a thin ctypes layer over a C ABI.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["build", "pytest"]
+
+[project.urls]
+Homepage = "https://github.com/Boriken-Dev/guatiao/"
+Issues = "https://github.com/Boriken-Dev/guatiao/issues"
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/.*"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/guatiao"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

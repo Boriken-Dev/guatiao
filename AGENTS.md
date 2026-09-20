@@ -18,6 +18,7 @@ public surface); this file is about the repository.
 | `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against |
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build |
+| `bindings/python/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md` |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 
 ## Commands
@@ -41,6 +42,12 @@ GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-header
 GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-serde --features c-header,json,toml,yaml
 GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-form --features c-header
 GUATIAO_WRITE_HEADER=1 cargo build -p greeter_kind --features c-header   # the kind tables, via macro expansion
+```
+
+Python bindings, after `cargo build --workspace --all-features`:
+
+```bash
+GUATIAO_LIBRARY=target/debug dotagents py -- -m pytest bindings/python/tests -rs
 ```
 
 Each crate with a C surface commits its header and has a test comparing
