@@ -4,33 +4,16 @@
 
 //! Reading a value with a caller's default, and a debug view.
 //!
-//! # The defaulting getters, and the one that matters
+//! [`int_or`] answers the default for three situations: absent, another
+//! kind, and a number **not representable** as an `i64`. The third is the
+//! point — C's `strtoll` saturates and sets `errno`, a wrong answer that
+//! looks right. A caller that must tell them apart has [`Value::tag`] and
+//! `TryAsRef::<Number>`. These mirror the header's `static inline`
+//! helpers one for one, and a test pins them equal.
 //!
-//! [`int_or`] answers the caller's default for three different situations:
-//! the value is absent, it is present but another kind, and it is a number
-//! that is **not representable** as an `i64`. That third case is the point.
-//! `strtoll` in C saturates to `LLONG_MAX` and sets `errno`, which is a
-//! wrong answer that looks like a right one; a value with a fractional
-//! part or an exponent spelling is not an integer at all.
-//!
-//! A caller that must tell the three apart has [`Value::tag`] to separate
-//! absent from present, and `TryAsRef::<Number>` to separate "not
-//! representable" from the rest, since a [`Number`] hands back the exact
-//! text whatever its magnitude.
-//!
-//! These mirror the `static inline` helpers in the generated header one
-//! for one, deliberately: two implementations of the same rule that must
-//! agree eventually will not, and a test pins them equal.
-//!
-//! # Get the value, then convert it
-//!
-//! There are **no per-kind getters on a map** — no `map.str("host")` — and
-//! no per-kind readers on a value either. A lookup answers a value and
-//! `TryInto` turns that value into a Rust type, which is two steps that
-//! compose rather than one method per pair of (container, kind).
-//!
-//! [`Map::required`] is the step from a lookup to a value, and it names
-//! the key an `Option` has already forgotten:
+//! There are **no per-kind getters on a map** and none on a value. A
+//! lookup answers a value and `TryInto` converts it; [`Map::required`] is
+//! the step between, and it names the key:
 //!
 //! ```
 //! use guatiao::{Map, TryAsRef};
@@ -54,10 +37,9 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! The defaulting getters answer a different question — "this or the
-//! fallback" rather than "this or why not" — and both are worth having: a
-//! reader building a diagnostic wants the error, and a reader filling in a
-//! form wants the default.
+//! The defaulting getters answer "this or the fallback" where
+//! [`Map::required`] answers "this or why not". A diagnostic wants the
+//! error; a form wants the default.
 
 #![forbid(unsafe_code)]
 
@@ -80,11 +62,10 @@ fn number_text(v: Option<&Value>) -> Option<&str> {
 
 /// The number as an `i64`, or `fallback`.
 ///
-/// **Never truncates.** `fallback` is answered for a value outside
-/// `i64`'s range, one with a fractional part, and one written with an
-/// exponent — `1e2` is integral in value but not in spelling, and
-/// evaluating the exponent correctly for arbitrary precision is the
-/// arithmetic this container exists to avoid.
+/// **Never truncates.** `fallback` for a value outside `i64`'s range,
+/// one with a fractional part, and one written with an exponent — `1e2`
+/// is integral in value but not in spelling, and evaluating exponents at
+/// arbitrary precision is the arithmetic this container avoids.
 pub fn int_or(v: Option<&Value>, fallback: i64) -> i64 {
     let Some(text) = number_text(v) else {
         return fallback;
@@ -107,11 +88,8 @@ pub fn float_or(v: Option<&Value>, fallback: f64) -> f64 {
         .unwrap_or(fallback)
 }
 
-/// The string, or `fallback` when absent or another kind.
-///
-/// A number is not a string, and `"5"` is not the number 5. Nothing here
-/// coerces: a value that reads as plausible under two kinds hides the
-/// producer and the consumer disagreeing about which it is.
+/// The string, or `fallback` when absent or another kind. A number is
+/// not a string and `"5"` is not the number 5: nothing here coerces.
 pub fn str_or<'a>(v: Option<&'a Value>, fallback: &'a str) -> &'a str {
     v.and_then(TryAsRef::<str>::try_as_ref).unwrap_or(fallback)
 }
@@ -126,11 +104,8 @@ pub fn bytes_or<'a>(v: Option<&'a Value>, fallback: &'a [u8]) -> &'a [u8] {
 /// A readable dump of a tree, for diagnostics.
 ///
 /// **Not a format.** It does not round-trip, nothing parses it, and its
-/// exact spelling is not a contract — which is the difference between
-/// this and the serialisation that deliberately lives in another crate.
-/// Bytes are shown as a length and a short hex prefix rather than decoded,
-/// because a byte value is not text and pretending otherwise is how a
-/// diagnostic misleads.
+/// spelling is not a contract. Bytes are a length and a short hex prefix
+/// rather than decoded text.
 pub struct Dump<'a>(pub &'a Value);
 
 impl fmt::Debug for Dump<'_> {
@@ -139,12 +114,10 @@ impl fmt::Debug for Dump<'_> {
     }
 }
 
-/// How deep the dump will follow before saying so.
-///
-/// A tree can arrive from a foreign producer, and a debug printer that
-/// recursed without a bound would turn a diagnostic into a stack overflow
-/// — in the one code path a person reaches for when something is already
-/// wrong.
+/// How deep the dump follows before saying so: a debug printer that
+/// recursed without a bound would turn a diagnostic into a stack
+/// overflow, in the one path a person reaches for when something is
+/// already wrong.
 const DUMP_DEPTH: u32 = 32;
 
 fn write(f: &mut fmt::Formatter<'_>, v: &Value, depth: u32) -> fmt::Result {

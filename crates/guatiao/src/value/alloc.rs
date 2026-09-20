@@ -4,44 +4,25 @@
 
 //! The allocator that travels with an owned tree.
 //!
-//! Every owned container stores a pointer to one of these, so growth and
-//! free never take an allocator argument: a container knows how it was
-//! allocated. That is `Vec<T, A>` transposed, and it is what lets a library
-//! hand a map to a host that then appends to it and frees it without
-//! either side naming the other's heap.
+//! Every owned container stores a pointer to one, so growth and free take
+//! no allocator argument: `Vec<T, A>` transposed. A library hands a map to
+//! a host, which appends to it and frees it, without either side naming
+//! the other's heap.
 //!
-//! # Versioning, and why a reference is the wrong tool
+//! [`Allocator`] leads with `struct_size` so fields can be appended, which
+//! is why reading one never starts with a `&Allocator`: a reference
+//! asserts the WHOLE pointee is dereferenceable, and a caller compiled
+//! before the last field was appended does not have it. Reading 40 bytes
+//! off a 32-byte object against a guard page is an access violation, so
+//! [`Alloc::from_raw`] projects raw fields and keeps the function
+//! pointers rather than the struct pointer.
 //!
-//! [`Allocator`] leads with `struct_size` so fields can be appended.
-//! Reading a caller's struct therefore cannot start by making a
-//! `&Allocator`: a reference asserts that the **whole pointee** is
-//! dereferenceable, which is exactly what a caller compiled before the
-//! last field was appended does not have. That is undefined behaviour
-//! before any check could run, and it is not theoretical — reading 40
-//! bytes off a 32-byte object placed against a guard page is an access
-//! violation.
-//!
-//! So [`Alloc::from_raw`] reads `struct_size` through a raw field
-//! projection, decides what is covered, and reads each field the same way.
-//! It keeps the function pointers rather than the struct pointer, so no
-//! later code can re-ask a question that was already answered.
-//!
-//! # What an allocator implementer must guarantee
-//!
-//! Stated here because `struct_size` cannot express any of it, and the
-//! shipped header repeats it next to the function pointers:
-//!
-//! - `alloc` returns memory aligned to at least `align`, or null. An
-//!   allocator that cannot honour the alignment is *supposed* to return
-//!   null; one that returns a misaligned pointer instead is broken, and
-//!   this crate treats the two identically.
-//! - `free` receives the same `(size, align)` the block was allocated
-//!   with. Pairing `_aligned_malloc` with `free` corrupts the heap.
-//! - Neither may unwind, throw a C++ exception, or `longjmp`. A foreign
-//!   unwind entering Rust across a `"C"` boundary is undefined behaviour
-//!   that no code on this side can defend against.
-//! - The `Allocator` itself must outlive every tree allocated through
-//!   it, since containers keep a pointer to it.
+//! An implementer must guarantee what `struct_size` cannot express, and
+//! the shipped header repeats it beside the function pointers: `alloc`
+//! returns memory aligned to at least `align` or null; `free` receives
+//! the same `(size, align)` the block was allocated with; neither may
+//! unwind, throw or `longjmp`; the `Allocator` outlives every tree
+//! allocated through it.
 
 #![allow(non_camel_case_types)]
 
@@ -166,34 +147,16 @@ impl std::fmt::Display for AllocError {
 
 impl std::error::Error for AllocError {}
 
-/// A checked view of a caller's allocator.
+/// A checked view of a caller's allocator: the function pointers rather
+/// than the struct pointer, so the coverage question is answered once.
+/// `release` is `None` for a caller that did not declare it, which is
+/// indistinguishable from one that declared it null.
 ///
-/// Holds the function pointers rather than the struct pointer, so the
-/// coverage question is answered once, here. `release` is `None` for a
-/// caller that did not declare it, and nothing downstream can tell that
-/// apart from a caller that declared it as null — which is correct, since
-/// both mean "no teardown".
-///
-/// # An allocator outlives everything built through it
-///
-/// **That is a contract, not a borrow.** Every owned container records the
-/// address of the allocator that made it and calls back into it to grow
-/// and to free, so an allocator that goes away first leaves every tree
-/// built through it holding a pointer to nothing — and the symptom is a
-/// free through an unmapped function pointer, arriving at teardown, a long
-/// way from the mistake.
-///
-/// **Not a lifetime parameter**, and that is deliberate rather than
-/// missing. [`Alloc::from_raw`] is `unsafe` and hands back whatever
-/// lifetime the caller asks for, so the borrow checker could only ever
-/// police an allocator built on the stack — the case nobody has. Every
-/// case anybody does have (a constant, a `static`, a vtable inside a
-/// loaded library) it cannot see at all.
-///
-/// So the rule is stated instead, here and on [`Alloc::from_raw`]: an
-/// allocator lives at least as long as everything built through it. A
-/// library that hands out trees must therefore never be unloaded while
-/// the host still holds one.
+/// **An allocator outlives everything built through it, by contract and
+/// not by borrow**: every owned container records its address, so one
+/// that goes away first leaves those trees pointing at nothing. There is
+/// no lifetime parameter because the borrow checker could only police an
+/// allocator on the stack, the one case nobody has.
 #[derive(Clone, Copy)]
 pub struct Alloc {
     ctx: *mut c_void,
@@ -220,18 +183,11 @@ impl Alloc {
     ///
     /// # Safety
     ///
-    /// Two things, and the second is the one the compiler stopped
-    /// checking when the lifetime parameter went:
-    ///
-    /// 1. `raw` is null, or points at `raw->struct_size` readable, aligned
-    ///    bytes. Nothing past `struct_size` is read.
-    /// 2. **The allocator outlives every value built through it.** Each
-    ///    owned container records this address and calls back into it to
-    ///    grow and to free, so an allocator that goes away first leaves
-    ///    every such tree pointing at nothing. A vtable inside a loaded
-    ///    library therefore means that library is never unloaded while the
-    ///    host holds a tree it made — which is why a loader forgets its
-    ///    handle rather than closing it.
+    /// 1. `raw` is null, or points at `raw->struct_size` readable,
+    ///    aligned bytes. Nothing past `struct_size` is read.
+    /// 2. **The allocator outlives every value built through it.** A
+    ///    vtable inside a loaded library therefore means that library is
+    ///    never unloaded while the host holds a tree it made.
     pub unsafe fn from_raw(raw: *const Allocator) -> Result<Alloc, AllocError> {
         if raw.is_null() {
             return Err(AllocError::Null);
@@ -283,25 +239,11 @@ impl Alloc {
 
     /// Rust's global allocator, ready to use and needing no `unsafe`.
     ///
-    /// The vtable it borrows is a **constant**: written at compile time,
-    /// never mutated, carrying a null context. That is what makes handing
-    /// out a `'static` borrow of it sound, and it is why this is the one
-    /// `static` in the crate.
-    ///
-    /// # This does not reintroduce process-global state
-    ///
-    /// The rule it might look like it breaks is about state two linkages
-    /// could **disagree** about -- an interning table, a registry, a
-    /// counter -- where a value produced by one artifact is invisible to
-    /// another. Nothing here can disagree: it is immutable, it has no
-    /// interior mutability, and the compiler initialises it rather than
-    /// any code at run time.
-    ///
-    /// A host and a library that each link their own copy of this crate get
-    /// their own constant, naming their own Rust allocator, which is
-    /// exactly right: **every owned container records the allocator that
-    /// made it**, so a tree built in the library is freed through the
-    /// library's allocator even after it crosses into the host.
+    /// The vtable it borrows is a **constant**, which is what makes a
+    /// `'static` borrow of it sound and why this is the one `static` in
+    /// the crate. It is not process-global state: that rule is about
+    /// state two linkages could **disagree** about, and nothing
+    /// immutable can.
     pub fn rust() -> Alloc {
         /// A `Allocator` holds a `*mut c_void` context, so it is not
         /// `Sync` and cannot be a `static` without saying why.
@@ -348,13 +290,9 @@ impl Alloc {
         self.release.is_some()
     }
 
-    /// Allocates `size` bytes aligned to `align`.
-    ///
-    /// Rejects a misaligned return the same way it rejects null, so no
-    /// reference or slice is ever built from memory that could not satisfy
-    /// its own type. `size` must be non-zero and `align` a power of two;
-    /// both are guaranteed by the callers in `raw`, which derive
-    /// them from an element type rather than from caller input.
+    /// Allocates `size` bytes aligned to `align`, rejecting a misaligned
+    /// return as it rejects null. `size` is non-zero and `align` a power
+    /// of two, both guaranteed by `raw`'s callers.
     pub fn alloc(&self, size: usize, align: usize) -> Result<*mut u8, AllocError> {
         debug_assert!(size != 0, "an empty container must not reach the allocator");
         debug_assert!(align.is_power_of_two());
@@ -376,7 +314,7 @@ impl Alloc {
         Ok(p.cast::<u8>())
     }
 
-    /// Releases a block, with the size and alignment it was allocated
+    /// Releases a block with the size and alignment it was allocated
     /// with.
     ///
     /// # Safety
@@ -432,13 +370,10 @@ unsafe extern "C" fn rust_free_fn(_ctx: *mut c_void, p: *mut c_void, size: usize
     unsafe { std::alloc::dealloc(p.cast::<u8>(), layout) }
 }
 
-/// An allocator over Rust's global allocator.
-///
-/// The value must outlive every tree built through it, because containers
-/// keep a pointer to it. A Rust caller wanting exactly this and nothing
-/// more should use [`Alloc::rust`], which hands back a ready one; this is
-/// the raw vtable, for a caller filling in a struct to hand across a
-/// boundary.
+/// An allocator over Rust's global allocator, as a raw vtable for a
+/// caller filling in a struct to hand across a boundary.
+/// [`Alloc::rust`] is the ready-made one. It must outlive every tree
+/// built through it.
 pub const fn rust_alloc() -> Allocator {
     Allocator {
         struct_size: size_of::<Allocator>() as u32,

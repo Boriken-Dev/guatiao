@@ -63,13 +63,12 @@ typedef struct guatiao_entry guatiao_entry;
 
 
 /*
- How deep a tree any walk here follows: cloning one, merging two,
- comparing two for equality, and checking one against a schema.
+ How deep any walk here follows: cloning, merging, comparing and
+ schema checking.
 
- Configuration trees are a handful of levels deep; this is far above any
- real one and far below what would exhaust a stack. It exists so a
- hostile or corrupt tree is an error rather than a dead process: a stack
- overflow on Windows is not catchable and takes the host with it.
+ Far above any real configuration tree and far below what would
+ exhaust a stack, so a hostile one is an error rather than a dead
+ process: a stack overflow on Windows is not catchable.
  */
 #define GUATIAO_MAX_DEPTH 128
 
@@ -111,11 +110,9 @@ typedef struct guatiao_entry guatiao_entry;
 /*
  What an entry point reports.
 
- The numbering is wider than the list because these values come from a
- status space a host application may share with the crates it embeds, so
- one `switch` in a consumer can cover both. A consumer with no such
- space reads 0 as success and treats every other value as failure, which
- is the whole contract.
+ The numbering is wider than the list because the space may be shared
+ with a host's own, so one `switch` covers both. The whole contract is
+ that 0 is success and everything else is failure.
  */
 enum guatiao_status
 #if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
@@ -127,9 +124,8 @@ enum guatiao_status
    */
   GUATIAO_OK = 0,
   /*
-   A value could not be stored: text offered as a number that is not
-   one, or bytes offered as text that are not UTF-8. Nothing was
-   written.
+   A value could not be stored: text that is not a number, or bytes
+   that are not UTF-8. Nothing was written.
    */
   GUATIAO_ERR_BAD_VALUE = 7,
   /*
@@ -150,14 +146,13 @@ enum guatiao_status
    */
   GUATIAO_ERR_NULL = 11,
   /*
-   The thing asked is gone: a host's registry that has been freed,
-   asked through the services a library kept. Nothing freed was
-   touched.
+   The thing asked is gone: a freed registry, asked through the
+   services a library kept.
    */
   GUATIAO_ERR_GONE = 12,
   /*
-   A callback unwound, or a panic was caught at this boundary. The
-   operation did not happen; the process is still usable.
+   A callback unwound, or a panic was caught here. The operation did
+   not happen; the process is still usable.
    */
   GUATIAO_ERR_INTERNAL = 100,
 };
@@ -172,20 +167,15 @@ typedef uint32_t guatiao_status;
 /*
  The kind of a stored value.
 
- **This type is deliberately NOT used as a field type.** It exists to
- give C an enum it can switch on and a debugger can print by name;
- A value's `tag` field is a plain `uint32_t`.
+ **Not used as a field type.** A value's `tag` field is a plain
+ `uint32_t`: a `repr(u32)` enum has a restricted set of valid values,
+ so a ninth bit pattern from a foreign caller would be undefined the
+ instant the struct is read, before any `match` could reject it. As an
+ integer it is merely out of range, and a reader skips it. The layout
+ is identical either way.
 
- The distinction is a soundness one and the layout is identical either
- way (measured). A Rust `#[repr(u32)]` enum has a *restricted set of
- valid values*, so a ninth bit pattern arriving from a foreign caller
- would be undefined behaviour the instant the struct is read — before
- any `match`, before anything could reject it. As a `uint32_t` it is
- merely an integer out of range, which a reader skips.
-
- **New kinds are APPENDED.** A reader meeting a tag it does not know
- must skip that one value and render the rest; that is the whole
- forward-compatibility story, and it works only if numbers never move.
+ **New kinds are APPENDED**, which is the whole forward-compatibility
+ story and works only if numbers never move.
  */
 enum guatiao_tag
 #if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
@@ -242,9 +232,8 @@ typedef struct guatiao_registry guatiao_registry;
 /*
  Borrowed UTF-8 text: a pointer and a length, no NUL terminator.
 
- **Check `len` before `ptr`.** An empty view may carry a dangling or
- null pointer, and the pointer must not be touched when the length is
- zero.
+ **Check `len` before `ptr`**: an empty view may carry a dangling or
+ null pointer.
  */
 typedef struct guatiao_str {
   /*
@@ -298,15 +287,12 @@ typedef struct guatiao_alloc {
 } guatiao_alloc;
 
 /*
- Owned, growable UTF-8 text.
-
- `cap == 0` means the buffer is **not owned**: a literal or a borrow,
- never freed, copied out of on the first growth.
+ Owned, growable UTF-8 text. `cap == 0` means the buffer is **not
+ owned**: never freed, copied out of on the first growth.
  */
 typedef struct guatiao_string {
   /*
-   First byte. Never null for an owned buffer; dangling-but-aligned
-   when the container is empty.
+   First byte. Dangling-but-aligned when the container is empty.
    */
   uint8_t *ptr;
   /*
@@ -318,7 +304,7 @@ typedef struct guatiao_string {
    */
   size_t cap;
   /*
-   The allocator that made this buffer, and the only one that may
+   The allocator that made this buffer and the only one that may
    grow or free it. Null when `cap == 0`.
    */
   const struct guatiao_alloc *alloc;
@@ -371,10 +357,10 @@ typedef struct guatiao_list {
 /*
  An owned, growable sequence of key/value pairs, in insertion order.
 
- Lookup is a linear scan, by contract rather than by accident: this is a
- metadata container holding tens of keys, and at that size a scan over
- contiguous memory beats hashing every lookup key. Setting an existing
- key replaces it **in place**, keeping its position.
+ Lookup is a linear scan by contract: this is a metadata container of
+ tens of keys, and at that size a scan over contiguous memory beats
+ hashing every lookup key. Setting an existing key replaces it **in
+ place**, keeping its position.
  */
 typedef struct guatiao_map {
   /*
@@ -396,45 +382,30 @@ typedef struct guatiao_map {
 } guatiao_map;
 
 /*
- The payload of a value. Which arm is live is decided by the
- tag, and by nothing else.
+ The payload of a value. The tag decides which arm is live, and
+ nothing else does.
 
- # Reading an arm
-
- Reading a 32-byte arm off the wrong tag is garbage but defined: all
- four are structs of pointers and integers, which have no validity
- constraint beyond being initialised. Reading the `b` arm off the wrong
- tag is **undefined behaviour** — `bool` is the one arm with a
- restricted value set.
-
- Both are prevented by one rule the constructors obey without
- exception: **every node is born with all 40 bytes initialised**. A
- payload written as `{ b: true }` alone initialises a single byte and
- leaves thirty-one uninitialised, and reading any wide arm off that is
- undefined too. Nothing in the toolchain warns about either.
+ Reading a 32-byte arm off the wrong tag is garbage but defined; all
+ four are structs of pointers and integers. Reading the `b` arm off the
+ wrong tag is **undefined**, and so is reading any wide arm off a
+ payload written as `{ b: true }` alone. One rule prevents both:
+ **every node is born with all 40 bytes initialised**.
 
  The arms are `ManuallyDrop` because a union field must be `Copy` or
- wrapped, and making an allocator-carrying container `Copy` would invite
- a silent double free. It costs nothing at the boundary: a header
- generator erases the wrapper entirely.
+ wrapped, and an allocator-carrying container that was `Copy` would
+ invite a silent double free. A header generator erases the wrapper.
  */
 typedef union guatiao_payload {
   /*
    Live when the tag is `GUATIAO_BOOL`. Zero is false, **any**
    non-zero byte is true.
 
-   A byte rather than a `bool`, and that is the one place this design
-   deliberately refuses a nicer-looking type. A `bool` has a
-   *restricted set of valid values* — it must be 0 or 1 — so a byte
-   that is neither would be undefined behaviour to read at that type,
-   at the moment of the read, before any check could reject it. A
-   producer can write one without trying: a cast, a union, an
-   uninitialised local.
-
-   `u8` has no invalid bit patterns, so the hazard does not exist
-   rather than being defended against at every read. It is the same
-   reason the tag is a `u32` and not an enum, and it costs a C caller
-   nothing: `.b = true` still stores 1.
+   A byte, not a `bool`: a `bool` must be 0 or 1, so any other byte
+   would be undefined to read at that type, at the read, before a
+   check could reject it — and a producer can write one without
+   trying. `u8` has no invalid bit patterns, so the hazard does not
+   exist rather than being defended against. `.b = true` still
+   stores 1.
    */
   uint8_t b;
   /*
@@ -467,8 +438,8 @@ typedef struct guatiao_value {
    */
   uint32_t tag;
   /*
-   Reserved. Always written as zero, so the whole node is
-   byte-comparable and a C caller has a named field to initialise.
+   Reserved. Always zero, so a node is byte-comparable and a C
+   caller has a named field to initialise.
    */
   uint32_t _pad;
   /*
@@ -497,20 +468,13 @@ typedef struct guatiao_provider_error {
 /*
  A `*const T` where **null is a value, not a mistake**.
 
- Crosses as a plain `const T *` and costs a C caller nothing: this is a
- `repr(transparent)` newtype, so its size, alignment and calling
- convention are a pointer's. What it buys is on the Rust side. A bare
- `*const T` in a descriptor says nothing about whether null is
- expected, so every reader re-decides and one of them eventually
- decides wrong; this says it once, in the type.
+ `repr(transparent)`, so it crosses as a plain `const T *` and costs a
+ C caller nothing. What it buys is on the Rust side: a bare `*const T`
+ says nothing about whether null is expected, so every reader
+ re-decides and one eventually decides wrong.
 
- # The contract
-
- **Non-null means a well-formed `T` that outlives the read.** Nothing
- checks that, and nothing tries: it is the same class of promise as a
- vtable pointer, whose shape only the `kind` that defined it knows.
- Writing a non-null pointer to anything that is not a live `T` is
- undefined behaviour at the read, on whoever wrote it.
+ **Non-null means a well-formed `T` that outlives the read**, and
+ nothing checks it — the same class of promise as a vtable pointer.
  */
 typedef const struct guatiao_map *guatiao_map_ptr;
 
@@ -1015,9 +979,8 @@ typedef struct guatiao_merge_override {
 /*
  Borrowed bytes: any content at all, NULs included.
 
- Same shape and the same check-the-length rule as `guatiao_str`; a
- separate type because "text" and "arbitrary bytes" are different
- promises and collapsing them loses the distinction at every call site.
+ Same shape and check-the-length rule as `guatiao_str`, and a separate
+ type because "text" and "arbitrary bytes" are different promises.
  */
 typedef struct guatiao_bytes {
   /*
@@ -1045,11 +1008,9 @@ typedef struct guatiao_values {
 } guatiao_values;
 
 /*
- A borrowed sequence of key/value pairs, in **insertion order**.
-
- Order is part of the contract, not an artefact: consumers render maps
- as forms, print them as tables and diff them in tests, and all three
- need it stable and meaningful.
+ A borrowed sequence of key/value pairs, in **insertion order**, which
+ is part of the contract: consumers render maps as forms, print them
+ as tables and diff them in tests.
  */
 typedef struct guatiao_entries {
   /*

@@ -16,9 +16,8 @@ use super::{Payload, Tag, Value, or_abort};
 
 /// Borrowed UTF-8 text: a pointer and a length, no NUL terminator.
 ///
-/// **Check `len` before `ptr`.** An empty view may carry a dangling or
-/// null pointer, and the pointer must not be touched when the length is
-/// zero.
+/// **Check `len` before `ptr`**: an empty view may carry a dangling or
+/// null pointer.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Str {
@@ -29,11 +28,9 @@ pub struct Str {
 }
 
 impl Str {
-    /// A view of text this program already holds.
-    ///
-    /// Borrowed, so whatever owns the text must outlive the view — which
-    /// is free for a literal, and is the usual case in a library
-    /// descriptor, where every string is a constant in the library image.
+    /// A view of text this program already holds: whatever owns the text
+    /// must outlive the view, which is free for a literal and is the usual
+    /// case in a library descriptor.
     pub const fn borrowed(text: &str) -> Str {
         Str {
             ptr: text.as_ptr(),
@@ -50,21 +47,18 @@ impl Str {
     }
 }
 
-/// Owned, growable UTF-8 text.
-///
-/// `cap == 0` means the buffer is **not owned**: a literal or a borrow,
-/// never freed, copied out of on the first growth.
+/// Owned, growable UTF-8 text. `cap == 0` means the buffer is **not
+/// owned**: never freed, copied out of on the first growth.
 #[repr(C)]
 #[derive(Debug)]
 pub struct Text {
-    /// First byte. Never null for an owned buffer; dangling-but-aligned
-    /// when the container is empty.
+    /// First byte. Dangling-but-aligned when the container is empty.
     pub(crate) ptr: *mut u8,
     /// Length in bytes.
     pub(crate) len: usize,
     /// Capacity in bytes. 0 means the buffer is not owned.
     pub(crate) cap: usize,
-    /// The allocator that made this buffer, and the only one that may
+    /// The allocator that made this buffer and the only one that may
     /// grow or free it. Null when `cap == 0`.
     pub(crate) alloc: *const Allocator,
 }
@@ -78,20 +72,16 @@ impl Drop for Text {
 }
 
 impl Text {
-    /// A text over storage described by hand: `len` initialised UTF-8
-    /// bytes at `ptr`, in a block of `cap` bytes from `alloc`, or a
-    /// borrowed buffer when `cap` is 0.
-    ///
-    /// The one door for a literal or a buffer another language owns.
-    /// Everything else builds through [`Text::new`].
+    /// A text over storage described by hand: the one door for a literal
+    /// or a buffer another language owns.
     ///
     /// # Safety
     ///
-    /// The four describe one consistent storage: the first `len` bytes are
-    /// initialised and readable for as long as this lives; `cap > 0` means
-    /// the block came from `alloc` with that layout and is owned by this
-    /// text alone; `cap == 0` means the bytes are somebody else's and, if
-    /// this text is mutated in place, writable.
+    /// The four describe one consistent storage: the first `len` bytes
+    /// are initialised and readable for as long as this lives; `cap > 0`
+    /// means the block came from `alloc` with that layout and is this
+    /// text's alone; `cap == 0` means the bytes are somebody else's and,
+    /// if this text is mutated in place, writable.
     pub unsafe fn from_raw_parts(
         ptr: *mut u8,
         len: usize,
@@ -106,32 +96,28 @@ impl Text {
         }
     }
 
-    /// The four fields, with ownership: this text no longer frees them.
+    /// The four fields, with ownership: this no longer frees them.
     pub fn into_raw_parts(self) -> (*mut u8, usize, usize, *const Allocator) {
         let this = std::mem::ManuallyDrop::new(self);
         (this.ptr, this.len, this.cap, this.alloc)
     }
 
-    /// How many bytes the storage holds before it must grow. Zero for a
-    /// buffer this text does not own.
+    /// How many bytes the storage holds before it must grow.
     pub fn capacity(&self) -> usize {
         self.cap
     }
 
-    /// Text, copied onto Rust's heap.
-    ///
-    /// Unlike [`Map::new`](super::Map::new) this OWNS a buffer the moment it exists, which
-    /// is why it can fail at all; it frees that buffer on drop, like every
-    /// other container here.
+    /// Text, copied onto Rust's heap. Unlike [`Map::new`](super::Map::new)
+    /// this owns a buffer the moment it exists, which is why it can fail
+    /// at all.
     pub fn new(text: &str) -> Text {
         or_abort(Text::new_in(Alloc::rust(), text))
     }
 
-    /// The same, through an allocator you name, reporting its refusal.
-    ///
-    /// The buffer's storage **becomes** this text's: the four fields are
-    /// copied across and the `Buffer` is forgotten, so one allocation has
-    /// one owner at every instant.
+    /// The same, through an allocator you name. The buffer's storage
+    /// **becomes** this text's: the fields are copied across and the
+    /// `Buffer` is forgotten, so one allocation has one owner at every
+    /// instant.
     pub fn new_in(alloc: Alloc, text: &str) -> Result<Text, ValueError> {
         let b = ManuallyDrop::new(super::Buffer::new_in(alloc, text.as_bytes())?);
         let (ptr, len, cap, alloc) = (b.ptr, b.len, b.cap, b.alloc);
@@ -156,9 +142,8 @@ impl Text {
         self.push_str_in(text, alloc)
     }
 
-    /// The same, adopting `alloc` for a buffer that carries none.
-    ///
-    /// `text` may address this text's own bytes; an overlapping source is
+    /// The same, adopting `alloc` for a buffer that carries none. `text`
+    /// may address this text's own bytes, and an overlapping source is
     /// copied out before anything grows.
     pub fn push_str_in(&mut self, text: &str, alloc: Alloc) -> Result<(), ValueError> {
         if text.is_empty() {
@@ -221,9 +206,9 @@ impl Default for Text {
 }
 
 impl Clone for Text {
-    /// A copy through the allocator this text recorded, or the crate's own
-    /// when it has none. Panics as [`Value::clone`] does, and on text that
-    /// is not UTF-8 — a foreign producer's, since nothing here writes one.
+    /// A copy through the allocator this text recorded, or the crate's
+    /// own. Panics as [`Value::clone`] does, and on text that is not
+    /// UTF-8 — a foreign producer's, since nothing here writes one.
     fn clone(&self) -> Text {
         let alloc = Alloc::recorded_or_rust(self.alloc);
         self.clone_in(alloc)
@@ -232,9 +217,9 @@ impl Clone for Text {
 }
 
 impl PartialEq for Text {
-    /// The BYTES, not the `&str`: text a foreign producer wrote that is
-    /// not UTF-8 reads back as `None`, and two different such texts would
-    /// then compare equal on the strength of both being unreadable.
+    /// The BYTES, not the `&str`: two texts that are not UTF-8 would
+    /// otherwise compare equal on the strength of both being
+    /// unreadable.
     fn eq(&self, other: &Text) -> bool {
         self.as_bytes() == other.as_bytes()
     }
@@ -243,11 +228,8 @@ impl PartialEq for Text {
 impl Eq for Text {}
 
 // SAFETY: the buffer is owned outright and reached only through `&self`
-// or `&mut self`, so no two threads share it without the borrow checker
-// saying so; the allocator it recorded is a table that outlives it, by the contract on `Alloc`,
-// and may be called from any thread, which is the contract on
-// `Allocator` — a host handing out an arena synchronises it, as Rust's
-// global allocator does.
+// or `&mut self`; the allocator it recorded outlives it and may be
+// called from any thread, which is the contract on `Allocator`.
 unsafe impl Send for Text {}
 // SAFETY: as above.
 unsafe impl Sync for Text {}
@@ -271,10 +253,10 @@ impl From<&String> for Text {
 }
 
 impl From<Text> for Value {
-    /// A string value. A [`Number`](super::Number) stores its digits in a
-    /// [`Text`] too, so that one converts from `Number` rather than from
-    /// this: the grammar has to be checked, and a conversion that cannot
-    /// refuse is the wrong place to check it.
+    /// A string value. A [`Number`](super::Number) stores its digits in
+    /// a [`Text`] too and converts from `Number` instead: the grammar has
+    /// to be checked, and a conversion that cannot refuse is the wrong
+    /// place for it.
     fn from(text: Text) -> Value {
         let mut v = Value::blank(Tag::GUATIAO_STRING);
         v.payload = Payload::text(text);

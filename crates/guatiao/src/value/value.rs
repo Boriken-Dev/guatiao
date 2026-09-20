@@ -4,25 +4,18 @@
 
 //! The node: a tag and the union that tag selects.
 //!
-//! [`Tag`] is here rather than in `types/` because it is not a
-//! container -- it is the node's discriminant, and the field it
-//! describes is on [`Value`].
-//!
-//! Not in `types/` with the containers, because it is not one of them --
-//! it is what uses them. `crate::value::Value` is its public path.
+//! [`Tag`] is here rather than in `types/` because it is not a container
+//! -- it is what uses them.
 
-// The tag variants are the C header's spelling, so they stay
-// SCREAMING_CASE; cbindgen copies a doc comment here verbatim, so the
-// obvious ones stay undocumented rather than adding noise to the header.
+// The tag variants keep the C header's SCREAMING_CASE spelling, and the
+// obvious ones stay undocumented: cbindgen copies every doc comment here
+// into the header.
 #![allow(non_camel_case_types)]
 #![allow(missing_docs)]
 
 use std::fmt;
 use std::mem::ManuallyDrop;
 
-// The raw layer this crate keeps to itself: the free walk, the
-// allocator-taking mutators and the private helpers. Imported whole
-// because the impl below calls into it at almost every line.
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::convert::{MapError, TryAsMut, TryAsRef};
 use crate::value::error::{MAX_DEPTH, ValueError};
@@ -32,20 +25,15 @@ use super::types::{Buffer, Entry, List, Map, Number, Text};
 
 /// The kind of a stored value.
 ///
-/// **This type is deliberately NOT used as a field type.** It exists to
-/// give C an enum it can switch on and a debugger can print by name;
-/// A value's `tag` field is a plain `uint32_t`.
+/// **Not used as a field type.** A value's `tag` field is a plain
+/// `uint32_t`: a `repr(u32)` enum has a restricted set of valid values,
+/// so a ninth bit pattern from a foreign caller would be undefined the
+/// instant the struct is read, before any `match` could reject it. As an
+/// integer it is merely out of range, and a reader skips it. The layout
+/// is identical either way.
 ///
-/// The distinction is a soundness one and the layout is identical either
-/// way (measured). A Rust `#[repr(u32)]` enum has a *restricted set of
-/// valid values*, so a ninth bit pattern arriving from a foreign caller
-/// would be undefined behaviour the instant the struct is read — before
-/// any `match`, before anything could reject it. As a `uint32_t` it is
-/// merely an integer out of range, which a reader skips.
-///
-/// **New kinds are APPENDED.** A reader meeting a tag it does not know
-/// must skip that one value and render the rest; that is the whole
-/// forward-compatibility story, and it works only if numbers never move.
+/// **New kinds are APPENDED**, which is the whole forward-compatibility
+/// story and works only if numbers never move.
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tag {
@@ -96,44 +84,29 @@ impl From<Tag> for u32 {
         tag as u32
     }
 }
-/// The payload of a value. Which arm is live is decided by the
-/// tag, and by nothing else.
+/// The payload of a value. The tag decides which arm is live, and
+/// nothing else does.
 ///
-/// # Reading an arm
-///
-/// Reading a 32-byte arm off the wrong tag is garbage but defined: all
-/// four are structs of pointers and integers, which have no validity
-/// constraint beyond being initialised. Reading the `b` arm off the wrong
-/// tag is **undefined behaviour** — `bool` is the one arm with a
-/// restricted value set.
-///
-/// Both are prevented by one rule the constructors obey without
-/// exception: **every node is born with all 40 bytes initialised**. A
-/// payload written as `{ b: true }` alone initialises a single byte and
-/// leaves thirty-one uninitialised, and reading any wide arm off that is
-/// undefined too. Nothing in the toolchain warns about either.
+/// Reading a 32-byte arm off the wrong tag is garbage but defined; all
+/// four are structs of pointers and integers. Reading the `b` arm off the
+/// wrong tag is **undefined**, and so is reading any wide arm off a
+/// payload written as `{ b: true }` alone. One rule prevents both:
+/// **every node is born with all 40 bytes initialised**.
 ///
 /// The arms are `ManuallyDrop` because a union field must be `Copy` or
-/// wrapped, and making an allocator-carrying container `Copy` would invite
-/// a silent double free. It costs nothing at the boundary: a header
-/// generator erases the wrapper entirely.
+/// wrapped, and an allocator-carrying container that was `Copy` would
+/// invite a silent double free. A header generator erases the wrapper.
 #[repr(C)]
 pub union Payload {
     /// Live when the tag is `GUATIAO_BOOL`. Zero is false, **any**
     /// non-zero byte is true.
     ///
-    /// A byte rather than a `bool`, and that is the one place this design
-    /// deliberately refuses a nicer-looking type. A `bool` has a
-    /// *restricted set of valid values* — it must be 0 or 1 — so a byte
-    /// that is neither would be undefined behaviour to read at that type,
-    /// at the moment of the read, before any check could reject it. A
-    /// producer can write one without trying: a cast, a union, an
-    /// uninitialised local.
-    ///
-    /// `u8` has no invalid bit patterns, so the hazard does not exist
-    /// rather than being defended against at every read. It is the same
-    /// reason the tag is a `u32` and not an enum, and it costs a C caller
-    /// nothing: `.b = true` still stores 1.
+    /// A byte, not a `bool`: a `bool` must be 0 or 1, so any other byte
+    /// would be undefined to read at that type, at the read, before a
+    /// check could reject it — and a producer can write one without
+    /// trying. `u8` has no invalid bit patterns, so the hazard does not
+    /// exist rather than being defended against. `.b = true` still
+    /// stores 1.
     pub(crate) b: u8,
     /// Live when the tag is `GUATIAO_STRING` **or** `GUATIAO_NUMBER`.
     pub(crate) text: ManuallyDrop<Text>,
@@ -153,32 +126,26 @@ pub union Payload {
 pub struct Value {
     /// One of the `GUATIAO_*` tag constants.
     pub(crate) tag: u32,
-    /// Reserved. Always written as zero, so the whole node is
-    /// byte-comparable and a C caller has a named field to initialise.
+    /// Reserved. Always zero, so a node is byte-comparable and a C
+    /// caller has a named field to initialise.
     pub(crate) _pad: u32,
     /// The payload the tag selects.
     pub(crate) payload: Payload,
 }
 
 impl fmt::Debug for Payload {
-    /// Prints nothing about the contents, deliberately.
-    ///
-    /// Which arm is live is decided by a tag this type does not carry, so
-    /// any choice made here would be a guess — and the wrong guess on the
-    /// `b` arm is undefined behaviour rather than a wrong line of output.
-    /// [`Value`]'s own `Debug` is the one that has the tag.
+    /// Prints nothing about the contents: the tag that decides which arm
+    /// is live is not on this type, so any choice here would be a guess,
+    /// and the wrong guess on the `b` arm is undefined behaviour.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Payload { .. }")
     }
 }
 
 impl fmt::Debug for Value {
-    /// The tag, and nothing that requires following a pointer.
-    ///
-    /// A node may have been built by a foreign caller, so a `Debug` that
-    /// walked into its payload would fault in a debugger — which is
-    /// exactly where this gets called and exactly where a fault is least
-    /// welcome.
+    /// The tag, and nothing that follows a pointer: a node may have been
+    /// built by a foreign caller, and a `Debug` that walked into its
+    /// payload would fault in the debugger it is called from.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut s = f.debug_struct("Value");
         match Tag::try_from(self.tag) {
@@ -190,16 +157,15 @@ impl fmt::Debug for Value {
 }
 
 impl Payload {
-    /// A payload holding text. Safe: the arm is a whole owned container,
-    /// and every other arm is the same bytes.
+    /// A payload holding text.
     pub fn text(text: Text) -> Payload {
         Payload {
             text: ManuallyDrop::new(text),
         }
     }
 
-    /// A payload holding a number: the same arm as text, since a number
-    /// is stored as the text that declared it.
+    /// A payload holding a number: the text arm, since a number is
+    /// stored as the text that declared it.
     pub fn number(number: Number) -> Payload {
         Payload::text(number.into_text())
     }
@@ -226,9 +192,8 @@ impl Payload {
     }
 
     /// A payload holding a boolean byte: any byte, since a producer may
-    /// write any and a reader treats non-zero as true. The other arms are
-    /// initialised too, so a node built over this is whole whatever its
-    /// tag.
+    /// write any. The other arms are initialised too, so a node built
+    /// over this is whole whatever its tag.
     pub fn bool(byte: u8) -> Payload {
         let mut payload = Value::null().into_raw_parts().1;
         payload.b = byte;
@@ -237,20 +202,16 @@ impl Payload {
 }
 
 impl Value {
-    /// A node from a tag and a payload described by hand: the one door for
-    /// a literal another language declared. Everything else builds through
-    /// the constructors on the kind.
+    /// A node from a tag and a payload described by hand: the one door
+    /// for a literal another language declared.
     ///
     /// # Safety
     ///
-    /// `tag` selects the arm `payload` was built with (a string or a
-    /// number over [`Payload::text`], bytes over [`Payload::bytes`], a
-    /// list over [`Payload::list`], a map over [`Payload::map`]), so every
-    /// read of the node reads the arm that is live. The raw `u32`, so a
-    /// producer's tag this build does not know can be declared: such a
-    /// node owns nothing as far as this build can tell, and is passed
-    /// through and never freed into. A boolean, a null or an absent node
-    /// takes [`Payload::bool`].
+    /// `tag` selects the arm `payload` was built with, so every read of
+    /// the node reads the live one. It is the raw `u32` so a producer's
+    /// unknown tag can be declared; such a node owns nothing this build
+    /// can see. A boolean, a null or an absent node takes
+    /// [`Payload::bool`].
     pub unsafe fn from_raw_parts(tag: u32, payload: Payload) -> Value {
         Value {
             tag,
@@ -260,8 +221,7 @@ impl Value {
     }
 
     /// The raw tag and the payload, with ownership: this node no longer
-    /// frees them. The tag is the integer, which may be one this build
-    /// does not know.
+    /// frees them.
     pub fn into_raw_parts(self) -> (u32, Payload) {
         let this = ManuallyDrop::new(self);
         // SAFETY: a bitwise copy out of a node that is never dropped, so
@@ -270,18 +230,14 @@ impl Value {
         (this.tag, payload)
     }
 
-    /// A node with every one of its bytes initialised.
-    ///
-    /// The only way a node is created here. Writing a single union arm
-    /// leaves the rest of the payload uninitialised, and reading a wide
-    /// arm off that is undefined behaviour rather than garbage; nothing in
-    /// the toolchain warns about it.
+    /// A node with every one of its bytes initialised: the only way one
+    /// is created here.
     pub(crate) fn blank(tag: Tag) -> Value {
         Value {
             tag: u32::from(tag),
             _pad: 0,
-            // The widest arm, fully written. Every other arm is the same
-            // 32 bytes, so this initialises all of them at once.
+            // The widest arm, fully written: every arm is the same 32
+            // bytes, so this initialises all of them at once.
             payload: Payload::map(Map {
                 ptr: dangling::<Entry>(),
                 len: 0,
@@ -291,20 +247,16 @@ impl Value {
         }
     }
 
-    /// The allocator this tree grows through.
+    /// The allocator this tree grows through, which an owned container
+    /// recorded when it was made.
     ///
-    /// **An owned container records the allocator that made it**, which
-    /// is why nothing else has to be told one: a write into this tree
-    /// allocates storage *for this tree*.
-    ///
-    /// **Two different refusals.** A scalar — null, bool, absent — has no
-    /// container to have recorded one, and answers
-    /// [`ValueError::WrongKind`]. A container whose `alloc` field is null
-    /// — a literal some other language wrote as a brace initialiser —
+    /// **Two different refusals.** A scalar has no container to have
+    /// recorded one and answers [`ValueError::WrongKind`]. A container
+    /// whose `alloc` field is null — a literal another language wrote —
     /// answers
-    /// [`ValueError::Alloc(AllocError::Null)`](crate::value::AllocError);
-    /// growing one means naming the allocator it adopts, which is what the
-    /// `_in` operations take.
+    /// [`ValueError::Alloc(AllocError::Null)`](crate::value::AllocError),
+    /// and growing it means naming the allocator it adopts: the `_in`
+    /// form of any operation.
     pub fn alloc(&self) -> Result<Alloc, ValueError> {
         let stored = self.recorded_alloc().ok_or(ValueError::WrongKind)?;
         // SAFETY: the address a container recorded is an allocator that
@@ -341,24 +293,16 @@ impl Value {
 }
 
 impl Value {
-    /// The kind this value is, or the raw integer if this build does not
-    /// know it.
-    ///
-    /// Not the same as the `tag` FIELD, which is the `u32` a C caller
-    /// writes: this reads that field and answers whether it names a kind
-    /// this build can act on. An unknown one means skip this value, never
-    /// stop.
+    /// The kind this value is, or an error naming the raw integer when
+    /// this build does not know it. An unknown tag means skip this value,
+    /// never stop.
     pub fn tag(&self) -> Result<Tag, ValueError> {
         Tag::try_from(self.tag)
     }
 
-    /// The boolean, or `None` for any other kind.
-    ///
-    /// Any non-zero byte reads as `true`, matching C's own rule. The arm
-    /// is a `u8`, which has no invalid bit patterns, so every byte a
-    /// producer could have written is a valid value of it -- which is why
-    /// there is no `TryAsRef<bool>`: no `&bool` over that byte would be
-    /// sound. `bool::try_from(&value)` is the public door.
+    /// The boolean, or `None` for any other kind. Any non-zero byte is
+    /// `true`. There is no `TryAsRef<bool>`, because no `&bool` over that
+    /// byte would be sound; `bool::try_from(&value)` is the public door.
     pub(crate) fn as_bool(&self) -> Option<bool> {
         match self.tag() {
             // SAFETY: the tag says the `b` arm is live, and a node is born
@@ -368,17 +312,12 @@ impl Value {
         }
     }
 
-    /// A deep copy, built through `alloc`.
+    /// A deep copy, built through `alloc`. Explicit, because an owned
+    /// tree carries its allocator and copying one into another heap costs
+    /// a walk.
     ///
-    /// Explicit, and deliberately so: an owned tree carries its allocator,
-    /// so copying one into another heap costs a walk, and that cost should
-    /// be a line a reader can see rather than something a setter does
-    /// quietly.
-    ///
-    /// Bounded by [`MAX_DEPTH`], so a hostile tree is
-    /// [`ValueError::TooDeep`] rather than a dead process. The copy is
-    /// complete or it does not exist: a failure part-way frees everything
-    /// already built.
+    /// Bounded by [`MAX_DEPTH`]. The copy is complete or it does not
+    /// exist: a failure part-way frees everything already built.
     pub fn clone_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
         self.clone_at(alloc, 0)
     }
@@ -427,13 +366,9 @@ impl Value {
     }
 
     /// Whether two trees hold the same thing, following no deeper than
-    /// [`MAX_DEPTH`].
-    ///
-    /// Two trees nested deeper compare **unequal** without being walked
-    /// further: the input can come from a foreign producer, and an
-    /// unbounded recursion over one is a stack overflow, which on Windows
-    /// is not catchable. A caller using this for uniqueness keeps an item
-    /// it might have discarded, which is a value kept rather than lost.
+    /// [`MAX_DEPTH`]. Two nested deeper compare **unequal** rather than
+    /// overflowing a stack: a caller using this for uniqueness keeps an
+    /// item it might have discarded.
     pub(crate) fn eq_at(&self, other: &Value, depth: u32) -> bool {
         if self.tag != other.tag {
             return false;
@@ -474,11 +409,9 @@ impl Value {
         }
     }
 
-    /// Frees everything this value owns and leaves it null-tagged.
-    ///
-    /// Rust code does not call this — a value frees itself when it goes
-    /// out of scope. It is here for the boundary, where a caller that has
-    /// only a pointer has no scope to end.
+    /// Frees everything this value owns and leaves it null-tagged. Rust
+    /// code does not call this; it is here for the boundary, where a
+    /// caller holding only a pointer has no scope to end.
     ///
     /// # Safety
     ///
@@ -491,9 +424,9 @@ impl Value {
 
 // --- the value seen as the kind it holds --------------------------------
 
-/// One `TryAsRef`/`TryAsMut` pair per arm, guarded by the tags that select
-/// it. `Number` and `Text` share the `text` arm and are listed separately,
-/// because sharing storage is not sharing a type.
+/// One pair per arm, guarded by the tags that select it. `Number` and
+/// `Text` share the `text` arm and are listed separately: sharing
+/// storage is not sharing a type.
 macro_rules! arm_as {
     ($ty:ty, $field:ident, $($tag:pat_param)|+) => {
         impl TryAsRef<$ty> for Value {
@@ -531,9 +464,8 @@ impl TryAsRef<Number> for Value {
             Ok(Tag::GUATIAO_NUMBER) => unsafe { &self.payload.text },
             _ => return None,
         };
-        // SAFETY: `Number` is `repr(transparent)` over `Text`, so the two
-        // have one layout and this reinterprets the reference rather than
-        // dereferencing it a second time.
+        // SAFETY: `Number` is `repr(transparent)` over `Text`, so this
+        // reinterprets the reference rather than dereferencing it twice.
         Some(unsafe { &*std::ptr::from_ref(text).cast::<Number>() })
     }
 }
@@ -567,8 +499,8 @@ impl TryAsRef<[u8]> for Value {
 // --- taking the container out of the node -------------------------------
 
 /// Consuming conversions. The error is the **value handed back
-/// untouched**: it owns a tree, so a refusal that dropped it would free
-/// what the caller still wanted.
+/// untouched**: a refusal that dropped it would free what the caller
+/// still wanted.
 ///
 /// ```
 /// # use guatiao::{Map, Tag, Value};
@@ -633,14 +565,9 @@ arm_borrowed!(Map, Tag::GUATIAO_MAP);
 arm_borrowed!(List, Tag::GUATIAO_LIST);
 
 impl Clone for Value {
-    /// A deep copy, grown through the allocator this tree recorded — the
-    /// crate's own for a scalar, or for a literal that recorded none — so
-    /// a copy lives where its source did.
-    ///
-    /// Panics if the allocator refuses or the tree is deeper than
-    /// [`MAX_DEPTH`], the same policy as the short constructors;
-    /// [`clone_in`](Value::clone_in) is the fallible form and the one
-    /// that names an allocator.
+    /// A deep copy through the allocator this tree recorded, so a copy
+    /// lives where its source did. Panics where the short constructors
+    /// do; [`clone_in`](Value::clone_in) is the fallible form.
     fn clone(&self) -> Value {
         let alloc = self.alloc().unwrap_or_else(|_| Alloc::rust());
         self.clone_in(alloc)
@@ -666,44 +593,30 @@ impl PartialEq for Value {
 impl Eq for Value {}
 
 // SAFETY: the buffer is owned outright and reached only through `&self`
-// or `&mut self`, so no two threads share it without the borrow checker
-// saying so; the allocator it recorded is a table that outlives it, by the contract on `Alloc`,
-// and may be called from any thread, which is the contract on
-// `Allocator` — a host handing out an arena synchronises it, as Rust's
-// global allocator does.
+// or `&mut self`; the allocator it recorded outlives it and may be
+// called from any thread, which is the contract on `Allocator`.
 unsafe impl Send for Value {}
 // SAFETY: as above.
 unsafe impl Sync for Value {}
 
 impl Drop for Value {
-    /// A value frees what it owns.
-    ///
-    /// **This is why there is no separate owning wrapper.** A `Value` is
-    /// the thing a caller holds, and holding it is what makes it yours:
-    /// it frees on drop like any other Rust value, and handing it to
-    /// something else is a move, which is exactly when Rust stops
-    /// dropping it. Crossing a boundary is therefore a plain
-    /// `ptr::write`, with nothing to remember.
-    ///
-    /// A value that owns nothing — null, a boolean, the absent sentinel,
-    /// a literal some other language declared with `cap == 0` — frees to
-    /// nothing, so this is safe on every value however it was made.
+    /// A value frees what it owns, which is why there is no separate
+    /// owning wrapper: holding a `Value` is what makes it yours, and
+    /// handing it away is a move. A value that owns nothing — a scalar,
+    /// or a literal with `cap == 0` — frees to nothing.
     fn drop(&mut self) {
-        // A scalar owns nothing, so leaving it null-tagged IS the whole
-        // operation: no walk, and no heap for the walk's stack. Scalars
-        // are most of the nodes in a tree.
+        // A scalar owns nothing, so null-tagging it IS the whole
+        // operation: no walk, and no heap for the walk's stack.
         if !self.owns_storage() {
             self.tag = u32::from(Tag::GUATIAO_NULL);
             return;
         }
 
-        // **Iterative on purpose.** A tree may have arrived from a foreign
-        // caller, and recursion on adversarial depth is a stack overflow,
-        // which on Windows is not catchable.
-        //
-        // Every node here is held in a `ManuallyDrop`: a node this loop
-        // has already dismantled would otherwise be freed a second time
-        // when its binding ended.
+        // Iterative on purpose: a tree may have arrived from a foreign
+        // caller, and recursion on adversarial depth is a stack overflow
+        // that Windows cannot catch. Every node is held in a
+        // `ManuallyDrop`, or one this loop has already dismantled would
+        // be freed again when its binding ended.
         let mut stack = vec![std::mem::take(self)];
         while let Some(node) = stack.pop() {
             let mut node = ManuallyDrop::new(node);
@@ -743,11 +656,9 @@ impl Drop for Value {
                     // SAFETY: as above.
                     unsafe { release_buffer(m) };
                 }
-                // Absent, null, bool, and any tag this build does not
-                // know: nothing is owned. An unknown tag is deliberately
-                // not an error -- refusing to free a tree because one node
-                // came from a newer producer would leak the whole tree to
-                // punish the one node.
+                // Absent, null, bool and any unknown tag own nothing.
+                // An unknown tag is not an error: refusing to free the
+                // tree would leak all of it to punish one node.
                 _ => {}
             }
         }
@@ -778,11 +689,8 @@ impl From<bool> for Value {
     }
 }
 
-/// A float converts **fallibly**, and that is not an oversight.
-///
-/// `NaN` and the infinities have no JSON spelling, so `f64` cannot promise
-/// what `From` promises. `map.set("ratio", Number::try_from(x)?)` says out
-/// loud that the value might not be one.
+/// A float converts **fallibly**: `NaN` and the infinities have no JSON
+/// spelling, so `f64` cannot promise what `From` promises.
 impl TryFrom<f64> for Value {
     type Error = ValueError;
 
@@ -811,11 +719,10 @@ impl<T: Into<Value>> From<Option<T>> for Value {
 
 /// Any number, whatever it was written from.
 ///
-/// **The one blanket impl in this crate**, and it has to be the only one:
-/// a second `From<T: Into<Something>>` overlaps with this one, because a
-/// downstream type may implement both `Into`s, and the blanket `TryFrom`
-/// collides with core's own. So numbers get the blanket and every other
-/// kind gets a concrete impl below.
+/// **The one blanket impl in this crate**, and necessarily the only one:
+/// a second `From<T: Into<_>>` overlaps with it, because a downstream
+/// type may implement both `Into`s, and a blanket `TryFrom` collides
+/// with core's own.
 impl<T: Into<Number>> From<T> for Value {
     fn from(v: T) -> Value {
         let mut node = Value::blank(Tag::GUATIAO_NUMBER);
@@ -824,7 +731,6 @@ impl<T: Into<Number>> From<T> for Value {
     }
 }
 
-/// A conversion that goes through the container that owns the operation:
 /// `Value::from("x")` is `Text::from("x").into()`, written once.
 macro_rules! value_from_via {
     ($($container:ident: $($source:ty),+ );* $(;)?) => {$($(

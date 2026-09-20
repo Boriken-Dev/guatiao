@@ -4,107 +4,50 @@
 
 //! The C form of a value: plain structs, no opaque handles.
 //!
-//! Two families, named the way Rust names them. A **view** is
-//! `{const ptr, len}` and is what every parameter takes and every read
-//! returns. An **owned** container is `{ptr, len, cap, alloc}` and can be
-//! grown through the allocator it carries.
+//! A **view** is `{const ptr, len}`, an **owned** container is
+//! `{ptr, len, cap, alloc}`: [`Str`]/[`Text`], [`Bytes`]/[`Buffer`],
+//! [`Values`]/[`List`], [`Entries`]/[`Map`]. A [`Value`] holds owned
+//! containers, and a view of a node is a const pointer to one because a
+//! list's element type IS the node type.
 //!
-//! | Rust | view (16 bytes) | owned (32 bytes) |
-//! | --- | --- | --- |
-//! | `&str` / `String` | [`Str`] | [`Text`] |
-//! | `&[u8]` / `Vec<u8>` | [`Bytes`] | [`Buffer`] |
-//! | `&[Value]` / `Vec<Value>` | [`Values`] | [`List`] |
-//! | `&[(K, V)]` / `Vec<(K, V)>` | [`Entries`] | [`Map`] |
-//! | `&Value` / `Value` | `*const Value` | [`Value`] |
+//! **`cap == 0` means the buffer is not owned**, `Vec`'s own rule, which
+//! is what lets a C literal be read like any other value and never
+//! freed. Only GROWTH copies out, so a literal that will be mutated must
+//! live in writable storage, and `cap >= len` does not hold on input.
 //!
-//! # One node type, holding owned payloads
-//!
-//! A [`Value`] is a `Value`, so it holds owned containers, exactly
-//! as Rust's enum holds `String` and `Vec`. A *view* of a node is a const
-//! pointer to one. A second, view-shaped node type was considered and
-//! rejected: a list's element type is the node type, so two node layouts
-//! would double every accessor and force a copy merely to read an owned
-//! tree through the view API.
-//!
-//! # The fields are private, and that is the safety argument
-//!
-//! Every `SAFETY:` comment in this crate assumes a node reached in safe
-//! code is well formed. That holds because safe code cannot build one by
-//! hand: the fields of [`Value`], [`Payload`], [`Entry`], [`Text`],
-//! [`Buffer`], [`List`] and [`Map`] are crate-private, and the one door
-//! for a literal or a buffer another language owns is `unsafe fn
-//! from_raw_parts`. The borrowed views keep public fields; they own
-//! nothing. The C header is unchanged, since cbindgen renders private
-//! fields.
-//!
-//! A forged node does not compile:
+//! **The fields are private, and that is the safety argument**: every
+//! `SAFETY:` comment here assumes a node reached in safe code is well
+//! formed, which holds because safe code cannot build one by hand.
 //!
 //! ```compile_fail
 //! let v = guatiao::Value { tag: 7, _pad: 0, payload: unreachable!() };
 //! ```
-//!
-//! Nor does a length written by hand:
 //!
 //! ```compile_fail
 //! let mut m = guatiao::Map::new();
 //! m.len = 4096;
 //! ```
 //!
-//! Nor a second owner copied out of a live container:
-//!
 //! ```compile_fail
 //! let a = guatiao::Text::new("hello");
 //! let b = guatiao::Text { ptr: a.ptr, len: a.len, cap: a.cap, alloc: a.alloc };
 //! ```
 //!
-//! Nor a stolen arm. A NUMBER and a STRING share the `text` arm and do
-//! not share a type, so the reader for a [`Text`] answers `None` for a
-//! number:
+//! A NUMBER and a STRING share the `text` arm and not a type, so no
+//! `&mut Text` comes off a number:
 //!
 //! ```
 //! use guatiao::{Text, TryAsMut, Value};
 //! let mut v = Value::from(1i64);
 //! assert!(TryAsMut::<Text>::try_as_mut(&mut v).is_none());
 //! ```
-//!
-//! # `cap == 0` means the buffer is not owned
-//!
-//! That is `Vec`'s own rule rather than an invention: a capacity of zero
-//! never deallocates. It is what lets a C literal be written as a brace
-//! initialiser with `cap = 0, alloc = NULL`, read like any other value,
-//! and never be freed. The first growth copies out of it and leaves the
-//! original untouched.
-//!
-//! **Only GROWTH copies out.** Mutation in place — removing an element,
-//! clearing a container, replacing the value under an existing key —
-//! shifts elements and writes through the buffer the container already
-//! has, whatever its capacity says. So a literal that will be mutated
-//! must live in **writable storage**: a C `static` without `const`, or a
-//! local. One in read-only memory may be read, cloned, merged and freed,
-//! and a borrowed buffer emptied this way is changed under whoever still
-//! owns it.
-//!
-//! **`cap >= len` therefore does NOT hold on input.** A literal is
-//! legitimately `len = 5, cap = 0`. Spare capacity is `cap - len` only
-//! after `cap == 0` has been handled, and the arithmetic in
-//! the private `raw` module is written that way.
 
 #![allow(non_camel_case_types)]
-// The crate root sets `#![warn(missing_docs)]`, which is right for the
-// model: a `Map` method's contract is not obvious from its name. It is
-// wrong for SCREAMING_CASE C constants that say exactly what they are.
-// cbindgen copies any doc comment here verbatim into the generated
-// header, so a per-variant `/// The bool kind.` would add a line of noise
-// to that header for every one of them. Scoped to this module rather than
-// silenced per item, because the exception is a property of the whole C
-// surface; the variants that DO carry a non-obvious distinction still
-// document it, and this allow does not discourage that.
+// Right for the model, wrong for SCREAMING_CASE C constants: cbindgen
+// copies every doc comment here into the header.
 #![allow(missing_docs)]
 
-// One module per type, each carrying its own definition and its own
-// impl. A `//` comment, never a `///`: rustdoc merges a `///` on a `mod`
-// line with that module's own `//!` header and then resolves the
-// header's links here.
+// A `//` comment, never a `///`: see `value/mod.rs`.
 pub mod buffer;
 pub mod list;
 pub mod map;
@@ -119,8 +62,8 @@ pub use maybe_null::MaybeNull;
 pub use number::Number;
 pub use text::{Str, Text};
 
-// The node lives beside this directory rather than in it, and every path
-// that named it through `types` keeps working.
+// The node lives beside this directory, and every path through `types`
+// still reaches it.
 pub use super::value::{Payload, Tag, Value};
 
 use std::ffi::c_void;
@@ -142,11 +85,10 @@ pub(crate) fn or_abort<T>(built: Result<T, ValueError>) -> T {
     }
 }
 
-// These are the numbers a foreign consumer compiles against, so a change
-// to any of them is an ABI break and must fail the build here rather than
-// in somebody else's program. The C side asserts the same numbers with
-// `_Static_assert`; both halves are needed, because Rust agreeing with
-// itself proves nothing about the header.
+// The numbers a foreign consumer compiles against: a change to one is an
+// ABI break and fails the build here. The C side asserts the same
+// numbers with `_Static_assert`, because Rust agreeing with itself
+// proves nothing about the header.
 const _: () = {
     use std::mem::{align_of, offset_of, size_of};
 
@@ -173,18 +115,16 @@ const _: () = {
     assert!(offset_of!(Entry, key) == 0);
     assert!(offset_of!(Entry, value) == 32);
 
-    // Every container asks its allocator for the element type's own
-    // alignment, and a C caller may reasonably wire `malloc` straight
-    // through. `malloc` guarantees only `max_align_t`, which on the
-    // targets in view is 8. So an element type that needed more would
-    // silently break every malloc-backed allocator; this makes adding one
-    // a build failure instead.
+    // A C caller may wire `malloc` straight through, and `malloc`
+    // guarantees only `max_align_t` -- 8 on the targets in view. An
+    // element type needing more would silently break every malloc-backed
+    // allocator, so adding one is a build failure instead.
     assert!(align_of::<Value>() <= 8);
     assert!(align_of::<Entry>() <= 8);
     assert!(align_of::<Text>() <= 8);
 };
 
-// A `*mut c_void` is what the allocator vtable speaks, and it must be the
-// same width as the pointers in the containers above, or the `(size,
-// align)` pair handed back to `free` describes a different block.
+// The allocator vtable speaks `*mut c_void`, which must be as wide as
+// the containers' pointers or the `(size, align)` pair handed to `free`
+// describes a different block.
 const _: () = assert!(size_of::<*mut c_void>() == size_of::<*mut u8>());

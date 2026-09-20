@@ -4,14 +4,11 @@
 
 //! A number: the exact text that declared it.
 //!
-//! What counts as one is RFC 8259 section 6 and nothing else, so a
-//! producer and a consumer that agree about JSON agree about this. The
-//! check is at construction, never at read.
-//!
-//! `f64::from_str` is a different grammar in both directions: it takes
-//! `inf`, `NaN`, `.5`, `5.` and `+1`, and it rounds, which throws away the
-//! reason the text is kept. A 200-digit integer is a number here and there
-//! is no `f64` for it.
+//! What counts as one is RFC 8259 section 6, checked at construction and
+//! never at read. `f64::from_str` is a different grammar in both
+//! directions -- it takes `inf`, `NaN`, `.5`, `5.` and `+1`, and it
+//! rounds away the reason the text is kept. A 200-digit integer is a
+//! number here and there is no `f64` for it.
 
 #![allow(missing_docs)]
 #![forbid(unsafe_code)]
@@ -24,45 +21,36 @@ use crate::value::error::ValueError;
 
 use super::Text;
 
-/// A JSON number, stored as its exact text.
+/// A JSON number, stored as its exact text: `1.10` reads back as `1.10`
+/// and `u64::MAX` survives, because nothing converts. A machine width is
+/// reached with `TryInto`, where the refusal is visible.
 ///
-/// `1.10` reads back as `1.10` and `u64::MAX` survives, because nothing
-/// converts. A machine width is reached with `TryInto` on the value, where
-/// the refusal is visible.
-///
-/// Wraps a [`Text`] rather than carrying its own fields: the node's
-/// `text` arm is the same storage for a string and a number, and one
-/// container means one growth path and one free.
+/// Wraps a [`Text`]: the node's `text` arm is the same storage for a
+/// string and a number, so one container means one growth path and one
+/// free.
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct Number(Text);
 
 impl Number {
-    /// A number from its exact text, refusing anything outside the JSON
-    /// grammar.
-    ///
-    /// Fallible in the short form too, and the refusal is about the
-    /// **text**: `"1,5"` is not a JSON number. Allocation failure aborts,
-    /// as [`Text::new`] does.
+    /// A number from its exact text. Fallible even in the short form,
+    /// because the refusal is about the **text**: `"1,5"` is not a JSON
+    /// number. Allocation failure aborts, as [`Text::new`] does.
     pub fn new(text: &str) -> Result<Number, ValueError> {
         validate_json_number(text.as_bytes()).map_err(|_| ValueError::NotANumber)?;
         Ok(Number(Text::new(text)))
     }
 
-    /// The same, through an allocator you name.
-    ///
-    /// The grammar is checked before anything is allocated, so a refused
-    /// number costs nothing.
+    /// The same, through an allocator you name. The grammar is checked
+    /// before anything is allocated.
     pub fn new_in(alloc: Alloc, text: &str) -> Result<Number, ValueError> {
         validate_json_number(text.as_bytes()).map_err(|_| ValueError::NotANumber)?;
         Ok(Number(Text::new_in(alloc, text)?))
     }
 
-    /// The text this number was written as.
-    ///
-    /// Infallible: the grammar is ASCII, so a number built here is UTF-8.
-    /// A NUMBER node a foreign producer wrote with other bytes reads as
-    /// `""`, which every conversion then refuses.
+    /// The text this number was written as. Infallible: the grammar is
+    /// ASCII. A NUMBER node a foreign producer wrote with other bytes
+    /// reads as `""`, which every conversion refuses.
     pub fn as_str(&self) -> &str {
         self.0.as_str().unwrap_or("")
     }
@@ -88,11 +76,9 @@ impl Number {
     }
 }
 
-/// A float's decimal text, or the refusal.
-///
-/// `NaN` and the infinities have no JSON spelling, so a container that
-/// took one would have to invent a spelling or lose the value at the
-/// first boundary it crossed.
+/// A float's decimal text, or the refusal: `NaN` and the infinities have
+/// no JSON spelling, so taking one means inventing a spelling or losing
+/// the value at the first boundary.
 fn float_text(v: f64) -> Result<String, ValueError> {
     if v.is_finite() {
         Ok(v.to_string())
@@ -131,11 +117,8 @@ impl FromStr for Number {
     }
 }
 
-/// Every integer width, written as its **decimal text**.
-///
-/// Not squeezed through an `i64` on the way: `u64::MAX` and `i128::MIN`
-/// cross as themselves rather than wrapping, because there is no machine
-/// width at the boundary to overflow.
+/// Every integer width, as its **decimal text**: `u64::MAX` and
+/// `i128::MIN` cross as themselves, with no machine width to overflow.
 macro_rules! number_from_integer {
     ($($t:ty),* $(,)?) => {$(
         impl From<$t> for Number {
@@ -153,9 +136,8 @@ number_from_integer!(
     i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
 );
 
-/// A float converts **fallibly**: `NaN` and the infinities have no JSON
-/// spelling, so keeping the refusal here keeps it out of every consumer's
-/// own formatting.
+/// A float converts **fallibly**, which keeps the refusal out of every
+/// consumer's own formatting.
 impl TryFrom<f64> for Number {
     type Error = ValueError;
 
@@ -235,12 +217,10 @@ mod tests {
     use super::*;
 
     /// Every shape RFC 8259 section 6 allows, and the ones a `f64` check
-    /// would take or reject wrongly.
-    ///
-    /// **This test bites.** Deleting the leading-zero rule makes `01`
-    /// pass; deleting the `1*DIGIT` after `.` makes `5.` pass; deferring
-    /// to `parse::<f64>()` makes `.5`, `+1`, `inf` and `NaN` pass and
-    /// makes a 200-digit integer round.
+    /// would take or reject wrongly. **This test bites**: deleting the
+    /// leading-zero rule makes `01` pass, deleting the `1*DIGIT` after
+    /// `.` makes `5.` pass, and deferring to `parse::<f64>()` makes `.5`,
+    /// `+1`, `inf` and `NaN` pass.
     #[test]
     fn the_json_number_grammar_is_accepted_exactly() {
         for text in [

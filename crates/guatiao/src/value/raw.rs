@@ -4,48 +4,24 @@
 
 //! Growth, shared by all four owned containers.
 //!
-//! The four differ only in element type, so the alloc/copy/free sequence
-//! is written once here and each container reaches it through
-//! [`Container`]. Writing it four times would be four chances to get the
-//! `cap == 0` branch wrong, and that branch is the one that corrupts a
-//! heap.
-//!
-//! # The two invariants the rest of the module depends on
+//! They differ only in element type, so the alloc/copy/free sequence is
+//! written once and each reaches it through [`Container`]. Four copies
+//! would be four chances to get the `cap == 0` branch wrong, and that
+//! branch is the one that corrupts a heap.
 //!
 //! **`cap > 0` implies `ptr` came from `alloc` and must be freed through
-//! it.** **`cap == 0` implies `ptr` is not ours**: a literal, a borrow, or
-//! the dangling placeholder of an empty container. It is never freed and
-//! never handed back to an allocator.
+//! it. `cap == 0` implies `ptr` is not ours** -- a literal, a borrow, or
+//! an empty container's dangling placeholder -- and is never freed.
+//! `cap > 0` requires a non-null `alloc`; `cap == 0` permits either, and
+//! a C literal carrying null **adopts** the allocator of the first
+//! growing call.
 //!
-//! `alloc` is a separate question from `cap`, and the pairing is what
-//! resolves the literal case. `cap > 0` requires a non-null `alloc`, since
-//! something allocated the block. `cap == 0` permits either: a container
-//! built by this crate carries its allocator from birth, while a C literal
-//! written as a brace initialiser carries null and **adopts** the
-//! allocator passed to the first growing call.
-//!
-//! # Growth copies out; mutation in place does not
-//!
-//! **A `cap == 0` buffer is read-only to the growth path and WRITTEN BY
-//! the mutation paths.** [`reserve`] copies out of it and never touches
-//! it again, so a literal that only ever grows is safe wherever it lives.
-//! Removing, clearing and replacing are the other half: `list_remove`,
-//! `map_remove`, `map_clear`, `list_clear` and the replace arm of
-//! `map_set_written` shift elements down and free values **in the
-//! caller's own buffer**, whatever its capacity says.
-//!
-//! So a literal a consumer intends to mutate must live in **writable
-//! storage** — a `static` without `const`, or a local — and a literal in
-//! read-only memory may be read, cloned, merged and freed but not
-//! emptied. A borrowed buffer mutated this way is also changed under
-//! whoever still owns it.
-//!
-//! # `cap >= len` is not an input invariant
-//!
-//! A literal is legitimately `len = 5, cap = 0`. Every computation of
-//! spare capacity in this file handles `cap == 0` before subtracting, and
-//! that is not defensiveness: it is the normal state of every value a C
-//! consumer declares statically.
+//! [`reserve`] copies out of a `cap == 0` buffer and never touches it
+//! again; removing, clearing and replacing write through it. So a literal
+//! a consumer intends to mutate must live in writable storage. `cap >=
+//! len` is therefore not an input invariant: `len = 5, cap = 0` is the
+//! normal shape of a statically declared value, and every computation of
+//! spare capacity here handles it before subtracting.
 
 use std::mem::{align_of, size_of};
 use std::ptr;
@@ -118,33 +94,22 @@ pub(crate) fn overlaps(a: *const u8, a_len: usize, b: *const u8, b_len: usize) -
 }
 
 /// The pointer an empty container holds: dangling but **aligned**, never
-/// null.
-///
-/// `slice::from_raw_parts` requires a non-null aligned pointer *even for a
-/// zero-length slice*, and the requirement is enforced — at compile time
-/// by a lint, at run time by a non-unwinding panic that no `catch_unwind`
-/// can intercept. `ptr::copy_nonoverlapping` says the same for a zero-byte
-/// copy. So the placeholder cannot be null, and this is the value std
-/// itself uses.
+/// null. `slice::from_raw_parts` requires that even for a zero-length
+/// slice, and enforces it with a non-unwinding panic no `catch_unwind`
+/// can intercept.
 pub(crate) fn dangling<T>() -> *mut T {
     ptr::dangling_mut::<T>()
 }
 
-/// The smallest capacity worth allocating, matching std's own floor.
-///
-/// Allocating one element at a time makes repeated append quadratic in
-/// allocator calls, and for a byte buffer the allocator's own header
-/// dwarfs the payload.
+/// The smallest capacity worth allocating, matching std's own floor:
+/// one element at a time makes repeated append quadratic in allocator
+/// calls.
 const fn min_cap<T>() -> usize {
     if size_of::<T>() == 1 { 8 } else { 4 }
 }
 
-/// The allocator a container will grow through.
-///
-/// A container that carries one uses it. A container that does not — a
-/// literal, or one a C caller built by hand — adopts the one passed in.
-/// This is the single place the two cases meet, so nothing downstream has
-/// to remember which it is holding.
+/// The allocator a container will grow through: its own, or the one
+/// passed in when it has none. The single place the two cases meet.
 fn allocator_for(stored: *const Allocator, adopt: Option<Alloc>) -> Result<Alloc, AllocError> {
     if stored.is_null() {
         adopt.ok_or(AllocError::Null)
@@ -168,12 +133,9 @@ fn array_size<T>(cap: usize) -> Result<usize, AllocError> {
     Ok(size)
 }
 
-/// Makes room for at least `extra` more elements past `len`.
-///
-/// On success the container owns a buffer of at least `len + extra`
-/// elements and carries the allocator that made it. **On failure nothing
-/// changed**: the fields still describe the old block and the old block is
-/// still live.
+/// Makes room for at least `extra` more elements past `len`. **On
+/// failure nothing changed**: the fields still describe the old block,
+/// and it is still live.
 ///
 /// # Safety
 ///
@@ -202,11 +164,10 @@ pub(crate) unsafe fn reserve<C: Container>(
         return Ok(());
     }
 
-    // A container that owns a block recorded the allocator that made it.
-    // `cap > 0` with a null `alloc` is a malformed container — the shape a
-    // C brace initialiser produces by leaving one field out — and the
-    // block would then be freed below through the allocator it ADOPTED
-    // rather than the one that made it.
+    // `cap > 0` with a null `alloc` is malformed -- the shape a C brace
+    // initialiser produces by leaving a field out -- and the block would
+    // be freed through the allocator it ADOPTED, not the one that made
+    // it.
     debug_assert!(
         cap == 0 || !stored.is_null(),
         "a container with cap > 0 must carry the allocator that made it"
@@ -226,11 +187,10 @@ pub(crate) unsafe fn reserve<C: Container>(
     // initialised, and reading past them would be reading uninitialised
     // memory at a type that forbids it.
     if len > 0 {
-        // SAFETY: the caller's invariant says the first `len` elements are
-        // initialised and readable; `new_ptr` has room for at least
-        // `needed >= len` of them; the two blocks cannot overlap because
-        // one was just allocated. Both are aligned: the old by its own
-        // invariant or by `dangling`, the new by the check in `alloc`.
+        // SAFETY: the first `len` elements are initialised and
+        // readable, `new_ptr` has room for them, the blocks cannot
+        // overlap because one was just allocated, and both are
+        // aligned.
         unsafe { ptr::copy_nonoverlapping(ptr, new_ptr, len) };
     }
 
@@ -248,10 +208,8 @@ pub(crate) unsafe fn reserve<C: Container>(
     Ok(())
 }
 
-/// Releases a container's buffer and leaves it empty.
-///
-/// Does **not** touch the elements: the caller drops or frees those first,
-/// because only the caller knows whether they own anything.
+/// Releases a container's buffer and leaves it empty. Does **not** touch
+/// the elements: only the caller knows whether they own anything.
 ///
 /// # Safety
 ///

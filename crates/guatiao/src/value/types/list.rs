@@ -41,14 +41,12 @@ pub struct List {
 impl Drop for List {
     fn drop(&mut self) {
         for i in 0..self.len {
-            // SAFETY: the first `len` elements are initialised, and each
-            // is read exactly once — `len` is zeroed below, so nothing
-            // reads the buffer again.
-            let elem = unsafe { self.ptr.add(i).read() };
-            // Each element is a `Value`, so this is `value_free`'s
-            // ITERATIVE walk. The recursion stops here at depth one, which
-            // is the whole reason that walk is iterative.
-            drop(elem);
+            // SAFETY: the first `len` elements are initialised, and
+            // each is read exactly once -- `len` is zeroed below.
+            //
+            // Dropping one enters `Value::drop`'s ITERATIVE walk, so the
+            // recursion stops here at depth one.
+            drop(unsafe { self.ptr.add(i).read() });
         }
         self.len = 0;
         // SAFETY: the elements have been moved out.
@@ -57,17 +55,15 @@ impl Drop for List {
 }
 
 impl List {
-    /// A list over storage described by hand. See
-    /// [`Text::from_raw_parts`](super::Text::from_raw_parts); the elements
-    /// are nodes.
+    /// A list over storage described by hand, the elements being nodes.
     ///
     /// # Safety
     ///
     /// The first `len` nodes at `ptr` are well formed and readable for as
     /// long as this lives; `cap > 0` means the block came from `alloc`
-    /// with a layout of `cap` nodes and is owned by this list alone;
-    /// `cap == 0` means the array is somebody else's and, if this list is
-    /// mutated in place, writable.
+    /// with a layout of `cap` nodes and is this list's alone; `cap == 0`
+    /// means the array is somebody else's and, if mutated in place,
+    /// writable.
     pub unsafe fn from_raw_parts(
         ptr: *mut Value,
         len: usize,
@@ -146,10 +142,8 @@ impl List {
         self.push_node(value.into(), alloc)
     }
 
-    /// Appends an already-built node.
-    ///
-    /// A refused append frees what it was handed: the node was moved in,
-    /// so nothing else can free it and leaving it would leak the tree.
+    /// Appends an already-built node. A refused append frees what it was
+    /// handed: it was moved in, so nothing else can.
     fn push_node(&mut self, value: Value, alloc: Alloc) -> Result<(), ValueError> {
         // SAFETY: the container is consistent.
         if let Err(e) = unsafe { reserve(self, 1, Some(alloc)) } {
@@ -184,10 +178,8 @@ impl List {
     }
 
     /// Removes the element at `index`, keeping the order of the rest.
-    ///
-    /// The returned node **owns its buffers** and frees them when it goes
-    /// out of scope, so dropping it on the floor is a release rather than
-    /// a leak.
+    /// The returned node **owns its buffers**, so dropping it on the
+    /// floor is a release rather than a leak.
     pub fn remove(&mut self, index: usize) -> Option<Value> {
         if index >= self.len {
             return None;
@@ -275,9 +267,8 @@ impl Clone for List {
 }
 
 impl PartialEq for List {
-    /// Structural, as [`Value`]'s is, and bounded the same way: two trees
-    /// nested deeper than [`MAX_DEPTH`](crate::MAX_DEPTH) compare unequal
-    /// rather than overflowing a stack.
+    /// Structural, and bounded as [`Value`]'s is: two trees nested
+    /// deeper than [`MAX_DEPTH`](crate::MAX_DEPTH) compare unequal.
     fn eq(&self, other: &List) -> bool {
         self.eq_at(other, 0)
     }
@@ -286,11 +277,8 @@ impl PartialEq for List {
 impl Eq for List {}
 
 // SAFETY: the buffer is owned outright and reached only through `&self`
-// or `&mut self`, so no two threads share it without the borrow checker
-// saying so; the allocator it recorded is a table that outlives it, by the contract on `Alloc`,
-// and may be called from any thread, which is the contract on
-// `Allocator` — a host handing out an arena synchronises it, as Rust's
-// global allocator does.
+// or `&mut self`; the allocator it recorded outlives it and may be
+// called from any thread, which is the contract on `Allocator`.
 unsafe impl Send for List {}
 // SAFETY: as above.
 unsafe impl Sync for List {}

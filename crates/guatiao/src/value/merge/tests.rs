@@ -2,34 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Merge tests.
+//! What each merge mode does, and what provenance says afterwards.
 //!
-//! # The first block is a PORT, not a fresh test suite
-//!
-//! `port_of_the_reference_suite` below is a case-for-case translation of
-//! the prior implementation's own tests. Those tests are the closest
-//! thing to a written specification of the three strategies — the summary
-//! table in the module doc does not capture the positional list rule, the
-//! `mergelists` overlap condition, or the map-absorbs-list-of-maps
-//! behaviour, and all three are pinned there.
-//!
-//! Keeping them as a distinct, named block matters: a divergence from the
-//! reference should show up as a **red test in the port**, not as a
-//! surprise in some unrelated behaviour years later. Each test carries
-//! the reference test's own name in a comment so the two can be diffed
-//! by hand.
-//!
-//! The second block is what this port needs and the reference did not
-//! have: the `Result` instead of an exception, the leaf-path provenance,
-//! and the per-path mode override.
-//!
-//! # Every value here is built on Rust's own heap
-//!
-//! The short-form constructors — `Value::string`, `Map::owned` — build
-//! through Rust's allocator and name none, so no helper below has to
-//! thread one through its own literals. A merge still takes one
-//! explicitly, because its result is a new tree and something has to say
-//! what that grows through.
+//! Beside the implementation rather than in `tests/`: these reach the
+//! private helpers the modes are built from, and a behaviour test that
+//! can only see the public surface cannot pin which of them was wrong.
 
 use super::*;
 use crate::value::convert::TryAsRef;
@@ -68,11 +45,8 @@ fn s(text: &str) -> Value {
 }
 
 /// A number value from an integer, for brevity in the cases below.
-///
-/// Numbers are stored as text, so `n(1)` is the value whose exact
-/// spelling is `"1"`. Merging never looks inside a number, so which
-/// spelling a case uses does not matter to it -- only that two values
-/// that should differ do.
+/// Numbers are stored as text, so `n(1)` is the value spelled `"1"`;
+/// merging never looks inside one.
 fn n(value: i64) -> Value {
     Value::from(value)
 }
@@ -166,6 +140,11 @@ macro_rules! assert_merges_to {
     }};
 }
 
+/// A case-for-case port of the reference suite, which is the closest
+/// thing to a written specification of the three strategies: the
+/// positional list rule, the `mergelists` overlap condition and the
+/// map-absorbs-list-of-maps behaviour are pinned only here. Each test
+/// names its reference so the two can be diffed by hand.
 mod port_of_the_reference_suite {
     use super::*;
 
@@ -440,14 +419,13 @@ mod port_of_the_reference_suite {
 // Beyond the reference: what this port has that the original did not.
 // ----------------------------------------------------------------------
 
-/// The overlap condition on `mergelists`, which the reference's own suite
-/// only tests in the positive.
+/// The overlap condition on `mergelists`, which the reference's own
+/// suite only tests in the positive.
 ///
-/// Two positionally-matching maps with **no** shared key are two records
-/// that happen to be adjacent, not one record described twice — so the
-/// later one is appended rather than folded in. Without this the merge
-/// would silently fuse unrelated records, which is worse than a duplicate
-/// because the duplicate is visible.
+/// Two positionally-matching maps with **no** shared key are two
+/// adjacent records, not one described twice, so the later is
+/// appended rather than folded in. Fusing them would be worse than a
+/// duplicate, because the duplicate is visible.
 #[test]
 fn mergelists_on_appends_a_positional_map_with_no_overlapping_key() {
     let earlier = l([m([("name", s("alpha"))])]);
@@ -657,10 +635,8 @@ fn simple_and_substitute_each_get_a_case_the_other_gets_right() {
 /// The asymmetry that makes `Substitute` the default: a list can be
 /// SHRUNK under it and provably cannot be under `Deep`.
 ///
-/// This is the whole argument for the default, asserted rather than
-/// argued in a comment. `Deep` has no operation that removes an item, so
-/// an inherited tag could never be taken back without inventing a null
-/// sentinel — a worse problem than the one it would solve.
+/// The whole argument for the default, asserted rather than argued.
+/// `Deep` has no operation that removes an item.
 #[test]
 fn a_list_shrinks_under_substitute_and_provably_cannot_under_deep() {
     let inherited = l([s("prod"), s("legacy"), s("eu-west")]);
@@ -684,11 +660,9 @@ fn a_list_shrinks_under_substitute_and_provably_cannot_under_deep() {
     assert_eq!(elements(&twice).len(), 3, "still monotone on a second pass");
 }
 
-/// A type mismatch returns `Err` and never silently replaces.
-///
-/// The failure being guarded is not untidiness: a silent replacement
-/// means the user set an option, the merge decided the shapes disagreed,
-/// the earlier value survived, and nothing anywhere said so.
+/// A type mismatch returns `Err` and never silently replaces: a
+/// silent replacement means the user set an option, the shapes
+/// disagreed, the earlier value survived, and nothing said so.
 #[test]
 fn a_type_mismatch_is_an_error_and_never_a_silent_replacement() {
     // A map arriving where the earlier layer has a scalar, under
@@ -742,24 +716,14 @@ fn a_type_mismatch_is_an_error_and_never_a_silent_replacement() {
 
 /// `Substitute` must report the kind the earlier side ACTUALLY had.
 ///
-/// The arm that raises this error sits in the `else` of a `let ... else`,
-/// which has already moved `earlier` — so the first version of it could not
-/// call `value_type()` and hardcoded `ValueType::Str` instead. That is
-/// right only when the earlier value happens to be a string and wrong for
-/// the five other kinds that reach the same arm (`Null`, `Bool`, `Number`,
-/// `Bytes` and, least obviously, `List`). Nothing caught it because the one
-/// test exercising the arm passed a string.
-///
-/// `Deep` derives the same field from the value it was handed, so for
-/// identical input the two modes disagreed about what went wrong. This
-/// pins them against each other rather than against a literal: a mode that
-/// starts guessing again stops matching its neighbour, which is a sharper
-/// signal than a hardcoded expectation would be.
-///
-/// `Null` is excluded from the cross-check on purpose — `Deep` treats a
-/// null on the left as "replace me" and returns `Ok`, which is the
-/// deliberate asymmetry pinned by the test just below. `Substitute` still
-/// has to name it correctly.
+/// The arm raising it has already moved `earlier`, so it is easy to
+/// report a fixed kind instead -- right only when that value is a
+/// string and wrong for the five other kinds reaching the same arm.
+/// `Deep` derives the field from the value it was handed, so this
+/// pins the two modes against each other rather than against a
+/// literal. `Null` is excluded because `Deep` treats a null on the
+/// left as "replace me" and returns `Ok`, the asymmetry pinned just
+/// below.
 #[test]
 fn substitute_names_the_earlier_kind_it_was_given_and_agrees_with_deep() {
     let later = m([("k", n(1))]);
@@ -811,11 +775,9 @@ fn substitute_names_the_earlier_kind_it_was_given_and_agrees_with_deep() {
     }
 }
 
-/// The `a is None` handling differs between the modes, deliberately.
-///
-/// `Deep` returns the later value when the earlier side is nothing.
-/// `Substitute` returns it only when the earlier side is not a map — so a
-/// map on the left is never overwritten by a scalar, it is an error.
+/// The `a is None` handling differs between the modes, deliberately:
+/// `Deep` returns the later value when the earlier side is nothing,
+/// `Substitute` only when the earlier side is not a map.
 #[test]
 fn the_a_is_none_handling_differs_between_deep_and_substitute() {
     // Earlier side is a stored nothing, later is a map.
@@ -902,11 +864,8 @@ fn merging_preserves_the_earlier_maps_key_order() {
 // --- per-path overrides (the `x-merge` channel) ------------------------
 
 /// An override changes the mode for **that key only**, leaving every
-/// other key on the call-site default.
-///
-/// This is the mechanism a schema layer's per-key merge annotations ride on. The
-/// declarer of an option knows whether its list is an unordered tag set
-/// or an ordered fallback chain; the caller merging two maps does not.
+/// other key on the call-site default -- the mechanism a schema
+/// layer's per-key annotations ride on.
 #[test]
 fn a_per_path_override_beats_the_call_site_mode_for_that_key_only() {
     let earlier = m([
@@ -988,12 +947,9 @@ fn the_default_mode_is_substitute() {
 // --- provenance --------------------------------------------------------
 
 /// Provenance survives a RECURSIVE merge and reports *mixed* where it
-/// must.
-///
-/// The wrinkle a naive per-top-level-key design gets wrong: after
-/// recursing, `tls` has no single source — `tls.verify` came from the
-/// user layer while `tls.ca` came from the system one. Answering with
-/// either would be a confident lie.
+/// must: after recursing, `tls.verify` came from the user layer while
+/// `tls.ca` came from the system one, so `tls` has no single source
+/// and answering with either would be a confident lie.
 
 #[test]
 fn provenance_is_per_leaf_and_reports_mixed_for_an_interior_node() {
@@ -1157,11 +1113,10 @@ fn a_failed_layer_merge_yields_an_error_not_a_partial_map() {
 
 // --- what nothing pinned before ----------------------------------------
 //
-// Three behaviours the port had to decide and the suite above does not
-// assert: the `mergelists` default, the order a mixed later list comes
-// out in, and what the C form's two extra spellings of "nothing" mean.
-// Every mergelists test above passes the flag explicitly, so a port that
-// flipped its default would have left all 43 of them green.
+// Three behaviours the port had to decide: the `mergelists` default,
+// the order a mixed later list comes out in, and what the two extra
+// spellings of "nothing" mean. Every mergelists test above passes the
+// flag explicitly, so a flipped default would leave them all green.
 
 /// `mergelists` is **off** by default, which is one of the behaviours
 /// this module's specification names.
@@ -1181,12 +1136,9 @@ fn mergelists_is_off_by_default() {
 }
 
 /// With `mergelists` off, a later list's unique non-map items are
-/// appended **before** its maps, whatever order it spelled them in.
-///
-/// Two passes rather than one, and the ordering is load-bearing: it is
-/// visible to any caller that renders the list, so it is written down
-/// here rather than left to be rediscovered by someone reading output
-/// that does not match their input.
+/// appended **before** its maps, whatever order it spelled them in. Two
+/// passes, and the ordering is visible to any caller that renders the
+/// list.
 #[test]
 fn a_later_lists_scalars_are_appended_before_its_maps() {
     let earlier = l([n(0)]);
@@ -1198,13 +1150,8 @@ fn a_later_lists_scalars_are_appended_before_its_maps() {
 }
 
 /// The stored **absent** sentinel means "no opinion" on either side; a
-/// stored **null** is a value and still overwrites.
-///
-/// The C form can put absent in a container and the owned model this
-/// replaced could not, so the rule the module states for a key the later
-/// layer does not carry is stated again for the sentinel that spells the
-/// same thing. Getting this wrong would let a producer's "I have nothing
-/// to say" erase a value.
+/// stored **null** is a value and still overwrites. Getting this wrong
+/// would let a producer's "I have nothing to say" erase a value.
 #[test]
 fn a_stored_absent_is_no_opinion_and_a_stored_null_is_a_value() {
     for mode in [MergeMode::Simple, MergeMode::Substitute, MergeMode::Deep] {
@@ -1216,16 +1163,12 @@ fn a_stored_absent_is_no_opinion_and_a_stored_null_is_a_value() {
 
 /// A value whose tag this build does not know **stops** the merge.
 ///
-/// Not because the merge refuses to reason about it — it classifies as a
-/// scalar and the later side simply wins — but because putting it in the
-/// result means copying it, and a node whose payload this build cannot
-/// interpret is one it cannot copy: bit-copying it would produce two
-/// owners of whatever it points at. So the failure is
-/// [`ValueError::UnknownTag`], reported rather than papered over.
-///
-/// This is the one place the C form's "skip the value you cannot read,
-/// render the rest" rule cannot apply, and saying so out loud is the
-/// point of the test.
+/// Not because the merge refuses to reason about it -- it classifies
+/// as a scalar and the later side wins -- but because putting it in
+/// the result means copying it, and bit-copying a payload this build
+/// cannot interpret would produce two owners of whatever it points
+/// at. The one place the "skip what you cannot read" rule cannot
+/// apply.
 #[test]
 fn a_kind_this_build_cannot_read_stops_the_merge_rather_than_being_copied() {
     // A tag no build knows, on a node that owns nothing -- which is what

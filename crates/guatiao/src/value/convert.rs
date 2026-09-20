@@ -4,128 +4,53 @@
 
 //! Converting a Rust type to and from a value.
 //!
-//! Two traits, [`ToValue`] and [`FromValue`], and the derive writes both.
-//! There is no separate map trait because there is no separate map type:
-//! a map is a value whose tag says map, so a second pair of traits would
-//! differ from these in their name and in nothing else.
-//!
-//! # Writing takes an allocator; reading does not
-//!
-//! Building a value means allocating one, and the allocator travels with
-//! the tree rather than being global, so every write takes one. Reading
-//! copies into ordinary Rust types — a `String`, a `Vec<T>` — so it needs
-//! nothing.
+//! [`ToValue`] and [`FromValue`], both written by the derive. Writing
+//! takes an allocator because building a value allocates one and the
+//! allocator travels with the tree; reading copies into ordinary Rust
+//! types and needs nothing.
 //!
 //! ```
 //! use guatiao::Alloc;
 //! use guatiao::value::convert::{FromValue, ToValue};
 //!
-//! let alloc = Alloc::rust();
-//!
-//! let value = "10.0.0.1".to_value(alloc)?;
+//! let value = "10.0.0.1".to_value(Alloc::rust())?;
 //! assert_eq!(String::from_value(&value)?, "10.0.0.1");
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! # Why a named trait as well as `TryFrom`
+//! **Why a named trait beside `TryFrom`.** The orphan rule refuses
+//! `impl<T: FromValue> TryFrom<&Value> for T`, and refuses `Vec<T>` and
+//! `Option<T>` too, so a generic reader needs a trait of this crate's
+//! own. Writing has no `From` to be, since it needs an allocator. And
+//! `TryFrom` for a user's own type is theirs to write.
 //!
-//! Every readable scalar implements `TryFrom<&Value>`, so `try_into` is
-//! the ordinary Rust spelling and the section below says what that costs
-//! and covers. These two traits stay underneath it for three reasons the
-//! standard ones cannot meet:
+//! **The two directions fail for different questions**: a refused write
+//! is a [`ValueError`], a read that found no key or the wrong kind is a
+//! [`MapError`]. [`MapError`] keeps its three cases apart because a
+//! typo'd key and a type mismatch have opposite fixes, and builds its
+//! path on the way **out**, because a leaf does not know what it was
+//! stored under.
 //!
-//! - **The orphan rule refuses a blanket impl.** `impl<T: FromValue>
-//!   TryFrom<&Value> for T` puts a bare parameter where the rule requires
-//!   a local type, and `Vec<T>` and `Option<T>` fall to the same rule, so
-//!   a generic reader needs a trait of this crate's own to bound on.
-//! - **Writing has no `From` to be.** Building a value allocates, the
-//!   allocator travels with the tree rather than being global, and
-//!   `From::from` takes one argument.
-//! - **`TryFrom` for a user's own type is theirs**, and they may already
-//!   have written it; a derive that claimed it would be a coherence
-//!   hazard rather than a convenience.
+//! **`Option<T>` collapses absent and null.** Writing omits the key;
+//! reading takes either. The asymmetry is what makes the round trip
+//! total. A reader that must tell them apart uses
+//! [`Map::get`](crate::Map::get), which answers `None` only for an absent
+//! key.
 //!
-//! Both directions are fallible and for different reasons, which is worth
-//! keeping straight: a write fails because the allocator refused or a
-//! `f64` was not finite — an [`ValueError`] — while a read fails because
-//! a key is missing or holds the wrong kind, which is a [`MapError`] and a
-//! completely different question.
+//! **`Vec<T>` is a list for every `T`, `Vec<u8>` included**; a field
+//! that must cross as the bytes kind wears [`Bytes`]. Coherence refuses
+//! both at once, and the sequence is the common case.
 //!
-//! # The error distinguishes its cases, on purpose
+//! **`try_into` covers** every scalar and the borrowed forms `&str`,
+//! `&[u8]`, `&[Value]`, `&[Entry]`, `&Map` and `&List`. `Vec<T>` and
+//! `Option<T>` read through [`FromValue`] instead. A lookup answers an
+//! `Option`, which has no `TryFrom` either: [`Map::required`] is the step
+//! from one to the other, and it names the key.
 //!
-//! [`MapError`] separates [`MapError::MissingKey`] from
-//! [`MapError::WrongType`] from [`MapError::BadValue`]. One opaque error
-//! would make a **typo'd key** and a **type mismatch** indistinguishable,
-//! and those have opposite fixes: the first is a spelling correction in
-//! the producer, the second is a disagreement about what the value means.
-//!
-//! # The path is built on the way out, not carried on the way in
-//!
-//! A leaf error names no key, because a leaf does not know what it was
-//! stored under. Each level that recurses adds its own step —
-//! [`MapError::under`] for a field, [`MapError::at`] for a list element —
-//! so a failure two levels down reports `"tls.verify"` or `"tags[2]"`
-//! rather than `"verify"`. A bare field name is ambiguous the moment
-//! anything nests, and threading a prefix downwards would make every
-//! implementation responsible for something only its caller knows.
-//!
-//! # `Option<T>`: absent and null are read the same way
-//!
-//! - **Writing:** the derive **omits the key entirely** for `None`. It
-//!   does not store a null. A record with unset options is a record with
-//!   fewer keys, which is how a config file spells it.
-//! - **Reading:** **both** an absent key **and** a stored null produce
-//!   `None`.
-//!
-//! So `Option<T>` deliberately cannot tell "the producer said nothing"
-//! from "the producer said explicitly nothing". That distinction is real,
-//! and the way to keep it is to read the map directly — [`Map::get`](crate::Map::get)
-//! answers `None` only for an absent key, and a stored null arrives as a
-//! value whose tag says so.
-//!
-//! The asymmetry (write omits, read accepts both) is what makes the round
-//! trip total: every map written here reads back to the value that wrote
-//! it, and a map from a producer that spells absence as null is still
-//! readable.
-//!
-//! # A sequence is a `Vec<T>`, and bytes are opt-in
-//!
-//! `Vec<T>` is a list for every `T`, `Vec<u8>` included. Bytes are a
-//! separate kind and a field that wants them says so by its type:
-//! [`Bytes`].
-//!
-//! This is the opposite of the arrangement it replaces, where `Vec<u8>`
-//! was bytes and no generic `Vec<T>` impl could exist beside it —
-//! coherence refuses both at once, and the sequence is the case that
-//! comes up constantly while a byte blob is the rare one. It is also what
-//! `serde` settled on for the same reason, so the shape is already
-//! familiar.
-//!
-//! # What `try_into` covers
-//!
-//! Every scalar — the twelve integer widths, `f64`, `bool`, `String`,
-//! [`Bytes`] — and the borrowed forms: `&str`, `&[u8]`, a list's
-//! `&[Value]` and a map's `&[Entry]`. There is no second
-//! vocabulary of named readers beside it, because a conversion is what
-//! `TryInto` is for and one spelling is easier to remember than eight.
-//!
-//! `Vec<T>` and `Option<T>` are the two the orphan rule keeps out, and
-//! they read through [`FromValue`] or through a derived struct, which is
-//! where a generic caller already is.
-//!
-//! A lookup answers an `Option`, which has no `TryFrom` to offer either
-//! — [`Map::required`] is the step from one to the other, and it names
-//! the key: `map.required("port")?.try_into()?`.
-//!
-//! # There is no `FromValue` for an owned subtree
-//!
-//! [`ToValue`] is implemented for [`Value`] itself, so a subtree already
-//! in hand can be **written** — it deep-copies into the target
-//! allocator, because the tree it is going into may not be on the heap it
-//! came from. Reading one back would have to
-//! allocate, and [`FromValue`] deliberately takes no allocator. A field
-//! that needs the raw thing reads it with [`Map::get`](crate::Map::get) and clones it
-//! explicitly, which is one line and says what it costs.
+//! [`ToValue`] is implemented for [`Value`], so a subtree in hand can be
+//! written -- it deep-copies into the target allocator. There is no
+//! `FromValue` for one, because reading it back would have to allocate
+//! and [`FromValue`] takes no allocator.
 
 use std::fmt;
 
@@ -135,34 +60,30 @@ use super::types::{Buffer, Entry, List, Map, Number, Tag, Text, Value};
 
 /// Why a value could not be read as a particular Rust type.
 ///
-/// The three cases are kept apart deliberately — see this module's
-/// documentation. Each names the key it is about, as a dotted path.
+/// Each names the key it is about, as a dotted path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum MapError {
-    /// Nothing is stored under this key, and the field is not optional.
+    /// Nothing is stored under this key, and the field is required.
     MissingKey {
         /// The dotted path of the key that was not found.
         key: String,
     },
     /// A value is stored, but it is the wrong kind entirely.
     WrongType {
-        /// The dotted path of the key, empty for a value passed in
-        /// directly rather than found under one.
+        /// The dotted path, empty for a value passed in directly.
         key: String,
         /// The kind the field needed.
         expected: Tag,
-        /// The kind that was actually there, or `None` for a tag this
-        /// build does not know — which is a real answer rather than a
-        /// missing one, and the reason this is not a bare tag.
+        /// The kind that was there, or `None` for a tag this build does
+        /// not know -- a real answer, which is why this is not a bare
+        /// tag.
         found: Option<Tag>,
     },
     /// The right kind, but not a value this field can hold: a number too
-    /// large for the field's integer type, a spelling nobody declared.
-    ///
-    /// Separate from [`MapError::WrongType`] because the fix is
-    /// different: the producer chose the right *kind* and the wrong
-    /// *value*.
+    /// large for its integer type, a spelling nobody declared. Separate
+    /// from [`MapError::WrongType`] because the producer chose the right
+    /// *kind* and the wrong *value*.
     BadValue {
         /// The dotted path of the key.
         key: String,
@@ -172,7 +93,7 @@ pub enum MapError {
 }
 
 impl MapError {
-    /// A missing key. The one error that names its key up front, because
+    /// A missing key: the one error that names its key up front, because
     /// a lookup that found nothing is the only place that knows it.
     pub fn missing(key: &str) -> MapError {
         MapError::MissingKey {
@@ -180,8 +101,8 @@ impl MapError {
         }
     }
 
-    /// A value of the wrong kind, reading the kind that is actually there
-    /// off the value itself so no caller has to spell it.
+    /// A value of the wrong kind, reading what is actually there off the
+    /// value itself.
     pub fn wrong_type(expected: Tag, found: &Value) -> MapError {
         MapError::WrongType {
             key: String::new(),
@@ -209,10 +130,6 @@ impl MapError {
 
     /// Re-roots this error under a field, so an error raised inside a
     /// nested map reports `"tls.verify"` rather than `"verify"`.
-    ///
-    /// Without this, a caller reading a struct with two nested maps that
-    /// both have a `verify` field is told which *field* failed and not
-    /// which *map*, which is the more useful half.
     #[must_use]
     pub fn under(self, prefix: &str) -> MapError {
         self.rekey(&|key| {
@@ -279,11 +196,8 @@ impl fmt::Display for MapError {
 
 impl std::error::Error for MapError {}
 
-/// How to refer to a key in a message.
-///
-/// The empty key is the value a caller passed in directly, which has no
-/// name — writing `''` there reads as a key that is genuinely called
-/// nothing.
+/// How to refer to a key in a message. The empty key is a value passed
+/// in directly, which has no name.
 fn named(key: &str) -> String {
     if key.is_empty() {
         "the value".to_string()
@@ -292,13 +206,13 @@ fn named(key: &str) -> String {
     }
 }
 
-/// A kind in a sentence. Kept beside [`MapError`] rather than on the tag
-/// itself: it is diagnostic phrasing, not part of the value model, and
-/// putting it on the enum would invite a consumer to key off the words.
+/// A kind in a sentence. Beside [`MapError`] rather than on the tag:
+/// diagnostic phrasing is not part of the value model, and on the enum it
+/// would invite a consumer to key off the words.
 fn describe(tag: Option<Tag>) -> &'static str {
     let Some(tag) = tag else {
-        // Not an error and not a lie: a newer producer's kind is a thing
-        // this build can carry and cannot name.
+        // A newer producer's kind is one this build carries and cannot
+        // name.
         return "a kind this build does not know";
     };
     match tag {
@@ -312,18 +226,13 @@ fn describe(tag: Option<Tag>) -> &'static str {
         Tag::GUATIAO_BYTES => "a byte string",
         Tag::GUATIAO_LIST => "a list",
         Tag::GUATIAO_MAP => "a map",
-        // Deliberately EXHAUSTIVE, with no catch-all: a kind added to the
-        // tag fails to compile here until it is given a description,
-        // which is what should happen. A `_` arm would let a new kind
-        // read as "a kind this build does not know" in every message,
-        // silently and forever.
+        // Exhaustive, with no catch-all: a kind added to the tag fails
+        // to compile here until it is given a description.
     }
 }
 
-/// A borrowed read that can say no: the kind the value holds, or `None`.
-///
-/// Mirrors [`AsRef`], with the failure the value model needs. The type
-/// parameter is on the **trait** rather than on the method, so a binding
+/// A borrowed read that can say no: [`AsRef`] with the refusal this
+/// model needs. The type parameter is on the **trait**, so a binding
 /// carries it and a turbofish is available where one does not:
 ///
 /// ```
@@ -350,8 +259,8 @@ pub trait TryAsRef<T: ?Sized> {
 /// The mutable half of [`TryAsRef`].
 ///
 /// A NUMBER and a STRING share one arm and do **not** share a type: the
-/// reader for a [`Text`] answers `None` for a number, which
-/// is what keeps the grammar from being edited away.
+/// reader for a [`Text`] answers `None` for a number, which keeps the
+/// grammar from being edited away.
 ///
 /// ```
 /// use guatiao::{Map, Text, TryAsMut, Value};
@@ -369,11 +278,8 @@ pub trait TryAsMut<T: ?Sized> {
     fn try_as_mut(&mut self) -> Option<&mut T>;
 }
 
-/// Bytes, as a field type.
-///
-/// `Vec<u8>` is a list of numbers like any other `Vec<T>`; a field that
-/// must cross as the `bytes` kind says so by wearing this. See this
-/// module's documentation for why round that way.
+/// Bytes, as a field type: `Vec<u8>` is a list like any other `Vec<T>`,
+/// and a field that must cross as the `bytes` kind wears this.
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Bytes(
     /// The bytes themselves.
@@ -398,11 +304,9 @@ impl AsRef<[u8]> for Bytes {
     }
 }
 
-/// Builds a value from a borrowed `self`.
-///
-/// Borrowed rather than consuming, because a generated `to_value(&self)`
-/// has only a borrow and a consuming trait would make it clone every
-/// field.
+/// Builds a value from a borrowed `self`. Borrowed, because a generated
+/// `to_value(&self)` has only a borrow and a consuming trait would make
+/// it clone every field.
 pub trait ToValue {
     /// Performs the conversion. A derived struct produces a map.
     fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError>;
@@ -426,12 +330,8 @@ impl ToValue for bool {
     }
 }
 
-/// Every integer width, written as its **decimal text**.
-///
-/// Not squeezed through an `i64` on the way: a number is the exact text
-/// that declared it, so `u64::MAX` and `i128::MIN` cross as themselves
-/// rather than failing or wrapping. The text form is what makes that free
-/// -- there is no machine width at the boundary to overflow.
+/// Every integer width, as its **decimal text**: `u64::MAX` and
+/// `i128::MIN` cross as themselves, with no machine width to overflow.
 macro_rules! integer_to_value {
     ($($t:ty),* $(,)?) => {$(
         impl ToValue for $t {
@@ -470,8 +370,7 @@ impl ToValue for Bytes {
     }
 }
 
-/// A borrow converts exactly as the thing it borrows does, so a field
-/// typed `&str` needs no separate impl.
+/// A borrow converts as the thing it borrows does.
 impl<T: ToValue + ?Sized> ToValue for &T {
     fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
         (**self).to_value(alloc)
@@ -479,8 +378,7 @@ impl<T: ToValue + ?Sized> ToValue for &T {
 }
 
 /// `None` becomes a null **here**; the derive omits the key instead when
-/// it can see the field is an `Option`. Both readings come back as
-/// `None`, so the two spellings agree — see this module's documentation.
+/// it can see the field is an `Option`. Both read back as `None`.
 impl<T: ToValue> ToValue for Option<T> {
     fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
         match self {
@@ -506,39 +404,21 @@ impl<T: ToValue> ToValue for Vec<T> {
     }
 }
 
-/// A raw subtree is deep-copied into the target allocator, because the
-/// one it is built on may not be the one the result belongs to and an
-/// owned tree carries its allocator with it.
+/// A raw subtree is deep-copied into the target allocator: an owned tree
+/// carries its own, which may not be the one the result belongs to.
 impl ToValue for Value {
     fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
-        // Every buffer in the tree this hands back came from `alloc` and
-        // nothing else holds it, so the caller owns the whole copy.
         self.clone_in(alloc)
     }
 }
 
 // --- the standard conversion traits -----------------------------------
 //
-// `value.try_into()` is the spelling a Rust reader reaches for first, so
-// it works: one `TryFrom<&Value>` impl per readable type, each
-// delegating to the [`FromValue`] impl above so the two cannot disagree.
-//
-// **One impl per concrete type, and not a blanket one.** The orphan rule
-// refuses `impl<T: FromValue> TryFrom<&Value> for T` outright:
-// the self type is a bare parameter standing before the local type, which
-// is exactly the shape the rule exists to forbid. It refuses `Vec<T>` and
-// `Option<T>` for the same reason -- a parameter inside a foreign type
-// constructor is not covered -- so those two convert through [`FromValue`]
-// and through the derive, which is where a generic caller is anyway.
-//
-// The **writing** direction has no `From` to be. Building a value means
-// allocating one, the allocator travels with the tree rather than being
-// global, and `From::from` takes one argument. That is a property of the
-// value model rather than an omission here: [`ToValue`] carries the
-// allocator because something has to.
+// One `TryFrom<&Value>` impl per readable type, each delegating to the
+// `FromValue` impl above so the two cannot disagree. Not a blanket one:
+// the orphan rule refuses it, and refuses `Vec<T>`/`Option<T>` too.
 
-/// One `TryFrom<&Value>` per type that can be read back, delegating to
-/// [`FromValue`] so there is one rule and two spellings of it.
+/// One rule, two spellings of it.
 macro_rules! try_from_value {
     ($($t:ty),* $(,)?) => {$(
         impl TryFrom<&Value> for $t {
@@ -611,9 +491,9 @@ fn number_text(value: &Value) -> Result<&str, MapError> {
         .as_str())
 }
 
-/// An integer read **never truncates**: a fractional or exponent spelling
-/// is refused rather than rounded, and so is a value outside the target
-/// type. Both are the right kind and the wrong value.
+/// An integer read **never truncates**: a fractional or exponent
+/// spelling is refused rather than rounded, and so is an out-of-range
+/// value. Both are the right kind and the wrong value.
 macro_rules! integer_from_value {
     ($($t:ty),* $(,)?) => {$(
         impl FromValue for $t {
@@ -641,10 +521,9 @@ integer_from_value!(
 impl FromValue for f64 {
     fn from_value(value: &Value) -> Result<f64, MapError> {
         let text = number_text(value)?;
-        // Rounding is not an error here: an `f64` has 53 bits of mantissa
-        // and refusing every number that needs more would make most
-        // decimals unreadable. What is refused is a number with no finite
-        // `f64` at all.
+        // Rounding is not an error: an `f64` has 53 bits of mantissa and
+        // refusing everything needing more would make most decimals
+        // unreadable. What is refused is a number with no finite `f64`.
         text.parse::<f64>()
             .ok()
             .filter(|x| x.is_finite())
@@ -664,8 +543,7 @@ impl FromValue for Bytes {
     }
 }
 
-/// Each element is read under `[i]`, so a failure names which element
-/// rather than only which field.
+/// Each element is read under `[i]`, so a failure names which one.
 impl<T: FromValue> FromValue for Vec<T> {
     fn from_value(value: &Value) -> Result<Vec<T>, MapError> {
         let items = <&List>::try_from(value)?.items();
@@ -677,8 +555,7 @@ impl<T: FromValue> FromValue for Vec<T> {
     }
 }
 
-/// A stored null reads as `None`; anything else is offered to `T`. See
-/// this module's documentation for why absent and null collapse.
+/// A stored null reads as `None`; anything else is offered to `T`.
 impl<T: FromValue> FromValue for Option<T> {
     fn from_value(value: &Value) -> Result<Option<T>, MapError> {
         if value.tag() == Ok(Tag::GUATIAO_NULL) {

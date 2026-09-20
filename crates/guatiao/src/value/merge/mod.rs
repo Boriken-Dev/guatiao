@@ -5,84 +5,43 @@
 //! Combining two values, later layer winning — the three strategies, and
 //! who came from where.
 //!
-//! # Why three modes and not one
-//!
-//! Configuration layering asks two *independent* questions, and an
-//! abstract "shallow versus deep" only answers the first:
-//!
-//! 1. When both layers hold a **map**, does the later one replace it or
-//!    recurse into it?
-//! 2. When both layers hold a **list**, does the later one replace it,
-//!    overwrite it positionally, or union with it?
-//!
-//! [`MergeMode`] names the three useful combinations:
+//! Layering asks two independent questions: when both layers hold a
+//! **map**, does the later replace it or recurse into it; and when both
+//! hold a **list**, does it replace, overwrite positionally, or union?
 //!
 //! | mode | nested map | list |
 //! |---|---|---|
-//! | [`MergeMode::Simple`] | shallow update, top-level keys only | positional replace, then append excess |
+//! | [`MergeMode::Simple`] | shallow, top-level keys only | positional replace, then append excess |
 //! | [`MergeMode::Substitute`] (default) | recursive | replaces wholesale |
 //! | [`MergeMode::Deep`] | recursive | extends with unique items |
 //!
-//! # Why `Substitute` is the default
+//! **`Substitute` is the default because `Deep` cannot shrink a list**:
+//! every override appends, so a later layer can never remove an inherited
+//! tag or cipher, and removal would need a null-sentinel convention worse
+//! than the problem. `Deep` is right for a genuine unordered set, which a
+//! caller has to name. The test
+//! `list_shrinks_under_substitute_and_provably_cannot_under_deep` is that
+//! asymmetry asserted.
 //!
-//! **`Deep` cannot shrink a list.** Every override only ever appends, so
-//! a later layer can never *remove* an inherited tag, address or cipher.
-//! Removal would need a null-sentinel convention, and inventing one is a
-//! worse problem than the one it solves. `Substitute` gives layering what
-//! it actually needs — override one inner key without restating the whole
-//! map — while leaving lists predictable: a later layer's list **is** the
-//! list. `Deep` stays on the enum because it is right for a genuine
-//! unordered set, which is exactly the case a caller has to *name*.
+//! **The result is a NEW tree, through the allocator you name.** Neither
+//! input is touched and nothing is moved out of either. That keeps the
+//! inputs usable, keeps the result freeable on its own — an owned
+//! container records the allocator that made it, so a result stitched
+//! from two would free half of itself through each — and keeps this
+//! module expressible under `forbid(unsafe_code)`.
 //!
-//! `list_shrinks_under_substitute_and_provably_cannot_under_deep` in this
-//! module's tests is that asymmetry, asserted rather than asserted-about.
+//! **Absent means "no opinion", never "delete".** A key missing from the
+//! later layer leaves the earlier value standing, and so does a stored
+//! absent sentinel. A stored **null** overwrites: a caller who wrote null
+//! meant it.
 //!
-//! # The result is a NEW tree, built through the allocator you name
+//! **A type mismatch is a [`MergeError`], not a guess.** A silent
+//! replacement is how a config layer quietly discards a value.
 //!
-//! Neither input is touched, and nothing is moved out of either: every
-//! value the result keeps is deep-copied into the allocator passed in. It
-//! costs copies, and it buys three things that matter more.
-//!
-//! - **The inputs stay usable**, which a merge that consumed them could
-//!   not offer. A caller layering four configurations keeps all four.
-//! - **The result is freeable on its own.** An owned container records the
-//!   allocator that made it, so a result stitched together from two
-//!   allocators would free half of itself through each — and an arena
-//!   released by a library would leave the host holding pointers into
-//!   freed memory.
-//! - **It is expressible in safe code.** Moving a subtree out of one
-//!   container into another needs the raw functions, every one of which is
-//!   `unsafe`, and this module carries `forbid(unsafe_code)` for the same
-//!   reason the rest of the crate outside `ffi` does.
-//!
-//! # Absent means "no opinion", never "delete"
-//!
-//! A key missing from the later layer leaves the earlier value standing.
-//! Removal, if ever needed, gets an explicit call — never a magic value.
-//!
-//! The C form can also *store* the absent sentinel in a container, which
-//! the model this replaced could not, so the rule is now written down
-//! twice: a stored absent on the later side leaves the earlier value
-//! standing, and one on the earlier side is nothing to merge into. A
-//! stored **null** is a different statement and still overwrites — a
-//! caller who wrote null meant it.
-//!
-//! # A type mismatch is an error, not a guess
-//!
-//! Merging a string into a list has no defensible answer, so it returns
-//! [`MergeError`] rather than picking one. A silent replacement here is
-//! how a config layer quietly discards a value: the user sets an option,
-//! the merge decides the shapes disagree, the earlier value survives, and
-//! nothing anywhere says so.
-//!
-//! # Provenance is per LEAF PATH
-//!
-//! After a recursive merge, "where did `tls` come from?" has no single
-//! answer — `tls.verify` may come from the user layer while `tls.ca` came
-//! from the system one. Recording provenance per top-level key would be a
-//! confident lie. So [`Provenance`] is keyed by leaf path
-//! (`"tls.ca"`), and asking about an interior node whose leaves came from
-//! several layers answers [`Source::Mixed`].
+//! **Provenance is per LEAF PATH.** After a recursive merge `tls.verify`
+//! may come from the user layer while `tls.ca` came from the system one,
+//! so [`Provenance`] is keyed by leaf path and an interior node drawn
+//! from several layers answers [`Source::Mixed`].
 //!
 //! ```
 //! use guatiao::{Alloc, Map, MergeMode, Source, Value};
@@ -98,11 +57,6 @@
 //! let mut user = Map::new();
 //! user.set("tls", user_tls)?;
 //!
-//! // The merge builds a NEW tree, so it is told where to put it. That is
-//! // the one allocator this example names, and a host merging into its
-//! // own arena is exactly who names a different one.
-//! // The layers cross as values, which is the one place a container
-//! // becomes a node: `.into()` is a move, so nothing is copied.
 //! let (system, user) = (Value::from(system), Value::from(user));
 //! let (merged, provenance) = MergeMode::Substitute.merge_layers(
 //!     [("system", &system), ("user", &user)],
@@ -115,24 +69,17 @@
 //! assert!(!verify);
 //! assert_eq!(provenance.source_of("tls.verify"), Source::Layer("user"));
 //! assert_eq!(provenance.source_of("tls.ca"), Source::Layer("system"));
-//! // The map itself was drawn from both, so no single layer is the honest
-//! // answer.
 //! assert_eq!(provenance.source_of("tls"), Source::Mixed);
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! # This crate still has no schema dependency in the direction that matters
-//!
-//! [`MergeMode`] is a **call-site default**, applied to every key. A
-//! declarer that knows an option's meaning better than its merger does
-//! can override the mode per key by handing in a
-//! [`MergeOverrides`] map — which is a plain `path -> MergeMode` lookup
-//! this module defines, deliberately *not* a schema type.
-//! [`crate::schema::merge`] reads a schema's own annotations and builds
-//! one; the merge itself never learns what a schema is.
+//! [`MergeMode`] is a **call-site default**. A declarer that knows an
+//! option's meaning better than its merger does overrides it per key with
+//! a [`MergeOverrides`] map — a plain `path -> MergeMode` lookup this
+//! module defines, deliberately not a schema type.
+//! [`crate::schema::merge`] builds one from a schema's annotations; the
+//! merge itself never learns what a schema is.
 
-// Merging is provably safe: the `unsafe` this crate contains is confined
-// to `src/ffi/`. See the crate root.
 #![forbid(unsafe_code)]
 
 use std::collections::BTreeMap;
@@ -422,26 +369,13 @@ fn key_text(key: &[u8]) -> Result<&str, MergeError> {
 }
 
 /// A per-path mode override: what a *declarer* of an option knows that
-/// its merger does not.
+/// its merger does not -- whether a list is an unordered tag set (where
+/// [`MergeMode::Deep`] is right) or an ordered fallback chain.
+/// Deliberately a plain path-to-mode map and not a schema type.
 ///
-/// The caller merging two maps does not know what the values mean. The
-/// declarer of an option knows whether its list is an unordered tag set
-/// (where [`MergeMode::Deep`]'s union is right) or an ordered fallback
-/// chain (where a later layer must replace it wholesale). This is the
-/// channel that lets the declarer say so.
-///
-/// **Deliberately a plain path→mode map defined here, not a schema type.**
-/// [`crate::schema::merge`] reads a schema's own annotations and builds one of these;
-/// the merge never learns what a schema is. A merge with no overrides at
-/// all is fully usable, because the call-site mode covers every path.
-///
-/// Paths are matched **exactly**, against the same dotted spelling
-/// [`Provenance`] uses. An override on `"tls"` governs how the `tls` maps
-/// themselves combine; it does not implicitly govern `"tls.ciphers"`,
-/// which takes its own entry. Exact matching rather than prefix
-/// inheritance is the choice that keeps a declaration's blast radius
-/// visible: an option's mode is stated where the option is declared, and
-/// nowhere else.
+/// Paths match **exactly**, in [`Provenance`]'s dotted spelling: an
+/// override on `"tls"` does not govern `"tls.ciphers"`, which keeps a
+/// declaration's blast radius visible.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MergeOverrides {
     by_path: BTreeMap<String, MergeMode>,
@@ -527,14 +461,9 @@ impl MergeMode {
     }
 
     /// Folds labelled layers left to right, later winning, recording
-    /// which layer each **leaf path** ended up coming from.
-    ///
-    /// Labels are the caller's: `[("system", base), ("user", local)]`
-    /// gives an answer a settings form can show — "inherited from system"
-    /// — rather than an index nobody can interpret.
-    ///
-    /// An empty layer list yields an empty map and empty provenance;
-    /// a single layer yields a copy of it with every leaf attributed to it.
+    /// which layer each **leaf path** came from. Labels are the caller's,
+    /// so a settings form can show "inherited from system" rather than an
+    /// index. An empty list yields an empty map and empty provenance.
     pub fn merge_layers<'a, 'l>(
         &self,
         layers: impl IntoIterator<Item = (&'l str, &'l Value)>,
@@ -592,19 +521,12 @@ fn is_list(value: &Value) -> bool {
     kind(value) == Some(Tag::GUATIAO_LIST)
 }
 
-/// Whether a value is one of the leaf kinds — anything that is neither a
-/// map nor a list.
-///
-/// Null counts as a scalar.
-///
-/// **A tag this build does not know counts as one too**, which decides
-/// only how it is classified, not that it survives: a value this build
-/// cannot read is one it cannot copy either, so the clone that would put
-/// it in the result answers [`ValueError::UnknownTag`] and the merge
-/// reports it. That is the right end — bit-copying a node whose payload
-/// this build cannot interpret would produce two owners of whatever it
-/// points at — and it is pinned by
-/// `a_kind_this_build_cannot_read_stops_the_merge_rather_than_being_copied`.
+/// Whether a value is a leaf kind — neither a map nor a list. Null
+/// counts, and so does a tag this build does not know: that decides only
+/// how it is classified. The clone that would put it in the result
+/// answers [`ValueError::UnknownTag`] instead, because bit-copying a
+/// payload this build cannot interpret would produce two owners of
+/// whatever it points at.
 fn is_scalar(value: &Value) -> bool {
     !is_map(value) && !is_list(value)
 }
@@ -636,22 +558,10 @@ fn shares_a_key(a: &Value, b: &Value) -> bool {
 /// Walks the same shape `merge_value` will, recording which leaves the
 /// incoming layer is about to claim.
 ///
-/// # Why this is a second walk rather than provenance threaded through the merge
-///
-/// The merge is used far more often without provenance than with it.
-/// Threading an optional recorder through every arm would put a branch in
-/// the hot path for the benefit of the rarer caller, and would make each
-/// arm responsible for remembering to record — the kind of obligation that
-/// gets missed when a new arm is added. A separate walk that mirrors the
-/// merge's *decisions* keeps the merge itself simple, at the cost of this
-/// function having to stay in step with it. The tests that pin recursive
-/// provenance (`provenance_is_per_leaf_and_reports_mixed_for_an_interior_node`)
-/// are what catch it drifting out of step.
-///
-/// Where the two could differ is deliberately narrow: this only has to
-/// answer "does the incoming value replace this leaf, or recurse past
-/// it?", which is a function of the mode and the two kinds — not of the
-/// merge's arithmetic.
+/// A second walk rather than a recorder in every arm, which most callers
+/// would pay for and never use. The cost is staying in step, which
+/// `provenance_is_per_leaf_and_reports_mixed_for_an_interior_node`
+/// catches.
 fn record_claims<'a>(
     earlier: &Value,
     later: &Value,
@@ -699,18 +609,11 @@ fn record_claims<'a>(
         return;
     }
 
-    // `Deep` UNIONS lists, so the earlier list's items keep their own
-    // provenance and only the appended ones belong to the later layer.
-    // Which indices those appended items land at is not knowable without
-    // redoing the union, so this claims the whole list for the later layer
-    // ONLY when the earlier one was empty — in which case every item is
-    // genuinely the later layer's.
-    //
-    // A non-empty earlier list is deliberately left partly unclaimed: its
-    // retained leaves keep whatever layer they came from, and `source_of`
-    // on the list therefore reports that mix. That is the honest answer
-    // for a union — the list is not any one layer's — and it is why this
-    // arm does not simply claim everything.
+    // `Deep` UNIONS lists, and which indices the appended items land at
+    // is not knowable without redoing the union. So the whole list is
+    // claimed only when the earlier one was empty; otherwise its
+    // retained leaves keep their own layer and `source_of` reports the
+    // mix, which is the honest answer for a union.
     if mode == MergeMode::Deep && is_list(earlier) && is_list(later) {
         if TryAsRef::<List>::try_as_ref(earlier)
             .map(List::items)
@@ -763,14 +666,9 @@ fn merge_value(
 
 /// `Simple`: scalars and maps replace, lists overwrite positionally.
 ///
-/// # The `a is None` question
-///
-/// Absence and a stored null are different things, and only one of them
-/// reaches here. Absence is the key not being in the later map, and the
-/// map arm only recurses into keys the later layer carries — so "absent
-/// means no opinion" holds structurally rather than by a check. A stored
-/// null is a value and *does* overwrite: a caller who wrote null meant
-/// it.
+/// Absence never reaches here -- the map arm only recurses into keys the
+/// later layer carries, so "absent means no opinion" holds structurally.
+/// A stored null is a value and *does* overwrite.
 fn merge_simple(
     earlier: &Value,
     later: &Value,
@@ -796,15 +694,10 @@ fn merge_simple(
         return clone_into(later, alloc);
     }
 
-    // SHALLOW: top-level keys only, each replaced outright. This is the
-    // whole distinction from `Substitute`, and
-    // `simple_and_substitute_each_get_a_case_the_other_gets_right` pins it.
-    //
-    // Built as a copy of the earlier map with the later map's keys written
-    // over it, so a replaced key keeps its position and a new one lands at
-    // the end. Insertion order is part of this container's contract —
-    // consumers render maps as forms and diff them in tests — and
-    // `merging_preserves_the_earlier_maps_key_order` is what catches it.
+    // SHALLOW: top-level keys only, each replaced outright, which is the
+    // whole distinction from `Substitute`. Built as a copy of the earlier
+    // map with the later's keys written over it, so a replaced key keeps
+    // its position and a new one lands at the end.
     let mut out: Map = Map::try_from(clone_into(earlier, alloc)?)
         .map_err(|_| MergeError::from(ValueError::WrongKind))?;
     for entry in <&Map>::try_from(later).map(Map::entries).unwrap_or(&[]) {
@@ -814,16 +707,13 @@ fn merge_simple(
     Ok(out.into())
 }
 
-/// `Simple`'s list rule: element `i` of the later list replaces element
-/// `i` of the earlier, recursing through `Simple` itself so a nested
-/// structure inside a list follows the same shallow rule; excess elements
-/// of the later list are appended, and excess elements of the *earlier*
-/// list SURVIVE.
+/// `Simple`'s list rule: element `i` of the later replaces element `i`
+/// of the earlier, recursing through `Simple` itself; excess later
+/// elements are appended and excess EARLIER ones survive.
 ///
-/// That survival is the counter-intuitive half — `[1,2,3]` updated with
-/// `[10,20]` is `[10,20,3]` — and it is what makes `Simple` unable to
-/// shorten a list. A caller that wants the later list to *be* the list
-/// wants [`MergeMode::Substitute`].
+/// That survival -- `[1,2,3]` updated with `[10,20]` is `[10,20,3]` --
+/// is what makes `Simple` unable to shorten a list. A caller that wants
+/// the later list to *be* the list wants [`MergeMode::Substitute`].
 fn overwrite_positionally(
     earlier: &Value,
     later: &Value,
@@ -862,15 +752,10 @@ fn overwrite_positionally(
 
 /// `Substitute`: recursive maps, wholesale list replacement.
 ///
-/// # The `a is None` asymmetry
-///
 /// Replacement happens outright only when the earlier side is **not** a
-/// map; otherwise the mapping branches take over. So a map on the left is
-/// never simply overwritten by a scalar — that combination is an error.
-///
-/// [`merge_deep`] deliberately differs: it returns the later value
-/// whenever the earlier side is null. The asymmetry is the point, so
-/// neither side should be "fixed" to match the other.
+/// map, so a map on the left is never overwritten by a scalar -- that
+/// combination is an error. [`merge_deep`] deliberately differs, and
+/// neither should be "fixed" to match the other.
 fn merge_substitute(
     earlier: &Value,
     later: &Value,
@@ -933,9 +818,8 @@ fn merge_deep(
     alloc: Alloc,
     depth: u32,
 ) -> Result<Value, MergeError> {
-    // A stored null is this crate's nothing and stands in for the prior
-    // implementation's `None` on the earlier side -- an explicit null is a
-    // value with no structure to merge into, so anything replaces it.
+    // An explicit null is a value with no structure to merge into, so
+    // anything replaces it.
     if kind(earlier) == Some(Tag::GUATIAO_NULL) || is_scalar(later) {
         return clone_into(later, alloc);
     }
@@ -958,15 +842,13 @@ fn merge_deep(
 }
 
 /// The recursive map rule shared by `Substitute` and `Deep`: keys the
-/// later map carries recurse (through whatever mode is in force at the
-/// CHILD's path, so an override applies where it is declared), keys only
-/// the later map has are appended, and keys only the earlier map has
-/// stand — which is "absent means no opinion", enforced by the loop's
-/// shape rather than by a check.
+/// later map carries recurse through whatever mode is in force at the
+/// CHILD's path, keys only it has are appended, and keys only the
+/// earlier map has stand -- "absent means no opinion", enforced by the
+/// loop's shape.
 ///
-/// Built earlier-first so the result keeps the earlier map's key order
-/// with the later map's new keys appended, which is what
-/// `merging_preserves_the_earlier_maps_key_order` pins.
+/// Built earlier-first, so the result keeps the earlier map's key order,
+/// which `merging_preserves_the_earlier_maps_key_order` pins.
 fn merge_maps_recursively(
     earlier: &Value,
     later: &Value,
@@ -1052,16 +934,13 @@ fn absorb_list_of_maps(
     Ok(result)
 }
 
-/// `Deep`'s list rule: extend with unique items.
-///
-/// With `mergelists` **off** (the default), unique non-map items are
-/// appended and map items are appended unconditionally. With it **on**,
-/// map elements merge by position, and only when at least one key
+/// `Deep`'s list rule: extend with unique items. With `mergelists` off
+/// (the default) unique non-map items are appended and map items always
+/// are; with it on, map elements merge by position and only when a key
 /// overlaps.
 ///
-/// Uniqueness is structural equality, which is order-significant for a map
-/// and byte-exact for a number. Note that this is why `Deep` cannot shrink
-/// a list: there is no operation here that removes anything.
+/// Uniqueness is structural equality. Nothing here removes anything,
+/// which is why `Deep` cannot shrink a list.
 fn union_lists(
     earlier: &Value,
     later: &Value,
