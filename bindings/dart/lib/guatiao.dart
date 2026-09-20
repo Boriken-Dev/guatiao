@@ -21,6 +21,8 @@ export 'src/errors.dart'
         Status,
         Unsupported,
         WrongKind;
+export 'src/kinds.dart' show FloorMismatch, kindTable;
 export 'src/library.dart' show LibraryNotFound, MissingSymbol, dllFilename;
+export 'src/registry.dart' show Instance, ProviderTable, Registry;
 export 'src/value.dart'
     show Absent, ListRef, MapRef, Numbers, Ref, Tag, Value, ValueOwner, absent;
