@@ -32,7 +32,8 @@ default = ["json"]
 # `serde_json::Value` everywhere in a consumer's graph; a consumer who does
 # not want that turns this feature off and hands a
 # `serde_json::Deserializer` to `ValueSeed` themselves.
-json = ["dep:serde_json", "serde_json/arbitrary_precision"]
+# `raw_value` is what writes a number's exact text as a bare token.
+json = ["dep:serde_json", "serde_json/arbitrary_precision", "serde_json/raw_value"]
 
 # A TOML document is a TABLE: writing a bare scalar or array is refused
 # rather than wrapped in a key the value never had.

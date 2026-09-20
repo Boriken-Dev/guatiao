@@ -36,21 +36,6 @@ def test_json_round_trip_preserves_key_order_and_integers():
         doc.close()
 
 
-@pytest.mark.xfail(
-    reason=(
-        "crates/guatiao-serde's `json` feature turns on serde_json's "
-        "arbitrary_precision but not raw_value; Numbers::RawText's "
-        "sentinel struct (ser.rs RAW_NUMBER) then serialises literally "
-        "as {\"$serde_json::private::RawValue\": \"1.10\"} instead of "
-        "the bare token 1.10 -- a fractional or 200-digit number's "
-        "exact text does not survive guatiao_json_emit as built today. "
-        "Reproduced outside this binding: ctypes.CDLL(...).guatiao_json_emit "
-        "on {\"b\": 1.5} emits that literal sentinel object. Not fixable "
-        "from bindings/python/ -- the feature list is in "
-        "crates/guatiao-serde/Cargo.toml."
-    ),
-    strict=True,
-)
 def test_json_round_trip_preserves_exact_number_text():
     with Value.from_python({"n": Value.number("1.10")}) as doc:
         text = serde.dumps(doc)
