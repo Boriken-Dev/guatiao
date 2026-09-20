@@ -6,6 +6,11 @@
 ///
 /// Importing this library touches no native library: every native call is
 /// resolved lazily, on first use.
+///
+/// The two optional halves are their own entry points, imported with a
+/// prefix so their verbs keep a namespace:
+/// `import 'package:guatiao/serde.dart' as serde;` and
+/// `import 'package:guatiao/form.dart' as form;`.
 library;
 
 export 'src/errors.dart'
@@ -24,5 +29,6 @@ export 'src/errors.dart'
 export 'src/kinds.dart' show FloorMismatch, kindTable;
 export 'src/library.dart' show LibraryNotFound, MissingSymbol, dllFilename;
 export 'src/registry.dart' show Instance, ProviderTable, Registry;
+export 'src/serde.dart' show Format;
 export 'src/value.dart'
     show Absent, ListRef, MapRef, Numbers, Ref, Tag, Value, ValueOwner, absent;
