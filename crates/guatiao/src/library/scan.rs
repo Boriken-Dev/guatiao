@@ -336,6 +336,14 @@ pub fn probe(path: &Path) -> Result<Probe, std::io::Error> {
     // stripped-but-dynamic library lists it there, so both are consulted.
     // An export may be identified by ORDINAL rather than by name, in which
     // case there is nothing to compare.
+    // Mach-O writes a C symbol with a leading underscore.
+    let macho = file.format() == object::BinaryFormat::MachO;
+    fn plain(name: &[u8], macho: bool) -> &[u8] {
+        match name.strip_prefix(b"_") {
+            Some(rest) if macho => rest,
+            _ => name,
+        }
+    }
     let mut has_entry = false;
     let mut declares_at: Option<u64> = None;
     if let Ok(exports) = file.exports() {
@@ -343,6 +351,7 @@ pub fn probe(path: &Path) -> Result<Probe, std::io::Error> {
             let Some(name) = export.name().into_name() else {
                 continue;
             };
+            let name = plain(name, macho);
             if name == entry {
                 has_entry = true;
             } else if name == declares
@@ -354,6 +363,7 @@ pub fn probe(path: &Path) -> Result<Probe, std::io::Error> {
     }
     for symbol in file.dynamic_symbols() {
         if let Ok(name) = symbol.name_bytes() {
+            let name = plain(name, macho);
             if name == entry {
                 has_entry = true;
             } else if name == declares && declares_at.is_none() && symbol.address() != 0 {
