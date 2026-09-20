@@ -11,6 +11,36 @@ constants or wants to catch ``LibraryNotFound`` itself can import freely.
 
 from __future__ import annotations
 
+from .errors import (
+    AllocFailed,
+    BadValue,
+    Gone,
+    GuatiaoError,
+    Internal,
+    NotFound,
+    NullArgument,
+    WrongKind,
+)
+from ._lib import LibraryNotFound, MissingSymbol
+from .value import ABSENT, List, Map, Ref, Value
+
 __version__ = "0.1.0"
 
-__all__ = ["__version__"]
+__all__ = [
+    "__version__",
+    "ABSENT",
+    "Value",
+    "Ref",
+    "Map",
+    "List",
+    "GuatiaoError",
+    "BadValue",
+    "AllocFailed",
+    "WrongKind",
+    "NotFound",
+    "NullArgument",
+    "Gone",
+    "Internal",
+    "LibraryNotFound",
+    "MissingSymbol",
+]
