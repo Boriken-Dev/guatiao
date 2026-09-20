@@ -66,3 +66,31 @@ jobs:
         run: cargo doc --workspace --no-deps --all-features
         env:
           RUSTDOCFLAGS: -D warnings
+
+  python:
+    name: Python bindings (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    # The stable ubuntu-latest build only: this is a binding, not a Rust
+    # legs matrix, and the native libraries are identical across the
+    # toolchains the `test` job already covers.
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build native libraries
+        run: cargo build --workspace --all-features
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install -e "bindings/python[dev]"
+      - name: Test
+        run: pytest bindings/python/tests -rs
+        env:
+          GUATIAO_LIBRARY: target/debug
