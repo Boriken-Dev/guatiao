@@ -1,0 +1,4 @@
+# One suite at a time. The suites share a process, and `unload` unmaps a
+# library for all of it: a concurrent suite calling into that library
+# would be reading a freed mapping.
+concurrency: 1

@@ -25,8 +25,8 @@ class LibraryNotFound implements Exception {
   String toString() {
     final tail = cause == null ? '' : ' ($cause)';
     return 'LibraryNotFound: could not find $filename: checked the '
-        'GUATIAO_LIBRARY environment variable and the platform library '
-        'search path$tail';
+        'GUATIAO_LIBRARY environment variable, guatiao.libraryDirectory '
+        'and the platform library search path$tail';
   }
 }
 
@@ -57,27 +57,44 @@ String dllFilename(String basename) {
   return 'lib$basename.so';
 }
 
+/// Where to look when `GUATIAO_LIBRARY` is unset.
+///
+/// A host that ships its own copies points this at their directory before
+/// the first native call. A process cannot set its own environment, so an
+/// embedder -- a Flutter app, a test suite -- has no other way to say
+/// where its libraries are. `GUATIAO_LIBRARY` still wins.
+String? libraryDirectory;
+
+String? _inDirectory(String directory, String filename) {
+  if (!Directory(directory).existsSync()) return null;
+  final candidate = '$directory${Platform.pathSeparator}$filename';
+  return File(candidate).existsSync() ? candidate : null;
+}
+
 /// Where [basename]'s library is (Q5).
 ///
 /// `GUATIAO_LIBRARY` first, naming either a directory holding the
-/// platform's filename or a file; otherwise the bare filename, which
-/// hands the search to the platform's own loader.
+/// platform's filename or a file; then [libraryDirectory]; otherwise the
+/// bare filename, which hands the search to the platform's own loader.
 String resolveLibraryPath(String basename) {
   final filename = dllFilename(basename);
   final env = Platform.environment['GUATIAO_LIBRARY'];
   if (env != null && env.isNotEmpty) {
-    if (Directory(env).existsSync()) {
-      final candidate = '$env${Platform.pathSeparator}$filename';
-      if (File(candidate).existsSync()) return candidate;
-    } else if (File(env).existsSync()) {
+    final found = _inDirectory(env, filename);
+    if (found != null) return found;
+    if (!Directory(env).existsSync() && File(env).existsSync()) {
       // For the core library a file `GUATIAO_LIBRARY` names is taken as
       // it is, whatever it is called; a sibling is looked for beside it
       // under its own platform filename.
       if (basename == 'guatiao') return env;
-      final candidate = '${File(env).parent.path}'
-          '${Platform.pathSeparator}$filename';
-      if (File(candidate).existsSync()) return candidate;
+      final beside = _inDirectory(File(env).parent.path, filename);
+      if (beside != null) return beside;
     }
+  }
+  final configured = libraryDirectory;
+  if (configured != null && configured.isNotEmpty) {
+    final found = _inDirectory(configured, filename);
+    if (found != null) return found;
   }
   return filename;
 }
