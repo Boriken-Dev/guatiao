@@ -116,6 +116,9 @@ with Registry("my-host", "1.0") as reg:
     schema = reg.provider_config("acme_shouter")   # borrowed; do not close
     with reg.create("acme_shouter", {"prefix": "hey"}) as instance:
         ...
+
+    reg.retire("acme")                           # out of the registry, still mapped
+    reg.unload("acme")                           # and unmapped, on your word
 ```
 
 Every answer that is data comes back as a plain `dict` or `list`.
@@ -172,6 +175,10 @@ provider's own words when it gave any.
   only appends and removes. `append` and `del list[i]` are direct.
 - A `Registry` is used from one thread at a time, and a `Value` is not
   shared between threads without a lock of your own.
+- `Registry.unload` unmaps a library, and nothing can check that you have
+  released what you took from it first -- every value it built through
+  its own allocator, every table, `ctx` and `Instance`. `retire` has no
+  such condition and leaves the library mapped.
 
 ## API overview
 

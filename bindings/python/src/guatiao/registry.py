@@ -257,32 +257,36 @@ class Registry:
                 config_value.close()
         return Instance(self, key, out)
 
-    def _guarded_key_call(self, symbol: str, key: str) -> None:
-        """Calls a not-yet-declared `(reg, key) -> status` export by
-        name, or raises `NotImplementedError` naming it when the loaded
-        library does not have it (Q9: `retire`/`unload` land in a
-        separate change and this binding does not wait for them)."""
+    def _key_call(self, fn: Any, key: str) -> None:
+        """One `(reg, key) -> status` export."""
         self._check_open()
-        cdll = _lib.core()._cdll
-        if not hasattr(cdll, symbol):
-            raise NotImplementedError(symbol)
-        fn = getattr(cdll, symbol)
-        fn.argtypes = [ctypes.c_void_p, _abi.Str]
-        fn.restype = ctypes.c_uint32
         view, _buf = _make_str(key.encode("utf-8"))
         check(fn(self._handle, view))
 
     def retire(self, key: str) -> None:
-        """Marks the library `key` names as no longer offered, ahead of
-        `unload`. `NotImplementedError("guatiao_registry_retire")` until
-        the loaded library exports it."""
-        self._guarded_key_call("guatiao_registry_retire", key)
+        """Takes the library `key` names out of this registry and leaves
+        it mapped.
+
+        `key` is the LIBRARY key -- `libraries_keyed_by`'s template,
+        `%id` by default -- not a provider key. Its providers leave, and
+        the key may be loaded again. Anything already taken from it (a
+        table from `provider_table`, an `Instance`) keeps working;
+        `provider_config` for one of its providers does not, because the
+        copy belonged to the registry. `guatiao.errors.NotFound` when
+        nothing answers to `key`."""
+        self._key_call(_lib.core().guatiao_registry_retire, key)
 
     def unload(self, key: str) -> None:
-        """Unmaps the library `key` names.
-        `NotImplementedError("guatiao_registry_unload")` until the
-        loaded library exports it."""
-        self._guarded_key_call("guatiao_registry_unload", key)
+        """`retire`, then the library's own say, then unmapping it.
+
+        **The caller states what nothing can check**: when this returns
+        the library's code and its allocator are gone, so every value it
+        built through its own allocator, every table, `ctx` and
+        `Instance` taken from it must already be released.
+        `guatiao.errors.WrongKind` when the library refuses or is linked
+        into the host rather than mapped -- either way it stays loaded --
+        and `guatiao.errors.NotFound` when nothing answers to `key`."""
+        self._key_call(_lib.core().guatiao_registry_unload, key)
 
     def host(self) -> Any:
         """The raw `const guatiao_host_info *` this registry hands a
