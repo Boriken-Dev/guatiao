@@ -250,10 +250,13 @@ macro_rules! __guatiao_declares {
 /// the long form) adds pairs of the library's own. See
 /// [`declares!`](crate::declares).
 ///
-/// The long form also takes `unload = <fn>`, an
-/// `unsafe extern "C" fn() -> Status` the host calls before it unmaps
-/// this library. See [`LibraryInfo::unload`]. Without one the library
-/// may be unmapped without notice.
+/// The library **refuses to be unloaded while anything it handed out is
+/// alive**: an instance built from a configuration, or an object one of
+/// its kinds returned. The derives count them, and the `unload` slot this
+/// writes answers `GUATIAO_ERR_BUSY` until the count is zero. The
+/// long form also takes `unload = <fn>`, an
+/// `unsafe extern "C" fn() -> Status` asked after that, for what only the
+/// library knows. See [`LibraryInfo::unload`].
 #[macro_export]
 macro_rules! providers {
     ($($provider:ty),+ $(,)?) => {
@@ -286,7 +289,12 @@ macro_rules! providers {
             #[doc(hidden)]
             fn __guatiao_describe;
             id = $id, version = $version, providers = [$($provider),+],
-            unload = ::core::option::Option::Some($unload)
+            unload = ::core::option::Option::Some(__guatiao_unload)
+        );
+        $crate::__guatiao_unload!(
+            providers = [$($provider),+],
+            // SAFETY: the library's own slot, called as the host would.
+            then = unsafe { ($unload)() }
         );
         $crate::guatiao_library!(__guatiao_describe);
     };
@@ -304,9 +312,34 @@ macro_rules! providers {
             #[doc(hidden)]
             fn __guatiao_describe;
             id = $id, version = $version, providers = [$($provider),+],
-            unload = ::core::option::Option::None
+            unload = ::core::option::Option::Some(__guatiao_unload)
+        );
+        $crate::__guatiao_unload!(
+            providers = [$($provider),+],
+            then = $crate::Status::GUATIAO_OK
         );
         $crate::guatiao_library!(__guatiao_describe);
+    };
+}
+
+/// The `unload` slot behind [`providers!`](crate::providers): refuses
+/// while any provider reports something alive, then answers `then`.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __guatiao_unload {
+    (providers = [$($provider:ty),+], then = $then:expr) => {
+        #[doc(hidden)]
+        unsafe extern "C" fn __guatiao_unload() -> $crate::Status {
+            $crate::library::kind::catch(|| {
+                let mut seen = ::std::vec::Vec::new();
+                let live = 0usize
+                    $(+ <$provider as $crate::library::kind::ProviderDecl>::live(&mut seen))+;
+                if live > 0 {
+                    return $crate::Status::GUATIAO_ERR_BUSY;
+                }
+                $then
+            })
+        }
     };
 }
 
@@ -1468,75 +1501,96 @@ pub(crate) fn open_entry(entry: EntryFn, host: Host) -> Opened {
 /// the file allowed to say it.
 #[cfg(feature = "load")]
 impl super::registry::Registry {
-    /// Takes one library out of this registry **and unmaps it**.
+    /// Takes one library out of this registry **and unmaps it**, when the
+    /// library agrees.
     ///
-    /// [`retire`](super::registry::Registry::retire), then the library's
-    /// own say, then the loader's close, in that order: a library that
-    /// refuses is left exactly as it was, registered and mapped
-    /// ([`UnloadError::Refused`](super::registry::UnloadError::Refused)).
-    /// A library the host LINKS has no mapping and answers
-    /// [`Linked`](super::registry::UnloadError::Linked); retiring it
-    /// works.
+    /// The library's `unload` slot is asked first. It is the library's
+    /// promise that everything it can account for is released: a derived
+    /// library counts its instances and objects and answers
+    /// `GUATIAO_ERR_BUSY` while any is alive
+    /// ([`Refused`](super::registry::UnloadError::Refused), and it is left
+    /// exactly as it was). A library with no slot promises nothing and
+    /// answers [`NotSupported`](super::registry::UnloadError::NotSupported);
+    /// [`unload_unchecked`](Self::unload_unchecked) is the host insisting.
+    /// A library the host LINKS answers
+    /// [`Linked`](super::registry::UnloadError::Linked); retiring it works.
     ///
     /// # Safety
     ///
-    /// **Nothing in this crate can check this, which is why it is the
-    /// caller's word.** When this returns, the library's code, its
-    /// descriptors and its allocator are gone from the address space.
-    /// Before calling, the host must have dropped:
-    ///
-    /// - every value this library built through **its own** allocator —
-    ///   each records that allocator's address and calls back into it to
-    ///   grow and to free;
-    /// - every [`Remote`](super::kind::Remote),
-    ///   [`Offer`](super::kind::Offer),
-    ///   [`Instance`](super::kind::Instance) and
-    ///   [`Object`](super::kind::Object) taken from it, and every raw
-    ///   vtable, `ctx` or descriptor pointer read out of it;
-    /// - every descriptor pointer another loaded library fetched from
-    ///   this one through the host's services.
-    ///
-    /// A registry created with
-    /// [`with_alloc`](super::registry::Registry::with_alloc) makes the
-    /// first of those the common case rather than the rule: a library
-    /// handed a host allocator builds the host's trees in the host's
-    /// arena, where they outlive the mapping.
-    ///
-    /// The library must also have no thread of its own still running and
-    /// nothing registered elsewhere that points into it. That is what its
-    /// `unload` slot is for: it is the only side that can know.
+    /// What no library can count is still the caller's word: every
+    /// [`Remote`](super::kind::Remote) and
+    /// [`Offer`](super::kind::Offer) copied out of it, every raw vtable,
+    /// `ctx` or descriptor pointer, every value it built through its own
+    /// allocator that its slot does not track, and every descriptor
+    /// pointer another library fetched from it through the host's
+    /// services, is not used again.
     pub unsafe fn unload(&mut self, key: &str) -> Result<(), super::registry::UnloadError> {
-        let one = self
-            .library(key)
-            .ok_or_else(|| super::registry::UnloadError::NotFound {
-                key: key.to_string(),
-            })?;
+        // SAFETY: forwarded.
+        unsafe { self.unload_with(key, false) }
+    }
+
+    /// [`unload`](Self::unload) for a library with no `unload` slot: the
+    /// host's word alone. A library that HAS a slot is still asked, and
+    /// its refusal still stands.
+    ///
+    /// # Safety
+    ///
+    /// As [`unload`](Self::unload), and nothing the library handed out is
+    /// alive at all: no instance, no object, no value from its allocator,
+    /// and no thread of its own still running.
+    pub unsafe fn unload_unchecked(
+        &mut self,
+        key: &str,
+    ) -> Result<(), super::registry::UnloadError> {
+        // SAFETY: forwarded.
+        unsafe { self.unload_with(key, true) }
+    }
+
+    /// # Safety
+    ///
+    /// As whichever of the two public forms called it.
+    unsafe fn unload_with(
+        &mut self,
+        key: &str,
+        insist: bool,
+    ) -> Result<(), super::registry::UnloadError> {
+        use super::registry::UnloadError;
+
+        let one = self.library(key).ok_or_else(|| UnloadError::NotFound {
+            key: key.to_string(),
+        })?;
         if !one.is_mapped() {
-            return Err(super::registry::UnloadError::Linked {
+            return Err(UnloadError::Linked {
                 key: key.to_string(),
             });
         }
-        // Asked FIRST, so a refusal leaves the registry untouched. A
-        // panic crossing back is caught here, as at every other boundary.
-        if let Some(ask) = one.unload_slot() {
-            // SAFETY: the slot is the library's own, read under its
-            // `struct_size` guard, and the library is still mapped.
-            let status =
-                crate::exports::guard_with(Status::GUATIAO_ERR_INTERNAL, || unsafe { ask() });
-            if status != Status::GUATIAO_OK {
-                return Err(super::registry::UnloadError::Refused {
+        // Asked FIRST, so a refusal leaves the registry untouched. A panic
+        // crossing back is caught here, as at every other boundary.
+        match one.unload_slot() {
+            Some(ask) => {
+                // SAFETY: the slot is the library's own, read under its
+                // `struct_size` guard, and the library is still mapped.
+                let status =
+                    crate::exports::guard_with(Status::GUATIAO_ERR_INTERNAL, || unsafe { ask() });
+                if status != Status::GUATIAO_OK {
+                    return Err(UnloadError::Refused {
+                        key: key.to_string(),
+                        status,
+                    });
+                }
+            }
+            None if insist => {}
+            None => {
+                return Err(UnloadError::NotSupported {
                     key: key.to_string(),
-                    status,
                 });
             }
         }
         let (_, origin) = self.take_library(key)?;
-        origin
-            .close()
-            .map_err(|e| super::registry::UnloadError::Close {
-                key: key.to_string(),
-                reason: e.to_string(),
-            })
+        origin.close().map_err(|e| UnloadError::Close {
+            key: key.to_string(),
+            reason: e.to_string(),
+        })
     }
 }
 

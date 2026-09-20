@@ -205,6 +205,7 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
         },
     };
 
+    let live_kinds = decl.kinds.iter();
     let checks = decl.kinds.iter().enumerate().map(|(i, kind)| {
         let check = format_ident!("__guatiao_implements_{}", i);
         quote! {
@@ -288,7 +289,7 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
                     out: *mut *mut ::core::ffi::c_void,
                     err: *mut ::guatiao::library::ProviderError,
                 ) -> ::guatiao::Status {
-                    ::guatiao::library::kind::catch(|| {
+                    let status = ::guatiao::library::kind::catch(|| {
                         // SAFETY: the caller's contract.
                         let built = unsafe { ::guatiao::library::kind::config_arg::<#config>(config) }
                             .and_then(|__c| {
@@ -297,7 +298,11 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
                             });
                         // SAFETY: the caller's contract.
                         unsafe { ::guatiao::library::kind::instance_out::<#ty>(out, err, built) }
-                    })
+                    });
+                    if status == ::guatiao::Status::GUATIAO_OK {
+                        __GUATIAO_LIVE.fetch_add(1, ::core::sync::atomic::Ordering::Relaxed);
+                    }
+                    status
                 }
 
                 /// # Safety
@@ -307,6 +312,9 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
                     _ctx: *mut ::core::ffi::c_void,
                     instance: *mut ::core::ffi::c_void,
                 ) {
+                    if !instance.is_null() {
+                        __GUATIAO_LIVE.fetch_sub(1, ::core::sync::atomic::Ordering::Relaxed);
+                    }
                     // SAFETY: the caller's contract.
                     unsafe { ::guatiao::library::kind::destroy_instance::<#ty>(instance) }
                 }
@@ -347,6 +355,10 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
 
             #(#tables)*
 
+            /// Instances built from a configuration and not yet destroyed.
+            static __GUATIAO_LIVE: ::core::sync::atomic::AtomicUsize =
+                ::core::sync::atomic::AtomicUsize::new(0);
+
             /// The one instance, built on the first entry call.
             static __GUATIAO_INSTANCE: ::std::sync::OnceLock<#ty> = ::std::sync::OnceLock::new();
 
@@ -356,6 +368,11 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
 
             impl ::guatiao::library::kind::ProviderDecl for #ty {
                 const KINDS: &'static [&'static str] = &[ #(#kind_names)* ];
+
+                fn live(seen: &mut ::std::vec::Vec<&'static str>) -> usize {
+                    __GUATIAO_LIVE.load(::core::sync::atomic::Ordering::Relaxed)
+                        #(+ <dyn #live_kinds as ::guatiao::library::Kind>::live_objects(seen))*
+                }
 
                 fn provider(
                     host: ::guatiao::library::Host,

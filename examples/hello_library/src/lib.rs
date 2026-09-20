@@ -264,7 +264,7 @@ static DESCRIPTOR_BLOCKS: AtomicI64 = AtomicI64::new(0);
 /// still out.
 ///
 /// A host has no way to see that, which is what the slot is for. The
-/// refusal is `GUATIAO_ERR_WRONG_KIND`, and the host leaves this library
+/// refusal is `GUATIAO_ERR_BUSY`, and the host leaves this library
 /// registered and mapped.
 ///
 /// # Safety
@@ -272,7 +272,7 @@ static DESCRIPTOR_BLOCKS: AtomicI64 = AtomicI64::new(0);
 /// Called by a host that is about to close this library's mapping.
 unsafe extern "C" fn unload() -> Status {
     if OUTSTANDING.load(Ordering::Relaxed) > DESCRIPTOR_BLOCKS.load(Ordering::Relaxed) {
-        return Status::GUATIAO_ERR_WRONG_KIND;
+        return Status::GUATIAO_ERR_BUSY;
     }
     Status::GUATIAO_OK
 }

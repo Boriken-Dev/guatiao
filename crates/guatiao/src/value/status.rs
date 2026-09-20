@@ -39,6 +39,12 @@ pub enum Status {
     /// The thing asked is gone: a freed registry, asked through the
     /// services a library kept.
     GUATIAO_ERR_GONE = 12,
+    /// What was asked is not something this side offers: a library with
+    /// no `unload` slot, asked to unload.
+    GUATIAO_ERR_UNSUPPORTED = 13,
+    /// Not now: something is still in use. A library answers this from
+    /// its `unload` slot while anything it handed out is alive.
+    GUATIAO_ERR_BUSY = 14,
     /// A callback unwound, or a panic was caught here. The operation did
     /// not happen; the process is still usable.
     GUATIAO_ERR_INTERNAL = 100,

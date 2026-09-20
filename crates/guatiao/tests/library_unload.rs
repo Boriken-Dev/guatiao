@@ -270,7 +270,7 @@ fn a_library_with_values_outstanding_refuses_and_then_agrees() {
         matches!(
             why,
             UnloadError::Refused { ref key, status }
-                if key == "hello_library" && status == Status::GUATIAO_ERR_WRONG_KIND
+                if key == "hello_library" && status == Status::GUATIAO_ERR_BUSY
         ),
         "{why:?}"
     );

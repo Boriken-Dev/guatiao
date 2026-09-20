@@ -646,6 +646,8 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         None => format_ident!("destroy_end"),
     };
 
+    // Counts the objects this image made and has not seen destroyed.
+    let live = format_ident!("__GUATIAO_LIVE_{}", trait_ident.to_string().to_uppercase());
     // An object kind's table starts with `destroy`, right after the header.
     let destroy_field = object.then(|| {
         quote! { pub destroy: ::core::option::Option<unsafe extern "C" fn(ctx: *mut ::core::ffi::c_void)>, }
@@ -667,6 +669,9 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             #[doc(hidden)]
             pub unsafe extern "C" fn __guatiao_destroy<__T: #trait_ident>(ctx: *mut ::core::ffi::c_void) {
                 ::guatiao::library::kind::catch(|| {
+                    if !ctx.is_null() {
+                        #live.fetch_sub(1, ::core::sync::atomic::Ordering::Relaxed);
+                    }
                     // SAFETY: the caller's contract.
                     unsafe { ::guatiao::library::kind::destroy_object::<Self, __T>(ctx) };
                     ::guatiao::Status::GUATIAO_OK
@@ -706,6 +711,30 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
     });
     let proxies = methods.iter().map(|m| emit_proxy(&table, m));
 
+    // Objects this image made and has not seen destroyed, and the kinds
+    // this one's methods hand back, which a library answers for as well.
+    let live_static = object.then(|| {
+        quote! {
+            #[doc(hidden)]
+            static #live: ::core::sync::atomic::AtomicUsize =
+                ::core::sync::atomic::AtomicUsize::new(0);
+        }
+    });
+    let own_live = if object {
+        quote! { #live.load(::core::sync::atomic::Ordering::Relaxed) }
+    } else {
+        quote! { 0usize }
+    };
+    let mut returned: Vec<Type> = Vec::new();
+    for m in methods.iter() {
+        if let RetKind::Object(inner) = &m.ret {
+            let spelled = quote!(#inner).to_string();
+            if !returned.iter().any(|t| quote!(#t).to_string() == spelled) {
+                returned.push(inner.clone());
+            }
+        }
+    }
+
     // The trait, with `into_object` appended for an object kind: the way
     // an implementation becomes a handle. `where Self: Sized` keeps it off
     // the trait object, so it is not a slot.
@@ -718,19 +747,23 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             where
                 Self: Sized + Send + 'static,
             {
-                ::guatiao::library::Object::from_cell(::std::boxed::Box::new(
+                let object = ::guatiao::library::Object::from_cell(::std::boxed::Box::new(
                     ::guatiao::library::kind::ObjectCell {
                         table: #table::of::<Self>(),
                         value: self,
                     },
                 ))
-                .expect("a table the kind attribute built fits its own kind")
+                .expect("a table the kind attribute built fits its own kind");
+                #live.fetch_add(1, ::core::sync::atomic::Ordering::Relaxed);
+                object
             }
         };
         tr.items.push(into_object);
     }
 
     quote! {
+        #live_static
+
         #tr
 
         #[repr(C)]
@@ -782,6 +815,14 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             const FLOOR_HASH: u32 = #table::FLOOR_HASH;
             const REQUIRED: &'static [(&'static str, usize)] = &[ #destroy_required #(#required_slots)* ];
             const OBJECT: bool = #object;
+
+            fn live_objects(seen: &mut ::std::vec::Vec<&'static str>) -> usize {
+                if seen.contains(&#name) {
+                    return 0;
+                }
+                seen.push(#name);
+                #own_live #(+ <#returned as ::guatiao::library::Kind>::live_objects(seen))*
+            }
 
             fn as_dyn(remote: &::guatiao::library::Remote<Self>) -> &Self {
                 remote

@@ -283,17 +283,24 @@ class Registry:
         nothing answers to `key`."""
         self._key_call(_lib.core().guatiao_registry_retire, key)
 
-    def unload(self, key: str) -> None:
-        """`retire`, then the library's own say, then unmapping it.
+    def unload(self, key: str, *, unchecked: bool = False) -> None:
+        """Unmaps a library, when the library agrees.
 
-        **The caller states what nothing can check**: when this returns
-        the library's code and its allocator are gone, so every value it
-        built through its own allocator, every table, `ctx` and
-        `Instance` taken from it must already be released.
-        `guatiao.errors.WrongKind` when the library refuses or is linked
-        into the host rather than mapped -- either way it stays loaded --
-        and `guatiao.errors.NotFound` when nothing answers to `key`."""
-        self._key_call(_lib.core().guatiao_registry_unload, key)
+        The library's own `unload` function is asked first: it promises
+        that what it can account for is released. `guatiao.Busy` while an
+        instance or object it handed out is alive; `guatiao.Unsupported`
+        when it has no such function and so promises nothing;
+        `guatiao.WrongKind` when it is linked into the host rather than
+        mapped; `guatiao.NotFound` for an unknown key. A refusal leaves it
+        loaded.
+
+        `unchecked=True` is the caller insisting on a library with no
+        `unload` function: nothing it handed out is alive at all. Either
+        way, no table, `ctx` or borrowed schema taken from the library is
+        used again."""
+        lib = _lib.core()
+        call = lib.guatiao_registry_unload_unchecked if unchecked else lib.guatiao_registry_unload
+        self._key_call(call, key)
 
     def host(self) -> Any:
         """The raw `const guatiao_host_info *` this registry hands a

@@ -126,6 +126,7 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
     # that is absent, which is what every optional export here does.
     "guatiao_registry_retire": ([c_void_p, Str], c_uint32, "load"),
     "guatiao_registry_unload": ([c_void_p, Str], c_uint32, "load"),
+    "guatiao_registry_unload_unchecked": ([c_void_p, Str], c_uint32, "load"),
     "guatiao_registry_free": ([c_void_p], None, "load"),
     "guatiao_registry_keyed_by": ([c_void_p, Str], c_uint32, "load"),
     "guatiao_registry_libraries_keyed_by": ([c_void_p, Str], c_uint32, "load"),

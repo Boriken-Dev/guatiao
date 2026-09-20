@@ -158,7 +158,7 @@ A format the loaded library does not export raises
 ### Errors
 
 A failed native call raises `guatiao.GuatiaoError`, as one of `BadValue`,
-`AllocFailed`, `WrongKind`, `NotFound`, `NullArgument`, `Gone` or
+`AllocFailed`, `WrongKind`, `NotFound`, `NullArgument`, `Gone`, `Unsupported`, `Busy` or
 `Internal`. `.status` is the C status code, and `.message` carries a
 provider's own words when it gave any.
 

@@ -577,7 +577,7 @@ reg.providers_of("acme_net_pve")           // every loaded version of one id (>1
 reg.all() / reg.all_ranked()               // everything, load order / best first
 reg.retire(library_key)                    // Result<Retired, UnloadError>: out of the registry,
                                            // still mapped
-unsafe { reg.unload(library_key) }?        // the same, then the library's say, then unmapped
+unsafe { reg.unload(library_key) }?        // asks the library, then unmaps it
 provider.kinds() -> &[String] / provider.supports(kind)   // what it serves
 provider.config_schema()                   // Option<&Value>, the registry's copy
 provider.vtable() -> (*const c_void, usize)
@@ -628,20 +628,32 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   it. Safe, because it dangles nothing. `Retired { key, id, version,
   providers }` says what left; `UnloadError::NotFound { key }` is the
   only refusal.
-- **And unloaded, on the host's word.** `unsafe Registry::unload(key)`
-  is `retire`, then the library's own `unload` slot, then the loader's
-  close. `unsafe` because nothing can check it: when it returns, the
-  library's code, descriptors and allocator are gone, so the host must
-  first have dropped every value that library built through **its own**
-  allocator, every `Remote`/`Offer`/`Instance`/`Object` and raw
-  vtable/`ctx`/descriptor pointer taken from it, and every descriptor
-  another library fetched from it through the services. A registry made
-  with `with_alloc` reduces the first of those to nothing: a library
-  handed a host allocator builds the host's trees in the host's arena.
-  `UnloadError::Linked { key }` for a library the host LINKS (nothing to
-  unmap; retiring it works), `Refused { key, status }` when the library
-  says no — it stays registered and mapped — and `Close { key, reason }`
-  when the loader could not close, in which case it is retired.
+- **And unloaded, when the library agrees.** `unsafe
+  Registry::unload(key)` asks the library's `unload` slot first, then
+  retires it, then closes the mapping. The slot is the library's promise
+  that what it can account for is released. `UnloadError`:
+  `NotSupported { key }` when it has no slot and so promises nothing;
+  `Refused { key, status }` when it says no (`GUATIAO_ERR_BUSY` from a
+  derived library with anything alive); `Linked { key }` for a library
+  the host LINKS; `NotFound`; and `Close { key, reason }` when the loader
+  could not close, in which case it is retired. Every refusal leaves the
+  library registered and mapped.
+- **`unsafe Registry::unload_unchecked(key)` is the host insisting** on a
+  library with no slot. A library that HAS a slot is still asked, and its
+  refusal still stands.
+- **Both are `unsafe` for what no library can count**: a `Remote` or
+  `Offer` copied out of it, a raw vtable, `ctx` or descriptor pointer, a
+  value it built through its own allocator that its slot does not track,
+  and a descriptor another library fetched from it through the services.
+  None is used again. A registry made with `with_alloc` takes the
+  library's descriptor out of that list: it is built in the host's arena.
+- **A derived library counts what it hands out.** `#[derive(Provider)]`
+  counts instances built through `create`, `#[guatiao::kind(object)]`
+  counts object cells, and `providers!` writes an `unload` slot that
+  answers `GUATIAO_ERR_BUSY` while either count, for the kinds its
+  providers serve and the object kinds those hand back, is above zero.
+  The counters are statics the derives emit into the library; this crate
+  holds none.
 - **A derived library builds its descriptor in the host's arena** when
   the host offers one: `providers!`/`local_providers!` take
   `host.alloc()` and fall back to their own. So the configuration schema
@@ -651,11 +663,11 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   is what `unload`'s contract covers.
 - **`LibraryInfo::unload`** is the library's say, an appended slot:
   `Option<unsafe extern "C" fn() -> Status>`, `GUATIAO_OK` to agree.
-  Null, or a descriptor from before the slot, means "unmap me without
-  asking". `providers!(id = .., version = .., providers = [..], unload =
-  <fn>)` fills it; a hand-written descriptor sets the field. It is the
-  one thing only the library knows: a thread of its own still running, a
-  callback registered elsewhere, values of its still outstanding.
+  Null, or a descriptor from before the slot, means the library does not
+  support being unloaded. `providers!` always fills it; its long form's
+  `unload = <fn>` is asked after the counts, for what only the library
+  knows: a thread of its own, a callback registered elsewhere. A
+  hand-written descriptor sets the field.
 - **A library's entry point must not call back into the registry loading
   it.** `load_file` holds the registry exclusively for the whole call; a
   provider that needs a peer looks it up later, from a vtable call.
@@ -1044,7 +1056,8 @@ guatiao_registry_scan_dir_rules(reg, dir, false,
 guatiao_registry_providers(reg, guatiao_cstr("greeter"), &alloc, &answer);
 guatiao_registry_provider(reg, key, &alloc, &answer);
 guatiao_registry_retire(reg, guatiao_cstr("hello_library"));   // out of the registry, still mapped
-guatiao_registry_unload(reg, guatiao_cstr("hello_library"));   // the same, then unmapped
+guatiao_registry_unload(reg, guatiao_cstr("hello_library"));   // asks the library, then unmaps it
+guatiao_registry_unload_unchecked(reg, key);                   // a library with no unload slot: the host insists
 guatiao_registry_keyed_by(reg, guatiao_cstr("%id@%version"));
 guatiao_registry_libraries_keyed_by(reg, tmpl);
 guatiao_registry_libraries(reg, &alloc, &answer);

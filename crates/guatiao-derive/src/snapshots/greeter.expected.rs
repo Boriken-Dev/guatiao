@@ -135,6 +135,13 @@ impl ::guatiao::library::Kind for dyn Greeter {
         ("greet", GreeterVtable::greet_end()),
     ];
     const OBJECT: bool = false;
+    fn live_objects(seen: &mut ::std::vec::Vec<&'static str>) -> usize {
+        if seen.contains(&"greeter") {
+            return 0;
+        }
+        seen.push("greeter");
+        0usize
+    }
     fn as_dyn(remote: &::guatiao::library::Remote<Self>) -> &Self {
         remote
     }

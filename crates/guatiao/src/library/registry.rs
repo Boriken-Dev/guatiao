@@ -480,6 +480,14 @@ pub enum UnloadError {
         /// The library key.
         key: String,
     },
+    /// The library has no `unload` slot, so it promises nothing about
+    /// what it handed out. It is left as it was;
+    /// [`unload_unchecked`](Registry::unload_unchecked) is the host
+    /// insisting.
+    NotSupported {
+        /// The library key.
+        key: String,
+    },
     /// The library's own `unload` slot refused, and the library is left
     /// exactly as it was: registered and mapped.
     Refused {
@@ -505,6 +513,10 @@ impl std::fmt::Display for UnloadError {
             UnloadError::Linked { key } => write!(
                 f,
                 "`{key}` is linked into this binary and cannot be unmapped"
+            ),
+            UnloadError::NotSupported { key } => write!(
+                f,
+                "`{key}` has no unload slot, so it does not support being unloaded"
             ),
             UnloadError::Refused { key, status } => {
                 write!(f, "`{key}` refused to be unloaded ({status:?})")

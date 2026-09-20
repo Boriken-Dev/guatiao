@@ -45,6 +45,14 @@ class NullArgument(GuatiaoError):
     pass
 
 
+class Unsupported(GuatiaoError):
+    """What was asked is not something the other side offers."""
+
+
+class Busy(GuatiaoError):
+    """Not now: something is still in use."""
+
+
 class Gone(GuatiaoError):
     pass
 
@@ -60,6 +68,8 @@ _BY_STATUS = {
     _abi.Status.ERR_NOT_FOUND: NotFound,
     _abi.Status.ERR_NULL: NullArgument,
     _abi.Status.ERR_GONE: Gone,
+    _abi.Status.ERR_UNSUPPORTED: Unsupported,
+    _abi.Status.ERR_BUSY: Busy,
     _abi.Status.ERR_INTERNAL: Internal,
 }
 

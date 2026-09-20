@@ -14,11 +14,13 @@ from __future__ import annotations
 from .errors import (
     AllocFailed,
     BadValue,
+    Busy,
     Gone,
     GuatiaoError,
     Internal,
     NotFound,
     NullArgument,
+    Unsupported,
     WrongKind,
 )
 from ._lib import LibraryNotFound, MissingSymbol
@@ -43,6 +45,8 @@ __all__ = [
     "NotFound",
     "NullArgument",
     "Gone",
+    "Unsupported",
+    "Busy",
     "Internal",
     "LibraryNotFound",
     "MissingSymbol",
