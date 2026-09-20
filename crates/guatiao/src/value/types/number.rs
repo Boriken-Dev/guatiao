@@ -87,6 +87,23 @@ fn float_text(v: f64) -> Result<String, ValueError> {
     }
 }
 
+impl Number {
+    /// A copy, grown through `alloc`.
+    pub fn clone_in(&self, alloc: Alloc) -> Result<Number, ValueError> {
+        Ok(Number(self.0.clone_in(alloc)?))
+    }
+
+    /// The allocator this number's text recorded.
+    pub fn alloc(&self) -> Result<Alloc, ValueError> {
+        self.0.alloc()
+    }
+
+    /// Frees the text and leaves it empty. Idempotent.
+    pub(crate) fn release(&mut self) {
+        self.0.release();
+    }
+}
+
 impl Clone for Number {
     fn clone(&self) -> Number {
         Number(self.0.clone())

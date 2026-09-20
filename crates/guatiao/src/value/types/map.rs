@@ -407,6 +407,20 @@ impl Map {
     /// Pairwise, in order, each value through [`Value`]'s own
     /// comparison. **Order is significant**: two maps with the same pairs
     /// in a different order are two different values.
+    /// Frees every key, moves every value onto `stack` and frees the
+    /// storage. See [`List::dismantle_into`](super::List).
+    pub(crate) fn dismantle_into(&mut self, stack: &mut Vec<Value>) {
+        for i in 0..self.len {
+            // SAFETY: the first `len` entries are initialised.
+            let entry = unsafe { &mut *self.ptr.add(i) };
+            entry.key.release();
+            stack.push(std::mem::take(&mut entry.value));
+        }
+        self.len = 0;
+        // SAFETY: the entries have been moved out.
+        unsafe { release_buffer(self) }
+    }
+
     pub(crate) fn eq_at(&self, other: &Map, depth: u32) -> bool {
         let (x, y) = (self.entries(), other.entries());
         x.len() == y.len()

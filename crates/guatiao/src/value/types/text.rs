@@ -129,6 +129,13 @@ impl Text {
         })
     }
 
+    /// Frees the storage and leaves this empty. Idempotent: `cap == 0`
+    /// afterwards, which frees nothing.
+    pub(crate) fn release(&mut self) {
+        // SAFETY: this container describes its own storage.
+        unsafe { release_buffer(self) }
+    }
+
     /// The allocator this text grows through.
     pub fn alloc(&self) -> Result<Alloc, ValueError> {
         // SAFETY: the address a container recorded is an allocator that
