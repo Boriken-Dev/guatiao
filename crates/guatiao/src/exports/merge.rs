@@ -39,7 +39,7 @@ use super::{entry, out};
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::merge::{MergeError, MergeMode, MergeOptions, MergeOverrides};
 use crate::value::status::Status;
-use crate::value::types::{Str, Value};
+use crate::value::types::{Number, Str, Value};
 
 /// Shallow: top-level keys replace, nested maps are not recursed into.
 pub const GUATIAO_MERGE_SIMPLE: u32 = 1;
@@ -102,15 +102,24 @@ fn describe(error: &MergeError, alloc: Alloc) -> Option<Value> {
             mode,
         } => {
             out.set("path", Value::string_in(alloc, path).ok()?).ok()?;
-            out.set("mode", Value::int_in(alloc, mode_number(*mode)).ok()?)
-                .ok()?;
+            out.set(
+                "mode",
+                Number::new_in(alloc, &mode_number(*mode).to_string()).ok()?,
+            )
+            .ok()?;
             if let Some(tag) = earlier {
-                out.set("earlier", Value::int_in(alloc, *tag as i64).ok()?)
-                    .ok()?;
+                out.set(
+                    "earlier",
+                    Number::new_in(alloc, &u32::from(*tag).to_string()).ok()?,
+                )
+                .ok()?;
             }
             if let Some(tag) = later {
-                out.set("later", Value::int_in(alloc, *tag as i64).ok()?)
-                    .ok()?;
+                out.set(
+                    "later",
+                    Number::new_in(alloc, &u32::from(*tag).to_string()).ok()?,
+                )
+                .ok()?;
             }
         }
         MergeError::Build(_) => {

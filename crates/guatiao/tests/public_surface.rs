@@ -112,7 +112,7 @@ fn the_borrowed_byte_view_has_the_constructors_its_sibling_has() {
 fn an_entry_hands_out_its_value_mutably() {
     use guatiao::{Entry, Text, Value};
 
-    let mut entry = Entry::new(Text::new("k"), Value::int(1));
+    let mut entry = Entry::new(Text::new("k"), Value::from(1i64));
     *entry.value_mut() = Value::string("two");
     assert_eq!(entry.value().as_str(), Some("two"));
     assert_eq!(entry.key(), b"k");
@@ -127,7 +127,7 @@ fn an_entry_hands_out_its_value_mutably() {
 /// Sync>`.
 #[test]
 fn the_owned_types_are_clone_eq_send_and_sync() {
-    use guatiao::{Buffer, List, Map, Text, Value};
+    use guatiao::{Buffer, List, Map, Number, Text, Value};
 
     fn is_send_sync<T: Send + Sync>() {}
     is_send_sync::<Value>();
@@ -162,17 +162,17 @@ fn the_owned_types_are_clone_eq_send_and_sync() {
     assert_eq!(value, twin);
     assert_ne!(value, Value::null());
     assert_eq!(
-        Value::int(3).clone(),
-        Value::int(3),
+        Value::from(3i64).clone(),
+        Value::from(3i64),
         "a scalar has no allocator and still clones"
     );
     assert_eq!(
-        Value::number("1.10").unwrap(),
-        Value::number("1.10").unwrap()
+        Value::from(Number::new("1.10").unwrap()),
+        Value::from(Number::new("1.10").unwrap())
     );
     assert_ne!(
-        Value::number("1.10").unwrap(),
-        Value::number("1.1").unwrap(),
+        Value::from(Number::new("1.10").unwrap()),
+        Value::from(Number::new("1.1").unwrap()),
         "a number is its text"
     );
 
@@ -206,7 +206,9 @@ fn a_value_gives_up_its_container_by_value() {
     let list = Value::from(list).into_list().expect("a list");
     assert_eq!(list.len(), 1);
 
-    let not_a_map = Value::int(3).into_map().expect_err("an int is not a map");
-    assert_eq!(not_a_map, Value::int(3), "handed back untouched");
+    let not_a_map = Value::from(3i64)
+        .into_map()
+        .expect_err("an int is not a map");
+    assert_eq!(not_a_map, Value::from(3i64), "handed back untouched");
     assert!(Value::string("x").into_list().is_err());
 }

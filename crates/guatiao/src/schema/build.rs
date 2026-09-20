@@ -69,7 +69,7 @@
 use super::vocab;
 use crate::value::alloc::Alloc;
 use crate::value::mutate::ValueError;
-use crate::value::types::Value;
+use crate::value::types::{Number, Value};
 
 /// Builds a schema: the root document, with its dialect declared.
 pub struct SchemaBuilder {
@@ -439,8 +439,16 @@ impl KindBuilder {
     /// The same, through an allocator you name.
     pub fn int_range_in(alloc: Alloc, min: i64, max: i64) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_INTEGER);
-        put(&mut k.state, vocab::MINIMUM, Value::int_in(alloc, min));
-        put(&mut k.state, vocab::MAXIMUM, Value::int_in(alloc, max));
+        put(
+            &mut k.state,
+            vocab::MINIMUM,
+            Number::new_in(alloc, &min.to_string()).map(Value::from),
+        );
+        put(
+            &mut k.state,
+            vocab::MAXIMUM,
+            Number::new_in(alloc, &max.to_string()).map(Value::from),
+        );
         k
     }
 
@@ -460,10 +468,18 @@ impl KindBuilder {
     pub fn int_bounds_in(alloc: Alloc, min: Option<i64>, max: Option<i64>) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_INTEGER);
         if let Some(min) = min {
-            put(&mut k.state, vocab::MINIMUM, Value::int_in(alloc, min));
+            put(
+                &mut k.state,
+                vocab::MINIMUM,
+                Number::new_in(alloc, &min.to_string()).map(Value::from),
+            );
         }
         if let Some(max) = max {
-            put(&mut k.state, vocab::MAXIMUM, Value::int_in(alloc, max));
+            put(
+                &mut k.state,
+                vocab::MAXIMUM,
+                Number::new_in(alloc, &max.to_string()).map(Value::from),
+            );
         }
         k
     }
@@ -491,10 +507,18 @@ impl KindBuilder {
     pub fn float_bounds_in(alloc: Alloc, min: Option<f64>, max: Option<f64>) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_NUMBER);
         if let Some(min) = min {
-            put(&mut k.state, vocab::MINIMUM, Value::float_in(alloc, min));
+            put(
+                &mut k.state,
+                vocab::MINIMUM,
+                Number::float_in(alloc, min).map(Value::from),
+            );
         }
         if let Some(max) = max {
-            put(&mut k.state, vocab::MAXIMUM, Value::float_in(alloc, max));
+            put(
+                &mut k.state,
+                vocab::MAXIMUM,
+                Number::float_in(alloc, max).map(Value::from),
+            );
         }
         k
     }

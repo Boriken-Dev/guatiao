@@ -162,6 +162,18 @@ impl Default for Buffer {
     }
 }
 
+impl From<&[u8]> for Buffer {
+    fn from(bytes: &[u8]) -> Buffer {
+        Buffer::new(bytes)
+    }
+}
+
+impl From<Vec<u8>> for Buffer {
+    fn from(bytes: Vec<u8>) -> Buffer {
+        Buffer::new(&bytes)
+    }
+}
+
 impl From<Buffer> for Value {
     fn from(bytes: Buffer) -> Value {
         let mut v = blank(Tag::GUATIAO_BYTES);

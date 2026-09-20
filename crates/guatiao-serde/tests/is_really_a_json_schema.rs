@@ -68,7 +68,7 @@ fn connection() -> Value {
         .field(
             FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
                 .label("Port")
-                .default(Value::int(5900))
+                .default(Value::from(5900i64))
                 .order(2),
         )
         .field(FieldBuilder::new(

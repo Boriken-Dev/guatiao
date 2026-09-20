@@ -408,45 +408,6 @@ impl Value {
         Ok(Buffer::new_in(alloc, bytes)?.into())
     }
 
-    /// A number from its exact text, stored verbatim.
-    ///
-    /// Fallible even in the short form, and the refusal is about the
-    /// **text**, not the memory: `"1,5"` is not a JSON number, and saying
-    /// so here puts the error at the mistake.
-    pub fn number(text: &str) -> Result<Value, ValueError> {
-        Value::number_in(Alloc::rust(), text)
-    }
-
-    /// The same, through an allocator you name.
-    pub fn number_in(alloc: Alloc, text: &str) -> Result<Value, ValueError> {
-        value_number(alloc, text)
-    }
-
-    /// A number from an integer. Every `i64` has a JSON spelling, so this
-    /// cannot be refused.
-    pub fn int(v: i64) -> Value {
-        or_abort(Value::int_in(Alloc::rust(), v))
-    }
-
-    /// The same, through an allocator you name.
-    pub fn int_in(alloc: Alloc, v: i64) -> Result<Value, ValueError> {
-        value_int(alloc, v)
-    }
-
-    /// A number from a float, refusing one with no JSON spelling.
-    ///
-    /// Fallible for the same reason [`number`](Value::number) is: `NaN`
-    /// and the infinities are not numbers this format can hold, and that
-    /// is a fact about the argument rather than about the heap.
-    pub fn float(v: f64) -> Result<Value, ValueError> {
-        Value::float_in(Alloc::rust(), v)
-    }
-
-    /// The same, through an allocator you name.
-    pub fn float_in(alloc: Alloc, v: f64) -> Result<Value, ValueError> {
-        value_float(alloc, v)
-    }
-
     /// An empty map, as a value: `Map::new().into()`, for a caller that
     /// wants the node rather than the container.
     pub fn map() -> Value {
@@ -767,24 +728,6 @@ impl Drop for Value {
     }
 }
 
-impl From<&str> for Value {
-    fn from(text: &str) -> Value {
-        Value::string(text)
-    }
-}
-
-impl From<String> for Value {
-    fn from(text: String) -> Value {
-        Value::string(&text)
-    }
-}
-
-impl From<&String> for Value {
-    fn from(text: &String) -> Value {
-        Value::string(text)
-    }
-}
-
 impl From<bool> for Value {
     fn from(b: bool) -> Value {
         Value::bool(b)
@@ -794,13 +737,13 @@ impl From<bool> for Value {
 /// A float converts **fallibly**, and that is not an oversight.
 ///
 /// `NaN` and the infinities have no JSON spelling, so `f64` cannot promise
-/// what `From` promises. `map.set("ratio", Value::float(x)?)` says out
+/// what `From` promises. `map.set("ratio", Number::try_from(x)?)` says out
 /// loud that the value might not be one.
 impl TryFrom<f64> for Value {
     type Error = ValueError;
 
     fn try_from(v: f64) -> Result<Value, ValueError> {
-        Value::float(v)
+        Ok(Number::try_from(v)?.into())
     }
 }
 
@@ -808,7 +751,7 @@ impl TryFrom<f32> for Value {
     type Error = ValueError;
 
     fn try_from(v: f32) -> Result<Value, ValueError> {
-        Value::float(f64::from(v))
+        Ok(Number::try_from(v)?.into())
     }
 }
 
@@ -822,22 +765,31 @@ impl<T: Into<Value>> From<Option<T>> for Value {
     }
 }
 
-/// Every integer width, written as its **decimal text**.
+/// Any number, whatever it was written from.
 ///
-/// Not squeezed through an `i64` on the way: a number is the exact text
-/// that declared it, so `u64::MAX` and `i128::MIN` cross as themselves
-/// rather than wrapping. The text form is what makes that free — there is
-/// no machine width at the boundary to overflow.
-macro_rules! integer_from {
-    ($($t:ty),* $(,)?) => {$(
-        impl From<$t> for Value {
-            fn from(v: $t) -> Value {
-                or_abort(value_number(Alloc::rust(), &v.to_string()))
-            }
-        }
-    )*};
+/// **The one blanket impl in this crate**, and it has to be the only one:
+/// a second `From<T: Into<Something>>` overlaps with this one, because a
+/// downstream type may implement both `Into`s, and the blanket `TryFrom`
+/// collides with core's own. So numbers get the blanket and every other
+/// kind gets a concrete impl below.
+impl<T: Into<Number>> From<T> for Value {
+    fn from(v: T) -> Value {
+        let mut node = blank(Tag::GUATIAO_NUMBER);
+        node.payload = Payload::number(v.into());
+        node
+    }
 }
 
-integer_from!(
-    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
-);
+/// A conversion that goes through the container that owns the operation:
+/// `Value::from("x")` is `Text::from("x").into()`, written once.
+macro_rules! value_from_via {
+    ($($container:ident: $($source:ty),+ );* $(;)?) => {$($(
+        impl From<$source> for Value {
+            fn from(v: $source) -> Value {
+                <$container>::from(v).into()
+            }
+        }
+    )+)*};
+}
+
+value_from_via!(Text: &str, String, &String; Buffer: &[u8], Vec<u8>);

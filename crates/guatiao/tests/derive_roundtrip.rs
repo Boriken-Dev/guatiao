@@ -16,7 +16,7 @@ use std::ffi::c_void;
 
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::value::read::{entries, str_or};
-use guatiao::{Bytes, FromValue, MapError, ToValue, Value};
+use guatiao::{Bytes, FromValue, MapError, Number, ToValue, Value};
 
 // A counting allocator, so every test also proves the tree frees.
 #[derive(Default)]
@@ -193,7 +193,12 @@ fn an_error_inside_a_list_names_the_index() {
         let tags = value.get_mut("tags").expect("tags was written");
         // A number where a string belongs, at a known position.
         assert!(tags.discard_at(1));
-        tags.push(Value::int_in(alloc, 7).unwrap()).unwrap();
+        tags.push(
+            Number::new_in(alloc, &7.to_string())
+                .map(Value::from)
+                .unwrap(),
+        )
+        .unwrap();
 
         let e = Connection::from_value(&value).unwrap_err();
         assert_eq!(e.key(), "tags[1]");
@@ -227,7 +232,7 @@ fn a_number_that_does_not_fit_is_bad_value_not_wrong_type() {
         value
             .set(
                 "port",
-                Value::number_in(alloc, "9223372036854775808").unwrap(),
+                Value::from(Number::new_in(alloc, "9223372036854775808").unwrap()),
             )
             .unwrap();
         let e = Connection::from_value(&value).unwrap_err();
@@ -236,7 +241,10 @@ fn a_number_that_does_not_fit_is_bad_value_not_wrong_type() {
 
         // ... and a fractional spelling is refused rather than truncated.
         value
-            .set("port", Value::number_in(alloc, "5900.5").unwrap())
+            .set(
+                "port",
+                Value::from(Number::new_in(alloc, "5900.5").unwrap()),
+            )
             .unwrap();
         let e = Connection::from_value(&value).unwrap_err();
         assert!(matches!(e, MapError::BadValue { .. }), "{e:?}");

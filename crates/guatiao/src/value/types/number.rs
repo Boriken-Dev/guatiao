@@ -20,9 +20,9 @@ use std::fmt;
 use std::str::FromStr;
 
 use crate::value::alloc::Alloc;
-use crate::value::mutate::{ValueError, blank};
+use crate::value::mutate::ValueError;
 
-use super::{Payload, Tag, Text, Value};
+use super::Text;
 
 /// A JSON number, stored as its exact text.
 ///
@@ -72,9 +72,27 @@ impl Number {
         self.0.as_bytes()
     }
 
+    /// A number from a float, through an allocator you name.
+    pub fn float_in(alloc: Alloc, v: f64) -> Result<Number, ValueError> {
+        Number::new_in(alloc, &float_text(v)?)
+    }
+
     /// The text, with ownership.
     pub(crate) fn into_text(self) -> Text {
         self.0
+    }
+}
+
+/// A float's decimal text, or the refusal.
+///
+/// `NaN` and the infinities have no JSON spelling, so a container that
+/// took one would have to invent a spelling or lose the value at the
+/// first boundary it crossed.
+fn float_text(v: f64) -> Result<String, ValueError> {
+    if v.is_finite() {
+        Ok(v.to_string())
+    } else {
+        Err(ValueError::NotANumber)
     }
 }
 
@@ -137,10 +155,7 @@ impl TryFrom<f64> for Number {
     type Error = ValueError;
 
     fn try_from(v: f64) -> Result<Number, ValueError> {
-        if !v.is_finite() {
-            return Err(ValueError::NotANumber);
-        }
-        Number::new(&v.to_string())
+        Number::new(&float_text(v)?)
     }
 }
 
@@ -149,23 +164,6 @@ impl TryFrom<f32> for Number {
 
     fn try_from(v: f32) -> Result<Number, ValueError> {
         Number::try_from(f64::from(v))
-    }
-}
-
-impl From<Number> for Value {
-    /// A number value: the same `text` arm a string uses, under the
-    /// number tag.
-    ///
-    /// ```
-    /// # use guatiao::{Number, Tag, Value};
-    /// let v = Value::from(Number::from(5u64));
-    /// assert_eq!(v.tag(), Ok(Tag::GUATIAO_NUMBER));
-    /// assert_eq!(v.as_number_str(), Some("5"));
-    /// ```
-    fn from(number: Number) -> Value {
-        let mut v = blank(Tag::GUATIAO_NUMBER);
-        v.payload = Payload::number(number);
-        v
     }
 }
 

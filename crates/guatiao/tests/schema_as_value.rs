@@ -14,7 +14,6 @@
 use std::cell::Cell;
 use std::ffi::c_void;
 
-use guatiao::Value;
 use guatiao::schema::FormBuilder;
 use guatiao::schema::FormFieldBuilder;
 use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
@@ -22,6 +21,7 @@ use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::schema::vocab;
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::value::read::{entries, str_or};
+use guatiao::{Number, Value};
 
 // A counting allocator, so every test also proves the schema frees.
 #[derive(Default)]
@@ -101,7 +101,11 @@ fn a_declared_schema_reads_back() {
                 FieldBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
                     .label("Port")
                     .section("net")
-                    .default(Value::int_in(alloc, 5900).unwrap())
+                    .default(
+                        Number::new_in(alloc, &5900.to_string())
+                            .map(Value::from)
+                            .unwrap(),
+                    )
                     .order(2),
             )
             .field(

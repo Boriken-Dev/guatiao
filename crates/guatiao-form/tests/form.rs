@@ -400,7 +400,7 @@ fn a_condition_the_field_could_never_meet_is_refused_without_quoting_it() {
     let schema = schema();
     let cases = [
         ("port", Value::string("hunter2")),
-        ("port", Value::int(70000)),
+        ("port", Value::from(70000i64)),
         ("auth", Value::string("kerberos")),
         ("auth", Value::bool(true)),
     ];
@@ -556,7 +556,7 @@ fn hiding_a_field_hides_what_waits_on_it() {
 
     let stale = values(vec![
         ("verify", Value::bool(false)),
-        ("port", Value::int(443)),
+        ("port", Value::from(443i64)),
     ]);
     assert!(!shown(s, f, "port", &stale));
     assert!(
@@ -566,7 +566,7 @@ fn hiding_a_field_hides_what_waits_on_it() {
 
     let both = values(vec![
         ("verify", Value::bool(true)),
-        ("port", Value::int(443)),
+        ("port", Value::from(443i64)),
     ]);
     assert!(shown(s, f, "ca", &both));
 }
@@ -580,7 +580,10 @@ fn a_cycle_is_never_shown() {
         .finish()
         .unwrap();
     let (s, f) = views(&schema, &form);
-    let v = values(vec![("host", Value::string("a")), ("port", Value::int(1))]);
+    let v = values(vec![
+        ("host", Value::string("a")),
+        ("port", Value::from(1i64)),
+    ]);
     assert!(!shown(s, f, "host", &v));
     assert!(!shown(s, f, "port", &v));
 }

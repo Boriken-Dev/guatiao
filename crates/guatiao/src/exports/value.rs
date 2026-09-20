@@ -21,7 +21,7 @@ use super::{as_str, entry, out};
 
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::status::Status;
-use crate::value::types::{Bytes, Str, Value};
+use crate::value::types::{Bytes, Number, Str, Value};
 
 /// # Safety
 ///
@@ -252,7 +252,7 @@ pub unsafe extern "C" fn guatiao_value_number(
         };
         // SAFETY: the caller guarantees the view's bytes.
         let t = match unsafe { as_str(text) } { Ok(t) => t, Err(s) => return s };
-        match Value::number_in(a, t) {
+        match Number::new_in(a, t).map(Value::from) {
             // SAFETY: checked non-null and writable by contract.
             Ok(v) => { unsafe { ptr::write(out, v) }; Status::GUATIAO_OK }
             Err(e) => e.into(),

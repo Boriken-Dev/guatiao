@@ -193,11 +193,29 @@ unsafe impl Send for Text {}
 // SAFETY: as above.
 unsafe impl Sync for Text {}
 
+impl From<&str> for Text {
+    fn from(text: &str) -> Text {
+        Text::new(text)
+    }
+}
+
+impl From<String> for Text {
+    fn from(text: String) -> Text {
+        Text::new(&text)
+    }
+}
+
+impl From<&String> for Text {
+    fn from(text: &String) -> Text {
+        Text::new(text)
+    }
+}
+
 impl From<Text> for Value {
-    /// A string value. A NUMBER also stores its digits in a [`Text`], so
-    /// that one is spelled [`Value::number`] rather than reached by
-    /// conversion — the grammar has to be checked, and a conversion that
-    /// cannot refuse is the wrong place to check it.
+    /// A string value. A [`Number`](super::Number) stores its digits in a
+    /// [`Text`] too, so that one converts from `Number` rather than from
+    /// this: the grammar has to be checked, and a conversion that cannot
+    /// refuse is the wrong place to check it.
     fn from(text: Text) -> Value {
         let mut v = blank(Tag::GUATIAO_STRING);
         v.payload = Payload {
