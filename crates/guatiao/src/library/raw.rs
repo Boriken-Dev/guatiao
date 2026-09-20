@@ -1289,14 +1289,22 @@ unsafe fn read_kind_tables(
 /// refuses, because there is nothing to unmap.
 #[cfg(feature = "load")]
 #[derive(Debug)]
-// The handle is held, not read, until `retire` and `unload` decide what
-// becomes of it.
-#[allow(dead_code)]
 pub(crate) enum Origin {
     /// A file this registry mapped and can close.
     Mapped(libloading::Library),
     /// Code in the host's own binary: `register_local`, `register_entry`.
     Linked,
+}
+
+#[cfg(feature = "load")]
+impl Origin {
+    /// Gives up the handle and leaves the mapping in place, so every
+    /// image address the library already handed out stays valid.
+    pub(crate) fn keep(self) {
+        if let Origin::Mapped(library) = self {
+            std::mem::forget(library);
+        }
+    }
 }
 
 /// What opening one file came to. Four outcomes, because the registry

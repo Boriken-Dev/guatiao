@@ -430,9 +430,76 @@ pub struct Loaded {
     canonical: PathBuf,
     /// The mapping, when this registry made one. Dropping it is what
     /// unmaps the library, which only `unload` does.
-    #[allow(dead_code)]
     origin: Origin,
 }
+
+/// What one library taking its leave came to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Retired {
+    /// The library key it answered to, which may now be loaded again.
+    pub key: String,
+    /// Its own identifier.
+    pub id: String,
+    /// Its version string, uninterpreted.
+    pub version: String,
+    /// How many providers left the registry with it.
+    pub providers: usize,
+}
+
+/// Why a library could not be retired or unloaded.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum UnloadError {
+    /// No library answers to that key.
+    NotFound {
+        /// The key that was asked for.
+        key: String,
+    },
+    /// It is code in the host's own binary — `register_local`,
+    /// `register_entry` — so there is no mapping to unmap. Retiring it
+    /// works; unloading it cannot.
+    Linked {
+        /// The library key.
+        key: String,
+    },
+    /// The library's own `unload` slot refused, and the library is left
+    /// exactly as it was: registered and mapped.
+    Refused {
+        /// The library key.
+        key: String,
+        /// What it answered.
+        status: crate::value::status::Status,
+    },
+    /// The loader could not close the mapping. The library is retired
+    /// either way, and the handle is given up.
+    Close {
+        /// The library key.
+        key: String,
+        /// The loader's own message.
+        reason: String,
+    },
+}
+
+impl std::fmt::Display for UnloadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnloadError::NotFound { key } => write!(f, "no library answers to `{key}`"),
+            UnloadError::Linked { key } => write!(
+                f,
+                "`{key}` is linked into this binary and cannot be unmapped"
+            ),
+            UnloadError::Refused { key, status } => {
+                write!(f, "`{key}` refused to be unloaded ({status:?})")
+            }
+            UnloadError::Close { key, reason } => write!(
+                f,
+                "`{key}` was retired and its mapping could not be closed: {reason}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for UnloadError {}
 
 /// The host's own table of what it has loaded.
 ///
@@ -901,6 +968,64 @@ impl Registry {
         });
         self.publish();
         Ok(Loading::Loaded(self.loaded.last().expect("just pushed")))
+    }
+
+    /// Takes one library out of this registry, **leaving it mapped**.
+    ///
+    /// `key` is the library key, from the template
+    /// [`libraries_keyed_by`](Registry::libraries_keyed_by) sets (`%id` by
+    /// default). Its providers leave the registry and the snapshot a
+    /// library reads, its [`Loaded`] record goes, and the key may be
+    /// loaded again — a retired library is not
+    /// [`Skipped::AlreadyLoaded`]. Nothing new can be obtained from it;
+    /// what a host already took — a [`Remote`], an [`Offer`], a vtable
+    /// pointer, a descriptor another library fetched through this host's
+    /// services — keeps working, because the mapping stays.
+    ///
+    /// Safe for that reason: retiring dangles nothing. `unload` is the
+    /// one that unmaps.
+    pub fn retire(&mut self, key: &str) -> Result<Retired, UnloadError> {
+        let (retired, origin) = self.take_library(key)?;
+        origin.keep();
+        Ok(retired)
+    }
+
+    /// Removes a library and hands back its record and its mapping.
+    /// Whoever calls decides what becomes of the handle.
+    fn take_library(&mut self, key: &str) -> Result<(Retired, Origin), UnloadError> {
+        let at = self
+            .loaded
+            .iter()
+            .position(|l| l.key.as_str() == Some(key))
+            .ok_or_else(|| UnloadError::NotFound {
+                key: key.to_string(),
+            })?;
+        let one = self.loaded.remove(at);
+
+        // By path, which is what `absorb` recorded on every provider it
+        // took from this library and is unique per registered library.
+        let before = self.providers.len();
+        self.providers.retain(|p| p.from != one.path);
+        let providers = before - self.providers.len();
+
+        // `by_key` is by index, so every index after a removal is wrong.
+        self.by_key = self
+            .providers
+            .iter()
+            .enumerate()
+            .map(|(at, p)| (p.key().to_string(), at))
+            .collect();
+        self.publish();
+
+        Ok((
+            Retired {
+                key: key.to_string(),
+                id: one.id,
+                version: one.version,
+                providers,
+            },
+            one.origin,
+        ))
     }
 
     /// Every provider that speaks one kind, best first: `(priority DESC,
