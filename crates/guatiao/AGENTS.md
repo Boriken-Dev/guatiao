@@ -228,11 +228,11 @@ a binding carries it:
 ```rust
 let m: &Map = v.try_as_ref()?;                    // or TryAsRef::<Map>::try_as_ref(&v)
 let l: &mut List = v.try_as_mut()?;
-// T in Map | List | Text | Number | Buffer | str | [u8]
+// T in bool | Map | List | Text | Number | Buffer | str | [u8]
 ```
 
-There is no `TryAsRef<bool>`: the arm is a `u8`, so no `&bool` over it
-would be sound. `bool::try_from(&v)` is the door.
+`bool` is one of them: `TryAsRef::<bool>` and `TryAsMut::<bool>` borrow
+the arm, and `bool::try_from(&v)` copies it out with a `MapError`.
 
 Taking the container out of the node consumes it, and the error is **the
 value handed back untouched**:

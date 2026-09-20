@@ -294,16 +294,6 @@ impl Value {
         Tag::try_from(self.tag)
     }
 
-    /// The boolean, or `None` for any other kind.
-    pub(crate) fn as_bool(&self) -> Option<bool> {
-        match self.tag() {
-            // SAFETY: the tag says the `b` arm is live, and a node is born
-            // with all 40 of its bytes initialised.
-            Ok(Tag::GUATIAO_BOOL) => Some(unsafe { self.payload.b }),
-            _ => None,
-        }
-    }
-
     /// A deep copy, built through `alloc`. Explicit, because an owned
     /// tree carries its allocator and copying one into another heap costs
     /// a walk.
@@ -323,7 +313,7 @@ impl Value {
         Ok(match self.tag()? {
             Tag::GUATIAO_ABSENT => Value::absent(),
             Tag::GUATIAO_NULL => Value::null(),
-            Tag::GUATIAO_BOOL => Value::from(self.as_bool().unwrap_or(false)),
+            Tag::GUATIAO_BOOL => Value::from(*arm::<bool>(self)?),
             Tag::GUATIAO_STRING => arm::<Text>(self)?.clone_in(alloc)?.into(),
             Tag::GUATIAO_NUMBER => arm::<Number>(self)?.clone_in(alloc)?.into(),
             Tag::GUATIAO_BYTES => arm::<Buffer>(self)?.clone_in(alloc)?.into(),
@@ -350,7 +340,7 @@ impl Value {
         }
         match self.tag() {
             Ok(Tag::GUATIAO_ABSENT | Tag::GUATIAO_NULL) => true,
-            Ok(Tag::GUATIAO_BOOL) => self.as_bool() == other.as_bool(),
+            Ok(Tag::GUATIAO_BOOL) => same::<bool>(self, other, bool::eq),
             Ok(Tag::GUATIAO_STRING) => same::<Text>(self, other, Text::eq),
             Ok(Tag::GUATIAO_NUMBER) => same::<Number>(self, other, Number::eq),
             Ok(Tag::GUATIAO_BYTES) => same::<Buffer>(self, other, Buffer::eq),
@@ -404,6 +394,7 @@ macro_rules! arm_as {
     };
 }
 
+arm_as!(bool, b, Tag::GUATIAO_BOOL);
 arm_as!(Map, map, Tag::GUATIAO_MAP);
 arm_as!(List, list, Tag::GUATIAO_LIST);
 arm_as!(Buffer, bytes, Tag::GUATIAO_BYTES);
