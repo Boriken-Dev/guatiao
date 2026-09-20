@@ -61,7 +61,7 @@ int main(void) {
 
   /* A key with a NUL in it: legal, because a key is pointer and length. */
   guatiao_value odd;
-  CHECK(guatiao_value_bool(1, &odd) == GUATIAO_OK, "could not create a bool");
+  CHECK(guatiao_value_bool(true, &odd) == GUATIAO_OK, "could not create a bool");
   CHECK(guatiao_map_set(&alloc, &map, guatiao_str_from("a\0b", 3), &odd) == GUATIAO_OK,
         "a key containing a NUL must be accepted");
 
@@ -118,9 +118,9 @@ int main(void) {
   /* ---- the wrong kind is refused, not guessed at -------------------- */
 
   guatiao_value scalar;
-  CHECK(guatiao_value_bool(0, &scalar) == GUATIAO_OK, "could not create a bool");
+  CHECK(guatiao_value_bool(false, &scalar) == GUATIAO_OK, "could not create a bool");
   guatiao_value orphan;
-  CHECK(guatiao_value_bool(1, &orphan) == GUATIAO_OK, "could not create a bool");
+  CHECK(guatiao_value_bool(true, &orphan) == GUATIAO_OK, "could not create a bool");
   CHECK(guatiao_map_set(&alloc, &scalar, guatiao_cstr("k"), &orphan) == GUATIAO_ERR_WRONG_KIND,
         "setting a key on a bool must be refused");
   CHECK(guatiao_tag_of(&orphan) == GUATIAO_BOOL,

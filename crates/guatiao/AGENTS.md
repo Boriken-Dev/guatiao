@@ -242,7 +242,8 @@ let map = Map::try_from(v)?;    // Err(v) for any other kind
 // also List, Text, Number, Buffer
 ```
 
-A NUMBER and a STRING share the `text` arm and do **not** share a type:
+A NUMBER and a STRING each have their own arm (`number`, `text`; the same
+32 bytes) and do **not** share a type:
 `TryAsRef::<Text>` answers `None` for a number, and `TryAsRef::<Number>`
 answers `None` for a string.
 
@@ -1177,11 +1178,10 @@ Contracts that are not in the signatures:
 
 - **Null is refused, not dereferenced.** Every exported function checks.
 - **Every boundary catches unwinds**, so a panic never crosses.
-- **Restricted-validity types never cross.** A tag is a `uint32_t`, not an
-  enum, and a boolean is a `uint8_t`: an out-of-range integer read at an
-  enum or `bool` type is undefined behaviour at the moment of the read,
-  before any check could reject it. A reader **skips** a tag it does not
-  know; it never stops.
+- **A tag is a `uint32_t`, not an enum**, because a newer producer may
+  write one this build does not know: a reader **skips** it and never
+  stops. **A boolean is a `bool`**: 0 or 1 is the contract, and a producer
+  that writes another byte has broken it.
 - **`guatiao_map_clear` is the map one** and refuses a list, unlike the
   Rust `Value::clear`, which dispatches on the tag.
 - **Every out-parameter is written `absent` on entry**, before anything
@@ -1253,7 +1253,7 @@ An implementer must guarantee, and `struct_size` cannot express:
   container's fields into a second owner; the compiler refuses all three
   (pinned as `compile_fail` doctests). The one door for a literal or a
   buffer another language owns is `unsafe fn from_raw_parts` on each
-  container and on `Value` (with `Payload::text/bytes/list/map/bool`),
+  container and on `Value` (with `Payload::text/number/bytes/list/map/bool`),
   and `into_raw_parts` is its safe inverse. The borrowed views (`Str`,
   `Bytes`, `Values`, `Entries`) keep public fields: they own nothing. The
   C header is unchanged — cbindgen renders private fields.

@@ -25,9 +25,8 @@ use super::Text;
 /// and `u64::MAX` survives, because nothing converts. A machine width is
 /// reached with `TryInto`, where the refusal is visible.
 ///
-/// Wraps a [`Text`]: the node's `text` arm is the same storage for a
-/// string and a number, so one container means one growth path and one
-/// free.
+/// Wraps a [`Text`], so it has the layout of one and its own arm in the
+/// node.
 #[repr(transparent)]
 #[derive(Debug)]
 pub struct Number(Text);
@@ -63,16 +62,6 @@ impl Number {
     /// A number from a float, through an allocator you name.
     pub fn float_in(alloc: Alloc, v: f64) -> Result<Number, ValueError> {
         Number::new_in(alloc, &float_text(v)?)
-    }
-
-    /// Wraps text a tag already says is a number.
-    pub(crate) fn from_text(text: Text) -> Number {
-        Number(text)
-    }
-
-    /// The text, with ownership.
-    pub(crate) fn into_text(self) -> Text {
-        self.0
     }
 }
 
