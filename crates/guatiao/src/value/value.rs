@@ -325,44 +325,6 @@ impl Value {
             })
         }
     }
-
-    /// Stores `value` under `key`, **consuming** it. See [`Map::set`].
-    pub fn set(&mut self, key: &str, value: impl Into<Value>) -> Result<(), ValueError> {
-        self.map_mut()?.set(key, value)
-    }
-
-    /// Appends `value`, **consuming** it. See [`List::push`].
-    pub fn push(&mut self, value: impl Into<Value>) -> Result<(), ValueError> {
-        self.list_mut()?.push(value)
-    }
-
-    /// Appends `value` to the list under `key`. See [`Map::push_into`].
-    pub fn push_into(&mut self, key: &str, value: impl Into<Value>) -> Result<(), ValueError> {
-        self.map_mut()?.push_into(key, value)
-    }
-
-    /// The value under `key`.
-    pub fn get(&self, key: &str) -> Option<&Value> {
-        self.as_map()?.get(key)
-    }
-
-    /// The value under `key`, mutably.
-    pub fn get_mut(&mut self, key: &str) -> Option<&mut Value> {
-        self.as_map_mut()?.get_mut(key)
-    }
-
-    /// Whether `key` is present.
-    pub fn contains_key(&self, key: &str) -> bool {
-        self.as_map().is_some_and(|m| m.contains_key(key))
-    }
-
-    fn map_mut(&mut self) -> Result<&mut Map, ValueError> {
-        self.try_as_mut().ok_or(ValueError::WrongKind)
-    }
-
-    fn list_mut(&mut self) -> Result<&mut List, ValueError> {
-        self.try_as_mut().ok_or(ValueError::WrongKind)
-    }
 }
 
 impl Value {
@@ -375,52 +337,6 @@ impl Value {
     /// a different statement from null.
     pub fn absent() -> Value {
         Value::blank(Tag::GUATIAO_ABSENT)
-    }
-
-    /// A boolean. Owns nothing.
-    pub fn bool(b: bool) -> Value {
-        Value::from(b)
-    }
-
-    /// Text, copied onto Rust's heap.
-    pub fn string(text: &str) -> Value {
-        Text::new(text).into()
-    }
-
-    /// Text, copied into an allocator you name.
-    pub fn string_in(alloc: Alloc, text: &str) -> Result<Value, ValueError> {
-        Ok(Text::new_in(alloc, text)?.into())
-    }
-
-    /// Bytes, copied onto Rust's heap.
-    pub fn bytes(bytes: &[u8]) -> Value {
-        Buffer::new(bytes).into()
-    }
-
-    /// Bytes, copied into an allocator you name.
-    pub fn bytes_in(alloc: Alloc, bytes: &[u8]) -> Result<Value, ValueError> {
-        Ok(Buffer::new_in(alloc, bytes)?.into())
-    }
-
-    /// An empty map, as a value: `Map::new().into()`, for a caller that
-    /// wants the node rather than the container.
-    pub fn map() -> Value {
-        Map::new().into()
-    }
-
-    /// The same, through an allocator you name.
-    pub fn map_in(alloc: Alloc) -> Value {
-        Map::new_in(alloc).into()
-    }
-
-    /// An empty list, as a value. See [`Value::map`].
-    pub fn list() -> Value {
-        List::new().into()
-    }
-
-    /// The same, through an allocator you name.
-    pub fn list_in(alloc: Alloc) -> Value {
-        List::new_in(alloc).into()
     }
 }
 
@@ -440,112 +356,16 @@ impl Value {
     ///
     /// Any non-zero byte reads as `true`, matching C's own rule. The arm
     /// is a `u8`, which has no invalid bit patterns, so every byte a
-    /// producer could have written is a valid value of it.
-    pub fn as_bool(&self) -> Option<bool> {
+    /// producer could have written is a valid value of it -- which is why
+    /// there is no `TryAsRef<bool>`: no `&bool` over that byte would be
+    /// sound. `bool::try_from(&value)` is the public door.
+    pub(crate) fn as_bool(&self) -> Option<bool> {
         match self.tag() {
             // SAFETY: the tag says the `b` arm is live, and a node is born
             // with all 40 of its bytes initialised.
             Ok(Tag::GUATIAO_BOOL) => Some(unsafe { self.payload.b } != 0),
             _ => None,
         }
-    }
-
-    /// The text of a string value.
-    pub fn as_str(&self) -> Option<&str> {
-        self.try_as_ref()
-    }
-
-    /// The bytes of a bytes value. Any content at all, NULs included.
-    pub fn as_bytes(&self) -> Option<&[u8]> {
-        self.try_as_ref()
-    }
-
-    /// A number's **exact text**, as it was written down.
-    ///
-    /// Numbers are text here, so `1.10` and `1.1` are different values and
-    /// `u64::MAX` survives. Convert with `TryInto` when you want a machine
-    /// width, and the refusal is then visible.
-    pub fn as_number_str(&self) -> Option<&str> {
-        Some(TryAsRef::<Number>::try_as_ref(self)?.as_str())
-    }
-
-    /// The map container, or `None` for any other kind.
-    pub fn as_map(&self) -> Option<&Map> {
-        self.try_as_ref()
-    }
-
-    /// The same, mutably.
-    pub fn as_map_mut(&mut self) -> Option<&mut Map> {
-        self.try_as_mut()
-    }
-
-    /// The list container, or `None` for any other kind.
-    pub fn as_list(&self) -> Option<&List> {
-        self.try_as_ref()
-    }
-
-    /// The same, mutably.
-    pub fn as_list_mut(&mut self) -> Option<&mut List> {
-        self.try_as_mut()
-    }
-
-    /// A map's entries, in insertion order, which is part of the contract.
-    pub fn entries(&self) -> Option<&[Entry]> {
-        Some(self.as_map()?.entries())
-    }
-
-    /// A list's elements, in order.
-    pub fn items(&self) -> Option<&[Value]> {
-        Some(self.as_list()?.items())
-    }
-
-    /// Removes `key` from a map and hands back its value.
-    pub fn remove(&mut self, key: &str) -> Option<Value> {
-        self.as_map_mut()?.remove(key)
-    }
-
-    /// Removes `key` and frees its value. Answers whether it was there.
-    pub fn discard(&mut self, key: &str) -> bool {
-        self.as_map_mut().is_some_and(|m| m.discard(key))
-    }
-
-    /// Removes the element at `index` from a list, keeping the order of
-    /// the rest.
-    pub fn remove_at(&mut self, index: usize) -> Option<Value> {
-        self.as_list_mut()?.remove(index)
-    }
-
-    /// Removes and frees the element at `index`.
-    pub fn discard_at(&mut self, index: usize) -> bool {
-        self.as_list_mut().is_some_and(|l| l.discard(index))
-    }
-
-    /// Frees every entry or element, **keeping the capacity** already
-    /// paid for. Errors for a kind that holds neither.
-    pub fn clear(&mut self) -> Result<(), ValueError> {
-        match self.tag() {
-            Ok(Tag::GUATIAO_MAP) => {
-                self.map_mut()?.clear();
-                Ok(())
-            }
-            Ok(Tag::GUATIAO_LIST) => {
-                self.list_mut()?.clear();
-                Ok(())
-            }
-            _ => Err(ValueError::WrongKind),
-        }
-    }
-
-    /// The map this value holds, consuming it; `Err` hands the value back
-    /// untouched when it is not a map.
-    pub fn into_map(self) -> Result<Map, Value> {
-        Map::try_from(self)
-    }
-
-    /// The list this value holds, consuming it; `Err` hands the value back
-    /// untouched when it is not a list.
-    pub fn into_list(self) -> Result<List, Value> {
-        List::try_from(self)
     }
 
     /// A deep copy, built through `alloc`.
@@ -627,85 +447,31 @@ impl Value {
             // Byte equality of the text, which is what makes `1.10`
             // different from `1.1`.
             Ok(Tag::GUATIAO_NUMBER | Tag::GUATIAO_STRING) => self.text_arm() == other.text_arm(),
-            Ok(Tag::GUATIAO_BYTES) => self.as_bytes() == other.as_bytes(),
-            Ok(Tag::GUATIAO_LIST) => match (self.as_list(), other.as_list()) {
-                (Some(x), Some(y)) => x.eq_at(y, depth),
-                _ => false,
-            },
-            Ok(Tag::GUATIAO_MAP) => match (self.as_map(), other.as_map()) {
-                (Some(x), Some(y)) => x.eq_at(y, depth),
-                _ => false,
-            },
+            Ok(Tag::GUATIAO_BYTES) => {
+                TryAsRef::<[u8]>::try_as_ref(self) == TryAsRef::<[u8]>::try_as_ref(other)
+            }
+            Ok(Tag::GUATIAO_LIST) => {
+                match (
+                    TryAsRef::<List>::try_as_ref(self),
+                    TryAsRef::<List>::try_as_ref(other),
+                ) {
+                    (Some(x), Some(y)) => x.eq_at(y, depth),
+                    _ => false,
+                }
+            }
+            Ok(Tag::GUATIAO_MAP) => {
+                match (
+                    TryAsRef::<Map>::try_as_ref(self),
+                    TryAsRef::<Map>::try_as_ref(other),
+                ) {
+                    (Some(x), Some(y)) => x.eq_at(y, depth),
+                    _ => false,
+                }
+            }
             // Two values this build cannot read are equal exactly when
             // their tags are, which the first line already established.
             Err(_) => true,
         }
-    }
-
-    /// Stores `value` under `key`, **moving** it and leaving the source
-    /// null-tagged, adopting `alloc` for a container that has none.
-    ///
-    /// [`set`](Value::set) is the form to reach for: it consumes the value
-    /// and takes the allocator off the tree. This one exists for a caller
-    /// that has a `&mut Value` it must not consume — which is what a
-    /// boundary hands over.
-    ///
-    /// # Safety
-    ///
-    /// Both nodes are well formed and `value`'s buffers came from an
-    /// allocator that outlives this tree.
-    pub unsafe fn set_in(
-        &mut self,
-        key: &str,
-        value: &mut Value,
-        alloc: Alloc,
-    ) -> Result<(), ValueError> {
-        let map = self.map_mut()?;
-        map.set_in(key, std::mem::take(value), alloc)
-    }
-
-    /// Appends `value`, **moving** it. See [`set_in`](Value::set_in).
-    ///
-    /// # Safety
-    ///
-    /// As for [`set_in`](Value::set_in).
-    pub unsafe fn push_in(&mut self, value: &mut Value, alloc: Alloc) -> Result<(), ValueError> {
-        let list = self.list_mut()?;
-        list.push_in(std::mem::take(value), alloc)
-    }
-
-    /// Copies every entry of `src` into this map, replacing keys that
-    /// collide and appending the rest. Answers how many were copied.
-    ///
-    /// # Safety
-    ///
-    /// Both nodes are well formed, and `src` does not address this node or
-    /// one inside it.
-    pub unsafe fn copy_from(&mut self, src: &Value, alloc: Alloc) -> Result<usize, ValueError> {
-        let copy = src.as_map().ok_or(ValueError::WrongKind)?.clone_in(alloc)?;
-        self.map_mut()?.absorb(copy, alloc)
-    }
-
-    /// Appends to a string value in place.
-    ///
-    /// # Safety
-    ///
-    /// This value is a well-formed string, and `text` is readable for the
-    /// call.
-    pub unsafe fn push_str(&mut self, text: &str, alloc: Alloc) -> Result<(), ValueError> {
-        let arm: &mut Text = self.try_as_mut().ok_or(ValueError::WrongKind)?;
-        arm.push_str_in(text, alloc)
-    }
-
-    /// Appends to a bytes value in place.
-    ///
-    /// # Safety
-    ///
-    /// This value is a well-formed bytes value, and `bytes` is readable
-    /// for the call.
-    pub unsafe fn push_bytes(&mut self, bytes: &[u8], alloc: Alloc) -> Result<(), ValueError> {
-        let arm: &mut Buffer = self.try_as_mut().ok_or(ValueError::WrongKind)?;
-        arm.push_in(bytes, alloc)
     }
 
     /// Frees everything this value owns and leaves it null-tagged.

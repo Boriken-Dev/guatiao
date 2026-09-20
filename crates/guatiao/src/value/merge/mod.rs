@@ -85,7 +85,7 @@
 //! several layers answers [`Source::Mixed`].
 //!
 //! ```
-//! use guatiao::{Alloc, Map, MergeMode, ReadValue, Source, Value};
+//! use guatiao::{Alloc, Map, MergeMode, Source, Value};
 //!
 //! let mut system_tls = Map::new();
 //! system_tls.set("ca", "/etc/ca.pem")?;
@@ -109,7 +109,9 @@
 //!     Alloc::rust(),
 //! )?;
 //!
-//! let verify: bool = merged.get("tls").get("verify").ok_or_missing()?.try_into()?;
+//! let merged_map: &Map = (&merged).try_into()?;
+//! let tls: &Map = merged_map.required("tls")?.try_into()?;
+//! let verify: bool = tls.required("verify")?.try_into()?;
 //! assert!(!verify);
 //! assert_eq!(provenance.source_of("tls.verify"), Source::Layer("user"));
 //! assert_eq!(provenance.source_of("tls.ca"), Source::Layer("system"));
@@ -136,10 +138,9 @@
 use std::collections::BTreeMap;
 
 use crate::value::alloc::Alloc;
-use crate::value::convert::ToValue;
+use crate::value::convert::{ToValue, TryAsRef};
 use crate::value::error::{MAX_DEPTH, ValueError};
-use crate::value::read::{entries, equal, items};
-use crate::value::types::{Tag, Value};
+use crate::value::types::{List, Map, Tag, Value};
 
 /// Which strategy combines two values.
 ///
@@ -350,7 +351,9 @@ impl<'a> Provenance<'a> {
         }
         match kind(value) {
             Some(Tag::GUATIAO_MAP) => {
-                let entries = value.entries().unwrap_or(&[]);
+                let entries = TryAsRef::<Map>::try_as_ref(value)
+                    .map(Map::entries)
+                    .unwrap_or(&[]);
                 if entries.is_empty() {
                     self.leaves.insert(path.to_string(), layer);
                     return;
@@ -361,7 +364,9 @@ impl<'a> Provenance<'a> {
                 }
             }
             Some(Tag::GUATIAO_LIST) => {
-                let items = value.items().unwrap_or(&[]);
+                let items = TryAsRef::<List>::try_as_ref(value)
+                    .map(List::items)
+                    .unwrap_or(&[]);
                 if items.is_empty() {
                     self.leaves.insert(path.to_string(), layer);
                     return;
@@ -568,7 +573,7 @@ impl MergeMode {
         }
 
         Ok((
-            accumulated.unwrap_or_else(|| Value::map_in(alloc)),
+            accumulated.unwrap_or_else(|| Map::new_in(alloc).into()),
             provenance,
         ))
     }
@@ -613,7 +618,19 @@ fn clone_into(value: &Value, alloc: Alloc) -> Result<Value, MergeError> {
 /// Whether the two maps share at least one key, compared as raw bytes so
 /// a key the contract would reject still compares correctly.
 fn shares_a_key(a: &Value, b: &Value) -> bool {
-    entries(b).any(|(key, _)| entries(a).any(|(other, _)| other == key))
+    TryAsRef::<Map>::try_as_ref(b)
+        .map(Map::entries)
+        .unwrap_or(&[])
+        .iter()
+        .map(|e| (e.key(), e.value()))
+        .any(|(key, _)| {
+            TryAsRef::<Map>::try_as_ref(a)
+                .map(Map::entries)
+                .unwrap_or(&[])
+                .iter()
+                .map(|e| (e.key(), e.value()))
+                .any(|(other, _)| other == key)
+        })
 }
 
 /// Walks the same shape `merge_value` will, recording which leaves the
@@ -652,10 +669,18 @@ fn record_claims<'a>(
     // Recursive map-into-map: descend, so only the keys the later layer
     // actually carries change hands.
     if matches!(mode, MergeMode::Substitute | MergeMode::Deep) && is_map(earlier) && is_map(later) {
-        for (key, later_child) in entries(later) {
+        for (key, later_child) in TryAsRef::<Map>::try_as_ref(later)
+            .map(Map::entries)
+            .unwrap_or(&[])
+            .iter()
+            .map(|e| (e.key(), e.value()))
+        {
             let segment = path_segment(key);
             let child_path = join(path, &segment);
-            match key_text(key).ok().and_then(|k| earlier.get(k)) {
+            match key_text(key)
+                .ok()
+                .and_then(|k| TryAsRef::<Map>::try_as_ref(earlier).and_then(|m| m.get(k)))
+            {
                 Some(earlier_child) => record_claims(
                     earlier_child,
                     later_child,
@@ -687,7 +712,11 @@ fn record_claims<'a>(
     // for a union — the list is not any one layer's — and it is why this
     // arm does not simply claim everything.
     if mode == MergeMode::Deep && is_list(earlier) && is_list(later) {
-        if earlier.items().unwrap_or(&[]).is_empty() {
+        if TryAsRef::<List>::try_as_ref(earlier)
+            .map(List::items)
+            .unwrap_or(&[])
+            .is_empty()
+        {
             provenance.forget_subtree(path);
             provenance.claim(path, later, label, depth);
         }
@@ -776,11 +805,13 @@ fn merge_simple(
     // the end. Insertion order is part of this container's contract —
     // consumers render maps as forms and diff them in tests — and
     // `merging_preserves_the_earlier_maps_key_order` is what catches it.
-    let mut out = clone_into(earlier, alloc)?;
-    for (key, value) in entries(later) {
-        out.set(key_text(key)?, clone_into(value, alloc)?)?;
+    let mut out: Map = Map::try_from(clone_into(earlier, alloc)?)
+        .map_err(|_| MergeError::from(ValueError::WrongKind))?;
+    for entry in <&Map>::try_from(later).map(Map::entries).unwrap_or(&[]) {
+        let key = key_text(entry.key())?;
+        out.set_in(key, clone_into(entry.value(), alloc)?, alloc)?;
     }
-    Ok(out)
+    Ok(out.into())
 }
 
 /// `Simple`'s list rule: element `i` of the later list replaces element
@@ -801,10 +832,14 @@ fn overwrite_positionally(
     alloc: Alloc,
     depth: u32,
 ) -> Result<Value, MergeError> {
-    let earlier_items = earlier.items().unwrap_or(&[]);
-    let later_items = later.items().unwrap_or(&[]);
+    let earlier_items = TryAsRef::<List>::try_as_ref(earlier)
+        .map(List::items)
+        .unwrap_or(&[]);
+    let later_items = TryAsRef::<List>::try_as_ref(later)
+        .map(List::items)
+        .unwrap_or(&[]);
 
-    let mut out = Value::list_in(alloc);
+    let mut out = List::new_in(alloc);
     for (index, later_item) in later_items.iter().enumerate() {
         let combined = match earlier_items.get(index) {
             Some(earlier_item) => merge_simple(
@@ -822,7 +857,7 @@ fn overwrite_positionally(
     for leftover in earlier_items.iter().skip(later_items.len()) {
         out.push(clone_into(leftover, alloc)?)?;
     }
-    Ok(out)
+    Ok(out.into())
 }
 
 /// `Substitute`: recursive maps, wholesale list replacement.
@@ -940,11 +975,16 @@ fn merge_maps_recursively(
     alloc: Alloc,
     depth: u32,
 ) -> Result<Value, MergeError> {
-    let mut out = Value::map_in(alloc);
+    let mut out = Map::new_in(alloc);
 
-    for (key, earlier_value) in entries(earlier) {
+    for (key, earlier_value) in TryAsRef::<Map>::try_as_ref(earlier)
+        .map(Map::entries)
+        .unwrap_or(&[])
+        .iter()
+        .map(|e| (e.key(), e.value()))
+    {
         let key = key_text(key)?;
-        let child = match later.get(key) {
+        let child = match TryAsRef::<Map>::try_as_ref(later).and_then(|m| m.get(key)) {
             Some(later_value) => merge_value(
                 earlier_value,
                 later_value,
@@ -958,14 +998,19 @@ fn merge_maps_recursively(
         out.set(key, child)?;
     }
 
-    for (key, later_value) in entries(later) {
+    for (key, later_value) in TryAsRef::<Map>::try_as_ref(later)
+        .map(Map::entries)
+        .unwrap_or(&[])
+        .iter()
+        .map(|e| (e.key(), e.value()))
+    {
         let key = key_text(key)?;
-        if !earlier.contains_key(key) {
+        if !TryAsRef::<Map>::try_as_ref(earlier).is_some_and(|m| m.contains_key(key)) {
             out.set(key, clone_into(later_value, alloc)?)?;
         }
     }
 
-    Ok(out)
+    Ok(out.into())
 }
 
 /// A map on the left absorbing a list of maps on the right, folding each
@@ -985,7 +1030,11 @@ fn absorb_list_of_maps(
     depth: u32,
 ) -> Result<Value, MergeError> {
     let mut result = clone_into(earlier, alloc)?;
-    for item in items(later) {
+    for item in TryAsRef::<List>::try_as_ref(later)
+        .map(List::items)
+        .unwrap_or(&[])
+        .iter()
+    {
         if !is_map(item) {
             return Err(MergeError::Kind {
                 path: path.to_string(),
@@ -1022,14 +1071,21 @@ fn union_lists(
     depth: u32,
 ) -> Result<Value, MergeError> {
     let mut result: Vec<Value> = Vec::new();
-    for item in items(earlier) {
+    for item in TryAsRef::<List>::try_as_ref(earlier)
+        .map(List::items)
+        .unwrap_or(&[])
+        .iter()
+    {
         result.push(clone_into(item, alloc)?);
     }
 
     if ctx.options.mergelists {
         // Map elements of the later list, by the position they sat at --
         // the candidates for a positional merge.
-        let mut later_maps: BTreeMap<usize, &Value> = items(later)
+        let mut later_maps: BTreeMap<usize, &Value> = TryAsRef::<List>::try_as_ref(later)
+            .map(List::items)
+            .unwrap_or(&[])
+            .iter()
             .enumerate()
             .filter(|(_, item)| is_map(item))
             .collect();
@@ -1037,7 +1093,11 @@ fn union_lists(
         // Non-map items first, unique only, and before the positional
         // pass. The order is part of the contract: it is what a consumer
         // diffing two merged lists sees.
-        for item in items(later) {
+        for item in TryAsRef::<List>::try_as_ref(later)
+            .map(List::items)
+            .unwrap_or(&[])
+            .iter()
+        {
             if !is_map(item) && !contains(&result, item) {
                 result.push(clone_into(item, alloc)?);
             }
@@ -1084,28 +1144,36 @@ fn union_lists(
         // unconditionally. A single pass would interleave them
         // differently, which is visible to any caller that renders the
         // list.
-        for item in items(later) {
+        for item in TryAsRef::<List>::try_as_ref(later)
+            .map(List::items)
+            .unwrap_or(&[])
+            .iter()
+        {
             if !is_map(item) && !contains(&result, item) {
                 result.push(clone_into(item, alloc)?);
             }
         }
-        for item in items(later) {
+        for item in TryAsRef::<List>::try_as_ref(later)
+            .map(List::items)
+            .unwrap_or(&[])
+            .iter()
+        {
             if is_map(item) {
                 result.push(clone_into(item, alloc)?);
             }
         }
     }
 
-    let mut out = Value::list_in(alloc);
+    let mut out = List::new_in(alloc);
     for item in result {
         out.push(item)?;
     }
-    Ok(out)
+    Ok(out.into())
 }
 
 /// Whether `built` already holds a value equal to `item`.
 fn contains(built: &[Value], item: &Value) -> bool {
-    built.iter().any(|held| equal(held, item))
+    built.iter().any(|held| held == item)
 }
 
 #[cfg(test)]
