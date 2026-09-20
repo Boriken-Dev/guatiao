@@ -8,18 +8,14 @@
 #![allow(missing_docs)]
 
 use std::fmt;
-use std::mem::ManuallyDrop;
 use std::ptr;
 
-use crate::value::alloc::Allocator;
-// The raw layer this crate keeps to itself: the free walk, the
-// allocator-taking mutators and the private helpers. Imported whole
-// because the impl below calls into it at almost every line.
-use crate::value::alloc::Alloc;
-use crate::value::mutate::*;
-use crate::value::raw::{dangling, release_buffer};
+use crate::value::alloc::{Alloc, Allocator};
+use crate::value::convert::MapError;
+use crate::value::error::ValueError;
+use crate::value::raw::{dangling, release_buffer, reserve};
 
-use super::{Payload, Tag, Text, Value};
+use super::{List, Payload, Tag, Text, Value};
 
 /// A borrowed sequence of key/value pairs, in **insertion order**.
 ///
@@ -187,86 +183,270 @@ impl Map {
     /// replaced key to the end would re-order a caller's rendered form.
     pub fn set(&mut self, key: &str, value: impl Into<Value>) -> Result<(), ValueError> {
         let alloc = self.alloc()?;
-        let mut value = value.into();
-        self.as_node(|node| {
-            // SAFETY: `node` is this map, and `value` is a well-formed
-            // tree consumed here, so nothing else refers to what it owned.
-            unsafe { map_set(node, key, &mut value, alloc) }
-        })
+        self.set_in(key, value, alloc)
+    }
+
+    /// The same, adopting `alloc` for a map that carries none.
+    pub fn set_in(
+        &mut self,
+        key: &str,
+        value: impl Into<Value>,
+        alloc: Alloc,
+    ) -> Result<(), ValueError> {
+        self.set_node(key, value.into(), alloc)
+    }
+
+    /// Stores an already-built node. A refused store frees it: the node
+    /// was moved in, so nothing else can.
+    fn set_node(&mut self, key: &str, value: Value, alloc: Alloc) -> Result<(), ValueError> {
+        match self.position(key) {
+            Some(i) => {
+                // SAFETY: `i < len`, so this entry is initialised. The
+                // replaced value is dropped, which frees what it owned.
+                let entry = unsafe { &mut *self.ptr.add(i) };
+                drop(std::mem::replace(&mut entry.value, value));
+                Ok(())
+            }
+            None => self.insert_node(key, value, alloc),
+        }
+    }
+
+    /// Appends an entry under a key known to be absent.
+    ///
+    /// The key copy is made before anything is touched, so a failure
+    /// there leaves the map exactly as it was.
+    fn insert_node(&mut self, key: &str, value: Value, alloc: Alloc) -> Result<(), ValueError> {
+        let key_owned = match Text::new_in(alloc, key) {
+            Ok(k) => k,
+            Err(e) => {
+                drop(value);
+                return Err(e);
+            }
+        };
+        // SAFETY: the container is consistent.
+        if let Err(e) = unsafe { reserve(self, 1, Some(alloc)) } {
+            drop((key_owned, value));
+            return Err(e.into());
+        }
+        // SAFETY: `reserve` guaranteed room for one more entry past `len`,
+        // and that slot is uninitialised, so it is written rather than
+        // assigned.
+        unsafe {
+            self.ptr.add(self.len).write(Entry {
+                key: key_owned,
+                value,
+            })
+        };
+        self.len += 1;
+        Ok(())
+    }
+
+    /// The position of `key`, by exact byte comparison.
+    ///
+    /// Bytes, not `strcmp`: a key may contain a NUL, and comparing only to
+    /// the first one would make two different keys look identical.
+    fn position(&self, key: &str) -> Option<usize> {
+        self.entries()
+            .iter()
+            .position(|e| e.key() == key.as_bytes())
     }
 
     /// The value under `key`.
     pub fn get(&self, key: &str) -> Option<&Value> {
-        let i = position_in(self.entries(), key)?;
+        let i = self.position(key)?;
         self.entries().get(i).map(|e| &e.value)
     }
 
     /// The value under `key`, mutably.
     pub fn get_mut(&mut self, key: &str) -> Option<&mut Value> {
-        let i = position_in(self.entries(), key)?;
+        let i = self.position(key)?;
         // SAFETY: `i < len`, so this entry is initialised.
         Some(unsafe { &mut (*self.ptr.add(i)).value })
     }
 
+    /// The value under `key`, or [`MapError::MissingKey`] **naming it**.
+    ///
+    /// The step from a lookup to a value, so a read is one expression:
+    ///
+    /// ```
+    /// # use guatiao::Map;
+    /// let mut map = Map::new();
+    /// map.set("host", "10.0.0.1")?;
+    /// let host: &str = map.required("host")?.try_into()?;
+    /// assert_eq!(host, "10.0.0.1");
+    /// assert!(map.required("nothing").is_err());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn required(&self, key: &str) -> Result<&Value, MapError> {
+        self.get(key).ok_or_else(|| MapError::missing(key))
+    }
+
     /// Whether `key` is present.
     pub fn contains_key(&self, key: &str) -> bool {
-        position_in(self.entries(), key).is_some()
+        self.position(key).is_some()
+    }
+
+    /// Appends `value` to the list under `key`, creating the list when
+    /// there is none.
+    ///
+    /// The operation every nested structure needs: without it, building a
+    /// list of maps means reaching into a borrowed node.
+    pub fn push_into(&mut self, key: &str, value: impl Into<Value>) -> Result<(), ValueError> {
+        let alloc = self.alloc()?;
+        if !self.contains_key(key) {
+            // A LIST, not a map. The key names a sequence being appended
+            // to.
+            self.set_in(key, List::new_in(alloc), alloc)?;
+        }
+        let node = self.get_mut(key).ok_or(ValueError::WrongKind)?;
+        let list: &mut List =
+            crate::value::convert::TryAsMut::try_as_mut(node).ok_or(ValueError::WrongKind)?;
+        list.push_in(value, alloc)
     }
 
     /// Removes `key` and hands back its value, keeping the order of the
     /// rest. The value frees itself when it goes out of scope.
     pub fn remove(&mut self, key: &str) -> Option<Value> {
-        // SAFETY: `self` is a well-formed map by construction.
-        self.as_node(|node| unsafe { map_remove(node, key) })
+        let i = self.position(key)?;
+        // SAFETY: `i < len`, so the entry is initialised.
+        let entry = unsafe { self.ptr.add(i).read() };
+        // SAFETY: closing the hole the removed entry left.
+        unsafe { ptr::copy(self.ptr.add(i + 1), self.ptr.add(i), self.len - i - 1) };
+        self.len -= 1;
+        let (_key, value) = entry.into_parts();
+        Some(value)
+    }
+
+    /// Removes `key` and frees its value. Answers whether it was there.
+    pub fn discard(&mut self, key: &str) -> bool {
+        self.remove(key).is_some()
     }
 
     /// Frees every entry, **keeping the capacity** already paid for.
     pub fn clear(&mut self) {
-        // SAFETY: as above.
-        let _ = self.as_node(|node| unsafe { map_clear(node) });
+        for i in 0..self.len {
+            // SAFETY: the first `len` entries are initialised, and each is
+            // read exactly once -- `len` is zeroed below.
+            drop(unsafe { self.ptr.add(i).read() });
+        }
+        self.len = 0;
     }
 
-    /// Runs `body` with this container seen as the node it would be.
+    /// Its entries, in insertion order.
+    pub fn iter(&self) -> std::slice::Iter<'_, Entry> {
+        self.entries().iter()
+    }
+
+    /// Its keys, in insertion order, as raw bytes.
+    pub fn keys(&self) -> impl Iterator<Item = &[u8]> {
+        self.iter().map(Entry::key)
+    }
+
+    /// Its values, in insertion order.
+    pub fn values(&self) -> impl Iterator<Item = &Value> {
+        self.iter().map(Entry::value)
+    }
+
+    /// Copies every entry of `src` into this map, replacing keys that
+    /// collide and appending the rest. Answers how many were copied.
     ///
-    /// **Why the detour.** Every mutation has to check a tag before it
-    /// touches an arm, so the operations are written against [`Value`];
-    /// a `&mut Map` cannot become a `&mut Value`, because the map sits at
-    /// an offset inside the node rather than at its start.
+    /// **Use this before rebuilding a record**, or every field you do not
+    /// model is dropped on write-back.
     ///
-    /// So the map MOVES into a node, the node is operated on, and the map
-    /// moves back. Every step is a move, so nothing is ever described by
-    /// two containers at once — which is the mistake that corrupts a
-    /// heap here. The placeholder left behind for the duration owns
-    /// nothing, so a panic inside `body` frees the tree exactly once and
-    /// leaves this container empty rather than dangling.
-    fn as_node<R>(&mut self, body: impl FnOnce(&mut Value) -> R) -> R {
-        let empty = Map {
-            ptr: dangling::<Entry>(),
-            len: 0,
-            cap: 0,
-            alloc: self.alloc,
-        };
-        let mut node = Value::from(std::mem::replace(self, empty));
-        let out = body(&mut node);
-        let node = ManuallyDrop::new(node);
-        // SAFETY: the node was built from a map immediately above and no
-        // operation changes a node's kind, so the map arm is live. The
-        // read moves it out, and the node is not dropped.
-        *self = unsafe { ptr::read(&*node.payload.map) };
-        out
+    /// **Not atomic.** A failure at entry *k* leaves entries `0..k`
+    /// applied; nothing is leaked and nothing is half-written.
+    pub fn copy_from(&mut self, src: &Map) -> Result<usize, ValueError> {
+        let alloc = self.alloc()?;
+        self.copy_from_in(src, alloc)
+    }
+
+    /// The same, adopting `alloc` for a map that carries none.
+    pub fn copy_from_in(&mut self, src: &Map, alloc: Alloc) -> Result<usize, ValueError> {
+        self.absorb(src.clone_in(alloc)?, alloc)
+    }
+
+    /// Moves every entry of `from` into this map.
+    ///
+    /// Each entry MOVES out, and `from`'s length falls with it, so
+    /// whatever is left when this stops is freed with `from` exactly once.
+    pub(crate) fn absorb(&mut self, from: Map, alloc: Alloc) -> Result<usize, ValueError> {
+        let mut from = from;
+        let mut n = 0;
+        let mut result = Ok(());
+        while let Some(entry) = from.take_first() {
+            let (key, value) = entry.into_parts();
+            match key.as_str() {
+                Some(key) => match self.set_node(key, value, alloc) {
+                    Ok(()) => n += 1,
+                    Err(e) => result = Err(e),
+                },
+                None => result = Err(ValueError::NotUtf8),
+            }
+            if result.is_err() {
+                break;
+            }
+        }
+        result?;
+        Ok(n)
+    }
+
+    /// Removes the first entry, keeping the order of the rest.
+    fn take_first(&mut self) -> Option<Entry> {
+        if self.len == 0 {
+            return None;
+        }
+        // SAFETY: the first entry is initialised.
+        let out = unsafe { self.ptr.read() };
+        // SAFETY: closing the hole it left. At `len == 1` the source is a
+        // legal one-past-the-end pointer and the count is zero.
+        unsafe { ptr::copy(self.ptr.add(1), self.ptr, self.len - 1) };
+        self.len -= 1;
+        Some(out)
+    }
+
+    /// A deep copy through `alloc`, bounded by [`MAX_DEPTH`](crate::MAX_DEPTH).
+    pub fn clone_in(&self, alloc: Alloc) -> Result<Map, ValueError> {
+        self.clone_at(alloc, 0)
+    }
+
+    pub(crate) fn clone_at(&self, alloc: Alloc, depth: u32) -> Result<Map, ValueError> {
+        let entries = self.entries();
+        // The guard owns everything built so far, so an early return frees
+        // it rather than leaking it.
+        let mut out = Map::new_in(alloc);
+        if !entries.is_empty() {
+            // SAFETY: the container is consistent and empty.
+            unsafe { reserve(&mut out, entries.len(), Some(alloc))? };
+        }
+        for entry in entries {
+            let key = entry.key_str().ok_or(ValueError::NotUtf8)?;
+            let value = entry.value.clone_at(alloc, depth + 1)?;
+            out.insert_node(key, value, alloc)?;
+        }
+        Ok(out)
+    }
+
+    /// Pairwise, in order, each value through [`Value`]'s own comparison.
+    ///
+    /// **Order is significant**, because insertion order is part of the
+    /// contract: two maps with the same pairs in a different order are two
+    /// different values, and saying otherwise would disagree with every
+    /// consumer that renders one.
+    pub(crate) fn eq_at(&self, other: &Map, depth: u32) -> bool {
+        let (x, y) = (self.entries(), other.entries());
+        x.len() == y.len()
+            && x.iter()
+                .zip(y)
+                .all(|(p, q)| p.key() == q.key() && p.value.eq_at(&q.value, depth + 1))
     }
 }
 
-impl Map {
-    /// This container as a node, for the tree walks that take one: a
-    /// bitwise copy of the header that is never dropped, so the buffer
-    /// keeps exactly one owner.
-    fn view_node(&self) -> ManuallyDrop<Value> {
-        // SAFETY: a bitwise copy of a well-formed header, wrapped so it is
-        // never dropped; every reader below takes `&Value`.
-        ManuallyDrop::new(unsafe {
-            Value::from_raw_parts(u32::from(Tag::GUATIAO_MAP), Payload::map(ptr::read(self)))
-        })
+impl<'a> IntoIterator for &'a Map {
+    type Item = &'a Entry;
+    type IntoIter = std::slice::Iter<'a, Entry>;
+
+    fn into_iter(self) -> std::slice::Iter<'a, Entry> {
+        self.iter()
     }
 }
 
@@ -275,23 +455,19 @@ impl Clone for Map {
     /// crate's own when it has none yet. Panics as [`Value::clone`] does.
     fn clone(&self) -> Map {
         let alloc = Alloc::recorded_or_rust(self.alloc);
-        let (_, payload) = self
-            .view_node()
-            .clone_in(alloc)
+        self.clone_in(alloc)
             .expect("a well-formed container clones through a working allocator")
-            .into_raw_parts();
-        // SAFETY: the clone of a node with this tag is a node with this
-        // tag, so the arm read is the live one.
-        ManuallyDrop::into_inner(unsafe { payload.map })
     }
 }
 
 impl PartialEq for Map {
     /// Structural, as [`Value`]'s is.
     fn eq(&self, other: &Map) -> bool {
-        crate::value::read::equal(&self.view_node(), &other.view_node())
+        self.eq_at(other, 0)
     }
 }
+
+impl Eq for Map {}
 
 // SAFETY: the buffer is owned outright and reached only through `&self`
 // or `&mut self`, so no two threads share it without the borrow checker
@@ -314,10 +490,8 @@ impl From<Map> for Value {
     /// container is consumed, the node takes over its buffer, and there
     /// is never a moment when two structs describe one allocation.
     fn from(map: Map) -> Value {
-        let mut v = blank(Tag::GUATIAO_MAP);
-        v.payload = Payload {
-            map: ManuallyDrop::new(map),
-        };
+        let mut v = Value::blank(Tag::GUATIAO_MAP);
+        v.payload = Payload::map(map);
         v
     }
 }
@@ -340,7 +514,7 @@ impl Entry {
     /// comparing only to the first one would make two different keys look
     /// identical. [`key_str`](Entry::key_str) is the checked reading.
     pub fn key(&self) -> &[u8] {
-        key_bytes(self)
+        self.key.as_bytes()
     }
 
     /// The key as text, or `None` if it is not valid UTF-8.

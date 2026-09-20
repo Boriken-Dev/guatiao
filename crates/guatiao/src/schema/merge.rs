@@ -46,7 +46,7 @@
 use crate::schema::flat::SEPARATOR;
 use crate::schema::read::{FieldRef, Kind, SchemaRef};
 use crate::value::alloc::Alloc;
-use crate::value::mutate::ValueError;
+use crate::value::error::ValueError;
 use crate::value::read::str_or;
 use crate::value::types::Value;
 use crate::{MergeError, MergeMode, MergeOptions, MergeOverrides};

@@ -6,16 +6,11 @@
 
 #![allow(missing_docs)]
 
-use std::mem::ManuallyDrop;
 use std::ptr;
 
-use crate::value::alloc::Allocator;
-// The raw layer this crate keeps to itself: the free walk, the
-// allocator-taking mutators and the private helpers. Imported whole
-// because the impl below calls into it at almost every line.
-use crate::value::alloc::Alloc;
-use crate::value::mutate::*;
-use crate::value::raw::{dangling, release_buffer};
+use crate::value::alloc::{Alloc, Allocator};
+use crate::value::error::ValueError;
+use crate::value::raw::{dangling, release_buffer, reserve};
 
 use super::{Payload, Tag, Value};
 
@@ -143,11 +138,30 @@ impl List {
     /// does.
     pub fn push(&mut self, value: impl Into<Value>) -> Result<(), ValueError> {
         let alloc = self.alloc()?;
-        let mut value = value.into();
-        self.as_node(|node| {
-            // SAFETY: `node` is this list, and `value` is consumed here.
-            unsafe { list_push(node, &mut value, alloc) }
-        })
+        self.push_in(value, alloc)
+    }
+
+    /// The same, adopting `alloc` for a list that carries none.
+    pub fn push_in(&mut self, value: impl Into<Value>, alloc: Alloc) -> Result<(), ValueError> {
+        self.push_node(value.into(), alloc)
+    }
+
+    /// Appends an already-built node.
+    ///
+    /// A refused append frees what it was handed: the node was moved in,
+    /// so nothing else can free it and leaving it would leak the tree.
+    fn push_node(&mut self, value: Value, alloc: Alloc) -> Result<(), ValueError> {
+        // SAFETY: the container is consistent.
+        if let Err(e) = unsafe { reserve(self, 1, Some(alloc)) } {
+            drop(value);
+            return Err(e.into());
+        }
+        // SAFETY: `reserve` guaranteed room for one more element past
+        // `len`, and that slot is uninitialised, so it is written rather
+        // than assigned.
+        unsafe { self.ptr.add(self.len).write(value) };
+        self.len += 1;
+        Ok(())
     }
 
     /// The element at `index`.
@@ -164,10 +178,39 @@ impl List {
         Some(unsafe { &mut *self.ptr.add(index) })
     }
 
+    /// Its elements, in order.
+    pub fn iter(&self) -> std::slice::Iter<'_, Value> {
+        self.items().iter()
+    }
+
     /// Removes the element at `index`, keeping the order of the rest.
+    ///
+    /// The returned node **owns its buffers** and frees them when it goes
+    /// out of scope, so dropping it on the floor is a release rather than
+    /// a leak.
     pub fn remove(&mut self, index: usize) -> Option<Value> {
-        // SAFETY: `self` is a well-formed list by construction.
-        self.as_node(|node| unsafe { list_remove(node, index) })
+        if index >= self.len {
+            return None;
+        }
+        // SAFETY: `index < len`, so this element is initialised; the shift
+        // below closes the hole it leaves.
+        let out = unsafe { self.ptr.add(index).read() };
+        // SAFETY: moving the tail down one slot over the hole just vacated.
+        unsafe {
+            ptr::copy(
+                self.ptr.add(index + 1),
+                self.ptr.add(index),
+                self.len - index - 1,
+            )
+        };
+        self.len -= 1;
+        Some(out)
+    }
+
+    /// Removes and frees the element at `index`. Answers whether there was
+    /// one.
+    pub fn discard(&mut self, index: usize) -> bool {
+        self.remove(index).is_some()
     }
 
     /// Removes the last element, as `Vec::pop` does.
@@ -177,37 +220,47 @@ impl List {
 
     /// Frees every element, **keeping the capacity** already paid for.
     pub fn clear(&mut self) {
-        // SAFETY: as above.
-        let _ = self.as_node(|node| unsafe { list_clear(node) });
+        for i in 0..self.len {
+            // SAFETY: the first `len` elements are initialised, and each
+            // is read exactly once -- `len` is zeroed below.
+            drop(unsafe { self.ptr.add(i).read() });
+        }
+        self.len = 0;
     }
 
-    /// See [`Map::as_node`] for why this exists.
-    fn as_node<R>(&mut self, body: impl FnOnce(&mut Value) -> R) -> R {
-        let empty = List {
-            ptr: dangling::<Value>(),
-            len: 0,
-            cap: 0,
-            alloc: self.alloc,
-        };
-        let mut node = Value::from(std::mem::replace(self, empty));
-        let out = body(&mut node);
-        let node = ManuallyDrop::new(node);
-        // SAFETY: as for `Map::as_node`.
-        *self = unsafe { ptr::read(&*node.payload.list) };
-        out
+    /// A deep copy through `alloc`, bounded by [`MAX_DEPTH`](crate::MAX_DEPTH).
+    pub fn clone_in(&self, alloc: Alloc) -> Result<List, ValueError> {
+        self.clone_at(alloc, 0)
+    }
+
+    pub(crate) fn clone_at(&self, alloc: Alloc, depth: u32) -> Result<List, ValueError> {
+        let items = self.items();
+        // The guard owns everything built so far, so an early return frees
+        // it rather than leaking it.
+        let mut out = List::new_in(alloc);
+        if !items.is_empty() {
+            // SAFETY: the container is consistent and empty.
+            unsafe { reserve(&mut out, items.len(), Some(alloc))? };
+        }
+        for item in items {
+            out.push_node(item.clone_at(alloc, depth + 1)?, alloc)?;
+        }
+        Ok(out)
+    }
+
+    /// Element by element, each through [`Value`]'s own comparison.
+    pub(crate) fn eq_at(&self, other: &List, depth: u32) -> bool {
+        let (x, y) = (self.items(), other.items());
+        x.len() == y.len() && x.iter().zip(y).all(|(p, q)| p.eq_at(q, depth + 1))
     }
 }
 
-impl List {
-    /// This container as a node, for the tree walks that take one: a
-    /// bitwise copy of the header that is never dropped, so the buffer
-    /// keeps exactly one owner.
-    fn view_node(&self) -> ManuallyDrop<Value> {
-        // SAFETY: a bitwise copy of a well-formed header, wrapped so it is
-        // never dropped; every reader below takes `&Value`.
-        ManuallyDrop::new(unsafe {
-            Value::from_raw_parts(u32::from(Tag::GUATIAO_LIST), Payload::list(ptr::read(self)))
-        })
+impl<'a> IntoIterator for &'a List {
+    type Item = &'a Value;
+    type IntoIter = std::slice::Iter<'a, Value>;
+
+    fn into_iter(self) -> std::slice::Iter<'a, Value> {
+        self.iter()
     }
 }
 
@@ -216,23 +269,21 @@ impl Clone for List {
     /// crate's own when it has none yet. Panics as [`Value::clone`] does.
     fn clone(&self) -> List {
         let alloc = Alloc::recorded_or_rust(self.alloc);
-        let (_, payload) = self
-            .view_node()
-            .clone_in(alloc)
+        self.clone_in(alloc)
             .expect("a well-formed container clones through a working allocator")
-            .into_raw_parts();
-        // SAFETY: the clone of a node with this tag is a node with this
-        // tag, so the arm read is the live one.
-        ManuallyDrop::into_inner(unsafe { payload.list })
     }
 }
 
 impl PartialEq for List {
-    /// Structural, as [`Value`]'s is.
+    /// Structural, as [`Value`]'s is, and bounded the same way: two trees
+    /// nested deeper than [`MAX_DEPTH`](crate::MAX_DEPTH) compare unequal
+    /// rather than overflowing a stack.
     fn eq(&self, other: &List) -> bool {
-        crate::value::read::equal(&self.view_node(), &other.view_node())
+        self.eq_at(other, 0)
     }
 }
+
+impl Eq for List {}
 
 // SAFETY: the buffer is owned outright and reached only through `&self`
 // or `&mut self`, so no two threads share it without the borrow checker
@@ -254,10 +305,8 @@ impl From<List> for Value {
     /// Safe for the same reason [`From<Map>`](super::Map) is: an empty container
     /// owns nothing.
     fn from(list: List) -> Value {
-        let mut v = blank(Tag::GUATIAO_LIST);
-        v.payload = Payload {
-            list: ManuallyDrop::new(list),
-        };
+        let mut v = Value::blank(Tag::GUATIAO_LIST);
+        v.payload = Payload::list(list);
         v
     }
 }

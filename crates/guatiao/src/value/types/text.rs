@@ -8,15 +8,11 @@
 
 use std::mem::ManuallyDrop;
 
-use crate::value::alloc::Allocator;
-// The raw layer this crate keeps to itself: the free walk, the
-// allocator-taking mutators and the private helpers. Imported whole
-// because the impl below calls into it at almost every line.
-use crate::value::alloc::Alloc;
-use crate::value::mutate::*;
-use crate::value::raw::release_buffer;
+use crate::value::alloc::{Alloc, Allocator};
+use crate::value::error::ValueError;
+use crate::value::raw::{overlaps, release_buffer, reserve};
 
-use super::{Payload, Tag, Value};
+use super::{Payload, Tag, Value, or_abort};
 
 /// Borrowed UTF-8 text: a pointer and a length, no NUL terminator.
 ///
@@ -132,8 +128,66 @@ impl Text {
     }
 
     /// The same, through an allocator you name, reporting its refusal.
+    ///
+    /// The buffer's storage **becomes** this text's: the four fields are
+    /// copied across and the `Buffer` is forgotten, so one allocation has
+    /// one owner at every instant.
     pub fn new_in(alloc: Alloc, text: &str) -> Result<Text, ValueError> {
-        Ok(owned_text(alloc, text)?)
+        let b = ManuallyDrop::new(super::Buffer::new_in(alloc, text.as_bytes())?);
+        let (ptr, len, cap, alloc) = (b.ptr, b.len, b.cap, b.alloc);
+        Ok(Text {
+            ptr,
+            len,
+            cap,
+            alloc,
+        })
+    }
+
+    /// The allocator this text grows through.
+    pub fn alloc(&self) -> Result<Alloc, ValueError> {
+        // SAFETY: the address a container recorded is an allocator that
+        // outlives it, by the contract on `Alloc`.
+        Ok(unsafe { Alloc::from_raw(self.alloc) }?)
+    }
+
+    /// Appends `text`, growing through the allocator this one recorded.
+    pub fn push_str(&mut self, text: &str) -> Result<(), ValueError> {
+        let alloc = self.alloc()?;
+        self.push_str_in(text, alloc)
+    }
+
+    /// The same, adopting `alloc` for a buffer that carries none.
+    ///
+    /// `text` may address this text's own bytes; an overlapping source is
+    /// copied out before anything grows.
+    pub fn push_str_in(&mut self, text: &str, alloc: Alloc) -> Result<(), ValueError> {
+        if text.is_empty() {
+            return Ok(());
+        }
+        // Growth frees the buffer the source may point into, and staying
+        // in place would make the copy below overlap itself.
+        let staged;
+        let bytes = if overlaps(self.ptr, self.len, text.as_ptr(), text.len()) {
+            staged = text.as_bytes().to_vec();
+            staged.as_slice()
+        } else {
+            text.as_bytes()
+        };
+        // SAFETY: the container is consistent.
+        unsafe { reserve(self, bytes.len(), Some(alloc))? };
+        // SAFETY: `reserve` guaranteed room for `bytes.len()` more past
+        // `len`, and the source is disjoint from the buffer or a staged
+        // copy of it.
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), self.ptr.add(self.len), bytes.len())
+        };
+        self.len += bytes.len();
+        Ok(())
+    }
+
+    /// A copy through `alloc`, reporting its refusal.
+    pub fn clone_in(&self, alloc: Alloc) -> Result<Text, ValueError> {
+        Text::new_in(alloc, self.as_str().ok_or(ValueError::NotUtf8)?)
     }
 
     /// The bytes, whether or not they are valid UTF-8.
@@ -172,16 +226,21 @@ impl Clone for Text {
     /// is not UTF-8 — a foreign producer's, since nothing here writes one.
     fn clone(&self) -> Text {
         let alloc = Alloc::recorded_or_rust(self.alloc);
-        Text::new_in(alloc, self.as_str().expect("text is UTF-8"))
+        self.clone_in(alloc)
             .expect("a text clones through a working allocator")
     }
 }
 
 impl PartialEq for Text {
+    /// The BYTES, not the `&str`: text a foreign producer wrote that is
+    /// not UTF-8 reads back as `None`, and two different such texts would
+    /// then compare equal on the strength of both being unreadable.
     fn eq(&self, other: &Text) -> bool {
-        self.as_str() == other.as_str()
+        self.as_bytes() == other.as_bytes()
     }
 }
+
+impl Eq for Text {}
 
 // SAFETY: the buffer is owned outright and reached only through `&self`
 // or `&mut self`, so no two threads share it without the borrow checker
@@ -217,10 +276,8 @@ impl From<Text> for Value {
     /// this: the grammar has to be checked, and a conversion that cannot
     /// refuse is the wrong place to check it.
     fn from(text: Text) -> Value {
-        let mut v = blank(Tag::GUATIAO_STRING);
-        v.payload = Payload {
-            text: ManuallyDrop::new(text),
-        };
+        let mut v = Value::blank(Tag::GUATIAO_STRING);
+        v.payload = Payload::text(text);
         v
     }
 }

@@ -31,7 +31,7 @@ use std::cell::Cell;
 use std::ffi::c_void;
 
 use guatiao::value::alloc::{Alloc, AllocError, Allocator, rust_alloc};
-use guatiao::value::mutate::{MAX_DEPTH, ValueError};
+use guatiao::value::error::{MAX_DEPTH, ValueError};
 use guatiao::value::read::equal;
 use guatiao::value::types::{Entry, List, Map, Number, Payload, Tag, Text, Value};
 

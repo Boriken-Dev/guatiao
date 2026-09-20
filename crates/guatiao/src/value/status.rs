@@ -19,7 +19,7 @@
 #![forbid(unsafe_code)]
 #![allow(non_camel_case_types)]
 
-use super::mutate::ValueError;
+use super::error::ValueError;
 
 /// What an entry point reports.
 ///

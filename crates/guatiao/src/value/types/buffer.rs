@@ -6,17 +6,11 @@
 
 #![allow(missing_docs)]
 
-use std::mem::ManuallyDrop;
+use crate::value::alloc::{Alloc, Allocator};
+use crate::value::error::ValueError;
+use crate::value::raw::{dangling, overlaps, release_buffer, reserve};
 
-use crate::value::alloc::Allocator;
-// The raw layer this crate keeps to itself: the free walk, the
-// allocator-taking mutators and the private helpers. Imported whole
-// because the impl below calls into it at almost every line.
-use crate::value::alloc::Alloc;
-use crate::value::mutate::*;
-use crate::value::raw::release_buffer;
-
-use super::{Payload, Tag, Value};
+use super::{Payload, Tag, Value, or_abort};
 
 /// Borrowed bytes: any content at all, NULs included.
 ///
@@ -74,7 +68,8 @@ impl Clone for Buffer {
     /// own when it has none. Panics as [`Value::clone`] does.
     fn clone(&self) -> Buffer {
         let alloc = Alloc::recorded_or_rust(self.alloc);
-        Buffer::new_in(alloc, self.as_slice()).expect("a buffer clones through a working allocator")
+        self.clone_in(alloc)
+            .expect("a buffer clones through a working allocator")
     }
 }
 
@@ -83,6 +78,8 @@ impl PartialEq for Buffer {
         self.as_slice() == other.as_slice()
     }
 }
+
+impl Eq for Buffer {}
 
 // SAFETY: the buffer is owned outright and reached only through `&self`
 // or `&mut self`, so no two threads share it without the borrow checker
@@ -142,7 +139,22 @@ impl Buffer {
 
     /// The same, through an allocator you name.
     pub fn new_in(alloc: Alloc, bytes: &[u8]) -> Result<Buffer, ValueError> {
-        Ok(owned_bytes(alloc, bytes)?)
+        let mut b = Buffer {
+            ptr: dangling::<u8>(),
+            len: 0,
+            cap: 0,
+            alloc: alloc.as_raw(),
+        };
+        if !bytes.is_empty() {
+            // SAFETY: the container is consistent -- empty, owning nothing.
+            unsafe { reserve(&mut b, bytes.len(), Some(alloc))? };
+            // SAFETY: `reserve` guaranteed room for `bytes.len()` elements
+            // at `b.ptr`, and the two regions cannot overlap since one was
+            // just allocated.
+            unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), b.ptr, bytes.len()) };
+            b.len = bytes.len();
+        }
+        Ok(b)
     }
 
     /// The bytes themselves.
@@ -152,6 +164,51 @@ impl Buffer {
         }
         // SAFETY: the first `len` bytes are initialised.
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+
+    /// The allocator this buffer grows through.
+    pub fn alloc(&self) -> Result<Alloc, ValueError> {
+        // SAFETY: the address a container recorded is an allocator that
+        // outlives it, by the contract on `Alloc`.
+        Ok(unsafe { Alloc::from_raw(self.alloc) }?)
+    }
+
+    /// Appends `bytes`, growing through the allocator this one recorded.
+    pub fn push(&mut self, bytes: &[u8]) -> Result<(), ValueError> {
+        let alloc = self.alloc()?;
+        self.push_in(bytes, alloc)
+    }
+
+    /// The same, adopting `alloc` for a buffer that carries none.
+    ///
+    /// `bytes` may address this buffer's own storage; an overlapping
+    /// source is copied out before anything grows.
+    pub fn push_in(&mut self, bytes: &[u8], alloc: Alloc) -> Result<(), ValueError> {
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        let staged;
+        let bytes = if overlaps(self.ptr, self.len, bytes.as_ptr(), bytes.len()) {
+            staged = bytes.to_vec();
+            staged.as_slice()
+        } else {
+            bytes
+        };
+        // SAFETY: the container is consistent.
+        unsafe { reserve(self, bytes.len(), Some(alloc))? };
+        // SAFETY: `reserve` guaranteed room for `bytes.len()` more past
+        // `len`, and the source is disjoint from the buffer or a staged
+        // copy of it.
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), self.ptr.add(self.len), bytes.len())
+        };
+        self.len += bytes.len();
+        Ok(())
+    }
+
+    /// A copy through `alloc`, reporting its refusal.
+    pub fn clone_in(&self, alloc: Alloc) -> Result<Buffer, ValueError> {
+        Buffer::new_in(alloc, self.as_slice())
     }
 }
 
@@ -176,10 +233,8 @@ impl From<Vec<u8>> for Buffer {
 
 impl From<Buffer> for Value {
     fn from(bytes: Buffer) -> Value {
-        let mut v = blank(Tag::GUATIAO_BYTES);
-        v.payload = Payload {
-            bytes: ManuallyDrop::new(bytes),
-        };
+        let mut v = Value::blank(Tag::GUATIAO_BYTES);
+        v.payload = Payload::bytes(bytes);
         v
     }
 }

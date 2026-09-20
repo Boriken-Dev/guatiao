@@ -125,6 +125,23 @@ pub use super::value::{Payload, Tag, Value};
 
 use std::ffi::c_void;
 
+use crate::value::error::ValueError;
+
+/// The short constructors abort on an allocation failure; the `_in` ones
+/// report it.
+///
+/// A short constructor allocates on Rust's own heap, and a failure there
+/// is the condition `String::from` and `Vec::push` already meet: the
+/// standard library aborts rather than returning. A foreign allocator
+/// returning null is a different statement -- it may be an arena that is
+/// merely full -- so `_in` hands the refusal back.
+pub(crate) fn or_abort<T>(built: Result<T, ValueError>) -> T {
+    match built {
+        Ok(v) => v,
+        Err(e) => panic!("guatiao: building a value on Rust's heap failed: {e}"),
+    }
+}
+
 // These are the numbers a foreign consumer compiles against, so a change
 // to any of them is an ABI break and must fail the build here rather than
 // in somebody else's program. The C side asserts the same numbers with

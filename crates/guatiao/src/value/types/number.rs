@@ -20,7 +20,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use crate::value::alloc::Alloc;
-use crate::value::mutate::ValueError;
+use crate::value::error::ValueError;
 
 use super::Text;
 
