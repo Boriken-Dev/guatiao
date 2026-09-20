@@ -142,3 +142,22 @@ def test_clone_is_independent():
     clone.as_list().append(4)
     assert src.to_python() == [1, 2, 3]
     assert clone.to_python() == [1, 2, 3, 4]
+
+
+def test_value_constructs_like_the_builtins():
+    from guatiao import Value
+
+    with Value({"host": "h", "tags": ["a"]}) as v:
+        assert v.to_python() == {"host": "h", "tags": ["a"]}
+    with Value(host="h", port=5900) as v:
+        assert v.to_python() == {"host": "h", "port": 5900}
+        assert list(v.as_map()) == ["host", "port"]
+    with Value({"host": "h"}, port=1) as v:
+        assert v.to_python() == {"host": "h", "port": 1}
+    for plain in (1, True, False, 1.5, "x", b"\x00", None, [1, 2]):
+        with Value(plain) as v:
+            assert v.to_python() == plain and type(v.to_python()) is type(plain)
+    with Value() as v:
+        assert v.is_absent()
+    with pytest.raises(TypeError):
+        Value([1], port=1)

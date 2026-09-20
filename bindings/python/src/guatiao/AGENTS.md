@@ -30,7 +30,7 @@ protocols. `Value` is itself a `Ref` onto its own root.
 ```python
 from guatiao import Value, ABSENT
 
-v = Value.from_python({"host": "10.0.0.1", "port": 5900, "tags": ["a", "b"]})
+v = Value(host="10.0.0.1", port=5900, tags=["a", "b"])
 m = v.as_map()
 m["port"].to_python()          # 5900
 m["port"] = 5901
@@ -40,13 +40,18 @@ v.to_python()                  # back to a plain dict/list tree
 v.close()
 ```
 
-**Construction**: `Value.null()`, `.absent()`, `.bool(b)`, `.string(s)`,
-`.bytes_(b)`, `.number(text)` (the exact text, no float/Decimal detour),
-`.map()`, `.list()`, and `Value.from_python(obj, *, alloc=None)` for a
-whole tree at once: `None` -> null, `bool`/`int` -> number, `float`
+**Construction**: `Value(obj)` takes what the builtins would -- `Value(1)`,
+`Value(True)`, `Value("x")`, `Value([1, 2])`, `Value({"host": "h"})` --
+and, as `dict` does, `Value(host="h", port=5900)` and
+`Value(mapping, port=1)`. `Value()` is absent. `alloc` is a reserved
+keyword, so a field of that name goes in a mapping. `Value.from_python(obj,
+*, alloc=None)` is the same conversion by name. Also `Value.null()`,
+`.absent()`, `.bool(b)`, `.string(s)`, `.bytes_(b)`, `.number(text)` (the
+exact text, no float/Decimal detour), `.map()`, `.list()`. Conversion:
+`None` -> null, `bool`, `int` -> number, `float`
 (`repr`) and `decimal.Decimal` (its own text) -> number (non-finite
 raises `ValueError`), `str` -> string, `bytes`/`bytearray` -> bytes,
-`list`/`tuple` -> list, `dict` with `str` keys -> map, a `Value`/`Ref` ->
+`list`/`tuple` -> list, a mapping with `str` keys -> map, a `Value`/`Ref` ->
 a deep copy.
 
 **Reading**: `ref.to_python(numbers="auto")` walks the whole node --
@@ -133,14 +138,9 @@ value = serde.loads(text, format="json")
 loaded `guatiao_serde` was not built with it. A TOML document must be a
 map (`WrongKind` otherwise).
 
-**A number with a `.`/`e`/`E`, or one too big for `i64`/`u64`, does not
-survive `format="json"` with its exact text today.** `guatiao-serde`'s
-`json` feature enables serde_json's `arbitrary_precision` but not
-`raw_value`; without the latter, the sentinel struct its `RawText` path
-writes (`ser.rs`'s `RAW_NUMBER`) serialises literally as
-`{"$serde_json::private::RawValue": "1.10"}` instead of the bare token.
-Integers that fit `i64`/`u64` are unaffected (a different, native path).
-Fix belongs in `crates/guatiao-serde/Cargo.toml`, not here.
+A number keeps its exact text through JSON, with one exception the
+parser owns: an exponent is read back with its sign written (`1e400`
+parses as `1e+400`).
 
 ## form
 
