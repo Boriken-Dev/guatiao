@@ -354,6 +354,8 @@ fn dropped_flag() -> std::sync::Arc<std::sync::atomic::AtomicBool> {
     std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))
 }
 
+// A compile-time check on purpose; clippy 1.89 reads it as a constant assertion.
+#[allow(clippy::assertions_on_constants)]
 #[test]
 fn an_object_kind_declares_itself() {
     const { assert!(<dyn Tally as Kind>::OBJECT) };
