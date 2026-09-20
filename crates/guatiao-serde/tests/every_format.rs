@@ -9,7 +9,7 @@
 //! survives TOML, YAML and MessagePack without a line written per format.
 
 use guatiao::value::alloc::Alloc;
-use guatiao::value::types::Value;
+use guatiao::value::types::{Number, Value};
 use guatiao_serde::{Presentation, Serializable, ValueSeed};
 use serde::de::DeserializeSeed;
 
@@ -26,7 +26,7 @@ fn a_configuration() -> Value {
     let mut map = Value::map();
     map.set("name", "example").unwrap();
     map.set("port", 5900).unwrap();
-    map.set("ratio", Value::number("1.5").unwrap()).unwrap();
+    map.set("ratio", Number::new("1.5").unwrap()).unwrap();
     map.set("hosts", hosts).unwrap();
     map.set("tls", inner).unwrap();
     map
@@ -92,7 +92,7 @@ fn json_keeps_a_numbers_spelling() {
     use guatiao_serde::text::json;
 
     for text in ["1.10", "1.0", "123456789012345678901234567890"] {
-        let v = Value::number(text).unwrap();
+        let v = Value::from(Number::new(text).unwrap());
         let doc = json::to_string(&v, Presentation::new()).unwrap();
         assert_eq!(doc, text, "written verbatim");
         let back = json::from_str(&doc, Alloc::rust(), Presentation::new()).unwrap();
@@ -129,7 +129,7 @@ fn toml_round_trips() {
 fn toml_refuses_what_it_cannot_spell() {
     use guatiao_serde::text::toml;
 
-    for v in [Value::string("bare"), Value::int(1), Value::list()] {
+    for v in [Value::string("bare"), Value::from(1i64), Value::list()] {
         let e = toml::to_string(&v, Presentation::new()).expect_err("not a table");
         assert_eq!(e.format(), "toml");
     }

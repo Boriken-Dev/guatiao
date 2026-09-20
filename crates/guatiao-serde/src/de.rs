@@ -25,7 +25,7 @@ use serde::de::{DeserializeSeed, Error as _, MapAccess, SeqAccess, Visitor};
 
 use guatiao::value::alloc::Alloc;
 use guatiao::value::mutate::MAX_DEPTH;
-use guatiao::value::types::Value;
+use guatiao::value::types::{Number, Value};
 
 use crate::{Presentation, from_data_uri};
 
@@ -249,7 +249,9 @@ const RAW_NUMBER: &str = "$serde_json::private::Number";
 
 /// A number from its text, or the error saying it is not one.
 fn number<E: serde::de::Error>(alloc: Alloc, text: &str) -> Result<Value, E> {
-    Value::number_in(alloc, text).map_err(E::custom)
+    Number::new_in(alloc, text)
+        .map(Value::from)
+        .map_err(E::custom)
 }
 
 // The unit tests drive a real format, and JSON is the one this crate
@@ -332,9 +334,9 @@ mod tests {
 
         // And writing is exact whatever the magnitude.
         let huge = "123456789012345678901234567890123456789012345678901234567890";
-        assert_eq!(write(&Value::number(huge).unwrap()), huge);
-        assert_eq!(write(&Value::number("1.10").unwrap()), "1.10");
-        assert_eq!(write(&Value::number("1e400").unwrap()), "1e400");
+        assert_eq!(write(&Value::from(Number::new(huge).unwrap())), huge);
+        assert_eq!(write(&Value::from(Number::new("1.10").unwrap())), "1.10");
+        assert_eq!(write(&Value::from(Number::new("1e400").unwrap())), "1e400");
     }
 
     /// Absent by default, on when asked: the trade is the caller's.

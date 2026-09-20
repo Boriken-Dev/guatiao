@@ -217,12 +217,12 @@ fn an_override_array_changes_the_mode_for_that_path_only() {
 fn the_mergelists_bit_reaches_the_merge() {
     let alloc = Alloc::rust();
     let mut inner_a = Value::map();
-    inner_a.set("a", Value::int(1)).unwrap();
+    inner_a.set("a", Value::from(1i64)).unwrap();
     let mut earlier = Value::list();
     earlier.push(inner_a).unwrap();
 
     let mut inner_b = Value::map();
-    inner_b.set("a", Value::int(2)).unwrap();
+    inner_b.set("a", Value::from(2i64)).unwrap();
     let mut later = Value::list();
     later.push(inner_b).unwrap();
 
@@ -308,7 +308,7 @@ fn validation_crosses_and_never_quotes_the_refused_value() {
         .unwrap();
 
     let mut good = Value::map();
-    good.set("port", Value::int(5900)).unwrap();
+    good.set("port", Value::from(5900i64)).unwrap();
     // SAFETY: both are well-formed values.
     let status =
         unsafe { guatiao_schema_validate(&schema, &good, alloc.as_raw(), std::ptr::null_mut()) };

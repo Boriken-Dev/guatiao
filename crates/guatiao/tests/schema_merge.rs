@@ -107,7 +107,7 @@ fn a_non_string_annotation_is_ignored() {
     let schema = SchemaBuilder::new_in(alloc)
         .field(
             FieldBuilder::new_in(alloc, "k", KindBuilder::string_in(alloc))
-                .option(X_MERGE, Value::int(2)),
+                .option(X_MERGE, Value::from(2i64)),
         )
         .finish()
         .unwrap();

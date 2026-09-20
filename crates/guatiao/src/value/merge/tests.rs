@@ -72,7 +72,7 @@ fn s(text: &str) -> Value {
 /// spelling a case uses does not matter to it -- only that two values
 /// that should differ do.
 fn n(value: i64) -> Value {
-    Value::int(value)
+    Value::from(value)
 }
 
 /// The stored nothing.

@@ -215,7 +215,7 @@ mod tests {
         let mut blank = Value::map();
         blank.set(TEXT_KEY, "   ").unwrap();
         list.push(blank).unwrap();
-        list.push(Value::int(7)).unwrap();
+        list.push(Value::from(7i64)).unwrap();
         let mut odd = Value::map();
         odd.set(TEXT_KEY, "some text").unwrap();
         odd.set(FORMAT_KEY, "rtf").unwrap();

@@ -38,7 +38,7 @@ use super::build::{ArmBuilder, FieldBuilder, SchemaBuilder, put};
 use super::vocab;
 use crate::value::alloc::Alloc;
 use crate::value::mutate::ValueError;
-use crate::value::types::Value;
+use crate::value::types::{Number, Value};
 
 /// What a person is shown about anything a schema declares.
 ///
@@ -115,7 +115,10 @@ pub trait FormFieldBuilder: FormBuilder {
     #[must_use]
     fn order(mut self, order: i64) -> Self {
         let alloc = self.form_alloc();
-        self.presentation(vocab::X_ORDER, Value::int_in(alloc, order));
+        self.presentation(
+            vocab::X_ORDER,
+            Number::new_in(alloc, &order.to_string()).map(Value::from),
+        );
         self
     }
 

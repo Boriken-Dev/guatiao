@@ -103,7 +103,7 @@ fn a_spelling_no_variant_declares_names_the_alternatives_but_not_itself() {
 
 #[test]
 fn a_choice_that_is_not_text_is_the_wrong_kind() {
-    let error = Level::from_value(&Value::int(1)).unwrap_err();
+    let error = Level::from_value(&Value::from(1i64)).unwrap_err();
     assert!(
         matches!(error, MapError::WrongType { .. }),
         "a number where a name belongs is a disagreement about kind, not value: {error:?}"

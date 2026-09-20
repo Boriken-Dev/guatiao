@@ -232,6 +232,8 @@ const RAW_NUMBER: &str = "$serde_json::private::RawValue";
 // covers a format this crate names nowhere.
 #[cfg(all(test, feature = "json"))]
 mod tests {
+    use guatiao::value::types::Number;
+
     use super::*;
     use crate::Numbers;
 
@@ -247,7 +249,7 @@ mod tests {
     fn the_shapes_a_document_is_made_of() {
         assert_eq!(json(&Value::null()), "null");
         assert_eq!(json(&Value::bool(true)), "true");
-        assert_eq!(json(&Value::int(5900)), "5900");
+        assert_eq!(json(&Value::from(5900i64)), "5900");
         assert_eq!(json(&Value::string("hi")), "\"hi\"");
 
         let mut list = Value::list();
@@ -274,11 +276,11 @@ mod tests {
     #[test]
     fn a_number_survives_that_no_f64_could_hold() {
         let huge = "123456789012345678901234567890123456789012345678901234567890";
-        assert_eq!(json(&Value::number(huge).unwrap()), huge);
-        assert_eq!(json(&Value::number("1e400").unwrap()), "1e400");
+        assert_eq!(json(&Value::from(Number::new(huge).unwrap())), huge);
+        assert_eq!(json(&Value::from(Number::new("1e400").unwrap())), "1e400");
         // And a spelling is preserved rather than normalised: `1.10` is
         // not `1.1`, because nothing re-formatted it.
-        assert_eq!(json(&Value::number("1.10").unwrap()), "1.10");
+        assert_eq!(json(&Value::from(Number::new("1.10").unwrap())), "1.10");
     }
 
     /// **Verbatim is a POLICY, not the default.**
@@ -291,7 +293,7 @@ mod tests {
     /// difference is invisible until a document is compared byte for byte.
     #[test]
     fn a_spelling_survives_only_under_the_raw_text_policy() {
-        let v = Value::number("1.10").unwrap();
+        let v = Value::from(Number::new("1.10").unwrap());
 
         assert_eq!(
             crate::text::json::to_string(&v, Presentation::new()).unwrap(),

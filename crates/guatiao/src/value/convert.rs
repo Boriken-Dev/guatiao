@@ -132,7 +132,7 @@ use std::fmt;
 
 use super::alloc::Alloc;
 use super::mutate::ValueError;
-use super::types::{Entry, Tag, Value};
+use super::types::{Entry, Number, Tag, Value};
 
 /// Why a value could not be read as a particular Rust type.
 ///
@@ -432,7 +432,7 @@ macro_rules! integer_to_value {
     ($($t:ty),* $(,)?) => {$(
         impl ToValue for $t {
             fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
-                Value::number_in(alloc, &self.to_string())
+                Ok(Number::new_in(alloc, &self.to_string())?.into())
             }
         }
     )*};
@@ -444,7 +444,7 @@ integer_to_value!(
 
 impl ToValue for f64 {
     fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
-        Value::float_in(alloc, *self)
+        Ok(Number::float_in(alloc, *self)?.into())
     }
 }
 

@@ -80,7 +80,7 @@
 //! NUMBER node in safe code:
 //!
 //! ```compile_fail
-//! let mut v = guatiao::Value::int(1);
+//! let mut v = guatiao::Value::from(1i64);
 //! let _ = guatiao::value::mutate::as_text_mut(&mut v);
 //! ```
 
@@ -89,7 +89,6 @@ use std::ptr;
 
 use super::alloc::{Alloc, AllocError, Allocator};
 use super::raw::{dangling, release_buffer, reserve};
-use super::types::number::validate_json_number;
 use super::types::{Buffer, Entry, List, Map, Payload, Tag, Text, Value};
 
 /// How deep a tree any walk here follows: cloning one, merging two,
@@ -108,7 +107,7 @@ pub enum ValueError {
     /// The allocator could not satisfy the request, or was itself unusable.
     Alloc(AllocError),
     /// Text offered as a number did not match the JSON number grammar
-    /// (RFC 8259 section 6). See [`Value::number`].
+    /// (RFC 8259 section 6). See [`Number::new`](crate::Number::new).
     NotANumber,
     /// A key, or the text of a string value, was not valid UTF-8.
     ///
@@ -242,43 +241,6 @@ pub(crate) fn value_bytes(alloc: Alloc, bytes: &[u8]) -> Result<Value, ValueErro
         bytes: ManuallyDrop::new(b),
     };
     Ok(v)
-}
-
-/// A number, from its **exact text**, which is stored verbatim.
-///
-/// Rejects anything outside the JSON number grammar, at construction
-/// rather than at read: a number that only failed when somebody asked for
-/// an integer would put the error a long way from the mistake.
-pub(crate) fn value_number(alloc: Alloc, text: &str) -> Result<Value, ValueError> {
-    validate_json_number(text.as_bytes()).map_err(|_| ValueError::NotANumber)?;
-    let s = owned_text(alloc, text)?;
-    let mut v = blank(Tag::GUATIAO_NUMBER);
-    v.payload = Payload {
-        text: ManuallyDrop::new(s),
-    };
-    Ok(v)
-}
-
-/// A number from an `i64`. Cannot be refused: every `i64` has a JSON
-/// spelling.
-///
-/// Exists so a C caller does not format its own and get the grammar
-/// subtly wrong.
-pub(crate) fn value_int(alloc: Alloc, v: i64) -> Result<Value, ValueError> {
-    value_number(alloc, &v.to_string())
-}
-
-/// A number from an `f64`, refusing a non-finite one.
-///
-/// `NaN` and the infinities have no JSON spelling at all, so a container
-/// that accepted one would have to invent a spelling or lose the value at
-/// the first boundary it crossed. Keeping the refusal here keeps it in one
-/// place instead of in every consumer's `snprintf`.
-pub(crate) fn value_float(alloc: Alloc, v: f64) -> Result<Value, ValueError> {
-    if !v.is_finite() {
-        return Err(ValueError::NotANumber);
-    }
-    value_number(alloc, &v.to_string())
 }
 
 // --- reading the shape ------------------------------------------------
@@ -575,7 +537,7 @@ pub(crate) fn alloc_of(v: &Value) -> Option<*const Allocator> {
 /// heap, and a failure there is the condition `String::from` and
 /// `Vec::push` already meet: there is no memory, the process is over, and
 /// the standard library aborts rather than returning. Threading a
-/// `Result` through every `Value::int(5900)` would buy a recovery nobody
+/// `Result` through every `Value::from(5900i64)` would buy a recovery nobody
 /// writes.
 ///
 /// A foreign allocator returning null is a different statement. It may be

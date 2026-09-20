@@ -33,7 +33,7 @@ use std::ffi::c_void;
 use guatiao::value::alloc::{Alloc, AllocError, Allocator, rust_alloc};
 use guatiao::value::mutate::{MAX_DEPTH, ValueError};
 use guatiao::value::read::equal;
-use guatiao::value::types::{Entry, List, Map, Payload, Tag, Text, Value};
+use guatiao::value::types::{Entry, List, Map, Number, Payload, Tag, Text, Value};
 
 // --- a counting allocator ---------------------------------------------
 
@@ -110,7 +110,7 @@ fn every_kind_survives_a_round_trip() {
 
         let mut null = Value::null();
         let mut b = Value::bool(true);
-        let mut n = Value::number_in(alloc, "1.10").unwrap();
+        let mut n = Value::from(Number::new_in(alloc, "1.10").unwrap());
         let mut s = Value::string_in(alloc, "10.0.0.1").unwrap();
         let mut by = Value::bytes_in(alloc, &[0u8, 0xff, b'x']).unwrap();
         let mut l = Value::list_in(alloc);
@@ -153,7 +153,7 @@ fn every_kind_survives_a_round_trip() {
 #[test]
 fn the_accessors_do_not_coerce() {
     with_alloc(|alloc, _| {
-        let n = Value::number_in(alloc, "5").unwrap();
+        let n = Value::from(Number::new_in(alloc, "5").unwrap());
         assert_eq!(n.as_number_str(), Some("5"));
         assert_eq!(n.as_str(), None, "a number is not a string");
         assert_eq!(n.as_bool(), None);
@@ -176,7 +176,7 @@ fn a_number_keeps_its_exact_text() {
             "2.5E-3",
             "123456789012345678901234567890123456789012345678901234567890",
         ] {
-            let v = Value::number_in(alloc, text).unwrap();
+            let v = Value::from(Number::new_in(alloc, text).unwrap());
             assert_eq!(v.as_number_str(), Some(text), "verbatim: {text}");
         }
     });
@@ -189,21 +189,27 @@ fn text_outside_the_json_number_grammar_is_refused() {
             "+1", ".5", "5.", "01", "0x1F", "Infinity", "NaN", "1_000", "",
         ] {
             assert_eq!(
-                Value::number_in(alloc, bad).unwrap_err(),
+                Number::new_in(alloc, bad).unwrap_err(),
                 ValueError::NotANumber,
                 "refused: {bad:?}"
             );
         }
         assert_eq!(
-            Value::float_in(alloc, f64::NAN).unwrap_err(),
+            Number::float_in(alloc, f64::NAN)
+                .map(Value::from)
+                .unwrap_err(),
             ValueError::NotANumber,
             "a non-finite float has no JSON spelling at all"
         );
         assert_eq!(
-            Value::float_in(alloc, f64::INFINITY).unwrap_err(),
+            Number::float_in(alloc, f64::INFINITY)
+                .map(Value::from)
+                .unwrap_err(),
             ValueError::NotANumber
         );
-        let v = Value::int_in(alloc, -5900).unwrap();
+        let v = Number::new_in(alloc, &(-5900i64).to_string())
+            .map(Value::from)
+            .unwrap();
         assert_eq!(v.as_number_str(), Some("-5900"));
     });
 }
@@ -403,7 +409,9 @@ fn a_list_appends_removes_and_keeps_order() {
     with_alloc(|alloc, _| {
         let mut l = Value::list_in(alloc);
         for i in 0..10i64 {
-            let mut v = Value::int_in(alloc, i).unwrap();
+            let mut v = Number::new_in(alloc, &i.to_string())
+                .map(Value::from)
+                .unwrap();
             unsafe { l.push_in(&mut v, alloc) }.unwrap();
         }
         assert_eq!(l.items().unwrap().len(), 10);
@@ -803,7 +811,7 @@ fn the_defaulting_getters_never_truncate_and_never_coerce() {
             ("exponent", "1e2"),
             ("enormous", "123456789012345678901234567890"),
         ] {
-            let mut v = Value::number_in(alloc, text).unwrap();
+            let mut v = Value::from(Number::new_in(alloc, text).unwrap());
             unsafe { root.set_in(k, &mut v, alloc) }.unwrap();
         }
         let mut b = Value::bool(true);
@@ -891,7 +899,9 @@ fn iteration_and_equality_respect_insertion_order() {
 
         let mut l = Value::list_in(alloc);
         for n in 0..3i64 {
-            let mut v = Value::int_in(alloc, n).unwrap();
+            let mut v = Number::new_in(alloc, &n.to_string())
+                .map(Value::from)
+                .unwrap();
             unsafe { l.push_in(&mut v, alloc) }.unwrap();
         }
         assert_eq!(items(&l).count(), 3);
@@ -906,9 +916,9 @@ fn equality_compares_a_number_as_text() {
     use guatiao::value::read::equal;
 
     with_alloc(|alloc, _| {
-        let a = Value::number_in(alloc, "1.10").unwrap();
-        let b = Value::number_in(alloc, "1.1").unwrap();
-        let c = Value::number_in(alloc, "1.10").unwrap();
+        let a = Value::from(Number::new_in(alloc, "1.10").unwrap());
+        let b = Value::from(Number::new_in(alloc, "1.1").unwrap());
+        let c = Value::from(Number::new_in(alloc, "1.10").unwrap());
         assert!(!equal(&a, &b));
         assert!(equal(&a, &c));
     });
@@ -920,7 +930,7 @@ fn the_debug_dump_walks_a_tree_and_shows_bytes_as_bytes() {
 
     with_alloc(|alloc, _| {
         let mut m = Value::map_in(alloc);
-        let mut n = Value::number_in(alloc, "1.10").unwrap();
+        let mut n = Value::from(Number::new_in(alloc, "1.10").unwrap());
         let mut s = Value::string_in(alloc, "hi").unwrap();
         let mut b = Value::bytes_in(alloc, &[0u8, 0xff]).unwrap();
         unsafe {

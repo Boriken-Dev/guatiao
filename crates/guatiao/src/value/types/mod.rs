@@ -60,7 +60,7 @@
 //! Nor a stolen arm:
 //!
 //! ```compile_fail
-//! let mut v = guatiao::Value::int(1);
+//! let mut v = guatiao::Value::from(1i64);
 //! let t = guatiao::value::mutate::as_text_mut(&mut v);
 //! ```
 //!

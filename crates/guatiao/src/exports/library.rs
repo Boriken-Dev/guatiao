@@ -1120,7 +1120,7 @@ fn library_value(alloc: Alloc, one: &crate::library::Loaded) -> Result<Value, Va
         "path",
         Value::string_in(alloc, &one.path.to_string_lossy())?,
     )?;
-    map.set("providers", Value::int(one.providers as i64))?;
+    map.set("providers", one.providers)?;
 
     // What it offered that this host already had. Empty on an ordinary
     // load, and written even then: absent and empty would otherwise be the
@@ -1156,9 +1156,9 @@ fn provider_value(alloc: Alloc, one: &Provider) -> Result<Value, ValueError> {
     // Whether there is something to fetch, rather than the thing itself: a
     // schema is borrowed from the library's image, and copying one into
     // every listing would be a tree per provider nobody asked for.
-    map.set("priority", Value::int(i64::from(one.priority())))?;
+    map.set("priority", one.priority())?;
     map.set("has_config", Value::bool(one.config_schema().is_some()))?;
-    map.set("vtable_size", Value::int(one.vtable().1 as i64))?;
+    map.set("vtable_size", one.vtable().1)?;
     Ok(map)
 }
 
@@ -1240,7 +1240,7 @@ fn skip_value(alloc: Alloc, why: &Skipped) -> Result<Value, ValueError> {
         map.set("id", Value::string_in(alloc, id)?)?;
     }
     if let Some(abi) = abi {
-        map.set("abi", Value::int(i64::from(abi)))?;
+        map.set("abi", abi)?;
     }
     if let Some(by) = by {
         map.set("by", Value::string_in(alloc, by)?)?;
