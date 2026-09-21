@@ -386,7 +386,7 @@ mod collect_tests {
     #[test]
     fn a_map_collects_pairs_in_order_and_a_repeat_replaces_in_place() {
         let map: Map = [("b", 1), ("a", 2), ("b", 3)].into_iter().collect();
-        let keys: Vec<&str> = map.entries().iter().filter_map(|e| e.key_str()).collect();
+        let keys: Vec<&str> = map.keys().collect();
         assert_eq!(
             keys,
             ["b", "a"],

@@ -179,7 +179,7 @@ fn a_tagged_enum_is_a_map_with_its_name_under_the_tag() {
         .map(Map::entries)
         .unwrap()
         .iter()
-        .filter_map(|e| e.key_str())
+        .map(guatiao::Entry::key)
         .collect();
     assert_eq!(
         keys,

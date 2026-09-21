@@ -73,9 +73,7 @@ fn keys_of(v: &Value) -> Vec<String> {
         .map(Map::entries)
         .unwrap_or(&[])
         .iter()
-        .map(|e| (e.key(), e.value()))
-        .filter_map(|(k, _)| std::str::from_utf8(k).ok())
-        .map(str::to_string)
+        .map(|e| e.key().to_string())
         .collect()
 }
 

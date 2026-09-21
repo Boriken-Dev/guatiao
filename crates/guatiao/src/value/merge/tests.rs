@@ -851,8 +851,7 @@ fn merging_preserves_the_earlier_maps_key_order() {
         .map(Map::entries)
         .unwrap_or(&[])
         .iter()
-        .map(|e| (e.key(), e.value()))
-        .map(|(key, _)| String::from_utf8_lossy(key).into_owned())
+        .map(|e| e.key().to_string())
         .collect();
     assert_eq!(
         keys,

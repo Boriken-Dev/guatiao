@@ -129,8 +129,7 @@ fn the_map_holds_exactly_the_keys_the_declaration_asks_for() {
             .map(Map::entries)
             .unwrap_or(&[])
             .iter()
-            .map(|e| (e.key(), e.value()))
-            .map(|(k, _)| String::from_utf8_lossy(k).into_owned())
+            .map(|e| e.key().to_string())
             .collect();
         assert_eq!(
             keys,

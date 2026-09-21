@@ -1240,10 +1240,25 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
         // spelling `()` there is what clippy calls an unneeded unit.
         RetKind::Unit if !m.fallible => quote!(),
         RetKind::Unit => quote!(()),
-        RetKind::Scalar(_) | RetKind::Value | RetKind::Map | RetKind::List => quote!(__out),
-        RetKind::Text => quote!(::std::string::ToString::to_string(
-            __out.as_str().unwrap_or("")
-        )),
+        RetKind::Scalar(_) | RetKind::Value | RetKind::List => quote!(__out),
+        RetKind::Map => {
+            let f = fail(quote!(__e));
+            quote! {
+                match ::guatiao::library::kind::map_ret(__out) {
+                    ::core::result::Result::Ok(__v) => __v,
+                    ::core::result::Result::Err(__e) => { #f }
+                }
+            }
+        }
+        RetKind::Text => {
+            let f = fail(quote!(__e));
+            quote! {
+                match ::guatiao::library::kind::text_ret(__out) {
+                    ::core::result::Result::Ok(__v) => ::std::string::ToString::to_string(&*__v),
+                    ::core::result::Result::Err(__e) => { #f }
+                }
+            }
+        }
         RetKind::Owned(ty) => {
             let f = fail(quote!(::guatiao::library::ProviderError::new(
                 ::guatiao::Status::GUATIAO_ERR_BAD_VALUE,

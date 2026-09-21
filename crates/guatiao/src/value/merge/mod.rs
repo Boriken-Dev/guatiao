@@ -306,7 +306,7 @@ impl<'a> Provenance<'a> {
                     return;
                 }
                 for entry in entries {
-                    let child = join(path, &path_segment(entry.key()));
+                    let child = join(path, entry.key());
                     self.claim(&child, entry.value(), layer, depth + 1);
                 }
             }
@@ -345,27 +345,6 @@ fn join(parent: &str, segment: &str) -> String {
     } else {
         format!("{parent}.{segment}")
     }
-}
-
-/// A key as a path segment, for a diagnostic.
-///
-/// Lossy on purpose, and the one place in this module that tolerates a key
-/// the contract says should be UTF-8: a **path is a label** and a wrong
-/// character in one costs nothing, while a **key is data** and writing a
-/// changed one into the result would produce a map that is quietly not the
-/// one it came from. [`key_text`] is the other half of that split.
-fn path_segment(key: &[u8]) -> String {
-    String::from_utf8_lossy(key).into_owned()
-}
-
-/// A key as text, refusing one that is not UTF-8.
-///
-/// A `Text` is UTF-8 by contract, so this only rejects a tree
-/// some other language built in violation of it. Refusing is what
-/// [`Value::copy_from`] already does, and the alternative — a lossy
-/// conversion — does not fail, it **renames the key**.
-fn key_text(key: &[u8]) -> Result<&str, MergeError> {
-    std::str::from_utf8(key).map_err(|_| MergeError::Build(ValueError::NotUtf8))
 }
 
 /// A per-path mode override: what a *declarer* of an option knows that
@@ -513,8 +492,10 @@ fn kind(value: &Value) -> Option<Tag> {
     value.tag().ok()
 }
 
+/// Through the door, so a foreign map whose keys are not text is a leaf,
+/// and copying it refuses.
 fn is_map(value: &Value) -> bool {
-    kind(value) == Some(Tag::GUATIAO_MAP)
+    TryAsRef::<Map>::try_as_ref(value).is_some()
 }
 
 fn is_list(value: &Value) -> bool {
@@ -585,12 +566,8 @@ fn record_claims<'a>(
             .iter()
             .map(|e| (e.key(), e.value()))
         {
-            let segment = path_segment(key);
-            let child_path = join(path, &segment);
-            match key_text(key)
-                .ok()
-                .and_then(|k| TryAsRef::<Map>::try_as_ref(earlier).and_then(|m| m.get(k)))
-            {
+            let child_path = join(path, key);
+            match TryAsRef::<Map>::try_as_ref(earlier).and_then(|m| m.get(key)) {
                 Some(earlier_child) => record_claims(
                     earlier_child,
                     later_child,
@@ -701,8 +678,7 @@ fn merge_simple(
     let mut out: Map = Map::try_from(clone_into(earlier, alloc)?)
         .map_err(|_| MergeError::from(ValueError::WrongKind))?;
     for entry in <&Map>::try_from(later).map(Map::entries).unwrap_or(&[]) {
-        let key = key_text(entry.key())?;
-        out.set_in(key, clone_into(entry.value(), alloc)?, alloc)?;
+        out.set_in(entry.key(), clone_into(entry.value(), alloc)?, alloc)?;
     }
     Ok(out.into())
 }
@@ -865,7 +841,6 @@ fn merge_maps_recursively(
         .iter()
         .map(|e| (e.key(), e.value()))
     {
-        let key = key_text(key)?;
         let child = match TryAsRef::<Map>::try_as_ref(later).and_then(|m| m.get(key)) {
             Some(later_value) => merge_value(
                 earlier_value,
@@ -886,7 +861,6 @@ fn merge_maps_recursively(
         .iter()
         .map(|e| (e.key(), e.value()))
     {
-        let key = key_text(key)?;
         if !TryAsRef::<Map>::try_as_ref(earlier).is_some_and(|m| m.contains_key(key)) {
             out.set(key, clone_into(later_value, alloc)?)?;
         }

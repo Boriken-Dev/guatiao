@@ -33,7 +33,7 @@
 use super::vocab;
 use crate::value::convert::TryAsRef;
 use crate::value::read::{bool_or, float_or, int_or};
-use crate::value::types::{List, Map, Number, Tag, Value};
+use crate::value::types::{List, Map, Number, Value};
 
 /// A schema: what a value is, and what a valid one looks like.
 #[derive(Clone, Copy, Debug)]
@@ -79,7 +79,7 @@ fn text<'a>(v: &'a Value, key: &str) -> &'a str {
 
 /// Whether `v` is a map, which every part of a schema is.
 fn is_map(v: &Value) -> bool {
-    v.tag() == Ok(Tag::GUATIAO_MAP)
+    TryAsRef::<Map>::try_as_ref(v).is_some()
 }
 
 /// Whether `owner`'s `required` list names `key`.
@@ -113,7 +113,7 @@ fn fields_of(owner: &Value) -> impl Iterator<Item = FieldRef<'_>> {
         .unwrap_or(&[])
         .iter()
         .filter_map(move |e| {
-            let key = e.key_str()?;
+            let key = e.key();
             let schema = e.value();
             is_map(schema).then(|| FieldRef {
                 key,
@@ -174,9 +174,9 @@ impl<'a> SchemaRef<'a> {
             .map(Map::entries)
             .unwrap_or(&[])
             .iter()
-            .find(|e| e.key_str() == Some(key))
+            .find(|e| e.key() == key)
             .and_then(|e| {
-                let name = e.key_str()?;
+                let name = e.key();
                 is_map(e.value()).then(|| FieldRef {
                     key: name,
                     schema: e.value(),
@@ -210,7 +210,7 @@ fn extras_of(schema: &Value) -> impl Iterator<Item = (&str, &Value)> {
         .map(Map::entries)
         .unwrap_or(&[])
         .iter()
-        .filter_map(|e| e.key_str().map(|k| (k, e.value())))
+        .map(|e| (e.key(), e.value()))
         .filter(|(k, _)| !vocab::known(k))
 }
 
@@ -623,11 +623,11 @@ fn opt_float(k: &Value, key: &str) -> Option<f64> {
 
 /// Every entry of a map, as `(key, value)`, for a caller walking
 /// annotations.
-pub fn annotations(v: &Value) -> impl Iterator<Item = (&[u8], &Value)> {
+pub fn annotations(v: &Value) -> impl Iterator<Item = (&str, &Value)> {
     TryAsRef::<Map>::try_as_ref(v)
         .map(Map::entries)
         .unwrap_or(&[])
         .iter()
         .map(|e| (e.key(), e.value()))
-        .filter(|(k, _)| std::str::from_utf8(k).is_ok_and(|s| !vocab::known(s)))
+        .filter(|(k, _)| !vocab::known(k))
 }

@@ -170,10 +170,7 @@ fn write(f: &mut fmt::Formatter<'_>, v: &Value, depth: u32) -> fmt::Result {
                 if i > 0 {
                     f.write_str(", ")?;
                 }
-                match std::str::from_utf8(key) {
-                    Ok(text) => write!(f, "{text:?}")?,
-                    Err(_) => write!(f, "<{} key bytes>", key.len())?,
-                }
+                write!(f, "{key:?}")?;
                 f.write_str(": ")?;
                 write(f, value, depth + 1)?;
             }

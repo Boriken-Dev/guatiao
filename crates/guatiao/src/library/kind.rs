@@ -147,7 +147,7 @@ impl ProviderError {
 
     /// The provider's own words, or empty.
     pub fn message(&self) -> &str {
-        self.message.as_str().unwrap_or("")
+        &self.message
     }
 }
 
@@ -1027,7 +1027,13 @@ pub unsafe fn value_opt<'a>(v: *const Value) -> Option<&'a Value> {
 #[doc(hidden)]
 pub unsafe fn map_arg<'a>(m: *const Map) -> Result<&'a Map, Status> {
     // SAFETY: the caller's contract.
-    unsafe { m.as_ref() }.ok_or(Status::GUATIAO_ERR_NULL)
+    let map = unsafe { m.as_ref() }.ok_or(Status::GUATIAO_ERR_NULL)?;
+    // Reached by pointer, not through a value's door, so checked here.
+    if map.keys_are_text() {
+        Ok(map)
+    } else {
+        Err(ValueError::NotUtf8.into())
+    }
 }
 
 /// Writes a result through an out-pointer, refusing null. The previous
@@ -1216,11 +1222,38 @@ pub unsafe fn object_ret<K: ?Sized + Kind>(raw: ObjectRaw) -> Result<Object<K>, 
 /// The error a proxy hands back: what the shim wrote, or one built from
 /// the status when it wrote nothing (an older library).
 #[doc(hidden)]
+///
+/// A message that is not UTF-8 is dropped, keeping the status: the shim
+/// wrote the text itself, past the checks a value's doors make.
 pub fn take_err(written: ProviderError, status: Status) -> ProviderError {
     if written.status == Status::GUATIAO_OK {
         ProviderError::from(status)
+    } else if std::str::from_utf8(written.message.bytes()).is_err() {
+        ProviderError::from(written.status)
     } else {
         written
+    }
+}
+
+/// A text a shim wrote through a `*mut Text`, checked: the callee writes
+/// the storage itself, past the checks a value's doors make.
+#[doc(hidden)]
+pub fn text_ret(out: Text) -> Result<Text, ProviderError> {
+    if std::str::from_utf8(out.bytes()).is_ok() {
+        Ok(out)
+    } else {
+        Err(ValueError::NotUtf8.into())
+    }
+}
+
+/// A map a shim wrote through a `*mut Map`, its keys checked as
+/// [`text_ret`] checks a text.
+#[doc(hidden)]
+pub fn map_ret(out: Map) -> Result<Map, ProviderError> {
+    if out.keys_are_text() {
+        Ok(out)
+    } else {
+        Err(ValueError::NotUtf8.into())
     }
 }
 
@@ -1561,7 +1594,7 @@ mod tests {
             // SAFETY: the slot's own signature; the locals are writable.
             let status = unsafe { f(self.ctx(), Str::borrowed(name), &mut out, &mut err) };
             if status == Status::GUATIAO_OK {
-                Ok(out.as_str().unwrap_or("").to_string())
+                Ok(text_ret(out)?.to_string())
             } else {
                 Err(take_err(err, status))
             }
@@ -1627,6 +1660,38 @@ mod tests {
                 ctx.cast_mut(),
             )
         }
+    }
+
+    /// A text or a map a shim wrote itself is checked before a proxy
+    /// hands it out, and a message that is not UTF-8 is dropped.
+    #[test]
+    fn what_a_shim_writes_itself_is_checked() {
+        let alloc = Alloc::rust();
+        let raw = |bytes: &[u8]| {
+            let (p, l, c, a) = crate::value::types::Buffer::new_in(alloc, bytes)
+                .unwrap()
+                .into_raw_parts();
+            // SAFETY: consistent storage; the bytes are under test.
+            unsafe { Text::from_raw_parts(p, l, c, a) }
+        };
+        assert_eq!(&*text_ret(raw(b"ok")).unwrap(), "ok");
+        let refused = text_ret(raw(b"\xff")).expect_err("not UTF-8");
+        assert_eq!(refused.status, Status::from(ValueError::NotUtf8));
+
+        let written = ProviderError {
+            status: Status::GUATIAO_ERR_BAD_VALUE,
+            message: raw(b"\xfe"),
+        };
+        let taken = take_err(written, Status::GUATIAO_ERR_BAD_VALUE);
+        assert_eq!(
+            taken.status,
+            Status::GUATIAO_ERR_BAD_VALUE,
+            "the status stays"
+        );
+        assert_eq!(taken.message(), "", "the unreadable words go");
+
+        let map: Map = [("k", 1)].into_iter().collect();
+        assert!(map_ret(map).is_ok());
     }
 
     #[test]

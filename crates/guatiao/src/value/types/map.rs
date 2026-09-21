@@ -52,7 +52,7 @@ pub struct Map {
 /// a map is one contiguous array.
 #[repr(C)]
 pub struct Entry {
-    /// The key. Raw bytes: `"Host"` and `"host"` are two keys.
+    /// The key, compared by bytes: `"Host"` and `"host"` are two keys.
     pub(crate) key: Text,
     /// The value.
     pub(crate) value: Value,
@@ -86,7 +86,8 @@ impl Map {
     ///
     /// # Safety
     ///
-    /// As [`List::from_raw_parts`](super::List::from_raw_parts).
+    /// As [`List::from_raw_parts`](super::List::from_raw_parts), and
+    /// every key is UTF-8, as a [`Text`]'s bytes are.
     pub unsafe fn from_raw_parts(
         ptr: *mut Entry,
         len: usize,
@@ -246,9 +247,7 @@ impl Map {
     /// The position of `key`, by exact byte comparison -- not `strcmp`,
     /// since a key may contain a NUL.
     fn position(&self, key: &str) -> Option<usize> {
-        self.entries()
-            .iter()
-            .position(|e| e.key() == key.as_bytes())
+        self.entries().iter().position(|e| e.key() == key)
     }
 
     /// The value under `key`.
@@ -333,8 +332,8 @@ impl Map {
         self.entries().iter()
     }
 
-    /// Its keys, in insertion order, as raw bytes.
-    pub fn keys(&self) -> impl Iterator<Item = &[u8]> {
+    /// Its keys, in insertion order.
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
         self.iter().map(Entry::key)
     }
 
@@ -368,16 +367,11 @@ impl Map {
         let mut result = Ok(());
         while let Some(entry) = from.take_first() {
             let (key, value) = entry.into_parts();
-            match key.as_str() {
-                Some(key) => match self.set_node(key, value, alloc) {
-                    Ok(()) => n += 1,
-                    Err(e) => result = Err(e),
-                },
-                None => result = Err(ValueError::NotUtf8),
-            }
+            result = self.set_node(&key, value, alloc);
             if result.is_err() {
                 break;
             }
+            n += 1;
         }
         result?;
         Ok(n)
@@ -395,6 +389,14 @@ impl Map {
         unsafe { ptr::copy(self.ptr.add(1), self.ptr, self.len - 1) };
         self.len -= 1;
         Some(out)
+    }
+
+    /// Whether every key is UTF-8: what a foreign map must show before it
+    /// is read as a `Map`. Its values are checked by their own doors.
+    pub(crate) fn keys_are_text(&self) -> bool {
+        self.entries()
+            .iter()
+            .all(|entry| std::str::from_utf8(entry.key_bytes()).is_ok())
     }
 
     /// A deep copy through `alloc`, at any depth.
@@ -584,16 +586,15 @@ impl Entry {
         (self.key, self.value)
     }
 
-    /// The key, as bytes: a key may contain a NUL, and comparing only to
-    /// the first would make two different keys look identical.
-    /// [`key_str`](Entry::key_str) is the checked reading.
-    pub fn key(&self) -> &[u8] {
+    /// The key. It may contain a NUL, so a C reader compares its length
+    /// too.
+    pub fn key(&self) -> &str {
         &self.key
     }
 
-    /// The key as text, or `None` if it is not valid UTF-8.
-    pub fn key_str(&self) -> Option<&str> {
-        std::str::from_utf8(self.key()).ok()
+    /// The key's stored bytes, for comparing a map not yet checked.
+    pub(crate) fn key_bytes(&self) -> &[u8] {
+        self.key.bytes()
     }
 
     /// The value stored under it.

@@ -49,6 +49,10 @@ impl Str {
 
 /// Owned, growable UTF-8 text. `cap == 0` means the buffer is **not
 /// owned**: never freed, copied out of on the first growth.
+///
+/// UTF-8 is the contract, not a hope: a string or a map key whose bytes
+/// are not UTF-8 is refused where it is read, and the node holding it
+/// reads as no string, or no map.
 #[repr(C)]
 #[derive(Debug)]
 pub struct Text {
@@ -81,7 +85,8 @@ impl Text {
     /// are initialised and readable for as long as this lives; `cap > 0`
     /// means the block came from `alloc` with that layout and is this
     /// text's alone; `cap == 0` means the bytes are somebody else's and,
-    /// if this text is mutated in place, writable.
+    /// if this text is mutated in place, writable. The bytes are UTF-8:
+    /// a `Text` is read as a `str` without checking again.
     pub unsafe fn from_raw_parts(
         ptr: *mut u8,
         len: usize,
@@ -179,27 +184,43 @@ impl Text {
 
     /// A copy through `alloc`, reporting its refusal.
     pub fn clone_in(&self, alloc: Alloc) -> Result<Text, ValueError> {
-        Text::new_in(alloc, self.as_str().ok_or(ValueError::NotUtf8)?)
+        Text::new_in(alloc, self)
     }
 
-    /// The text itself, or `None` if it is not valid UTF-8.
-    pub fn as_str(&self) -> Option<&str> {
-        std::str::from_utf8(self).ok()
-    }
-}
-
-/// The bytes, whether or not they are valid UTF-8. There is no
-/// `DerefMut`: writing bytes could break the UTF-8, and `push_str` is how
-/// a text changes.
-impl std::ops::Deref for Text {
-    type Target = [u8];
-
-    fn deref(&self) -> &[u8] {
+    /// The stored bytes, before anything is known of them: what the doors
+    /// check, and what freeing and comparing a foreign node read.
+    pub(crate) fn bytes(&self) -> &[u8] {
         if self.len == 0 {
             return &[];
         }
         // SAFETY: the first `len` bytes are initialised.
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+}
+
+/// The text, as a `String` gives its `str`. There is no `DerefMut`, as
+/// `String` has none: `push_str` and `fmt::Write` change a text.
+impl std::ops::Deref for Text {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        // SAFETY: a `Text` is checked once, when it is made: its
+        // constructors take a `str`, and a foreign one is checked by the
+        // door that reads it out of a value.
+        unsafe { std::str::from_utf8_unchecked(self.bytes()) }
+    }
+}
+
+/// For a bound, which does not deref, as `String` has it.
+impl AsRef<str> for Text {
+    fn as_ref(&self) -> &str {
+        self
+    }
+}
+
+impl std::fmt::Display for Text {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self)
     }
 }
 
@@ -215,8 +236,7 @@ impl Default for Text {
 
 impl Clone for Text {
     /// A copy through the allocator this text recorded, or the crate's
-    /// own. Panics as [`Value::clone`] does, and on text that is not
-    /// UTF-8 — a foreign producer's, since nothing here writes one.
+    /// own. Panics as [`Value::clone`] does.
     fn clone(&self) -> Text {
         let alloc = Alloc::recorded_or_rust(self.alloc);
         self.clone_in(alloc)
@@ -226,11 +246,11 @@ impl Clone for Text {
 
 impl AsRef<[u8]> for Text {
     fn as_ref(&self) -> &[u8] {
-        self
+        self.as_bytes()
     }
 }
 
-/// By bytes, as its equality is.
+/// As its `str`, as its equality is.
 impl std::hash::Hash for Text {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         (**self).hash(state);
@@ -246,9 +266,6 @@ impl std::fmt::Write for Text {
 }
 
 impl PartialEq for Text {
-    /// The BYTES, not the `&str`: two texts that are not UTF-8 would
-    /// otherwise compare equal on the strength of both being
-    /// unreadable.
     fn eq(&self, other: &Text) -> bool {
         **self == **other
     }

@@ -290,7 +290,7 @@ impl Provider {
     /// What this registry filed it under, rendered from the host's
     /// [`KeyTemplate`]. The argument [`Registry::provider`] takes.
     pub fn key(&self) -> &str {
-        self.key.as_str().unwrap_or_default()
+        &self.key
     }
 
     /// A name to show a person. Empty when the library offered none.
@@ -906,11 +906,7 @@ impl Registry {
         // filename comparison only guesses at. Whether two versions of one
         // library are the same thing is the host's template's answer.
         let library_key = self.library_key.render(KeyFields::library(&id, &version));
-        if let Some(already) = self
-            .loaded
-            .iter()
-            .find(|l| l.key.as_str() == Some(library_key.as_str()))
-        {
+        if let Some(already) = self.loaded.iter().find(|l| *l.key == *library_key) {
             let from = already.path.clone();
             return Ok(Loading::Skipped(Skipped::AlreadyLoaded { from }));
         }
@@ -1029,7 +1025,7 @@ impl Registry {
     /// For `unload`, which lives in `raw.rs` because this module carries
     /// `#![forbid(unsafe_code)]`.
     pub(crate) fn library(&self, key: &str) -> Option<&Loaded> {
-        self.loaded.iter().find(|l| l.key.as_str() == Some(key))
+        self.loaded.iter().find(|l| *l.key == *key)
     }
 
     /// Removes a library and hands back its record and its mapping.
@@ -1038,7 +1034,7 @@ impl Registry {
         let at = self
             .loaded
             .iter()
-            .position(|l| l.key.as_str() == Some(key))
+            .position(|l| *l.key == *key)
             .ok_or_else(|| UnloadError::NotFound {
                 key: key.to_string(),
             })?;

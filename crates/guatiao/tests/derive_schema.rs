@@ -239,6 +239,37 @@ fn a_key_the_schema_does_not_declare_is_refused() {
     });
 }
 
+/// A map whose keys are not all text is refused by name, not read as an
+/// empty map that passes.
+#[test]
+fn a_map_with_a_key_that_is_not_text_is_refused() {
+    alloc_and(|alloc| {
+        let declared = Connection::schema(alloc).unwrap();
+        let s = SchemaRef::new(&declared).unwrap();
+
+        let value = sample().to_value(alloc).unwrap();
+        let map = Map::try_from(value).expect("a map");
+        let (ptr, len, cap, a) = map.into_raw_parts();
+        let (bptr, blen, bcap, ba) = guatiao::Buffer::new_in(alloc, b"\xff")
+            .unwrap()
+            .into_raw_parts();
+        // SAFETY: an entry is `repr(C)` with its key first; the old key is
+        // freed before a foreign producer's bytes are written over it.
+        let map = unsafe {
+            let slot = ptr.cast::<Text>();
+            std::ptr::drop_in_place(slot);
+            std::ptr::write(slot, Text::from_raw_parts(bptr, blen, bcap, ba));
+            Map::from_raw_parts(ptr, len, cap, a)
+        };
+        let value: guatiao::Value = map.into();
+        let refused = validate_map(s, &value).expect_err("refused");
+        assert!(
+            refused.to_string().contains("keys that are text"),
+            "{refused}"
+        );
+    });
+}
+
 /// A declared default lands in the document as the value itself.
 ///
 /// `#[schema(default = <expr>)]` goes out through `ToValue`, so the

@@ -264,10 +264,11 @@ impl Value {
     /// form of any operation.
     pub fn alloc(&self) -> Result<Alloc, ValueError> {
         match self.tag()? {
-            Tag::GUATIAO_MAP => arm::<Map>(self)?.alloc(),
+            Tag::GUATIAO_MAP => self.map_arm().ok_or(ValueError::WrongKind)?.alloc(),
             Tag::GUATIAO_LIST => arm::<List>(self)?.alloc(),
-            Tag::GUATIAO_STRING => arm::<Text>(self)?.alloc(),
-            Tag::GUATIAO_NUMBER => self.number_text().ok_or(ValueError::WrongKind)?.alloc(),
+            Tag::GUATIAO_STRING | Tag::GUATIAO_NUMBER => {
+                self.text_arm().ok_or(ValueError::WrongKind)?.alloc()
+            }
             Tag::GUATIAO_BYTES => arm::<Buffer>(self)?.alloc(),
             _ => Err(ValueError::WrongKind),
         }
@@ -350,91 +351,133 @@ macro_rules! arm_as {
 }
 
 arm_as!(bool, b, Tag::GUATIAO_BOOL);
-arm_as!(Map, map, Tag::GUATIAO_MAP);
 arm_as!(List, list, Tag::GUATIAO_LIST);
 arm_as!(Buffer, bytes, Tag::GUATIAO_BYTES);
-arm_as!(Text, text, Tag::GUATIAO_STRING);
 
+/// The arms whose content a producer can get wrong, read before any
+/// check: freeing, finding the allocator and comparing must reach a
+/// malformed foreign node too. What they hand out is read by its stored
+/// bytes only, never as a `str`.
 impl Value {
-    /// A NUMBER node's storage, read as the `Text` it is laid out as,
-    /// whatever its bytes are. Freeing it, finding its allocator and
-    /// comparing its bytes must reach a malformed foreign number too, and
-    /// a `Text` offers no `str` it could be wrong about.
-    fn number_text(&self) -> Option<&Text> {
+    /// A STRING's or a NUMBER's storage, laid out alike.
+    fn text_arm(&self) -> Option<&Text> {
         match Tag::try_from(self.tag) {
-            // SAFETY: the tag says the number arm is live, and a `Number`
-            // is a `Text` in layout, so the text arm is the same storage.
-            Ok(Tag::GUATIAO_NUMBER) => Some(unsafe { &self.payload.text }),
+            // SAFETY: the tag says the text arm is live, and a `Number` is
+            // a `Text` in layout, so its arm is the same storage.
+            Ok(Tag::GUATIAO_STRING | Tag::GUATIAO_NUMBER) => Some(unsafe { &self.payload.text }),
             _ => None,
         }
     }
 
-    fn number_text_mut(&mut self) -> Option<&mut Text> {
+    fn text_arm_mut(&mut self) -> Option<&mut Text> {
         match Tag::try_from(self.tag) {
-            // SAFETY: as for `number_text`.
-            Ok(Tag::GUATIAO_NUMBER) => Some(unsafe { &mut self.payload.text }),
+            // SAFETY: as for `text_arm`.
+            Ok(Tag::GUATIAO_STRING | Tag::GUATIAO_NUMBER) => {
+                Some(unsafe { &mut self.payload.text })
+            }
             _ => None,
         }
     }
 
-    /// The bytes under a NUMBER tag, whether or not they are a number.
-    pub(crate) fn number_bytes(&self) -> Option<&[u8]> {
-        self.number_text().map(|digits| &digits[..])
+    /// A MAP, keys unchecked: compare them with `Entry::key_bytes`.
+    pub(crate) fn map_arm(&self) -> Option<&Map> {
+        match Tag::try_from(self.tag) {
+            // SAFETY: the tag says the map arm is live.
+            Ok(Tag::GUATIAO_MAP) => Some(unsafe { &self.payload.map }),
+            _ => None,
+        }
     }
 
-    /// Whether this is a NUMBER whose text is one.
+    fn map_arm_mut(&mut self) -> Option<&mut Map> {
+        match Tag::try_from(self.tag) {
+            // SAFETY: as for `map_arm`.
+            Ok(Tag::GUATIAO_MAP) => Some(unsafe { &mut self.payload.map }),
+            _ => None,
+        }
+    }
+
+    /// The bytes under `tag`, STRING or NUMBER, whatever they are.
+    pub(crate) fn text_bytes(&self, tag: Tag) -> Option<&[u8]> {
+        if self.tag() != Ok(tag) {
+            return None;
+        }
+        self.text_arm().map(Text::bytes)
+    }
+
+    /// A STRING whose bytes are UTF-8.
+    fn holds_text(&self) -> bool {
+        self.text_bytes(Tag::GUATIAO_STRING)
+            .is_some_and(|bytes| std::str::from_utf8(bytes).is_ok())
+    }
+
+    /// A NUMBER whose text is one.
     fn holds_a_number(&self) -> bool {
-        self.number_bytes()
+        self.text_bytes(Tag::GUATIAO_NUMBER)
             .is_some_and(|digits| validate_json_number(digits).is_ok())
     }
-}
 
-/// Only a number that is one: its text matches the JSON grammar, which is
-/// what lets a [`Number`] be read as a `str`. A foreign producer may write
-/// anything under the tag, and such a node holds no number.
-impl TryAsRef<Number> for Value {
-    fn try_as_ref(&self) -> Option<&Number> {
-        if !self.holds_a_number() {
-            return None;
-        }
-        // SAFETY: the tag says the number arm is live, and its text was
-        // just checked against the grammar.
-        Some(unsafe { &self.payload.number })
+    /// A MAP whose keys are UTF-8.
+    fn holds_a_map(&self) -> bool {
+        self.map_arm().is_some_and(Map::keys_are_text)
     }
 }
 
-impl TryAsMut<Number> for Value {
-    fn try_as_mut(&mut self) -> Option<&mut Number> {
-        if !self.holds_a_number() {
-            return None;
+/// The doors to an arm whose content is checked: the tag, and what the
+/// type promises -- a `Text` and a map's keys are UTF-8, a `Number` is
+/// the JSON grammar. A foreign producer may write anything under the tag,
+/// and such a node holds none of them. Once through, the type is trusted
+/// and never checked again.
+macro_rules! checked_arm {
+    ($ty:ty, $field:ident, $holds:ident) => {
+        impl TryAsRef<$ty> for Value {
+            fn try_as_ref(&self) -> Option<&$ty> {
+                if !self.$holds() {
+                    return None;
+                }
+                // SAFETY: the tag says this arm is live, and its content
+                // was just checked.
+                Some(unsafe { &self.payload.$field })
+            }
         }
-        // SAFETY: as for `try_as_ref`. A `Number` offers no way to change
-        // its text, so it stays well formed.
-        Some(unsafe { &mut self.payload.number })
-    }
+
+        impl TryAsMut<$ty> for Value {
+            fn try_as_mut(&mut self) -> Option<&mut $ty> {
+                if !self.$holds() {
+                    return None;
+                }
+                // SAFETY: as for `try_as_ref`. The type offers no way to
+                // break what was checked.
+                Some(unsafe { &mut self.payload.$field })
+            }
+        }
+
+        /// Consuming the node; one that fails the check is handed back
+        /// untouched.
+        impl TryFrom<Value> for $ty {
+            type Error = Value;
+
+            fn try_from(value: Value) -> Result<$ty, Value> {
+                if !value.$holds() {
+                    return Err(value);
+                }
+                let (_, payload) = value.into_raw_parts();
+                // SAFETY: checked just above, and `into_raw_parts` forgot
+                // the node, so this is the arm's only owner.
+                Ok(ManuallyDrop::into_inner(unsafe { payload.$field }))
+            }
+        }
+    };
 }
 
-/// The number, consuming the node; a node that holds no number is handed
-/// back untouched.
-impl TryFrom<Value> for Number {
-    type Error = Value;
-
-    fn try_from(value: Value) -> Result<Number, Value> {
-        if !value.holds_a_number() {
-            return Err(value);
-        }
-        let (_, payload) = value.into_raw_parts();
-        // SAFETY: checked just above, and `into_raw_parts` forgot the
-        // node, so this is the arm's only owner.
-        Ok(ManuallyDrop::into_inner(unsafe { payload.number }))
-    }
-}
+checked_arm!(Text, text, holds_text);
+checked_arm!(Number, number, holds_a_number);
+checked_arm!(Map, map, holds_a_map);
 
 impl TryAsRef<str> for Value {
     /// A STRING's text. A number is not a string, so this answers `None`
     /// for one.
     fn try_as_ref(&self) -> Option<&str> {
-        TryAsRef::<Text>::try_as_ref(self)?.as_str()
+        TryAsRef::<Text>::try_as_ref(self).map(|text| &**text)
     }
 }
 
@@ -473,10 +516,8 @@ macro_rules! arm_into {
     };
 }
 
-arm_into!(Map, map, Tag::GUATIAO_MAP);
 arm_into!(List, list, Tag::GUATIAO_LIST);
 arm_into!(Buffer, bytes, Tag::GUATIAO_BYTES);
-arm_into!(Text, text, Tag::GUATIAO_STRING);
 
 /// A borrowed container, with the error a reader wants: which kind was
 /// needed and which was there.
@@ -558,12 +599,10 @@ impl Drop for Value {
             // nothing this build can name, and is not an error.
             if let Some(list) = TryAsMut::<List>::try_as_mut(node) {
                 list.dismantle_into(&mut stack);
-            } else if let Some(map) = TryAsMut::<Map>::try_as_mut(node) {
+            } else if let Some(map) = node.map_arm_mut() {
                 map.dismantle_into(&mut stack);
-            } else if let Some(text) = TryAsMut::<Text>::try_as_mut(node) {
+            } else if let Some(text) = node.text_arm_mut() {
                 text.release();
-            } else if let Some(digits) = node.number_text_mut() {
-                digits.release();
             } else if let Some(buffer) = TryAsMut::<Buffer>::try_as_mut(node) {
                 buffer.release();
             }

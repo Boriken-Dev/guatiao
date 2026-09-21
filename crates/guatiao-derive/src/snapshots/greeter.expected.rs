@@ -180,7 +180,14 @@ impl Greeter for ::guatiao::library::Remote<dyn Greeter> {
             );
         }
         ::core::result::Result::Ok(
-            ::std::string::ToString::to_string(__out.as_str().unwrap_or("")),
+            match ::guatiao::library::kind::text_ret(__out) {
+                ::core::result::Result::Ok(__v) => {
+                    ::std::string::ToString::to_string(&*__v)
+                }
+                ::core::result::Result::Err(__e) => {
+                    return ::core::result::Result::Err(__e);
+                }
+            },
         )
     }
     fn count(&self, bytes: &[u8], flag: bool) -> i64 {
