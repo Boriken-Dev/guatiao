@@ -622,7 +622,7 @@ fn a_host_files_providers_under_a_key_it_chooses() {
     let version = provider.version().to_string();
     assert_eq!(provider.key(), "hello_library_greeter");
     assert_eq!(provider.library(), "hello_library");
-    assert_eq!(registry.loaded()[0].key.as_str(), Some("hello_library"));
+    assert_eq!(&*registry.loaded()[0].key, "hello_library");
 
     assert_eq!(registry.providers_of("hello_library_greeter").count(), 1);
     assert_eq!(
@@ -681,7 +681,7 @@ fn a_host_decides_how_many_builds_of_one_library_it_will_hold() {
         .expect("an empty registry cannot collide");
     let loaded = apart.load_file(&path).unwrap().loaded().unwrap();
     let expected = format!("hello_library@{}", loaded.version);
-    assert_eq!(loaded.key.as_str(), Some(expected.as_str()));
+    assert_eq!(*loaded.key, *expected);
     assert!(matches!(
         apart.load_file(&path).unwrap().skipped(),
         Some(Skipped::AlreadyLoaded { .. })

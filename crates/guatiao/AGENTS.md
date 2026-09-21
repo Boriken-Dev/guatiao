@@ -89,7 +89,7 @@ for value in list { .. }               // owned: Value; &List: &Value; &mut List
 Text::new(&str) -> Text                Buffer::new(&[u8]) -> Buffer
 Text::new_in(alloc, &str) -> Result<Text, ValueError>
 Buffer::new_in(alloc, &[u8]) -> Result<Buffer, ValueError>
-text.as_str() -> Option<&str>          &*text -> &[u8]   // Deref<Target = [u8]>
+&*text -> &str                         // Deref<Target = str>: every str method
 text.push_str(&str) / push_str_in(&str, alloc)
 buffer.push(&[u8]) / push_in(&[u8], alloc)
 
@@ -97,8 +97,7 @@ Number::new(&str) -> Result<Number, ValueError>     // the JSON grammar
 Number::new_in(alloc, &str)            Number::float_in(alloc, f64)
 &*number -> &str                       // Deref<Target = str>: every str method
 
-Entry::key() -> &[u8]                  // bytes: a key may contain a NUL
-Entry::key_str() -> Option<&str>       Entry::value() -> &Value
+Entry::key() -> &str                   Entry::value() -> &Value
 Entry::value_mut() -> &mut Value       // the key is not offered this way
 Text::default() / Buffer::default()    // empty, allocating nothing
 ```
@@ -203,28 +202,27 @@ an `Allocator` may be called from any thread.
 | `List` | `Vec<Value>` | `Deref`/`DerefMut<Target = [Value]>` (`len`, `get`, `iter`, `list[0]`, `sort_by`, `swap` are the slice's), `AsRef`/`AsMut<[Value]>`, owned and `&mut` `IntoIterator`, `FromIterator`, `Extend` |
 | `Buffer` | `Vec<u8>` | `Deref`/`DerefMut<Target = [u8]>`, `AsRef`/`AsMut<[u8]>`, `Hash`, `io::Write` |
 | `Map` | `HashMap`, ordered | `Index<&str>`, owned and `&mut` `IntoIterator`, `FromIterator<(K, V)>`, `Extend` |
-| `Text` | `String` | `Deref<Target = [u8]>`, `AsRef<[u8]>`, `Hash`, `fmt::Write` |
+| `Text` | `String` | `Deref<Target = str>`, `AsRef<str>`, `AsRef<[u8]>`, `Hash`, `Display`, `fmt::Write` |
 | `Number` | its text | `Deref<Target = str>`, `AsRef<str>`, `AsRef<[u8]>`, `Hash`, `Display`, `FromStr` |
 
 A slice cannot change its length, so `DerefMut` leaves what a container
 owns untouched. **`Map` has no `IndexMut` and no `Deref`**: `IndexMut`
 could only hand back a slot that exists, so `map["new"] = v` would panic
-rather than insert (`set` inserts), and a map is not a slice. **`Text`
-derefs to its bytes, not to `str`**, because a text read from a foreign
-tree may not be UTF-8 and a `&str` over that is undefined behaviour;
-`as_str` checks. It has no `DerefMut`, since writing bytes could break
-the UTF-8. `Hash`
-is by bytes, as equality is, so `1.10` and `1.1` are two keys.
+rather than insert (`set` inserts), and a map is not a slice. `Text`
+has no `DerefMut`, as `String` has none: `push_str` and `fmt::Write`
+change it. `Hash` follows equality, so `1.10` and `1.1` are two keys.
 
-**A `Number` is always a JSON number**, which is why it can be a `str`.
-Each constructor checks the grammar, and so does every way out of a
-value (`TryAsRef`, `TryAsMut`, `TryFrom<Value>`). Text a foreign producer
-wrote under the number tag that is not a number is **no `Number` at
-all**: conversions refuse it, and it still frees on drop and equals
-itself by its bytes. The line this follows: a producer's **memory shape**
-(pointers, lengths, capacity) cannot be checked and is its contract to
-keep; its **content** (a number's text, UTF-8, a known tag) can, and is
-checked rather than trusted.
+**A `Text` is always UTF-8 and a `Number` always a JSON number**, which
+is why each is a `str`. Both are checked once, when they are made: a
+constructor takes a `&str`, and every way out of a value (`TryAsRef`,
+`TryAsMut`, `TryFrom<Value>`) checks what a foreign producer wrote. A
+map's keys are `Text`, so a map is checked the same way at its own door.
+A node that fails is **no `Text`, `Number` or `Map` at all**:
+conversions refuse it, copying it is `ValueError::NotUtf8` or a refusal,
+and it still frees on drop and equals itself by its bytes. The line this
+follows: a producer's **memory shape** (pointers, lengths, capacity)
+cannot be checked and is its contract to keep; its **content** (UTF-8, a
+number's text, a known tag) can, and is checked rather than trusted.
 
 **Crossing FFI**: a value handed to a foreign caller must be forgotten
 (`std::mem::forget`, `ManuallyDrop`, or a move into `ptr::write`) or Drop
@@ -1320,7 +1318,7 @@ An implementer must guarantee, and `struct_size` cannot express:
 - **Interior NUL is legal everywhere.** Keys and string values are
   pointer and length; comparing only to the first NUL makes two different
   keys look identical.
-- **Key comparison is raw bytes.** No case folding, no normalisation, no
+- **Key comparison is exact.** No case folding, no normalisation, no
   trimming: `"Host"` and `"host"` are two keys.
 - **`#![forbid(unsafe_code)]` is per module**, and a test names the paths
   allowed to contain `unsafe`: the value model, `library/raw.rs` and

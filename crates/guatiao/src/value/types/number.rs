@@ -11,6 +11,7 @@
 //! number here and there is no `f64` for it.
 
 #![allow(missing_docs)]
+#![forbid(unsafe_code)]
 use std::fmt;
 use std::str::FromStr;
 
@@ -84,7 +85,7 @@ impl PartialEq for Number {
     /// Byte equality of the text, which is what makes `1.10` different
     /// from `1.1`. Comparing as numbers would be the lossy view.
     fn eq(&self, other: &Number) -> bool {
-        self.as_bytes() == other.as_bytes()
+        self.0 == other.0
     }
 }
 
@@ -95,11 +96,7 @@ impl std::ops::Deref for Number {
     type Target = str;
 
     fn deref(&self) -> &str {
-        // SAFETY: a `Number` is checked once, when it is made -- by its
-        // constructor, or for a foreign one by the door that reads it out
-        // of a value -- and the JSON grammar is ASCII. Nothing changes its
-        // text afterwards, so it is never checked again.
-        unsafe { std::str::from_utf8_unchecked(&self.0) }
+        &self.0
     }
 }
 

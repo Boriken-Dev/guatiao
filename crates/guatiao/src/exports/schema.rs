@@ -151,7 +151,7 @@ fn store_of(v: &Value) -> Option<BTreeMap<String, String>> {
     let mut out = BTreeMap::new();
     for entry in TryAsRef::<Map>::try_as_ref(v).map(Map::entries)? {
         out.insert(
-            entry.key_str()?.to_string(),
+            entry.key().to_string(),
             TryAsRef::<str>::try_as_ref(entry.value())?.to_string(),
         );
     }

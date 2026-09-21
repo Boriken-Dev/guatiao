@@ -109,10 +109,7 @@ impl<'a> FormRef<'a> {
             .map(Map::entries)
             .unwrap_or(&[])
             .iter()
-            .filter_map(|e| {
-                let path = e.key_str()?;
-                Some((path, HintsRef(Some(e.value()).filter(|h| is_map(h)))))
-            })
+            .map(|e| (e.key(), HintsRef(Some(e.value()).filter(|h| is_map(h)))))
     }
 
     /// An annotation on the form as a whole. Carried, never interpreted.

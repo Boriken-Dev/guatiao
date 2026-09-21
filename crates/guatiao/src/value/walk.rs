@@ -70,15 +70,13 @@ impl<'a> Copying<'a> {
         })
     }
 
-    /// The next child, with the key it goes under when this is a map. A
-    /// key that is not UTF-8 is refused: a copy cannot spell it.
-    fn next(&mut self) -> Option<Result<(Option<&'a str>, &'a Value), ValueError>> {
+    /// The next child, with the key it goes under when this is a map.
+    fn next(&mut self) -> Option<(Option<&'a str>, &'a Value)> {
         match &mut self.left {
-            Left::List(items) => items.next().map(|item| Ok((None, item))),
-            Left::Map(entries) => entries.next().map(|entry| {
-                let key = entry.key_str().ok_or(ValueError::NotUtf8)?;
-                Ok((Some(key), entry.value()))
-            }),
+            Left::List(items) => items.next().map(|item| (None, item)),
+            Left::Map(entries) => entries
+                .next()
+                .map(|entry| (Some(entry.key()), entry.value())),
         }
     }
 
@@ -100,14 +98,22 @@ enum Step<'a> {
     Open(Copying<'a>),
 }
 
+/// A STRING or MAP under its tag that its door refuses is not UTF-8.
+fn text<T: ?Sized>(node: &Value) -> Result<&T, ValueError>
+where
+    Value: TryAsRef<T>,
+{
+    node.try_as_ref().ok_or(ValueError::NotUtf8)
+}
+
 fn step<'a>(node: &'a Value, key: Option<&'a str>, alloc: Alloc) -> Result<Step<'a>, ValueError> {
     Ok(Step::Leaf(match node.tag()? {
         Tag::GUATIAO_LIST => return Ok(Step::Open(Copying::list(arm(node)?, key, alloc)?)),
-        Tag::GUATIAO_MAP => return Ok(Step::Open(Copying::map(arm(node)?, key, alloc)?)),
+        Tag::GUATIAO_MAP => return Ok(Step::Open(Copying::map(text(node)?, key, alloc)?)),
         Tag::GUATIAO_ABSENT => Value::absent(),
         Tag::GUATIAO_NULL => Value::null(),
         Tag::GUATIAO_BOOL => Value::from(*arm::<bool>(node)?),
-        Tag::GUATIAO_STRING => arm::<Text>(node)?.clone_in(alloc)?.into(),
+        Tag::GUATIAO_STRING => text::<Text>(node)?.clone_in(alloc)?.into(),
         Tag::GUATIAO_NUMBER => arm::<Number>(node)?.clone_in(alloc)?.into(),
         Tag::GUATIAO_BYTES => arm::<Buffer>(node)?.clone_in(alloc)?.into(),
     }))
@@ -122,13 +128,10 @@ fn copy_tree(root: Copying<'_>, alloc: Alloc) -> Result<Built, ValueError> {
             .last_mut()
             .expect("the root leaves the stack only to return");
         match top.next() {
-            Some(child) => {
-                let (key, node) = child?;
-                match step(node, key, alloc)? {
-                    Step::Leaf(copy) => top.attach(key, copy, alloc)?,
-                    Step::Open(container) => stack.push(container),
-                }
-            }
+            Some((key, node)) => match step(node, key, alloc)? {
+                Step::Leaf(copy) => top.attach(key, copy, alloc)?,
+                Step::Open(container) => stack.push(container),
+            },
             None => {
                 let done = stack.pop().expect("the top was just read");
                 match stack.last_mut() {
@@ -196,7 +199,7 @@ pub(crate) fn equal(first: Pair<'_>) -> bool {
             Pair::Maps(a, b) => {
                 a.len() == b.len()
                     && a.iter().zip(b.iter()).all(|(x, y)| {
-                        let same = x.key() == y.key();
+                        let same = x.key_bytes() == y.key_bytes();
                         if same {
                             stack.push(Pair::Values(x.value(), y.value()));
                         }
@@ -227,9 +230,11 @@ fn values<'a>(a: &'a Value, b: &'a Value, stack: &mut Vec<Pair<'a>>) -> bool {
     match a.tag() {
         Ok(Tag::GUATIAO_ABSENT | Tag::GUATIAO_NULL) | Err(_) => true,
         Ok(Tag::GUATIAO_BOOL) => same::<bool>(a, b),
-        Ok(Tag::GUATIAO_STRING) => same::<Text>(a, b),
-        // By bytes, so a foreign number that is not one still equals itself.
-        Ok(Tag::GUATIAO_NUMBER) => a.number_bytes() == b.number_bytes(),
+        // By bytes, so a foreign text or number that is malformed still
+        // equals itself.
+        Ok(tag @ (Tag::GUATIAO_STRING | Tag::GUATIAO_NUMBER)) => {
+            a.text_bytes(tag) == b.text_bytes(tag)
+        }
         Ok(Tag::GUATIAO_BYTES) => same::<Buffer>(a, b),
         Ok(Tag::GUATIAO_LIST) => match (arm::<List>(a), arm::<List>(b)) {
             (Ok(x), Ok(y)) => {
@@ -238,8 +243,8 @@ fn values<'a>(a: &'a Value, b: &'a Value, stack: &mut Vec<Pair<'a>>) -> bool {
             }
             _ => false,
         },
-        Ok(Tag::GUATIAO_MAP) => match (arm::<Map>(a), arm::<Map>(b)) {
-            (Ok(x), Ok(y)) => {
+        Ok(Tag::GUATIAO_MAP) => match (a.map_arm(), b.map_arm()) {
+            (Some(x), Some(y)) => {
                 stack.push(Pair::Maps(x, y));
                 true
             }

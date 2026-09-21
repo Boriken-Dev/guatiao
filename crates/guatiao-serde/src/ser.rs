@@ -143,16 +143,7 @@ impl Serialize for Serializable<'_> {
                     .ok_or_else(|| malformed::<S>("a map"))?;
                 let mut map = s.serialize_map(Some(entries.len()))?;
                 for entry in entries {
-                    // A key is raw bytes; a serde map key here is a
-                    // string. One that is not UTF-8 has no spelling, and a
-                    // lossy replacement would silently rename it.
-                    let Some(key) = entry.key_str() else {
-                        return Err(S::Error::custom(
-                            "a map key that is not UTF-8 cannot be written; \
-                             guatiao keys are raw bytes",
-                        ));
-                    };
-                    map.serialize_entry(key, &child(entry.value(), self.how))?;
+                    map.serialize_entry(entry.key(), &child(entry.value(), self.how))?;
                 }
                 map.end()
             }

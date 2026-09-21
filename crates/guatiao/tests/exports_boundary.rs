@@ -695,7 +695,7 @@ fn a_map_copied_onto_itself_is_refused() {
         .map(Map::entries)
         .unwrap()
         .iter()
-        .map(|e| e.key_str().unwrap().to_string())
+        .map(|e| e.key().to_string())
         .collect();
     assert_eq!(keys, ["a", "b"], "a refused call changed nothing");
 }
@@ -730,7 +730,7 @@ fn a_source_inside_the_target_copies_whole() {
         .map(Map::entries)
         .unwrap()
         .iter()
-        .map(|e| e.key_str().unwrap().to_string())
+        .map(|e| e.key().to_string())
         .collect();
     assert_eq!(
         keys,

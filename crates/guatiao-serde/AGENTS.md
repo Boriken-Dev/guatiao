@@ -135,8 +135,8 @@ the reason.)
 - **`GUATIAO_ABSENT` is refused, not written as null.** Absent is the
   answer to a lookup, not something a container holds; a map expresses it
   by not holding the key.
-- **A non-UTF-8 map key is refused.** Keys are raw bytes; a lossy
-  replacement would silently rename one.
+- **A map with a key that is not UTF-8 is refused**, as the value model
+  refuses it; a lossy replacement would silently rename the key.
 - **An unknown tag is refused**, rather than written as something a reader
   would believe — and so is a node whose tag and payload disagree, rather
   than written as a `0`, a `false` or an empty string.

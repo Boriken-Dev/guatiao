@@ -249,11 +249,7 @@ fn iteration_is_insertion_order_and_replacement_keeps_position() {
             let v = Text::new_in(alloc, key).map(Value::from).unwrap();
             root.set_in(key, v, alloc).unwrap();
         }
-        let keys = |m: &Map| {
-            m.keys()
-                .map(|k| String::from_utf8(k.to_vec()).unwrap())
-                .collect::<Vec<_>>()
-        };
+        let keys = |m: &Map| m.keys().map(str::to_string).collect::<Vec<_>>();
         assert_eq!(keys(&m), ["zulu", "yankee", "alpha", "mike"]);
 
         let replacement = Text::new_in(alloc, "REPLACED").map(Value::from).unwrap();
@@ -333,11 +329,7 @@ fn remove_hands_back_an_owned_value_and_discard_frees_it() {
         let mut taken = taken;
         unsafe { taken.free() };
 
-        let keys: Vec<_> = m
-            .entries()
-            .iter()
-            .map(|e| String::from_utf8(e.key().to_vec()).unwrap())
-            .collect();
+        let keys: Vec<_> = m.entries().iter().map(|e| e.key().to_string()).collect();
         assert_eq!(keys, ["a", "c"], "the order of the rest is kept");
 
         assert!(m.discard("a"));
@@ -586,7 +578,7 @@ fn a_nested_node_is_mutated_without_unsafe() {
             .map(Map::entries)
             .unwrap()
             .iter()
-            .filter_map(|e| e.key_str())
+            .map(Entry::key)
             .collect();
         assert_eq!(keys, ["ca", "ciphers"]);
         let tags: Vec<&str> = root
@@ -835,6 +827,97 @@ fn a_number_a_foreign_producer_malformed_is_no_number_yet_is_freed_and_equals_it
     });
 }
 
+/// Bytes a foreign producer wrote as a text, UTF-8 or not, owned by
+/// `alloc`: what C can put in a `guatiao_text` without asking anyone.
+fn foreign_text(alloc: Alloc, bytes: &[u8]) -> Text {
+    let (ptr, len, cap, a) = Buffer::new_in(alloc, bytes).unwrap().into_raw_parts();
+    // SAFETY: the storage is consistent; whether its bytes are UTF-8 is
+    // what the tests below are about.
+    unsafe { Text::from_raw_parts(ptr, len, cap, a) }
+}
+
+/// `map` with its first key's bytes replaced, as a foreign producer
+/// writing the entries itself could.
+fn with_foreign_first_key(map: Map, alloc: Alloc, key: &[u8]) -> Map {
+    let (ptr, len, cap, a) = map.into_raw_parts();
+    assert!(len > 0);
+    // SAFETY: an entry is `repr(C)` with its key first, and the old key is
+    // freed before the new one is written over it.
+    unsafe {
+        let slot = ptr.cast::<Text>();
+        std::ptr::drop_in_place(slot);
+        std::ptr::write(slot, foreign_text(alloc, key));
+        Map::from_raw_parts(ptr, len, cap, a)
+    }
+}
+
+#[test]
+fn a_string_a_foreign_producer_wrote_that_is_not_utf8_is_no_text_yet_is_freed_and_equals_itself() {
+    with_alloc(|alloc, _| {
+        let bad = unsafe {
+            // SAFETY: a STRING tag over a text arm, which is the shape; the
+            // bytes are what is under test.
+            Value::from_raw_parts(
+                u32::from(Tag::GUATIAO_STRING),
+                Payload::text(foreign_text(alloc, b"caf\xe9")),
+            )
+        };
+        assert!(
+            TryAsRef::<Text>::try_as_ref(&bad).is_none(),
+            "no Text for bytes that are not UTF-8"
+        );
+        assert!(TryAsRef::<str>::try_as_ref(&bad).is_none());
+        assert!(bad == bad, "equal to itself, by its bytes");
+        assert_eq!(bad.clone_in(alloc).unwrap_err(), ValueError::NotUtf8);
+        let mut bad = Text::try_from(bad).expect_err("handed back, not converted");
+        assert!(TryAsMut::<Text>::try_as_mut(&mut bad).is_none());
+        drop(bad);
+
+        let good = unsafe {
+            // SAFETY: as above, with UTF-8 bytes.
+            Value::from_raw_parts(
+                u32::from(Tag::GUATIAO_STRING),
+                Payload::text(foreign_text(alloc, "café".as_bytes())),
+            )
+        };
+        assert_eq!(
+            TryAsRef::<str>::try_as_ref(&good),
+            Some("café"),
+            "checked, then a str"
+        );
+    });
+}
+
+#[test]
+fn a_map_a_foreign_producer_wrote_with_a_key_that_is_not_utf8_is_no_map_yet_is_freed_and_equals_itself()
+ {
+    with_alloc(|alloc, _| {
+        let mut map = Map::new_in(alloc);
+        map.set("host", "h").unwrap();
+        map.set("port", 1).unwrap();
+        let bad: Value = with_foreign_first_key(map, alloc, b"\xffhost").into();
+
+        assert!(
+            TryAsRef::<Map>::try_as_ref(&bad).is_none(),
+            "no Map while a key is not text"
+        );
+        assert!(<&Map>::try_from(&bad).is_err());
+        assert!(bad == bad, "equal to itself, keys by their bytes");
+        assert_eq!(bad.clone_in(alloc).unwrap_err(), ValueError::NotUtf8);
+
+        let mut outer = List::new_in(alloc);
+        outer.push(bad).unwrap();
+        let outer: Value = outer.into();
+        assert_eq!(
+            outer.clone_in(alloc).unwrap_err(),
+            ValueError::NotUtf8,
+            "found at any depth"
+        );
+        // Dropping frees the bad key and everything else: the counting
+        // allocator's check at the end of `with_alloc` proves it.
+    });
+}
+
 #[test]
 fn a_number_is_a_str() {
     let number = Number::new("1.10").unwrap();
@@ -1007,11 +1090,8 @@ fn iteration_and_equality_respect_insertion_order() {
         let b = build(["zulu", "alpha", "mike"]);
         let reordered = build(["alpha", "zulu", "mike"]);
 
-        let seen: Vec<Vec<u8>> = a.keys().map(<[u8]>::to_vec).collect();
-        assert_eq!(
-            seen,
-            vec![b"zulu".to_vec(), b"alpha".to_vec(), b"mike".to_vec()]
-        );
+        let seen: Vec<&str> = a.keys().collect();
+        assert_eq!(seen, ["zulu", "alpha", "mike"]);
         assert_eq!(a.entries().len(), 3);
 
         assert!(a == b);

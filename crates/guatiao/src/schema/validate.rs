@@ -293,17 +293,15 @@ fn value_against(
             if value.tag() != Ok(Tag::GUATIAO_MAP) {
                 return Err(bad(key, "an object"));
             }
+            let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
+                return Err(bad(key, "keys that are text"));
+            };
             // The same two rules a variant arm's payload obeys, for the
             // same reason: a key nobody declared is a mistake worth
             // reporting rather than something to drop, and a required
             // field that is absent is the other half of the same check.
-            for entry in TryAsRef::<Map>::try_as_ref(value)
-                .map(Map::entries)
-                .unwrap_or(&[])
-            {
-                let Some(name) = entry.key_str() else {
-                    return Err(bad(key, "keys that are text"));
-                };
+            for entry in map {
+                let name = entry.key();
                 let Some(field) = kind.fields().find(|f| f.key() == name) else {
                     return Err(bad(
                         format!("{key}{}{name}", super::flat::SEPARATOR),
@@ -351,10 +349,10 @@ fn value_against(
             format!("an object carrying a '{tag}' discriminant"),
         ));
     }
-    let chosen = str_or(
-        TryAsRef::<Map>::try_as_ref(value).and_then(|m| m.get(tag)),
-        "",
-    );
+    let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
+        return Err(bad(key, "keys that are text"));
+    };
+    let chosen = str_or(map.get(tag), "");
     let Some(arm) = kind.arms().find(|a| a.value() == chosen) else {
         return Err(bad(
             key,
@@ -365,13 +363,8 @@ fn value_against(
     // A field belonging to an arm that was not selected is an error, not
     // something to drop silently — the same argument the schema makes for
     // a field key it does not declare.
-    for entry in TryAsRef::<Map>::try_as_ref(value)
-        .map(Map::entries)
-        .unwrap_or(&[])
-    {
-        let Some(name) = entry.key_str() else {
-            return Err(bad(key, "keys that are text"));
-        };
+    for entry in map {
+        let name = entry.key();
         if name == tag {
             continue;
         }
@@ -434,13 +427,11 @@ pub fn validate_map(schema: SchemaRef<'_>, values: &Value) -> Result<(), Validat
     if values.tag() != Ok(Tag::GUATIAO_MAP) {
         return Err(bad("", "a map of values"));
     }
-    for entry in TryAsRef::<Map>::try_as_ref(values)
-        .map(Map::entries)
-        .unwrap_or(&[])
-    {
-        let Some(key) = entry.key_str() else {
-            return Err(bad("", "keys that are text"));
-        };
+    let Some(map) = TryAsRef::<Map>::try_as_ref(values) else {
+        return Err(bad("", "keys that are text"));
+    };
+    for entry in map {
+        let key = entry.key();
         let Some(field) = schema.find(key) else {
             return Err(ValidationError::UnknownOption {
                 key: key.to_string(),

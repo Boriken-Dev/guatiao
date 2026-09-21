@@ -173,9 +173,7 @@ pub fn check(schema: SchemaRef<'_>, form: FormRef<'_>) -> Result<(), FormError> 
             .map(Map::entries)
             .ok_or_else(|| malformed(vocab::FIELDS, "a map"))?;
         for entry in entries {
-            let Some(path) = entry.key_str() else {
-                return Err(malformed(vocab::FIELDS, "a map whose keys are text"));
-            };
+            let path = entry.key();
             if flat::resolve(schema, path).is_none() {
                 return Err(FormError::UnknownField {
                     at: vocab::FIELDS.to_string(),
@@ -198,9 +196,7 @@ pub fn check(schema: SchemaRef<'_>, form: FormRef<'_>) -> Result<(), FormError> 
         // After every condition is known to be well formed, so a cycle is
         // reported as a cycle rather than as the malformed link in it.
         for entry in entries {
-            if let Some(path) = entry.key_str()
-                && let Some(on_cycle) = cycle_from(form, path)
-            {
+            if let Some(on_cycle) = cycle_from(form, entry.key()) {
                 return Err(FormError::CyclicCondition { path: on_cycle });
             }
         }

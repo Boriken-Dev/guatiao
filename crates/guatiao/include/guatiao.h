@@ -300,6 +300,10 @@ typedef struct guatiao_alloc {
 /*
  Owned, growable UTF-8 text. `cap == 0` means the buffer is **not
  owned**: never freed, copied out of on the first growth.
+
+ UTF-8 is the contract, not a hope: a string or a map key whose bytes
+ are not UTF-8 is refused where it is read, and the node holding it
+ reads as no string, or no map.
  */
 typedef struct guatiao_string {
   /*

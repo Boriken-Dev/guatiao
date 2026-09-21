@@ -73,12 +73,13 @@ fn a_buffer_is_its_bytes() {
 fn text_takes_formatting_and_hands_out_its_bytes() {
     let mut text = Text::new("port ");
     write!(text, "{}", 5900).unwrap();
-    assert_eq!(text.as_str(), Some("port 5900"));
+    assert_eq!(&*text, "port 5900");
     assert_eq!(text.as_ref() as &[u8], b"port 5900");
-    assert_eq!(&text[..], b"port 5900");
-    assert_eq!(text.len(), 9, "the slice's length, in bytes");
-    assert!(text.starts_with(b"port"));
-    assert_eq!(&Text::default()[..], b"");
+    assert_eq!(text.as_ref() as &str, "port 5900");
+    assert_eq!(text.len(), 9, "the str's length, in bytes");
+    assert!(text.starts_with("port"));
+    assert_eq!(text.to_string(), "port 5900", "Display");
+    assert_eq!(&*Text::default(), "");
 }
 
 #[test]
@@ -124,7 +125,7 @@ fn a_map_hands_its_pairs_out_in_order() {
     let map: Map = [("b", 1), ("a", 2)].into_iter().collect();
     let pairs: Vec<(String, i64)> = map
         .into_iter()
-        .map(|(k, v)| (k.as_str().unwrap().to_string(), i64::try_from(&v).unwrap()))
+        .map(|(k, v)| (k.to_string(), i64::try_from(&v).unwrap()))
         .collect();
     assert_eq!(pairs, [("b".to_string(), 1), ("a".to_string(), 2)]);
 

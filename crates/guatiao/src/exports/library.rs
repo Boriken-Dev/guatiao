@@ -1451,5 +1451,5 @@ fn skip_value(alloc: Alloc, why: &Skipped) -> Result<Value, ValueError> {
 /// The copy is the point: the answer is the caller's to free, and it must
 /// not borrow a key the registry may re-render.
 fn text_value(alloc: Alloc, text: &Text) -> Result<Value, ValueError> {
-    Text::new_in(alloc, text.as_str().unwrap_or_default()).map(Value::from)
+    Text::new_in(alloc, text).map(Value::from)
 }

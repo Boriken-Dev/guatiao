@@ -51,14 +51,14 @@ fn the_root_exports_the_names_the_header_names() {
     use guatiao::{Alloc, Buffer, Entry, List, Map, Status, Str, Tag, Text, Value, ValueError};
 
     let text = Text::new("hello");
-    assert_eq!(text.as_str(), Some("hello"));
+    assert_eq!(&*text, "hello");
     let buffer = Buffer::new(b"\x00\xff");
     assert_eq!(&buffer[..], b"\x00\xff");
 
     let mut map = Map::new();
     map.set("k", "v").unwrap();
     let entry: &Entry = &map.entries()[0];
-    assert_eq!(entry.key(), b"k");
+    assert_eq!(entry.key(), "k");
     assert_eq!(entry.value().tag(), Ok(Tag::GUATIAO_STRING));
 
     let mut list = List::new();
@@ -81,7 +81,7 @@ fn the_root_exports_the_names_the_header_names() {
 fn the_owned_containers_default_to_empty() {
     use guatiao::{Buffer, Text};
 
-    assert_eq!(Text::default().as_str(), Some(""));
+    assert_eq!(&*Text::default(), "");
     assert_eq!(&Buffer::default()[..], b"");
 }
 
@@ -115,7 +115,7 @@ fn an_entry_hands_out_its_value_mutably() {
     let mut entry = Entry::new(Text::new("k"), Value::from(1i64));
     *entry.value_mut() = Value::from(Text::new("two"));
     assert_eq!(TryAsRef::<str>::try_as_ref(entry.value()), Some("two"));
-    assert_eq!(entry.key(), b"k");
+    assert_eq!(entry.key(), "k");
 }
 
 // --- the standard traits the owned types carry ----------------------------
