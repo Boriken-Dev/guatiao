@@ -28,7 +28,14 @@ export 'src/errors.dart'
         WrongKind;
 export 'src/kinds.dart' show FloorMismatch, kindTable;
 export 'src/library.dart'
-    show LibraryNotFound, MissingSymbol, dllFilename, libraryDirectory;
+    show
+        LibraryNotFound,
+        MissingSymbol,
+        dllFilename,
+        forgetLibraries,
+        libraryDirectory,
+        surfaces,
+        useLibrary;
 export 'src/registry.dart' show Instance, ProviderTable, Registry;
 export 'src/serde.dart' show Format;
 export 'src/value.dart'
