@@ -606,16 +606,17 @@ fn opt_int(k: &Value, key: &str) -> Option<i64> {
     let v = TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(key))?;
     // A bound written outside `i64` is no bound this build can apply, and
     // silently clamping it would enforce a limit nobody declared.
-    TryAsRef::<Number>::try_as_ref(v).map(Number::as_str)?;
+    TryAsRef::<Number>::try_as_ref(v).map(AsRef::<str>::as_ref)?;
     let got = int_or(Some(v), i64::MIN);
     (got != i64::MIN
-        || TryAsRef::<Number>::try_as_ref(v).map(Number::as_str) == Some("-9223372036854775808"))
+        || TryAsRef::<Number>::try_as_ref(v).map(AsRef::<str>::as_ref)
+            == Some("-9223372036854775808"))
     .then_some(got)
 }
 
 fn opt_float(k: &Value, key: &str) -> Option<f64> {
     let v = TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(key))?;
-    TryAsRef::<Number>::try_as_ref(v).map(Number::as_str)?;
+    TryAsRef::<Number>::try_as_ref(v).map(AsRef::<str>::as_ref)?;
     let got = float_or(Some(v), f64::NAN);
     got.is_finite().then_some(got)
 }

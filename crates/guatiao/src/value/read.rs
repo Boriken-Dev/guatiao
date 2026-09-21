@@ -57,7 +57,7 @@ pub fn bool_or(v: Option<&Value>, fallback: bool) -> bool {
 
 /// A number's exact text, or `None` when this is not a number.
 fn number_text(v: Option<&Value>) -> Option<&str> {
-    Some(TryAsRef::<Number>::try_as_ref(v?)?.as_str())
+    TryAsRef::<Number>::try_as_ref(v?).map(AsRef::<str>::as_ref)
 }
 
 /// The number as an `i64`, or `fallback`.

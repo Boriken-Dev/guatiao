@@ -62,7 +62,7 @@ pub fn text_of(value: &Value) -> String {
     match value.tag() {
         Ok(Tag::GUATIAO_BOOL) => crate::value::read::bool_or(Some(value), false).to_string(),
         Ok(Tag::GUATIAO_NUMBER) => TryAsRef::<Number>::try_as_ref(value)
-            .map(Number::as_str)
+            .map(AsRef::<str>::as_ref)
             .unwrap_or("")
             .to_string(),
         Ok(Tag::GUATIAO_STRING) => TryAsRef::<str>::try_as_ref(value).unwrap_or("").to_string(),

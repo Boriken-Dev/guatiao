@@ -131,7 +131,7 @@ fn every_kind_survives_a_round_trip() {
         assert_eq!(root.get("null").unwrap().tag().unwrap(), Tag::GUATIAO_NULL);
         assert_eq!(bool::try_from(root.get("bool").unwrap()).ok(), Some(true));
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(root.get("number").unwrap()).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(root.get("number").unwrap()).map(AsRef::<str>::as_ref),
             Some("1.10"),
             "the exact text, not a reformatted f64"
         );
@@ -159,7 +159,7 @@ fn the_accessors_do_not_coerce() {
     with_alloc(|alloc, _| {
         let n = Value::from(Number::new_in(alloc, "5").unwrap());
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(&n).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(&n).map(AsRef::<str>::as_ref),
             Some("5")
         );
         assert_eq!(
@@ -173,7 +173,7 @@ fn the_accessors_do_not_coerce() {
         let s = Text::new_in(alloc, "5").map(Value::from).unwrap();
         assert_eq!(TryAsRef::<str>::try_as_ref(&s), Some("5"));
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(&s).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(&s).map(AsRef::<str>::as_ref),
             None,
             "a string is not a number"
         );
@@ -193,7 +193,7 @@ fn a_number_keeps_its_exact_text() {
         ] {
             let v = Value::from(Number::new_in(alloc, text).unwrap());
             assert_eq!(
-                TryAsRef::<Number>::try_as_ref(&v).map(Number::as_str),
+                TryAsRef::<Number>::try_as_ref(&v).map(AsRef::<str>::as_ref),
                 Some(text),
                 "verbatim: {text}"
             );
@@ -230,7 +230,7 @@ fn text_outside_the_json_number_grammar_is_refused() {
             .map(Value::from)
             .unwrap();
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(&v).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(&v).map(AsRef::<str>::as_ref),
             Some("-5900")
         );
     });
@@ -437,20 +437,20 @@ fn a_list_appends_removes_and_keeps_order() {
         }
         assert_eq!(l.len(), 10);
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(l.get(3).unwrap()).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(l.get(3).unwrap()).map(AsRef::<str>::as_ref),
             Some("3")
         );
 
         let taken = l.remove(0).unwrap();
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(&taken).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(&taken).map(AsRef::<str>::as_ref),
             Some("0")
         );
         let mut taken = taken;
         unsafe { taken.free() };
 
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(l.first().unwrap()).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(l.first().unwrap()).map(AsRef::<str>::as_ref),
             Some("1")
         );
         assert!(l.discard(8));
@@ -967,7 +967,7 @@ fn the_defaulting_getters_never_truncate_and_never_coerce() {
              would have done"
         );
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(root.get("enormous").unwrap()).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(root.get("enormous").unwrap()).map(AsRef::<str>::as_ref),
             Some("123456789012345678901234567890"),
             "and the exact text is still there for a caller that wants it"
         );

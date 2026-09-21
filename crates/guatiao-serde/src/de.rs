@@ -324,22 +324,22 @@ mod tests {
     fn a_number_keeps_its_spelling_through_a_round_trip() {
         // Exact in, exact out, for everything that fits.
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(&read("5900")).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(&read("5900")).map(AsRef::<str>::as_ref),
             Some("5900")
         );
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(&read("18446744073709551615")).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(&read("18446744073709551615")).map(AsRef::<str>::as_ref),
             Some("18446744073709551615")
         );
 
         // And past that, through the token: exact, spelling included.
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(&read("1.10")).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(&read("1.10")).map(AsRef::<str>::as_ref),
             Some("1.10")
         );
         assert_eq!(
             TryAsRef::<Number>::try_as_ref(&read("123456789012345678901234567890"))
-                .map(Number::as_str),
+                .map(AsRef::<str>::as_ref),
             Some("123456789012345678901234567890")
         );
         // `1e400` comes back `1e+400`: serde_json writes the exponent's
@@ -348,7 +348,7 @@ mod tests {
         // normalise, and this is what it chose.
 
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(&read("1e400")).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(&read("1e400")).map(AsRef::<str>::as_ref),
             Some("1e+400")
         );
 
@@ -421,7 +421,7 @@ mod tests {
             TryAsRef::<Map>::try_as_ref(&v)
                 .and_then(|m| m.get("a"))
                 .and_then(TryAsRef::<Number>::try_as_ref)
-                .map(Number::as_str),
+                .map(AsRef::<str>::as_ref),
             Some("2")
         );
     }

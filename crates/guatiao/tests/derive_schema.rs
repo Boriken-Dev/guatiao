@@ -262,7 +262,7 @@ fn a_declared_default_lands_in_the_document() {
             TryAsRef::<Map>::try_as_ref(port.as_value())
                 .and_then(|m| m.get(guatiao::schema::vocab::DEFAULT))
                 .and_then(TryAsRef::<Number>::try_as_ref)
-                .map(Number::as_str),
+                .map(AsRef::<str>::as_ref),
             Some("5900"),
             "the document carries `default: 5900`, not a description of one"
         );

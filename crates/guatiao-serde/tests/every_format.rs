@@ -46,7 +46,7 @@ fn check(what: &str, v: &Value) {
         TryAsRef::<Map>::try_as_ref(v)
             .and_then(|m| m.get("port"))
             .and_then(TryAsRef::<Number>::try_as_ref)
-            .map(Number::as_str),
+            .map(AsRef::<str>::as_ref),
         Some("5900"),
         "{what}"
     );
@@ -54,7 +54,7 @@ fn check(what: &str, v: &Value) {
         TryAsRef::<Map>::try_as_ref(v)
             .and_then(|m| m.get("ratio"))
             .and_then(TryAsRef::<Number>::try_as_ref)
-            .map(Number::as_str),
+            .map(AsRef::<str>::as_ref),
         Some("1.5"),
         "{what}"
     );
@@ -111,7 +111,7 @@ fn json_keeps_a_numbers_spelling() {
         assert_eq!(doc, text, "written verbatim");
         let back = json::from_str(&doc, Alloc::rust(), Presentation::new()).unwrap();
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(&back).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(&back).map(AsRef::<str>::as_ref),
             Some(text),
             "and read back verbatim"
         );
