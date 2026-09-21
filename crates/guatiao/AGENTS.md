@@ -95,7 +95,7 @@ buffer.push(&[u8]) / push_in(&[u8], alloc)
 
 Number::new(&str) -> Result<Number, ValueError>     // the JSON grammar
 Number::new_in(alloc, &str)            Number::float_in(alloc, f64)
-number.as_str() -> &str                number.as_bytes() -> &[u8]
+&*number -> &str                       // Deref<Target = str>: every str method
 
 Entry::key() -> &[u8]                  // bytes: a key may contain a NUL
 Entry::key_str() -> Option<&str>       Entry::value() -> &Value
