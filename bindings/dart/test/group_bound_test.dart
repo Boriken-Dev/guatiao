@@ -7,8 +7,12 @@
 ///
 /// The callback is started on a fresh OS thread through the platform's own
 /// thread API, so it runs with no isolate of its own, as it would when an
-/// engine calls in. Calling it through its pointer from the Dart thread
-/// would run it in this isolate instead, and prove less.
+/// engine calls in.
+///
+/// It passes on a reader that strides by a top-level `final` too, so it is
+/// not what keeps that out: one callback in a fresh process never reads the
+/// global as 0, and the failure seen elsewhere needed an earlier callback
+/// first. `read_path_test.dart` guards that rule in the source instead.
 library;
 
 import 'dart:ffi';
