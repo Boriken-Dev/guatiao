@@ -66,7 +66,7 @@ fn the_root_exports_the_names_the_header_names() {
     assert_eq!(list.len(), 1);
 
     let view = Str::new("k");
-    assert_eq!(view.len, 1);
+    assert_eq!(view.len(), 1);
 
     assert_eq!(Value::null().tag(), Ok(Tag::GUATIAO_NULL));
     assert_eq!(
@@ -93,12 +93,12 @@ fn the_borrowed_byte_view_has_the_constructors_its_sibling_has() {
 
     static RAW: &[u8] = &[0x00, 0xff];
     let view = Bytes::new(RAW);
-    assert_eq!(view.len, 2);
-    assert!(!view.ptr.is_null());
+    assert_eq!(view.len(), 2);
+    assert!(!view.ptr().is_null());
 
     let empty = Bytes::empty();
-    assert_eq!(empty.len, 0);
-    assert!(empty.ptr.is_null());
+    assert_eq!(empty.len(), 0);
+    assert!(empty.ptr().is_null());
 }
 
 /// An entry hands out its value mutably, so a pair can be changed without

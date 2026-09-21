@@ -40,11 +40,8 @@ fn values() -> Value {
     map.into()
 }
 
-fn key(text: &str) -> Str {
-    Str {
-        ptr: text.as_ptr(),
-        len: text.len(),
-    }
+fn key(text: &str) -> Str<'_> {
+    Str::new(text)
 }
 
 /// An allocator that cannot allocate is `GUATIAO_ERR_ALLOC`, not

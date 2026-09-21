@@ -94,24 +94,6 @@ unsafe fn views<'a>(
     Ok((schema, form))
 }
 
-/// A key's text, or the status saying why not.
-///
-/// # Safety
-///
-/// `key` is a readable view for the call.
-unsafe fn key_text<'a>(key: Str) -> Result<&'a str, Status> {
-    if key.len > 0 && key.ptr.is_null() {
-        return Err(Status::GUATIAO_ERR_NULL);
-    }
-    let bytes = if key.len == 0 {
-        &[][..]
-    } else {
-        // SAFETY: the caller's contract; a zero length never reads.
-        unsafe { std::slice::from_raw_parts(key.ptr, key.len) }
-    };
-    std::str::from_utf8(bytes).map_err(|_| Status::GUATIAO_ERR_BAD_VALUE)
-}
-
 /// Whether `form` fits `schema`.
 ///
 /// `GUATIAO_ERR_BAD_VALUE` when it does not, and `out_error` — which may be
@@ -311,9 +293,9 @@ pub unsafe extern "C" fn guatiao_form_is_visible(
             Err(status) => return status,
         };
         // SAFETY: as above.
-        let key = match unsafe { key_text(key) } {
+        let key = match std::str::from_utf8(key.into()) {
             Ok(k) => k,
-            Err(status) => return status,
+            Err(e) => return e.into(),
         };
         // SAFETY: checked non-null; the caller's contract for the rest.
         let values = unsafe { &*values };

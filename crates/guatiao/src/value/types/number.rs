@@ -11,7 +11,6 @@
 //! number here and there is no `f64` for it.
 
 #![allow(missing_docs)]
-#![forbid(unsafe_code)]
 use std::fmt;
 use std::str::FromStr;
 
@@ -64,6 +63,21 @@ fn float_text(v: f64) -> Result<String, ValueError> {
 }
 
 impl Number {
+    /// The number `ptr` points at, its grammar checked: how a number C
+    /// hands over by pointer is read.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` points at a number whose storage is consistent and outlives
+    /// `'a`. Only the memory is promised: the text is checked.
+    pub unsafe fn from_ptr<'a>(ptr: *const Number) -> Result<&'a Number, ValueError> {
+        // SAFETY: the caller's contract; a `Number` is a `Text` in layout.
+        let digits = unsafe { &*ptr.cast::<Text>() };
+        validate_json_number(digits.bytes()).map_err(|_| ValueError::NotANumber)?;
+        // SAFETY: as above, and the grammar was just checked.
+        Ok(unsafe { &*ptr })
+    }
+
     /// A copy, grown through `alloc`.
     pub fn clone_in(&self, alloc: Alloc) -> Result<Number, ValueError> {
         Ok(Number(self.0.clone_in(alloc)?))
@@ -114,10 +128,17 @@ impl AsRef<[u8]> for Number {
     }
 }
 
-/// By bytes, as its equality is: `1.10` and `1.1` hash apart.
+/// As its `str`, as its equality is: `1.10` and `1.1` hash apart.
 impl std::hash::Hash for Number {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_bytes().hash(state);
+        (**self).hash(state);
+    }
+}
+
+/// A `HashMap<Number, _>` is searched with a `&str`.
+impl std::borrow::Borrow<str> for Number {
+    fn borrow(&self) -> &str {
+        self
     }
 }
 

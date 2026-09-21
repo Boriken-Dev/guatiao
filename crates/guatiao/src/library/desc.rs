@@ -65,16 +65,16 @@ pub const ABI_VERSION: u32 = 1;
 /// `GUATIAO_ERR_GONE` and touches nothing freed.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct HostInfo {
+pub struct HostInfo<'a> {
     /// `sizeof(guatiao_host_info)` as the host compiled it. Always first.
     pub struct_size: u32,
     /// The envelope version the host speaks. See [`ABI_VERSION`].
     pub abi_version: u32,
     /// Who the host is, for a library that registers different providers
     /// for different hosts.
-    pub host_id: Str,
+    pub host_id: Str<'a>,
     /// The host's own version string, uninterpreted.
-    pub host_version: Str,
+    pub host_version: Str<'a>,
     /// The host's allocator, or null. Valid for the life of the process,
     /// like the block it sits in, and it must be: every tree built through
     /// it records this address.
@@ -110,7 +110,7 @@ pub struct HostInfo {
     pub services: *const HostServices,
 }
 
-impl HostInfo {
+impl HostInfo<'_> {
     /// The smallest `struct_size` that can be used at all.
     ///
     /// Frozen at the first field added after v1, and never moved. A floor
@@ -212,9 +212,9 @@ impl HostServices {
 /// So the library states the stride and a reader walks by bytes.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Providers {
+pub struct Providers<'a> {
     /// First descriptor. May be null when `len` is 0.
-    pub ptr: *const ProviderInfo,
+    pub ptr: *const ProviderInfo<'a>,
     /// How many.
     pub len: usize,
     /// `sizeof(guatiao_provider_info)` as the LIBRARY compiled it, which
@@ -237,16 +237,16 @@ pub struct Providers {
 /// size is the same number on both sides of the boundary.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Kinds {
+pub struct Kinds<'a> {
     /// First name. May be null when `len` is 0.
-    pub ptr: *const Str,
+    pub ptr: *const Str<'a>,
     /// How many.
     pub len: usize,
 }
 
-impl Kinds {
+impl<'a> Kinds<'a> {
     /// A borrowed array of names.
-    pub const fn new(kinds: &'static [Str]) -> Kinds {
+    pub const fn new(kinds: &'a [Str<'a>]) -> Kinds<'a> {
         Kinds {
             ptr: kinds.as_ptr(),
             len: kinds.len(),
@@ -254,7 +254,7 @@ impl Kinds {
     }
 
     /// No kinds: a provider that serves no vtable, reached by name alone.
-    pub const fn empty() -> Kinds {
+    pub const fn empty() -> Kinds<'a> {
         Kinds {
             ptr: std::ptr::null(),
             len: 0,
@@ -262,12 +262,12 @@ impl Kinds {
     }
 }
 
-impl Providers {
+impl<'a> Providers<'a> {
     /// A borrowed array, with the stride this build lays it out at.
     ///
     /// The way to write one: a hand-set stride is a number to get wrong
     /// exactly once.
-    pub const fn new(providers: &'static [ProviderInfo]) -> Providers {
+    pub const fn new(providers: &'a [ProviderInfo<'a>]) -> Providers<'a> {
         Providers {
             ptr: providers.as_ptr(),
             len: providers.len(),
@@ -277,7 +277,7 @@ impl Providers {
 
     /// No providers, which is a library that loaded and had nothing for
     /// this host.
-    pub const fn empty() -> Providers {
+    pub const fn empty() -> Providers<'a> {
         Providers {
             ptr: std::ptr::null(),
             len: 0,
@@ -289,14 +289,14 @@ impl Providers {
 /// What a library says about itself, on the way out.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct LibraryInfo {
+pub struct LibraryInfo<'a> {
     /// `sizeof(guatiao_library_info)` as the library compiled it.
     pub struct_size: u32,
     /// The envelope version the library speaks.
     pub abi_version: u32,
     /// A stable identifier for the library itself, for diagnostics and
     /// for refusing to load the same one twice.
-    pub id: Str,
+    pub id: Str<'a>,
     /// Its version, declared **semver**.
     ///
     /// A field a host can name in the key it files providers under
@@ -304,10 +304,10 @@ pub struct LibraryInfo {
     /// loaded at once. This crate compares it as a string and never parses
     /// it — ordering is a host's policy, applied with the semver library
     /// it already has.
-    pub version: Str,
+    pub version: Str<'a>,
     /// Everything it offers. May be empty, which is a library that
     /// loaded and had nothing for this host.
-    pub providers: Providers,
+    pub providers: Providers<'a>,
     /// Anything else this library wants to say, as an ordinary value, or
     /// null. Conventionally a map.
     ///
@@ -350,7 +350,7 @@ pub struct LibraryInfo {
     pub unload: Option<unsafe extern "C" fn() -> Status>,
 }
 
-impl LibraryInfo {
+impl LibraryInfo<'_> {
     /// The smallest usable `struct_size`.
     pub const fn floor() -> usize {
         offset_of!(LibraryInfo, providers) + size_of::<Providers>()
@@ -377,7 +377,7 @@ impl LibraryInfo {
 /// looking at the pointer.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct ProviderInfo {
+pub struct ProviderInfo<'a> {
     /// `sizeof(guatiao_provider_info)` as the library compiled it.
     pub struct_size: u32,
     /// Size of the struct `vtable` points at, as the library compiled it.
@@ -395,7 +395,7 @@ pub struct ProviderInfo {
     /// provider speaks, so a host can ask for everything that speaks one.
     /// What identifies the provider is `id`. Empty is legal and means a
     /// provider that serves no vtable — pure data, reached by name.
-    pub kinds: Kinds,
+    pub kinds: Kinds<'a>,
     /// This provider's own identifier, **unique across every provider a
     /// host loads**.
     ///
@@ -411,10 +411,10 @@ pub struct ProviderInfo {
     ///
     /// What a host files it under is that host's own key template, `%id`
     /// by default.
-    pub id: Str,
+    pub id: Str<'a>,
     /// A name to show a person. May be empty, and a host that shows
     /// nothing to anybody ignores it.
-    pub display_name: Str,
+    pub display_name: Str<'a>,
     /// The schema for this provider's configuration, as an ordinary
     /// value, or null when it takes none.
     ///
@@ -462,7 +462,7 @@ pub struct ProviderInfo {
     /// Declared **semver**. This crate compares it as a string and never
     /// parses it: ordering is a host's policy, applied with the semver
     /// library it already has.
-    pub version: Str,
+    pub version: Str<'a>,
     /// Can this provider actually run **here, right now** — and if not,
     /// why not?
     ///
@@ -511,7 +511,7 @@ pub struct ProviderInfo {
     /// A reader asks [`ProviderView::table_for`](super::raw::ProviderView::table_for):
     /// a table here for the kind first, then `vtable` when `kinds` names
     /// the kind.
-    pub tables: KindTables,
+    pub tables: KindTables<'a>,
     /// Builds an **instance** from a configuration, or null for a provider
     /// that is its one instance.
     ///
@@ -538,21 +538,21 @@ pub struct ProviderInfo {
 /// with a table each.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct KindTable {
+pub struct KindTable<'a> {
     /// `sizeof(guatiao_kind_table)` as the library compiled it. Always
     /// first.
     pub struct_size: u32,
     /// Size of the struct `vtable` points at, as the library compiled it.
     pub vtable_size: u32,
     /// The kind this table serves.
-    pub kind: Str,
+    pub kind: Str<'a>,
     /// The table, whose shape the kind defines.
     pub vtable: *const c_void,
 }
 
-impl KindTable {
+impl<'a> KindTable<'a> {
     /// A table for `kind`, with the size this build lays it out at.
-    pub const fn new(kind: &'static str, vtable: *const c_void, vtable_size: usize) -> KindTable {
+    pub const fn new(kind: &'a str, vtable: *const c_void, vtable_size: usize) -> KindTable<'a> {
         KindTable {
             struct_size: size_of::<KindTable>() as u32,
             vtable_size: vtable_size as u32,
@@ -574,18 +574,18 @@ impl KindTable {
 /// elements are.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct KindTables {
+pub struct KindTables<'a> {
     /// First table. May be null when `len` is 0.
-    pub ptr: *const KindTable,
+    pub ptr: *const KindTable<'a>,
     /// How many.
     pub len: usize,
     /// `sizeof(guatiao_kind_table)` as the LIBRARY compiled it.
     pub stride: usize,
 }
 
-impl KindTables {
+impl<'a> KindTables<'a> {
     /// A borrowed array, with the stride this build lays it out at.
-    pub const fn new(tables: &'static [KindTable]) -> KindTables {
+    pub const fn new(tables: &'a [KindTable<'a>]) -> KindTables<'a> {
         KindTables {
             ptr: tables.as_ptr(),
             len: tables.len(),
@@ -594,7 +594,7 @@ impl KindTables {
     }
 
     /// No per-kind tables: `vtable` serves every kind.
-    pub const fn empty() -> KindTables {
+    pub const fn empty() -> KindTables<'a> {
         KindTables {
             ptr: std::ptr::null(),
             len: 0,
@@ -603,7 +603,7 @@ impl KindTables {
     }
 }
 
-impl ProviderInfo {
+impl ProviderInfo<'_> {
     /// The smallest usable `struct_size`.
     pub const fn floor() -> usize {
         offset_of!(ProviderInfo, ctx) + size_of::<*mut c_void>()

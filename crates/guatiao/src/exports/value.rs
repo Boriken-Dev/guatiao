@@ -18,25 +18,11 @@
 use crate::value::convert::{TryAsMut, TryAsRef};
 use std::ptr;
 
-use super::{as_str, entry, out};
+use super::{entry, out};
 
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::status::Status;
 use crate::value::types::{Buffer, Bytes, List, Map, Number, Str, Tag, Text, Value};
-
-/// # Safety
-///
-/// `b` is a view whose `len` bytes are readable for the call.
-unsafe fn as_bytes<'a>(b: Bytes) -> Result<&'a [u8], Status> {
-    if b.len == 0 {
-        return Ok(&[]);
-    }
-    if b.ptr.is_null() {
-        return Err(Status::GUATIAO_ERR_NULL);
-    }
-    // SAFETY: as above.
-    Ok(unsafe { std::slice::from_raw_parts(b.ptr, b.len) })
-}
 
 // --- lifecycle --------------------------------------------------------
 
@@ -209,7 +195,7 @@ pub unsafe extern "C" fn guatiao_value_string(
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: the caller guarantees the view's bytes.
-        let t = match unsafe { as_str(text) } { Ok(t) => t, Err(s) => return s };
+        let t = match std::str::from_utf8(text.into()) { Ok(t) => t, Err(e) => return e.into() };
         match Text::new_in(a, t).map(Value::from) {
             // SAFETY: checked non-null and writable by contract.
             Ok(v) => { unsafe { ptr::write(out, v) }; Status::GUATIAO_OK }
@@ -241,7 +227,7 @@ pub unsafe extern "C" fn guatiao_value_number(
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: the caller guarantees the view's bytes.
-        let t = match unsafe { as_str(text) } { Ok(t) => t, Err(s) => return s };
+        let t = match std::str::from_utf8(text.into()) { Ok(t) => t, Err(e) => return e.into() };
         match Number::new_in(a, t).map(Value::from) {
             // SAFETY: checked non-null and writable by contract.
             Ok(v) => { unsafe { ptr::write(out, v) }; Status::GUATIAO_OK }
@@ -270,7 +256,7 @@ pub unsafe extern "C" fn guatiao_value_bytes(
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: the caller guarantees the view's bytes.
-        let b = match unsafe { as_bytes(bytes) } { Ok(b) => b, Err(s) => return s };
+        let b = <&[u8]>::from(bytes);
         match Buffer::new_in(a, b).map(Value::from) {
             // SAFETY: checked non-null and writable by contract.
             Ok(v) => { unsafe { ptr::write(out, v) }; Status::GUATIAO_OK }
@@ -316,7 +302,7 @@ pub unsafe extern "C" fn guatiao_map_set(
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: the caller guarantees the key's bytes.
-        let k = match unsafe { as_str(key) } { Ok(k) => k, Err(s) => return s };
+        let k = match std::str::from_utf8(key.into()) { Ok(k) => k, Err(e) => return e.into() };
         // SAFETY: checked non-null and well-formed by contract; the
         // dereference is the only unsafety left.
         match unsafe { TryAsMut::<Map>::try_as_mut(&mut *node) } {
@@ -341,7 +327,7 @@ pub unsafe extern "C" fn guatiao_map_set(
 pub unsafe extern "C" fn guatiao_map_discard(node: *mut Value, key: Str) -> Status {
     entry!(node => {
         // SAFETY: the caller guarantees the key's bytes.
-        let k = match unsafe { as_str(key) } { Ok(k) => k, Err(s) => return s };
+        let k = match std::str::from_utf8(key.into()) { Ok(k) => k, Err(e) => return e.into() };
         // SAFETY: checked non-null and well-formed by contract; the
         // dereference is the only unsafety left.
         if unsafe { TryAsMut::<Map>::try_as_mut(&mut *node).is_some_and(|m| m.discard(k)) } {
@@ -541,7 +527,7 @@ pub unsafe extern "C" fn guatiao_string_push(
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: the caller guarantees the view's bytes.
-        let t = match unsafe { as_str(text) } { Ok(t) => t, Err(s) => return s };
+        let t = match std::str::from_utf8(text.into()) { Ok(t) => t, Err(e) => return e.into() };
         // A STRING only: `TryAsMut<Text>` refuses a NUMBER, whose digits
         // share the arm and not the type.
         //
@@ -576,7 +562,7 @@ pub unsafe extern "C" fn guatiao_buffer_push(
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: the caller guarantees the view's bytes.
-        let b = match unsafe { as_bytes(bytes) } { Ok(b) => b, Err(s) => return s };
+        let b = <&[u8]>::from(bytes);
         // SAFETY: checked non-null and well-formed by contract.
         match unsafe { TryAsMut::<Buffer>::try_as_mut(&mut *node) } {
             Some(buffer) => match buffer.push_in(b, a) {

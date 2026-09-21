@@ -135,19 +135,19 @@ const fn put(out: &mut [u8], at: usize, bytes: &[u8]) -> usize {
 /// Returning null means **"nothing for this host"**, which is an answer
 /// rather than a failure: a library that supports one host and is loaded
 /// by another says so this way, and the loader reports it as skipped.
-pub type EntryFn = unsafe extern "C" fn(*const HostInfo) -> *const LibraryInfo;
+pub type EntryFn = unsafe extern "C" fn(*const HostInfo<'static>) -> *const LibraryInfo<'static>;
 
 /// Writes a library's entry point.
 ///
 /// Give it a function taking a [`Host`] and answering
-/// `Option<&'static LibraryInfo>`; it emits the `extern "C"` symbol a
+/// `Option<&'static LibraryInfo<'static>>`; it emits the `extern "C"` symbol a
 /// loader looks for, catches a panic rather than letting one cross the
 /// boundary, and answers null for "nothing for this host". The `Host` is
 /// `Copy + Send + Sync + 'static`, so a library keeps it in a `OnceLock`
 /// of its own and asks the host for a provider from any later call.
 ///
 /// ```ignore
-/// fn describe(host: guatiao::library::Host) -> Option<&'static guatiao::library::LibraryInfo> {
+/// fn describe(host: guatiao::library::Host) -> Option<&'static guatiao::library::LibraryInfo<'static>> {
 ///     // build a descriptor, keep it and `host` in a `OnceLock` of your own
 /// }
 /// guatiao::guatiao_library!(describe);
@@ -173,8 +173,8 @@ macro_rules! guatiao_library {
         /// well-formed host descriptor.
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn guatiao_library_entry(
-            host: *const $crate::library::HostInfo,
-        ) -> *const $crate::library::LibraryInfo {
+            host: *const $crate::library::HostInfo<'static>,
+        ) -> *const $crate::library::LibraryInfo<'static> {
             // SAFETY: the loader's side of the contract is that `host` is
             // null or points at a host descriptor declaring its own size
             // that stays valid for the life of the process.
@@ -396,7 +396,7 @@ macro_rules! __guatiao_describe {
         $(#[$attr])*
         $vis fn $name(
             host: $crate::library::Host,
-        ) -> ::core::option::Option<&'static $crate::library::LibraryInfo> {
+        ) -> ::core::option::Option<&'static $crate::library::LibraryInfo<'static>> {
             static REGISTERED: ::std::sync::OnceLock<::core::option::Option<$crate::library::kind::LibraryParts>> = ::std::sync::OnceLock::new();
             REGISTERED
                 .get_or_init(|| {
@@ -430,7 +430,7 @@ macro_rules! __guatiao_describe {
 /// as not having it.
 #[derive(Debug, Clone, Copy)]
 pub struct Host {
-    raw: *const HostInfo,
+    raw: *const HostInfo<'static>,
 }
 
 // SAFETY: the pointee is never written after the host hands it over, and
@@ -448,7 +448,7 @@ impl Host {
     ///
     /// `raw` is null, or points at `raw->struct_size` readable, aligned
     /// bytes that stay valid and unchanged for the life of the process.
-    pub unsafe fn from_raw(raw: *const HostInfo) -> Option<Host> {
+    pub unsafe fn from_raw(raw: *const HostInfo<'static>) -> Option<Host> {
         if raw.is_null() {
             return None;
         }
@@ -461,7 +461,7 @@ impl Host {
     }
 
     /// The pointer as it was handed over, for a caller that speaks C.
-    pub fn as_raw(&self) -> *const HostInfo {
+    pub fn as_raw(&self) -> *const HostInfo<'static> {
         self.raw
     }
 
@@ -479,13 +479,17 @@ impl Host {
     /// Who the host is. Empty when it said nothing readable.
     pub fn id(&self) -> &'static str {
         // SAFETY: within the floor; the text lives in the host's block.
-        unsafe { str_of(std::ptr::addr_of!((*self.raw).host_id).read()) }.unwrap_or("")
+        unsafe { std::str::from_utf8(std::ptr::addr_of!((*self.raw).host_id).read().into()).ok() }
+            .unwrap_or("")
     }
 
     /// The host's own version string, uninterpreted.
     pub fn version(&self) -> &'static str {
         // SAFETY: as `id`.
-        unsafe { str_of(std::ptr::addr_of!((*self.raw).host_version).read()) }.unwrap_or("")
+        unsafe {
+            std::str::from_utf8(std::ptr::addr_of!((*self.raw).host_version).read().into()).ok()
+        }
+        .unwrap_or("")
     }
 
     /// The host's allocator, or `None` when it offers none or predates
@@ -513,7 +517,7 @@ impl Host {
 
     /// A copy of the descriptor as it reads today, with absent fields
     /// nulled. For a caller that wants a snapshot rather than a handle.
-    pub fn snapshot(&self) -> HostInfo {
+    pub fn snapshot(&self) -> HostInfo<'static> {
         // SAFETY: `from_raw` established the contract `read_host` needs.
         unsafe { read_host(self.raw) }.expect("a Host was built from a readable descriptor")
     }
@@ -545,7 +549,7 @@ impl Host {
     /// `Ok(None)` when nothing answers to the key. `Err` when the host
     /// offers no services (`GUATIAO_ERR_NULL`) or its registry is gone
     /// (`GUATIAO_ERR_GONE`).
-    pub fn get(&self, key: &str) -> Result<Option<&'static ProviderInfo>, Status> {
+    pub fn get(&self, key: &str) -> Result<Option<&'static ProviderInfo<'static>>, Status> {
         let table = self.services().ok_or(Status::GUATIAO_ERR_NULL)?;
         let get = table.get.ok_or(Status::GUATIAO_ERR_NULL)?;
         let mut out: *const ProviderInfo = std::ptr::null();
@@ -567,7 +571,7 @@ impl Host {
     /// each and chooses.
     ///
     /// `Err` when the host offers no services or its registry is gone.
-    pub fn list(&self, kind: &str) -> Result<Vec<&'static ProviderInfo>, Status> {
+    pub fn list(&self, kind: &str) -> Result<Vec<&'static ProviderInfo<'static>>, Status> {
         let table = self.services().ok_or(Status::GUATIAO_ERR_NULL)?;
         let list = table.list.ok_or(Status::GUATIAO_ERR_NULL)?;
         let kind = Str::new(kind);
@@ -617,7 +621,7 @@ impl Host {
 #[cfg(feature = "load")]
 #[derive(Debug)]
 pub(crate) struct HostBlock {
-    info: HostInfo,
+    info: HostInfo<'static>,
     services: HostServices,
     #[allow(dead_code)]
     id: Box<str>,
@@ -642,7 +646,7 @@ pub(crate) struct Snapshot {
 #[derive(Debug)]
 pub(crate) struct SnapshotEntry {
     pub(crate) kinds: Vec<String>,
-    pub(crate) raw: *const ProviderInfo,
+    pub(crate) raw: *const ProviderInfo<'static>,
 }
 
 // SAFETY: `raw` addresses a descriptor inside a library image the
@@ -697,6 +701,19 @@ impl Shared {
 
 /// Leaks the block a registry hands its libraries.
 ///
+/// A view of text a box owns, for a descriptor kept in the same struct as
+/// that box. `'static` in name only: the struct hands its descriptor out
+/// for no longer than itself.
+///
+/// # Safety
+///
+/// `text` is heap storage kept, unmoved and unchanged, for as long as the
+/// view is read.
+pub(crate) unsafe fn view_of_owned(text: &str) -> Str<'static> {
+    // SAFETY: the caller's contract, and a `str` is UTF-8.
+    unsafe { Str::from_raw_parts(text.as_ptr(), text.len()) }
+}
+
 /// The descriptor's text points into the block's own boxes, and the
 /// services' `ctx` is the block itself, so nothing here borrows from the
 /// registry.
@@ -713,9 +730,10 @@ pub(crate) fn leak_host_block(
         info: HostInfo {
             struct_size: size_of::<HostInfo>() as u32,
             abi_version: super::desc::ABI_VERSION,
-            // The boxes' heap storage does not move when the block does.
-            host_id: Str::new(&id),
-            host_version: Str::new(&version),
+            // SAFETY: the boxes' heap storage does not move when the
+            // block does, and the block is leaked with them.
+            host_id: unsafe { view_of_owned(&id) },
+            host_version: unsafe { view_of_owned(&version) },
             alloc: alloc.map_or(std::ptr::null(), |a| a.as_raw()),
             meta: MaybeNull::null(),
             services: std::ptr::null(),
@@ -776,7 +794,7 @@ unsafe extern "C" fn services_get(
             return Status::GUATIAO_ERR_GONE;
         };
         // SAFETY: the caller's contract.
-        let Ok(key) = (unsafe { crate::exports::as_str(key) }) else {
+        let Ok(key) = std::str::from_utf8(key.into()) else {
             return Status::GUATIAO_ERR_BAD_VALUE;
         };
         let snapshot = shared.read();
@@ -817,7 +835,7 @@ unsafe extern "C" fn services_list(
             return Status::GUATIAO_ERR_GONE;
         };
         // SAFETY: the caller's contract.
-        let Ok(kind) = (unsafe { crate::exports::as_str(kind) }) else {
+        let Ok(kind) = std::str::from_utf8(kind.into()) else {
             return Status::GUATIAO_ERR_BAD_VALUE;
         };
         let snapshot = shared.read();
@@ -911,7 +929,9 @@ pub unsafe fn read_host(raw: *const HostInfo) -> Option<HostInfo> {
 ///
 /// A panic becomes null, which a loader reports as "declined" rather than
 /// as a crash.
-pub fn answer(describe: impl FnOnce() -> Option<&'static LibraryInfo>) -> *const LibraryInfo {
+pub fn answer(
+    describe: impl FnOnce() -> Option<&'static LibraryInfo<'static>>,
+) -> *const LibraryInfo<'static> {
     match catch_unwind(AssertUnwindSafe(describe)) {
         Ok(Some(desc)) => desc as *const LibraryInfo,
         Ok(None) => std::ptr::null(),
@@ -922,24 +942,6 @@ pub fn answer(describe: impl FnOnce() -> Option<&'static LibraryInfo>) -> *const
             std::ptr::null()
         }
     }
-}
-
-/// A borrowed `&str` from a view, or `None` when it is not text.
-///
-/// # Safety
-///
-/// `s` is a view whose `len` bytes are readable and stay so.
-pub(crate) unsafe fn str_of(s: Str) -> Option<&'static str> {
-    if s.len == 0 {
-        return Some("");
-    }
-    if s.ptr.is_null() {
-        return None;
-    }
-    // SAFETY: the caller guarantees `len` readable bytes at `ptr`, and the
-    // library they are in is mapped for the call.
-    let bytes = unsafe { std::slice::from_raw_parts(s.ptr, s.len) };
-    std::str::from_utf8(bytes).ok()
 }
 
 /// One provider, read out of a descriptor once so nothing downstream has
@@ -978,7 +980,7 @@ pub struct ProviderView {
     /// The descriptor this was read from, in the library's image, valid
     /// until that library is unloaded. What a host's services hand a
     /// library that asks.
-    pub raw: *const ProviderInfo,
+    pub raw: *const ProviderInfo<'static>,
     /// One table per kind, as `(kind, vtable, vtable_size)`, for a
     /// provider serving several kinds with a table each. Empty when
     /// `vtable` serves them all. See [`ProviderInfo::tables`].
@@ -1045,7 +1047,7 @@ impl ProviderView {
         }
         // SAFETY: the contract on the field is that a written reason
         // outlives every reader.
-        Err(unsafe { str_of(reason) }.unwrap_or(""))
+        Err(std::str::from_utf8(reason.into()).ok().unwrap_or(""))
     }
 }
 
@@ -1122,7 +1124,9 @@ pub(crate) enum Rejected {
 /// `raw` came from a library's entry point and points at a descriptor
 /// that stays valid for the life of the process, which is what never
 /// unloading the library guarantees.
-pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Result<LibraryView, Rejected> {
+pub(crate) unsafe fn read_library(
+    raw: *const LibraryInfo<'static>,
+) -> Result<LibraryView, Rejected> {
     if raw.is_null() {
         return Err(Rejected::Malformed);
     }
@@ -1141,10 +1145,12 @@ pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Result<LibraryView
     // SAFETY: each field lies within `declared` bytes.
     let (id, version, providers) = unsafe {
         (
-            str_of(std::ptr::addr_of!((*raw).id).read())
+            std::str::from_utf8(std::ptr::addr_of!((*raw).id).read().into())
+                .ok()
                 .ok_or(Rejected::Malformed)?
                 .to_string(),
-            str_of(std::ptr::addr_of!((*raw).version).read())
+            std::str::from_utf8(std::ptr::addr_of!((*raw).version).read().into())
+                .ok()
                 .ok_or(Rejected::Malformed)?
                 .to_string(),
             std::ptr::addr_of!((*raw).providers).read(),
@@ -1200,7 +1206,7 @@ pub(crate) unsafe fn read_library(raw: *const LibraryInfo) -> Result<LibraryView
     })
 }
 
-impl ProviderInfo {
+impl ProviderInfo<'static> {
     /// Reads this descriptor out, honouring its declared size.
     ///
     /// For a descriptor a host's services handed over: it lives as long as
@@ -1219,7 +1225,7 @@ impl ProviderInfo {
 /// # Safety
 ///
 /// `raw` points at a provider descriptor declaring its own size.
-unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<ProviderView> {
+unsafe fn read_provider(raw: *const ProviderInfo<'static>, limit: usize) -> Option<ProviderView> {
     // SAFETY: the caller guarantees the leading word is readable.
     let declared = unsafe { std::ptr::addr_of!((*raw).struct_size).read() } as usize;
     // Above the floor, and not past its neighbour: an element claiming
@@ -1240,13 +1246,19 @@ unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<Provid
         let mut names = Vec::with_capacity(kinds.len);
         for i in 0..kinds.len {
             // SAFETY: the library declared `len` names at `ptr`.
-            names.push(str_of(kinds.ptr.add(i).read())?.to_string());
+            names.push(<&str>::from(Str::from_ptr(kinds.ptr.add(i)).ok()?).to_string());
         }
 
         Some(ProviderView {
             kinds: names,
-            id: str_of(std::ptr::addr_of!((*raw).id).read())?.to_string(),
-            display_name: str_of(std::ptr::addr_of!((*raw).display_name).read())?.to_string(),
+            id: std::str::from_utf8(std::ptr::addr_of!((*raw).id).read().into())
+                .ok()?
+                .to_string(),
+            display_name: std::str::from_utf8(
+                std::ptr::addr_of!((*raw).display_name).read().into(),
+            )
+            .ok()?
+            .to_string(),
             // Copied out of the image, so the schema outlives the library
             // it was read from.
             config: config
@@ -1282,7 +1294,8 @@ unsafe fn read_provider(raw: *const ProviderInfo, limit: usize) -> Option<Provid
                 // different statement from a descriptor that predates the
                 // field — and both land on `None` deliberately, because
                 // both mean the same thing to a reader.
-                str_of(std::ptr::addr_of!((*raw).version).read())
+                std::str::from_utf8(std::ptr::addr_of!((*raw).version).read().into())
+                    .ok()
                     .filter(|v| !v.is_empty())
                     .map(str::to_string)
             } else {
@@ -1343,7 +1356,9 @@ unsafe fn read_kind_tables(
         // SAFETY: each field lies within `declared` bytes.
         let (kind, vtable, size) = unsafe {
             (
-                str_of(std::ptr::addr_of!((*entry).kind).read())?.to_string(),
+                std::str::from_utf8(std::ptr::addr_of!((*entry).kind).read().into())
+                    .ok()?
+                    .to_string(),
                 std::ptr::addr_of!((*entry).vtable).read(),
                 std::ptr::addr_of!((*entry).vtable_size).read() as usize,
             )
@@ -1648,7 +1663,7 @@ mod tests {
         (buf, ptr)
     }
 
-    fn a_host(size: usize) -> HostInfo {
+    fn a_host(size: usize) -> HostInfo<'static> {
         HostInfo {
             struct_size: size as u32,
             abi_version: crate::library::ABI_VERSION,
@@ -1688,7 +1703,7 @@ mod tests {
         let read = unsafe { read_host(ptr) }.expect("a floor-sized host is usable");
 
         assert_eq!(read.struct_size as usize, HostInfo::floor());
-        assert_eq!(read.host_id.len, "test-host".len());
+        assert_eq!(read.host_id.len(), "test-host".len());
         assert!(
             read.alloc.is_null(),
             "the allocator sits past the declared size, so it is absent — \
@@ -1750,7 +1765,7 @@ mod tests {
         );
     }
 
-    fn a_library(size: usize) -> LibraryInfo {
+    fn a_library(size: usize) -> LibraryInfo<'static> {
         LibraryInfo {
             struct_size: size as u32,
             abi_version: crate::library::ABI_VERSION,
@@ -1771,10 +1786,14 @@ mod tests {
         use crate::library::{Registry, Skipped};
         use std::path::{Path, PathBuf};
 
-        unsafe extern "C" fn describing(_host: *const HostInfo) -> *const LibraryInfo {
+        unsafe extern "C" fn describing(
+            _host: *const HostInfo<'static>,
+        ) -> *const LibraryInfo<'static> {
             Box::leak(Box::new(a_library(size_of::<LibraryInfo>())))
         }
-        unsafe extern "C" fn declining(_host: *const HostInfo) -> *const LibraryInfo {
+        unsafe extern "C" fn declining(
+            _host: *const HostInfo<'static>,
+        ) -> *const LibraryInfo<'static> {
             std::ptr::null()
         }
 
@@ -1938,13 +1957,13 @@ mod tests {
 
     /// A `Str` array cannot be a `static` without saying why: it holds a
     /// raw pointer. These address string literals in this image.
-    struct Names([Str; 1]);
+    struct Names([Str<'static>; 1]);
     // SAFETY: a constant that is never written, whose pointer addresses a
     // string literal in this binary.
     unsafe impl Sync for Names {}
     static KINDS: Names = Names([Str::new("greeter")]);
 
-    fn a_provider(size: usize, vtable_size: u32) -> ProviderInfo {
+    fn a_provider(size: usize, vtable_size: u32) -> ProviderInfo<'static> {
         ProviderInfo {
             struct_size: size as u32,
             vtable_size,
@@ -2000,7 +2019,7 @@ mod tests {
     fn a_provider_with_a_table_per_kind_hands_each_back_by_kind() {
         use super::super::desc::KindTables;
 
-        struct Tables([KindTable; 2]);
+        struct Tables([KindTable<'static>; 2]);
         // SAFETY: a constant never written; the pointers are sentinels
         // that are never dereferenced.
         unsafe impl Sync for Tables {}

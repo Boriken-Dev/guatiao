@@ -115,7 +115,49 @@ the value is consumed.
 **`guatiao::Bytes` is the conversion marker**, not the borrowed view: it
 is the field type that says "cross as the bytes kind". The borrowed view
 of the same name stays at `guatiao::value::types::Bytes`, with
-`Bytes::new(&'static [u8])` and `Bytes::empty()` mirroring `Str`.
+`Bytes::new(&[u8])` and `Bytes::empty()` mirroring `Str`.
+
+**The views borrow**: `Str<'a>`, `Bytes<'a>`, `Values<'a>`,
+`Entries<'a>` and `BytesMut<'a>` carry the lifetime of what they view, as
+a zero-sized marker C never sees. Their fields are private; read them
+with `ptr()`, `len()` and `is_empty()`.
+
+```rust
+Str::new(&'a str) -> Str<'a>            Bytes::new(&'a [u8]) -> Bytes<'a>
+unsafe Str::from_raw_parts(ptr, len) -> Str<'a>          // trusts, as String::from_raw_parts
+<&str>::from(view)                      <&[u8]>::from(bytes)   // never fail
+<&[u8]>::from(view)                     // a view's bytes, claiming nothing
+```
+
+The types whose content is checked (`Str`, `Text`, `Number`, `Map`) are
+made the way std makes `String`: a checked door, and `from_raw_parts`
+that trusts.
+
+```rust
+Str::new(&str)  /  std::str::from_utf8(bytes)?.into()   // Str or Text
+unsafe Text::from_raw_parts(..) / Map::from_raw_parts(..) // trusts
+unsafe Str::from_ptr(*const Str<'a>) -> Result<Str<'a>, ValueError>      // UTF-8
+unsafe Text::from_ptr(*const Text) -> Result<&'a Text, ValueError>      // UTF-8
+unsafe Number::from_ptr(*const Number) -> Result<&'a Number, ValueError> // grammar
+unsafe Map::from_ptr(*const Map) -> Result<&'a Map, ValueError>          // keys
+```
+
+`from_ptr` is what reads something C points at, as `CStr::from_ptr`
+does: the caller promises the memory, and the content is checked. A
+`Value` is read through its doors (`TryAsRef`, …), which check the same.
+
+A `Str` is UTF-8 from the moment it is made: `new` takes a `str`,
+`str::from_utf8` checks bytes on the way to one, and the caller of
+`from_raw_parts` promises, as with `String`. A `Str` C passes into an export or a shim was made by C, so the
+export makes it again from its bytes, `str::from_utf8(view.into())`; text
+that is not UTF-8 is `GUATIAO_ERR_BAD_VALUE`. A `*const Str` is read with
+`Str::from_ptr`, `unsafe` as `CStr::from_ptr` is, since only a raw read
+can follow a pointer; the caller promises the memory and the text is
+checked. Null is an empty view. A
+null pointer views nothing. `BytesMut` is neither `Clone` nor `Copy`,
+since it converts to a `&mut [u8]`. Descriptors carry the lifetime of
+their views (`LibraryInfo<'a>`, `ProviderInfo<'a>`, …); one a library
+exports, or a host's services hand over, is `'static`.
 
 **Collecting into a container** is the standard trait, as for `Vec` and
 `HashMap`: `["a", "b"].into_iter().collect::<List>()`, and
@@ -200,18 +242,19 @@ an `Allocator` may be called from any thread.
 | type | as | so |
 | --- | --- | --- |
 | `List` | `Vec<Value>` | `Deref`/`DerefMut<Target = [Value]>` (`len`, `get`, `iter`, `list[0]`, `sort_by`, `swap` are the slice's), `AsRef`/`AsMut<[Value]>`, owned and `&mut` `IntoIterator`, `FromIterator`, `Extend` |
-| `Buffer` | `Vec<u8>` | `Deref`/`DerefMut<Target = [u8]>`, `AsRef`/`AsMut<[u8]>`, `Hash`, `io::Write`, `From<&[u8]>`/`From<Vec<u8>>`, `Into<Vec<u8>>` |
+| `Buffer` | `Vec<u8>` | `Deref`/`DerefMut<Target = [u8]>`, `AsRef`/`AsMut<[u8]>`, `Borrow<[u8]>`, `Hash`, `io::Write`, `From<&[u8]>`/`From<Vec<u8>>`, `Into<Vec<u8>>` |
 | `Map` | `HashMap`, ordered | `Index<&str>`, owned and `&mut` `IntoIterator`, `FromIterator<(K, V)>`, `Extend` |
-| `Text` | `String` | `Deref<Target = str>`, `AsRef<str>`, `AsRef<[u8]>`, `Hash`, `Display`, `fmt::Write`, `From<&str>`/`From<String>`, `Into<String>` |
-| `Str`, `Bytes` (views) | `&str`, `&[u8]` | `From<&str>`, `From<&'static [u8]>`; no way back, since a view carries no lifetime |
-| `Number` | its text | `Deref<Target = str>`, `AsRef<str>`, `AsRef<[u8]>`, `Hash`, `Display`, `FromStr` |
+| `Text` | `String` | `Deref`/`DerefMut<Target = str>`, `AsRef`/`AsMut<str>`, `AsRef<[u8]>`, `Borrow<str>`, `Hash`, `Display`, `fmt::Write`, `From<&str>`/`From<String>`, `Into<String>` |
+| `Str<'a>`, `Bytes<'a>` (views) | `&'a str`, `&'a [u8]` | `From<&'a str>`/`From<&'a [u8]>`, and back with `From` |
+| `Number` | its text | `Deref<Target = str>`, `AsRef<str>`, `AsRef<[u8]>`, `Borrow<str>`, `Hash`, `Display`, `FromStr` |
 
 A slice cannot change its length, so `DerefMut` leaves what a container
 owns untouched. **`Map` has no `IndexMut` and no `Deref`**: `IndexMut`
 could only hand back a slot that exists, so `map["new"] = v` would panic
-rather than insert (`set` inserts), and a map is not a slice. `Text`
-has no `DerefMut`, as `String` has none: `push_str` and `fmt::Write`
-change it. `Hash` follows equality, so `1.10` and `1.1` are two keys.
+rather than insert (`set` inserts), and a map is not a slice. `Text`'s
+`DerefMut` is `String`'s: a `&mut str` stays UTF-8. `Hash` follows
+equality, which is what `Borrow` needs: a `HashMap<Text, _>` is searched
+with a `&str`, and `1.10` and `1.1` are two keys.
 
 **A `Text` is always UTF-8 and a `Number` always a JSON number**, which
 is why each is a `str`. Both are checked once, when they are made: a
@@ -562,7 +605,7 @@ A library exports **exactly one symbol**. Everything else it offers is
 reached through the descriptor it returns.
 
 ```rust
-fn describe(host: &HostInfo) -> Option<&'static LibraryInfo> { ... }
+fn describe(host: &HostInfo) -> Option<&'static LibraryInfo<'static>> { ... }
 guatiao::guatiao_library!(describe);   // emits `guatiao_library_entry`
 ```
 
@@ -732,12 +775,12 @@ pointer to a block the registry leaks on first use and never frees. Keep
 it in a `OnceLock` of your own.
 
 ```rust
-fn describe(host: Host) -> Option<&'static LibraryInfo> { .. }
+fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> { .. }
 host.id() / host.version() / host.abi_version()
 host.alloc() -> Option<Alloc>                // the host's, or None
 host.meta() -> Option<&'static Map>
-host.get(key) -> Result<Option<&'static ProviderInfo>, Status>
-host.list(kind) -> Result<Vec<&'static ProviderInfo>, Status>  // "" lists all
+host.get(key) -> Result<Option<&'static ProviderInfo<'static>>, Status>
+host.list(kind) -> Result<Vec<&'static ProviderInfo<'static>>, Status>  // "" lists all
 provider_info.view() -> Option<ProviderView>  // then .vtable_as::<T>(), .id, .ctx
 host.snapshot() -> HostInfo                   // a copy, absent fields nulled
 ```
@@ -1311,8 +1354,9 @@ An implementer must guarantee, and `struct_size` cannot express:
   buffer another language owns is `unsafe fn from_raw_parts` on each
   container and on `Value` (with `Payload::text/number/bytes/list/map/bool`),
   and `into_raw_parts` is its safe inverse. The borrowed views (`Str`,
-  `Bytes`, `Values`, `Entries`) keep public fields: they own nothing. The
-  C header is unchanged — cbindgen renders private fields.
+  `Bytes`, `Values`, `Entries`, `BytesMut`) are private too, and carry a
+  lifetime, so safe code cannot point one at freed memory. The C header
+  is unchanged — cbindgen renders private fields and drops the marker.
 - **`try_into` on a value needs `TryFrom`, not a bespoke trait.** A trait
   method named `try_into` is ambiguous against std's blanket impl at
   every call site: it compiles inside the crate and fails in a doctest.

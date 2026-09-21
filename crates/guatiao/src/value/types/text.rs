@@ -6,6 +6,7 @@
 
 #![allow(missing_docs)]
 
+use std::marker::PhantomData;
 use std::mem::ManuallyDrop;
 
 use crate::value::alloc::{Alloc, Allocator};
@@ -14,36 +15,148 @@ use crate::value::raw::{overlaps, release_buffer, reserve};
 
 use super::{Payload, Tag, Value, or_abort};
 
-/// Borrowed UTF-8 text: a pointer and a length, no NUL terminator.
+/// Borrowed UTF-8 text: a pointer and a length, no NUL terminator. Text
+/// that is not UTF-8 is refused where it crosses into Rust.
 ///
 /// **Check `len` before `ptr`**: an empty view may carry a dangling or
 /// null pointer.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Str {
+pub struct Str<'a> {
     /// First byte. May be null or dangling when `len` is 0.
-    pub ptr: *const u8,
+    ptr: *const u8,
     /// Length in bytes.
-    pub len: usize,
+    len: usize,
+    /// What the view borrows, for the compiler; nothing in C.
+    _borrows: PhantomData<&'a str>,
 }
 
-impl Str {
-    /// A view of text this program already holds: whatever owns the text
-    /// must outlive the view, which is free for a literal and is the usual
-    /// case in a library descriptor.
-    pub const fn new(text: &str) -> Str {
+impl<'a> Str<'a> {
+    /// A view of text this program holds, for as long as it holds it.
+    ///
+    /// It borrows what it views, so it cannot outlive it:
+    ///
+    /// ```compile_fail
+    /// let view = {
+    ///     let owned = String::from("host");
+    ///     guatiao::Str::new(&owned)
+    /// };
+    /// assert_eq!(view.len(), 4);
+    /// ```
+    pub const fn new(text: &'a str) -> Str<'a> {
         Str {
             ptr: text.as_ptr(),
             len: text.len(),
+            _borrows: PhantomData,
         }
     }
 
     /// An empty view.
-    pub const fn empty() -> Str {
+    pub const fn empty() -> Str<'a> {
         Str {
             ptr: std::ptr::null(),
             len: 0,
+            _borrows: PhantomData,
         }
+    }
+
+    /// The view `ptr` points at, its text checked: how a view C hands over
+    /// by pointer is read, as `CStr::from_ptr` reads a C string. Null is
+    /// an empty view.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` is null, or points at a view whose bytes stay readable for
+    /// `'a`. Only the memory is promised: the text is checked.
+    ///
+    /// ```
+    /// # use guatiao::{Str, ValueError};
+    /// let from_c = Str::new("host");
+    /// // SAFETY: a live view, over a literal.
+    /// let view = unsafe { Str::from_ptr(&from_c) }?;
+    /// assert_eq!(<&str>::from(view), "host");
+    /// assert_eq!(unsafe { Str::from_ptr(std::ptr::null()) }?.len(), 0);
+    /// # Ok::<(), ValueError>(())
+    /// ```
+    pub unsafe fn from_ptr(ptr: *const Str<'a>) -> Result<Str<'a>, ValueError> {
+        if ptr.is_null() {
+            return Ok(Str::empty());
+        }
+        // SAFETY: the caller's contract.
+        let view = unsafe { ptr.read() };
+        Ok(std::str::from_utf8(view.into())?.into())
+    }
+
+    /// A view described by hand, trusted as `String::from_raw_parts`
+    /// trusts: nothing is checked.
+    ///
+    /// # Safety
+    ///
+    /// `len` is 0, or `ptr` addresses `len` bytes of UTF-8 that stay
+    /// readable and unchanged for `'a`.
+    pub const unsafe fn from_raw_parts(ptr: *const u8, len: usize) -> Str<'a> {
+        Str {
+            ptr,
+            len,
+            _borrows: PhantomData,
+        }
+    }
+
+    /// The first element. May be null or dangling when `len` is 0.
+    pub const fn ptr(&self) -> *const u8 {
+        self.ptr
+    }
+
+    /// How many elements.
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Whether it views nothing.
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// The elements, whatever they hold. A null pointer views nothing.
+    fn items(self) -> &'a [u8] {
+        if self.len == 0 || self.ptr.is_null() {
+            return &[];
+        }
+        // SAFETY: the view was made from a borrow of `'a`, or by
+        // `from_raw_parts` or a foreign caller promising the same.
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+}
+
+impl<'a> From<&'a str> for Str<'a> {
+    fn from(text: &'a str) -> Str<'a> {
+        Str::new(text)
+    }
+}
+
+/// The bytes, claiming nothing about them: what `str::from_utf8` checks
+/// when a view came from C, whose memory the caller vouched for and whose
+/// text nobody has.
+///
+/// ```
+/// # use guatiao::Str;
+/// let from_c = Str::new("host"); // as an export receives it
+/// let checked = std::str::from_utf8(from_c.into())?;
+/// assert_eq!(checked, "host");
+/// # Ok::<(), std::str::Utf8Error>(())
+/// ```
+impl<'a> From<Str<'a>> for &'a [u8] {
+    fn from(view: Str<'a>) -> &'a [u8] {
+        view.items()
+    }
+}
+
+/// The text: a `Str` is UTF-8 from the moment it is made.
+impl<'a> From<Str<'a>> for &'a str {
+    fn from(view: Str<'a>) -> &'a str {
+        // SAFETY: `new` took a `str`, and the caller of `from_raw_parts`
+        // promised.
+        unsafe { std::str::from_utf8_unchecked(view.items()) }
     }
 }
 
@@ -187,6 +300,22 @@ impl Text {
         Text::new_in(alloc, self)
     }
 
+    /// The text `ptr` points at, checked: how a text C hands over by
+    /// pointer is read, as `CStr::from_ptr` reads a C string.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` points at a text whose storage is consistent and outlives
+    /// `'a`. Only the memory is promised: the text is checked.
+    pub unsafe fn from_ptr<'a>(ptr: *const Text) -> Result<&'a Text, ValueError> {
+        // SAFETY: the caller's contract.
+        let text = unsafe { &*ptr };
+        match std::str::from_utf8(text.bytes()) {
+            Ok(_) => Ok(text),
+            Err(_) => Err(ValueError::NotUtf8),
+        }
+    }
+
     /// The stored bytes, before anything is known of them: what the doors
     /// check, and what freeing and comparing a foreign node read.
     pub(crate) fn bytes(&self) -> &[u8] {
@@ -198,8 +327,7 @@ impl Text {
     }
 }
 
-/// The text, as a `String` gives its `str`. There is no `DerefMut`, as
-/// `String` has none: `push_str` and `fmt::Write` change a text.
+/// The text, as a `String` gives its `str`.
 impl std::ops::Deref for Text {
     type Target = str;
 
@@ -211,9 +339,39 @@ impl std::ops::Deref for Text {
     }
 }
 
+/// The text to change in place, as `String` gives it: a `&mut str` can
+/// only stay UTF-8. Bytes a text does not own (`cap == 0`) are written
+/// where they are, which `from_raw_parts` asks of them, as `Buffer` does.
+impl std::ops::DerefMut for Text {
+    fn deref_mut(&mut self) -> &mut str {
+        if self.len == 0 {
+            return <&mut str>::default();
+        }
+        // SAFETY: the first `len` bytes are initialised and UTF-8, and
+        // `&mut self` makes the borrow unique.
+        unsafe {
+            std::str::from_utf8_unchecked_mut(std::slice::from_raw_parts_mut(self.ptr, self.len))
+        }
+    }
+}
+
 /// For a bound, which does not deref, as `String` has it.
 impl AsRef<str> for Text {
     fn as_ref(&self) -> &str {
+        self
+    }
+}
+
+impl AsMut<str> for Text {
+    fn as_mut(&mut self) -> &mut str {
+        self
+    }
+}
+
+/// A `HashMap<Text, _>` is searched with a `&str`: hash and equality are
+/// the `str`'s.
+impl std::borrow::Borrow<str> for Text {
+    fn borrow(&self) -> &str {
         self
     }
 }
@@ -279,13 +437,6 @@ impl Eq for Text {}
 unsafe impl Send for Text {}
 // SAFETY: as above.
 unsafe impl Sync for Text {}
-
-/// A view of `text`, as [`Str::new`].
-impl From<&str> for Str {
-    fn from(text: &str) -> Str {
-        Str::new(text)
-    }
-}
 
 /// A copy onto Rust's heap: the text's storage belongs to its allocator.
 impl From<Text> for String {

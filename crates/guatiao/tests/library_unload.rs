@@ -410,7 +410,7 @@ fn greet(registry: &Registry, name: &str) -> guatiao::Value {
 
 /// A `Str` array holds raw pointers, so it is not `Sync` without saying
 /// why. These address string literals in this test binary.
-struct Names<const N: usize>([guatiao::value::types::Str; N]);
+struct Names<const N: usize>([guatiao::value::types::Str<'static>; N]);
 // SAFETY: a constant never written, whose pointers address literals in
 // this binary.
 unsafe impl<const N: usize> Sync for Names<N> {}
@@ -429,8 +429,8 @@ unsafe extern "C" fn describing(_host: *const guatiao::library::HostInfo) -> *co
 
     struct Described {
         #[allow(dead_code)]
-        providers: Vec<ProviderInfo>,
-        desc: LibraryInfo,
+        providers: Vec<ProviderInfo<'static>>,
+        desc: LibraryInfo<'static>,
     }
     // SAFETY: built once, never written again, and every pointer in it
     // addresses something this struct owns and keeps.

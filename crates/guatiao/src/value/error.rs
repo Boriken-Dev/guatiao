@@ -64,3 +64,10 @@ impl std::fmt::Display for ValueError {
 }
 
 impl std::error::Error for ValueError {}
+
+/// Text that is not UTF-8, however it was found.
+impl From<std::str::Utf8Error> for ValueError {
+    fn from(_: std::str::Utf8Error) -> ValueError {
+        ValueError::NotUtf8
+    }
+}

@@ -842,7 +842,7 @@ impl Registry {
     pub fn register_local(
         &mut self,
         name: &str,
-        describe: fn(Host) -> Option<&'static super::desc::LibraryInfo>,
+        describe: fn(Host) -> Option<&'static super::desc::LibraryInfo<'static>>,
     ) -> Result<Loading<'_>, LoadError> {
         let path = PathBuf::from(format!("<{name}>"));
         if let Some(already) = self.loaded_from_path(&path) {

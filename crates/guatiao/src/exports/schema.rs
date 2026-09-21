@@ -181,7 +181,7 @@ unsafe fn field_at<'a>(schema: *const Value, key: Str) -> Option<FieldRef<'a>> {
     // SAFETY: the caller's contract.
     let schema = SchemaRef::new(unsafe { &*schema })?;
     // SAFETY: as above.
-    let key = unsafe { super::as_str(key) }.ok()?;
+    let key = std::str::from_utf8(key.into()).ok()?;
     flat::resolve(schema, key)
 }
 
@@ -209,7 +209,7 @@ pub unsafe extern "C" fn guatiao_schema_resolve(schema: *const Value, key: Str) 
             return ptr::null();
         };
         // SAFETY: as above.
-        let Ok(key) = (unsafe { super::as_str(key) }) else {
+        let Ok(key) = std::str::from_utf8(key.into()) else {
             return ptr::null();
         };
         match flat::resolve(schema, key) {

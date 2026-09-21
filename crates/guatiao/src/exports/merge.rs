@@ -56,9 +56,9 @@ pub const GUATIAO_MERGE_OPT_MERGELISTS: u32 = 1;
 /// that whoever merges two maps does not.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct MergeOverride {
+pub struct MergeOverride<'a> {
     /// The dotted path this governs, matched exactly.
-    pub path: Str,
+    pub path: Str<'a>,
     /// One of the `GUATIAO_MERGE_*` mode constants.
     pub mode: u32,
 }
@@ -204,7 +204,7 @@ pub unsafe extern "C" fn guatiao_merge(
                     return Status::GUATIAO_ERR_BAD_VALUE;
                 };
                 // SAFETY: a view whose `len` bytes are readable.
-                let Some(path) = (unsafe { crate::library::raw::str_of(entry.path) }) else {
+                let Some(path) = std::str::from_utf8(entry.path.into()).ok() else {
                     return Status::GUATIAO_ERR_BAD_VALUE;
                 };
                 table.set(path, entry_mode);
