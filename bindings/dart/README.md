@@ -178,7 +178,21 @@ final shown = form.isVisible(schema, formDoc, 'tls.verify', values);
 A format the loaded library does not export throws `UnsupportedError`
 naming the symbol and the feature it belongs to.
 
-### Embedding it, and sharing its types
+### Reading a value you were handed
+
+When an engine hands you a value, as in a callback, read it in place
+rather than copying it:
+
+```dart
+final view = Ref.borrowed(pointer);   // read-only; you keep the memory alive
+view.toDart();
+```
+
+It touches no library and no global state, so it is safe inside an
+`isolateGroupBound` callback that a native thread calls. The form
+functions take any `Ref`, a borrowed one included.
+
+## Embedding it, and sharing its types
 
 **One library may carry several surfaces.** An application that links the
 ABI into its own shared library exports `guatiao_*` from that one file,

@@ -78,16 +78,34 @@ abstract class ValueOwner {
   Pointer<guatiao_alloc> get allocator;
 }
 
+/// A root this binding reads but does not own. See [Ref.borrowed].
+class _BorrowedRoot implements ValueOwner {
+  _BorrowedRoot(this._root);
+
+  final Pointer<guatiao_value> _root;
+
+  @override
+  Pointer<guatiao_value> get rootNode => _root;
+
+  @override
+  Pointer<guatiao_alloc> get allocator =>
+      throw StateError('a borrowed value cannot be mutated');
+}
+
 // ---- reading, with no library needed ---------------------------------
 //
 // Every reader below reimplements one of `guatiao.h`'s `static inline`
 // helpers, which have no symbol in any library.
 
-final int _valueSize = sizeOf<guatiao_value>();
-final int _entrySize = sizeOf<guatiao_entry>();
+// **No top-level state on this path**, so a reader is safe inside an
+// `isolateGroupBound` callback, which may touch only globals shared across
+// the isolate group. A stride comes from a struct pointer's own `+` and an
+// offset from `sizeOf` written inline, both resolved at compile time.
 
-/// `guatiao_entry.value`, pinned by the crate's own layout checks.
-final int _entryValueOffset = sizeOf<guatiao_string>();
+/// `guatiao_entry.value`: the entry's key is a `guatiao_string`, and the
+/// value follows it. Pinned by the crate's own layout checks.
+Pointer<guatiao_value> _entryValue(Pointer<guatiao_entry> entry) =>
+    (entry.cast<Uint8>() + sizeOf<guatiao_string>()).cast<guatiao_value>();
 
 Uint8List _stringBytes(guatiao_string s) {
   if (s.len == 0 || s.ptr == nullptr) return Uint8List(0);
@@ -122,11 +140,10 @@ Pointer<guatiao_value> _listAt(Pointer<guatiao_value> node, int index) {
   var i = index;
   if (i < 0) i += list.len;
   if (i < 0 || i >= list.len) return nullptr;
-  return (list.ptr.cast<Uint8>() + i * _valueSize).cast<guatiao_value>();
+  return list.ptr + i;
 }
 
-Pointer<guatiao_entry> _entryAt(guatiao_map map, int index) =>
-    (map.ptr.cast<Uint8>() + index * _entrySize).cast<guatiao_entry>();
+Pointer<guatiao_entry> _entryAt(guatiao_map map, int index) => map.ptr + index;
 
 /// The value stored under `key`, compared over bytes: a key is UTF-8 with
 /// no terminator and may hold a NUL of its own.
@@ -137,7 +154,7 @@ Pointer<guatiao_value> _mapFind(Pointer<guatiao_value> node, Uint8List key) {
   for (var i = 0; i < map.len; i++) {
     final entry = _entryAt(map, i);
     if (_bytesEqual(_stringBytes(entry.ref.key), key)) {
-      return (entry.cast<Uint8>() + _entryValueOffset).cast<guatiao_value>();
+      return _entryValue(entry);
     }
   }
   return nullptr;
@@ -199,9 +216,7 @@ Object? _nodeToDart(Pointer<guatiao_value> node, Numbers numbers) {
       for (var i = 0; i < map.len; i++) {
         final entry = _entryAt(map, i);
         final key = utf8.decode(_stringBytes(entry.ref.key));
-        final value =
-            (entry.cast<Uint8>() + _entryValueOffset).cast<guatiao_value>();
-        out[key] = _nodeToDart(value, numbers);
+        out[key] = _nodeToDart(_entryValue(entry), numbers);
       }
       return out;
   }
@@ -399,6 +414,15 @@ class Ref {
       : this._(owner, List<Object>.unmodifiable(path));
 
   Ref._(this._ownerOrNull, this.path);
+
+  /// A read-only view of a tree this binding does not own, rooted at
+  /// [root]: a value an engine hands a callback, or one a registry lends.
+  ///
+  /// The caller keeps that memory alive and unchanged for as long as the
+  /// view is read. Writing through it throws, and nothing frees it.
+  /// Reading one touches no library and no top-level state, so it is safe
+  /// inside an `isolateGroupBound` callback.
+  factory Ref.borrowed(Pointer<guatiao_value> root) => Ref(_BorrowedRoot(root));
 
   final ValueOwner? _ownerOrNull;
 

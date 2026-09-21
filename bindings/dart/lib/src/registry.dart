@@ -27,18 +27,6 @@ class ProviderTable {
 
 /// A root this binding only borrows: read it, never free it, never write
 /// through it.
-class _BorrowedRoot implements ValueOwner {
-  _BorrowedRoot(this._root);
-
-  final Pointer<guatiao_value> _root;
-
-  @override
-  Pointer<guatiao_value> get rootNode => _root;
-
-  @override
-  Pointer<guatiao_alloc> get allocator =>
-      throw StateError('a borrowed value cannot be mutated');
-}
 
 /// An instance [Registry.create] built.
 ///
@@ -412,7 +400,7 @@ class Registry implements Finalizable {
           ),
     );
     if (root == nullptr) return null;
-    return Ref(_BorrowedRoot(root));
+    return Ref.borrowed(root);
   }
 
   /// Builds an instance of the provider filed under `key` from `config`
