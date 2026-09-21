@@ -1281,7 +1281,7 @@ pub unsafe fn available_via<T>(
         Err(why) => {
             if !reason.is_null() {
                 // SAFETY: the caller's contract.
-                unsafe { reason.write(Str::borrowed(why)) };
+                unsafe { reason.write(Str::new(why)) };
             }
             false
         }
@@ -1363,7 +1363,7 @@ impl ProviderParts {
         let id: Box<str> = id.into();
         let name: Box<str> = name.into();
         let version: Box<str> = version.into();
-        let kinds: Box<[Str]> = kinds.iter().map(|k| Str::borrowed(k)).collect();
+        let kinds: Box<[Str]> = kinds.iter().map(|k| Str::new(k)).collect();
         let tables: Box<[KindTable]> = tables.into_boxed_slice();
         let config = config.map(Box::new);
         // The boxes' heap storage does not move when this struct does.
@@ -1374,15 +1374,15 @@ impl ProviderParts {
                 ptr: kinds.as_ptr(),
                 len: kinds.len(),
             },
-            id: Str::borrowed(&id),
-            display_name: Str::borrowed(&name),
+            id: Str::new(&id),
+            display_name: Str::new(&name),
             config: config
                 .as_deref()
                 .map_or(std::ptr::null(), |v| v as *const Value),
             vtable: std::ptr::null(),
             ctx,
             meta: crate::value::types::MaybeNull::null(),
-            version: Str::borrowed(&version),
+            version: Str::new(&version),
             available,
             tables: KindTables {
                 ptr: tables.as_ptr(),
@@ -1437,8 +1437,8 @@ impl LibraryParts {
         let info = LibraryInfo {
             struct_size: size_of::<LibraryInfo>() as u32,
             abi_version: super::desc::ABI_VERSION,
-            id: Str::borrowed(&id),
-            version: Str::borrowed(&version),
+            id: Str::new(&id),
+            version: Str::new(&version),
             providers: super::desc::Providers {
                 ptr: infos.as_ptr(),
                 len: infos.len(),
@@ -1592,7 +1592,7 @@ mod tests {
             let mut out = Text::new("");
             let mut err = ProviderError::none();
             // SAFETY: the slot's own signature; the locals are writable.
-            let status = unsafe { f(self.ctx(), Str::borrowed(name), &mut out, &mut err) };
+            let status = unsafe { f(self.ctx(), Str::new(name), &mut out, &mut err) };
             if status == Status::GUATIAO_OK {
                 Ok(text_ret(out)?.to_string())
             } else {
@@ -1848,7 +1848,7 @@ mod tests {
         unsafe extern "C" fn refuses(_ctx: *mut c_void, reason: *mut Str) -> bool {
             if !reason.is_null() {
                 // SAFETY: the test passes writable storage.
-                unsafe { reason.write(Str::borrowed("not today")) };
+                unsafe { reason.write(Str::new("not today")) };
             }
             false
         }

@@ -359,21 +359,19 @@ fn the_c_surface_hands_back_a_table_by_kind() {
     let path = path.to_string_lossy().into_owned();
     let alloc = guatiao::Alloc::rust().as_raw();
     // SAFETY: the names are readable for the call; the allocator is ours.
-    let reg =
-        unsafe { guatiao_registry_new(Str::borrowed("c-tables"), Str::borrowed("1.0"), alloc) };
+    let reg = unsafe { guatiao_registry_new(Str::new("c-tables"), Str::new("1.0"), alloc) };
     assert!(!reg.is_null());
     let mut answer = Value::absent();
     // SAFETY: `reg` is live, the path readable, `answer` writable.
-    let status =
-        unsafe { guatiao_registry_load_file(reg, Str::borrowed(&path), alloc, &mut answer) };
+    let status = unsafe { guatiao_registry_load_file(reg, Str::new(&path), alloc, &mut answer) };
     assert_eq!(status, Status::GUATIAO_OK);
     drop(answer);
 
-    let key = Str::borrowed("derived_greeter_hello");
+    let key = Str::new("derived_greeter_hello");
     let mut size = 0usize;
     // SAFETY: `reg` is live, the texts readable, `size` writable.
     let table =
-        unsafe { guatiao_registry_provider_table(reg, key, Str::borrowed("greeter"), &mut size) };
+        unsafe { guatiao_registry_provider_table(reg, key, Str::new("greeter"), &mut size) };
     assert!(
         !table.is_null(),
         "a derived provider's greeter table is reachable"
@@ -389,8 +387,7 @@ fn the_c_surface_hands_back_a_table_by_kind() {
     // SAFETY: as above.
     assert!(unsafe { guatiao_registry_provider_vtable(reg, key, &mut legacy) }.is_null());
     // SAFETY: as above.
-    let none =
-        unsafe { guatiao_registry_provider_table(reg, key, Str::borrowed("codec"), &mut size) };
+    let none = unsafe { guatiao_registry_provider_table(reg, key, Str::new("codec"), &mut size) };
     assert!(none.is_null());
     assert_eq!(size, 0);
 

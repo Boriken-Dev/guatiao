@@ -115,7 +115,7 @@ the value is consumed.
 **`guatiao::Bytes` is the conversion marker**, not the borrowed view: it
 is the field type that says "cross as the bytes kind". The borrowed view
 of the same name stays at `guatiao::value::types::Bytes`, with
-`Bytes::borrowed(&'static [u8])` and `Bytes::empty()` mirroring `Str`.
+`Bytes::new(&'static [u8])` and `Bytes::empty()` mirroring `Str`.
 
 **Collecting into a container** is the standard trait, as for `Vec` and
 `HashMap`: `["a", "b"].into_iter().collect::<List>()`, and
@@ -200,9 +200,10 @@ an `Allocator` may be called from any thread.
 | type | as | so |
 | --- | --- | --- |
 | `List` | `Vec<Value>` | `Deref`/`DerefMut<Target = [Value]>` (`len`, `get`, `iter`, `list[0]`, `sort_by`, `swap` are the slice's), `AsRef`/`AsMut<[Value]>`, owned and `&mut` `IntoIterator`, `FromIterator`, `Extend` |
-| `Buffer` | `Vec<u8>` | `Deref`/`DerefMut<Target = [u8]>`, `AsRef`/`AsMut<[u8]>`, `Hash`, `io::Write` |
+| `Buffer` | `Vec<u8>` | `Deref`/`DerefMut<Target = [u8]>`, `AsRef`/`AsMut<[u8]>`, `Hash`, `io::Write`, `From<&[u8]>`/`From<Vec<u8>>`, `Into<Vec<u8>>` |
 | `Map` | `HashMap`, ordered | `Index<&str>`, owned and `&mut` `IntoIterator`, `FromIterator<(K, V)>`, `Extend` |
-| `Text` | `String` | `Deref<Target = str>`, `AsRef<str>`, `AsRef<[u8]>`, `Hash`, `Display`, `fmt::Write` |
+| `Text` | `String` | `Deref<Target = str>`, `AsRef<str>`, `AsRef<[u8]>`, `Hash`, `Display`, `fmt::Write`, `From<&str>`/`From<String>`, `Into<String>` |
+| `Str`, `Bytes` (views) | `&str`, `&[u8]` | `From<&str>`, `From<&'static [u8]>`; no way back, since a view carries no lifetime |
 | `Number` | its text | `Deref<Target = str>`, `AsRef<str>`, `AsRef<[u8]>`, `Hash`, `Display`, `FromStr` |
 
 A slice cannot change its length, so `DerefMut` leaves what a container

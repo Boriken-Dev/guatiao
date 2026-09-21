@@ -551,7 +551,7 @@ impl Host {
         let mut out: *const ProviderInfo = std::ptr::null();
         // SAFETY: the slot is the host's own, read under its guard; `out`
         // is a writable local; `key` is readable for the call.
-        match unsafe { get(table.ctx, Str::borrowed(key), &mut out) } {
+        match unsafe { get(table.ctx, Str::new(key), &mut out) } {
             Status::GUATIAO_OK if !out.is_null() => {
                 // SAFETY: the host answers with a descriptor the offering
                 // library keeps for the life of the process.
@@ -570,7 +570,7 @@ impl Host {
     pub fn list(&self, kind: &str) -> Result<Vec<&'static ProviderInfo>, Status> {
         let table = self.services().ok_or(Status::GUATIAO_ERR_NULL)?;
         let list = table.list.ok_or(Status::GUATIAO_ERR_NULL)?;
-        let kind = Str::borrowed(kind);
+        let kind = Str::new(kind);
         let mut total = 0usize;
         // SAFETY: as `get`; a zero capacity asks for the count alone.
         match unsafe { list(table.ctx, kind, std::ptr::null_mut(), 0, &mut total) } {
@@ -714,8 +714,8 @@ pub(crate) fn leak_host_block(
             struct_size: size_of::<HostInfo>() as u32,
             abi_version: super::desc::ABI_VERSION,
             // The boxes' heap storage does not move when the block does.
-            host_id: Str::borrowed(&id),
-            host_version: Str::borrowed(&version),
+            host_id: Str::new(&id),
+            host_version: Str::new(&version),
             alloc: alloc.map_or(std::ptr::null(), |a| a.as_raw()),
             meta: MaybeNull::null(),
             services: std::ptr::null(),
@@ -1652,8 +1652,8 @@ mod tests {
         HostInfo {
             struct_size: size as u32,
             abi_version: crate::library::ABI_VERSION,
-            host_id: Str::borrowed("test-host"),
-            host_version: Str::borrowed("1.0"),
+            host_id: Str::new("test-host"),
+            host_version: Str::new("1.0"),
             alloc: std::ptr::null(),
             meta: MaybeNull::null(),
             services: std::ptr::null(),
@@ -1754,8 +1754,8 @@ mod tests {
         LibraryInfo {
             struct_size: size as u32,
             abi_version: crate::library::ABI_VERSION,
-            id: Str::borrowed("lib"),
-            version: Str::borrowed("0.1.0"),
+            id: Str::new("lib"),
+            version: Str::new("0.1.0"),
             providers: Providers::empty(),
             meta: MaybeNull::null(),
             unload: None,
@@ -1884,7 +1884,7 @@ mod tests {
 
         let first = a_provider(stride, 0);
         let mut second = a_provider(stride, 0);
-        second.id = Str::borrowed("second");
+        second.id = Str::new("second");
 
         let words = (stride * 2).div_ceil(size_of::<u64>());
         let mut array = vec![0u64; words];
@@ -1942,20 +1942,20 @@ mod tests {
     // SAFETY: a constant that is never written, whose pointer addresses a
     // string literal in this binary.
     unsafe impl Sync for Names {}
-    static KINDS: Names = Names([Str::borrowed("greeter")]);
+    static KINDS: Names = Names([Str::new("greeter")]);
 
     fn a_provider(size: usize, vtable_size: u32) -> ProviderInfo {
         ProviderInfo {
             struct_size: size as u32,
             vtable_size,
             kinds: Kinds::new(&KINDS.0),
-            id: Str::borrowed("hello"),
-            display_name: Str::borrowed("Hello"),
+            id: Str::new("hello"),
+            display_name: Str::new("Hello"),
             config: std::ptr::null(),
             vtable: std::ptr::null(),
             ctx: std::ptr::null_mut(),
             meta: MaybeNull::null(),
-            version: Str::borrowed(""),
+            version: Str::new(""),
             available: None,
             tables: super::super::desc::KindTables::empty(),
             create: None,
@@ -2050,7 +2050,7 @@ mod tests {
     unsafe extern "C" fn refuses(_ctx: *mut c_void, reason: *mut Str) -> bool {
         if !reason.is_null() {
             // SAFETY: the test passes writable storage.
-            unsafe { reason.write(Str::borrowed("no calendar here")) };
+            unsafe { reason.write(Str::new("no calendar here")) };
         }
         false
     }

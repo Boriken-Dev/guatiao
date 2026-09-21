@@ -788,7 +788,7 @@ fn a_provider_reaches_another_through_the_host() {
 
     let mut out = Value::absent();
     // SAFETY: the slot's contract: a readable name and a writable node.
-    let status = unsafe { call(echo.ctx(), Str::borrowed("ana"), &mut out) };
+    let status = unsafe { call(echo.ctx(), Str::new("ana"), &mut out) };
     assert_eq!(status, Status::GUATIAO_OK);
     assert_eq!(
         TryAsRef::<Map>::try_as_ref(&out)

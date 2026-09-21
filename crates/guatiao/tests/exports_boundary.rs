@@ -160,7 +160,7 @@ fn an_override_array_changes_the_mode_for_that_path_only() {
     let (earlier, later) = (Value::from(earlier), Value::from(later));
 
     let overrides = [MergeOverride {
-        path: Str::borrowed("tags"),
+        path: Str::new("tags"),
         mode: GUATIAO_MERGE_DEEP,
     }];
     let mut out = Value::absent();
@@ -194,7 +194,7 @@ fn an_override_array_changes_the_mode_for_that_path_only() {
 
     // The same, with a mode nobody declared in the array.
     let bad = [MergeOverride {
-        path: Str::borrowed("tags"),
+        path: Str::new("tags"),
         mode: 77,
     }];
     let mut out = Value::absent();
@@ -478,11 +478,11 @@ fn a_flat_key_resolves_to_the_option_that_governs_it() {
     let schema = variant_schema();
 
     // SAFETY: a well-formed schema and a readable view.
-    let direct = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth")) };
+    let direct = unsafe { guatiao_schema_resolve(&schema, Str::new("auth")) };
     assert!(!direct.is_null(), "the field itself resolves");
 
     // SAFETY: as above.
-    let projected = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth.password")) };
+    let projected = unsafe { guatiao_schema_resolve(&schema, Str::new("auth.password")) };
     assert!(
         !projected.is_null(),
         "a projected key resolves to the arm field it names"
@@ -490,7 +490,7 @@ fn a_flat_key_resolves_to_the_option_that_governs_it() {
     assert_ne!(direct, projected, "and not to the parent field");
 
     // SAFETY: as above.
-    let nothing = unsafe { guatiao_schema_resolve(&schema, Str::borrowed("auth.nonesuch")) };
+    let nothing = unsafe { guatiao_schema_resolve(&schema, Str::new("auth.nonesuch")) };
     assert!(
         nothing.is_null(),
         "a key nobody declared resolves to nothing"
@@ -514,7 +514,7 @@ fn a_tagged_value_survives_the_round_trip_through_flat_text() {
     let status = unsafe {
         guatiao_schema_flatten(
             &schema,
-            Str::borrowed("auth"),
+            Str::new("auth"),
             &chosen,
             alloc.as_raw(),
             &mut flat,
@@ -540,13 +540,7 @@ fn a_tagged_value_survives_the_round_trip_through_flat_text() {
     let mut back = Value::absent();
     // SAFETY: as above; `flat` is a map whose values are all strings.
     let status = unsafe {
-        guatiao_schema_unflatten(
-            &schema,
-            Str::borrowed("auth"),
-            &flat,
-            alloc.as_raw(),
-            &mut back,
-        )
+        guatiao_schema_unflatten(&schema, Str::new("auth"), &flat, alloc.as_raw(), &mut back)
     };
     assert_eq!(status, Status::GUATIAO_OK);
     assert_eq!(
@@ -584,13 +578,7 @@ fn a_flat_store_that_is_not_all_text_is_refused() {
     let mut back = Value::absent();
     // SAFETY: as above.
     let status = unsafe {
-        guatiao_schema_unflatten(
-            &schema,
-            Str::borrowed("auth"),
-            &flat,
-            alloc.as_raw(),
-            &mut back,
-        )
+        guatiao_schema_unflatten(&schema, Str::new("auth"), &flat, alloc.as_raw(), &mut back)
     };
     assert_eq!(
         status,
@@ -608,9 +596,8 @@ fn the_flat_keys_of_an_option_are_listed() {
 
     let mut keys = Value::absent();
     // SAFETY: a well-formed schema and writable storage.
-    let status = unsafe {
-        guatiao_schema_flat_keys(&schema, Str::borrowed("auth"), alloc.as_raw(), &mut keys)
-    };
+    let status =
+        unsafe { guatiao_schema_flat_keys(&schema, Str::new("auth"), alloc.as_raw(), &mut keys) };
     assert_eq!(status, Status::GUATIAO_OK);
 
     let listed: Vec<&str> = TryAsRef::<List>::try_as_ref(&keys)
@@ -636,20 +623,15 @@ fn the_flat_exports_refuse_null() {
 
     // SAFETY: passing null is the case under test.
     unsafe {
-        assert!(guatiao_schema_resolve(std::ptr::null(), Str::borrowed("k")).is_null());
+        assert!(guatiao_schema_resolve(std::ptr::null(), Str::new("k")).is_null());
         assert_eq!(
-            guatiao_schema_flat_keys(
-                std::ptr::null(),
-                Str::borrowed("auth"),
-                alloc.as_raw(),
-                &mut out
-            ),
+            guatiao_schema_flat_keys(std::ptr::null(), Str::new("auth"), alloc.as_raw(), &mut out),
             Status::GUATIAO_ERR_NULL
         );
         assert_eq!(
             guatiao_schema_flatten(
                 std::ptr::null(),
-                Str::borrowed("auth"),
+                Str::new("auth"),
                 &schema,
                 alloc.as_raw(),
                 &mut out
@@ -659,7 +641,7 @@ fn the_flat_exports_refuse_null() {
         assert_eq!(
             guatiao_schema_unflatten(
                 std::ptr::null(),
-                Str::borrowed("auth"),
+                Str::new("auth"),
                 &schema,
                 alloc.as_raw(),
                 &mut out
@@ -760,7 +742,7 @@ fn a_node_stored_into_itself_is_refused() {
     let alloc = Alloc::rust();
     let mut map: Value = Map::new_in(alloc).into();
     // SAFETY: one well-formed node as both arguments, the case under test.
-    let status = unsafe { guatiao_map_set(alloc.as_raw(), &mut map, Str::borrowed("k"), &mut map) };
+    let status = unsafe { guatiao_map_set(alloc.as_raw(), &mut map, Str::new("k"), &mut map) };
     assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
     assert_eq!(
         TryAsRef::<Map>::try_as_ref(&map)
@@ -876,9 +858,8 @@ fn a_failed_call_leaves_its_out_parameters_absent() {
 
     let mut out = Value::from(true);
     // SAFETY: as above.
-    let status = unsafe {
-        guatiao_schema_flat_keys(&a, Str::borrowed("nonesuch"), alloc.as_raw(), &mut out)
-    };
+    let status =
+        unsafe { guatiao_schema_flat_keys(&a, Str::new("nonesuch"), alloc.as_raw(), &mut out) };
     assert_eq!(status, Status::GUATIAO_ERR_WRONG_KIND);
     assert!(is_absent(&out));
 }

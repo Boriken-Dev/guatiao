@@ -556,7 +556,7 @@ impl KindTable {
         KindTable {
             struct_size: size_of::<KindTable>() as u32,
             vtable_size: vtable_size as u32,
-            kind: Str::borrowed(kind),
+            kind: Str::new(kind),
             vtable,
         }
     }

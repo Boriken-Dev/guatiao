@@ -1171,7 +1171,7 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
         let name = format_ident!("__arg_{}", ident);
         match &a.kind {
             ArgKind::Scalar(_) => quote! { let #name = #ident; },
-            ArgKind::Str => quote! { let #name = ::guatiao::Str::borrowed(#ident); },
+            ArgKind::Str => quote! { let #name = ::guatiao::Str::new(#ident); },
             ArgKind::Bytes => quote! {
                 let #name = ::guatiao::value::types::Bytes { ptr: #ident.as_ptr(), len: #ident.len() };
             },

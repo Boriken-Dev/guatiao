@@ -135,3 +135,19 @@ fn a_map_hands_its_pairs_out_in_order() {
     }
     assert_eq!(i64::try_from(&map["n"]).unwrap(), 7);
 }
+
+#[test]
+fn the_views_and_the_owned_types_convert_as_std_does() {
+    use guatiao::value::types::Bytes;
+    use guatiao::{Buffer, Str};
+
+    let view: Str = "port".into();
+    assert_eq!(view.len, 4);
+    let bytes: Bytes = (b"ab" as &'static [u8]).into();
+    assert_eq!(bytes.len, 2);
+
+    let text: Text = String::from("host").into();
+    assert_eq!(String::from(text), "host");
+    let buffer: Buffer = vec![0u8, 255].into();
+    assert_eq!(Vec::<u8>::from(buffer), [0, 255]);
+}

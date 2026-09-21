@@ -170,7 +170,7 @@ impl Greeter for ::guatiao::library::Remote<dyn Greeter> {
             )
         }
             .expect("validated: a required slot is present and non-null");
-        let __arg_name = ::guatiao::Str::borrowed(name);
+        let __arg_name = ::guatiao::Str::new(name);
         let mut __out = ::guatiao::Text::new("");
         let mut __err = ::guatiao::library::ProviderError::none();
         let __status = unsafe { __f(self.ctx(), __arg_name, &mut __out, &mut __err) };
