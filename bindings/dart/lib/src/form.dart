@@ -15,8 +15,8 @@ import 'value.dart';
 /// `guatiao_form_check` writes: `kind` and `at`, plus whichever of
 /// `path`, `id`, `field`, `expected` and `message` apply.
 Map<String, Object?>? check(
-  Value schema,
-  Value form, {
+  Ref schema,
+  Ref form, {
   Pointer<guatiao_alloc>? alloc,
 }) {
   final lib = native.formLib();
@@ -25,8 +25,8 @@ Map<String, Object?>? check(
   var filled = false;
   try {
     final status = lib.bindings.guatiao_form_check(
-      schema.pointer,
-      form.pointer,
+      schema.requireNode(),
+      form.requireNode(),
       allocator,
       out,
     );
@@ -46,8 +46,8 @@ Map<String, Object?>? check(
 
 /// The schema's fields grouped into sections and put in order.
 List<Map<String, Object?>> layout(
-  Value schema,
-  Value form, {
+  Ref schema,
+  Ref form, {
   Pointer<guatiao_alloc>? alloc,
 }) {
   final lib = native.formLib();
@@ -57,8 +57,8 @@ List<Map<String, Object?>> layout(
   try {
     checkStatus(
       lib.bindings.guatiao_form_layout(
-        schema.pointer,
-        form.pointer,
+        schema.requireNode(),
+        form.requireNode(),
         allocator,
         out,
       ),
@@ -78,17 +78,17 @@ List<Map<String, Object?>> layout(
 
 /// Whether the field under `key` is shown, given the `values` entered so
 /// far.
-bool isVisible(Value schema, Value form, String key, Value values) {
+bool isVisible(Ref schema, Ref form, String key, Ref values) {
   final lib = native.formLib();
   final out = calloc<Bool>();
   try {
     using((arena) {
       checkStatus(
         lib.bindings.guatiao_form_is_visible(
-          schema.pointer,
-          form.pointer,
+          schema.requireNode(),
+          form.requireNode(),
           strOf(arena, key).ref,
-          values.pointer,
+          values.requireNode(),
           out,
         ),
       );

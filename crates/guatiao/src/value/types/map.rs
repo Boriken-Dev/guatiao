@@ -15,7 +15,7 @@ use crate::value::convert::MapError;
 use crate::value::error::ValueError;
 use crate::value::raw::{dangling, release_buffer, reserve};
 
-use super::{List, Payload, Tag, Text, Value};
+use super::{List, Payload, Tag, Text, Value, or_abort};
 
 /// A borrowed sequence of key/value pairs, in **insertion order**, which
 /// is part of the contract: consumers render maps as forms, print them
@@ -468,6 +468,27 @@ unsafe impl Sync for Map {}
 impl Default for Map {
     fn default() -> Map {
         Map::new()
+    }
+}
+
+/// Collects `(key, value)` pairs, as `HashMap` does, but in insertion
+/// order; a repeated key replaces the value in place. Grows through Rust's
+/// allocator and aborts if it refuses.
+impl<K: AsRef<str>, V: Into<Value>> FromIterator<(K, V)> for Map {
+    fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Map {
+        let mut map = Map::new();
+        map.extend(iter);
+        map
+    }
+}
+
+/// Sets each pair through the allocator this map recorded. Panics if it
+/// refuses, as [`List`]'s `Extend` does.
+impl<K: AsRef<str>, V: Into<Value>> Extend<(K, V)> for Map {
+    fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
+        for (key, value) in iter {
+            or_abort(self.set(key.as_ref(), value));
+        }
     }
 }
 

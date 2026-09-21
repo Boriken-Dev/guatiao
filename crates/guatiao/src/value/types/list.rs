@@ -12,7 +12,7 @@ use crate::value::alloc::{Alloc, Allocator};
 use crate::value::error::ValueError;
 use crate::value::raw::{dangling, release_buffer, reserve};
 
-use super::{Payload, Tag, Value};
+use super::{Payload, Tag, Value, or_abort};
 
 /// A borrowed sequence of values, in order.
 #[repr(C)]
@@ -301,6 +301,27 @@ impl Default for List {
     }
 }
 
+/// Collects anything a value is made from, as `Vec` does. Grows through
+/// Rust's allocator and aborts if it refuses, the short form's policy.
+impl<T: Into<Value>> FromIterator<T> for List {
+    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> List {
+        let mut list = List::new();
+        list.extend(iter);
+        list
+    }
+}
+
+/// Appends each item through the allocator this list recorded. Panics if
+/// it refuses, which for a list over storage another language owns is
+/// every time: that list has no allocator to grow through.
+impl<T: Into<Value>> Extend<T> for List {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        for item in iter {
+            or_abort(self.push(item));
+        }
+    }
+}
+
 impl From<List> for Value {
     /// Safe for the same reason [`From<Map>`](super::Map) is: an empty container
     /// owns nothing.
@@ -308,5 +329,39 @@ impl From<List> for Value {
         let mut v = Value::blank(Tag::GUATIAO_LIST);
         v.payload = Payload::list(list);
         v
+    }
+}
+
+#[cfg(test)]
+mod collect_tests {
+    use super::*;
+    use crate::value::convert::TryAsRef;
+    use crate::value::types::Map;
+
+    #[test]
+    fn a_list_collects_anything_a_value_is_made_from() {
+        let list: List = ["a", "b"].into_iter().collect();
+        let texts: Vec<&str> = list
+            .items()
+            .iter()
+            .filter_map(TryAsRef::<str>::try_as_ref)
+            .collect();
+        assert_eq!(texts, ["a", "b"]);
+
+        let mut more = List::new();
+        more.extend([1, 2, 3]);
+        assert_eq!(more.len(), 3);
+    }
+
+    #[test]
+    fn a_map_collects_pairs_in_order_and_a_repeat_replaces_in_place() {
+        let map: Map = [("b", 1), ("a", 2), ("b", 3)].into_iter().collect();
+        let keys: Vec<&str> = map.entries().iter().filter_map(|e| e.key_str()).collect();
+        assert_eq!(
+            keys,
+            ["b", "a"],
+            "insertion order, the repeat kept its slot"
+        );
+        assert_eq!(i64::try_from(map.get("b").unwrap()).unwrap(), 3);
     }
 }

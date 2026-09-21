@@ -167,6 +167,16 @@ form.layout(schema, formDoc);         // [{'section': ..., 'fields': [...]}, ...
 form.isVisible(schema, formDoc, 'key', values);   // bool
 ```
 
+## Reading memory you do not own
+
+`Ref.borrowed(Pointer<guatiao_value>)` is a read-only view of a tree
+someone else keeps alive: a value an engine hands a callback, or one a
+registry lends. Writing through it throws and nothing frees it. Reading
+touches no library and no top-level state, so it works inside an
+`isolateGroupBound` callback that a native thread calls. The form
+functions take any `Ref`, so a borrowed schema is passed as it is, with
+no copy.
+
 ## Embedding, and sharing the types
 
 `useLibrary(DynamicLibrary, {Iterable<String>? forSurfaces, String path})`

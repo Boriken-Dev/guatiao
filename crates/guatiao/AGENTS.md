@@ -118,6 +118,13 @@ is the field type that says "cross as the bytes kind". The borrowed view
 of the same name stays at `guatiao::value::types::Bytes`, with
 `Bytes::borrowed(&'static [u8])` and `Bytes::empty()` mirroring `Str`.
 
+**Collecting into a container** is the standard trait, as for `Vec` and
+`HashMap`: `["a", "b"].into_iter().collect::<List>()`, and
+`[("host", "h"), ("port", "p")].into_iter().collect::<Map>()`. `Extend`
+appends to either. Both grow through the container's allocator and abort
+if it refuses, as the short constructors do; a map keeps insertion order
+and a repeated key replaces its value in place.
+
 **Setting an existing key replaces it in place**, keeping its position.
 Map order is insertion order and is part of the contract.
 

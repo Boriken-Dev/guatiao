@@ -222,4 +222,19 @@ void main() {
     expect(() => Value.fromDart(DateTime.now()), throwsArgumentError);
     expect(() => Value.fromDart({1: 'a'}), throwsArgumentError);
   });
+
+  group('a borrowed view', () {
+    test('reads a tree it does not own, and refuses to write', () {
+      final owner = Value.fromDart({'host': 'h', 'port': 5900});
+      try {
+        final view = Ref.borrowed(owner.pointer);
+        expect(view.toDart(), {'host': 'h', 'port': 5900});
+        expect(() => view.asMap()['port'] = 1, throwsStateError);
+        expect(owner.toDart(), {'host': 'h', 'port': 5900},
+            reason: 'untouched');
+      } finally {
+        owner.close();
+      }
+    });
+  });
 }
