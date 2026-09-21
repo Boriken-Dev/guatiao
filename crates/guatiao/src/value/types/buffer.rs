@@ -27,9 +27,9 @@ pub struct Bytes {
 
 impl Bytes {
     /// A view of bytes this program already holds. `'static` where
-    /// [`Str::borrowed`](super::Str::borrowed) takes any lifetime: the
+    /// [`Str::new`](super::Str::new) takes any lifetime: the
     /// view is a C struct and keeps no lifetime of its own.
-    pub const fn borrowed(bytes: &'static [u8]) -> Bytes {
+    pub const fn new(bytes: &'static [u8]) -> Bytes {
         Bytes {
             ptr: bytes.as_ptr(),
             len: bytes.len(),
@@ -263,6 +263,20 @@ impl std::io::Write for Buffer {
 impl Default for Buffer {
     fn default() -> Buffer {
         Buffer::new(&[])
+    }
+}
+
+/// A view of `bytes`, as [`Bytes::new`].
+impl From<&'static [u8]> for Bytes {
+    fn from(bytes: &'static [u8]) -> Bytes {
+        Bytes::new(bytes)
+    }
+}
+
+/// A copy onto Rust's heap: the buffer's storage belongs to its allocator.
+impl From<Buffer> for Vec<u8> {
+    fn from(bytes: Buffer) -> Vec<u8> {
+        bytes.to_vec()
     }
 }
 

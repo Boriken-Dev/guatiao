@@ -65,7 +65,7 @@ fn the_root_exports_the_names_the_header_names() {
     list.push(1).unwrap();
     assert_eq!(list.len(), 1);
 
-    let view = Str::borrowed("k");
+    let view = Str::new("k");
     assert_eq!(view.len, 1);
 
     assert_eq!(Value::null().tag(), Ok(Tag::GUATIAO_NULL));
@@ -92,7 +92,7 @@ fn the_borrowed_byte_view_has_the_constructors_its_sibling_has() {
     use guatiao::value::types::Bytes;
 
     static RAW: &[u8] = &[0x00, 0xff];
-    let view = Bytes::borrowed(RAW);
+    let view = Bytes::new(RAW);
     assert_eq!(view.len, 2);
     assert!(!view.ptr.is_null());
 

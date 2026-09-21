@@ -179,8 +179,8 @@ fn the_c_surface_retires() {
     // is this crate's own.
     let reg = unsafe {
         guatiao::exports::library::guatiao_registry_new(
-            Str::borrowed("c-retire"),
-            Str::borrowed("1.0"),
+            Str::new("c-retire"),
+            Str::new("1.0"),
             guatiao::Alloc::rust().as_raw(),
         )
     };
@@ -190,7 +190,7 @@ fn the_c_surface_retires() {
     let status = unsafe {
         guatiao::exports::library::guatiao_registry_load_file(
             reg,
-            Str::borrowed(&path),
+            Str::new(&path),
             guatiao::Alloc::rust().as_raw(),
             &mut answer,
         )
@@ -201,14 +201,14 @@ fn the_c_surface_retires() {
     // SAFETY: `reg` is live and the key is readable.
     assert_eq!(
         unsafe {
-            guatiao::exports::library::guatiao_registry_retire(reg, Str::borrowed("hello_library"))
+            guatiao::exports::library::guatiao_registry_retire(reg, Str::new("hello_library"))
         },
         Status::GUATIAO_OK
     );
     // SAFETY: as above.
     assert_eq!(
         unsafe {
-            guatiao::exports::library::guatiao_registry_retire(reg, Str::borrowed("hello_library"))
+            guatiao::exports::library::guatiao_registry_retire(reg, Str::new("hello_library"))
         },
         Status::GUATIAO_ERR_NOT_FOUND,
         "it left with the first call"
@@ -334,8 +334,8 @@ fn the_c_surface_unloads() {
     // this crate's own.
     let reg = unsafe {
         guatiao::exports::library::guatiao_registry_new(
-            Str::borrowed("c-unload"),
-            Str::borrowed("1.0"),
+            Str::new("c-unload"),
+            Str::new("1.0"),
             guatiao::Alloc::rust().as_raw(),
         )
     };
@@ -345,7 +345,7 @@ fn the_c_surface_unloads() {
     let status = unsafe {
         guatiao::exports::library::guatiao_registry_load_file(
             reg,
-            Str::borrowed(&path),
+            Str::new(&path),
             guatiao::Alloc::rust().as_raw(),
             &mut answer,
         )
@@ -357,14 +357,14 @@ fn the_c_surface_unloads() {
     // outstanding, so the library agrees.
     assert_eq!(
         unsafe {
-            guatiao::exports::library::guatiao_registry_unload(reg, Str::borrowed("hello_library"))
+            guatiao::exports::library::guatiao_registry_unload(reg, Str::new("hello_library"))
         },
         Status::GUATIAO_OK
     );
     // SAFETY: as above.
     assert_eq!(
         unsafe {
-            guatiao::exports::library::guatiao_registry_unload(reg, Str::borrowed("hello_library"))
+            guatiao::exports::library::guatiao_registry_unload(reg, Str::new("hello_library"))
         },
         Status::GUATIAO_ERR_NOT_FOUND
     );
@@ -415,7 +415,7 @@ struct Names<const N: usize>([guatiao::value::types::Str; N]);
 // this binary.
 unsafe impl<const N: usize> Sync for Names<N> {}
 
-static LINKED_KINDS: Names<1> = Names([guatiao::value::types::Str::borrowed("greeter")]);
+static LINKED_KINDS: Names<1> = Names([guatiao::value::types::Str::new("greeter")]);
 
 /// Built once and leaked, which is the contract an entry point makes: the
 /// descriptor lives as long as the code that answered with it.
@@ -443,13 +443,13 @@ unsafe extern "C" fn describing(_host: *const guatiao::library::HostInfo) -> *co
             struct_size: size_of::<ProviderInfo>() as u32,
             vtable_size: 0,
             kinds: Kinds::new(&LINKED_KINDS.0),
-            id: Str::borrowed("linked_greeter"),
-            display_name: Str::borrowed("Linked"),
+            id: Str::new("linked_greeter"),
+            display_name: Str::new("Linked"),
             config: std::ptr::null(),
             vtable: std::ptr::null(),
             ctx: std::ptr::null_mut(),
             meta: MaybeNull::null(),
-            version: Str::borrowed(""),
+            version: Str::new(""),
             available: None,
             tables: guatiao::library::KindTables::empty(),
             create: None,
@@ -458,8 +458,8 @@ unsafe extern "C" fn describing(_host: *const guatiao::library::HostInfo) -> *co
         let desc = LibraryInfo {
             struct_size: size_of::<LibraryInfo>() as u32,
             abi_version: guatiao::library::ABI_VERSION,
-            id: Str::borrowed("linked_library"),
-            version: Str::borrowed("1.0.0"),
+            id: Str::new("linked_library"),
+            version: Str::new("1.0.0"),
             providers: Providers {
                 ptr: providers.as_ptr(),
                 len: providers.len(),

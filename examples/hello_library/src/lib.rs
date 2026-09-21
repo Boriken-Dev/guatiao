@@ -211,7 +211,7 @@ unsafe extern "C" fn almanac_available(_ctx: *mut c_void, reason: *mut Str) -> b
     if !reason.is_null() {
         // SAFETY: the caller's contract says it is writable.
         unsafe {
-            reason.write(Str::borrowed(
+            reason.write(Str::new(
                 "this almanac needs a calendar this host has not set",
             ))
         };
@@ -227,7 +227,7 @@ unsafe extern "C" fn almanac_available(_ctx: *mut c_void, reason: *mut Str) -> b
 unsafe extern "C" fn sundial_available(_ctx: *mut c_void, reason: *mut Str) -> bool {
     if !reason.is_null() {
         // SAFETY: the caller's contract says it is writable.
-        unsafe { reason.write(Str::borrowed("the sun is not up")) };
+        unsafe { reason.write(Str::new("the sun is not up")) };
     }
     false
 }
@@ -459,14 +459,13 @@ fn describe(host: Host) -> Option<&'static LibraryInfo> {
         // ranking several implementations of one kind has a real case to
         // work on rather than a contrived one.
         static GREETER_KINDS: Names<3> = Names([
-            Str::borrowed("greeter"),
-            Str::borrowed("writer"),
-            Str::borrowed("everything"),
+            Str::new("greeter"),
+            Str::new("writer"),
+            Str::new("everything"),
         ]);
-        static SUNDIAL_KINDS: Names<2> =
-            Names([Str::borrowed("timekeeper"), Str::borrowed("everything")]);
-        static ALMANAC_KINDS: Names<1> = Names([Str::borrowed("everything")]);
-        static ECHO_KINDS: Names<1> = Names([Str::borrowed("echo")]);
+        static SUNDIAL_KINDS: Names<2> = Names([Str::new("timekeeper"), Str::new("everything")]);
+        static ALMANAC_KINDS: Names<1> = Names([Str::new("everything")]);
+        static ECHO_KINDS: Names<1> = Names([Str::new("echo")]);
 
         let providers = vec![
             ProviderInfo {
@@ -475,15 +474,15 @@ fn describe(host: Host) -> Option<&'static LibraryInfo> {
                 kinds: Kinds::new(&GREETER_KINDS.0),
                 // `{library id}_{name}`, the convention that makes an id
                 // unique without a central register.
-                id: Str::borrowed("hello_library_greeter"),
-                display_name: Str::borrowed("Hello"),
+                id: Str::new("hello_library_greeter"),
+                display_name: Str::new("Hello"),
                 config: &*schema as *const Value,
                 vtable: &GREETER as *const GreeterVtable as *const c_void,
                 ctx: std::ptr::null_mut(),
                 meta: MaybeNull::null(),
                 // Empty: this provider ships in this library and moves
                 // with it, so its version is the library's.
-                version: Str::borrowed(""),
+                version: Str::new(""),
                 // No slot: this greeter is available whenever it loaded,
                 // which is the common case and the right default.
                 available: None,
@@ -495,15 +494,15 @@ fn describe(host: Host) -> Option<&'static LibraryInfo> {
                 struct_size: size_of::<ProviderInfo>() as u32,
                 vtable_size: 0,
                 kinds: Kinds::new(&ALMANAC_KINDS.0),
-                id: Str::borrowed("hello_library_almanac"),
-                display_name: Str::borrowed("Almanac"),
+                id: Str::new("hello_library_almanac"),
+                display_name: Str::new("Almanac"),
                 config: std::ptr::null(),
                 vtable: std::ptr::null(),
                 ctx: std::ptr::null_mut(),
                 meta: MaybeNull::null(),
                 // Its own, because its contract froze while the library
                 // around it went on. This is the case the field exists for.
-                version: Str::borrowed("1.0.0"),
+                version: Str::new("1.0.0"),
                 // And it refuses, with a reason a host can show.
                 available: Some(almanac_available),
                 tables: KindTables::empty(),
@@ -517,13 +516,13 @@ fn describe(host: Host) -> Option<&'static LibraryInfo> {
                 struct_size: size_of::<ProviderInfo>() as u32,
                 vtable_size: 0,
                 kinds: Kinds::new(&SUNDIAL_KINDS.0),
-                id: Str::borrowed("hello_library_sundial"),
-                display_name: Str::borrowed("Sundial"),
+                id: Str::new("hello_library_sundial"),
+                display_name: Str::new("Sundial"),
                 config: std::ptr::null(),
                 vtable: std::ptr::null(),
                 ctx: std::ptr::null_mut(),
                 meta: MaybeNull::null(),
-                version: Str::borrowed(""),
+                version: Str::new(""),
                 available: Some(sundial_available),
                 tables: KindTables::empty(),
                 create: None,
@@ -536,13 +535,13 @@ fn describe(host: Host) -> Option<&'static LibraryInfo> {
                 struct_size: size_of::<ProviderInfo>() as u32,
                 vtable_size: size_of::<EchoVtable>() as u32,
                 kinds: Kinds::new(&ECHO_KINDS.0),
-                id: Str::borrowed("hello_library_echo"),
-                display_name: Str::borrowed("Echo"),
+                id: Str::new("hello_library_echo"),
+                display_name: Str::new("Echo"),
                 config: std::ptr::null(),
                 vtable: &ECHO as *const EchoVtable as *const c_void,
                 ctx: std::ptr::null_mut(),
                 meta: MaybeNull::null(),
-                version: Str::borrowed(""),
+                version: Str::new(""),
                 available: None,
                 tables: KindTables::empty(),
                 create: None,
@@ -553,8 +552,8 @@ fn describe(host: Host) -> Option<&'static LibraryInfo> {
         let desc = LibraryInfo {
             struct_size: size_of::<LibraryInfo>() as u32,
             abi_version: guatiao::library::ABI_VERSION,
-            id: Str::borrowed("hello_library"),
-            version: Str::borrowed(env!("CARGO_PKG_VERSION")),
+            id: Str::new("hello_library"),
+            version: Str::new(env!("CARGO_PKG_VERSION")),
             providers: Providers {
                 ptr: providers.as_ptr(),
                 len: providers.len(),

@@ -31,7 +31,7 @@ impl Str {
     /// A view of text this program already holds: whatever owns the text
     /// must outlive the view, which is free for a literal and is the usual
     /// case in a library descriptor.
-    pub const fn borrowed(text: &str) -> Str {
+    pub const fn new(text: &str) -> Str {
         Str {
             ptr: text.as_ptr(),
             len: text.len(),
@@ -279,6 +279,20 @@ impl Eq for Text {}
 unsafe impl Send for Text {}
 // SAFETY: as above.
 unsafe impl Sync for Text {}
+
+/// A view of `text`, as [`Str::new`].
+impl From<&str> for Str {
+    fn from(text: &str) -> Str {
+        Str::new(text)
+    }
+}
+
+/// A copy onto Rust's heap: the text's storage belongs to its allocator.
+impl From<Text> for String {
+    fn from(text: Text) -> String {
+        String::from(&*text)
+    }
+}
 
 impl From<&str> for Text {
     fn from(text: &str) -> Text {

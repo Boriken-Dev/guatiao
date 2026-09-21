@@ -1029,7 +1029,7 @@ pub unsafe extern "C" fn guatiao_registry_provider_available(
             Some(Err(why)) => {
                 if !reason.is_null() {
                     // SAFETY: the caller's contract says it is writable.
-                    unsafe { reason.write(Str::borrowed(why)) };
+                    unsafe { reason.write(Str::new(why)) };
                 }
                 false
             }

@@ -270,7 +270,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Two envelope slots, `ProviderInfo::create` and `destroy`, and from C
   `guatiao_registry_provider_create` / `_destroy`.
 - `Text`, `Buffer`, `Entry`, `Tag`, `Str`, `MAX_DEPTH` at the crate root;
-  `Default` for `Text` and `Buffer`; `Bytes::borrowed`/`empty`;
+  `Default` for `Text` and `Buffer`; `Bytes::new`/`empty`;
   `Entry::value_mut`; `Schema for f32`; `Registry::all_ranked`;
   `Provider::table_for`; `Skipped::UnsupportedAbi`; the schema keys as
   `GUATIAO_KEY_*` macros in the header.
