@@ -78,4 +78,48 @@ void main() {
       ),
     );
   });
+
+  group('a library registered by hand', () {
+    tearDown(native.forgetLibraries);
+
+    test('answers for every surface it carries, and no other', () {
+      final path = native.resolveLibraryPath('guatiao');
+      useLibrary(DynamicLibrary.open(path), path: path);
+
+      // The core surface is there; the serde one is a separate library,
+      // so it was not claimed on this library's behalf.
+      expect(native.core().path, path);
+      expect(() => native.serdeLib().path, returnsNormally);
+      expect(native.serdeLib().path, isNot(path));
+    });
+
+    test('takes the caller word when the surfaces are named', () {
+      final path = native.resolveLibraryPath('guatiao');
+      useLibrary(
+        DynamicLibrary.open(path),
+        path: path,
+        forSurfaces: const ['guatiao_form'],
+      );
+      expect(native.formLib().path, path);
+    });
+
+    test('refuses a name that is not a surface', () {
+      final path = native.resolveLibraryPath('guatiao');
+      expect(
+        () => useLibrary(
+          DynamicLibrary.open(path),
+          forSurfaces: const ['guatiao_nonesuch'],
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('is forgotten on request', () {
+      final path = native.resolveLibraryPath('guatiao');
+      useLibrary(DynamicLibrary.open(path), path: path);
+      expect(native.core().path, path);
+      native.forgetLibraries();
+      expect(native.core().path, isNot('<registered>'));
+    });
+  });
 }

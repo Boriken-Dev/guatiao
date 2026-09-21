@@ -10,7 +10,17 @@ description: >-
   Raw dart:ffi bindings over the guatiao C ABI, generated from
   crates/guatiao/include/guatiao.h and the sibling headers for the serde
   and form libraries.
-output: 'lib/src/bindings.g.dart'
+# `symbol-file` is what lets ANOTHER package's ffigen run reuse these
+# type definitions instead of minting its own. Dart's FFI structs are
+# nominal: without it, a `Pointer<guatiao_value>` generated over there is
+# a different type from one generated here and the two cannot be passed
+# between packages at all. A consumer writes
+# `import: { symbol-files: ['package:guatiao/src/symbols.yaml'] }`.
+output:
+  bindings: 'lib/src/bindings.g.dart'
+  symbol-file:
+    output: 'package:guatiao/src/symbols.yaml'
+    import-path: 'package:guatiao/src/bindings.g.dart'
 
 headers:
   entry-points:

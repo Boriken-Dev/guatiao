@@ -25,6 +25,7 @@ class LibraryNotFound implements Exception {
   String toString() {
     final tail = cause == null ? '' : ' ($cause)';
     return 'LibraryNotFound: could not find $filename: checked the '
+        'libraries registered with guatiao.useLibrary, the '
         'GUATIAO_LIBRARY environment variable, guatiao.libraryDirectory '
         'and the platform library search path$tail';
   }
@@ -56,6 +57,21 @@ String dllFilename(String basename) {
   if (Platform.isMacOS) return 'lib$basename.dylib';
   return 'lib$basename.so';
 }
+
+/// Every surface this package speaks, by the base name of the library
+/// that carries it when each is its own file.
+const List<String> surfaces = <String>[
+  'guatiao',
+  'guatiao_serde',
+  'guatiao_form'
+];
+
+/// One symbol per surface, to recognise a library that carries it.
+const Map<String, String> _probe = <String, String>{
+  'guatiao': 'guatiao_value_free',
+  'guatiao_serde': 'guatiao_json_parse',
+  'guatiao_form': 'guatiao_form_check',
+};
 
 /// Where to look when `GUATIAO_LIBRARY` is unset.
 ///
@@ -162,15 +178,65 @@ class NativeLib {
   }
 }
 
-NativeLib? _core;
-NativeLib? _serde;
-NativeLib? _form;
+final Map<String, NativeLib> _registered = <String, NativeLib>{};
+final Map<String, NativeLib> _opened = <String, NativeLib>{};
+
+/// Answers for a surface with a library that is already open, ahead of
+/// every other route.
+///
+/// Two cases need it, and neither can be expressed by a path:
+///
+/// - **One library carrying several surfaces.** An application that links
+///   the ABI into its own shared library exports `guatiao_*` from that
+///   one file, under its own name. Registering it says so.
+/// - **Symbols already in the process.** A statically linked build has no
+///   file to open, and `DynamicLibrary.process()` is the library.
+///
+/// With no [forSurfaces], the library is registered for each surface it
+/// actually exports, so a host registers what it has and nothing else.
+/// Naming them explicitly skips that check and takes the caller's word.
+/// [path] is only what an error message will quote.
+void useLibrary(
+  DynamicLibrary library, {
+  Iterable<String>? forSurfaces,
+  String path = '<registered>',
+}) {
+  final wanted = forSurfaces ?? surfaces;
+  var any = false;
+  for (final basename in wanted) {
+    final probe = _probe[basename];
+    if (probe == null) {
+      throw ArgumentError.value(
+          basename, 'forSurfaces', 'not a guatiao surface');
+    }
+    if (forSurfaces == null && !library.providesSymbol(probe)) continue;
+    _registered[basename] = NativeLib._(path, library);
+    any = true;
+  }
+  if (!any) {
+    throw ArgumentError.value(
+      path,
+      'library',
+      'exports none of the guatiao surfaces (looked for ${_probe.values.join(', ')})',
+    );
+  }
+}
+
+/// Forgets every library registered with [useLibrary]; the next call
+/// resolves again. For a test that swaps one out.
+void forgetLibraries() {
+  _registered.clear();
+  _opened.clear();
+}
+
+NativeLib _libFor(String basename) =>
+    _registered[basename] ?? (_opened[basename] ??= NativeLib.open(basename));
 
 /// The `guatiao` library, loaded on first use.
-NativeLib core() => _core ??= NativeLib.open('guatiao');
+NativeLib core() => _libFor('guatiao');
 
 /// The `guatiao_serde` library, loaded on first use.
-NativeLib serdeLib() => _serde ??= NativeLib.open('guatiao_serde');
+NativeLib serdeLib() => _libFor('guatiao_serde');
 
 /// The `guatiao_form` library, loaded on first use.
-NativeLib formLib() => _form ??= NativeLib.open('guatiao_form');
+NativeLib formLib() => _libFor('guatiao_form');

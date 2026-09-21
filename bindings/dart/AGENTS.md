@@ -167,6 +167,22 @@ form.layout(schema, formDoc);         // [{'section': ..., 'fields': [...]}, ...
 form.isVisible(schema, formDoc, 'key', values);   // bool
 ```
 
+## Embedding, and sharing the types
+
+`useLibrary(DynamicLibrary, {Iterable<String>? forSurfaces, String path})`
+registers an open library ahead of every other route. With no
+`forSurfaces` it is registered for each surface it exports and no other,
+so a host that carries the value and form surfaces in one file registers
+that file once. It is also the way in when the symbols are already in
+the process and there is no file to open. `forgetLibraries()` undoes it.
+`surfaces` lists the three base names.
+
+`package:guatiao/src/symbols.yaml` is an ffigen symbol file. A package
+generating its own bindings over a header that includes `guatiao.h`
+lists it under `import: symbol-files:` and its bindings then reuse these
+types rather than defining their own, which is the only way a pointer
+can cross between the two packages: Dart's FFI structs are nominal.
+
 ## Errors
 
 Every failing `guatiao_status` throws `GuatiaoException` (`code` the raw
