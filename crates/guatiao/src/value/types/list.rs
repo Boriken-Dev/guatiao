@@ -77,7 +77,7 @@ impl<'a> Values<'a> {
     }
 
     /// The elements, whatever they hold. A null pointer views nothing.
-    fn items(self) -> &'a [Value] {
+    const fn items(self) -> &'a [Value] {
         if self.len == 0 || self.ptr.is_null() {
             return &[];
         }

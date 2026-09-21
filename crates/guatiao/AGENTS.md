@@ -136,10 +136,10 @@ that trusts.
 ```rust
 Str::new(&str)  /  std::str::from_utf8(bytes)?.into()   // Str or Text
 unsafe Text::from_raw_parts(..) / Map::from_raw_parts(..) // trusts
-unsafe Str::from_ptr(*const Str<'a>) -> Result<Str<'a>, ValueError>      // UTF-8
-unsafe Text::from_ptr(*const Text) -> Result<&'a Text, ValueError>      // UTF-8
-unsafe Number::from_ptr(*const Number) -> Result<&'a Number, ValueError> // grammar
-unsafe Map::from_ptr(*const Map) -> Result<&'a Map, ValueError>          // keys
+const unsafe Str::from_ptr(*const Str<'a>) -> Result<Str<'a>, ValueError>      // UTF-8
+const unsafe Text::from_ptr(*const Text) -> Result<&'a Text, ValueError>      // UTF-8
+const unsafe Number::from_ptr(*const Number) -> Result<&'a Number, ValueError> // grammar
+const unsafe Map::from_ptr(*const Map) -> Result<&'a Map, ValueError>          // keys
 ```
 
 `from_ptr` is what reads something C points at, as `CStr::from_ptr`

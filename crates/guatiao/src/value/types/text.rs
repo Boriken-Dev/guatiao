@@ -78,13 +78,16 @@ impl<'a> Str<'a> {
     /// assert_eq!(unsafe { Str::from_ptr(std::ptr::null()) }?.len(), 0);
     /// # Ok::<(), ValueError>(())
     /// ```
-    pub unsafe fn from_ptr(ptr: *const Str<'a>) -> Result<Str<'a>, ValueError> {
+    pub const unsafe fn from_ptr(ptr: *const Str<'a>) -> Result<Str<'a>, ValueError> {
         if ptr.is_null() {
             return Ok(Str::empty());
         }
         // SAFETY: the caller's contract.
         let view = unsafe { ptr.read() };
-        Ok(std::str::from_utf8(view.into())?.into())
+        match std::str::from_utf8(view.items()) {
+            Ok(_) => Ok(view),
+            Err(_) => Err(ValueError::NotUtf8),
+        }
     }
 
     /// A view described by hand, trusted as `String::from_raw_parts`
@@ -118,7 +121,7 @@ impl<'a> Str<'a> {
     }
 
     /// The elements, whatever they hold. A null pointer views nothing.
-    fn items(self) -> &'a [u8] {
+    const fn items(self) -> &'a [u8] {
         if self.len == 0 || self.ptr.is_null() {
             return &[];
         }
@@ -307,7 +310,7 @@ impl Text {
     ///
     /// `ptr` points at a text whose storage is consistent and outlives
     /// `'a`. Only the memory is promised: the text is checked.
-    pub unsafe fn from_ptr<'a>(ptr: *const Text) -> Result<&'a Text, ValueError> {
+    pub const unsafe fn from_ptr<'a>(ptr: *const Text) -> Result<&'a Text, ValueError> {
         // SAFETY: the caller's contract.
         let text = unsafe { &*ptr };
         match std::str::from_utf8(text.bytes()) {
@@ -318,7 +321,7 @@ impl Text {
 
     /// The stored bytes, before anything is known of them: what the doors
     /// check, and what freeing and comparing a foreign node read.
-    pub(crate) fn bytes(&self) -> &[u8] {
+    pub(crate) const fn bytes(&self) -> &[u8] {
         if self.len == 0 {
             return &[];
         }
