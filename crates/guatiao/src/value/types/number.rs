@@ -70,12 +70,14 @@ impl Number {
     ///
     /// `ptr` points at a number whose storage is consistent and outlives
     /// `'a`. Only the memory is promised: the text is checked.
-    pub unsafe fn from_ptr<'a>(ptr: *const Number) -> Result<&'a Number, ValueError> {
+    pub const unsafe fn from_ptr<'a>(ptr: *const Number) -> Result<&'a Number, ValueError> {
         // SAFETY: the caller's contract; a `Number` is a `Text` in layout.
         let digits = unsafe { &*ptr.cast::<Text>() };
-        validate_json_number(digits.bytes()).map_err(|_| ValueError::NotANumber)?;
-        // SAFETY: as above, and the grammar was just checked.
-        Ok(unsafe { &*ptr })
+        match validate_json_number(digits.bytes()) {
+            // SAFETY: as above, and the grammar was just checked.
+            Ok(()) => Ok(unsafe { &*ptr }),
+            Err(_) => Err(ValueError::NotANumber),
+        }
     }
 
     /// A copy, grown through `alloc`.
@@ -198,20 +200,20 @@ impl TryFrom<f32> for Number {
 ///
 /// The offset equals the text's length when the text ended early (`"1."`,
 /// `"1e"`, `""`).
-pub(crate) fn validate_json_number(bytes: &[u8]) -> Result<(), usize> {
+pub(crate) const fn validate_json_number(bytes: &[u8]) -> Result<(), usize> {
     let mut i = 0usize;
 
-    if bytes.first() == Some(&b'-') {
+    if matches!(bytes.first(), Some(b'-')) {
         i += 1;
     }
 
     // int = "0" / ( digit1-9 *DIGIT ). A leading zero may not be followed
     // by more digits, which is what rejects `01`.
-    match bytes.get(i) {
+    match at(bytes, i) {
         Some(b'0') => i += 1,
         Some(b'1'..=b'9') => {
             i += 1;
-            while matches!(bytes.get(i), Some(b'0'..=b'9')) {
+            while matches!(at(bytes, i), Some(b'0'..=b'9')) {
                 i += 1;
             }
         }
@@ -219,27 +221,27 @@ pub(crate) fn validate_json_number(bytes: &[u8]) -> Result<(), usize> {
     }
 
     // frac = "." 1*DIGIT -- at least one digit, so `5.` is not a number.
-    if bytes.get(i) == Some(&b'.') {
+    if matches!(at(bytes, i), Some(b'.')) {
         i += 1;
-        if !matches!(bytes.get(i), Some(b'0'..=b'9')) {
+        if !matches!(at(bytes, i), Some(b'0'..=b'9')) {
             return Err(i);
         }
-        while matches!(bytes.get(i), Some(b'0'..=b'9')) {
+        while matches!(at(bytes, i), Some(b'0'..=b'9')) {
             i += 1;
         }
     }
 
     // exp = ("e" / "E") [ "-" / "+" ] 1*DIGIT. The sign IS allowed here,
     // unlike the leading `+` the grammar refuses.
-    if matches!(bytes.get(i), Some(b'e' | b'E')) {
+    if matches!(at(bytes, i), Some(b'e' | b'E')) {
         i += 1;
-        if matches!(bytes.get(i), Some(b'+' | b'-')) {
+        if matches!(at(bytes, i), Some(b'+' | b'-')) {
             i += 1;
         }
-        if !matches!(bytes.get(i), Some(b'0'..=b'9')) {
+        if !matches!(at(bytes, i), Some(b'0'..=b'9')) {
             return Err(i);
         }
-        while matches!(bytes.get(i), Some(b'0'..=b'9')) {
+        while matches!(at(bytes, i), Some(b'0'..=b'9')) {
             i += 1;
         }
     }
@@ -251,9 +253,22 @@ pub(crate) fn validate_json_number(bytes: &[u8]) -> Result<(), usize> {
     Ok(())
 }
 
+/// `bytes.get(i)`, which is not `const`.
+const fn at(bytes: &[u8], i: usize) -> Option<u8> {
+    if i < bytes.len() {
+        Some(bytes[i])
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // The grammar is `const`, so `Number::from_ptr` can be.
+    const _: () = assert!(validate_json_number(b"-2.5E-3").is_ok());
+    const _: () = assert!(validate_json_number(b"01").is_err());
 
     /// Every shape RFC 8259 section 6 allows, and the ones a `f64` check
     /// would take or reject wrongly. **This test bites**: deleting the

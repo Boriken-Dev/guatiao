@@ -227,3 +227,17 @@ fn what_c_points_at_is_checked_on_the_way_in() {
         Err(guatiao::ValueError::NotUtf8)
     );
 }
+
+/// `from_ptr` and the grammar behind `Number` run at compile time.
+#[test]
+fn the_checked_reads_are_const() {
+    use guatiao::{Str, ValueError};
+
+    const HOST: Str<'static> = Str::new("host");
+    // SAFETY: a live view over a literal.
+    const READ: Result<Str<'static>, ValueError> = unsafe { Str::from_ptr(&HOST) };
+    assert!(matches!(READ, Ok(view) if view.len() == 4));
+    // SAFETY: null is an empty view.
+    const NULL: Result<Str<'static>, ValueError> = unsafe { Str::from_ptr(std::ptr::null()) };
+    assert!(matches!(NULL, Ok(view) if view.is_empty()));
+}

@@ -78,7 +78,7 @@ impl<'a> Bytes<'a> {
     }
 
     /// The elements, whatever they hold. A null pointer views nothing.
-    fn items(self) -> &'a [u8] {
+    const fn items(self) -> &'a [u8] {
         if self.len == 0 || self.ptr.is_null() {
             return &[];
         }

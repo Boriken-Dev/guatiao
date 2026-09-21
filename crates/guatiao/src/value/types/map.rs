@@ -82,7 +82,7 @@ impl<'a> Entries<'a> {
     }
 
     /// The elements, whatever they hold. A null pointer views nothing.
-    fn items(self) -> &'a [Entry] {
+    const fn items(self) -> &'a [Entry] {
         if self.len == 0 || self.ptr.is_null() {
             return &[];
         }
@@ -235,7 +235,7 @@ impl Map {
     }
 
     /// Its entries, in insertion order, which is part of the contract.
-    pub fn entries(&self) -> &[Entry] {
+    pub const fn entries(&self) -> &[Entry] {
         if self.len == 0 {
             return &[];
         }
@@ -475,7 +475,7 @@ impl Map {
     ///
     /// `ptr` points at a map whose storage is consistent and outlives
     /// `'a`. Only the memory is promised: the keys are checked.
-    pub unsafe fn from_ptr<'a>(ptr: *const Map) -> Result<&'a Map, ValueError> {
+    pub const unsafe fn from_ptr<'a>(ptr: *const Map) -> Result<&'a Map, ValueError> {
         // SAFETY: the caller's contract.
         let map = unsafe { &*ptr };
         if map.keys_are_text() {
@@ -487,10 +487,16 @@ impl Map {
 
     /// Whether every key is UTF-8: what a foreign map must show before it
     /// is read as a `Map`. Its values are checked by their own doors.
-    pub(crate) fn keys_are_text(&self) -> bool {
-        self.entries()
-            .iter()
-            .all(|entry| std::str::from_utf8(entry.key_bytes()).is_ok())
+    pub(crate) const fn keys_are_text(&self) -> bool {
+        let entries = self.entries();
+        let mut i = 0;
+        while i < entries.len() {
+            if std::str::from_utf8(entries[i].key_bytes()).is_err() {
+                return false;
+            }
+            i += 1;
+        }
+        true
     }
 
     /// A deep copy through `alloc`, at any depth.
@@ -687,7 +693,7 @@ impl Entry {
     }
 
     /// The key's stored bytes, for comparing a map not yet checked.
-    pub(crate) fn key_bytes(&self) -> &[u8] {
+    pub(crate) const fn key_bytes(&self) -> &[u8] {
         self.key.bytes()
     }
 
