@@ -182,23 +182,24 @@ impl Text {
         Text::new_in(alloc, self.as_str().ok_or(ValueError::NotUtf8)?)
     }
 
-    /// The bytes, whether or not they are valid UTF-8.
-    pub fn as_bytes(&self) -> &[u8] {
+    /// The text itself, or `None` if it is not valid UTF-8.
+    pub fn as_str(&self) -> Option<&str> {
+        std::str::from_utf8(self).ok()
+    }
+}
+
+/// The bytes, whether or not they are valid UTF-8. There is no
+/// `DerefMut`: writing bytes could break the UTF-8, and `push_str` is how
+/// a text changes.
+impl std::ops::Deref for Text {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
         if self.len == 0 {
             return &[];
         }
         // SAFETY: the first `len` bytes are initialised.
         unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
-    }
-
-    /// The text itself, or `None` if it is not valid UTF-8.
-    pub fn as_str(&self) -> Option<&str> {
-        if self.len == 0 {
-            return Some("");
-        }
-        // SAFETY: the first `len` bytes are initialised.
-        let bytes = unsafe { std::slice::from_raw_parts(self.ptr, self.len) };
-        std::str::from_utf8(bytes).ok()
     }
 }
 
@@ -225,14 +226,14 @@ impl Clone for Text {
 
 impl AsRef<[u8]> for Text {
     fn as_ref(&self) -> &[u8] {
-        self.as_bytes()
+        self
     }
 }
 
 /// By bytes, as its equality is.
 impl std::hash::Hash for Text {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.as_bytes().hash(state);
+        (**self).hash(state);
     }
 }
 
@@ -249,7 +250,7 @@ impl PartialEq for Text {
     /// otherwise compare equal on the strength of both being
     /// unreadable.
     fn eq(&self, other: &Text) -> bool {
-        self.as_bytes() == other.as_bytes()
+        **self == **other
     }
 }
 

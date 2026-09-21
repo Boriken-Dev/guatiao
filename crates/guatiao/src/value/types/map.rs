@@ -588,7 +588,7 @@ impl Entry {
     /// the first would make two different keys look identical.
     /// [`key_str`](Entry::key_str) is the checked reading.
     pub fn key(&self) -> &[u8] {
-        self.key.as_bytes()
+        &self.key
     }
 
     /// The key as text, or `None` if it is not valid UTF-8.

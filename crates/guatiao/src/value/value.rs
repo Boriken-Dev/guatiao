@@ -379,7 +379,7 @@ impl Value {
 
     /// The bytes under a NUMBER tag, whether or not they are a number.
     pub(crate) fn number_bytes(&self) -> Option<&[u8]> {
-        self.number_text().map(Text::as_bytes)
+        self.number_text().map(|digits| &digits[..])
     }
 
     /// Whether this is a NUMBER whose text is one.
