@@ -97,10 +97,11 @@ class _BorrowedRoot implements ValueOwner {
 // Every reader below reimplements one of `guatiao.h`'s `static inline`
 // helpers, which have no symbol in any library.
 
-// **No top-level state on this path**, so a reader is safe inside an
-// `isolateGroupBound` callback, which may touch only globals shared across
-// the isolate group. A stride comes from a struct pointer's own `+` and an
-// offset from `sizeOf` written inline, both resolved at compile time.
+// **No top-level state on this path.** In an `isolateGroupBound` callback a
+// top-level `final` here has read as 0 after an earlier callback read it as
+// 72, and a reader striding by it then returns the first entry every time.
+// So a stride comes from a struct pointer's own `+` and an offset from
+// `sizeOf` written inline. `test/read_path_test.dart` holds the line.
 
 /// `guatiao_entry.value`: the entry's key is a `guatiao_string`, and the
 /// value follows it. Pinned by the crate's own layout checks.
