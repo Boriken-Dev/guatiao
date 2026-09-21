@@ -116,7 +116,7 @@ fn len_of(value: &Value) -> usize {
 /// The elements of a list, for comparison.
 fn elements(value: &Value) -> Vec<&Value> {
     TryAsRef::<List>::try_as_ref(value)
-        .map(List::items)
+        .map(|list| &list[..])
         .unwrap_or(&[])
         .iter()
         .collect()

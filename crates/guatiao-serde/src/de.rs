@@ -472,7 +472,7 @@ mod tests {
         assert_eq!(text, "[1,2]");
         assert_eq!(
             TryAsRef::<List>::try_as_ref(&read(&text))
-                .map(List::items)
+                .map(|list| &list[..])
                 .map(<[_]>::len),
             Some(2)
         );

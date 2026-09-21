@@ -62,7 +62,7 @@ fn check(what: &str, v: &Value) {
         TryAsRef::<Map>::try_as_ref(v)
             .and_then(|m| m.get("hosts"))
             .and_then(TryAsRef::<List>::try_as_ref)
-            .map(List::items)
+            .map(|list| &list[..])
             .map(<[_]>::len),
         Some(2),
         "{what}"

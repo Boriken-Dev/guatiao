@@ -136,6 +136,16 @@ impl Map {
         Ok(unsafe { Alloc::from_raw(self.alloc) }?)
     }
 
+    /// An empty map with room for `capacity` entries, through `alloc`.
+    pub(crate) fn with_capacity_in(alloc: Alloc, capacity: usize) -> Result<Map, ValueError> {
+        let mut map = Map::new_in(alloc);
+        if capacity > 0 {
+            // SAFETY: the container is consistent and empty.
+            unsafe { reserve(&mut map, capacity, Some(alloc))? };
+        }
+        Ok(map)
+    }
+
     /// How many entries it holds.
     pub fn len(&self) -> usize {
         self.len
@@ -202,7 +212,12 @@ impl Map {
 
     /// Appends an entry under a key known to be absent. The key copy is
     /// made first, so a failure there leaves the map as it was.
-    fn insert_node(&mut self, key: &str, value: Value, alloc: Alloc) -> Result<(), ValueError> {
+    pub(crate) fn insert_node(
+        &mut self,
+        key: &str,
+        value: Value,
+        alloc: Alloc,
+    ) -> Result<(), ValueError> {
         let key_owned = match Text::new_in(alloc, key) {
             Ok(k) => k,
             Err(e) => {
@@ -382,31 +397,34 @@ impl Map {
         Some(out)
     }
 
-    /// A deep copy through `alloc`, bounded by [`MAX_DEPTH`](crate::MAX_DEPTH).
+    /// A deep copy through `alloc`, at any depth.
     pub fn clone_in(&self, alloc: Alloc) -> Result<Map, ValueError> {
-        self.clone_at(alloc, 0)
+        crate::value::walk::copy_map(self, alloc)
     }
 
-    pub(crate) fn clone_at(&self, alloc: Alloc, depth: u32) -> Result<Map, ValueError> {
-        let entries = self.entries();
-        // The guard owns everything built so far, so an early return frees
-        // it rather than leaking it.
-        let mut out = Map::new_in(alloc);
-        if !entries.is_empty() {
-            // SAFETY: the container is consistent and empty.
-            unsafe { reserve(&mut out, entries.len(), Some(alloc))? };
+    /// The entries, mutably, for reordering them in place. Private: a
+    /// caller changing a key would move a value to a key nobody searched
+    /// for.
+    fn entries_mut(&mut self) -> &mut [Entry] {
+        if self.len == 0 {
+            return &mut [];
         }
-        for entry in entries {
-            let key = entry.key_str().ok_or(ValueError::NotUtf8)?;
-            let value = entry.value.clone_at(alloc, depth + 1)?;
-            out.insert_node(key, value, alloc)?;
-        }
-        Ok(out)
+        // SAFETY: the first `len` entries are initialised, and `&mut self`
+        // makes the borrow unique.
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 
-    /// Pairwise, in order, each value through [`Value`]'s own
-    /// comparison. **Order is significant**: two maps with the same pairs
-    /// in a different order are two different values.
+    /// Removes the last entry.
+    fn pop_last(&mut self) -> Option<Entry> {
+        if self.len == 0 {
+            return None;
+        }
+        self.len -= 1;
+        // SAFETY: the entry at the old last index is initialised, and with
+        // `len` lowered nothing reads it again.
+        Some(unsafe { self.ptr.add(self.len).read() })
+    }
+
     /// Frees every key, moves every value onto `stack` and frees the
     /// storage. See [`List::dismantle_into`](super::List).
     pub(crate) fn dismantle_into(&mut self, stack: &mut Vec<Value>) {
@@ -420,13 +438,63 @@ impl Map {
         // SAFETY: the entries have been moved out.
         unsafe { release_buffer(self) }
     }
+}
 
-    pub(crate) fn eq_at(&self, other: &Map, depth: u32) -> bool {
-        let (x, y) = (self.entries(), other.entries());
-        x.len() == y.len()
-            && x.iter()
-                .zip(y)
-                .all(|(p, q)| p.key() == q.key() && p.value.eq_at(&q.value, depth + 1))
+/// `map["host"]`, as `HashMap` gives it: panics when nothing is stored
+/// under the key. There is no `IndexMut`, for the same reason `HashMap`
+/// has none: it could only hand back a slot that already exists, so
+/// `map["new"] = v` would panic rather than insert. [`Map::set`] inserts.
+impl std::ops::Index<&str> for Map {
+    type Output = Value;
+
+    fn index(&self, key: &str) -> &Value {
+        match self.get(key) {
+            Some(value) => value,
+            None => panic!("no value under `{key}`"),
+        }
+    }
+}
+
+/// The entries, moved out in order as `(key, value)`. What is not taken is
+/// freed with the iterator.
+#[derive(Debug)]
+pub struct IntoIter {
+    /// The rest, in reverse, so each `next` is a `pop_last`.
+    rest: Map,
+}
+
+impl Iterator for IntoIter {
+    type Item = (Text, Value);
+
+    fn next(&mut self) -> Option<(Text, Value)> {
+        self.rest.pop_last().map(Entry::into_parts)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.rest.len(), Some(self.rest.len()))
+    }
+}
+
+impl ExactSizeIterator for IntoIter {}
+
+impl IntoIterator for Map {
+    type Item = (Text, Value);
+    type IntoIter = IntoIter;
+
+    fn into_iter(mut self) -> IntoIter {
+        self.entries_mut().reverse();
+        IntoIter { rest: self }
+    }
+}
+
+/// Each entry, mutably. [`Entry::value_mut`] reaches the value; the key
+/// stays the key.
+impl<'a> IntoIterator for &'a mut Map {
+    type Item = &'a mut Entry;
+    type IntoIter = std::slice::IterMut<'a, Entry>;
+
+    fn into_iter(self) -> std::slice::IterMut<'a, Entry> {
+        self.entries_mut().iter_mut()
     }
 }
 
@@ -450,9 +518,11 @@ impl Clone for Map {
 }
 
 impl PartialEq for Map {
-    /// Structural, as [`Value`]'s is.
+    /// Pairwise, in order, each value by [`Value`]'s own comparison.
+    /// **Order is significant**: two maps with the same pairs in a
+    /// different order are two different values.
     fn eq(&self, other: &Map) -> bool {
-        self.eq_at(other, 0)
+        crate::value::walk::equal(crate::value::walk::Pair::Maps(self, other))
     }
 }
 

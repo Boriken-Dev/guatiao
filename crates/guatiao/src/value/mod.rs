@@ -22,6 +22,8 @@ mod raw;
 pub mod read;
 pub mod status;
 pub mod types;
+// The whole-tree walks besides drop: a deep copy, and equality.
+mod walk;
 // A stutter to clippy; every file here is named for the type it holds.
 #[allow(clippy::module_inception)]
 pub mod value;

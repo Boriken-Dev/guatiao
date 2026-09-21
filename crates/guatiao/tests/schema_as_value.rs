@@ -82,7 +82,7 @@ fn keys_of(v: &Value) -> Vec<String> {
 /// The strings in a list.
 fn strings_of(v: Option<&Value>) -> Vec<String> {
     v.and_then(TryAsRef::<List>::try_as_ref)
-        .map(List::items)
+        .map(|list| &list[..])
         .unwrap_or(&[])
         .iter()
         .filter_map(TryAsRef::<str>::try_as_ref)
@@ -369,7 +369,7 @@ fn a_union_and_a_variant_are_different_features() {
         assert_eq!(
             at(port, "anyOf")
                 .and_then(TryAsRef::<List>::try_as_ref)
-                .map(List::items)
+                .map(|list| &list[..])
                 .unwrap()
                 .len(),
             2
@@ -384,7 +384,7 @@ fn a_union_and_a_variant_are_different_features() {
         assert_eq!(str_or(at(auth, "x-variant-tag"), ""), "auth");
         let one_of = at(auth, "oneOf")
             .and_then(TryAsRef::<List>::try_as_ref)
-            .map(List::items)
+            .map(|list| &list[..])
             .unwrap();
         assert_eq!(one_of.len(), 2);
         let userpass = &one_of[1];

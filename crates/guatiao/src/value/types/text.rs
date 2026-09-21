@@ -223,6 +223,27 @@ impl Clone for Text {
     }
 }
 
+impl AsRef<[u8]> for Text {
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+/// By bytes, as its equality is.
+impl std::hash::Hash for Text {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_bytes().hash(state);
+    }
+}
+
+/// Appends, as `String`'s `Write` does, so `write!(text, "{x}")` works.
+/// An allocator's refusal is `fmt::Error`, which carries no detail.
+impl std::fmt::Write for Text {
+    fn write_str(&mut self, text: &str) -> std::fmt::Result {
+        self.push_str(text).map_err(|_| std::fmt::Error)
+    }
+}
+
 impl PartialEq for Text {
     /// The BYTES, not the `&str`: two texts that are not UTF-8 would
     /// otherwise compare equal on the strength of both being

@@ -63,8 +63,9 @@ typedef struct guatiao_entry guatiao_entry;
 
 
 /*
- How deep any walk here follows: cloning, merging, comparing and
- schema checking.
+ How deep the recursive walks follow: merging, schema checking and the
+ serde formats. Copying, comparing and freeing are loops and have no
+ such limit.
 
  Far above any real configuration tree and far below what would
  exhaust a stack, so a hostile one is an error rather than a dead

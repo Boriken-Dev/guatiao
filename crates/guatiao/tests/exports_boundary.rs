@@ -254,7 +254,7 @@ fn the_mergelists_bit_reaches_the_merge() {
         let merged = out;
         assert_eq!(
             TryAsRef::<List>::try_as_ref(&merged)
-                .map(List::items)
+                .map(|list| &list[..])
                 .unwrap_or(&[])
                 .len(),
             expected,
@@ -427,7 +427,7 @@ fn the_map_clear_symbol_refuses_a_list() {
     assert_eq!(status, Status::GUATIAO_ERR_WRONG_KIND);
     assert_eq!(
         TryAsRef::<List>::try_as_ref(&list)
-            .map(List::items)
+            .map(|list| &list[..])
             .unwrap()
             .len(),
         1,
@@ -614,7 +614,7 @@ fn the_flat_keys_of_an_option_are_listed() {
     assert_eq!(status, Status::GUATIAO_OK);
 
     let listed: Vec<&str> = TryAsRef::<List>::try_as_ref(&keys)
-        .map(List::items)
+        .map(|list| &list[..])
         .expect("a list")
         .iter()
         .filter_map(TryAsRef::<str>::try_as_ref)
@@ -777,7 +777,7 @@ fn a_node_stored_into_itself_is_refused() {
     assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
     assert_eq!(
         TryAsRef::<List>::try_as_ref(&list)
-            .map(List::items)
+            .map(|list| &list[..])
             .unwrap()
             .len(),
         0,

@@ -18,9 +18,10 @@ use std::mem::ManuallyDrop;
 
 use crate::value::alloc::Alloc;
 use crate::value::convert::{MapError, TryAsMut, TryAsRef};
-use crate::value::error::{MAX_DEPTH, ValueError};
+use crate::value::error::ValueError;
 use crate::value::raw::dangling;
 
+use super::types::number::validate_json_number;
 use super::types::{Buffer, Entry, List, Map, Number, Text};
 
 /// The kind of a stored value.
@@ -266,7 +267,7 @@ impl Value {
             Tag::GUATIAO_MAP => arm::<Map>(self)?.alloc(),
             Tag::GUATIAO_LIST => arm::<List>(self)?.alloc(),
             Tag::GUATIAO_STRING => arm::<Text>(self)?.alloc(),
-            Tag::GUATIAO_NUMBER => arm::<Number>(self)?.alloc(),
+            Tag::GUATIAO_NUMBER => self.number_text().ok_or(ValueError::WrongKind)?.alloc(),
             Tag::GUATIAO_BYTES => arm::<Buffer>(self)?.alloc(),
             _ => Err(ValueError::WrongKind),
         }
@@ -298,57 +299,11 @@ impl Value {
     /// tree carries its allocator and copying one into another heap costs
     /// a walk.
     ///
-    /// Bounded by [`MAX_DEPTH`]. The copy is complete or it does not
-    /// exist: a failure part-way frees everything already built.
+    /// Any depth: the walk is a loop over a heap stack. The copy is
+    /// complete or it does not exist: a failure part-way frees everything
+    /// already built.
     pub fn clone_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
-        self.clone_at(alloc, 0)
-    }
-
-    /// Hands off to the live container's own copy; `depth` bounds the walk
-    /// at [`MAX_DEPTH`].
-    pub(crate) fn clone_at(&self, alloc: Alloc, depth: u32) -> Result<Value, ValueError> {
-        if depth >= MAX_DEPTH {
-            return Err(ValueError::TooDeep);
-        }
-        Ok(match self.tag()? {
-            Tag::GUATIAO_ABSENT => Value::absent(),
-            Tag::GUATIAO_NULL => Value::null(),
-            Tag::GUATIAO_BOOL => Value::from(*arm::<bool>(self)?),
-            Tag::GUATIAO_STRING => arm::<Text>(self)?.clone_in(alloc)?.into(),
-            Tag::GUATIAO_NUMBER => arm::<Number>(self)?.clone_in(alloc)?.into(),
-            Tag::GUATIAO_BYTES => arm::<Buffer>(self)?.clone_in(alloc)?.into(),
-            Tag::GUATIAO_LIST => arm::<List>(self)?.clone_at(alloc, depth)?.into(),
-            Tag::GUATIAO_MAP => arm::<Map>(self)?.clone_at(alloc, depth)?.into(),
-        })
-    }
-
-    /// Whether two trees hold the same thing, following no deeper than
-    /// [`MAX_DEPTH`]. Two nested deeper compare **unequal** rather than
-    /// overflowing a stack: a caller using this for uniqueness keeps an
-    /// item it might have discarded.
-    pub(crate) fn eq_at(&self, other: &Value, depth: u32) -> bool {
-        /// Both sides as `T`, compared by `T`'s own rule.
-        fn same<T: ?Sized>(a: &Value, b: &Value, eq: impl Fn(&T, &T) -> bool) -> bool
-        where
-            Value: TryAsRef<T>,
-        {
-            matches!((a.try_as_ref(), b.try_as_ref()), (Some(x), Some(y)) if eq(x, y))
-        }
-
-        if self.tag != other.tag || depth >= MAX_DEPTH {
-            return false;
-        }
-        match self.tag() {
-            Ok(Tag::GUATIAO_ABSENT | Tag::GUATIAO_NULL) => true,
-            Ok(Tag::GUATIAO_BOOL) => same::<bool>(self, other, bool::eq),
-            Ok(Tag::GUATIAO_STRING) => same::<Text>(self, other, Text::eq),
-            Ok(Tag::GUATIAO_NUMBER) => same::<Number>(self, other, Number::eq),
-            Ok(Tag::GUATIAO_BYTES) => same::<Buffer>(self, other, Buffer::eq),
-            Ok(Tag::GUATIAO_LIST) => same::<List>(self, other, |x, y| x.eq_at(y, depth)),
-            Ok(Tag::GUATIAO_MAP) => same::<Map>(self, other, |x, y| x.eq_at(y, depth)),
-            // Unknown to this build: equal exactly when the tags are.
-            Err(_) => true,
-        }
+        crate::value::walk::copy_value(self, alloc)
     }
 
     /// Frees everything this value owns and leaves it null-tagged. Rust
@@ -399,7 +354,81 @@ arm_as!(Map, map, Tag::GUATIAO_MAP);
 arm_as!(List, list, Tag::GUATIAO_LIST);
 arm_as!(Buffer, bytes, Tag::GUATIAO_BYTES);
 arm_as!(Text, text, Tag::GUATIAO_STRING);
-arm_as!(Number, number, Tag::GUATIAO_NUMBER);
+
+impl Value {
+    /// A NUMBER node's storage, read as the `Text` it is laid out as,
+    /// whatever its bytes are. Freeing it, finding its allocator and
+    /// comparing its bytes must reach a malformed foreign number too, and
+    /// a `Text` offers no `str` it could be wrong about.
+    fn number_text(&self) -> Option<&Text> {
+        match Tag::try_from(self.tag) {
+            // SAFETY: the tag says the number arm is live, and a `Number`
+            // is a `Text` in layout, so the text arm is the same storage.
+            Ok(Tag::GUATIAO_NUMBER) => Some(unsafe { &self.payload.text }),
+            _ => None,
+        }
+    }
+
+    fn number_text_mut(&mut self) -> Option<&mut Text> {
+        match Tag::try_from(self.tag) {
+            // SAFETY: as for `number_text`.
+            Ok(Tag::GUATIAO_NUMBER) => Some(unsafe { &mut self.payload.text }),
+            _ => None,
+        }
+    }
+
+    /// The bytes under a NUMBER tag, whether or not they are a number.
+    pub(crate) fn number_bytes(&self) -> Option<&[u8]> {
+        self.number_text().map(Text::as_bytes)
+    }
+
+    /// Whether this is a NUMBER whose text is one.
+    fn holds_a_number(&self) -> bool {
+        self.number_bytes()
+            .is_some_and(|digits| validate_json_number(digits).is_ok())
+    }
+}
+
+/// Only a number that is one: its text matches the JSON grammar, which is
+/// what lets a [`Number`] be read as a `str`. A foreign producer may write
+/// anything under the tag, and such a node holds no number.
+impl TryAsRef<Number> for Value {
+    fn try_as_ref(&self) -> Option<&Number> {
+        if !self.holds_a_number() {
+            return None;
+        }
+        // SAFETY: the tag says the number arm is live, and its text was
+        // just checked against the grammar.
+        Some(unsafe { &self.payload.number })
+    }
+}
+
+impl TryAsMut<Number> for Value {
+    fn try_as_mut(&mut self) -> Option<&mut Number> {
+        if !self.holds_a_number() {
+            return None;
+        }
+        // SAFETY: as for `try_as_ref`. A `Number` offers no way to change
+        // its text, so it stays well formed.
+        Some(unsafe { &mut self.payload.number })
+    }
+}
+
+/// The number, consuming the node; a node that holds no number is handed
+/// back untouched.
+impl TryFrom<Value> for Number {
+    type Error = Value;
+
+    fn try_from(value: Value) -> Result<Number, Value> {
+        if !value.holds_a_number() {
+            return Err(value);
+        }
+        let (_, payload) = value.into_raw_parts();
+        // SAFETY: checked just above, and `into_raw_parts` forgot the
+        // node, so this is the arm's only owner.
+        Ok(ManuallyDrop::into_inner(unsafe { payload.number }))
+    }
+}
 
 impl TryAsRef<str> for Value {
     /// A STRING's text. A number is not a string, so this answers `None`
@@ -411,7 +440,7 @@ impl TryAsRef<str> for Value {
 
 impl TryAsRef<[u8]> for Value {
     fn try_as_ref(&self) -> Option<&[u8]> {
-        Some(TryAsRef::<Buffer>::try_as_ref(self)?.as_slice())
+        TryAsRef::<Buffer>::try_as_ref(self).map(|buffer| &buffer[..])
     }
 }
 
@@ -448,7 +477,6 @@ arm_into!(Map, map, Tag::GUATIAO_MAP);
 arm_into!(List, list, Tag::GUATIAO_LIST);
 arm_into!(Buffer, bytes, Tag::GUATIAO_BYTES);
 arm_into!(Text, text, Tag::GUATIAO_STRING);
-arm_into!(Number, number, Tag::GUATIAO_NUMBER);
 
 /// A borrowed container, with the error a reader wants: which kind was
 /// needed and which was there.
@@ -489,9 +517,9 @@ impl Default for Value {
 
 impl PartialEq for Value {
     /// Structural: the same kind and the same contents, whatever
-    /// allocator either side lives in.
+    /// allocator either side lives in, at any depth.
     fn eq(&self, other: &Value) -> bool {
-        self.eq_at(other, 0)
+        crate::value::walk::equal(crate::value::walk::Pair::Values(self, other))
     }
 }
 
@@ -534,8 +562,8 @@ impl Drop for Value {
                 map.dismantle_into(&mut stack);
             } else if let Some(text) = TryAsMut::<Text>::try_as_mut(node) {
                 text.release();
-            } else if let Some(number) = TryAsMut::<Number>::try_as_mut(node) {
-                number.release();
+            } else if let Some(digits) = node.number_text_mut() {
+                digits.release();
             } else if let Some(buffer) = TryAsMut::<Buffer>::try_as_mut(node) {
                 buffer.release();
             }
