@@ -8,6 +8,8 @@
 
 use std::ptr;
 
+use std::marker::PhantomData;
+
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::error::ValueError;
 use crate::value::raw::{dangling, release_buffer, reserve};
@@ -17,11 +19,85 @@ use super::{Payload, Tag, Value, or_abort};
 /// A borrowed sequence of values, in order.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Values {
+pub struct Values<'a> {
     /// First element. May be null or dangling when `len` is 0.
-    pub ptr: *const Value,
+    ptr: *const Value,
     /// Number of elements.
-    pub len: usize,
+    len: usize,
+    /// What the view borrows, for the compiler; nothing in C.
+    _borrows: PhantomData<&'a [Value]>,
+}
+
+impl<'a> Values<'a> {
+    /// A view of values this program holds, for as long as it holds it.
+    pub const fn new(items: &'a [Value]) -> Values<'a> {
+        Values {
+            ptr: items.as_ptr(),
+            len: items.len(),
+            _borrows: PhantomData,
+        }
+    }
+
+    /// An empty view.
+    pub const fn empty() -> Values<'a> {
+        Values {
+            ptr: std::ptr::null(),
+            len: 0,
+            _borrows: PhantomData,
+        }
+    }
+
+    /// A view described by hand.
+    ///
+    /// # Safety
+    ///
+    /// `len` is 0, or `ptr` addresses `len` initialised elements that stay
+    /// readable and unchanged for `'a`.
+    pub const unsafe fn from_raw_parts(ptr: *const Value, len: usize) -> Values<'a> {
+        Values {
+            ptr,
+            len,
+            _borrows: PhantomData,
+        }
+    }
+
+    /// The first element. May be null or dangling when `len` is 0.
+    pub const fn ptr(&self) -> *const Value {
+        self.ptr
+    }
+
+    /// How many elements.
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Whether it views nothing.
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// The elements, whatever they hold. A null pointer views nothing.
+    fn items(self) -> &'a [Value] {
+        if self.len == 0 || self.ptr.is_null() {
+            return &[];
+        }
+        // SAFETY: the view was made from a borrow of `'a`, or by
+        // `from_raw_parts` or a foreign caller promising the same.
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+}
+
+impl<'a> From<&'a [Value]> for Values<'a> {
+    fn from(items: &'a [Value]) -> Values<'a> {
+        Values::new(items)
+    }
+}
+
+/// The values. Each is checked by its own door when it is read.
+impl<'a> From<Values<'a>> for &'a [Value] {
+    fn from(view: Values<'a>) -> &'a [Value] {
+        view.items()
+    }
 }
 
 /// An owned, growable sequence of values.

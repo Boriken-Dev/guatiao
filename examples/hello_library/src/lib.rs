@@ -136,7 +136,7 @@ unsafe impl Sync for VTable {}
 
 /// A `Str` holds a `*const u8`, so an array of them is not `Sync` and
 /// cannot be a `static` without saying why either.
-struct Names<const N: usize>([Str; N]);
+struct Names<const N: usize>([Str<'static>; N]);
 
 // SAFETY: a compile-time constant that is never written, whose every
 // pointer addresses a string literal in this library's own image, which
@@ -341,16 +341,7 @@ unsafe extern "C" fn echo(_ctx: *mut c_void, name: Str, out: *mut Value) -> Stat
         return Status::GUATIAO_ERR_WRONG_KIND;
     };
 
-    // SAFETY: the caller's contract says `name` is readable for the call;
-    // an empty view may carry any pointer and is never dereferenced.
-    let bytes: &[u8] = if name.len == 0 {
-        &[]
-    } else if name.ptr.is_null() {
-        return Status::GUATIAO_ERR_NULL;
-    } else {
-        unsafe { std::slice::from_raw_parts(name.ptr, name.len) }
-    };
-    let Ok(name) = std::str::from_utf8(bytes) else {
+    let Ok(name) = std::str::from_utf8(name.into()) else {
         return Status::GUATIAO_ERR_BAD_VALUE;
     };
     let alloc = library_alloc();
@@ -399,8 +390,8 @@ struct Registered {
     #[allow(dead_code)]
     meta: Box<Map>,
     #[allow(dead_code)]
-    providers: Vec<ProviderInfo>,
-    desc: LibraryInfo,
+    providers: Vec<ProviderInfo<'static>>,
+    desc: LibraryInfo<'static>,
 }
 
 // SAFETY: built once inside `OnceLock::get_or_init`, never written again,
@@ -417,7 +408,7 @@ static REGISTERED: OnceLock<Registered> = OnceLock::new();
 /// null, which its loader reports as a skip rather than a failure. The
 /// host is kept, because the echo provider reaches the greeter through it
 /// on every call.
-fn describe(host: Host) -> Option<&'static LibraryInfo> {
+fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> {
     ENTRY_CALLS.fetch_add(1, Ordering::Relaxed);
     if host.abi_version() != guatiao::library::ABI_VERSION {
         return None;

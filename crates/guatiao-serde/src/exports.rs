@@ -154,7 +154,7 @@ fn guard(body: impl FnOnce() -> Status) -> Status {
 /// `text` is a readable view for the call, `alloc` is null or addresses
 /// an allocator, and `out` addresses writable storage for one value.
 unsafe fn inputs<'a>(
-    text: Str,
+    text: Str<'a>,
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Result<(&'a str, Alloc), Status> {
@@ -169,18 +169,7 @@ unsafe fn inputs<'a>(
     let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
         return Err(Status::GUATIAO_ERR_ALLOC);
     };
-    if text.len > 0 && text.ptr.is_null() {
-        return Err(Status::GUATIAO_ERR_NULL);
-    }
-    // SAFETY: as above; a zero length never dereferences the pointer.
-    let bytes = if text.len == 0 {
-        &[][..]
-    } else {
-        unsafe { std::slice::from_raw_parts(text.ptr, text.len) }
-    };
-    let Ok(text) = std::str::from_utf8(bytes) else {
-        return Err(Status::GUATIAO_ERR_BAD_VALUE);
-    };
+    let text = std::str::from_utf8(text.into()).map_err(Status::from)?;
     Ok((text, alloc))
 }
 

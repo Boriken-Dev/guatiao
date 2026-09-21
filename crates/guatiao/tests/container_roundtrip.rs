@@ -901,6 +901,16 @@ fn a_map_a_foreign_producer_wrote_with_a_key_that_is_not_utf8_is_no_map_yet_is_f
             TryAsRef::<Map>::try_as_ref(&bad).is_none(),
             "no Map while a key is not text"
         );
+        let (_, payload) = bad.into_raw_parts();
+        // SAFETY: the map arm is live under the MAP tag it was built with.
+        let arm = unsafe { &*std::ptr::addr_of!(payload).cast::<Map>() };
+        // SAFETY: a live map.
+        assert_eq!(
+            unsafe { Map::from_ptr(arm) }.map(|_| ()),
+            Err(ValueError::NotUtf8)
+        );
+        // SAFETY: rebuilt from its own parts, to be freed below.
+        let bad = unsafe { Value::from_raw_parts(u32::from(Tag::GUATIAO_MAP), payload) };
         assert!(<&Map>::try_from(&bad).is_err());
         assert!(bad == bad, "equal to itself, keys by their bytes");
         assert_eq!(bad.clone_in(alloc).unwrap_err(), ValueError::NotUtf8);

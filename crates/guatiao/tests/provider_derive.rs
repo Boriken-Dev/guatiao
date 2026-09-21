@@ -296,12 +296,7 @@ fn a_library_line_names_the_whole_library() {
     assert!(std::ptr::eq(info, again));
 }
 
-/// A `Str` a descriptor names, read as the test's own convenience.
-fn unsafe_str(s: guatiao::Str) -> &'static str {
-    if s.len == 0 {
-        return "";
-    }
-    // SAFETY: the descriptor's text is a `'static` literal or a box the
-    // library parts keep for the process.
-    std::str::from_utf8(unsafe { std::slice::from_raw_parts(s.ptr, s.len) }).unwrap()
+/// A `Str` a descriptor names, checked as a host reading it would.
+fn unsafe_str(s: guatiao::Str<'static>) -> &'static str {
+    std::str::from_utf8(s.into()).unwrap()
 }

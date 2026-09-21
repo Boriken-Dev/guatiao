@@ -6,6 +6,8 @@
 
 #![allow(missing_docs)]
 
+use std::marker::PhantomData;
+
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::error::ValueError;
 use crate::value::raw::{dangling, overlaps, release_buffer, reserve};
@@ -18,30 +20,84 @@ use super::{Payload, Tag, Value, or_abort};
 /// type because "text" and "arbitrary bytes" are different promises.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Bytes {
+pub struct Bytes<'a> {
     /// First byte. May be null or dangling when `len` is 0.
-    pub ptr: *const u8,
+    ptr: *const u8,
     /// Length in bytes.
-    pub len: usize,
+    len: usize,
+    /// What the view borrows, for the compiler; nothing in C.
+    _borrows: PhantomData<&'a [u8]>,
 }
 
-impl Bytes {
-    /// A view of bytes this program already holds. `'static` where
-    /// [`Str::new`](super::Str::new) takes any lifetime: the
-    /// view is a C struct and keeps no lifetime of its own.
-    pub const fn new(bytes: &'static [u8]) -> Bytes {
+impl<'a> Bytes<'a> {
+    /// A view of bytes this program holds, for as long as it holds it.
+    pub const fn new(items: &'a [u8]) -> Bytes<'a> {
         Bytes {
-            ptr: bytes.as_ptr(),
-            len: bytes.len(),
+            ptr: items.as_ptr(),
+            len: items.len(),
+            _borrows: PhantomData,
         }
     }
 
     /// An empty view.
-    pub const fn empty() -> Bytes {
+    pub const fn empty() -> Bytes<'a> {
         Bytes {
             ptr: std::ptr::null(),
             len: 0,
+            _borrows: PhantomData,
         }
+    }
+
+    /// A view described by hand.
+    ///
+    /// # Safety
+    ///
+    /// `len` is 0, or `ptr` addresses `len` initialised elements that stay
+    /// readable and unchanged for `'a`.
+    pub const unsafe fn from_raw_parts(ptr: *const u8, len: usize) -> Bytes<'a> {
+        Bytes {
+            ptr,
+            len,
+            _borrows: PhantomData,
+        }
+    }
+
+    /// The first element. May be null or dangling when `len` is 0.
+    pub const fn ptr(&self) -> *const u8 {
+        self.ptr
+    }
+
+    /// How many elements.
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Whether it views nothing.
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// The elements, whatever they hold. A null pointer views nothing.
+    fn items(self) -> &'a [u8] {
+        if self.len == 0 || self.ptr.is_null() {
+            return &[];
+        }
+        // SAFETY: the view was made from a borrow of `'a`, or by
+        // `from_raw_parts` or a foreign caller promising the same.
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+}
+
+impl<'a> From<&'a [u8]> for Bytes<'a> {
+    fn from(items: &'a [u8]) -> Bytes<'a> {
+        Bytes::new(items)
+    }
+}
+
+/// The bytes: any content is bytes.
+impl<'a> From<Bytes<'a>> for &'a [u8] {
+    fn from(view: Bytes<'a>) -> &'a [u8] {
+        view.items()
     }
 }
 
@@ -227,6 +283,14 @@ impl std::ops::DerefMut for Buffer {
     }
 }
 
+/// A `HashMap<Buffer, _>` is searched with a `&[u8]`: hash and equality
+/// are the slice's.
+impl std::borrow::Borrow<[u8]> for Buffer {
+    fn borrow(&self) -> &[u8] {
+        self
+    }
+}
+
 impl AsRef<[u8]> for Buffer {
     fn as_ref(&self) -> &[u8] {
         self
@@ -263,13 +327,6 @@ impl std::io::Write for Buffer {
 impl Default for Buffer {
     fn default() -> Buffer {
         Buffer::new(&[])
-    }
-}
-
-/// A view of `bytes`, as [`Bytes::new`].
-impl From<&'static [u8]> for Bytes {
-    fn from(bytes: &'static [u8]) -> Bytes {
-        Bytes::new(bytes)
     }
 }
 

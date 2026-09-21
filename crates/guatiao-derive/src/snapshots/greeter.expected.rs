@@ -74,11 +74,14 @@ impl GreeterVtable {
             }) else {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
-            let name = match unsafe { ::guatiao::library::kind::str_arg(name) } {
+            let name = match ::core::str::from_utf8(name.into()) {
                 ::core::result::Result::Ok(__v) => __v,
-                ::core::result::Result::Err(__s) => {
+                ::core::result::Result::Err(__e) => {
                     return unsafe {
-                        ::guatiao::library::kind::write_err(err, __s.into())
+                        ::guatiao::library::kind::write_err(
+                            err,
+                            ::guatiao::Status::from(__e).into(),
+                        )
                     };
                 }
             };
@@ -114,12 +117,7 @@ impl GreeterVtable {
             }) else {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
-            let bytes = match unsafe { ::guatiao::library::kind::bytes_arg(bytes) } {
-                ::core::result::Result::Ok(__v) => __v,
-                ::core::result::Result::Err(__s) => {
-                    return __s;
-                }
-            };
+            let bytes: &[u8] = ::core::convert::From::from(bytes);
             unsafe {
                 ::guatiao::library::kind::write_out(out, __this.count(bytes, flag))
             }
@@ -205,10 +203,7 @@ impl Greeter for ::guatiao::library::Remote<dyn Greeter> {
             )
         } {
             ::core::option::Option::Some(__f) => {
-                let __arg_bytes = ::guatiao::value::types::Bytes {
-                    ptr: bytes.as_ptr(),
-                    len: bytes.len(),
-                };
+                let __arg_bytes = ::guatiao::value::types::Bytes::new(bytes);
                 let __arg_flag = flag;
                 let mut __out: i64 = ::core::default::Default::default();
                 let __status = unsafe {

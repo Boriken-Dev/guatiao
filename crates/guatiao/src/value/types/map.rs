@@ -10,6 +10,8 @@
 use std::fmt;
 use std::ptr;
 
+use std::marker::PhantomData;
+
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::convert::MapError;
 use crate::value::error::ValueError;
@@ -22,11 +24,86 @@ use super::{List, Payload, Tag, Text, Value, or_abort};
 /// as tables and diff them in tests.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
-pub struct Entries {
+pub struct Entries<'a> {
     /// First entry. May be null or dangling when `len` is 0.
-    pub ptr: *const Entry,
+    ptr: *const Entry,
     /// Number of entries.
-    pub len: usize,
+    len: usize,
+    /// What the view borrows, for the compiler; nothing in C.
+    _borrows: PhantomData<&'a [Entry]>,
+}
+
+impl<'a> Entries<'a> {
+    /// A view of entries this program holds, for as long as it holds it.
+    pub const fn new(items: &'a [Entry]) -> Entries<'a> {
+        Entries {
+            ptr: items.as_ptr(),
+            len: items.len(),
+            _borrows: PhantomData,
+        }
+    }
+
+    /// An empty view.
+    pub const fn empty() -> Entries<'a> {
+        Entries {
+            ptr: std::ptr::null(),
+            len: 0,
+            _borrows: PhantomData,
+        }
+    }
+
+    /// A view described by hand.
+    ///
+    /// # Safety
+    ///
+    /// `len` is 0, or `ptr` addresses `len` initialised entries, their keys
+    /// UTF-8, that stay readable and unchanged for `'a`.
+    pub const unsafe fn from_raw_parts(ptr: *const Entry, len: usize) -> Entries<'a> {
+        Entries {
+            ptr,
+            len,
+            _borrows: PhantomData,
+        }
+    }
+
+    /// The first element. May be null or dangling when `len` is 0.
+    pub const fn ptr(&self) -> *const Entry {
+        self.ptr
+    }
+
+    /// How many elements.
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Whether it views nothing.
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// The elements, whatever they hold. A null pointer views nothing.
+    fn items(self) -> &'a [Entry] {
+        if self.len == 0 || self.ptr.is_null() {
+            return &[];
+        }
+        // SAFETY: the view was made from a borrow of `'a`, or by
+        // `from_raw_parts` or a foreign caller promising the same.
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+}
+
+impl<'a> From<&'a [Entry]> for Entries<'a> {
+    fn from(items: &'a [Entry]) -> Entries<'a> {
+        Entries::new(items)
+    }
+}
+
+/// The entries. An `Entries` made by `new` borrowed entries whose keys
+/// are text; one made by `from_raw_parts` was promised so.
+impl<'a> From<Entries<'a>> for &'a [Entry] {
+    fn from(view: Entries<'a>) -> &'a [Entry] {
+        view.items()
+    }
 }
 
 /// An owned, growable sequence of key/value pairs, in insertion order.
@@ -389,6 +466,23 @@ impl Map {
         unsafe { ptr::copy(self.ptr.add(1), self.ptr, self.len - 1) };
         self.len -= 1;
         Some(out)
+    }
+
+    /// The map `ptr` points at, its keys checked: how a map C hands over
+    /// by pointer is read. Its values are checked by their own doors.
+    ///
+    /// # Safety
+    ///
+    /// `ptr` points at a map whose storage is consistent and outlives
+    /// `'a`. Only the memory is promised: the keys are checked.
+    pub unsafe fn from_ptr<'a>(ptr: *const Map) -> Result<&'a Map, ValueError> {
+        // SAFETY: the caller's contract.
+        let map = unsafe { &*ptr };
+        if map.keys_are_text() {
+            Ok(map)
+        } else {
+            Err(ValueError::NotUtf8)
+        }
     }
 
     /// Whether every key is UTF-8: what a foreign map must show before it

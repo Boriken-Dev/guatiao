@@ -779,10 +779,11 @@ fn a_string_appended_to_itself_copies_its_own_bytes() {
     let alloc = Alloc::rust();
     let mut node = Text::new_in(alloc, "abc").map(Value::from).unwrap();
 
-    let own = Str {
-        ptr: TryAsRef::<str>::try_as_ref(&node).unwrap().as_ptr(),
-        len: TryAsRef::<str>::try_as_ref(&node).unwrap().len(),
-    };
+    let text = TryAsRef::<str>::try_as_ref(&node).unwrap();
+    let (ptr, len) = (text.as_ptr(), text.len());
+    // SAFETY: the node's own bytes, readable for the call below; a C
+    // caller holding a view while writing the node is the case under test.
+    let own = unsafe { Str::from_raw_parts(ptr, len) };
     // SAFETY: a well-formed string, and a view of its own bytes, readable
     // for the call: the aliasing case under test.
     let status = unsafe { guatiao_string_push(alloc.as_raw(), &mut node, own) };
@@ -908,4 +909,33 @@ fn a_tree_nested_past_the_bound_is_refused_rather_than_followed() {
         "too deep is a refusal, and the process is still here to say so"
     );
     assert!(!is_absent(&error), "the detail says which key and what for");
+}
+
+/// Text C passes that is not UTF-8 is refused where it arrives: the
+/// export builds the view again through the constructor that checks.
+///
+/// Rust cannot build such a `Str`, so this writes the two fields as a C
+/// caller lays them out.
+#[test]
+fn text_a_c_caller_passes_that_is_not_utf8_is_refused_where_it_arrives() {
+    #[repr(C)]
+    struct AsC {
+        ptr: *const u8,
+        len: usize,
+    }
+    let bytes = [b'h', 0xff];
+    // SAFETY: `Str` is `repr(C)` with exactly these two fields, the marker
+    // being zero-sized, which is the layout the C header declares.
+    let text: Str<'_> = unsafe {
+        std::mem::transmute(AsC {
+            ptr: bytes.as_ptr(),
+            len: bytes.len(),
+        })
+    };
+    let alloc = Alloc::rust();
+    let mut out = Value::null();
+    // SAFETY: a readable view and a writable out-slot.
+    let status =
+        unsafe { guatiao::exports::value::guatiao_value_string(alloc.as_raw(), text, &mut out) };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
 }

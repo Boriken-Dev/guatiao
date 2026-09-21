@@ -142,12 +142,88 @@ fn the_views_and_the_owned_types_convert_as_std_does() {
     use guatiao::{Buffer, Str};
 
     let view: Str = "port".into();
-    assert_eq!(view.len, 4);
+    assert_eq!(view.len(), 4);
     let bytes: Bytes = (b"ab" as &'static [u8]).into();
-    assert_eq!(bytes.len, 2);
+    assert_eq!(bytes.len(), 2);
 
     let text: Text = String::from("host").into();
     assert_eq!(String::from(text), "host");
     let buffer: Buffer = vec![0u8, 255].into();
     assert_eq!(Vec::<u8>::from(buffer), [0, 255]);
+}
+
+#[test]
+fn a_text_changes_in_place_as_a_string_does() {
+    let mut text = Text::new("port");
+    text.make_ascii_uppercase();
+    assert_eq!(&*text, "PORT");
+    AsMut::<str>::as_mut(&mut text).make_ascii_lowercase();
+    assert_eq!(&*text, "port");
+    let mut empty = Text::default();
+    assert_eq!(&mut *empty, "");
+}
+
+#[test]
+fn owned_keys_are_searched_by_their_borrowed_form() {
+    use guatiao::Buffer;
+    use std::collections::HashMap;
+
+    let texts: HashMap<Text, i32> = [(Text::new("a"), 1)].into_iter().collect();
+    assert_eq!(texts.get("a"), Some(&1));
+    let numbers: HashMap<Number, i32> = [(Number::new("1.10").unwrap(), 1)].into_iter().collect();
+    assert_eq!(numbers.get("1.10"), Some(&1));
+    assert_eq!(numbers.get("1.1"), None, "a number is its text");
+    let buffers: HashMap<Buffer, i32> = [(Buffer::new(b"ab"), 1)].into_iter().collect();
+    assert_eq!(buffers.get(&b"ab"[..]), Some(&1));
+}
+
+#[test]
+fn a_view_borrows_what_it_views() {
+    use guatiao::Str;
+    use guatiao::value::types::Bytes;
+
+    let owned = String::from("host");
+    let view = Str::new(&owned);
+    assert_eq!(view.len(), 4);
+    assert_eq!(<&str>::from(view), "host");
+    let checked: Str<'_> = std::str::from_utf8(b"host").unwrap().into();
+    assert_eq!(<&str>::from(checked), "host");
+    let bad = [b'h', 0xff];
+    // SAFETY: a readable array that outlives the call.
+    let from_c = unsafe { Str::from_ptr(&Str::from_raw_parts(bad.as_ptr(), bad.len())) };
+    assert_eq!(
+        from_c.map(|_| ()),
+        Err(guatiao::ValueError::NotUtf8),
+        "refused"
+    );
+    let bytes = Bytes::new(owned.as_bytes());
+    assert_eq!(<&[u8]>::from(bytes), b"host");
+    assert!(<&[u8]>::from(Bytes::empty()).is_empty());
+}
+
+#[test]
+fn what_c_points_at_is_checked_on_the_way_in() {
+    use guatiao::Buffer;
+
+    let good = Text::new("1.5");
+    // SAFETY: a live text.
+    assert_eq!(unsafe { Text::from_ptr(&good) }.map(|t| &**t), Ok("1.5"));
+    // SAFETY: a live text; a `Number` is a `Text` in layout.
+    let as_number = unsafe { Number::from_ptr((&good as *const Text).cast()) };
+    assert_eq!(as_number.map(|n| &**n), Ok("1.5"));
+
+    let not_a_number = Text::new("1,5");
+    // SAFETY: as above.
+    let refused = unsafe { Number::from_ptr((&not_a_number as *const Text).cast()) };
+    assert_eq!(refused.map(|_| ()), Err(guatiao::ValueError::NotANumber));
+
+    // A text a foreign producer wrote, not UTF-8.
+    let (ptr, len, cap, alloc) = Buffer::new(&[b'h', 0xff]).into_raw_parts();
+    // SAFETY: consistent storage; its bytes are what is under test.
+    let foreign = unsafe { Text::from_raw_parts(ptr, len, cap, alloc) };
+    // SAFETY: a live text.
+    assert_eq!(
+        unsafe { Text::from_ptr(&foreign) }.map(|_| ()),
+        Err(guatiao::ValueError::NotUtf8)
+    );
 }

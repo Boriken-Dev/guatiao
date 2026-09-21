@@ -241,7 +241,8 @@ typedef uint32_t guatiao_tag;
 typedef struct guatiao_registry guatiao_registry;
 
 /*
- Borrowed UTF-8 text: a pointer and a length, no NUL terminator.
+ Borrowed UTF-8 text: a pointer and a length, no NUL terminator. Text
+ that is not UTF-8 is refused where it crosses into Rust.
 
  **Check `len` before `ptr`**: an empty view may carry a dangling or
  null pointer.
@@ -1105,7 +1106,7 @@ typedef struct guatiao_object {
  Borrowed **writable** bytes: a pointer and a length. The out-buffer
  argument an object kind's `&mut [u8]` crosses as.
 
- Check `len` before `ptr`, as with [`Bytes`]: an empty buffer may carry
+ Check `len` before `ptr`, as with a bytes view: an empty buffer may carry
  a null pointer.
  */
 typedef struct guatiao_bytes_mut {

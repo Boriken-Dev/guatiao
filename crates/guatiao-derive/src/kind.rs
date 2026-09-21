@@ -974,23 +974,18 @@ fn emit_shim(trait_ident: &Ident, table: &Ident, object: bool, m: &MethodPlan) -
         match &a.kind {
             ArgKind::Scalar(_) | ArgKind::Object(_) => quote!(),
             ArgKind::Str => {
-                let f = fail(quote!(__s));
+                let f = fail(quote!(::guatiao::Status::from(__e)));
                 quote! {
-                    // SAFETY: the proxy passes a readable view.
-                    let #ident = match unsafe { ::guatiao::library::kind::str_arg(#ident) } {
+                    // The caller may be C: checked where it arrives.
+                    let #ident = match ::core::str::from_utf8(#ident.into()) {
                         ::core::result::Result::Ok(__v) => __v,
-                        ::core::result::Result::Err(__s) => { #f }
+                        ::core::result::Result::Err(__e) => { #f }
                     };
                 }
             }
             ArgKind::Bytes => {
-                let f = fail(quote!(__s));
                 quote! {
-                    // SAFETY: the proxy passes a readable view.
-                    let #ident = match unsafe { ::guatiao::library::kind::bytes_arg(#ident) } {
-                        ::core::result::Result::Ok(__v) => __v,
-                        ::core::result::Result::Err(__s) => { #f }
-                    };
+                    let #ident: &[u8] = ::core::convert::From::from(#ident);
                 }
             }
             ArgKind::ValueRef => {
@@ -1036,13 +1031,8 @@ fn emit_shim(trait_ident: &Ident, table: &Ident, object: bool, m: &MethodPlan) -
                 }
             }
             ArgKind::BytesMut => {
-                let f = fail(quote!(__s));
                 quote! {
-                    // SAFETY: the proxy passes a writable view it holds for the call.
-                    let #ident = match unsafe { ::guatiao::library::kind::bytes_mut_arg(#ident) } {
-                        ::core::result::Result::Ok(__v) => __v,
-                        ::core::result::Result::Err(__s) => { #f }
-                    };
+                    let #ident: &mut [u8] = ::core::convert::From::from(#ident);
                 }
             }
         }
@@ -1173,7 +1163,7 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
             ArgKind::Scalar(_) => quote! { let #name = #ident; },
             ArgKind::Str => quote! { let #name = ::guatiao::Str::new(#ident); },
             ArgKind::Bytes => quote! {
-                let #name = ::guatiao::value::types::Bytes { ptr: #ident.as_ptr(), len: #ident.len() };
+                let #name = ::guatiao::value::types::Bytes::new(#ident);
             },
             ArgKind::ValueRef => quote! { let #name = #ident as *const ::guatiao::Value; },
             ArgKind::MapRef => quote! { let #name = #ident as *const ::guatiao::Map; },
@@ -1191,7 +1181,7 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
                 }
             }
             ArgKind::BytesMut => quote! {
-                let #name = ::guatiao::library::BytesMut { ptr: #ident.as_mut_ptr(), len: #ident.len() };
+                let #name = ::guatiao::library::BytesMut::new(#ident);
             },
             // Ownership crosses with the call: the callee destroys it.
             ArgKind::Object(_) => quote! { let #name = #ident.into_raw(); },

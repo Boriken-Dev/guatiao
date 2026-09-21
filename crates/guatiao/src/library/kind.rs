@@ -49,7 +49,7 @@ use super::raw::{Host, ProviderView};
 use crate::value::ValueError;
 use crate::value::alloc::Alloc;
 use crate::value::status::Status;
-use crate::value::types::{Bytes, Map, Str, Text, Value};
+use crate::value::types::{Map, Str, Text, Value};
 
 /// What a kind declares about its table. Implemented for `dyn Trait` by
 /// `#[guatiao::kind]`; the host and the library share the impl.
@@ -693,15 +693,86 @@ impl ObjectRaw {
 /// Borrowed **writable** bytes: a pointer and a length. The out-buffer
 /// argument an object kind's `&mut [u8]` crosses as.
 ///
-/// Check `len` before `ptr`, as with [`Bytes`]: an empty buffer may carry
+/// Check `len` before `ptr`, as with a bytes view: an empty buffer may carry
 /// a null pointer.
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct BytesMut {
+#[derive(Debug)]
+pub struct BytesMut<'a> {
     /// First byte. May be null when `len` is 0.
-    pub ptr: *mut u8,
+    ptr: *mut u8,
     /// Length in bytes.
-    pub len: usize,
+    len: usize,
+    /// What the view borrows, for the compiler; nothing in C.
+    _borrows: PhantomData<&'a mut [u8]>,
+}
+
+impl<'a> BytesMut<'a> {
+    /// A view of bytes this program holds and lends to be written.
+    ///
+    /// Neither `Clone` nor `Copy`: it converts to a `&mut [u8]`, and a
+    /// copy would be a second one.
+    ///
+    /// ```compile_fail
+    /// let mut bytes = [0u8; 4];
+    /// let view = guatiao::library::BytesMut::new(&mut bytes);
+    /// let copy = view;
+    /// let _: &mut [u8] = view.into();
+    /// ```
+    pub fn new(bytes: &'a mut [u8]) -> BytesMut<'a> {
+        BytesMut {
+            ptr: bytes.as_mut_ptr(),
+            len: bytes.len(),
+            _borrows: PhantomData,
+        }
+    }
+
+    /// A view described by hand.
+    ///
+    /// # Safety
+    ///
+    /// `len` is 0, or `ptr` addresses `len` bytes writable for `'a` and
+    /// reached by nothing else meanwhile.
+    pub const unsafe fn from_raw_parts(ptr: *mut u8, len: usize) -> BytesMut<'a> {
+        BytesMut {
+            ptr,
+            len,
+            _borrows: PhantomData,
+        }
+    }
+
+    /// The first byte. May be null when `len` is 0.
+    pub const fn ptr(&self) -> *mut u8 {
+        self.ptr
+    }
+
+    /// How many bytes.
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Whether it views nothing.
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+}
+
+impl<'a> From<&'a mut [u8]> for BytesMut<'a> {
+    fn from(bytes: &'a mut [u8]) -> BytesMut<'a> {
+        BytesMut::new(bytes)
+    }
+}
+
+/// The bytes to write. A null pointer views nothing.
+impl<'a> From<BytesMut<'a>> for &'a mut [u8] {
+    fn from(view: BytesMut<'a>) -> &'a mut [u8] {
+        if view.len == 0 || view.ptr.is_null() {
+            return &mut [];
+        }
+        // SAFETY: the view was made from a `&'a mut`, or by
+        // `from_raw_parts` or a foreign caller promising the same, and it
+        // is consumed here, so this is the only `&mut` it gives.
+        unsafe { std::slice::from_raw_parts_mut(view.ptr, view.len) }
+    }
 }
 
 /// One Rust-built object: its kind's table, then the value the table's
@@ -886,7 +957,7 @@ unsafe fn destroy_raw(raw: ObjectRaw) {
     }
 }
 
-impl ProviderInfo {
+impl ProviderInfo<'static> {
     /// This provider's table for `K`, validated.
     ///
     /// For a descriptor a host's services handed over.
@@ -933,7 +1004,7 @@ impl Host {
     /// One with no per-kind table is neither an offer nor a mismatch.
     pub fn mismatches<K: ?Sized + Kind>(
         &self,
-    ) -> Result<Vec<(&'static ProviderInfo, KindMismatch)>, Status> {
+    ) -> Result<Vec<(&'static ProviderInfo<'static>, KindMismatch)>, Status> {
         Ok(self
             .list(K::NAME)?
             .into_iter()
@@ -969,34 +1040,6 @@ pub unsafe fn ctx_ref<'a, T>(ctx: *const c_void) -> Option<&'a T> {
     unsafe { ctx.cast::<T>().as_ref() }
 }
 
-/// A `&str` argument from a view, or the status a shim answers.
-///
-/// # Safety
-///
-/// `s` is readable for the call.
-#[doc(hidden)]
-pub unsafe fn str_arg<'a>(s: Str) -> Result<&'a str, Status> {
-    // SAFETY: forwarded.
-    unsafe { crate::exports::as_str(s) }
-}
-
-/// A `&[u8]` argument from a view.
-///
-/// # Safety
-///
-/// `b` is readable for the call.
-#[doc(hidden)]
-pub unsafe fn bytes_arg<'a>(b: Bytes) -> Result<&'a [u8], Status> {
-    if b.len == 0 {
-        return Ok(&[]);
-    }
-    if b.ptr.is_null() {
-        return Err(Status::GUATIAO_ERR_NULL);
-    }
-    // SAFETY: the caller's contract.
-    Ok(unsafe { std::slice::from_raw_parts(b.ptr, b.len) })
-}
-
 /// A `&Value` argument, refusing null.
 ///
 /// # Safety
@@ -1027,13 +1070,12 @@ pub unsafe fn value_opt<'a>(v: *const Value) -> Option<&'a Value> {
 #[doc(hidden)]
 pub unsafe fn map_arg<'a>(m: *const Map) -> Result<&'a Map, Status> {
     // SAFETY: the caller's contract.
-    let map = unsafe { m.as_ref() }.ok_or(Status::GUATIAO_ERR_NULL)?;
-    // Reached by pointer, not through a value's door, so checked here.
-    if map.keys_are_text() {
-        Ok(map)
-    } else {
-        Err(ValueError::NotUtf8.into())
+    if m.is_null() {
+        return Err(Status::GUATIAO_ERR_NULL);
     }
+    // SAFETY: the caller's contract; reached by pointer, not through a
+    // value's door, so `from_ptr` checks the keys.
+    Ok(unsafe { Map::from_ptr(m) }?)
 }
 
 /// Writes a result through an out-pointer, refusing null. The previous
@@ -1161,23 +1203,6 @@ pub unsafe fn destroy_object<V, T>(ctx: *mut c_void) {
     drop(unsafe { Box::from_raw(ctx.cast::<ObjectCell<V, T>>()) });
 }
 
-/// A `&mut [u8]` argument from a writable view.
-///
-/// # Safety
-///
-/// `b` is writable for the call and aliased by nothing else during it.
-#[doc(hidden)]
-pub unsafe fn bytes_mut_arg<'a>(b: BytesMut) -> Result<&'a mut [u8], Status> {
-    if b.len == 0 {
-        return Ok(&mut []);
-    }
-    if b.ptr.is_null() {
-        return Err(Status::GUATIAO_ERR_NULL);
-    }
-    // SAFETY: the caller's contract.
-    Ok(unsafe { std::slice::from_raw_parts_mut(b.ptr, b.len) })
-}
-
 /// An object argument, validated for `K`, or the error a shim answers.
 /// Takes ownership either way.
 ///
@@ -1228,7 +1253,8 @@ pub unsafe fn object_ret<K: ?Sized + Kind>(raw: ObjectRaw) -> Result<Object<K>, 
 pub fn take_err(written: ProviderError, status: Status) -> ProviderError {
     if written.status == Status::GUATIAO_OK {
         ProviderError::from(status)
-    } else if std::str::from_utf8(written.message.bytes()).is_err() {
+    // SAFETY: a live local, written by the shim.
+    } else if unsafe { Text::from_ptr(&written.message) }.is_err() {
         ProviderError::from(written.status)
     } else {
         written
@@ -1239,22 +1265,18 @@ pub fn take_err(written: ProviderError, status: Status) -> ProviderError {
 /// the storage itself, past the checks a value's doors make.
 #[doc(hidden)]
 pub fn text_ret(out: Text) -> Result<Text, ProviderError> {
-    if std::str::from_utf8(out.bytes()).is_ok() {
-        Ok(out)
-    } else {
-        Err(ValueError::NotUtf8.into())
-    }
+    // SAFETY: a live local, written by the shim.
+    unsafe { Text::from_ptr(&out) }?;
+    Ok(out)
 }
 
 /// A map a shim wrote through a `*mut Map`, its keys checked as
 /// [`text_ret`] checks a text.
 #[doc(hidden)]
 pub fn map_ret(out: Map) -> Result<Map, ProviderError> {
-    if out.keys_are_text() {
-        Ok(out)
-    } else {
-        Err(ValueError::NotUtf8.into())
-    }
+    // SAFETY: a live local, written by the shim.
+    unsafe { Map::from_ptr(&out) }?;
+    Ok(out)
 }
 
 /// The `available` slot over a Rust method: runs `ask` on the instance
@@ -1320,12 +1342,12 @@ pub struct ProviderParts {
     #[allow(dead_code)]
     version: Box<str>,
     #[allow(dead_code)]
-    kinds: Box<[Str]>,
+    kinds: Box<[Str<'static>]>,
     #[allow(dead_code)]
-    tables: Box<[KindTable]>,
+    tables: Box<[KindTable<'static>]>,
     #[allow(dead_code)]
     config: Option<Box<Value>>,
-    info: ProviderInfo,
+    info: ProviderInfo<'static>,
 }
 
 // SAFETY: built once and never written; every pointer in `info` addresses
@@ -1346,7 +1368,7 @@ impl ProviderParts {
         name: &str,
         version: &str,
         kinds: &[&'static str],
-        tables: Vec<KindTable>,
+        tables: Vec<KindTable<'static>>,
         config: Option<Value>,
         ctx: *mut c_void,
         available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
@@ -1374,15 +1396,17 @@ impl ProviderParts {
                 ptr: kinds.as_ptr(),
                 len: kinds.len(),
             },
-            id: Str::new(&id),
-            display_name: Str::new(&name),
+            // SAFETY: the boxes are kept beside `info`, below.
+            id: unsafe { super::raw::view_of_owned(&id) },
+            display_name: unsafe { super::raw::view_of_owned(&name) },
             config: config
                 .as_deref()
                 .map_or(std::ptr::null(), |v| v as *const Value),
             vtable: std::ptr::null(),
             ctx,
             meta: crate::value::types::MaybeNull::null(),
-            version: Str::new(&version),
+            // SAFETY: as `id`.
+            version: unsafe { super::raw::view_of_owned(&version) },
             available,
             tables: KindTables {
                 ptr: tables.as_ptr(),
@@ -1404,7 +1428,7 @@ impl ProviderParts {
     }
 
     /// The descriptor, pointing into this.
-    pub fn info(&self) -> &ProviderInfo {
+    pub fn info(&self) -> &ProviderInfo<'_> {
         &self.info
     }
 }
@@ -1419,8 +1443,8 @@ pub struct LibraryParts {
     #[allow(dead_code)]
     providers: Vec<ProviderParts>,
     #[allow(dead_code)]
-    infos: Box<[ProviderInfo]>,
-    info: LibraryInfo,
+    infos: Box<[ProviderInfo<'static>]>,
+    info: LibraryInfo<'static>,
 }
 
 // SAFETY: as `ProviderParts`.
@@ -1433,12 +1457,13 @@ impl LibraryParts {
     pub fn new(id: &str, version: &str, providers: Vec<ProviderParts>) -> LibraryParts {
         let id: Box<str> = id.into();
         let version: Box<str> = version.into();
-        let infos: Box<[ProviderInfo]> = providers.iter().map(|p| *p.info()).collect();
+        let infos: Box<[ProviderInfo<'static>]> = providers.iter().map(|p| p.info).collect();
         let info = LibraryInfo {
             struct_size: size_of::<LibraryInfo>() as u32,
             abi_version: super::desc::ABI_VERSION,
-            id: Str::new(&id),
-            version: Str::new(&version),
+            // SAFETY: the boxes are kept beside `info`, below.
+            id: unsafe { super::raw::view_of_owned(&id) },
+            version: unsafe { super::raw::view_of_owned(&version) },
             providers: super::desc::Providers {
                 ptr: infos.as_ptr(),
                 len: infos.len(),
@@ -1463,7 +1488,7 @@ impl LibraryParts {
     }
 
     /// The descriptor, pointing into this.
-    pub fn info(&self) -> &LibraryInfo {
+    pub fn info(&self) -> &LibraryInfo<'_> {
         &self.info
     }
 }
@@ -1526,9 +1551,9 @@ mod tests {
                 return Status::GUATIAO_ERR_NULL;
             };
             // SAFETY: the proxy passes a readable view.
-            let name = match unsafe { str_arg(name) } {
+            let name = match std::str::from_utf8(name.into()) {
                 Ok(n) => n,
-                Err(s) => return s,
+                Err(e) => return e.into(),
             };
             match this.greet(name) {
                 // SAFETY: the proxy passes writable out-pointers.
