@@ -406,7 +406,7 @@ fn a_tagged_enums_own_schema_carries_its_tag_and_its_arms() {
         .expect("the arms survive");
     assert_eq!(
         TryAsRef::<List>::try_as_ref(arms)
-            .map(List::items)
+            .map(|list| &list[..])
             .unwrap_or(&[])
             .len(),
         2

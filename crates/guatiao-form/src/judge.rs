@@ -145,7 +145,7 @@ pub fn check(schema: SchemaRef<'_>, form: FormRef<'_>) -> Result<(), FormError> 
 
     if let Some(sections) = TryAsRef::<Map>::try_as_ref(doc).and_then(|m| m.get(vocab::SECTIONS)) {
         let items = TryAsRef::<List>::try_as_ref(sections)
-            .map(List::items)
+            .map(|list| &list[..])
             .ok_or_else(|| malformed(vocab::SECTIONS, "a list"))?;
         let mut seen: Vec<&str> = Vec::new();
         for (i, item) in items.iter().enumerate() {

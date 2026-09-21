@@ -71,7 +71,7 @@ impl<'a> FormRef<'a> {
         TryAsRef::<Map>::try_as_ref(self.0)
             .and_then(|m| m.get(vocab::SECTIONS))
             .and_then(TryAsRef::<List>::try_as_ref)
-            .map(List::items)
+            .map(|list| &list[..])
             .unwrap_or(&[])
             .iter()
             .filter(|s| {

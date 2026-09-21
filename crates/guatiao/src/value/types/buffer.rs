@@ -71,7 +71,7 @@ impl Clone for Buffer {
 
 impl PartialEq for Buffer {
     fn eq(&self, other: &Buffer) -> bool {
-        self.as_slice() == other.as_slice()
+        **self == **other
     }
 }
 
@@ -150,15 +150,6 @@ impl Buffer {
         Ok(b)
     }
 
-    /// The bytes themselves.
-    pub fn as_slice(&self) -> &[u8] {
-        if self.len == 0 {
-            return &[];
-        }
-        // SAFETY: the first `len` bytes are initialised.
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
-    }
-
     /// Frees the storage and leaves this empty. Idempotent: `cap == 0`
     /// afterwards, which frees nothing.
     pub(crate) fn release(&mut self) {
@@ -207,7 +198,64 @@ impl Buffer {
 
     /// A copy through `alloc`, reporting its refusal.
     pub fn clone_in(&self, alloc: Alloc) -> Result<Buffer, ValueError> {
-        Buffer::new_in(alloc, self.as_slice())
+        Buffer::new_in(alloc, self)
+    }
+}
+
+/// The bytes, as `Vec<u8>` gives them.
+impl std::ops::Deref for Buffer {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        if self.len == 0 {
+            return &[];
+        }
+        // SAFETY: the first `len` bytes are initialised, and the borrow of
+        // `self` keeps them alive.
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+}
+
+/// The bytes, mutably. A slice cannot change its length.
+impl std::ops::DerefMut for Buffer {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        if self.len == 0 {
+            return &mut [];
+        }
+        // SAFETY: as for `deref`, and `&mut self` makes the borrow unique.
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+    }
+}
+
+impl AsRef<[u8]> for Buffer {
+    fn as_ref(&self) -> &[u8] {
+        self
+    }
+}
+
+impl AsMut<[u8]> for Buffer {
+    fn as_mut(&mut self) -> &mut [u8] {
+        self
+    }
+}
+
+/// By bytes, as its equality is.
+impl std::hash::Hash for Buffer {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (**self).hash(state);
+    }
+}
+
+/// Appends, as `Vec<u8>`'s `Write` does. An allocator's refusal is the
+/// error.
+impl std::io::Write for Buffer {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.push(bytes).map_err(std::io::Error::other)?;
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 

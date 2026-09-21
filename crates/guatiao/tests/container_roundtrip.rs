@@ -435,7 +435,7 @@ fn a_list_appends_removes_and_keeps_order() {
                 .unwrap();
             l.push_in(v, alloc).unwrap();
         }
-        assert_eq!(l.items().len(), 10);
+        assert_eq!(l.len(), 10);
         assert_eq!(
             TryAsRef::<Number>::try_as_ref(l.get(3).unwrap()).map(Number::as_str),
             Some("3")
@@ -450,15 +450,15 @@ fn a_list_appends_removes_and_keeps_order() {
         unsafe { taken.free() };
 
         assert_eq!(
-            TryAsRef::<Number>::try_as_ref(l.get(0).unwrap()).map(Number::as_str),
+            TryAsRef::<Number>::try_as_ref(l.first().unwrap()).map(Number::as_str),
             Some("1")
         );
         assert!(l.discard(8));
         assert!(!l.discard(99), "past the end");
-        assert_eq!(l.items().len(), 8);
+        assert_eq!(l.len(), 8);
 
         l.clear();
-        assert_eq!(l.items().len(), 0);
+        assert_eq!(l.len(), 0);
     });
 }
 
@@ -481,7 +481,7 @@ fn appending_to_text_and_bytes_grows_across_a_reallocation() {
         for _ in 0..100 {
             b.push_in(&[1, 2], alloc).unwrap();
         }
-        assert_eq!(b.as_slice().len(), 201);
+        assert_eq!(b.len(), 201);
     });
 }
 
@@ -592,7 +592,7 @@ fn a_nested_node_is_mutated_without_unsafe() {
         let tags: Vec<&str> = root
             .get("tags")
             .and_then(TryAsRef::<List>::try_as_ref)
-            .map(List::items)
+            .map(|list| &list[..])
             .unwrap()
             .iter()
             .filter_map(TryAsRef::<str>::try_as_ref)
@@ -812,21 +812,91 @@ fn an_unknown_tag_is_skippable_rather_than_fatal() {
 }
 
 #[test]
-fn a_tree_deeper_than_the_limit_is_an_error_rather_than_a_dead_process() {
+fn a_number_a_foreign_producer_malformed_is_no_number_yet_is_freed_and_equals_itself() {
+    // What a C producer can write: text under the NUMBER tag that is not a
+    // JSON number. Under the counting allocator, so dropping it is proven
+    // to free it even though no `Number` is ever handed out for it.
     with_alloc(|alloc, _| {
-        let mut root = List::new_in(alloc);
-        // Build well past the clone limit.
-        let mut cursor: *mut List = &mut root;
-        for _ in 0..(MAX_DEPTH + 8) {
-            let child = List::new_in(alloc);
-            // SAFETY: `cursor` points at a list that outlives this loop.
-            unsafe {
-                (*cursor).push_in(child, alloc).unwrap();
-                cursor = TryAsMut::<List>::try_as_mut((*cursor).get_mut(0).unwrap()).unwrap();
-            }
+        let digits = Text::new_in(alloc, "1,5").unwrap();
+        // SAFETY: the text arm is the number arm's layout, and this is the
+        // shape a foreign producer may write; reading it is the point.
+        let bad =
+            unsafe { Value::from_raw_parts(u32::from(Tag::GUATIAO_NUMBER), Payload::text(digits)) };
+
+        assert_eq!(bad.tag().unwrap(), Tag::GUATIAO_NUMBER);
+        assert!(
+            TryAsRef::<Number>::try_as_ref(&bad).is_none(),
+            "no Number for digits that are not one"
+        );
+        assert!(i64::try_from(&bad).is_err());
+        assert!(bad == bad, "equal to itself, by its bytes");
+        let bad = Number::try_from(bad).expect_err("handed back, not converted");
+        drop(bad);
+    });
+}
+
+#[test]
+fn a_number_is_a_str() {
+    let number = Number::new("1.10").unwrap();
+    assert_eq!(&*number, "1.10");
+    assert_eq!(number.len(), 4);
+    assert!(number.contains('.'));
+    assert_eq!(number.parse::<f64>().unwrap(), 1.1);
+    let v: Value = number.into();
+    assert_eq!(
+        TryAsRef::<Number>::try_as_ref(&v).map(|n| &**n),
+        Some("1.10")
+    );
+}
+
+#[test]
+fn an_iterator_left_half_way_frees_what_it_did_not_hand_out() {
+    // Under the counting allocator: what is taken is freed by its taker,
+    // what is left is freed with the iterator, and nothing is outstanding.
+    with_alloc(|alloc, _| {
+        let mut list = List::new_in(alloc);
+        let mut map = Map::new_in(alloc);
+        for i in 0..6 {
+            list.push_in(Text::new_in(alloc, &i.to_string()).unwrap(), alloc)
+                .unwrap();
+            map.set_in(&i.to_string(), Text::new_in(alloc, "v").unwrap(), alloc)
+                .unwrap();
         }
-        assert_eq!(root.clone_in(alloc).unwrap_err(), ValueError::TooDeep);
-        // Freeing it is iterative, so this does not overflow the stack.
+        let mut items = list.into_iter();
+        drop(items.next());
+        drop(items.next());
+        drop(items);
+        let mut pairs = map.into_iter();
+        drop(pairs.next());
+        drop(pairs);
+    });
+}
+
+#[test]
+fn a_tree_of_any_depth_copies_and_equals_itself() {
+    // Far past `MAX_DEPTH`, built in safe code. Copying and comparing are
+    // loops over a heap stack, so neither is bounded by depth and neither
+    // can overflow the thread's stack; dropping is too.
+    with_alloc(|alloc, _| {
+        let depth = MAX_DEPTH as usize * 500;
+        let mut tree: Value = Value::from(1);
+        for _ in 0..depth {
+            let mut list = List::new_in(alloc);
+            list.push_in(tree, alloc).unwrap();
+            tree = list.into();
+        }
+        assert!(tree == tree, "equal to itself at any depth");
+        let copy = tree.clone_in(alloc).expect("a deep tree copies");
+        assert!(copy == tree, "and equal to its copy");
+
+        // A difference at the bottom is found, not given up on.
+        let mut other = copy.clone_in(alloc).unwrap();
+        let mut cursor = &mut other;
+        for _ in 0..depth {
+            cursor = &mut TryAsMut::<List>::try_as_mut(cursor).unwrap()[0];
+        }
+        *cursor = Value::from(2);
+        assert!(other != tree, "a leaf changed {depth} levels down");
     });
 }
 
@@ -846,7 +916,7 @@ fn an_operation_on_the_wrong_kind_is_refused_by_name() {
         let mut l = List::new_in(alloc);
         l.push(Value::from(true)).unwrap();
         l.clear();
-        assert_eq!(l.items().len(), 0);
+        assert_eq!(l.len(), 0);
     });
 }
 
@@ -958,7 +1028,7 @@ fn iteration_and_equality_respect_insertion_order() {
                 .unwrap();
             l.push_in(v, alloc).unwrap();
         }
-        assert_eq!(l.items().len(), 3);
+        assert_eq!(l.len(), 3);
     });
 }
 
@@ -1070,7 +1140,7 @@ fn a_literal_list_and_map_are_mutated_in_place_and_free_to_nothing() {
         );
         assert_eq!(
             TryAsRef::<List>::try_as_ref(&list)
-                .map(List::items)
+                .map(|list| &list[..])
                 .unwrap()
                 .len(),
             1
@@ -1078,7 +1148,7 @@ fn a_literal_list_and_map_are_mutated_in_place_and_free_to_nothing() {
         assert_eq!(
             TryAsRef::<str>::try_as_ref(
                 &TryAsRef::<List>::try_as_ref(&list)
-                    .map(List::items)
+                    .map(|list| &list[..])
                     .unwrap()[0]
             ),
             Some("b"),
@@ -1087,7 +1157,7 @@ fn a_literal_list_and_map_are_mutated_in_place_and_free_to_nothing() {
         TryAsMut::<List>::try_as_mut(&mut list).unwrap().clear();
         assert_eq!(
             TryAsRef::<List>::try_as_ref(&list)
-                .map(List::items)
+                .map(|list| &list[..])
                 .unwrap()
                 .len(),
             0
@@ -1109,7 +1179,7 @@ fn a_literal_list_and_map_are_mutated_in_place_and_free_to_nothing() {
         assert_eq!(
             TryAsRef::<str>::try_as_ref(
                 &TryAsRef::<List>::try_as_ref(&list)
-                    .map(List::items)
+                    .map(|list| &list[..])
                     .unwrap()[0]
             ),
             Some("c")

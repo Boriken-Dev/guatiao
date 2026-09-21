@@ -91,7 +91,7 @@ fn is_required_in(owner: &Value, key: &str) -> bool {
     TryAsRef::<Map>::try_as_ref(owner)
         .and_then(|m| m.get(vocab::REQUIRED))
         .and_then(TryAsRef::<List>::try_as_ref)
-        .map(List::items)
+        .map(|list| &list[..])
         .unwrap_or(&[])
         .iter()
         .filter_map(TryAsRef::<str>::try_as_ref)
@@ -512,7 +512,7 @@ impl<'a> Kind<'a> {
                 TryAsRef::<Map>::try_as_ref(k)
                     .and_then(|m| m.get(vocab::ENUM))
                     .and_then(TryAsRef::<List>::try_as_ref)
-                    .map(List::items)
+                    .map(|list| &list[..])
                     .unwrap_or(&[]),
                 TryAsRef::<Map>::try_as_ref(k)
                     .and_then(|m| m.get(vocab::X_ENUM_LABELS))
@@ -541,7 +541,7 @@ impl<'a> Kind<'a> {
     pub fn alternatives(self) -> impl Iterator<Item = Kind<'a>> {
         let list = match self {
             Kind::Union(a) => TryAsRef::<List>::try_as_ref(a)
-                .map(List::items)
+                .map(|list| &list[..])
                 .unwrap_or(&[]),
             _ => &[],
         };
@@ -554,7 +554,7 @@ impl<'a> Kind<'a> {
             Kind::Variant { tag, arms } => (
                 tag,
                 TryAsRef::<List>::try_as_ref(arms)
-                    .map(List::items)
+                    .map(|list| &list[..])
                     .unwrap_or(&[]),
             ),
             _ => ("", &[][..]),

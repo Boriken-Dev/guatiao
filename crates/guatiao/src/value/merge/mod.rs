@@ -312,7 +312,7 @@ impl<'a> Provenance<'a> {
             }
             Some(Tag::GUATIAO_LIST) => {
                 let items = TryAsRef::<List>::try_as_ref(value)
-                    .map(List::items)
+                    .map(|list| &list[..])
                     .unwrap_or(&[]);
                 if items.is_empty() {
                     self.leaves.insert(path.to_string(), layer);
@@ -616,7 +616,7 @@ fn record_claims<'a>(
     // mix, which is the honest answer for a union.
     if mode == MergeMode::Deep && is_list(earlier) && is_list(later) {
         if TryAsRef::<List>::try_as_ref(earlier)
-            .map(List::items)
+            .map(|list| &list[..])
             .unwrap_or(&[])
             .is_empty()
         {
@@ -723,10 +723,10 @@ fn overwrite_positionally(
     depth: u32,
 ) -> Result<Value, MergeError> {
     let earlier_items = TryAsRef::<List>::try_as_ref(earlier)
-        .map(List::items)
+        .map(|list| &list[..])
         .unwrap_or(&[]);
     let later_items = TryAsRef::<List>::try_as_ref(later)
-        .map(List::items)
+        .map(|list| &list[..])
         .unwrap_or(&[]);
 
     let mut out = List::new_in(alloc);
@@ -913,7 +913,7 @@ fn absorb_list_of_maps(
 ) -> Result<Value, MergeError> {
     let mut result = clone_into(earlier, alloc)?;
     for item in TryAsRef::<List>::try_as_ref(later)
-        .map(List::items)
+        .map(|list| &list[..])
         .unwrap_or(&[])
         .iter()
     {
@@ -951,7 +951,7 @@ fn union_lists(
 ) -> Result<Value, MergeError> {
     let mut result: Vec<Value> = Vec::new();
     for item in TryAsRef::<List>::try_as_ref(earlier)
-        .map(List::items)
+        .map(|list| &list[..])
         .unwrap_or(&[])
         .iter()
     {
@@ -962,7 +962,7 @@ fn union_lists(
         // Map elements of the later list, by the position they sat at --
         // the candidates for a positional merge.
         let mut later_maps: BTreeMap<usize, &Value> = TryAsRef::<List>::try_as_ref(later)
-            .map(List::items)
+            .map(|list| &list[..])
             .unwrap_or(&[])
             .iter()
             .enumerate()
@@ -973,7 +973,7 @@ fn union_lists(
         // pass. The order is part of the contract: it is what a consumer
         // diffing two merged lists sees.
         for item in TryAsRef::<List>::try_as_ref(later)
-            .map(List::items)
+            .map(|list| &list[..])
             .unwrap_or(&[])
             .iter()
         {
@@ -1024,7 +1024,7 @@ fn union_lists(
         // differently, which is visible to any caller that renders the
         // list.
         for item in TryAsRef::<List>::try_as_ref(later)
-            .map(List::items)
+            .map(|list| &list[..])
             .unwrap_or(&[])
             .iter()
         {
@@ -1033,7 +1033,7 @@ fn union_lists(
             }
         }
         for item in TryAsRef::<List>::try_as_ref(later)
-            .map(List::items)
+            .map(|list| &list[..])
             .unwrap_or(&[])
             .iter()
         {

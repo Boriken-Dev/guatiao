@@ -129,7 +129,7 @@ impl Serialize for Serializable<'_> {
             }
             Ok(Tag::GUATIAO_LIST) => {
                 let items = TryAsRef::<List>::try_as_ref(self.value)
-                    .map(List::items)
+                    .map(|list| &list[..])
                     .ok_or_else(|| malformed::<S>("a list"))?;
                 let mut seq = s.serialize_seq(Some(items.len()))?;
                 for item in items {

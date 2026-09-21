@@ -458,7 +458,7 @@ impl<'a> TryFrom<&'a Value> for &'a [Value] {
     type Error = MapError;
 
     fn try_from(value: &'a Value) -> Result<&'a [Value], MapError> {
-        Ok(<&List>::try_from(value)?.items())
+        Ok(&<&List>::try_from(value)?[..])
     }
 }
 
@@ -543,7 +543,7 @@ impl FromValue for Bytes {
 /// Each element is read under `[i]`, so a failure names which one.
 impl<T: FromValue> FromValue for Vec<T> {
     fn from_value(value: &Value) -> Result<Vec<T>, MapError> {
-        let items = <&List>::try_from(value)?.items();
+        let items = &<&List>::try_from(value)?[..];
         let mut out = Vec::with_capacity(items.len());
         for (i, item) in items.iter().enumerate() {
             out.push(T::from_value(item).map_err(|e| e.at(i))?);

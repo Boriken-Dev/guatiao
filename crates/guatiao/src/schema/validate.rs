@@ -280,7 +280,7 @@ fn value_against(
             };
         }
         Kind::List(_) => {
-            let Some(items) = TryAsRef::<List>::try_as_ref(value).map(List::items) else {
+            let Some(items) = TryAsRef::<List>::try_as_ref(value).map(|list| &list[..]) else {
                 return Err(bad(key, "a list"));
             };
             let element = kind.items();

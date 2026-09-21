@@ -11,8 +11,6 @@
 //! number here and there is no `f64` for it.
 
 #![allow(missing_docs)]
-#![forbid(unsafe_code)]
-
 use std::fmt;
 use std::str::FromStr;
 
@@ -47,11 +45,9 @@ impl Number {
         Ok(Number(Text::new_in(alloc, text)?))
     }
 
-    /// The text this number was written as. Infallible: the grammar is
-    /// ASCII. A NUMBER node a foreign producer wrote with other bytes
-    /// reads as `""`, which every conversion refuses.
+    /// The text this number was written as, as `String::as_str` gives it.
     pub fn as_str(&self) -> &str {
-        self.0.as_str().unwrap_or("")
+        self
     }
 
     /// The bytes, for a reader that must tell "not UTF-8" from empty.
@@ -86,11 +82,6 @@ impl Number {
     pub fn alloc(&self) -> Result<Alloc, ValueError> {
         self.0.alloc()
     }
-
-    /// Frees the text and leaves it empty. Idempotent.
-    pub(crate) fn release(&mut self) {
-        self.0.release();
-    }
 }
 
 impl Clone for Number {
@@ -108,6 +99,40 @@ impl PartialEq for Number {
 }
 
 impl Eq for Number {}
+
+/// The text, as a `String` gives its `str`.
+impl std::ops::Deref for Number {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        // SAFETY: a `Number` is checked once, when it is made -- by its
+        // constructor, or for a foreign one by the door that reads it out
+        // of a value -- and the JSON grammar is ASCII. Nothing changes its
+        // text afterwards, so it is never checked again.
+        unsafe { std::str::from_utf8_unchecked(self.as_bytes()) }
+    }
+}
+
+/// For a bound, which does not deref: `fn f(x: impl AsRef<str>)` takes a
+/// `Number` only through this, as it takes a `String`.
+impl AsRef<str> for Number {
+    fn as_ref(&self) -> &str {
+        self
+    }
+}
+
+impl AsRef<[u8]> for Number {
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+/// By bytes, as its equality is: `1.10` and `1.1` hash apart.
+impl std::hash::Hash for Number {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_bytes().hash(state);
+    }
+}
 
 impl fmt::Display for Number {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

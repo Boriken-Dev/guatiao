@@ -53,7 +53,7 @@ fn the_root_exports_the_names_the_header_names() {
     let text = Text::new("hello");
     assert_eq!(text.as_str(), Some("hello"));
     let buffer = Buffer::new(b"\x00\xff");
-    assert_eq!(buffer.as_slice(), b"\x00\xff");
+    assert_eq!(&buffer[..], b"\x00\xff");
 
     let mut map = Map::new();
     map.set("k", "v").unwrap();
@@ -63,7 +63,7 @@ fn the_root_exports_the_names_the_header_names() {
 
     let mut list = List::new();
     list.push(1).unwrap();
-    assert_eq!(list.items().len(), 1);
+    assert_eq!(list.len(), 1);
 
     let view = Str::borrowed("k");
     assert_eq!(view.len, 1);
@@ -82,7 +82,7 @@ fn the_owned_containers_default_to_empty() {
     use guatiao::{Buffer, Text};
 
     assert_eq!(Text::default().as_str(), Some(""));
-    assert_eq!(Buffer::default().as_slice(), b"");
+    assert_eq!(&Buffer::default()[..], b"");
 }
 
 /// The borrowed byte view is constructed the way the borrowed text view
@@ -153,7 +153,7 @@ fn the_owned_types_are_clone_eq_send_and_sync() {
     assert_eq!(
         copy.get("l")
             .and_then(TryAsRef::<List>::try_as_ref)
-            .map(List::len),
+            .map(|list| list.len()),
         Some(2)
     );
 

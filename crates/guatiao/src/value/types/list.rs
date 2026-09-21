@@ -111,23 +111,14 @@ impl List {
         Ok(unsafe { Alloc::from_raw(self.alloc) }?)
     }
 
-    /// How many elements it holds.
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    /// Whether it holds none.
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
-    /// Its elements, in order.
-    pub fn items(&self) -> &[Value] {
-        if self.len == 0 {
-            return &[];
+    /// An empty list with room for `capacity` elements, through `alloc`.
+    pub(crate) fn with_capacity_in(alloc: Alloc, capacity: usize) -> Result<List, ValueError> {
+        let mut list = List::new_in(alloc);
+        if capacity > 0 {
+            // SAFETY: the container is consistent and empty.
+            unsafe { reserve(&mut list, capacity, Some(alloc))? };
         }
-        // SAFETY: the first `len` elements are initialised.
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+        Ok(list)
     }
 
     /// Appends `value`, **consuming** it. Takes anything [`Map::set`](super::Map::set)
@@ -144,7 +135,7 @@ impl List {
 
     /// Appends an already-built node. A refused append frees what it was
     /// handed: it was moved in, so nothing else can.
-    fn push_node(&mut self, value: Value, alloc: Alloc) -> Result<(), ValueError> {
+    pub(crate) fn push_node(&mut self, value: Value, alloc: Alloc) -> Result<(), ValueError> {
         // SAFETY: the container is consistent.
         if let Err(e) = unsafe { reserve(self, 1, Some(alloc)) } {
             drop(value);
@@ -156,25 +147,6 @@ impl List {
         unsafe { self.ptr.add(self.len).write(value) };
         self.len += 1;
         Ok(())
-    }
-
-    /// The element at `index`.
-    pub fn get(&self, index: usize) -> Option<&Value> {
-        self.items().get(index)
-    }
-
-    /// The element at `index`, mutably.
-    pub fn get_mut(&mut self, index: usize) -> Option<&mut Value> {
-        if index >= self.len {
-            return None;
-        }
-        // SAFETY: `index < len`, so the element is initialised.
-        Some(unsafe { &mut *self.ptr.add(index) })
-    }
-
-    /// Its elements, in order.
-    pub fn iter(&self) -> std::slice::Iter<'_, Value> {
-        self.items().iter()
     }
 
     /// Removes the element at `index`, keeping the order of the rest.
@@ -220,27 +192,11 @@ impl List {
         self.len = 0;
     }
 
-    /// A deep copy through `alloc`, bounded by [`MAX_DEPTH`](crate::MAX_DEPTH).
+    /// A deep copy through `alloc`, at any depth.
     pub fn clone_in(&self, alloc: Alloc) -> Result<List, ValueError> {
-        self.clone_at(alloc, 0)
+        crate::value::walk::copy_list(self, alloc)
     }
 
-    pub(crate) fn clone_at(&self, alloc: Alloc, depth: u32) -> Result<List, ValueError> {
-        let items = self.items();
-        // The guard owns everything built so far, so an early return frees
-        // it rather than leaking it.
-        let mut out = List::new_in(alloc);
-        if !items.is_empty() {
-            // SAFETY: the container is consistent and empty.
-            unsafe { reserve(&mut out, items.len(), Some(alloc))? };
-        }
-        for item in items {
-            out.push_node(item.clone_at(alloc, depth + 1)?, alloc)?;
-        }
-        Ok(out)
-    }
-
-    /// Element by element, each through [`Value`]'s own comparison.
     /// Moves every element onto `stack` and frees the storage, so a
     /// value's drop takes a tree apart without recursing.
     pub(crate) fn dismantle_into(&mut self, stack: &mut Vec<Value>) {
@@ -252,10 +208,86 @@ impl List {
         // SAFETY: the elements have been moved out.
         unsafe { release_buffer(self) }
     }
+}
 
-    pub(crate) fn eq_at(&self, other: &List, depth: u32) -> bool {
-        let (x, y) = (self.items(), other.items());
-        x.len() == y.len() && x.iter().zip(y).all(|(p, q)| p.eq_at(q, depth + 1))
+/// The elements, as `Vec` gives them: `len`, `get`, `iter`, indexing and
+/// every other slice method are the slice's own.
+impl std::ops::Deref for List {
+    type Target = [Value];
+
+    fn deref(&self) -> &[Value] {
+        if self.len == 0 {
+            return &[];
+        }
+        // SAFETY: the first `len` elements are initialised, and the borrow
+        // of `self` keeps them alive and unaliased.
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+    }
+}
+
+/// The elements, mutably. A slice cannot change its length, so what this
+/// list owns and how it frees it are untouched: an element moved out of a
+/// slot is moved out whole, as `mem::replace` or `swap` does.
+impl std::ops::DerefMut for List {
+    fn deref_mut(&mut self) -> &mut [Value] {
+        if self.len == 0 {
+            return &mut [];
+        }
+        // SAFETY: as for `deref`, and `&mut self` makes the borrow unique.
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+    }
+}
+
+impl AsRef<[Value]> for List {
+    fn as_ref(&self) -> &[Value] {
+        self
+    }
+}
+
+impl AsMut<[Value]> for List {
+    fn as_mut(&mut self) -> &mut [Value] {
+        self
+    }
+}
+
+/// The elements, moved out in order. What is not taken is freed with the
+/// iterator.
+#[derive(Debug)]
+pub struct IntoIter {
+    /// The rest, in reverse, so each `next` is a `pop`.
+    rest: List,
+}
+
+impl Iterator for IntoIter {
+    type Item = Value;
+
+    fn next(&mut self) -> Option<Value> {
+        self.rest.pop()
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.rest.len(), Some(self.rest.len()))
+    }
+}
+
+impl ExactSizeIterator for IntoIter {}
+
+impl IntoIterator for List {
+    type Item = Value;
+    type IntoIter = IntoIter;
+
+    fn into_iter(mut self) -> IntoIter {
+        self.reverse();
+        IntoIter { rest: self }
+    }
+}
+
+impl<'a> IntoIterator for &'a mut List {
+    type Item = &'a mut Value;
+    type IntoIter = std::slice::IterMut<'a, Value>;
+
+    fn into_iter(self) -> std::slice::IterMut<'a, Value> {
+        self.iter_mut()
     }
 }
 
@@ -279,10 +311,9 @@ impl Clone for List {
 }
 
 impl PartialEq for List {
-    /// Structural, and bounded as [`Value`]'s is: two trees nested
-    /// deeper than [`MAX_DEPTH`](crate::MAX_DEPTH) compare unequal.
+    /// Element by element, each by [`Value`]'s own comparison.
     fn eq(&self, other: &List) -> bool {
-        self.eq_at(other, 0)
+        crate::value::walk::equal(crate::value::walk::Pair::Lists(self, other))
     }
 }
 
@@ -342,7 +373,6 @@ mod collect_tests {
     fn a_list_collects_anything_a_value_is_made_from() {
         let list: List = ["a", "b"].into_iter().collect();
         let texts: Vec<&str> = list
-            .items()
             .iter()
             .filter_map(TryAsRef::<str>::try_as_ref)
             .collect();
