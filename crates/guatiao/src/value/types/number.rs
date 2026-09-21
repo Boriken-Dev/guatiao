@@ -99,9 +99,7 @@ impl std::ops::Deref for Number {
         // constructor, or for a foreign one by the door that reads it out
         // of a value -- and the JSON grammar is ASCII. Nothing changes its
         // text afterwards, so it is never checked again.
-        // The text's own bytes: `self.as_bytes()` would come back through
-        // this `Deref` and never return.
-        unsafe { std::str::from_utf8_unchecked(self.0.as_bytes()) }
+        unsafe { std::str::from_utf8_unchecked(&self.0) }
     }
 }
 

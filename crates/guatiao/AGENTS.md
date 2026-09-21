@@ -89,7 +89,7 @@ for value in list { .. }               // owned: Value; &List: &Value; &mut List
 Text::new(&str) -> Text                Buffer::new(&[u8]) -> Buffer
 Text::new_in(alloc, &str) -> Result<Text, ValueError>
 Buffer::new_in(alloc, &[u8]) -> Result<Buffer, ValueError>
-text.as_str() -> Option<&str>          text.as_bytes() -> &[u8]
+text.as_str() -> Option<&str>          &*text -> &[u8]   // Deref<Target = [u8]>
 text.push_str(&str) / push_str_in(&str, alloc)
 buffer.push(&[u8]) / push_in(&[u8], alloc)
 
@@ -203,15 +203,17 @@ an `Allocator` may be called from any thread.
 | `List` | `Vec<Value>` | `Deref`/`DerefMut<Target = [Value]>` (`len`, `get`, `iter`, `list[0]`, `sort_by`, `swap` are the slice's), `AsRef`/`AsMut<[Value]>`, owned and `&mut` `IntoIterator`, `FromIterator`, `Extend` |
 | `Buffer` | `Vec<u8>` | `Deref`/`DerefMut<Target = [u8]>`, `AsRef`/`AsMut<[u8]>`, `Hash`, `io::Write` |
 | `Map` | `HashMap`, ordered | `Index<&str>`, owned and `&mut` `IntoIterator`, `FromIterator<(K, V)>`, `Extend` |
-| `Text` | `String` | `AsRef<[u8]>`, `Hash`, `fmt::Write` |
+| `Text` | `String` | `Deref<Target = [u8]>`, `AsRef<[u8]>`, `Hash`, `fmt::Write` |
 | `Number` | its text | `Deref<Target = str>`, `AsRef<str>`, `AsRef<[u8]>`, `Hash`, `Display`, `FromStr` |
 
 A slice cannot change its length, so `DerefMut` leaves what a container
 owns untouched. **`Map` has no `IndexMut` and no `Deref`**: `IndexMut`
 could only hand back a slot that exists, so `map["new"] = v` would panic
 rather than insert (`set` inserts), and a map is not a slice. **`Text`
-has no `Deref<Target = str>`**, because a text read from a foreign tree
-may not be UTF-8 and a `&str` over that is undefined behaviour. `Hash`
+derefs to its bytes, not to `str`**, because a text read from a foreign
+tree may not be UTF-8 and a `&str` over that is undefined behaviour;
+`as_str` checks. It has no `DerefMut`, since writing bytes could break
+the UTF-8. `Hash`
 is by bytes, as equality is, so `1.10` and `1.1` are two keys.
 
 **A `Number` is always a JSON number**, which is why it can be a `str`.

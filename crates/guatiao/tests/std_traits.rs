@@ -75,6 +75,10 @@ fn text_takes_formatting_and_hands_out_its_bytes() {
     write!(text, "{}", 5900).unwrap();
     assert_eq!(text.as_str(), Some("port 5900"));
     assert_eq!(text.as_ref() as &[u8], b"port 5900");
+    assert_eq!(&text[..], b"port 5900");
+    assert_eq!(text.len(), 9, "the slice's length, in bytes");
+    assert!(text.starts_with(b"port"));
+    assert_eq!(&Text::default()[..], b"");
 }
 
 #[test]
