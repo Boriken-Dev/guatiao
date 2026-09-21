@@ -45,16 +45,6 @@ impl Number {
         Ok(Number(Text::new_in(alloc, text)?))
     }
 
-    /// The text this number was written as, as `String::as_str` gives it.
-    pub fn as_str(&self) -> &str {
-        self
-    }
-
-    /// The bytes, for a reader that must tell "not UTF-8" from empty.
-    pub fn as_bytes(&self) -> &[u8] {
-        self.0.as_bytes()
-    }
-
     /// A number from a float, through an allocator you name.
     pub fn float_in(alloc: Alloc, v: f64) -> Result<Number, ValueError> {
         Number::new_in(alloc, &float_text(v)?)
@@ -109,7 +99,9 @@ impl std::ops::Deref for Number {
         // constructor, or for a foreign one by the door that reads it out
         // of a value -- and the JSON grammar is ASCII. Nothing changes its
         // text afterwards, so it is never checked again.
-        unsafe { std::str::from_utf8_unchecked(self.as_bytes()) }
+        // The text's own bytes: `self.as_bytes()` would come back through
+        // this `Deref` and never return.
+        unsafe { std::str::from_utf8_unchecked(self.0.as_bytes()) }
     }
 }
 
@@ -136,7 +128,7 @@ impl std::hash::Hash for Number {
 
 impl fmt::Display for Number {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_str())
+        f.write_str(self)
     }
 }
 
@@ -319,11 +311,11 @@ mod tests {
     /// door it comes through.
     #[test]
     fn a_number_keeps_the_text_it_was_given() {
-        assert_eq!(Number::new("1.10").expect("a JSON number").as_str(), "1.10");
-        assert_eq!(Number::from(u64::MAX).as_str(), "18446744073709551615");
-        assert_eq!(Number::from(i128::MIN).as_str(), &i128::MIN.to_string());
+        assert_eq!(&*Number::new("1.10").expect("a JSON number"), "1.10");
+        assert_eq!(&*Number::from(u64::MAX), "18446744073709551615");
+        assert_eq!(*Number::from(i128::MIN), i128::MIN.to_string());
         assert_eq!(Number::new("1,5"), Err(ValueError::NotANumber));
-        assert_eq!("5".parse::<Number>().expect("a JSON number").as_str(), "5");
+        assert_eq!(&*"5".parse::<Number>().expect("a JSON number"), "5");
         assert_eq!(Number::try_from(f64::NAN), Err(ValueError::NotANumber));
         assert_eq!(Number::try_from(f32::INFINITY), Err(ValueError::NotANumber));
         assert_ne!(

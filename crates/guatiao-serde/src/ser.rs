@@ -92,7 +92,7 @@ impl Serialize for Serializable<'_> {
             Ok(Tag::GUATIAO_NUMBER) => write_number(
                 s,
                 TryAsRef::<Number>::try_as_ref(self.value)
-                    .map(Number::as_str)
+                    .map(AsRef::<str>::as_ref)
                     .ok_or_else(|| malformed::<S>("a number"))?,
                 self.how.numbers_as(),
             ),

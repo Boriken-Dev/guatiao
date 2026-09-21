@@ -483,9 +483,9 @@ impl FromValue for bool {
 
 /// The number as text, or the error saying it was not a number at all.
 fn number_text(value: &Value) -> Result<&str, MapError> {
-    Ok(TryAsRef::<Number>::try_as_ref(value)
-        .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_NUMBER, value))?
-        .as_str())
+    TryAsRef::<Number>::try_as_ref(value)
+        .map(AsRef::<str>::as_ref)
+        .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_NUMBER, value))
 }
 
 /// An integer read **never truncates**: a fractional or exponent
