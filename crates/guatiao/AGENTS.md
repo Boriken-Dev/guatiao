@@ -76,20 +76,20 @@ map.push_into(key, impl Into<Value>)   // appends to the list under `key`
 map.remove(key) -> Option<Value>       // handed back, frees on drop
 map.discard(key) -> bool               map.clear()
 map.copy_from(&Map) / copy_from_in(&Map, alloc) -> Result<usize, ValueError>
-map.iter() / map.keys() / map.values()          // &Map is IntoIterator
+map.iter() / map.keys() / map.values()
+map["host"] -> &Value                  // panics when absent, as HashMap does
 map.clone_in(alloc) -> Result<Map, ValueError>
+for (key, value) in map { .. }         // owned: (Text, Value); &Map: &Entry; &mut Map: &mut Entry
 
-list.items() -> &[Value]               list.push(impl Into<Value>)
-list.push_in(impl Into<Value>, alloc)  list.iter()   // &List is IntoIterator
-list.get(i) / list.get_mut(i)          list.remove(i) / list.pop()
-list.discard(i) -> bool                list.clear()
+list.push(impl Into<Value>)            list.push_in(impl Into<Value>, alloc)
+list.remove(i) / list.pop()            list.discard(i) -> bool     list.clear()
 list.clone_in(alloc) -> Result<List, ValueError>
+for value in list { .. }               // owned: Value; &List: &Value; &mut List: &mut Value
 
 Text::new(&str) -> Text                Buffer::new(&[u8]) -> Buffer
 Text::new_in(alloc, &str) -> Result<Text, ValueError>
 Buffer::new_in(alloc, &[u8]) -> Result<Buffer, ValueError>
-text.as_str() -> Option<&str>          buffer.as_slice() -> &[u8]
-text.as_bytes() -> &[u8]
+text.as_str() -> Option<&str>          text.as_bytes() -> &[u8]
 text.push_str(&str) / push_str_in(&str, alloc)
 buffer.push(&[u8]) / push_in(&[u8], alloc)
 
@@ -188,13 +188,41 @@ operation.
 target is touched.
 
 **`Value`, `Map`, `List`, `Text`, `Buffer` and `Number` are `Clone`,
-`PartialEq`, `Send` and `Sync`.** `clone()` is a deep copy through the
-allocator the source recorded (the crate's own for a scalar or a
+`PartialEq`, `Eq`, `Send` and `Sync`.** `clone()` is a deep copy through
+the allocator the source recorded (the crate's own for a scalar or a
 literal), and panics where the short constructors do; `clone_in(alloc)`
-is the fallible form that names one. Equality is structural and bounded
-by `MAX_DEPTH`, on the node and on the container alike. `Send` and
-`Sync` rest on the allocator contract below: an `Allocator` may be
-called from any thread.
+is the fallible form that names one. Both copying and equality are loops
+over a heap stack, so they work at **any depth** and a value is always
+equal to itself. `Send` and `Sync` rest on the allocator contract below:
+an `Allocator` may be called from any thread.
+
+**The standard traits, as the standard library's own types have them:**
+
+| type | as | so |
+| --- | --- | --- |
+| `List` | `Vec<Value>` | `Deref`/`DerefMut<Target = [Value]>` (`len`, `get`, `iter`, `list[0]`, `sort_by`, `swap` are the slice's), `AsRef`/`AsMut<[Value]>`, owned and `&mut` `IntoIterator`, `FromIterator`, `Extend` |
+| `Buffer` | `Vec<u8>` | `Deref`/`DerefMut<Target = [u8]>`, `AsRef`/`AsMut<[u8]>`, `Hash`, `io::Write` |
+| `Map` | `HashMap`, ordered | `Index<&str>`, owned and `&mut` `IntoIterator`, `FromIterator<(K, V)>`, `Extend` |
+| `Text` | `String` | `AsRef<[u8]>`, `Hash`, `fmt::Write` |
+| `Number` | its text | `Deref<Target = str>`, `AsRef<str>`, `AsRef<[u8]>`, `Hash`, `Display`, `FromStr` |
+
+A slice cannot change its length, so `DerefMut` leaves what a container
+owns untouched. **`Map` has no `IndexMut` and no `Deref`**: `IndexMut`
+could only hand back a slot that exists, so `map["new"] = v` would panic
+rather than insert (`set` inserts), and a map is not a slice. **`Text`
+has no `Deref<Target = str>`**, because a text read from a foreign tree
+may not be UTF-8 and a `&str` over that is undefined behaviour. `Hash`
+is by bytes, as equality is, so `1.10` and `1.1` are two keys.
+
+**A `Number` is always a JSON number**, which is why it can be a `str`.
+Each constructor checks the grammar, and so does every way out of a
+value (`TryAsRef`, `TryAsMut`, `TryFrom<Value>`). Text a foreign producer
+wrote under the number tag that is not a number is **no `Number` at
+all**: conversions refuse it, and it still frees on drop and equals
+itself by its bytes. The line this follows: a producer's **memory shape**
+(pointers, lengths, capacity) cannot be checked and is its contract to
+keep; its **content** (a number's text, UTF-8, a known tag) can, and is
+checked rather than trusted.
 
 **Crossing FFI**: a value handed to a foreign caller must be forgotten
 (`std::mem::forget`, `ManuallyDrop`, or a move into `ptr::write`) or Drop
@@ -203,8 +231,9 @@ will free what the far side now owns. The far side frees with
 
 The free walk is **iterative**, because a tree may have arrived from a
 caller this crate cannot see and recursion on adversarial depth is an
-uncatchable stack overflow on Windows. Every recursive read is bounded by
-`MAX_DEPTH` (128).
+uncatchable stack overflow on Windows. Copying and equality are
+iterative for the same reason. The walks that remain recursive -- merge,
+validation, the serde formats -- are bounded by `MAX_DEPTH` (128).
 
 ---
 
