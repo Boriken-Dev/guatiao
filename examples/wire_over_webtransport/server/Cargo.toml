@@ -1,0 +1,28 @@
+[package]
+name = "wire_over_webtransport"
+version = "0.1.0"
+edition = "2024"
+rust-version.workspace = true
+license = "MPL-2.0"
+publish = false
+description = "Values over WebTransport: a server that announces a schema and streams values, and a native probe that receives them as a browser would"
+
+[[bin]]
+name = "wire-server"
+path = "src/main.rs"
+
+[[bin]]
+name = "wire-probe"
+path = "src/bin/probe.rs"
+
+[dependencies]
+guatiao = { path = "../../../crates/guatiao" }
+
+# The two binaries' network stack, native only: the library -- the channel,
+# the schema, the framing -- is what the browser client shares, and it
+# builds for wasm with guatiao alone.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+# WebTransport over HTTP/3, server and client; `self-signed` (a default)
+# makes the short-lived certificate a browser accepts by hash.
+wtransport = "0.7"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }

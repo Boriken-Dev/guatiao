@@ -1,0 +1,25 @@
+<!doctype html>
+<!-- This Source Code Form is subject to the terms of the Mozilla Public
+     License, v. 2.0. If a copy of the MPL was not distributed with this
+     file, You can obtain one at https://mozilla.org/MPL/2.0/. -->
+<meta charset="utf-8">
+<title>guatiao over WebTransport</title>
+<p>Frames received, each checked against its channel's schema:</p>
+<pre id="log"></pre>
+<script type="module">
+  import init, { run } from "./pkg/wire_client.js";
+
+  const params = new URLSearchParams(location.search);
+  const log = (line) => {
+    document.getElementById("log").textContent += line + "\n";
+  };
+  const hex = params.get("hash") ?? "";
+  if (hex.length !== 64) {
+    log("add ?hash=<the certificate-sha256 the server printed>");
+  } else {
+    const hash = Uint8Array.from(hex.match(/../g).map((h) => parseInt(h, 16)));
+    await init();
+    run(params.get("url") ?? "https://localhost:4433", hash, log)
+      .catch((e) => log("error: " + e));
+  }
+</script>
