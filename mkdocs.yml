@@ -35,6 +35,7 @@ nav:
       - Rust: https://boriken-dev.github.io/guatiao/rust/guatiao/index.html
       - Python: api/python.md
       - Dart: api/dart.md
+  - In a browser: wasm.md
   - Changelog: changelog.md
 
 plugins:
