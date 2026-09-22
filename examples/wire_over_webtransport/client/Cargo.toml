@@ -1,0 +1,29 @@
+[package]
+name = "wire_client"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MPL-2.0"
+publish = false
+description = "A browser page that receives guatiao values over WebTransport, each checked against the schema its channel announced"
+
+# Its own workspace: it builds only for wasm32, which the parent's
+# `cargo test --workspace` does not target.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+guatiao = { path = "../../../crates/guatiao" }
+wire_over_webtransport = { path = "../server" }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "ReadableStream",
+    "ReadableStreamDefaultReader",
+    "WebTransport",
+    "WebTransportHash",
+    "WebTransportOptions",
+] }

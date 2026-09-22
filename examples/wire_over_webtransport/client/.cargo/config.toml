@@ -1,0 +1,5 @@
+# The browser has only one target, and WebTransport is still behind
+# web-sys's unstable-APIs flag.
+[build]
+target = "wasm32-unknown-unknown"
+rustflags = ["--cfg=web_sys_unstable_apis"]

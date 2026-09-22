@@ -9,7 +9,10 @@ members = [
     "examples/greeter_kind",
     "examples/derived_greeter",
     "examples/greeter_host",
+    "examples/wire_over_webtransport/server",
 ]
+# Builds only for wasm32, as its own workspace.
+exclude = ["examples/wire_over_webtransport/client"]
 
 # Four crates plus the examples. `guatiao-derive` exists only
 # because a proc-macro crate cannot be anything else, and is reached
