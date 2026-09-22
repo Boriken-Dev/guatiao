@@ -67,6 +67,59 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
+  miri:
+    # Undefined behaviour the tests pass through: the value model is repr(C)
+    # unions, raw slices and a hand-rolled drop. Only the tests that load no
+    # library run here -- Miri cannot map one -- and the one deep-tree test is
+    # skipped for time, not weakened. The nightly is pinned so a run means
+    # the same thing twice.
+    name: Miri (value model)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-09-21
+          components: miri, rust-src
+      - uses: Swatinem/rust-cache@v2
+      - name: The value model and the schema, unit tests
+        run: "cargo miri test -p guatiao --all-features --lib -- value:: schema::"
+      - name: The value model, integration tests
+        run: >-
+          cargo miri test -p guatiao --all-features
+          --test container_roundtrip --test std_traits --test public_surface
+          --test exports_boundary --test flat_projection --test schema_as_value
+          -- --skip a_tree_of_any_depth
+
+  public-api:
+    # A change to what a consumer can name must be a line somebody wrote:
+    # each crate commits its surface, and a difference here fails with the
+    # diff. Regenerate with the command in AGENTS.md, in the same commit.
+    name: Public API snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-09-21
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-public-api@0.52.0
+      - uses: Swatinem/rust-cache@v2
+      - name: Compare each crate with its snapshot
+        shell: bash
+        run: |
+          status=0
+          for crate in guatiao guatiao-serde guatiao-form; do
+            cargo public-api -p "$crate" --all-features -ss > "$RUNNER_TEMP/$crate.txt"
+            diff -u "crates/$crate/public-api.txt" "$RUNNER_TEMP/$crate.txt" || status=1
+          done
+          exit $status
+
   python:
     name: Python bindings (py${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}

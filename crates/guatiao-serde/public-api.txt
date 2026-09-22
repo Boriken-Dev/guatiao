@@ -1,0 +1,168 @@
+pub mod guatiao_serde
+pub mod guatiao_serde::exports
+pub const guatiao_serde::exports::GUATIAO_BYTES_ARRAY: u32
+pub const guatiao_serde::exports::GUATIAO_BYTES_BASE64: u32
+pub const guatiao_serde::exports::GUATIAO_BYTES_DATA_URI: u32
+pub const guatiao_serde::exports::GUATIAO_BYTES_REFUSE: u32
+pub const guatiao_serde::exports::GUATIAO_PRETTY: u32
+pub const guatiao_serde::exports::GUATIAO_READ_DATA_URIS: u32
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_emit(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_emit_pretty(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_parse(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_emit(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_parse(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_emit(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_parse(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+pub mod guatiao_serde::text
+pub mod guatiao_serde::text::json
+pub const guatiao_serde::text::json::NAME: &str
+pub fn guatiao_serde::text::json::from_str(&str, guatiao::value::alloc::Alloc, guatiao_serde::Presentation) -> core::result::Result<guatiao::value::value::Value, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::json::to_string(&guatiao::value::value::Value, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::json::to_string_pretty(&guatiao::value::value::Value, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
+pub mod guatiao_serde::text::toml
+pub const guatiao_serde::text::toml::NAME: &str
+pub fn guatiao_serde::text::toml::from_str(&str, guatiao::value::alloc::Alloc, guatiao_serde::Presentation) -> core::result::Result<guatiao::value::value::Value, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::toml::to_string(&guatiao::value::value::Value, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
+pub mod guatiao_serde::text::yaml
+pub const guatiao_serde::text::yaml::NAME: &str
+pub fn guatiao_serde::text::yaml::from_str(&str, guatiao::value::alloc::Alloc, guatiao_serde::Presentation) -> core::result::Result<guatiao::value::value::Value, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::yaml::to_string(&guatiao::value::value::Value, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
+#[non_exhaustive] pub enum guatiao_serde::text::Error
+pub guatiao_serde::text::Error::Format
+pub guatiao_serde::text::Error::Format::detail: alloc::string::String
+pub guatiao_serde::text::Error::Format::format: &'static str
+pub guatiao_serde::text::Error::Unsupported
+pub guatiao_serde::text::Error::Unsupported::detail: alloc::string::String
+pub guatiao_serde::text::Error::Unsupported::format: &'static str
+impl guatiao_serde::text::Error
+pub fn guatiao_serde::text::Error::format(&self) -> &'static str
+impl core::clone::Clone for guatiao_serde::text::Error
+pub fn guatiao_serde::text::Error::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_serde::text::Error
+impl core::cmp::PartialEq for guatiao_serde::text::Error
+pub fn guatiao_serde::text::Error::eq(&self, &Self) -> bool
+impl core::error::Error for guatiao_serde::text::Error
+impl core::fmt::Debug for guatiao_serde::text::Error
+pub fn guatiao_serde::text::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao_serde::text::Error
+pub fn guatiao_serde::text::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao_serde::text::Error
+#[non_exhaustive] pub enum guatiao_serde::Bytes
+pub guatiao_serde::Bytes::Array
+pub guatiao_serde::Bytes::Base64
+pub guatiao_serde::Bytes::DataUri
+pub guatiao_serde::Bytes::Refuse
+impl guatiao_serde::Bytes
+pub const fn guatiao_serde::Bytes::read_data_uris(self) -> bool
+impl core::clone::Clone for guatiao_serde::Bytes
+pub fn guatiao_serde::Bytes::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_serde::Bytes
+impl core::cmp::PartialEq for guatiao_serde::Bytes
+pub fn guatiao_serde::Bytes::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao_serde::Bytes
+pub fn guatiao_serde::Bytes::default() -> Self
+impl core::fmt::Debug for guatiao_serde::Bytes
+pub fn guatiao_serde::Bytes::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao_serde::Bytes
+impl core::marker::StructuralPartialEq for guatiao_serde::Bytes
+#[non_exhaustive] pub enum guatiao_serde::Error
+pub guatiao_serde::Error::Format
+pub guatiao_serde::Error::Format::detail: alloc::string::String
+pub guatiao_serde::Error::Format::format: &'static str
+pub guatiao_serde::Error::Unsupported
+pub guatiao_serde::Error::Unsupported::detail: alloc::string::String
+pub guatiao_serde::Error::Unsupported::format: &'static str
+impl guatiao_serde::text::Error
+pub fn guatiao_serde::text::Error::format(&self) -> &'static str
+impl core::clone::Clone for guatiao_serde::text::Error
+pub fn guatiao_serde::text::Error::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_serde::text::Error
+impl core::cmp::PartialEq for guatiao_serde::text::Error
+pub fn guatiao_serde::text::Error::eq(&self, &Self) -> bool
+impl core::error::Error for guatiao_serde::text::Error
+impl core::fmt::Debug for guatiao_serde::text::Error
+pub fn guatiao_serde::text::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao_serde::text::Error
+pub fn guatiao_serde::text::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao_serde::text::Error
+#[non_exhaustive] pub enum guatiao_serde::Numbers
+pub guatiao_serde::Numbers::Native
+pub guatiao_serde::Numbers::RawText
+impl core::clone::Clone for guatiao_serde::Numbers
+pub fn guatiao_serde::Numbers::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_serde::Numbers
+impl core::cmp::PartialEq for guatiao_serde::Numbers
+pub fn guatiao_serde::Numbers::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao_serde::Numbers
+pub fn guatiao_serde::Numbers::default() -> Self
+impl core::fmt::Debug for guatiao_serde::Numbers
+pub fn guatiao_serde::Numbers::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao_serde::Numbers
+impl core::marker::StructuralPartialEq for guatiao_serde::Numbers
+pub struct guatiao_serde::Presentation
+impl guatiao_serde::Presentation
+pub const fn guatiao_serde::Presentation::bytes(self, guatiao_serde::Bytes) -> guatiao_serde::Presentation
+pub const fn guatiao_serde::Presentation::bytes_as(self) -> guatiao_serde::Bytes
+pub const fn guatiao_serde::Presentation::new() -> guatiao_serde::Presentation
+pub const fn guatiao_serde::Presentation::numbers(self, guatiao_serde::Numbers) -> guatiao_serde::Presentation
+pub const fn guatiao_serde::Presentation::numbers_as(self) -> guatiao_serde::Numbers
+pub const fn guatiao_serde::Presentation::reading_data_uris(self) -> guatiao_serde::Presentation
+pub const fn guatiao_serde::Presentation::reads_data_uris(self) -> bool
+impl core::clone::Clone for guatiao_serde::Presentation
+pub fn guatiao_serde::Presentation::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_serde::Presentation
+impl core::cmp::PartialEq for guatiao_serde::Presentation
+pub fn guatiao_serde::Presentation::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao_serde::Presentation
+pub fn guatiao_serde::Presentation::default() -> Self
+impl core::fmt::Debug for guatiao_serde::Presentation
+pub fn guatiao_serde::Presentation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao_serde::Presentation
+impl core::marker::StructuralPartialEq for guatiao_serde::Presentation
+pub struct guatiao_serde::Serializable<'a>
+impl<'a> guatiao_serde::Serializable<'a>
+pub fn guatiao_serde::Serializable<'a>::new(&'a guatiao::value::value::Value, guatiao_serde::Presentation) -> guatiao_serde::Serializable<'a>
+pub fn guatiao_serde::Serializable<'a>::presentation(&self) -> guatiao_serde::Presentation
+pub fn guatiao_serde::Serializable<'a>::value(&self) -> &'a guatiao::value::value::Value
+impl serde_core::ser::Serialize for guatiao_serde::Serializable<'_>
+pub fn guatiao_serde::Serializable<'_>::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'a> core::clone::Clone for guatiao_serde::Serializable<'a>
+pub fn guatiao_serde::Serializable<'a>::clone(&self) -> Self
+impl<'a> core::convert::From<&'a guatiao::value::value::Value> for guatiao_serde::Serializable<'a>
+pub fn guatiao_serde::Serializable<'a>::from(&'a guatiao::value::value::Value) -> guatiao_serde::Serializable<'a>
+impl<'a> core::fmt::Debug for guatiao_serde::Serializable<'a>
+pub fn guatiao_serde::Serializable<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for guatiao_serde::Serializable<'a>
+pub struct guatiao_serde::ValueSeed
+impl guatiao_serde::ValueSeed
+pub const fn guatiao_serde::ValueSeed::new(guatiao::value::alloc::Alloc) -> guatiao_serde::ValueSeed
+pub const fn guatiao_serde::ValueSeed::with(guatiao::value::alloc::Alloc, guatiao_serde::Presentation) -> guatiao_serde::ValueSeed
+impl core::clone::Clone for guatiao_serde::ValueSeed
+pub fn guatiao_serde::ValueSeed::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_serde::ValueSeed
+pub fn guatiao_serde::ValueSeed::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao_serde::ValueSeed
+impl<'de> serde_core::de::DeserializeSeed<'de> for guatiao_serde::ValueSeed
+pub type guatiao_serde::ValueSeed::Value = guatiao::value::value::Value
+pub fn guatiao_serde::ValueSeed::deserialize<D: serde_core::de::Deserializer<'de>>(self, D) -> core::result::Result<guatiao::value::value::Value, <D as serde_core::de::Deserializer>::Error>
+impl<'de> serde_core::de::Visitor<'de> for guatiao_serde::ValueSeed
+pub type guatiao_serde::ValueSeed::Value = guatiao::value::value::Value
+pub fn guatiao_serde::ValueSeed::expecting(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn guatiao_serde::ValueSeed::visit_bool<E: serde_core::de::Error>(self, bool) -> core::result::Result<guatiao::value::value::Value, E>
+pub fn guatiao_serde::ValueSeed::visit_bytes<E: serde_core::de::Error>(self, &[u8]) -> core::result::Result<guatiao::value::value::Value, E>
+pub fn guatiao_serde::ValueSeed::visit_f64<E: serde_core::de::Error>(self, f64) -> core::result::Result<guatiao::value::value::Value, E>
+pub fn guatiao_serde::ValueSeed::visit_i128<E: serde_core::de::Error>(self, i128) -> core::result::Result<guatiao::value::value::Value, E>
+pub fn guatiao_serde::ValueSeed::visit_i64<E: serde_core::de::Error>(self, i64) -> core::result::Result<guatiao::value::value::Value, E>
+pub fn guatiao_serde::ValueSeed::visit_map<A: serde_core::de::MapAccess<'de>>(self, A) -> core::result::Result<guatiao::value::value::Value, <A as serde_core::de::MapAccess>::Error>
+pub fn guatiao_serde::ValueSeed::visit_none<E: serde_core::de::Error>(self) -> core::result::Result<guatiao::value::value::Value, E>
+pub fn guatiao_serde::ValueSeed::visit_seq<A: serde_core::de::SeqAccess<'de>>(self, A) -> core::result::Result<guatiao::value::value::Value, <A as serde_core::de::SeqAccess>::Error>
+pub fn guatiao_serde::ValueSeed::visit_some<D: serde_core::de::Deserializer<'de>>(self, D) -> core::result::Result<guatiao::value::value::Value, <D as serde_core::de::Deserializer>::Error>
+pub fn guatiao_serde::ValueSeed::visit_str<E: serde_core::de::Error>(self, &str) -> core::result::Result<guatiao::value::value::Value, E>
+pub fn guatiao_serde::ValueSeed::visit_u128<E: serde_core::de::Error>(self, u128) -> core::result::Result<guatiao::value::value::Value, E>
+pub fn guatiao_serde::ValueSeed::visit_u64<E: serde_core::de::Error>(self, u64) -> core::result::Result<guatiao::value::value::Value, E>
+pub fn guatiao_serde::ValueSeed::visit_unit<E: serde_core::de::Error>(self) -> core::result::Result<guatiao::value::value::Value, E>
+pub fn guatiao_serde::base64(&[u8]) -> alloc::string::String
+pub fn guatiao_serde::data_uri(&[u8]) -> alloc::string::String
+pub fn guatiao_serde::from_base64(&str) -> core::option::Option<alloc::vec::Vec<u8>>
+pub fn guatiao_serde::from_data_uri(&str) -> core::option::Option<alloc::vec::Vec<u8>>
+pub fn guatiao_serde::from_serde<'de, D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<guatiao::value::value::Value, <D as serde_core::de::Deserializer>::Error>

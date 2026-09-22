@@ -8,7 +8,7 @@ repository.workspace = true
 publish.workspace = true
 license.workspace = true
 readme = "README.md"
-exclude = [".*", "*.local.*"]
+exclude = [".*", "*.local.*", "public-api.txt"]
 
 # docs.rs documents every feature.
 [package.metadata.docs.rs]

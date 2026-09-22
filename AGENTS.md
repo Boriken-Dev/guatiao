@@ -32,6 +32,27 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 cargo package --list -p guatiao --allow-dirty   # must list AGENTS.md, README.md and no dot-prefixed path
 ```
 
+Two gates on a pinned nightly (`rustup toolchain install nightly-2026-09-21
+--component miri,rust-src`, `cargo install cargo-public-api --version
+0.52.0`). Miri runs the tests that load no library; the deep-tree test is
+skipped for time only:
+
+```bash
+cargo +nightly-2026-09-21 miri test -p guatiao --all-features --lib -- value:: schema::
+cargo +nightly-2026-09-21 miri test -p guatiao --all-features --test container_roundtrip \
+  --test std_traits --test public_surface --test exports_boundary \
+  --test flat_projection --test schema_as_value -- --skip a_tree_of_any_depth
+```
+
+Each crate commits its public surface. A change to it regenerates the
+snapshot in the same commit; CI fails on any difference:
+
+```bash
+for c in guatiao guatiao-serde guatiao-form; do
+  cargo public-api -p $c --all-features -ss > crates/$c/public-api.txt
+done
+```
+
 Regenerating the header. `build.rs` renders it on every build with
 `c-header` on, into `OUT_DIR`; this writes the committed copy as well.
 cbindgen is an **optional** build-dependency enabled by that feature, so a
