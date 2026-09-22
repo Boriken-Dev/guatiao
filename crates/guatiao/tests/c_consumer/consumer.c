@@ -27,23 +27,27 @@
 
 /* ---- the layout, from the C side ------------------------------------ */
 
-_Static_assert(sizeof(guatiao_str) == 16, "view is two words");
-_Static_assert(sizeof(guatiao_bytes) == 16, "view is two words");
-_Static_assert(sizeof(guatiao_values) == 16, "view is two words");
-_Static_assert(sizeof(guatiao_entries) == 16, "view is two words");
+/* In pointer widths, as the Rust side states them, so this compiles on
+ * every target the crate builds for. */
+#define P sizeof(void *)
+_Static_assert(sizeof(guatiao_str) == 2 * P, "view is two words");
+_Static_assert(sizeof(guatiao_bytes) == 2 * P, "view is two words");
+_Static_assert(sizeof(guatiao_values) == 2 * P, "view is two words");
+_Static_assert(sizeof(guatiao_entries) == 2 * P, "view is two words");
 
-_Static_assert(sizeof(guatiao_string) == 32, "owned is four words");
-_Static_assert(sizeof(guatiao_buffer) == 32, "owned is four words");
-_Static_assert(sizeof(guatiao_list) == 32, "owned is four words");
-_Static_assert(sizeof(guatiao_map) == 32, "owned is four words");
+_Static_assert(sizeof(guatiao_string) == 4 * P, "owned is four words");
+_Static_assert(sizeof(guatiao_buffer) == 4 * P, "owned is four words");
+_Static_assert(sizeof(guatiao_list) == 4 * P, "owned is four words");
+_Static_assert(sizeof(guatiao_map) == 4 * P, "owned is four words");
 
-_Static_assert(sizeof(guatiao_payload) == 32, "the union is its widest arm");
-_Static_assert(sizeof(guatiao_value) == 40, "tag, pad, payload");
-_Static_assert(sizeof(guatiao_entry) == 72, "key plus value");
-_Static_assert(sizeof(guatiao_alloc) == 40, "size, ctx, three callbacks");
+_Static_assert(sizeof(guatiao_payload) == 4 * P, "the union is its widest arm");
+_Static_assert(sizeof(guatiao_value) == 8 + 4 * P, "tag, pad, payload");
+_Static_assert(sizeof(guatiao_entry) == 4 * P + sizeof(guatiao_value), "key plus value");
+_Static_assert(sizeof(guatiao_alloc) == 5 * P, "size padded to a word, ctx, three callbacks");
+#undef P
 
-_Static_assert(_Alignof(guatiao_value) == 8, "pointer aligned");
-_Static_assert(_Alignof(guatiao_entry) == 8, "pointer aligned");
+_Static_assert(_Alignof(guatiao_value) == _Alignof(void *), "pointer aligned");
+_Static_assert(_Alignof(guatiao_entry) == _Alignof(void *), "pointer aligned");
 
 _Static_assert(offsetof(guatiao_value, tag) == 0, "the tag leads");
 _Static_assert(offsetof(guatiao_value, _pad) == 4, "then the reserved word");

@@ -93,6 +93,13 @@
 // list is `tests/forbid_unsafe_per_module.rs`.
 //
 // A `//` comment, never a `///`: see `merge` below.
+
+// A browser has no files to map and no symbols to look up: the loader
+// means nothing there, and turning it on is a mistake worth a clear error
+// rather than a link failure deep inside `libloading`.
+#[cfg(all(feature = "load", target_family = "wasm"))]
+compile_error!("the `load` feature maps libraries from files, which a wasm target cannot do");
+
 pub mod value;
 
 /// Converting a Rust type to and from a value.

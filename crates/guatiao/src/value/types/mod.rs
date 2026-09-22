@@ -92,28 +92,33 @@ pub(crate) fn or_abort<T>(built: Result<T, ValueError>) -> T {
 const _: () = {
     use std::mem::{align_of, offset_of, size_of};
 
-    assert!(size_of::<Str>() == 16);
-    assert!(size_of::<Bytes>() == 16);
-    assert!(size_of::<Values>() == 16);
-    assert!(size_of::<Entries>() == 16);
+    // In pointer widths, so the one layout holds on every target: a view
+    // is two words, an owned container four, a node a tag and its padding
+    // then a container, an entry a key then a node.
+    const P: usize = size_of::<usize>();
+
+    assert!(size_of::<Str>() == 2 * P);
+    assert!(size_of::<Bytes>() == 2 * P);
+    assert!(size_of::<Values>() == 2 * P);
+    assert!(size_of::<Entries>() == 2 * P);
 
     // `Number` is a `Text` under a different tag, so it is the same
-    // storage and the same 32 bytes; nothing new crosses the boundary.
-    assert!(size_of::<Number>() == 32);
-    assert!(size_of::<Text>() == 32);
-    assert!(size_of::<Buffer>() == 32);
-    assert!(size_of::<List>() == 32);
-    assert!(size_of::<Map>() == 32);
+    // storage; nothing new crosses the boundary.
+    assert!(size_of::<Number>() == 4 * P);
+    assert!(size_of::<Text>() == 4 * P);
+    assert!(size_of::<Buffer>() == 4 * P);
+    assert!(size_of::<List>() == 4 * P);
+    assert!(size_of::<Map>() == 4 * P);
 
-    assert!(size_of::<Payload>() == 32);
-    assert!(size_of::<Value>() == 40);
-    assert!(size_of::<Entry>() == 72);
+    assert!(size_of::<Payload>() == 4 * P);
+    assert!(size_of::<Value>() == 8 + 4 * P);
+    assert!(size_of::<Entry>() == 4 * P + size_of::<Value>());
 
     assert!(offset_of!(Value, tag) == 0);
     assert!(offset_of!(Value, _pad) == 4);
     assert!(offset_of!(Value, payload) == 8);
     assert!(offset_of!(Entry, key) == 0);
-    assert!(offset_of!(Entry, value) == 32);
+    assert!(offset_of!(Entry, value) == 4 * P);
 
     // A C caller may wire `malloc` straight through, and `malloc`
     // guarantees only `max_align_t` -- 8 on the targets in view. An
