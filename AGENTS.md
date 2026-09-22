@@ -85,7 +85,8 @@ the suite rather than shipping.
   registry, no allocator singleton. This is what lets a host and a library
   both link the crate.
 - **`unsafe` is confined to named places.** In `guatiao`: the value
-  model's raw layer, `library/raw.rs`, and `exports/` — listed in
+  model's raw layer, the loader (`library/raw/`), the kind runtime's
+  files (`library/kind/`), and `exports/` — listed in
   `tests/forbid_unsafe_per_module.rs`. In `guatiao-form`: `exports.rs`
   alone, checked by its `tests/unsafe_stays_in_exports.rs`. Every other
   module carries `#![forbid(unsafe_code)]`.

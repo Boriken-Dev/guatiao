@@ -1366,5 +1366,5 @@ An implementer must guarantee, and `struct_size` cannot express:
 - **Key comparison is exact.** No case folding, no normalisation, no
   trimming: `"Host"` and `"host"` are two keys.
 - **`#![forbid(unsafe_code)]` is per module**, and a test names the paths
-  allowed to contain `unsafe`: the value model, `library/raw.rs` and
-  `exports`. Every other module must carry the attribute.
+  allowed to contain `unsafe`: the value model, `library/raw/`, the
+  kind runtime's files under `library/kind/`, and `exports`. Every other module must carry the attribute.
