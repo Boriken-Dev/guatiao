@@ -91,6 +91,7 @@ jobs:
           cargo miri test -p guatiao --all-features
           --test container_roundtrip --test std_traits --test public_surface
           --test exports_boundary --test flat_projection --test schema_as_value
+          --test kind_glue_probes
           -- --skip a_tree_of_any_depth
 
   public-api:

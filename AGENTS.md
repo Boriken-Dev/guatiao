@@ -41,7 +41,7 @@ skipped for time only:
 cargo +nightly-2026-09-21 miri test -p guatiao --all-features --lib -- value:: schema::
 cargo +nightly-2026-09-21 miri test -p guatiao --all-features --test container_roundtrip \
   --test std_traits --test public_surface --test exports_boundary \
-  --test flat_projection --test schema_as_value -- --skip a_tree_of_any_depth
+  --test flat_projection --test schema_as_value --test kind_glue_probes \n  -- --skip a_tree_of_any_depth
 ```
 
 Each crate commits its public surface. A change to it regenerates the
