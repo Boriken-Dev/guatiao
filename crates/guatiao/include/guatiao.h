@@ -74,6 +74,21 @@ typedef struct guatiao_entry guatiao_entry;
 #define GUATIAO_MAX_DEPTH 128
 
 /*
+ A frame that announces a channel's schema.
+ */
+#define GUATIAO_FRAME_SCHEMA 0
+
+/*
+ A frame that carries one value.
+ */
+#define GUATIAO_FRAME_VALUE 1
+
+/*
+ A frame that ends a channel.
+ */
+#define GUATIAO_FRAME_CLOSE 2
+
+/*
  Shallow: top-level keys replace, nested maps are not recursed into.
  */
 #define GUATIAO_MERGE_SIMPLE 1
@@ -2050,6 +2065,42 @@ guatiao_status guatiao_buffer_push(const struct guatiao_alloc *alloc,
  `out` addresses writable storage for one allocator.
  */
 guatiao_status guatiao_alloc_default(struct guatiao_alloc *out);
+
+/*
+ Encodes `value` in the wire encoding (`guatiao::value::wire`), writing
+ the bytes through `out` as a BYTES value built in `alloc`.
+
+ `out` is written the absent marker on entry. A node `value` holds that
+ its own reader refuses (text that is not UTF-8, a number outside the
+ grammar, an unknown tag) is `GUATIAO_ERR_BAD_VALUE`; a null or unusable
+ allocator is `GUATIAO_ERR_ALLOC`.
+
+ # Safety
+
+ The pointers are null or valid, and `out` addresses writable storage
+ for one value that does not already hold one.
+ */
+guatiao_status guatiao_wire_encode(const struct guatiao_alloc *alloc,
+                                   const struct guatiao_value *value,
+                                   struct guatiao_value *out);
+
+/*
+ Decodes the wire encoding in `bytes`, writing the value through `out`,
+ built in `alloc`.
+
+ `out` is written the absent marker on entry. Bytes that are not a
+ value — truncated, an unknown tag, text that is not UTF-8, a number
+ outside the grammar, a repeated key, anything after the value — are
+ `GUATIAO_ERR_BAD_VALUE`; the Rust API names the byte.
+
+ # Safety
+
+ `bytes` is readable for the call; `out` addresses writable storage for
+ one value that does not already hold one.
+ */
+guatiao_status guatiao_wire_decode(const struct guatiao_alloc *alloc,
+                                   struct guatiao_bytes bytes,
+                                   struct guatiao_value *out);
 
 #ifdef __cplusplus
 }  // extern "C"
