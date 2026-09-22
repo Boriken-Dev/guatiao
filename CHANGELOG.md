@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`value::wire`**, an exact, self-describing binary encoding of a value
+  (a tag byte per node, shortest-form LEB128 lengths, numbers as their
+  text, bytes as bytes, map order kept), with a decoder that refuses every
+  malformation at its byte offset; **`value::wire::channel`**, frames that
+  announce a schema on a channel before its values, and a `Receiver` that
+  checks each value against it. C: `guatiao_wire_encode`,
+  `guatiao_wire_decode`, `GUATIAO_FRAME_*`.
+- **wasm32**: the crates build for `wasm32-unknown-unknown`; the layout is
+  stated in pointer widths, and `load` on a wasm target is a compile error.
+  `examples/wire_over_webtransport`: a server streaming checked values to a
+  browser page over WebTransport.
+- CI gates: Miri over the value model, a public API snapshot per crate,
+  and a wasm32 build.
+
 - **Dart bindings**, `bindings/dart/`: `dart:ffi` over the same C ABI,
   with `package:ffi` as the only dependency and no Flutter dependency, so
   one package serves a Flutter app and a command-line program. `Value`,
