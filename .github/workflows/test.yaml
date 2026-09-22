@@ -93,6 +93,12 @@ jobs:
           --test exports_boundary --test flat_projection --test schema_as_value
           --test kind_glue_probes
           -- --skip a_tree_of_any_depth
+      - name: The wire decoder, which reads bytes nobody vouched for
+        # The three heavy tests (random inputs, a deep tree, a thousand keys)
+        # run natively; under Miri they take minutes and add no new path.
+        run: >-
+          cargo miri test -p guatiao --all-features --test wire_roundtrip --test wire_channel
+          -- --skip ten_thousand_random --skip a_tree_deeper_than --skip a_thousand_keys
 
   public-api:
     # A change to what a consumer can name must be a line somebody wrote:
@@ -120,6 +126,40 @@ jobs:
             diff -u "crates/$crate/public-api.txt" "$RUNNER_TEMP/$crate.txt" || status=1
           done
           exit $status
+
+  wasm:
+    # The crates build for a browser. The layout is written in pointer
+    # widths, so wasm32 (4-byte pointers) is the same contract as 64-bit.
+    name: wasm32
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Check the crates for wasm32
+        run: >-
+          cargo check --target wasm32-unknown-unknown
+          -p guatiao -p guatiao-serde -p guatiao-form
+          --features guatiao/derive,guatiao/provider,guatiao-serde/json,guatiao-serde/toml,guatiao-serde/yaml
+      - name: Build the module
+        run: cargo build -p guatiao --target wasm32-unknown-unknown --release
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-tools
+      - name: The module exports the C surface, the wire encoding included
+        shell: bash
+        run: |
+          exports=$(wasm-tools print target/wasm32-unknown-unknown/release/guatiao.wasm | grep -c '(export "guatiao_')
+          wire=$(wasm-tools print target/wasm32-unknown-unknown/release/guatiao.wasm | grep -c '(export "guatiao_wire_')
+          echo "guatiao_* exports: $exports, wire: $wire"
+          test "$wire" -eq 2 && test "$exports" -ge 20
+      - name: The wire encoding
+        run: cargo test -p guatiao --test wire_roundtrip --test wire_channel
 
   python:
     name: Python bindings (py${{ matrix.python-version }}, ${{ matrix.os }})
