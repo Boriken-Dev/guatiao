@@ -70,10 +70,15 @@ const UNSAFE_PATHS: &[&str] = &[
     "value/types",
     "value/value.rs",
     // The loader, which maps a library and calls a symbol out of it.
-    "library/raw.rs",
+    "library/raw",
     // The kind runtime: every `unsafe` a generated shim or proxy needs,
-    // written once.
-    "library/kind.rs",
+    // written once. File by file: `kind/mod.rs` holds the trait and the
+    // errors, and no `unsafe`.
+    "library/kind/object.rs",
+    "library/kind/parts.rs",
+    "library/kind/proxy.rs",
+    "library/kind/shim.rs",
+    "library/kind/tests.rs",
     // The `extern "C"` surface.
     "exports",
 ];
@@ -92,6 +97,8 @@ const UNSAFE_PATHS: &[&str] = &[
 /// become one itself.
 const NO_FORBID: &[&str] = &[
     "library/mod.rs",
+    // Declares the kind runtime's files, which carry `unsafe`.
+    "library/kind/mod.rs",
     "value/mod.rs",
     // Declares children that carry `unsafe`.
     "value/types/mod.rs",
