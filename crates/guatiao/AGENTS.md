@@ -337,6 +337,40 @@ Structural comparison is `PartialEq` on both the node and the container.
 `1.10`, a 200-digit integer survives, and `u64::MAX` crosses as itself.
 Nothing coerces between kinds.
 
+## Values as bytes: `value::wire`
+
+An exact, self-describing binary encoding, for sending a value anywhere
+bytes go. A tag byte per node, LEB128 lengths, a number as its own text,
+bytes as bytes, a map in its order, the same bytes on every pointer width.
+
+```rust
+wire::encode(&Value, &mut Vec<u8>) -> Result<(), ValueError>   // a node its door refuses: refused
+wire::to_bytes(&Value) -> Result<Vec<u8>, ValueError>
+wire::decode(&[u8]) -> Result<Value, WireError>                // decode_in(Alloc, ..)
+WireError::{Truncated, UnknownTag, Overlong, NotUtf8, NotANumber, NotABool,
+            DuplicateKey, Trailing, Alloc, ..} { at: usize, .. }   // the byte it went wrong at
+
+wire::channel::{announce(ch, &schema), send(ch, &value)} -> Result<Vec<u8>, ValueError>
+wire::channel::close(ch) -> Vec<u8>
+Receiver::new() / new_in(Alloc);  receiver.accept(&frame) -> Result<Received, WireError>
+Received::{Schema(ch), Value { channel, value }, Closed(ch)}
+// NoSchema { channel }, NotASchema { channel }, Invalid { channel, error: ValidationError }
+```
+
+Decoding is a loop, so depth costs heap, not stack; every malformation
+is refused, never repaired: a length not in its shortest LEB128, a
+repeated key, bytes after the value. A channel's schema arrives first and
+every value on it is checked with `validate_map` before `accept` answers;
+offsets in a channel's errors name bytes of the whole frame. No I/O: the
+transport says where a frame ends. C: `guatiao_wire_encode(alloc, value,
+out)` writes a BYTES value, `guatiao_wire_decode(alloc, bytes, out)`
+answers `GUATIAO_ERR_BAD_VALUE` for bytes that are not a value.
+
+**wasm32**: the crate builds for `wasm32-unknown-unknown` (the layout is
+written in pointer widths); `load` there is a compile error. The module
+exports the value, schema and merge C surface; a JavaScript caller builds
+with `guatiao_alloc_default()`.
+
 ## Errors
 
 ```rust

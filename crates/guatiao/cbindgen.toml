@@ -518,6 +518,10 @@ exclude = ["Entry"]
 [export.rename]
 "SEPARATOR" = "GUATIAO_PAYLOAD_SEPARATOR"
 "MAX_DEPTH" = "GUATIAO_MAX_DEPTH"
+# The wire channel's frame kinds.
+"SCHEMA" = "GUATIAO_FRAME_SCHEMA"
+"VALUE" = "GUATIAO_FRAME_VALUE"
+"CLOSE" = "GUATIAO_FRAME_CLOSE"
 
 # The types are named for Rust on the Rust side — `Value`, `Map`, `List`
 # — and for C on the C side. A header shares one flat namespace with

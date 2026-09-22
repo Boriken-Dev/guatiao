@@ -1444,6 +1444,48 @@ class GuatiaoBindings {
       int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
           ffi.Pointer<guatiao_value>)>();
 
+  int guatiao_wire_decode(
+    ffi.Pointer<guatiao_alloc> alloc,
+    guatiao_bytes bytes,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_wire_decode(
+      alloc,
+      bytes,
+      out,
+    );
+  }
+
+  late final _guatiao_wire_decodePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status$1 Function(ffi.Pointer<guatiao_alloc>, guatiao_bytes,
+              ffi.Pointer<guatiao_value>)>>('guatiao_wire_decode');
+  late final _guatiao_wire_decode = _guatiao_wire_decodePtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, guatiao_bytes,
+          ffi.Pointer<guatiao_value>)>();
+
+  int guatiao_wire_encode(
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> value,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_wire_encode(
+      alloc,
+      value,
+      out,
+    );
+  }
+
+  late final _guatiao_wire_encodePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status$1 Function(
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_wire_encode');
+  late final _guatiao_wire_encode = _guatiao_wire_encodePtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>)>();
+
   int guatiao_yaml_emit(
     ffi.Pointer<guatiao_value> value,
     int how,
@@ -1504,6 +1546,12 @@ const int GUATIAO_BYTES_BASE64 = 1;
 const int GUATIAO_BYTES_DATA_URI = 0;
 
 const int GUATIAO_BYTES_REFUSE = 3;
+
+const int GUATIAO_FRAME_CLOSE = 2;
+
+const int GUATIAO_FRAME_SCHEMA = 0;
+
+const int GUATIAO_FRAME_VALUE = 1;
 
 const String GUATIAO_KEY_ADDITIONAL_PROPERTIES = 'additionalProperties';
 

@@ -132,6 +132,10 @@ files:
         name: guatiao_value_number
       c:@F@guatiao_value_string:
         name: guatiao_value_string
+      c:@F@guatiao_wire_decode:
+        name: guatiao_wire_decode
+      c:@F@guatiao_wire_encode:
+        name: guatiao_wire_encode
       c:@F@guatiao_yaml_emit:
         name: guatiao_yaml_emit
       c:@F@guatiao_yaml_parse:

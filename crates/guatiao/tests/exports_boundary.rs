@@ -939,3 +939,41 @@ fn text_a_c_caller_passes_that_is_not_utf8_is_refused_where_it_arrives() {
         unsafe { guatiao::exports::value::guatiao_value_string(alloc.as_raw(), text, &mut out) };
     assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
 }
+
+/// The wire encoding through the C surface: a round trip, and bytes that
+/// are not a value refused as `GUATIAO_ERR_BAD_VALUE` with `out` absent.
+#[test]
+fn a_value_crosses_the_wire_surface_and_back() {
+    use guatiao::exports::value::{guatiao_wire_decode, guatiao_wire_encode};
+    use guatiao::value::types::Bytes;
+
+    let alloc = Alloc::rust();
+    let mut map = Map::new();
+    map.set("n", guatiao::Number::new("1.10").unwrap()).unwrap();
+    map.set("s", "text").unwrap();
+    let value: Value = map.into();
+
+    let mut encoded = Value::null();
+    // SAFETY: valid pointers; `encoded` holds nothing owned.
+    let status = unsafe { guatiao_wire_encode(alloc.as_raw(), &value, &mut encoded) };
+    assert_eq!(status, Status::GUATIAO_OK);
+    let bytes = TryAsRef::<[u8]>::try_as_ref(&encoded)
+        .expect("BYTES")
+        .to_vec();
+
+    let mut decoded = Value::null();
+    // SAFETY: the view borrows `bytes` for the call.
+    let status = unsafe { guatiao_wire_decode(alloc.as_raw(), Bytes::new(&bytes), &mut decoded) };
+    assert_eq!(status, Status::GUATIAO_OK);
+    assert_eq!(decoded, value, "the same tree");
+
+    let mut refused = Value::null();
+    // SAFETY: as above.
+    let status = unsafe { guatiao_wire_decode(alloc.as_raw(), Bytes::new(&[9]), &mut refused) };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert_eq!(
+        refused.tag(),
+        Ok(Tag::GUATIAO_ABSENT),
+        "a failed call leaves ABSENT"
+    );
+}

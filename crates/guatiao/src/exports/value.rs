@@ -591,3 +591,75 @@ pub unsafe extern "C" fn guatiao_alloc_default(out: *mut Allocator) -> Status {
         Status::GUATIAO_OK
     })
 }
+
+// --- the wire encoding ------------------------------------------------
+
+/// Encodes `value` in the wire encoding (`guatiao::value::wire`), writing
+/// the bytes through `out` as a BYTES value built in `alloc`.
+///
+/// `out` is written the absent marker on entry. A node `value` holds that
+/// its own reader refuses (text that is not UTF-8, a number outside the
+/// grammar, an unknown tag) is `GUATIAO_ERR_BAD_VALUE`; a null or unusable
+/// allocator is `GUATIAO_ERR_ALLOC`.
+///
+/// # Safety
+///
+/// The pointers are null or valid, and `out` addresses writable storage
+/// for one value that does not already hold one.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_wire_encode(
+    alloc: *const Allocator,
+    value: *const Value,
+    out: *mut Value,
+) -> Status {
+    out!(out);
+    entry!(value, out => {
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        // SAFETY: checked non-null and well-formed by contract.
+        let bytes = match crate::value::wire::to_bytes(unsafe { &*value }) {
+            Ok(bytes) => bytes,
+            Err(e) => return e.into(),
+        };
+        match Buffer::new_in(a, &bytes).map(Value::from) {
+            // SAFETY: `out` is writable and holds no value the caller owns.
+            Ok(v) => { unsafe { ptr::write(out, v) }; Status::GUATIAO_OK }
+            Err(e) => e.into(),
+        }
+    })
+}
+
+/// Decodes the wire encoding in `bytes`, writing the value through `out`,
+/// built in `alloc`.
+///
+/// `out` is written the absent marker on entry. Bytes that are not a
+/// value — truncated, an unknown tag, text that is not UTF-8, a number
+/// outside the grammar, a repeated key, anything after the value — are
+/// `GUATIAO_ERR_BAD_VALUE`; the Rust API names the byte.
+///
+/// # Safety
+///
+/// `bytes` is readable for the call; `out` addresses writable storage for
+/// one value that does not already hold one.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_wire_decode(
+    alloc: *const Allocator,
+    bytes: Bytes,
+    out: *mut Value,
+) -> Status {
+    out!(out);
+    entry!(out => {
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        match crate::value::wire::decode_in(a, bytes.into()) {
+            // SAFETY: `out` is writable and holds no value the caller owns.
+            Ok(v) => { unsafe { ptr::write(out, v) }; Status::GUATIAO_OK }
+            Err(crate::value::wire::WireError::Alloc { error, .. }) => error.into(),
+            Err(_) => Status::GUATIAO_ERR_BAD_VALUE,
+        }
+    })
+}

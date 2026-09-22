@@ -257,6 +257,8 @@ pub mod guatiao::exports::value
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_null(*mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_number(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_string(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_wire_decode(*const guatiao::value::alloc::Allocator, guatiao::value::types::buffer::Bytes<'_>, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_wire_encode(*const guatiao::value::alloc::Allocator, *const guatiao::value::value::Value, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub mod guatiao::library
 pub mod guatiao::library::desc
 #[repr(C)] pub struct guatiao::library::desc::HostInfo<'a>
@@ -3977,6 +3979,79 @@ impl<T: core::convert::Into<guatiao::value::types::number::Number>> core::conver
 pub fn guatiao::value::value::Value::from(T) -> guatiao::value::value::Value
 impl<T: core::convert::Into<guatiao::value::value::Value>> core::convert::From<core::option::Option<T>> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::from(core::option::Option<T>) -> guatiao::value::value::Value
+pub mod guatiao::value::wire
+pub mod guatiao::value::wire::channel
+pub enum guatiao::value::wire::channel::Received
+pub guatiao::value::wire::channel::Received::Closed(u64)
+pub guatiao::value::wire::channel::Received::Schema(u64)
+pub guatiao::value::wire::channel::Received::Value
+pub guatiao::value::wire::channel::Received::Value::channel: u64
+pub guatiao::value::wire::channel::Received::Value::value: guatiao::value::value::Value
+impl core::fmt::Debug for guatiao::value::wire::channel::Received
+pub fn guatiao::value::wire::channel::Received::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::value::wire::channel::Receiver
+impl guatiao::value::wire::channel::Receiver
+pub fn guatiao::value::wire::channel::Receiver::accept(&mut self, &[u8]) -> core::result::Result<guatiao::value::wire::channel::Received, guatiao::value::wire::WireError>
+pub fn guatiao::value::wire::channel::Receiver::new() -> guatiao::value::wire::channel::Receiver
+pub fn guatiao::value::wire::channel::Receiver::new_in(guatiao::value::alloc::Alloc) -> guatiao::value::wire::channel::Receiver
+pub fn guatiao::value::wire::channel::Receiver::schema(&self, u64) -> core::option::Option<&guatiao::value::value::Value>
+impl core::default::Default for guatiao::value::wire::channel::Receiver
+pub fn guatiao::value::wire::channel::Receiver::default() -> guatiao::value::wire::channel::Receiver
+impl core::fmt::Debug for guatiao::value::wire::channel::Receiver
+pub fn guatiao::value::wire::channel::Receiver::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const guatiao::value::wire::channel::CLOSE: u8
+pub const guatiao::value::wire::channel::SCHEMA: u8
+pub const guatiao::value::wire::channel::VALUE: u8
+pub fn guatiao::value::wire::channel::announce(u64, &guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<u8>, guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::channel::close(u64) -> alloc::vec::Vec<u8>
+pub fn guatiao::value::wire::channel::send(u64, &guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<u8>, guatiao::value::error::ValueError>
+#[non_exhaustive] pub enum guatiao::value::wire::WireError
+pub guatiao::value::wire::WireError::Alloc
+pub guatiao::value::wire::WireError::Alloc::at: usize
+pub guatiao::value::wire::WireError::Alloc::error: guatiao::value::error::ValueError
+pub guatiao::value::wire::WireError::DuplicateKey
+pub guatiao::value::wire::WireError::DuplicateKey::at: usize
+pub guatiao::value::wire::WireError::Invalid
+pub guatiao::value::wire::WireError::Invalid::channel: u64
+pub guatiao::value::wire::WireError::Invalid::error: guatiao::schema::ValidationError
+pub guatiao::value::wire::WireError::NoSchema
+pub guatiao::value::wire::WireError::NoSchema::channel: u64
+pub guatiao::value::wire::WireError::NotABool
+pub guatiao::value::wire::WireError::NotABool::at: usize
+pub guatiao::value::wire::WireError::NotABool::byte: u8
+pub guatiao::value::wire::WireError::NotANumber
+pub guatiao::value::wire::WireError::NotANumber::at: usize
+pub guatiao::value::wire::WireError::NotASchema
+pub guatiao::value::wire::WireError::NotASchema::channel: u64
+pub guatiao::value::wire::WireError::NotUtf8
+pub guatiao::value::wire::WireError::NotUtf8::at: usize
+pub guatiao::value::wire::WireError::Overlong
+pub guatiao::value::wire::WireError::Overlong::at: usize
+pub guatiao::value::wire::WireError::Trailing
+pub guatiao::value::wire::WireError::Trailing::at: usize
+pub guatiao::value::wire::WireError::Truncated
+pub guatiao::value::wire::WireError::Truncated::at: usize
+pub guatiao::value::wire::WireError::UnknownFrame
+pub guatiao::value::wire::WireError::UnknownFrame::at: usize
+pub guatiao::value::wire::WireError::UnknownFrame::kind: u8
+pub guatiao::value::wire::WireError::UnknownTag
+pub guatiao::value::wire::WireError::UnknownTag::at: usize
+pub guatiao::value::wire::WireError::UnknownTag::tag: u8
+impl core::clone::Clone for guatiao::value::wire::WireError
+pub fn guatiao::value::wire::WireError::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::value::wire::WireError
+impl core::cmp::PartialEq for guatiao::value::wire::WireError
+pub fn guatiao::value::wire::WireError::eq(&self, &Self) -> bool
+impl core::error::Error for guatiao::value::wire::WireError
+impl core::fmt::Debug for guatiao::value::wire::WireError
+pub fn guatiao::value::wire::WireError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::value::wire::WireError
+pub fn guatiao::value::wire::WireError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::value::wire::WireError
+pub fn guatiao::value::wire::decode(&[u8]) -> core::result::Result<guatiao::value::value::Value, guatiao::value::wire::WireError>
+pub fn guatiao::value::wire::decode_in(guatiao::value::alloc::Alloc, &[u8]) -> core::result::Result<guatiao::value::value::Value, guatiao::value::wire::WireError>
+pub fn guatiao::value::wire::encode(&guatiao::value::value::Value, &mut alloc::vec::Vec<u8>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::to_bytes(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<u8>, guatiao::value::error::ValueError>
 #[non_exhaustive] pub enum guatiao::value::AllocError
 pub guatiao::value::AllocError::Failed
 pub guatiao::value::AllocError::NoAllocFn
