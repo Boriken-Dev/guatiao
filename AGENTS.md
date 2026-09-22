@@ -32,6 +32,15 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
 cargo package --list -p guatiao --allow-dirty   # must list AGENTS.md, README.md and no dot-prefixed path
 ```
 
+The crate builds for a browser; the module carries the C surface:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo check --target wasm32-unknown-unknown -p guatiao -p guatiao-serde -p guatiao-form \
+  --features guatiao/derive,guatiao/provider,guatiao-serde/json,guatiao-serde/toml,guatiao-serde/yaml
+cargo build -p guatiao --target wasm32-unknown-unknown --release
+```
+
 Two gates on a pinned nightly (`rustup toolchain install nightly-2026-09-21
 --component miri,rust-src`, `cargo install cargo-public-api --version
 0.52.0`). Miri runs the tests that load no library; the deep-tree test is
@@ -43,6 +52,9 @@ cargo +nightly-2026-09-21 miri test -p guatiao --all-features --test container_r
   --test std_traits --test public_surface --test exports_boundary \
   --test flat_projection --test schema_as_value --test kind_glue_probes \
   -- --skip a_tree_of_any_depth
+cargo +nightly-2026-09-21 miri test -p guatiao --all-features --test wire_roundtrip \
+  --test wire_channel -- --skip ten_thousand_random --skip a_tree_deeper_than \
+  --skip a_thousand_keys
 ```
 
 Each crate commits its public surface. A change to it regenerates the
