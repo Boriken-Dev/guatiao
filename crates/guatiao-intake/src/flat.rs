@@ -32,81 +32,333 @@ use guatiao::schema::read::{FieldRef, Kind, SchemaRef};
 use guatiao::schema::validate::text_of;
 use guatiao::schema::vocab as schema_vocab;
 use guatiao::value::alloc::Alloc;
+use guatiao::value::error::MAX_DEPTH;
 use guatiao::value::error::ValueError;
 use guatiao::value::read::str_or;
-use guatiao::value::types::{Map, Tag, Text, Value};
+use guatiao::value::types::{List, Map, Tag, Text, Value};
 
 /// Between a field's key and one of its payload fields.
 pub const SEPARATOR: char = '.';
 
-/// Writes a tagged value into flat storage. Answers whether it applied.
+/// Writes a value into flat storage, one entry per scalar leaf.
+///
+/// `{"agent": [{"name": "one"}]}` stores `agent[0].name`. A nested
+/// object, a list and an open map are each walked; a tagged field keeps
+/// its discriminant under its **own** key, because that is the thing a
+/// command line selects (`?auth=userpass&auth.username=alice`).
+///
+/// Answers whether the value fits the field: `false` when the shape
+/// contradicts the kind at the top — a list where an object is declared,
+/// a discriminant naming no arm — and the store is left cleared but
+/// otherwise untouched. **Deeper mismatches are skipped, not refused**:
+/// a member that cannot be spelled as text is not written, the way it
+/// never was.
+///
+/// # An empty container stores nothing
+///
+/// So an empty list and an absent one are the same thing here, and
+/// reading back gives the absent one. It is the one fact a flat store
+/// cannot carry, and it is cheaper to say than to work around: a store
+/// of `key -> text` has no way to write "there is a container here and
+/// it is empty".
+///
+/// # The deletion is first, and unconditional
+///
+/// Everything at or under the field's key goes before anything is
+/// written ([`clear_under`]). See the module note: make it conditional
+/// and a field two arms happen to share keeps the old arm's value.
 pub fn flatten(field: FieldRef<'_>, value: &Value, store: &mut BTreeMap<String, String>) -> bool {
-    let kind = field.kind();
-    let Kind::Variant { tag, .. } = kind else {
-        return false;
-    };
-    if value.tag() != Ok(Tag::GUATIAO_MAP) {
-        return false;
-    }
-    let chosen = str_or(
-        TryAsRef::<Map>::try_as_ref(value).and_then(|m| m.get(tag)),
-        "",
+    clear_under(store, field.key());
+    let mut stack = Vec::new();
+    // The top frame decides the answer; everything it pushes is walked
+    // for what it can offer.
+    let fits = visit(
+        store,
+        &mut stack,
+        field.key().to_string(),
+        field.kind(),
+        value,
     );
-    let Some(arm) = kind.arms().find(|a| a.value() == chosen) else {
-        return false;
-    };
-
-    // FIRST, AND UNCONDITIONAL. See the module note.
-    let prefix = format!("{}{SEPARATOR}", field.key());
-    store.retain(|key, _| !key.starts_with(&prefix));
-
-    store.insert(field.key().to_string(), chosen.to_string());
-    for member in arm.fields() {
-        if let Some(present) = TryAsRef::<Map>::try_as_ref(value).and_then(|m| m.get(member.key()))
-            && let Some(text) = scalar_text(present)
-        {
-            store.insert(format!("{prefix}{}", member.key()), text);
-        }
+    while let Some((path, kind, value)) = stack.pop() {
+        let _ = visit(store, &mut stack, path, kind, value);
     }
-    true
+    fits
 }
 
-/// Reads a tagged value back out of flat storage.
+/// Removes every entry **at or under** `path`.
 ///
-/// `None` when the field is not tagged, the discriminant is absent, or
-/// the stored discriminant names no declared arm. All three mean "there is
-/// no tagged value here", which is a different thing from an arm with an
-/// empty payload and must not be confused with it.
+/// `auth` takes `auth`, `auth.username` and `auth[0].x` with it, and
+/// leaves `authority` alone — a prefix is only a prefix when what
+/// follows it starts a segment.
+pub fn clear_under(store: &mut BTreeMap<String, String>, path: &str) {
+    store.retain(|key, _| !at_or_under(key, path));
+}
+
+/// Whether `key` is `path` itself or something inside it.
+fn at_or_under(key: &str, path: &str) -> bool {
+    if key == path {
+        return true;
+    }
+    key.strip_prefix(path)
+        .is_some_and(|rest| rest.starts_with(SEPARATOR) || rest.starts_with('['))
+}
+
+/// One node: writes a leaf, or pushes what it contains. Answers whether
+/// the value fits the kind at all.
+fn visit<'a>(
+    store: &mut BTreeMap<String, String>,
+    stack: &mut Vec<(String, Kind<'a>, &'a Value)>,
+    path: String,
+    kind: Kind<'a>,
+    value: &'a Value,
+) -> bool {
+    match kind {
+        Kind::Variant { tag, .. } => {
+            let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
+                return false;
+            };
+            let chosen = str_or(map.get(tag), "");
+            let Some(arm) = kind.arms().find(|a| a.value() == chosen) else {
+                return false;
+            };
+            // The discriminant under the field's OWN key, which is what
+            // makes `?auth=userpass` a thing a person can type.
+            store.insert(path.clone(), chosen.to_string());
+            for member in arm.fields() {
+                if let Some(v) = map.get(member.key()) {
+                    stack.push((named(&path, member.key()), member.kind(), v));
+                }
+            }
+            true
+        }
+        Kind::Map(_) => {
+            let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
+                return false;
+            };
+            // Walked in DECLARATION order rather than the value's, so two
+            // values of one schema produce keys in one order. The store
+            // is sorted anyway; this is for anything reading the walk.
+            for declared in kind.fields() {
+                if let Some(v) = map.get(declared.key()) {
+                    stack.push((named(&path, declared.key()), declared.kind(), v));
+                }
+            }
+            true
+        }
+        Kind::MapOf(_) => {
+            let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
+                return false;
+            };
+            let values = kind.values();
+            for entry in map {
+                stack.push((keyed(&path, entry.key()), values, entry.value()));
+            }
+            true
+        }
+        Kind::List(_) => {
+            let Some(list) = TryAsRef::<List>::try_as_ref(value) else {
+                return false;
+            };
+            let items = kind.items();
+            for (at, v) in list.iter().enumerate() {
+                stack.push((indexed(&path, at), items, v));
+            }
+            true
+        }
+        _ => match scalar_text(value) {
+            Some(text) => {
+                store.insert(path, text);
+                true
+            }
+            None => false,
+        },
+    }
+}
+
+/// `path.name`, or `path["na.me"]` when the name would not read back as
+/// one segment. A declared key may hold a separator, so this is not
+/// always a dot.
+fn named(path: &str, name: &str) -> String {
+    if name.is_empty() || name.contains(['.', '[', ']']) {
+        keyed(path, name)
+    } else {
+        format!("{path}{SEPARATOR}{name}")
+    }
+}
+
+/// `path[key]`, quoted if it would otherwise read as a position.
+fn keyed(path: &str, key: &str) -> String {
+    format!("{path}{}", Segment::Key(Cow::Borrowed(key)))
+}
+
+/// `path[3]`.
+fn indexed(path: &str, at: usize) -> String {
+    format!("{path}{}", Segment::Index(at))
+}
+
+/// Reads a value back out of flat storage, rebuilding what the schema
+/// declares.
 ///
-/// **Any `<key>.*` entry the selected arm does not declare is dropped**,
-/// which is the read half of the rule above: a record that picked up a
-/// stale field some other way still reads back as the arm says it is.
+/// The inverse of [`flatten`], and the same rule in reverse: **an entry
+/// the schema does not declare is dropped**, so a record that picked up
+/// a stale key some other way still reads back as the schema says. A
+/// container with nothing under it reads as absent, which is the other
+/// half of "an empty container stores nothing".
+///
+/// `None` when nothing under this field is present at all, or when the
+/// stored shape cannot be a value of this kind — a tagged field whose
+/// discriminant is missing or names no arm is the case that matters,
+/// because "no tagged value here" and "an arm with an empty payload" are
+/// different answers and must not be confused.
 pub fn unflatten(
     alloc: Alloc,
     field: FieldRef<'_>,
     store: &BTreeMap<String, String>,
 ) -> Option<Value> {
-    let kind = field.kind();
-    let Kind::Variant { tag, .. } = kind else {
-        return None;
-    };
-    let chosen = store.get(field.key())?;
-    let arm = kind.arms().find(|a| a.value() == chosen)?;
+    rebuild(alloc, field.key(), field.kind(), store, 0)
+}
 
-    let mut map = Map::new_in(alloc);
-    // The discriminant goes in FIRST, so re-emission is byte-stable: a map
-    // is insertion-ordered by contract.
-    map.set(tag, Text::new_in(alloc, chosen).map(Value::from).ok()?)
-        .ok()?;
-    let prefix = format!("{}{SEPARATOR}", field.key());
-    for member in arm.fields() {
-        if let Some(text) = store.get(&format!("{prefix}{}", member.key()))
-            && let Ok(v) = Text::new_in(alloc, text).map(Value::from)
-        {
-            let _ = map.set(member.key(), v);
+/// One node of [`unflatten`], bounded like every other walk over two
+/// trees a caller supplied.
+fn rebuild(
+    alloc: Alloc,
+    path: &str,
+    kind: Kind<'_>,
+    store: &BTreeMap<String, String>,
+    depth: u32,
+) -> Option<Value> {
+    if depth >= MAX_DEPTH {
+        return None;
+    }
+    match kind {
+        Kind::Variant { tag, .. } => {
+            let chosen = store.get(path)?;
+            let arm = kind.arms().find(|a| a.value() == chosen)?;
+            let mut map = Map::new_in(alloc);
+            // The discriminant goes in FIRST, so re-emission is
+            // byte-stable: a map is insertion-ordered by contract.
+            map.set(tag, Text::new_in(alloc, chosen).map(Value::from).ok()?)
+                .ok()?;
+            for member in arm.fields() {
+                let at = named(path, member.key());
+                if let Some(v) = rebuild(alloc, &at, member.kind(), store, depth + 1) {
+                    map.set(member.key(), v).ok()?;
+                }
+            }
+            Some(map.into())
+        }
+        Kind::Map(_) => {
+            let mut map = Map::new_in(alloc);
+            let mut any = false;
+            for declared in kind.fields() {
+                let at = named(path, declared.key());
+                if let Some(v) = rebuild(alloc, &at, declared.kind(), store, depth + 1) {
+                    map.set(declared.key(), v).ok()?;
+                    any = true;
+                }
+            }
+            any.then(|| map.into())
+        }
+        Kind::MapOf(_) => {
+            let values = kind.values();
+            let mut map = Map::new_in(alloc);
+            let mut any = false;
+            for step in children(store, path) {
+                let (key, at) = match step {
+                    Step::Named(key) => {
+                        let at = keyed(path, &key);
+                        (key, at)
+                    }
+                    // A key that reads as a position is still a key here:
+                    // an open map's keys are data.
+                    Step::At(index) => (index.to_string(), indexed(path, index)),
+                };
+                if let Some(v) = rebuild(alloc, &at, values, store, depth + 1) {
+                    map.set(&key, v).ok()?;
+                    any = true;
+                }
+            }
+            any.then(|| map.into())
+        }
+        Kind::List(_) => {
+            let items = kind.items();
+            let mut at: Vec<usize> = children(store, path)
+                .into_iter()
+                .filter_map(|step| match step {
+                    Step::At(index) => Some(index),
+                    // A key under a list is not a position, so there is
+                    // no element it could be.
+                    Step::Named(_) => None,
+                })
+                .collect();
+            at.sort_unstable();
+            let mut list = List::new_in(alloc);
+            for index in at {
+                if let Some(v) = rebuild(alloc, &indexed(path, index), items, store, depth + 1) {
+                    // Positions are taken in order and CLOSED UP: a store
+                    // holding 0 and 2 rebuilds two elements, because a
+                    // list has no hole to leave.
+                    list.push_in(v, alloc).ok()?;
+                }
+            }
+            (!list.is_empty()).then(|| list.into())
+        }
+        _ => {
+            let text = store.get(path)?;
+            Text::new_in(alloc, text).map(Value::from).ok()
         }
     }
-    Some(map.into())
+}
+
+/// One step below a path, as the store spells it.
+#[derive(Debug, PartialEq, Eq)]
+enum Step {
+    /// A name or a quoted key: `path.name`, `path["a.b"]`.
+    Named(String),
+    /// A position, or a key that reads as one: `path[3]`.
+    At(usize),
+}
+
+/// The distinct next steps under `path`, in the order the store holds
+/// them.
+///
+/// The keys of a `BTreeMap` are sorted, so everything under a prefix is
+/// contiguous: the scan starts at the prefix and stops at the first key
+/// that is not under it.
+fn children(store: &BTreeMap<String, String>, path: &str) -> Vec<Step> {
+    let mut out: Vec<Step> = Vec::new();
+    for key in store.range(path.to_string()..).map(|(k, _)| k) {
+        if !at_or_under(key, path) {
+            // Sorted, so the first key outside the prefix ends the run --
+            // except the prefix itself, which sorts first and is the
+            // field's own entry rather than a child.
+            if key.as_str() == path {
+                continue;
+            }
+            break;
+        }
+        let rest = &key[path.len()..];
+        let Some(step) = first_step(rest) else {
+            continue;
+        };
+        if !out.contains(&step) {
+            out.push(step);
+        }
+    }
+    out
+}
+
+/// The first segment of what follows a prefix: `.name`, `[3]`, `["a.b"]`.
+fn first_step(rest: &str) -> Option<Step> {
+    // A leading separator belongs to the segment after it; the grammar is
+    // rootless, so it is stripped before parsing.
+    let text = rest.strip_prefix(SEPARATOR).unwrap_or(rest);
+    let parsed = path::parse(text).ok()?;
+    match parsed.segments().next()? {
+        Segment::Field(name) => Some(Step::Named(name.to_string())),
+        Segment::Key(key) => Some(Step::Named(key.into_owned())),
+        Segment::Index(at) => Some(Step::At(at)),
+    }
 }
 
 /// Every flat key this field can occupy: its own, plus one per field of

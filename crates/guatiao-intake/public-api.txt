@@ -34,6 +34,7 @@ pub mod guatiao_intake::exports_flat
 #[no_mangle] pub unsafe c fn guatiao_intake::exports_flat::guatiao_intake_unflatten(*const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub mod guatiao_intake::flat
 pub const guatiao_intake::flat::SEPARATOR: char
+pub fn guatiao_intake::flat::clear_under(&mut alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>, &str)
 pub fn guatiao_intake::flat::flatten(guatiao::schema::read::FieldRef<'_>, &guatiao::value::value::Value, &mut alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>) -> bool
 pub fn guatiao_intake::flat::is_sensitive(guatiao::schema::read::SchemaRef<'_>, &str) -> bool
 pub fn guatiao_intake::flat::keys(guatiao::schema::read::FieldRef<'_>) -> alloc::vec::Vec<alloc::string::String>

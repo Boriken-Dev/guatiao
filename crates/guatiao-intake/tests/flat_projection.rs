@@ -155,7 +155,7 @@ fn unflatten_drops_fields_the_arm_does_not_declare() {
 }
 
 #[test]
-fn unflatten_answers_none_when_there_is_no_tagged_value() {
+fn unflatten_answers_none_when_there_is_nothing_to_read() {
     let alloc = Alloc::rust();
     let s = schema(alloc);
     let s = SchemaRef::new(&s).unwrap();
@@ -171,9 +171,16 @@ fn unflatten_answers_none_when_there_is_no_tagged_value() {
         "a discriminant naming no declared arm"
     );
     assert!(
-        flat::unflatten(alloc, host, &store_of(&[("host", "x")])).is_none(),
-        "a field that is not tagged at all"
+        flat::unflatten(alloc, host, &store_of(&[])).is_none(),
+        "nothing stored under it"
     );
+
+    // A plain field reads back its own entry. This used to answer `None`
+    // for anything that was not tagged, back when the projection only
+    // knew variants; it walks every kind now.
+    let back = flat::unflatten(alloc, host, &store_of(&[("host", "x")]))
+        .expect("a plain field is a value like any other");
+    assert_eq!(TryInto::<&str>::try_into(&back).ok(), Some("x"));
 }
 
 #[test]
@@ -556,4 +563,256 @@ fn a_store_refusal_names_the_prefix_that_failed() {
         }
         other => panic!("expected the bad-value shape: {other}"),
     }
+}
+
+// --- flattening to every scalar leaf ------------------------------------
+
+/// A value for the `nested` schema: two agents, a nested object, an open
+/// map.
+fn nested_value(alloc: Alloc) -> Value {
+    let mut tls = Map::new_in(alloc);
+    tls.set("verify", true).unwrap();
+    tls.set(
+        "ca",
+        Text::new_in(alloc, "/etc/ca.pem").map(Value::from).unwrap(),
+    )
+    .unwrap();
+    let mut connection = Map::new_in(alloc);
+    connection
+        .set(
+            "host",
+            Text::new_in(alloc, "10.0.0.1").map(Value::from).unwrap(),
+        )
+        .unwrap();
+    connection.set("tls", tls).unwrap();
+
+    let mut one = Map::new_in(alloc);
+    one.set("name", Text::new_in(alloc, "one").map(Value::from).unwrap())
+        .unwrap();
+    one.set(
+        "secret",
+        Text::new_in(alloc, "s1").map(Value::from).unwrap(),
+    )
+    .unwrap();
+    let mut two = Map::new_in(alloc);
+    two.set("name", Text::new_in(alloc, "two").map(Value::from).unwrap())
+        .unwrap();
+    let mut agents = guatiao::List::new_in(alloc);
+    agents.push_in(one, alloc).unwrap();
+    agents.push_in(two, alloc).unwrap();
+
+    let mut env = Map::new_in(alloc);
+    env.set(
+        "PATH",
+        Text::new_in(alloc, "/bin").map(Value::from).unwrap(),
+    )
+    .unwrap();
+    env.set(
+        "a.b",
+        Text::new_in(alloc, "dotted").map(Value::from).unwrap(),
+    )
+    .unwrap();
+
+    let mut root = Map::new_in(alloc);
+    root.set("connection", connection).unwrap();
+    root.set("agent", agents).unwrap();
+    root.set("env", env).unwrap();
+    root.into()
+}
+
+/// One entry per scalar leaf, each under the path that reaches it.
+#[test]
+fn flatten_writes_one_entry_per_scalar_leaf() {
+    let alloc = Alloc::rust();
+    let doc = nested(alloc);
+    let s = SchemaRef::new(&doc).expect("a schema");
+    let value = nested_value(alloc);
+    let held = |key: &str| {
+        TryAsRef::<Map>::try_as_ref(&value)
+            .unwrap()
+            .get(key)
+            .unwrap()
+    };
+
+    let mut store = BTreeMap::new();
+    assert!(flat::flatten(
+        s.find("connection").unwrap(),
+        held("connection"),
+        &mut store
+    ));
+    assert!(flat::flatten(
+        s.find("agent").unwrap(),
+        held("agent"),
+        &mut store
+    ));
+    assert!(flat::flatten(
+        s.find("env").unwrap(),
+        held("env"),
+        &mut store
+    ));
+
+    let entries: Vec<(&str, &str)> = store
+        .iter()
+        .map(|(k, v)| (k.as_str(), v.as_str()))
+        .collect();
+    assert_eq!(
+        entries,
+        [
+            ("agent[0].name", "one"),
+            ("agent[0].secret", "s1"),
+            ("agent[1].name", "two"),
+            ("connection.host", "10.0.0.1"),
+            ("connection.tls.ca", "/etc/ca.pem"),
+            ("connection.tls.verify", "true"),
+            ("env[PATH]", "/bin"),
+            // A key holding a separator needs NO quoting inside the
+            // brackets: the `]` already says where the segment ends, so
+            // this reads back as the one key `a.b`.
+            ("env[a.b]", "dotted"),
+        ],
+        "a list indexes, an object dots, an open map brackets"
+    );
+}
+
+/// What was written reads back as what it was.
+#[test]
+fn a_deep_value_survives_the_round_trip() {
+    let alloc = Alloc::rust();
+    let doc = nested(alloc);
+    let s = SchemaRef::new(&doc).expect("a schema");
+    let value = nested_value(alloc);
+    let held = |key: &str| {
+        TryAsRef::<Map>::try_as_ref(&value)
+            .unwrap()
+            .get(key)
+            .unwrap()
+            .clone_in(alloc)
+            .unwrap()
+    };
+
+    for key in ["connection", "agent", "env"] {
+        let original = held(key);
+        let field = s.find(key).unwrap();
+        let mut store = BTreeMap::new();
+        assert!(flat::flatten(field, &original, &mut store));
+        let back = flat::unflatten(alloc, field, &store).expect("it reads back");
+
+        // Every leaf is text in a store, so the two are compared by
+        // flattening again rather than by value: `verify` left as `true`
+        // and comes back as `"true"`, which is what a flat store IS.
+        let mut again = BTreeMap::new();
+        assert!(flat::flatten(field, &back, &mut again));
+        assert_eq!(store, again, "`{key}` did not survive the round trip");
+    }
+}
+
+/// An empty container stores nothing, so it reads back absent. The one
+/// fact a `key -> text` store cannot carry, stated rather than hidden.
+#[test]
+fn an_empty_container_stores_nothing() {
+    let alloc = Alloc::rust();
+    let doc = nested(alloc);
+    let s = SchemaRef::new(&doc).expect("a schema");
+
+    let empty_list = Value::from(guatiao::List::new_in(alloc));
+    let mut store = BTreeMap::new();
+    assert!(flat::flatten(
+        s.find("agent").unwrap(),
+        &empty_list,
+        &mut store
+    ));
+    assert!(store.is_empty(), "nothing to write: {store:?}");
+    assert!(
+        flat::unflatten(alloc, s.find("agent").unwrap(), &store).is_none(),
+        "and nothing to read, so it comes back absent rather than empty"
+    );
+
+    let empty_map = Value::from(Map::new_in(alloc));
+    let mut store = BTreeMap::new();
+    assert!(flat::flatten(
+        s.find("env").unwrap(),
+        &empty_map,
+        &mut store
+    ));
+    assert!(store.is_empty());
+}
+
+/// Positions are taken in order and closed up: a store cannot hold a
+/// hole, because a list has none to leave.
+#[test]
+fn a_gap_in_the_positions_closes_up() {
+    let alloc = Alloc::rust();
+    let doc = nested(alloc);
+    let s = SchemaRef::new(&doc).expect("a schema");
+    let store = store_of(&[("agent[0].name", "one"), ("agent[2].name", "three")]);
+
+    let back = flat::unflatten(alloc, s.find("agent").unwrap(), &store).expect("two elements");
+    let list = TryAsRef::<guatiao::List>::try_as_ref(&back).expect("a list");
+    assert_eq!(list.len(), 2);
+    let names: Vec<&str> = list
+        .iter()
+        .map(|v| {
+            str_or(
+                TryAsRef::<Map>::try_as_ref(v).and_then(|m| m.get("name")),
+                "",
+            )
+        })
+        .collect();
+    assert_eq!(names, ["one", "three"]);
+}
+
+/// The clearing rule generalises: everything AT or UNDER the path goes
+/// first, and a key that merely starts with the same letters does not.
+#[test]
+fn writing_clears_everything_under_the_path_first() {
+    let alloc = Alloc::rust();
+    let doc = nested(alloc);
+    let s = SchemaRef::new(&doc).expect("a schema");
+
+    let mut store = store_of(&[
+        ("agent[0].name", "stale"),
+        ("agent[3].secret", "stale"),
+        ("agentry", "left alone"),
+        ("connection.host", "left alone"),
+    ]);
+
+    let mut one = Map::new_in(alloc);
+    one.set(
+        "name",
+        Text::new_in(alloc, "fresh").map(Value::from).unwrap(),
+    )
+    .unwrap();
+    let mut agents = guatiao::List::new_in(alloc);
+    agents.push_in(one, alloc).unwrap();
+
+    assert!(flat::flatten(
+        s.find("agent").unwrap(),
+        &Value::from(agents),
+        &mut store
+    ));
+
+    let keys: Vec<&str> = store.keys().map(String::as_str).collect();
+    assert_eq!(
+        keys,
+        ["agent[0].name", "agentry", "connection.host"],
+        "the old element is gone; a key that only shares a prefix is not"
+    );
+    assert_eq!(
+        store.get("agent[0].name").map(String::as_str),
+        Some("fresh")
+    );
+}
+
+/// `clear_under` on its own, since a caller may want it without writing.
+#[test]
+fn clear_under_takes_a_subtree_and_nothing_else() {
+    let mut store = store_of(&[
+        ("auth", "userpass"),
+        ("auth.username", "ana"),
+        ("authority", "kept"),
+        ("other", "kept"),
+    ]);
+    flat::clear_under(&mut store, "auth");
+    let keys: Vec<&str> = store.keys().map(String::as_str).collect();
+    assert_eq!(keys, ["authority", "other"]);
 }
