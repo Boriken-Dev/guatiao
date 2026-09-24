@@ -91,6 +91,56 @@ guatiao_status guatiao_intake_layout(const guatiao_value *schema,
                                      guatiao_value *out);
 
 /*
+ The form a schema implies, for when nobody wrote one.
+
+ An object is a form: the schema already says which section each field
+ belongs to, so a renderer with no form still has one to draw. What
+ comes back carries one section per distinct `x-section` in
+ first-appearance order, **ids only** -- what a section is called is a
+ form's business and a schema has no opinion -- plus each member's own
+ form where there is something in it. A schema that groups nothing
+ gives an empty map, which is a complete form.
+
+ `out` receives a value the **caller owns** and frees with
+ `guatiao_value_free`.
+
+ # Safety
+
+ Every non-null pointer addresses what its type says, and `out`
+ addresses writable storage for one value.
+ */
+guatiao_status guatiao_intake_for_schema(const guatiao_value *schema,
+                                         const guatiao_alloc *alloc,
+                                         guatiao_value *out);
+
+/*
+ The form to show the field at `path` with: **the one the form
+ assigns, or the one its schema implies**.
+
+ The question a renderer asks. Assignment wins, because somebody wrote
+ it down; where nobody did, the member's schema still groups its
+ fields.
+
+ **A field with no form and no members is not an error**: `out` is left
+ ABSENT and the status is `GUATIAO_OK`, which is what a lookup that
+ found nothing answers everywhere else here. So is a path naming no
+ field.
+
+ `out` receives a value the **caller owns**, whichever way it was
+ reached.
+
+ # Safety
+
+ Every non-null pointer addresses what its type says, `path` is a
+ readable view, and `out` addresses writable storage for one value.
+ */
+guatiao_status guatiao_intake_form_for(const guatiao_value *form,
+                                       const guatiao_value *schema,
+                                       guatiao_str path,
+                                       const guatiao_alloc *alloc,
+                                       guatiao_value *out);
+
+/*
  Whether the field under `key` is shown, given the `values` entered so
  far. Writes the answer through `out`.
 

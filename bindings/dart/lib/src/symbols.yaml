@@ -18,6 +18,10 @@ files:
         name: guatiao_intake_flat_keys
       c:@F@guatiao_intake_flatten:
         name: guatiao_intake_flatten
+      c:@F@guatiao_intake_for_schema:
+        name: guatiao_intake_for_schema
+      c:@F@guatiao_intake_form_for:
+        name: guatiao_intake_form_for
       c:@F@guatiao_intake_is_visible:
         name: guatiao_intake_is_visible
       c:@F@guatiao_intake_layout:

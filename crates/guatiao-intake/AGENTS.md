@@ -151,6 +151,9 @@ for_schema(SchemaRef, Alloc) -> Result<Value, ValueError>
 for_field(FieldRef, Alloc) -> Option<Result<Value, ValueError>>   // None: no members
 form_for(FormRef, SchemaRef, path, Alloc) -> Option<Result<Value, ValueError>>
                                    // assigned wins; else what the schema implies
+// C: guatiao_intake_for_schema(schema, alloc, out)
+//    guatiao_intake_form_for(form, schema, path, alloc, out)
+//      -- nothing to show it with leaves `out` ABSENT and answers OK
 
 // reading (borrowed views; skip what is malformed)
 FormRef::new(&Value) -> Option<FormRef>

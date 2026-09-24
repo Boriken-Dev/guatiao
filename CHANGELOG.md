@@ -36,6 +36,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   for a field whose own type is not a screen (a `Vec<Agent>` is not, and
   `Agent` is). Refused beside `nested`, which is the other presentation
   of the same member.
+- **The created form crosses to C**: `guatiao_intake_for_schema` and
+  `guatiao_intake_form_for`, with `guatiao.intake.for_schema` /
+  `form_for` in Python and `intake.forSchema` / `formFor` in Dart. A
+  field with nothing to show it with leaves `out` **absent** and answers
+  `GUATIAO_OK`: a lookup that found nothing is an answer, not a failure.
+  Reading a sub-form needs no export — a form is a value, and
+  `hints["form"]` is a map lookup a C caller already has helpers for.
 - **A form can be made out of a schema alone**: `for_schema`,
   `for_field` and `form_for`, the last being what a renderer asks — the
   assigned form if somebody wrote one, otherwise the one the schema

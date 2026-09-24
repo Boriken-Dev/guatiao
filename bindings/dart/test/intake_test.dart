@@ -103,4 +103,57 @@ void main() {
       value.close();
     }
   });
+
+  test('a form can be made out of a schema, and a member carries its own', () {
+    // An object is a form: the schema groups the fields, so a renderer
+    // with no form still has one to draw.
+    final nested = Value.fromDart({
+      'type': 'object',
+      'properties': {
+        'host': {'type': 'string', 'x-section': 'net'},
+        'tls': {
+          'type': 'object',
+          'properties': {
+            'verify': {'type': 'boolean', 'x-section': 'trust'},
+          },
+          'additionalProperties': false,
+        },
+        'label': {'type': 'string'},
+      },
+      'additionalProperties': false,
+    });
+    final blank = Value.fromDart(<String, Object?>{});
+    try {
+      final made = form.forSchema(nested);
+      try {
+        final doc = made.toDart() as Map;
+        // Ids only, first-appearance order.
+        expect(
+          (doc['sections'] as List).map((s) => (s as Map)['id']).toList(),
+          ['net'],
+        );
+        expect(
+          ((doc['fields'] as Map)['tls'] as Map)['form'],
+          {
+            'sections': [
+              {'id': 'trust'},
+            ],
+          },
+        );
+        expect(form.check(nested, made), isNull);
+      } finally {
+        made.close();
+      }
+
+      // Assigned wins; a field with no members has none.
+      final implied = form.formFor(blank, nested, 'tls');
+      expect(implied, isNotNull);
+      implied!.close();
+      expect(form.formFor(blank, nested, 'label'), isNull);
+      expect(form.formFor(blank, nested, 'nonesuch'), isNull);
+    } finally {
+      nested.close();
+      blank.close();
+    }
+  });
 }
