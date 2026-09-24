@@ -1,5 +1,20 @@
 pub mod guatiao_form
 pub use guatiao_form::Form
+pub mod guatiao_form::declare
+pub trait guatiao_form::declare::FormBuilder: guatiao::schema::build::Extras
+pub fn guatiao_form::declare::FormBuilder::section(self, &str) -> Self
+impl guatiao_form::declare::FormBuilder for guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::section(self, &str) -> Self
+impl guatiao_form::declare::FormBuilder for guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::section(self, &str) -> Self
+impl guatiao_form::declare::FormBuilder for guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::section(self, &str) -> Self
+pub trait guatiao_form::declare::FormFieldBuilder: guatiao_form::declare::FormBuilder
+pub fn guatiao_form::declare::FormFieldBuilder::advanced(self) -> Self
+pub fn guatiao_form::declare::FormFieldBuilder::order(self, i64) -> Self
+impl guatiao_form::declare::FormFieldBuilder for guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::advanced(self) -> Self
+pub fn guatiao::schema::build::FieldBuilder::order(self, i64) -> Self
 pub mod guatiao_form::exports
 #[no_mangle] pub unsafe c fn guatiao_form::exports::guatiao_form_check(*const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_form::exports::guatiao_form_is_visible(*const guatiao::value::value::Value, *const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *mut bool) -> guatiao::value::status::Status
@@ -149,6 +164,20 @@ pub fn guatiao_form::SectionRef<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao_form::SectionRef<'a>
 pub fn guatiao_form::SectionRef<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<'a> core::marker::Copy for guatiao_form::SectionRef<'a>
+pub trait guatiao_form::FormBuilder: guatiao::schema::build::Extras
+pub fn guatiao_form::FormBuilder::section(self, &str) -> Self
+impl guatiao_form::declare::FormBuilder for guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::section(self, &str) -> Self
+impl guatiao_form::declare::FormBuilder for guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::section(self, &str) -> Self
+impl guatiao_form::declare::FormBuilder for guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::section(self, &str) -> Self
+pub trait guatiao_form::FormFieldBuilder: guatiao_form::declare::FormBuilder
+pub fn guatiao_form::FormFieldBuilder::advanced(self) -> Self
+pub fn guatiao_form::FormFieldBuilder::order(self, i64) -> Self
+impl guatiao_form::declare::FormFieldBuilder for guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::advanced(self) -> Self
+pub fn guatiao::schema::build::FieldBuilder::order(self, i64) -> Self
 pub trait guatiao_form::Screen
 pub fn guatiao_form::Screen::form(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao_form::Screen::hints(&str, guatiao_form::Form) -> guatiao_form::Form

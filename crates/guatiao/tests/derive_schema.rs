@@ -36,7 +36,7 @@ struct Connection {
     /// A host name or an address.
     host: String,
     port: u16,
-    #[schema(label = "Password", sensitive, section = "auth", order = 3)]
+    #[schema(title = "Password", sensitive, section = "auth", order = 3)]
     password: Option<String>,
     #[schema(advanced, default = 30i64)]
     timeout: i64,
@@ -140,12 +140,12 @@ fn a_doc_comment_becomes_the_help_text() {
         let declared = Connection::schema(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
         assert_eq!(
-            s.find("host").unwrap().help(),
+            s.find("host").unwrap().description(),
             "Where to connect. A host name or an address.",
             "every line of the comment, joined"
         );
         assert_eq!(
-            s.find("port").unwrap().help(),
+            s.find("port").unwrap().description(),
             "",
             "no comment is no help, not an empty sentence"
         );
@@ -159,7 +159,7 @@ fn the_presentation_attributes_reach_the_option() {
         let s = SchemaRef::new(&declared).unwrap();
 
         let password = s.find("password").unwrap();
-        assert_eq!(password.label(), "Password");
+        assert_eq!(password.title(), "Password");
         assert_eq!(password.section(), "auth");
         assert_eq!(password.order(), 3);
         assert!(password.is_sensitive());
@@ -196,7 +196,7 @@ fn a_sequence_a_blob_and_a_nested_struct_each_have_a_kind() {
         let fields: Vec<String> = tls.fields().map(|f| f.key().to_string()).collect();
         assert_eq!(fields, ["verify", "ca"], "a nested struct carries its own");
         assert_eq!(
-            tls.fields().next().unwrap().help(),
+            tls.fields().next().unwrap().description(),
             "Whether to check the certificate.",
             "and its fields are ordinary fields, doc comments and all"
         );

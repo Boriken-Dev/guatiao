@@ -7,8 +7,8 @@ repeats it.
 
 ```rust
 use guatiao::schema::read::SchemaRef;
-use guatiao::schema::{FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
-use guatiao_form::{Form, FormRef, Hints, Section, check, is_visible, layout};
+use guatiao::schema::{FieldBuilder, KindBuilder, SchemaBuilder};
+use guatiao_form::{Form, FormBuilder, FormRef, Hints, Section, check, is_visible, layout};
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 let schema = SchemaBuilder::new()

@@ -139,7 +139,7 @@ fn field_at(path: &str) -> String {
 ///
 /// A section a schema field names but the form does not declare is **not**
 /// an error: that field joins the default section, which is what the
-/// schema's own `FormBuilder::section` promises.
+/// schema's own `x-section` promises.
 pub fn check(schema: SchemaRef<'_>, form: FormRef<'_>) -> Result<(), FormError> {
     let doc = form.as_value();
 

@@ -161,19 +161,20 @@ pub fn derive_to_value(input: TokenStream) -> TokenStream {
 ///
 /// A unit enum describes itself as a choice and a tagged enum as a
 /// variant. **A doc comment fills the most descriptive slot the thing
-/// has**: a field or an arm has a label and help, so its doc comment is
-/// help; a choice has only a label, so its doc comment is the label.
+/// has**: a field or an arm has a description as well as a title, so its
+/// doc comment is the description; a choice has only a label, so its doc
+/// comment is the label.
 ///
 /// The kind of each option comes from the field's **type**, which already
 /// states it -- `u16` is an integer between 0 and 65535 -- and everything
 /// else comes from the declaration: the key from `#[map(rename = "...")]`
 /// or the field name, `required` from the type not being `Option<T>`, and
-/// the help text from the field's own doc comment.
+/// the description from the field's own doc comment.
 ///
 /// | attribute | effect |
 /// |---|---|
-/// | `#[schema(label = "...")]` | the name a person sees |
-/// | `#[schema(help = "...")]` | overrides the doc comment |
+/// | `#[schema(title = "...")]` | the name a person sees |
+/// | `#[schema(description = "...")]` | overrides the doc comment |
 /// | `#[schema(section = "...")]` | the section id this option belongs to |
 /// | `#[schema(order = N)]` | sort position within its section |
 /// | `#[schema(advanced)]` | hide unless asked for |

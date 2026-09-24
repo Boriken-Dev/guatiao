@@ -15,8 +15,6 @@ use guatiao::value::convert::TryAsRef;
 use std::cell::Cell;
 use std::ffi::c_void;
 
-use guatiao::schema::FormBuilder;
-use guatiao::schema::FormFieldBuilder;
 use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::schema::vocab;
@@ -97,31 +95,31 @@ fn at<'a>(v: &'a Value, key: &str) -> Option<&'a Value> {
 fn a_declared_schema_reads_back() {
     with_alloc(|alloc| {
         let schema = SchemaBuilder::new_in(alloc)
-            .label("Connection")
-            .help("Where to connect, and how.")
+            .title("Connection")
+            .description("Where to connect, and how.")
             .field(
                 FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
-                    .label("Host")
-                    .section("net")
+                    .title("Host")
+                    .option(vocab::X_SECTION, Text::from("net"))
                     .required()
-                    .order(1),
+                    .option(vocab::X_ORDER, Number::from(1)),
             )
             .field(
                 FieldBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
-                    .label("Port")
-                    .section("net")
+                    .title("Port")
+                    .option(vocab::X_SECTION, Text::from("net"))
                     .default(
                         Number::new_in(alloc, &5900.to_string())
                             .map(Value::from)
                             .unwrap(),
                     )
-                    .order(2),
+                    .option(vocab::X_ORDER, Number::from(2)),
             )
             .field(
                 FieldBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
-                    .label("Password")
+                    .title("Password")
                     .sensitive()
-                    .advanced(),
+                    .option(vocab::X_ADVANCED, true),
             )
             .finish()
             .expect("a schema this small does not exhaust an allocator");
@@ -129,14 +127,14 @@ fn a_declared_schema_reads_back() {
         let s = SchemaRef::new(&schema).expect("a schema is a map");
 
         assert_eq!(s.dialect(), vocab::DIALECT);
-        assert_eq!(s.label(), "Connection");
-        assert_eq!(s.help(), "Where to connect, and how.");
+        assert_eq!(s.title(), "Connection");
+        assert_eq!(s.description(), "Where to connect, and how.");
 
         let keys: Vec<_> = s.fields().map(|o| o.key().to_string()).collect();
         assert_eq!(keys, ["host", "port", "password"], "declaration order");
 
         let host = s.find("host").expect("host is declared");
-        assert_eq!(host.label(), "Host");
+        assert_eq!(host.title(), "Host");
         assert_eq!(host.section(), "net");
         assert!(host.is_required());
         assert!(!host.is_sensitive());
@@ -176,11 +174,11 @@ fn a_declared_schema_reads_back() {
 fn the_document_is_written_in_json_schemas_own_keys() {
     with_alloc(|alloc| {
         let schema = SchemaBuilder::new_in(alloc)
-            .label("Connection")
+            .title("Connection")
             .field(
                 FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
-                    .label("Host")
-                    .help("Where to connect.")
+                    .title("Host")
+                    .description("Where to connect.")
                     .required(),
             )
             .field(FieldBuilder::new_in(
@@ -350,7 +348,7 @@ fn a_union_and_a_variant_are_different_features() {
         let arms: Vec<_> = variant.arms().collect();
         assert_eq!(arms.len(), 2);
         assert_eq!(arms[0].value(), "ambient");
-        assert_eq!(arms[0].label(), "Ambient");
+        assert_eq!(arms[0].title(), "Ambient");
         assert_eq!(arms[0].fields().count(), 0, "an empty arm is complete");
         assert_eq!(arms[1].value(), "userpass");
         let fields: Vec<_> = arms[1].fields().map(|f| f.key().to_string()).collect();
@@ -466,12 +464,12 @@ fn an_unknown_kind_leaves_the_field_readable_and_the_rest_intact() {
         let future = s.find("timeout").expect("the field is readable");
         assert!(matches!(future.kind(), Kind::Unknown("duration")));
         assert_eq!(
-            future.label(),
+            future.title(),
             "Timeout",
             "and everything that does not depend on the kind still reads"
         );
 
-        assert_eq!(s.find("known").unwrap().label(), "Known");
+        assert_eq!(s.find("known").unwrap().title(), "Known");
     });
 }
 
@@ -594,7 +592,7 @@ fn the_plain_builders_and_the_in_builders_agree() {
     let by_hand = SchemaBuilder::new()
         .field(
             FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
-                .label("Port")
+                .title("Port")
                 .required(),
         )
         .field(FieldBuilder::new("name", KindBuilder::string()))
@@ -605,7 +603,7 @@ fn the_plain_builders_and_the_in_builders_agree() {
     let named = SchemaBuilder::new_in(alloc)
         .field(
             FieldBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
-                .label("Port")
+                .title("Port")
                 .required(),
         )
         .field(FieldBuilder::new_in(

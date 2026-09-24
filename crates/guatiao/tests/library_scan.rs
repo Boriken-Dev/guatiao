@@ -394,7 +394,7 @@ fn a_macro_exported_schema_is_callable_by_name() {
         "the fields, in declaration order"
     );
     assert_eq!(
-        schema.find("greeting").expect("the option").help(),
+        schema.find("greeting").expect("the option").description(),
         "The text to show.",
         "the doc comment reached a caller that has no Rust"
     );

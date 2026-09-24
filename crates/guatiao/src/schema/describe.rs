@@ -28,7 +28,7 @@
 //!
 //! let host = s.find("host").unwrap();
 //! assert!(host.is_required());
-//! assert_eq!(host.help(), "Where to connect.");
+//! assert_eq!(host.description(), "Where to connect.");
 //!
 //! // The bounds come from the Rust width, which already stated them.
 //! assert!(matches!(

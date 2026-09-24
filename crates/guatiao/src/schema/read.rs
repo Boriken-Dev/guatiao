@@ -145,13 +145,13 @@ impl<'a> SchemaRef<'a> {
         text(self.0, vocab::SCHEMA)
     }
 
-    /// A short human label for the schema as a whole: its `title`.
-    pub fn label(&self) -> &'a str {
+    /// The schema's own `title`: a short line naming what it describes.
+    pub fn title(&self) -> &'a str {
         text(self.0, vocab::TITLE)
     }
 
-    /// Longer human help for the schema as a whole: its `description`.
-    pub fn help(&self) -> &'a str {
+    /// The schema's own `description`: the longer prose under the title.
+    pub fn description(&self) -> &'a str {
         text(self.0, vocab::DESCRIPTION)
     }
 
@@ -248,13 +248,13 @@ impl<'a> FieldRef<'a> {
         Kind::read(Some(self.schema))
     }
 
-    /// A short human label: the field's `title`. May be empty.
-    pub fn label(&self) -> &'a str {
+    /// The field's `title`: what a person sees it called. May be empty.
+    pub fn title(&self) -> &'a str {
         text(self.schema, vocab::TITLE)
     }
 
-    /// Longer human help: the field's `description`. May be empty.
-    pub fn help(&self) -> &'a str {
+    /// The field's `description`: the longer prose. May be empty.
+    pub fn description(&self) -> &'a str {
         text(self.schema, vocab::DESCRIPTION)
     }
 
@@ -348,13 +348,13 @@ impl<'a> ArmRef<'a> {
             .and_then(TryAsRef::<str>::try_as_ref)
             .unwrap_or("")
     }
-    /// What is shown. Falls back to the value.
-    pub fn label(&self) -> &'a str {
+    /// The arm's `title`, falling back to its discriminant.
+    pub fn title(&self) -> &'a str {
         let l = text(self.schema, vocab::TITLE);
         if l.is_empty() { self.value() } else { l }
     }
-    /// Longer human help. May be empty.
-    pub fn help(&self) -> &'a str {
+    /// The arm's `description`. May be empty.
+    pub fn description(&self) -> &'a str {
         text(self.schema, vocab::DESCRIPTION)
     }
     /// The fields this arm adds when selected.

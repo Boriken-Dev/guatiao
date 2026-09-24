@@ -41,7 +41,7 @@ enum Auth {
     /// The ambient credential.
     Ambient,
     #[map(rename = "userpass")]
-    #[schema(label = "Username and password")]
+    #[schema(title = "Username and password")]
     UserPass {
         username: String,
         #[schema(sensitive)]
@@ -283,18 +283,19 @@ fn a_tagged_enum_describes_itself_as_a_variant() {
 
     assert_eq!(arms[0].value(), "Ambient");
     assert_eq!(
-        arms[0].help(),
+        arms[0].description(),
         "The ambient credential.",
-        "an arm has help as well as a label, so its doc comment is help"
+        "an arm has a description as well as a title, so its doc comment is the \
+         description"
     );
     assert_eq!(
-        arms[0].label(),
+        arms[0].title(),
         "Ambient",
-        "and with no label it shows its value"
+        "and with no title it shows its value"
     );
 
     assert_eq!(arms[1].value(), "userpass");
-    assert_eq!(arms[1].label(), "Username and password");
+    assert_eq!(arms[1].title(), "Username and password");
     let fields: Vec<(String, bool, bool)> = arms[1]
         .fields()
         .map(|f| (f.key().to_string(), f.is_required(), f.is_sensitive()))
