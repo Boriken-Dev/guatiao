@@ -9,7 +9,7 @@
 //! so none of them can disagree about what a path means.
 //!
 //! ```
-//! use guatiao::path;
+//! use guatiao_intake::path;
 //!
 //! let mut inner = guatiao::Map::new();
 //! inner.set("host", "10.0.0.1")?;
@@ -50,13 +50,18 @@
 //! A `.` needs no quoting inside brackets, because the `]` already says
 //! where the segment ends.
 //!
-//! # A declaration may not contain a delimiter; data may
+//! # Every key is spellable, declared or not
 //!
-//! [`schema::flat::check_keys`](crate::schema::flat::check_keys) refuses a
-//! declared field key containing `.`, `[` or `]`, at the moment the schema
-//! is finished. A schema's keys are ours to spell. The keys **inside** a
-//! value are not — they come from whoever wrote the data — which is the
-//! whole reason quoting exists.
+//! A schema describes the struct exactly as it is, so a field may be
+//! named `a.b` and `guatiao` says nothing about it. Quoting is what makes
+//! that workable: `["a.b"]` is that one key, where `a.b` would be two
+//! steps. The keys **inside** a value — which come from whoever wrote the
+//! data, not from a declaration — are the case this was built for, and
+//! they get the same escape.
+//!
+//! An earlier rule refused a declared key holding a `.` when the schema
+//! was finished. It was dropped with this grammar: the ambiguity it
+//! protected against is what quoting removes.
 //!
 //! # Walking is iterative
 //!

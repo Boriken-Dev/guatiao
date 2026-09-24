@@ -46,8 +46,17 @@
 //! ```
 //! - [`read`] reads one back: [`SchemaRef`], [`FieldRef`], [`KindRef`].
 //! - [`validate`] answers whether a value is one the schema accepts.
-//! - [`flat`] projects a tagged field onto flat `key -> text` storage,
-//!   which is what a command line or a query string can carry.
+//!
+//! # A schema is a description, and nothing else
+//!
+//! Naming a place inside a value (`agent[1].name`), projecting one onto
+//! flat `key -> text` storage, and checking a store of text are **not
+//! here**: they live in `guatiao-intake`, as its `path`, `flat` and
+//! `validate_texts`. Each is a decision about how a consumer reads,
+//! enters or stores a value, and a schema describes the struct exactly
+//! as it is — which is why a field key may hold a `.` and nothing here
+//! objects. `validate_text` stays, because "is this text acceptable for
+//! this field" is a question about the schema alone.
 //!
 //! # Anything outside the vocabulary is an annotation
 //!
@@ -86,7 +95,6 @@
 pub mod build;
 // What a Rust type says its schema is. A `//` comment, never a `///`.
 pub mod describe;
-pub mod flat;
 // How a schema declares the way one of its fields combines across
 // layers: the `x-merge` annotation. Here rather than under the merge
 // because the merge touches values only — it is this side that
@@ -98,9 +106,8 @@ pub mod vocab;
 
 pub use build::{ArmBuilder, Extras, FieldBuilder, KindBuilder, SchemaBuilder};
 pub use describe::Schema;
-pub use flat::{SEPARATOR, flatten, is_sensitive, resolve, resolve_in, unflatten};
 pub use read::{ArmRef, ChoiceRef, FieldRef, Kind as KindRef, SchemaRef};
-pub use validate::{validate_map, validate_text, validate_texts, validate_value};
+pub use validate::{validate_map, validate_text, validate_value};
 
 /// Why a value was rejected by [`validate_value`] or [`validate_map`].
 ///

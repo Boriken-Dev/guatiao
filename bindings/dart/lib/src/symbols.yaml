@@ -14,10 +14,18 @@ files:
         name: guatiao_buffer_push
       c:@F@guatiao_intake_check:
         name: guatiao_intake_check
+      c:@F@guatiao_intake_flat_keys:
+        name: guatiao_intake_flat_keys
+      c:@F@guatiao_intake_flatten:
+        name: guatiao_intake_flatten
       c:@F@guatiao_intake_is_visible:
         name: guatiao_intake_is_visible
       c:@F@guatiao_intake_layout:
         name: guatiao_intake_layout
+      c:@F@guatiao_intake_resolve:
+        name: guatiao_intake_resolve
+      c:@F@guatiao_intake_unflatten:
+        name: guatiao_intake_unflatten
       c:@F@guatiao_json_emit:
         name: guatiao_json_emit
       c:@F@guatiao_json_emit_pretty:
@@ -96,14 +104,6 @@ files:
         name: guatiao_registry_unload_unchecked
       c:@F@guatiao_registry_why_not:
         name: guatiao_registry_why_not
-      c:@F@guatiao_schema_flat_keys:
-        name: guatiao_schema_flat_keys
-      c:@F@guatiao_schema_flatten:
-        name: guatiao_schema_flatten
-      c:@F@guatiao_schema_resolve:
-        name: guatiao_schema_resolve
-      c:@F@guatiao_schema_unflatten:
-        name: guatiao_schema_unflatten
       c:@F@guatiao_schema_validate:
         name: guatiao_schema_validate
       c:@F@guatiao_string_push:

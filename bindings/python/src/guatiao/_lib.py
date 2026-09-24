@@ -10,7 +10,7 @@ whatever the platform's default promotion happens to produce. This
 declares the 50 real, linkable exports of `guatiao.h` -- not the 22
 `static inline` helpers alongside them, which have no symbol in any
 library and are reimplemented in `value.py` instead -- plus the 7 of
-`guatiao_serde.h` and the 3 of `guatiao_intake.h`, each of which also
+`guatiao_serde.h` and the 7 of `guatiao_intake.h`, each of which also
 re-exports `guatiao_alloc_default`: any cdylib linking the `guatiao`
 crate carries its plain value-level functions along, and `Library.alloc`
 (Q5: one allocator per loaded library) needs its own copy of that one.
@@ -232,22 +232,6 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
         c_uint32,
         None,
     ),
-    "guatiao_schema_resolve": ([_P(Value), Str], _P(Value), None),
-    "guatiao_schema_flat_keys": (
-        [_P(Value), Str, _P(Alloc), _P(Value)],
-        c_uint32,
-        None,
-    ),
-    "guatiao_schema_flatten": (
-        [_P(Value), Str, _P(Value), _P(Alloc), _P(Value)],
-        c_uint32,
-        None,
-    ),
-    "guatiao_schema_unflatten": (
-        [_P(Value), Str, _P(Value), _P(Alloc), _P(Value)],
-        c_uint32,
-        None,
-    ),
     "guatiao_value_free": ([_P(Value)], c_uint32, None),
     "guatiao_value_clone": ([_P(Alloc), _P(Value), _P(Value)], c_uint32, None),
     "guatiao_value_null": ([_P(Value)], c_uint32, None),
@@ -331,6 +315,24 @@ _FORM_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
     ),
     "guatiao_intake_is_visible": (
         [_P(Value), _P(Value), Str, _P(Value), _P(c_bool)],
+        c_uint32,
+        None,
+    ),
+    # The flat projection: it names places inside a value, which is this
+    # library's business and not the schema's.
+    "guatiao_intake_resolve": ([_P(Value), Str], _P(Value), None),
+    "guatiao_intake_flat_keys": (
+        [_P(Value), Str, _P(Alloc), _P(Value)],
+        c_uint32,
+        None,
+    ),
+    "guatiao_intake_flatten": (
+        [_P(Value), Str, _P(Value), _P(Alloc), _P(Value)],
+        c_uint32,
+        None,
+    ),
+    "guatiao_intake_unflatten": (
+        [_P(Value), Str, _P(Value), _P(Alloc), _P(Value)],
         c_uint32,
         None,
     ),

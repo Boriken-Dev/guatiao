@@ -481,7 +481,7 @@ does nothing.
 root document, not only `properties`/`required`: a tagged enum's
 `schema()` is its `x-variant-tag` and its `oneOf`. `SchemaBuilder::finish`
 refuses a field key containing `.` (`WrongKind`), which is
-`flat::check_keys` run where nobody has to remember it.
+any field key at all, including one holding a `.`.
 
 Build:
 
@@ -505,8 +505,8 @@ why a `FieldRef` carries its name and its requiredness alongside the
 schema it views -- a bare pointer to a field's subschema cannot say what
 it is called.
 
-The same reason the C flat exports take `(schema, key)` rather than a
-field pointer.
+The same reason `guatiao-intake`'s C flat exports take `(schema, key)`
+rather than a field pointer.
 
 **A schema does not know about forms.** Nothing here writes the
 presentation vocabulary: which section a field sits in, where among its
@@ -607,8 +607,7 @@ Validate:
 ```rust
 validate_map(schema, &values)   -> Result<(), ValidationError>
 validate_value(field, &value)  -> Result<(), ValidationError>
-validate_text(field, text)     // for a string-typed front end
-validate_texts(schema, &BTreeMap<String, String>)
+validate_text(field, text)     // one text against one field's kind
 ```
 
 `ValidationError` is `UnknownOption { .. }` or `BadValue { .. }`. **An
@@ -619,13 +618,19 @@ it says what would have been accepted.
 here: it runs over two trees a caller supplied, and either nested past
 the bound is a `BadValue` naming the key rather than a stack overflow.
 
-Flat projection, for a front end that only has `key -> text`:
-`flatten`, `unflatten`, `keys`, `resolve`, `resolve_in`, `is_sensitive`,
-`check_keys`, separator `.`. `resolve` answers for the schema alone;
-`resolve_in(schema, key, selected)` answers for a store, checking a
-payload key against the arm the store selects (or the field's default),
-and `validate_texts` goes through it -- so `auth=sso&auth.username=x` is
-refused in the text form the way it is in the nested one.
+**The flat projection is not here.** Naming a place inside a value
+(`agent[1].name`), projecting one onto `key -> text`, and checking a
+store of text are `guatiao-intake`'s: `path`, `flat` and
+`validate_texts`. They are decisions about how a consumer reads, enters
+and stores a value, and a schema describes the struct exactly as it is.
+`validate_text` stays, because "is this text acceptable for this field"
+asks about the schema alone -- it is also the check `validate_value`
+performs on every scalar.
+
+One consequence: **a field key may hold a `.`, a `[` or a `]`**, and
+`finish` says nothing about it. It used to refuse one, back when the
+only spelling for a nested path was ambiguous; the grammar quotes such a
+key now (`["a.b"]`).
 
 ---
 

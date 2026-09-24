@@ -233,8 +233,9 @@ fn annotation_round_trips_through_parse_mode() {
 /// It was read from top-level fields only, so `x-merge` two levels down
 /// did nothing at all — silently, which is the worst way for a
 /// declaration to fail. The doc claimed the opposite: that a dotted field
-/// KEY declared a nested path, which `flat::check_keys` refuses at
-/// declaration and `SchemaBuilder::finish` now refuses too.
+/// KEY declared a nested path, which it never did: a dotted key is a
+/// field whose name holds a dot, and the path this reports is built from
+/// the fields walked rather than parsed out of one.
 #[test]
 fn a_declaration_on_a_nested_field_is_read_as_its_dotted_path() {
     let alloc = Alloc::rust();

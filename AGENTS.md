@@ -8,12 +8,12 @@ public surface); this file is about the repository.
 
 | path | what |
 | --- | --- |
-| `crates/guatiao/` | the crate: value model (every operation on its container, `Value` thin), C type vocabulary, schema, library envelope, loader |
+| `crates/guatiao/` | the crate: value model (every operation on its container, `Value` thin), C type vocabulary, schema (a description of the struct, and nothing about how it is named or stored), library envelope, loader |
 | `crates/guatiao/include/guatiao.h` | the C header, rendered by `build.rs` and committed |
 | `guatiao.dll` / `libguatiao.so` | the C ABI artifact, from the same crate — `cargo build` |
 | `crates/guatiao-derive/` | `#[derive(ToValue, FromValue, Schema)]`, `#[guatiao::kind]`/`#[derive(Provider)]`, `#[derive(Form)]`; reached through `guatiao`'s `derive`/`provider` features and `guatiao-intake`'s `derive`, never named directly |
 | `crates/guatiao-serde/` | serde for values: JSON, TOML and YAML as features, and a C surface with its own `include/guatiao_serde.h` |
-| `crates/guatiao-intake/` | how a schema is shown: sections, widget hints, conditional visibility, as a value beside the schema, or declared with `#[derive(Form)]`; C surface in `include/guatiao_intake.h` |
+| `crates/guatiao-intake/` | taking a value in from a person: the path grammar (`agent[1].name`), flat `key -> text` storage, checking a store of text, and how a schema is shown (sections, widget hints, conditional visibility, `#[derive(Form)]`); C surface in `include/guatiao_intake.h` |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
 | `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against |
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
@@ -101,7 +101,7 @@ the suite rather than shipping.
 - **`unsafe` is confined to named places.** In `guatiao`: the value
   model's raw layer, the loader (`library/raw/`), the kind runtime's
   files (`library/kind/`), and `exports/` — listed in
-  `tests/forbid_unsafe_per_module.rs`. In `guatiao-intake`: `exports.rs`
+  `tests/forbid_unsafe_per_module.rs`. In `guatiao-intake`: `exports.rs` and `exports_flat.rs`
   alone, checked by its `tests/unsafe_stays_in_exports.rs`. Every other
   module carries `#![forbid(unsafe_code)]`.
 - **Lines are LF** (`.gitattributes`), on every platform, including

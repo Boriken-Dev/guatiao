@@ -12,8 +12,8 @@
 
 use std::borrow::Cow;
 
-use guatiao::path::{self, PathError, Segment};
 use guatiao::{List, Map, Value};
+use guatiao_intake::path::{self, PathError, Segment};
 
 fn segments(text: &str) -> Vec<Segment<'_>> {
     path::parse(text)

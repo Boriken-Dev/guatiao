@@ -91,6 +91,64 @@ class GuatiaoBindings {
       int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
 
+  int guatiao_intake_flat_keys(
+    ffi.Pointer<guatiao_value> schema,
+    guatiao_str key,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_intake_flat_keys(
+      schema,
+      key,
+      alloc,
+      out,
+    );
+  }
+
+  late final _guatiao_intake_flat_keysPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status$1 Function(
+              ffi.Pointer<guatiao_value>,
+              guatiao_str,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_intake_flat_keys');
+  late final _guatiao_intake_flat_keys =
+      _guatiao_intake_flat_keysPtr.asFunction<
+          int Function(ffi.Pointer<guatiao_value>, guatiao_str,
+              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+
+  int guatiao_intake_flatten(
+    ffi.Pointer<guatiao_value> schema,
+    guatiao_str key,
+    ffi.Pointer<guatiao_value> value,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_intake_flatten(
+      schema,
+      key,
+      value,
+      alloc,
+      out,
+    );
+  }
+
+  late final _guatiao_intake_flattenPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status$1 Function(
+              ffi.Pointer<guatiao_value>,
+              guatiao_str,
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_intake_flatten');
+  late final _guatiao_intake_flatten = _guatiao_intake_flattenPtr.asFunction<
+      int Function(
+          ffi.Pointer<guatiao_value>,
+          guatiao_str,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>)>();
+
   int guatiao_intake_is_visible(
     ffi.Pointer<guatiao_value> schema,
     ffi.Pointer<guatiao_value> form,
@@ -148,6 +206,57 @@ class GuatiaoBindings {
   late final _guatiao_intake_layout = _guatiao_intake_layoutPtr.asFunction<
       int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+
+  ffi.Pointer<guatiao_value> guatiao_intake_resolve(
+    ffi.Pointer<guatiao_value> schema,
+    guatiao_str key,
+  ) {
+    return _guatiao_intake_resolve(
+      schema,
+      key,
+    );
+  }
+
+  late final _guatiao_intake_resolvePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Pointer<guatiao_value> Function(ffi.Pointer<guatiao_value>,
+              guatiao_str)>>('guatiao_intake_resolve');
+  late final _guatiao_intake_resolve = _guatiao_intake_resolvePtr.asFunction<
+      ffi.Pointer<guatiao_value> Function(
+          ffi.Pointer<guatiao_value>, guatiao_str)>();
+
+  int guatiao_intake_unflatten(
+    ffi.Pointer<guatiao_value> schema,
+    guatiao_str key,
+    ffi.Pointer<guatiao_value> flat,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_intake_unflatten(
+      schema,
+      key,
+      flat,
+      alloc,
+      out,
+    );
+  }
+
+  late final _guatiao_intake_unflattenPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status$1 Function(
+              ffi.Pointer<guatiao_value>,
+              guatiao_str,
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_intake_unflatten');
+  late final _guatiao_intake_unflatten =
+      _guatiao_intake_unflattenPtr.asFunction<
+          int Function(
+              ffi.Pointer<guatiao_value>,
+              guatiao_str,
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>();
 
   int guatiao_json_emit(
     ffi.Pointer<guatiao_value> value,
@@ -1067,115 +1176,6 @@ class GuatiaoBindings {
           int Function(ffi.Pointer<guatiao_registry>, guatiao_str,
               ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
 
-  int guatiao_schema_flat_keys(
-    ffi.Pointer<guatiao_value> schema,
-    guatiao_str key,
-    ffi.Pointer<guatiao_alloc> alloc,
-    ffi.Pointer<guatiao_value> out,
-  ) {
-    return _guatiao_schema_flat_keys(
-      schema,
-      key,
-      alloc,
-      out,
-    );
-  }
-
-  late final _guatiao_schema_flat_keysPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status$1 Function(
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_schema_flat_keys');
-  late final _guatiao_schema_flat_keys =
-      _guatiao_schema_flat_keysPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_value>, guatiao_str,
-              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
-
-  int guatiao_schema_flatten(
-    ffi.Pointer<guatiao_value> schema,
-    guatiao_str key,
-    ffi.Pointer<guatiao_value> value,
-    ffi.Pointer<guatiao_alloc> alloc,
-    ffi.Pointer<guatiao_value> out,
-  ) {
-    return _guatiao_schema_flatten(
-      schema,
-      key,
-      value,
-      alloc,
-      out,
-    );
-  }
-
-  late final _guatiao_schema_flattenPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status$1 Function(
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_schema_flatten');
-  late final _guatiao_schema_flatten = _guatiao_schema_flattenPtr.asFunction<
-      int Function(
-          ffi.Pointer<guatiao_value>,
-          guatiao_str,
-          ffi.Pointer<guatiao_value>,
-          ffi.Pointer<guatiao_alloc>,
-          ffi.Pointer<guatiao_value>)>();
-
-  ffi.Pointer<guatiao_value> guatiao_schema_resolve(
-    ffi.Pointer<guatiao_value> schema,
-    guatiao_str key,
-  ) {
-    return _guatiao_schema_resolve(
-      schema,
-      key,
-    );
-  }
-
-  late final _guatiao_schema_resolvePtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Pointer<guatiao_value> Function(ffi.Pointer<guatiao_value>,
-              guatiao_str)>>('guatiao_schema_resolve');
-  late final _guatiao_schema_resolve = _guatiao_schema_resolvePtr.asFunction<
-      ffi.Pointer<guatiao_value> Function(
-          ffi.Pointer<guatiao_value>, guatiao_str)>();
-
-  int guatiao_schema_unflatten(
-    ffi.Pointer<guatiao_value> schema,
-    guatiao_str key,
-    ffi.Pointer<guatiao_value> flat,
-    ffi.Pointer<guatiao_alloc> alloc,
-    ffi.Pointer<guatiao_value> out,
-  ) {
-    return _guatiao_schema_unflatten(
-      schema,
-      key,
-      flat,
-      alloc,
-      out,
-    );
-  }
-
-  late final _guatiao_schema_unflattenPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status$1 Function(
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_schema_unflatten');
-  late final _guatiao_schema_unflatten =
-      _guatiao_schema_unflattenPtr.asFunction<
-          int Function(
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>();
-
   int guatiao_schema_validate(
     ffi.Pointer<guatiao_value> schema,
     ffi.Pointer<guatiao_value> config,
@@ -1627,11 +1627,11 @@ const int GUATIAO_MERGE_SIMPLE = 1;
 
 const int GUATIAO_MERGE_SUBSTITUTE = 3;
 
-const int GUATIAO_PAYLOAD_SEPARATOR = 46;
-
 const int GUATIAO_PRETTY = 512;
 
 const int GUATIAO_READ_DATA_URIS = 256;
+
+const int SEPARATOR = 46;
 
 final class guatiao_alloc extends ffi.Struct {
   @ffi.Uint32()

@@ -22,16 +22,16 @@
 
 #![forbid(unsafe_code)]
 
-use crate::value::convert::TryAsRef;
+use guatiao::value::convert::TryAsRef;
 use std::collections::BTreeMap;
 
-use super::ValidationError;
-use super::read::{FieldRef, Kind, SchemaRef};
-use super::validate::text_of;
-use crate::value::alloc::Alloc;
-use crate::value::error::ValueError;
-use crate::value::read::str_or;
-use crate::value::types::{Map, Tag, Text, Value};
+use guatiao::schema::ValidationError;
+use guatiao::schema::read::{FieldRef, Kind, SchemaRef};
+use guatiao::schema::validate::text_of;
+use guatiao::value::alloc::Alloc;
+use guatiao::value::error::ValueError;
+use guatiao::value::read::str_or;
+use guatiao::value::types::{Map, Tag, Text, Value};
 
 /// Between a field's key and one of its payload fields.
 pub const SEPARATOR: char = '.';
@@ -236,20 +236,6 @@ pub fn resolve_in<'a>(
 /// have to.
 pub fn is_sensitive(schema: SchemaRef<'_>, key: &str) -> bool {
     resolve(schema, key).is_some_and(|o| o.is_sensitive())
-}
-
-/// Rejects a declaration whose field key contains the separator, which
-/// would make a payload key ambiguous with a field key.
-///
-/// Answers the offending key. A declaration bug, so it is caught at
-/// declaration rather than tolerated at read time.
-pub fn check_keys(schema: SchemaRef<'_>) -> Result<(), String> {
-    for field in schema.fields() {
-        if field.key().contains(SEPARATOR) {
-            return Err(field.key().to_string());
-        }
-    }
-    Ok(())
 }
 
 /// The text spelling of a scalar, or `None` for a container.

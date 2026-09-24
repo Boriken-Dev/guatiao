@@ -29,7 +29,7 @@
 //!
 //! **A path is a flat key**: a field's own key, or `owner.member` for a
 //! field an arm of a variant adds. It is the spelling
-//! `guatiao::schema::flat` already resolves, and the one a C caller already
+//! [`crate::flat`] already resolves, and the one a C caller already
 //! passes to `guatiao_schema_resolve`.
 //!
 //! **Sections are listed in display order.** A section is what a person

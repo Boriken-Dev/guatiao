@@ -66,7 +66,7 @@ const GROUP_FIELDS: &str = "fields";
 /// Runs a boundary body, turning a panic into a status. The payload is
 /// forgotten rather than dropped: dropping one can panic, and a second
 /// panic in an `extern "C"` body is the abort this exists to avoid.
-fn guard(body: impl FnOnce() -> Status) -> Status {
+pub(crate) fn guard(body: impl FnOnce() -> Status) -> Status {
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(status) => status,
         Err(payload) => {
@@ -75,6 +75,49 @@ fn guard(body: impl FnOnce() -> Status) -> Status {
         }
     }
 }
+
+/// [`guard`] for a body that answers something other than a status.
+///
+/// A function returning a POINTER cannot report an internal failure as a
+/// status, so it reports it the only way its signature allows: by handing
+/// back `fallback`, which for a pointer is null.
+pub(crate) fn guard_with<T>(fallback: T, body: impl FnOnce() -> T) -> T {
+    match catch_unwind(AssertUnwindSafe(body)) {
+        Ok(v) => v,
+        Err(payload) => {
+            std::mem::forget(payload);
+            fallback
+        }
+    }
+}
+
+/// Null-checks the pointers a boundary function must have, then runs its
+/// body under [`guard`].
+macro_rules! entry {
+    ($($p:ident),* $(,)? => $body:expr) => {{
+        $(if $p.is_null() { return Status::GUATIAO_ERR_NULL; })*
+        $crate::exports::guard(|| $body)
+    }};
+}
+
+/// Writes the absent marker through every non-null out-pointer named.
+///
+/// **The first statement of every function that has one**, before any
+/// check and before [`entry!`], so a caller reading an out-parameter
+/// after a failure reads ABSENT rather than whatever it happened to
+/// contain.
+macro_rules! out {
+    ($($p:ident),* $(,)?) => {
+        $(if !$p.is_null() {
+            // SAFETY: checked non-null, and by the caller's contract it
+            // addresses writable storage for one value that does not
+            // already hold one the caller still owns.
+            unsafe { ::std::ptr::write($p, ::guatiao::Value::absent()) };
+        })*
+    };
+}
+
+pub(crate) use {entry, out};
 
 /// A schema and a form, viewed, or the status saying which was wrong.
 ///

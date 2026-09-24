@@ -11,12 +11,17 @@
 
 use std::ptr;
 
-use guatiao::schema::{FieldBuilder, KindBuilder, SchemaBuilder};
+use guatiao::schema::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::value::alloc::{Allocator, rust_alloc};
+use guatiao::value::convert::TryAsRef;
 use guatiao::value::status::Status;
 use guatiao::value::types::{Str, Value};
-use guatiao::{Map, Value as V};
+use guatiao::{Alloc, List, Map, Value as V};
 use guatiao_intake::exports::{guatiao_intake_is_visible, guatiao_intake_layout};
+use guatiao_intake::exports_flat::{
+    guatiao_intake_flat_keys, guatiao_intake_flatten, guatiao_intake_resolve,
+    guatiao_intake_unflatten,
+};
 use guatiao_intake::{Form, Hints};
 
 fn schema() -> Value {
@@ -130,4 +135,238 @@ fn every_required_pointer_is_refused_the_same_way() {
             Status::GUATIAO_ERR_NULL
         );
     }
+}
+
+// --- the flat projection ------------------------------------------------
+
+/// A schema with a variant field, which is the only shape the projection
+/// applies to.
+fn variant_schema() -> Value {
+    let alloc = Alloc::rust();
+    SchemaBuilder::new_in(alloc)
+        .field(FieldBuilder::new_in(
+            alloc,
+            "auth",
+            KindBuilder::variant_in(
+                alloc,
+                "auth",
+                vec![
+                    ArmBuilder::new_in(alloc, "sso", "Single sign-on"),
+                    ArmBuilder::new_in(alloc, "userpass", "Username and password")
+                        .field(FieldBuilder::new_in(
+                            alloc,
+                            "username",
+                            KindBuilder::string_in(alloc),
+                        ))
+                        .field(
+                            FieldBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
+                                .sensitive(),
+                        ),
+                ],
+            ),
+        ))
+        .finish()
+        .expect("a schema this small does not exhaust an allocator")
+}
+
+/// A flat key resolves through one level of projection, and the field it
+/// lands on is the ARM FIELD's, not the parent's.
+#[test]
+fn a_flat_key_resolves_to_the_option_that_governs_it() {
+    let schema = variant_schema();
+
+    // SAFETY: a well-formed schema and a readable view.
+    let direct = unsafe { guatiao_intake_resolve(&schema, Str::new("auth")) };
+    assert!(!direct.is_null(), "the field itself resolves");
+
+    // SAFETY: as above.
+    let projected = unsafe { guatiao_intake_resolve(&schema, Str::new("auth.password")) };
+    assert!(
+        !projected.is_null(),
+        "a projected key resolves to the arm field it names"
+    );
+    assert_ne!(direct, projected, "and not to the parent field");
+
+    // SAFETY: as above.
+    let nothing = unsafe { guatiao_intake_resolve(&schema, Str::new("auth.nonesuch")) };
+    assert!(
+        nothing.is_null(),
+        "a key nobody declared resolves to nothing"
+    );
+}
+
+/// A value goes out flat and comes back whole.
+#[test]
+fn a_tagged_value_survives_the_round_trip_through_flat_text() {
+    let alloc = Alloc::rust();
+    let schema = variant_schema();
+
+    let mut chosen = Map::new();
+    chosen.set("auth", "userpass").unwrap();
+    chosen.set("username", "ana").unwrap();
+    chosen.set("password", "hunter2").unwrap();
+    let chosen: Value = chosen.into();
+
+    let mut flat = Value::absent();
+    // SAFETY: every pointer addresses what its type says.
+    let status = unsafe {
+        guatiao_intake_flatten(
+            &schema,
+            Str::new("auth"),
+            &chosen,
+            alloc.as_raw(),
+            &mut flat,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_OK);
+
+    assert_eq!(
+        TryAsRef::<Map>::try_as_ref(&flat)
+            .and_then(|m| m.get("auth"))
+            .and_then(TryAsRef::<str>::try_as_ref),
+        Some("userpass"),
+        "the tag crosses as text"
+    );
+    assert_eq!(
+        TryAsRef::<Map>::try_as_ref(&flat)
+            .and_then(|m| m.get("auth.password"))
+            .and_then(TryAsRef::<str>::try_as_ref),
+        Some("hunter2"),
+        "and the arm's fields are projected under it"
+    );
+
+    let mut back = Value::absent();
+    // SAFETY: as above; `flat` is a map whose values are all strings.
+    let status = unsafe {
+        guatiao_intake_unflatten(&schema, Str::new("auth"), &flat, alloc.as_raw(), &mut back)
+    };
+    assert_eq!(status, Status::GUATIAO_OK);
+    assert_eq!(
+        TryAsRef::<Map>::try_as_ref(&back)
+            .and_then(|m| m.get("auth"))
+            .and_then(TryAsRef::<str>::try_as_ref),
+        Some("userpass")
+    );
+    assert_eq!(
+        TryAsRef::<Map>::try_as_ref(&back)
+            .and_then(|m| m.get("username"))
+            .and_then(TryAsRef::<str>::try_as_ref),
+        Some("ana")
+    );
+    assert_eq!(
+        TryAsRef::<Map>::try_as_ref(&back)
+            .and_then(|m| m.get("password"))
+            .and_then(TryAsRef::<str>::try_as_ref),
+        Some("hunter2")
+    );
+}
+
+/// A store holding anything but text is refused rather than stringified.
+#[test]
+fn a_flat_store_that_is_not_all_text_is_refused() {
+    let alloc = Alloc::rust();
+    let schema = variant_schema();
+
+    let mut flat = Map::new();
+    flat.set("auth", "userpass").unwrap();
+    // A number, where the projection's contract says text.
+    flat.set("username", 5900).unwrap();
+    let flat: Value = flat.into();
+
+    let mut back = Value::absent();
+    // SAFETY: as above.
+    let status = unsafe {
+        guatiao_intake_unflatten(&schema, Str::new("auth"), &flat, alloc.as_raw(), &mut back)
+    };
+    assert_eq!(
+        status,
+        Status::GUATIAO_ERR_WRONG_KIND,
+        "a flat store holds text by definition, so a number in one is a \
+         mistake worth hearing about at the boundary rather than two layers in"
+    );
+}
+
+/// The keys a field projects onto, for a renderer laying out a form.
+#[test]
+fn the_flat_keys_of_an_option_are_listed() {
+    let alloc = Alloc::rust();
+    let schema = variant_schema();
+
+    let mut keys = Value::absent();
+    // SAFETY: a well-formed schema and writable storage.
+    let status =
+        unsafe { guatiao_intake_flat_keys(&schema, Str::new("auth"), alloc.as_raw(), &mut keys) };
+    assert_eq!(status, Status::GUATIAO_OK);
+
+    let listed: Vec<&str> = TryAsRef::<List>::try_as_ref(&keys)
+        .map(|list| &list[..])
+        .expect("a list")
+        .iter()
+        .filter_map(TryAsRef::<str>::try_as_ref)
+        .collect();
+    assert_eq!(
+        listed,
+        ["auth", "auth.username", "auth.password"],
+        "the field's own key first, then one per arm field, in declaration \
+         order — which is the order a form renders them in"
+    );
+}
+
+/// Null is refused rather than dereferenced, here as everywhere.
+#[test]
+fn the_flat_exports_refuse_null() {
+    let alloc = Alloc::rust();
+    let schema = variant_schema();
+    let mut out = Value::absent();
+
+    // SAFETY: passing null is the case under test.
+    unsafe {
+        assert!(guatiao_intake_resolve(std::ptr::null(), Str::new("k")).is_null());
+        assert_eq!(
+            guatiao_intake_flat_keys(std::ptr::null(), Str::new("auth"), alloc.as_raw(), &mut out),
+            Status::GUATIAO_ERR_NULL
+        );
+        assert_eq!(
+            guatiao_intake_flatten(
+                std::ptr::null(),
+                Str::new("auth"),
+                &schema,
+                alloc.as_raw(),
+                &mut out
+            ),
+            Status::GUATIAO_ERR_NULL
+        );
+        assert_eq!(
+            guatiao_intake_unflatten(
+                std::ptr::null(),
+                Str::new("auth"),
+                &schema,
+                alloc.as_raw(),
+                &mut out
+            ),
+            Status::GUATIAO_ERR_NULL
+        );
+    }
+}
+
+/// **A failed call still wrote the out-parameter.** The slot is written
+/// the absent marker before any check, so a caller reading it after a
+/// failure reads ABSENT rather than whatever its uninitialised local
+/// happened to hold. Moved here with the export it exercises.
+#[test]
+fn a_refused_flat_call_still_writes_its_out_parameter() {
+    let alloc = Alloc::rust();
+    let schema = variant_schema();
+
+    let mut out = Value::from(true);
+    // SAFETY: every pointer addresses what its type says; the key naming
+    // no field is the case under test.
+    let status = unsafe {
+        guatiao_intake_flat_keys(&schema, Str::new("nonesuch"), alloc.as_raw(), &mut out)
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_WRONG_KIND);
+    assert!(
+        out.tag() == Ok(guatiao::Tag::GUATIAO_ABSENT),
+        "a refused call still wrote the slot"
+    );
 }
