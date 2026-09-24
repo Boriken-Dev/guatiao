@@ -90,9 +90,16 @@ jobs:
         run: >-
           cargo miri test -p guatiao --all-features
           --test container_roundtrip --test std_traits --test public_surface
-          --test exports_boundary --test flat_projection --test schema_as_value
+          --test exports_boundary --test schema_as_value
           --test kind_glue_probes
           -- --skip a_tree_of_any_depth
+      - name: The path grammar and the flat projection, in the crate that has them
+        # They moved out of `guatiao` with the rest of the projection; the
+        # walk is the same kind of thing Miri is here for -- it reads and
+        # rebuilds trees a caller supplied.
+        run: >-
+          cargo miri test -p guatiao-intake --all-features
+          --test paths --test flat_projection
       - name: The wire decoder, which reads bytes nobody vouched for
         # The three heavy tests (random inputs, a deep tree, a thousand keys)
         # run natively; under Miri they take minutes and add no new path.

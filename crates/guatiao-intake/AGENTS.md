@@ -15,9 +15,13 @@ hints    := { "widget": text, "placeholder": text,
 
 - Every key is optional except a section's `id`. **An empty map is a
   complete form.**
-- **A path is a flat key**: a field's own key, or `owner.member` for a
-  field an arm of a variant adds — what `guatiao::schema::flat::resolve`
-  and `guatiao_intake_resolve` already take.
+- **A path is a flat key**, and the grammar is the one in `path`: a dot
+  is a member (`connection.tls.ca`), a bracket is a list position or a
+  map key (`agent[0].name`, `env[PATH]`), and which one a bracket means
+  is decided by what it is applied to. `flat::resolve` and
+  `guatiao_intake_resolve` take exactly this. It used to be one dot deep
+  and variant-only, so a form that hinted `agent[0].name` had nothing to
+  resolve it.
 - **Sections are listed in display order.** Which section a field is in
   is the schema's `x-section`; the form only says what a section is called.
   **`x-section`, `x-order` and `x-advanced` are this crate's keys**, in
