@@ -269,13 +269,19 @@ fn resolve_in_a_store_follows_the_selected_arm() {
         "{undecided}"
     );
 
-    // A dotted key whose stem is not tagged at all is unknown, listing
-    // what does exist.
-    let unknown = flat::resolve_in(s, "host.min", selected(&[])).expect_err("host is text");
-    assert!(matches!(
-        unknown,
-        guatiao::schema::ValidationError::UnknownOption { .. }
-    ));
+    // A path that reads through a SCALAR is refused at that scalar. It
+    // used to come back as "unknown option `host.min`", from a resolver
+    // that could only walk one dot; now the walk goes as far as it can
+    // and names where it stopped, which for a deeper path is the only
+    // message a person can act on without bisecting it.
+    let refused = flat::resolve_in(s, "host.min", selected(&[])).expect_err("host is text");
+    match refused {
+        guatiao::schema::ValidationError::BadValue { key, expected } => {
+            assert_eq!(key, "host", "the step that failed");
+            assert!(expected.contains("members"), "{expected}");
+        }
+        other => panic!("expected the bad-value shape: {other}"),
+    }
 
     // And a whole store, through the validator a front end calls.
     use guatiao_intake::validate_texts;
@@ -346,4 +352,208 @@ fn a_field_key_may_hold_a_delimiter_and_is_named_by_quoting_it() {
         path::get(&values, two_steps).is_none(),
         "unquoted, it means `auth` then `username`, which is not there"
     );
+}
+
+// --- a path resolves through everything a value can nest ----------------
+
+/// A schema that nests every way a path can walk: an object inside an
+/// object, a list of objects, an open map, and a variant with an arm
+/// that adds fields.
+fn nested(alloc: Alloc) -> Value {
+    let tls = KindBuilder::map_in(
+        alloc,
+        vec![
+            FieldBuilder::new_in(alloc, "verify", KindBuilder::bool_in(alloc)),
+            FieldBuilder::new_in(alloc, "ca", KindBuilder::string_in(alloc)).sensitive(),
+        ],
+    );
+    let connection = KindBuilder::map_in(
+        alloc,
+        vec![
+            FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc)),
+            FieldBuilder::new_in(alloc, "tls", tls),
+        ],
+    );
+    let agent = KindBuilder::map_in(
+        alloc,
+        vec![
+            FieldBuilder::new_in(alloc, "name", KindBuilder::string_in(alloc)),
+            FieldBuilder::new_in(alloc, "secret", KindBuilder::string_in(alloc)).sensitive(),
+        ],
+    );
+
+    SchemaBuilder::new_in(alloc)
+        .field(FieldBuilder::new_in(alloc, "connection", connection))
+        .field(FieldBuilder::new_in(
+            alloc,
+            "agent",
+            KindBuilder::list_in(alloc, agent),
+        ))
+        .field(FieldBuilder::new_in(
+            alloc,
+            "env",
+            KindBuilder::map_of_in(alloc, KindBuilder::string_in(alloc)),
+        ))
+        // A field whose own name holds a separator: legal since
+        // `check_keys` went, and reachable only by quoting.
+        .field(FieldBuilder::new_in(
+            alloc,
+            "a.b",
+            KindBuilder::int_in(alloc),
+        ))
+        .finish()
+        .expect("a schema this small does not exhaust an allocator")
+}
+
+/// Every step the grammar can take, against the schema above.
+#[test]
+fn a_path_resolves_through_objects_lists_and_open_maps() {
+    let alloc = Alloc::rust();
+    let doc = nested(alloc);
+    let s = SchemaRef::new(&doc).expect("a schema is a map");
+    let at = |key: &str| flat::resolve(s, key);
+
+    // Two declared objects deep.
+    assert_eq!(
+        at("connection.tls.ca").map(|f| f.key()),
+        Some("ca"),
+        "a field two objects down is the field itself"
+    );
+    assert!(at("connection.tls.ca").expect("it resolves").is_sensitive());
+    assert!(matches!(
+        at("connection.tls").expect("it resolves").kind(),
+        guatiao::schema::read::Kind::Map(_)
+    ));
+
+    // Through a list: the position is a step, and every element has the
+    // one schema, so which index cannot matter.
+    assert_eq!(at("agent[1].name").map(|f| f.key()), Some("name"));
+    assert_eq!(at("agent[0].name").map(|f| f.key()), Some("name"));
+    assert!(at("agent[7].secret").expect("it resolves").is_sensitive());
+    assert_eq!(
+        at("agent[0]").map(|f| f.key()),
+        Some(""),
+        "an element has no declared name; the path is the caller's"
+    );
+    assert!(at("agent[first]").is_none(), "a list is indexed, not keyed");
+
+    // Through an open map: the keys are data, so any segment reaches the
+    // one value schema.
+    assert!(matches!(
+        at("env[PATH]").expect("it resolves").kind(),
+        guatiao::schema::read::Kind::Str
+    ));
+    assert!(
+        at("env[0]").is_some(),
+        "a number is a key here, not a position"
+    );
+    assert!(at("env[\"a.b\"]").is_some(), "and so is a quoted one");
+
+    // Stopping: a scalar has no members.
+    assert!(at("connection.tls.ca.x").is_none());
+    assert!(at("connection.nonesuch").is_none());
+    assert!(at("nonesuch.anything").is_none());
+
+    // A declared key that holds a separator means itself, and a walk
+    // reaching a member of that name has to quote it.
+    assert_eq!(
+        at("a.b").map(|f| f.key()),
+        Some("a.b"),
+        "the whole key names a field, so it is that field"
+    );
+}
+
+/// The variant walk still works, and now works at depth.
+#[test]
+fn an_arms_member_resolves_at_any_depth() {
+    let alloc = Alloc::rust();
+    let flat_doc = schema(alloc);
+    let s = SchemaRef::new(&flat_doc).expect("a schema");
+    assert_eq!(
+        flat::resolve(s, "auth.password").map(|f| f.key()),
+        Some("password"),
+        "one level, as it always did"
+    );
+    assert!(
+        flat::resolve(s, "auth.password")
+            .expect("it resolves")
+            .is_sensitive()
+    );
+    assert!(flat::resolve(s, "auth.nonesuch").is_none());
+
+    // And the same field reached through a list of objects.
+    let session = KindBuilder::map_in(
+        alloc,
+        vec![FieldBuilder::new_in(
+            alloc,
+            "auth",
+            KindBuilder::variant_in(
+                alloc,
+                "auth",
+                vec![
+                    ArmBuilder::new_in(alloc, "sso", "Single sign-on"),
+                    ArmBuilder::new_in(alloc, "userpass", "Username and password").field(
+                        FieldBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
+                            .sensitive(),
+                    ),
+                ],
+            ),
+        )],
+    );
+    let doc = SchemaBuilder::new_in(alloc)
+        .field(FieldBuilder::new_in(
+            alloc,
+            "sessions",
+            KindBuilder::list_in(alloc, session),
+        ))
+        .finish()
+        .expect("it builds");
+    let s = SchemaRef::new(&doc).expect("a schema");
+    assert!(
+        flat::resolve(s, "sessions[2].auth.password")
+            .expect("a list, an object, a variant and its arm's field")
+            .is_sensitive(),
+        "is_sensitive follows the whole path, which is what a store asks"
+    );
+    assert!(flat::is_sensitive(s, "sessions[2].auth.password"));
+    assert!(!flat::is_sensitive(s, "sessions[2].auth.nonesuch"));
+}
+
+/// `resolve_in` refuses at the segment that failed, and names it.
+#[test]
+fn a_store_refusal_names_the_prefix_that_failed() {
+    let alloc = Alloc::rust();
+    let doc = nested(alloc);
+    let s = SchemaRef::new(&doc).expect("a schema");
+    let nothing = |_: &str| None;
+
+    assert_eq!(
+        flat::resolve_in(s, "connection.tls.verify", nothing)
+            .expect("it resolves")
+            .key(),
+        "verify"
+    );
+
+    let refused = flat::resolve_in(s, "connection.tls.nonesuch", nothing)
+        .expect_err("tls declares no such member");
+    match refused {
+        guatiao::schema::ValidationError::UnknownOption { key, known } => {
+            assert_eq!(key, "connection.tls.nonesuch");
+            assert_eq!(known, ["verify", "ca"], "the members AT that step");
+        }
+        other => panic!("expected the unknown-key shape: {other}"),
+    }
+
+    let refused =
+        flat::resolve_in(s, "connection.host.deeper", nothing).expect_err("a text has no members");
+    match refused {
+        guatiao::schema::ValidationError::BadValue { key, expected } => {
+            assert_eq!(
+                key, "connection.host",
+                "the prefix that failed, not the whole"
+            );
+            assert!(expected.contains("members"), "{expected}");
+        }
+        other => panic!("expected the bad-value shape: {other}"),
+    }
 }
