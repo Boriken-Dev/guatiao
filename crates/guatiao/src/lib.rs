@@ -140,6 +140,11 @@ pub mod exports;
 // the host owns. A `//` comment, never a `///`.
 pub mod library;
 
+// Naming one place inside a value, as text: `agent[1].name[home].host`.
+// The grammar a flat store, a command line and a form's hints all share.
+// A `//` comment, never a `///`.
+pub mod path;
+
 // What a value is and what a valid one looks like: the fields it
 // accepts, what they default to, and what makes a value valid.
 //
