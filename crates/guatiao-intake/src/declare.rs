@@ -69,6 +69,23 @@ use crate::vocab;
 ///     .finish()
 ///     .expect("a schema this small does not exhaust an allocator");
 /// ```
+///
+/// # It is the FIELD that has a section, not the kind
+///
+/// Implemented for `SchemaBuilder`, `FieldBuilder` and `ArmBuilder`
+/// — never for `KindBuilder`, which says what a value **is** and has no
+/// opinion about where it is drawn. In
+/// `FieldBuilder::new("host", KindBuilder::string()).section("net")` the
+/// `.section` hangs off the `FieldBuilder::new(..)` call, because that is
+/// what returns a `FieldBuilder`; written on the kind it would not
+/// compile.
+///
+/// The confusion is worth a paragraph because **in the document the two
+/// really do share one map**: a field's subschema IS its kind's map, so
+/// `x-section` lands beside `"type": "string"` rather than under
+/// anything. JSON Schema has no `kind` wrapper to put it under, and
+/// `FieldBuilder::new` takes the kind's map over as its own. So they are
+/// two builders in Rust and one object on the wire.
 pub trait FormBuilder: Extras {
     /// Which section this belongs to, by whatever id the thing drawing
     /// the form groups by.
@@ -134,8 +151,16 @@ impl FormFieldBuilder for FieldBuilder {}
 /// use guatiao_intake::{FormBuilder, FormField, FormFieldBuilder};
 ///
 /// let schema = SchemaBuilder::new()
-///     .field(FieldBuilder::new("host", KindBuilder::string()).section("net"))
-///     .field(FieldBuilder::new("retries", KindBuilder::int()).order(2).advanced())
+///     // The hint hangs off the FIELD builder, never off the kind.
+///     .field(
+///         FieldBuilder::new("host", KindBuilder::string())
+///             .section("net"),
+///     )
+///     .field(
+///         FieldBuilder::new("retries", KindBuilder::int())
+///             .order(2)
+///             .advanced(),
+///     )
 ///     .finish()?;
 ///
 /// let s = SchemaRef::new(&schema).expect("a schema is a map");

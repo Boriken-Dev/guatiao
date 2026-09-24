@@ -39,6 +39,8 @@ struct Connection {
     #[schema(section = "net", order = 1)]
     #[form(widget = "number")]
     port: i64,
+    #[schema(advanced)]
+    retries: i64,
     verify: bool,
     #[form(
         placeholder = "/etc/ssl/ca.pem",
@@ -107,7 +109,7 @@ fn a_derived_form_fits_its_derived_schema() {
     assert_eq!(
         titled,
         [
-            (None, vec!["verify", "ca-file"]),
+            (None, vec!["retries", "verify", "ca-file"]),
             (Some("Network"), vec!["port", "host"]),
             (Some("Login"), vec!["auth"]),
         ]
@@ -140,6 +142,12 @@ fn the_schema_derive_writes_the_keys_this_crate_names() {
     let port = s.find("port").expect("port is declared");
     assert_eq!(port.section(), "net");
     assert_eq!(port.order(), 1);
+
+    // `#[schema(advanced)]` writes this crate's key, so this crate is
+    // where it is read back. `guatiao` never names it.
+    let retries = s.find("retries").expect("retries is declared");
+    assert!(retries.is_advanced());
+    assert_eq!(retries.section(), "", "nothing said is the default section");
 
     // Read the raw keys too: the trait is a convenience over them, and a
     // renamed constant that both sides moved together would pass above.

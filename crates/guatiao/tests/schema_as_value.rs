@@ -100,26 +100,26 @@ fn a_declared_schema_reads_back() {
             .field(
                 FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
                     .title("Host")
-                    .option("x-section", Text::from("net"))
+                    .option("x-vendor-note", Text::from("net"))
                     .required()
-                    .option("x-order", Number::from(1)),
+                    .option("x-vendor-rank", Number::from(1)),
             )
             .field(
                 FieldBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
                     .title("Port")
-                    .option("x-section", Text::from("net"))
+                    .option("x-vendor-note", Text::from("net"))
                     .default(
                         Number::new_in(alloc, &5900.to_string())
                             .map(Value::from)
                             .unwrap(),
                     )
-                    .option("x-order", Number::from(2)),
+                    .option("x-vendor-rank", Number::from(2)),
             )
             .field(
                 FieldBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
                     .title("Password")
                     .sensitive()
-                    .option("x-advanced", true),
+                    .option("x-vendor-flag", true),
             )
             .finish()
             .expect("a schema this small does not exhaust an allocator");
@@ -136,7 +136,7 @@ fn a_declared_schema_reads_back() {
         let host = s.find("host").expect("host is declared");
         assert_eq!(host.title(), "Host");
         assert_eq!(
-            str_or(host.extra("x-section"), ""),
+            str_or(host.extra("x-vendor-note"), ""),
             "net",
             "a key this crate does not know is carried, never interpreted"
         );
@@ -163,7 +163,7 @@ fn a_declared_schema_reads_back() {
         let password = s.find("password").expect("password is declared");
         assert!(password.is_sensitive());
         assert!(guatiao::value::read::bool_or(
-            password.extra("x-advanced"),
+            password.extra("x-vendor-flag"),
             false
         ));
 

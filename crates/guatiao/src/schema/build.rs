@@ -23,11 +23,12 @@
 //!
 //! What a value **is** — its kind, its bounds, whether it is required, and
 //! JSON Schema's own `title` and `description` — is substance, and lives
-//! here. How it is **shown** — which section it sits in, where it sits
-//! among its siblings, whether it hides behind a disclosure — is
-//! presentation, and lives in `guatiao-intake`, which writes it through
-//! [`Extras`]. That crate depends on this one and not the other way
-//! around, so nothing here has to know that forms exist.
+//! here. How it is **shown** is presentation: it is written by whatever
+//! crate holds that opinion, through [`Extras`], and **this crate does
+//! not name a single one of those keys**. Not even to say where they
+//! live — a name written down here is a name that goes stale when the
+//! crate that owns it renames one, and it teaches a reader that the
+//! schema has a stake in the answer. It does not.
 //!
 //! The one presentation-shaped thing that stays is
 //! [`FieldBuilder::sensitive`], and it stays because it is not really
@@ -258,10 +259,10 @@ fn seal(
 /// first over and takes the second, so an extension living in another
 /// crate collects its errors exactly as the builders here do.
 ///
-/// `guatiao-intake`'s `FormBuilder` is the extension that exists: which
-/// section a field sits in, where among its siblings, whether it hides
-/// behind a disclosure. None of those are this crate's business, and this
-/// is what lets them be written without making them so.
+/// An extension writing presentation hints is what this exists for, and
+/// what those hints ARE is deliberately not stated here: the vocabulary
+/// belongs to whoever writes it, and this crate's part is the door, the
+/// allocator and the collected error.
 pub trait Extras: Sized {
     /// Sets `key`, keeping the first error rather than the last.
     #[must_use]
@@ -346,9 +347,9 @@ impl SchemaBuilder {
 
     /// JSON Schema's `title`: a short line naming what this describes.
     ///
-    /// A schema keyword, not a form one — which is why it is here and not
-    /// in `guatiao-intake`. A consumer with no screen still reads it, in an
-    /// error message or a `--help` line.
+    /// A schema keyword, not a presentation one — which is why it is
+    /// here. A consumer with no screen still reads it: an error message
+    /// and a `--help` line both want the name of the thing.
     pub fn title(mut self, title: &str) -> SchemaBuilder {
         let alloc = self.alloc;
         put(
@@ -491,13 +492,13 @@ impl FieldBuilder {
 
     /// A secret: never print this value.
     ///
-    /// **The one hint that is not about drawing**, which is why it stays
-    /// in this crate while the rest of the presentation vocabulary lives
-    /// in `guatiao-intake`. A form masks it, but so does a log, a debug
-    /// dump, a crash report and anything else that renders a value into
-    /// text — none of which have a screen. What each of them actually
-    /// does about it stays its own decision; this says only that somebody
-    /// declared the field one.
+    /// **The one hint here that is not about drawing**, which is what
+    /// earns it a place: a form masks it, but so do a log, a debug dump
+    /// and a crash report, none of which have a screen. What each of them
+    /// actually does about it stays its own decision; this says only that
+    /// somebody declared the field one. A hint only a renderer acts on
+    /// goes through [`Extras`] instead, under whatever name the crate
+    /// that reads it chose.
     ///
     /// Read back with
     /// [`FieldRef::is_sensitive`](super::read::FieldRef::is_sensitive).
