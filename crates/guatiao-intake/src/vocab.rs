@@ -127,6 +127,21 @@ pub const FIELD: &str = "field";
 /// because that is the one thing about a variant a single value can say.
 pub const EQUALS: &str = "equals";
 
+/// A form of this field's own, for a field whose kind is an object.
+///
+/// A complete form document, exactly the shape the top level is, and its
+/// paths are **relative to this field**: a form under `connection` names
+/// `tls.ca`, not `connection.tls.ca`. A renderer that knows the key
+/// draws the member in its own window or group; one that does not knows
+/// it as an annotation and draws the members the way it draws any
+/// others, which is why this is a hint rather than a second kind of
+/// document.
+///
+/// **A condition inside a sub-form may only name that form's own
+/// fields.** Reaching out of it would make the window's contents depend
+/// on something the window does not show, and `check` refuses it.
+pub const FORM: &str = "form";
+
 /// Widget names worth agreeing on. **An open set**: a renderer that does
 /// not know a name falls back to its default for the field's kind.
 pub mod widget {
@@ -148,6 +163,16 @@ pub mod widget {
     pub const SELECT: &str = "select";
     /// One choice, every alternative visible at once.
     pub const RADIO: &str = "radio";
+    /// An object's own form, in a window of its own: a button that opens
+    /// it, and the members inside.
+    pub const DIALOG: &str = "dialog";
+    /// An object's own form, inline: the members drawn where the field
+    /// is, grouped together.
+    ///
+    /// What a renderer does with no widget at all on an object, so
+    /// saying it changes nothing -- it is here for a form that wants to
+    /// say it deliberately, beside one that says [`DIALOG`].
+    pub const GROUP: &str = "group";
 }
 
 /// The keys this vocabulary gives a meaning at the top of a form.
@@ -155,7 +180,7 @@ pub(crate) const FORM_KEYS: &[&str] = &[SECTIONS, FIELDS];
 /// The keys it gives a meaning inside a section.
 pub(crate) const SECTION_KEYS: &[&str] = &[ID, TITLE, DESCRIPTION];
 /// The keys it gives a meaning inside a field's hints.
-pub(crate) const HINT_KEYS: &[&str] = &[WIDGET, PLACEHOLDER, VISIBLE_WHEN];
+pub(crate) const HINT_KEYS: &[&str] = &[WIDGET, PLACEHOLDER, VISIBLE_WHEN, FORM];
 
 #[cfg(test)]
 mod tests {

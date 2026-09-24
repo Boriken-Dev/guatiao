@@ -122,6 +122,8 @@ pub fn guatiao_intake::path::parse(&str) -> core::result::Result<guatiao_intake:
 pub mod guatiao_intake::vocab
 pub mod guatiao_intake::vocab::widget
 pub const guatiao_intake::vocab::widget::CHECKBOX: &str
+pub const guatiao_intake::vocab::widget::DIALOG: &str
+pub const guatiao_intake::vocab::widget::GROUP: &str
 pub const guatiao_intake::vocab::widget::NUMBER: &str
 pub const guatiao_intake::vocab::widget::PASSWORD: &str
 pub const guatiao_intake::vocab::widget::RADIO: &str
@@ -135,6 +137,7 @@ pub const guatiao_intake::vocab::DESCRIPTION: &str
 pub const guatiao_intake::vocab::EQUALS: &str
 pub const guatiao_intake::vocab::FIELD: &str
 pub const guatiao_intake::vocab::FIELDS: &str
+pub const guatiao_intake::vocab::FORM: &str
 pub const guatiao_intake::vocab::ID: &str
 pub const guatiao_intake::vocab::PLACEHOLDER: &str
 pub const guatiao_intake::vocab::SECTIONS: &str
@@ -215,6 +218,8 @@ impl<'a> core::fmt::Debug for guatiao_intake::Group<'a>
 pub fn guatiao_intake::Group<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao_intake::Hints
 impl guatiao_intake::Hints
+pub fn guatiao_intake::Hints::form(self, guatiao_intake::Form) -> guatiao_intake::Hints
+pub fn guatiao_intake::Hints::form_value(self, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao_intake::Hints
 pub fn guatiao_intake::Hints::new() -> guatiao_intake::Hints
 pub fn guatiao_intake::Hints::new_in(guatiao::value::alloc::Alloc) -> guatiao_intake::Hints
 pub fn guatiao_intake::Hints::option(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao_intake::Hints
@@ -229,6 +234,7 @@ pub struct guatiao_intake::HintsRef<'a>(_)
 impl<'a> guatiao_intake::HintsRef<'a>
 pub fn guatiao_intake::HintsRef<'a>::as_value(&self) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao_intake::HintsRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
+pub fn guatiao_intake::HintsRef<'a>::form(&self) -> core::option::Option<guatiao_intake::FormRef<'a>>
 pub fn guatiao_intake::HintsRef<'a>::is_empty(&self) -> bool
 pub fn guatiao_intake::HintsRef<'a>::placeholder(&self) -> &'a str
 pub fn guatiao_intake::HintsRef<'a>::visible_when(&self) -> core::option::Option<guatiao_intake::Condition<'a>>

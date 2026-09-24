@@ -283,6 +283,33 @@ impl Hints {
         self
     }
 
+    /// A form of this field's own, for a field whose kind is an object.
+    ///
+    /// Its paths are **relative to this field**: a form given to
+    /// `connection` names `tls.ca`, not `connection.tls.ca`. Pair it
+    /// with [`widget`](Hints::widget) of
+    /// [`DIALOG`](vocab::widget::DIALOG) for a window of its own, or
+    /// leave the widget off and a renderer groups the members where the
+    /// field is.
+    ///
+    /// The form is finished here rather than by the caller, so its first
+    /// error travels with this one rather than being unwrapped at the
+    /// call site.
+    pub fn form(mut self, form: Form) -> Hints {
+        let built = form.finish();
+        put(&mut self.state, vocab::FORM, built);
+        self
+    }
+
+    /// The same, for a form already finished.
+    ///
+    /// **For generated code**, which has a `Result` and nowhere to put a
+    /// failure -- `#[derive(Form)]` composes a member's form this way.
+    pub fn form_value(mut self, form: Result<Value, ValueError>) -> Hints {
+        put(&mut self.state, vocab::FORM, form);
+        self
+    }
+
     /// Sets any key: an annotation on this field's hints.
     pub fn option(mut self, key: &str, value: impl Into<Value>) -> Hints {
         put(&mut self.state, key, Ok(value.into()));
