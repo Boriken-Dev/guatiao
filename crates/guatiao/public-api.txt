@@ -1689,6 +1689,81 @@ pub fn guatiao::library::scan_dir_rules(&mut guatiao::library::registry::Registr
 pub fn guatiao::library::scan_dir_with(&mut guatiao::library::registry::Registry, &std::path::Path, guatiao::library::scan::Order, impl core::ops::function::FnMut(&guatiao::library::scan::Declared) -> core::result::Result<(), alloc::string::String>) -> core::result::Result<guatiao::library::scan::LoadReport, core::io::error::Error>
 pub fn guatiao::library::scan_path(&mut guatiao::library::registry::Registry, &guatiao::library::scan::SearchPath, guatiao::library::scan::Order, &guatiao::library::scan::ScanRules) -> guatiao::library::scan::LoadReport
 pub type guatiao::library::EntryFn = fn(*const guatiao::library::desc::HostInfo<'static>) -> *const guatiao::library::desc::LibraryInfo<'static>
+pub mod guatiao::path
+#[non_exhaustive] pub enum guatiao::path::PathError
+pub guatiao::path::PathError::BadEscape
+pub guatiao::path::PathError::BadEscape::at: usize
+pub guatiao::path::PathError::Empty
+pub guatiao::path::PathError::EmptyField
+pub guatiao::path::PathError::EmptyField::at: usize
+pub guatiao::path::PathError::EmptyIndex
+pub guatiao::path::PathError::EmptyIndex::at: usize
+pub guatiao::path::PathError::TrailingQuote
+pub guatiao::path::PathError::TrailingQuote::at: usize
+pub guatiao::path::PathError::UnclosedIndex
+pub guatiao::path::PathError::UnclosedIndex::at: usize
+pub guatiao::path::PathError::UnclosedQuote
+pub guatiao::path::PathError::UnclosedQuote::at: usize
+pub guatiao::path::PathError::UnexpectedClose
+pub guatiao::path::PathError::UnexpectedClose::at: usize
+impl guatiao::path::PathError
+pub fn guatiao::path::PathError::offset(&self) -> usize
+impl core::clone::Clone for guatiao::path::PathError
+pub fn guatiao::path::PathError::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::path::PathError
+impl core::cmp::PartialEq for guatiao::path::PathError
+pub fn guatiao::path::PathError::eq(&self, &Self) -> bool
+impl core::error::Error for guatiao::path::PathError
+impl core::fmt::Debug for guatiao::path::PathError
+pub fn guatiao::path::PathError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::path::PathError
+pub fn guatiao::path::PathError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::path::PathError
+#[non_exhaustive] pub enum guatiao::path::Segment<'a>
+pub guatiao::path::Segment::Field(&'a str)
+pub guatiao::path::Segment::Index(usize)
+pub guatiao::path::Segment::Key(alloc::borrow::Cow<'a, str>)
+impl core::fmt::Display for guatiao::path::Segment<'_>
+pub fn guatiao::path::Segment<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::clone::Clone for guatiao::path::Segment<'a>
+pub fn guatiao::path::Segment<'a>::clone(&self) -> Self
+impl<'a> core::cmp::Eq for guatiao::path::Segment<'a>
+impl<'a> core::cmp::PartialEq for guatiao::path::Segment<'a>
+pub fn guatiao::path::Segment<'a>::eq(&self, &Self) -> bool
+impl<'a> core::fmt::Debug for guatiao::path::Segment<'a>
+pub fn guatiao::path::Segment<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::StructuralPartialEq for guatiao::path::Segment<'a>
+pub struct guatiao::path::Path<'a>
+impl<'a> guatiao::path::Path<'a>
+pub fn guatiao::path::Path<'a>::as_str(&self) -> &'a str
+pub fn guatiao::path::Path<'a>::segments(&self) -> guatiao::path::Segments<'a>
+pub fn guatiao::path::Path<'a>::split_first(&self) -> core::option::Option<(guatiao::path::Segment<'a>, core::option::Option<guatiao::path::Path<'a>>)>
+impl core::fmt::Display for guatiao::path::Path<'_>
+pub fn guatiao::path::Path<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::clone::Clone for guatiao::path::Path<'a>
+pub fn guatiao::path::Path<'a>::clone(&self) -> Self
+impl<'a> core::cmp::Eq for guatiao::path::Path<'a>
+impl<'a> core::cmp::PartialEq for guatiao::path::Path<'a>
+pub fn guatiao::path::Path<'a>::eq(&self, &Self) -> bool
+impl<'a> core::fmt::Debug for guatiao::path::Path<'a>
+pub fn guatiao::path::Path<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::iter::traits::collect::IntoIterator for guatiao::path::Path<'a>
+pub type guatiao::path::Path<'a>::IntoIter = guatiao::path::Segments<'a>
+pub type guatiao::path::Path<'a>::Item = guatiao::path::Segment<'a>
+pub fn guatiao::path::Path<'a>::into_iter(self) -> guatiao::path::Segments<'a>
+impl<'a> core::marker::Copy for guatiao::path::Path<'a>
+impl<'a> core::marker::StructuralPartialEq for guatiao::path::Path<'a>
+pub struct guatiao::path::Segments<'a>
+impl<'a> core::clone::Clone for guatiao::path::Segments<'a>
+pub fn guatiao::path::Segments<'a>::clone(&self) -> Self
+impl<'a> core::fmt::Debug for guatiao::path::Segments<'a>
+pub fn guatiao::path::Segments<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::iter::traits::iterator::Iterator for guatiao::path::Segments<'a>
+pub type guatiao::path::Segments<'a>::Item = guatiao::path::Segment<'a>
+pub fn guatiao::path::Segments<'a>::next(&mut self) -> core::option::Option<guatiao::path::Segment<'a>>
+pub fn guatiao::path::get<'v>(&'v guatiao::value::value::Value, guatiao::path::Path<'_>) -> core::option::Option<&'v guatiao::value::value::Value>
+pub fn guatiao::path::get_mut<'v>(&'v mut guatiao::value::value::Value, guatiao::path::Path<'_>) -> core::option::Option<&'v mut guatiao::value::value::Value>
+pub fn guatiao::path::parse(&str) -> core::result::Result<guatiao::path::Path<'_>, guatiao::path::PathError>
 pub mod guatiao::schema
 pub mod guatiao::schema::build
 pub struct guatiao::schema::build::ArmBuilder
