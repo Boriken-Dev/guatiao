@@ -246,8 +246,8 @@ pub fn derive_provider(input: TokenStream) -> TokenStream {
     provider::expand(input.into()).into()
 }
 
-/// Derives `guatiao_form::Screen`: the type's default screen, as a form
-/// value beside its schema. Reached as `guatiao_form::Form` with that
+/// Derives `guatiao_intake::Screen`: the type's default screen, as a form
+/// value beside its schema. Reached as `guatiao_intake::Form` with that
 /// crate's `derive` feature.
 ///
 /// On the type, `#[form(section(id = "..", label = "..", help = ".."))]`,

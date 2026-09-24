@@ -47,7 +47,7 @@ void main() {
     ]) {
       expect(native.serdeLib().provides(name), isTrue, reason: name);
     }
-    expect(native.formLib().provides('guatiao_form_check'), isTrue);
+    expect(native.formLib().provides('guatiao_intake_check'), isTrue);
   });
 
   test('a missing symbol names the library and the feature', () {
@@ -98,7 +98,7 @@ void main() {
       useLibrary(
         DynamicLibrary.open(path),
         path: path,
-        forSurfaces: const ['guatiao_form'],
+        forSurfaces: const ['guatiao_intake'],
       );
       expect(native.formLib().path, path);
     });

@@ -155,10 +155,10 @@ fn a_doc_comment_becomes_the_help_text() {
 
 /// The presentation keys are read here as **annotations**, by name,
 /// because that is what they are to this crate: `x-section`, `x-order`
-/// and `x-advanced` are `guatiao-form`'s vocabulary, and nothing in
+/// and `x-advanced` are `guatiao-intake`'s vocabulary, and nothing in
 /// `guatiao` interprets them. The derive writes them all the same, so a
 /// consumer declares once and the form crate reads what it named.
-/// `guatiao-form`'s own `form_derive.rs` reads the same fields through
+/// `guatiao-intake`'s own `form_derive.rs` reads the same fields through
 /// `FormField`, which is the other half of this.
 #[test]
 fn the_presentation_attributes_reach_the_option() {

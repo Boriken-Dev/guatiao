@@ -18,7 +18,7 @@ built by `dart doc`.
 | --- | --- |
 | `package:guatiao/guatiao.dart` | `Value`, `Ref`, `MapRef`, `ListRef`, `absent`, `Registry`, `Instance`, `kindTable`, the error classes |
 | `package:guatiao/serde.dart` | `loads` / `dumps` for JSON, TOML and YAML |
-| `package:guatiao/form.dart` | `check`, `layout`, `isVisible` |
+| `package:guatiao/intake.dart` | `check`, `layout`, `isVisible` |
 
 ## Values
 
@@ -63,7 +63,7 @@ size and the floor hash before casting.
 
 ```dart
 import 'package:guatiao/serde.dart' as serde;
-import 'package:guatiao/form.dart' as form;
+import 'package:guatiao/intake.dart' as form;
 
 final value = serde.loads('{"port": 5900}');
 final text = serde.dumps(value, format: Format.yaml);

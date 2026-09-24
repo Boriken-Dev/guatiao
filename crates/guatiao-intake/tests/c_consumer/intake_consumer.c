@@ -18,7 +18,7 @@
 
 #include <stdio.h>
 
-#include "guatiao_form.h"
+#include "guatiao_intake.h"
 
 static int failures = 0;
 
@@ -126,10 +126,10 @@ int main(void) {
   /* ---- check ----------------------------------------------------------- */
 
   guatiao_value detail = {0};
-  st = guatiao_form_check(&SCHEMA, &FORM, &alloc, &detail);
+  st = guatiao_intake_check(&SCHEMA, &FORM, &alloc, &detail);
   CHECK(st == GUATIAO_OK, "a form that fits its schema checks, saw status %d", (int)st);
 
-  st = guatiao_form_check(&SCHEMA, &TYPO_FORM, &alloc, &detail);
+  st = guatiao_intake_check(&SCHEMA, &TYPO_FORM, &alloc, &detail);
   CHECK(st == GUATIAO_ERR_BAD_VALUE, "a misspelled field is refused, saw %d", (int)st);
   if (st == GUATIAO_ERR_BAD_VALUE) {
     CHECK(text_is(guatiao_map_find(&detail, s("kind")), "unknown_field"),
@@ -141,13 +141,13 @@ int main(void) {
     guatiao_value_free(&detail);
   }
 
-  st = guatiao_form_check(NULL, &FORM, &alloc, NULL);
+  st = guatiao_intake_check(NULL, &FORM, &alloc, NULL);
   CHECK(st == GUATIAO_ERR_NULL, "a null schema is refused rather than read");
 
   /* ---- layout ------------------------------------------------------------ */
 
   guatiao_value groups = {0};
-  st = guatiao_form_layout(&SCHEMA, &FORM, &alloc, &groups);
+  st = guatiao_intake_layout(&SCHEMA, &FORM, &alloc, &groups);
   CHECK(st == GUATIAO_OK, "layout, saw status %d", (int)st);
   if (st == GUATIAO_OK) {
     guatiao_values g = guatiao_list_items(&groups);
@@ -175,18 +175,18 @@ int main(void) {
   /* ---- visibility --------------------------------------------------------- */
 
   bool shown = true;
-  st = guatiao_form_is_visible(&SCHEMA, &FORM, s("ca"), &ENTERED_OFF, &shown);
+  st = guatiao_intake_is_visible(&SCHEMA, &FORM, s("ca"), &ENTERED_OFF, &shown);
   CHECK(st == GUATIAO_OK && !shown, "ca is hidden while verify is false");
 
   shown = false;
-  st = guatiao_form_is_visible(&SCHEMA, &FORM, s("ca"), &ENTERED_ON, &shown);
+  st = guatiao_intake_is_visible(&SCHEMA, &FORM, s("ca"), &ENTERED_ON, &shown);
   CHECK(st == GUATIAO_OK && shown, "ca shows once verify is true");
 
   shown = false;
-  st = guatiao_form_is_visible(&SCHEMA, &FORM, s("host"), &ENTERED_OFF, &shown);
+  st = guatiao_intake_is_visible(&SCHEMA, &FORM, s("host"), &ENTERED_OFF, &shown);
   CHECK(st == GUATIAO_OK && shown, "a field with no condition shows");
 
-  st = guatiao_form_is_visible(&SCHEMA, &FORM, s("ca"), &ENTERED_ON, NULL);
+  st = guatiao_intake_is_visible(&SCHEMA, &FORM, s("ca"), &ENTERED_ON, NULL);
   CHECK(st == GUATIAO_ERR_NULL, "a null answer slot is refused rather than written");
 
   if (failures) {

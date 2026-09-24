@@ -1,7 +1,7 @@
 # guatiao-derive
 
 The proc-macro half of `guatiao`'s `derive` feature (and, behind `form`,
-of `guatiao-form`'s: `#[derive(Form)]`): `#[derive(ToValue)]`,
+of `guatiao-intake`'s: `#[derive(Form)]`): `#[derive(ToValue)]`,
 `#[derive(FromValue)]` and `#[derive(Schema)]`, for a struct with named
 fields, an enum of unit variants, or an enum that names its tag.
 

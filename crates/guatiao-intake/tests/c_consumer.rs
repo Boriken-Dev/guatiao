@@ -62,16 +62,16 @@ fn shared_library(stem: &str) -> Option<(PathBuf, PathBuf)> {
 #[cfg(feature = "c-header")]
 fn the_committed_header_is_what_this_build_rendered() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let committed = std::fs::read_to_string(manifest.join("include/guatiao_form.h"))
+    let committed = std::fs::read_to_string(manifest.join("include/guatiao_intake.h"))
         .expect("the header is committed");
-    let fresh = std::fs::read_to_string(env!("GUATIAO_FORM_GENERATED_HEADER"))
+    let fresh = std::fs::read_to_string(env!("GUATIAO_INTAKE_GENERATED_HEADER"))
         .expect("build.rs rendered one");
 
     assert_eq!(
         first_difference(&committed, &fresh),
         None,
         "the committed header is not what this build renders. Regenerate it:\n  \
-         GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-form --features c-header"
+         GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-intake --features c-header"
     );
 }
 
@@ -85,7 +85,7 @@ fn the_committed_header_is_what_this_build_rendered() {
 #[test]
 fn every_schema_key_this_crate_adds_reaches_the_header_as_a_macro() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let header = std::fs::read_to_string(manifest.join("include/guatiao_form.h"))
+    let header = std::fs::read_to_string(manifest.join("include/guatiao_intake.h"))
         .expect("the header is committed");
     let vocab = std::fs::read_to_string(manifest.join("src/vocab.rs"))
         .expect("the vocabulary is committed");
@@ -111,7 +111,7 @@ fn every_schema_key_this_crate_adds_reaches_the_header_as_a_macro() {
 
     let missing: Vec<String> = declared
         .iter()
-        .map(|(name, value)| format!("#define GUATIAO_FORM_KEY_{name} {value}"))
+        .map(|(name, value)| format!("#define GUATIAO_INTAKE_KEY_{name} {value}"))
         .filter(|line| !header.lines().any(|l| l.trim() == line))
         .collect();
 
@@ -144,7 +144,7 @@ fn first_difference(a: &str, b: &str) -> Option<String> {
 #[test]
 fn a_c_program_checks_lays_out_and_evaluates_a_form() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let source = manifest.join("tests/c_consumer/form_consumer.c");
+    let source = manifest.join("tests/c_consumer/intake_consumer.c");
     assert!(
         source.exists(),
         "the C source is missing: {}",
@@ -160,7 +160,7 @@ fn a_c_program_checks_lays_out_and_evaluates_a_form() {
     // Two libraries: the value model's and this crate's. The header
     // includes `guatiao.h`, so both include directories are needed too.
     let (Some((dir, ours)), Some((_, core))) =
-        (shared_library("guatiao_form"), shared_library("guatiao"))
+        (shared_library("guatiao_intake"), shared_library("guatiao"))
     else {
         println!(
             "skipped: the shared libraries are not beside this test binary. \
@@ -171,9 +171,9 @@ fn a_c_program_checks_lays_out_and_evaluates_a_form() {
     };
 
     let out = dir.join(if cfg!(windows) {
-        "guatiao_form_consumer.exe"
+        "guatiao_intake_consumer.exe"
     } else {
-        "guatiao_form_consumer"
+        "guatiao_intake_consumer"
     });
 
     let mut compile = Command::new(&cc);
@@ -193,7 +193,7 @@ fn a_c_program_checks_lays_out_and_evaluates_a_form() {
     } else {
         compile
             .arg(format!("-L{}", dir.display()))
-            .arg("-lguatiao_form")
+            .arg("-lguatiao_intake")
             .arg("-lguatiao")
             .arg("-Wl,-rpath,$ORIGIN");
     }

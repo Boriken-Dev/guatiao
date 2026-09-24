@@ -26,11 +26,11 @@ headers:
   entry-points:
     - '../../crates/guatiao/include/guatiao.h'
     - '../../crates/guatiao-serde/include/guatiao_serde.h'
-    - '../../crates/guatiao-form/include/guatiao_form.h'
+    - '../../crates/guatiao-intake/include/guatiao_intake.h'
   include-directives:
     - '**guatiao.h'
     - '**guatiao_serde.h'
-    - '**guatiao_form.h'
+    - '**guatiao_intake.h'
 
 compiler-opts:
   - '-I../../crates/guatiao/include'

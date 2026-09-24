@@ -1,4 +1,4 @@
-# guatiao-form — shipped API header
+# guatiao-intake — shipped API header
 
 How a guatiao schema is shown: sections, widget hints and conditional
 visibility, as a **value beside the schema**. Depends on `guatiao` and
@@ -26,8 +26,8 @@ hints    := { "widget": text, "placeholder": text,
   annotations like any key it does not know. They sit on the **schema**,
   beside the field, not in the form document. `FormBuilder` and
   `FormFieldBuilder` write them, `FormField` reads them back off a
-  `FieldRef`, and C gets them from `guatiao_form.h` as
-  `GUATIAO_FORM_KEY_X_SECTION` and its two siblings.
+  `FieldRef`, and C gets them from `guatiao_intake.h` as
+  `GUATIAO_INTAKE_KEY_X_SECTION` and its two siblings.
 - **`x-sensitive` is not ours.** It stays on `guatiao`'s
   `FieldBuilder::sensitive`, because "never print this value" is obeyed
   by a log and a crash dump as much as by a form.
@@ -154,20 +154,20 @@ gives it, rather than `true` for a field that does not exist.
   error. `values` is shaped like the schema's values: a variant's value is
   a map carrying its tag.
 
-## From C (`include/guatiao_form.h`)
+## From C (`include/guatiao_intake.h`)
 
 Where the header is, for a consumer's own build script:
-`DEP_GUATIAO_FORM_INCLUDE` (this crate says `links = "guatiao-form"` and
+`DEP_GUATIAO_INTAKE_INCLUDE` (this crate says `links = "guatiao-intake"` and
 its `build.rs` publishes `include=`), the arrangement `guatiao` has with
 `DEP_GUATIAO_INCLUDE`. Copy the file beside your own header from there
 rather than hard-coding a path into a checkout.
 
 ```c
-guatiao_status guatiao_form_check(const guatiao_value *schema, const guatiao_value *form,
+guatiao_status guatiao_intake_check(const guatiao_value *schema, const guatiao_value *form,
                                   const guatiao_alloc *alloc, guatiao_value *out_error);
-guatiao_status guatiao_form_layout(const guatiao_value *schema, const guatiao_value *form,
+guatiao_status guatiao_intake_layout(const guatiao_value *schema, const guatiao_value *form,
                                    const guatiao_alloc *alloc, guatiao_value *out);
-guatiao_status guatiao_form_is_visible(const guatiao_value *schema, const guatiao_value *form,
+guatiao_status guatiao_intake_is_visible(const guatiao_value *schema, const guatiao_value *form,
                                        guatiao_str key, const guatiao_value *values, bool *out);
 ```
 

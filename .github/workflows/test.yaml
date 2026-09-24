@@ -121,7 +121,7 @@ jobs:
         shell: bash
         run: |
           status=0
-          for crate in guatiao guatiao-serde guatiao-form; do
+          for crate in guatiao guatiao-serde guatiao-intake; do
             cargo public-api -p "$crate" --all-features -ss > "$RUNNER_TEMP/$crate.txt"
             diff -u "crates/$crate/public-api.txt" "$RUNNER_TEMP/$crate.txt" || status=1
           done
@@ -144,7 +144,7 @@ jobs:
       - name: Check the crates for wasm32
         run: >-
           cargo check --target wasm32-unknown-unknown
-          -p guatiao -p guatiao-serde -p guatiao-form
+          -p guatiao -p guatiao-serde -p guatiao-intake
           --features guatiao/derive,guatiao/provider,guatiao-serde/json,guatiao-serde/toml,guatiao-serde/yaml
       - name: Build the module
         run: cargo build -p guatiao --target wasm32-unknown-unknown --release

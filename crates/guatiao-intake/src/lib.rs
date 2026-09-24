@@ -35,7 +35,7 @@
 //! ```
 //! use guatiao::schema::read::SchemaRef;
 //! use guatiao::schema::{FieldBuilder, KindBuilder, SchemaBuilder};
-//! use guatiao_form::{
+//! use guatiao_intake::{
 //!     Form, FormBuilder, FormFieldBuilder, FormRef, Hints, Section, check, is_visible, layout,
 //! };
 //!

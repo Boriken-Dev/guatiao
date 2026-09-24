@@ -63,14 +63,14 @@ String dllFilename(String basename) {
 const List<String> surfaces = <String>[
   'guatiao',
   'guatiao_serde',
-  'guatiao_form'
+  'guatiao_intake'
 ];
 
 /// One symbol per surface, to recognise a library that carries it.
 const Map<String, String> _probe = <String, String>{
   'guatiao': 'guatiao_value_free',
   'guatiao_serde': 'guatiao_json_parse',
-  'guatiao_form': 'guatiao_form_check',
+  'guatiao_intake': 'guatiao_intake_check',
 };
 
 /// Where to look when `GUATIAO_LIBRARY` is unset.
@@ -238,5 +238,5 @@ NativeLib core() => _libFor('guatiao');
 /// The `guatiao_serde` library, loaded on first use.
 NativeLib serdeLib() => _libFor('guatiao_serde');
 
-/// The `guatiao_form` library, loaded on first use.
-NativeLib formLib() => _libFor('guatiao_form');
+/// The `guatiao_intake` library, loaded on first use.
+NativeLib formLib() => _libFor('guatiao_intake');

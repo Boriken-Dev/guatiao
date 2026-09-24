@@ -8,7 +8,7 @@
 //! carry it without binding the exports too. Every other module carries it
 //! itself, and this is what keeps that true when a module is added.
 //!
-//! The same check `guatiao-form` has, and the one `lib.rs` cites: the
+//! The same check `guatiao-intake` has, and the one `lib.rs` cites: the
 //! arrangement is only a claim until something reads the files.
 
 use std::fs;

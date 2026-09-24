@@ -66,13 +66,13 @@ class GuatiaoBindings {
       int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
           guatiao_bytes)>();
 
-  int guatiao_form_check(
+  int guatiao_intake_check(
     ffi.Pointer<guatiao_value> schema,
     ffi.Pointer<guatiao_value> form,
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out_error,
   ) {
-    return _guatiao_form_check(
+    return _guatiao_intake_check(
       schema,
       form,
       alloc,
@@ -80,25 +80,25 @@ class GuatiaoBindings {
     );
   }
 
-  late final _guatiao_form_checkPtr = _lookup<
+  late final _guatiao_intake_checkPtr = _lookup<
       ffi.NativeFunction<
           guatiao_status$1 Function(
               ffi.Pointer<guatiao_value>,
               ffi.Pointer<guatiao_value>,
               ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_form_check');
-  late final _guatiao_form_check = _guatiao_form_checkPtr.asFunction<
+              ffi.Pointer<guatiao_value>)>>('guatiao_intake_check');
+  late final _guatiao_intake_check = _guatiao_intake_checkPtr.asFunction<
       int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
 
-  int guatiao_form_is_visible(
+  int guatiao_intake_is_visible(
     ffi.Pointer<guatiao_value> schema,
     ffi.Pointer<guatiao_value> form,
     guatiao_str key,
     ffi.Pointer<guatiao_value> values,
     ffi.Pointer<ffi.Bool> out,
   ) {
-    return _guatiao_form_is_visible(
+    return _guatiao_intake_is_visible(
       schema,
       form,
       key,
@@ -107,25 +107,30 @@ class GuatiaoBindings {
     );
   }
 
-  late final _guatiao_form_is_visiblePtr = _lookup<
+  late final _guatiao_intake_is_visiblePtr = _lookup<
       ffi.NativeFunction<
           guatiao_status$1 Function(
               ffi.Pointer<guatiao_value>,
               ffi.Pointer<guatiao_value>,
               guatiao_str,
               ffi.Pointer<guatiao_value>,
-              ffi.Pointer<ffi.Bool>)>>('guatiao_form_is_visible');
-  late final _guatiao_form_is_visible = _guatiao_form_is_visiblePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_value>,
-          guatiao_str, ffi.Pointer<guatiao_value>, ffi.Pointer<ffi.Bool>)>();
+              ffi.Pointer<ffi.Bool>)>>('guatiao_intake_is_visible');
+  late final _guatiao_intake_is_visible =
+      _guatiao_intake_is_visiblePtr.asFunction<
+          int Function(
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_value>,
+              guatiao_str,
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<ffi.Bool>)>();
 
-  int guatiao_form_layout(
+  int guatiao_intake_layout(
     ffi.Pointer<guatiao_value> schema,
     ffi.Pointer<guatiao_value> form,
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_form_layout(
+    return _guatiao_intake_layout(
       schema,
       form,
       alloc,
@@ -133,14 +138,14 @@ class GuatiaoBindings {
     );
   }
 
-  late final _guatiao_form_layoutPtr = _lookup<
+  late final _guatiao_intake_layoutPtr = _lookup<
       ffi.NativeFunction<
           guatiao_status$1 Function(
               ffi.Pointer<guatiao_value>,
               ffi.Pointer<guatiao_value>,
               ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_form_layout');
-  late final _guatiao_form_layout = _guatiao_form_layoutPtr.asFunction<
+              ffi.Pointer<guatiao_value>)>>('guatiao_intake_layout');
+  late final _guatiao_intake_layout = _guatiao_intake_layoutPtr.asFunction<
       int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
 
@@ -1547,17 +1552,17 @@ const int GUATIAO_BYTES_DATA_URI = 0;
 
 const int GUATIAO_BYTES_REFUSE = 3;
 
-const String GUATIAO_FORM_KEY_X_ADVANCED = 'x-advanced';
-
-const String GUATIAO_FORM_KEY_X_ORDER = 'x-order';
-
-const String GUATIAO_FORM_KEY_X_SECTION = 'x-section';
-
 const int GUATIAO_FRAME_CLOSE = 2;
 
 const int GUATIAO_FRAME_SCHEMA = 0;
 
 const int GUATIAO_FRAME_VALUE = 1;
+
+const String GUATIAO_INTAKE_KEY_X_ADVANCED = 'x-advanced';
+
+const String GUATIAO_INTAKE_KEY_X_ORDER = 'x-order';
+
+const String GUATIAO_INTAKE_KEY_X_SECTION = 'x-section';
 
 const String GUATIAO_KEY_ADDITIONAL_PROPERTIES = 'additionalProperties';
 

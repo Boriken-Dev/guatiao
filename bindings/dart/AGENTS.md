@@ -22,7 +22,7 @@ native call is resolved lazily, on first use, in this order:
 3. The platform's own library search, by name.
 
 Not found throws `LibraryNotFound` naming all three. `guatiao_serde` and
-`guatiao_form` resolve the same way, independently, only when
+`guatiao_intake` resolve the same way, independently, only when
 `package:guatiao/serde.dart` or `.../form.dart` is first used. A symbol a
 build does not export throws `MissingSymbol` naming it.
 
@@ -160,7 +160,7 @@ The `how` flag takes `bytesDataUri`, `bytesBase64`, `bytesArray`,
 ## form
 
 ```dart
-import 'package:guatiao/form.dart' as form;
+import 'package:guatiao/intake.dart' as form;
 
 form.check(schema, formDoc);          // null, or the error map
 form.layout(schema, formDoc);         // [{'section': ..., 'fields': [...]}, ...]

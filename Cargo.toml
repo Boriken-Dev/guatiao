@@ -4,7 +4,7 @@ members = [
     "crates/guatiao",
     "crates/guatiao-derive",
     "crates/guatiao-serde",
-    "crates/guatiao-form",
+    "crates/guatiao-intake",
     "examples/hello_library",
     "examples/greeter_kind",
     "examples/derived_greeter",
@@ -19,7 +19,7 @@ exclude = ["examples/wire_over_webtransport/client"]
 # through `guatiao = { features = ["derive"] }` rather than named in a
 # consumer's manifest. `guatiao-serde` is separate for the opposite
 # reason: it is the one crate here that resolves dependencies, and the core
-# stays free of them. `guatiao-form` is separate because only a consumer
+# stays free of them. `guatiao-intake` is separate because only a consumer
 # that draws a screen needs it.
 #
 # Everything a consumer names -- the value model, the C type vocabulary,

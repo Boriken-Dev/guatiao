@@ -23,7 +23,7 @@ library; the first call that needs one resolves it from
 
 ## Forms
 
-::: guatiao.form
+::: guatiao.intake
 
 ## Errors
 

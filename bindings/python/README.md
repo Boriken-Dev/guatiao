@@ -26,7 +26,7 @@ that is `guatiao` itself or an application that carries it.
   declares before loading it, list providers best first, build an
   instance from a configuration, call a provider through its table.
 - **JSON, TOML and YAML**, and **form checks against a schema**, through
-  the `guatiao-serde` and `guatiao-form` libraries when they are present.
+  the `guatiao-serde` and `guatiao-intake` libraries when they are present.
 - **Importing never fails** — a native library is looked for on first
   use, and a missing one says every place that was searched.
 
@@ -55,10 +55,10 @@ naming it, and everything else works.
 | --- | --- |
 | `guatiao` | values, the registry, provider tables |
 | `guatiao_serde` | `guatiao.serde`: JSON, and TOML and YAML when the library has them |
-| `guatiao_form` | `guatiao.form` |
+| `guatiao_intake` | `guatiao.intake` |
 
-`guatiao_serde` and `guatiao_form` are looked for the same way, in the
-same directory, only when `guatiao.serde` or `guatiao.form` is first used.
+`guatiao_serde` and `guatiao_intake` are looked for the same way, in the
+same directory, only when `guatiao.serde` or `guatiao.intake` is first used.
 
 ## Quick start
 
@@ -183,7 +183,7 @@ provider's own words when it gave any.
 | `guatiao.registry` | the plugin host: load, scan, list, rank, configure, instantiate |
 | `guatiao.kinds` | check and cast a provider's function table |
 | `guatiao.serde` | `loads` / `dumps` for JSON, TOML, YAML |
-| `guatiao.form` | `check`, `layout`, `is_visible` |
+| `guatiao.intake` | `check`, `layout`, `is_visible` |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/src/guatiao/AGENTS.md) is
 the full API reference and ships inside the wheel. The C ABI is described

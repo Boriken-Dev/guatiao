@@ -3,10 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 /// Whether a form fits a schema, its layout, and field visibility, over
-/// `guatiao_form`.
+/// `guatiao_intake`.
 ///
-/// Import it with a prefix: `import 'package:guatiao/form.dart' as form;`.
+/// Import it with a prefix: `import 'package:guatiao/intake.dart' as form;`.
 /// Resolution is lazy, like `serde.dart`.
 library;
 
-export 'src/form.dart';
+export 'src/intake.dart';

@@ -12,14 +12,14 @@
 //! # Refreshing the committed copy
 //!
 //! ```text
-//! GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-form --features c-header
+//! GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-intake --features c-header
 //! ```
 
 fn main() {
     // Where the committed header is, for a consumer whose own header or
     // build includes it: readable in that consumer's build script as
-    // `DEP_GUATIAO_FORM_INCLUDE`, because `Cargo.toml` says
-    // `links = "guatiao-form"` -- the arrangement `guatiao` itself has.
+    // `DEP_GUATIAO_INTAKE_INCLUDE`, because `Cargo.toml` says
+    // `links = "guatiao-intake"` -- the arrangement `guatiao` itself has.
     let include = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("include");
     println!("cargo::metadata=include={}", include.display());
     println!("cargo::rerun-if-changed=src");
@@ -51,14 +51,14 @@ fn render() {
         }
     };
 
-    let rendered = out_dir.join("guatiao_form.h");
+    let rendered = out_dir.join("guatiao_intake.h");
     generated.write_to_file(&rendered);
     println!(
-        "cargo::rustc-env=GUATIAO_FORM_GENERATED_HEADER={}",
+        "cargo::rustc-env=GUATIAO_INTAKE_GENERATED_HEADER={}",
         rendered.display()
     );
 
     if std::env::var_os("GUATIAO_WRITE_HEADER").is_some() {
-        generated.write_to_file(crate_dir.join("include").join("guatiao_form.h"));
+        generated.write_to_file(crate_dir.join("include").join("guatiao_intake.h"));
     }
 }

@@ -15,8 +15,8 @@ lazily, on first use, in this order:
 The package is pure Python and carries no native library.
 
 Not found raises `guatiao.LibraryNotFound` naming both places it
-looked. `guatiao_serde` and `guatiao_form` resolve the same way,
-independently, only when `guatiao.serde` / `guatiao.form` is first used.
+looked. `guatiao_serde` and `guatiao_intake` resolve the same way,
+independently, only when `guatiao.serde` / `guatiao.intake` is first used.
 
 ## Values
 
@@ -142,7 +142,7 @@ parses as `1e+400`).
 ## form
 
 ```python
-from guatiao import form
+from guatiao import intake
 
 form.check(schema, form_doc)             # None, or an error map
 form.layout(schema, form_doc)            # [{"section": ..., "fields": [...]}, ...]

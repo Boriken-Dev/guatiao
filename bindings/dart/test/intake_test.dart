@@ -2,11 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-/// `guatiao_form` against a real `--all-features` build, over a schema
+/// `guatiao_intake` against a real `--all-features` build, over a schema
 /// and a form built as plain Dart maps.
 library;
 
-import 'package:guatiao/form.dart' as form;
+import 'package:guatiao/intake.dart' as form;
 import 'package:guatiao/guatiao.dart';
 import 'package:test/test.dart';
 

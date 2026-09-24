@@ -3,7 +3,7 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 """Whether a form fits a schema, its layout, and field visibility, over
-`guatiao_form`. Resolved lazily, like `serde.py`."""
+`guatiao_intake`. Resolved lazily, like `serde.py`."""
 
 from __future__ import annotations
 
@@ -21,11 +21,11 @@ def _alloc(given: "_abi.Alloc | None", lib) -> "_abi.Alloc":
 def check(schema: Value, form: Value, *, alloc: "_abi.Alloc | None" = None):
     """`None` when `form` fits `schema`; otherwise the error map
     (`kind`, `at`, and whichever of `path`/`id`/`field`/`expected`/
-    `message` apply) `guatiao_form_check` writes."""
+    `message` apply) `guatiao_intake_check` writes."""
     lib = _lib.form()
     alloc_struct = _alloc(alloc, lib)
     out = _abi.Value()
-    status = lib.guatiao_form_check(
+    status = lib.guatiao_intake_check(
         ctypes.byref(schema._raw),
         ctypes.byref(form._raw),
         ctypes.byref(alloc_struct),
@@ -49,7 +49,7 @@ def layout(schema: Value, form: Value, *, alloc: "_abi.Alloc | None" = None):
     alloc_struct = _alloc(alloc, lib)
     out = _abi.Value()
     _check_status(
-        lib.guatiao_form_layout(
+        lib.guatiao_intake_layout(
             ctypes.byref(schema._raw),
             ctypes.byref(form._raw),
             ctypes.byref(alloc_struct),
@@ -70,7 +70,7 @@ def is_visible(schema: Value, form: Value, key: str, values: Value) -> bool:
     key_view, _buf = _make_str(key.encode("utf-8"))
     out = ctypes.c_bool(False)
     _check_status(
-        lib.guatiao_form_is_visible(
+        lib.guatiao_intake_is_visible(
             ctypes.byref(schema._raw),
             ctypes.byref(form._raw),
             key_view,

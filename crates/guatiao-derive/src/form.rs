@@ -6,8 +6,8 @@
 //!
 //! What the schema derive cannot say — what a section is **called**, which
 //! **widget** draws a field, its **placeholder**, and **when** it is shown —
-//! is written here and emitted as an `impl guatiao_form::Screen`, which
-//! builds the form value through `guatiao_form`'s own builders:
+//! is written here and emitted as an `impl guatiao_intake::Screen`, which
+//! builds the form value through `guatiao_intake`'s own builders:
 //!
 //! ```ignore
 //! #[derive(Schema, Form)]
@@ -39,7 +39,7 @@
 //! choice and has no fields to place, so it is refused.
 //!
 //! The derive is `Form`, after what it builds; the trait is `Screen`,
-//! because `guatiao_form::Form` is the builder it uses.
+//! because `guatiao_intake::Form` is the builder it uses.
 
 #![forbid(unsafe_code)]
 
@@ -297,7 +297,7 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
         let help = s.help.iter().map(|h| quote! { .help(#h) });
         quote! {
             __form = __form.section(
-                ::guatiao_form::Section::new_in(__alloc, #id) #(#label)* #(#help)*
+                ::guatiao_intake::Section::new_in(__alloc, #id) #(#label)* #(#help)*
             );
         }
     });
@@ -319,7 +319,7 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
                 quote! {
                     __form = __form.field(
                         &::std::format!("{}{}", __prefix, #key),
-                        ::guatiao_form::Hints::new_in(__alloc) #(#widget)* #(#placeholder)* #(#visible)*,
+                        ::guatiao_intake::Hints::new_in(__alloc) #(#widget)* #(#placeholder)* #(#visible)*,
                     );
                 }
             } else {
@@ -328,7 +328,7 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
         };
         let nested = if f.hints.nested {
             quote! {
-                __form = <#ty as ::guatiao_form::Screen>::hints(
+                __form = <#ty as ::guatiao_intake::Screen>::hints(
                     &::std::format!("{}{}.", __prefix, #key),
                     __form,
                 );
@@ -341,17 +341,17 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
 
     quote! {
         #[automatically_derived]
-        impl ::guatiao_form::Screen for #name {
+        impl ::guatiao_intake::Screen for #name {
             fn form(
                 __alloc: ::guatiao::Alloc,
             ) -> ::core::result::Result<::guatiao::Value, ::guatiao::ValueError> {
-                let mut __form = ::guatiao_form::Form::new_in(__alloc);
+                let mut __form = ::guatiao_intake::Form::new_in(__alloc);
                 #(#sections)*
-                __form = <#name as ::guatiao_form::Screen>::hints("", __form);
+                __form = <#name as ::guatiao_intake::Screen>::hints("", __form);
                 __form.finish()
             }
 
-            fn hints(__prefix: &str, mut __form: ::guatiao_form::Form) -> ::guatiao_form::Form {
+            fn hints(__prefix: &str, mut __form: ::guatiao_intake::Form) -> ::guatiao_intake::Form {
                 // Bound first: `field` takes the form by value.
                 let __alloc = __form.alloc();
                 #(#hints)*
@@ -397,9 +397,9 @@ mod tests {
             out.contains("Section :: new_in (__alloc , \"auth\")) ;"),
             "{out}"
         );
-        assert!(out.contains("format ! (\"{}{}\" , __prefix , \"api-token\") , :: guatiao_form :: Hints :: new_in (__alloc) . widget (\"password\")"));
+        assert!(out.contains("format ! (\"{}{}\" , __prefix , \"api-token\") , :: guatiao_intake :: Hints :: new_in (__alloc) . widget (\"password\")"));
         assert!(out.contains(". placeholder (\"/etc/ca.pem\") . visible_when (\"verify\" , true)"));
-        assert!(out.contains("< Auth as :: guatiao_form :: Screen > :: hints (& :: std :: format ! (\"{}{}.\" , __prefix , \"auth\") , __form ,)"));
+        assert!(out.contains("< Auth as :: guatiao_intake :: Screen > :: hints (& :: std :: format ! (\"{}{}.\" , __prefix , \"auth\") , __form ,)"));
         assert!(
             !out.contains("\"host\"") && !out.contains("\"plain\"") && !out.contains("\"cache\""),
             "a field without hints is not named: {out}"

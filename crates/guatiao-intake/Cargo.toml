@@ -1,10 +1,10 @@
 [package]
-name = "guatiao-form"
+name = "guatiao-intake"
 # A build script key, not a native library: it lets `build.rs` publish
 # where the committed header lives, so a consumer's own build script reads
-# `DEP_GUATIAO_FORM_INCLUDE` and copies `guatiao_form.h` beside its own
+# `DEP_GUATIAO_INTAKE_INCLUDE` and copies `guatiao_intake.h` beside its own
 # header -- the arrangement `guatiao` itself has.
-links = "guatiao-form"
+links = "guatiao-intake"
 description = "how a guatiao schema is shown -- sections, widget hints and conditional visibility, as a value beside the schema"
 version.workspace = true
 edition.workspace = true
@@ -20,14 +20,14 @@ exclude = [".*", "*.local.*", "public-api.txt"]
 all-features = true
 
 [lib]
-name = "guatiao_form"
+name = "guatiao_intake"
 # A cdylib as well, because the `extern "C"` surface has to be IN an
 # artifact for a C or Python host to load. An rlib exports nothing.
 crate-type = ["rlib", "cdylib"]
 path = "src/lib.rs"
 
 [features]
-# Renders `include/guatiao_form.h` from the Rust that declares it. NOT the
+# Renders `include/guatiao_intake.h` from the Rust that declares it. NOT the
 # `extern "C"` surface, which is always compiled -- this is about the file
 # that DECLARES it, which is committed and which most builds only read.
 c-header = ["dep:cbindgen"]

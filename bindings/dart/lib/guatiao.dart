@@ -10,7 +10,7 @@
 /// The two optional halves are their own entry points, imported with a
 /// prefix so their verbs keep a namespace:
 /// `import 'package:guatiao/serde.dart' as serde;` and
-/// `import 'package:guatiao/form.dart' as form;`.
+/// `import 'package:guatiao/intake.dart' as form;`.
 library;
 
 export 'src/errors.dart'

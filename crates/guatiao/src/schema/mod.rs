@@ -74,7 +74,7 @@
 //! consumer with no user interface ignores them entirely. Never make a
 //! validation or type behaviour depend on one.
 //!
-//! **Writing the `x-` ones is `guatiao-form`'s business**, through
+//! **Writing the `x-` ones is `guatiao-intake`'s business**, through
 //! [`Extras`]: how to group and order controls on a screen is an opinion,
 //! and this crate holds none. Reading them stays here — [`FieldRef`] has
 //! `section`, `order` and `is_advanced`, because reading a key is reading

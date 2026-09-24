@@ -521,11 +521,11 @@ fn field_builder(field: &FieldPlan) -> TokenStream {
         };
     }
     // The presentation keys go through `Extras`, the general door, and are
-    // spelled out rather than named: they are `guatiao-form`'s vocabulary
-    // (`guatiao_form::vocab::X_SECTION` and its two siblings), and neither
+    // spelled out rather than named: they are `guatiao-intake`'s vocabulary
+    // (`guatiao_intake::vocab::X_SECTION` and its two siblings), and neither
     // `guatiao` nor a crate deriving a schema has to depend on that crate
     // to carry one. THIS is the seam -- a rename there is a rename here,
-    // and `crates/guatiao-form/tests/form_derive.rs` is what notices.
+    // and `crates/guatiao-intake/tests/form_derive.rs` is what notices.
     //
     // The allocator comes back out of the builder, so a hint lands in the
     // same arena the schema is being built into.
@@ -1422,7 +1422,7 @@ mod tests {
             "KindBuilder",
             "Number",
             // The door the presentation keys go through. Their names are
-            // `guatiao-form`'s and are emitted as literals, so nothing
+            // `guatiao-intake`'s and are emitted as literals, so nothing
             // here names that crate -- which is the point: a crate
             // deriving a schema need not depend on it.
             "Extras",

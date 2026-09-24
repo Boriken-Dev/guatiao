@@ -87,7 +87,7 @@ one declaration, so the schema cannot describe a value the type refuses.
 A default build pulls in nothing.
 
 Two sibling crates build on this one: `guatiao-serde` writes and reads a
-value in any serde format, and `guatiao-form` describes how a schema is
+value in any serde format, and `guatiao-intake` describes how a schema is
 shown to a person.
 
 ## Licence

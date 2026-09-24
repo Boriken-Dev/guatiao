@@ -12,12 +12,12 @@ files:
         name: guatiao_alloc_default
       c:@F@guatiao_buffer_push:
         name: guatiao_buffer_push
-      c:@F@guatiao_form_check:
-        name: guatiao_form_check
-      c:@F@guatiao_form_is_visible:
-        name: guatiao_form_is_visible
-      c:@F@guatiao_form_layout:
-        name: guatiao_form_layout
+      c:@F@guatiao_intake_check:
+        name: guatiao_intake_check
+      c:@F@guatiao_intake_is_visible:
+        name: guatiao_intake_is_visible
+      c:@F@guatiao_intake_layout:
+        name: guatiao_intake_layout
       c:@F@guatiao_json_emit:
         name: guatiao_json_emit
       c:@F@guatiao_json_emit_pretty:

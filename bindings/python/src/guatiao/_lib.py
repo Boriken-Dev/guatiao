@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Finding and loading `guatiao`, `guatiao_serde` and `guatiao_form`.
+"""Finding and loading `guatiao`, `guatiao_serde` and `guatiao_intake`.
 
 Every export gets a declared `argtypes`/`restype` up front, from a table,
 so ctypes passes the width the function actually expects rather than
@@ -10,7 +10,7 @@ whatever the platform's default promotion happens to produce. This
 declares the 50 real, linkable exports of `guatiao.h` -- not the 22
 `static inline` helpers alongside them, which have no symbol in any
 library and are reimplemented in `value.py` instead -- plus the 7 of
-`guatiao_serde.h` and the 3 of `guatiao_form.h`, each of which also
+`guatiao_serde.h` and the 3 of `guatiao_intake.h`, each of which also
 re-exports `guatiao_alloc_default`: any cdylib linking the `guatiao`
 crate carries its plain value-level functions along, and `Library.alloc`
 (Q5: one allocator per loaded library) needs its own copy of that one.
@@ -319,17 +319,17 @@ _SERDE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
 
 _FORM_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
     "guatiao_alloc_default": ([_P(Alloc)], c_uint32, None),
-    "guatiao_form_check": (
+    "guatiao_intake_check": (
         [_P(Value), _P(Value), _P(Alloc), _P(Value)],
         c_uint32,
         None,
     ),
-    "guatiao_form_layout": (
+    "guatiao_intake_layout": (
         [_P(Value), _P(Value), _P(Alloc), _P(Value)],
         c_uint32,
         None,
     ),
-    "guatiao_form_is_visible": (
+    "guatiao_intake_is_visible": (
         [_P(Value), _P(Value), Str, _P(Value), _P(c_bool)],
         c_uint32,
         None,
@@ -415,9 +415,9 @@ def serde() -> Library:
 
 
 def form() -> Library:
-    """The `guatiao_form` library, loaded and declared on first use."""
+    """The `guatiao_intake` library, loaded and declared on first use."""
     global _form
     with _lock:
         if _form is None:
-            _form = Library(resolve("guatiao_form"), _FORM_EXPORTS)
+            _form = Library(resolve("guatiao_intake"), _FORM_EXPORTS)
         return _form

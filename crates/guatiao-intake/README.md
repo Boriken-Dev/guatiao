@@ -1,4 +1,4 @@
-# guatiao-form
+# guatiao-intake
 
 How a [guatiao](../guatiao) schema is **shown**: what its sections are
 called and the order they come in, which control draws a field, and when a
@@ -8,7 +8,7 @@ repeats it.
 ```rust
 use guatiao::schema::read::SchemaRef;
 use guatiao::schema::{FieldBuilder, KindBuilder, SchemaBuilder};
-use guatiao_form::{Form, FormBuilder, FormRef, Hints, Section, check, is_visible, layout};
+use guatiao_intake::{Form, FormBuilder, FormRef, Hints, Section, check, is_visible, layout};
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 let schema = SchemaBuilder::new()
@@ -39,7 +39,7 @@ With the `derive` feature the same form is declared on the type,
 beside its schema:
 
 ```rust,ignore
-#[derive(guatiao::Schema, guatiao_form::Form)]
+#[derive(guatiao::Schema, guatiao_intake::Form)]
 #[form(section(id = "net", label = "Network"))]
 struct Connection {
     #[schema(section = "net")]
@@ -48,7 +48,7 @@ struct Connection {
     #[form(placeholder = "/etc/ssl/ca.pem", visible_when(field = "verify", equals = true))]
     ca: Option<String>,
 }
-let form = Connection::form(guatiao::Alloc::rust())?;   // `guatiao_form::Screen`
+let form = Connection::form(guatiao::Alloc::rust())?;   // `guatiao_intake::Screen`
 ```
 
 ## Three layers
@@ -57,7 +57,7 @@ let form = Connection::form(guatiao::Alloc::rust())?;   // `guatiao_form::Screen
 | --- | --- | --- |
 | value | what is being passed | `guatiao` |
 | schema | what it is, and what a valid one looks like | `guatiao` |
-| **form** | how to show one to a person | **`guatiao-form`** |
+| **form** | how to show one to a person | **`guatiao-intake`** |
 
 A consumer with no screen never compiles this, which is why it is a crate.
 
@@ -76,9 +76,9 @@ A form is a value, so a C, Python or Dart consumer reads one with
 worked the rules out would disagree about the same form:
 
 ```c
-guatiao_form_check(schema, form, alloc, &error);      // does it fit?
-guatiao_form_layout(schema, form, alloc, &groups);    // keys, grouped and ordered
-guatiao_form_is_visible(schema, form, key, values, &shown);
+guatiao_intake_check(schema, form, alloc, &error);      // does it fit?
+guatiao_intake_layout(schema, form, alloc, &groups);    // keys, grouped and ordered
+guatiao_intake_is_visible(schema, form, key, values, &shown);
 ```
 
 ## Badges
