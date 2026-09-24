@@ -23,11 +23,14 @@
 #![forbid(unsafe_code)]
 
 use guatiao::value::convert::TryAsRef;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
+use crate::path::{self, Segment};
 use guatiao::schema::ValidationError;
 use guatiao::schema::read::{FieldRef, Kind, SchemaRef};
 use guatiao::schema::validate::text_of;
+use guatiao::schema::vocab as schema_vocab;
 use guatiao::value::alloc::Alloc;
 use guatiao::value::error::ValueError;
 use guatiao::value::read::str_or;
@@ -132,41 +135,107 @@ pub fn split(key: &str) -> Option<(&str, &str)> {
     key.split_once(SEPARATOR)
 }
 
-/// The field governing a flat key, following one level of projection.
+/// The field governing a path, walking every segment of it.
 ///
-/// So `sensitive` on `auth.password` resolves to the arm field's own flag,
-/// which is what lets a field-level encryption path keep working with no
-/// new concept: it already asks the schema whether a key is a secret, and
-/// now the schema can answer for a dotted one.
+/// `auth.password` reaches the arm field an arm of a variant adds;
+/// `connection.tls.ca` walks two declared objects; `agent[1].name`
+/// indexes a list and then names a member; `env[PATH]` reaches into an
+/// open map. A segment that names nothing answers `None`, and so does a
+/// segment applied to something that has no members at all.
+///
+/// **A key that names a field outright wins**, whatever it contains: a
+/// schema may declare a field called `a.b`, and `resolve(schema, "a.b")`
+/// means that field rather than a walk. To reach a *member* called `a.b`
+/// of a declared object, quote it: `owner["a.b"]`.
+///
+/// What comes back for a list element or an open map's entry is a
+/// [`FieldRef`] over the **element's** schema with an **empty key**: such
+/// a thing has no declared name, and the path that reached it is the
+/// caller's to keep.
 pub fn resolve<'a>(schema: SchemaRef<'a>, key: &str) -> Option<FieldRef<'a>> {
     if let Some(direct) = schema.find(key) {
         return Some(direct);
     }
-    // Two different things, and the rename briefly gave them one name:
-    // `leaf` is the key AFTER the dot, `owner` is the field the dot hangs
-    // off. Comparing a field against a key compiles nowhere, which is the
-    // only reason this was caught rather than shipped.
-    let (parent, leaf) = split(key)?;
-    let owner = schema.find(parent)?;
-    owner
-        .kind()
-        .arms()
-        .find_map(|arm| arm.fields().find(|f| f.key() == leaf))
+    let parsed = path::parse(key).ok()?;
+    let mut segments = parsed.segments();
+    let mut at = root(schema, &segments.next()?)?;
+    for segment in segments {
+        at = into(at, &segment)?;
+    }
+    Some(at)
 }
 
-/// The field governing a flat key **in a particular store**: the arm a
+/// The top-level field a path's first segment names.
+///
+/// A schema's root is an object, so a bracket there is a key like any
+/// other: `["a.b"]` names the field spelled `a.b`, and `[0]` names one
+/// spelled `0`.
+fn root<'a>(schema: SchemaRef<'a>, first: &Segment<'_>) -> Option<FieldRef<'a>> {
+    schema.find(&name_of(first))
+}
+
+/// A segment as the text it names, for a container that is keyed.
+fn name_of<'a>(segment: &'a Segment<'_>) -> Cow<'a, str> {
+    match segment {
+        Segment::Field(name) => Cow::Borrowed(name),
+        Segment::Key(key) => Cow::Borrowed(key.as_ref()),
+        // A number applied to something keyed is that key's text, the
+        // same rule `path::get` follows over a value.
+        Segment::Index(at) => Cow::Owned(at.to_string()),
+    }
+}
+
+/// One step INTO a field, by one segment.
+fn into<'a>(field: FieldRef<'a>, segment: &Segment<'_>) -> Option<FieldRef<'a>> {
+    let kind = field.kind();
+    match kind {
+        // A declared object, or the members an arm of a variant adds:
+        // both are named fields, and the segment names one.
+        Kind::Map(_) => kind.fields().find(|f| f.key() == name_of(segment)),
+        Kind::Variant { .. } => kind
+            .arms()
+            .find_map(|arm| arm.fields().find(|f| f.key() == name_of(segment))),
+        // A list is indexed, never keyed: `agent[0]` reaches an element
+        // and `agent[first]` reaches nothing. Every element has the one
+        // schema, so WHICH index it is changes nothing here.
+        Kind::List(items) => {
+            matches!(segment, Segment::Index(_)).then(|| FieldRef::new("", items))?
+        }
+        // An open map is the other way round: its keys are data, so any
+        // segment reaches its one value schema.
+        Kind::MapOf(_) => FieldRef::new("", values_of(field)?),
+        _ => None,
+    }
+}
+
+/// The value schema of an open map, as the value it is written as.
+///
+/// [`Kind::values`](guatiao::schema::read::Kind::values) answers a kind;
+/// a [`FieldRef`] needs the value under it, which is the same place JSON
+/// Schema puts it.
+fn values_of<'a>(field: FieldRef<'a>) -> Option<&'a Value> {
+    TryAsRef::<Map>::try_as_ref(field.as_value())
+        .and_then(|m| m.get(schema_vocab::ADDITIONAL_PROPERTIES))
+}
+
+/// The field governing a path **in a particular store**: the arm a
 /// payload key belongs to must be the one the store selects.
 ///
 /// [`resolve`] answers for the schema alone, and for a schema alone
 /// `auth.username` is a field of SOME arm. A store has said which arm --
-/// `selected("auth")` is the discriminant's text there, or `None` when
+/// `selected(path)` is the discriminant's text there, or `None` when
 /// nothing was written and the field's default decides -- and a payload
 /// key the chosen arm does not declare is an error rather than something
 /// to drop. Ignoring it is how a credential ends up stored under a key
 /// the chosen arm does not have.
 ///
-/// A dotted key whose stem is not a tagged field is an unknown key, not a
-/// payload field: reporting it as one lists the keys that do exist.
+/// The discriminant is asked for **by the owner's own path**, which is
+/// the key it is stored under: `auth` at the root, `agent[0].auth` for a
+/// variant inside a list of objects.
+///
+/// Every refusal names the **prefix that failed**, not the whole path: a
+/// path is wrong at one step, and saying which one is the difference
+/// between a message a person can act on and one they have to bisect.
 pub fn resolve_in<'a>(
     schema: SchemaRef<'a>,
     key: &str,
@@ -179,19 +248,66 @@ pub fn resolve_in<'a>(
         key: key.to_string(),
         known: schema.fields().map(|f| f.key().to_string()).collect(),
     };
-    let Some((parent, leaf)) = split(key) else {
+    let Ok(parsed) = path::parse(key) else {
         return Err(unknown());
     };
-    let Some(owner) = schema.find(parent) else {
+    let mut segments = parsed.segments();
+    let Some(first) = segments.next() else {
         return Err(unknown());
     };
-    let kind = owner.kind();
-    if !matches!(kind, Kind::Variant { .. }) {
+    let Some(mut at) = root(schema, &first) else {
         return Err(unknown());
+    };
+
+    // The path walked so far, which is both what a refusal names and the
+    // key a discriminant is stored under.
+    let mut walked = first.to_string();
+    for segment in segments {
+        at = step_in(at, &segment, &walked, key, &selected)?;
+        if !matches!(segment, Segment::Field(_)) {
+            walked.push_str(&segment.to_string());
+        } else {
+            walked.push(SEPARATOR);
+            walked.push_str(&segment.to_string());
+        }
     }
-    let chosen = selected(parent)
+    Ok(at)
+}
+
+/// One step of [`resolve_in`], with the arm a store selected.
+fn step_in<'a>(
+    field: FieldRef<'a>,
+    segment: &Segment<'_>,
+    walked: &str,
+    whole: &str,
+    selected: &impl Fn(&str) -> Option<String>,
+) -> Result<FieldRef<'a>, ValidationError> {
+    let kind = field.kind();
+    let Kind::Variant { .. } = kind else {
+        // Everything else steps the same way it does without a store:
+        // which element or member a path reaches is not something a
+        // store's contents can change.
+        return into(field, segment).ok_or_else(|| {
+            let known: Vec<String> = kind.fields().map(|f| f.key().to_string()).collect();
+            if known.is_empty() {
+                ValidationError::BadValue {
+                    key: walked.to_string(),
+                    expected: format!(
+                        "something with members — '{whole}' reads through it as if it had them"
+                    ),
+                }
+            } else {
+                ValidationError::UnknownOption {
+                    key: whole.to_string(),
+                    known,
+                }
+            }
+        });
+    };
+
+    let chosen = selected(walked)
         .filter(|t| !t.is_empty())
-        .or_else(|| owner.default().map(text_of))
+        .or_else(|| field.default().map(text_of))
         .unwrap_or_default();
     let Some(arm) = kind.arms().find(|a| a.value() == chosen) else {
         // Either the tag names no arm -- which the tag's own entry
@@ -200,27 +316,29 @@ pub fn resolve_in<'a>(
         // cannot be checked until the arm is known.
         let names: Vec<&str> = kind.arms().map(|a| a.value()).collect();
         return Err(ValidationError::BadValue {
-            key: parent.to_string(),
+            key: walked.to_string(),
             expected: format!(
-                "a value naming one of {} — '{key}' belongs to an arm and cannot be \
+                "a value naming one of {} — '{whole}' belongs to an arm and cannot be \
                  checked until one is chosen",
                 names.join(", ")
             ),
         });
     };
-    arm.fields().find(|f| f.key() == leaf).ok_or_else(|| {
-        // Names the ARM rather than listing keys, for a measured reason:
-        // the empty arm is the interesting case, and its list of accepted
-        // payload keys is EMPTY -- a sentence that stops mid-air. The key
-        // is not wrong in general, it is wrong for what was chosen.
+    let wanted = name_of(segment);
+    arm.fields().find(|f| f.key() == wanted).ok_or_else(|| {
+        // Names the ARM rather than listing keys, for a measured
+        // reason: the empty arm is the interesting case, and its list
+        // of accepted payload keys is EMPTY -- a sentence that stops
+        // mid-air. The key is not wrong in general, it is wrong for
+        // what was chosen.
         let accepted: Vec<&str> = arm.fields().map(|f| f.key()).collect();
         ValidationError::BadValue {
-            key: key.to_string(),
+            key: whole.to_string(),
             expected: if accepted.is_empty() {
-                format!("nothing — the '{chosen}' arm of '{parent}' stores no fields at all")
+                format!("nothing — the '{chosen}' arm of '{walked}' stores no fields at all")
             } else {
                 format!(
-                    "nothing — the '{chosen}' arm of '{parent}' accepts only {}",
+                    "nothing — the '{chosen}' arm of '{walked}' accepts only {}",
                     accepted.join(", ")
                 )
             },
