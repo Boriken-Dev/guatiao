@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **An object whose keys are data**: `KindBuilder::map_of(values)` writes
+  `{"type": "object", "additionalProperties": <schema>}` and
+  `Kind::MapOf` reads it, told from `Kind::Map` by declaring no
+  `properties`. `Kind::values()` answers its one value kind, as
+  `items()` does for a list. `validate` checks every entry against it and
+  names a bad one by its key (`ports[shell]`); a third-party 2020-12
+  validator enforces the same thing, because the spelling is JSON
+  Schema's own. `ToValue`, `FromValue` and `Schema` for
+  `BTreeMap<String, T>` and `HashMap<String, T>`, so a struct holding one
+  describes itself with no help. `MapError::at_key` re-roots an error
+  under an entry.
+- **`guatiao::path`**, a jq-shaped way to name one place inside a value:
+  `agent[1].name[name2].value`. A dot is a field, a bracket is a list
+  position or a map key, and which one a bracket means is decided where
+  it is applied. Quoting is the escape: `["1"]` is a key and never a
+  position, `["a[b]"]` is the only way to spell a key holding a bracket,
+  and a `.` inside brackets needs none. `parse` checks the whole string
+  and every refusal carries its byte offset; `get`/`get_mut` follow a
+  path through a value, iteratively, and create nothing.
 - **`value::wire`**, an exact, self-describing binary encoding of a value
   (a tag byte per node, shortest-form LEB128 lengths, numbers as their
   text, bytes as bytes, map order kept), with a decoder that refuses every

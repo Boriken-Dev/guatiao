@@ -626,3 +626,107 @@ fn the_plain_builders_and_the_in_builders_agree() {
         "the plain form is the `_in` form with the crate's own allocator"
     );
 }
+
+/// An object whose **keys are data**: `map_of` says what the values are
+/// and nothing about the keys, because there is nothing to say.
+///
+/// The document is JSON Schema's own: a schema under
+/// `additionalProperties`, where a sealed object writes `false`. So a
+/// general validator accepts exactly what `validate_value` accepts, with
+/// no keyword of ours involved.
+#[test]
+fn an_open_map_declares_its_values_and_not_its_keys() {
+    with_alloc(|alloc| {
+        let schema = SchemaBuilder::new_in(alloc)
+            .field(FieldBuilder::new_in(
+                alloc,
+                "env",
+                KindBuilder::map_of_in(alloc, KindBuilder::string_in(alloc)),
+            ))
+            .finish()
+            .expect("a schema this small does not exhaust an allocator");
+
+        let s = SchemaRef::new(&schema).expect("a schema is a map");
+        let env = s.find("env").expect("env is declared");
+        assert!(matches!(env.kind(), Kind::MapOf(_)));
+        assert!(matches!(env.kind().values(), Kind::Str));
+        assert!(
+            env.kind().fields().next().is_none(),
+            "an open map declares no field at all"
+        );
+
+        let declared = TryAsRef::<Map>::try_as_ref(env.as_value())
+            .and_then(|m| m.get(vocab::ADDITIONAL_PROPERTIES))
+            .expect("the value schema is written there");
+        assert_eq!(
+            str_or(
+                TryAsRef::<Map>::try_as_ref(declared).and_then(|m| m.get(vocab::TYPE)),
+                ""
+            ),
+            vocab::TYPE_STRING,
+            "additionalProperties carries the value schema, not a bool"
+        );
+
+        // Every entry answers to the value schema, and a bad one is named
+        // by its key.
+        let mut values = Map::new_in(alloc);
+        values.set("PATH", "/bin").unwrap();
+        values.set("HOME", "/root").unwrap();
+        assert!(guatiao::schema::validate_value(env, &Value::from(values)).is_ok());
+
+        // A scalar is checked by its TEXT form, here and everywhere:
+        // `true` is acceptable text for a string, so refusing needs a
+        // kind text can fail. A list is refused too, by not being one
+        // value at all.
+        let ports = SchemaBuilder::new_in(alloc)
+            .field(FieldBuilder::new_in(
+                alloc,
+                "ports",
+                KindBuilder::map_of_in(alloc, KindBuilder::int_range_in(alloc, 1, 65535)),
+            ))
+            .finish()
+            .expect("it builds");
+        let ports = SchemaRef::new(&ports)
+            .expect("a schema")
+            .find("ports")
+            .expect("ports is declared");
+
+        let mut wrong = Map::new_in(alloc);
+        wrong
+            .set("http", Text::new_in(alloc, "80").map(Value::from).unwrap())
+            .unwrap();
+        wrong
+            .set(
+                "shell",
+                Text::new_in(alloc, "nope").map(Value::from).unwrap(),
+            )
+            .unwrap();
+        let refused = guatiao::schema::validate_value(ports, &Value::from(wrong))
+            .expect_err("`nope` is not a number between 1 and 65535");
+        assert!(
+            format!("{refused}").contains("ports[shell]"),
+            "the entry is named by its key, in brackets: {refused}"
+        );
+    });
+}
+
+/// A declared object and an open one are told apart by whether any key is
+/// declared. Both are `type: object`, which is what JSON Schema has.
+#[test]
+fn a_declared_object_is_not_an_open_one() {
+    let declared = SchemaBuilder::new()
+        .field(FieldBuilder::new(
+            "tls",
+            KindBuilder::map(vec![FieldBuilder::new("verify", KindBuilder::bool())]),
+        ))
+        .finish()
+        .expect("it builds");
+    let s = SchemaRef::new(&declared).expect("a schema");
+    let tls = s.find("tls").expect("tls");
+    assert!(matches!(tls.kind(), Kind::Map(_)));
+    assert!(
+        matches!(tls.kind().values(), Kind::Missing),
+        "a declared object has no one value kind"
+    );
+    assert_eq!(tls.kind().name(), vocab::TYPE_OBJECT);
+}

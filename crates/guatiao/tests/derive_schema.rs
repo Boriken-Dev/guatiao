@@ -309,3 +309,61 @@ fn a_declared_default_lands_in_the_document() {
         assert_eq!(read, 5900);
     });
 }
+
+/// A struct holding a map keyed by text describes an **open object**, and
+/// the three derives agree about it: what it declares, what it writes,
+/// and what it reads back.
+///
+/// The schema's one job is to describe the struct as it is, and a
+/// `BTreeMap<String, T>` is a set of keys nobody declared.
+#[test]
+fn a_map_field_describes_an_open_object() {
+    use std::collections::BTreeMap;
+
+    #[derive(Debug, PartialEq, Schema, ToValue, guatiao::FromValue)]
+    struct Agent {
+        name: String,
+        /// The environment it runs with.
+        env: BTreeMap<String, String>,
+    }
+
+    alloc_and(|alloc| {
+        let declared = Agent::schema(alloc).unwrap();
+        let s = SchemaRef::new(&declared).unwrap();
+        let env = s.find("env").expect("env is declared");
+        assert!(matches!(env.kind(), Kind::MapOf(_)));
+        assert!(matches!(env.kind().values(), Kind::Str));
+        assert_eq!(
+            env.description(),
+            "The environment it runs with.",
+            "a doc comment describes the field, whatever its kind"
+        );
+
+        let agent = Agent {
+            name: "one".into(),
+            env: BTreeMap::from([
+                ("PATH".into(), "/bin".into()),
+                ("HOME".into(), "/root".into()),
+            ]),
+        };
+        let written = agent.to_value(alloc).expect("it writes");
+
+        // What the type writes validates against what the same type
+        // declares. That is the agreement the derives exist for.
+        let map = TryAsRef::<Map>::try_as_ref(&written).expect("a map");
+        guatiao::schema::validate_value(env, map.get("env").expect("env was written"))
+            .expect("what it writes, it accepts");
+
+        // And a BTreeMap writes its keys sorted, so the value is the same
+        // every time.
+        let env_value = map.get("env").expect("env");
+        let keys: Vec<&str> = TryAsRef::<Map>::try_as_ref(env_value)
+            .expect("a map")
+            .keys()
+            .collect();
+        assert_eq!(keys, ["HOME", "PATH"]);
+
+        let read = <Agent as guatiao::FromValue>::from_value(&written).expect("it reads back");
+        assert_eq!(read, agent);
+    });
+}

@@ -707,6 +707,34 @@ impl KindBuilder {
         k
     }
 
+    /// An object whose **keys are data**: any number of them, every value
+    /// of one kind.
+    ///
+    /// [`map`](KindBuilder::map) declares the keys; this one declares that
+    /// nobody does — an environment, a set of named agents, labels on a
+    /// record. The difference reaches the document as
+    /// [`ADDITIONAL_PROPERTIES`](vocab::ADDITIONAL_PROPERTIES): a sealed
+    /// object writes `false` there, and this writes the schema every value
+    /// must match, which is what JSON Schema means by the keyword. A
+    /// general validator accepts exactly what [`validate`](super::validate)
+    /// accepts, with no keyword of ours involved.
+    ///
+    /// `map_of`, not `dict` or `record`: the container this describes is a
+    /// [`Map`], and one thing has one name.
+    ///
+    /// Built through the crate's own allocator. `map_of_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn map_of(values: KindBuilder) -> KindBuilder {
+        KindBuilder::map_of_in(Alloc::rust(), values)
+    }
+
+    /// The same, through an allocator you name.
+    pub fn map_of_in(alloc: Alloc, values: KindBuilder) -> KindBuilder {
+        let mut k = KindBuilder::typed(alloc, vocab::TYPE_OBJECT);
+        put(&mut k.state, vocab::ADDITIONAL_PROPERTIES, values.state);
+        k
+    }
+
     /// Exactly one of a fixed set of alternatives.
     ///
     /// A `string` with an `enum`, and the labels in a **map** keyed by the

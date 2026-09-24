@@ -152,6 +152,17 @@ impl MapError {
         self.rekey(&|key| format!("[{index}]{key}"))
     }
 
+    /// The same, for one entry of an **open** map, whose keys are data:
+    /// an error inside one reports `env[PATH]`.
+    ///
+    /// A bracket rather than a dot for the same reason an index gets one:
+    /// a declared field is named, and a key that came with the data is
+    /// reached.
+    #[must_use]
+    pub fn at_key(self, entry: &str) -> MapError {
+        self.rekey(&|key| format!("[{entry}]{key}"))
+    }
+
     fn rekey(self, f: &dyn Fn(&str) -> String) -> MapError {
         match self {
             MapError::MissingKey { key } => MapError::MissingKey { key: f(&key) },
@@ -401,6 +412,38 @@ impl<T: ToValue> ToValue for Vec<T> {
     }
 }
 
+/// An object whose **keys are data**, in the order the map iterates.
+///
+/// A `BTreeMap` iterates sorted, so the value it writes is the same every
+/// time; a [`HashMap`](std::collections::HashMap) iterates in whatever
+/// order it has, and the value keeps that order because a map here is
+/// insertion-ordered by contract. Neither is wrong; only one is
+/// reproducible, which is worth knowing before a hash goes over a wire.
+impl<T: ToValue> ToValue for std::collections::BTreeMap<String, T> {
+    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+        entries_to_value(self.iter().map(|(k, v)| (k.as_str(), v)), alloc)
+    }
+}
+
+/// The same, unordered. See [`BTreeMap`](std::collections::BTreeMap).
+impl<T: ToValue> ToValue for std::collections::HashMap<String, T> {
+    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+        entries_to_value(self.iter().map(|(k, v)| (k.as_str(), v)), alloc)
+    }
+}
+
+/// Builds a map value from key/value pairs, in the order they arrive.
+fn entries_to_value<'a, T: ToValue + 'a>(
+    entries: impl Iterator<Item = (&'a str, &'a T)>,
+    alloc: Alloc,
+) -> Result<Value, ValueError> {
+    let mut out = Map::new_in(alloc);
+    for (key, value) in entries {
+        out.set_in(key, value.to_value(alloc)?, alloc)?;
+    }
+    Ok(out.into())
+}
+
 /// A raw subtree is deep-copied into the target allocator: an owned tree
 /// carries its own, which may not be the one the result belongs to.
 impl ToValue for Value {
@@ -547,6 +590,34 @@ impl<T: FromValue> FromValue for Vec<T> {
         let mut out = Vec::with_capacity(items.len());
         for (i, item) in items.iter().enumerate() {
             out.push(T::from_value(item).map_err(|e| e.at(i))?);
+        }
+        Ok(out)
+    }
+}
+
+/// Every entry of a map, keyed by its own key.
+///
+/// An error inside one reports `env[PATH]`, so a caller is told which
+/// entry rather than only which field.
+impl<T: FromValue> FromValue for std::collections::BTreeMap<String, T> {
+    fn from_value(value: &Value) -> Result<std::collections::BTreeMap<String, T>, MapError> {
+        let mut out = std::collections::BTreeMap::new();
+        for entry in <&Map>::try_from(value)? {
+            let read = T::from_value(entry.value()).map_err(|e| e.at_key(entry.key()))?;
+            out.insert(entry.key().to_string(), read);
+        }
+        Ok(out)
+    }
+}
+
+/// The same, into a `HashMap`. The value's order is not kept, because a
+/// `HashMap` has none to keep it in.
+impl<T: FromValue> FromValue for std::collections::HashMap<String, T> {
+    fn from_value(value: &Value) -> Result<std::collections::HashMap<String, T>, MapError> {
+        let mut out = std::collections::HashMap::new();
+        for entry in <&Map>::try_from(value)? {
+            let read = T::from_value(entry.value()).map_err(|e| e.at_key(entry.key()))?;
+            out.insert(entry.key().to_string(), read);
         }
         Ok(out)
     }

@@ -259,3 +259,47 @@ fn the_one_type_we_invented_is_the_one_a_strict_validator_refuses() {
         "and for the reason on record: the meta-schema's type list is closed: {complaint}"
     );
 }
+
+/// An **open map** is `additionalProperties: <schema>`, which is JSON
+/// Schema's own spelling for it — so a third-party validator enforces the
+/// value kind for us, and refuses the same entry `validate_value` refuses.
+///
+/// This is the one place the claim can be measured: a sealed object
+/// writes `false` there, an open one writes a schema, and `boon` reads
+/// both without being told anything about guatiao.
+#[test]
+fn a_validator_enforces_an_open_maps_value_kind() {
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new(
+            "ports",
+            KindBuilder::map_of(KindBuilder::int_range(1, 65535)),
+        ))
+        .finish()
+        .expect("a schema this small does not exhaust an allocator");
+
+    let doc = as_document(&schema);
+    assert_eq!(
+        doc["properties"]["ports"]["additionalProperties"]["type"], "integer",
+        "the value schema is written where the specification puts it: {doc}"
+    );
+
+    let (schemas, index) = compile(doc).expect("it is a JSON Schema");
+
+    let ok = serde_json::json!({"ports": {"http": 80, "https": 443}});
+    assert!(
+        schemas.validate(&ok, index).is_ok(),
+        "any key, every value an integer in range"
+    );
+
+    let bad_value = serde_json::json!({"ports": {"http": "eighty"}});
+    assert!(
+        schemas.validate(&bad_value, index).is_err(),
+        "the value kind is enforced although the key was never declared"
+    );
+
+    let out_of_range = serde_json::json!({"ports": {"http": 70000}});
+    assert!(
+        schemas.validate(&out_of_range, index).is_err(),
+        "and so are the value's bounds"
+    );
+}

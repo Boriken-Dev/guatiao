@@ -389,6 +389,16 @@ pub enum Kind<'a> {
     /// A nested object, with its own fields. Carries the **object's**
     /// schema, not its `properties`, because `required` sits beside them.
     Map(&'a Value),
+    /// An object whose **keys are data**: any number of them, every value
+    /// of one kind. Carries the object's schema, whose
+    /// `additionalProperties` is the value schema.
+    ///
+    /// Told apart from [`Map`](Kind::Map) by having no `properties`: an
+    /// object that declares some keys is a declaration, and one that
+    /// declares none but says what its values look like is this. A
+    /// document carrying both reads as a `Map`, because the declared half
+    /// is the half a reader can act on.
+    MapOf(&'a Value),
     /// Exactly one of a fixed set of alternatives. Carries the schema
     /// holding both `enum` and `x-labels`.
     Enum(&'a Value),
@@ -474,7 +484,19 @@ impl<'a> Kind<'a> {
                         None => Kind::Unknown(ty),
                     }
                 }
-                None => Kind::Map(k),
+                None => {
+                    let declares_keys = TryAsRef::<Map>::try_as_ref(k)
+                        .and_then(|m| m.get(vocab::PROPERTIES))
+                        .is_some();
+                    let values_declared = TryAsRef::<Map>::try_as_ref(k)
+                        .and_then(|m| m.get(vocab::ADDITIONAL_PROPERTIES))
+                        .is_some_and(is_map);
+                    if !declares_keys && values_declared {
+                        Kind::MapOf(k)
+                    } else {
+                        Kind::Map(k)
+                    }
+                }
             },
             vocab::TYPE_INTEGER => Kind::Int {
                 min: opt_int(k, vocab::MINIMUM),
@@ -556,6 +578,21 @@ impl<'a> Kind<'a> {
         }
     }
 
+    /// The kind every value of an open object has, or [`Kind::Missing`]
+    /// for any other kind.
+    ///
+    /// The map counterpart of [`items`](Kind::items): a
+    /// [`MapOf`](Kind::MapOf) says what its values are and says nothing
+    /// about its keys, because its keys are data.
+    pub fn values(self) -> Kind<'a> {
+        match self {
+            Kind::MapOf(k) => Kind::read(
+                TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(vocab::ADDITIONAL_PROPERTIES)),
+            ),
+            _ => Kind::Missing,
+        }
+    }
+
     /// The fields of a nested object, or nothing for any other kind.
     ///
     /// Reads exactly like [`ArmRef::fields`], because it is the same idea:
@@ -577,7 +614,7 @@ impl<'a> Kind<'a> {
             Kind::Str | Kind::Enum(_) => vocab::TYPE_STRING,
             Kind::Bytes => vocab::TYPE_BYTES,
             Kind::List(_) => vocab::TYPE_ARRAY,
-            Kind::Map(_) | Kind::Variant { .. } => vocab::TYPE_OBJECT,
+            Kind::Map(_) | Kind::MapOf(_) | Kind::Variant { .. } => vocab::TYPE_OBJECT,
             Kind::Union(_) => vocab::ANY_OF,
             Kind::Unknown(name) => name,
             Kind::Missing => "",

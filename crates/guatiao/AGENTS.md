@@ -577,6 +577,7 @@ Kinds, with what each writes:
 | `bytes` | `type: "bytes"` (ours) |
 | `list(items)` | `type: "array"` + `items` |
 | `map(fields)` | `type: "object"` + `properties`/`required` |
+| `map_of(values)` | `type: "object"` + `additionalProperties`: the value schema |
 | `enumeration(choices)` | `type: "string"` + `enum` + `x-enum-labels` (a map, keyed by value) |
 | `union(arms)` | `anyOf` — **any** arm accepting is enough, and no `type` |
 | `variant(tag, arms)` | `type: "object"` + `x-variant-tag` + `oneOf`, each arm pinning the tag with `const` and requiring it |
@@ -595,7 +596,10 @@ FieldRef::new(key, &schema) -> Option<FieldRef>   // answers is_required() false
 FieldRef: .key() .kind() .title() .description() .default() .is_sensitive()
            .is_required() .extra(key) .extras()
            // .section() .order() .is_advanced(): guatiao_form::FormField
-Kind: .choices() .alternatives() .arms() .items() .fields() .name()
+Kind: .choices() .alternatives() .arms() .items() .values() .fields() .name()
+      // Map vs MapOf: a declared object vs one whose KEYS ARE DATA.
+      // Told apart by having `properties`; `.values()` answers MapOf's
+      // one value kind, as `.items()` answers a list's.
 ```
 
 Validate:
