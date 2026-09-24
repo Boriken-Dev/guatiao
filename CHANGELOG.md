@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `guatiao_intake_path_get(value, path)`, which answers a **borrowed**
   pointer or null; Python `guatiao.intake.at(value, path)`, Dart
   `intake.at(value, path)`.
+- **`#[derive(Form)]` can assign a member's own screen**:
+  `#[form(form)]` uses the field's type, `#[form(form = Ty)]` names one
+  for a field whose own type is not a screen (a `Vec<Agent>` is not, and
+  `Agent` is). Refused beside `nested`, which is the other presentation
+  of the same member.
 - **A form can be made out of a schema alone**: `for_schema`,
   `for_field` and `form_for`, the last being what a renderer asks — the
   assigned form if somebody wrote one, otherwise the one the schema

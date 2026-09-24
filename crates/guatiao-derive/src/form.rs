@@ -27,7 +27,9 @@
 //!
 //! On the type: `section(id = "..", label = "..", help = "..")`, repeated,
 //! in display order. On a field: `widget = ".."`, `placeholder = ".."`,
-//! `visible_when(field = "..", equals = <expr>)`, and `nested`, which says
+//! `visible_when(field = "..", equals = <expr>)`, `form` (or
+//! `form = Ty`), which gives the member a form of its OWN, and `nested`,
+//! which says
 //! the field's type derives `Form` too and composes its hints under
 //! `<key>.`. Keys follow `#[map(rename = "..")]`, so the form names the
 //! same paths the schema and the value do; a `#[map(skip)]` field cannot
@@ -71,6 +73,13 @@ struct FieldHints {
     placeholder: Option<String>,
     visible_when: Option<(String, syn::Expr)>,
     nested: bool,
+    /// Whose screen this member is drawn by: `#[form(form = Ty)]` names
+    /// it, and `#[form(form)]` means the field's own type, which is
+    /// filled in below as soon as that type is in scope. So the emitter
+    /// has one thing to look at.
+    form: Option<Type>,
+    /// `form` was written without naming a type.
+    form_own: bool,
 }
 
 impl FieldHints {
@@ -79,6 +88,8 @@ impl FieldHints {
             && self.placeholder.is_none()
             && self.visible_when.is_none()
             && !self.nested
+            && self.form.is_none()
+            && !self.form_own
     }
 }
 
@@ -222,6 +233,22 @@ fn read_fields<'a>(fields: impl Iterator<Item = &'a syn::Field>) -> syn::Result<
                 read_hints(attr, &mut hints)?;
             }
         }
+        // `#[form(form)]` means this field's type, and here is where
+        // that type is known.
+        if hints.form_own && hints.form.is_none() {
+            hints.form = Some(field.ty.clone());
+        }
+        if hints.nested && hints.form.is_some() {
+            return Err(syn::Error::new_spanned(
+                ident,
+                format!(
+                    "`nested` and `form` are two presentations of one member, so a field \
+                     takes one or the other. {LABEL} flattens a member's hints into this \
+                     form with `nested`, and gives the member a form of its OWN with \
+                     `form` -- a window or a group, drawn from its own screen"
+                ),
+            ));
+        }
         if skip && !hints.is_empty() {
             return Err(syn::Error::new_spanned(
                 ident,
@@ -250,6 +277,12 @@ fn read_hints(attr: &Attribute, hints: &mut FieldHints) -> syn::Result<()> {
             hints.placeholder = Some(meta.value()?.parse::<LitStr>()?.value());
         } else if meta.path.is_ident("nested") {
             hints.nested = true;
+        } else if meta.path.is_ident("form") {
+            if meta.input.peek(syn::Token![=]) {
+                hints.form = Some(meta.value()?.parse::<Type>()?);
+            } else {
+                hints.form_own = true;
+            }
         } else if meta.path.is_ident("visible_when") {
             let mut field = None;
             let mut equals = None;
@@ -283,7 +316,8 @@ fn read_hints(attr: &Attribute, hints: &mut FieldHints) -> syn::Result<()> {
         } else {
             return Err(meta.error(format!(
                 "unrecognised `#[form(..)]` option. {LABEL} knows `widget`, `placeholder`, \
-                 `visible_when(field = \"..\", equals = <value>)` and `nested` on a field"
+                 `visible_when(field = \"..\", equals = <value>)`, `nested` and `form` (or \
+                 `form = Ty`) on a field"
             )));
         }
         Ok(())
@@ -306,20 +340,34 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
         let ty = &f.ty;
         let own = {
             let widget = f.hints.widget.iter().map(|w| quote! { .widget(#w) });
-            let placeholder = f.hints.placeholder.iter().map(|p| quote! { .placeholder(#p) });
+            let placeholder = f
+                .hints
+                .placeholder
+                .iter()
+                .map(|p| quote! { .placeholder(#p) });
             let visible = f
                 .hints
                 .visible_when
                 .iter()
                 .map(|(field, equals)| quote! { .visible_when(#field, #equals) });
+            // The member's own screen, as this field's form. `form_value`
+            // rather than `form`, because `Screen::form` answers a
+            // `Result` and the builder is where the first error waits.
+            let form = f.hints.form.iter().map(|source| {
+                quote! {
+                    .form_value(<#source as ::guatiao_intake::Screen>::form(__alloc))
+                }
+            });
             if f.hints.widget.is_some()
                 || f.hints.placeholder.is_some()
                 || f.hints.visible_when.is_some()
+                || f.hints.form.is_some()
             {
                 quote! {
                     __form = __form.field(
                         &::std::format!("{}{}", __prefix, #key),
-                        ::guatiao_intake::Hints::new_in(__alloc) #(#widget)* #(#placeholder)* #(#visible)*,
+                        ::guatiao_intake::Hints::new_in(__alloc)
+                            #(#widget)* #(#placeholder)* #(#visible)* #(#form)*,
                     );
                 }
             } else {
@@ -468,6 +516,17 @@ mod tests {
             (
                 "struct S { #[map(skip)] #[form(widget = \"x\")] a: i64 }",
                 "cannot place a `#[map(skip)]` field",
+            ),
+            // The two presentations of one member are exclusive: either
+            // its hints are flattened into this screen, or it gets a
+            // screen of its own.
+            (
+                "struct S { #[form(nested, form)] a: A }",
+                "two presentations of one member",
+            ),
+            (
+                "struct S { #[form(form = B)] #[form(nested)] a: A }",
+                "two presentations of one member",
             ),
         ];
         for (item, expected) in cases {
