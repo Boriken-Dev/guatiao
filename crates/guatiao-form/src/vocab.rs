@@ -16,6 +16,15 @@
 //! Every key is optional except a section's `id`. **An empty map is a
 //! form**: it shows the schema exactly the way the schema alone says to.
 //!
+//! Three more keys are this crate's and do **not** live in the form
+//! document: [`X_SECTION`], [`X_ORDER`] and [`X_ADVANCED`] sit on the
+//! **schema**, beside the field they describe, because a field can say
+//! them about itself. They are named here rather than in `guatiao`
+//! because they are opinions about how to organise controls, and that
+//! crate holds none — it carries them as annotations, like any key it
+//! does not know. [`declare`](crate::declare) writes them and reads them
+//! back.
+//!
 //! # Rules a reader must follow
 //!
 //! **A path is a flat key**: a field's own key, or `owner.member` for a
@@ -79,6 +88,33 @@ pub const PLACEHOLDER: &str = "placeholder";
 /// For what a variant cannot say. "These fields exist only for this arm"
 /// is already a variant; "show `ca` only when `verify` is true" is this.
 pub const VISIBLE_WHEN: &str = "visibleWhen";
+
+// --- written onto the SCHEMA, beside a field ---------------------------
+//
+// Not part of the form document: these three sit on the schema itself,
+// where a field can carry them. They are named here rather than in
+// `guatiao` because they are opinions about how to organise controls on a
+// screen, and that crate holds none. It carries them as annotations, like
+// any key it does not know.
+//
+// `x-sensitive` is NOT one of them. It stays `guatiao`'s, on
+// `FieldBuilder::sensitive` and `FieldRef::is_sensitive`, because "never
+// print this value" is obeyed by a log and a crash dump as much as by a
+// form.
+
+/// Which section a field belongs to, by whatever id draws the form.
+///
+/// Naming a section nothing declared is not an error: a consumer that does
+/// not know it puts the field wherever it puts the ungrouped ones.
+pub const X_SECTION: &str = "x-section";
+/// Declaration position, as a number.
+///
+/// Not a preference. If every field omits it, a consumer has no ordering
+/// information and falls back to something arbitrary — alphabetical,
+/// usually — which silently rearranges a carefully grouped form.
+pub const X_ORDER: &str = "x-order";
+/// True when the field is advanced: hidden behind a disclosure by default.
+pub const X_ADVANCED: &str = "x-advanced";
 
 // --- a condition --------------------------------------------------------
 

@@ -9,6 +9,14 @@ impl guatiao_form::declare::FormBuilder for guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::section(self, &str) -> Self
 impl guatiao_form::declare::FormBuilder for guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::section(self, &str) -> Self
+pub trait guatiao_form::declare::FormField
+pub fn guatiao_form::declare::FormField::is_advanced(&self) -> bool
+pub fn guatiao_form::declare::FormField::order(&self) -> i64
+pub fn guatiao_form::declare::FormField::section(&self) -> &str
+impl<'a> guatiao_form::declare::FormField for guatiao::schema::read::FieldRef<'a>
+pub fn guatiao::schema::read::FieldRef<'a>::is_advanced(&self) -> bool
+pub fn guatiao::schema::read::FieldRef<'a>::order(&self) -> i64
+pub fn guatiao::schema::read::FieldRef<'a>::section(&self) -> &str
 pub trait guatiao_form::declare::FormFieldBuilder: guatiao_form::declare::FormBuilder
 pub fn guatiao_form::declare::FormFieldBuilder::advanced(self) -> Self
 pub fn guatiao_form::declare::FormFieldBuilder::order(self, i64) -> Self
@@ -41,6 +49,9 @@ pub const guatiao_form::vocab::SECTIONS: &str
 pub const guatiao_form::vocab::TITLE: &str
 pub const guatiao_form::vocab::VISIBLE_WHEN: &str
 pub const guatiao_form::vocab::WIDGET: &str
+pub const guatiao_form::vocab::X_ADVANCED: &str
+pub const guatiao_form::vocab::X_ORDER: &str
+pub const guatiao_form::vocab::X_SECTION: &str
 #[non_exhaustive] pub enum guatiao_form::FormError
 pub guatiao_form::FormError::ConditionRefused
 pub guatiao_form::FormError::ConditionRefused::at: alloc::string::String
@@ -172,6 +183,14 @@ impl guatiao_form::declare::FormBuilder for guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::section(self, &str) -> Self
 impl guatiao_form::declare::FormBuilder for guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::section(self, &str) -> Self
+pub trait guatiao_form::FormField
+pub fn guatiao_form::FormField::is_advanced(&self) -> bool
+pub fn guatiao_form::FormField::order(&self) -> i64
+pub fn guatiao_form::FormField::section(&self) -> &str
+impl<'a> guatiao_form::declare::FormField for guatiao::schema::read::FieldRef<'a>
+pub fn guatiao::schema::read::FieldRef<'a>::is_advanced(&self) -> bool
+pub fn guatiao::schema::read::FieldRef<'a>::order(&self) -> i64
+pub fn guatiao::schema::read::FieldRef<'a>::section(&self) -> &str
 pub trait guatiao_form::FormFieldBuilder: guatiao_form::declare::FormBuilder
 pub fn guatiao_form::FormFieldBuilder::advanced(self) -> Self
 pub fn guatiao_form::FormFieldBuilder::order(self, i64) -> Self

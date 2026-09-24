@@ -1929,14 +1929,11 @@ pub fn guatiao::schema::read::FieldRef<'a>::default(&self) -> core::option::Opti
 pub fn guatiao::schema::read::FieldRef<'a>::description(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao::schema::read::FieldRef<'a>::extras(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&'a str, &'a guatiao::value::value::Value)>
-pub fn guatiao::schema::read::FieldRef<'a>::is_advanced(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_required(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_sensitive(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::key(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::kind(&self) -> guatiao::schema::read::Kind<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::new(&'a str, &'a guatiao::value::value::Value) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
-pub fn guatiao::schema::read::FieldRef<'a>::order(&self) -> i64
-pub fn guatiao::schema::read::FieldRef<'a>::section(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::title(&self) -> &'a str
 impl<'a> core::clone::Clone for guatiao::schema::read::FieldRef<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::clone(&self) -> Self
@@ -1995,10 +1992,7 @@ pub const guatiao::schema::vocab::TYPE_INTEGER: &str
 pub const guatiao::schema::vocab::TYPE_NUMBER: &str
 pub const guatiao::schema::vocab::TYPE_OBJECT: &str
 pub const guatiao::schema::vocab::TYPE_STRING: &str
-pub const guatiao::schema::vocab::X_ADVANCED: &str
 pub const guatiao::schema::vocab::X_ENUM_LABELS: &str
-pub const guatiao::schema::vocab::X_ORDER: &str
-pub const guatiao::schema::vocab::X_SECTION: &str
 pub const guatiao::schema::vocab::X_SENSITIVE: &str
 pub const guatiao::schema::vocab::X_VARIANT_TAG: &str
 pub fn guatiao::schema::vocab::known(&str) -> bool
@@ -2106,14 +2100,11 @@ pub fn guatiao::schema::read::FieldRef<'a>::default(&self) -> core::option::Opti
 pub fn guatiao::schema::read::FieldRef<'a>::description(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao::schema::read::FieldRef<'a>::extras(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&'a str, &'a guatiao::value::value::Value)>
-pub fn guatiao::schema::read::FieldRef<'a>::is_advanced(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_required(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_sensitive(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::key(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::kind(&self) -> guatiao::schema::read::Kind<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::new(&'a str, &'a guatiao::value::value::Value) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
-pub fn guatiao::schema::read::FieldRef<'a>::order(&self) -> i64
-pub fn guatiao::schema::read::FieldRef<'a>::section(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::title(&self) -> &'a str
 impl<'a> core::clone::Clone for guatiao::schema::read::FieldRef<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::clone(&self) -> Self

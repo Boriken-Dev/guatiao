@@ -44,9 +44,13 @@
 
 #![forbid(unsafe_code)]
 
-use guatiao::schema::vocab;
+use guatiao::schema::read::FieldRef;
 use guatiao::schema::{ArmBuilder, Extras, FieldBuilder, SchemaBuilder};
-use guatiao::value::types::{Number, Text, Value};
+use guatiao::value::convert::TryAsRef;
+use guatiao::value::read::{bool_or, int_or, str_or};
+use guatiao::value::types::{Map, Number, Text, Value};
+
+use crate::vocab;
 
 /// Where a schema, a field or an arm is shown.
 ///
@@ -116,3 +120,59 @@ impl FormBuilder for ArmBuilder {}
 
 /// Only a field has a position among siblings, or a disclosure.
 impl FormFieldBuilder for FieldBuilder {}
+
+/// Reading back what [`FormBuilder`] and [`FormFieldBuilder`] wrote.
+///
+/// On [`FieldRef`], because that is what a reader holds — `guatiao`'s
+/// readers answer the schema's own keywords and `is_sensitive`, and these
+/// three are this crate's. A field that declares none of them answers the
+/// defaults, which is what an empty form does too.
+///
+/// ```
+/// use guatiao::schema::read::SchemaRef;
+/// use guatiao::schema::{FieldBuilder, KindBuilder, SchemaBuilder};
+/// use guatiao_form::{FormBuilder, FormField, FormFieldBuilder};
+///
+/// let schema = SchemaBuilder::new()
+///     .field(FieldBuilder::new("host", KindBuilder::string()).section("net"))
+///     .field(FieldBuilder::new("retries", KindBuilder::int()).order(2).advanced())
+///     .finish()?;
+///
+/// let s = SchemaRef::new(&schema).expect("a schema is a map");
+/// assert_eq!(s.find("host").expect("host").section(), "net");
+/// assert_eq!(s.find("retries").expect("retries").order(), 2);
+/// assert!(s.find("retries").expect("retries").is_advanced());
+/// // Nothing declared reads as the default, never as an error.
+/// assert_eq!(s.find("host").expect("host").order(), 0);
+/// # Ok::<(), guatiao::ValueError>(())
+/// ```
+pub trait FormField {
+    /// Which section this belongs to. Empty means the default one.
+    fn section(&self) -> &str;
+
+    /// Declaration position. 0 when unset, which a consumer should read
+    /// as "no ordering information" rather than "first".
+    fn order(&self) -> i64;
+
+    /// Hidden behind a disclosure by default.
+    fn is_advanced(&self) -> bool;
+}
+
+impl<'a> FormField for FieldRef<'a> {
+    fn section(&self) -> &str {
+        str_or(get(self, vocab::X_SECTION), "")
+    }
+
+    fn order(&self) -> i64 {
+        int_or(get(self, vocab::X_ORDER), 0)
+    }
+
+    fn is_advanced(&self) -> bool {
+        bool_or(get(self, vocab::X_ADVANCED), false)
+    }
+}
+
+/// One key off a field's own subschema.
+fn get<'a>(field: &FieldRef<'a>, key: &str) -> Option<&'a Value> {
+    TryAsRef::<Map>::try_as_ref(field.as_value()).and_then(|m| m.get(key))
+}

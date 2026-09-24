@@ -1547,6 +1547,12 @@ const int GUATIAO_BYTES_DATA_URI = 0;
 
 const int GUATIAO_BYTES_REFUSE = 3;
 
+const String GUATIAO_FORM_KEY_X_ADVANCED = 'x-advanced';
+
+const String GUATIAO_FORM_KEY_X_ORDER = 'x-order';
+
+const String GUATIAO_FORM_KEY_X_SECTION = 'x-section';
+
 const int GUATIAO_FRAME_CLOSE = 2;
 
 const int GUATIAO_FRAME_SCHEMA = 0;
@@ -1600,13 +1606,7 @@ const String GUATIAO_KEY_TYPE_OBJECT = 'object';
 
 const String GUATIAO_KEY_TYPE_STRING = 'string';
 
-const String GUATIAO_KEY_X_ADVANCED = 'x-advanced';
-
 const String GUATIAO_KEY_X_ENUM_LABELS = 'x-enum-labels';
-
-const String GUATIAO_KEY_X_ORDER = 'x-order';
-
-const String GUATIAO_KEY_X_SECTION = 'x-section';
 
 const String GUATIAO_KEY_X_SENSITIVE = 'x-sensitive';
 

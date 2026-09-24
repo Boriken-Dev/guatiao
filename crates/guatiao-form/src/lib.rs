@@ -93,7 +93,7 @@ mod screen;
 pub mod vocab;
 
 pub use build::{Form, Hints, Section};
-pub use declare::{FormBuilder, FormFieldBuilder};
+pub use declare::{FormBuilder, FormField, FormFieldBuilder};
 /// `#[derive(Form)]`, behind the `derive` feature: a type's default
 /// screen from `#[form(..)]` on the type and its fields, as an
 /// `impl Screen`. A macro and a type live in different namespaces, so

@@ -20,11 +20,14 @@ hints    := { "widget": text, "placeholder": text,
   and `guatiao_schema_resolve` already take.
 - **Sections are listed in display order.** Which section a field is in
   is the schema's `x-section`; the form only says what a section is called.
-  Writing `x-section`, `x-order` and `x-advanced` onto a schema is this
-  crate's job too — `FormBuilder` and `FormFieldBuilder` below — because
-  how to group and order controls is an opinion, and `guatiao` holds
-  none. It still READS them (`FieldRef::section`, `order`,
-  `is_advanced`): reading a key is reading a key.
+  **`x-section`, `x-order` and `x-advanced` are this crate's keys**, in
+  its own `vocab` — `guatiao` does not name them, because how to group
+  and order controls is an opinion it does not hold; it carries them as
+  annotations like any key it does not know. They sit on the **schema**,
+  beside the field, not in the form document. `FormBuilder` and
+  `FormFieldBuilder` write them, `FormField` reads them back off a
+  `FieldRef`, and C gets them from `guatiao_form.h` as
+  `GUATIAO_FORM_KEY_X_SECTION` and its two siblings.
 - **`x-sensitive` is not ours.** It stays on `guatiao`'s
   `FieldBuilder::sensitive`, because "never print this value" is obeyed
   by a log and a crash dump as much as by a form.
@@ -50,6 +53,11 @@ trait FormBuilder: guatiao::schema::Extras {   // SchemaBuilder, FieldBuilder, A
 trait FormFieldBuilder: FormBuilder {          // FieldBuilder only
     fn order(self, order: i64) -> Self;        // x-order
     fn advanced(self) -> Self;                 // x-advanced
+}
+trait FormField {                              // reading, on guatiao's FieldRef
+    fn section(&self) -> &str;                 // "" when unset
+    fn order(&self) -> i64;                    // 0 means "no ordering information"
+    fn is_advanced(&self) -> bool;
 }
 
 // building (names no allocator; `_in` forms name one; errors collected)

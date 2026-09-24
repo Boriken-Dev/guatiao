@@ -67,7 +67,7 @@ fn connection() -> Value {
             FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
                 .title("Port")
                 .default(Value::from(5900i64))
-                .option(guatiao::schema::vocab::X_ORDER, guatiao::Number::from(2)),
+                .option("x-order", guatiao::Number::from(2)),
         )
         .field(FieldBuilder::new(
             "level",

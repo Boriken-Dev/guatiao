@@ -311,6 +311,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     through — `extra(key, Result<Value, ValueError>)` plus
     `extra_alloc()`, so a hint lands in the same allocator as the schema
     carrying it.
+  - **The keys themselves moved too.** `x-section`, `x-order` and
+    `x-advanced` are named in `guatiao_form::vocab`, not
+    `guatiao::schema::vocab`, and are read back by
+    `guatiao_form::FormField` over a `FieldRef` — so
+    `FieldRef::{section, order, is_advanced}` are **gone from `guatiao`**,
+    as are `GUATIAO_KEY_X_SECTION`, `_X_ORDER` and `_X_ADVANCED` from
+    `guatiao.h`. C gets them from `guatiao_form.h` as
+    `GUATIAO_FORM_KEY_X_SECTION` and its siblings, and Dart's mirror
+    follows. `guatiao` carries the keys as annotations, like any key it
+    does not name. `x-sensitive` stays `guatiao`'s, both halves.
   - `#[derive(Schema)]`: `#[schema(label = "..")]` → `#[schema(title =
     "..")]` and `#[schema(help = "..")]` → `#[schema(description =
     "..")]` on a field or an arm. A **choice** keeps `label`, because its

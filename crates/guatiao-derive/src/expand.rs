@@ -520,16 +520,20 @@ fn field_builder(field: &FieldPlan) -> TokenStream {
             ::guatiao::schema::FieldBuilder::description(#built, #description)
         };
     }
-    // The presentation keys go through `Extras`, the general door, because
-    // the methods that name them live in `guatiao-form` and a crate
-    // deriving a schema need not depend on it. The allocator comes back
-    // out of the builder, so a hint lands in the same arena the schema is
-    // being built into.
+    // The presentation keys go through `Extras`, the general door, and are
+    // spelled out rather than named: they are `guatiao-form`'s vocabulary
+    // (`guatiao_form::vocab::X_SECTION` and its two siblings), and neither
+    // `guatiao` nor a crate deriving a schema has to depend on that crate
+    // to carry one. THIS is the seam -- a rename there is a rename here,
+    // and `crates/guatiao-form/tests/form_derive.rs` is what notices.
+    //
+    // The allocator comes back out of the builder, so a hint lands in the
+    // same arena the schema is being built into.
     if let Some(section) = &a.section {
         built = quote! {
             ::guatiao::schema::Extras::extra(
                 #built,
-                ::guatiao::schema::vocab::X_SECTION,
+                "x-section",
                 ::guatiao::Text::new_in(__alloc, #section).map(::guatiao::Value::from),
             )
         };
@@ -538,7 +542,7 @@ fn field_builder(field: &FieldPlan) -> TokenStream {
         built = quote! {
             ::guatiao::schema::Extras::extra(
                 #built,
-                ::guatiao::schema::vocab::X_ORDER,
+                "x-order",
                 ::guatiao::Number::new_in(__alloc, &#order.to_string())
                     .map(::guatiao::Value::from),
             )
@@ -548,7 +552,7 @@ fn field_builder(field: &FieldPlan) -> TokenStream {
         built = quote! {
             ::guatiao::schema::Extras::extra(
                 #built,
-                ::guatiao::schema::vocab::X_ADVANCED,
+                "x-advanced",
                 ::core::result::Result::Ok(::guatiao::Value::from(true)),
             )
         };
@@ -1417,15 +1421,11 @@ mod tests {
             "FieldBuilder",
             "KindBuilder",
             "Number",
-            // The door the presentation keys go through, and the module
-            // holding their names. The methods that write them live in
-            // `guatiao-form`, which a crate deriving a schema need not
-            // depend on.
+            // The door the presentation keys go through. Their names are
+            // `guatiao-form`'s and are emitted as literals, so nothing
+            // here names that crate -- which is the point: a crate
+            // deriving a schema need not depend on it.
             "Extras",
-            "vocab",
-            "X_ADVANCED",
-            "X_ORDER",
-            "X_SECTION",
             // Items from `core` and `std`.
             "Default",
             "Option",

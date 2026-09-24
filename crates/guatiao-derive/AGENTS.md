@@ -43,17 +43,23 @@ two parse it and ignore it.
 | --- | --- | --- |
 | `title = "..."` | display name | `title` |
 | `description = "..."` | the prose under it; a `///` doc comment sets this when absent | `description` |
-| `section = "..."` | which section the field belongs to | `x-section` |
-| `order = <int>` | sort position | `x-order` |
-| `advanced` | hide behind an "advanced" toggle | `x-advanced` |
+| `section = "..."` | which section the field belongs to | `x-section` (a) |
+| `order = <int>` | sort position | `x-order` (a) |
+| `advanced` | hide behind an "advanced" toggle | `x-advanced` (a) |
 | `sensitive` | never render, never log, never quote in an error | `x-sensitive` |
 | `default = <expr>` | the declared default | `default` |
 
 The right-hand column is what lands in the document, because **a schema IS
-a JSON Schema** -- and each key is named after what it writes. The `x-`
-ones are written through `guatiao::schema::Extras`, the general door, so
-the expansion never names `guatiao-form`, where the methods that spell
-them live. The field's own name is its key in `properties`, and
+a JSON Schema** -- and each key is named after what it writes.
+
+**(a) is `guatiao-form`'s vocabulary**, not `guatiao`'s: it names
+`x-section`, `x-order` and `x-advanced`, because how to group and order
+controls is an opinion the value crate does not hold. The expansion
+writes them through `guatiao::schema::Extras`, the general door, with the
+key **spelled as a literal** -- so a crate deriving a schema never
+depends on the form crate. That literal is a seam;
+`crates/guatiao-form/tests/form_derive.rs` is what notices if the two
+sides drift. The field's own name is its key in `properties`, and
 whether it is required — a field that is not an `Option<T>` — is a name in
 the struct's `required` list. Neither is written inside the field.
 

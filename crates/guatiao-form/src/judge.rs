@@ -25,10 +25,10 @@ use guatiao::schema::ValidationError;
 use guatiao::schema::flat;
 use guatiao::schema::read::{FieldRef, Kind, SchemaRef};
 use guatiao::schema::validate::{validate_text, validate_value};
-use guatiao::schema::vocab as schema_vocab;
 
 use guatiao::value::types::{List, Map, Tag, Value};
 
+use crate::declare::FormField;
 use crate::read::{FormRef, HintsRef, SectionRef};
 use crate::vocab;
 
@@ -351,7 +351,7 @@ pub fn layout<'a>(schema: SchemaRef<'a>, form: FormRef<'a>) -> Vec<Group<'a>> {
 
 /// Explicit orders first and ascending, then everything without one.
 fn order_key(field: FieldRef<'_>) -> (bool, i64) {
-    match TryAsRef::<Map>::try_as_ref(field.as_value()).and_then(|m| m.get(schema_vocab::X_ORDER)) {
+    match TryAsRef::<Map>::try_as_ref(field.as_value()).and_then(|m| m.get(vocab::X_ORDER)) {
         Some(_) => (false, field.order()),
         None => (true, 0),
     }
