@@ -85,6 +85,9 @@
 #![deny(missing_docs)]
 
 mod build;
+// The form a schema implies, for when nobody wrote one. A `//` comment,
+// never a `///`.
+pub mod create;
 // The presentation hints written beside a schema, extending `guatiao`'s
 // builders through its `Extras` hook. A `//` comment, never a `///`.
 pub mod declare;
@@ -107,6 +110,7 @@ mod texts;
 pub mod vocab;
 
 pub use build::{Form, Hints, Section};
+pub use create::{for_field, for_schema, form_for};
 pub use declare::{FormBuilder, FormField, FormFieldBuilder};
 pub use flat::{SEPARATOR, flatten, is_sensitive, keys, resolve, resolve_in, split, unflatten};
 /// `#[derive(Form)]`, behind the `derive` feature: a type's default

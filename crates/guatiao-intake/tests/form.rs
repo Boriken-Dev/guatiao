@@ -15,8 +15,8 @@ use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::value::read::str_or;
 use guatiao::{Map, Text, Value};
 use guatiao_intake::{
-    Form, FormBuilder, FormError, FormFieldBuilder, FormRef, Hints, Section, check, is_visible,
-    layout, vocab,
+    Form, FormBuilder, FormError, FormFieldBuilder, FormRef, Hints, Section, check, for_field,
+    for_schema, form_for, is_visible, layout, vocab,
 };
 
 /// A schema with a bit of everything: sections, an order, a boolean that
@@ -905,5 +905,127 @@ fn a_sub_form_obeys_every_rule_a_form_obeys() {
     assert!(
         matches!(refused, FormError::DuplicateSection { ref id } if id == "net"),
         "{refused}"
+    );
+}
+
+// --- the form a schema implies ------------------------------------------
+
+/// A created form says what the schema says: which sections exist, in
+/// first-appearance order, and what a member's own form would be.
+#[test]
+fn a_created_form_carries_the_sections_the_schema_names() {
+    let alloc = Alloc::rust();
+    let tls = KindBuilder::map(vec![
+        FieldBuilder::new("verify", KindBuilder::bool()).section("trust"),
+        FieldBuilder::new("ca", KindBuilder::string()).section("trust"),
+        FieldBuilder::new("note", KindBuilder::string()),
+    ]);
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new("host", KindBuilder::string()).section("net"))
+        .field(FieldBuilder::new("tls", tls))
+        .field(FieldBuilder::new("port", KindBuilder::int()).section("net"))
+        .field(FieldBuilder::new("label", KindBuilder::string()).section("meta"))
+        .finish()
+        .expect("it builds");
+    let s = SchemaRef::new(&schema).expect("a schema");
+
+    let form = for_schema(s, alloc).expect("a form this small builds");
+    let f = FormRef::new(&form).expect("what it made is a form");
+
+    // First-appearance order, ids only: what a section is CALLED is a
+    // form's business and a schema has no opinion.
+    let ids: Vec<&str> = f.sections().map(|s| s.id()).collect();
+    assert_eq!(ids, ["net", "meta"]);
+    assert_eq!(f.sections().next().expect("one").label(), "");
+
+    // The nested object carries its own created form, with its own
+    // sections, under the `form` hint.
+    let nested = f.hints("tls").form().expect("tls has members");
+    let nested_ids: Vec<&str> = nested.sections().map(|s| s.id()).collect();
+    assert_eq!(nested_ids, ["trust"]);
+
+    // And what it made fits what it was made from.
+    check(s, f).expect("a created form fits its schema");
+}
+
+/// A schema whose fields name no section implies nothing, and says so:
+/// an empty form, which is a complete one.
+#[test]
+fn a_created_form_is_empty_when_the_schema_groups_nothing() {
+    let alloc = Alloc::rust();
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new("host", KindBuilder::string()))
+        .field(FieldBuilder::new("port", KindBuilder::int()))
+        .finish()
+        .expect("it builds");
+    let s = SchemaRef::new(&schema).expect("a schema");
+
+    let form = for_schema(s, alloc).expect("it builds");
+    let f = FormRef::new(&form).expect("a form");
+    assert!(f.sections().next().is_none());
+    assert!(f.fields().next().is_none(), "no member had anything to say");
+    check(s, f).expect("an empty form is a complete one");
+}
+
+/// `for_field` answers for what a field HAS, and `None` for what it does
+/// not: a text is shown by a control, not by a form.
+#[test]
+fn for_field_answers_only_where_there_are_members() {
+    let alloc = Alloc::rust();
+    let schema = nesting_schema();
+    let s = SchemaRef::new(&schema).expect("a schema");
+
+    for key in ["connection", "agents", "named"] {
+        let field = s.find(key).expect("declared");
+        let made = for_field(field, alloc)
+            .unwrap_or_else(|| panic!("`{key}` has members"))
+            .expect("it builds");
+        assert!(FormRef::new(&made).is_some(), "`{key}` made a form");
+    }
+    assert!(
+        for_field(s.find("label").expect("declared"), alloc).is_none(),
+        "a text has no members to make a form out of"
+    );
+}
+
+/// `form_for` is the question a renderer asks: the assigned form, or the
+/// one the schema implies.
+#[test]
+fn form_for_prefers_what_somebody_wrote() {
+    let alloc = Alloc::rust();
+    let schema = nesting_schema();
+    let s = SchemaRef::new(&schema).expect("a schema");
+
+    // Nothing assigned: the schema still groups the member's fields, so
+    // there is an answer.
+    let bare = Form::new().finish().expect("an empty form");
+    let bare = FormRef::new(&bare).expect("a form");
+    assert!(
+        form_for(bare, s, "connection", alloc).is_some(),
+        "an object is a form whether or not anybody wrote one"
+    );
+    assert!(
+        form_for(bare, s, "label", alloc).is_none(),
+        "and a text is not"
+    );
+    assert!(form_for(bare, s, "nonesuch", alloc).is_none());
+
+    // Assigned: that one wins, and comes back owned.
+    let written = Form::new()
+        .field(
+            "connection",
+            Hints::new().form(Form::new().section(Section::new("written").label("Written"))),
+        )
+        .finish()
+        .expect("it builds");
+    let written = FormRef::new(&written).expect("a form");
+    let chosen = form_for(written, s, "connection", alloc)
+        .expect("assigned")
+        .expect("it copies");
+    let chosen = FormRef::new(&chosen).expect("a form");
+    assert_eq!(
+        chosen.sections().next().expect("one section").label(),
+        "Written",
+        "assignment wins: somebody wrote it down"
     );
 }
