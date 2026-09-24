@@ -17,6 +17,7 @@ pub guatiao::convert::MapError::WrongType::found: core::option::Option<guatiao::
 pub guatiao::convert::MapError::WrongType::key: alloc::string::String
 impl guatiao::convert::MapError
 pub fn guatiao::convert::MapError::at(self, usize) -> guatiao::convert::MapError
+pub fn guatiao::convert::MapError::at_key(self, &str) -> guatiao::convert::MapError
 pub fn guatiao::convert::MapError::bad_value(impl core::convert::Into<alloc::string::String>) -> guatiao::convert::MapError
 pub fn guatiao::convert::MapError::key(&self) -> &str
 pub fn guatiao::convert::MapError::missing(&str) -> guatiao::convert::MapError
@@ -100,10 +101,14 @@ impl guatiao::convert::FromValue for u8
 pub fn u8::from_value(&guatiao::value::value::Value) -> core::result::Result<u8, guatiao::convert::MapError>
 impl guatiao::convert::FromValue for usize
 pub fn usize::from_value(&guatiao::value::value::Value) -> core::result::Result<usize, guatiao::convert::MapError>
+impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, T>, guatiao::convert::MapError>
 impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<T>, guatiao::convert::MapError>
 impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for core::option::Option<T>
 pub fn core::option::Option<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<core::option::Option<T>, guatiao::convert::MapError>
+impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for std::collections::hash::map::HashMap<alloc::string::String, T>
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<std::collections::hash::map::HashMap<alloc::string::String, T>, guatiao::convert::MapError>
 pub trait guatiao::convert::ToValue
 pub fn guatiao::convert::ToValue::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::convert::ToValue for alloc::string::String
@@ -146,10 +151,14 @@ impl<T: guatiao::convert::ToValue + ?core::marker::Sized> guatiao::convert::ToVa
 pub fn &T::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for [T]
 pub fn [T]::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for core::option::Option<T>
 pub fn core::option::Option<T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for std::collections::hash::map::HashMap<alloc::string::String, T>
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub trait guatiao::convert::TryAsMut<T: ?core::marker::Sized>
 pub fn guatiao::convert::TryAsMut::try_as_mut(&mut self) -> core::option::Option<&mut T>
 impl guatiao::convert::TryAsMut<bool> for guatiao::value::value::Value
@@ -1817,6 +1826,8 @@ pub fn guatiao::schema::build::KindBuilder::list(guatiao::schema::build::KindBui
 pub fn guatiao::schema::build::KindBuilder::list_in(guatiao::value::alloc::Alloc, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::map(alloc::vec::Vec<guatiao::schema::build::FieldBuilder>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::map_in(guatiao::value::alloc::Alloc, alloc::vec::Vec<guatiao::schema::build::FieldBuilder>) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::map_of(guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::map_of_in(guatiao::value::alloc::Alloc, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::union(alloc::vec::Vec<guatiao::schema::build::KindBuilder>) -> guatiao::schema::build::KindBuilder
@@ -1908,12 +1919,18 @@ pub fn u8::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao:
 impl guatiao::schema::describe::Schema for usize
 pub fn usize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn usize::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn alloc::vec::Vec<T>::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for core::option::Option<T>
 pub fn core::option::Option<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn core::option::Option<T>::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for std::collections::hash::map::HashMap<alloc::string::String, T>
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub mod guatiao::schema::flat
 pub const guatiao::schema::flat::SEPARATOR: char
 pub fn guatiao::schema::flat::check_keys(guatiao::schema::read::SchemaRef<'_>) -> core::result::Result<(), alloc::string::String>
@@ -1958,6 +1975,7 @@ pub guatiao::schema::read::Kind::Int::max: core::option::Option<i64>
 pub guatiao::schema::read::Kind::Int::min: core::option::Option<i64>
 pub guatiao::schema::read::Kind::List(&'a guatiao::value::value::Value)
 pub guatiao::schema::read::Kind::Map(&'a guatiao::value::value::Value)
+pub guatiao::schema::read::Kind::MapOf(&'a guatiao::value::value::Value)
 pub guatiao::schema::read::Kind::Missing
 pub guatiao::schema::read::Kind::Str
 pub guatiao::schema::read::Kind::Union(&'a guatiao::value::value::Value)
@@ -1972,6 +1990,7 @@ pub fn guatiao::schema::read::Kind<'a>::choices(self) -> impl core::iter::traits
 pub fn guatiao::schema::read::Kind<'a>::fields(self) -> impl core::iter::traits::iterator::Iterator<Item = guatiao::schema::read::FieldRef<'a>>
 pub fn guatiao::schema::read::Kind<'a>::items(self) -> guatiao::schema::read::Kind<'a>
 pub fn guatiao::schema::read::Kind<'a>::name(self) -> &'a str
+pub fn guatiao::schema::read::Kind<'a>::values(self) -> guatiao::schema::read::Kind<'a>
 impl<'a> core::clone::Clone for guatiao::schema::read::Kind<'a>
 pub fn guatiao::schema::read::Kind<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::schema::read::Kind<'a>
@@ -2083,6 +2102,7 @@ pub guatiao::schema::KindRef::Int::max: core::option::Option<i64>
 pub guatiao::schema::KindRef::Int::min: core::option::Option<i64>
 pub guatiao::schema::KindRef::List(&'a guatiao::value::value::Value)
 pub guatiao::schema::KindRef::Map(&'a guatiao::value::value::Value)
+pub guatiao::schema::KindRef::MapOf(&'a guatiao::value::value::Value)
 pub guatiao::schema::KindRef::Missing
 pub guatiao::schema::KindRef::Str
 pub guatiao::schema::KindRef::Union(&'a guatiao::value::value::Value)
@@ -2097,6 +2117,7 @@ pub fn guatiao::schema::read::Kind<'a>::choices(self) -> impl core::iter::traits
 pub fn guatiao::schema::read::Kind<'a>::fields(self) -> impl core::iter::traits::iterator::Iterator<Item = guatiao::schema::read::FieldRef<'a>>
 pub fn guatiao::schema::read::Kind<'a>::items(self) -> guatiao::schema::read::Kind<'a>
 pub fn guatiao::schema::read::Kind<'a>::name(self) -> &'a str
+pub fn guatiao::schema::read::Kind<'a>::values(self) -> guatiao::schema::read::Kind<'a>
 impl<'a> core::clone::Clone for guatiao::schema::read::Kind<'a>
 pub fn guatiao::schema::read::Kind<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::schema::read::Kind<'a>
@@ -2209,6 +2230,8 @@ pub fn guatiao::schema::build::KindBuilder::list(guatiao::schema::build::KindBui
 pub fn guatiao::schema::build::KindBuilder::list_in(guatiao::value::alloc::Alloc, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::map(alloc::vec::Vec<guatiao::schema::build::FieldBuilder>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::map_in(guatiao::value::alloc::Alloc, alloc::vec::Vec<guatiao::schema::build::FieldBuilder>) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::map_of(guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::map_of_in(guatiao::value::alloc::Alloc, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::union(alloc::vec::Vec<guatiao::schema::build::KindBuilder>) -> guatiao::schema::build::KindBuilder
@@ -2316,12 +2339,18 @@ pub fn u8::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao:
 impl guatiao::schema::describe::Schema for usize
 pub fn usize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn usize::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn alloc::vec::Vec<T>::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for core::option::Option<T>
 pub fn core::option::Option<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn core::option::Option<T>::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for std::collections::hash::map::HashMap<alloc::string::String, T>
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::schema::flatten(guatiao::schema::read::FieldRef<'_>, &guatiao::value::value::Value, &mut alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>) -> bool
 pub fn guatiao::schema::is_sensitive(guatiao::schema::read::SchemaRef<'_>, &str) -> bool
 pub fn guatiao::schema::resolve<'a>(guatiao::schema::read::SchemaRef<'a>, &str) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
@@ -2398,6 +2427,7 @@ pub guatiao::value::convert::MapError::WrongType::found: core::option::Option<gu
 pub guatiao::value::convert::MapError::WrongType::key: alloc::string::String
 impl guatiao::convert::MapError
 pub fn guatiao::convert::MapError::at(self, usize) -> guatiao::convert::MapError
+pub fn guatiao::convert::MapError::at_key(self, &str) -> guatiao::convert::MapError
 pub fn guatiao::convert::MapError::bad_value(impl core::convert::Into<alloc::string::String>) -> guatiao::convert::MapError
 pub fn guatiao::convert::MapError::key(&self) -> &str
 pub fn guatiao::convert::MapError::missing(&str) -> guatiao::convert::MapError
@@ -2481,10 +2511,14 @@ impl guatiao::convert::FromValue for u8
 pub fn u8::from_value(&guatiao::value::value::Value) -> core::result::Result<u8, guatiao::convert::MapError>
 impl guatiao::convert::FromValue for usize
 pub fn usize::from_value(&guatiao::value::value::Value) -> core::result::Result<usize, guatiao::convert::MapError>
+impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, T>, guatiao::convert::MapError>
 impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<T>, guatiao::convert::MapError>
 impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for core::option::Option<T>
 pub fn core::option::Option<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<core::option::Option<T>, guatiao::convert::MapError>
+impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for std::collections::hash::map::HashMap<alloc::string::String, T>
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<std::collections::hash::map::HashMap<alloc::string::String, T>, guatiao::convert::MapError>
 pub trait guatiao::value::convert::ToValue
 pub fn guatiao::value::convert::ToValue::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::convert::ToValue for alloc::string::String
@@ -2527,10 +2561,14 @@ impl<T: guatiao::convert::ToValue + ?core::marker::Sized> guatiao::convert::ToVa
 pub fn &T::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for [T]
 pub fn [T]::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for core::option::Option<T>
 pub fn core::option::Option<T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for std::collections::hash::map::HashMap<alloc::string::String, T>
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub trait guatiao::value::convert::TryAsMut<T: ?core::marker::Sized>
 pub fn guatiao::value::convert::TryAsMut::try_as_mut(&mut self) -> core::option::Option<&mut T>
 impl guatiao::convert::TryAsMut<bool> for guatiao::value::value::Value
@@ -4100,6 +4138,7 @@ pub guatiao::value::MapError::WrongType::found: core::option::Option<guatiao::va
 pub guatiao::value::MapError::WrongType::key: alloc::string::String
 impl guatiao::convert::MapError
 pub fn guatiao::convert::MapError::at(self, usize) -> guatiao::convert::MapError
+pub fn guatiao::convert::MapError::at_key(self, &str) -> guatiao::convert::MapError
 pub fn guatiao::convert::MapError::bad_value(impl core::convert::Into<alloc::string::String>) -> guatiao::convert::MapError
 pub fn guatiao::convert::MapError::key(&self) -> &str
 pub fn guatiao::convert::MapError::missing(&str) -> guatiao::convert::MapError
@@ -4820,10 +4859,14 @@ impl guatiao::convert::FromValue for u8
 pub fn u8::from_value(&guatiao::value::value::Value) -> core::result::Result<u8, guatiao::convert::MapError>
 impl guatiao::convert::FromValue for usize
 pub fn usize::from_value(&guatiao::value::value::Value) -> core::result::Result<usize, guatiao::convert::MapError>
+impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, T>, guatiao::convert::MapError>
 impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<T>, guatiao::convert::MapError>
 impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for core::option::Option<T>
 pub fn core::option::Option<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<core::option::Option<T>, guatiao::convert::MapError>
+impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for std::collections::hash::map::HashMap<alloc::string::String, T>
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<std::collections::hash::map::HashMap<alloc::string::String, T>, guatiao::convert::MapError>
 pub trait guatiao::value::ToValue
 pub fn guatiao::value::ToValue::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::convert::ToValue for alloc::string::String
@@ -4866,10 +4909,14 @@ impl<T: guatiao::convert::ToValue + ?core::marker::Sized> guatiao::convert::ToVa
 pub fn &T::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for [T]
 pub fn [T]::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for core::option::Option<T>
 pub fn core::option::Option<T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for std::collections::hash::map::HashMap<alloc::string::String, T>
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub trait guatiao::value::TryAsMut<T: ?core::marker::Sized>
 pub fn guatiao::value::TryAsMut::try_as_mut(&mut self) -> core::option::Option<&mut T>
 impl guatiao::convert::TryAsMut<bool> for guatiao::value::value::Value
@@ -4925,6 +4972,7 @@ pub guatiao::MapError::WrongType::found: core::option::Option<guatiao::value::va
 pub guatiao::MapError::WrongType::key: alloc::string::String
 impl guatiao::convert::MapError
 pub fn guatiao::convert::MapError::at(self, usize) -> guatiao::convert::MapError
+pub fn guatiao::convert::MapError::at_key(self, &str) -> guatiao::convert::MapError
 pub fn guatiao::convert::MapError::bad_value(impl core::convert::Into<alloc::string::String>) -> guatiao::convert::MapError
 pub fn guatiao::convert::MapError::key(&self) -> &str
 pub fn guatiao::convert::MapError::missing(&str) -> guatiao::convert::MapError
@@ -5725,10 +5773,14 @@ impl guatiao::convert::FromValue for u8
 pub fn u8::from_value(&guatiao::value::value::Value) -> core::result::Result<u8, guatiao::convert::MapError>
 impl guatiao::convert::FromValue for usize
 pub fn usize::from_value(&guatiao::value::value::Value) -> core::result::Result<usize, guatiao::convert::MapError>
+impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, T>, guatiao::convert::MapError>
 impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<T>, guatiao::convert::MapError>
 impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for core::option::Option<T>
 pub fn core::option::Option<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<core::option::Option<T>, guatiao::convert::MapError>
+impl<T: guatiao::convert::FromValue> guatiao::convert::FromValue for std::collections::hash::map::HashMap<alloc::string::String, T>
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<std::collections::hash::map::HashMap<alloc::string::String, T>, guatiao::convert::MapError>
 pub trait guatiao::Schema
 pub fn guatiao::Schema::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::Schema::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -5783,12 +5835,18 @@ pub fn u8::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao:
 impl guatiao::schema::describe::Schema for usize
 pub fn usize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn usize::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn alloc::vec::Vec<T>::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for core::option::Option<T>
 pub fn core::option::Option<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn core::option::Option<T>::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for std::collections::hash::map::HashMap<alloc::string::String, T>
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub trait guatiao::ToValue
 pub fn guatiao::ToValue::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::convert::ToValue for alloc::string::String
@@ -5831,10 +5889,14 @@ impl<T: guatiao::convert::ToValue + ?core::marker::Sized> guatiao::convert::ToVa
 pub fn &T::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for [T]
 pub fn [T]::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
+pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for core::option::Option<T>
 pub fn core::option::Option<T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::convert::ToValue> guatiao::convert::ToValue for std::collections::hash::map::HashMap<alloc::string::String, T>
+pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub trait guatiao::TryAsMut<T: ?core::marker::Sized>
 pub fn guatiao::TryAsMut::try_as_mut(&mut self) -> core::option::Option<&mut T>
 impl guatiao::convert::TryAsMut<bool> for guatiao::value::value::Value

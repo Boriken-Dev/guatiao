@@ -185,7 +185,7 @@ fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), Val
         // rule here to check against, and accepting is the honest answer
         // rather than the lenient one. The structural check is in
         // [`validate_value`], which has the value rather than its text.
-        Kind::Bytes | Kind::List(_) | Kind::Map(_) => Ok(()),
+        Kind::Bytes | Kind::List(_) | Kind::Map(_) | Kind::MapOf(_) => Ok(()),
         // A kind from a newer producer: this build cannot say whether the
         // value is acceptable, so it does not pretend to. Accepting is the
         // right answer rather than the lenient one — rejecting would make
@@ -286,6 +286,30 @@ fn value_against(
             let element = kind.items();
             for (i, item) in items.iter().enumerate() {
                 value_against(element, &format!("{key}[{i}]"), item, depth + 1)?;
+            }
+            return Ok(());
+        }
+        Kind::MapOf(_) => {
+            // The keys are data, so there is nothing to check about them
+            // and no such thing as an undeclared one. What is declared is
+            // the value, and every entry answers to it.
+            if value.tag() != Ok(Tag::GUATIAO_MAP) {
+                return Err(bad(key, "an object"));
+            }
+            let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
+                return Err(bad(key, "keys that are text"));
+            };
+            let element = kind.values();
+            for entry in map {
+                // `[key]` rather than `.key`, the same bracket the list
+                // branch writes for a position: an entry of an open map
+                // is reached by its key, and a key is data.
+                value_against(
+                    element,
+                    &format!("{key}[{}]", entry.key()),
+                    entry.value(),
+                    depth + 1,
+                )?;
             }
             return Ok(());
         }

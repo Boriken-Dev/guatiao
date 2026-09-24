@@ -166,6 +166,26 @@ impl<T: Schema> Schema for Vec<T> {
     }
 }
 
+/// A map keyed by text describes an object whose **keys are data**: any
+/// number of them, every value of one kind.
+///
+/// The schema says what the values are and nothing about the keys,
+/// because there is nothing to say — a struct holding one of these is
+/// exactly that, and a schema describes the struct as it is.
+impl<T: Schema> Schema for std::collections::BTreeMap<String, T> {
+    fn kind(alloc: Alloc) -> KindBuilder {
+        KindBuilder::map_of_in(alloc, T::kind(alloc))
+    }
+}
+
+/// The same. A `HashMap`'s iteration order is its own, which shows in the
+/// value it writes and not in what it declares.
+impl<T: Schema> Schema for std::collections::HashMap<String, T> {
+    fn kind(alloc: Alloc) -> KindBuilder {
+        KindBuilder::map_of_in(alloc, T::kind(alloc))
+    }
+}
+
 /// An `Option<T>` describes exactly what `T` describes.
 ///
 /// Optionality is the **field's** property, not the type's: a schema says
