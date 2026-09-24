@@ -10,13 +10,14 @@ use std::cell::Cell;
 use std::ffi::c_void;
 
 use guatiao::schema::read::SchemaRef;
-use guatiao::schema::{
-    ArmBuilder, FieldBuilder, FormBuilder, FormFieldBuilder, KindBuilder, SchemaBuilder,
-};
+use guatiao::schema::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::value::read::str_or;
 use guatiao::{Map, Text, Value};
-use guatiao_form::{Form, FormError, FormRef, Hints, Section, check, is_visible, layout, vocab};
+use guatiao_form::{
+    Form, FormBuilder, FormError, FormFieldBuilder, FormRef, Hints, Section, check, is_visible,
+    layout, vocab,
+};
 
 /// A schema with a bit of everything: sections, an order, a boolean that
 /// guards another field, a default, and a variant with an arm field.

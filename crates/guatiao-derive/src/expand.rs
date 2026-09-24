@@ -226,11 +226,13 @@ struct FieldAttrs {
 /// and still useful -- presentation is optional, substance is not.
 #[derive(Default)]
 struct SchemaAttrs {
-    label: Option<String>,
-    /// `#[schema(help = "...")]`, or the field's doc comment when that is
-    /// absent. A doc comment is where a person already writes this, and
-    /// asking them to write it twice is how the two drift apart.
-    help: Option<String>,
+    /// `#[schema(title = "...")]`: JSON Schema's own keyword, named after
+    /// it.
+    title: Option<String>,
+    /// `#[schema(description = "...")]`, or the field's doc comment when
+    /// that is absent. A doc comment is where a person already writes
+    /// this, and asking them to write it twice is how the two drift apart.
+    description: Option<String>,
     section: Option<String>,
     order: Option<i64>,
     advanced: bool,
@@ -246,7 +248,7 @@ impl FieldAttrs {
         let mut out = FieldAttrs::default();
         let mut rename_span = None;
 
-        out.schema.help = doc_comment(&field.attrs);
+        out.schema.description = doc_comment(&field.attrs);
 
         for attr in &field.attrs {
             if attr.path().is_ident("schema") {
@@ -294,10 +296,10 @@ impl FieldAttrs {
 impl SchemaAttrs {
     fn read(&mut self, label: &str, attr: &syn::Attribute) -> syn::Result<()> {
         attr.parse_nested_meta(|meta| {
-            if meta.path.is_ident("label") {
-                self.label = Some(meta.value()?.parse::<LitStr>()?.value());
-            } else if meta.path.is_ident("help") {
-                self.help = Some(meta.value()?.parse::<LitStr>()?.value());
+            if meta.path.is_ident("title") {
+                self.title = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("description") {
+                self.description = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("section") {
                 self.section = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("order") {
@@ -310,8 +312,8 @@ impl SchemaAttrs {
                 self.default = Some(meta.value()?.parse()?);
             } else {
                 return Err(meta.error(format!(
-                    "unrecognised `#[schema(...)]` option. {label} knows `label`, \
-                     `help`, `section`, `order`, `advanced`, `sensitive` and \
+                    "unrecognised `#[schema(...)]` option. {label} knows `title`, \
+                     `description`, `section`, `order`, `advanced`, `sensitive` and \
                      `default`; the key and whether the field is required come from \
                      `#[map(...)]` and from the type."
                 )));
@@ -504,38 +506,56 @@ fn field_builder(field: &FieldPlan) -> TokenStream {
         )
     };
     let a = &field.schema;
-    // Qualified, not `.label(..)`. These are trait methods, and method
-    // syntax would need `FormBuilder` in scope at the EXPANSION site --
+    // Qualified, not `.title(..)`. Some of these are trait methods, and
+    // method syntax would need the trait in scope at the EXPANSION site --
     // somebody else's crate, which generated code may not assume anything
     // about. The same reason every path here is rooted at `::guatiao`.
-    if let Some(label) = &a.label {
+    if let Some(title) = &a.title {
         built = quote! {
-            ::guatiao::schema::FormBuilder::label(#built, #label)
+            ::guatiao::schema::FieldBuilder::title(#built, #title)
         };
     }
-    if let Some(help) = &a.help {
+    if let Some(description) = &a.description {
         built = quote! {
-            ::guatiao::schema::FormBuilder::help(#built, #help)
+            ::guatiao::schema::FieldBuilder::description(#built, #description)
         };
     }
+    // The presentation keys go through `Extras`, the general door, because
+    // the methods that name them live in `guatiao-form` and a crate
+    // deriving a schema need not depend on it. The allocator comes back
+    // out of the builder, so a hint lands in the same arena the schema is
+    // being built into.
     if let Some(section) = &a.section {
         built = quote! {
-            ::guatiao::schema::FormBuilder::section(#built, #section)
+            ::guatiao::schema::Extras::extra(
+                #built,
+                ::guatiao::schema::vocab::X_SECTION,
+                ::guatiao::Text::new_in(__alloc, #section).map(::guatiao::Value::from),
+            )
         };
     }
     if let Some(order) = a.order {
         built = quote! {
-            ::guatiao::schema::FormFieldBuilder::order(#built, #order)
+            ::guatiao::schema::Extras::extra(
+                #built,
+                ::guatiao::schema::vocab::X_ORDER,
+                ::guatiao::Number::new_in(__alloc, &#order.to_string())
+                    .map(::guatiao::Value::from),
+            )
         };
     }
     if a.advanced {
         built = quote! {
-            ::guatiao::schema::FormFieldBuilder::advanced(#built)
+            ::guatiao::schema::Extras::extra(
+                #built,
+                ::guatiao::schema::vocab::X_ADVANCED,
+                ::core::result::Result::Ok(::guatiao::Value::from(true)),
+            )
         };
     }
     if a.sensitive {
         built = quote! {
-            ::guatiao::schema::FormFieldBuilder::sensitive(#built)
+            ::guatiao::schema::FieldBuilder::sensitive(#built)
         };
     }
     // Not an `Option<T>` means the value has to be there. The declaration
@@ -694,20 +714,29 @@ struct VariantPlan {
     unit: bool,
     /// Named fields, in declaration order. Empty for a unit variant.
     fields: Vec<FieldPlan>,
-    label: Option<String>,
-    help: Option<String>,
+    /// The text shown for it: an arm's `title`, or a choice's entry in
+    /// `x-enum-labels` -- which is why a choice declares it as `label`.
+    title: Option<String>,
+    /// An arm's `description`. A choice has none.
+    description: Option<String>,
 }
 
 impl VariantPlan {
-    /// `tagged` decides what a doc comment is. **A doc comment fills the
-    /// most descriptive human slot the thing has**: an arm has a label and
-    /// help, so its doc comment is help, the same as a struct field's; a
-    /// choice has only a label, so its doc comment is the label.
+    /// `tagged` decides both what a doc comment is and what the attribute
+    /// is called, because the two shapes write different keys. An arm is a
+    /// subschema, so it takes `title` and `description`, JSON Schema's own
+    /// keywords; a choice is one entry in `x-enum-labels`, so it takes
+    /// `label`, that key's own word.
+    ///
+    /// **A doc comment fills the most descriptive human slot the thing
+    /// has**: an arm has a description as well as a title, so its doc
+    /// comment is the description, the same as a struct field's; a choice
+    /// has only a label, so its doc comment is the label.
     fn read(derive: Derive, variant: &Variant, tagged: bool) -> syn::Result<VariantPlan> {
         let label = derive.spelled();
         let mut rename = None;
-        let mut explicit_label = None;
-        let mut explicit_help = None;
+        let mut explicit_title = None;
+        let mut explicit_description = None;
 
         for attr in &variant.attrs {
             if attr.path().is_ident("map") {
@@ -725,23 +754,28 @@ impl VariantPlan {
                 })?;
             } else if attr.path().is_ident("schema") {
                 attr.parse_nested_meta(|meta| {
-                    if meta.path.is_ident("label") {
-                        explicit_label = Some(meta.value()?.parse::<LitStr>()?.value());
+                    if tagged && meta.path.is_ident("title") {
+                        explicit_title = Some(meta.value()?.parse::<LitStr>()?.value());
                         Ok(())
-                    } else if tagged && meta.path.is_ident("help") {
-                        explicit_help = Some(meta.value()?.parse::<LitStr>()?.value());
+                    } else if tagged && meta.path.is_ident("description") {
+                        explicit_description = Some(meta.value()?.parse::<LitStr>()?.value());
+                        Ok(())
+                    } else if !tagged && meta.path.is_ident("label") {
+                        explicit_title = Some(meta.value()?.parse::<LitStr>()?.value());
                         Ok(())
                     } else if tagged {
                         Err(meta.error(format!(
                             "unrecognised `#[schema(...)]` option on a variant. {label} \
-                             knows `label` and `help`: a variant is an arm, and the \
+                             knows `title` and `description`: a variant is an arm, which \
+                             is a subschema and takes JSON Schema's own keywords. The \
                              other options describe fields, which go on its fields."
                         )))
                     } else {
                         Err(meta.error(format!(
                             "unrecognised `#[schema(...)]` option on a variant. {label} \
                              knows `label`: a unit variant is one choice among several, \
-                             and a choice has a label and nothing else."
+                             its text is written to `x-enum-labels`, and `label` is that \
+                             key's own word. An arm of a tagged enum takes `title`."
                         )))
                     }
                 })?;
@@ -749,10 +783,10 @@ impl VariantPlan {
         }
 
         let doc = doc_comment(&variant.attrs);
-        let (label_text, help_text) = if tagged {
-            (explicit_label, explicit_help.or(doc))
+        let (title_text, description_text) = if tagged {
+            (explicit_title, explicit_description.or(doc))
         } else {
-            (explicit_label.or(doc), None)
+            (explicit_title.or(doc), None)
         };
 
         let fields = match &variant.fields {
@@ -782,8 +816,8 @@ impl VariantPlan {
             unit: matches!(variant.fields, Fields::Unit),
             ident: variant.ident.clone(),
             fields,
-            label: label_text,
-            help: help_text,
+            title: title_text,
+            description: description_text,
         })
     }
 }
@@ -955,7 +989,7 @@ fn emit_choice_schema(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
         let stored = &v.stored;
         // No label is written as empty, and the builder leaves an empty
         // one off: a reader shows the value when there is no label.
-        let label = v.label.as_deref().unwrap_or("");
+        let label = v.title.as_deref().unwrap_or("");
         quote! { (#stored, #label), }
     });
     quote! {
@@ -1080,13 +1114,13 @@ fn emit_arm_from(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStre
 fn emit_arm_schema(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStream {
     let arms = variants.iter().map(|v| {
         let stored = &v.stored;
-        let label = v.label.as_deref().unwrap_or("");
+        let title = v.title.as_deref().unwrap_or("");
         let mut built = quote! {
-            ::guatiao::schema::ArmBuilder::new_in(__alloc, #stored, #label)
+            ::guatiao::schema::ArmBuilder::new_in(__alloc, #stored, #title)
         };
-        if let Some(help) = &v.help {
+        if let Some(description) = &v.description {
             built = quote! {
-                ::guatiao::schema::FormBuilder::help(#built, #help)
+                ::guatiao::schema::ArmBuilder::description(#built, #description)
             };
         }
         // The same builder a struct's fields go through, so `#[map]` and
@@ -1247,7 +1281,7 @@ mod tests {
         // path would be scanned as though the expansion had emitted it.
         let declaration = quote! {
             struct S {
-                #[schema(label = "A", help = "h", section = "s", order = 2, advanced, sensitive, default = 5900)]
+                #[schema(title = "A", description = "h", section = "s", order = 2, advanced, sensitive, default = 5900)]
                 a: u8,
                 b: ::core::option::Option<u8>,
                 #[map(skip)] c: u8,
@@ -1381,9 +1415,17 @@ mod tests {
             "Schema",
             "ArmBuilder",
             "FieldBuilder",
-            "FormBuilder",
-            "FormFieldBuilder",
             "KindBuilder",
+            "Number",
+            // The door the presentation keys go through, and the module
+            // holding their names. The methods that write them live in
+            // `guatiao-form`, which a crate deriving a schema need not
+            // depend on.
+            "Extras",
+            "vocab",
+            "X_ADVANCED",
+            "X_ORDER",
+            "X_SECTION",
             // Items from `core` and `std`.
             "Default",
             "Option",
@@ -1574,8 +1616,9 @@ mod tests {
             "{schema_side}"
         );
         assert!(
-            schema_side.contains("FormBuilder :: help"),
-            "an arm has help as well as a label, so its doc comment is help: {schema_side}"
+            schema_side.contains("ArmBuilder :: description"),
+            "an arm has a description as well as a title, so its doc comment is the \
+             description: {schema_side}"
         );
         assert!(
             schema_side.contains("FieldBuilder :: new_in (__alloc , \"username\""),
@@ -1611,10 +1654,18 @@ mod tests {
         let skip = to(quote! { enum E { #[map(skip)] A } });
         assert!(skip.contains("cannot be skipped"), "{skip}");
 
-        let help = schema(quote! { enum E { #[schema(help = "x")] A } });
+        // A choice takes `label`, the word `x-enum-labels` uses; `title`
+        // is the arm spelling and is refused here, with the difference
+        // named rather than left to be guessed at.
+        let described = schema(quote! { enum E { #[schema(description = "x")] A } });
         assert!(
-            help.contains("a choice has a label and nothing else"),
-            "{help}"
+            described.contains("`label` is that key's own word"),
+            "{described}"
+        );
+        let titled = schema(quote! { enum E { #[schema(title = "x")] A } });
+        assert!(
+            titled.contains("An arm of a tagged enum takes `title`"),
+            "{titled}"
         );
 
         let generic = to(quote! { enum E<T> { A(T) } });

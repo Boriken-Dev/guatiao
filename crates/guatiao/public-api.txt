@@ -1693,37 +1693,32 @@ pub mod guatiao::schema
 pub mod guatiao::schema::build
 pub struct guatiao::schema::build::ArmBuilder
 impl guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::description(self, &str) -> guatiao::schema::build::ArmBuilder
 pub fn guatiao::schema::build::ArmBuilder::field(self, guatiao::schema::build::FieldBuilder) -> guatiao::schema::build::ArmBuilder
 pub fn guatiao::schema::build::ArmBuilder::new(&str, &str) -> guatiao::schema::build::ArmBuilder
 pub fn guatiao::schema::build::ArmBuilder::new_in(guatiao::value::alloc::Alloc, &str, &str) -> guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::title(self, &str) -> guatiao::schema::build::ArmBuilder
 impl core::fmt::Debug for guatiao::schema::build::ArmBuilder
 pub fn guatiao::schema::build::ArmBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl guatiao::schema::form::FormBuilder for guatiao::schema::build::ArmBuilder
-pub fn guatiao::schema::build::ArmBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::build::ArmBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::build::ArmBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::build::ArmBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::build::ArmBuilder::section(self, &str) -> Self
+impl guatiao::schema::build::Extras for guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::extra_alloc(&self) -> guatiao::value::alloc::Alloc
 pub struct guatiao::schema::build::FieldBuilder
 impl guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::default(self, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::default_checked(self, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::description(self, &str) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::new(&str, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::new_in(guatiao::value::alloc::Alloc, &str, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::option(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::required(self) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::sensitive(self) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::title(self, &str) -> guatiao::schema::build::FieldBuilder
 impl core::fmt::Debug for guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl guatiao::schema::form::FormBuilder for guatiao::schema::build::FieldBuilder
-pub fn guatiao::schema::build::FieldBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::build::FieldBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::build::FieldBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::build::FieldBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::build::FieldBuilder::section(self, &str) -> Self
-impl guatiao::schema::form::FormFieldBuilder for guatiao::schema::build::FieldBuilder
-pub fn guatiao::schema::build::FieldBuilder::advanced(self) -> Self
-pub fn guatiao::schema::build::FieldBuilder::order(self, i64) -> Self
-pub fn guatiao::schema::build::FieldBuilder::sensitive(self) -> Self
+impl guatiao::schema::build::Extras for guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::extra_alloc(&self) -> guatiao::value::alloc::Alloc
 pub struct guatiao::schema::build::KindBuilder
 impl guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::bool() -> guatiao::schema::build::KindBuilder
@@ -1757,21 +1752,32 @@ impl core::fmt::Debug for guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::schema::build::SchemaBuilder
 impl guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::description(self, &str) -> guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::field(self, guatiao::schema::build::FieldBuilder) -> guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::finish(self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::schema::build::SchemaBuilder::new() -> guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::new_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::option(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::title(self, &str) -> guatiao::schema::build::SchemaBuilder
 impl core::default::Default for guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::default() -> guatiao::schema::build::SchemaBuilder
 impl core::fmt::Debug for guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl guatiao::schema::form::FormBuilder for guatiao::schema::build::SchemaBuilder
-pub fn guatiao::schema::build::SchemaBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::build::SchemaBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::build::SchemaBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::build::SchemaBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::build::SchemaBuilder::section(self, &str) -> Self
+impl guatiao::schema::build::Extras for guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::extra_alloc(&self) -> guatiao::value::alloc::Alloc
+pub trait guatiao::schema::build::Extras: core::marker::Sized
+pub fn guatiao::schema::build::Extras::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> Self
+pub fn guatiao::schema::build::Extras::extra_alloc(&self) -> guatiao::value::alloc::Alloc
+impl guatiao::schema::build::Extras for guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::extra_alloc(&self) -> guatiao::value::alloc::Alloc
+impl guatiao::schema::build::Extras for guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::extra_alloc(&self) -> guatiao::value::alloc::Alloc
+impl guatiao::schema::build::Extras for guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::extra_alloc(&self) -> guatiao::value::alloc::Alloc
 pub mod guatiao::schema::describe
 pub trait guatiao::schema::describe::Schema
 pub fn guatiao::schema::describe::Schema::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
@@ -1844,39 +1850,6 @@ pub fn guatiao::schema::flat::resolve_in<'a>(guatiao::schema::read::SchemaRef<'a
 pub fn guatiao::schema::flat::split(&str) -> core::option::Option<(&str, &str)>
 pub fn guatiao::schema::flat::unflatten(guatiao::value::alloc::Alloc, guatiao::schema::read::FieldRef<'_>, &alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>) -> core::option::Option<guatiao::value::value::Value>
 pub type guatiao::schema::flat::Error = guatiao::value::error::ValueError
-pub mod guatiao::schema::form
-pub trait guatiao::schema::form::FormBuilder: core::marker::Sized
-pub fn guatiao::schema::form::FormBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::form::FormBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::form::FormBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::form::FormBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::form::FormBuilder::section(self, &str) -> Self
-impl guatiao::schema::form::FormBuilder for guatiao::schema::build::ArmBuilder
-pub fn guatiao::schema::build::ArmBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::build::ArmBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::build::ArmBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::build::ArmBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::build::ArmBuilder::section(self, &str) -> Self
-impl guatiao::schema::form::FormBuilder for guatiao::schema::build::FieldBuilder
-pub fn guatiao::schema::build::FieldBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::build::FieldBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::build::FieldBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::build::FieldBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::build::FieldBuilder::section(self, &str) -> Self
-impl guatiao::schema::form::FormBuilder for guatiao::schema::build::SchemaBuilder
-pub fn guatiao::schema::build::SchemaBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::build::SchemaBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::build::SchemaBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::build::SchemaBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::build::SchemaBuilder::section(self, &str) -> Self
-pub trait guatiao::schema::form::FormFieldBuilder: guatiao::schema::form::FormBuilder
-pub fn guatiao::schema::form::FormFieldBuilder::advanced(self) -> Self
-pub fn guatiao::schema::form::FormFieldBuilder::order(self, i64) -> Self
-pub fn guatiao::schema::form::FormFieldBuilder::sensitive(self) -> Self
-impl guatiao::schema::form::FormFieldBuilder for guatiao::schema::build::FieldBuilder
-pub fn guatiao::schema::build::FieldBuilder::advanced(self) -> Self
-pub fn guatiao::schema::build::FieldBuilder::order(self, i64) -> Self
-pub fn guatiao::schema::build::FieldBuilder::sensitive(self) -> Self
 pub mod guatiao::schema::merge
 pub struct guatiao::schema::merge::DeclaredMerge
 pub guatiao::schema::merge::DeclaredMerge::mode: guatiao::value::merge::MergeMode
@@ -1931,9 +1904,9 @@ pub fn guatiao::schema::read::Kind<'a>::fmt(&self, &mut core::fmt::Formatter<'_>
 impl<'a> core::marker::Copy for guatiao::schema::read::Kind<'a>
 pub struct guatiao::schema::read::ArmRef<'a>
 impl<'a> guatiao::schema::read::ArmRef<'a>
+pub fn guatiao::schema::read::ArmRef<'a>::description(&self) -> &'a str
 pub fn guatiao::schema::read::ArmRef<'a>::fields(&self) -> impl core::iter::traits::iterator::Iterator<Item = guatiao::schema::read::FieldRef<'a>>
-pub fn guatiao::schema::read::ArmRef<'a>::help(&self) -> &'a str
-pub fn guatiao::schema::read::ArmRef<'a>::label(&self) -> &'a str
+pub fn guatiao::schema::read::ArmRef<'a>::title(&self) -> &'a str
 pub fn guatiao::schema::read::ArmRef<'a>::value(&self) -> &'a str
 impl<'a> core::clone::Clone for guatiao::schema::read::ArmRef<'a>
 pub fn guatiao::schema::read::ArmRef<'a>::clone(&self) -> Self
@@ -1953,18 +1926,18 @@ pub struct guatiao::schema::read::FieldRef<'a>
 impl<'a> guatiao::schema::read::FieldRef<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::as_value(&self) -> &'a guatiao::value::value::Value
 pub fn guatiao::schema::read::FieldRef<'a>::default(&self) -> core::option::Option<&'a guatiao::value::value::Value>
+pub fn guatiao::schema::read::FieldRef<'a>::description(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao::schema::read::FieldRef<'a>::extras(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&'a str, &'a guatiao::value::value::Value)>
-pub fn guatiao::schema::read::FieldRef<'a>::help(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::is_advanced(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_required(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_sensitive(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::key(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::kind(&self) -> guatiao::schema::read::Kind<'a>
-pub fn guatiao::schema::read::FieldRef<'a>::label(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::new(&'a str, &'a guatiao::value::value::Value) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
 pub fn guatiao::schema::read::FieldRef<'a>::order(&self) -> i64
 pub fn guatiao::schema::read::FieldRef<'a>::section(&self) -> &'a str
+pub fn guatiao::schema::read::FieldRef<'a>::title(&self) -> &'a str
 impl<'a> core::clone::Clone for guatiao::schema::read::FieldRef<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::schema::read::FieldRef<'a>
@@ -1973,14 +1946,14 @@ impl<'a> core::marker::Copy for guatiao::schema::read::FieldRef<'a>
 pub struct guatiao::schema::read::SchemaRef<'a>(_)
 impl<'a> guatiao::schema::read::SchemaRef<'a>
 pub fn guatiao::schema::read::SchemaRef<'a>::as_value(&self) -> &'a guatiao::value::value::Value
+pub fn guatiao::schema::read::SchemaRef<'a>::description(&self) -> &'a str
 pub fn guatiao::schema::read::SchemaRef<'a>::dialect(&self) -> &'a str
 pub fn guatiao::schema::read::SchemaRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao::schema::read::SchemaRef<'a>::extras(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&'a str, &'a guatiao::value::value::Value)>
 pub fn guatiao::schema::read::SchemaRef<'a>::fields(&self) -> impl core::iter::traits::iterator::Iterator<Item = guatiao::schema::read::FieldRef<'a>>
 pub fn guatiao::schema::read::SchemaRef<'a>::find(&self, &str) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
-pub fn guatiao::schema::read::SchemaRef<'a>::help(&self) -> &'a str
-pub fn guatiao::schema::read::SchemaRef<'a>::label(&self) -> &'a str
 pub fn guatiao::schema::read::SchemaRef<'a>::new(&'a guatiao::value::value::Value) -> core::option::Option<guatiao::schema::read::SchemaRef<'a>>
+pub fn guatiao::schema::read::SchemaRef<'a>::title(&self) -> &'a str
 impl<'a> core::clone::Clone for guatiao::schema::read::SchemaRef<'a>
 pub fn guatiao::schema::read::SchemaRef<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::schema::read::SchemaRef<'a>
@@ -2080,22 +2053,21 @@ pub fn guatiao::schema::ValidationError::fmt(&self, &mut core::fmt::Formatter<'_
 impl core::marker::StructuralPartialEq for guatiao::schema::ValidationError
 pub struct guatiao::schema::ArmBuilder
 impl guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::description(self, &str) -> guatiao::schema::build::ArmBuilder
 pub fn guatiao::schema::build::ArmBuilder::field(self, guatiao::schema::build::FieldBuilder) -> guatiao::schema::build::ArmBuilder
 pub fn guatiao::schema::build::ArmBuilder::new(&str, &str) -> guatiao::schema::build::ArmBuilder
 pub fn guatiao::schema::build::ArmBuilder::new_in(guatiao::value::alloc::Alloc, &str, &str) -> guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::title(self, &str) -> guatiao::schema::build::ArmBuilder
 impl core::fmt::Debug for guatiao::schema::build::ArmBuilder
 pub fn guatiao::schema::build::ArmBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl guatiao::schema::form::FormBuilder for guatiao::schema::build::ArmBuilder
-pub fn guatiao::schema::build::ArmBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::build::ArmBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::build::ArmBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::build::ArmBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::build::ArmBuilder::section(self, &str) -> Self
+impl guatiao::schema::build::Extras for guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::extra_alloc(&self) -> guatiao::value::alloc::Alloc
 pub struct guatiao::schema::ArmRef<'a>
 impl<'a> guatiao::schema::read::ArmRef<'a>
+pub fn guatiao::schema::read::ArmRef<'a>::description(&self) -> &'a str
 pub fn guatiao::schema::read::ArmRef<'a>::fields(&self) -> impl core::iter::traits::iterator::Iterator<Item = guatiao::schema::read::FieldRef<'a>>
-pub fn guatiao::schema::read::ArmRef<'a>::help(&self) -> &'a str
-pub fn guatiao::schema::read::ArmRef<'a>::label(&self) -> &'a str
+pub fn guatiao::schema::read::ArmRef<'a>::title(&self) -> &'a str
 pub fn guatiao::schema::read::ArmRef<'a>::value(&self) -> &'a str
 impl<'a> core::clone::Clone for guatiao::schema::read::ArmRef<'a>
 pub fn guatiao::schema::read::ArmRef<'a>::clone(&self) -> Self
@@ -2115,38 +2087,34 @@ pub struct guatiao::schema::FieldBuilder
 impl guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::default(self, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::default_checked(self, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::description(self, &str) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::new(&str, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::new_in(guatiao::value::alloc::Alloc, &str, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::option(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::required(self) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::sensitive(self) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::title(self, &str) -> guatiao::schema::build::FieldBuilder
 impl core::fmt::Debug for guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl guatiao::schema::form::FormBuilder for guatiao::schema::build::FieldBuilder
-pub fn guatiao::schema::build::FieldBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::build::FieldBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::build::FieldBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::build::FieldBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::build::FieldBuilder::section(self, &str) -> Self
-impl guatiao::schema::form::FormFieldBuilder for guatiao::schema::build::FieldBuilder
-pub fn guatiao::schema::build::FieldBuilder::advanced(self) -> Self
-pub fn guatiao::schema::build::FieldBuilder::order(self, i64) -> Self
-pub fn guatiao::schema::build::FieldBuilder::sensitive(self) -> Self
+impl guatiao::schema::build::Extras for guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::extra_alloc(&self) -> guatiao::value::alloc::Alloc
 pub struct guatiao::schema::FieldRef<'a>
 impl<'a> guatiao::schema::read::FieldRef<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::as_value(&self) -> &'a guatiao::value::value::Value
 pub fn guatiao::schema::read::FieldRef<'a>::default(&self) -> core::option::Option<&'a guatiao::value::value::Value>
+pub fn guatiao::schema::read::FieldRef<'a>::description(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao::schema::read::FieldRef<'a>::extras(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&'a str, &'a guatiao::value::value::Value)>
-pub fn guatiao::schema::read::FieldRef<'a>::help(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::is_advanced(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_required(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_sensitive(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::key(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::kind(&self) -> guatiao::schema::read::Kind<'a>
-pub fn guatiao::schema::read::FieldRef<'a>::label(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::new(&'a str, &'a guatiao::value::value::Value) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
 pub fn guatiao::schema::read::FieldRef<'a>::order(&self) -> i64
 pub fn guatiao::schema::read::FieldRef<'a>::section(&self) -> &'a str
+pub fn guatiao::schema::read::FieldRef<'a>::title(&self) -> &'a str
 impl<'a> core::clone::Clone for guatiao::schema::read::FieldRef<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::schema::read::FieldRef<'a>
@@ -2185,70 +2153,49 @@ impl core::fmt::Debug for guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::schema::SchemaBuilder
 impl guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::description(self, &str) -> guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::field(self, guatiao::schema::build::FieldBuilder) -> guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::finish(self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::schema::build::SchemaBuilder::new() -> guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::new_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::option(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::title(self, &str) -> guatiao::schema::build::SchemaBuilder
 impl core::default::Default for guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::default() -> guatiao::schema::build::SchemaBuilder
 impl core::fmt::Debug for guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl guatiao::schema::form::FormBuilder for guatiao::schema::build::SchemaBuilder
-pub fn guatiao::schema::build::SchemaBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::build::SchemaBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::build::SchemaBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::build::SchemaBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::build::SchemaBuilder::section(self, &str) -> Self
+impl guatiao::schema::build::Extras for guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::extra_alloc(&self) -> guatiao::value::alloc::Alloc
 pub struct guatiao::schema::SchemaRef<'a>(_)
 impl<'a> guatiao::schema::read::SchemaRef<'a>
 pub fn guatiao::schema::read::SchemaRef<'a>::as_value(&self) -> &'a guatiao::value::value::Value
+pub fn guatiao::schema::read::SchemaRef<'a>::description(&self) -> &'a str
 pub fn guatiao::schema::read::SchemaRef<'a>::dialect(&self) -> &'a str
 pub fn guatiao::schema::read::SchemaRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao::schema::read::SchemaRef<'a>::extras(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&'a str, &'a guatiao::value::value::Value)>
 pub fn guatiao::schema::read::SchemaRef<'a>::fields(&self) -> impl core::iter::traits::iterator::Iterator<Item = guatiao::schema::read::FieldRef<'a>>
 pub fn guatiao::schema::read::SchemaRef<'a>::find(&self, &str) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
-pub fn guatiao::schema::read::SchemaRef<'a>::help(&self) -> &'a str
-pub fn guatiao::schema::read::SchemaRef<'a>::label(&self) -> &'a str
 pub fn guatiao::schema::read::SchemaRef<'a>::new(&'a guatiao::value::value::Value) -> core::option::Option<guatiao::schema::read::SchemaRef<'a>>
+pub fn guatiao::schema::read::SchemaRef<'a>::title(&self) -> &'a str
 impl<'a> core::clone::Clone for guatiao::schema::read::SchemaRef<'a>
 pub fn guatiao::schema::read::SchemaRef<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::schema::read::SchemaRef<'a>
 pub fn guatiao::schema::read::SchemaRef<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<'a> core::marker::Copy for guatiao::schema::read::SchemaRef<'a>
 pub const guatiao::schema::SEPARATOR: char
-pub trait guatiao::schema::FormBuilder: core::marker::Sized
-pub fn guatiao::schema::FormBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::FormBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::FormBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::FormBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::FormBuilder::section(self, &str) -> Self
-impl guatiao::schema::form::FormBuilder for guatiao::schema::build::ArmBuilder
-pub fn guatiao::schema::build::ArmBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::build::ArmBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::build::ArmBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::build::ArmBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::build::ArmBuilder::section(self, &str) -> Self
-impl guatiao::schema::form::FormBuilder for guatiao::schema::build::FieldBuilder
-pub fn guatiao::schema::build::FieldBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::build::FieldBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::build::FieldBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::build::FieldBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::build::FieldBuilder::section(self, &str) -> Self
-impl guatiao::schema::form::FormBuilder for guatiao::schema::build::SchemaBuilder
-pub fn guatiao::schema::build::SchemaBuilder::form_alloc(&self) -> guatiao::value::alloc::Alloc
-pub fn guatiao::schema::build::SchemaBuilder::help(self, &str) -> Self
-pub fn guatiao::schema::build::SchemaBuilder::label(self, &str) -> Self
-pub fn guatiao::schema::build::SchemaBuilder::presentation(&mut self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>)
-pub fn guatiao::schema::build::SchemaBuilder::section(self, &str) -> Self
-pub trait guatiao::schema::FormFieldBuilder: guatiao::schema::form::FormBuilder
-pub fn guatiao::schema::FormFieldBuilder::advanced(self) -> Self
-pub fn guatiao::schema::FormFieldBuilder::order(self, i64) -> Self
-pub fn guatiao::schema::FormFieldBuilder::sensitive(self) -> Self
-impl guatiao::schema::form::FormFieldBuilder for guatiao::schema::build::FieldBuilder
-pub fn guatiao::schema::build::FieldBuilder::advanced(self) -> Self
-pub fn guatiao::schema::build::FieldBuilder::order(self, i64) -> Self
-pub fn guatiao::schema::build::FieldBuilder::sensitive(self) -> Self
+pub trait guatiao::schema::Extras: core::marker::Sized
+pub fn guatiao::schema::Extras::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> Self
+pub fn guatiao::schema::Extras::extra_alloc(&self) -> guatiao::value::alloc::Alloc
+impl guatiao::schema::build::Extras for guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::extra_alloc(&self) -> guatiao::value::alloc::Alloc
+impl guatiao::schema::build::Extras for guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::extra_alloc(&self) -> guatiao::value::alloc::Alloc
+impl guatiao::schema::build::Extras for guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::extra_alloc(&self) -> guatiao::value::alloc::Alloc
 pub trait guatiao::schema::Schema
 pub fn guatiao::schema::Schema::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::Schema::schema(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>

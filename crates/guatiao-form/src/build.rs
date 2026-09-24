@@ -11,7 +11,7 @@
 //! # The Rust names are the schema builders' names
 //!
 //! A section has a `label` and `help`, written as `title` and
-//! `description` — exactly what `guatiao::schema::FormBuilder` calls the
+//! `description` — exactly what `guatiao::schema` calls the
 //! same two things, so one vocabulary covers both halves of a screen.
 //!
 //! # Building names no allocator; errors are collected

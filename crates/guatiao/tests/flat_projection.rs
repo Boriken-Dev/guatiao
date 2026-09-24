@@ -12,7 +12,6 @@
 use guatiao::value::convert::TryAsRef;
 use std::collections::BTreeMap;
 
-use guatiao::schema::FormFieldBuilder;
 use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::schema::flat;
 use guatiao::schema::read::SchemaRef;

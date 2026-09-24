@@ -27,7 +27,7 @@ use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::{OnceLock, PoisonError, RwLock};
 
 use guatiao::library::{Host, KindTables, Kinds, LibraryInfo, ProviderInfo, Providers};
-use guatiao::schema::{FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
+use guatiao::schema::{FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::value::convert::TryAsRef;
 use guatiao::value::read::str_or;
@@ -425,8 +425,8 @@ fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> {
             SchemaBuilder::new_in(alloc)
                 .field(
                     FieldBuilder::new_in(alloc, "name", KindBuilder::string_in(alloc))
-                        .label("Name")
-                        .help("Who to greet.")
+                        .title("Name")
+                        .description("Who to greet.")
                         .required(),
                 )
                 .finish()

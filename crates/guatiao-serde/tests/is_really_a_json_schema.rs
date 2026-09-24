@@ -55,21 +55,19 @@ fn compile(doc: serde_json::Value) -> Result<(Schemas, SchemaIndex), Box<Compile
 /// The schema under test: one of every kind that has a JSON Schema
 /// spelling.
 fn connection() -> Value {
-    use guatiao::schema::{FormBuilder, FormFieldBuilder};
-
     SchemaBuilder::new()
-        .label("Connection")
-        .help("Where to connect, and how.")
+        .title("Connection")
+        .description("Where to connect, and how.")
         .field(
             FieldBuilder::new("host", KindBuilder::string())
-                .label("Host")
+                .title("Host")
                 .required(),
         )
         .field(
             FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
-                .label("Port")
+                .title("Port")
                 .default(Value::from(5900i64))
-                .order(2),
+                .option(guatiao::schema::vocab::X_ORDER, guatiao::Number::from(2)),
         )
         .field(FieldBuilder::new(
             "level",
@@ -94,7 +92,7 @@ fn connection() -> Value {
                     ],
                 ),
             )
-            .label("Authentication"),
+            .title("Authentication"),
         )
         .finish()
         .expect("a schema this small does not exhaust an allocator")

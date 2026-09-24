@@ -19,6 +19,12 @@
 //! - **which control to draw** and what an empty one shows;
 //! - **when a field is shown**, for what a variant cannot express.
 //!
+//! The half a field CAN say about itself is written beside the schema, by
+//! [`FormBuilder`] and [`FormFieldBuilder`] in [`declare`]: they extend
+//! `guatiao`'s builders with `section`, `order` and `advanced`. Those are
+//! opinions about how to organise controls, which is why they live here
+//! and not in the crate carrying the value model.
+//!
 //! With the `derive` feature, `#[derive(Form)]` writes a type's default
 //! screen from `#[form(..)]` beside `#[derive(Schema)]`, as an
 //! [`impl Screen`](Screen).
@@ -28,8 +34,10 @@
 //!
 //! ```
 //! use guatiao::schema::read::SchemaRef;
-//! use guatiao::schema::{FieldBuilder, FormBuilder, FormFieldBuilder, KindBuilder, SchemaBuilder};
-//! use guatiao_form::{Form, FormRef, Hints, Section, check, is_visible, layout};
+//! use guatiao::schema::{FieldBuilder, KindBuilder, SchemaBuilder};
+//! use guatiao_form::{
+//!     Form, FormBuilder, FormFieldBuilder, FormRef, Hints, Section, check, is_visible, layout,
+//! };
 //!
 //! let schema = SchemaBuilder::new()
 //!     .field(FieldBuilder::new("host", KindBuilder::string()).section("net").required())
@@ -73,6 +81,9 @@
 #![deny(missing_docs)]
 
 mod build;
+// The presentation hints written beside a schema, extending `guatiao`'s
+// builders through its `Extras` hook. A `//` comment, never a `///`.
+pub mod declare;
 // The `extern "C"` surface. Always compiled: a surface that appears only
 // when somebody remembers a flag is one a C caller cannot rely on.
 pub mod exports;
@@ -82,6 +93,7 @@ mod screen;
 pub mod vocab;
 
 pub use build::{Form, Hints, Section};
+pub use declare::{FormBuilder, FormFieldBuilder};
 /// `#[derive(Form)]`, behind the `derive` feature: a type's default
 /// screen from `#[form(..)]` on the type and its fields, as an
 /// `impl Screen`. A macro and a type live in different namespaces, so

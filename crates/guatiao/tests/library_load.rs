@@ -450,7 +450,7 @@ fn the_host_validates_a_configuration_against_the_librarys_own_schema() {
     let schema = SchemaRef::new(declared).expect("a schema is a map");
     let name = schema.find("name").expect("it declares `name`");
     assert!(name.is_required());
-    assert_eq!(name.help(), "Who to greet.");
+    assert_eq!(name.description(), "Who to greet.");
 
     let mut config = Map::new();
     config.set("name", Value::from(Text::new("ana"))).unwrap();

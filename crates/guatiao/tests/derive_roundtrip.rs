@@ -349,7 +349,7 @@ fn a_schema_attribute_is_accepted_by_the_other_two_derives() {
     with_alloc(|alloc| {
         #[derive(Debug, PartialEq, guatiao::ToValue, guatiao::FromValue)]
         struct Described {
-            #[schema(label = "x", sensitive)]
+            #[schema(title = "x", sensitive)]
             secret: i64,
         }
 

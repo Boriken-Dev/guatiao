@@ -29,13 +29,13 @@
 //!   [`KindBuilder`], [`ArmBuilder`].
 //!
 //! ```
-//! use guatiao::schema::{FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
+//! use guatiao::schema::{FieldBuilder, KindBuilder, SchemaBuilder};
 //!
 //! // Building names no allocator, the same as `Map::new()`.
 //! let schema = SchemaBuilder::new()
 //!     .field(
 //!         FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
-//!             .label("Port")
+//!             .title("Port")
 //!             .required(),
 //!     )
 //!     .finish()
@@ -73,14 +73,20 @@
 //! be empty or default and the schema is still correct and still useful. A
 //! consumer with no user interface ignores them entirely. Never make a
 //! validation or type behaviour depend on one.
+//!
+//! **Writing the `x-` ones is `guatiao-form`'s business**, through
+//! [`Extras`]: how to group and order controls on a screen is an opinion,
+//! and this crate holds none. Reading them stays here — [`FieldRef`] has
+//! `section`, `order` and `is_advanced`, because reading a key is reading
+//! a key. `title` and `description` are JSON Schema's own keywords and are
+//! written here, by [`SchemaBuilder::title`] and its siblings.
 
 #![forbid(unsafe_code)]
 
 pub mod build;
-// The presentation half. A `//` comment, never a `///`.
+// What a Rust type says its schema is. A `//` comment, never a `///`.
 pub mod describe;
 pub mod flat;
-pub mod form;
 // How a schema declares the way one of its fields combines across
 // layers: the `x-merge` annotation. Here rather than under the merge
 // because the merge touches values only — it is this side that
@@ -90,10 +96,9 @@ pub mod read;
 pub mod validate;
 pub mod vocab;
 
-pub use build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
+pub use build::{ArmBuilder, Extras, FieldBuilder, KindBuilder, SchemaBuilder};
 pub use describe::Schema;
 pub use flat::{SEPARATOR, flatten, is_sensitive, resolve, resolve_in, unflatten};
-pub use form::{FormBuilder, FormFieldBuilder};
 pub use read::{ArmRef, ChoiceRef, FieldRef, Kind as KindRef, SchemaRef};
 pub use validate::{validate_map, validate_text, validate_texts, validate_value};
 

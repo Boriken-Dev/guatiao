@@ -189,7 +189,7 @@ unsafe fn field_at<'a>(schema: *const Value, key: Str) -> Option<FieldRef<'a>> {
 ///
 /// Follows one level of projection, so `auth.password` answers the arm
 /// field's own field rather than the `auth` field. Every per-field flag
-/// a caller wants — required, advanced, sensitive, the label — is read
+/// a caller wants — required, advanced, sensitive, the title — is read
 /// off the value this hands back, so the boundary needs one lookup rather
 /// than one export per flag.
 ///

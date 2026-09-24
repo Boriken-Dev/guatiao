@@ -21,21 +21,18 @@
 //!
 //! # A schema does not know about forms
 //!
-//! **There is no way here to DECLARE a section**, and that is deliberate:
-//! a section exists only to group controls on a screen, so declaring one
-//! is a form's business and not a schema's. [`FormBuilder::section`] says
-//! which section a field belongs to, because that is a hint carried
-//! alongside the field; what a section is CALLED belongs to whatever
-//! draws it.
+//! What a value **is** — its kind, its bounds, whether it is required, and
+//! JSON Schema's own `title` and `description` — is substance, and lives
+//! here. How it is **shown** — which section it sits in, where it sits
+//! among its siblings, whether it hides behind a disclosure — is
+//! presentation, and lives in `guatiao-form`, which writes it through
+//! [`Extras`]. That crate depends on this one and not the other way
+//! around, so nothing here has to know that forms exist.
 //!
-//! [`FormBuilder::section`]: super::FormBuilder::section
-//!
-//! # A schema and a form are different questions
-//!
-//! What a value **is** — its kind, its bounds, whether it is required —
-//! is substance, and lives here. How it is **shown** — a title, some prose,
-//! which section it sits in, whether it hides behind a disclosure, whether
-//! it is a secret — is presentation, and lives in [`super::form`].
+//! The one presentation-shaped thing that stays is
+//! [`FieldBuilder::sensitive`], and it stays because it is not really
+//! about drawing: it says "never print this value", which a log, a dump
+//! and a store all obey with no screen in sight.
 //!
 //! # Building names no allocator
 //!
@@ -249,6 +246,64 @@ fn seal(
     }
 }
 
+/// Sets a key this crate has no method for, through the builder's own
+/// allocator.
+///
+/// **The door another crate writes through.** The `option` methods take a
+/// value already built, which is everything a caller holding a `bool` or
+/// an `i64` needs. A caller building a [`Text`] needs the allocator this
+/// builder is using — reaching for the crate's own instead is how half a
+/// schema meant for a host's arena lands somewhere else — and it needs
+/// somewhere to put the failure that allocator can return. This hands the
+/// first over and takes the second, so an extension living in another
+/// crate collects its errors exactly as the builders here do.
+///
+/// `guatiao-form`'s `FormBuilder` is the extension that exists: which
+/// section a field sits in, where among its siblings, whether it hides
+/// behind a disclosure. None of those are this crate's business, and this
+/// is what lets them be written without making them so.
+pub trait Extras: Sized {
+    /// Sets `key`, keeping the first error rather than the last.
+    #[must_use]
+    fn extra(self, key: &str, value: Result<Value, ValueError>) -> Self;
+
+    /// The allocator this builder is writing through.
+    fn extra_alloc(&self) -> Alloc;
+}
+
+impl Extras for SchemaBuilder {
+    fn extra(mut self, key: &str, value: Result<Value, ValueError>) -> SchemaBuilder {
+        put(&mut self.state, key, value);
+        self
+    }
+
+    fn extra_alloc(&self) -> Alloc {
+        self.alloc
+    }
+}
+
+impl Extras for FieldBuilder {
+    fn extra(mut self, key: &str, value: Result<Value, ValueError>) -> FieldBuilder {
+        put(&mut self.state, key, value);
+        self
+    }
+
+    fn extra_alloc(&self) -> Alloc {
+        self.alloc
+    }
+}
+
+impl Extras for ArmBuilder {
+    fn extra(mut self, key: &str, value: Result<Value, ValueError>) -> ArmBuilder {
+        put(&mut self.state, key, value);
+        self
+    }
+
+    fn extra_alloc(&self) -> Alloc {
+        self.alloc
+    }
+}
+
 impl SchemaBuilder {
     /// An empty schema, through the crate's own allocator.
     ///
@@ -286,6 +341,32 @@ impl SchemaBuilder {
     /// sees, because a map here is insertion-ordered by contract.
     pub fn field(mut self, field: FieldBuilder) -> SchemaBuilder {
         self.fields.push(field);
+        self
+    }
+
+    /// JSON Schema's `title`: a short line naming what this describes.
+    ///
+    /// A schema keyword, not a form one — which is why it is here and not
+    /// in `guatiao-form`. A consumer with no screen still reads it, in an
+    /// error message or a `--help` line.
+    pub fn title(mut self, title: &str) -> SchemaBuilder {
+        let alloc = self.alloc;
+        put(
+            &mut self.state,
+            vocab::TITLE,
+            Text::new_in(alloc, title).map(Value::from),
+        );
+        self
+    }
+
+    /// JSON Schema's `description`: the longer prose under the title.
+    pub fn description(mut self, description: &str) -> SchemaBuilder {
+        let alloc = self.alloc;
+        put(
+            &mut self.state,
+            vocab::DESCRIPTION,
+            Text::new_in(alloc, description).map(Value::from),
+        );
         self
     }
 
@@ -388,6 +469,45 @@ impl FieldBuilder {
     /// finishes, which is where JSON Schema keeps it.
     pub fn required(mut self) -> FieldBuilder {
         self.required = true;
+        self
+    }
+
+    /// JSON Schema's `title`: what this field is called.
+    pub fn title(mut self, title: &str) -> FieldBuilder {
+        let alloc = self.alloc;
+        put(
+            &mut self.state,
+            vocab::TITLE,
+            Text::new_in(alloc, title).map(Value::from),
+        );
+        self
+    }
+
+    /// JSON Schema's `description`: the longer prose under the title.
+    pub fn description(mut self, description: &str) -> FieldBuilder {
+        let alloc = self.alloc;
+        put(
+            &mut self.state,
+            vocab::DESCRIPTION,
+            Text::new_in(alloc, description).map(Value::from),
+        );
+        self
+    }
+
+    /// A secret: never print this value.
+    ///
+    /// **The one hint that is not about drawing**, which is why it stays
+    /// in this crate while the rest of the presentation vocabulary lives
+    /// in `guatiao-form`. A form masks it, but so does a log, a debug
+    /// dump, a crash report and anything else that renders a value into
+    /// text — none of which have a screen. What each of them actually
+    /// does about it stays its own decision; this says only that somebody
+    /// declared the field one.
+    ///
+    /// Read back with [`FieldRef::is_sensitive`](super::read::FieldRef::is_sensitive),
+    /// and, for flat storage, [`flat::is_sensitive`](super::flat::is_sensitive).
+    pub fn sensitive(mut self) -> FieldBuilder {
+        put(&mut self.state, vocab::X_SENSITIVE, Ok(Value::from(true)));
         self
     }
 
@@ -700,21 +820,21 @@ impl ArmBuilder {
     /// design making it exceptional would make the exception the thing
     /// everyone must remember.
     /// One arm, through the crate's own allocator.
-    pub fn new(value: &str, label: &str) -> ArmBuilder {
-        ArmBuilder::new_in(Alloc::rust(), value, label)
+    pub fn new(value: &str, title: &str) -> ArmBuilder {
+        ArmBuilder::new_in(Alloc::rust(), value, title)
     }
 
     /// The same, through an allocator you name.
-    pub fn new_in(alloc: Alloc, value: &str, label: &str) -> ArmBuilder {
+    pub fn new_in(alloc: Alloc, value: &str, title: &str) -> ArmBuilder {
         let mut state = Ok(Map::new_in(alloc).into());
         // Left off when it says nothing the value does not, for the reason
         // `enumeration_in` gives: a reader shows the value when there is no
         // title.
-        if !label.is_empty() && label != value {
+        if !title.is_empty() && title != value {
             put(
                 &mut state,
                 vocab::TITLE,
-                Text::new_in(alloc, label).map(Value::from),
+                Text::new_in(alloc, title).map(Value::from),
             );
         }
         // Held rather than written: an arm does not know which key its
@@ -737,6 +857,31 @@ impl ArmBuilder {
     /// A field this arm adds when selected.
     pub fn field(mut self, field: FieldBuilder) -> ArmBuilder {
         self.fields.push(field);
+        self
+    }
+
+    /// JSON Schema's `title`: what this arm is called.
+    ///
+    /// The same key [`new`](ArmBuilder::new) writes from its second
+    /// argument, for an arm that wants to set it later or to overwrite it.
+    pub fn title(mut self, title: &str) -> ArmBuilder {
+        let alloc = self.alloc;
+        put(
+            &mut self.state,
+            vocab::TITLE,
+            Text::new_in(alloc, title).map(Value::from),
+        );
+        self
+    }
+
+    /// JSON Schema's `description`: the longer prose under the title.
+    pub fn description(mut self, description: &str) -> ArmBuilder {
+        let alloc = self.alloc;
+        put(
+            &mut self.state,
+            vocab::DESCRIPTION,
+            Text::new_in(alloc, description).map(Value::from),
+        );
         self
     }
 }
