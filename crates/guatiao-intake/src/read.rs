@@ -180,6 +180,19 @@ impl<'a> HintsRef<'a> {
         })
     }
 
+    /// The form this field carries of its own, or `None`.
+    ///
+    /// A field whose kind is an object may be shown by a form of its
+    /// own, whose paths are **relative to it**: a form under
+    /// `connection` names `tls.ca`. `None` covers both "no form here"
+    /// and "something is under the key but it is not a form" -- the rule
+    /// every reader here follows, with [`check`](crate::check) as the
+    /// one that reports.
+    pub fn form(&self) -> Option<FormRef<'a>> {
+        let held = TryAsRef::<Map>::try_as_ref(self.0?).and_then(|m| m.get(vocab::FORM))?;
+        FormRef::new(held)
+    }
+
     /// The value these hints are a view of, if the form has any.
     pub fn as_value(&self) -> Option<&'a Value> {
         self.0

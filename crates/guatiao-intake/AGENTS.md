@@ -10,7 +10,8 @@ nothing else; the `derive` feature adds `#[derive(Form)]`.
 form     := { "sections": [section, …], "fields": { <path>: hints, … } }
 section  := { "id": text, "title": text, "description": text }
 hints    := { "widget": text, "placeholder": text,
-              "visibleWhen": { "field": <path>, "equals": <value> } }
+              "visibleWhen": { "field": <path>, "equals": <value> },
+              "form": form }        // a field that HAS members
 ```
 
 - Every key is optional except a section's `id`. **An empty map is a
@@ -42,6 +43,22 @@ hints    := { "widget": text, "placeholder": text,
   (`text`, `textarea`, `password`, `number`, `slider`, `checkbox`,
   `toggle`, `select`, `radio`); a renderer shows an unknown one as its
   default for the kind.
+- **A field with members may carry a form of its own**, under `form`,
+  and it is a complete form document — the same shape as the top level.
+  Its paths are **relative to that field**: a form under `connection`
+  names `tls.ca`. Given to a field whose kind has no members, `check`
+  refuses it; there would be nothing for its paths to name. A **variant**
+  is refused too, and that one is a judgement: its members differ by arm,
+  so there is no one schema the sub-form could be checked against, and a
+  form already reaches an arm's fields with `owner.member`.
+- **A condition inside a sub-form may only name that form's own
+  fields.** Not a rule written twice: the sub-form is checked against the
+  member schema, so anything outside it is simply not a field. A window
+  whose contents depended on something the window does not show would be
+  a window a person cannot satisfy.
+- Widgets for one: `dialog` (a window of its own) and `group` (inline,
+  which is what a renderer does with no widget at all — it is there for a
+  form that wants to say so beside one that says `dialog`).
 - Anything else is an **annotation**: carried, never interpreted.
 - A value's own read-only-ness is **not** a form hint. It is a statement
   about the value, and JSON Schema's `readOnly` in the schema says it.
@@ -111,6 +128,8 @@ Section::new(id) / Section::new_in(Alloc, id) -> Section
 Hints::new() / Hints::new_in(Alloc) -> Hints
   .widget(&str) / .placeholder(&str)
   .visible_when(path: &str, equals: impl Into<Value>)
+  .form(Form)                        // a field that has members; paths RELATIVE
+  .form_value(Result<Value, ValueError>)   // the same, for generated code
   .option(key, impl Into<Value>)
 
 // reading (borrowed views; skip what is malformed)
@@ -124,6 +143,7 @@ SectionRef: .id() .label() .help() -> &str     // "" when absent
             .extra(key) -> Option<&Value>  .as_value() -> &Value
 HintsRef:   .is_empty() -> bool  .widget() .placeholder() -> &str
             .visible_when() -> Option<Condition>
+            .form() -> Option<FormRef>     // what a renderer nests by
             .extra(key) -> Option<&Value>
             .as_value() -> Option<&Value>      // None when the form says nothing
 Condition:  .field() -> &str  .equals() -> &Value
@@ -247,6 +267,6 @@ guatiao_status guatiao_intake_is_visible(const guatiao_value *schema, const guat
 - `HintsRef::as_value` answers `Option<&Value>` — `None` when the form
   says nothing about the field — where `FormRef` and `SectionRef` answer a
   plain `&Value`.
-- **`unsafe` lives in `src/exports.rs` alone**, checked by
-  `tests/unsafe_stays_in_exports.rs`; every other module carries
+- **`unsafe` lives in `src/exports.rs` and `src/exports_flat.rs`**,
+  checked by `tests/unsafe_stays_in_exports.rs`; every other module carries
   `#![forbid(unsafe_code)]`.

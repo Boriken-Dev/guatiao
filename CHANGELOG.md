@@ -31,6 +31,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `guatiao_intake_path_get(value, path)`, which answers a **borrowed**
   pointer or null; Python `guatiao.intake.at(value, path)`, Dart
   `intake.at(value, path)`.
+- **A field with members may carry a form of its own**, under the
+  `form` hint: a complete form document whose paths are **relative to
+  that field**, so a form under `connection` names `tls.ca`. Written
+  with `Hints::form(Form)` (or `form_value` from generated code), read
+  with `HintsRef::form()`, and given a widget with
+  `vocab::widget::{DIALOG, GROUP}`. `check` follows it into the member
+  schema, which is what makes a condition inside a sub-form unable to
+  name anything outside it. An object, a list of objects and a map of
+  them each take one; a field with no members does not, and neither does
+  a variant — its members differ by arm, so there is no one schema to
+  check against.
 - **The flat projection reaches every scalar leaf.** `flatten` walks a
   value against its schema and writes one entry per leaf under the path
   that reaches it (`agent[0].name`, `env[PATH]`, `connection.tls.ca`);

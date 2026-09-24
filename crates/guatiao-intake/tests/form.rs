@@ -742,3 +742,168 @@ fn an_arm_field_is_read_only_while_its_arm_is_picked() {
         "`ambient` declares no `username`, so the value left behind is not read"
     );
 }
+
+// --- a field that is an object carries a form of its own ----------------
+
+/// A schema with three shapes a sub-form can be given to, and one it
+/// cannot: an object, a list of objects, an open map of objects, and a
+/// plain text.
+fn nesting_schema() -> Value {
+    let member = || {
+        KindBuilder::map(vec![
+            FieldBuilder::new("host", KindBuilder::string()),
+            FieldBuilder::new("verify", KindBuilder::bool()),
+            FieldBuilder::new("ca", KindBuilder::string()),
+        ])
+    };
+    SchemaBuilder::new()
+        .field(FieldBuilder::new("connection", member()))
+        .field(FieldBuilder::new("agents", KindBuilder::list(member())))
+        .field(FieldBuilder::new("named", KindBuilder::map_of(member())))
+        .field(FieldBuilder::new("label", KindBuilder::string()))
+        .finish()
+        .expect("a schema this small does not exhaust an allocator")
+}
+
+/// The form a member is shown with: its paths are **relative to the
+/// field**, so it names `ca`, not `connection.ca`.
+fn member_form() -> Form {
+    Form::new()
+        .section(Section::new("net").label("Network"))
+        .field("host", Hints::new().placeholder("10.0.0.1"))
+        .field("ca", Hints::new().visible_when("verify", true))
+}
+
+/// An object, a list of objects and a map of them each take one.
+#[test]
+fn a_form_may_be_given_to_anything_with_members() {
+    let schema = nesting_schema();
+    let s = SchemaRef::new(&schema).expect("a schema");
+
+    for (field, widget) in [
+        ("connection", vocab::widget::DIALOG),
+        ("agents", vocab::widget::GROUP),
+        ("named", vocab::widget::DIALOG),
+    ] {
+        let form = Form::new()
+            .field(field, Hints::new().widget(widget).form(member_form()))
+            .finish()
+            .expect("it builds");
+        let f = FormRef::new(&form).expect("a form");
+        check(s, f).unwrap_or_else(|e| panic!("`{field}` should take a form: {e}"));
+
+        // And a renderer reaches it by asking the hints.
+        let nested = f.hints(field).form().expect("the form is there");
+        assert_eq!(
+            nested.sections().next().expect("one section").label(),
+            "Network"
+        );
+        assert_eq!(nested.hints("host").placeholder(), "10.0.0.1");
+        assert_eq!(f.hints(field).widget(), widget);
+    }
+}
+
+/// A form on a field with no members is refused: there is nothing for
+/// its paths to name.
+#[test]
+fn a_form_on_a_text_field_is_refused() {
+    let schema = nesting_schema();
+    let s = SchemaRef::new(&schema).expect("a schema");
+    let form = Form::new()
+        .field("label", Hints::new().form(member_form()))
+        .finish()
+        .expect("it builds");
+    let refused =
+        check(s, FormRef::new(&form).expect("a form")).expect_err("a text has no members");
+    match refused {
+        FormError::Malformed { at, expected } => {
+            assert_eq!(at, "fields[\"label\"].form");
+            assert!(expected.contains("object"), "{expected}");
+        }
+        other => panic!("expected the malformed shape: {other}"),
+    }
+}
+
+/// A sub-form's paths are checked against the MEMBER, so a path naming
+/// the outer form's field is unknown here.
+#[test]
+fn a_sub_forms_paths_name_the_member_and_nothing_else() {
+    let schema = nesting_schema();
+    let s = SchemaRef::new(&schema).expect("a schema");
+    let form = Form::new()
+        .field(
+            "connection",
+            Hints::new().form(Form::new().field("label", Hints::new().widget("text"))),
+        )
+        .finish()
+        .expect("it builds");
+
+    let refused = check(s, FormRef::new(&form).expect("a form"))
+        .expect_err("`label` is the OUTER form's field, not a member of `connection`");
+    match refused {
+        FormError::UnknownField { at, path } => {
+            assert_eq!(path, "label");
+            assert!(
+                at.starts_with("fields[\"connection\"].form"),
+                "the refusal says whose form it came from: {at}"
+            );
+        }
+        other => panic!("expected the unknown-field shape: {other}"),
+    }
+}
+
+/// A condition inside a sub-form may only read that form's own fields,
+/// which falls out of checking it against the member schema.
+#[test]
+fn a_condition_cannot_reach_out_of_a_sub_form() {
+    let schema = nesting_schema();
+    let s = SchemaRef::new(&schema).expect("a schema");
+
+    // Reaching a sibling INSIDE the member is fine.
+    let inside = Form::new()
+        .field("connection", Hints::new().form(member_form()))
+        .finish()
+        .expect("it builds");
+    check(s, FormRef::new(&inside).expect("a form")).expect("`ca` may watch `verify`");
+
+    // Reaching the outer form's `label` is not.
+    let outward = Form::new()
+        .field(
+            "connection",
+            Hints::new()
+                .form(Form::new().field("ca", Hints::new().visible_when("label", "anything"))),
+        )
+        .finish()
+        .expect("it builds");
+    let refused =
+        check(s, FormRef::new(&outward).expect("a form")).expect_err("`label` is not a member");
+    match refused {
+        FormError::UnknownField { path, .. } => assert_eq!(path, "label"),
+        other => panic!("expected the unknown-field shape: {other}"),
+    }
+}
+
+/// A sub-form is a form, so everything a form must be, it must be.
+#[test]
+fn a_sub_form_obeys_every_rule_a_form_obeys() {
+    let schema = nesting_schema();
+    let s = SchemaRef::new(&schema).expect("a schema");
+
+    // A section declared twice, one level down.
+    let form = Form::new()
+        .field(
+            "connection",
+            Hints::new().form(
+                Form::new()
+                    .section(Section::new("net"))
+                    .section(Section::new("net")),
+            ),
+        )
+        .finish()
+        .expect("it builds");
+    let refused = check(s, FormRef::new(&form).expect("a form")).expect_err("two sections, one id");
+    assert!(
+        matches!(refused, FormError::DuplicateSection { ref id } if id == "net"),
+        "{refused}"
+    );
+}

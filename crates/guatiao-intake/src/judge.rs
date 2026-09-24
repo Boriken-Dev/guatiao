@@ -25,6 +25,8 @@ use crate::flat;
 use guatiao::schema::ValidationError;
 use guatiao::schema::read::{FieldRef, Kind, SchemaRef};
 use guatiao::schema::validate::{validate_text, validate_value};
+use guatiao::schema::vocab as schema_vocab;
+use guatiao::value::error::MAX_DEPTH;
 
 use guatiao::value::types::{List, Map, Tag, Value};
 
@@ -107,6 +109,92 @@ impl fmt::Display for FormError {
 
 impl std::error::Error for FormError {}
 
+/// A field's own form: what it may be given to, and what it must be.
+///
+/// The member schema is the thing the sub-form's paths are checked
+/// against, which is also what makes "a condition inside a sub-form may
+/// only name that form's own fields" true by construction rather than by
+/// a rule written twice: the condition resolves against the member, so
+/// anything outside it is simply not a field.
+fn check_sub_form(
+    schema: SchemaRef<'_>,
+    path: &str,
+    nested: &Value,
+    at: &str,
+    depth: u32,
+) -> Result<(), FormError> {
+    let here = format!("{at}.{}", vocab::FORM);
+    let Some(field) = flat::resolve(schema, path) else {
+        // The path was resolved before this ran; keeping the branch
+        // rather than unwrapping is what stops a later reordering from
+        // turning it into a panic.
+        return Err(FormError::UnknownField {
+            at: here,
+            path: path.to_string(),
+        });
+    };
+    let Some(members) = member_schema(field) else {
+        return Err(malformed(
+            here,
+            "a form on a field whose kind is an object, a list of objects, \
+             or a map of them -- there is nothing else for its paths to name",
+        ));
+    };
+    let Some(members) = SchemaRef::new(members) else {
+        return Err(malformed(here, "a member schema that is a map"));
+    };
+    let Some(nested) = FormRef::new(nested) else {
+        return Err(malformed(here, "a form"));
+    };
+    check_at(members, nested, depth + 1).map_err(|e| under(e, &here))
+}
+
+/// The schema of what a sub-form would show: an object's own, a list's
+/// element, or an open map's value.
+///
+/// `None` for everything else, including a **variant**: its members
+/// differ by arm, so there is no one schema a sub-form's paths could be
+/// checked against. A variant is shown by its arms, which the form
+/// already reaches with `owner.member` paths.
+fn member_schema<'a>(field: FieldRef<'a>) -> Option<&'a Value> {
+    match field.kind() {
+        Kind::Map(object) => Some(object),
+        Kind::List(items) => is_map(items).then_some(items),
+        Kind::MapOf(_) => TryAsRef::<Map>::try_as_ref(field.as_value())
+            .and_then(|m| m.get(schema_vocab::ADDITIONAL_PROPERTIES))
+            .filter(|v| is_map(v)),
+        _ => None,
+    }
+}
+
+/// Re-roots a refusal raised inside a sub-form, so its `at` says which
+/// field's form it came from.
+fn under(error: FormError, prefix: &str) -> FormError {
+    match error {
+        FormError::Malformed { at, expected } => FormError::Malformed {
+            at: format!("{prefix}.{at}"),
+            expected,
+        },
+        FormError::UnknownField { at, path } => FormError::UnknownField {
+            at: format!("{prefix}.{at}"),
+            path,
+        },
+        FormError::ConditionRefused {
+            at,
+            field,
+            expected,
+        } => FormError::ConditionRefused {
+            at: format!("{prefix}.{at}"),
+            field,
+            expected,
+        },
+        // These two name a path or an id inside the sub-form rather than
+        // a place in the document, and prefixing one would say it is a
+        // path in the outer form, which it is not.
+        other => other,
+    }
+}
+
 fn malformed(at: impl Into<String>, expected: &'static str) -> FormError {
     FormError::Malformed {
         at: at.into(),
@@ -141,6 +229,21 @@ fn field_at(path: &str) -> String {
 /// an error: that field joins the default section, which is what the
 /// schema's own `x-section` promises.
 pub fn check(schema: SchemaRef<'_>, form: FormRef<'_>) -> Result<(), FormError> {
+    check_at(schema, form, 0)
+}
+
+/// [`check`], carrying how deep it is.
+///
+/// A field may carry a form of its own, and that form's fields may too,
+/// so this walks two trees a caller supplied -- bounded like every other
+/// walk that does.
+fn check_at(schema: SchemaRef<'_>, form: FormRef<'_>, depth: u32) -> Result<(), FormError> {
+    if depth >= MAX_DEPTH {
+        return Err(malformed(
+            vocab::FIELDS,
+            "a form nested no deeper than the bound",
+        ));
+    }
     let doc = form.as_value();
 
     if let Some(sections) = TryAsRef::<Map>::try_as_ref(doc).and_then(|m| m.get(vocab::SECTIONS)) {
@@ -191,6 +294,11 @@ pub fn check(schema: SchemaRef<'_>, form: FormRef<'_>) -> Result<(), FormError> 
                 TryAsRef::<Map>::try_as_ref(hints).and_then(|m| m.get(vocab::VISIBLE_WHEN))
             {
                 check_condition(schema, condition, format!("{at}.{}", vocab::VISIBLE_WHEN))?;
+            }
+            if let Some(nested) =
+                TryAsRef::<Map>::try_as_ref(hints).and_then(|m| m.get(vocab::FORM))
+            {
+                check_sub_form(schema, path, nested, &at, depth)?;
             }
         }
         // After every condition is known to be well formed, so a cycle is
