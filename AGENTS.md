@@ -11,9 +11,9 @@ public surface); this file is about the repository.
 | `crates/guatiao/` | the crate: value model (every operation on its container, `Value` thin), C type vocabulary, schema, library envelope, loader |
 | `crates/guatiao/include/guatiao.h` | the C header, rendered by `build.rs` and committed |
 | `guatiao.dll` / `libguatiao.so` | the C ABI artifact, from the same crate — `cargo build` |
-| `crates/guatiao-derive/` | `#[derive(ToValue, FromValue, Schema)]`, `#[guatiao::kind]`/`#[derive(Provider)]`, `#[derive(Form)]`; reached through `guatiao`'s `derive`/`provider` features and `guatiao-form`'s `derive`, never named directly |
+| `crates/guatiao-derive/` | `#[derive(ToValue, FromValue, Schema)]`, `#[guatiao::kind]`/`#[derive(Provider)]`, `#[derive(Form)]`; reached through `guatiao`'s `derive`/`provider` features and `guatiao-intake`'s `derive`, never named directly |
 | `crates/guatiao-serde/` | serde for values: JSON, TOML and YAML as features, and a C surface with its own `include/guatiao_serde.h` |
-| `crates/guatiao-form/` | how a schema is shown: sections, widget hints, conditional visibility, as a value beside the schema, or declared with `#[derive(Form)]`; C surface in `include/guatiao_form.h` |
+| `crates/guatiao-intake/` | how a schema is shown: sections, widget hints, conditional visibility, as a value beside the schema, or declared with `#[derive(Form)]`; C surface in `include/guatiao_intake.h` |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
 | `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against |
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
@@ -37,7 +37,7 @@ The crate builds for a browser; the module carries the C surface:
 
 ```bash
 rustup target add wasm32-unknown-unknown
-cargo check --target wasm32-unknown-unknown -p guatiao -p guatiao-serde -p guatiao-form \
+cargo check --target wasm32-unknown-unknown -p guatiao -p guatiao-serde -p guatiao-intake \
   --features guatiao/derive,guatiao/provider,guatiao-serde/json,guatiao-serde/toml,guatiao-serde/yaml
 cargo build -p guatiao --target wasm32-unknown-unknown --release
 ```
@@ -62,7 +62,7 @@ Each crate commits its public surface. A change to it regenerates the
 snapshot in the same commit; CI fails on any difference:
 
 ```bash
-for c in guatiao guatiao-serde guatiao-form; do
+for c in guatiao guatiao-serde guatiao-intake; do
   cargo public-api -p $c --all-features -ss > crates/$c/public-api.txt
 done
 ```
@@ -76,7 +76,7 @@ render is gated rather than unconditional.
 ```bash
 GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-header
 GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-serde --features c-header,json,toml,yaml
-GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-form --features c-header
+GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-intake --features c-header
 GUATIAO_WRITE_HEADER=1 cargo build -p greeter_kind --features c-header   # the kind tables, via macro expansion
 ```
 
@@ -101,7 +101,7 @@ the suite rather than shipping.
 - **`unsafe` is confined to named places.** In `guatiao`: the value
   model's raw layer, the loader (`library/raw/`), the kind runtime's
   files (`library/kind/`), and `exports/` — listed in
-  `tests/forbid_unsafe_per_module.rs`. In `guatiao-form`: `exports.rs`
+  `tests/forbid_unsafe_per_module.rs`. In `guatiao-intake`: `exports.rs`
   alone, checked by its `tests/unsafe_stays_in_exports.rs`. Every other
   module carries `#![forbid(unsafe_code)]`.
 - **Lines are LF** (`.gitattributes`), on every platform, including

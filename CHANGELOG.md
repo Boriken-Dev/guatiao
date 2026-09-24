@@ -101,8 +101,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   symbol and no declaration, so the host's own binary never looks like
   a plugin to a scan. The host example carries a built-in greeter this
   way, offered beside the ones it loads.
-- `guatiao-form` says `links = "guatiao-form"` and publishes its header
-  path as `DEP_GUATIAO_FORM_INCLUDE`, as `guatiao` does.
+- `guatiao-intake` says `links = "guatiao-intake"` and publishes its header
+  path as `DEP_GUATIAO_INTAKE_INCLUDE`, as `guatiao` does.
 - `examples/greeter_host`: the host side as a program. It scans a search
   path under a kind rule, prints the report, offers every `dyn Greeter`
   it found, calls the one that is its own instance through both of its
@@ -252,7 +252,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   not only its magnitude: `1.10` reads back as `1.10`. From C:
   `guatiao_json_parse` / `_emit` / `_emit_pretty`, and the same for TOML and
   YAML; emitting answers a value holding a string, freed like any other.
-- **`guatiao-form`**: how a schema is shown, as a value beside it that
+- **`guatiao-intake`**: how a schema is shown, as a value beside it that
   never repeats it. A form names fields by path (`port`, `auth.username`)
   and adds only what no single field can say about itself: what a section
   is called and the order sections come in, which widget draws a field and
@@ -260,8 +260,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   whether a form fits its schema without ever quoting a value; `layout`
   groups and orders the fields; `is_visible` evaluates conditions, where a
   condition on a hidden field is not met. All three are exported to C in
-  `include/guatiao_form.h`.
-  - **`#[derive(Form)]`** (`guatiao-form`'s `derive` feature) writes a
+  `include/guatiao_intake.h`.
+  - **`#[derive(Form)]`** (`guatiao-intake`'s `derive` feature) writes a
     type's default screen beside `#[derive(Schema)]`: `#[form(section(id,
     label, help))]` on the type in display order, `#[form(widget,
     placeholder, visible_when(field, equals), nested)]` on a field, keys
@@ -310,20 +310,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking: guatiao-form is now guatiao-intake.** The crate took
+  on the path grammar, flat storage and text validation, so orm
+  stopped describing it: what it does is take a value in from a person,
+  by whatever surface -- a screen, a command line, a query string -- and
+  say how to show one. The types keep their names: a Form, a Section
+  and #[derive(Form)] are still about forms. In C:
+  guatiao_intake.h, GUATIAO_INTAKE_H, guatiao_intake_check,
+  _layout, _is_visible, GUATIAO_INTAKE_KEY_X_SECTION. Python:
+  guatiao.intake. Dart: package:guatiao/intake.dart.
+
 - **Breaking: the schema says `title` and `description`, and the
-  presentation opinions moved to `guatiao-form`.** A reader named for a
+  presentation opinions moved to `guatiao-intake`.** A reader named for a
   form keyword hid which schema keyword it read, and a crate that claims
   to know nothing about forms should not carry the form vocabulary.
   - `SchemaRef`, `FieldRef` and `ArmRef`: `label` → `title`, `help` →
     `description`. `ChoiceRef::label` is unchanged — it reads
     `x-enum-labels`, whose own word is "label" — and so are
-    `guatiao_form`'s `SectionRef::label`/`help`.
+    `guatiao_intake`'s `SectionRef::label`/`help`.
   - `title` and `description` are now **inherent** on `SchemaBuilder`,
     `FieldBuilder` and `ArmBuilder`, and `sensitive` on `FieldBuilder`:
     the first two are JSON Schema's own keywords, and "never print this
     value" is obeyed by a log and a crash dump as much as by a form.
   - `guatiao::schema::{FormBuilder, FormFieldBuilder}` are **gone from
-    `guatiao`** and live in `guatiao_form` (`FormBuilder::section`,
+    `guatiao`** and live in `guatiao_intake` (`FormBuilder::section`,
     `FormFieldBuilder::{order, advanced}`). Reading those keys stays in
     `guatiao`: `FieldRef::section`, `order`, `is_advanced`.
   - New: `guatiao::schema::Extras`, the hook the form crate writes
@@ -331,20 +341,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     `extra_alloc()`, so a hint lands in the same allocator as the schema
     carrying it.
   - **The keys themselves moved too.** `x-section`, `x-order` and
-    `x-advanced` are named in `guatiao_form::vocab`, not
+    `x-advanced` are named in `guatiao_intake::vocab`, not
     `guatiao::schema::vocab`, and are read back by
-    `guatiao_form::FormField` over a `FieldRef` — so
+    `guatiao_intake::FormField` over a `FieldRef` — so
     `FieldRef::{section, order, is_advanced}` are **gone from `guatiao`**,
     as are `GUATIAO_KEY_X_SECTION`, `_X_ORDER` and `_X_ADVANCED` from
-    `guatiao.h`. C gets them from `guatiao_form.h` as
-    `GUATIAO_FORM_KEY_X_SECTION` and its siblings, and Dart's mirror
+    `guatiao.h`. C gets them from `guatiao_intake.h` as
+    `GUATIAO_INTAKE_KEY_X_SECTION` and its siblings, and Dart's mirror
     follows. `guatiao` carries the keys as annotations, like any key it
     does not name. `x-sensitive` stays `guatiao`'s, both halves.
   - `#[derive(Schema)]`: `#[schema(label = "..")]` → `#[schema(title =
     "..")]` and `#[schema(help = "..")]` → `#[schema(description =
     "..")]` on a field or an arm. A **choice** keeps `label`, because its
     text lands in `x-enum-labels`; `title` on one is refused with a
-    message saying so. The expansion never names `guatiao-form`.
+    message saying so. The expansion never names `guatiao-intake`.
   - The document is unchanged — the same keys, in the same places — so no
     stored schema, C consumer or binding reader moves.
 - **Breaking: the fields of `Value`, `Payload`, `Entry`, `Text`, `Buffer`,
@@ -367,7 +377,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking**: `describe` takes `Host` instead of `&HostInfo`;
   `HostInfo` gained `services` and `ProviderInfo` gained `tables`, both
   appended under `struct_size`; `ProviderView` gained `raw` and `tables`.
-  `Provider::key_str` is gone. `guatiao-form`'s `is_visible` returns
+  `Provider::key_str` is gone. `guatiao-intake`'s `is_visible` returns
   `Result<bool, FormError>` and refuses a path no field declares. The
   value model's arm accessors (`as_text_mut` and kin) are crate-private.
   The header's `MAX_DEPTH` macro is `GUATIAO_MAX_DEPTH`. A null or
@@ -398,8 +408,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   A corrupt provider array could be allocated for before it was checked.
 - `guatiao-derive` ignored container attributes on a struct;
   `guatiao-serde` ignored `GUATIAO_PRETTY` and wrote a malformed node as
-  zero; `guatiao-form` answered "visible" for an unknown path and read an
-  arm's field whichever arm was picked. `guatiao-serde` and `guatiao-form`
+  zero; `guatiao-intake` answered "visible" for an unknown path and read an
+  arm's field whichever arm was picked. `guatiao-serde` and `guatiao-intake`
   now ship their LICENSE and docs.rs metadata, and their generated headers
   carry the Exhibit A notice.
 

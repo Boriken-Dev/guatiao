@@ -12,7 +12,7 @@ import 'library.dart' as native;
 import 'value.dart';
 
 /// `null` when `form` fits `schema`, otherwise the error map
-/// `guatiao_form_check` writes: `kind` and `at`, plus whichever of
+/// `guatiao_intake_check` writes: `kind` and `at`, plus whichever of
 /// `path`, `id`, `field`, `expected` and `message` apply.
 Map<String, Object?>? check(
   Ref schema,
@@ -24,7 +24,7 @@ Map<String, Object?>? check(
   final out = calloc<guatiao_value>();
   var filled = false;
   try {
-    final status = lib.bindings.guatiao_form_check(
+    final status = lib.bindings.guatiao_intake_check(
       schema.requireNode(),
       form.requireNode(),
       allocator,
@@ -56,7 +56,7 @@ List<Map<String, Object?>> layout(
   var filled = false;
   try {
     checkStatus(
-      lib.bindings.guatiao_form_layout(
+      lib.bindings.guatiao_intake_layout(
         schema.requireNode(),
         form.requireNode(),
         allocator,
@@ -84,7 +84,7 @@ bool isVisible(Ref schema, Ref form, String key, Ref values) {
   try {
     using((arena) {
       checkStatus(
-        lib.bindings.guatiao_form_is_visible(
+        lib.bindings.guatiao_intake_is_visible(
           schema.requireNode(),
           form.requireNode(),
           strOf(arena, key).ref,

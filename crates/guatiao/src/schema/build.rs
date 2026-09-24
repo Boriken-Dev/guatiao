@@ -25,7 +25,7 @@
 //! JSON Schema's own `title` and `description` — is substance, and lives
 //! here. How it is **shown** — which section it sits in, where it sits
 //! among its siblings, whether it hides behind a disclosure — is
-//! presentation, and lives in `guatiao-form`, which writes it through
+//! presentation, and lives in `guatiao-intake`, which writes it through
 //! [`Extras`]. That crate depends on this one and not the other way
 //! around, so nothing here has to know that forms exist.
 //!
@@ -258,7 +258,7 @@ fn seal(
 /// first over and takes the second, so an extension living in another
 /// crate collects its errors exactly as the builders here do.
 ///
-/// `guatiao-form`'s `FormBuilder` is the extension that exists: which
+/// `guatiao-intake`'s `FormBuilder` is the extension that exists: which
 /// section a field sits in, where among its siblings, whether it hides
 /// behind a disclosure. None of those are this crate's business, and this
 /// is what lets them be written without making them so.
@@ -347,7 +347,7 @@ impl SchemaBuilder {
     /// JSON Schema's `title`: a short line naming what this describes.
     ///
     /// A schema keyword, not a form one — which is why it is here and not
-    /// in `guatiao-form`. A consumer with no screen still reads it, in an
+    /// in `guatiao-intake`. A consumer with no screen still reads it, in an
     /// error message or a `--help` line.
     pub fn title(mut self, title: &str) -> SchemaBuilder {
         let alloc = self.alloc;
@@ -498,7 +498,7 @@ impl FieldBuilder {
     ///
     /// **The one hint that is not about drawing**, which is why it stays
     /// in this crate while the rest of the presentation vocabulary lives
-    /// in `guatiao-form`. A form masks it, but so does a log, a debug
+    /// in `guatiao-intake`. A form masks it, but so does a log, a debug
     /// dump, a crash report and anything else that renders a value into
     /// text — none of which have a screen. What each of them actually
     /// does about it stays its own decision; this says only that somebody

@@ -459,8 +459,8 @@ nothing about schemas.
 Keys we added are `x-` prefixed, which is the space the specification
 reserves for exactly that: `x-sensitive`, `x-enum-labels`,
 `x-variant-tag`. Everything else is JSON Schema's. **`x-section`,
-`x-order` and `x-advanced` are `guatiao-form`'s**, named in its `vocab`
-and reached in C through `guatiao_form.h`; a document may carry them and
+`x-order` and `x-advanced` are `guatiao-intake`'s**, named in its `vocab`
+and reached in C through `guatiao_intake.h`; a document may carry them and
 nothing here interprets them.
 
 **Two things are not JSON Schema's, on purpose.** `type: "bytes"` extends
@@ -511,7 +511,7 @@ field pointer.
 **A schema does not know about forms.** Nothing here writes the
 presentation vocabulary: which section a field sits in, where among its
 siblings, whether it hides behind a disclosure. Those are opinions about
-how to organise controls, and they live in `guatiao-form`, as
+how to organise controls, and they live in `guatiao-intake`, as
 `FormBuilder::section` and `FormFieldBuilder::{order, advanced}`. That
 crate depends on this one, so nothing here has to know forms exist.
 
@@ -540,7 +540,7 @@ pub trait Extras: Sized {                     // the door another crate writes t
 `Result` that building through a named allocator produces, and the
 builder keeps the first error as it does for everything else.
 
-**Reading them is `guatiao-form`'s too**, through its `FormField` trait
+**Reading them is `guatiao-intake`'s too**, through its `FormField` trait
 over `FieldRef` (`section`, `order`, `is_advanced`). The split is by
 vocabulary, not by direction: a crate that does not name a key has no
 business answering what it means. What stays here is every key this
@@ -548,7 +548,7 @@ crate DOES name — including `is_sensitive`.
 
 **`#[derive(Schema)]` needs no import**: it names `title` and
 `description` by rooted path and writes the presentation keys through
-`Extras`, so a crate deriving a schema never depends on `guatiao-form`.
+`Extras`, so a crate deriving a schema never depends on `guatiao-intake`.
 
 Presentation is optional and substance is not: every presentation key may
 be missing and the schema is still correct and still usable. Never make a
@@ -595,7 +595,7 @@ SchemaRef::new(&value) -> Option<SchemaRef>
 FieldRef::new(key, &schema) -> Option<FieldRef>   // answers is_required() false
 FieldRef: .key() .kind() .title() .description() .default() .is_sensitive()
            .is_required() .extra(key) .extras()
-           // .section() .order() .is_advanced(): guatiao_form::FormField
+           // .section() .order() .is_advanced(): guatiao_intake::FormField
 Kind: .choices() .alternatives() .arms() .items() .values() .fields() .name()
       // Map vs MapOf: a declared object vs one whose KEYS ARE DATA.
       // Told apart by having `properties`; `.values()` answers MapOf's

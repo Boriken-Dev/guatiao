@@ -12,17 +12,17 @@
 //! implementations would get differently:
 //!
 //! ```c
-//! guatiao_status guatiao_form_check(const guatiao_value *schema, const guatiao_value *form,
+//! guatiao_status guatiao_intake_check(const guatiao_value *schema, const guatiao_value *form,
 //!                                   const guatiao_alloc *alloc, guatiao_value *out_error);
-//! guatiao_status guatiao_form_layout(const guatiao_value *schema, const guatiao_value *form,
+//! guatiao_status guatiao_intake_layout(const guatiao_value *schema, const guatiao_value *form,
 //!                                    const guatiao_alloc *alloc, guatiao_value *out);
-//! guatiao_status guatiao_form_is_visible(const guatiao_value *schema, const guatiao_value *form,
+//! guatiao_status guatiao_intake_is_visible(const guatiao_value *schema, const guatiao_value *form,
 //!                                        guatiao_str key, const guatiao_value *values, bool *out);
 //! ```
 //!
 //! # A layout is keys, not copies
 //!
-//! `guatiao_form_layout` answers **grouping and order** and nothing else:
+//! `guatiao_intake_layout` answers **grouping and order** and nothing else:
 //! a list of `{ "section": <the section's map, or null>, "fields": [key, …] }`.
 //! Everything else about a field the caller already holds — its schema
 //! through `guatiao_schema_resolve`, its hints in the form it passed in —
@@ -111,7 +111,7 @@ unsafe fn views<'a>(
 /// Every non-null pointer addresses what its type says, and `out_error`
 /// addresses writable storage for one value.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn guatiao_form_check(
+pub unsafe extern "C" fn guatiao_intake_check(
     schema: *const Value,
     form: *const Value,
     alloc: *const Allocator,
@@ -195,7 +195,7 @@ fn describe(error: &FormError, alloc: Alloc) -> Option<Value> {
 ///
 /// Writes a list of `{ "section": <map or null>, "fields": [key, …] }` to
 /// `out`, built through `alloc` and freed with `guatiao_value_free`. The
-/// rules are `guatiao_form::layout`'s: declared sections in order, the
+/// rules are `guatiao_intake::layout`'s: declared sections in order, the
 /// default section first unless the form places it, explicit `x-order`
 /// ahead of declaration order, empty groups left out.
 ///
@@ -204,7 +204,7 @@ fn describe(error: &FormError, alloc: Alloc) -> Option<Value> {
 /// Every non-null pointer addresses what its type says, and `out`
 /// addresses writable storage for one value.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn guatiao_form_layout(
+pub unsafe extern "C" fn guatiao_intake_layout(
     schema: *const Value,
     form: *const Value,
     alloc: *const Allocator,
@@ -264,7 +264,7 @@ fn layout_value(schema: SchemaRef<'_>, form: FormRef<'_>, alloc: Alloc) -> Optio
 /// Whether the field under `key` is shown, given the `values` entered so
 /// far. Writes the answer through `out`.
 ///
-/// The rules are `guatiao_form::is_visible`'s: no condition is shown; a
+/// The rules are `guatiao_intake::is_visible`'s: no condition is shown; a
 /// condition is met when the field it reads is itself shown and holds the
 /// value; a field holding nothing reads as its schema default.
 ///
@@ -276,7 +276,7 @@ fn layout_value(schema: SchemaRef<'_>, form: FormRef<'_>, alloc: Alloc) -> Optio
 /// Every non-null pointer addresses what its type says, `key` is a readable
 /// view, and `out` addresses writable storage for one `bool`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn guatiao_form_is_visible(
+pub unsafe extern "C" fn guatiao_intake_is_visible(
     schema: *const Value,
     form: *const Value,
     key: Str,

@@ -21,6 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `kindTable`: a provider's function table, checked against the size
     and the floor hash the kind's own C header declares.
   - `package:guatiao/serde.dart`: JSON, TOML and YAML.
-  - `package:guatiao/form.dart`: `check`, `layout`, `isVisible`.
+  - `package:guatiao/intake.dart`: `check`, `layout`, `isVisible`.
   - `libraryDirectory`, for an app that ships its own copies of the
     libraries and cannot set its own environment.

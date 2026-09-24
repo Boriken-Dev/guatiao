@@ -56,7 +56,7 @@ use crate::vocab;
 ///
 /// ```
 /// use guatiao::schema::{FieldBuilder, KindBuilder, SchemaBuilder};
-/// use guatiao_form::FormBuilder;
+/// use guatiao_intake::FormBuilder;
 ///
 /// let schema = SchemaBuilder::new()
 ///     .title("Connection")
@@ -131,7 +131,7 @@ impl FormFieldBuilder for FieldBuilder {}
 /// ```
 /// use guatiao::schema::read::SchemaRef;
 /// use guatiao::schema::{FieldBuilder, KindBuilder, SchemaBuilder};
-/// use guatiao_form::{FormBuilder, FormField, FormFieldBuilder};
+/// use guatiao_intake::{FormBuilder, FormField, FormFieldBuilder};
 ///
 /// let schema = SchemaBuilder::new()
 ///     .field(FieldBuilder::new("host", KindBuilder::string()).section("net"))

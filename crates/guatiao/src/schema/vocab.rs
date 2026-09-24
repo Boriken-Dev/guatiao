@@ -58,7 +58,7 @@
 //!
 //! Plus, on any of them: `default`, `title`, `description` and
 //! [`X_SENSITIVE`]. Presentation keys — `x-section`, `x-order`,
-//! `x-advanced` — are named by `guatiao-form`, not here.
+//! `x-advanced` — are named by `guatiao-intake`, not here.
 //!
 //! # An undeclared key is refused, and the document says so
 //!
@@ -193,7 +193,7 @@ pub const ONE_OF: &str = "oneOf";
 // --- what this crate adds ---------------------------------------------
 //
 // Three keys that used to be here — `x-section`, `x-order` and
-// `x-advanced` — are `guatiao-form`'s, in its own `vocab`. They name how
+// `x-advanced` — are `guatiao-intake`'s, in its own `vocab`. They name how
 // to organise controls on a screen, which is an opinion this crate does
 // not hold. They stay perfectly legal in a document written here: unknown
 // to `known()`, so carried as annotations and interpreted by whoever

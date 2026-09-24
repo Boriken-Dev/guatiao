@@ -1,0 +1,205 @@
+pub mod guatiao_intake
+pub use guatiao_intake::Form
+pub mod guatiao_intake::declare
+pub trait guatiao_intake::declare::FormBuilder: guatiao::schema::build::Extras
+pub fn guatiao_intake::declare::FormBuilder::section(self, &str) -> Self
+impl guatiao_intake::declare::FormBuilder for guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::section(self, &str) -> Self
+impl guatiao_intake::declare::FormBuilder for guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::section(self, &str) -> Self
+impl guatiao_intake::declare::FormBuilder for guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::section(self, &str) -> Self
+pub trait guatiao_intake::declare::FormField
+pub fn guatiao_intake::declare::FormField::is_advanced(&self) -> bool
+pub fn guatiao_intake::declare::FormField::order(&self) -> i64
+pub fn guatiao_intake::declare::FormField::section(&self) -> &str
+impl<'a> guatiao_intake::declare::FormField for guatiao::schema::read::FieldRef<'a>
+pub fn guatiao::schema::read::FieldRef<'a>::is_advanced(&self) -> bool
+pub fn guatiao::schema::read::FieldRef<'a>::order(&self) -> i64
+pub fn guatiao::schema::read::FieldRef<'a>::section(&self) -> &str
+pub trait guatiao_intake::declare::FormFieldBuilder: guatiao_intake::declare::FormBuilder
+pub fn guatiao_intake::declare::FormFieldBuilder::advanced(self) -> Self
+pub fn guatiao_intake::declare::FormFieldBuilder::order(self, i64) -> Self
+impl guatiao_intake::declare::FormFieldBuilder for guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::advanced(self) -> Self
+pub fn guatiao::schema::build::FieldBuilder::order(self, i64) -> Self
+pub mod guatiao_intake::exports
+#[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_check(*const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_is_visible(*const guatiao::value::value::Value, *const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *mut bool) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_layout(*const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+pub mod guatiao_intake::vocab
+pub mod guatiao_intake::vocab::widget
+pub const guatiao_intake::vocab::widget::CHECKBOX: &str
+pub const guatiao_intake::vocab::widget::NUMBER: &str
+pub const guatiao_intake::vocab::widget::PASSWORD: &str
+pub const guatiao_intake::vocab::widget::RADIO: &str
+pub const guatiao_intake::vocab::widget::SELECT: &str
+pub const guatiao_intake::vocab::widget::SLIDER: &str
+pub const guatiao_intake::vocab::widget::TEXT: &str
+pub const guatiao_intake::vocab::widget::TEXTAREA: &str
+pub const guatiao_intake::vocab::widget::TOGGLE: &str
+pub const guatiao_intake::vocab::DEFAULT_SECTION: &str
+pub const guatiao_intake::vocab::DESCRIPTION: &str
+pub const guatiao_intake::vocab::EQUALS: &str
+pub const guatiao_intake::vocab::FIELD: &str
+pub const guatiao_intake::vocab::FIELDS: &str
+pub const guatiao_intake::vocab::ID: &str
+pub const guatiao_intake::vocab::PLACEHOLDER: &str
+pub const guatiao_intake::vocab::SECTIONS: &str
+pub const guatiao_intake::vocab::TITLE: &str
+pub const guatiao_intake::vocab::VISIBLE_WHEN: &str
+pub const guatiao_intake::vocab::WIDGET: &str
+pub const guatiao_intake::vocab::X_ADVANCED: &str
+pub const guatiao_intake::vocab::X_ORDER: &str
+pub const guatiao_intake::vocab::X_SECTION: &str
+#[non_exhaustive] pub enum guatiao_intake::FormError
+pub guatiao_intake::FormError::ConditionRefused
+pub guatiao_intake::FormError::ConditionRefused::at: alloc::string::String
+pub guatiao_intake::FormError::ConditionRefused::expected: alloc::string::String
+pub guatiao_intake::FormError::ConditionRefused::field: alloc::string::String
+pub guatiao_intake::FormError::CyclicCondition
+pub guatiao_intake::FormError::CyclicCondition::path: alloc::string::String
+pub guatiao_intake::FormError::DuplicateSection
+pub guatiao_intake::FormError::DuplicateSection::id: alloc::string::String
+pub guatiao_intake::FormError::Malformed
+pub guatiao_intake::FormError::Malformed::at: alloc::string::String
+pub guatiao_intake::FormError::Malformed::expected: &'static str
+pub guatiao_intake::FormError::UnknownField
+pub guatiao_intake::FormError::UnknownField::at: alloc::string::String
+pub guatiao_intake::FormError::UnknownField::path: alloc::string::String
+impl core::clone::Clone for guatiao_intake::FormError
+pub fn guatiao_intake::FormError::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_intake::FormError
+impl core::cmp::PartialEq for guatiao_intake::FormError
+pub fn guatiao_intake::FormError::eq(&self, &Self) -> bool
+impl core::error::Error for guatiao_intake::FormError
+impl core::fmt::Debug for guatiao_intake::FormError
+pub fn guatiao_intake::FormError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao_intake::FormError
+pub fn guatiao_intake::FormError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao_intake::FormError
+pub struct guatiao_intake::Condition<'a>
+impl<'a> guatiao_intake::Condition<'a>
+pub fn guatiao_intake::Condition<'a>::equals(&self) -> &'a guatiao::value::value::Value
+pub fn guatiao_intake::Condition<'a>::field(&self) -> &'a str
+impl<'a> core::clone::Clone for guatiao_intake::Condition<'a>
+pub fn guatiao_intake::Condition<'a>::clone(&self) -> Self
+impl<'a> core::fmt::Debug for guatiao_intake::Condition<'a>
+pub fn guatiao_intake::Condition<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for guatiao_intake::Condition<'a>
+pub struct guatiao_intake::Form
+impl guatiao_intake::Form
+pub fn guatiao_intake::Form::alloc(&self) -> guatiao::value::alloc::Alloc
+pub fn guatiao_intake::Form::field(self, &str, guatiao_intake::Hints) -> guatiao_intake::Form
+pub fn guatiao_intake::Form::finish(self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao_intake::Form::new() -> guatiao_intake::Form
+pub fn guatiao_intake::Form::new_in(guatiao::value::alloc::Alloc) -> guatiao_intake::Form
+pub fn guatiao_intake::Form::option(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao_intake::Form
+pub fn guatiao_intake::Form::section(self, guatiao_intake::Section) -> guatiao_intake::Form
+impl core::default::Default for guatiao_intake::Form
+pub fn guatiao_intake::Form::default() -> guatiao_intake::Form
+impl core::fmt::Debug for guatiao_intake::Form
+pub fn guatiao_intake::Form::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_intake::FormRef<'a>(_)
+impl<'a> guatiao_intake::FormRef<'a>
+pub fn guatiao_intake::FormRef<'a>::as_value(&self) -> &'a guatiao::value::value::Value
+pub fn guatiao_intake::FormRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
+pub fn guatiao_intake::FormRef<'a>::fields(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&'a str, guatiao_intake::HintsRef<'a>)>
+pub fn guatiao_intake::FormRef<'a>::hints(&self, &str) -> guatiao_intake::HintsRef<'a>
+pub fn guatiao_intake::FormRef<'a>::new(&'a guatiao::value::value::Value) -> core::option::Option<guatiao_intake::FormRef<'a>>
+pub fn guatiao_intake::FormRef<'a>::section(&self, &str) -> core::option::Option<guatiao_intake::SectionRef<'a>>
+pub fn guatiao_intake::FormRef<'a>::sections(&self) -> impl core::iter::traits::iterator::Iterator<Item = guatiao_intake::SectionRef<'a>>
+impl<'a> core::clone::Clone for guatiao_intake::FormRef<'a>
+pub fn guatiao_intake::FormRef<'a>::clone(&self) -> Self
+impl<'a> core::fmt::Debug for guatiao_intake::FormRef<'a>
+pub fn guatiao_intake::FormRef<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for guatiao_intake::FormRef<'a>
+pub struct guatiao_intake::Group<'a>
+pub guatiao_intake::Group::fields: alloc::vec::Vec<guatiao_intake::Placed<'a>>
+pub guatiao_intake::Group::section: core::option::Option<guatiao_intake::SectionRef<'a>>
+impl<'a> core::clone::Clone for guatiao_intake::Group<'a>
+pub fn guatiao_intake::Group<'a>::clone(&self) -> Self
+impl<'a> core::fmt::Debug for guatiao_intake::Group<'a>
+pub fn guatiao_intake::Group<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_intake::Hints
+impl guatiao_intake::Hints
+pub fn guatiao_intake::Hints::new() -> guatiao_intake::Hints
+pub fn guatiao_intake::Hints::new_in(guatiao::value::alloc::Alloc) -> guatiao_intake::Hints
+pub fn guatiao_intake::Hints::option(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao_intake::Hints
+pub fn guatiao_intake::Hints::placeholder(self, &str) -> guatiao_intake::Hints
+pub fn guatiao_intake::Hints::visible_when(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao_intake::Hints
+pub fn guatiao_intake::Hints::widget(self, &str) -> guatiao_intake::Hints
+impl core::default::Default for guatiao_intake::Hints
+pub fn guatiao_intake::Hints::default() -> guatiao_intake::Hints
+impl core::fmt::Debug for guatiao_intake::Hints
+pub fn guatiao_intake::Hints::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_intake::HintsRef<'a>(_)
+impl<'a> guatiao_intake::HintsRef<'a>
+pub fn guatiao_intake::HintsRef<'a>::as_value(&self) -> core::option::Option<&'a guatiao::value::value::Value>
+pub fn guatiao_intake::HintsRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
+pub fn guatiao_intake::HintsRef<'a>::is_empty(&self) -> bool
+pub fn guatiao_intake::HintsRef<'a>::placeholder(&self) -> &'a str
+pub fn guatiao_intake::HintsRef<'a>::visible_when(&self) -> core::option::Option<guatiao_intake::Condition<'a>>
+pub fn guatiao_intake::HintsRef<'a>::widget(&self) -> &'a str
+impl<'a> core::clone::Clone for guatiao_intake::HintsRef<'a>
+pub fn guatiao_intake::HintsRef<'a>::clone(&self) -> Self
+impl<'a> core::fmt::Debug for guatiao_intake::HintsRef<'a>
+pub fn guatiao_intake::HintsRef<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for guatiao_intake::HintsRef<'a>
+pub struct guatiao_intake::Placed<'a>
+pub guatiao_intake::Placed::field: guatiao::schema::read::FieldRef<'a>
+pub guatiao_intake::Placed::hints: guatiao_intake::HintsRef<'a>
+impl<'a> core::clone::Clone for guatiao_intake::Placed<'a>
+pub fn guatiao_intake::Placed<'a>::clone(&self) -> Self
+impl<'a> core::fmt::Debug for guatiao_intake::Placed<'a>
+pub fn guatiao_intake::Placed<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for guatiao_intake::Placed<'a>
+pub struct guatiao_intake::Section
+impl guatiao_intake::Section
+pub fn guatiao_intake::Section::help(self, &str) -> guatiao_intake::Section
+pub fn guatiao_intake::Section::label(self, &str) -> guatiao_intake::Section
+pub fn guatiao_intake::Section::new(&str) -> guatiao_intake::Section
+pub fn guatiao_intake::Section::new_in(guatiao::value::alloc::Alloc, &str) -> guatiao_intake::Section
+pub fn guatiao_intake::Section::option(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao_intake::Section
+impl core::fmt::Debug for guatiao_intake::Section
+pub fn guatiao_intake::Section::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_intake::SectionRef<'a>(_)
+impl<'a> guatiao_intake::SectionRef<'a>
+pub fn guatiao_intake::SectionRef<'a>::as_value(&self) -> &'a guatiao::value::value::Value
+pub fn guatiao_intake::SectionRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
+pub fn guatiao_intake::SectionRef<'a>::help(&self) -> &'a str
+pub fn guatiao_intake::SectionRef<'a>::id(&self) -> &'a str
+pub fn guatiao_intake::SectionRef<'a>::label(&self) -> &'a str
+impl<'a> core::clone::Clone for guatiao_intake::SectionRef<'a>
+pub fn guatiao_intake::SectionRef<'a>::clone(&self) -> Self
+impl<'a> core::fmt::Debug for guatiao_intake::SectionRef<'a>
+pub fn guatiao_intake::SectionRef<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for guatiao_intake::SectionRef<'a>
+pub trait guatiao_intake::FormBuilder: guatiao::schema::build::Extras
+pub fn guatiao_intake::FormBuilder::section(self, &str) -> Self
+impl guatiao_intake::declare::FormBuilder for guatiao::schema::build::ArmBuilder
+pub fn guatiao::schema::build::ArmBuilder::section(self, &str) -> Self
+impl guatiao_intake::declare::FormBuilder for guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::section(self, &str) -> Self
+impl guatiao_intake::declare::FormBuilder for guatiao::schema::build::SchemaBuilder
+pub fn guatiao::schema::build::SchemaBuilder::section(self, &str) -> Self
+pub trait guatiao_intake::FormField
+pub fn guatiao_intake::FormField::is_advanced(&self) -> bool
+pub fn guatiao_intake::FormField::order(&self) -> i64
+pub fn guatiao_intake::FormField::section(&self) -> &str
+impl<'a> guatiao_intake::declare::FormField for guatiao::schema::read::FieldRef<'a>
+pub fn guatiao::schema::read::FieldRef<'a>::is_advanced(&self) -> bool
+pub fn guatiao::schema::read::FieldRef<'a>::order(&self) -> i64
+pub fn guatiao::schema::read::FieldRef<'a>::section(&self) -> &str
+pub trait guatiao_intake::FormFieldBuilder: guatiao_intake::declare::FormBuilder
+pub fn guatiao_intake::FormFieldBuilder::advanced(self) -> Self
+pub fn guatiao_intake::FormFieldBuilder::order(self, i64) -> Self
+impl guatiao_intake::declare::FormFieldBuilder for guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::advanced(self) -> Self
+pub fn guatiao::schema::build::FieldBuilder::order(self, i64) -> Self
+pub trait guatiao_intake::Screen
+pub fn guatiao_intake::Screen::form(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao_intake::Screen::hints(&str, guatiao_intake::Form) -> guatiao_intake::Form
+pub fn guatiao_intake::check(guatiao::schema::read::SchemaRef<'_>, guatiao_intake::FormRef<'_>) -> core::result::Result<(), guatiao_intake::FormError>
+pub fn guatiao_intake::is_visible(guatiao::schema::read::SchemaRef<'_>, guatiao_intake::FormRef<'_>, &str, &guatiao::value::value::Value) -> core::result::Result<bool, guatiao_intake::FormError>
+pub fn guatiao_intake::layout<'a>(guatiao::schema::read::SchemaRef<'a>, guatiao_intake::FormRef<'a>) -> alloc::vec::Vec<guatiao_intake::Group<'a>>

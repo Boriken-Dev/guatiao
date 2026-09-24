@@ -14,7 +14,7 @@ use guatiao::schema::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::value::read::str_or;
 use guatiao::{Map, Text, Value};
-use guatiao_form::{
+use guatiao_intake::{
     Form, FormBuilder, FormError, FormFieldBuilder, FormRef, Hints, Section, check, is_visible,
     layout, vocab,
 };
@@ -60,7 +60,7 @@ fn views<'a>(schema: &'a Value, form: &'a Value) -> (SchemaRef<'a>, FormRef<'a>)
     )
 }
 
-fn keys(group: &guatiao_form::Group<'_>) -> Vec<String> {
+fn keys(group: &guatiao_intake::Group<'_>) -> Vec<String> {
     group
         .fields
         .iter()

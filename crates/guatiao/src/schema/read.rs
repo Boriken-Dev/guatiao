@@ -269,7 +269,7 @@ impl<'a> FieldRef<'a> {
     /// A secret: never print this value.
     ///
     /// Not a drawing instruction, which is why this one is here and
-    /// `section`, `order` and `is_advanced` are in `guatiao-form`: a log,
+    /// `section`, `order` and `is_advanced` are in `guatiao-intake`: a log,
     /// a crash dump and a debug print all obey it with no screen in
     /// sight.
     pub fn is_sensitive(&self) -> bool {

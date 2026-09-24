@@ -26,7 +26,7 @@ It works with any shared library that exports the ABI, whether that is
   declares before loading it, list providers best first, build an
   instance from a configuration, call a provider through its table.
 - **JSON, TOML and YAML**, and **form checks against a schema**, through
-  the `guatiao_serde` and `guatiao_form` libraries when they are present.
+  the `guatiao_serde` and `guatiao_intake` libraries when they are present.
 - **Importing never fails** — a native library is looked for on first
   use, and a missing one says every place that was searched.
 
@@ -63,7 +63,7 @@ lacks throws `MissingSymbol` naming it, and everything else works.
 | --- | --- |
 | `guatiao` | values, the registry, provider tables |
 | `guatiao_serde` | `package:guatiao/serde.dart`: JSON, and TOML and YAML when the library has them |
-| `guatiao_form` | `package:guatiao/form.dart` |
+| `guatiao_intake` | `package:guatiao/intake.dart` |
 
 The two optional libraries are looked for the same way, in the same
 directory, only when `serde` or `form` is first used.
@@ -164,7 +164,7 @@ is a complete worked example.
 ```dart
 import 'package:guatiao/guatiao.dart';
 import 'package:guatiao/serde.dart' as serde;
-import 'package:guatiao/form.dart' as form;
+import 'package:guatiao/intake.dart' as form;
 
 final value = serde.loads('{"port": 5900}');            // Format.json by default
 final text = serde.dumps(value, format: Format.yaml);
@@ -258,7 +258,7 @@ words when it gave any.
 | --- | --- |
 | `package:guatiao/guatiao.dart` | `Value`, `Ref`, `MapRef`, `ListRef`, `absent`, `Registry`, `Instance`, `kindTable`, the error classes |
 | `package:guatiao/serde.dart` | `loads` / `dumps` for JSON, TOML, YAML |
-| `package:guatiao/form.dart` | `check`, `layout`, `isVisible` |
+| `package:guatiao/intake.dart` | `check`, `layout`, `isVisible` |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/AGENTS.md)
 is the full API reference and ships with the package. The C ABI is

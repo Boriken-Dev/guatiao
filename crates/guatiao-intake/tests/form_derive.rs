@@ -11,7 +11,7 @@
 use guatiao::schema::read::SchemaRef;
 use guatiao::value::convert::TryAsRef;
 use guatiao::{Alloc, Map, Schema, Value};
-use guatiao_form::{Form, FormField, FormRef, Screen, check, is_visible, layout, vocab};
+use guatiao_intake::{Form, FormField, FormRef, Screen, check, is_visible, layout, vocab};
 
 /// How a session authenticates. An arm field carries a hint of its own.
 #[derive(Schema, Form)]

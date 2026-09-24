@@ -16,8 +16,8 @@ use guatiao::value::alloc::{Allocator, rust_alloc};
 use guatiao::value::status::Status;
 use guatiao::value::types::{Str, Value};
 use guatiao::{Map, Value as V};
-use guatiao_form::exports::{guatiao_form_is_visible, guatiao_form_layout};
-use guatiao_form::{Form, Hints};
+use guatiao_intake::exports::{guatiao_intake_is_visible, guatiao_intake_layout};
+use guatiao_intake::{Form, Hints};
 
 fn schema() -> Value {
     SchemaBuilder::new()
@@ -55,7 +55,7 @@ fn an_allocator_that_cannot_allocate_says_so() {
 
     // SAFETY: both trees are live, `out` holds a null — which owns nothing
     // — and the null allocator is what this asserts about.
-    let status = unsafe { guatiao_form_layout(&schema, &form, ptr::null(), &mut out) };
+    let status = unsafe { guatiao_intake_layout(&schema, &form, ptr::null(), &mut out) };
     assert_eq!(status, Status::GUATIAO_ERR_ALLOC);
 
     let empty = Allocator {
@@ -66,7 +66,7 @@ fn an_allocator_that_cannot_allocate_says_so() {
         release: None,
     };
     // SAFETY: as above, with a present but incomplete allocator.
-    let status = unsafe { guatiao_form_layout(&schema, &form, &empty, &mut out) };
+    let status = unsafe { guatiao_intake_layout(&schema, &form, &empty, &mut out) };
     assert_eq!(status, Status::GUATIAO_ERR_ALLOC);
 }
 
@@ -81,12 +81,13 @@ fn a_key_the_schema_does_not_declare_is_not_found() {
     // SAFETY: every pointer addresses a live value, and `shown` is one
     // writable bool.
     let status =
-        unsafe { guatiao_form_is_visible(&schema, &form, key("hots"), &values, &mut shown) };
+        unsafe { guatiao_intake_is_visible(&schema, &form, key("hots"), &values, &mut shown) };
     assert_eq!(status, Status::GUATIAO_ERR_NOT_FOUND);
     assert!(!shown, "the answer slot is untouched");
 
     // SAFETY: as above, with a key the schema declares.
-    let status = unsafe { guatiao_form_is_visible(&schema, &form, key("ca"), &values, &mut shown) };
+    let status =
+        unsafe { guatiao_intake_is_visible(&schema, &form, key("ca"), &values, &mut shown) };
     assert_eq!(status, Status::GUATIAO_OK);
     assert!(shown, "`verify` holds true, so `ca` shows");
 }
@@ -105,27 +106,27 @@ fn every_required_pointer_is_refused_the_same_way() {
     // values everywhere else.
     unsafe {
         assert_eq!(
-            guatiao_form_layout(ptr::null(), &form, &vt, &mut out),
+            guatiao_intake_layout(ptr::null(), &form, &vt, &mut out),
             Status::GUATIAO_ERR_NULL
         );
         assert_eq!(
-            guatiao_form_layout(&schema, ptr::null(), &vt, &mut out),
+            guatiao_intake_layout(&schema, ptr::null(), &vt, &mut out),
             Status::GUATIAO_ERR_NULL
         );
         assert_eq!(
-            guatiao_form_layout(&schema, &form, &vt, ptr::null_mut()),
+            guatiao_intake_layout(&schema, &form, &vt, ptr::null_mut()),
             Status::GUATIAO_ERR_NULL
         );
         assert_eq!(
-            guatiao_form_is_visible(ptr::null(), &form, key("ca"), &values, &mut shown),
+            guatiao_intake_is_visible(ptr::null(), &form, key("ca"), &values, &mut shown),
             Status::GUATIAO_ERR_NULL
         );
         assert_eq!(
-            guatiao_form_is_visible(&schema, &form, key("ca"), ptr::null(), &mut shown),
+            guatiao_intake_is_visible(&schema, &form, key("ca"), ptr::null(), &mut shown),
             Status::GUATIAO_ERR_NULL
         );
         assert_eq!(
-            guatiao_form_is_visible(&schema, &form, key("ca"), &values, ptr::null_mut()),
+            guatiao_intake_is_visible(&schema, &form, key("ca"), &values, ptr::null_mut()),
             Status::GUATIAO_ERR_NULL
         );
     }

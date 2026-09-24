@@ -35,8 +35,8 @@ proc-macro2 = "1"
 # paid only by a consumer that turns it on (`guatiao/provider`).
 [features]
 provider = ["syn/full"]
-# `#[derive(Form)]`, reached as `guatiao_form::Form` with that crate's
-# `derive` feature. Emits `::guatiao_form::` paths, so it is off unless
+# `#[derive(Form)]`, reached as `guatiao_intake::Form` with that crate's
+# `derive` feature. Emits `::guatiao_intake::` paths, so it is off unless
 # that crate is what turned it on.
 form = []
 
