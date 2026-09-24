@@ -22,6 +22,8 @@ files:
         name: guatiao_intake_is_visible
       c:@F@guatiao_intake_layout:
         name: guatiao_intake_layout
+      c:@F@guatiao_intake_path_get:
+        name: guatiao_intake_path_get
       c:@F@guatiao_intake_resolve:
         name: guatiao_intake_resolve
       c:@F@guatiao_intake_unflatten:

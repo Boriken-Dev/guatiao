@@ -22,7 +22,7 @@
  * fields are grouped and ordered, and whether one is showing.
  *
  * guatiao_intake_layout() answers keys, not copies: everything else about a
- * field you already hold, through guatiao_schema_resolve() and the form
+ * field you already hold, through guatiao_intake_resolve() and the form
  * you passed in.
  * ----------------------------------------------------------------------
  */
@@ -111,6 +111,28 @@ guatiao_status guatiao_intake_is_visible(const guatiao_value *schema,
                                          guatiao_str key,
                                          const guatiao_value *values,
                                          bool *out);
+
+/*
+ The value at `path` inside `value`, or null.
+
+ `agent[1].name[home].host`: a dot is a member, a bracket is a list
+ position or a map key, and which one a bracket means is decided by
+ what it is applied to. A path that names nothing answers null, and so
+ does one that is not a path at all — the two are the same answer to a
+ C caller, which is why the grammar's byte offsets stay on the Rust
+ side.
+
+ **This walks a VALUE and asks no schema.** For what the schema says
+ about a path, use `guatiao_intake_resolve`.
+
+ The result **borrows from `value`** and is valid for as long as it is.
+ Nothing is allocated, so nothing is freed.
+
+ # Safety
+
+ `value` addresses a well-formed value, and `path` a readable view.
+ */
+const guatiao_value *guatiao_intake_path_get(const guatiao_value *value, guatiao_str path);
 
 /*
  The field governing a flat key, or null.

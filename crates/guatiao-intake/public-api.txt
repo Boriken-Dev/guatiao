@@ -30,6 +30,7 @@ pub mod guatiao_intake::exports
 pub mod guatiao_intake::exports_flat
 #[no_mangle] pub unsafe c fn guatiao_intake::exports_flat::guatiao_intake_flat_keys(*const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_intake::exports_flat::guatiao_intake_flatten(*const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_intake::exports_flat::guatiao_intake_path_get(*const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>) -> *const guatiao::value::value::Value
 #[no_mangle] pub unsafe c fn guatiao_intake::exports_flat::guatiao_intake_resolve(*const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>) -> *const guatiao::value::value::Value
 #[no_mangle] pub unsafe c fn guatiao_intake::exports_flat::guatiao_intake_unflatten(*const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub mod guatiao_intake::flat

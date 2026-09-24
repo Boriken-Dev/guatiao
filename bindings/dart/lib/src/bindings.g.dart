@@ -207,6 +207,24 @@ class GuatiaoBindings {
       int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
 
+  ffi.Pointer<guatiao_value> guatiao_intake_path_get(
+    ffi.Pointer<guatiao_value> value,
+    guatiao_str path,
+  ) {
+    return _guatiao_intake_path_get(
+      value,
+      path,
+    );
+  }
+
+  late final _guatiao_intake_path_getPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Pointer<guatiao_value> Function(ffi.Pointer<guatiao_value>,
+              guatiao_str)>>('guatiao_intake_path_get');
+  late final _guatiao_intake_path_get = _guatiao_intake_path_getPtr.asFunction<
+      ffi.Pointer<guatiao_value> Function(
+          ffi.Pointer<guatiao_value>, guatiao_str)>();
+
   ffi.Pointer<guatiao_value> guatiao_intake_resolve(
     ffi.Pointer<guatiao_value> schema,
     guatiao_str key,

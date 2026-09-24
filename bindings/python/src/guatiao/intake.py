@@ -2,8 +2,9 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Whether a form fits a schema, its layout, and field visibility, over
-`guatiao_intake`. Resolved lazily, like `serde.py`."""
+"""Naming a place inside a value, whether a form fits a schema, its
+layout, and field visibility, over `guatiao_intake`. Resolved lazily,
+like `serde.py`."""
 
 from __future__ import annotations
 
@@ -11,7 +12,8 @@ import ctypes
 
 from . import _abi, _lib
 from .errors import check as _check_status
-from .value import Value, _make_str
+from .value import Ref, Value, _make_str
+from .registry import _Borrowed
 
 
 def _alloc(given: "_abi.Alloc | None", lib) -> "_abi.Alloc":
@@ -79,3 +81,24 @@ def is_visible(schema: Value, form: Value, key: str, values: Value) -> bool:
         )
     )
     return bool(out.value)
+
+
+def at(value: Value, path: str):
+    """The value at `path`, or `None`.
+
+    `agent[1].name[home].host`: a dot is a member, a bracket is a list
+    position or a map key, and which one a bracket means is decided by
+    what it is applied to -- so `env[PATH]` needs no quoting and
+    `env["1"]` is a key rather than a position.
+
+    What comes back **borrows** from `value` and is read-only: it is a
+    view into the tree you passed, not a copy, so it must not outlive it.
+    A path that names nothing and a path that is not a path at all both
+    answer `None`.
+    """
+    lib = _lib.form()
+    view, _buf = _make_str(path.encode("utf-8"))
+    ptr = lib.guatiao_intake_path_get(ctypes.byref(value._raw), view)
+    if not ptr:
+        return None
+    return Ref(_Borrowed(ptr.contents), ())

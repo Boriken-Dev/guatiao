@@ -20,14 +20,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `BTreeMap<String, T>` and `HashMap<String, T>`, so a struct holding one
   describes itself with no help. `MapError::at_key` re-roots an error
   under an entry.
-- **`guatiao::path`**, a jq-shaped way to name one place inside a value:
+- **`guatiao_intake::path`**, a jq-shaped way to name one place inside a value:
   `agent[1].name[name2].value`. A dot is a field, a bracket is a list
   position or a map key, and which one a bracket means is decided where
   it is applied. Quoting is the escape: `["1"]` is a key and never a
   position, `["a[b]"]` is the only way to spell a key holding a bracket,
   and a `.` inside brackets needs none. `parse` checks the whole string
   and every refusal carries its byte offset; `get`/`get_mut` follow a
-  path through a value, iteratively, and create nothing.
+  path through a value, iteratively, and create nothing. In C:
+  `guatiao_intake_path_get(value, path)`, which answers a **borrowed**
+  pointer or null; Python `guatiao.intake.at(value, path)`, Dart
+  `intake.at(value, path)`.
+- **The flat projection reaches every scalar leaf.** `flatten` walks a
+  value against its schema and writes one entry per leaf under the path
+  that reaches it (`agent[0].name`, `env[PATH]`, `connection.tls.ca`);
+  `unflatten` rebuilds from one, discovering a list's positions and an
+  open map's keys by scanning the prefix. It handled exactly one shape
+  before — a tagged field, one level deep — so a store could not spell a
+  list at all. A tagged field still keeps its discriminant under its own
+  key, because `?auth=userpass` is what a person types.
+  `flat::clear_under(store, path)` is the generalised deletion and is
+  public. Two facts a `key -> text` store cannot carry, now stated: an
+  empty container stores nothing and reads back **absent**, and every
+  leaf is text, so `true` returns as `"true"`.
+- **`resolve` walks every segment**: through declared objects to any
+  depth, into a list element by position, into an open map's value by
+  key, and into the members an arm of a variant adds. `resolve_in`
+  follows the same walk with the arm a store selected, asks for each
+  discriminant by the owner's own path (`agent[0].auth`), and names the
+  **prefix** that failed rather than the whole path.
 - **`value::wire`**, an exact, self-describing binary encoding of a value
   (a tag byte per node, shortest-form LEB128 lengths, numbers as their
   text, bytes as bytes, map order kept), with a decoder that refuses every

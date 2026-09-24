@@ -98,3 +98,24 @@ bool isVisible(Ref schema, Ref form, String key, Ref values) {
     calloc.free(out);
   }
 }
+
+/// The value at [path] inside [value], or `null`.
+///
+/// `agent[1].name[home].host`: a dot is a member, a bracket is a list
+/// position or a map key, and which one a bracket means is decided by
+/// what it is applied to -- so `env[PATH]` needs no quoting, while
+/// `env["1"]` is a key rather than a position.
+///
+/// What comes back **borrows** from [value]: it is a view into that
+/// tree, not a copy, and it must not outlive it. A path that names
+/// nothing and a path that is not a path at all both answer `null`.
+Ref? at(Ref value, String path) {
+  final lib = native.formLib();
+  return using((arena) {
+    final found = lib.bindings.guatiao_intake_path_get(
+      value.requireNode(),
+      strOf(arena, path).ref,
+    );
+    return found == nullptr ? null : Ref.borrowed(found);
+  });
+}
