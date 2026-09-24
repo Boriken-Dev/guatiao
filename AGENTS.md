@@ -51,8 +51,10 @@ skipped for time only:
 cargo +nightly-2026-09-21 miri test -p guatiao --all-features --lib -- value:: schema::
 cargo +nightly-2026-09-21 miri test -p guatiao --all-features --test container_roundtrip \
   --test std_traits --test public_surface --test exports_boundary \
-  --test flat_projection --test schema_as_value --test kind_glue_probes \
+  --test schema_as_value --test kind_glue_probes \
   -- --skip a_tree_of_any_depth
+cargo +nightly-2026-09-21 miri test -p guatiao-intake --all-features \
+  --test paths --test flat_projection
 cargo +nightly-2026-09-21 miri test -p guatiao --all-features --test wire_roundtrip \
   --test wire_channel -- --skip ten_thousand_random --skip a_tree_deeper_than \
   --skip a_thousand_keys
