@@ -625,8 +625,15 @@ impl Value {
 }
 
 impl From<bool> for Value {
-    /// Stores 1 or 0. The arm is a byte rather than a `bool` so that a
-    /// value written by somebody else is still readable.
+    /// Stores a `bool`, and the arm **is** a `bool`.
+    ///
+    /// Reading one back is infallible once the tag says `GUATIAO_BOOL`:
+    /// `TryAsRef<bool>` answers `None` for the wrong arm and never for
+    /// the byte. **A `bool` is a type, not content**: a producer that
+    /// writes any other byte has broken the contract the way a bad
+    /// pointer does, which is the half this crate trusts rather than the
+    /// half it checks. A number's grammar and a text's UTF-8 are content
+    /// and are checked; `true` and `false` are all a `bool` has.
     fn from(b: bool) -> Value {
         let mut v = Value::blank(Tag::GUATIAO_BOOL);
         v.payload.b = b;
