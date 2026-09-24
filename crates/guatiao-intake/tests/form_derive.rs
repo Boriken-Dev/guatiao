@@ -178,3 +178,70 @@ fn a_member_s_hints_compose_under_its_key() {
         "a member adds no sections"
     );
 }
+
+// --- a member drawn by its own screen -----------------------------------
+
+/// What a TLS setting looks like, as a record with a screen of its own.
+#[derive(Schema, Form)]
+#[form(section(id = "trust", label = "Trust"))]
+struct Tls {
+    #[schema(section = "trust")]
+    verify: bool,
+    #[schema(section = "trust")]
+    #[form(placeholder = "/etc/ssl/ca.pem")]
+    ca: Option<String>,
+}
+
+/// A record whose members are drawn two different ways: `auth` flattened
+/// into this screen, `tls` given a window of its own, and `agents` given
+/// one built from the element's type.
+#[derive(Schema, Form)]
+struct Server {
+    name: String,
+    #[form(nested)]
+    auth: Auth,
+    #[form(widget = "dialog", form)]
+    tls: Tls,
+    // A `Vec<T>` is not a screen; the element is, and `form = Ty` is how
+    // a field says which.
+    #[form(form = Tls)]
+    agents: Vec<Tls>,
+}
+
+/// `#[form(form)]` carries the member's OWN form, with its own sections
+/// and hints, and the pair still fits.
+#[test]
+fn a_member_may_be_drawn_by_its_own_screen() {
+    let schema = Server::schema(Alloc::rust()).expect("the schema builds");
+    let form = Server::form(Alloc::rust()).expect("the form builds");
+    let (s, f) = (
+        SchemaRef::new(&schema).expect("a schema"),
+        FormRef::new(&form).expect("a form"),
+    );
+    check(s, f).expect("a derived pair agrees, sub-forms and all");
+
+    // The window: the member's own screen, under its `form` hint.
+    assert_eq!(f.hints("tls").widget(), "dialog");
+    let tls = f.hints("tls").form().expect("tls carries its own form");
+    assert_eq!(
+        tls.sections().map(|s| s.label()).collect::<Vec<_>>(),
+        ["Trust"],
+        "the member's sections, not the outer form's"
+    );
+    assert_eq!(
+        tls.hints("ca").placeholder(),
+        "/etc/ssl/ca.pem",
+        "and its own field hints, at paths relative to the member"
+    );
+
+    // `form = Ty` names the element's type for a field that is a list.
+    let agents = f.hints("agents").form().expect("agents carries one too");
+    assert_eq!(agents.hints("ca").placeholder(), "/etc/ssl/ca.pem");
+
+    // `nested` still flattens, which is the other presentation.
+    assert_eq!(f.hints("auth.password").widget(), "password");
+    assert!(
+        f.hints("auth").form().is_none(),
+        "a flattened member has no form of its own; that is the point"
+    );
+}

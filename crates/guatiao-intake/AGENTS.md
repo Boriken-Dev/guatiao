@@ -59,6 +59,10 @@ hints    := { "widget": text, "placeholder": text,
 - Widgets for one: `dialog` (a window of its own) and `group` (inline,
   which is what a renderer does with no widget at all — it is there for a
   form that wants to say so beside one that says `dialog`).
+- **`#[form(form)]` assigns a member's own screen** as that field's
+  form, and `#[form(form = Ty)]` names the type when the field's own is
+  not a screen — a `Vec<Agent>` is not one and `Agent` is. It is
+  refused beside `nested`: those are two presentations of one member.
 - **A form can be made out of a schema alone**, and `form_for` is the
   question a renderer asks: the assigned form if somebody wrote one,
   otherwise the one the schema implies. A created form carries **one
@@ -173,7 +177,12 @@ struct T {
     #[form(widget = "password")] token: String,
     #[form(placeholder = "..", visible_when(field = "verify", equals = true))] ca: Option<String>,
     #[form(nested)] auth: Auth,                           // `Auth: Screen`; its hints land under `auth.`
+    #[form(widget = "dialog", form)] tls: Tls,            // a form of its OWN, from `Tls: Screen`
+    #[form(form = Tls)] agents: Vec<Tls>,                 // when the FIELD's type is not a screen
 }
+// `nested` and `form` are the two presentations of one member and are
+// refused together: flattened into this screen, or given a screen of
+// its own.
 trait Screen { fn form(Alloc) -> Result<Value, ValueError>; fn hints(prefix: &str, into: Form) -> Form; }
 T::form(alloc)                                 // sections, then hints at the root
 Auth::hints("session.auth.", Form::new())      // a member's hints under a prefix; no sections
