@@ -43,8 +43,8 @@
 
 #![forbid(unsafe_code)]
 
-use crate::schema::flat::SEPARATOR;
 use crate::schema::read::{FieldRef, Kind, SchemaRef};
+use crate::schema::validate::NESTED;
 use crate::value::alloc::Alloc;
 use crate::value::error::ValueError;
 use crate::value::read::str_or;
@@ -122,9 +122,11 @@ pub fn declared_for(field: FieldRef<'_>) -> Option<DeclaredMerge> {
 /// Keyed by the **path** the field occupies in a values map, which is the
 /// spelling the merge matches against: a top-level field's own key, and a
 /// field of a nested object joined to its owner's with a dot
-/// (`"tls.ciphers"`). A field key may not contain the separator itself —
-/// [`flat::check_keys`](crate::schema::flat::check_keys) refuses that at
-/// declaration — so a path here has exactly one reading.
+/// (`"tls.ciphers"`). A key holding a `.` of its own is reported the
+/// same way, which is ambiguous to read and unambiguous to act on: the
+/// path is built from the fields walked, not parsed back out of the
+/// text. A reader that needs to parse one wants `guatiao-intake`'s path
+/// grammar, where a key like that is written `["tls.ciphers"]`.
 ///
 /// **Nested objects are walked**, because the declaration lives with the
 /// field and a field two levels down declares just as meaningfully as one
@@ -154,7 +156,7 @@ fn collect_overrides<'a>(
         let path = if prefix.is_empty() {
             field.key().to_string()
         } else {
-            format!("{prefix}{SEPARATOR}{}", field.key())
+            format!("{prefix}{NESTED}{}", field.key())
         };
         if let Some(declared) = declared_for(field) {
             overrides.set(path.clone(), declared.mode);

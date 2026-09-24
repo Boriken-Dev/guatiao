@@ -35,8 +35,11 @@ fn every_module_but_the_exports_forbids_unsafe() {
 
         match name.as_str() {
             // The root cannot forbid: the attribute would bind `exports`.
-            // The exports cannot forbid: they are the boundary.
-            "lib.rs" | "exports.rs" => assert!(
+            // The exports cannot forbid: they are the boundary. There are
+            // two of them -- the form judgement and the flat projection --
+            // and naming both here is the point: the list is what a
+            // reader checks, so a third would have to be argued for.
+            "lib.rs" | "exports.rs" | "exports_flat.rs" => assert!(
                 !forbids,
                 "{name} forbids unsafe, which would stop the C surface compiling"
             ),

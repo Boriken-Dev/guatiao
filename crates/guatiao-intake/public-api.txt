@@ -27,6 +27,96 @@ pub mod guatiao_intake::exports
 #[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_check(*const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_is_visible(*const guatiao::value::value::Value, *const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *mut bool) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_layout(*const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+pub mod guatiao_intake::exports_flat
+#[no_mangle] pub unsafe c fn guatiao_intake::exports_flat::guatiao_intake_flat_keys(*const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_intake::exports_flat::guatiao_intake_flatten(*const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_intake::exports_flat::guatiao_intake_resolve(*const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>) -> *const guatiao::value::value::Value
+#[no_mangle] pub unsafe c fn guatiao_intake::exports_flat::guatiao_intake_unflatten(*const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+pub mod guatiao_intake::flat
+pub const guatiao_intake::flat::SEPARATOR: char
+pub fn guatiao_intake::flat::flatten(guatiao::schema::read::FieldRef<'_>, &guatiao::value::value::Value, &mut alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>) -> bool
+pub fn guatiao_intake::flat::is_sensitive(guatiao::schema::read::SchemaRef<'_>, &str) -> bool
+pub fn guatiao_intake::flat::keys(guatiao::schema::read::FieldRef<'_>) -> alloc::vec::Vec<alloc::string::String>
+pub fn guatiao_intake::flat::resolve<'a>(guatiao::schema::read::SchemaRef<'a>, &str) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
+pub fn guatiao_intake::flat::resolve_in<'a>(guatiao::schema::read::SchemaRef<'a>, &str, impl core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String>) -> core::result::Result<guatiao::schema::read::FieldRef<'a>, guatiao::schema::ValidationError>
+pub fn guatiao_intake::flat::split(&str) -> core::option::Option<(&str, &str)>
+pub fn guatiao_intake::flat::unflatten(guatiao::value::alloc::Alloc, guatiao::schema::read::FieldRef<'_>, &alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>) -> core::option::Option<guatiao::value::value::Value>
+pub type guatiao_intake::flat::Error = guatiao::value::error::ValueError
+pub mod guatiao_intake::path
+#[non_exhaustive] pub enum guatiao_intake::path::PathError
+pub guatiao_intake::path::PathError::BadEscape
+pub guatiao_intake::path::PathError::BadEscape::at: usize
+pub guatiao_intake::path::PathError::Empty
+pub guatiao_intake::path::PathError::EmptyField
+pub guatiao_intake::path::PathError::EmptyField::at: usize
+pub guatiao_intake::path::PathError::EmptyIndex
+pub guatiao_intake::path::PathError::EmptyIndex::at: usize
+pub guatiao_intake::path::PathError::TrailingQuote
+pub guatiao_intake::path::PathError::TrailingQuote::at: usize
+pub guatiao_intake::path::PathError::UnclosedIndex
+pub guatiao_intake::path::PathError::UnclosedIndex::at: usize
+pub guatiao_intake::path::PathError::UnclosedQuote
+pub guatiao_intake::path::PathError::UnclosedQuote::at: usize
+pub guatiao_intake::path::PathError::UnexpectedClose
+pub guatiao_intake::path::PathError::UnexpectedClose::at: usize
+impl guatiao_intake::path::PathError
+pub fn guatiao_intake::path::PathError::offset(&self) -> usize
+impl core::clone::Clone for guatiao_intake::path::PathError
+pub fn guatiao_intake::path::PathError::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_intake::path::PathError
+impl core::cmp::PartialEq for guatiao_intake::path::PathError
+pub fn guatiao_intake::path::PathError::eq(&self, &Self) -> bool
+impl core::error::Error for guatiao_intake::path::PathError
+impl core::fmt::Debug for guatiao_intake::path::PathError
+pub fn guatiao_intake::path::PathError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao_intake::path::PathError
+pub fn guatiao_intake::path::PathError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao_intake::path::PathError
+#[non_exhaustive] pub enum guatiao_intake::path::Segment<'a>
+pub guatiao_intake::path::Segment::Field(&'a str)
+pub guatiao_intake::path::Segment::Index(usize)
+pub guatiao_intake::path::Segment::Key(alloc::borrow::Cow<'a, str>)
+impl core::fmt::Display for guatiao_intake::path::Segment<'_>
+pub fn guatiao_intake::path::Segment<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::clone::Clone for guatiao_intake::path::Segment<'a>
+pub fn guatiao_intake::path::Segment<'a>::clone(&self) -> Self
+impl<'a> core::cmp::Eq for guatiao_intake::path::Segment<'a>
+impl<'a> core::cmp::PartialEq for guatiao_intake::path::Segment<'a>
+pub fn guatiao_intake::path::Segment<'a>::eq(&self, &Self) -> bool
+impl<'a> core::fmt::Debug for guatiao_intake::path::Segment<'a>
+pub fn guatiao_intake::path::Segment<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::StructuralPartialEq for guatiao_intake::path::Segment<'a>
+pub struct guatiao_intake::path::Path<'a>
+impl<'a> guatiao_intake::path::Path<'a>
+pub fn guatiao_intake::path::Path<'a>::as_str(&self) -> &'a str
+pub fn guatiao_intake::path::Path<'a>::segments(&self) -> guatiao_intake::path::Segments<'a>
+pub fn guatiao_intake::path::Path<'a>::split_first(&self) -> core::option::Option<(guatiao_intake::path::Segment<'a>, core::option::Option<guatiao_intake::path::Path<'a>>)>
+impl core::fmt::Display for guatiao_intake::path::Path<'_>
+pub fn guatiao_intake::path::Path<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::clone::Clone for guatiao_intake::path::Path<'a>
+pub fn guatiao_intake::path::Path<'a>::clone(&self) -> Self
+impl<'a> core::cmp::Eq for guatiao_intake::path::Path<'a>
+impl<'a> core::cmp::PartialEq for guatiao_intake::path::Path<'a>
+pub fn guatiao_intake::path::Path<'a>::eq(&self, &Self) -> bool
+impl<'a> core::fmt::Debug for guatiao_intake::path::Path<'a>
+pub fn guatiao_intake::path::Path<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::iter::traits::collect::IntoIterator for guatiao_intake::path::Path<'a>
+pub type guatiao_intake::path::Path<'a>::IntoIter = guatiao_intake::path::Segments<'a>
+pub type guatiao_intake::path::Path<'a>::Item = guatiao_intake::path::Segment<'a>
+pub fn guatiao_intake::path::Path<'a>::into_iter(self) -> guatiao_intake::path::Segments<'a>
+impl<'a> core::marker::Copy for guatiao_intake::path::Path<'a>
+impl<'a> core::marker::StructuralPartialEq for guatiao_intake::path::Path<'a>
+pub struct guatiao_intake::path::Segments<'a>
+impl<'a> core::clone::Clone for guatiao_intake::path::Segments<'a>
+pub fn guatiao_intake::path::Segments<'a>::clone(&self) -> Self
+impl<'a> core::fmt::Debug for guatiao_intake::path::Segments<'a>
+pub fn guatiao_intake::path::Segments<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::iter::traits::iterator::Iterator for guatiao_intake::path::Segments<'a>
+pub type guatiao_intake::path::Segments<'a>::Item = guatiao_intake::path::Segment<'a>
+pub fn guatiao_intake::path::Segments<'a>::next(&mut self) -> core::option::Option<guatiao_intake::path::Segment<'a>>
+pub fn guatiao_intake::path::get<'v>(&'v guatiao::value::value::Value, guatiao_intake::path::Path<'_>) -> core::option::Option<&'v guatiao::value::value::Value>
+pub fn guatiao_intake::path::get_mut<'v>(&'v mut guatiao::value::value::Value, guatiao_intake::path::Path<'_>) -> core::option::Option<&'v mut guatiao::value::value::Value>
+pub fn guatiao_intake::path::parse(&str) -> core::result::Result<guatiao_intake::path::Path<'_>, guatiao_intake::path::PathError>
 pub mod guatiao_intake::vocab
 pub mod guatiao_intake::vocab::widget
 pub const guatiao_intake::vocab::widget::CHECKBOX: &str
@@ -175,6 +265,7 @@ pub fn guatiao_intake::SectionRef<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao_intake::SectionRef<'a>
 pub fn guatiao_intake::SectionRef<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<'a> core::marker::Copy for guatiao_intake::SectionRef<'a>
+pub const guatiao_intake::SEPARATOR: char
 pub trait guatiao_intake::FormBuilder: guatiao::schema::build::Extras
 pub fn guatiao_intake::FormBuilder::section(self, &str) -> Self
 impl guatiao_intake::declare::FormBuilder for guatiao::schema::build::ArmBuilder
@@ -201,5 +292,13 @@ pub trait guatiao_intake::Screen
 pub fn guatiao_intake::Screen::form(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao_intake::Screen::hints(&str, guatiao_intake::Form) -> guatiao_intake::Form
 pub fn guatiao_intake::check(guatiao::schema::read::SchemaRef<'_>, guatiao_intake::FormRef<'_>) -> core::result::Result<(), guatiao_intake::FormError>
+pub fn guatiao_intake::flatten(guatiao::schema::read::FieldRef<'_>, &guatiao::value::value::Value, &mut alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>) -> bool
+pub fn guatiao_intake::is_sensitive(guatiao::schema::read::SchemaRef<'_>, &str) -> bool
 pub fn guatiao_intake::is_visible(guatiao::schema::read::SchemaRef<'_>, guatiao_intake::FormRef<'_>, &str, &guatiao::value::value::Value) -> core::result::Result<bool, guatiao_intake::FormError>
+pub fn guatiao_intake::keys(guatiao::schema::read::FieldRef<'_>) -> alloc::vec::Vec<alloc::string::String>
 pub fn guatiao_intake::layout<'a>(guatiao::schema::read::SchemaRef<'a>, guatiao_intake::FormRef<'a>) -> alloc::vec::Vec<guatiao_intake::Group<'a>>
+pub fn guatiao_intake::resolve<'a>(guatiao::schema::read::SchemaRef<'a>, &str) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
+pub fn guatiao_intake::resolve_in<'a>(guatiao::schema::read::SchemaRef<'a>, &str, impl core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String>) -> core::result::Result<guatiao::schema::read::FieldRef<'a>, guatiao::schema::ValidationError>
+pub fn guatiao_intake::split(&str) -> core::option::Option<(&str, &str)>
+pub fn guatiao_intake::unflatten(guatiao::value::alloc::Alloc, guatiao::schema::read::FieldRef<'_>, &alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>) -> core::option::Option<guatiao::value::value::Value>
+pub fn guatiao_intake::validate_texts(guatiao::schema::read::SchemaRef<'_>, &alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>) -> core::result::Result<(), guatiao::schema::ValidationError>

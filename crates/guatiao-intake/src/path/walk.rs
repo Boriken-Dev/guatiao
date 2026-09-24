@@ -10,15 +10,15 @@
 #![forbid(unsafe_code)]
 
 use super::{Path, Segment};
-use crate::value::convert::{TryAsMut, TryAsRef};
-use crate::value::types::{List, Map, Value};
+use guatiao::value::convert::{TryAsMut, TryAsRef};
+use guatiao::value::types::{List, Map, Value};
 
 /// The value at `path`, or `None`.
 ///
 /// `None` says "nothing is there", for every reason at once: a key no map
 /// holds, a position past the end of a list, or a segment applied to a
 /// scalar. A caller that needs to tell those apart is asking about the
-/// **schema**, and [`schema::flat::resolve`](crate::schema::flat::resolve)
+/// **schema**, and [`schema::flat::resolve`](crate::flat::resolve)
 /// is the one that answers.
 pub fn get<'v>(value: &'v Value, path: Path<'_>) -> Option<&'v Value> {
     let mut at = value;
@@ -43,7 +43,7 @@ pub fn get<'v>(value: &'v Value, path: Path<'_>) -> Option<&'v Value> {
 /// **Does not create what is missing.** A path names a place; making one
 /// needs an allocator and a decision about what kind of container each
 /// missing step should be, which is
-/// [`schema::flat::unflatten`](crate::schema::flat::unflatten)'s job,
+/// [`schema::flat::unflatten`](crate::flat::unflatten)'s job,
 /// because the schema is what says.
 pub fn get_mut<'v>(value: &'v mut Value, path: Path<'_>) -> Option<&'v mut Value> {
     let mut at = value;

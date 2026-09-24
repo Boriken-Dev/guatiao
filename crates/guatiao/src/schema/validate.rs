@@ -28,11 +28,20 @@
 #![forbid(unsafe_code)]
 
 use crate::value::convert::TryAsRef;
-use std::collections::BTreeMap;
 
 use super::ValidationError;
 use super::read::{FieldRef, Kind, SchemaRef};
 use crate::value::error::MAX_DEPTH;
+
+/// Between an owner and one of its members, in the KEY an error
+/// reports: `"tls.verify"`.
+///
+/// **Prose for a person, not a path language.** Naming a place inside
+/// a value is `guatiao-intake`'s business, and this crate does not
+/// depend on it -- an error message that reads the way a reader
+/// expects is not a reason to. Do not reintroduce that dependency to
+/// "share" this character.
+pub(crate) const NESTED: char = '.';
 use crate::value::read::str_or;
 use crate::value::types::{List, Map, Number, Tag, Value};
 
@@ -328,13 +337,13 @@ fn value_against(
                 let name = entry.key();
                 let Some(field) = kind.fields().find(|f| f.key() == name) else {
                     return Err(bad(
-                        format!("{key}{}{name}", super::flat::SEPARATOR),
+                        format!("{key}{}{name}", NESTED),
                         format!("nothing — '{name}' is not a declared field"),
                     ));
                 };
                 value_against(
                     field.kind(),
-                    &format!("{key}{}{name}", super::flat::SEPARATOR),
+                    &format!("{key}{}{name}", NESTED),
                     entry.value(),
                     depth + 1,
                 )?;
@@ -345,7 +354,7 @@ fn value_against(
                         .is_some_and(|m| m.contains_key(field.key()))
                 {
                     return Err(bad(
-                        format!("{key}{}{}", super::flat::SEPARATOR, field.key()),
+                        format!("{key}{}{}", NESTED, field.key()),
                         "a value — it is required",
                     ));
                 }
@@ -394,13 +403,13 @@ fn value_against(
         }
         let Some(field) = arm.fields().find(|f| f.key() == name) else {
             return Err(bad(
-                format!("{key}{}{name}", super::flat::SEPARATOR),
+                format!("{key}{}{name}", NESTED),
                 format!("nothing — '{name}' is not declared by the '{chosen}' arm"),
             ));
         };
         value_against(
             field.kind(),
-            &format!("{key}{}{name}", super::flat::SEPARATOR),
+            &format!("{key}{}{name}", NESTED),
             entry.value(),
             depth + 1,
         )?;
@@ -411,36 +420,9 @@ fn value_against(
             && !TryAsRef::<Map>::try_as_ref(value).is_some_and(|m| m.contains_key(field.key()))
         {
             return Err(bad(
-                format!("{key}{}{}", super::flat::SEPARATOR, field.key()),
+                format!("{key}{}{}", NESTED, field.key()),
                 format!("a value — it is required by the '{chosen}' arm"),
             ));
-        }
-    }
-    Ok(())
-}
-
-/// Whether every entry of `values` is accepted by `schema`.
-///
-/// An undeclared key is an error rather than something to ignore. Silently
-/// dropping a misspelled field is how somebody ends up convinced a
-/// setting does nothing.
-///
-/// A dotted key is a tagged field's payload, checked against the arm the
-/// store selects -- see [`super::flat::resolve_in`]. The flat spelling
-/// carries the discriminant only under the field's own key, so this is
-/// the one place the text form can say what the nested form says: a
-/// field belonging to an unselected arm is refused, not ignored.
-pub fn validate_texts(
-    schema: SchemaRef<'_>,
-    values: &BTreeMap<String, String>,
-) -> Result<(), ValidationError> {
-    for (key, value) in values {
-        let field = super::flat::resolve_in(schema, key, |k| values.get(k).cloned())?;
-        validate_text(field, value)?;
-    }
-    for field in schema.fields() {
-        if field.is_required() && !values.contains_key(field.key()) {
-            return Err(bad(field.key(), "a value — it is required"));
         }
     }
     Ok(())

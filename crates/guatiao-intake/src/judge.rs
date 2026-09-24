@@ -21,8 +21,8 @@
 use guatiao::value::convert::TryAsRef;
 use std::fmt;
 
+use crate::flat;
 use guatiao::schema::ValidationError;
-use guatiao::schema::flat;
 use guatiao::schema::read::{FieldRef, Kind, SchemaRef};
 use guatiao::schema::validate::{validate_text, validate_value};
 

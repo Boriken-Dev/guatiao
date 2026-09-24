@@ -14,9 +14,7 @@
 
 use guatiao::List;
 use guatiao::value::convert::{TryAsMut, TryAsRef};
-use std::collections::BTreeMap;
 
-use guatiao::schema::flat;
 use guatiao::schema::read::{FieldRef, Kind, SchemaRef};
 use guatiao::schema::validate::{validate_map, validate_value};
 use guatiao::value::alloc::Alloc;
@@ -337,25 +335,6 @@ fn a_variant_it_writes_is_one_its_schema_accepts() {
         validate_value(field, &foreign).is_err(),
         "a key the chosen arm does not declare is the validator's to refuse"
     );
-}
-
-#[test]
-fn a_variant_survives_the_flat_projection() {
-    let (kind, key) = field_of::<Auth>("auth");
-    let field = FieldRef::new(key, &kind).unwrap();
-    let written = userpass().to_value(alloc()).unwrap();
-
-    let mut store = BTreeMap::new();
-    assert!(flat::flatten(field, &written, &mut store));
-    assert_eq!(store.get("auth").map(String::as_str), Some("userpass"));
-    assert_eq!(
-        store.get("auth.username").map(String::as_str),
-        Some("ana"),
-        "an arm's field lands under the owner's key"
-    );
-
-    let back = flat::unflatten(alloc(), field, &store).expect("it reads back");
-    assert_eq!(Auth::from_value(&back).unwrap(), userpass());
 }
 
 // --- held by a struct -----------------------------------------------------

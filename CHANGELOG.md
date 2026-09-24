@@ -310,15 +310,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- **Breaking: guatiao-form is now guatiao-intake.** The crate took
-  on the path grammar, flat storage and text validation, so orm
-  stopped describing it: what it does is take a value in from a person,
-  by whatever surface -- a screen, a command line, a query string -- and
-  say how to show one. The types keep their names: a Form, a Section
-  and #[derive(Form)] are still about forms. In C:
-  guatiao_intake.h, GUATIAO_INTAKE_H, guatiao_intake_check,
-  _layout, _is_visible, GUATIAO_INTAKE_KEY_X_SECTION. Python:
-  guatiao.intake. Dart: package:guatiao/intake.dart.
+- **Breaking: the path language and the flat projection left `guatiao`.**
+  A schema describes the struct exactly as it is; naming a place inside a
+  value, projecting one onto `key -> text` and checking a store of text
+  are decisions a consumer makes *over* a schema. All of it is
+  `guatiao-intake`'s now: `path`, `flat` (`flatten`, `unflatten`,
+  `resolve`, `resolve_in`, `keys`, `split`, `is_sensitive`, `SEPARATOR`)
+  and `validate_texts`. In C, `guatiao_schema_{resolve, flat_keys,
+  flatten, unflatten}` are `guatiao_intake_*` and are declared in
+  `guatiao_intake.h`. `validate_text` stays in `guatiao`: one text
+  against one field's kind asks about the schema alone, and it is the
+  check `validate_value` already performs on every scalar.
+- **`SchemaBuilder::finish` accepts any field key**, including one
+  holding a `.`, a `[` or a `]`; `check_keys` is **gone**, not moved. It
+  refused such a key because the only spelling for a nested path was
+  ambiguous, and the grammar quotes one now: `["a.b"]`.
+- **Breaking: `guatiao-form` is now `guatiao-intake`.** The crate took on
+  the path grammar, flat storage and text validation, so `form` stopped
+  describing it: what it does is take a value in from a person, by
+  whatever surface — a screen, a command line, a query string — and say
+  how to show one. The types keep their names: a `Form`, a `Section` and
+  `#[derive(Form)]` are still about forms. In C: `guatiao_intake.h`,
+  `GUATIAO_INTAKE_H`, `guatiao_intake_check`, `_layout`, `_is_visible`,
+  `GUATIAO_INTAKE_KEY_X_SECTION`. Python: `guatiao.intake`. Dart:
+  `package:guatiao/intake.dart`.
 
 - **Breaking: the schema says `title` and `description`, and the
   presentation opinions moved to `guatiao-intake`.** A reader named for a

@@ -119,11 +119,6 @@ typedef struct guatiao_entry guatiao_entry;
 #define GUATIAO_ABI_VERSION 1
 
 /*
- Between a field's key and one of its payload fields.
- */
-#define GUATIAO_PAYLOAD_SEPARATOR '.'
-
-/*
  What an entry point reports.
 
  The numbering is wider than the list because the space may be shared
@@ -1721,87 +1716,6 @@ guatiao_status guatiao_schema_validate(const struct guatiao_value *schema,
                                        const struct guatiao_value *config,
                                        const struct guatiao_alloc *alloc,
                                        struct guatiao_value *out_error);
-
-/*
- The field governing a flat key, or null.
-
- Follows one level of projection, so `auth.password` answers the arm
- field's own field rather than the `auth` field. Every per-field flag
- a caller wants — required, advanced, sensitive, the title — is read
- off the value this hands back, so the boundary needs one lookup rather
- than one export per flag.
-
- The result **borrows from `schema`** and is valid for as long as it is.
-
- # Safety
-
- `schema` addresses a well-formed value, and `key` a readable view.
- */
-const struct guatiao_value *guatiao_schema_resolve(const struct guatiao_value *schema,
-                                                   struct guatiao_str key);
-
-/*
- The flat keys one field projects onto, as a list of strings.
-
- Takes the schema and a key rather than a field, because **a field's
- name is not inside the field**: it is the key it is filed under in
- `properties`, so a bare pointer to a field's schema cannot say what it
- is called. Same for the three below.
-
- `out` is written the absent marker on entry, so a failed call leaves
- it ABSENT. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
-
- # Safety
-
- `schema` addresses a well-formed value, `key` a readable view, and
- `out` writable storage for one value.
- */
-guatiao_status guatiao_schema_flat_keys(const struct guatiao_value *schema,
-                                        struct guatiao_str key,
-                                        const struct guatiao_alloc *alloc,
-                                        struct guatiao_value *out);
-
-/*
- Writes a tagged value into a flat store of `key -> text`.
-
- `GUATIAO_ERR_WRONG_KIND` when the key names no field, the field is not
- a variant, or the value is not a map — all of which are the same "it
- does not apply" the Rust side reports as `false`.
-
- `out` is written the absent marker on entry, so a failed call leaves
- it ABSENT. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
-
- # Safety
-
- Every non-null pointer addresses what its type says, `key` is a
- readable view, and `out` addresses writable storage for one value.
- */
-guatiao_status guatiao_schema_flatten(const struct guatiao_value *schema,
-                                      struct guatiao_str key,
-                                      const struct guatiao_value *value,
-                                      const struct guatiao_alloc *alloc,
-                                      struct guatiao_value *out);
-
-/*
- Rebuilds a tagged value from a flat store.
-
- The reverse of [`guatiao_schema_flatten`], and the round trip is what
- makes the projection usable: a front end reads text, hands it back, and
- gets the value the schema describes.
-
- `out` is written the absent marker on entry, so a failed call leaves
- it ABSENT. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
-
- # Safety
-
- As for [`guatiao_schema_flatten`]. `flat` is a map whose values are all
- strings; one that is not answers `GUATIAO_ERR_WRONG_KIND`.
- */
-guatiao_status guatiao_schema_unflatten(const struct guatiao_value *schema,
-                                        struct guatiao_str key,
-                                        const struct guatiao_value *flat,
-                                        const struct guatiao_alloc *alloc,
-                                        struct guatiao_value *out);
 
 /*
  Frees everything `v` owns and leaves it null-tagged.

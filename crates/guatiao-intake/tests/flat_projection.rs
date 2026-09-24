@@ -13,11 +13,12 @@ use guatiao::value::convert::TryAsRef;
 use std::collections::BTreeMap;
 
 use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
-use guatiao::schema::flat;
 use guatiao::schema::read::SchemaRef;
 use guatiao::value::alloc::Alloc;
 use guatiao::value::read::str_or;
-use guatiao::{Map, Text, Value, ValueError};
+use guatiao::{Map, Text, Value};
+use guatiao_intake::flat;
+use guatiao_intake::path;
 
 /// A schema with one tagged field: two arms, one of them empty.
 fn schema(alloc: Alloc) -> Value {
@@ -277,7 +278,7 @@ fn resolve_in_a_store_follows_the_selected_arm() {
     ));
 
     // And a whole store, through the validator a front end calls.
-    use guatiao::schema::validate_texts;
+    use guatiao_intake::validate_texts;
     assert!(
         validate_texts(
             s,
@@ -296,40 +297,53 @@ fn resolve_in_a_store_follows_the_selected_arm() {
     );
 }
 
+/// **A field key holding a delimiter is legal**, and used not to be.
+///
+/// The old rule refused `auth.username` at `SchemaBuilder::finish`,
+/// because the only spelling for a nested path was `owner.member` and a
+/// key like that made one ambiguous. The grammar has brackets and
+/// quoting now, so the key has an unambiguous spelling of its own and
+/// the schema is free to describe the struct exactly as it is.
 #[test]
-fn an_option_key_containing_the_separator_is_rejected() {
+fn a_field_key_may_hold_a_delimiter_and_is_named_by_quoting_it() {
     let alloc = Alloc::rust();
 
-    let good = schema(alloc);
-    assert_eq!(flat::check_keys(SchemaRef::new(&good).unwrap()), Ok(()));
+    let schema = SchemaBuilder::new_in(alloc)
+        .field(FieldBuilder::new_in(
+            alloc,
+            "auth.username",
+            KindBuilder::string_in(alloc),
+        ))
+        .finish()
+        .expect("a schema describes the struct as it is");
 
-    // The builder refuses it, so the declaration never becomes a schema.
-    assert_eq!(
-        SchemaBuilder::new_in(alloc)
-            .field(FieldBuilder::new_in(
-                alloc,
-                "auth.username",
-                KindBuilder::string_in(alloc),
-            ))
-            .finish()
-            .unwrap_err(),
-        ValueError::WrongKind,
-        "`finish` is where the check runs, so nobody has to remember to call it"
+    let s = SchemaRef::new(&schema).expect("a schema is a map");
+    assert!(
+        s.find("auth.username").is_some(),
+        "the field is declared under the name it was given"
     );
 
-    // And the check itself still names the offending key, for a schema
-    // that arrived from somewhere else.
-    let mut properties = Map::new_in(alloc);
-    properties.set("auth.username", Map::new_in(alloc)).unwrap();
-    let mut bad = Map::new_in(alloc);
-    bad.set(
-        "type",
-        Text::new_in(alloc, "object").map(Value::from).unwrap(),
-    )
-    .unwrap();
-    bad.set("properties", properties).unwrap();
+    // The value it holds is named by quoting: `["auth.username"]` is that
+    // one key, and `auth.username` is a two-step path that finds nothing
+    // here.
+    let mut values = Map::new_in(alloc);
+    values
+        .set(
+            "auth.username",
+            Text::new_in(alloc, "ana").map(Value::from).unwrap(),
+        )
+        .unwrap();
+    let values = Value::from(values);
+
+    let quoted = path::parse("[\"auth.username\"]").expect("a path");
     assert_eq!(
-        flat::check_keys(SchemaRef::new(&Value::from(bad)).unwrap()),
-        Err("auth.username".to_string())
+        path::get(&values, quoted).and_then(|v| TryInto::<&str>::try_into(v).ok()),
+        Some("ana")
+    );
+
+    let two_steps = path::parse("auth.username").expect("also a path");
+    assert!(
+        path::get(&values, two_steps).is_none(),
+        "unquoted, it means `auth` then `username`, which is not there"
     );
 }

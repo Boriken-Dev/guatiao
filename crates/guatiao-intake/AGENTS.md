@@ -42,6 +42,40 @@ hints    := { "widget": text, "placeholder": text,
 - A value's own read-only-ness is **not** a form hint. It is a statement
   about the value, and JSON Schema's `readOnly` in the schema says it.
 
+## What else lives here
+
+Three things that are **not** about drawing, and are here because they
+are decisions a consumer makes about a schema rather than facts about
+the struct:
+
+```rust
+// naming one place inside a value: `agent[1].name[home].host`
+path::parse(text) -> Result<Path, PathError>    // every refusal says its byte offset
+path::get(&value, path) -> Option<&Value>  /  path::get_mut(..)
+Segment::{Field(&str), Index(usize), Key(Cow<str>)}
+
+// projecting a value onto flat `key -> text` storage
+flatten(field, &value, &mut BTreeMap<String, String>) -> bool
+unflatten(alloc, field, &store) -> Option<Value>
+resolve(schema, key) -> Option<FieldRef>         // for the schema alone
+resolve_in(schema, key, selected) -> Result<FieldRef, ValidationError>
+keys(field) -> Vec<String>  /  split(key)  /  is_sensitive(schema, key)
+SEPARATOR = '.'
+
+// checking a whole store of text
+validate_texts(schema, &BTreeMap<String, String>) -> Result<(), ValidationError>
+```
+
+**The grammar**: a `.` is a field, `[0]` a list position **or** a map
+key, `[name]` a map key, `["a.b"]` a map key that would otherwise read
+as something else. Which one a bracket means is decided where it is
+applied, not by how it is written -- so `env[PATH]` needs no ceremony
+and `["1"]` is the escape for a key that looks like a position. A path
+is rootless: no leading `.`, no `$`.
+
+`validate_text` (one text, one field) stays in `guatiao`: that one asks
+about the schema alone.
+
 ## The whole surface
 
 ```rust

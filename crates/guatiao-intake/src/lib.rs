@@ -87,13 +87,24 @@ pub mod declare;
 // The `extern "C"` surface. Always compiled: a surface that appears only
 // when somebody remembers a flag is one a C caller cannot rely on.
 pub mod exports;
+// The same surface for the flat projection. A `//` comment, never a
+// `///`.
+pub mod exports_flat;
+// Projecting a value onto flat `key -> text` storage, and resolving a
+// path against a schema. A `//` comment, never a `///`.
+pub mod flat;
 mod judge;
+// Naming one place inside a value, as text: `agent[1].name[home].host`.
+// A `//` comment, never a `///`.
+pub mod path;
 mod read;
 mod screen;
+mod texts;
 pub mod vocab;
 
 pub use build::{Form, Hints, Section};
 pub use declare::{FormBuilder, FormField, FormFieldBuilder};
+pub use flat::{SEPARATOR, flatten, is_sensitive, keys, resolve, resolve_in, split, unflatten};
 /// `#[derive(Form)]`, behind the `derive` feature: a type's default
 /// screen from `#[form(..)]` on the type and its fields, as an
 /// `impl Screen`. A macro and a type live in different namespaces, so
@@ -103,3 +114,4 @@ pub use guatiao_derive::Form;
 pub use judge::{FormError, Group, Placed, check, is_visible, layout};
 pub use read::{Condition, FormRef, HintsRef, SectionRef};
 pub use screen::Screen;
+pub use texts::validate_texts;
