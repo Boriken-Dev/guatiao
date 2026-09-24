@@ -102,3 +102,58 @@ def at(value: Value, path: str):
     if not ptr:
         return None
     return Ref(_Borrowed(ptr.contents), ())
+
+
+def for_schema(schema: Value, *, alloc: "_abi.Alloc | None" = None) -> Value:
+    """The form `schema` implies, for when nobody wrote one.
+
+    One section per distinct `x-section` the fields name, in
+    first-appearance order and **ids only** -- what a section is called
+    is a form's business and a schema has no opinion -- plus each
+    member's own form where there is something in it. A schema that
+    groups nothing gives `{}`, which is a complete form.
+    """
+    lib = _lib.form()
+    alloc_struct = _alloc(alloc, lib)
+    out = _abi.Value()
+    _check_status(
+        lib.guatiao_intake_for_schema(
+            ctypes.byref(schema._raw),
+            ctypes.byref(alloc_struct),
+            ctypes.byref(out),
+        )
+    )
+    return Value(_raw=out, alloc=alloc_struct)
+
+
+def form_for(
+    form: Value,
+    schema: Value,
+    path: str,
+    *,
+    alloc: "_abi.Alloc | None" = None,
+) -> "Value | None":
+    """The form to show the field at `path` with: the one `form` assigns,
+    or the one its schema implies.
+
+    `None` when the path names no field, or names one with no members and
+    no form assigned -- a text is shown by a control, not by a form.
+    """
+    lib = _lib.form()
+    alloc_struct = _alloc(alloc, lib)
+    view, _buf = _make_str(path.encode("utf-8"))
+    out = _abi.Value()
+    _check_status(
+        lib.guatiao_intake_form_for(
+            ctypes.byref(form._raw),
+            ctypes.byref(schema._raw),
+            view,
+            ctypes.byref(alloc_struct),
+            ctypes.byref(out),
+        )
+    )
+    value = Value(_raw=out, alloc=alloc_struct)
+    if value.is_absent():
+        value.close()
+        return None
+    return value

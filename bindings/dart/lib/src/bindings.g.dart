@@ -149,6 +149,61 @@ class GuatiaoBindings {
           ffi.Pointer<guatiao_alloc>,
           ffi.Pointer<guatiao_value>)>();
 
+  int guatiao_intake_for_schema(
+    ffi.Pointer<guatiao_value> schema,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_intake_for_schema(
+      schema,
+      alloc,
+      out,
+    );
+  }
+
+  late final _guatiao_intake_for_schemaPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status$1 Function(
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_intake_for_schema');
+  late final _guatiao_intake_for_schema =
+      _guatiao_intake_for_schemaPtr.asFunction<
+          int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>();
+
+  int guatiao_intake_form_for(
+    ffi.Pointer<guatiao_value> form,
+    ffi.Pointer<guatiao_value> schema,
+    guatiao_str path,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_intake_form_for(
+      form,
+      schema,
+      path,
+      alloc,
+      out,
+    );
+  }
+
+  late final _guatiao_intake_form_forPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status$1 Function(
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_value>,
+              guatiao_str,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_intake_form_for');
+  late final _guatiao_intake_form_for = _guatiao_intake_form_forPtr.asFunction<
+      int Function(
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>)>();
+
   int guatiao_intake_is_visible(
     ffi.Pointer<guatiao_value> schema,
     ffi.Pointer<guatiao_value> form,

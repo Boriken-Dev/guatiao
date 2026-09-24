@@ -29,6 +29,8 @@ pub fn guatiao::schema::build::FieldBuilder::advanced(self) -> Self
 pub fn guatiao::schema::build::FieldBuilder::order(self, i64) -> Self
 pub mod guatiao_intake::exports
 #[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_check(*const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_for_schema(*const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_form_for(*const guatiao::value::value::Value, *const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_is_visible(*const guatiao::value::value::Value, *const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *mut bool) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_intake::exports::guatiao_intake_layout(*const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub mod guatiao_intake::exports_flat

@@ -94,3 +94,51 @@ def test_a_path_names_one_place_inside_a_value():
         assert at("agent[") is None
     finally:
         value.close()
+
+
+def test_a_form_can_be_made_out_of_a_schema_and_a_member_carries_its_own():
+    """An object is a form: the schema groups the fields, so a renderer
+    with no form still has one to draw."""
+    schema = Value.from_python(
+        {
+            "type": "object",
+            "properties": {
+                "host": {"type": "string", "x-section": "net"},
+                "port": {"type": "integer", "x-section": "net"},
+                "tls": {
+                    "type": "object",
+                    "properties": {
+                        "verify": {"type": "boolean", "x-section": "trust"},
+                    },
+                    "additionalProperties": False,
+                },
+                "label": {"type": "string"},
+            },
+            "additionalProperties": False,
+        }
+    )
+    try:
+        made = intake.for_schema(schema)
+        try:
+            doc = made.to_python()
+            # Ids only, in first-appearance order: what a section is
+            # CALLED is a form's business, and a schema has no opinion.
+            assert [s["id"] for s in doc["sections"]] == ["net"]
+            assert doc["fields"]["tls"]["form"]["sections"] == [{"id": "trust"}]
+            # And what it made fits what it was made from.
+            assert intake.check(schema, made) is None
+        finally:
+            made.close()
+
+        # `form_for`: assigned wins, and a field with no members has none.
+        blank = Value.from_python({})
+        try:
+            implied = intake.form_for(blank, schema, "tls")
+            assert implied is not None
+            implied.close()
+            assert intake.form_for(blank, schema, "label") is None
+            assert intake.form_for(blank, schema, "nonesuch") is None
+        finally:
+            blank.close()
+    finally:
+        schema.close()

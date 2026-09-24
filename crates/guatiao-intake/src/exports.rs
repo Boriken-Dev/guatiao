@@ -304,6 +304,109 @@ fn layout_value(schema: SchemaRef<'_>, form: FormRef<'_>, alloc: Alloc) -> Optio
     Some(groups.into())
 }
 
+/// The form a schema implies, for when nobody wrote one.
+///
+/// An object is a form: the schema already says which section each field
+/// belongs to, so a renderer with no form still has one to draw. What
+/// comes back carries one section per distinct `x-section` in
+/// first-appearance order, **ids only** -- what a section is called is a
+/// form's business and a schema has no opinion -- plus each member's own
+/// form where there is something in it. A schema that groups nothing
+/// gives an empty map, which is a complete form.
+///
+/// `out` receives a value the **caller owns** and frees with
+/// `guatiao_value_free`.
+///
+/// # Safety
+///
+/// Every non-null pointer addresses what its type says, and `out`
+/// addresses writable storage for one value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_intake_for_schema(
+    schema: *const Value,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    out!(out);
+    entry!(schema, out => {
+        // SAFETY: the caller's contract.
+        let Some(schema) = SchemaRef::new(unsafe { &*schema }) else {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        };
+        // SAFETY: as above.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        match crate::create::for_schema(schema, alloc) {
+            Ok(form) => {
+                // SAFETY: `out` is writable by contract, and the tree
+                // MOVES into it rather than being copied.
+                unsafe { ::std::ptr::write(out, form) };
+                Status::GUATIAO_OK
+            }
+            Err(e) => Status::from(e),
+        }
+    })
+}
+
+/// The form to show the field at `path` with: **the one the form
+/// assigns, or the one its schema implies**.
+///
+/// The question a renderer asks. Assignment wins, because somebody wrote
+/// it down; where nobody did, the member's schema still groups its
+/// fields.
+///
+/// **A field with no form and no members is not an error**: `out` is left
+/// ABSENT and the status is `GUATIAO_OK`, which is what a lookup that
+/// found nothing answers everywhere else here. So is a path naming no
+/// field.
+///
+/// `out` receives a value the **caller owns**, whichever way it was
+/// reached.
+///
+/// # Safety
+///
+/// Every non-null pointer addresses what its type says, `path` is a
+/// readable view, and `out` addresses writable storage for one value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_intake_form_for(
+    form: *const Value,
+    schema: *const Value,
+    path: Str,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    out!(out);
+    entry!(form, schema, out => {
+        // SAFETY: the caller's contract.
+        let (Some(form), Some(schema)) = (
+            FormRef::new(unsafe { &*form }),
+            SchemaRef::new(unsafe { &*schema }),
+        ) else {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        };
+        // SAFETY: as above.
+        let Ok(path) = ::std::str::from_utf8(path.into()) else {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        };
+        // SAFETY: as above.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        match crate::create::form_for(form, schema, path, alloc) {
+            // Nothing to show it with is an answer, not a failure: the
+            // slot keeps the absent marker `out!` wrote.
+            None => Status::GUATIAO_OK,
+            Some(Ok(found)) => {
+                // SAFETY: as above; the tree moves into `out`.
+                unsafe { ::std::ptr::write(out, found) };
+                Status::GUATIAO_OK
+            }
+            Some(Err(e)) => Status::from(e),
+        }
+    })
+}
+
 /// Whether the field under `key` is shown, given the `values` entered so
 /// far. Writes the answer through `out`.
 ///
