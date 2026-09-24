@@ -1353,7 +1353,9 @@ number,bytes}`, `guatiao_map_{set,discard,clear,copy_from}`,
 Also `guatiao_merge`, and the schema surface:
 `guatiao_schema_{validate,resolve,flat_keys,flatten,unflatten}`.
 
-Every one returns `Status` **except `guatiao_schema_resolve`**, which
+Every one returns `Status` **except the two that answer a borrowed
+pointer** (`guatiao_intake_resolve` and `guatiao_intake_path_get`, in
+the other library), which
 answers a `const guatiao_value *` borrowed from the schema it was given,
 or null — a function returning a pointer has no way to report a status,
 so null is the only failure it can express.

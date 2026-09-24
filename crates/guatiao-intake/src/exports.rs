@@ -25,7 +25,7 @@
 //! `guatiao_intake_layout` answers **grouping and order** and nothing else:
 //! a list of `{ "section": <the section's map, or null>, "fields": [key, …] }`.
 //! Everything else about a field the caller already holds — its schema
-//! through `guatiao_schema_resolve`, its hints in the form it passed in —
+//! through `guatiao_intake_resolve`, its hints in the form it passed in —
 //! so copying either would only give it a second thing to keep in step.
 //!
 //! # The shape of every function here

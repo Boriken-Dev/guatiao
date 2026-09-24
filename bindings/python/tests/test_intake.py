@@ -65,3 +65,32 @@ def test_is_visible_unknown_key_is_not_found():
         with Value.from_python({}) as values:
             with pytest.raises(NotFound):
                 intake.is_visible(schema, blank, "nope", values)
+
+
+def test_a_path_names_one_place_inside_a_value():
+    """`agent[1].name`: a dot is a member, a bracket is a position or a
+    key, and which one it is depends on what it is applied to."""
+    value = Value.from_python(
+        {
+            "agent": [{"name": "one"}, {"name": "two"}],
+            "env": {"PATH": "/bin", "a.b": "dotted", "1": "keyed"},
+        }
+    )
+    try:
+        at = lambda path: intake.at(value, path)
+
+        assert at("agent[0].name").to_python() == "one"
+        assert at("agent[1].name").to_python() == "two"
+        assert at("env[PATH]").to_python() == "/bin"
+
+        # No quoting needed inside brackets: the `]` ends the segment.
+        assert at("env[a.b]").to_python() == "dotted"
+        # But a key that would read as a position needs it.
+        assert at("env[\"1\"]").to_python() == "keyed"
+
+        # Nothing there, and not a path at all, are the same answer here.
+        assert at("agent[9].name") is None
+        assert at("nonesuch") is None
+        assert at("agent[") is None
+    finally:
+        value.close()

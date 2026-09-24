@@ -34,7 +34,7 @@ header = """
  * fields are grouped and ordered, and whether one is showing.
  *
  * guatiao_intake_layout() answers keys, not copies: everything else about a
- * field you already hold, through guatiao_schema_resolve() and the form
+ * field you already hold, through guatiao_intake_resolve() and the form
  * you passed in.
  * ----------------------------------------------------------------------
  */

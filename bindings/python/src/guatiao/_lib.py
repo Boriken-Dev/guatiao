@@ -10,7 +10,7 @@ whatever the platform's default promotion happens to produce. This
 declares the 50 real, linkable exports of `guatiao.h` -- not the 22
 `static inline` helpers alongside them, which have no symbol in any
 library and are reimplemented in `value.py` instead -- plus the 7 of
-`guatiao_serde.h` and the 7 of `guatiao_intake.h`, each of which also
+`guatiao_serde.h` and the 8 of `guatiao_intake.h`, each of which also
 re-exports `guatiao_alloc_default`: any cdylib linking the `guatiao`
 crate carries its plain value-level functions along, and `Library.alloc`
 (Q5: one allocator per loaded library) needs its own copy of that one.
@@ -318,8 +318,9 @@ _FORM_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
         c_uint32,
         None,
     ),
-    # The flat projection: it names places inside a value, which is this
-    # library's business and not the schema's.
+    # Naming a place inside a value, and the flat projection: both are
+    # this library's business and not the schema's.
+    "guatiao_intake_path_get": ([_P(Value), Str], _P(Value), None),
     "guatiao_intake_resolve": ([_P(Value), Str], _P(Value), None),
     "guatiao_intake_flat_keys": (
         [_P(Value), Str, _P(Alloc), _P(Value)],

@@ -17,7 +17,7 @@ hints    := { "widget": text, "placeholder": text,
   complete form.**
 - **A path is a flat key**: a field's own key, or `owner.member` for a
   field an arm of a variant adds — what `guatiao::schema::flat::resolve`
-  and `guatiao_schema_resolve` already take.
+  and `guatiao_intake_resolve` already take.
 - **Sections are listed in display order.** Which section a field is in
   is the schema's `x-section`; the form only says what a section is called.
   **`x-section`, `x-order` and `x-advanced` are this crate's keys**, in
@@ -53,6 +53,7 @@ the struct:
 path::parse(text) -> Result<Path, PathError>    // every refusal says its byte offset
 path::get(&value, path) -> Option<&Value>  /  path::get_mut(..)
 Segment::{Field(&str), Index(usize), Key(Cow<str>)}
+// C: guatiao_intake_path_get(value, path) -> const guatiao_value*  (borrowed, null when absent)
 
 // projecting a value onto flat `key -> text` storage
 flatten(field, &value, &mut BTreeMap<String, String>) -> bool
@@ -60,6 +61,7 @@ unflatten(alloc, field, &store) -> Option<Value>
 resolve(schema, key) -> Option<FieldRef>         // for the schema alone
 resolve_in(schema, key, selected) -> Result<FieldRef, ValidationError>
 keys(field) -> Vec<String>  /  split(key)  /  is_sensitive(schema, key)
+clear_under(&mut store, path)                    // everything AT or UNDER it
 SEPARATOR = '.'
 
 // checking a whole store of text
@@ -211,7 +213,7 @@ guatiao_status guatiao_intake_is_visible(const guatiao_value *schema, const guat
   `condition_refused` or `cyclic_condition`.
 - `_layout`: a list of `{ "section": <the section's map, or null>,
   "fields": [key, …] }`. **Keys, not copies** — a field's schema is one
-  `guatiao_schema_resolve` away and its hints are in the form you passed.
+  `guatiao_intake_resolve` away and its hints are in the form you passed.
 - `_is_visible`: the answer through `out`.
 - `_is_visible`: `GUATIAO_ERR_NOT_FOUND` when `key`, or a key a condition
   reads, names no field the schema declares — and `out` is then not

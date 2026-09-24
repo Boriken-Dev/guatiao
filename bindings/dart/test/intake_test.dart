@@ -74,4 +74,33 @@ void main() {
       throwsA(isA<NotFound>()),
     );
   });
+
+  test('a path names one place inside a value', () {
+    // A dot is a member, a bracket is a position or a key, and which one
+    // a bracket means is decided by what it is applied to.
+    final value = Value.fromDart({
+      'agent': [
+        {'name': 'one'},
+        {'name': 'two'},
+      ],
+      'env': {'PATH': '/bin', 'a.b': 'dotted', '1': 'keyed'},
+    });
+    try {
+      expect(form.at(value, 'agent[0].name')?.toDart(), 'one');
+      expect(form.at(value, 'agent[1].name')?.toDart(), 'two');
+      expect(form.at(value, 'env[PATH]')?.toDart(), '/bin');
+
+      // No quoting needed inside brackets: the `]` ends the segment.
+      expect(form.at(value, 'env[a.b]')?.toDart(), 'dotted');
+      // But a key that would read as a position needs it.
+      expect(form.at(value, 'env["1"]')?.toDart(), 'keyed');
+
+      // Nothing there, and not a path at all, are the same answer.
+      expect(form.at(value, 'agent[9].name'), isNull);
+      expect(form.at(value, 'nonesuch'), isNull);
+      expect(form.at(value, 'agent['), isNull);
+    } finally {
+      value.close();
+    }
+  });
 }

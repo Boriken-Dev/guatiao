@@ -73,6 +73,45 @@ unsafe fn field_at<'a>(schema: *const Value, key: Str) -> Option<FieldRef<'a>> {
     crate::flat::resolve(schema, key)
 }
 
+/// The value at `path` inside `value`, or null.
+///
+/// `agent[1].name[home].host`: a dot is a member, a bracket is a list
+/// position or a map key, and which one a bracket means is decided by
+/// what it is applied to. A path that names nothing answers null, and so
+/// does one that is not a path at all — the two are the same answer to a
+/// C caller, which is why the grammar's byte offsets stay on the Rust
+/// side.
+///
+/// **This walks a VALUE and asks no schema.** For what the schema says
+/// about a path, use `guatiao_intake_resolve`.
+///
+/// The result **borrows from `value`** and is valid for as long as it is.
+/// Nothing is allocated, so nothing is freed.
+///
+/// # Safety
+///
+/// `value` addresses a well-formed value, and `path` a readable view.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_intake_path_get(value: *const Value, path: Str) -> *const Value {
+    if value.is_null() {
+        return ptr::null();
+    }
+    guard_with(ptr::null(), || {
+        // SAFETY: as above.
+        let Ok(text) = std::str::from_utf8(path.into()) else {
+            return ptr::null();
+        };
+        let Ok(parsed) = crate::path::parse(text) else {
+            return ptr::null();
+        };
+        // SAFETY: the caller's contract.
+        match crate::path::get(unsafe { &*value }, parsed) {
+            Some(found) => found as *const Value,
+            None => ptr::null(),
+        }
+    })
+}
+
 /// The field governing a flat key, or null.
 ///
 /// Follows one level of projection, so `auth.password` answers the arm
