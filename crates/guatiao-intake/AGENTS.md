@@ -59,6 +59,16 @@ hints    := { "widget": text, "placeholder": text,
 - Widgets for one: `dialog` (a window of its own) and `group` (inline,
   which is what a renderer does with no widget at all — it is there for a
   form that wants to say so beside one that says `dialog`).
+- **A form can be made out of a schema alone**, and `form_for` is the
+  question a renderer asks: the assigned form if somebody wrote one,
+  otherwise the one the schema implies. A created form carries **one
+  section per distinct `x-section`, in first-appearance order, ids
+  only** — what a section is *called* is a form's business and a schema
+  has no opinion — plus each member's own created form where there is
+  something in it. It says nothing about widgets: a schema does not know
+  them, and guessing would be this crate inventing. For a schema that
+  groups nothing the answer is `{}`, which is a complete form and
+  exactly as informative as the schema was.
 - Anything else is an **annotation**: carried, never interpreted.
 - A value's own read-only-ness is **not** a form hint. It is a statement
   about the value, and JSON Schema's `readOnly` in the schema says it.
@@ -131,6 +141,12 @@ Hints::new() / Hints::new_in(Alloc) -> Hints
   .form(Form)                        // a field that has members; paths RELATIVE
   .form_value(Result<Value, ValueError>)   // the same, for generated code
   .option(key, impl Into<Value>)
+
+// the form a schema implies, for when nobody wrote one
+for_schema(SchemaRef, Alloc) -> Result<Value, ValueError>
+for_field(FieldRef, Alloc) -> Option<Result<Value, ValueError>>   // None: no members
+form_for(FormRef, SchemaRef, path, Alloc) -> Option<Result<Value, ValueError>>
+                                   // assigned wins; else what the schema implies
 
 // reading (borrowed views; skip what is malformed)
 FormRef::new(&Value) -> Option<FormRef>

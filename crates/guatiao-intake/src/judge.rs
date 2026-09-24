@@ -156,7 +156,7 @@ fn check_sub_form(
 /// differ by arm, so there is no one schema a sub-form's paths could be
 /// checked against. A variant is shown by its arms, which the form
 /// already reaches with `owner.member` paths.
-fn member_schema<'a>(field: FieldRef<'a>) -> Option<&'a Value> {
+pub(crate) fn member_schema<'a>(field: FieldRef<'a>) -> Option<&'a Value> {
     match field.kind() {
         Kind::Map(object) => Some(object),
         Kind::List(items) => is_map(items).then_some(items),

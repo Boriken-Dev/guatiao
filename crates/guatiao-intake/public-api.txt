@@ -1,5 +1,9 @@
 pub mod guatiao_intake
 pub use guatiao_intake::Form
+pub mod guatiao_intake::create
+pub fn guatiao_intake::create::for_field(guatiao::schema::read::FieldRef<'_>, guatiao::value::alloc::Alloc) -> core::option::Option<core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>>
+pub fn guatiao_intake::create::for_schema(guatiao::schema::read::SchemaRef<'_>, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao_intake::create::form_for(guatiao_intake::FormRef<'_>, guatiao::schema::read::SchemaRef<'_>, &str, guatiao::value::alloc::Alloc) -> core::option::Option<core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>>
 pub mod guatiao_intake::declare
 pub trait guatiao_intake::declare::FormBuilder: guatiao::schema::build::Extras
 pub fn guatiao_intake::declare::FormBuilder::section(self, &str) -> Self
@@ -9,14 +13,14 @@ impl guatiao_intake::declare::FormBuilder for guatiao::schema::build::FieldBuild
 pub fn guatiao::schema::build::FieldBuilder::section(self, &str) -> Self
 impl guatiao_intake::declare::FormBuilder for guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::section(self, &str) -> Self
-pub trait guatiao_intake::declare::FormField
+pub trait guatiao_intake::declare::FormField<'a>
 pub fn guatiao_intake::declare::FormField::is_advanced(&self) -> bool
 pub fn guatiao_intake::declare::FormField::order(&self) -> i64
-pub fn guatiao_intake::declare::FormField::section(&self) -> &str
-impl<'a> guatiao_intake::declare::FormField for guatiao::schema::read::FieldRef<'a>
+pub fn guatiao_intake::declare::FormField::section(&self) -> &'a str
+impl<'a> guatiao_intake::declare::FormField<'a> for guatiao::schema::read::FieldRef<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::is_advanced(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::order(&self) -> i64
-pub fn guatiao::schema::read::FieldRef<'a>::section(&self) -> &str
+pub fn guatiao::schema::read::FieldRef<'a>::section(&self) -> &'a str
 pub trait guatiao_intake::declare::FormFieldBuilder: guatiao_intake::declare::FormBuilder
 pub fn guatiao_intake::declare::FormFieldBuilder::advanced(self) -> Self
 pub fn guatiao_intake::declare::FormFieldBuilder::order(self, i64) -> Self
@@ -282,14 +286,14 @@ impl guatiao_intake::declare::FormBuilder for guatiao::schema::build::FieldBuild
 pub fn guatiao::schema::build::FieldBuilder::section(self, &str) -> Self
 impl guatiao_intake::declare::FormBuilder for guatiao::schema::build::SchemaBuilder
 pub fn guatiao::schema::build::SchemaBuilder::section(self, &str) -> Self
-pub trait guatiao_intake::FormField
+pub trait guatiao_intake::FormField<'a>
 pub fn guatiao_intake::FormField::is_advanced(&self) -> bool
 pub fn guatiao_intake::FormField::order(&self) -> i64
-pub fn guatiao_intake::FormField::section(&self) -> &str
-impl<'a> guatiao_intake::declare::FormField for guatiao::schema::read::FieldRef<'a>
+pub fn guatiao_intake::FormField::section(&self) -> &'a str
+impl<'a> guatiao_intake::declare::FormField<'a> for guatiao::schema::read::FieldRef<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::is_advanced(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::order(&self) -> i64
-pub fn guatiao::schema::read::FieldRef<'a>::section(&self) -> &str
+pub fn guatiao::schema::read::FieldRef<'a>::section(&self) -> &'a str
 pub trait guatiao_intake::FormFieldBuilder: guatiao_intake::declare::FormBuilder
 pub fn guatiao_intake::FormFieldBuilder::advanced(self) -> Self
 pub fn guatiao_intake::FormFieldBuilder::order(self, i64) -> Self
@@ -301,6 +305,9 @@ pub fn guatiao_intake::Screen::form(guatiao::value::alloc::Alloc) -> core::resul
 pub fn guatiao_intake::Screen::hints(&str, guatiao_intake::Form) -> guatiao_intake::Form
 pub fn guatiao_intake::check(guatiao::schema::read::SchemaRef<'_>, guatiao_intake::FormRef<'_>) -> core::result::Result<(), guatiao_intake::FormError>
 pub fn guatiao_intake::flatten(guatiao::schema::read::FieldRef<'_>, &guatiao::value::value::Value, &mut alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>) -> bool
+pub fn guatiao_intake::for_field(guatiao::schema::read::FieldRef<'_>, guatiao::value::alloc::Alloc) -> core::option::Option<core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>>
+pub fn guatiao_intake::for_schema(guatiao::schema::read::SchemaRef<'_>, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao_intake::form_for(guatiao_intake::FormRef<'_>, guatiao::schema::read::SchemaRef<'_>, &str, guatiao::value::alloc::Alloc) -> core::option::Option<core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>>
 pub fn guatiao_intake::is_sensitive(guatiao::schema::read::SchemaRef<'_>, &str) -> bool
 pub fn guatiao_intake::is_visible(guatiao::schema::read::SchemaRef<'_>, guatiao_intake::FormRef<'_>, &str, &guatiao::value::value::Value) -> core::result::Result<bool, guatiao_intake::FormError>
 pub fn guatiao_intake::keys(guatiao::schema::read::FieldRef<'_>) -> alloc::vec::Vec<alloc::string::String>

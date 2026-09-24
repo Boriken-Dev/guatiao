@@ -171,9 +171,13 @@ impl FormFieldBuilder for FieldBuilder {}
 /// assert_eq!(s.find("host").expect("host").order(), 0);
 /// # Ok::<(), guatiao::ValueError>(())
 /// ```
-pub trait FormField {
+pub trait FormField<'a> {
     /// Which section this belongs to. Empty means the default one.
-    fn section(&self) -> &str;
+    ///
+    /// Answers with the **schema's** lifetime, not the view's: the text
+    /// lives in the document, so what is read stays readable after the
+    /// `FieldRef` is gone, exactly as `FieldRef::title` does.
+    fn section(&self) -> &'a str;
 
     /// Declaration position. 0 when unset, which a consumer should read
     /// as "no ordering information" rather than "first".
@@ -183,8 +187,8 @@ pub trait FormField {
     fn is_advanced(&self) -> bool;
 }
 
-impl<'a> FormField for FieldRef<'a> {
-    fn section(&self) -> &str {
+impl<'a> FormField<'a> for FieldRef<'a> {
+    fn section(&self) -> &'a str {
         str_or(get(self, vocab::X_SECTION), "")
     }
 

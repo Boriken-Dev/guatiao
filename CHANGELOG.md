@@ -31,6 +31,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `guatiao_intake_path_get(value, path)`, which answers a **borrowed**
   pointer or null; Python `guatiao.intake.at(value, path)`, Dart
   `intake.at(value, path)`.
+- **A form can be made out of a schema alone**: `for_schema`,
+  `for_field` and `form_for`, the last being what a renderer asks — the
+  assigned form if somebody wrote one, otherwise the one the schema
+  implies. A created form carries one section per distinct `x-section`
+  in first-appearance order, ids only, plus each member's own created
+  form where there is something in it; `{}` for a schema that groups
+  nothing, which is a complete form.
+- **Breaking: `FormField` takes the schema's lifetime**
+  (`FormField<'a>`), so `section()` answers `&'a str` rather than
+  borrowing from the view — the shape `FieldRef::title` already had. It
+  was added earlier in this same unreleased window.
 - **A field with members may carry a form of its own**, under the
   `form` hint: a complete form document whose paths are **relative to
   that field**, so a form under `connection` names `tls.ca`. Written
