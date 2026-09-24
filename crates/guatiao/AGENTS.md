@@ -988,6 +988,25 @@ drop(s);                                                             // the libr
   `floor_hash` of `0` passes only through `from_raw`.
 - **`ProviderError { status, message: Text }`** is the one error type
   both sides share: `From<Status>`, `From<ValueError>`, `message()`.
+- **An infallible method is a promise, and breaking it panics the host.**
+  A method with no `Result` has nowhere to put a failure, so when its
+  slot answers a status other than OK the generated proxy panics — in
+  the **caller's** stack, not the provider's. A provider that cannot
+  keep the promise must say so in the signature; one that answers non-OK
+  anyway is a **bug in that provider**, and it is heard loudly rather
+  than swallowed, the same treatment a null required slot gets at
+  validation. Pinned by
+  `tests/kind_glue_probes.rs::an_infallible_method_whose_provider_fails_panics_in_the_host`.
+
+  Writing `Result<_, ProviderError>` is the fix, and it is free: a
+  provider that never fails just returns `Ok`. **A Rust provider cannot
+  trip this by accident** — the boundary checks its arguments before its
+  body runs (`&str` UTF-8, a non-null `&Value`, a `&Map`'s keys), and
+  everything the proxy sends has already passed those checks. What
+  reaches the panic is a C provider, or a hand-written table, answering
+  non-OK for its own reasons. Measured 2026-09-25, which is why the
+  macro does **not** refuse an infallible method for taking one of those
+  arguments: there is no reachable failure to prevent.
 - **`#[provider(..)]` long form**: `kinds(A, B)`, `id = ".."` (default
   `{package}_{type}` snake case), `name = ".."` (default the type),
   `version = ".."` (default empty: the library's), `config = C` or bare
