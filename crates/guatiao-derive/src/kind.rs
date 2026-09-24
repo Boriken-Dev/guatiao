@@ -378,6 +378,24 @@ fn plan_method(f: &TraitItemFn, object: bool) -> syn::Result<MethodPlan> {
         ));
     }
 
+    // NOT refused here: an infallible method taking `&str`, `&Value` or
+    // `&Map`. It looks like the reachable case -- the shim checks each of
+    // those where it arrives, and an infallible method has nowhere to put
+    // the refusal, so the proxy panics in the HOST. Measured 2026-09-25,
+    // it cannot fire: the proxy is the only caller that a panic can reach
+    // back to, and what it sends is already checked. `Str::new(&str)` is
+    // UTF-8 by type; a `&Value`/`&Map` pointer comes from a live
+    // reference, so never null; and a `&Map` a Rust host holds arrived
+    // through `checked_arm!(Map, ..)`, whose keys are UTF-8. When the
+    // caller is C instead, it reads the status the shim returns and there
+    // is no proxy to panic.
+    //
+    // What IS reachable is a provider -- a C one, or a hand-written table
+    // -- answering non-OK for an infallible slot for its own reasons, and
+    // no signature rule can prevent that. It is documented in the kind
+    // section of the shipped `AGENTS.md` instead, and pinned by
+    // `tests/kind_glue_probes.rs`.
+
     let signature = normalised_signature(sig);
     Ok(MethodPlan {
         ident: sig.ident.clone(),
