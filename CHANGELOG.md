@@ -291,6 +291,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking: the schema says `title` and `description`, and the
+  presentation opinions moved to `guatiao-form`.** A reader named for a
+  form keyword hid which schema keyword it read, and a crate that claims
+  to know nothing about forms should not carry the form vocabulary.
+  - `SchemaRef`, `FieldRef` and `ArmRef`: `label` → `title`, `help` →
+    `description`. `ChoiceRef::label` is unchanged — it reads
+    `x-enum-labels`, whose own word is "label" — and so are
+    `guatiao_form`'s `SectionRef::label`/`help`.
+  - `title` and `description` are now **inherent** on `SchemaBuilder`,
+    `FieldBuilder` and `ArmBuilder`, and `sensitive` on `FieldBuilder`:
+    the first two are JSON Schema's own keywords, and "never print this
+    value" is obeyed by a log and a crash dump as much as by a form.
+  - `guatiao::schema::{FormBuilder, FormFieldBuilder}` are **gone from
+    `guatiao`** and live in `guatiao_form` (`FormBuilder::section`,
+    `FormFieldBuilder::{order, advanced}`). Reading those keys stays in
+    `guatiao`: `FieldRef::section`, `order`, `is_advanced`.
+  - New: `guatiao::schema::Extras`, the hook the form crate writes
+    through — `extra(key, Result<Value, ValueError>)` plus
+    `extra_alloc()`, so a hint lands in the same allocator as the schema
+    carrying it.
+  - `#[derive(Schema)]`: `#[schema(label = "..")]` → `#[schema(title =
+    "..")]` and `#[schema(help = "..")]` → `#[schema(description =
+    "..")]` on a field or an arm. A **choice** keeps `label`, because its
+    text lands in `x-enum-labels`; `title` on one is refused with a
+    message saying so. The expansion never names `guatiao-form`.
+  - The document is unchanged — the same keys, in the same places — so no
+    stored schema, C consumer or binding reader moves.
 - **Breaking: the fields of `Value`, `Payload`, `Entry`, `Text`, `Buffer`,
   `List` and `Map` are private.** Safe code can no longer forge a node,
   write a length, or copy a container into a second owner. The one door

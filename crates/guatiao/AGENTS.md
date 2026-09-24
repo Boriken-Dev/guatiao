@@ -389,7 +389,7 @@ MapError   = MissingKey | WrongType | BadValue     // carries the path
 ```rust
 #[derive(ToValue, FromValue, Schema, PartialEq, Debug)]
 struct Connection {
-    /// Where to connect.          // doc comment becomes the help text
+    /// Where to connect.          // doc comment becomes the description
     host: String,
     port: u16,
     #[map(rename = "view-only")]
@@ -399,9 +399,11 @@ struct Connection {
 }
 ```
 
-`#[map(rename = "...")]`, `#[map(skip)]`; `#[schema(label, help, section,
-order, advanced, sensitive, default)]`. Unions, tuple structs and generics
-are refused with a message naming the derive you wrote.
+`#[map(rename = "...")]`, `#[map(skip)]`; `#[schema(title, description,
+section, order, advanced, sensitive, default)]` -- named after the keys
+they write, so `title`/`description` are JSON Schema's own and the rest
+are `x-` prefixed. Unions, tuple structs and generics are refused with a
+message naming the derive you wrote.
 
 Enums, in two shapes:
 
@@ -418,7 +420,11 @@ A unit enum is a string and describes itself as a choice; a tagged enum is
 a map and describes itself as a variant. An enum whose variants carry
 fields and names **no** tag is refused: the key that tells variants apart
 is a wire-format decision, and it is yours. A doc comment on a choice is
-its label; on an arm it is help, as on a field.
+its label; on an arm it is the description, as on a field.
+
+The attribute follows the key: an arm is a subschema, so it takes
+`#[schema(title = "..", description = "..")]`; a choice is one entry in
+`x-enum-labels`, so it takes `#[schema(label = "..")]` and nothing else.
 
 Generated readers go through `convert::{expect_map, expect_str, expect_key,
 find_key}`; they are public so a hand-written impl reports errors the same
@@ -478,13 +484,13 @@ refuses a field key containing `.` (`WrongKind`), which is
 Build:
 
 ```rust
-use guatiao::schema::{FieldBuilder, FormBuilder, KindBuilder, SchemaBuilder};
+use guatiao::schema::{FieldBuilder, KindBuilder, SchemaBuilder};
 
 SchemaBuilder::new()
-    .label("Connection")                      // FormBuilder
+    .title("Connection")                      // JSON Schema's own keyword
     .field(FieldBuilder::new("port", KindBuilder::int_range(1, 65535))
-        .label("Port").help("...")            // FormBuilder
-        .required())                          // inherent: substance
+        .title("Port").description("...")
+        .required())
     .finish() -> Result<Value, ValueError>
 ```
 
@@ -500,31 +506,44 @@ it is called.
 The same reason the C flat exports take `(schema, key)` rather than a
 field pointer.
 
-**A schema does not know about forms.** There is no way here to DECLARE
-a section: a section exists only to group controls on a screen, so naming
-one is a form's business. `FormBuilder::section` says which section a
-field belongs to — a hint carried alongside the field — and what that
-section is CALLED belongs to whatever draws it. A producer that must
-write one uses `option`, the door every annotation goes through.
+**A schema does not know about forms.** Nothing here writes the
+presentation vocabulary: which section a field sits in, where among its
+siblings, whether it hides behind a disclosure. Those are opinions about
+how to organise controls, and they live in `guatiao-form`, as
+`FormBuilder::section` and `FormFieldBuilder::{order, advanced}`. That
+crate depends on this one, so nothing here has to know forms exist.
 
-**A schema and a form are different questions.** Substance lives on the
-builders; presentation lives on two traits in `schema::form`:
+What every builder writes is JSON Schema's own, named after the keyword:
 
-| trait | gives | implemented for |
+| method | key | on |
 | --- | --- | --- |
-| `FormBuilder` | `label`→`title`, `help`→`description`, `section`→`x-section` | `SchemaBuilder`, `FieldBuilder`, `ArmBuilder` |
-| `FormFieldBuilder` | `order`, `advanced`, `sensitive` (all `x-`) | `FieldBuilder` |
+| `title` | `title` | `SchemaBuilder`, `FieldBuilder`, `ArmBuilder` |
+| `description` | `description` | `SchemaBuilder`, `FieldBuilder`, `ArmBuilder` |
+| `sensitive` | `x-sensitive` | `FieldBuilder` |
+| `option(key, value)` | any | `SchemaBuilder`, `FieldBuilder` |
+| `extra(key, Result<Value>)` | any | all three, via `Extras` |
 
-The Rust names stay `label`/`help`; the wire names are JSON Schema's.
+`sensitive` stays here although it looks like presentation: "never print
+this value" is obeyed by a log, a dump and a crash report, none of which
+have a screen.
 
-Two, because a schema has no position among siblings and an arm is not a
-secret — a single trait would hand out methods that mean nothing on two of
-its three implementers. What stays inherent on `FieldBuilder` is the
-substance: `required`, `default`, `extra`.
+```rust
+pub trait Extras: Sized {                     // the door another crate writes through
+    fn extra(self, key: &str, value: Result<Value, ValueError>) -> Self;
+    fn extra_alloc(&self) -> Alloc;           // so a hint lands in the schema's own arena
+}
+```
 
-Import the trait to use its methods. **`#[derive(Schema)]` needs no
-import**: it names them by rooted path, because a trait reached by method
-syntax would have to be in scope at the expansion site.
+`option` takes a value already built and cannot fail; `extra` takes the
+`Result` that building through a named allocator produces, and the
+builder keeps the first error as it does for everything else. **Reading
+the `x-` keys stays here** — `FieldRef::section`, `order`, `is_advanced`
+— because reading a key is reading a key. Writing the opinion is the
+opinion.
+
+**`#[derive(Schema)]` needs no import**: it names `title` and
+`description` by rooted path and writes the presentation keys through
+`Extras`, so a crate deriving a schema never depends on `guatiao-form`.
 
 Presentation is optional and substance is not: every presentation key may
 be missing and the schema is still correct and still usable. Never make a
@@ -565,10 +584,10 @@ Read (borrowed views over the value, no copying):
 
 ```rust
 SchemaRef::new(&value) -> Option<SchemaRef>
-  .dialect() .label() .help() .fields() .find(key) .extra(key) .extras()
+  .dialect() .title() .description() .fields() .find(key) .extra(key) .extras()
   .as_value()
 FieldRef::new(key, &schema) -> Option<FieldRef>   // answers is_required() false
-FieldRef: .key() .kind() .label() .help() .section() .default() .order()
+FieldRef: .key() .kind() .title() .description() .section() .default() .order()
            .is_advanced() .is_sensitive() .is_required() .extra(key) .extras()
 Kind: .choices() .alternatives() .arms() .items() .fields() .name()
 ```

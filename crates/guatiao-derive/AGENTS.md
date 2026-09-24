@@ -41,8 +41,8 @@ two parse it and ignore it.
 
 | key | effect | written as |
 | --- | --- | --- |
-| `label = "..."` | display name | `title` |
-| `help = "..."` | help text; a `///` doc comment sets this when absent | `description` |
+| `title = "..."` | display name | `title` |
+| `description = "..."` | the prose under it; a `///` doc comment sets this when absent | `description` |
 | `section = "..."` | which section the field belongs to | `x-section` |
 | `order = <int>` | sort position | `x-order` |
 | `advanced` | hide behind an "advanced" toggle | `x-advanced` |
@@ -50,7 +50,10 @@ two parse it and ignore it.
 | `default = <expr>` | the declared default | `default` |
 
 The right-hand column is what lands in the document, because **a schema IS
-a JSON Schema**. The field's own name is its key in `properties`, and
+a JSON Schema** -- and each key is named after what it writes. The `x-`
+ones are written through `guatiao::schema::Extras`, the general door, so
+the expansion never names `guatiao-form`, where the methods that spell
+them live. The field's own name is its key in `properties`, and
 whether it is required — a field that is not an `Option<T>` — is a name in
 the struct's `required` list. Neither is written inside the field.
 
@@ -65,13 +68,14 @@ the struct's `required` list. Neither is written inside the field.
 | --- | --- | --- |
 | enum | `#[map(tag = "...")]` | the key the variant's name is stored under; required when any variant has fields |
 | variant | `#[map(rename = "...")]` | the name stored instead of the variant's own |
-| variant | `#[schema(label = "...")]` | a choice's or an arm's label |
-| variant | `#[schema(help = "...")]` | an arm's help — **tagged enums only**; a choice has no help slot |
+| variant | `#[schema(title = "...")]` | an arm's title — **tagged enums only**: an arm is a subschema |
+| variant | `#[schema(description = "...")]` | an arm's description — **tagged enums only** |
+| variant | `#[schema(label = "...")]` | a choice's label — **unit enums only**: it lands in `x-enum-labels`, whose word is `label` |
 | a variant's field | anything a struct field takes | means the same thing |
 
 **A doc comment fills the most descriptive slot the thing has.** A field
-or an arm has a label and help, so its doc comment is help; a choice has
-only a label, so its doc comment is the label.
+or an arm has a description as well as a title, so its doc comment is the
+description; a choice has only a label, so its doc comment is the label.
 
 Refused, each with its own message: an enum with no variants; a
 data-carrying enum with no `tag`; a tuple variant; two variants stored
