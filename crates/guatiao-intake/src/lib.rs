@@ -40,7 +40,11 @@
 //! };
 //!
 //! let schema = SchemaBuilder::new()
-//!     .field(FieldBuilder::new("host", KindBuilder::string()).section("net").required())
+//!     .field(
+//!         FieldBuilder::new("host", KindBuilder::string())
+//!             .section("net")     // the FIELD's hint, not the kind's
+//!             .required(),
+//!     )
 //!     .field(FieldBuilder::new("port", KindBuilder::int_range(1, 65535)).section("net").order(1))
 //!     .field(FieldBuilder::new("verify", KindBuilder::bool()))
 //!     .field(FieldBuilder::new("ca", KindBuilder::string()))

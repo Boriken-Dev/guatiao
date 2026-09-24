@@ -268,10 +268,11 @@ impl<'a> FieldRef<'a> {
 
     /// A secret: never print this value.
     ///
-    /// Not a drawing instruction, which is why this one is here and
-    /// `section`, `order` and `is_advanced` are in `guatiao-intake`: a log,
-    /// a crash dump and a debug print all obey it with no screen in
-    /// sight.
+    /// **The one hint this crate reads by name**, and it earns that by
+    /// not being a drawing instruction: a log, a crash dump and a debug
+    /// print all obey it with no screen in sight. A hint that only a
+    /// renderer acts on is read with [`extra`](FieldRef::extra) by
+    /// whoever named it.
     pub fn is_sensitive(&self) -> bool {
         bool_or(
             TryAsRef::<Map>::try_as_ref(self.schema).and_then(|m| m.get(vocab::X_SENSITIVE)),

@@ -15,7 +15,6 @@ use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::schema::validate::validate_map;
 use guatiao::value::alloc::Alloc;
 use guatiao::value::convert::{TryAsMut, TryAsRef};
-use guatiao::value::read::{bool_or, int_or, str_or};
 use guatiao::{Bytes, Map, Number, Schema, Text, ToValue, ValueError};
 
 fn alloc_and<R>(body: impl FnOnce(Alloc) -> R) -> R {
@@ -37,9 +36,9 @@ struct Connection {
     /// A host name or an address.
     host: String,
     port: u16,
-    #[schema(title = "Password", sensitive, section = "auth", order = 3)]
+    #[schema(title = "Password", sensitive)]
     password: Option<String>,
-    #[schema(advanced, default = 30i64)]
+    #[schema(default = 30i64)]
     timeout: i64,
     tags: Vec<String>,
     ticket: Bytes,
@@ -153,28 +152,24 @@ fn a_doc_comment_becomes_the_help_text() {
     });
 }
 
-/// The presentation keys are read here as **annotations**, by name,
-/// because that is what they are to this crate: `x-section`, `x-order`
-/// and `x-advanced` are `guatiao-intake`'s vocabulary, and nothing in
-/// `guatiao` interprets them. The derive writes them all the same, so a
-/// consumer declares once and the form crate reads what it named.
-/// `guatiao-intake`'s own `form_derive.rs` reads the same fields through
-/// `FormField`, which is the other half of this.
+/// The `#[schema(..)]` keys **this crate owns** reach the field.
+///
+/// The derive also accepts attributes for presentation keys named
+/// elsewhere; those are exercised where their vocabulary lives, in
+/// `guatiao-intake`'s `form_derive.rs`, because a test here would have to
+/// spell a word this crate deliberately does not know.
 #[test]
-fn the_presentation_attributes_reach_the_option() {
+fn the_schema_attributes_reach_the_option() {
     alloc_and(|alloc| {
         let declared = Connection::schema(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
 
         let password = s.find("password").unwrap();
         assert_eq!(password.title(), "Password");
-        assert_eq!(str_or(password.extra("x-section"), ""), "auth");
-        assert_eq!(int_or(password.extra("x-order"), 0), 3);
         assert!(password.is_sensitive());
-        assert!(password.extra("x-advanced").is_none());
 
         let timeout = s.find("timeout").unwrap();
-        assert!(bool_or(timeout.extra("x-advanced"), false));
+        assert!(!timeout.is_sensitive());
         let default: i64 = timeout.default().unwrap().try_into().unwrap();
         assert_eq!(
             default, 30,

@@ -47,9 +47,9 @@
 //! 65535 wherever it appears, so [`Schema::kind`] is an associated
 //! function with no `self` and no field to ask.
 //!
-//! Everything else — the key, whether it is required, its label, its
-//! section — belongs to the *field*, not to the type, and is read off the
-//! declaration by the derive. That split is why `Option<T>` contributes no
+//! Everything else — the key, whether it is required, its title, any
+//! hint hung beside it — belongs to the *field*, not to the type, and is
+//! read off the declaration by the derive. That split is why `Option<T>` contributes no
 //! kind of its own: optionality is the field's business, so
 //! `Option<T>::kind` is `T::kind` and the derive omits `required` instead.
 

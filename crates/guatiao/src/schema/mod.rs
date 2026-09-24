@@ -78,17 +78,19 @@
 //!
 //! # Presentation is optional; substance is not
 //!
-//! `title`, `description`, `x-section`, `x-advanced` and `x-order` may all
-//! be empty or default and the schema is still correct and still useful. A
-//! consumer with no user interface ignores them entirely. Never make a
-//! validation or type behaviour depend on one.
+//! `title` and `description` may be empty and the schema is still
+//! correct and still useful; a consumer with no user interface ignores
+//! them entirely. Never make a validation or type behaviour depend on
+//! one. They are JSON Schema's own keywords, written here by
+//! [`SchemaBuilder::title`] and its siblings.
 //!
-//! **Writing the `x-` ones is `guatiao-intake`'s business**, through
-//! [`Extras`]: how to group and order controls on a screen is an opinion,
-//! and this crate holds none. Reading them stays here — [`FieldRef`] has
-//! `section`, `order` and `is_advanced`, because reading a key is reading
-//! a key. `title` and `description` are JSON Schema's own keywords and are
-//! written here, by [`SchemaBuilder::title`] and its siblings.
+//! **Every other presentation key belongs to whoever draws the thing.**
+//! Such a key reaches a schema through [`Extras`] or [`option`
+//! ](SchemaBuilder::option), is carried as an annotation, and is read
+//! back with [`FieldRef::extra`]. This crate names none of them, writes
+//! none of them and reads none of them by name — which is what lets the
+//! crate that does hold that opinion change its mind without touching
+//! anything here.
 
 #![forbid(unsafe_code)]
 

@@ -12,7 +12,10 @@ use guatiao_intake::{Form, FormBuilder, FormRef, Hints, Section, check, is_visib
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 let schema = SchemaBuilder::new()
-    .field(FieldBuilder::new("host", KindBuilder::string()).section("net"))
+    .field(
+        FieldBuilder::new("host", KindBuilder::string())
+            .section("net"),     // the FIELD's hint, not the kind's
+    )
     .field(FieldBuilder::new("verify", KindBuilder::bool()))
     .field(FieldBuilder::new("ca", KindBuilder::string()))
     .finish()?;
