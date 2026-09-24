@@ -42,6 +42,20 @@ header = """
 #include "guatiao.h"
 """
 
+# The three keys this library writes onto a SCHEMA, beside a field. They
+# are not form-document keys and they are not in guatiao.h: `guatiao` does
+# not name them, because how to group and order controls is an opinion it
+# does not hold. A C consumer that reads them includes this header, which
+# is the honest statement of where they come from.
+trailer = """
+
+/* ---- what this library writes onto a schema field -------------------- */
+
+#define GUATIAO_FORM_KEY_X_SECTION "x-section"
+#define GUATIAO_FORM_KEY_X_ORDER "x-order"
+#define GUATIAO_FORM_KEY_X_ADVANCED "x-advanced"
+"""
+
 # Every type in a signature here comes from `guatiao.h`, included above.
 # Without this, cbindgen would emit its own incompatible copies.
 [export]

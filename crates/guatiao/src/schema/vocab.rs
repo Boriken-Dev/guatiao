@@ -56,9 +56,9 @@
 //!              "required": [<tag>, …] }
 //! ```
 //!
-//! Plus, on any of them: `default`, `title`, `description`, and the
-//! presentation extensions [`X_SECTION`], [`X_ORDER`], [`X_ADVANCED`] and
-//! [`X_SENSITIVE`].
+//! Plus, on any of them: `default`, `title`, `description` and
+//! [`X_SENSITIVE`]. Presentation keys — `x-section`, `x-order`,
+//! `x-advanced` — are named by `guatiao-form`, not here.
 //!
 //! # An undeclared key is refused, and the document says so
 //!
@@ -78,7 +78,7 @@
 //! forward-compatibility story.
 //!
 //! **Presentation keys are optional; substance is not.** `title`,
-//! `description`, `x-section`, `x-order` and `x-advanced` may all be
+//! `description` and every `x-` key another crate hangs on a field may be
 //! missing and the schema is still correct and still useful. A consumer
 //! with no user interface ignores them. Never make a validation or type
 //! behaviour depend on one.
@@ -191,22 +191,21 @@ pub const ANY_OF: &str = "anyOf";
 pub const ONE_OF: &str = "oneOf";
 
 // --- what this crate adds ---------------------------------------------
+//
+// Three keys that used to be here — `x-section`, `x-order` and
+// `x-advanced` — are `guatiao-form`'s, in its own `vocab`. They name how
+// to organise controls on a screen, which is an opinion this crate does
+// not hold. They stay perfectly legal in a document written here: unknown
+// to `known()`, so carried as annotations and interpreted by whoever
+// draws the form.
 
-/// Which section a field belongs to, by whatever id draws the form.
+/// True when the value is a secret: never print it.
 ///
-/// Naming a section nothing declared is not an error: a consumer that does
-/// not know it puts the field wherever it puts the ungrouped ones.
-pub const X_SECTION: &str = "x-section";
-/// Declaration position, as a number.
-///
-/// Not a preference. If every field omits it, a consumer has no ordering
-/// information and falls back to something arbitrary — alphabetical,
-/// usually — which silently rearranges a carefully grouped form.
-pub const X_ORDER: &str = "x-order";
-/// True when the field is advanced: hidden behind a disclosure by default.
-pub const X_ADVANCED: &str = "x-advanced";
-/// True when the value is a secret: masked in a form, and not somewhere to
-/// put in a log.
+/// **Not presentation**, which is why it stayed when the rest went. A
+/// form masks it, but so does a log, a crash dump and anything else that
+/// renders a value into text, none of which have a screen. What each of
+/// them does about it is its own decision; this says only that somebody
+/// declared the field one.
 pub const X_SENSITIVE: &str = "x-sensitive";
 /// What a person is shown for each value in [`ENUM`]: a map from the value
 /// to its label.
@@ -294,14 +293,7 @@ pub const KEYWORDS: &[&str] = &[
 ];
 
 /// Every key **this crate** invented, all of them `x-` prefixed.
-pub const EXTENSIONS: &[&str] = &[
-    X_SECTION,
-    X_ORDER,
-    X_ADVANCED,
-    X_SENSITIVE,
-    X_ENUM_LABELS,
-    X_VARIANT_TAG,
-];
+pub const EXTENSIONS: &[&str] = &[X_SENSITIVE, X_ENUM_LABELS, X_VARIANT_TAG];
 
 /// Every key that has a meaning at all: [`KEYWORDS`] and [`EXTENSIONS`].
 ///

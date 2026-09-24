@@ -112,3 +112,10 @@ guatiao_status guatiao_form_is_visible(const guatiao_value *schema,
 #endif  // __cplusplus
 
 #endif  /* GUATIAO_FORM_H */
+
+
+/* ---- what this library writes onto a schema field -------------------- */
+
+#define GUATIAO_FORM_KEY_X_SECTION "x-section"
+#define GUATIAO_FORM_KEY_X_ORDER "x-order"
+#define GUATIAO_FORM_KEY_X_ADVANCED "x-advanced"

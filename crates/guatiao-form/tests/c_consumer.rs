@@ -75,6 +75,55 @@ fn the_committed_header_is_what_this_build_rendered() {
     );
 }
 
+/// **Every schema key this crate invented reaches the header as a macro.**
+///
+/// The three `x-` keys are written onto a *schema*, not into the form, and
+/// `guatiao` does not name them — so this header is the only place a C
+/// consumer can get them from, and a key it has to spell by hand is a key
+/// it can misspell. The list is read out of `vocab.rs` at test time rather
+/// than copied here, because the copy is what goes stale.
+#[test]
+fn every_schema_key_this_crate_adds_reaches_the_header_as_a_macro() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let header = std::fs::read_to_string(manifest.join("include/guatiao_form.h"))
+        .expect("the header is committed");
+    let vocab = std::fs::read_to_string(manifest.join("src/vocab.rs"))
+        .expect("the vocabulary is committed");
+
+    let declared: Vec<(String, String)> = vocab
+        .lines()
+        .filter_map(|line| line.strip_prefix("pub const X_"))
+        .filter_map(|rest| rest.split_once(": &str = "))
+        .filter_map(|(name, rest)| {
+            rest.strip_suffix(';')
+                .map(|value| (format!("X_{name}"), value.to_string()))
+        })
+        .collect();
+
+    assert_eq!(
+        declared.len(),
+        3,
+        "found {} `x-` keys in vocab.rs, and there are three: x-section, \
+         x-order, x-advanced. If one was added or removed, say so here and \
+         in the trailer in cbindgen.toml",
+        declared.len()
+    );
+
+    let missing: Vec<String> = declared
+        .iter()
+        .map(|(name, value)| format!("#define GUATIAO_FORM_KEY_{name} {value}"))
+        .filter(|line| !header.lines().any(|l| l.trim() == line))
+        .collect();
+
+    assert!(
+        missing.is_empty(),
+        "these keys are declared in Rust and absent from the header, so a C \
+         consumer has to spell them by hand. Add each to the `trailer` in \
+         cbindgen.toml and regenerate:\n  {}",
+        missing.join("\n  ")
+    );
+}
+
 #[cfg(feature = "c-header")]
 fn first_difference(a: &str, b: &str) -> Option<String> {
     for (n, (x, y)) in a.lines().zip(b.lines()).enumerate() {

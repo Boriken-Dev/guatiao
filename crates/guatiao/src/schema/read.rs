@@ -258,11 +258,6 @@ impl<'a> FieldRef<'a> {
         text(self.schema, vocab::DESCRIPTION)
     }
 
-    /// Which section this belongs to. Empty means the default one.
-    pub fn section(&self) -> &'a str {
-        text(self.schema, vocab::X_SECTION)
-    }
-
     /// The default value, or `None` when the field has no default.
     ///
     /// **`None` and a default of null are different things**: the first
@@ -271,24 +266,12 @@ impl<'a> FieldRef<'a> {
         TryAsRef::<Map>::try_as_ref(self.schema).and_then(|m| m.get(vocab::DEFAULT))
     }
 
-    /// Declaration position. 0 when unset, which a consumer should read as
-    /// "no ordering information" rather than "first".
-    pub fn order(&self) -> i64 {
-        int_or(
-            TryAsRef::<Map>::try_as_ref(self.schema).and_then(|m| m.get(vocab::X_ORDER)),
-            0,
-        )
-    }
-
-    /// Hidden behind a disclosure by default.
-    pub fn is_advanced(&self) -> bool {
-        bool_or(
-            TryAsRef::<Map>::try_as_ref(self.schema).and_then(|m| m.get(vocab::X_ADVANCED)),
-            false,
-        )
-    }
-
-    /// A secret: masked in a form, and not somewhere to put in a log.
+    /// A secret: never print this value.
+    ///
+    /// Not a drawing instruction, which is why this one is here and
+    /// `section`, `order` and `is_advanced` are in `guatiao-form`: a log,
+    /// a crash dump and a debug print all obey it with no screen in
+    /// sight.
     pub fn is_sensitive(&self) -> bool {
         bool_or(
             TryAsRef::<Map>::try_as_ref(self.schema).and_then(|m| m.get(vocab::X_SENSITIVE)),

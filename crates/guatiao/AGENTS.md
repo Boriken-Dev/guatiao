@@ -457,9 +457,11 @@ nothing about schemas.
 ```
 
 Keys we added are `x-` prefixed, which is the space the specification
-reserves for exactly that: `x-section`, `x-order`, `x-advanced`,
-`x-sensitive`, `x-enum-labels`, `x-variant-tag`. Everything else is
-JSON Schema's.
+reserves for exactly that: `x-sensitive`, `x-enum-labels`,
+`x-variant-tag`. Everything else is JSON Schema's. **`x-section`,
+`x-order` and `x-advanced` are `guatiao-form`'s**, named in its `vocab`
+and reached in C through `guatiao_form.h`; a document may carry them and
+nothing here interprets them.
 
 **Two things are not JSON Schema's, on purpose.** `type: "bytes"` extends
 the type set, so a document using it is readable by anything and fails a
@@ -536,10 +538,13 @@ pub trait Extras: Sized {                     // the door another crate writes t
 
 `option` takes a value already built and cannot fail; `extra` takes the
 `Result` that building through a named allocator produces, and the
-builder keeps the first error as it does for everything else. **Reading
-the `x-` keys stays here** — `FieldRef::section`, `order`, `is_advanced`
-— because reading a key is reading a key. Writing the opinion is the
-opinion.
+builder keeps the first error as it does for everything else.
+
+**Reading them is `guatiao-form`'s too**, through its `FormField` trait
+over `FieldRef` (`section`, `order`, `is_advanced`). The split is by
+vocabulary, not by direction: a crate that does not name a key has no
+business answering what it means. What stays here is every key this
+crate DOES name — including `is_sensitive`.
 
 **`#[derive(Schema)]` needs no import**: it names `title` and
 `description` by rooted path and writes the presentation keys through
@@ -587,8 +592,9 @@ SchemaRef::new(&value) -> Option<SchemaRef>
   .dialect() .title() .description() .fields() .find(key) .extra(key) .extras()
   .as_value()
 FieldRef::new(key, &schema) -> Option<FieldRef>   // answers is_required() false
-FieldRef: .key() .kind() .title() .description() .section() .default() .order()
-           .is_advanced() .is_sensitive() .is_required() .extra(key) .extras()
+FieldRef: .key() .kind() .title() .description() .default() .is_sensitive()
+           .is_required() .extra(key) .extras()
+           // .section() .order() .is_advanced(): guatiao_form::FormField
 Kind: .choices() .alternatives() .arms() .items() .fields() .name()
 ```
 

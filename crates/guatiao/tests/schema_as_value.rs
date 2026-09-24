@@ -100,26 +100,26 @@ fn a_declared_schema_reads_back() {
             .field(
                 FieldBuilder::new_in(alloc, "host", KindBuilder::string_in(alloc))
                     .title("Host")
-                    .option(vocab::X_SECTION, Text::from("net"))
+                    .option("x-section", Text::from("net"))
                     .required()
-                    .option(vocab::X_ORDER, Number::from(1)),
+                    .option("x-order", Number::from(1)),
             )
             .field(
                 FieldBuilder::new_in(alloc, "port", KindBuilder::int_range_in(alloc, 1, 65535))
                     .title("Port")
-                    .option(vocab::X_SECTION, Text::from("net"))
+                    .option("x-section", Text::from("net"))
                     .default(
                         Number::new_in(alloc, &5900.to_string())
                             .map(Value::from)
                             .unwrap(),
                     )
-                    .option(vocab::X_ORDER, Number::from(2)),
+                    .option("x-order", Number::from(2)),
             )
             .field(
                 FieldBuilder::new_in(alloc, "password", KindBuilder::string_in(alloc))
                     .title("Password")
                     .sensitive()
-                    .option(vocab::X_ADVANCED, true),
+                    .option("x-advanced", true),
             )
             .finish()
             .expect("a schema this small does not exhaust an allocator");
@@ -135,7 +135,11 @@ fn a_declared_schema_reads_back() {
 
         let host = s.find("host").expect("host is declared");
         assert_eq!(host.title(), "Host");
-        assert_eq!(host.section(), "net");
+        assert_eq!(
+            str_or(host.extra("x-section"), ""),
+            "net",
+            "a key this crate does not know is carried, never interpreted"
+        );
         assert!(host.is_required());
         assert!(!host.is_sensitive());
         assert!(matches!(host.kind(), Kind::Str));
@@ -158,7 +162,10 @@ fn a_declared_schema_reads_back() {
 
         let password = s.find("password").expect("password is declared");
         assert!(password.is_sensitive());
-        assert!(password.is_advanced());
+        assert!(guatiao::value::read::bool_or(
+            password.extra("x-advanced"),
+            false
+        ));
 
         assert!(s.find("nothing").is_none());
     });

@@ -15,6 +15,7 @@ use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::schema::validate::validate_map;
 use guatiao::value::alloc::Alloc;
 use guatiao::value::convert::{TryAsMut, TryAsRef};
+use guatiao::value::read::{bool_or, int_or, str_or};
 use guatiao::{Bytes, Map, Number, Schema, Text, ToValue, ValueError};
 
 fn alloc_and<R>(body: impl FnOnce(Alloc) -> R) -> R {
@@ -152,6 +153,13 @@ fn a_doc_comment_becomes_the_help_text() {
     });
 }
 
+/// The presentation keys are read here as **annotations**, by name,
+/// because that is what they are to this crate: `x-section`, `x-order`
+/// and `x-advanced` are `guatiao-form`'s vocabulary, and nothing in
+/// `guatiao` interprets them. The derive writes them all the same, so a
+/// consumer declares once and the form crate reads what it named.
+/// `guatiao-form`'s own `form_derive.rs` reads the same fields through
+/// `FormField`, which is the other half of this.
 #[test]
 fn the_presentation_attributes_reach_the_option() {
     alloc_and(|alloc| {
@@ -160,13 +168,13 @@ fn the_presentation_attributes_reach_the_option() {
 
         let password = s.find("password").unwrap();
         assert_eq!(password.title(), "Password");
-        assert_eq!(password.section(), "auth");
-        assert_eq!(password.order(), 3);
+        assert_eq!(str_or(password.extra("x-section"), ""), "auth");
+        assert_eq!(int_or(password.extra("x-order"), 0), 3);
         assert!(password.is_sensitive());
-        assert!(!password.is_advanced());
+        assert!(password.extra("x-advanced").is_none());
 
         let timeout = s.find("timeout").unwrap();
-        assert!(timeout.is_advanced());
+        assert!(bool_or(timeout.extra("x-advanced"), false));
         let default: i64 = timeout.default().unwrap().try_into().unwrap();
         assert_eq!(
             default, 30,
