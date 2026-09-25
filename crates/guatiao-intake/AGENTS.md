@@ -110,12 +110,33 @@ applied, not by how it is written -- so `env[PATH]` needs no ceremony
 and `["1"]` is the escape for a key that looks like a position. A path
 is rootless: no leading `.`, no `$`.
 
+```rust
+// can this name be written as it stands?
+path::is_bare_name(name) -> bool    // a Field segment: non-empty, no `.` `[` `]`
+path::needs_quoting(key) -> bool    // a bracket key: empty, leading `"`, a
+                                    // bracket, or all digits
+```
+
+**Ask `is_bare_name` when your own surface cannot quote.** A schema may
+declare a field whose key holds a `.`, because this grammar can still
+reach it (`["a.b"]`) -- so this crate does not refuse one. A consumer
+whose keys travel as bare text (a URI query, a flat store keyed by dotted
+path) has no such escape, and should refuse the key where it enters
+rather than discover it at the far end. Asking the grammar beats
+`key.contains('.')`: the rule is wider than that one character, and it
+stays correct when the grammar moves.
+
 `validate_text` (one text, one field) stays in `guatiao`: that one asks
 about the schema alone.
 
 ## The whole surface
 
 ```rust
+// `use guatiao_intake::prelude::*;` -- both crates' halves of a
+// declaration at once: guatiao's builders and reading views, this crate's
+// extension traits, `Form`/`Section`/`Hints`, `check`/`layout`/
+// `is_visible`. It re-exports and adds nothing.
+
 // declaring, beside the schema: these EXTEND `guatiao`'s builders, which
 // write JSON Schema's own `title`, `description` and nothing presentational
 trait FormBuilder: guatiao::schema::Extras {   // SchemaBuilder, FieldBuilder, ArmBuilder
@@ -125,11 +146,13 @@ trait FormFieldBuilder: FormBuilder {          // FieldBuilder only
     fn order(self, order: i64) -> Self;        // x-order
     fn advanced(self) -> Self;                 // x-advanced
 }
-trait FormField {                              // reading, on guatiao's FieldRef
-    fn section(&self) -> &str;                 // "" when unset
+trait FormField<'a> {                          // reading, on guatiao's FieldRef<'a>
+    fn section(&self) -> &'a str;              // "" when unset
     fn order(&self) -> i64;                    // 0 means "no ordering information"
     fn is_advanced(&self) -> bool;
 }
+// The lifetime is the SCHEMA's, not the view's: a caller holding a
+// `FieldRef` past the borrow still holds the text it read.
 
 // building (names no allocator; `_in` forms name one; errors collected)
 Form::new() / Form::new_in(Alloc) -> Form
@@ -214,6 +237,24 @@ vocab::widget::{TEXT, TEXTAREA, PASSWORD, NUMBER, SLIDER,
 including one a condition reads — is the same `UnknownField` `check`
 gives it, rather than `true` for a field that does not exist.
 
+## Which word belongs to which layer
+
+Three vocabularies meet here, and a rename that does not respect the
+boundary compiles right up until it does not:
+
+| written as | where | why that word |
+| --- | --- | --- |
+| `title` / `description` | `SchemaBuilder`, `FieldBuilder`, `ArmBuilder` (in `guatiao`) | JSON Schema's own keywords; a schema describes the struct |
+| `label` / `help` | `Section`, `SectionRef` (here) | a section is a form's own thing, and those are form words -- both land as `title`/`description` inside the section's map |
+| `label` | one enum choice (`#[schema(label = "..")]`, `ChoiceRef::label`) | a choice is not a subschema: its text is one entry in `x-enum-labels` |
+
+So **`Section::label` is not a schema `title` that somebody forgot to
+rename**, and a sweep over `.label(` that does not tell the three apart
+will break the other two. Downstream, four such over-renames were caught
+by the compiler on one migration; it catches them because the method
+simply does not exist, which is the argument for keeping the names
+distinct.
+
 ## The rules the judgement applies
 
 - **`check`** refuses: a path that resolves to no field, a section id
@@ -295,6 +336,11 @@ guatiao_status guatiao_intake_is_visible(const guatiao_value *schema, const guat
 - `HintsRef::as_value` answers `Option<&Value>` — `None` when the form
   says nothing about the field — where `FormRef` and `SectionRef` answer a
   plain `&Value`.
+- **`resolve` and `resolve_in` are the common entry points**, not
+  `flatten`/`unflatten`: naming one place is what a consumer does per
+  keystroke, where projecting a whole tree happens when a store is
+  loaded or saved. The one real consumer of this crate uses the first
+  pair and neither of the second.
 - **`unsafe` lives in `src/exports.rs` and `src/exports_flat.rs`**,
   checked by `tests/unsafe_stays_in_exports.rs`; every other module carries
   `#![forbid(unsafe_code)]`.

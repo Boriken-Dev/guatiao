@@ -549,6 +549,16 @@ key has no business answering what it means. What stays here is every
 key this crate DOES act on — `is_sensitive` among them, because "never
 print this" is obeyed by a log with no screen in sight.
 
+**The import is the tell.** A key this crate acts on is an *inherent*
+method, so it needs no `use` — `title`, `description`, `sensitive`. A key
+it merely stores for somebody else arrives as an *extension trait's*
+method and does not exist until that trait is in scope — `section`,
+`order`, `advanced`, all `guatiao-intake`'s. So "this method needs an
+import" reads directly as "this crate has no opinion about that key",
+which is the boundary made visible rather than an inconsistency in the
+builder. A caller who wants both halves without thinking about it imports
+`guatiao_intake::prelude::*`.
+
 **`#[derive(Schema)]` needs no import**: it names `title` and
 `description` by rooted path and writes any other key through `Extras`
 with the key spelled out, so a crate deriving a schema depends on this

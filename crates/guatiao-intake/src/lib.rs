@@ -109,6 +109,38 @@ mod screen;
 mod texts;
 pub mod vocab;
 
+/// Everything a declaration needs, from both crates at once.
+///
+/// This crate extends `guatiao`'s builders rather than wrapping them, so
+/// the type is one crate's and the method is the other's: `FieldBuilder`
+/// comes from `guatiao`, and the `section` you call on it is
+/// [`FormFieldBuilder`]'s. An extension trait does nothing until it is in
+/// scope, so a caller who imports only the builder gets "method not
+/// found" for a method the docs plainly show.
+///
+/// ```
+/// use guatiao_intake::prelude::*;
+///
+/// let schema = SchemaBuilder::new()
+///     .field(FieldBuilder::new("host", KindBuilder::string()).section("net").required())
+///     .field(FieldBuilder::new("token", KindBuilder::string()).sensitive())
+///     .finish()?;
+///
+/// let form = Form::new().section(Section::new("net").label("Network")).finish()?;
+/// check(SchemaRef::new(&schema).unwrap(), FormRef::new(&form).unwrap())?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// It re-exports, and adds nothing of its own — a name here is the same
+/// name it is elsewhere.
+pub mod prelude {
+    pub use guatiao::schema::read::{ArmRef, ChoiceRef, FieldRef, Kind as KindRef, SchemaRef};
+    pub use guatiao::schema::{ArmBuilder, Extras, FieldBuilder, KindBuilder, SchemaBuilder};
+
+    pub use crate::{Form, FormBuilder, FormField, FormFieldBuilder, Hints, Screen, Section};
+    pub use crate::{FormRef, HintsRef, SectionRef, check, is_visible, layout};
+}
+
 pub use build::{Form, Hints, Section};
 pub use create::{for_field, for_schema, form_for};
 pub use declare::{FormBuilder, FormField, FormFieldBuilder};

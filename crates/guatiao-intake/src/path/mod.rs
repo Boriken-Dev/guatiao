@@ -122,13 +122,54 @@ impl fmt::Display for Segment<'_> {
     }
 }
 
+/// The characters that end a field-name segment: a `.` starts the next
+/// one, and a bracket starts or ends a bracket segment. [`step`] and
+/// [`is_bare_name`] both read this, so the rule has one home.
+const NAME_ENDS: [char; 3] = ['.', '[', ']'];
+
+/// Whether `name` can be a [`Field`](Segment::Field) segment as written.
+///
+/// A path names a field by writing its name plainly, so a name holding a
+/// `.` or a bracket cannot be written that way -- `a.b` reads as two
+/// segments, not one field called `a.b`. Such a field is still reachable,
+/// as a quoted bracket key (`["a.b"]`), so a schema is free to declare
+/// one.
+///
+/// **Ask this when your own surface cannot quote.** Where a key is stored
+/// or transported as bare text -- a URI query, a flat `key -> text` store
+/// keyed by dotted path -- a name that is not bare has no spelling left,
+/// and refusing it early beats discovering it at the far end:
+///
+/// ```
+/// use guatiao_intake::path;
+///
+/// assert!(path::is_bare_name("host"));
+/// assert!(!path::is_bare_name("a.b"));
+/// assert!(!path::is_bare_name(""));
+/// ```
+pub fn is_bare_name(name: &str) -> bool {
+    !name.is_empty() && !name.contains(NAME_ENDS)
+}
+
 /// Whether writing this key bare would parse back as something else.
 ///
 /// **Only a leading** `"` matters: a quoted segment is recognised by the
 /// character right after the `[`, so `[say "hi"]` reads back as the key it
 /// looks like. Quoting only what has to be quoted is what keeps the
 /// common spelling readable.
-fn needs_quoting(key: &str) -> bool {
+///
+/// This is what [`Segment`]'s [`Display`](fmt::Display) asks before it
+/// quotes, exposed because a consumer assembling a path by hand needs the
+/// same answer.
+///
+/// ```
+/// use guatiao_intake::path;
+///
+/// assert!(!path::needs_quoting("home"));
+/// assert!(path::needs_quoting("0"));      // bare, it would read as an index
+/// assert!(path::needs_quoting("a[b]"));
+/// ```
+pub fn needs_quoting(key: &str) -> bool {
     key.is_empty()
         || key.starts_with('"')
         || key.contains(['[', ']'])
@@ -365,7 +406,7 @@ fn step(rest: &str) -> Result<Option<(Segment<'_>, usize)>, PathError> {
         let (segment, read) = bracket(body).map_err(|e| offset_by(e, skipped))?;
         return Ok(Some((segment, skipped + read)));
     }
-    let end = body.find(['.', '[', ']']).unwrap_or(body.len());
+    let end = body.find(NAME_ENDS).unwrap_or(body.len());
     if let Some(']') = body[end..].chars().next() {
         return Err(PathError::UnexpectedClose { at: skipped + end });
     }
