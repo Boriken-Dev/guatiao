@@ -428,9 +428,10 @@ The attribute follows the key: an arm is a subschema, so it takes
 `#[schema(title = "..", description = "..")]`; a choice is one entry in
 `x-enum-labels`, so it takes `#[schema(label = "..")]` and nothing else.
 
-Generated readers go through `convert::{expect_map, expect_str, expect_key,
-find_key}`; they are public so a hand-written impl reports errors the same
-way.
+Generated readers go through `Map::required(key)` and
+`MapError::under(prefix)` / `at_key(key)`; they are public so a
+hand-written impl reports a missing key, and where in the tree an error
+happened, the same way.
 
 An `Option<T>` field is omitted when `None` rather than written as null,
 and both spellings read back as `None`.

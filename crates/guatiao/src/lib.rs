@@ -55,7 +55,7 @@
 //!   layer is one of the three places `unsafe` is allowed, beside the
 //!   loader and the `extern "C"` surface; every other module carries
 //!   `#![forbid(unsafe_code)]`.
-//! - [`convert`] turns a Rust type into a value and back, which is what
+//! - [`value::convert`] turns a Rust type into a value and back, which is what
 //!   `#[derive(ToValue)]` and `#[derive(FromValue)]` write for you.
 //! - [`schema`] describes a value: what a provider needs to be configured,
 //!   and equally a record, a set of capabilities or metadata one library
@@ -102,24 +102,6 @@ compile_error!("the `load` feature maps libraries from files, which a wasm targe
 
 pub mod value;
 
-/// Converting a Rust type to and from a value.
-///
-/// Public as a MODULE, for the same reason [`value::merge`] is: the reasoning a
-/// caller has to understand before using these is longer than an item's
-/// doc comment can hold — why the traits are named rather than
-/// `From`/`TryFrom`, why the error distinguishes its cases, what
-/// `Option<T>` does about the absent-versus-null distinction, and why a
-/// sequence is a `Vec<T>` while bytes are opt-in. Every item is
-/// re-exported at the crate root as well, so `guatiao::ToValue` works and
-/// the module path is documentation rather than an obligation.
-///
-/// This is a re-export rather than the module itself, which is why the
-/// doc comment here is safe: there is no `//!` header for it to be
-/// merged with.
-pub mod convert {
-    pub use crate::value::convert::*;
-}
-
 // The `extern "C"` surface: everything public that is not a Rust
 // convenience, reachable by a caller that cannot link Rust. A `//`
 // comment, never a `///`.
@@ -152,7 +134,7 @@ pub mod library;
 // rustdoc reports those with no file or line to find them by.
 pub mod schema;
 
-pub use convert::{Bytes, FromValue, MapError, ToValue, TryAsMut, TryAsRef};
+pub use value::convert::{Bytes, FromValue, MapError, ToValue, TryAsMut, TryAsRef};
 // The names generated code reaches for, at the root where it names them.
 // Keeping the derive's paths rooted here rather than at `value::` is what
 // lets the module underneath be rearranged without touching a macro every
@@ -163,7 +145,7 @@ pub use schema::Schema;
 // named at this level by the API header and by generated code, so they
 // resolve at this level.
 //
-// `Bytes` above is `convert::Bytes`, the marker that says a field crosses
+// `Bytes` above is `value::convert::Bytes`, the marker that says a field crosses
 // as the bytes kind. The BORROWED view of the same name stays at
 // `value::types::Bytes`, since one name cannot be both.
 pub use value::types::Str;
