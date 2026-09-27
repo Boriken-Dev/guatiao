@@ -52,7 +52,7 @@ yaml = ["dep:serde-saphyr"]
 c-header = ["dep:cbindgen"]
 
 [dependencies]
-guatiao = { path = "../guatiao", version = "0.1.0" }
+guatiao = { path = "../guatiao", version = "=0.0.0-alpha.0" }
 # `derive` is NOT enabled: nothing here derives anything. The impls are
 # written by hand because they carry a presentation policy and an
 # allocator, neither of which a derive can express.

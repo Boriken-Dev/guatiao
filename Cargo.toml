@@ -31,7 +31,7 @@ exclude = ["examples/wire_over_webtransport/client"]
 # something prose can demonstrate.
 
 [workspace.package]
-version = "0.1.0"
+version = "0.0.0-alpha.0"
 edition = "2024"
 # MSRV: the lowest toolchain every step of the test workflow has been run
 # on. Let chains, used throughout, set a floor of 1.88 by themselves; 1.88
@@ -40,8 +40,6 @@ rust-version = "1.89"
 repository = "https://github.com/Boriken-Dev/guatiao"
 license = "MPL-2.0"
 
-# `publish = false` even though the licence is settled, and the two are
-# unrelated: the licence says what a recipient may do, this says the crate
-# is not offered on a registry yet. Lift it when the repository goes
-# public, not before.
-publish = false
+# Publishable. Each example says `publish = false` itself, so only the four
+# crates can reach a registry.
+publish = true

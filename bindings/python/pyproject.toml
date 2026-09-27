@@ -4,16 +4,18 @@ build-backend = "hatchling.build"
 
 [project]
 name = "guatiao"
-version = "0.1.0"
+version = "0.0.0a0"
 authors = [{ name = "jose-pr" }]
 description = "ctypes bindings over the guatiao C ABI"
 readme = "README.md"
 requires-python = ">=3.9"
-# PEP 639: SPDX license expression. The licence file itself is the repo's
-# own LICENSE, two levels up -- not shipped inside this sub-package.
+# PEP 639: SPDX license expression, and the licence text shipped in both
+# the sdist and the wheel. MPL 2.0 asks that a recipient be told where the
+# licence is; the package carries its own copy.
 license = "MPL-2.0"
+license-files = ["LICENSE"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
     "Typing :: Typed",

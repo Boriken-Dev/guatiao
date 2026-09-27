@@ -27,7 +27,7 @@ from ._lib import LibraryNotFound, MissingSymbol
 from .registry import Instance, Registry
 from .value import ABSENT, List, Map, Ref, Value
 
-__version__ = "0.1.0"
+__version__ = "0.0.0a0"
 
 __all__ = [
     "__version__",

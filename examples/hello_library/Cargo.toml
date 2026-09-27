@@ -1,7 +1,11 @@
 [package]
 name = "hello_library"
 description = "An example guatiao library: one provider, one vtable, built and loaded by the test suite"
-version.workspace = true
+# Its own version, never the release's: the test suite loads this library
+# and names `hello_library_v0_1_ledger_schema`, the symbol `schema_export!`'s
+# versioned form derives from THIS crate's version. Following the workspace
+# would rename the export at every release.
+version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 repository.workspace = true

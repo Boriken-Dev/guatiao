@@ -2,7 +2,7 @@ name: guatiao
 description: >-
   Dart FFI bindings over the guatiao C ABI: a value model, a JSON Schema
   that describes a value, and a registry that loads plugin libraries.
-version: 0.1.0
+version: 0.0.0-alpha.0
 repository: https://github.com/Boriken-Dev/guatiao
 issue_tracker: https://github.com/Boriken-Dev/guatiao/issues
 documentation: https://boriken-dev.github.io/guatiao/

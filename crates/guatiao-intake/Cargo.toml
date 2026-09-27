@@ -41,9 +41,9 @@ derive = ["dep:guatiao-derive", "guatiao/derive"]
 # schema, and a schema is a value. Nothing here parses or prints a
 # document; `guatiao-serde` does that for a form exactly as it does for
 # any other value.
-guatiao = { path = "../guatiao", version = "0.1.0" }
+guatiao = { path = "../guatiao", version = "=0.0.0-alpha.0" }
 # The proc-macro half of `derive`, with only the form derive turned on.
-guatiao-derive = { path = "../guatiao-derive", version = "0.1.0", optional = true, features = ["form"] }
+guatiao-derive = { path = "../guatiao-derive", version = "=0.0.0-alpha.0", optional = true, features = ["form"] }
 
 [build-dependencies]
 # Optional, enabled only by `c-header`, so an ordinary build renders

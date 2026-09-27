@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.0.0-alpha.0] - 2026-09-27
+
 ### Added
 
 - **The shape keywords a form draws from**: `KindBuilder::min_length`,
@@ -542,4 +544,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   now ship their LICENSE and docs.rs metadata, and their generated headers
   carry the Exhibit A notice.
 
-[Unreleased]: https://github.com/Boriken-Dev/guatiao/commits/main
+[Unreleased]: https://github.com/Boriken-Dev/guatiao/compare/v0.0.0-alpha.0...HEAD
+[0.0.0-alpha.0]: https://github.com/Boriken-Dev/guatiao/releases/tag/v0.0.0-alpha.0

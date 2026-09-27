@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.0.0-alpha.0] - 2026-09-27
+
 ### Added
 
 - First release: `dart:ffi` bindings over the guatiao C ABI.
