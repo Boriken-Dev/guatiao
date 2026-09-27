@@ -53,6 +53,31 @@ struct Connection {
     auth: Auth,
 }
 
+/// Every shape keyword, every annotation, a unit and a condition with
+/// several values -- each written as an attribute, none by hand.
+#[derive(Schema, Form)]
+struct Tunnel {
+    #[schema(
+        min_length = 2,
+        max_length = 8,
+        pattern = "^[a-z]+$",
+        examples("edge", "core")
+    )]
+    name: String,
+    #[schema(format = "hostname", read_only)]
+    endpoint: String,
+    mode: String,
+    #[form(visible_when(field = "mode", in("tls", "mtls")))]
+    ca: Option<String>,
+    #[schema(multiple_of = 5, deprecated)]
+    #[form(unit = "s")]
+    keepalive: i64,
+    #[schema(multiple_of = 0.5)]
+    ratio: f64,
+    #[schema(min_items = 1, max_items = 4)]
+    peers: Vec<String>,
+}
+
 fn pair() -> (Value, Value) {
     let schema = Connection::schema(Alloc::rust()).expect("the schema builds");
     let form = Connection::form(Alloc::rust()).expect("the form builds");
@@ -246,4 +271,93 @@ fn a_member_may_be_drawn_by_its_own_screen() {
         f.hints("auth").form().is_none(),
         "a flattened member has no form of its own; that is the point"
     );
+}
+
+/// What the attributes said is what the schema and the form say, and it
+/// behaves: `check` accepts the pair, the constraints refuse what they
+/// should, and the condition shows `ca` for either listed mode.
+#[test]
+fn every_new_attribute_lands_and_behaves() {
+    use guatiao::schema::read::Kind;
+    use guatiao::schema::validate::{validate_text, validate_value};
+
+    let schema = Tunnel::schema(Alloc::rust()).expect("the schema builds");
+    let form = Tunnel::form(Alloc::rust()).expect("the form builds");
+    let (s, f) = (
+        SchemaRef::new(&schema).unwrap(),
+        FormRef::new(&form).unwrap(),
+    );
+    check(s, f).expect("the derived pair agrees");
+
+    let name = s.find("name").unwrap();
+    assert!(matches!(
+        name.kind(),
+        Kind::Str {
+            min_length: Some(2),
+            max_length: Some(8),
+            pattern: Some("^[a-z]+$"),
+            ..
+        }
+    ));
+    let examples: Vec<&str> = name
+        .examples()
+        .iter()
+        .filter_map(TryAsRef::<str>::try_as_ref)
+        .collect();
+    assert_eq!(examples, ["edge", "core"]);
+    assert!(validate_text(name, "x").is_err(), "one short");
+
+    let endpoint = s.find("endpoint").unwrap();
+    assert!(matches!(
+        endpoint.kind(),
+        Kind::Str {
+            format: Some("hostname"),
+            ..
+        }
+    ));
+    assert!(endpoint.is_read_only());
+
+    let keepalive = s.find("keepalive").unwrap();
+    assert!(keepalive.is_deprecated());
+    assert!(matches!(
+        keepalive.kind(),
+        Kind::Int {
+            multiple_of: Some(5.0),
+            ..
+        }
+    ));
+    assert!(validate_text(keepalive, "15").is_ok());
+    assert!(validate_text(keepalive, "16").is_err());
+    assert_eq!(f.hints("keepalive").unit(), "s");
+
+    let ratio = s.find("ratio").unwrap();
+    assert!(validate_text(ratio, "1.5").is_ok());
+    assert!(validate_text(ratio, "1.25").is_err());
+
+    let peers = s.find("peers").unwrap();
+    assert!(matches!(
+        peers.kind(),
+        Kind::List {
+            min: Some(1),
+            max: Some(4),
+            ..
+        }
+    ));
+    assert!(
+        validate_value(peers, &guatiao::List::new().into()).is_err(),
+        "at least one"
+    );
+
+    let when = f.hints("ca").visible_when().expect("guarded");
+    assert!(when.equals().is_none());
+    assert_eq!(when.values().len(), 2);
+    for (mode, expected) in [("tls", true), ("mtls", true), ("plain", false)] {
+        let mut values = Map::new();
+        values.set("mode", mode).unwrap();
+        assert_eq!(
+            is_visible(s, f, "ca", &values.into()).unwrap(),
+            expected,
+            "mode {mode}"
+        );
+    }
 }

@@ -206,6 +206,8 @@ struct T {
     #[schema(section = "net")] host: String,              // WHICH section stays the schema's
     #[form(widget = "password")] token: String,
     #[form(placeholder = "..", visible_when(field = "verify", equals = true))] ca: Option<String>,
+    #[form(visible_when(field = "mode", in("tls", "mtls")))] key: Option<String>,  // any of several
+    #[form(unit = "s")] keepalive: i64,                     // shown beside the number
     #[form(nested)] auth: Auth,                           // `Auth: Screen`; its hints land under `auth.`
     #[form(widget = "dialog", form)] tls: Tls,            // a form of its OWN, from `Tls: Screen`
     #[form(form = Tls)] agents: Vec<Tls>,                 // when the FIELD's type is not a screen

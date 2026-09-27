@@ -401,7 +401,9 @@ struct Connection {
 ```
 
 `#[map(rename = "...")]`, `#[map(skip)]`; `#[schema(title, description,
-sensitive, default)]` -- named after the keys they write. The derive also
+sensitive, default, read_only, deprecated, examples(..))]` on the field and
+`#[schema(min_length, max_length, pattern, format, multiple_of, min_items,
+max_items)]` on its kind -- named after the keys they write. The derive also
 accepts attributes for presentation keys **it does not own**, which are
 listed in `guatiao-derive`'s own `AGENTS.md` beside the crate that names
 them; they reach the document through `Extras` like any annotation.

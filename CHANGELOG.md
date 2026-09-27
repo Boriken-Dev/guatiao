@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   listed value to the rule `equals` has -- one the referenced field could
   hold -- and refuses both spellings, neither, or an empty list.
   `guatiao_intake_is_visible` answers it with no new symbol.
+- **The derives say all of it**: `#[schema(min_length, max_length,
+  pattern, format, multiple_of, min_items, max_items)]` chain onto the
+  kind, `#[schema(read_only, deprecated, examples(..))]` onto the field,
+  and `#[form(unit = "..")]` and `#[form(visible_when(field = "..",
+  in(..)))]` onto the form. A step that is not greater than zero, both
+  `equals` and `in`, and an empty `in()` are refused at compile time.
 - **A unit beside a number**: `Hints::unit("ms")` and `HintsRef::unit()`.
   Presentation only -- nothing is converted -- and `check` refuses it on
   anything but an integer or a real number.

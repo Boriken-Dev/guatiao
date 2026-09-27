@@ -27,7 +27,8 @@
 //!
 //! On the type: `section(id = "..", label = "..", help = "..")`, repeated,
 //! in display order. On a field: `widget = ".."`, `placeholder = ".."`,
-//! `visible_when(field = "..", equals = <expr>)`, `form` (or
+//! `unit = ".."`, `visible_when(field = "..", equals = <expr>)` or
+//! `visible_when(field = "..", in(<expr>, ..))`, `form` (or
 //! `form = Ty`), which gives the member a form of its OWN, and `nested`,
 //! which says
 //! the field's type derives `Form` too and composes its hints under
@@ -66,12 +67,19 @@ struct SectionDecl {
     help: Option<String>,
 }
 
+/// What a condition compares with: one value, or any of several.
+enum Shown {
+    Equals(syn::Expr),
+    In(Vec<syn::Expr>),
+}
+
 /// What one field says about its screen.
 #[derive(Default)]
 struct FieldHints {
     widget: Option<String>,
     placeholder: Option<String>,
-    visible_when: Option<(String, syn::Expr)>,
+    unit: Option<String>,
+    visible_when: Option<(String, Shown)>,
     nested: bool,
     /// Whose screen this member is drawn by: `#[form(form = Ty)]` names
     /// it, and `#[form(form)]` means the field's own type, which is
@@ -86,6 +94,7 @@ impl FieldHints {
     fn is_empty(&self) -> bool {
         self.widget.is_none()
             && self.placeholder.is_none()
+            && self.unit.is_none()
             && self.visible_when.is_none()
             && !self.nested
             && self.form.is_none()
@@ -275,6 +284,8 @@ fn read_hints(attr: &Attribute, hints: &mut FieldHints) -> syn::Result<()> {
             hints.widget = Some(meta.value()?.parse::<LitStr>()?.value());
         } else if meta.path.is_ident("placeholder") {
             hints.placeholder = Some(meta.value()?.parse::<LitStr>()?.value());
+        } else if meta.path.is_ident("unit") {
+            hints.unit = Some(meta.value()?.parse::<LitStr>()?.value());
         } else if meta.path.is_ident("nested") {
             hints.nested = true;
         } else if meta.path.is_ident("form") {
@@ -286,24 +297,47 @@ fn read_hints(attr: &Attribute, hints: &mut FieldHints) -> syn::Result<()> {
         } else if meta.path.is_ident("visible_when") {
             let mut field = None;
             let mut equals = None;
+            let mut any = None;
             meta.parse_nested_meta(|inner| {
                 if inner.path.is_ident("field") {
                     field = Some(inner.value()?.parse::<LitStr>()?.value());
                 } else if inner.path.is_ident("equals") {
                     equals = Some(inner.value()?.parse::<syn::Expr>()?);
+                } else if inner.path.is_ident("in") {
+                    // `in` is a keyword, and attribute paths accept one.
+                    let content;
+                    syn::parenthesized!(content in inner.input);
+                    let values: Vec<syn::Expr> = syn::punctuated::Punctuated::<
+                        syn::Expr,
+                        syn::Token![,],
+                    >::parse_terminated(&content)?
+                    .into_iter()
+                    .collect();
+                    if values.is_empty() {
+                        return Err(
+                            inner.error("`in()` with no values is a condition nothing meets")
+                        );
+                    }
+                    any = Some(values);
                 } else {
                     return Err(inner.error(format!(
                         "unrecognised `visible_when` option. {LABEL} knows `field = \"..\"` \
-                         and `equals = <value>`"
+                         and one of `equals = <value>` or `in(<value>, ..)`"
                     )));
                 }
                 Ok(())
             })?;
-            match (field, equals) {
-                (Some(field), Some(equals)) => hints.visible_when = Some((field, equals)),
+            match (field, equals, any) {
+                (Some(field), Some(equals), None) => {
+                    hints.visible_when = Some((field, Shown::Equals(equals)));
+                }
+                (Some(field), None, Some(values)) => {
+                    hints.visible_when = Some((field, Shown::In(values)));
+                }
                 _ => {
                     return Err(meta.error(
-                        "`visible_when` names both `field = \"..\"` and `equals = <value>`",
+                        "`visible_when` names `field = \"..\"` and exactly one of \
+                         `equals = <value>` or `in(<value>, ..)`",
                     ));
                 }
             }
@@ -316,7 +350,8 @@ fn read_hints(attr: &Attribute, hints: &mut FieldHints) -> syn::Result<()> {
         } else {
             return Err(meta.error(format!(
                 "unrecognised `#[form(..)]` option. {LABEL} knows `widget`, `placeholder`, \
-                 `visible_when(field = \"..\", equals = <value>)`, `nested` and `form` (or \
+                 `unit`, `visible_when(field = \"..\", equals = <value>)` or \
+                 `visible_when(field = \"..\", in(<value>, ..))`, `nested` and `form` (or \
                  `form = Ty`) on a field"
             )));
         }
@@ -345,11 +380,15 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
                 .placeholder
                 .iter()
                 .map(|p| quote! { .placeholder(#p) });
+            let unit = f.hints.unit.iter().map(|u| quote! { .unit(#u) });
             let visible = f
                 .hints
                 .visible_when
                 .iter()
-                .map(|(field, equals)| quote! { .visible_when(#field, #equals) });
+                .map(|(field, shown)| match shown {
+                    Shown::Equals(equals) => quote! { .visible_when(#field, #equals) },
+                    Shown::In(values) => quote! { .visible_when_in(#field, [#(#values),*]) },
+                });
             // The member's own screen, as this field's form. `form_value`
             // rather than `form`, because `Screen::form` answers a
             // `Result` and the builder is where the first error waits.
@@ -360,6 +399,7 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
             });
             if f.hints.widget.is_some()
                 || f.hints.placeholder.is_some()
+                || f.hints.unit.is_some()
                 || f.hints.visible_when.is_some()
                 || f.hints.form.is_some()
             {
@@ -367,7 +407,7 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
                     __form = __form.field(
                         &::std::format!("{}{}", __prefix, #key),
                         ::guatiao_intake::Hints::new_in(__alloc)
-                            #(#widget)* #(#placeholder)* #(#visible)* #(#form)*,
+                            #(#widget)* #(#placeholder)* #(#unit)* #(#visible)* #(#form)*,
                     );
                 }
             } else {
@@ -507,11 +547,21 @@ mod tests {
             ),
             (
                 "struct S { #[form(visible_when(field = \"b\"))] a: i64 }",
-                "names both `field",
+                "exactly one of `equals = <value>` or `in(<value>, ..)`",
             ),
             (
                 "struct S { #[form(visible_when(field = \"b\", is = 1))] a: i64 }",
                 "unrecognised `visible_when` option",
+            ),
+            // One condition, one spelling: two answers to "when is this
+            // shown" would leave a renderer to pick.
+            (
+                "struct S { #[form(visible_when(field = \"b\", equals = 1, in(1, 2)))] a: i64 }",
+                "exactly one of",
+            ),
+            (
+                "struct S { #[form(visible_when(field = \"b\", in()))] a: i64 }",
+                "a condition nothing meets",
             ),
             (
                 "struct S { #[map(skip)] #[form(widget = \"x\")] a: i64 }",

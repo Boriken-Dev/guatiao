@@ -180,6 +180,12 @@ pub fn derive_to_value(input: TokenStream) -> TokenStream {
 /// | `#[schema(advanced)]` | hide unless asked for |
 /// | `#[schema(sensitive)]` | a passphrase or a key: never log it |
 /// | `#[schema(default = <expr>)]` | the value a consumer starts from |
+/// | `#[schema(read_only)]`, `#[schema(deprecated)]` | JSON Schema's annotations |
+/// | `#[schema(examples(<expr>, ..))]` | sample values, each through `ToValue` |
+/// | `#[schema(min_length = N, max_length = N)]` | text length, in code points |
+/// | `#[schema(pattern = "..", format = "..")]` | a regex to match; what the text holds |
+/// | `#[schema(multiple_of = 5)]` | the step a number moves by |
+/// | `#[schema(min_items = N, max_items = N)]` | how many elements a list holds |
 ///
 /// `#[map(rename)]` and `#[map(skip)]` are read here too, so the schema
 /// and the value agree about keys by construction rather than by care.
@@ -252,8 +258,9 @@ pub fn derive_provider(input: TokenStream) -> TokenStream {
 ///
 /// On the type, `#[form(section(id = "..", label = "..", help = ".."))]`,
 /// repeated in display order. On a field, `#[form(widget = "..",
-/// placeholder = "..", visible_when(field = "..", equals = <value>),
-/// nested)]`; `nested` composes the field type's own hints under
+/// placeholder = "..", unit = "..", visible_when(field = "..", equals =
+/// <value>), nested)]`, or `visible_when(field = "..", in(<value>, ..))`
+/// for several values; `nested` composes the field type's own hints under
 /// `<key>.`. Keys follow `#[map(rename)]`; which section a field is in
 /// stays `#[schema(section)]`'s.
 #[cfg(feature = "form")]

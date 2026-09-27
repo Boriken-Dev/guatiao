@@ -237,6 +237,21 @@ struct SchemaAttrs {
     order: Option<i64>,
     advanced: bool,
     sensitive: bool,
+    /// JSON Schema's shape keywords, chained onto the KIND: they say what
+    /// the type's values look like, so they go where the kind is built.
+    min_length: Option<u64>,
+    max_length: Option<u64>,
+    pattern: Option<String>,
+    format: Option<String>,
+    multiple_of: Option<f64>,
+    min_items: Option<u64>,
+    max_items: Option<u64>,
+    /// JSON Schema's meta-data annotations, on the FIELD.
+    read_only: bool,
+    deprecated: bool,
+    /// Each an expression of any type with a `ToValue`, so an example is
+    /// written in Rust like a default is.
+    examples: Vec<syn::Expr>,
     /// The expression a consumer starts from. Emitted through `ToValue`,
     /// so a default is written in Rust rather than in a value literal.
     default: Option<syn::Expr>,
@@ -310,12 +325,55 @@ impl SchemaAttrs {
                 self.sensitive = true;
             } else if meta.path.is_ident("default") {
                 self.default = Some(meta.value()?.parse()?);
+            } else if meta.path.is_ident("min_length") {
+                self.min_length = Some(meta.value()?.parse::<syn::LitInt>()?.base10_parse()?);
+            } else if meta.path.is_ident("max_length") {
+                self.max_length = Some(meta.value()?.parse::<syn::LitInt>()?.base10_parse()?);
+            } else if meta.path.is_ident("pattern") {
+                self.pattern = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("format") {
+                self.format = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("multiple_of") {
+                // Either spelling of a number: `5` and `0.25` both mean a
+                // step, and making a person write `5.0` for an integer
+                // field would be ceremony.
+                let step = match meta.value()?.parse::<syn::Lit>()? {
+                    syn::Lit::Int(i) => i.base10_parse::<f64>()?,
+                    syn::Lit::Float(f) => f.base10_parse::<f64>()?,
+                    other => {
+                        return Err(syn::Error::new_spanned(other, "a number: `5` or `0.25`"));
+                    }
+                };
+                if !(step > 0.0 && step.is_finite()) {
+                    return Err(meta.error("`multiple_of` is a step greater than zero"));
+                }
+                self.multiple_of = Some(step);
+            } else if meta.path.is_ident("min_items") {
+                self.min_items = Some(meta.value()?.parse::<syn::LitInt>()?.base10_parse()?);
+            } else if meta.path.is_ident("max_items") {
+                self.max_items = Some(meta.value()?.parse::<syn::LitInt>()?.base10_parse()?);
+            } else if meta.path.is_ident("read_only") {
+                self.read_only = true;
+            } else if meta.path.is_ident("deprecated") {
+                self.deprecated = true;
+            } else if meta.path.is_ident("examples") {
+                let content;
+                syn::parenthesized!(content in meta.input);
+                self.examples =
+                    syn::punctuated::Punctuated::<syn::Expr, syn::Token![,]>::parse_terminated(
+                        &content,
+                    )?
+                    .into_iter()
+                    .collect();
             } else {
                 return Err(meta.error(format!(
                     "unrecognised `#[schema(...)]` option. {label} knows `title`, \
-                     `description`, `section`, `order`, `advanced`, `sensitive` and \
-                     `default`; the key and whether the field is required come from \
-                     `#[map(...)]` and from the type."
+                     `description`, `section`, `order`, `advanced`, `sensitive`, \
+                     `default`, `read_only`, `deprecated` and `examples(..)` about the \
+                     field, and `min_length`, `max_length`, `pattern`, `format`, \
+                     `multiple_of`, `min_items` and `max_items` about its values; the \
+                     key and whether the field is required come from `#[map(...)]` and \
+                     from the type."
                 )));
             }
             Ok(())
@@ -499,13 +557,33 @@ fn read_field(field: &FieldPlan) -> TokenStream {
 fn field_builder(field: &FieldPlan) -> TokenStream {
     let key = &field.key;
     let ty = &field.ty;
-    let mut built = quote! {
-        ::guatiao::schema::FieldBuilder::new_in(__alloc,
-            #key,
-            <#ty as ::guatiao::Schema>::kind(__alloc),
-        )
-    };
     let a = &field.schema;
+    // The shape keywords chain onto the KIND, before it becomes a field.
+    // Inherent methods, called by path for the same reason as below.
+    let mut kind = quote! { <#ty as ::guatiao::Schema>::kind(__alloc) };
+    for (method, n) in [
+        ("min_length", a.min_length),
+        ("max_length", a.max_length),
+        ("min_items", a.min_items),
+        ("max_items", a.max_items),
+    ] {
+        if let Some(n) = n {
+            let method = syn::Ident::new(method, proc_macro2::Span::call_site());
+            kind = quote! { ::guatiao::schema::KindBuilder::#method(#kind, #n) };
+        }
+    }
+    if let Some(pattern) = &a.pattern {
+        kind = quote! { ::guatiao::schema::KindBuilder::pattern(#kind, #pattern) };
+    }
+    if let Some(format) = &a.format {
+        kind = quote! { ::guatiao::schema::KindBuilder::format(#kind, #format) };
+    }
+    if let Some(step) = a.multiple_of {
+        kind = quote! { ::guatiao::schema::KindBuilder::multiple_of(#kind, #step) };
+    }
+    let mut built = quote! {
+        ::guatiao::schema::FieldBuilder::new_in(__alloc, #key, #kind)
+    };
     // Qualified, not `.title(..)`. Some of these are trait methods, and
     // method syntax would need the trait in scope at the EXPANSION site --
     // somebody else's crate, which generated code may not assume anything
@@ -560,6 +638,39 @@ fn field_builder(field: &FieldPlan) -> TokenStream {
     if a.sensitive {
         built = quote! {
             ::guatiao::schema::FieldBuilder::sensitive(#built)
+        };
+    }
+    if a.read_only {
+        built = quote! { ::guatiao::schema::FieldBuilder::read_only(#built) };
+    }
+    if a.deprecated {
+        built = quote! { ::guatiao::schema::FieldBuilder::deprecated(#built) };
+    }
+    if !a.examples.is_empty() {
+        // Built through `ToValue` into the schema's own arena, with the
+        // first failure kept by the builder -- the same route a default
+        // takes, and the reason this is not `FieldBuilder::examples`,
+        // which takes values already built somewhere else.
+        let examples = &a.examples;
+        built = quote! {
+            ::guatiao::schema::Extras::extra(
+                #built,
+                ::guatiao::schema::vocab::EXAMPLES,
+                {
+                    use ::guatiao::ToValue as _;
+                    let mut __examples = ::guatiao::List::new_in(__alloc);
+                    let mut __ok: ::core::result::Result<(), ::guatiao::ValueError> =
+                        ::core::result::Result::Ok(());
+                    #(
+                        if __ok.is_ok() {
+                            __ok = (#examples)
+                                .to_value(__alloc)
+                                .and_then(|__v| __examples.push(__v));
+                        }
+                    )*
+                    __ok.map(|()| ::guatiao::Value::from(__examples))
+                },
+            )
         };
     }
     // Not an `Option<T>` means the value has to be there. The declaration
@@ -1524,6 +1635,49 @@ mod tests {
 
     fn schema(input: TokenStream) -> String {
         rendered(Derive::Schema, input)
+    }
+
+    /// The shape keywords chain onto the KIND, the annotations onto the
+    /// FIELD, and each is a call by path into `guatiao`'s own builders.
+    #[test]
+    fn shape_keywords_and_annotations_reach_the_builders() {
+        let out = schema(quote! {
+            struct S {
+                #[schema(min_length = 2, max_length = 8, pattern = "^[a-z]+$", format = "email")]
+                user: String,
+                #[schema(multiple_of = 5, read_only)]
+                port: i64,
+                #[schema(multiple_of = 0.25, deprecated)]
+                ratio: f64,
+                #[schema(min_items = 1, max_items = 3, examples("a", "b"))]
+                tags: Vec<String>,
+            }
+        });
+        for expected in [
+            "KindBuilder :: min_length",
+            "KindBuilder :: max_length",
+            "KindBuilder :: pattern",
+            "KindBuilder :: format",
+            "KindBuilder :: multiple_of",
+            "KindBuilder :: min_items",
+            "KindBuilder :: max_items",
+            "FieldBuilder :: read_only",
+            "FieldBuilder :: deprecated",
+            "vocab :: EXAMPLES",
+        ] {
+            assert!(out.contains(expected), "missing {expected}: {out}");
+        }
+        assert!(!out.contains("compile_error"), "{out}");
+    }
+
+    #[test]
+    fn a_step_that_divides_nothing_is_refused() {
+        for bad in [quote! { 0 }, quote! { 0.0 }, quote! { -5 }] {
+            let out = schema(quote! { struct S { #[schema(multiple_of = #bad)] n: i64 } });
+            assert!(out.contains("compile_error"), "{bad}: {out}");
+        }
+        let out = schema(quote! { struct S { #[schema(multiple_of = "5")] n: i64 } });
+        assert!(out.contains("a number"), "{out}");
     }
 
     /// A unit enum is a choice: its value is the variant's name, and no

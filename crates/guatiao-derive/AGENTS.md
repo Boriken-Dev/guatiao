@@ -46,11 +46,24 @@ two parse it and ignore it.
 | `section = "..."` | which section the field belongs to | `x-section` (a) |
 | `order = <int>` | sort position | `x-order` (a) |
 | `advanced` | hide behind an "advanced" toggle | `x-advanced` (a) |
-| `sensitive` | never render, never log, never quote in an error | `x-sensitive` |
+| `sensitive` | never render, never log, never quote in an error | `x-sensitive` and `writeOnly` |
 | `default = <expr>` | the declared default | `default` |
+| `read_only` | shown, never edited | `readOnly` |
+| `deprecated` | kept for old documents, not offered for new ones | `deprecated` |
+| `examples(<expr>, ..)` | sample values, each through `ToValue` | `examples` |
+| `min_length = N`, `max_length = N` | text length, in code points | `minLength`, `maxLength` (b) |
+| `pattern = "..."` | a regex the text matches, unanchored | `pattern` (b) |
+| `format = "..."` | what the text holds (`email`, `uri`, ..) | `format` (b) |
+| `multiple_of = 5` / `0.25` | the step a number moves by; refused at compile time if not > 0 | `multipleOf` (b) |
+| `min_items = N`, `max_items = N` | how many elements a list holds | `minItems`, `maxItems` (b) |
 
 The right-hand column is what lands in the document, because **a schema IS
 a JSON Schema** -- and each key is named after what it writes.
+
+**(b) chains onto the KIND**, before it becomes a field: `<T as
+Schema>::kind(alloc).min_length(2)`. A keyword for another type is carried
+and ignored, as JSON Schema says -- the derive cannot see the kind a type
+will describe, so `min_length` on an integer compiles.
 
 **(a) is `guatiao-intake`'s vocabulary**, not `guatiao`'s: it names
 `x-section`, `x-order` and `x-advanced`, because how to group and order
