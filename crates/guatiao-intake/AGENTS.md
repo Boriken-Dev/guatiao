@@ -9,7 +9,7 @@ nothing else; the `derive` feature adds `#[derive(Form)]`.
 ```text
 form     := { "sections": [section, …], "fields": { <path>: hints, … } }
 section  := { "id": text, "title": text, "description": text }
-hints    := { "widget": text, "placeholder": text,
+hints    := { "widget": text, "placeholder": text, "unit": text,
               "visibleWhen": { "field": <path>, "equals": <value> }
                            | { "field": <path>, "in": [<value>, …] },
               "form": form }        // a field that HAS members
@@ -164,7 +164,7 @@ Section::new(id) / Section::new_in(Alloc, id) -> Section
   .help(&str)    // written as `description`
   .option(key, impl Into<Value>)
 Hints::new() / Hints::new_in(Alloc) -> Hints
-  .widget(&str) / .placeholder(&str)
+  .widget(&str) / .placeholder(&str) / .unit(&str)
   .visible_when(path: &str, equals: impl Into<Value>)
   .visible_when_in(path: &str, values: impl IntoIterator<Item: Into<Value>>)
   .form(Form)                        // a field that has members; paths RELATIVE
@@ -189,7 +189,7 @@ FormRef::new(&Value) -> Option<FormRef>
   .extra(key) -> Option<&Value>  /  .as_value() -> &Value
 SectionRef: .id() .label() .help() -> &str     // "" when absent
             .extra(key) -> Option<&Value>  .as_value() -> &Value
-HintsRef:   .is_empty() -> bool  .widget() .placeholder() -> &str
+HintsRef:   .is_empty() -> bool  .widget() .placeholder() .unit() -> &str
             .visible_when() -> Option<Condition>
             .form() -> Option<FormRef>     // what a renderer nests by
             .extra(key) -> Option<&Value>
@@ -231,7 +231,7 @@ FormError = Malformed { at, expected } | UnknownField { at, path }
 // the keys a form is written with: `pub mod vocab`
 vocab::{SECTIONS, FIELDS}                         // the form
 vocab::{ID, TITLE, DESCRIPTION, DEFAULT_SECTION}  // a section; DEFAULT_SECTION is ""
-vocab::{WIDGET, PLACEHOLDER, VISIBLE_WHEN}        // a field's hints
+vocab::{WIDGET, PLACEHOLDER, UNIT, VISIBLE_WHEN}        // a field's hints
 vocab::{FIELD, EQUALS, IN}                        // a condition
 vocab::widget::{TEXT, TEXTAREA, PASSWORD, NUMBER, SLIDER,
                 CHECKBOX, TOGGLE, SELECT, RADIO}  // suggestions, an open set
@@ -266,7 +266,8 @@ distinct.
   `fields["port"].widget`), a condition holding both `equals` and `in`,
   neither, or an empty `in`, a condition naming any value the referenced
   field would never hold -- **every** value of an `in`, not just one --
-  and a field whose conditions lead back to itself. A
+  a `unit` on anything but an integer or a real number, and a field whose
+  conditions lead back to itself. A
   section a field names but the form does not declare is **not** an error.
   **No error quotes a value**: a condition's `equals` is something a field
   could hold, and a field can be a secret.

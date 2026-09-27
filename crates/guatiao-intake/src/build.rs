@@ -269,6 +269,18 @@ impl Hints {
         self
     }
 
+    /// What the number is counted in, shown beside it: `ms`, `MB`, `%`.
+    /// Presentation only -- nothing is converted. For an integer or a
+    /// real number; `check` refuses it on any other kind.
+    pub fn unit(mut self, unit: &str) -> Hints {
+        put(
+            &mut self.state,
+            vocab::UNIT,
+            Text::new_in(self.alloc, unit).map(Value::from),
+        );
+        self
+    }
+
     /// Shows the field only while the field at `path` holds `equals`.
     ///
     /// For a variant named by its own key, `equals` is the name of an arm.

@@ -83,6 +83,13 @@ pub const WIDGET: &str = "widget";
 /// Text shown in an empty control. **Not a default**: it is never stored,
 /// and a field with a real default says so in the schema.
 pub const PLACEHOLDER: &str = "placeholder";
+/// What a number is counted in, shown beside it: `ms`, `MB`, `%`.
+///
+/// Presentation, not meaning: the schema's number is the same number
+/// whatever unit a form shows beside it, so this is a form's word and
+/// never converts anything. `check` accepts it on an integer or a real
+/// number and refuses it anywhere else.
+pub const UNIT: &str = "unit";
 /// The one condition under which a field is shown.
 ///
 /// For what a variant cannot say. "These fields exist only for this arm"
@@ -187,7 +194,7 @@ pub(crate) const FORM_KEYS: &[&str] = &[SECTIONS, FIELDS];
 /// The keys it gives a meaning inside a section.
 pub(crate) const SECTION_KEYS: &[&str] = &[ID, TITLE, DESCRIPTION];
 /// The keys it gives a meaning inside a field's hints.
-pub(crate) const HINT_KEYS: &[&str] = &[WIDGET, PLACEHOLDER, VISIBLE_WHEN, FORM];
+pub(crate) const HINT_KEYS: &[&str] = &[WIDGET, PLACEHOLDER, UNIT, VISIBLE_WHEN, FORM];
 
 #[cfg(test)]
 mod tests {

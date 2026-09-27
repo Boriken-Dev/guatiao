@@ -33,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   listed value to the rule `equals` has -- one the referenced field could
   hold -- and refuses both spellings, neither, or an empty list.
   `guatiao_intake_is_visible` answers it with no new symbol.
+- **A unit beside a number**: `Hints::unit("ms")` and `HintsRef::unit()`.
+  Presentation only -- nothing is converted -- and `check` refuses it on
+  anything but an integer or a real number.
 - **`guatiao_intake::path::is_bare_name` and `needs_quoting`**: the
   grammar answers whether a name can be a field segment as written, and
   whether a map key must be quoted. For a consumer whose own keys are

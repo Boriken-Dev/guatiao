@@ -169,6 +169,11 @@ impl<'a> HintsRef<'a> {
         self.0.map_or("", |h| text(h, vocab::PLACEHOLDER))
     }
 
+    /// What the number is counted in, shown beside it; `""` when unset.
+    pub fn unit(&self) -> &'a str {
+        self.0.map_or("", |h| text(h, vocab::UNIT))
+    }
+
     /// The condition under which the field is shown, if it has one.
     ///
     /// `None` for a condition with no text `field`, with neither `equals`

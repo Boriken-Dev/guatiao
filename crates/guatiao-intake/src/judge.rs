@@ -290,6 +290,18 @@ fn check_at(schema: SchemaRef<'_>, form: FormRef<'_>, depth: u32) -> Result<(), 
             }
             text_if_present(hints, vocab::WIDGET, &at)?;
             text_if_present(hints, vocab::PLACEHOLDER, &at)?;
+            text_if_present(hints, vocab::UNIT, &at)?;
+            // A unit says what a NUMBER is counted in; on text or a list
+            // it would be shown beside something it cannot describe.
+            if TryAsRef::<Map>::try_as_ref(hints).is_some_and(|m| m.contains_key(vocab::UNIT))
+                && !flat::resolve(schema, path)
+                    .is_some_and(|f| matches!(f.kind(), Kind::Int { .. } | Kind::Float { .. }))
+            {
+                return Err(malformed(
+                    format!("{at}.{}", vocab::UNIT),
+                    "a unit on a number field -- an integer or a real number",
+                ));
+            }
             if let Some(condition) =
                 TryAsRef::<Map>::try_as_ref(hints).and_then(|m| m.get(vocab::VISIBLE_WHEN))
             {

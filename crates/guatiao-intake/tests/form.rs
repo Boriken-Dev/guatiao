@@ -545,6 +545,61 @@ fn a_variant_is_compared_by_its_discriminant() {
     assert!(!shown(s, f, "host", &other));
 }
 
+// --- a unit beside a number -------------------------------------------------
+
+#[test]
+fn a_unit_reads_back_on_an_integer_and_a_real_number() {
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new("timeout", KindBuilder::int()))
+        .field(FieldBuilder::new("ratio", KindBuilder::float()))
+        .finish()
+        .unwrap();
+    let form = Form::new()
+        .field("timeout", Hints::new().unit("ms"))
+        .field("ratio", Hints::new().unit("%"))
+        .finish()
+        .unwrap();
+    let (s, f) = views(&schema, &form);
+    check(s, f).expect("both are numbers");
+    assert_eq!(f.hints("timeout").unit(), "ms");
+    assert_eq!(f.hints("ratio").unit(), "%");
+    assert_eq!(f.hints("nothing").unit(), "", "unset reads as empty");
+    assert!(
+        f.hints("timeout").extra(vocab::UNIT).is_none(),
+        "a hint read by name, not an annotation"
+    );
+}
+
+/// A unit describes what a NUMBER is counted in; beside text, a flag or a
+/// list it would describe nothing that is there.
+#[test]
+fn a_unit_anywhere_but_a_number_is_refused_where_it_is() {
+    let schema = schema();
+    for field in ["host", "verify", "auth"] {
+        let form = Form::new()
+            .field(field, Hints::new().unit("ms"))
+            .finish()
+            .unwrap();
+        let (s, f) = views(&schema, &form);
+        let error = check(s, f).expect_err(field);
+        assert!(
+            matches!(&error, FormError::Malformed { at, .. }
+                if at == &format!("fields[\"{field}\"].unit")),
+            "{field}: {error:?}"
+        );
+    }
+
+    let form = Form::new()
+        .field("port", Hints::new().option(vocab::UNIT, 5i64))
+        .finish()
+        .unwrap();
+    let (s, f) = views(&schema, &form);
+    assert!(
+        matches!(check(s, f), Err(FormError::Malformed { at, .. }) if at.ends_with(".unit")),
+        "a unit is text"
+    );
+}
+
 // --- a condition with several values --------------------------------------
 
 /// "Show `ca` when `port` is 22 or 443": one condition, two values.
