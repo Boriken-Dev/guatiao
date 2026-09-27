@@ -26,7 +26,7 @@
 use guatiao::value::alloc::Alloc;
 use guatiao::value::convert::{TryAsMut, TryAsRef};
 use guatiao::value::error::ValueError;
-use guatiao::value::types::{Map, Text, Value};
+use guatiao::value::types::{List, Map, Text, Value};
 
 use crate::vocab;
 
@@ -278,6 +278,30 @@ impl Hints {
         let built = Text::new_in(alloc, path)
             .and_then(|p| condition.set(vocab::FIELD, p))
             .and_then(|()| condition.set(vocab::EQUALS, equals.into()))
+            .map(|()| Value::from(condition));
+        put(&mut self.state, vocab::VISIBLE_WHEN, built);
+        self
+    }
+
+    /// Shows the field only while the field at `path` holds any one of
+    /// `values`.
+    ///
+    /// For a variant named by its own key, each value is the name of an
+    /// arm. An empty list could never be met, and `check` refuses it.
+    pub fn visible_when_in<I, V>(mut self, path: &str, values: I) -> Hints
+    where
+        I: IntoIterator<Item = V>,
+        V: Into<Value>,
+    {
+        let alloc = self.alloc;
+        let mut list = List::new_in(alloc);
+        let mut condition = Map::new_in(alloc);
+        let built = values
+            .into_iter()
+            .try_for_each(|v| list.push(v.into()))
+            .and_then(|()| Text::new_in(alloc, path))
+            .and_then(|p| condition.set(vocab::FIELD, p))
+            .and_then(|()| condition.set(vocab::IN, list))
             .map(|()| Value::from(condition));
         put(&mut self.state, vocab::VISIBLE_WHEN, built);
         self

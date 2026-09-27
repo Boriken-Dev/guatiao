@@ -97,6 +97,34 @@ fn a_key_the_schema_does_not_declare_is_not_found() {
     assert!(shown, "`verify` holds true, so `ca` shows");
 }
 
+/// A condition written with `in` answers through the same C call, with no
+/// new symbol: a renderer in C, Python or Dart asks the judge, so a richer
+/// condition costs it nothing.
+#[test]
+fn a_condition_with_several_values_crosses_unchanged() {
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new("mode", KindBuilder::string()))
+        .field(FieldBuilder::new("ca", KindBuilder::string()))
+        .finish()
+        .expect("it builds");
+    let form = Form::new()
+        .field("ca", Hints::new().visible_when_in("mode", ["tls", "mtls"]))
+        .finish()
+        .expect("it builds");
+    for (mode, expected) in [("tls", true), ("mtls", true), ("plain", false)] {
+        let mut values = Map::new();
+        values.set("mode", mode).unwrap();
+        let values: Value = values.into();
+        let mut shown = !expected;
+        // SAFETY: every pointer addresses a live value, and `shown` is one
+        // writable bool.
+        let status =
+            unsafe { guatiao_intake_is_visible(&schema, &form, key("ca"), &values, &mut shown) };
+        assert_eq!(status, Status::GUATIAO_OK);
+        assert_eq!(shown, expected, "mode {mode}");
+    }
+}
+
 /// **One null-check shape at this boundary.** Every pointer a call needs
 /// is checked before anything else happens, so the status never depends
 /// on how far a body got.

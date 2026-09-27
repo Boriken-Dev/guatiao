@@ -124,7 +124,9 @@ fn a_built_form_reads_back() {
     assert_eq!(ca.placeholder(), "/etc/ssl/ca.pem");
     let condition = ca.visible_when().expect("ca has a condition");
     assert_eq!(condition.field(), "verify");
-    assert_eq!(condition.equals().try_into().ok(), Some(true));
+    let equals = condition.equals().expect("written with `equals`");
+    assert_eq!(equals.try_into().ok(), Some(true));
+    assert_eq!(condition.values().len(), 1, "one value, in either reading");
 
     assert!(
         f.hints("host").is_empty(),
@@ -361,7 +363,7 @@ fn every_shape_mistake_names_where_it_is() {
                     .unwrap()
             },
             "fields[\"ca\"].visibleWhen.equals",
-            "a value to compare with",
+            "a value to compare with, or a list under `in`",
         ),
     ];
     for (form, at, expected) in cases {
@@ -541,6 +543,147 @@ fn a_variant_is_compared_by_its_discriminant() {
     let other = values(vec![("auth", ambient.into())]);
     assert!(!shown(s, f, "ca", &other));
     assert!(!shown(s, f, "host", &other));
+}
+
+// --- a condition with several values --------------------------------------
+
+/// "Show `ca` when `port` is 22 or 443": one condition, two values.
+#[test]
+fn a_condition_in_shows_the_field_for_any_listed_value() {
+    let schema = schema();
+    let form = Form::new()
+        .field("ca", Hints::new().visible_when_in("port", [22i64, 443]))
+        .finish()
+        .unwrap();
+    let (s, f) = views(&schema, &form);
+    check(s, f).expect("both are ports");
+
+    let condition = f.hints("ca").visible_when().expect("ca has a condition");
+    assert!(
+        condition.equals().is_none(),
+        "written with `in`, not `equals`"
+    );
+    assert_eq!(condition.values().len(), 2);
+
+    for port in [22i64, 443] {
+        assert!(
+            shown(s, f, "ca", &values(vec![("port", Value::from(port))])),
+            "{port}"
+        );
+    }
+    assert!(!shown(
+        s,
+        f,
+        "ca",
+        &values(vec![("port", Value::from(80i64))])
+    ));
+    assert!(!shown(s, f, "ca", &values(vec![])), "no port, no default");
+}
+
+/// Each listed value names an arm, compared with the discriminant.
+#[test]
+fn a_variant_is_compared_by_its_discriminant_for_each_listed_arm() {
+    let schema = schema();
+    let form = Form::new()
+        .field(
+            "ca",
+            Hints::new().visible_when_in("auth", ["ambient", "userpass"]),
+        )
+        .field("host", Hints::new().visible_when_in("auth", ["userpass"]))
+        .finish()
+        .unwrap();
+    let (s, f) = views(&schema, &form);
+    check(s, f).expect("both are arms");
+
+    let mut ambient = Map::new();
+    ambient.set("auth", "ambient").unwrap();
+    let picked = values(vec![("auth", ambient.into())]);
+    assert!(shown(s, f, "ca", &picked));
+    assert!(
+        !shown(s, f, "host", &picked),
+        "a one-value `in` is `equals`"
+    );
+}
+
+/// Every value is held to the rule `equals` is: one the field could hold.
+/// One impossible value in the list is still refused, and the refusal
+/// says where -- under `in` -- without quoting it.
+#[test]
+fn every_value_in_the_list_must_be_one_the_field_could_hold() {
+    let schema = schema();
+    for (field, list) in [
+        (
+            "auth",
+            vec![
+                Value::from(Text::new("userpass")),
+                Value::from(Text::new("kerberos")),
+            ],
+        ),
+        ("port", vec![Value::from(443i64), Value::from(70000i64)]),
+    ] {
+        let form = Form::new()
+            .field("ca", Hints::new().visible_when_in(field, list))
+            .finish()
+            .unwrap();
+        let (s, f) = views(&schema, &form);
+        let error = check(s, f).expect_err("one value can never be held");
+        assert!(
+            matches!(&error, FormError::ConditionRefused { at, field: got, .. }
+                if got == field && at.ends_with(".in")),
+            "{error:?}"
+        );
+        let message = error.to_string();
+        assert!(
+            !message.contains("kerberos") && !message.contains("70000"),
+            "{message}"
+        );
+    }
+}
+
+/// The condition's own shape: `equals` or a non-empty list under `in`,
+/// exactly one of them.
+#[test]
+fn a_condition_names_its_values_exactly_once() {
+    let schema = schema();
+    let shaped = |condition: Map| {
+        Form::new()
+            .field("ca", Hints::new().option(vocab::VISIBLE_WHEN, condition))
+            .finish()
+            .unwrap()
+    };
+    let base = || {
+        let mut m = Map::new();
+        m.set(vocab::FIELD, "verify").unwrap();
+        m
+    };
+
+    let mut both = base();
+    both.set(vocab::EQUALS, true).unwrap();
+    both.set(vocab::IN, guatiao::List::new()).unwrap();
+    let mut empty = base();
+    empty.set(vocab::IN, guatiao::List::new()).unwrap();
+    let mut not_a_list = base();
+    not_a_list.set(vocab::IN, true).unwrap();
+    let neither = base();
+
+    for (why, condition, place) in [
+        ("both spellings", both, "visibleWhen"),
+        ("an empty list", empty, "visibleWhen.in"),
+        ("`in` that is not a list", not_a_list, "visibleWhen.in"),
+        ("neither spelling", neither, "visibleWhen.equals"),
+    ] {
+        let form = shaped(condition);
+        let (s, f) = views(&schema, &form);
+        let error = check(s, f).expect_err(why);
+        assert!(
+            matches!(&error, FormError::Malformed { at, .. } if at.ends_with(place)),
+            "{why}: {error:?}"
+        );
+        assert!(
+            f.hints("ca").visible_when().is_none(),
+            "{why}: the reader skips what `check` refuses"
+        );
+    }
 }
 
 /// A condition on a hidden field is not met, so hiding a field hides

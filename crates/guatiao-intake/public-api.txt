@@ -175,6 +175,7 @@ pub fn guatiao_intake::Hints::new_in(guatiao::value::alloc::Alloc) -> guatiao_in
 pub fn guatiao_intake::Hints::option(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao_intake::Hints
 pub fn guatiao_intake::Hints::placeholder(self, &str) -> guatiao_intake::Hints
 pub fn guatiao_intake::Hints::visible_when(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao_intake::Hints
+pub fn guatiao_intake::Hints::visible_when_in<I, V>(self, &str, I) -> guatiao_intake::Hints where I: core::iter::traits::collect::IntoIterator<Item = V>, V: core::convert::Into<guatiao::value::value::Value>
 pub fn guatiao_intake::Hints::widget(self, &str) -> guatiao_intake::Hints
 impl core::default::Default for guatiao_intake::Hints
 pub fn guatiao_intake::Hints::default() -> guatiao_intake::Hints
@@ -263,6 +264,7 @@ pub const guatiao_intake::vocab::FIELD: &str
 pub const guatiao_intake::vocab::FIELDS: &str
 pub const guatiao_intake::vocab::FORM: &str
 pub const guatiao_intake::vocab::ID: &str
+pub const guatiao_intake::vocab::IN: &str
 pub const guatiao_intake::vocab::PLACEHOLDER: &str
 pub const guatiao_intake::vocab::SECTIONS: &str
 pub const guatiao_intake::vocab::TITLE: &str
@@ -299,8 +301,9 @@ pub fn guatiao_intake::FormError::fmt(&self, &mut core::fmt::Formatter<'_>) -> c
 impl core::marker::StructuralPartialEq for guatiao_intake::FormError
 pub struct guatiao_intake::Condition<'a>
 impl<'a> guatiao_intake::Condition<'a>
-pub fn guatiao_intake::Condition<'a>::equals(&self) -> &'a guatiao::value::value::Value
+pub fn guatiao_intake::Condition<'a>::equals(&self) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao_intake::Condition<'a>::field(&self) -> &'a str
+pub fn guatiao_intake::Condition<'a>::values(&self) -> &'a [guatiao::value::value::Value]
 impl<'a> core::clone::Clone for guatiao_intake::Condition<'a>
 pub fn guatiao_intake::Condition<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao_intake::Condition<'a>
@@ -349,6 +352,7 @@ pub fn guatiao_intake::Hints::new_in(guatiao::value::alloc::Alloc) -> guatiao_in
 pub fn guatiao_intake::Hints::option(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao_intake::Hints
 pub fn guatiao_intake::Hints::placeholder(self, &str) -> guatiao_intake::Hints
 pub fn guatiao_intake::Hints::visible_when(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao_intake::Hints
+pub fn guatiao_intake::Hints::visible_when_in<I, V>(self, &str, I) -> guatiao_intake::Hints where I: core::iter::traits::collect::IntoIterator<Item = V>, V: core::convert::Into<guatiao::value::value::Value>
 pub fn guatiao_intake::Hints::widget(self, &str) -> guatiao_intake::Hints
 impl core::default::Default for guatiao_intake::Hints
 pub fn guatiao_intake::Hints::default() -> guatiao_intake::Hints

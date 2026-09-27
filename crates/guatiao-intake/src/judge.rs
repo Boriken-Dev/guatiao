@@ -313,21 +313,35 @@ fn check_at(schema: SchemaRef<'_>, form: FormRef<'_>, depth: u32) -> Result<(), 
 }
 
 fn check_condition(schema: SchemaRef<'_>, condition: &Value, at: String) -> Result<(), FormError> {
-    if !is_map(condition) {
-        return Err(malformed(at, "a map holding `field` and `equals`"));
-    }
-    let Some(field) = TryAsRef::<Map>::try_as_ref(condition)
-        .and_then(|m| m.get(vocab::FIELD))
-        .and_then(TryAsRef::<str>::try_as_ref)
-    else {
+    let Some(m) = TryAsRef::<Map>::try_as_ref(condition) else {
+        return Err(malformed(at, "a map holding `field` and `equals` or `in`"));
+    };
+    let Some(field) = m.get(vocab::FIELD).and_then(TryAsRef::<str>::try_as_ref) else {
         return Err(malformed(format!("{at}.{}", vocab::FIELD), "text"));
     };
-    let Some(equals) = TryAsRef::<Map>::try_as_ref(condition).and_then(|m| m.get(vocab::EQUALS))
-    else {
-        return Err(malformed(
-            format!("{at}.{}", vocab::EQUALS),
-            "a value to compare with",
-        ));
+    // EXACTLY ONE spelling. Both would be two answers to "when is this
+    // shown", and a renderer would have to pick one.
+    let (values, here) = match (m.get(vocab::EQUALS), m.get(vocab::IN)) {
+        (Some(equals), None) => (std::slice::from_ref(equals), vocab::EQUALS),
+        (None, Some(any)) => match TryAsRef::<List>::try_as_ref(any) {
+            Some(list) if !list.is_empty() => (&list[..], vocab::IN),
+            Some(_) => {
+                return Err(malformed(
+                    format!("{at}.{}", vocab::IN),
+                    "at least one value -- an empty list is a condition nothing meets",
+                ));
+            }
+            None => return Err(malformed(format!("{at}.{}", vocab::IN), "a list")),
+        },
+        (None, None) => {
+            return Err(malformed(
+                format!("{at}.{}", vocab::EQUALS),
+                "a value to compare with, or a list under `in`",
+            ));
+        }
+        (Some(_), Some(_)) => {
+            return Err(malformed(at, "`equals` or `in`, not both"));
+        }
     };
     let Some(referenced) = flat::resolve(schema, field) else {
         return Err(FormError::UnknownField {
@@ -336,27 +350,33 @@ fn check_condition(schema: SchemaRef<'_>, condition: &Value, at: String) -> Resu
         });
     };
 
-    // A variant named by its own key is compared with its DISCRIMINANT,
-    // so what must be acceptable is the text form, which for a variant is
-    // exactly the name of an arm.
-    let accepted = match (referenced.kind(), flat::split(field)) {
-        (Kind::Variant { .. }, None) => match TryAsRef::<str>::try_as_ref(equals) {
-            Some(arm) => validate_text(referenced, arm),
-            None => {
-                return Err(FormError::ConditionRefused {
-                    at,
-                    field: field.to_string(),
-                    expected: "the name of one of its arms".to_string(),
-                });
-            }
-        },
-        _ => validate_value(referenced, equals),
-    };
-    accepted.map_err(|e| FormError::ConditionRefused {
-        at,
-        field: field.to_string(),
-        expected: expected_of(e),
-    })
+    // Every value is held to the same rule: something the field could
+    // hold. One impossible value in an `in` list is still a mistake -- it
+    // reads as a case the form handles when it handles nothing.
+    for value in values {
+        // A variant named by its own key is compared with its
+        // DISCRIMINANT, so what must be acceptable is the text form, which
+        // for a variant is exactly the name of an arm.
+        let accepted = match (referenced.kind(), flat::split(field)) {
+            (Kind::Variant { .. }, None) => match TryAsRef::<str>::try_as_ref(value) {
+                Some(arm) => validate_text(referenced, arm),
+                None => {
+                    return Err(FormError::ConditionRefused {
+                        at: format!("{at}.{here}"),
+                        field: field.to_string(),
+                        expected: "the name of one of its arms".to_string(),
+                    });
+                }
+            },
+            _ => validate_value(referenced, value),
+        };
+        accepted.map_err(|e| FormError::ConditionRefused {
+            at: format!("{at}.{here}"),
+            field: field.to_string(),
+            expected: expected_of(e),
+        })?;
+    }
+    Ok(())
 }
 
 /// What a validation error says would have been accepted.
@@ -517,7 +537,7 @@ fn visible(
     walked.push(path.to_string());
     Ok(visible(schema, form, condition.field(), values, walked)?
         && current(schema, values, condition.field())
-            .is_some_and(|held| held == condition.equals()))
+            .is_some_and(|held| condition.values().iter().any(|v| held == v)))
 }
 
 /// What the field at `path` holds now: its value, else its default, and

@@ -34,7 +34,11 @@ pub struct HintsRef<'a>(Option<&'a Value>);
 #[derive(Clone, Copy, Debug)]
 pub struct Condition<'a> {
     field: &'a str,
-    equals: &'a Value,
+    /// Every value that meets it: one when written with `equals`, any
+    /// number when written with `in`.
+    values: &'a [Value],
+    /// Written with `equals`, so [`Condition::equals`] has an answer.
+    single: bool,
 }
 
 fn is_map(v: &Value) -> bool {
@@ -167,16 +171,28 @@ impl<'a> HintsRef<'a> {
 
     /// The condition under which the field is shown, if it has one.
     ///
-    /// `None` for a condition with no text `field` or no `equals` as well
-    /// as for no condition at all; `check` tells those apart.
+    /// `None` for a condition with no text `field`, with neither `equals`
+    /// nor a list under `in`, or with both, as well as for no condition at
+    /// all; `check` tells those apart.
     pub fn visible_when(&self) -> Option<Condition<'a>> {
         let condition =
             TryAsRef::<Map>::try_as_ref(self.0?).and_then(|m| m.get(vocab::VISIBLE_WHEN))?;
+        let m = TryAsRef::<Map>::try_as_ref(condition)?;
+        let field = m.get(vocab::FIELD).and_then(TryAsRef::<str>::try_as_ref)?;
+        let (values, single) = match (m.get(vocab::EQUALS), m.get(vocab::IN)) {
+            (Some(equals), None) => (std::slice::from_ref(equals), true),
+            // An empty list is malformed like the rest, and skipped like
+            // the rest: read as "no condition", never as "never shown".
+            (None, Some(any)) => match TryAsRef::<List>::try_as_ref(any) {
+                Some(list) if !list.is_empty() => (&list[..], false),
+                _ => return None,
+            },
+            _ => return None,
+        };
         Some(Condition {
-            field: TryAsRef::<Map>::try_as_ref(condition)
-                .and_then(|m| m.get(vocab::FIELD))
-                .and_then(TryAsRef::<str>::try_as_ref)?,
-            equals: TryAsRef::<Map>::try_as_ref(condition).and_then(|m| m.get(vocab::EQUALS))?,
+            field,
+            values,
+            single,
         })
     }
 
@@ -210,8 +226,15 @@ impl<'a> Condition<'a> {
         self.field
     }
 
-    /// The value that field must hold.
-    pub fn equals(&self) -> &'a Value {
-        self.equals
+    /// The value that field must hold, when the condition was written
+    /// with `equals`; `None` for one written with `in`.
+    pub fn equals(&self) -> Option<&'a Value> {
+        self.single.then(|| &self.values[0])
+    }
+
+    /// Every value that meets the condition, in either spelling: the one
+    /// `equals` names, or each of `in`'s. The question a renderer asks.
+    pub fn values(&self) -> &'a [Value] {
+        self.values
     }
 }

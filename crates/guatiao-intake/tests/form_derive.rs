@@ -89,7 +89,9 @@ fn a_derived_form_fits_its_derived_schema() {
     assert_eq!(f.hints("ca-file").placeholder(), "/etc/ssl/ca.pem");
     let when = f.hints("ca-file").visible_when().expect("guarded");
     assert_eq!(when.field(), "verify");
-    assert_eq!(when.equals().try_into().ok(), Some(true));
+    let equals = when.equals().expect("written with `equals`");
+    assert_eq!(equals.try_into().ok(), Some(true));
+    assert_eq!(when.values().len(), 1, "one value, in either reading");
     assert_eq!(f.hints("auth.password").widget(), "password");
     assert!(f.hints("auth.username").is_empty(), "nothing was said");
     assert!(f.hints("host").is_empty());

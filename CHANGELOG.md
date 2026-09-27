@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `FieldBuilder::sensitive` also writes `writeOnly: true`, so a tool that
   knows no `x-` key still treats the field as a secret; `x-sensitive`
   stays the one read back.
+- **A condition may name several values**: `visibleWhen` takes
+  `{"field": .., "in": [..]}` beside `{"field": .., "equals": ..}`,
+  exactly one of the two. `Hints::visible_when_in(path, values)` writes
+  it and `Condition::values()` reads either spelling. `check` holds every
+  listed value to the rule `equals` has -- one the referenced field could
+  hold -- and refuses both spellings, neither, or an empty list.
+  `guatiao_intake_is_visible` answers it with no new symbol.
 - **`guatiao_intake::path::is_bare_name` and `needs_quoting`**: the
   grammar answers whether a name can be a field segment as written, and
   whether a map key must be quoted. For a consumer whose own keys are
@@ -397,6 +404,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Kind::List { items, min, max }`. `Kind::Int` and `Kind::Float` gain
   `multiple_of`. A match on `Kind::Str` becomes `Kind::Str { .. }`, and on
   `Kind::List(items)` becomes `Kind::List { items, .. }`.
+- **`Condition::equals` answers `Option<&Value>`**: `None` for a
+  condition written with `in`. `Condition::values()` is the question a
+  renderer asks in both cases.
 
 - **Breaking: the path language and the flat projection left `guatiao`.**
   A schema describes the struct exactly as it is; naming a place inside a

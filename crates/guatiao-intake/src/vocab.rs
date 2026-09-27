@@ -126,6 +126,13 @@ pub const FIELD: &str = "field";
 /// it is compared with the **discriminant** — the arm a person picked —
 /// because that is the one thing about a variant a single value can say.
 pub const EQUALS: &str = "equals";
+/// The values, any one of which meets the condition: a list.
+///
+/// A condition holds **exactly one** of [`EQUALS`] and this. "Show `ca`
+/// when `mode` is `tls` or `mtls`" is one condition with two values, and
+/// every value is held to the rule `equals` is: something the field it
+/// reads could hold.
+pub const IN: &str = "in";
 
 /// A form of this field's own, for a field whose kind is an object.
 ///

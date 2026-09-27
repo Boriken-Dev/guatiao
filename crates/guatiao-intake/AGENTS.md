@@ -10,7 +10,8 @@ nothing else; the `derive` feature adds `#[derive(Form)]`.
 form     := { "sections": [section, …], "fields": { <path>: hints, … } }
 section  := { "id": text, "title": text, "description": text }
 hints    := { "widget": text, "placeholder": text,
-              "visibleWhen": { "field": <path>, "equals": <value> },
+              "visibleWhen": { "field": <path>, "equals": <value> }
+                           | { "field": <path>, "in": [<value>, …] },
               "form": form }        // a field that HAS members
 ```
 
@@ -165,6 +166,7 @@ Section::new(id) / Section::new_in(Alloc, id) -> Section
 Hints::new() / Hints::new_in(Alloc) -> Hints
   .widget(&str) / .placeholder(&str)
   .visible_when(path: &str, equals: impl Into<Value>)
+  .visible_when_in(path: &str, values: impl IntoIterator<Item: Into<Value>>)
   .form(Form)                        // a field that has members; paths RELATIVE
   .form_value(Result<Value, ValueError>)   // the same, for generated code
   .option(key, impl Into<Value>)
@@ -192,7 +194,9 @@ HintsRef:   .is_empty() -> bool  .widget() .placeholder() -> &str
             .form() -> Option<FormRef>     // what a renderer nests by
             .extra(key) -> Option<&Value>
             .as_value() -> Option<&Value>      // None when the form says nothing
-Condition:  .field() -> &str  .equals() -> &Value
+Condition:  .field() -> &str
+            .values() -> &[Value]          // every value that meets it: the question to ask
+            .equals() -> Option<&Value>    // only when written with `equals`
 
 // a type's default screen (`derive` feature); the trait is `Screen`
 // because `Form` is the builder
@@ -228,7 +232,7 @@ FormError = Malformed { at, expected } | UnknownField { at, path }
 vocab::{SECTIONS, FIELDS}                         // the form
 vocab::{ID, TITLE, DESCRIPTION, DEFAULT_SECTION}  // a section; DEFAULT_SECTION is ""
 vocab::{WIDGET, PLACEHOLDER, VISIBLE_WHEN}        // a field's hints
-vocab::{FIELD, EQUALS}                            // a condition
+vocab::{FIELD, EQUALS, IN}                        // a condition
 vocab::widget::{TEXT, TEXTAREA, PASSWORD, NUMBER, SLIDER,
                 CHECKBOX, TOGGLE, SELECT, RADIO}  // suggestions, an open set
 ```
@@ -259,8 +263,10 @@ distinct.
 
 - **`check`** refuses: a path that resolves to no field, a section id
   declared twice, a key of the wrong shape (named by its location, e.g.
-  `fields["port"].widget`), a condition whose `equals` the referenced field
-  would never hold, and a field whose conditions lead back to itself. A
+  `fields["port"].widget`), a condition holding both `equals` and `in`,
+  neither, or an empty `in`, a condition naming any value the referenced
+  field would never hold -- **every** value of an `in`, not just one --
+  and a field whose conditions lead back to itself. A
   section a field names but the form does not declare is **not** an error.
   **No error quotes a value**: a condition's `equals` is something a field
   could hold, and a field can be a secret.
@@ -272,7 +278,8 @@ distinct.
   variant, and their hints are `hints("owner.member")`. Visibility is not
   applied — it needs values.
 - **`is_visible`**: no condition is shown. A condition is met when the
-  field it reads is **itself shown** and holds `equals`, so hiding a field
+  field it reads is **itself shown** and holds `equals`, or any one of
+  `in`'s values, so hiding a field
   hides everything that waits on it. A field holding nothing reads as its
   schema `default`; with no default the condition is not met. A variant
   named by its own key reads as its **discriminant**, so `equals` is an arm
@@ -322,6 +329,11 @@ guatiao_status guatiao_intake_is_visible(const guatiao_value *schema, const guat
 
 - `equals` is compared **structurally**, as `guatiao::value::read::equal`
   does. A number is its text, so `443` and `443.0` are different values.
+- **A condition compares; it does not evaluate a schema.** `in` covers
+  "any of these values", which is what every surveyed form needed. A
+  condition that is itself a JSON Schema (JSON Forms' rules) was weighed
+  and left out: `check` would have to judge a subschema against a field,
+  and nobody has a case `in` cannot express.
 - `visibleWhen` is for what a variant cannot say. "These fields exist only
   for this arm" is already a variant, and hiding them again with a
   condition would give two sources of truth for one rule.
