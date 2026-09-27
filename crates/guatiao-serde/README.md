@@ -1,7 +1,48 @@
 # guatiao-serde
 
-serde for [guatiao](../guatiao) values: **one pair of impls, every serde
-format**.
+[![Crate](https://img.shields.io/crates/v/guatiao-serde.svg)](https://crates.io/crates/guatiao-serde)
+[![docs.rs](https://img.shields.io/docsrs/guatiao-serde)](https://docs.rs/guatiao-serde)
+[![License: MPL 2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](https://github.com/Boriken-Dev/guatiao/blob/main/LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/Boriken-Dev/guatiao/test.yaml)](https://github.com/Boriken-Dev/guatiao/actions/workflows/test.yaml)
+
+serde for [guatiao](https://crates.io/crates/guatiao) values: **one pair of
+impls, every serde format**. JSON, MessagePack, CBOR, TOML, YAML, RON — and
+a format this crate has never heard of works too, because it speaks serde
+rather than any one format.
+
+> **Status: alpha.** Released in lockstep with `guatiao`.
+
+## Features
+
+- **Serialising carries a policy.** JSON has no byte string, so something
+  has to decide how one is spelled. `Presentation` is that decision, and it
+  belongs to whoever writes the document: a `data:;base64,` URI by default,
+  or bare base64, or an array of numbers, or a refusal. A format that *has*
+  a byte string gets one natively whatever the policy says.
+- **Deserialising carries an allocator.** Every guatiao container records
+  the allocator that made it, and `Deserialize::deserialize` takes no
+  arguments to name one with. `ValueSeed` is serde's own answer —
+  `DeserializeSeed` exists to carry state into a deserialisation — and it is
+  what lets a host read a document straight into its own arena.
+- **Numbers stay exact through `text::json`**, spelling included — `1.10`,
+  `1e400`, a 200-digit integer.
+- **A C surface** with its own `include/guatiao_serde.h`.
+
+## Installation
+
+```toml
+[dependencies]
+guatiao-serde = { version = "0.0.0-alpha.0", features = ["toml", "yaml"] }
+```
+
+| Flag | Adds | Needed for |
+| --- | --- | --- |
+| `json` (default) | `serde_json`, with `arbitrary_precision` | `text::json`, and numbers read exactly |
+| `toml` | `toml` | `text::toml` |
+| `yaml` | `serde-saphyr` | `text::yaml` |
+| `c-header` | `cbindgen` | regenerating the committed C header |
+
+## Quick start
 
 ```rust
 use guatiao::value::alloc::Alloc;
@@ -28,24 +69,6 @@ let back = ValueSeed::new(Alloc::rust()).deserialize(&mut de)?;
 # Ok(())
 # }
 ```
-
-JSON, MessagePack, CBOR, TOML, YAML, RON — and a format this crate has
-never heard of works too, because it speaks serde rather than any one
-format.
-
-## Two things it does that a derive could not
-
-**Serialising carries a policy.** JSON has no byte string, so something
-has to decide how one is spelled. `Presentation` is that decision, and it
-belongs to whoever writes the document: a `data:;base64,` URI by default,
-or bare base64, or an array of numbers, or a refusal. A format that *has*
-a byte string gets one natively whatever the policy says.
-
-**Deserialising carries an allocator.** Every guatiao container records
-the allocator that made it, and `Deserialize::deserialize` takes no
-arguments to name one with. `ValueSeed` is serde's own answer —
-`DeserializeSeed` exists to carry state into a deserialisation — and it is
-what lets a host read a document straight into its own arena.
 
 ## What survives, and what does not
 
@@ -75,12 +98,21 @@ features across a build, so it reaches `serde_json::Value` everywhere in a
 consumer's graph — turn the `json` feature off and hand a
 `serde_json::Deserializer` to `ValueSeed` yourself if that is not wanted.
 
-## Badges
+## API overview
 
-None yet, deliberately: the crate is `publish = false`, so a crates.io or
-docs.rs badge would link to a page that does not exist. They go in with
-the first release.
+| Item | Purpose |
+| --- | --- |
+| `Serializable` | a value as a `serde::Serialize`, with its `Presentation` |
+| `ValueSeed` | a `DeserializeSeed` that builds a value through a named allocator |
+| `Presentation`, `Bytes`, `Numbers` | how bytes and out-of-range numbers are written |
+| `text::{json, toml, yaml}` | `to_string` / `from_str` for each, behind its feature |
 
-## Licence
+## Development
 
-MPL-2.0, like the rest of the workspace.
+Part of the [guatiao](https://github.com/Boriken-Dev/guatiao) workspace;
+its README has the commands.
+
+## License
+
+**Mozilla Public License 2.0**, like the rest of the workspace — see
+[LICENSE](https://github.com/Boriken-Dev/guatiao/blob/main/LICENSE).

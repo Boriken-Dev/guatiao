@@ -1,9 +1,46 @@
 # guatiao-intake
 
-How a [guatiao](../guatiao) schema is **shown**: what its sections are
-called and the order they come in, which control draws a field, and when a
-field is visible — as a value that sits beside the schema and never
-repeats it.
+[![Crate](https://img.shields.io/crates/v/guatiao-intake.svg)](https://crates.io/crates/guatiao-intake)
+[![docs.rs](https://img.shields.io/docsrs/guatiao-intake)](https://docs.rs/guatiao-intake)
+[![License: MPL 2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](https://github.com/Boriken-Dev/guatiao/blob/main/LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/Boriken-Dev/guatiao/test.yaml)](https://github.com/Boriken-Dev/guatiao/actions/workflows/test.yaml)
+
+How a [guatiao](https://crates.io/crates/guatiao) schema is **shown**: what
+its sections are called and the order they come in, which control draws a
+field, and when a field is visible — as a value that sits beside the schema
+and never repeats it.
+
+> **Status: alpha.** Released in lockstep with `guatiao`.
+
+## Features
+
+- **Three layers, one per question** — the value says what is being passed,
+  the schema what it is and what a valid one looks like, and **the form how
+  to show one to a person**. A consumer with no screen never compiles this,
+  which is why it is a crate.
+- **Only what no field can say about itself** — a field's `title`,
+  `description`, section (`x-section`), position (`x-order`) and whether it is
+  advanced or a secret stay in the schema. A form adds what a section is
+  **called**, which **control** draws a field, a **unit** beside a number, and
+  **when** a field is shown.
+- **A path grammar** — `agent[1].name[home].host` names one place inside a
+  value, and a flat `key -> text` projection stores one.
+- **The judgement is exported** — `check`, `layout` and `is_visible` in C, so
+  two renderers never work the rules out differently.
+
+## Installation
+
+```toml
+[dependencies]
+guatiao-intake = { version = "0.0.0-alpha.0", features = ["derive"] }
+```
+
+| Flag | Adds | Needed for |
+| --- | --- | --- |
+| `derive` | `guatiao-derive` | `#[derive(Form)]`, beside `guatiao`'s `#[derive(Schema)]` |
+| `c-header` | `cbindgen` | regenerating the committed C header |
+
+## Quick start
 
 ```rust
 use guatiao::schema::read::SchemaRef;
@@ -54,25 +91,7 @@ struct Connection {
 let form = Connection::form(guatiao::Alloc::rust())?;   // `guatiao_intake::Screen`
 ```
 
-## Three layers
-
-| layer | answers | crate |
-| --- | --- | --- |
-| value | what is being passed | `guatiao` |
-| schema | what it is, and what a valid one looks like | `guatiao` |
-| **form** | how to show one to a person | **`guatiao-intake`** |
-
-A consumer with no screen never compiles this, which is why it is a crate.
-
-## What stays in the schema
-
-Everything a field can say about itself: its `title` and `description`,
-which section it belongs to (`x-section`), its position (`x-order`), and
-whether it is advanced or a secret. A form adds only what no single field
-can say: what a section is **called**, which **control** draws it, and
-**when** it is shown.
-
-## From C
+### From C
 
 A form is a value, so a C, Python or Dart consumer reads one with
 `guatiao.h`. The judgement is exported, because two renderers that each
@@ -84,12 +103,24 @@ guatiao_intake_layout(schema, form, alloc, &groups);    // keys, grouped and ord
 guatiao_intake_is_visible(schema, form, key, values, &shown);
 ```
 
-## Badges
+## API overview
 
-None yet, deliberately: the crate is `publish = false`, so a crates.io or
-docs.rs badge would link to a page that does not exist. They go in with
-the first release.
+| Item | Purpose |
+| --- | --- |
+| `Form`, `Section`, `Hints` | building a form document |
+| `FormRef`, `SectionRef`, `HintsRef`, `Condition` | reading one |
+| `check`, `layout`, `is_visible` | the judgement |
+| `for_schema`, `for_field`, `form_for` | the form a schema implies, when nobody wrote one |
+| `FormBuilder`, `FormFieldBuilder`, `FormField` | a field's section, order and advanced flag, on `guatiao`'s builders |
+| `path`, `flat` | naming a place inside a value; flat `key -> text` storage |
+| `prelude` | both crates' halves of a declaration in one import |
 
-## Licence
+## Development
 
-MPL-2.0, like the rest of the workspace.
+Part of the [guatiao](https://github.com/Boriken-Dev/guatiao) workspace;
+its README has the commands.
+
+## License
+
+**Mozilla Public License 2.0**, like the rest of the workspace — see
+[LICENSE](https://github.com/Boriken-Dev/guatiao/blob/main/LICENSE).

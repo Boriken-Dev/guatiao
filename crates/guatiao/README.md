@@ -1,5 +1,10 @@
 # guatiao
 
+[![Crate](https://img.shields.io/crates/v/guatiao.svg)](https://crates.io/crates/guatiao)
+[![docs.rs](https://img.shields.io/docsrs/guatiao)](https://docs.rs/guatiao)
+[![License: MPL 2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](https://github.com/Boriken-Dev/guatiao/blob/main/LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/Boriken-Dev/guatiao/test.yaml)](https://github.com/Boriken-Dev/guatiao/actions/workflows/test.yaml)
+
 **One contract for passing values between languages.**
 A value model whose C form is plain structs with pointer-and-length strings,
 a schema that describes a value — what a provider needs to be configured, or
@@ -10,6 +15,10 @@ a descriptor with no call into any library.
 
 *Guatiao* is the Taíno pact in which two people exchange names and become
 kin. An ABI is the same agreement between two sides of a boundary.
+
+> **Status: alpha.** The API can still change between releases; the
+> [changelog](https://github.com/Boriken-Dev/guatiao/blob/main/CHANGELOG.md)
+> says what did and what to do about it.
 
 ## Features
 
@@ -27,6 +36,24 @@ kin. An ABI is the same agreement between two sides of a boundary.
   consumer's decision.
 - **Rust ergonomics on top** — `#[derive(ToValue, FromValue, Schema)]`,
   `try_into` for reading, and a generated C header for everyone else.
+
+## Installation
+
+```toml
+[dependencies]
+guatiao = { version = "0.0.0-alpha.0", features = ["derive"] }
+```
+
+Optional features:
+
+| Flag | Adds | Needed for |
+| --- | --- | --- |
+| `derive` | `guatiao-derive` | `#[derive(ToValue, FromValue, Schema)]` |
+| `load` | `libloading`, `object` | loading libraries from disk into a `Registry` |
+| `c-header` | nothing | regenerating the committed C header |
+| `regex` | `regex` | enforcing a schema's `pattern` when validating |
+
+A default build pulls in nothing.
 
 ## Quick start
 
@@ -76,27 +103,39 @@ a host, may leave out a password, and should not log it. `to_value` and
 `from_value` move the struct across the boundary, and the three derives read
 one declaration, so the schema cannot describe a value the type refuses.
 
-## Feature flags
+## API overview
 
-| Flag | Adds | Needed for |
-| --- | --- | --- |
-| `derive` | `guatiao-derive` | `#[derive(ToValue, FromValue, Schema)]` |
-| `load` | `libloading`, `object` | loading libraries from disk into a `Registry` |
-| `c-header` | nothing | regenerating the committed C header |
-| `regex` | `regex` | enforcing a schema's `pattern` when validating |
+| Module | Purpose |
+| --- | --- |
+| `guatiao::value` | the value model: `Value`, `Map`, `List`, `Text`, `Buffer`, `Number`, the allocator, conversion, merging, and the `wire` byte format |
+| `guatiao::schema` | JSON Schema as a value: `SchemaBuilder`/`FieldBuilder`/`KindBuilder`, the `SchemaRef` reader, `validate_*` |
+| `guatiao::library` | the envelope: one entry symbol, provider descriptors, a `Registry` a host owns, and (with `load`) scanning and loading |
+| `guatiao::exports` | the `extern "C"` surface declared in `include/guatiao.h` |
 
-A default build pulls in nothing.
+Two sibling crates build on this one:
+[`guatiao-serde`](https://crates.io/crates/guatiao-serde) writes and reads
+a value in any serde format, and
+[`guatiao-intake`](https://crates.io/crates/guatiao-intake) describes how a
+schema is shown to a person.
 
-Two sibling crates build on this one: `guatiao-serde` writes and reads a
-value in any serde format, and `guatiao-intake` describes how a schema is
-shown to a person.
+## Development
 
-## Licence
+The four crates, the examples and the Python and Dart bindings share one
+workspace; its [README](https://github.com/Boriken-Dev/guatiao#development)
+has the commands.
 
-**Mozilla Public License 2.0.** Per-file copyleft: using this crate imposes
-nothing on your code, whether you link it statically or dynamically and
-whatever licence your own work carries. Modifying this crate's own files is
-what carries the obligation to publish those files under the MPL 2.0.
+```bash
+cargo test --workspace --all-features
+```
+
+## License
+
+**Mozilla Public License 2.0** — see
+[LICENSE](https://github.com/Boriken-Dev/guatiao/blob/main/LICENSE).
+Per-file copyleft: using this crate imposes nothing on your code, whether
+you link it statically or dynamically and whatever licence your own work
+carries. Modifying this crate's own files is what carries the obligation to
+publish those files under the MPL 2.0.
 
 A combined work may be distributed under terms of your choosing (MPL 2.0
 section 3.3), and the licence stays GPL-compatible.
