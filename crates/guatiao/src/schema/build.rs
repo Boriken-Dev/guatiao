@@ -72,11 +72,8 @@ use crate::value::types::{List, Map, Number, Text, Value};
 
 /// Builds a schema: the root document, with its dialect declared.
 pub struct SchemaBuilder {
-    // Reached by `super::form`, which is the other half of this builder
-    // rather than a stranger: the presentation setters live there so the
-    // schema half and the form half can be read apart.
-    pub(super) alloc: Alloc,
-    pub(super) state: Result<Value, ValueError>,
+    alloc: Alloc,
+    state: Result<Value, ValueError>,
     fields: Vec<FieldBuilder>,
 }
 
@@ -86,8 +83,8 @@ pub struct SchemaBuilder {
 /// The name and the requiredness are the owner's to write; everything else
 /// goes onto the field's own subschema, which is what `state` holds.
 pub struct FieldBuilder {
-    pub(super) alloc: Alloc,
-    pub(super) state: Result<Value, ValueError>,
+    alloc: Alloc,
+    state: Result<Value, ValueError>,
     key: String,
     required: bool,
 }
@@ -103,8 +100,8 @@ pub struct KindBuilder {
 /// does not know which key the discriminant is stored under — that is the
 /// variant's declaration, not the arm's.
 pub struct ArmBuilder {
-    pub(super) alloc: Alloc,
-    pub(super) state: Result<Value, ValueError>,
+    alloc: Alloc,
+    state: Result<Value, ValueError>,
     discriminant: Result<Value, ValueError>,
     fields: Vec<FieldBuilder>,
 }
@@ -150,11 +147,7 @@ fn debug_state(
 }
 
 /// Sets `key` to `value`, keeping the first error rather than the last.
-pub(super) fn put(
-    state: &mut Result<Value, ValueError>,
-    key: &str,
-    value: Result<Value, ValueError>,
-) {
+fn put(state: &mut Result<Value, ValueError>, key: &str, value: Result<Value, ValueError>) {
     let node = match state {
         Ok(n) => n,
         // Already failed: do nothing further, so the error a caller sees
@@ -398,8 +391,7 @@ impl SchemaBuilder {
     /// `.` or a bracket. A schema describes the struct as it is, and a
     /// field named `a.b` is a field named `a.b`; a consumer that names
     /// places inside a value has a grammar that can spell one
-    /// (`guatiao-intake`'s `["a.b"]`). This used to refuse such a key,
-    /// back when the only spelling for a nested path was ambiguous.
+    /// (`guatiao-intake`'s `["a.b"]`).
     pub fn finish(mut self) -> Result<Value, ValueError> {
         let (alloc, fields) = (self.alloc, std::mem::take(&mut self.fields));
         seal(&mut self.state, alloc, None, fields);
@@ -415,8 +407,8 @@ impl Default for SchemaBuilder {
 }
 
 impl FieldBuilder {
-    /// A field under `key`, accepting `kind`.
-    /// One field, through the crate's own allocator.
+    /// A field under `key`, accepting `kind`, through the crate's own
+    /// allocator.
     pub fn new(key: &str, kind: KindBuilder) -> FieldBuilder {
         FieldBuilder::new_in(Alloc::rust(), key, kind)
     }

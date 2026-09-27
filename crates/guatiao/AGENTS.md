@@ -644,9 +644,10 @@ asks about the schema alone -- it is also the check `validate_value`
 performs on every scalar.
 
 One consequence: **a field key may hold a `.`, a `[` or a `]`**, and
-`finish` says nothing about it. It used to refuse one, back when the
-only spelling for a nested path was ambiguous; the grammar quotes such a
-key now (`["a.b"]`).
+`finish` says nothing about it: `guatiao-intake`'s path grammar reaches
+such a key by quoting it (`["a.b"]`). A consumer whose own keys are bare
+text and cannot quote refuses one itself, asking
+`guatiao_intake::path::is_bare_name`.
 
 ---
 
