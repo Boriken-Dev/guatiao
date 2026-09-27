@@ -525,13 +525,23 @@ What every builder writes is JSON Schema's own, named after the keyword:
 | --- | --- | --- |
 | `title` | `title` | `SchemaBuilder`, `FieldBuilder`, `ArmBuilder` |
 | `description` | `description` | `SchemaBuilder`, `FieldBuilder`, `ArmBuilder` |
-| `sensitive` | `x-sensitive` | `FieldBuilder` |
+| `sensitive` | `x-sensitive` **and** `writeOnly` | `FieldBuilder` |
+| `read_only` | `readOnly` | `FieldBuilder` |
+| `deprecated` | `deprecated` | `FieldBuilder` |
+| `examples(values)` | `examples` | `FieldBuilder` |
 | `option(key, value)` | any | `SchemaBuilder`, `FieldBuilder` |
 | `extra(key, Result<Value>)` | any | all three, via `Extras` |
 
 `sensitive` stays here although it looks like presentation: "never print
 this value" is obeyed by a log, a dump and a crash report, none of which
-have a screen.
+have a screen. It also writes JSON Schema's `writeOnly`, so a tool that
+knows no `x-` key still treats the field as a secret; `x-sensitive` is the
+one read back, because "never log" is the stronger promise.
+
+`readOnly`, `deprecated` and `examples` are JSON Schema's meta-data
+annotations: carried, read by name, and **never a reason validation
+refuses a value** -- `readOnly` is about who writes, and an example is
+offered, not required.
 
 ```rust
 pub trait Extras: Sized {                     // the door another crate writes through
@@ -627,6 +637,7 @@ SchemaRef::new(&value) -> Option<SchemaRef>
   .as_value()
 FieldRef::new(key, &schema) -> Option<FieldRef>   // answers is_required() false
 FieldRef: .key() .kind() .title() .description() .default() .is_sensitive()
+           .is_read_only() .is_deprecated() .examples() -> &[Value]
            .is_required() .extra(key) .extras()
            // a hint this crate does not name is read with .extra(key),
            // or by an extension trait the crate that named it provides

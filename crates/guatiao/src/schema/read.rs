@@ -268,14 +268,42 @@ impl<'a> FieldRef<'a> {
 
     /// A secret: never print this value.
     ///
-    /// **The one hint this crate reads by name**, and it earns that by
+    /// **The one `x-` key this crate reads by name**, and it earns that by
     /// not being a drawing instruction: a log, a crash dump and a debug
     /// print all obey it with no screen in sight. A hint that only a
     /// renderer acts on is read with [`extra`](FieldRef::extra) by
     /// whoever named it.
     pub fn is_sensitive(&self) -> bool {
+        self.flag(vocab::X_SENSITIVE)
+    }
+
+    /// JSON Schema's `readOnly`: shown, never edited. Validation does not
+    /// refuse a value for it; a renderer disables the control.
+    pub fn is_read_only(&self) -> bool {
+        self.flag(vocab::READ_ONLY)
+    }
+
+    /// JSON Schema's `deprecated`: kept for old documents, not offered for
+    /// new ones.
+    pub fn is_deprecated(&self) -> bool {
+        self.flag(vocab::DEPRECATED)
+    }
+
+    /// JSON Schema's `examples`, in document order; empty when there are
+    /// none. Not checked against the field's kind -- a renderer offering
+    /// one should validate it like anything a person typed.
+    pub fn examples(&self) -> &'a [Value] {
+        TryAsRef::<Map>::try_as_ref(self.schema)
+            .and_then(|m| m.get(vocab::EXAMPLES))
+            .and_then(TryAsRef::<List>::try_as_ref)
+            .map(|list| &list[..])
+            .unwrap_or(&[])
+    }
+
+    /// A boolean annotation: `true` only when written `true`.
+    fn flag(&self, key: &str) -> bool {
         bool_or(
-            TryAsRef::<Map>::try_as_ref(self.schema).and_then(|m| m.get(vocab::X_SENSITIVE)),
+            TryAsRef::<Map>::try_as_ref(self.schema).and_then(|m| m.get(key)),
             false,
         )
     }

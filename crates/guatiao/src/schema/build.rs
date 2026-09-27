@@ -488,18 +488,59 @@ impl FieldBuilder {
 
     /// A secret: never print this value.
     ///
-    /// **The one hint here that is not about drawing**, which is what
-    /// earns it a place: a form masks it, but so do a log, a debug dump
-    /// and a crash report, none of which have a screen. What each of them
-    /// actually does about it stays its own decision; this says only that
-    /// somebody declared the field one. A hint only a renderer acts on
-    /// goes through [`Extras`] instead, under whatever name the crate
+    /// **The one `x-` key here, and it is not about drawing**, which is
+    /// what earns it a place: a form masks it, but so do a log, a debug
+    /// dump and a crash report, none of which have a screen. What each of
+    /// them actually does about it stays its own decision; this says only
+    /// that somebody declared the field one. A hint only a renderer acts
+    /// on goes through [`Extras`] instead, under whatever name the crate
     /// that reads it chose.
+    ///
+    /// Also writes JSON Schema's `writeOnly: true` -- "accepted, never
+    /// handed back" -- so a tool that knows no `x-` key still treats the
+    /// field as a secret.
     ///
     /// Read back with
     /// [`FieldRef::is_sensitive`](super::read::FieldRef::is_sensitive).
     pub fn sensitive(mut self) -> FieldBuilder {
         put(&mut self.state, vocab::X_SENSITIVE, Ok(Value::from(true)));
+        put(&mut self.state, vocab::WRITE_ONLY, Ok(Value::from(true)));
+        self
+    }
+
+    /// JSON Schema's `readOnly`: whoever serves the value owns it, and a
+    /// person sees it without editing it. An annotation -- validation
+    /// does not refuse a value for it.
+    ///
+    /// Read back with
+    /// [`FieldRef::is_read_only`](super::read::FieldRef::is_read_only).
+    pub fn read_only(mut self) -> FieldBuilder {
+        put(&mut self.state, vocab::READ_ONLY, Ok(Value::from(true)));
+        self
+    }
+
+    /// JSON Schema's `deprecated`: kept for old documents, not offered for
+    /// new ones. An annotation.
+    pub fn deprecated(mut self) -> FieldBuilder {
+        put(&mut self.state, vocab::DEPRECATED, Ok(Value::from(true)));
+        self
+    }
+
+    /// JSON Schema's `examples`: sample values of the field's own kind,
+    /// which a renderer may offer. An annotation -- nothing is refused for
+    /// not being one, and nothing checks that they are acceptable.
+    pub fn examples<I, V>(mut self, examples: I) -> FieldBuilder
+    where
+        I: IntoIterator<Item = V>,
+        V: Into<Value>,
+    {
+        let mut list = List::new_in(self.alloc);
+        let pushed = examples.into_iter().try_for_each(|v| list.push(v.into()));
+        put(
+            &mut self.state,
+            vocab::EXAMPLES,
+            pushed.map(|()| list.into()),
+        );
         self
     }
 

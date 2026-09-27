@@ -1525,10 +1525,13 @@ pub struct guatiao::schema::build::FieldBuilder
 impl guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::default(self, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::default_checked(self, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::deprecated(self) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::description(self, &str) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::examples<I, V>(self, I) -> guatiao::schema::build::FieldBuilder where I: core::iter::traits::collect::IntoIterator<Item = V>, V: core::convert::Into<guatiao::value::value::Value>
 pub fn guatiao::schema::build::FieldBuilder::new(&str, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::new_in(guatiao::value::alloc::Alloc, &str, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::option(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::read_only(self) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::required(self) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::sensitive(self) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::title(self, &str) -> guatiao::schema::build::FieldBuilder
@@ -1760,8 +1763,11 @@ impl<'a> guatiao::schema::read::FieldRef<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::as_value(&self) -> &'a guatiao::value::value::Value
 pub fn guatiao::schema::read::FieldRef<'a>::default(&self) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao::schema::read::FieldRef<'a>::description(&self) -> &'a str
+pub fn guatiao::schema::read::FieldRef<'a>::examples(&self) -> &'a [guatiao::value::value::Value]
 pub fn guatiao::schema::read::FieldRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao::schema::read::FieldRef<'a>::extras(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&'a str, &'a guatiao::value::value::Value)>
+pub fn guatiao::schema::read::FieldRef<'a>::is_deprecated(&self) -> bool
+pub fn guatiao::schema::read::FieldRef<'a>::is_read_only(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_required(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_sensitive(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::key(&self) -> &'a str
@@ -1802,9 +1808,11 @@ pub const guatiao::schema::vocab::ADDITIONAL_PROPERTIES: &str
 pub const guatiao::schema::vocab::ANY_OF: &str
 pub const guatiao::schema::vocab::CONST: &str
 pub const guatiao::schema::vocab::DEFAULT: &str
+pub const guatiao::schema::vocab::DEPRECATED: &str
 pub const guatiao::schema::vocab::DESCRIPTION: &str
 pub const guatiao::schema::vocab::DIALECT: &str
 pub const guatiao::schema::vocab::ENUM: &str
+pub const guatiao::schema::vocab::EXAMPLES: &str
 pub const guatiao::schema::vocab::EXTENSIONS: &[&str]
 pub const guatiao::schema::vocab::FORMAT: &str
 pub const guatiao::schema::vocab::ITEMS: &str
@@ -1819,6 +1827,7 @@ pub const guatiao::schema::vocab::MULTIPLE_OF: &str
 pub const guatiao::schema::vocab::ONE_OF: &str
 pub const guatiao::schema::vocab::PATTERN: &str
 pub const guatiao::schema::vocab::PROPERTIES: &str
+pub const guatiao::schema::vocab::READ_ONLY: &str
 pub const guatiao::schema::vocab::REQUIRED: &str
 pub const guatiao::schema::vocab::SCHEMA: &str
 pub const guatiao::schema::vocab::TITLE: &str
@@ -1831,6 +1840,7 @@ pub const guatiao::schema::vocab::TYPE_INTEGER: &str
 pub const guatiao::schema::vocab::TYPE_NUMBER: &str
 pub const guatiao::schema::vocab::TYPE_OBJECT: &str
 pub const guatiao::schema::vocab::TYPE_STRING: &str
+pub const guatiao::schema::vocab::WRITE_ONLY: &str
 pub const guatiao::schema::vocab::X_ENUM_LABELS: &str
 pub const guatiao::schema::vocab::X_SENSITIVE: &str
 pub const guatiao::schema::vocab::X_VARIANT_TAG: &str
@@ -1931,10 +1941,13 @@ pub struct guatiao::schema::FieldBuilder
 impl guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::default(self, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::default_checked(self, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::deprecated(self) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::description(self, &str) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::examples<I, V>(self, I) -> guatiao::schema::build::FieldBuilder where I: core::iter::traits::collect::IntoIterator<Item = V>, V: core::convert::Into<guatiao::value::value::Value>
 pub fn guatiao::schema::build::FieldBuilder::new(&str, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::new_in(guatiao::value::alloc::Alloc, &str, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::option(self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> guatiao::schema::build::FieldBuilder
+pub fn guatiao::schema::build::FieldBuilder::read_only(self) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::required(self) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::sensitive(self) -> guatiao::schema::build::FieldBuilder
 pub fn guatiao::schema::build::FieldBuilder::title(self, &str) -> guatiao::schema::build::FieldBuilder
@@ -1948,8 +1961,11 @@ impl<'a> guatiao::schema::read::FieldRef<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::as_value(&self) -> &'a guatiao::value::value::Value
 pub fn guatiao::schema::read::FieldRef<'a>::default(&self) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao::schema::read::FieldRef<'a>::description(&self) -> &'a str
+pub fn guatiao::schema::read::FieldRef<'a>::examples(&self) -> &'a [guatiao::value::value::Value]
 pub fn guatiao::schema::read::FieldRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao::schema::read::FieldRef<'a>::extras(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&'a str, &'a guatiao::value::value::Value)>
+pub fn guatiao::schema::read::FieldRef<'a>::is_deprecated(&self) -> bool
+pub fn guatiao::schema::read::FieldRef<'a>::is_read_only(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_required(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_sensitive(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::key(&self) -> &'a str

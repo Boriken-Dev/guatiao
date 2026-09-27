@@ -444,3 +444,31 @@ fn a_validator_reads_the_shape_keywords_as_we_do() {
         "a validator reads `pattern` from the document we wrote"
     );
 }
+
+/// The meta-data annotations compile under the meta-schema and refuse
+/// nothing: a validator given a document that writes to a `readOnly`
+/// field, omits a `deprecated` one and matches no `examples` accepts it,
+/// as the specification says an annotation must.
+#[test]
+fn a_validator_treats_the_annotations_as_annotations() {
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new("serial", KindBuilder::string()).read_only())
+        .field(FieldBuilder::new("legacy", KindBuilder::bool()).deprecated())
+        .field(
+            FieldBuilder::new("host", KindBuilder::string())
+                .examples([guatiao::Text::new("db.internal")]),
+        )
+        .field(FieldBuilder::new("password", KindBuilder::string()).sensitive())
+        .finish()
+        .expect("it builds");
+    let doc = as_document(&schema);
+    assert_eq!(
+        doc["properties"]["password"]["writeOnly"],
+        serde_json::json!(true)
+    );
+    let (schemas, index) = compile(doc).expect("a validator compiles it");
+    let instance = serde_json::json!({
+        "serial": "written anyway", "legacy": true, "host": "elsewhere", "password": "x"
+    });
+    assert!(schemas.validate(&instance, index).is_ok());
+}

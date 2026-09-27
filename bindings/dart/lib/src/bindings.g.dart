@@ -1645,12 +1645,16 @@ const String GUATIAO_KEY_CONST = 'const';
 
 const String GUATIAO_KEY_DEFAULT = 'default';
 
+const String GUATIAO_KEY_DEPRECATED = 'deprecated';
+
 const String GUATIAO_KEY_DESCRIPTION = 'description';
 
 const String GUATIAO_KEY_DIALECT =
     'https://json-schema.org/draft/2020-12/schema';
 
 const String GUATIAO_KEY_ENUM = 'enum';
+
+const String GUATIAO_KEY_EXAMPLES = 'examples';
 
 const String GUATIAO_KEY_FORMAT = 'format';
 
@@ -1676,6 +1680,8 @@ const String GUATIAO_KEY_PATTERN = 'pattern';
 
 const String GUATIAO_KEY_PROPERTIES = 'properties';
 
+const String GUATIAO_KEY_READ_ONLY = 'readOnly';
+
 const String GUATIAO_KEY_REQUIRED = 'required';
 
 const String GUATIAO_KEY_SCHEMA = '\$schema';
@@ -1697,6 +1703,8 @@ const String GUATIAO_KEY_TYPE_NUMBER = 'number';
 const String GUATIAO_KEY_TYPE_OBJECT = 'object';
 
 const String GUATIAO_KEY_TYPE_STRING = 'string';
+
+const String GUATIAO_KEY_WRITE_ONLY = 'writeOnly';
 
 const String GUATIAO_KEY_X_ENUM_LABELS = 'x-enum-labels';
 

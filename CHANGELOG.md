@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   since 2020-12 makes it an annotation. A third-party validator gives the
   same verdict as `validate_map` on every case in the agreement test. In
   C, `GUATIAO_KEY_MIN_LENGTH` and its six siblings.
+- **`readOnly`, `deprecated` and `examples`**: `FieldBuilder::read_only`,
+  `deprecated` and `examples(values)`, read back with
+  `FieldRef::is_read_only`, `is_deprecated` and `examples`. JSON Schema's
+  meta-data annotations, carried and never a reason to refuse a value.
+  `FieldBuilder::sensitive` also writes `writeOnly: true`, so a tool that
+  knows no `x-` key still treats the field as a secret; `x-sensitive`
+  stays the one read back.
 - **`guatiao_intake::path::is_bare_name` and `needs_quoting`**: the
   grammar answers whether a name can be a field segment as written, and
   whether a map key must be quoted. For a consumer whose own keys are

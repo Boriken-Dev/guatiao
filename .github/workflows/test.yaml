@@ -91,7 +91,7 @@ jobs:
           cargo miri test -p guatiao --all-features
           --test container_roundtrip --test std_traits --test public_surface
           --test exports_boundary --test schema_as_value
-          --test kind_glue_probes --test schema_constraints
+          --test kind_glue_probes --test schema_constraints --test schema_annotations
           -- --skip a_tree_of_any_depth
       - name: The path grammar and the flat projection, in the crate that has them
         # They moved out of `guatiao` with the rest of the projection; the

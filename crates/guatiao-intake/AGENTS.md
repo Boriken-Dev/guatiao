@@ -73,7 +73,9 @@ hints    := { "widget": text, "placeholder": text,
   exactly as informative as the schema was.
 - Anything else is an **annotation**: carried, never interpreted.
 - A value's own read-only-ness is **not** a form hint. It is a statement
-  about the value, and JSON Schema's `readOnly` in the schema says it.
+  about the value, and JSON Schema's `readOnly` in the schema says it:
+  `FieldBuilder::read_only` writes it and `FieldRef::is_read_only` reads
+  it. `deprecated` and `examples` sit beside it the same way.
 
 ## What else lives here
 

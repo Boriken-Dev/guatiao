@@ -211,6 +211,26 @@ pub const MIN_ITEMS: &str = "minItems";
 /// Most elements a list may hold. Optional.
 pub const MAX_ITEMS: &str = "maxItems";
 
+// --- about a value, not its shape ----------------------------------------
+
+/// The value is owned by whoever serves it: shown, never edited. `true`
+/// or absent. An annotation -- carried, read, never enforced here, since
+/// "a person may not change this" is a statement about who writes, not
+/// about which values are acceptable.
+pub const READ_ONLY: &str = "readOnly";
+/// The value is accepted and never handed back: a password a form sends
+/// and a server never echoes. `true` or absent. Written beside
+/// [`X_SENSITIVE`] by `FieldBuilder::sensitive`, so a tool that knows no
+/// `x-` key still treats the field as a secret; `x-sensitive` stays the
+/// one this crate reads, because "never log" is the stronger promise.
+pub const WRITE_ONLY: &str = "writeOnly";
+/// The field is kept for old documents and should not be offered for new
+/// ones. `true` or absent. An annotation.
+pub const DEPRECATED: &str = "deprecated";
+/// Sample values: a list, each of the field's own kind. An annotation --
+/// a renderer may offer them, and nothing is refused for not being one.
+pub const EXAMPLES: &str = "examples";
+
 // --- alternatives -----------------------------------------------------
 
 /// The permitted values of an enumeration: a list.
@@ -334,6 +354,10 @@ pub const KEYWORDS: &[&str] = &[
     FORMAT,
     MIN_ITEMS,
     MAX_ITEMS,
+    READ_ONLY,
+    WRITE_ONLY,
+    DEPRECATED,
+    EXAMPLES,
     ENUM,
     CONST,
     ANY_OF,
