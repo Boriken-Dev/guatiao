@@ -159,7 +159,7 @@ fn check_sub_form(
 pub(crate) fn member_schema<'a>(field: FieldRef<'a>) -> Option<&'a Value> {
     match field.kind() {
         Kind::Map(object) => Some(object),
-        Kind::List(items) => is_map(items).then_some(items),
+        Kind::List { items, .. } => is_map(items).then_some(items),
         Kind::MapOf(_) => TryAsRef::<Map>::try_as_ref(field.as_value())
             .and_then(|m| m.get(schema_vocab::ADDITIONAL_PROPERTIES))
             .filter(|v| is_map(v)),

@@ -448,7 +448,7 @@ fn a_path_resolves_through_objects_lists_and_open_maps() {
     // one value schema.
     assert!(matches!(
         at("env[PATH]").expect("it resolves").kind(),
-        guatiao::schema::read::Kind::Str
+        guatiao::schema::read::Kind::Str { .. }
     ));
     assert!(
         at("env[0]").is_some(),

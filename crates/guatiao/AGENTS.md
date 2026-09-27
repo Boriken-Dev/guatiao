@@ -23,9 +23,10 @@ A C, C++ or Dart consumer reads a whole tree through
 | `derive` | `#[derive(ToValue, FromValue, Schema)]` | off |
 | `provider` | `#[guatiao::kind]`, `#[derive(Provider)]`, `guatiao::providers!` (implies `derive`; turns on `syn/full` in the derive crate) | off |
 | `c-header` | regenerating the committed `include/guatiao.h` | off |
+| `regex` | enforcing a schema's `pattern` in `validate_*` (carried and read either way) | off |
 
 MSRV 1.89. No required dependencies; `derive` pulls `guatiao-derive`,
-and the loader pulls `libloading`.
+the loader pulls `libloading`, and `regex` pulls `regex`.
 
 ---
 
@@ -591,6 +592,23 @@ Kinds, with what each writes:
 | `float`, `float_bounds` | `type: "number"` + `minimum`/`maximum` |
 | `bytes` | `type: "bytes"` (ours) |
 | `list(items)` | `type: "array"` + `items` |
+
+Constraints chain onto a kind, each JSON Schema's own keyword:
+
+| method | key | on | checked |
+| --- | --- | --- | --- |
+| `.min_length(n)`, `.max_length(n)` | `minLength`, `maxLength` | string | yes, in **code points** |
+| `.pattern(re)` | `pattern` | string | with the `regex` feature; **unanchored** |
+| `.format(name)` | `format` | string | **never** — an annotation, as 2020-12 defaults |
+| `.multiple_of(step)` | `multipleOf` | integer, number | yes; exact for a whole step on an integer |
+| `.min_items(n)`, `.max_items(n)` | `minItems`, `maxItems` | list | yes, on the value |
+
+A keyword for another type is carried and ignored, as JSON Schema says.
+A count that is negative or fractional, and a step of zero or less, is
+read as absent rather than guessed at. A `pattern` the `regex` crate
+cannot compile (ECMA-262 lookaround, backreferences) is carried and not
+enforced -- refusing every value for a schema this build cannot evaluate
+would make the field unusable.
 | `map(fields)` | `type: "object"` + `properties`/`required` |
 | `map_of(values)` | `type: "object"` + `additionalProperties`: the value schema |
 | `enumeration(choices)` | `type: "string"` + `enum` + `x-enum-labels` (a map, keyed by value) |
@@ -612,6 +630,9 @@ FieldRef: .key() .kind() .title() .description() .default() .is_sensitive()
            .is_required() .extra(key) .extras()
            // a hint this crate does not name is read with .extra(key),
            // or by an extension trait the crate that named it provides
+Kind::Str { min_length, max_length, pattern, format }   // all Option
+Kind::Int { min, max, multiple_of }  /  Kind::Float { min, max, multiple_of }
+Kind::List { items, min, max }       // min/max: minItems/maxItems
 Kind: .choices() .alternatives() .arms() .items() .values() .fields() .name()
       // Map vs MapOf: a declared object vs one whose KEYS ARE DATA.
       // Told apart by having `properties`; `.values()` answers MapOf's

@@ -94,7 +94,8 @@ fn an_integer_kind_carries_the_bounds_of_its_width() {
             s.find("port").unwrap().kind(),
             Kind::Int {
                 min: Some(0),
-                max: Some(65535)
+                max: Some(65535),
+                multiple_of: None
             }
         ));
         // `u64::MAX` has no `i64` to be written as, so the upper bound is
@@ -103,14 +104,16 @@ fn an_integer_kind_carries_the_bounds_of_its_width() {
             s.find("max-size").unwrap().kind(),
             Kind::Int {
                 min: Some(0),
-                max: None
+                max: None,
+                multiple_of: None
             }
         ));
         assert!(matches!(
             s.find("timeout").unwrap().kind(),
             Kind::Int {
                 min: Some(i64::MIN),
-                max: Some(i64::MAX)
+                max: Some(i64::MAX),
+                multiple_of: None
             }
         ));
     });
@@ -186,9 +189,9 @@ fn a_sequence_a_blob_and_a_nested_struct_each_have_a_kind() {
         let s = SchemaRef::new(&declared).unwrap();
 
         let tags = s.find("tags").unwrap().kind();
-        assert!(matches!(tags, Kind::List(_)));
+        assert!(matches!(tags, Kind::List { .. }));
         assert!(
-            matches!(tags.items(), Kind::Str),
+            matches!(tags.items(), Kind::Str { .. }),
             "a list says what it holds"
         );
 
@@ -327,7 +330,7 @@ fn a_map_field_describes_an_open_object() {
         let s = SchemaRef::new(&declared).unwrap();
         let env = s.find("env").expect("env is declared");
         assert!(matches!(env.kind(), Kind::MapOf(_)));
-        assert!(matches!(env.kind().values(), Kind::Str));
+        assert!(matches!(env.kind().values(), Kind::Str { .. }));
         assert_eq!(
             env.description(),
             "The environment it runs with.",

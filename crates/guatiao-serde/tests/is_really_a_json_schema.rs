@@ -303,3 +303,144 @@ fn a_validator_enforces_an_open_maps_value_kind() {
         "and so are the value's bounds"
     );
 }
+
+/// The shape keywords -- lengths, patterns, formats, steps, list sizes --
+/// mean to a validator what they mean to us.
+///
+/// For every keyword but one this is **agreement**: the same document is
+/// handed to `boon` and to `validate_map`, and the two verdicts must be
+/// equal, accepting and refusing alike. `format` is in the table on
+/// purpose, as an ACCEPT: 2020-12 makes it an annotation by default, and a
+/// validator that refused a bad email here would be disagreeing with the
+/// specification, not with us.
+///
+/// `pattern` is the one keyword checked against `boon` alone. guatiao
+/// enforces it only with its `regex` feature, and which features guatiao
+/// was built with is not something this crate can see -- so the document
+/// carries it, a validator enforces it, and guatiao's own tests cover
+/// both of its builds.
+#[test]
+fn a_validator_reads_the_shape_keywords_as_we_do() {
+    use guatiao::schema::read::SchemaRef;
+    use guatiao::schema::validate::validate_map;
+
+    let schema = SchemaBuilder::new()
+        // Lengths and pattern on separate fields, so a case refused by
+        // one is never mistaken for a case refused by the other.
+        .field(FieldBuilder::new(
+            "user",
+            KindBuilder::string().min_length(2).max_length(8),
+        ))
+        .field(FieldBuilder::new(
+            "slug",
+            KindBuilder::string().pattern("^[a-z]+$"),
+        ))
+        .field(FieldBuilder::new(
+            "email",
+            KindBuilder::string().format("email"),
+        ))
+        .field(FieldBuilder::new(
+            "port",
+            KindBuilder::int_range(0, 1000).multiple_of(5.0),
+        ))
+        .field(FieldBuilder::new(
+            "ratio",
+            KindBuilder::float().multiple_of(0.25),
+        ))
+        .field(FieldBuilder::new(
+            "agents",
+            KindBuilder::list(KindBuilder::string())
+                .min_items(1)
+                .max_items(2),
+        ))
+        .finish()
+        .expect("it builds");
+    let (schemas, index) = compile(as_document(&schema)).expect("a validator compiles it");
+    let ours = SchemaRef::new(&schema).unwrap();
+
+    let cases: [(&str, bool, serde_json::Value); 12] = [
+        (
+            "everything in shape",
+            true,
+            serde_json::json!({
+                "user": "ana", "email": "a@b.test", "port": 15, "ratio": 0.75, "agents": ["x"]
+            }),
+        ),
+        (
+            "a name at the shortest",
+            true,
+            serde_json::json!({ "user": "ab" }),
+        ),
+        (
+            "a name one short",
+            false,
+            serde_json::json!({ "user": "a" }),
+        ),
+        (
+            "a name one long",
+            false,
+            serde_json::json!({ "user": "abcdefghi" }),
+        ),
+        // Code points, on both sides: three characters, six bytes.
+        (
+            "a name counted in code points",
+            true,
+            serde_json::json!({ "user": "ñño" }),
+        ),
+        (
+            "an email that is not one",
+            true,
+            serde_json::json!({ "email": "not an email" }),
+        ),
+        (
+            "a port on the step",
+            true,
+            serde_json::json!({ "port": 995 }),
+        ),
+        (
+            "a port off the step",
+            false,
+            serde_json::json!({ "port": 996 }),
+        ),
+        (
+            "a ratio on the step",
+            true,
+            serde_json::json!({ "ratio": 1.25 }),
+        ),
+        (
+            "a ratio off the step",
+            false,
+            serde_json::json!({ "ratio": 0.3 }),
+        ),
+        (
+            "no agents at all",
+            false,
+            serde_json::json!({ "agents": [] }),
+        ),
+        (
+            "one agent too many",
+            false,
+            serde_json::json!({ "agents": ["x", "y", "z"] }),
+        ),
+    ];
+    for (why, accepted, instance) in cases {
+        let theirs = schemas.validate(&instance, index).is_ok();
+        let value = json::from_str(
+            &instance.to_string(),
+            guatiao::Alloc::rust(),
+            Presentation::default(),
+        )
+        .expect("the instance reads");
+        let ours = validate_map(ours, &value).is_ok();
+        assert_eq!(theirs, accepted, "boon on {why}: {instance}");
+        assert_eq!(ours, accepted, "guatiao on {why}: {instance}");
+    }
+
+    // The pattern: in the document, and enforced by a validator.
+    assert!(
+        schemas
+            .validate(&serde_json::json!({ "slug": "Ana" }), index)
+            .is_err(),
+        "a validator reads `pattern` from the document we wrote"
+    );
+}

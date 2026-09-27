@@ -122,7 +122,24 @@ fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), Val
         return Err(too_deep(key));
     }
     match kind {
-        Kind::Str => Ok(()),
+        Kind::Str {
+            min_length,
+            max_length,
+            pattern,
+            ..
+        } => {
+            // Code points, as JSON Schema counts: `chars`, never `len`.
+            let n = value.chars().count() as u64;
+            if min_length.is_some_and(|m| n < m) || max_length.is_some_and(|m| n > m) {
+                return Err(bad(key, lengths(min_length, max_length)));
+            }
+            if let Some(pattern) = pattern
+                && !matches_pattern(pattern, value)
+            {
+                return Err(bad(key, format!("text matching {pattern}")));
+            }
+            Ok(())
+        }
         Kind::Bool => {
             if BOOL_WORDS.contains(&value) {
                 Ok(())
@@ -130,16 +147,29 @@ fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), Val
                 Err(bad(key, "a boolean (1/0, true/false, yes/no)"))
             }
         }
-        Kind::Int { min, max } => {
+        Kind::Int {
+            min,
+            max,
+            multiple_of,
+        } => {
             if !is_integer_text(value) {
                 return Err(bad(key, "a whole number"));
             }
             if !within(value, min, max) {
                 return Err(bad(key, bounds(min, max)));
             }
+            if let Some(step) = multiple_of
+                && !int_is_multiple(value, step)
+            {
+                return Err(bad(key, format!("a multiple of {step}")));
+            }
             Ok(())
         }
-        Kind::Float { min, max } => {
+        Kind::Float {
+            min,
+            max,
+            multiple_of,
+        } => {
             let x: f64 = value.parse().map_err(|_| bad(key, "a number"))?;
             // NaN fails every comparison, so it needs rejecting on its
             // own: without this, `NaN < min` is false, `NaN > max` is
@@ -149,6 +179,11 @@ fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), Val
             }
             if min.is_some_and(|m| x < m) || max.is_some_and(|m| x > m) {
                 return Err(bad(key, bounds(min, max)));
+            }
+            if let Some(step) = multiple_of
+                && !float_is_multiple(x, step)
+            {
+                return Err(bad(key, format!("a multiple of {step}")));
             }
             Ok(())
         }
@@ -194,7 +229,7 @@ fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), Val
         // rule here to check against, and accepting is the honest answer
         // rather than the lenient one. The structural check is in
         // [`validate_value`], which has the value rather than its text.
-        Kind::Bytes | Kind::List(_) | Kind::Map(_) | Kind::MapOf(_) => Ok(()),
+        Kind::Bytes | Kind::List { .. } | Kind::Map(_) | Kind::MapOf(_) => Ok(()),
         // A kind from a newer producer: this build cannot say whether the
         // value is acceptable, so it does not pretend to. Accepting is the
         // right answer rather than the lenient one — rejecting would make
@@ -230,6 +265,63 @@ fn within(text: &str, min: Option<i64>, max: Option<i64>) -> bool {
         Ok(n) => min.is_none_or(|m| n >= i128::from(m)) && max.is_none_or(|m| n <= i128::from(m)),
         Err(_) if text.starts_with('-') => min.is_none(),
         Err(_) => max.is_none(),
+    }
+}
+
+/// Whether an integer written as `text` is a multiple of `step`.
+///
+/// **Exact** for a whole-number step, in `i128` like [`within`]. An
+/// integer past even that cannot be checked by this build and is not
+/// refused for it. A fractional step on an integer is a real-number
+/// question, and goes to [`float_is_multiple`].
+fn int_is_multiple(text: &str, step: f64) -> bool {
+    if step.fract() == 0.0 && step < 9.0e18 {
+        // `step` is positive (the reader drops any other) and whole, so
+        // this is the integer it spells.
+        let step = step as i128;
+        return text.parse::<i128>().map_or(true, |n| n % step == 0);
+    }
+    text.parse::<f64>()
+        .map_or(true, |x| float_is_multiple(x, step))
+}
+
+/// Whether `x` is a multiple of `step`, to within a few ulps of `x`.
+///
+/// Not `x % step == 0.0`: in binary `0.3 % 0.1` is `0.09999999999999998`,
+/// and a person who typed `0.3` into a field stepping by `0.1` meant a
+/// multiple. The nearest multiple is compared against `x` with a
+/// tolerance that grows with `x`, which is where float error does.
+fn float_is_multiple(x: f64, step: f64) -> bool {
+    let nearest = (x / step).round() * step;
+    (nearest - x).abs() <= f64::EPSILON * x.abs().max(1.0) * 4.0
+}
+
+/// Whether `text` matches `pattern`, unanchored, as JSON Schema specifies.
+///
+/// A pattern the `regex` crate cannot compile -- ECMA-262 lookaround or a
+/// backreference -- is carried, not enforced: refusing every value for a
+/// schema this build cannot evaluate would make the field unusable, the
+/// same argument [`Kind::Unknown`] makes. Compiled per call, because this
+/// crate keeps no process-global cache; `regex` matches in linear time,
+/// so a hostile pattern costs its compile and nothing worse.
+#[cfg(feature = "regex")]
+fn matches_pattern(pattern: &str, text: &str) -> bool {
+    regex::Regex::new(pattern).map_or(true, |re| re.is_match(text))
+}
+
+/// Without the `regex` feature a pattern is carried and never enforced.
+#[cfg(not(feature = "regex"))]
+fn matches_pattern(_pattern: &str, _text: &str) -> bool {
+    true
+}
+
+/// What a length refusal says it wanted.
+fn lengths(min: Option<u64>, max: Option<u64>) -> String {
+    match (min, max) {
+        (Some(lo), Some(hi)) => format!("text of between {lo} and {hi} characters"),
+        (Some(lo), None) => format!("text of at least {lo} characters"),
+        (None, Some(hi)) => format!("text of at most {hi} characters"),
+        (None, None) => "text".to_string(),
     }
 }
 
@@ -288,10 +380,22 @@ fn value_against(
                 Err(bad(key, "bytes"))
             };
         }
-        Kind::List(_) => {
+        Kind::List { min, max, .. } => {
             let Some(items) = TryAsRef::<List>::try_as_ref(value).map(|list| &list[..]) else {
                 return Err(bad(key, "a list"));
             };
+            let n = items.len() as u64;
+            if min.is_some_and(|m| n < m) || max.is_some_and(|m| n > m) {
+                return Err(bad(
+                    key,
+                    match (min, max) {
+                        (Some(lo), Some(hi)) => format!("a list of between {lo} and {hi} items"),
+                        (Some(lo), None) => format!("a list of at least {lo} items"),
+                        (None, Some(hi)) => format!("a list of at most {hi} items"),
+                        (None, None) => "a list".to_string(),
+                    },
+                ));
+            }
             let element = kind.items();
             for (i, item) in items.iter().enumerate() {
                 value_against(element, &format!("{key}[{i}]"), item, depth + 1)?;

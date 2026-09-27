@@ -90,7 +90,11 @@ pub struct FieldBuilder {
 }
 
 /// Builds one kind: a subschema with no name of its own.
+///
+/// Holds its allocator, as the other builders do, so a constraint chained
+/// onto it -- `.max_length(64)` -- lands in the same arena as the kind.
 pub struct KindBuilder {
+    alloc: Alloc,
     state: Result<Value, ValueError>,
 }
 
@@ -515,7 +519,84 @@ impl KindBuilder {
             vocab::TYPE,
             Text::new_in(alloc, ty).map(Value::from),
         );
-        KindBuilder { state }
+        KindBuilder { alloc, state }
+    }
+
+    /// Writes a count, which JSON Schema requires to be a non-negative
+    /// integer -- a `u64` cannot be anything else.
+    fn count(mut self, key: &str, n: u64) -> KindBuilder {
+        let alloc = self.alloc;
+        put(
+            &mut self.state,
+            key,
+            Number::new_in(alloc, &n.to_string()).map(Value::from),
+        );
+        self
+    }
+
+    /// Writes text through this kind's allocator.
+    fn text(mut self, key: &str, text: &str) -> KindBuilder {
+        let alloc = self.alloc;
+        put(
+            &mut self.state,
+            key,
+            Text::new_in(alloc, text).map(Value::from),
+        );
+        self
+    }
+
+    /// JSON Schema's `minLength`: at least `n` characters, counted in
+    /// Unicode code points. For a string; carried and ignored on any other
+    /// kind, as JSON Schema says a keyword for another type is.
+    pub fn min_length(self, n: u64) -> KindBuilder {
+        self.count(vocab::MIN_LENGTH, n)
+    }
+
+    /// JSON Schema's `maxLength`: at most `n` characters, counted as
+    /// [`min_length`](KindBuilder::min_length) counts. For a string.
+    pub fn max_length(self, n: u64) -> KindBuilder {
+        self.count(vocab::MAX_LENGTH, n)
+    }
+
+    /// JSON Schema's `pattern`: a regular expression the string must
+    /// match, **unanchored** -- write `^...$` to mean the whole string.
+    ///
+    /// Enforced by [`validate_text`](super::validate::validate_text) only
+    /// with the `regex` feature; carried either way. See
+    /// [`vocab::PATTERN`].
+    pub fn pattern(self, pattern: &str) -> KindBuilder {
+        self.text(vocab::PATTERN, pattern)
+    }
+
+    /// JSON Schema's `format`: what the string holds -- `email`, `uri`,
+    /// `hostname`, `ipv4`, `date`. **An annotation, never checked**; a
+    /// renderer picks an input from it. See [`vocab::FORMAT`].
+    pub fn format(self, format: &str) -> KindBuilder {
+        self.text(vocab::FORMAT, format)
+    }
+
+    /// JSON Schema's `multipleOf`: the number must be an exact multiple
+    /// of `step`, which is also the step a slider moves by. For an integer
+    /// or a real number; `step` must be greater than zero, and a reader
+    /// ignores one that is not.
+    pub fn multiple_of(mut self, step: f64) -> KindBuilder {
+        let alloc = self.alloc;
+        put(
+            &mut self.state,
+            vocab::MULTIPLE_OF,
+            Number::float_in(alloc, step).map(Value::from),
+        );
+        self
+    }
+
+    /// JSON Schema's `minItems`: at least `n` elements. For a list.
+    pub fn min_items(self, n: u64) -> KindBuilder {
+        self.count(vocab::MIN_ITEMS, n)
+    }
+
+    /// JSON Schema's `maxItems`: at most `n` elements. For a list.
+    pub fn max_items(self, n: u64) -> KindBuilder {
+        self.count(vocab::MAX_ITEMS, n)
     }
 
     /// True or false.
@@ -776,6 +857,7 @@ impl KindBuilder {
         // No `type` of its own: `anyOf` alone is what a union is, and a
         // union of an integer and a string has no single type to name.
         let mut k = KindBuilder {
+            alloc,
             state: Ok(Map::new_in(alloc).into()),
         };
         put(&mut k.state, vocab::ANY_OF, Ok(List::new_in(alloc).into()));

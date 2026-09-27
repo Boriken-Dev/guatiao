@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The shape keywords a form draws from**: `KindBuilder::min_length`,
+  `max_length`, `pattern`, `format`, `multiple_of`, `min_items` and
+  `max_items`, each writing JSON Schema's own keyword, read back on
+  `Kind::Str`, `Kind::Int`/`Float` and `Kind::List`. `validate_*` enforces
+  lengths (in code points), steps (exact on a whole step, within a few
+  ulps on a real one, so `0.3` is a multiple of `0.1`) and list sizes;
+  `pattern` under the new default-off `regex` feature; `format` never,
+  since 2020-12 makes it an annotation. A third-party validator gives the
+  same verdict as `validate_map` on every case in the agreement test. In
+  C, `GUATIAO_KEY_MIN_LENGTH` and its six siblings.
 - **`guatiao_intake::path::is_bare_name` and `needs_quoting`**: the
   grammar answers whether a name can be a field segment as written, and
   whether a map key must be quoted. For a consumer whose own keys are
@@ -374,6 +384,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `GUATIAO_KEY_*` macros in the header.
 
 ### Changed
+
+- **`Kind::Str` and `Kind::List` are struct variants**:
+  `Kind::Str { min_length, max_length, pattern, format }` and
+  `Kind::List { items, min, max }`. `Kind::Int` and `Kind::Float` gain
+  `multiple_of`. A match on `Kind::Str` becomes `Kind::Str { .. }`, and on
+  `Kind::List(items)` becomes `Kind::List { items, .. }`.
 
 - **Breaking: the path language and the flat projection left `guatiao`.**
   A schema describes the struct exactly as it is; naming a place inside a

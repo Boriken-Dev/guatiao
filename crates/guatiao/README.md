@@ -83,6 +83,7 @@ one declaration, so the schema cannot describe a value the type refuses.
 | `derive` | `guatiao-derive` | `#[derive(ToValue, FromValue, Schema)]` |
 | `load` | `libloading`, `object` | loading libraries from disk into a `Registry` |
 | `c-header` | nothing | regenerating the committed C header |
+| `regex` | `regex` | enforcing a schema's `pattern` when validating |
 
 A default build pulls in nothing.
 

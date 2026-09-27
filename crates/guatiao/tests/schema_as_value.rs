@@ -142,7 +142,7 @@ fn a_declared_schema_reads_back() {
         );
         assert!(host.is_required());
         assert!(!host.is_sensitive());
-        assert!(matches!(host.kind(), Kind::Str));
+        assert!(matches!(host.kind(), Kind::Str { .. }));
         assert!(host.default().is_none(), "no default is not a null default");
 
         let port = s.find("port").expect("port is declared");
@@ -150,7 +150,8 @@ fn a_declared_schema_reads_back() {
             port.kind(),
             Kind::Int {
                 min: Some(1),
-                max: Some(65535)
+                max: Some(65535),
+                multiple_of: None
             }
         ));
         assert!(!port.is_required(), "only `host` asked to be required");
@@ -649,7 +650,7 @@ fn an_open_map_declares_its_values_and_not_its_keys() {
         let s = SchemaRef::new(&schema).expect("a schema is a map");
         let env = s.find("env").expect("env is declared");
         assert!(matches!(env.kind(), Kind::MapOf(_)));
-        assert!(matches!(env.kind().values(), Kind::Str));
+        assert!(matches!(env.kind().values(), Kind::Str { .. }));
         assert!(
             env.kind().fields().next().is_none(),
             "an open map declares no field at all"

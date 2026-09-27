@@ -155,7 +155,7 @@ fn visit<'a>(
             }
             true
         }
-        Kind::List(_) => {
+        Kind::List { .. } => {
             let Some(list) = TryAsRef::<List>::try_as_ref(value) else {
                 return false;
             };
@@ -280,7 +280,7 @@ fn rebuild(
             }
             any.then(|| map.into())
         }
-        Kind::List(_) => {
+        Kind::List { .. } => {
             let items = kind.items();
             let mut at: Vec<usize> = children(store, path)
                 .into_iter()
@@ -450,7 +450,7 @@ fn into<'a>(field: FieldRef<'a>, segment: &Segment<'_>) -> Option<FieldRef<'a>> 
         // A list is indexed, never keyed: `agent[0]` reaches an element
         // and `agent[first]` reaches nothing. Every element has the one
         // schema, so WHICH index it is changes nothing here.
-        Kind::List(items) => {
+        Kind::List { items, .. } => {
             matches!(segment, Segment::Index(_)).then(|| FieldRef::new("", items))?
         }
         // An open map is the other way round: its keys are data, so any

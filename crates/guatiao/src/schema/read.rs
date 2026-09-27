@@ -373,6 +373,9 @@ pub enum Kind<'a> {
         min: Option<i64>,
         /// Inclusive upper bound.
         max: Option<i64>,
+        /// The number must be a multiple of this: `multipleOf`, greater
+        /// than zero when present.
+        multiple_of: Option<f64>,
     },
     /// A real number, with optional inclusive bounds.
     Float {
@@ -380,13 +383,34 @@ pub enum Kind<'a> {
         min: Option<f64>,
         /// Inclusive upper bound.
         max: Option<f64>,
+        /// The number must be a multiple of this: `multipleOf`, greater
+        /// than zero when present.
+        multiple_of: Option<f64>,
     },
-    /// Free text.
-    Str,
+    /// Free text, with what JSON Schema can say about its shape.
+    Str {
+        /// `minLength`: fewest characters, in Unicode code points.
+        min_length: Option<u64>,
+        /// `maxLength`: most characters, in Unicode code points.
+        max_length: Option<u64>,
+        /// `pattern`: a regular expression the text must match,
+        /// unanchored.
+        pattern: Option<&'a str>,
+        /// `format`: what the text holds (`email`, `uri`, ...). An
+        /// annotation -- never checked.
+        format: Option<&'a str>,
+    },
     /// Opaque bytes: a certificate, a ticket, a key.
     Bytes,
-    /// A sequence, every element of one kind. Carries the element schema.
-    List(&'a Value),
+    /// A sequence, every element of one kind.
+    List {
+        /// The element schema; [`Kind::items`] reads it as a kind.
+        items: &'a Value,
+        /// `minItems`: fewest elements.
+        min: Option<u64>,
+        /// `maxItems`: most elements.
+        max: Option<u64>,
+    },
     /// A nested object, with its own fields. Carries the **object's**
     /// schema, not its `properties`, because `required` sits beside them.
     Map(&'a Value),
@@ -460,14 +484,23 @@ impl<'a> Kind<'a> {
             {
                 Kind::Enum(k)
             }
-            vocab::TYPE_STRING => Kind::Str,
+            vocab::TYPE_STRING => Kind::Str {
+                min_length: opt_count(k, vocab::MIN_LENGTH),
+                max_length: opt_count(k, vocab::MAX_LENGTH),
+                pattern: opt_str(k, vocab::PATTERN),
+                format: opt_str(k, vocab::FORMAT),
+            },
             vocab::TYPE_BYTES => Kind::Bytes,
             // An array with no element schema says nothing about what it
             // holds, which is a kind this build cannot use rather than an
             // array of anything.
             vocab::TYPE_ARRAY => {
                 match TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(vocab::ITEMS)) {
-                    Some(i) => Kind::List(i),
+                    Some(items) => Kind::List {
+                        items,
+                        min: opt_count(k, vocab::MIN_ITEMS),
+                        max: opt_count(k, vocab::MAX_ITEMS),
+                    },
                     None => Kind::Unknown(ty),
                 }
             }
@@ -502,10 +535,12 @@ impl<'a> Kind<'a> {
             vocab::TYPE_INTEGER => Kind::Int {
                 min: opt_int(k, vocab::MINIMUM),
                 max: opt_int(k, vocab::MAXIMUM),
+                multiple_of: opt_step(k),
             },
             vocab::TYPE_NUMBER => Kind::Float {
                 min: opt_float(k, vocab::MINIMUM),
                 max: opt_float(k, vocab::MAXIMUM),
+                multiple_of: opt_step(k),
             },
             other => Kind::Unknown(other),
         }
@@ -574,7 +609,7 @@ impl<'a> Kind<'a> {
     /// any other kind.
     pub fn items(self) -> Kind<'a> {
         match self {
-            Kind::List(i) => Kind::read(Some(i)),
+            Kind::List { items, .. } => Kind::read(Some(items)),
             _ => Kind::Missing,
         }
     }
@@ -612,9 +647,9 @@ impl<'a> Kind<'a> {
             Kind::Bool => vocab::TYPE_BOOLEAN,
             Kind::Int { .. } => vocab::TYPE_INTEGER,
             Kind::Float { .. } => vocab::TYPE_NUMBER,
-            Kind::Str | Kind::Enum(_) => vocab::TYPE_STRING,
+            Kind::Str { .. } | Kind::Enum(_) => vocab::TYPE_STRING,
             Kind::Bytes => vocab::TYPE_BYTES,
-            Kind::List(_) => vocab::TYPE_ARRAY,
+            Kind::List { .. } => vocab::TYPE_ARRAY,
             Kind::Map(_) | Kind::MapOf(_) | Kind::Variant { .. } => vocab::TYPE_OBJECT,
             Kind::Union(_) => vocab::ANY_OF,
             Kind::Unknown(name) => name,
@@ -633,6 +668,25 @@ fn opt_int(k: &Value, key: &str) -> Option<i64> {
         || TryAsRef::<Number>::try_as_ref(v).map(AsRef::<str>::as_ref)
             == Some("-9223372036854775808"))
     .then_some(got)
+}
+
+/// A count JSON Schema requires to be a non-negative integer. Anything
+/// else -- negative, fractional, past `i64` -- is no count this build can
+/// apply, and is read as absent rather than guessed at.
+fn opt_count(k: &Value, key: &str) -> Option<u64> {
+    opt_int(k, key).and_then(|n| u64::try_from(n).ok())
+}
+
+/// `multipleOf`, which JSON Schema requires to be greater than zero. A
+/// step of zero or less divides nothing, so it is read as absent.
+fn opt_step(k: &Value) -> Option<f64> {
+    opt_float(k, vocab::MULTIPLE_OF).filter(|s| *s > 0.0)
+}
+
+fn opt_str<'a>(k: &'a Value, key: &str) -> Option<&'a str> {
+    TryAsRef::<Map>::try_as_ref(k)
+        .and_then(|m| m.get(key))
+        .and_then(TryAsRef::<str>::try_as_ref)
 }
 
 fn opt_float(k: &Value, key: &str) -> Option<f64> {

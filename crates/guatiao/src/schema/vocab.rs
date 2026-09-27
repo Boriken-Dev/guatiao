@@ -168,6 +168,48 @@ pub const ITEMS: &str = "items";
 pub const MINIMUM: &str = "minimum";
 /// Inclusive upper bound of a numeric kind. Optional.
 pub const MAXIMUM: &str = "maximum";
+/// A number must be an exact multiple of this, which is also the step a
+/// slider moves by. Optional; greater than zero, or it is ignored.
+///
+/// Exact for a whole-number step on an integer. On a real number it is
+/// checked to within a few ulps, because `0.3` is not a multiple of `0.1`
+/// in binary and a person typing it meant that it was.
+pub const MULTIPLE_OF: &str = "multipleOf";
+
+// --- strings -----------------------------------------------------------
+
+/// Fewest characters a string may hold. Optional.
+///
+/// **Counted in Unicode code points**, which is how JSON Schema counts
+/// them -- not bytes, and not what a person would call a character when
+/// an accent is a separate code point.
+pub const MIN_LENGTH: &str = "minLength";
+/// Most characters a string may hold, counted as [`MIN_LENGTH`] counts.
+/// Optional.
+pub const MAX_LENGTH: &str = "maxLength";
+/// A regular expression a string must match. Optional.
+///
+/// **Unanchored**, as JSON Schema specifies: `[0-9]+` accepts `a1`, and a
+/// pattern that means the whole string says `^...$`. Enforced only with
+/// the `regex` feature, and only for a pattern that crate's syntax accepts
+/// -- ECMA-262 lookaround and backreferences are carried, never enforced.
+/// Carried either way, so a renderer can still check as a person types.
+pub const PATTERN: &str = "pattern";
+/// What a string holds: `email`, `uri`, `hostname`, `ipv4`, `ipv6`,
+/// `date`, `date-time`, `uuid` and the rest JSON Schema names. Optional.
+///
+/// **An annotation, never checked.** JSON Schema 2020-12 splits `format`
+/// into an annotation vocabulary (the default) and an assertion one, and
+/// this crate implements the first. A renderer picks an input from it; a
+/// value is not refused for failing to look like one.
+pub const FORMAT: &str = "format";
+
+// --- lists -------------------------------------------------------------
+
+/// Fewest elements a list may hold. Optional.
+pub const MIN_ITEMS: &str = "minItems";
+/// Most elements a list may hold. Optional.
+pub const MAX_ITEMS: &str = "maxItems";
 
 // --- alternatives -----------------------------------------------------
 
@@ -285,6 +327,13 @@ pub const KEYWORDS: &[&str] = &[
     ITEMS,
     MINIMUM,
     MAXIMUM,
+    MULTIPLE_OF,
+    MIN_LENGTH,
+    MAX_LENGTH,
+    PATTERN,
+    FORMAT,
+    MIN_ITEMS,
+    MAX_ITEMS,
     ENUM,
     CONST,
     ANY_OF,

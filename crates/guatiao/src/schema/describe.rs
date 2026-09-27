@@ -33,7 +33,7 @@
 //! // The bounds come from the Rust width, which already stated them.
 //! assert!(matches!(
 //!     s.find("port").unwrap().kind(),
-//!     Kind::Int { min: Some(0), max: Some(65535) }
+//!     Kind::Int { min: Some(0), max: Some(65535), .. }
 //! ));
 //!
 //! // `Option<T>` is how a field says it may be left out.

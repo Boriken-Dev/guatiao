@@ -1652,13 +1652,27 @@ const String GUATIAO_KEY_DIALECT =
 
 const String GUATIAO_KEY_ENUM = 'enum';
 
+const String GUATIAO_KEY_FORMAT = 'format';
+
 const String GUATIAO_KEY_ITEMS = 'items';
 
 const String GUATIAO_KEY_MAXIMUM = 'maximum';
 
+const String GUATIAO_KEY_MAX_ITEMS = 'maxItems';
+
+const String GUATIAO_KEY_MAX_LENGTH = 'maxLength';
+
 const String GUATIAO_KEY_MINIMUM = 'minimum';
 
+const String GUATIAO_KEY_MIN_ITEMS = 'minItems';
+
+const String GUATIAO_KEY_MIN_LENGTH = 'minLength';
+
+const String GUATIAO_KEY_MULTIPLE_OF = 'multipleOf';
+
 const String GUATIAO_KEY_ONE_OF = 'oneOf';
+
+const String GUATIAO_KEY_PATTERN = 'pattern';
 
 const String GUATIAO_KEY_PROPERTIES = 'properties';
 

@@ -1550,6 +1550,7 @@ pub fn guatiao::schema::build::KindBuilder::float() -> guatiao::schema::build::K
 pub fn guatiao::schema::build::KindBuilder::float_bounds(core::option::Option<f64>, core::option::Option<f64>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::float_bounds_in(guatiao::value::alloc::Alloc, core::option::Option<f64>, core::option::Option<f64>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::float_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::format(self, &str) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::int() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::int_bounds(core::option::Option<i64>, core::option::Option<i64>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::int_bounds_in(guatiao::value::alloc::Alloc, core::option::Option<i64>, core::option::Option<i64>) -> guatiao::schema::build::KindBuilder
@@ -1562,6 +1563,12 @@ pub fn guatiao::schema::build::KindBuilder::map(alloc::vec::Vec<guatiao::schema:
 pub fn guatiao::schema::build::KindBuilder::map_in(guatiao::value::alloc::Alloc, alloc::vec::Vec<guatiao::schema::build::FieldBuilder>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::map_of(guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::map_of_in(guatiao::value::alloc::Alloc, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::max_items(self, u64) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::max_length(self, u64) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::min_items(self, u64) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::min_length(self, u64) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::multiple_of(self, f64) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::pattern(self, &str) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::union(alloc::vec::Vec<guatiao::schema::build::KindBuilder>) -> guatiao::schema::build::KindBuilder
@@ -1693,14 +1700,23 @@ pub guatiao::schema::read::Kind::Enum(&'a guatiao::value::value::Value)
 pub guatiao::schema::read::Kind::Float
 pub guatiao::schema::read::Kind::Float::max: core::option::Option<f64>
 pub guatiao::schema::read::Kind::Float::min: core::option::Option<f64>
+pub guatiao::schema::read::Kind::Float::multiple_of: core::option::Option<f64>
 pub guatiao::schema::read::Kind::Int
 pub guatiao::schema::read::Kind::Int::max: core::option::Option<i64>
 pub guatiao::schema::read::Kind::Int::min: core::option::Option<i64>
-pub guatiao::schema::read::Kind::List(&'a guatiao::value::value::Value)
+pub guatiao::schema::read::Kind::Int::multiple_of: core::option::Option<f64>
+pub guatiao::schema::read::Kind::List
+pub guatiao::schema::read::Kind::List::items: &'a guatiao::value::value::Value
+pub guatiao::schema::read::Kind::List::max: core::option::Option<u64>
+pub guatiao::schema::read::Kind::List::min: core::option::Option<u64>
 pub guatiao::schema::read::Kind::Map(&'a guatiao::value::value::Value)
 pub guatiao::schema::read::Kind::MapOf(&'a guatiao::value::value::Value)
 pub guatiao::schema::read::Kind::Missing
 pub guatiao::schema::read::Kind::Str
+pub guatiao::schema::read::Kind::Str::format: core::option::Option<&'a str>
+pub guatiao::schema::read::Kind::Str::max_length: core::option::Option<u64>
+pub guatiao::schema::read::Kind::Str::min_length: core::option::Option<u64>
+pub guatiao::schema::read::Kind::Str::pattern: core::option::Option<&'a str>
 pub guatiao::schema::read::Kind::Union(&'a guatiao::value::value::Value)
 pub guatiao::schema::read::Kind::Unknown(&'a str)
 pub guatiao::schema::read::Kind::Variant
@@ -1790,11 +1806,18 @@ pub const guatiao::schema::vocab::DESCRIPTION: &str
 pub const guatiao::schema::vocab::DIALECT: &str
 pub const guatiao::schema::vocab::ENUM: &str
 pub const guatiao::schema::vocab::EXTENSIONS: &[&str]
+pub const guatiao::schema::vocab::FORMAT: &str
 pub const guatiao::schema::vocab::ITEMS: &str
 pub const guatiao::schema::vocab::KEYWORDS: &[&str]
 pub const guatiao::schema::vocab::MAXIMUM: &str
+pub const guatiao::schema::vocab::MAX_ITEMS: &str
+pub const guatiao::schema::vocab::MAX_LENGTH: &str
 pub const guatiao::schema::vocab::MINIMUM: &str
+pub const guatiao::schema::vocab::MIN_ITEMS: &str
+pub const guatiao::schema::vocab::MIN_LENGTH: &str
+pub const guatiao::schema::vocab::MULTIPLE_OF: &str
 pub const guatiao::schema::vocab::ONE_OF: &str
+pub const guatiao::schema::vocab::PATTERN: &str
 pub const guatiao::schema::vocab::PROPERTIES: &str
 pub const guatiao::schema::vocab::REQUIRED: &str
 pub const guatiao::schema::vocab::SCHEMA: &str
@@ -1819,14 +1842,23 @@ pub guatiao::schema::KindRef::Enum(&'a guatiao::value::value::Value)
 pub guatiao::schema::KindRef::Float
 pub guatiao::schema::KindRef::Float::max: core::option::Option<f64>
 pub guatiao::schema::KindRef::Float::min: core::option::Option<f64>
+pub guatiao::schema::KindRef::Float::multiple_of: core::option::Option<f64>
 pub guatiao::schema::KindRef::Int
 pub guatiao::schema::KindRef::Int::max: core::option::Option<i64>
 pub guatiao::schema::KindRef::Int::min: core::option::Option<i64>
-pub guatiao::schema::KindRef::List(&'a guatiao::value::value::Value)
+pub guatiao::schema::KindRef::Int::multiple_of: core::option::Option<f64>
+pub guatiao::schema::KindRef::List
+pub guatiao::schema::KindRef::List::items: &'a guatiao::value::value::Value
+pub guatiao::schema::KindRef::List::max: core::option::Option<u64>
+pub guatiao::schema::KindRef::List::min: core::option::Option<u64>
 pub guatiao::schema::KindRef::Map(&'a guatiao::value::value::Value)
 pub guatiao::schema::KindRef::MapOf(&'a guatiao::value::value::Value)
 pub guatiao::schema::KindRef::Missing
 pub guatiao::schema::KindRef::Str
+pub guatiao::schema::KindRef::Str::format: core::option::Option<&'a str>
+pub guatiao::schema::KindRef::Str::max_length: core::option::Option<u64>
+pub guatiao::schema::KindRef::Str::min_length: core::option::Option<u64>
+pub guatiao::schema::KindRef::Str::pattern: core::option::Option<&'a str>
 pub guatiao::schema::KindRef::Union(&'a guatiao::value::value::Value)
 pub guatiao::schema::KindRef::Unknown(&'a str)
 pub guatiao::schema::KindRef::Variant
@@ -1942,6 +1974,7 @@ pub fn guatiao::schema::build::KindBuilder::float() -> guatiao::schema::build::K
 pub fn guatiao::schema::build::KindBuilder::float_bounds(core::option::Option<f64>, core::option::Option<f64>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::float_bounds_in(guatiao::value::alloc::Alloc, core::option::Option<f64>, core::option::Option<f64>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::float_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::format(self, &str) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::int() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::int_bounds(core::option::Option<i64>, core::option::Option<i64>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::int_bounds_in(guatiao::value::alloc::Alloc, core::option::Option<i64>, core::option::Option<i64>) -> guatiao::schema::build::KindBuilder
@@ -1954,6 +1987,12 @@ pub fn guatiao::schema::build::KindBuilder::map(alloc::vec::Vec<guatiao::schema:
 pub fn guatiao::schema::build::KindBuilder::map_in(guatiao::value::alloc::Alloc, alloc::vec::Vec<guatiao::schema::build::FieldBuilder>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::map_of(guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::map_of_in(guatiao::value::alloc::Alloc, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::max_items(self, u64) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::max_length(self, u64) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::min_items(self, u64) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::min_length(self, u64) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::multiple_of(self, f64) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::pattern(self, &str) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::union(alloc::vec::Vec<guatiao::schema::build::KindBuilder>) -> guatiao::schema::build::KindBuilder
