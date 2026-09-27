@@ -164,3 +164,16 @@ release finishes it. The four crates go in dependency order: `guatiao-derive`,
 | crates.io | `CARGO_REGISTRY_TOKEN` secret: trusted publishing needs a crate that exists | trusted publishing per crate, then repository variable `CRATES_IO_TRUSTED_PUBLISHING=true` and delete the secret |
 | PyPI | a *pending* trusted publisher: repository `Boriken-Dev/guatiao`, workflow `release.yml`, environment `pypi` | the same publisher |
 | pub.dev | **by hand**, `dart pub publish` in `bindings/dart`: automated publishing needs a package that exists | automated publishing from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
+
+**Who owns what.** Neither registry lets a new package start under an
+organisation, so each is published by a person and handed over:
+
+- **crates.io** has no organisations; a crate is owned by people and GitHub
+  teams. The four crates belong to the `boriken-dev` team of the
+  `Boriken-Dev` organisation: `cargo owner --add github:Boriken-Dev:boriken-dev
+  <crate>` on each, once it exists. A team owner may publish but not change
+  owners, so one person stays an owner as well.
+- **pub.dev** calls an organisation a verified publisher. `guatiao` belongs
+  to `boriken.dev`: after the first `dart pub publish`, the package's Admin
+  tab transfers it there, and automated publishing is configured on the same
+  tab.
