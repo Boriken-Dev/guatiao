@@ -104,10 +104,16 @@ jobs:
       # packaged form -- what crates.io would receive -- uploading nothing.
       - name: Dry-run the workspace publish
         run: cargo publish --workspace --dry-run
+      # The dry run keeps its packages in cargo's own scratch directories,
+      # so the four are packaged again for the release. Named, because
+      # `--workspace` would take in the examples, which are never packaged.
+      - name: Package the four crates for the release
+        run: cargo package -p guatiao-derive -p guatiao -p guatiao-serde -p guatiao-intake --no-verify
       - uses: actions/upload-artifact@v4
         with:
           name: crates
           path: target/package/*.crate
+          if-no-files-found: error
 
   build-python:
     name: Build and check the Python distribution
@@ -127,6 +133,7 @@ jobs:
         with:
           name: python
           path: dist/
+          if-no-files-found: error
 
   build-dart:
     name: Validate the Dart package
@@ -152,10 +159,16 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      # By name: the run holds other artifacts too (the docs gate uploads
+      # the built site), and none of those is a release asset.
       - uses: actions/download-artifact@v4
         with:
+          name: crates
           path: dist/
-          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: python
+          path: dist/
       - name: Extract the CHANGELOG.md section for this tag
         shell: python
         env:
