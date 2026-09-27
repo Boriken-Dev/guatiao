@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`guatiao_intake::path::is_bare_name` and `needs_quoting`**: the
+  grammar answers whether a name can be a field segment as written, and
+  whether a map key must be quoted. For a consumer whose own keys are
+  bare text -- a URI query, a flat store -- and so must refuse a field
+  key the grammar would have quoted, rather than guessing with
+  `key.contains('.')`.
+- **`guatiao_intake::prelude`**: guatiao's schema builders and reading
+  views with this crate's extension traits, in one glob import. `section`
+  on a `FieldBuilder` is `FormFieldBuilder`'s method, and an extension
+  trait does nothing until it is in scope.
 - **An object whose keys are data**: `KindBuilder::map_of(values)` writes
   `{"type": "object", "additionalProperties": <schema>}` and
   `Kind::MapOf` reads it, told from `Kind::Map` by declaring no
@@ -461,6 +471,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `GUATIAO_SERDE_TOML` / `GUATIAO_SERDE_YAML`, since a default build
   exports neither; its docs say `arbitrary_precision` is on with `json`
   and that a number is verbatim only under `Numbers::RawText`.
+
+### Removed
+
+- **`guatiao::convert`**, a module that only re-exported
+  `guatiao::value::convert`. The traits are still at the crate root
+  (`guatiao::ToValue`) and at `guatiao::value::convert`, which carries the
+  module documentation; nothing wrote a path through the third spelling.
 
 ### Fixed
 
