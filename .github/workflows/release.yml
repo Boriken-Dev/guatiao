@@ -1,0 +1,335 @@
+name: Release
+
+# A `v*` tag releases: the test suite and a strict docs build gate it, every
+# manifest must name the tag's version, the three packages are built and
+# dry-run, a GitHub release is made, and then crates.io, PyPI and pub.dev
+# are published -- each skipping a version it already has, so a re-run
+# after a partial release finishes the job instead of failing on it.
+#
+# `workflow_dispatch` is the rehearsal: every gate, build and dry run,
+# nothing released and nothing published. A release must never be the
+# first time this file runs.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to rehearse a release from"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test gate
+    uses: ./.github/workflows/test.yaml
+    with:
+      ref: ${{ inputs.ref || github.ref }}
+
+  docs-gate:
+    name: Docs build gate (strict, no deploy)
+    uses: ./.github/workflows/docs.yml
+    # What the called jobs ask for, including the deploy job this call
+    # skips: a caller must grant a nested job's permissions up front.
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    with:
+      deploy: false
+      ref: ${{ inputs.ref || github.ref }}
+
+  version:
+    name: Every manifest names one version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: python -m pip install --upgrade packaging
+      # Cargo and pub.dev write the tag's version as it is; Python writes
+      # the same version the PEP 440 way (0.0.0-alpha.0 is 0.0.0a0). The
+      # tag reaches the script as data, never spliced into its source.
+      - name: Compare the tag with Cargo, pyproject and pubspec
+        shell: python
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: |
+          import os
+          import pathlib
+          import re
+          import sys
+          import tomllib
+
+          from packaging.version import Version
+
+          cargo = tomllib.loads(pathlib.Path("Cargo.toml").read_text())["workspace"]["package"]["version"]
+          python = tomllib.loads(pathlib.Path("bindings/python/pyproject.toml").read_text())["project"]["version"]
+          pubspec = re.search(r"^version:\s*(\S+)", pathlib.Path("bindings/dart/pubspec.yaml").read_text(), re.M).group(1)
+          init = re.search(r'^__version__ = "([^"]+)"', pathlib.Path("bindings/python/src/guatiao/__init__.py").read_text(), re.M).group(1)
+          print(f"Cargo {cargo}, pubspec {pubspec}, pyproject {python}, __version__ {init}")
+
+          problems = []
+          if cargo != pubspec:
+              problems.append(f"Cargo says {cargo} and pubspec says {pubspec}")
+          if Version(cargo) != Version(python) or python != init:
+              problems.append(f"Cargo says {cargo}, pyproject {python}, __version__ {init}")
+          tag = os.environ["TAG"]
+          if tag:
+              want = tag[1:] if tag.startswith("v") else tag
+              if want != cargo:
+                  problems.append(f"the tag {tag} names {want}, the manifests {cargo}")
+          if problems:
+              sys.exit("; ".join(problems))
+          print("one version:", cargo)
+
+  build-crates:
+    name: Package and verify the crates
+    needs: [test, version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # Packages every crate in dependency order and builds each from its
+      # packaged form -- what crates.io would receive -- uploading nothing.
+      - name: Dry-run the workspace publish
+        run: cargo publish --workspace --dry-run
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crates
+          path: target/package/*.crate
+
+  build-python:
+    name: Build and check the Python distribution
+    needs: [test, version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: python -m pip install --upgrade build twine
+      - run: python -m build bindings/python --outdir dist/
+      - run: python -m twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python
+          path: dist/
+
+  build-dart:
+    name: Validate the Dart package
+    needs: [test, version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Dry-run the pub.dev publish
+        working-directory: bindings/dart
+        run: dart pub get && dart pub publish --dry-run
+
+  github-release:
+    name: Create the GitHub release
+    needs: [docs-gate, build-crates, build-python, build-dart]
+    if: ${{ github.ref_type == 'tag' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+      - name: Extract the CHANGELOG.md section for this tag
+        shell: python
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          import os
+          import pathlib
+          import re
+          import sys
+
+          tag = os.environ["TAG"]
+          version = tag[1:] if tag.startswith("v") else tag
+
+          changelog = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          # Stop before the next "## [version]" heading, or before the
+          # trailing reference-link block when this is the oldest release.
+          match = re.search(
+              rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|^\[[^\]]+\]:\s|\Z)",
+              changelog,
+              re.DOTALL | re.MULTILINE,
+          )
+          if not match:
+              sys.exit(f"No CHANGELOG.md section found for version {version!r}")
+          pathlib.Path("release_notes.md").write_text(match.group(1).strip() + "\n", encoding="utf-8")
+      - name: Create the release
+        # Pinned to a commit: this action runs with contents: write.
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          files: dist/*
+          # Pinned to the tagged commit; left unset it names the default
+          # branch, which is not what was released.
+          target_commitish: ${{ github.sha }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body_path: release_notes.md
+
+  # --- publishing: after the GitHub release, each re-run-safe ----------------
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: github-release
+    runs-on: ubuntu-latest
+    environment:
+      name: crates-io
+      url: https://crates.io/crates/guatiao
+    permissions:
+      contents: read
+      id-token: write # trusted publishing, once it is configured
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # Trusted publishing can only be set up for a crate that already
+      # exists, so the first release uses the CARGO_REGISTRY_TOKEN secret.
+      # Once each crate trusts this workflow, set the repository variable
+      # CRATES_IO_TRUSTED_PUBLISHING to `true` and delete the secret.
+      - name: Exchange this run's identity for a crates.io token
+        id: auth
+        if: ${{ vars.CRATES_IO_TRUSTED_PUBLISHING == 'true' }}
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: Publish each crate crates.io does not have yet, in dependency order
+        shell: python
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token || secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          import json
+          import os
+          import subprocess
+          import sys
+          import tomllib
+          import urllib.error
+          import urllib.request
+
+          if not os.environ.get("CARGO_REGISTRY_TOKEN"):
+              sys.exit("no crates.io token: set the CARGO_REGISTRY_TOKEN secret, "
+                       "or configure trusted publishing and CRATES_IO_TRUSTED_PUBLISHING")
+          version = tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"]
+          headers = {"User-Agent": "guatiao release workflow (github.com/Boriken-Dev/guatiao)"}
+
+          def published(name):
+              url = f"https://crates.io/api/v1/crates/{name}/{version}"
+              try:
+                  with urllib.request.urlopen(urllib.request.Request(url, headers=headers)) as r:
+                      return json.load(r).get("version", {}).get("num") == version
+              except urllib.error.HTTPError as e:
+                  if e.code == 404:
+                      return False
+                  raise
+
+          # A crate before everything that depends on it. `cargo publish`
+          # waits until each is in the index before the next one starts.
+          for name in ["guatiao-derive", "guatiao", "guatiao-serde", "guatiao-intake"]:
+              if published(name):
+                  print(f"{name} {version} is already on crates.io; skipped")
+                  continue
+              subprocess.run(["cargo", "publish", "-p", name], check=True)
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: github-release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/guatiao/
+    permissions:
+      id-token: write # PyPI trusted publishing
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # PyPI never lets a version be replaced; a re-run uploads only
+          # what is missing. The version job keeps it from masking a
+          # wrong tag.
+          skip-existing: true
+
+  publish-pub:
+    name: Publish to pub.dev
+    needs: github-release
+    runs-on: ubuntu-latest
+    environment:
+      name: pub-dev
+      url: https://pub.dev/packages/guatiao
+    permissions:
+      contents: read
+      id-token: write # pub.dev automated publishing
+    steps:
+      - uses: actions/checkout@v4
+      # Configures the OIDC token pub.dev accepts from a tag-triggered run
+      # of a repository the package's admin page trusts.
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Publish, unless pub.dev has this version already
+        working-directory: bindings/dart
+        shell: python
+        run: |
+          import json
+          import re
+          import subprocess
+          import urllib.error
+          import urllib.request
+
+          version = re.search(r"^version:\s*(\S+)", open("pubspec.yaml").read(), re.M).group(1)
+          try:
+              with urllib.request.urlopen("https://pub.dev/api/packages/guatiao") as r:
+                  have = {v["version"] for v in json.load(r)["versions"]}
+          except urllib.error.HTTPError as e:
+              if e.code != 404:
+                  raise
+              # pub.dev automates only a package that already exists: the
+              # first version is published by hand, with `dart pub publish`.
+              raise SystemExit("guatiao is not on pub.dev yet: publish its first "
+                               "version by hand, then enable automated publishing")
+          if version in have:
+              print(f"guatiao {version} is already on pub.dev; skipped")
+          else:
+              subprocess.run(["dart", "pub", "get"], check=True)
+              subprocess.run(["dart", "pub", "publish", "--force"], check=True)
+
+  # A GITHUB_TOKEN-made release starts no workflow, so docs.yml is
+  # dispatched at this tag instead. A pre-release leaves the published docs
+  # alone, and this is off the publish chain: a docs problem never blocks a
+  # package that passed its tests.
+  docs-deploy:
+    name: Deploy the docs for this release
+    needs: github-release
+    if: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch docs.yml at this tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME"

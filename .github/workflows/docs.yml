@@ -1,11 +1,14 @@
 name: Docs
 
 # The only workflow that deploys Pages, so the site can be rebuilt without
-# cutting a release: on a published release (its docs ship with it), on a
-# push to main that touches a docs source, and on demand for any ref.
+# cutting a release: on a push to main that touches a docs source, and on
+# demand for any ref -- which is how a release ships its docs: release.yml
+# dispatches this at its tag. It cannot listen for the release itself: a
+# release made with the workflow's own GITHUB_TOKEN starts no workflow.
+#
+# release.yml also CALLS it with `deploy: false`, as the strict docs build
+# that gates a release without the release owning a deployment.
 on:
-  release:
-    types: [published]
   push:
     branches:
       - main
@@ -18,6 +21,18 @@ on:
       - "bindings/dart/lib/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      deploy:
+        description: "Deploy the built site, or only prove it builds"
+        type: boolean
+        required: false
+        default: true
+      ref:
+        description: "Git ref to build"
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -37,6 +52,8 @@ jobs:
       pages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
@@ -84,6 +101,9 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
+    # Absent outside a call, so a push or a dispatch deploys; a caller that
+    # passes `deploy: false` only proves the site builds.
+    if: ${{ inputs.deploy != false }}
     runs-on: ubuntu-latest
     permissions:
       pages: write

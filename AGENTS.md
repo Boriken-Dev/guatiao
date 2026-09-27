@@ -125,9 +125,42 @@ without tracking down past contributors.
 
 ## CI and release
 
-Two workflows. `test.yaml` runs on `workflow_dispatch` or a `ci-*` tag; push
-a uniquely named `ci-*` tag, watch the run, then delete the tag. Its `python`
-job builds the workspace once, then runs `bindings/python`'s tests on 3.9
-and 3.14. `cla.yaml` gates pull requests. There is no release workflow and
-`publish = false` everywhere: the licence is settled, but the crate is not
-offered on a registry yet.
+Four workflows:
+
+- `test.yaml` runs on `workflow_dispatch` or a `ci-*` tag; push a uniquely
+  named `ci-*` tag, watch the run, then delete the tag. Its `python` job
+  builds the workspace once, then runs `bindings/python`'s tests on 3.9 and
+  3.14. `release.yml` calls it as its test gate.
+- `docs.yml` owns every Pages deploy: a push to `main` touching a docs
+  source, or a dispatch at any ref. `release.yml` calls it with
+  `deploy: false` as a strict build gate, and dispatches it at a final tag.
+- `release.yml` releases a `v*` tag, and rehearses one on `workflow_dispatch`
+  (every gate, build and dry run; nothing released, nothing published).
+- `cla.yaml` gates pull requests.
+
+**Cutting a release.** One version everywhere: `[workspace.package] version`
+in `Cargo.toml`, `bindings/dart/pubspec.yaml`, and the same version the
+PEP 440 way in `bindings/python/pyproject.toml` and its `__version__`
+(`0.0.0-alpha.0` is `0.0.0a0`). A `## [x.y.z] - <date>` section in
+`CHANGELOG.md` (its body becomes the release notes) and in
+`bindings/dart/CHANGELOG.md`. Rehearse with `gh workflow run release.yml`,
+then push the tag `vx.y.z` -- the tag is the release, and a registry never
+takes a version back. The `version` job refuses a tag the manifests do not
+name.
+
+**What the tag does**: gates (tests, strict docs build, one version), then
+packages all three (`cargo publish --workspace --dry-run`, `python -m build`
++ `twine check`, `dart pub publish --dry-run`), then the GitHub release
+(marked pre-release for a tag with a `-`), then publishes. Each publish job
+skips a version its registry already has, so re-running a partly failed
+release finishes it. The four crates go in dependency order: `guatiao-derive`,
+`guatiao`, `guatiao-serde`, `guatiao-intake`, each naming the others with
+`=x.y.z`.
+
+**How each registry is reached**:
+
+| registry | first release | afterwards |
+| --- | --- | --- |
+| crates.io | `CARGO_REGISTRY_TOKEN` secret: trusted publishing needs a crate that exists | trusted publishing per crate, then repository variable `CRATES_IO_TRUSTED_PUBLISHING=true` and delete the secret |
+| PyPI | a *pending* trusted publisher: repository `Boriken-Dev/guatiao`, workflow `release.yml`, environment `pypi` | the same publisher |
+| pub.dev | **by hand**, `dart pub publish` in `bindings/dart`: automated publishing needs a package that exists | automated publishing from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |

@@ -1,13 +1,21 @@
 name: Test
 
-# On-demand test workflow, kept separate from any future release workflow:
-# workflow_dispatch (with a ref input) plus throwaway "ci-*" tags, deleted
-# after the run. Not triggered by push/PR on branches by default.
+# On-demand test workflow: workflow_dispatch (with a ref input) plus
+# throwaway "ci-*" tags, deleted after the run. Not triggered by push/PR on
+# branches. release.yml calls it as its test gate, so a release runs exactly
+# the suite a ci-* tag does -- never a copy that drifted.
 on:
   workflow_dispatch:
     inputs:
       ref:
         description: "Git ref to test (branch, tag, or SHA)"
+        required: false
+        default: ""
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to test"
+        type: string
         required: false
         default: ""
   push:
