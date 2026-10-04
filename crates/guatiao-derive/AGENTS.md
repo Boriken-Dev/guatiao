@@ -78,6 +78,23 @@ sides drift. The field's own name is its key in `properties`, and
 whether it is required — a field that is neither an `Option<T>` nor
 `#[map(default)]` — is a name in the struct's `required` list. Neither is written inside the field.
 
+**`crate = <path>`** on the type, for a consumer that reaches `guatiao`
+through a re-export and names no such dependency itself:
+
+| on | written as |
+| --- | --- |
+| `ToValue`, `FromValue`, `Schema` | `#[map(crate = ::acme_kinds::guatiao)]` on the struct or enum |
+| `#[derive(Provider)]` | `#[provider(Greeter, crate = ::acme_kinds::guatiao)]` |
+| `#[kind]` | `#[acme_kinds::guatiao::kind(crate = ::acme_kinds::guatiao)]` |
+
+Every path the expansion would root at `::guatiao` is rooted at the
+path instead, so a crate that defines kinds can `pub use guatiao;` and
+be the one thing its providers depend on -- one version to agree on
+rather than two that must match. `providers!` needs nothing: it is
+`macro_rules!` and already resolves through the path it was called by
+(`acme_kinds::guatiao::providers!(Tuner);`). `#[derive(Form)]` has no
+such key.
+
 **Enums**, in two shapes. Refused otherwise, with a sentence saying why.
 
 | declaration | value | `Schema::kind` |
@@ -173,8 +190,8 @@ associated consts/types, `async`, generic or variadic methods, `&mut
 self`/`self`/no receiver, a `&mut` argument, a borrowed argument of any
 other type, a value type by value as an argument, `impl Trait` anywhere,
 a function argument, a borrowed or `impl Trait` return, a `Result` whose
-error is not `ProviderError`, and an attribute key other than `name`
-and `object`. Every message is pinned by text in
+error is not `ProviderError`, and an attribute key other than `name`,
+`object` and `crate`. Every message is pinned by text in
 `kind::tests::kind_rejects_by_name`; the expansion of a two-method trait
 is pinned by `src/snapshots/greeter.expected.rs`.
 
@@ -208,6 +225,7 @@ implementation fills the same table and hands `{table, size, ctx}` as a
 | `config = C` | the provider is **built from `C`**: schema through `C: Schema`, decoded through `C: FromValue`, built through `Self: TryFrom<C, Error: Into<ProviderError>>` (`C = Self` is the identity); emits the `create`/`destroy` slots, so a host gets an `Instance` per configuration whose address is the `ctx` | none: the type is its one instance |
 | `new = path` / `new_with_host = path` | `fn() -> Self` / `fn(Host) -> Self` building the default instance (the descriptor's `ctx`); with `config` and neither, there is no default instance | `Default`, except with `config` |
 | `available = path` | `fn(&Self) -> Result<(), &'static str>`, asked on every call of the default instance; refused when there is none | always available |
+| `crate = path` | where the expansion finds `guatiao`, for a provider that reaches it through a re-export | `::guatiao` |
 
 Emits, inside a `const _` block: one `static` table per kind
 (`<dyn K as Kind>::Vtable::of::<T>()`, reached through the trait so only
@@ -236,8 +254,8 @@ writes the whole library.
   `#[map(default)]` beside `#[schema(default = ..)]`.
 - **A key may contain a NUL.** Keys are pointer and length, so the derive
   does not invent a restriction the value model does not have.
-- **Every path the expansion emits is rooted** at `::guatiao::`,
-  `::core::` or `::std::` — the last for `::std::vec::Vec::new()`, the
+- **Every path the expansion emits is rooted** at `::guatiao::` (or at
+  the path `crate = ..` names instead), `::core::` or `::std::` — the last for `::std::vec::Vec::new()`, the
   list a schema's fields are collected into. A test asserts this token by
   token, over all three derives: generated code that named a third crate
   would fail in every consumer that expanded it while passing here.

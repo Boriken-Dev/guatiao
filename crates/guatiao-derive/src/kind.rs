@@ -78,7 +78,10 @@ fn try_expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
     let attr = parse_attr(attr, &tr.ident)?;
     check_trait(&tr, attr.object)?;
     let methods = plan_methods(&tr, attr.object)?;
-    Ok(emit(&tr, &attr, &methods))
+    Ok(crate::krate::reroot(
+        emit(&tr, &attr, &methods),
+        attr.krate.as_ref(),
+    ))
 }
 
 // --- what the attribute takes ---------------------------------------------
@@ -89,13 +92,16 @@ struct KindAttr {
     name: String,
     /// `object`: a handle one caller owns, not a provider.
     object: bool,
+    /// `crate = <path>`: where the expansion finds `guatiao`.
+    krate: Option<syn::Path>,
 }
 
-/// `#[kind]`, `#[kind(name = "...")]`, `#[kind(object)]`, or both. The
-/// name defaults to the trait's ident in snake case.
+/// `#[kind]`, or any of `name = "..."`, `object` and `crate = <path>`.
+/// The name defaults to the trait's ident in snake case.
 fn parse_attr(attr: TokenStream, ident: &Ident) -> syn::Result<KindAttr> {
     let mut name = None;
     let mut object = false;
+    let mut krate = None;
     if !attr.is_empty() {
         let parser = syn::meta::parser(|meta| {
             if meta.path.is_ident("name") {
@@ -111,8 +117,12 @@ fn parse_attr(attr: TokenStream, ident: &Ident) -> syn::Result<KindAttr> {
                 }
                 object = true;
                 Ok(())
+            } else if meta.path.is_ident("crate") {
+                krate = Some(meta.value()?.parse()?);
+                Ok(())
             } else {
-                Err(meta.error("#[kind] takes only `name = \"...\"` and `object`"))
+                Err(meta
+                    .error("#[kind] takes only `name = \"...\"`, `object` and `crate = <path>`"))
             }
         });
         syn::parse::Parser::parse2(parser, attr)?;
@@ -120,6 +130,7 @@ fn parse_attr(attr: TokenStream, ident: &Ident) -> syn::Result<KindAttr> {
     Ok(KindAttr {
         name: name.unwrap_or_else(|| snake_case(&ident.to_string())),
         object,
+        krate,
     })
 }
 
@@ -1534,6 +1545,35 @@ mod tests {
         assert!(out.contains("object_out :: < dyn Conversation >"));
         assert!(out.contains("object_ret :: < dyn Conversation >"));
         assert!(out.contains("let __arg_listener = listener . into_raw ()"));
+    }
+
+    /// With `crate = <path>` nothing is rooted at `::guatiao`: a consumer
+    /// reaching the crate through a re-export has no such name.
+    #[test]
+    fn a_crate_path_reroots_every_generated_path() {
+        // Every way an argument and a return can cross.
+        const EVERYTHING: &str = "pub trait Greeter: Send + Sync { \
+            fn a(&self, s: &str, b: &[u8], v: &Value, o: Option<&Value>, m: &Map, n: i64, \
+                c: Config) -> Result<Map, ProviderError>; \
+            fn b(&self) -> Result<List, ProviderError>; \
+            fn c(&self) -> Result<Value, ProviderError>; \
+            fn d(&self) -> Result<Reply, ProviderError>; \
+            fn e(&self, l: Object<dyn Listener>) \
+                -> Result<Object<dyn Conversation>, ProviderError>; \
+            fn f(&self) -> i64; \
+            fn g(&self) -> String { String::new() } }";
+        for (attr, item) in [
+            ("crate = ::kinds::guatiao", EVERYTHING),
+            ("object, crate = ::kinds::guatiao", CONVERSATION),
+        ] {
+            let out = expand_str(attr, item).expect("expands");
+            assert!(out.contains(":: kinds :: guatiao ::"), "{out}");
+            let rest = out.replace(":: kinds :: guatiao", "");
+            assert!(
+                !rest.contains(":: guatiao"),
+                "a path is still rooted at `::guatiao`: {rest}"
+            );
+        }
     }
 
     #[test]

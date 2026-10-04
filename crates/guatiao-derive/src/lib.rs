@@ -132,6 +132,7 @@ mod expand;
 mod form;
 #[cfg(feature = "provider")]
 mod kind;
+mod krate;
 #[cfg(feature = "provider")]
 mod provider;
 

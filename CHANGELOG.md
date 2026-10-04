@@ -32,6 +32,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   fail to decode because the other side knows a newer name. Its schema is
   the new `KindBuilder::open_enumeration`: a string with the known names
   as `examples`, read with `FieldRef::suggestions()`.
+- **`crate = <path>` on the derives and on `#[kind]`**: `#[map(crate =
+  ..)]`, `#[provider(.., crate = ..)]` and `#[kind(crate = ..)]` root the
+  generated code at a re-export of `guatiao` instead of at `::guatiao`.
+  A crate that defines kinds can `pub use guatiao;` and be the one thing
+  its providers depend on, rather than every provider pinning `guatiao`
+  at the same version beside it.
 
 ### Fixed
 

@@ -1100,6 +1100,15 @@ drop(s);                                                             // the libr
   `{package}_{type}` of the crate that **derived** it (`acme_tuner`). A
   host that links the library instead calls `local_providers!`, which
   exports nothing.
+- **A kind crate can be the one dependency.** `pub use guatiao;` in the
+  crate that defines the kinds, and a provider names that path:
+  `#[provider(Tuner, crate = ::acme_kinds::guatiao)]`,
+  `#[map(crate = ::acme_kinds::guatiao)]` on a type deriving `ToValue`,
+  `FromValue` or `Schema`, `#[kind(crate = ..)]` on a trait, and
+  `acme_kinds::guatiao::providers!(..)`. Without it every expansion is
+  rooted at `::guatiao`, so each provider names `guatiao` itself at the
+  exact version the kind crate was built against -- two copies of this
+  crate are two different `Kind` traits.
 - **Instances from a configuration.** `config = C` means the provider is
   **built from `C`**: `C: Schema + FromValue`, `Self: TryFrom<C, Error:
   Into<ProviderError>>`. Bare `config`, or `config = Self`, makes the

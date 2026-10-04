@@ -87,7 +87,7 @@ fn try_expand(derive: Derive, input: TokenStream) -> syn::Result<TokenStream> {
             // The same reader the enum path uses, so a container-level
             // `#[map(...)]` is refused on a struct rather than ignored --
             // ignoring one would change the wire shape silently.
-            ContainerAttrs::read(derive, &ast.attrs, false)?;
+            let krate = ContainerAttrs::read(derive, &ast.attrs, false)?.krate;
             let named = named_fields(derive, &ast.ident, &data.fields)?;
 
             let mut plan: Vec<FieldPlan> = Vec::new();
@@ -97,11 +97,12 @@ fn try_expand(derive: Derive, input: TokenStream) -> syn::Result<TokenStream> {
             reject_duplicate_keys(&plan)?;
 
             let name = &ast.ident;
-            Ok(match derive {
+            let tokens = match derive {
                 Derive::ToValue => emit_to(name, &plan),
                 Derive::FromValue => emit_from(name, &plan),
                 Derive::Schema => emit_schema(name, &plan),
-            })
+            };
+            Ok(crate::krate::reroot(tokens, krate.as_ref()))
         }
         Data::Enum(data) => {
             refuse_generics(derive, &ast)?;
@@ -866,6 +867,9 @@ struct ContainerAttrs {
     /// The one wire-format decision an enum can need, so the author makes
     /// it rather than this crate.
     tag: Option<String>,
+    /// `#[map(crate = <path>)]`: where the expansion finds `guatiao`,
+    /// for a consumer that reaches it through a re-export.
+    krate: Option<syn::Path>,
 }
 
 impl ContainerAttrs {
@@ -877,7 +881,10 @@ impl ContainerAttrs {
                 continue;
             }
             attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("tag") && is_enum {
+                if meta.path.is_ident("crate") {
+                    out.krate = Some(meta.value()?.parse()?);
+                    Ok(())
+                } else if meta.path.is_ident("tag") && is_enum {
                     out.tag = Some(meta.value()?.parse::<LitStr>()?.value());
                     Ok(())
                 } else if meta.path.is_ident("tag") {
@@ -891,13 +898,14 @@ impl ContainerAttrs {
                     // silently ignored would change the wire shape.
                     Err(meta.error(format!(
                         "unrecognised `#[map(...)]` option on an enum. {label} knows \
-                         one: `tag = \"...\"`, the key a variant's name is stored under."
+                         two: `tag = \"...\"`, the key a variant's name is stored under, \
+                         and `crate = <path>`, where `guatiao` is re-exported."
                     )))
                 } else {
                     Err(meta.error(format!(
                         "unrecognised `#[map(...)]` option on a struct. {label} takes \
-                         none here: `rename = \"...\"` and `skip` go on a field, and \
-                         `tag` is an enum's."
+                         one here, `crate = <path>`: `rename = \"...\"`, `skip` and \
+                         `default` go on a field, and `tag` is an enum's."
                     )))
                 }
             })?;
@@ -1087,7 +1095,8 @@ fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Resul
         ));
     }
 
-    let tag = ContainerAttrs::read(derive, &ast.attrs, true)?.tag;
+    let ContainerAttrs { tag, krate } = ContainerAttrs::read(derive, &ast.attrs, true)?;
+    let reroot = |tokens| crate::krate::reroot(tokens, krate.as_ref());
 
     // Before reading any variant, so the message is about the decision
     // that is missing rather than about whichever variant came first.
@@ -1124,18 +1133,18 @@ fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Resul
     }
 
     let Some(tag) = tag else {
-        return Ok(match derive {
+        return Ok(reroot(match derive {
             Derive::ToValue => emit_choice_to(name, &variants),
             Derive::FromValue => emit_choice_from(name, &variants),
             Derive::Schema => emit_choice_schema(name, &variants),
-        });
+        }));
     };
     reject_fields_on_the_tag(&tag, &variants)?;
-    Ok(match derive {
+    Ok(reroot(match derive {
         Derive::ToValue => emit_arm_to(name, &tag, &variants),
         Derive::FromValue => emit_arm_from(name, &tag, &variants),
         Derive::Schema => emit_arm_schema(name, &tag, &variants),
-    })
+    }))
 }
 
 /// Whether a variant carries `#[map(other)]`, before its plan is read.
@@ -1603,6 +1612,55 @@ mod tests {
         });
         assert!(clash.contains("two fields map to the key"), "{clash}");
         assert!(clash.contains("silently replace"), "{clash}");
+    }
+
+    /// With `#[map(crate = <path>)]` nothing is rooted at `::guatiao`, on
+    /// any shape under any of the three derives.
+    #[test]
+    fn a_crate_path_reroots_every_generated_path() {
+        let shapes = [
+            quote! {
+                #[map(crate = ::kinds::guatiao)]
+                struct S {
+                    #[schema(title = "A", description = "h", section = "s", order = 2,
+                        advanced, sensitive, read_only, deprecated, examples(1, 2),
+                        min_length = 1, pattern = "x", format = "f", multiple_of = 2,
+                        min_items = 1, default = 5900)]
+                    a: u8,
+                    b: Option<u8>,
+                    #[map(skip)] c: u8,
+                    #[map(default)] d: u8,
+                    #[map(default = 7)] e: u8,
+                }
+            },
+            quote! {
+                #[map(crate = ::kinds::guatiao)]
+                enum C { A, #[map(rename = "b")] B }
+            },
+            quote! {
+                #[map(crate = ::kinds::guatiao)]
+                enum O { A, #[map(other)] X(String) }
+            },
+            quote! {
+                #[map(tag = "t", crate = ::kinds::guatiao)]
+                enum T { A, B { x: u8, y: Option<u8>, #[map(skip)] z: u8, #[map(default)] w: u8 } }
+            },
+        ];
+        for shape in shapes {
+            for out in [
+                to(shape.clone()),
+                from(shape.clone()),
+                schema(shape.clone()),
+            ] {
+                assert!(!out.contains("compile_error"), "{out}");
+                assert!(out.contains(":: kinds :: guatiao ::"), "{out}");
+                let rest = out.replace(":: kinds :: guatiao", "");
+                assert!(
+                    !rest.contains(":: guatiao"),
+                    "a path is still rooted at `::guatiao`: {rest}"
+                );
+            }
+        }
     }
 
     /// A key with a NUL in it is **accepted**.

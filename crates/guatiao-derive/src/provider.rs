@@ -67,6 +67,8 @@ struct Decl {
     new: Option<Path>,
     new_with_host: Option<Path>,
     available: Option<Path>,
+    /// `crate = <path>`: where the expansion finds `guatiao`.
+    krate: Option<Path>,
 }
 
 fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
@@ -99,7 +101,10 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
              configuration has none; add `new` or `new_with_host`, or drop `available`",
         ));
     }
-    Ok(emit(&ast.ident, &decl, has_default_instance))
+    Ok(crate::krate::reroot(
+        emit(&ast.ident, &decl, has_default_instance),
+        decl.krate.as_ref(),
+    ))
 }
 
 fn read_attrs(ast: &DeriveInput) -> syn::Result<Decl> {
@@ -149,6 +154,11 @@ fn read_attrs(ast: &DeriveInput) -> syn::Result<Decl> {
                     decl.available = Some(meta.value()?.parse()?);
                     Ok(())
                 }
+                "crate" => {
+                    once(&meta, decl.krate.is_some(), "crate")?;
+                    decl.krate = Some(meta.value()?.parse()?);
+                    Ok(())
+                }
                 // A bare path with no `=` is a kind: `#[provider(Greeter)]`.
                 _ if !meta.input.peek(syn::Token![=]) => {
                     decl.kinds.push(meta.path.clone());
@@ -156,7 +166,8 @@ fn read_attrs(ast: &DeriveInput) -> syn::Result<Decl> {
                 }
                 other => Err(meta.error(format!(
                     "`{other}` is not a provider option; the options are `kinds(..)`, `id`, \
-                     `name`, `version`, `config`, `new`, `new_with_host` and `available`"
+                     `name`, `version`, `config`, `new`, `new_with_host`, `available` and \
+                     `crate`"
                 ))),
             }
         })?;
@@ -496,6 +507,25 @@ mod tests {
         );
         let out = expand_str("#[provider(Greeter, new = Hi::make)] struct Hi;").unwrap();
         assert!(out.contains("Hi :: make ()"));
+    }
+
+    /// With `crate = <path>` nothing is rooted at `::guatiao`.
+    #[test]
+    fn a_crate_path_reroots_every_generated_path() {
+        for attr in [
+            "#[provider(Greeter, counter::Counter, crate = ::kinds::guatiao)]",
+            "#[provider(Greeter, config, crate = ::kinds::guatiao)]",
+            "#[provider(kinds(Greeter), config = HiConfig, new_with_host = Hi::build, \
+             available = Hi::ready, crate = ::kinds::guatiao)]",
+        ] {
+            let out = expand_str(&format!("{attr} struct Hi;")).unwrap();
+            assert!(out.contains(":: kinds :: guatiao ::"), "{out}");
+            let rest = out.replace(":: kinds :: guatiao", "");
+            assert!(
+                !rest.contains(":: guatiao"),
+                "a path is still rooted at `::guatiao`: {rest}"
+            );
+        }
     }
 
     #[test]
