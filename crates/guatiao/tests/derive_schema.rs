@@ -308,6 +308,99 @@ fn a_declared_default_lands_in_the_document() {
     });
 }
 
+/// A field with `#[map(default)]` may be left out, and the three derives
+/// agree about it: the schema does not require it and carries the value,
+/// a document without it validates, and the reader fills that same value.
+#[test]
+fn a_defaulted_field_may_be_left_out_and_reads_as_its_default() {
+    use guatiao::FromValue;
+
+    #[derive(Debug, PartialEq, Schema, ToValue, FromValue)]
+    struct Tuner {
+        name: String,
+        #[map(default = 4)]
+        channels: u32,
+        #[map(default)]
+        tags: Vec<String>,
+    }
+
+    #[derive(Debug, PartialEq, ToValue, FromValue)]
+    #[map(tag = "via")]
+    enum Source {
+        Http {
+            url: String,
+            #[map(default = 30)]
+            timeout: u32,
+        },
+    }
+
+    alloc_and(|alloc| {
+        let declared = Tuner::schema(alloc).unwrap();
+        let s = SchemaRef::new(&declared).unwrap();
+        assert!(s.find("name").unwrap().is_required());
+        assert!(!s.find("channels").unwrap().is_required());
+        assert!(!s.find("tags").unwrap().is_required());
+        let channels: u32 = s
+            .find("channels")
+            .unwrap()
+            .default()
+            .expect("the schema carries the default the reader uses")
+            .try_into()
+            .unwrap();
+        assert_eq!(channels, 4);
+        let tags = s.find("tags").unwrap().default().expect("and `Default`'s");
+        assert_eq!(
+            TryAsRef::<guatiao::List>::try_as_ref(tags).map(|l| l.iter().count()),
+            Some(0)
+        );
+
+        // A document that leaves both out is one the schema accepts and
+        // the type reads.
+        let mut doc = Map::new();
+        doc.set("name", "one").unwrap();
+        let doc = guatiao::Value::from(doc);
+        assert_eq!(validate_map(s, &doc), Ok(()));
+        assert_eq!(
+            Tuner::from_value(&doc).unwrap(),
+            Tuner {
+                name: "one".into(),
+                channels: 4,
+                tags: Vec::new(),
+            }
+        );
+
+        // A stored value wins, and is always written.
+        let full = Tuner {
+            name: "two".into(),
+            channels: 2,
+            tags: vec!["a".into()],
+        };
+        let written = full.to_value(alloc).unwrap();
+        assert_eq!(validate_map(s, &written), Ok(()));
+        assert_eq!(Tuner::from_value(&written).unwrap(), full);
+
+        // A stored value of the wrong kind is refused under its key, not
+        // replaced by the default.
+        let mut wrong = Map::new();
+        wrong.set("name", "three").unwrap();
+        wrong.set("channels", "many").unwrap();
+        let refused = Tuner::from_value(&guatiao::Value::from(wrong)).unwrap_err();
+        assert!(refused.to_string().contains("channels"), "{refused}");
+
+        // A tagged variant's field takes one the same way.
+        let mut http = Map::new();
+        http.set("via", "Http").unwrap();
+        http.set("url", "http://x").unwrap();
+        assert_eq!(
+            Source::from_value(&guatiao::Value::from(http)).unwrap(),
+            Source::Http {
+                url: "http://x".into(),
+                timeout: 30,
+            }
+        );
+    });
+}
+
 /// A struct holding a map keyed by text describes an **open object**, and
 /// the three derives agree about it: what it declares, what it writes,
 /// and what it reads back.

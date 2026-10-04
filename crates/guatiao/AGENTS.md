@@ -401,7 +401,9 @@ struct Connection {
 }
 ```
 
-`#[map(rename = "...")]`, `#[map(skip)]`; `#[schema(title, description,
+`#[map(rename = "...")]`, `#[map(skip)]`, `#[map(default)]` or
+`#[map(default = <expr>)]` (an absent key reads as it, the field is not
+required, and the schema carries it); `#[schema(title, description,
 sensitive, default, read_only, deprecated, examples(..))]` on the field and
 `#[schema(min_length, max_length, pattern, format, multiple_of, min_items,
 max_items)]` on its kind -- named after the keys they write. The derive also

@@ -183,9 +183,19 @@ struct FieldPlan {
     /// The map key. Meaningless when `skip` is set, and never emitted then.
     key: String,
     skip: bool,
+    /// What an absent key reads as. With one the field is not required.
+    default: Option<MapDefault>,
     /// What only the schema reads. Carried on every plan so the three
     /// derives share one parse of one declaration.
     schema: SchemaAttrs,
+}
+
+/// `#[map(default)]` or `#[map(default = <expr>)]`.
+enum MapDefault {
+    /// The field type's own `Default`.
+    Trait,
+    /// An expression of the field's type.
+    Expr(syn::Expr),
 }
 
 impl FieldPlan {
@@ -199,6 +209,7 @@ impl FieldPlan {
             key: attrs.rename.unwrap_or_else(|| ident.to_string()),
             inner: option_inner(&field.ty).cloned(),
             skip: attrs.skip,
+            default: attrs.default,
             schema: attrs.schema,
             ty: field.ty.clone(),
             ident,
@@ -208,12 +219,29 @@ impl FieldPlan {
     fn optional(&self) -> bool {
         self.inner.is_some()
     }
+
+    /// The value an absent key reads as, as an expression of the field's
+    /// type. Qualified and typed so a type with no `Default`, or an
+    /// expression of another type, is reported at the field.
+    fn default_expr(&self) -> Option<TokenStream> {
+        let ty = &self.ty;
+        match self.default.as_ref()? {
+            MapDefault::Trait => Some(quote! { <#ty as ::core::default::Default>::default() }),
+            MapDefault::Expr(expr) => Some(quote! {
+                {
+                    let __default: #ty = #expr;
+                    __default
+                }
+            }),
+        }
+    }
 }
 
 #[derive(Default)]
 struct FieldAttrs {
     rename: Option<String>,
     skip: bool,
+    default: Option<MapDefault>,
     /// Everything only the schema reads. Collected for every derive, so a
     /// misspelled `#[schema(...)]` is reported by whichever one the user
     /// wrote rather than silently ignored by two of the three.
@@ -262,6 +290,7 @@ impl FieldAttrs {
         let label = derive.spelled();
         let mut out = FieldAttrs::default();
         let mut rename_span = None;
+        let mut default_span = None;
 
         out.schema.description = doc_comment(&field.attrs);
 
@@ -283,10 +312,22 @@ impl FieldAttrs {
                 } else if meta.path.is_ident("skip") {
                     out.skip = true;
                     Ok(())
+                } else if meta.path.is_ident("default") {
+                    if out.default.is_some() {
+                        return Err(meta.error("`default` is given twice. Keep one."));
+                    }
+                    default_span = Some(meta.path.clone());
+                    out.default = Some(if meta.input.peek(syn::Token![=]) {
+                        MapDefault::Expr(meta.value()?.parse()?)
+                    } else {
+                        MapDefault::Trait
+                    });
+                    Ok(())
                 } else {
                     Err(meta.error(format!(
-                        "unrecognised `#[map(...)]` option. {label} knows two: \
-                         `rename = \"...\"` and `skip`."
+                        "unrecognised `#[map(...)]` option. {label} knows three: \
+                         `rename = \"...\"`, `skip`, and `default` or \
+                         `default = <expr>`."
                     )))
                 }
             })?;
@@ -303,6 +344,32 @@ impl FieldAttrs {
                 "`skip` and `rename` together say nothing: a field that is never \
                  stored has no key to rename. Remove one.",
             ));
+        }
+        if let Some(span) = default_span {
+            if out.skip {
+                return Err(syn::Error::new_spanned(
+                    span,
+                    "`skip` and `default` together say nothing: a field that is never \
+                     stored always reads as its `Default`. Remove one.",
+                ));
+            }
+            if option_inner(&field.ty).is_some() {
+                return Err(syn::Error::new_spanned(
+                    span,
+                    "an `Option` field is already optional: an absent key reads as \
+                     `None`, and `None` is written as an absent key, so a default \
+                     could never be written back. Make the field a plain `T` to \
+                     give it a default.",
+                ));
+            }
+            if out.schema.default.is_some() {
+                return Err(syn::Error::new_spanned(
+                    span,
+                    "`#[map(default)]` and `#[schema(default = ..)]` both name this \
+                     field's default. `#[map(default = <expr>)]` says it once: an \
+                     absent key reads as it, and the schema carries it.",
+                ));
+            }
         }
         Ok(out)
     }
@@ -529,6 +596,16 @@ fn read_field(field: &FieldPlan) -> TokenStream {
     // `under` is what turns a leaf error into a dotted path: the value
     // being read does not know its own key, so the reader that knows it
     // adds it here, on the way out.
+    if let Some(default) = field.default_expr() {
+        return quote! {
+            #ident: match __map.get(#key) {
+                ::core::option::Option::Some(__field) =>
+                    <#ty as ::guatiao::FromValue>::from_value(__field)
+                        .map_err(|__e| ::guatiao::MapError::under(__e, #key))?,
+                ::core::option::Option::None => #default,
+            },
+        };
+    }
     if field.optional() {
         quote! {
             #ident: match __map.get(#key) {
@@ -673,10 +750,20 @@ fn field_builder(field: &FieldPlan) -> TokenStream {
             )
         };
     }
-    // Not an `Option<T>` means the value has to be there. The declaration
-    // already said so; this is only writing it down.
-    if !field.optional() {
+    // Neither an `Option<T>` nor defaulted means the value has to be
+    // there. The declaration already said so; this is only writing it
+    // down.
+    if !field.optional() && field.default.is_none() {
         built = quote! { #built.required() };
+    }
+    if let Some(default) = field.default_expr() {
+        // The value an absent key reads as is the one the schema declares,
+        // so a consumer filling a form starts from what the reader uses.
+        built = quote! {
+            #built.default_checked(
+                <#ty as ::guatiao::ToValue>::to_value(&#default, __alloc),
+            )
+        };
     }
     if let Some(default) = &a.default {
         // Through `ToValue`, so the default is written in Rust and cannot
@@ -1357,6 +1444,28 @@ mod tests {
             struct S { #[map(skip, rename = "x")] a: u8 }
         });
         assert!(both.contains("say nothing"), "{both}");
+        assert!(unknown.contains("default = <expr>"), "{unknown}");
+
+        // A default that could not mean anything, each said where it is.
+        let skipped = from(quote! {
+            struct S { #[map(skip, default)] a: u8 }
+        });
+        assert!(
+            skipped.contains("`skip` and `default` together"),
+            "{skipped}"
+        );
+        let optional = from(quote! {
+            struct S { #[map(default)] a: Option<u8> }
+        });
+        assert!(optional.contains("already optional"), "{optional}");
+        let twice = from(quote! {
+            struct S { #[map(default = 1)] #[schema(default = 1)] a: u8 }
+        });
+        assert!(twice.contains("says it once"), "{twice}");
+        let repeated = from(quote! {
+            struct S { #[map(default, default = 1)] a: u8 }
+        });
+        assert!(repeated.contains("given twice"), "{repeated}");
 
         // Silent overwrite, refused at compile time.
         let clash = to(quote! {
@@ -1400,6 +1509,8 @@ mod tests {
                 a: u8,
                 b: ::core::option::Option<u8>,
                 #[map(skip)] c: u8,
+                #[map(default)] d: u8,
+                #[map(default = 7)] e: u8,
             }
         };
         // And both enum shapes, which reach different helpers: a choice
@@ -1411,7 +1522,7 @@ mod tests {
             #[map(tag = "t")]
             enum T {
                 A,
-                B { x: u8, y: ::core::option::Option<u8>, #[map(skip)] z: u8 },
+                B { x: u8, y: ::core::option::Option<u8>, #[map(skip)] z: u8, #[map(default)] w: u8 },
             }
         };
         // All THREE derives on all three shapes. `Schema` is not optional

@@ -22,8 +22,8 @@ variants, or an enum that names its tag.**
   cannot describe a value the type refuses.
 - **Attributes named after what they write** — `#[schema(title, description,
   default, sensitive, read_only, examples(..))]` on a field, `#[schema(min_length,
-  pattern, multiple_of, min_items, ..)]` on its kind, `#[map(rename, skip)]`
-  for the key.
+  pattern, multiple_of, min_items, ..)]` on its kind, `#[map(rename, skip,
+  default)]` for the key and what an absent one reads as.
 - **Refusals at compile time, with a sentence** — a tuple struct, an untagged
   enum with data, two fields on one key, a step that divides nothing.
 

@@ -34,6 +34,8 @@ cannot describe a value it refuses.
 | --- | --- |
 | `rename = "..."` | the key to use instead of the field name |
 | `skip` | the field does not cross; `FromValue` fills it from `Default` |
+| `default` | an absent key reads as the field type's `Default`; the field leaves the schema's `required` and the schema's `default` is that value |
+| `default = <expr>` | the same, with an expression of the field's type |
 
 **`#[schema(...)]`** — what `Schema` adds. Registered by all three, so
 a field carrying one compiles under `ToValue` and `FromValue` alone; those
@@ -47,7 +49,7 @@ two parse it and ignore it.
 | `order = <int>` | sort position | `x-order` (a) |
 | `advanced` | hide behind an "advanced" toggle | `x-advanced` (a) |
 | `sensitive` | never render, never log, never quote in an error | `x-sensitive` and `writeOnly` |
-| `default = <expr>` | the declared default | `default` |
+| `default = <expr>` | the declared default, as an annotation: the field stays required and `FromValue` does not use it. `#[map(default = <expr>)]` is the one that decodes | `default` |
 | `read_only` | shown, never edited | `readOnly` |
 | `deprecated` | kept for old documents, not offered for new ones | `deprecated` |
 | `examples(<expr>, ..)` | sample values, each through `ToValue` | `examples` |
@@ -73,8 +75,8 @@ key **spelled as a literal** -- so a crate deriving a schema never
 depends on the form crate. That literal is a seam;
 `crates/guatiao-intake/tests/form_derive.rs` is what notices if the two
 sides drift. The field's own name is its key in `properties`, and
-whether it is required — a field that is not an `Option<T>` — is a name in
-the struct's `required` list. Neither is written inside the field.
+whether it is required — a field that is neither an `Option<T>` nor
+`#[map(default)]` — is a name in the struct's `required` list. Neither is written inside the field.
 
 **Enums**, in two shapes. Refused otherwise, with a sentence saying why.
 
@@ -216,6 +218,12 @@ writes the whole library.
   alike; `schema::validate` is what refuses them.
 - **`Option<T>` is omitted when `None`** rather than written as a stored
   null. Both spellings read back as `None`, so the two agree.
+- **A defaulted field is always written**, and read as its default only
+  when the key is absent: a stored null or a value of another kind is
+  refused under the key, as for any field. Refused at compile time:
+  `default` with `skip`, `default` on an `Option<T>` (an absent key is
+  already `None`, and `None` is written as an absent key), and
+  `#[map(default)]` beside `#[schema(default = ..)]`.
 - **A key may contain a NUL.** Keys are pointer and length, so the derive
   does not invent a restriction the value model does not have.
 - **Every path the expansion emits is rooted** at `::guatiao::`,

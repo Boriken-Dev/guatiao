@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   configuration is stored as `Arc<dyn K>` or `Box<dyn K>` like any other
   implementation and released when its last owner goes. A host holding
   "a provider, configured or not" no longer wraps the two by hand.
+- **`#[map(default)]` and `#[map(default = <expr>)]`** on a field: an
+  absent key reads as the type's `Default` or the expression, the field
+  leaves the schema's `required` list, and the schema's `default` is the
+  same value. A setting with a default is then a plain `T` rather than an
+  `Option<T>` resolved by hand, and a document the schema accepts is one
+  the type reads. `#[schema(default = ..)]` is unchanged: an annotation
+  on a field that stays required.
 
 ### Fixed
 

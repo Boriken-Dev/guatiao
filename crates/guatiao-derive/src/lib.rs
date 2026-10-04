@@ -62,6 +62,7 @@
 //! |---|---|
 //! | `#[map(rename = "...")]` | store under this key instead of the field name |
 //! | `#[map(skip)]` | never store; on read, `Default::default()` |
+//! | `#[map(default)]`, `#[map(default = <expr>)]` | an absent key reads as `Default::default()` or the expression; the schema does not require the field and carries that value as `default` |
 //!
 //! On an enum, `#[map(tag = "...")]` names the key a variant's name is
 //! stored under; on a variant, `#[map(rename = "...")]` changes the name
