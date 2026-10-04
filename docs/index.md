@@ -27,6 +27,7 @@ pulls in nothing.
 | `derive` | `#[derive(ToValue, FromValue, Schema)]` |
 | `provider` | `#[guatiao::kind]`, `#[derive(Provider)]`, `guatiao::providers!` |
 | `load` | `Registry::load_file`, `scan_dir`: mapping a library and calling it |
+| `regex` | enforcing a schema's `pattern` when validating |
 | `c-header` | regenerating the committed `include/guatiao.h` |
 
 A Python consumer installs the bindings and points them at a library that

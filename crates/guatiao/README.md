@@ -49,9 +49,10 @@ Optional features:
 | Flag | Adds | Needed for |
 | --- | --- | --- |
 | `derive` | `guatiao-derive` | `#[derive(ToValue, FromValue, Schema)]` |
-| `load` | `libloading`, `object` | loading libraries from disk into a `Registry` |
-| `c-header` | nothing | regenerating the committed C header |
+| `provider` | `derive`, with `syn`'s full parser | `#[guatiao::kind]`, `#[derive(Provider)]`, `guatiao::providers!`: a kind crate and every library need it |
+| `load` | `libloading`, `object` | the `Registry` and loading libraries from disk into it (`load_file`, `scan_dir`, `scan_path`): a host needs it |
 | `regex` | `regex` | enforcing a schema's `pattern` when validating |
+| `c-header` | nothing | regenerating the committed C header |
 
 A default build pulls in nothing.
 

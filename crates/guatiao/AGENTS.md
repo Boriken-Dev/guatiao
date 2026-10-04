@@ -22,11 +22,12 @@ A C, C++ or Dart consumer reads a whole tree through
 | --- | --- | --- |
 | `derive` | `#[derive(ToValue, FromValue, Schema)]` | off |
 | `provider` | `#[guatiao::kind]`, `#[derive(Provider)]`, `guatiao::providers!` (implies `derive`; turns on `syn/full` in the derive crate) | off |
-| `c-header` | regenerating the committed `include/guatiao.h` | off |
+| `load` | `Registry` and the scans (`load_file`, `scan_dir*`, `scan_path*`, `probe`): everything a host does | off |
 | `regex` | enforcing a schema's `pattern` in `validate_*` (carried and read either way) | off |
+| `c-header` | regenerating the committed `include/guatiao.h` | off |
 
 MSRV 1.89. No required dependencies; `derive` pulls `guatiao-derive`,
-the loader pulls `libloading`, and `regex` pulls `regex`.
+`load` pulls `libloading` and `object`, and `regex` pulls `regex`.
 
 ---
 
