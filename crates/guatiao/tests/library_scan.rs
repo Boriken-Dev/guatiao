@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 
 use guatiao::library::{
     Order, Registry, ScanRules, SearchPath, Skipped, declares_entry_symbol, probe, scan_dir,
-    scan_dir_rules, scan_dir_with, scan_path,
+    scan_dir_rules, scan_dir_with, scan_path, scan_path_with,
 };
 use guatiao::schema::SchemaRef;
 use guatiao::value::alloc::Allocator;
@@ -487,5 +487,33 @@ fn a_search_path_is_walked_once_per_place_and_reports_what_it_could_not_read() {
         ),
         "{:?}",
         report.skipped
+    );
+
+    // A filter of the host's own says what a rule cannot -- here, any kind
+    // with a prefix -- over the same walk: the directory and the file.
+    let both = SearchPath::new().with(&dir).with(&library);
+    let by_prefix = |prefix: &'static str| {
+        move |declared: &guatiao::library::Declared| {
+            if declared.kinds().any(|kind| kind.starts_with(prefix)) {
+                Ok(())
+            } else {
+                Err(format!("no kind starting with `{prefix}`"))
+            }
+        }
+    };
+    let mut fresh = Registry::new("scan-test", "1.0");
+    let report = scan_path_with(&mut fresh, &both, Order::Ascending, by_prefix("gree"));
+    assert_eq!(report.loaded, vec![copy.clone()], "{report:#?}");
+
+    let mut fresh = Registry::new("scan-test", "1.0");
+    let report = scan_path_with(&mut fresh, &both, Order::Ascending, by_prefix("nonesuch"));
+    assert!(report.loaded.is_empty(), "{report:#?}");
+    let filtered = Skipped::Filtered {
+        by: "no kind starting with `nonesuch`".to_string(),
+    };
+    assert_eq!(
+        report.skipped,
+        vec![(copy, filtered.clone()), (library, filtered)],
+        "the directory's copy and the named file, each kept out before mapping"
     );
 }

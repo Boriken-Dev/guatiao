@@ -115,5 +115,5 @@ pub use registry::{
 pub use scan::{
     Declared, LoadReport, Order, Probe, RuleError, ScanRules, SearchPath, bundle_binary,
     declares_entry_symbol, probe, scan_dir, scan_dir_ordered, scan_dir_rules, scan_dir_with,
-    scan_path,
+    scan_path, scan_path_with,
 };

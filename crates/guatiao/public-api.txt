@@ -813,6 +813,7 @@ pub fn guatiao::library::scan::scan_dir_ordered(&mut guatiao::library::registry:
 pub fn guatiao::library::scan::scan_dir_rules(&mut guatiao::library::registry::Registry, &std::path::Path, guatiao::library::scan::Order, &guatiao::library::scan::ScanRules) -> core::result::Result<guatiao::library::scan::LoadReport, core::io::error::Error>
 pub fn guatiao::library::scan::scan_dir_with(&mut guatiao::library::registry::Registry, &std::path::Path, guatiao::library::scan::Order, impl core::ops::function::FnMut(&guatiao::library::scan::Declared) -> core::result::Result<(), alloc::string::String>) -> core::result::Result<guatiao::library::scan::LoadReport, core::io::error::Error>
 pub fn guatiao::library::scan::scan_path(&mut guatiao::library::registry::Registry, &guatiao::library::scan::SearchPath, guatiao::library::scan::Order, &guatiao::library::scan::ScanRules) -> guatiao::library::scan::LoadReport
+pub fn guatiao::library::scan::scan_path_with(&mut guatiao::library::registry::Registry, &guatiao::library::scan::SearchPath, guatiao::library::scan::Order, impl core::ops::function::FnMut(&guatiao::library::scan::Declared) -> core::result::Result<(), alloc::string::String>) -> guatiao::library::scan::LoadReport
 #[non_exhaustive] pub enum guatiao::library::KeyError
 pub guatiao::library::KeyError::Collides
 pub guatiao::library::KeyError::Collides::key: alloc::string::String
@@ -1514,6 +1515,7 @@ pub fn guatiao::library::scan_dir_ordered(&mut guatiao::library::registry::Regis
 pub fn guatiao::library::scan_dir_rules(&mut guatiao::library::registry::Registry, &std::path::Path, guatiao::library::scan::Order, &guatiao::library::scan::ScanRules) -> core::result::Result<guatiao::library::scan::LoadReport, core::io::error::Error>
 pub fn guatiao::library::scan_dir_with(&mut guatiao::library::registry::Registry, &std::path::Path, guatiao::library::scan::Order, impl core::ops::function::FnMut(&guatiao::library::scan::Declared) -> core::result::Result<(), alloc::string::String>) -> core::result::Result<guatiao::library::scan::LoadReport, core::io::error::Error>
 pub fn guatiao::library::scan_path(&mut guatiao::library::registry::Registry, &guatiao::library::scan::SearchPath, guatiao::library::scan::Order, &guatiao::library::scan::ScanRules) -> guatiao::library::scan::LoadReport
+pub fn guatiao::library::scan_path_with(&mut guatiao::library::registry::Registry, &guatiao::library::scan::SearchPath, guatiao::library::scan::Order, impl core::ops::function::FnMut(&guatiao::library::scan::Declared) -> core::result::Result<(), alloc::string::String>) -> guatiao::library::scan::LoadReport
 pub type guatiao::library::EntryFn = fn(*const guatiao::library::desc::HostInfo<'static>) -> *const guatiao::library::desc::LibraryInfo<'static>
 pub mod guatiao::schema
 pub mod guatiao::schema::build

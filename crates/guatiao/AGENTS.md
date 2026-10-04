@@ -1219,6 +1219,10 @@ report.loaded / report.skipped / report.failed / report.unreadable
   probed and loaded on its own, under the same rules: naming it is
   asking for it, so its extension is not checked, but what it declares
   still is.
+- **`scan_path_with(reg, &path, order, |declared| Ok(()) | Err(why))`**
+  is the same walk under a filter of the host's own, for what a rule
+  cannot say: a rule set is a conjunction of exact pairs, so "any kind of
+  mine" is `declared.kinds().any(|k| k.starts_with("acme_"))`.
 - A **bundle** is its binary: `Name.framework` resolves to `Name` inside
   it, flat (iOS) or under `Versions/Current` (macOS). `bundle_binary` is
   pure path logic and answers on every platform; a scan of a directory

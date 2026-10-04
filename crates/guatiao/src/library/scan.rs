@@ -631,18 +631,33 @@ pub fn scan_path(
     order: Order,
     rules: &ScanRules,
 ) -> LoadReport {
+    scan_path_with(registry, path, order, |declared| {
+        rules.check(declared).map_err(str::to_string)
+    })
+}
+
+/// The same, with a filter of the host's own in place of rules: called
+/// with what each library declares, **before it is mapped**; `Err(why)`
+/// skips it as [`Skipped::Filtered`] naming `why`.
+///
+/// What a rule cannot say, a closure can: "any kind of mine", a prefix,
+/// one of several.
+pub fn scan_path_with(
+    registry: &mut Registry,
+    path: &SearchPath,
+    order: Order,
+    mut filter: impl FnMut(&Declared) -> Result<(), String>,
+) -> LoadReport {
     let mut report = LoadReport::default();
     for entry in path.entries() {
         let entry = bundle_binary(entry).unwrap_or_else(|| entry.clone());
         if entry.is_dir() {
-            match scan_dir_rules(registry, &entry, order, rules) {
+            match scan_dir_with(registry, &entry, order, &mut filter) {
                 Ok(found) => report.absorb(found),
                 Err(e) => report.unreadable.push((entry, e)),
             }
         } else if entry.is_file() {
-            consider(registry, entry, &mut report, &mut |declared| {
-                rules.check(declared).map_err(str::to_string)
-            });
+            consider(registry, entry, &mut report, &mut filter);
         } else {
             report
                 .unreadable
