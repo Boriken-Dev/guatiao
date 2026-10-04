@@ -1076,6 +1076,20 @@ drop(s);                                                             // the libr
   with extra declarations. The library declares every kind its providers
   serve (`ProviderDecl::KINDS`) for a scanner to read before mapping it;
   `guatiao::declares!(..)` does the same for a hand-written library.
+- **The crate that calls `providers!` is a `cdylib` and nothing else.**
+  The entry symbol and the declaration are `no_mangle`, and a `cdylib`
+  exports every `no_mangle` symbol of the Rust libraries linked into it.
+  So a crate that calls `providers!` (or `guatiao_library!`,
+  `declares!`) and is an `rlib` as well makes every `cdylib` depending on
+  it scan and load as a library offering those providers; with two such
+  dependencies one entry symbol wins, with no link error. A provider
+  that is also a Rust library is **two crates**: the library derives
+  `Provider` and exports the type, and a plugin crate holds one line,
+  `guatiao::providers!(acme::Tuner, acme::Recorder);`. The library id
+  and version are then the plugin crate's; a provider's default id is
+  `{package}_{type}` of the crate that **derived** it (`acme_tuner`). A
+  host that links the library instead calls `local_providers!`, which
+  exports nothing.
 - **Instances from a configuration.** `config = C` means the provider is
   **built from `C`**: `C: Schema + FromValue`, `Self: TryFrom<C, Error:
   Into<ProviderError>>`. Bare `config`, or `config = Self`, makes the

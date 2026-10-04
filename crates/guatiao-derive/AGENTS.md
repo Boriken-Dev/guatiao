@@ -189,7 +189,7 @@ implementation fills the same table and hands `{table, size, ctx}` as a
 | key | effect | default |
 | --- | --- | --- |
 | a bare path, or `kinds(A, B)` | the kinds this type serves; a `T: Kind` bound is checked per kind | required, at least one |
-| `id = "..."` | the provider id | `{CARGO_PKG_NAME}_{type}` in snake case, `-` as `_` |
+| `id = "..."` | the provider id | `{CARGO_PKG_NAME}_{type}` in snake case, `-` as `_`; the package is the crate holding the derive, not the one calling `providers!` |
 | `name = "..."` | display name | the type's ident |
 | `version = "..."` | the provider's own version | empty: the library's |
 | `config = C` | the provider is **built from `C`**: schema through `C: Schema`, decoded through `C: FromValue`, built through `Self: TryFrom<C, Error: Into<ProviderError>>` (`C = Self` is the identity); emits the `create`/`destroy` slots, so a host gets an `Instance` per configuration whose address is the `ctx` | none: the type is its one instance |

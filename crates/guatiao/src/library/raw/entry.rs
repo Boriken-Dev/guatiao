@@ -120,6 +120,9 @@ pub type EntryFn = unsafe extern "C" fn(*const HostInfo<'static>) -> *const Libr
 /// guatiao::guatiao_library!(describe);
 /// ```
 ///
+/// The symbol is `no_mangle`, so the crate calling this is a `cdylib` and
+/// nothing else; [`providers!`](crate::providers) says why.
+///
 /// # Why a macro rather than a documented signature
 ///
 /// So a library author never writes `unsafe` and never writes
@@ -224,6 +227,28 @@ macro_rules! __guatiao_declares {
 /// long form also takes `unload = <fn>`, an
 /// `unsafe extern "C" fn() -> Status` asked after that, for what only the
 /// library knows. See [`LibraryInfo::unload`].
+///
+/// # Call it from a crate that is only a `cdylib`
+///
+/// The two symbols this writes are `no_mangle`, and a `cdylib` exports
+/// every `no_mangle` symbol of the Rust libraries linked into it. A crate
+/// that calls this and is an `rlib` as well therefore makes each `cdylib`
+/// depending on it scan and load as a library offering these providers;
+/// with two such dependencies one entry symbol wins and nothing reports
+/// it.
+///
+/// A provider that is also an ordinary Rust library is two crates: the
+/// library derives `Provider` and exports the type, and a plugin crate of
+/// one line names it.
+///
+/// ```ignore
+/// // acme_plugin/src/lib.rs, crate-type = ["cdylib"], depending on `acme`
+/// guatiao::providers!(acme::Tuner, acme::Recorder);
+/// ```
+///
+/// The library's id and version are then the plugin crate's, and each
+/// provider's default id is still `{package}_{type}` of the crate that
+/// derived it: `acme_tuner` in a library `acme_plugin`.
 #[macro_export]
 macro_rules! providers {
     ($($provider:ty),+ $(,)?) => {

@@ -14,9 +14,10 @@ publish = false
 
 [lib]
 # `cdylib` is what a host loads. `rlib` as well, so the test can name the
-# vtable type this library defines -- which is the arrangement a real kind
-# has anyway: whoever defines a kind publishes its table, and both the
-# library and the host compile against that one declaration.
+# vtable type this library defines. Only a test binary links the rlib: a
+# `cdylib` linking it would export this library's entry symbol as its own,
+# which is why a real kind publishes its table from a crate of its own
+# (`examples/greeter_kind`).
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
