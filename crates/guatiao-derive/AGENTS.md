@@ -135,6 +135,7 @@ default is the trait's ident in snake case, `SessionBackend` →
 | `impl Kind for dyn Trait` | `NAME`, `Vtable`, `FLOOR`, `FLOOR_HASH` (FNV-1a over `provider;` or `object;` and the required signatures), `REQUIRED`, `OBJECT`, `as_dyn`/`as_dyn_mut` |
 | `impl Trait for Remote<dyn Trait>` | the proxy: reads each slot under the table's size, marshals, calls, converts back |
 | `impl From<Remote<dyn Trait>> for Box<dyn Trait>` | `Box` only: `Arc` is not fundamental (`Kind::shared`) |
+| `impl Trait for Instance<dyn Trait>`, `impl From<Instance<dyn Trait>> for Box<dyn Trait>` | provider kinds only: an instance built from a configuration is the trait, so `Arc::new(instance)` coerces to `Arc<dyn Trait>` and `destroy` runs when the last owner goes |
 
 Accepted method shapes — receiver `&self`, the trait names `Send + Sync`:
 

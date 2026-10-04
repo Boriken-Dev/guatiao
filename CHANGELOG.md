@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`scan_path_with`**: a search-path scan under a closure over what each
   library declares, as `scan_dir_with` is for one directory. A host with
   several kinds can say "any of mine", which a rule set cannot.
+- **An `Instance<dyn K>` implements `K`.** `#[guatiao::kind]` writes the
+  impl and a `From` for `Box<dyn K>`, so an instance built from a
+  configuration is stored as `Arc<dyn K>` or `Box<dyn K>` like any other
+  implementation and released when its last owner goes. A host holding
+  "a provider, configured or not" no longer wraps the two by hand.
 
 ### Fixed
 

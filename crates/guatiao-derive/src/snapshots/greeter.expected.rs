@@ -227,3 +227,17 @@ for ::std::boxed::Box<dyn Greeter> {
         ::std::boxed::Box::new(remote)
     }
 }
+impl Greeter for ::guatiao::library::Instance<dyn Greeter> {
+    fn greet(&self, name: &str) -> Result<String, ProviderError> {
+        (**self).greet(name)
+    }
+    fn count(&self, bytes: &[u8], flag: bool) -> i64 {
+        (**self).count(bytes, flag)
+    }
+}
+impl ::core::convert::From<::guatiao::library::Instance<dyn Greeter>>
+for ::std::boxed::Box<dyn Greeter> {
+    fn from(instance: ::guatiao::library::Instance<dyn Greeter>) -> Self {
+        ::std::boxed::Box::new(instance)
+    }
+}

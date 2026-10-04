@@ -14,7 +14,10 @@
 //! - `impl Trait for Remote<dyn Trait>`, the proxy that calls through a
 //!   table it was handed;
 //! - `From<Remote<dyn Trait>>` for `Box<dyn Trait>` (`Box` is the one
-//!   fundamental type the orphan rule allows; `Kind::shared` makes an `Arc`).
+//!   fundamental type the orphan rule allows; `Kind::shared` makes an `Arc`);
+//! - for a provider kind, `impl Trait for Instance<dyn Trait>` and its
+//!   `From` for `Box<dyn Trait>`, so a configured instance is stored like
+//!   any implementation and released with its last owner.
 //!
 //! Every `unsafe` the shims and the proxy need is a call into
 //! `::guatiao::library::kind`; this file writes tokens and never runs any.
@@ -728,6 +731,25 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         quote! { (#name, #table::#end()), }
     });
     let proxies = methods.iter().map(|m| emit_proxy(&table, m));
+    // A provider kind's instance is the trait as well, so a host stores it
+    // as `Arc<dyn Trait>` or `Box<dyn Trait>` and it is released with the
+    // last owner. An object kind has no instances.
+    let instance_impl = (!object).then(|| {
+        let forwards = methods.iter().map(emit_forward);
+        quote! {
+            impl #trait_ident for ::guatiao::library::Instance<dyn #trait_ident> {
+                #(#forwards)*
+            }
+
+            impl ::core::convert::From<::guatiao::library::Instance<dyn #trait_ident>>
+                for ::std::boxed::Box<dyn #trait_ident>
+            {
+                fn from(instance: ::guatiao::library::Instance<dyn #trait_ident>) -> Self {
+                    ::std::boxed::Box::new(instance)
+                }
+            }
+        }
+    });
 
     // Objects this image made and has not seen destroyed, and the kinds
     // this one's methods hand back, which a library answers for as well.
@@ -868,6 +890,8 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
                 ::std::boxed::Box::new(remote)
             }
         }
+
+        #instance_impl
     }
 }
 
@@ -1339,6 +1363,24 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
     }
 }
 
+/// One method of the trait on an `Instance`: the same call on the proxy
+/// the instance derefs to.
+fn emit_forward(m: &MethodPlan) -> TokenStream {
+    let method = &m.ident;
+    let ret_ty = &m.ret_ty;
+    let params = m.args.iter().map(|a| {
+        let ident = &a.ident;
+        let ty = &a.ty;
+        quote!(#ident: #ty)
+    });
+    let names = m.args.iter().map(|a| &a.ident);
+    quote! {
+        fn #method(&self #(, #params)*) #ret_ty {
+            (**self).#method(#(#names),*)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1388,8 +1430,15 @@ mod tests {
                 "impl :: guatiao :: library :: Kind",
                 "impl Greeter",
                 "impl :: core :: convert :: From < :: guatiao :: library :: Remote < dyn Greeter > >",
+                "impl Greeter",
+                "impl :: core :: convert :: From < :: guatiao :: library :: Instance < dyn Greeter > >",
             ]
         );
+        // The second `impl Greeter` is the instance's, forwarding every
+        // method, the defaulted one included, to the proxy it derefs to.
+        assert!(out.contains("for :: guatiao :: library :: Instance < dyn Greeter >"));
+        assert!(out.contains("(* * self) . greet (name)"), "{out}");
+        assert!(out.contains("(* * self) . count (bytes , flag)"), "{out}");
         assert!(out.contains("const NAME : & 'static str = \"greeter\""));
         // Only the required method is hashed, normalised, behind the
         // shape -- and written as a literal on the table, where a C
@@ -1454,6 +1503,7 @@ mod tests {
             .collect();
         assert_eq!(fields, ["header", "destroy", "say", "read", "turns"]);
         assert!(out.contains("const OBJECT : bool = true"));
+        assert!(!out.contains("Instance"), "an object kind has no instances");
         assert!(out.contains("(\"destroy\" , ConversationVtable :: destroy_end ())"));
         let literal = fnv1a("object;say(&str)->Result<(),ProviderError>;read(&mut[u8])->i64");
         assert!(

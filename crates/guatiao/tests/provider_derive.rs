@@ -179,6 +179,27 @@ fn a_provider_builds_instances_from_a_configuration() {
         "dropping an instance runs the provider's destroy"
     );
 
+    // An instance is the trait, so it is stored like any implementation
+    // and released when its last owner goes.
+    let build = || parts.info().instantiate::<dyn Greeter>(&config).unwrap();
+    let shared: std::sync::Arc<dyn Greeter> = std::sync::Arc::new(build());
+    let also = std::sync::Arc::clone(&shared);
+    let boxed: Box<dyn Greeter> = build().into();
+    drop(shared);
+    assert_eq!(also.greet("ana").unwrap(), "hey ANA!!");
+    assert_eq!(boxed.greet("bo").unwrap(), "hey BO!!");
+    assert_eq!(
+        SHOUTERS_ALIVE.load(std::sync::atomic::Ordering::SeqCst),
+        before + 2,
+        "one owner of the shared instance is left"
+    );
+    drop(also);
+    drop(boxed);
+    assert_eq!(
+        SHOUTERS_ALIVE.load(std::sync::atomic::Ordering::SeqCst),
+        before
+    );
+
     // A configuration the type refuses, and one the schema refuses.
     let mut bad = Map::new();
     bad.set("prefix", "x").unwrap();

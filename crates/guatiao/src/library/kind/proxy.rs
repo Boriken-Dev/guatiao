@@ -341,7 +341,9 @@ impl<K: ?Sized + Kind> Offer<K> {
 /// over that instance, released when this is dropped.
 ///
 /// `Send + Sync`, since the kind's trait names both; not `Copy`, since it
-/// owns the instance.
+/// owns the instance. It implements the kind's trait (the macro writes
+/// that impl), so `Arc::new(instance)` is an `Arc<dyn Trait>` that
+/// releases the instance with its last owner.
 pub struct Instance<K: ?Sized> {
     remote: Remote<K>,
     lib_ctx: *mut c_void,

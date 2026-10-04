@@ -1100,7 +1100,11 @@ drop(s);                                                             // the libr
   the `Instance` derefs to the trait, its address is the `ctx` every call
   on it takes (what `&self` is in the impl), and dropping it runs the
   provider's `destroy`. Many instances per provider, each its own
-  configuration. With `config` and no `new`/`new_with_host` there is no
+  configuration. **An `Instance<dyn K>` is also a `K`**: store one as
+  `let shared: Arc<dyn K> = Arc::new(instance);` or `Box<dyn K>::from(instance)`,
+  beside `offer.shared()` / `offer.boxed()` for a provider that is its
+  one instance, and `destroy` runs when the last owner goes. Never
+  `K::shared(instance.remote())`: that `Arc` outlives the instance. With `config` and no `new`/`new_with_host` there is no
   default instance (`ctx` null) and `available` is refused. A provider
   without `config` is its one instance and `instantiate` answers
   `GUATIAO_ERR_NULL`; `offer.builds_instances()` says which. The envelope
