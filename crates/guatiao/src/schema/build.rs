@@ -858,6 +858,30 @@ impl KindBuilder {
 
     /// The same, through an allocator you name.
     pub fn enumeration_in(alloc: Alloc, choices: &[(&str, &str)]) -> KindBuilder {
+        KindBuilder::names_in(alloc, vocab::ENUM, choices)
+    }
+
+    /// One of a set of known names, **or any other text**.
+    ///
+    /// For a vocabulary that grows on the other side of a boundary -- a
+    /// codec, a media type -- where a name this build has never met is
+    /// still accepted and passed on. A plain `string` carrying the known
+    /// names as `examples`, labelled as an enumeration's are: a validator
+    /// accepts any text, and a renderer offers the names
+    /// ([`FieldRef::suggestions`](super::read::FieldRef::suggestions)).
+    /// Built through the crate's own allocator. `open_enumeration_in`
+    /// names one, which is what a schema built into a host's arena needs.
+    pub fn open_enumeration(choices: &[(&str, &str)]) -> KindBuilder {
+        KindBuilder::open_enumeration_in(Alloc::rust(), choices)
+    }
+
+    /// The same, through an allocator you name.
+    pub fn open_enumeration_in(alloc: Alloc, choices: &[(&str, &str)]) -> KindBuilder {
+        KindBuilder::names_in(alloc, vocab::EXAMPLES, choices)
+    }
+
+    /// A `string` with its names under `key` and their labels keyed by name.
+    fn names_in(alloc: Alloc, key: &str, choices: &[(&str, &str)]) -> KindBuilder {
         let mut k = KindBuilder::typed(alloc, vocab::TYPE_STRING);
         let mut values = Ok(List::new_in(alloc).into());
         let mut labels = Ok(Map::new_in(alloc).into());
@@ -876,7 +900,7 @@ impl KindBuilder {
                 any_label = true;
             }
         }
-        put(&mut k.state, vocab::ENUM, values);
+        put(&mut k.state, key, values);
         if any_label {
             put(&mut k.state, vocab::X_ENUM_LABELS, labels);
         }

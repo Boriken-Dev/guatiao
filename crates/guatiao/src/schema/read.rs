@@ -300,6 +300,25 @@ impl<'a> FieldRef<'a> {
             .unwrap_or(&[])
     }
 
+    /// The `examples` that are text, each with its label: the names an
+    /// open enumeration offers without requiring one of them. Empty for
+    /// a field with no text examples.
+    pub fn suggestions(&self) -> impl Iterator<Item = ChoiceRef<'a>> {
+        let labels = TryAsRef::<Map>::try_as_ref(self.schema)
+            .and_then(|m| m.get(vocab::X_ENUM_LABELS))
+            .and_then(TryAsRef::<Map>::try_as_ref);
+        self.examples()
+            .iter()
+            .filter_map(TryAsRef::<str>::try_as_ref)
+            .map(move |value| {
+                let label = labels
+                    .and_then(|m| m.get(value))
+                    .and_then(TryAsRef::<str>::try_as_ref)
+                    .unwrap_or("");
+                ChoiceRef { value, label }
+            })
+    }
+
     /// A boolean annotation: `true` only when written `true`.
     fn flag(&self, key: &str) -> bool {
         bool_or(

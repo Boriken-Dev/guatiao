@@ -424,6 +424,14 @@ enum Level { Off, #[map(rename = "warn")] Warning, On }   // "Off" | "warn" | "O
 enum Auth { Ambient, UserPass { username: String } }       // {"auth": "UserPass", "username": ...}
 ```
 
+One variant of a unit enum may be the **catch-all**, `#[map(other)]
+Other(String)`: a name no variant declares is kept there instead of
+refused, and written back as that text, so a vocabulary can grow on one
+side of a boundary without failing the other. Its schema is then
+`KindBuilder::open_enumeration`: `type: "string"` with the known names
+as `examples` and their labels in `x-enum-labels`, read back with
+`FieldRef::suggestions()` (`Kind::Str`, since any text validates).
+
 A unit enum is a string and describes itself as a choice; a tagged enum is
 a map and describes itself as a variant. An enum whose variants carry
 fields and names **no** tag is refused: the key that tells variants apart

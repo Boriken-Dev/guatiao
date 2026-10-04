@@ -1581,6 +1581,8 @@ pub fn guatiao::schema::build::KindBuilder::max_length(self, u64) -> guatiao::sc
 pub fn guatiao::schema::build::KindBuilder::min_items(self, u64) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::min_length(self, u64) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::multiple_of(self, f64) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::open_enumeration(&[(&str, &str)]) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::open_enumeration_in(guatiao::value::alloc::Alloc, &[(&str, &str)]) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::pattern(self, &str) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
@@ -1783,6 +1785,7 @@ pub fn guatiao::schema::read::FieldRef<'a>::is_sensitive(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::key(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::kind(&self) -> guatiao::schema::read::Kind<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::new(&'a str, &'a guatiao::value::value::Value) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
+pub fn guatiao::schema::read::FieldRef<'a>::suggestions(&self) -> impl core::iter::traits::iterator::Iterator<Item = guatiao::schema::read::ChoiceRef<'a>>
 pub fn guatiao::schema::read::FieldRef<'a>::title(&self) -> &'a str
 impl<'a> core::clone::Clone for guatiao::schema::read::FieldRef<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::clone(&self) -> Self
@@ -1981,6 +1984,7 @@ pub fn guatiao::schema::read::FieldRef<'a>::is_sensitive(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::key(&self) -> &'a str
 pub fn guatiao::schema::read::FieldRef<'a>::kind(&self) -> guatiao::schema::read::Kind<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::new(&'a str, &'a guatiao::value::value::Value) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
+pub fn guatiao::schema::read::FieldRef<'a>::suggestions(&self) -> impl core::iter::traits::iterator::Iterator<Item = guatiao::schema::read::ChoiceRef<'a>>
 pub fn guatiao::schema::read::FieldRef<'a>::title(&self) -> &'a str
 impl<'a> core::clone::Clone for guatiao::schema::read::FieldRef<'a>
 pub fn guatiao::schema::read::FieldRef<'a>::clone(&self) -> Self
@@ -2018,6 +2022,8 @@ pub fn guatiao::schema::build::KindBuilder::max_length(self, u64) -> guatiao::sc
 pub fn guatiao::schema::build::KindBuilder::min_items(self, u64) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::min_length(self, u64) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::multiple_of(self, f64) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::open_enumeration(&[(&str, &str)]) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::open_enumeration_in(guatiao::value::alloc::Alloc, &[(&str, &str)]) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::pattern(self, &str) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder

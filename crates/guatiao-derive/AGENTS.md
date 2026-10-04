@@ -83,12 +83,14 @@ whether it is required — a field that is neither an `Option<T>` nor
 | declaration | value | `Schema::kind` |
 | --- | --- | --- |
 | unit variants only | the variant's name, as a string | `type: "string"` + `enum` + `x-enum-labels` |
+| unit variants and one `#[map(other)]` | the name, or the text the catch-all holds | `type: "string"` + `examples` + `x-enum-labels`: any text is accepted, the known names are offered |
 | `#[map(tag = "k")]` on the enum | a map: name under `k` first, then the variant's fields | `type: "object"` + `x-variant-tag` + `oneOf` |
 
 | on | attribute | effect |
 | --- | --- | --- |
 | enum | `#[map(tag = "...")]` | the key the variant's name is stored under; required when any variant has fields |
 | variant | `#[map(rename = "...")]` | the name stored instead of the variant's own |
+| variant | `#[map(other)]` | **unit enums only**, on one variant of the shape `Other(T)` with `T: From<&str> + AsRef<str>` (`String`): a name no other variant is stored as is kept there rather than refused, and written back as that text |
 | variant | `#[schema(title = "...")]` | an arm's title — **tagged enums only**: an arm is a subschema |
 | variant | `#[schema(description = "...")]` | an arm's description — **tagged enums only** |
 | variant | `#[schema(label = "...")]` | a choice's label — **unit enums only**: it lands in `x-enum-labels`, whose word is `label` |
@@ -98,7 +100,15 @@ whether it is required — a field that is neither an `Option<T>` nor
 or an arm has a description as well as a title, so its doc comment is the
 description; a choice has only a label, so its doc comment is the label.
 
-Refused, each with its own message: an enum with no variants; a
+A catch-all is for a vocabulary shared across a boundary, where the two
+sides are built at different times and a name one side does not know
+must not fail the whole value. Text equal to a known name always reads
+as that variant, so `Other("h264")` writes `h264` and reads back as the
+variant stored as `h264`.
+
+Refused, each with its own message: `other` on a tagged enum, on a
+variant that is not `Name(T)`, beside `rename` or `label`, or on two
+variants; an enum with no variants; a
 data-carrying enum with no `tag`; a tuple variant; two variants stored
 under one name; a field stored under the tag; a misspelled container-level
 `#[map(...)]` key (ignoring it would change the wire shape); `tag` on a

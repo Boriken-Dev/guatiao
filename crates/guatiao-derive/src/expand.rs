@@ -921,6 +921,9 @@ struct VariantPlan {
     title: Option<String>,
     /// An arm's `description`. A choice has none.
     description: Option<String>,
+    /// `#[map(other)]`: the catch-all of a unit enum, holding a name no
+    /// other variant is stored as. The type of its one field.
+    other: Option<Type>,
 }
 
 impl VariantPlan {
@@ -937,6 +940,7 @@ impl VariantPlan {
     fn read(derive: Derive, variant: &Variant, tagged: bool) -> syn::Result<VariantPlan> {
         let label = derive.spelled();
         let mut rename = None;
+        let mut other_span = None;
         let mut explicit_title = None;
         let mut explicit_description = None;
 
@@ -946,11 +950,16 @@ impl VariantPlan {
                     if meta.path.is_ident("rename") {
                         rename = Some(meta.value()?.parse::<LitStr>()?.value());
                         Ok(())
+                    } else if meta.path.is_ident("other") {
+                        other_span = Some(meta.path.clone());
+                        Ok(())
                     } else {
                         Err(meta.error(format!(
                             "unrecognised `#[map(...)]` option on a variant. {label} \
-                             knows one: `rename = \"...\"`. A variant cannot be skipped: \
-                             a value of that variant would have no way to be written."
+                             knows two: `rename = \"...\"`, and `other` on the one \
+                             variant of a unit enum that keeps a name it does not know. \
+                             A variant cannot be skipped: a value of that variant would \
+                             have no way to be written."
                         )))
                     }
                 })?;
@@ -984,8 +993,46 @@ impl VariantPlan {
             }
         }
 
+        let other = match other_span {
+            None => None,
+            Some(span) if tagged => {
+                return Err(syn::Error::new_spanned(
+                    span,
+                    "`other` is for an enum of unit variants, where a name nobody \
+                     declared is still a name. An unknown variant of a tagged enum \
+                     would carry fields nobody declared, and nothing here could \
+                     keep them.",
+                ));
+            }
+            Some(span) if rename.is_some() || explicit_title.is_some() => {
+                return Err(syn::Error::new_spanned(
+                    span,
+                    "the `other` variant has no name of its own: it is stored as \
+                     whatever text it holds, so there is nothing to rename or to \
+                     label. Remove `rename` and `label`.",
+                ));
+            }
+            Some(_) => match &variant.fields {
+                Fields::Unnamed(unnamed) if unnamed.unnamed.len() == 1 => {
+                    Some(unnamed.unnamed[0].ty.clone())
+                }
+                _ => {
+                    return Err(syn::Error::new_spanned(
+                        &variant.ident,
+                        format!(
+                            "{label} needs the `#[map(other)]` variant to hold the \
+                             text it did not recognise: exactly one unnamed field, as \
+                             `Other(String)`."
+                        ),
+                    ));
+                }
+            },
+        };
+
         let doc = doc_comment(&variant.attrs);
-        let (title_text, description_text) = if tagged {
+        let (title_text, description_text) = if other.is_some() {
+            (None, None)
+        } else if tagged {
             (explicit_title, explicit_description.or(doc))
         } else {
             (explicit_title.or(doc), None)
@@ -993,6 +1040,7 @@ impl VariantPlan {
 
         let fields = match &variant.fields {
             Fields::Unit => Vec::new(),
+            Fields::Unnamed(_) if other.is_some() => Vec::new(),
             Fields::Named(named) => {
                 let mut plan = Vec::new();
                 for field in &named.named {
@@ -1020,6 +1068,7 @@ impl VariantPlan {
             fields,
             title: title_text,
             description: description_text,
+            other,
         })
     }
 }
@@ -1046,7 +1095,7 @@ fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Resul
         && let Some(carrying) = data
             .variants
             .iter()
-            .find(|v| !matches!(v.fields, Fields::Unit))
+            .find(|v| !matches!(v.fields, Fields::Unit) && !says_other(v))
     {
         return Err(syn::Error::new_spanned(
             &carrying.ident,
@@ -1066,6 +1115,13 @@ fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Resul
         variants.push(VariantPlan::read(derive, variant, tag.is_some())?);
     }
     reject_duplicate_variants(&variants)?;
+    if let Some(second) = variants.iter().filter(|v| v.other.is_some()).nth(1) {
+        return Err(syn::Error::new(
+            second.ident.span(),
+            "two variants are `#[map(other)]`. A name no variant declares could be \
+             read as either, so only one can be the catch-all.",
+        ));
+    }
 
     let Some(tag) = tag else {
         return Ok(match derive {
@@ -1082,11 +1138,35 @@ fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Resul
     })
 }
 
+/// Whether a variant carries `#[map(other)]`, before its plan is read.
+/// Lenient: a malformed attribute is reported by the plan, not here.
+fn says_other(variant: &Variant) -> bool {
+    let mut found = false;
+    for attr in &variant.attrs {
+        if attr.path().is_ident("map") {
+            let _ = attr.parse_nested_meta(|meta| {
+                found |= meta.path.is_ident("other");
+                if meta.input.peek(syn::Token![=]) {
+                    meta.value()?.parse::<syn::Expr>()?;
+                }
+                Ok(())
+            });
+        }
+    }
+    found
+}
+
 /// Two variants stored as one name could not be told apart on the way
-/// back, so neither could be read.
+/// back, so neither could be read. The catch-all has no stored name.
 fn reject_duplicate_variants(variants: &[VariantPlan]) -> syn::Result<()> {
     for (i, variant) in variants.iter().enumerate() {
-        if let Some(earlier) = variants[..i].iter().find(|v| v.stored == variant.stored) {
+        if variant.other.is_some() {
+            continue;
+        }
+        if let Some(earlier) = variants[..i]
+            .iter()
+            .find(|v| v.other.is_none() && v.stored == variant.stored)
+        {
             return Err(syn::Error::new(
                 variant.ident.span(),
                 format!(
@@ -1136,6 +1216,12 @@ fn emit_choice_to(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
     let arms = variants.iter().map(|v| {
         let ident = &v.ident;
         let stored = &v.stored;
+        if v.other.is_some() {
+            // Written as the text it holds, which is what it was read from.
+            return quote! {
+                Self::#ident(ref __text) => ::core::convert::AsRef::<str>::as_ref(__text),
+            };
+        }
         quote! { Self::#ident => #stored, }
     });
     quote! {
@@ -1148,8 +1234,8 @@ fn emit_choice_to(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
                 ::guatiao::Value,
                 ::guatiao::ValueError,
             > {
-                // `*self`: every pattern is a unit variant, so nothing is
-                // moved out of the borrow.
+                // `*self`: every pattern is a unit variant or binds by
+                // `ref`, so nothing is moved out of the borrow.
                 ::core::result::Result::Ok(::guatiao::Value::from(
                     ::guatiao::Text::new_in(__alloc, match *self {
                         #(#arms)*
@@ -1161,12 +1247,32 @@ fn emit_choice_to(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
 }
 
 fn emit_choice_from(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
-    let arms = variants.iter().map(|v| {
+    let arms = variants.iter().filter(|v| v.other.is_none()).map(|v| {
         let ident = &v.ident;
         let stored = &v.stored;
         quote! { #stored => ::core::result::Result::Ok(Self::#ident), }
     });
-    let expected = one_of(variants);
+    // A name no variant declares: kept by the catch-all when there is
+    // one, refused naming the alternatives when there is not.
+    let unknown = match variants.iter().find(|v| v.other.is_some()) {
+        Some(v) => {
+            let ident = &v.ident;
+            let ty = &v.other;
+            quote! {
+                __other => ::core::result::Result::Ok(Self::#ident(
+                    <#ty as ::core::convert::From<&str>>::from(__other),
+                )),
+            }
+        }
+        None => {
+            let expected = one_of(variants);
+            quote! {
+                _ => ::core::result::Result::Err(
+                    ::guatiao::MapError::bad_value(#expected),
+                ),
+            }
+        }
+    };
     quote! {
         #[automatically_derived]
         impl ::guatiao::FromValue for #name {
@@ -1177,9 +1283,7 @@ fn emit_choice_from(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
                     __value,
                 )? {
                     #(#arms)*
-                    _ => ::core::result::Result::Err(
-                        ::guatiao::MapError::bad_value(#expected),
-                    ),
+                    #unknown
                 }
             }
         }
@@ -1187,7 +1291,14 @@ fn emit_choice_from(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
 }
 
 fn emit_choice_schema(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
-    let rows = variants.iter().map(|v| {
+    // With a catch-all the names are offered, not required: any text is
+    // a value of the type, so the kind must accept any text.
+    let build = if variants.iter().any(|v| v.other.is_some()) {
+        quote!(open_enumeration_in)
+    } else {
+        quote!(enumeration_in)
+    };
+    let rows = variants.iter().filter(|v| v.other.is_none()).map(|v| {
         let stored = &v.stored;
         // No label is written as empty, and the builder leaves an empty
         // one off: a reader shows the value when there is no label.
@@ -1200,7 +1311,7 @@ fn emit_choice_schema(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
             fn kind(
                 __alloc: ::guatiao::Alloc,
             ) -> ::guatiao::schema::KindBuilder {
-                ::guatiao::schema::KindBuilder::enumeration_in(__alloc, &[
+                ::guatiao::schema::KindBuilder::#build(__alloc, &[
                     #(#rows)*
                 ])
             }
@@ -1462,6 +1573,25 @@ mod tests {
             struct S { #[map(default = 1)] #[schema(default = 1)] a: u8 }
         });
         assert!(twice.contains("says it once"), "{twice}");
+        // The catch-all, in each place it cannot go.
+        let tagged = from(quote! {
+            #[map(tag = "t")] enum E { A, #[map(other)] B(String) }
+        });
+        assert!(tagged.contains("fields nobody declared"), "{tagged}");
+        let unit = from(quote! { enum E { A, #[map(other)] B } });
+        assert!(unit.contains("exactly one unnamed field"), "{unit}");
+        let named = from(quote! {
+            enum E { A, #[map(other, rename = "b")] B(String) }
+        });
+        assert!(named.contains("no name of its own"), "{named}");
+        let two = from(quote! {
+            enum E { #[map(other)] A(String), #[map(other)] B(String) }
+        });
+        assert!(two.contains("only one can be the catch-all"), "{two}");
+        // A tuple variant that is not the catch-all is still a missing tag.
+        let untagged = from(quote! { enum E { A, B(String) } });
+        assert!(untagged.contains("#[map(tag = "), "{untagged}");
+
         let repeated = from(quote! {
             struct S { #[map(default, default = 1)] a: u8 }
         });
@@ -1518,6 +1648,9 @@ mod tests {
         let choice = quote! {
             enum C { A, #[map(rename = "b")] B }
         };
+        let open = quote! {
+            enum O { A, #[map(other)] X(String) }
+        };
         let tagged = quote! {
             #[map(tag = "t")]
             enum T {
@@ -1534,6 +1667,9 @@ mod tests {
             + &to(choice.clone())
             + &from(choice.clone())
             + &schema(choice)
+            + &to(open.clone())
+            + &from(open.clone())
+            + &schema(open)
             + &to(tagged.clone())
             + &from(tagged.clone())
             + &schema(tagged);
@@ -1654,6 +1790,8 @@ mod tests {
             "Result",
             "TryFrom",
             "Vec",
+            // How a catch-all variant's field is written as text.
+            "AsRef",
         ];
         for segment in &segments {
             assert!(

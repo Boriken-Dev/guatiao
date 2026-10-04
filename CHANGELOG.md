@@ -26,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Option<T>` resolved by hand, and a document the schema accepts is one
   the type reads. `#[schema(default = ..)]` is unchanged: an annotation
   on a field that stays required.
+- **`#[map(other)]`: a unit enum can keep a name it does not know.** One
+  variant of the shape `Other(String)` holds any text no other variant is
+  stored as, and writes it back, so a model crossing a boundary does not
+  fail to decode because the other side knows a newer name. Its schema is
+  the new `KindBuilder::open_enumeration`: a string with the known names
+  as `examples`, read with `FieldRef::suggestions()`.
 
 ### Fixed
 

@@ -269,8 +269,9 @@ pub const ONE_OF: &str = "oneOf";
 /// them does about it is its own decision; this says only that somebody
 /// declared the field one.
 pub const X_SENSITIVE: &str = "x-sensitive";
-/// What a person is shown for each value in [`ENUM`]: a map from the value
-/// to its label.
+/// What a person is shown for each value in [`ENUM`], or for each name an
+/// open enumeration lists in [`EXAMPLES`]: a map from the value to its
+/// label.
 ///
 /// Keyed rather than parallel, so a label cannot come adrift from the value
 /// it belongs to. A value with no entry shows as itself.

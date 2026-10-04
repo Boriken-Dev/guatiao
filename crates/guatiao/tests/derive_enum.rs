@@ -160,6 +160,76 @@ fn a_choice_it_writes_is_one_its_schema_accepts() {
     );
 }
 
+// --- a choice that keeps what it does not know ---------------------------
+
+/// A vocabulary the other side of a boundary may have grown.
+#[derive(Debug, Clone, PartialEq, Eq, ToValue, FromValue, Schema)]
+enum Codec {
+    #[map(rename = "h264")]
+    #[schema(label = "H.264")]
+    H264,
+    #[map(rename = "hevc")]
+    Hevc,
+    #[map(other)]
+    Other(String),
+}
+
+#[test]
+fn a_catch_all_keeps_a_name_no_variant_declares() {
+    assert_eq!(
+        Codec::from_value(&Value::from(Text::new("hevc"))).unwrap(),
+        Codec::Hevc,
+        "a known name is still its own variant"
+    );
+    let unknown = Codec::from_value(&Value::from(Text::new("av1"))).unwrap();
+    assert_eq!(unknown, Codec::Other("av1".to_string()));
+
+    // And it is written as the text it was read from, so a host passing
+    // the value on loses nothing it did not understand.
+    let written = unknown.to_value(alloc()).unwrap();
+    assert_eq!(TryAsRef::<str>::try_as_ref(&written), Some("av1"));
+    assert_eq!(
+        TryAsRef::<str>::try_as_ref(&Codec::H264.to_value(alloc()).unwrap()),
+        Some("h264")
+    );
+
+    // Text that is not a name is still the wrong kind.
+    assert!(matches!(
+        Codec::from_value(&Value::from(1i64)).unwrap_err(),
+        MapError::WrongType { .. }
+    ));
+}
+
+#[test]
+fn a_catch_all_describes_itself_as_text_that_suggests_its_names() {
+    let (kind, key) = field_of::<Codec>("codec");
+    let field = FieldRef::new(key, &kind).unwrap();
+    assert!(
+        matches!(field.kind(), Kind::Str { .. }),
+        "any text is a value of the type, so the kind is text and not a choice"
+    );
+    let suggestions: Vec<(String, String)> = field
+        .suggestions()
+        .map(|c| (c.value().to_string(), c.label().to_string()))
+        .collect();
+    assert_eq!(
+        suggestions,
+        [
+            ("h264".to_string(), "H.264".to_string()),
+            ("hevc".to_string(), "hevc".to_string()),
+        ],
+        "the known names are offered with their labels; the catch-all has none"
+    );
+
+    // What the type writes, its schema accepts: a known name and an
+    // unknown one alike.
+    for codec in [Codec::H264, Codec::Hevc, Codec::Other("av1".to_string())] {
+        let value = codec.to_value(alloc()).unwrap();
+        validate_value(field, &value)
+            .unwrap_or_else(|e| panic!("{codec:?} wrote a value its own schema refuses: {e}"));
+    }
+}
+
 // --- a variant ----------------------------------------------------------
 
 fn userpass() -> Auth {
