@@ -590,6 +590,8 @@ impl core::cmp::PartialEq for guatiao::library::registry::Skipped
 pub fn guatiao::library::registry::Skipped::eq(&self, &Self) -> bool
 impl core::fmt::Debug for guatiao::library::registry::Skipped
 pub fn guatiao::library::registry::Skipped::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::library::registry::Skipped
+pub fn guatiao::library::registry::Skipped::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao::library::registry::Skipped
 #[non_exhaustive] pub enum guatiao::library::registry::UnloadError
 pub guatiao::library::registry::UnloadError::Close
@@ -906,6 +908,8 @@ impl core::cmp::Eq for guatiao::library::registry::Skipped
 impl core::cmp::PartialEq for guatiao::library::registry::Skipped
 pub fn guatiao::library::registry::Skipped::eq(&self, &Self) -> bool
 impl core::fmt::Debug for guatiao::library::registry::Skipped
+pub fn guatiao::library::registry::Skipped::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::library::registry::Skipped
 pub fn guatiao::library::registry::Skipped::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao::library::registry::Skipped
 pub enum guatiao::library::Subject

@@ -170,6 +170,29 @@ pub enum Skipped {
     },
 }
 
+/// One clause, to follow the file's name: `{path}: {skipped}`.
+impl std::fmt::Display for Skipped {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Skipped::NoEntrySymbol => f.write_str("not a guatiao library"),
+            Skipped::DeclinedThisHost => f.write_str("declined this host"),
+            Skipped::AlreadyLoaded { from } => write!(f, "already loaded from {}", from.display()),
+            Skipped::ProviderAlreadyLoaded { id, from } => write!(
+                f,
+                "its provider `{id}` is already registered by {}",
+                from.display()
+            ),
+            Skipped::NotExaminable => f.write_str("could not be read as a library file"),
+            Skipped::UnsupportedAbi { declared } => write!(
+                f,
+                "built for envelope ABI {declared}, and this host speaks {}",
+                super::desc::ABI_VERSION
+            ),
+            Skipped::Filtered { by } => write!(f, "kept out by `{by}`"),
+        }
+    }
+}
+
 /// What one [`Registry::load_file`] did.
 ///
 /// Two outcomes rather than `Option`, because "nothing happened" has
@@ -1228,6 +1251,46 @@ mod tests {
             },
             Origin::Linked,
         )
+    }
+
+    #[test]
+    fn a_skip_reads_as_a_clause_after_the_file_name() {
+        let from = PathBuf::from("first.so");
+        let cases = [
+            (Skipped::NoEntrySymbol, "not a guatiao library".to_string()),
+            (Skipped::DeclinedThisHost, "declined this host".to_string()),
+            (
+                Skipped::AlreadyLoaded { from: from.clone() },
+                "already loaded from first.so".to_string(),
+            ),
+            (
+                Skipped::ProviderAlreadyLoaded {
+                    id: "acme_hello".to_string(),
+                    from,
+                },
+                "its provider `acme_hello` is already registered by first.so".to_string(),
+            ),
+            (
+                Skipped::NotExaminable,
+                "could not be read as a library file".to_string(),
+            ),
+            (
+                Skipped::UnsupportedAbi { declared: 7 },
+                format!(
+                    "built for envelope ABI 7, and this host speaks {}",
+                    crate::library::desc::ABI_VERSION
+                ),
+            ),
+            (
+                Skipped::Filtered {
+                    by: "kind=greeter".to_string(),
+                },
+                "kept out by `kind=greeter`".to_string(),
+            ),
+        ];
+        for (skipped, expected) in cases {
+            assert_eq!(skipped.to_string(), expected);
+        }
     }
 
     fn registry() -> Registry {

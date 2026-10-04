@@ -817,7 +817,9 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   version; the host's `abi_version` is checked by the library, the
   library's by the loader), and `LoadError::Malformed` (a descriptor this
   build cannot read: below the floor, non-UTF-8 text, a stride below the
-  floor, an element overlapping its neighbour).
+  floor, an element overlapping its neighbour). `Skipped` implements
+  `Display` as one clause to print after the file's name
+  (`{path}: already loaded from ..`).
 - **A library can be retired.** `Registry::retire(library_key)` takes its
   providers out of the registry and out of the snapshot other libraries
   read, drops its `Loaded` record, and frees the key — a retired library

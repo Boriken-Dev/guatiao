@@ -42,7 +42,7 @@ use std::sync::{Arc, Mutex};
 
 use greeter_kind::{Counter, Greeter, Listener};
 use guatiao::library::{
-    Kind, Offer, Order, ProviderError, Registry, ScanRules, SearchPath, Skipped, scan_path,
+    Kind, Offer, Order, ProviderError, Registry, ScanRules, SearchPath, scan_path,
 };
 use guatiao::schema::{SchemaRef, validate_map};
 use guatiao::{Alloc, Map, Provider, Schema, ToValue, Value};
@@ -92,7 +92,7 @@ fn main() -> ExitCode {
     if !report.skipped.is_empty() {
         println!("skipped ({}):", report.skipped.len());
         for (file, why) in &report.skipped {
-            println!("  {}: {}", file.display(), skip_reason(why));
+            println!("  {}: {why}", file.display());
         }
     }
     for (file, error) in &report.failed {
@@ -320,22 +320,6 @@ fn search_path() -> SearchPath {
         path.push(dir);
     }
     path
-}
-
-/// One line per reason, in the host's words.
-fn skip_reason(why: &Skipped) -> String {
-    match why {
-        Skipped::NoEntrySymbol => "not a guatiao library".to_string(),
-        Skipped::Filtered { by } => format!("declares nothing for the rule `{by}`"),
-        Skipped::AlreadyLoaded { from } => format!("already loaded from {}", from.display()),
-        Skipped::ProviderAlreadyLoaded { id, .. } => {
-            format!("its provider `{id}` is already registered")
-        }
-        Skipped::DeclinedThisHost => "declined this host".to_string(),
-        Skipped::NotExaminable => "could not be examined without running it".to_string(),
-        Skipped::UnsupportedAbi { declared } => format!("built for envelope ABI {declared}"),
-        other => format!("{other:?}"),
-    }
 }
 
 fn render(value: &Value) -> String {

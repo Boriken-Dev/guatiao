@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`Skipped` implements `Display`**: one clause to print after the file's
+  name, so every host reports a skip in the same words.
+
 ### Fixed
 
 - **A handle held across an `.await` no longer makes the future `!Send`.**
