@@ -13,20 +13,20 @@ use super::*;
 /// consumer holds it as `dyn Trait`. `Copy`, `Send`, `Sync` and
 /// `'static`: the table lives in a library's mapping, and unloading that
 /// library is the host's word that nothing like this is still held.
-pub struct Remote<K: ?Sized + Kind> {
+pub struct Remote<K: ?Sized> {
     pub(super) table: *const c_void,
     pub(super) size: usize,
     pub(super) ctx: *mut c_void,
     kind: PhantomData<fn() -> K>,
 }
 
-impl<K: ?Sized + Kind> Clone for Remote<K> {
+impl<K: ?Sized> Clone for Remote<K> {
     fn clone(&self) -> Remote<K> {
         *self
     }
 }
 
-impl<K: ?Sized + Kind> Copy for Remote<K> {}
+impl<K: ?Sized> Copy for Remote<K> {}
 
 impl<K: ?Sized + Kind> std::fmt::Debug for Remote<K> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -39,10 +39,12 @@ impl<K: ?Sized + Kind> std::fmt::Debug for Remote<K> {
 
 // SAFETY: the table and `ctx` address a mapping the registry holds, and
 // the kind's trait names `Send + Sync`, which the shims uphold by calling
-// a `&self` method.
-unsafe impl<K: ?Sized + Kind> Send for Remote<K> {}
+// a `&self` method. Unbounded in `K` so the impl holds for `dyn Trait +
+// 'a` at every `'a`, which a future needs; every constructor requires
+// `K: Kind`, so no value exists for any other `K`.
+unsafe impl<K: ?Sized> Send for Remote<K> {}
 // SAFETY: as above.
-unsafe impl<K: ?Sized + Kind> Sync for Remote<K> {}
+unsafe impl<K: ?Sized> Sync for Remote<K> {}
 
 impl<K: ?Sized + Kind> Remote<K> {
     /// Validates a table from anywhere: a C host passing one in, a plugin
@@ -203,7 +205,7 @@ impl<K: ?Sized + Kind> Remote<K> {
 /// **Every provider claiming the kind with a valid table is an offer,
 /// unavailable ones included.** Ask [`available`](Offer::available) and
 /// choose; nothing here picks.
-pub struct Offer<K: ?Sized + Kind> {
+pub struct Offer<K: ?Sized> {
     remote: Remote<K>,
     view: ProviderView,
     key: Option<String>,
@@ -340,7 +342,7 @@ impl<K: ?Sized + Kind> Offer<K> {
 ///
 /// `Send + Sync`, since the kind's trait names both; not `Copy`, since it
 /// owns the instance.
-pub struct Instance<K: ?Sized + Kind> {
+pub struct Instance<K: ?Sized> {
     remote: Remote<K>,
     lib_ctx: *mut c_void,
     destroy: Option<unsafe extern "C" fn(ctx: *mut c_void, instance: *mut c_void)>,
@@ -356,9 +358,9 @@ impl<K: ?Sized + Kind> std::fmt::Debug for Instance<K> {
 
 // SAFETY: the instance is the provider's own, addressed only through the
 // kind's `Send + Sync` trait, and released once, here.
-unsafe impl<K: ?Sized + Kind> Send for Instance<K> {}
+unsafe impl<K: ?Sized> Send for Instance<K> {}
 // SAFETY: as above.
-unsafe impl<K: ?Sized + Kind> Sync for Instance<K> {}
+unsafe impl<K: ?Sized> Sync for Instance<K> {}
 
 impl<K: ?Sized + Kind> Instance<K> {
     /// Builds through a provider's `create` slot and validates its table
@@ -420,7 +422,7 @@ impl<K: ?Sized + Kind> std::ops::Deref for Instance<K> {
     }
 }
 
-impl<K: ?Sized + Kind> Drop for Instance<K> {
+impl<K: ?Sized> Drop for Instance<K> {
     fn drop(&mut self) {
         if let Some(destroy) = self.destroy {
             // SAFETY: the instance came from this provider's `create` and

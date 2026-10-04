@@ -160,7 +160,7 @@ const DESTROY_END: usize = size_of::<KindHeader>() + size_of::<*const c_void>();
 /// `Send` (an object kind names `Send`); not `Sync` and not `Clone`,
 /// because the shims hand out `&mut` to the value behind it. Share one
 /// through a `Mutex` if two threads need it.
-pub struct Object<K: ?Sized + Kind> {
+pub struct Object<K: ?Sized> {
     remote: Remote<K>,
 }
 
@@ -174,8 +174,8 @@ impl<K: ?Sized + Kind> std::fmt::Debug for Object<K> {
 
 // SAFETY: the object kind's trait names `Send`, and this is the one
 // handle to the value; the table addresses a library that is never
-// unloaded or the cell the handle owns.
-unsafe impl<K: ?Sized + Kind> Send for Object<K> {}
+// unloaded or the cell the handle owns. Unbounded in `K`, as `Remote` is.
+unsafe impl<K: ?Sized> Send for Object<K> {}
 
 impl<K: ?Sized + Kind> Object<K> {
     /// An object from a cell the derive's `into_object` built: the table
@@ -268,7 +268,7 @@ impl<K: ?Sized + Kind> std::ops::DerefMut for Object<K> {
     }
 }
 
-impl<K: ?Sized + Kind> Drop for Object<K> {
+impl<K: ?Sized> Drop for Object<K> {
     fn drop(&mut self) {
         // SAFETY: the table was validated for an object kind, whose
         // `destroy` slot follows the header; released exactly once, here.

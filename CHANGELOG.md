@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A handle held across an `.await` no longer makes the future `!Send`.**
+  `Remote`, `Instance` and `Object` were `Send` only for a kind that is
+  `'static`, which a future cannot show, so `tokio::spawn` refused any task
+  holding one with "implementation of `Kind` is not general enough". The
+  `Kind` bound is off those types and their marker impls, and `Offer` and
+  `ProviderView` are `Send + Sync` as well.
+
 ## [0.0.0-alpha.0] - 2026-09-27
 
 First release. An alpha: the API can change between releases, and this

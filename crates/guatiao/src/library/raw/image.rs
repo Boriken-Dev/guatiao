@@ -62,6 +62,12 @@ pub struct ProviderView {
     pub destroy: Option<unsafe extern "C" fn(ctx: *mut c_void, instance: *mut c_void)>,
 }
 
+// SAFETY: the pointers address a loaded library's image, which this side
+// never writes, and a provider's slots are callable from any thread.
+unsafe impl Send for ProviderView {}
+// SAFETY: as above.
+unsafe impl Sync for ProviderView {}
+
 impl ProviderView {
     /// Whether it serves this kind.
     pub fn supports(&self, kind: &str) -> bool {

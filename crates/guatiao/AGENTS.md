@@ -1034,6 +1034,9 @@ drop(s);                                                             // the libr
   `available()` (asked live), `remote()`, `boxed()`, `shared()`.
   Unavailable providers ARE offered; the consumer chooses. `Remote<K>` is
   `Copy + Send + Sync + 'static`; `Box<dyn K>: From<Remote<dyn K>>`.
+- **Every handle may be held across an `.await`.** `Remote`, `Offer` and
+  `Instance` are `Send + Sync` and `Object` is `Send`, with no bound on
+  `K`, so a future holding one stays `Send` and can be spawned.
 - **`KindMismatch`**: `NoTable`, `BelowFloor { size, floor }`,
   `HashMismatch { expected, found }`, `NullRequiredSlot(name)`. A
   `floor_hash` of `0` passes only through `from_raw`.
