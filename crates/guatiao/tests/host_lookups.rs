@@ -131,3 +131,46 @@ fn a_host_lists_what_it_gets() {
         "the block outlives the registry, and says so"
     );
 }
+
+/// A library the host LINKS, built by hand: what `register_local` takes.
+fn linked_library(_host: guatiao::library::Host) -> Option<guatiao::library::LocalLibrary> {
+    use guatiao::library::kind::{LibraryParts, ProviderParts};
+    // SAFETY: no table, no ctx and no slot: there is nothing to vouch for
+    // but the text, which the builder owns.
+    let provider = unsafe {
+        ProviderParts::builder("linked_provider")
+            .name("Linked")
+            .version("2.0.0")
+            .kinds(&["linked"])
+            .build()
+    };
+    let parts: &'static LibraryParts = Box::leak(Box::new(LibraryParts::new(
+        "linked",
+        "1.0.0",
+        vec![provider],
+    )));
+    Some(guatiao::library::LocalLibrary::from(parts))
+}
+
+/// A linked library's descriptor answers through the host as a loaded
+/// one's does, and the host block's own text reads back.
+#[test]
+fn a_host_answers_for_a_library_it_links() {
+    let mut registry = Registry::new("lookups", "1.0");
+    registry
+        .register_local("linked", linked_library)
+        .expect("a linked library registers")
+        .loaded()
+        .expect("it accepts this host");
+    let host = registry.host();
+    assert_eq!((host.id(), host.version()), ("lookups", "1.0"));
+    let view = host
+        .get("linked_provider")
+        .expect("the host offers services")
+        .expect("the provider is found");
+    assert_eq!(view.display_name(), "Linked");
+    assert_eq!(view.version(), Some("2.0.0"));
+    assert_eq!(view.kinds(), ["linked"]);
+    assert_eq!(host.list("linked").unwrap().len(), 1);
+    assert!(host.list("nothing").unwrap().is_empty());
+}

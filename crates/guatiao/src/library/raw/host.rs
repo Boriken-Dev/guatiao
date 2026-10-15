@@ -229,10 +229,12 @@ unsafe fn read_answer(raw: *const ProviderInfo<'static>) -> Option<ProviderView>
 pub(crate) struct HostBlock {
     info: HostInfo<'static>,
     services: HostServices,
+    /// `String`, not `Box<str>`: moving a `Box` into the block would
+    /// retag it as unique and invalidate `info`'s views of it.
     #[allow(dead_code)]
-    id: Box<str>,
+    id: String,
     #[allow(dead_code)]
-    version: Box<str>,
+    version: String,
     state: alloc::sync::Weak<Shared>,
 }
 
@@ -320,7 +322,7 @@ pub(crate) unsafe fn view_of_owned(text: &str) -> Str<'static> {
     unsafe { Str::from_raw_parts(text.as_ptr(), text.len()) }
 }
 
-/// The descriptor's text points into the block's own boxes, and the
+/// The descriptor's text points into the block's own strings, and the
 /// services' `ctx` is the block itself, so nothing here borrows from the
 /// registry.
 #[cfg(feature = "load")]
@@ -330,8 +332,8 @@ pub(crate) fn leak_host_block(
     alloc: Option<Alloc>,
     state: alloc::sync::Weak<Shared>,
 ) -> &'static HostBlock {
-    let id: Box<str> = id.into();
-    let version: Box<str> = version.into();
+    let id = String::from(id);
+    let version = String::from(version);
     // Leaked as a raw pointer, and the two self-references written through
     // it: a `&mut` taken first and written through after `ctx` is derived
     // would invalidate `ctx` under Stacked Borrows.
@@ -339,7 +341,7 @@ pub(crate) fn leak_host_block(
         info: HostInfo {
             struct_size: size_of::<HostInfo>() as u32,
             abi_version: crate::library::desc::ABI_VERSION,
-            // SAFETY: the boxes' heap storage does not move when the
+            // SAFETY: the strings' heap storage does not move when the
             // block does, and the block is leaked with them.
             host_id: unsafe { view_of_owned(&id) },
             host_version: unsafe { view_of_owned(&version) },

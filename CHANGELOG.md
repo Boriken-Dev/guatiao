@@ -147,6 +147,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A panic in a configured instance's `Drop` no longer aborts the host.**
   The `destroy` slot `#[derive(Provider)]` writes runs under the same
   catch as every other shim.
+- **A descriptor built by `ProviderParts`, `LibraryParts` or a registry's
+  host block keeps its pointers valid when its owner moves.** The text
+  and the schema it points into were held in `Box`es, which a move
+  retags as unique and Stacked Borrows then treats as invalidating every
+  pointer taken earlier; they are `String`s and `Vec`s now.
 - **The host block a registry leaks is written through one raw pointer**,
   so the services' `ctx` it holds stays valid under Stacked Borrows.
 - **A handle held across an `.await` no longer makes the future `!Send`.**
