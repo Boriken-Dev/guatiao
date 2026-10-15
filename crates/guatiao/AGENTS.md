@@ -735,7 +735,7 @@ A library exports **exactly one symbol**. Everything else it offers is
 reached through the descriptor it returns.
 
 ```rust
-fn describe(host: &HostInfo) -> Option<&'static LibraryInfo<'static>> { ... }
+fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> { ... }
 guatiao::guatiao_library!(describe);   // emits `guatiao_library_entry`
 ```
 
@@ -1159,8 +1159,11 @@ drop(s);                                                             // the libr
   exports every `no_mangle` symbol of the Rust libraries linked into it.
   So a crate that calls `providers!` (or `guatiao_library!`,
   `declares!`) and is an `rlib` as well makes every `cdylib` depending on
-  it scan and load as a library offering those providers; with two such
-  dependencies one entry symbol wins, with no link error. A provider
+  it scan and load as a library offering those providers. Two such
+  dependencies are a link error (`LNK2005`/`LNK1169` on MSVC, a multiple
+  definition elsewhere), or, where the linker never pulls one
+  dependency's object in (as an optimised build may), the other's entry
+  symbol wins and nothing reports it. A provider
   that is also a Rust library is **two crates**: the library derives
   `Provider` and exports the type, and a plugin crate holds one line,
   `guatiao::providers!(acme::Tuner, acme::Recorder);`. The library id
@@ -1504,6 +1507,19 @@ crate takes its object code. Two copies in one process are harmless, and
 that is a property rather than luck — every one of these functions is
 pure over the structs plus the allocator pointer the tree carries, so a
 tree allocated through one copy frees correctly through another.
+
+**Linking this rlib beside the import library of a DLL that carries it
+is `LNK2005` on MSVC.** A Rust crate that depends on `guatiao` for the
+Rust API and also links, through its `.lib`, a DLL built from a crate
+that depends on `guatiao` (an engine, a plugin host) gets every
+`guatiao_*` symbol twice and the link fails with `LNK2005 ... already
+defined` and `LNK1169`. Link that DLL by name instead:
+`#[link(name = "engine", kind = "raw-dylib")]` on every `extern` block
+that imports from it, and no import library on the link line. The
+crate then holds this crate's copy and calls the DLL's own functions,
+which is the harmless two-copy case above. The exports stay
+unconditional: a feature turning them off would be unified across a
+whole workspace build, so one crate could not opt out alone.
 
 **`cargo test` does not build a cdylib for the package under test**, only
 for a dev-dependency, so `tests/c_exports.rs` needs a `cargo build` first

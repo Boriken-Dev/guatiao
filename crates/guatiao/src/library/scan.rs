@@ -73,7 +73,9 @@ pub struct LoadReport {
 }
 
 impl LoadReport {
-    /// Whether anything at all loaded.
+    /// Whether nothing loaded. Skips, failures and unreadable entries do
+    /// not count: a scan that passed over every file it saw is empty, and
+    /// says why in the other three lists.
     pub fn is_empty(&self) -> bool {
         self.loaded.is_empty()
     }
@@ -564,15 +566,16 @@ pub enum Order {
     /// agree on for a report to be reproducible.
     #[default]
     Ascending,
-    /// By name, descending — so `libfoo-1.10.0` is offered before
-    /// `libfoo-1.2.0` and, under a `%id` library key, is the one that
-    /// loads.
+    /// By name, descending: the highest-sorting name is offered first and,
+    /// under a `%id` library key, is the one that loads.
     ///
-    /// **Byte order, not version order.** It agrees with semver only while
-    /// the names agree with it; `1.10.0` sorts above `1.2.0` here because
-    /// `1` is above `2` at the fourth byte, which is luck rather than
-    /// arithmetic. A host that needs real ordering scans with a library
-    /// key of `%id@%version`, loads every build, and picks.
+    /// **Byte order, not version order.** `libfoo-1.2.0` sorts ABOVE
+    /// `libfoo-1.10.0`, because `2` is above `1` at the byte where they
+    /// first differ, so a descending scan loads 1.2.0 and skips the newer
+    /// build. It agrees with semver only while every version component has
+    /// the same number of digits. A host that needs the newest scans with
+    /// a library key of `%id@%version`, loads every build, and picks with
+    /// a version-aware comparison of [`Loaded::version`](super::Loaded).
     Descending,
 }
 
