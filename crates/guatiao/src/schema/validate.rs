@@ -27,12 +27,15 @@
 
 #![forbid(unsafe_code)]
 
+use core::cmp::Ordering;
+
 use crate::value::convert::TryAsRef;
 
 use super::ValidationError;
-use super::read::{FieldRef, Kind, SchemaRef, is_nullable, members};
+use super::read::{FieldRef, Kind, SchemaRef, is_nullable, members, peel};
 use super::vocab;
 use crate::value::error::MAX_DEPTH;
+use crate::value::read::bool_or;
 use crate::value::types::number::validate_json_number;
 
 /// Between an owner and one of its members, in the KEY an error
@@ -101,7 +104,7 @@ fn bad(key: impl Into<String>, expected: impl Into<String>) -> ValidationError {
 /// A typed value is checked by [`validate_value`], which also requires
 /// the type the kind names.
 pub fn validate_text(field: FieldRef<'_>, text: &str) -> Result<(), ValidationError> {
-    against(field.kind(), field.key(), text, 0)
+    against(field.as_value(), field.key(), text, 0)
 }
 
 /// What a refusal says when a tree is nested too deep to follow.
@@ -121,16 +124,19 @@ fn arm_names(kind: Kind<'_>) -> String {
     names.join(", ")
 }
 
-/// Recursive, because a union holds kinds. A free function rather than a
-/// method so the error can name the field's key, which a bare kind does
-/// not know.
+/// Recursive, because a union holds schemas. Written over the schema
+/// rather than its [`Kind`], because a numeric bound is compared as the
+/// exact text that declared it and the kind carries only what fits an
+/// `i64` or an `f64`.
 ///
 /// `depth` counts the levels already followed, shared with
 /// [`value_against`] because the two recurse into each other.
-fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), ValidationError> {
+fn against(schema: &Value, key: &str, value: &str, depth: u32) -> Result<(), ValidationError> {
     if depth >= MAX_DEPTH {
         return Err(too_deep(key));
     }
+    let kind = Kind::read(Some(schema));
+    let own = peel(schema);
     match kind {
         Kind::Str {
             min_length,
@@ -157,16 +163,25 @@ fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), Val
                 Err(bad(key, "a boolean (1/0, true/false, yes/no)"))
             }
         }
-        Kind::Int {
-            min,
-            max,
-            multiple_of,
-        } => {
+        Kind::Int { multiple_of, .. } => {
             if !is_integer_text(value) {
                 return Err(bad(key, "a whole number"));
             }
-            if !within(value, min, max) {
-                return Err(bad(key, bounds(min, max)));
+            let bounds = Bounds::read(own);
+            if !bounds.admit(value) {
+                return Err(bad(key, bounds.describe()));
+            }
+            // `-0` is zero, and an unsigned Rust type still refuses the
+            // spelling: below a minimum of zero, a minus sign is refused.
+            if value.starts_with('-')
+                && bounds
+                    .min
+                    .is_some_and(|m| compare(m, "0").is_some_and(Ordering::is_ge))
+            {
+                return Err(bad(
+                    key,
+                    format!("{}, written without a minus sign", bounds.describe()),
+                ));
             }
             if let Some(step) = multiple_of
                 && !int_is_multiple(value, step)
@@ -175,19 +190,16 @@ fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), Val
             }
             Ok(())
         }
-        Kind::Float {
-            min,
-            max,
-            multiple_of,
-        } => {
+        Kind::Float { multiple_of, .. } => {
             // The JSON number grammar and a finite result: `inf`, `NaN`
             // and `1e999` are not numbers, and NaN would otherwise sail
             // through a bounded range, failing every comparison.
             let Some(x) = number_of(value) else {
                 return Err(bad(key, "a number"));
             };
-            if min.is_some_and(|m| x < m) || max.is_some_and(|m| x > m) {
-                return Err(bad(key, bounds(min, max)));
+            let bounds = Bounds::read(own);
+            if !bounds.admit(value) {
+                return Err(bad(key, bounds.describe()));
             }
             if let Some(step) = multiple_of
                 && !float_is_multiple(x, step)
@@ -221,10 +233,12 @@ fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), Val
         // ANY arm accepting is enough, which is `anyOf` rather than strict
         // `oneOf`. Knowing which arm took the value is explicitly not the
         // point of a union; that is what a variant is for.
-        Kind::Union(_) => {
-            if kind
-                .alternatives()
-                .any(|k| against(k, key, value, depth + 1).is_ok())
+        Kind::Union(any_of) => {
+            if TryAsRef::<List>::try_as_ref(any_of)
+                .map(|list| &list[..])
+                .unwrap_or(&[])
+                .iter()
+                .any(|arm| against(arm, key, value, depth + 1).is_ok())
             {
                 Ok(())
             } else {
@@ -272,18 +286,145 @@ fn number_of(text: &str) -> Option<f64> {
     text.parse::<f64>().ok().filter(|x| x.is_finite())
 }
 
-/// Whether an integer written as `text` satisfies the declared bounds.
-///
-/// Compared as `i128`, which covers every Rust integer width. Beyond even
-/// that, the value cannot violate a bound that was not declared and must
-/// violate one that was, so its SIGN settles it — no bound this
-/// vocabulary can write down is out there.
-fn within(text: &str, min: Option<i64>, max: Option<i64>) -> bool {
-    match text.parse::<i128>() {
-        Ok(n) => min.is_none_or(|m| n >= i128::from(m)) && max.is_none_or(|m| n <= i128::from(m)),
-        Err(_) if text.starts_with('-') => min.is_none(),
-        Err(_) => max.is_none(),
+/// The four bounds JSON Schema can put on a number, each as the exact
+/// text that declared it. A bound that is not a number is no bound.
+struct Bounds<'a> {
+    min: Option<&'a str>,
+    max: Option<&'a str>,
+    exclusive_min: Option<&'a str>,
+    exclusive_max: Option<&'a str>,
+}
+
+impl<'a> Bounds<'a> {
+    fn read(schema: &'a Value) -> Bounds<'a> {
+        let at = |key| {
+            TryAsRef::<Map>::try_as_ref(schema)
+                .and_then(|m| m.get(key))
+                .and_then(TryAsRef::<Number>::try_as_ref)
+                .map(AsRef::<str>::as_ref)
+        };
+        Bounds {
+            min: at(vocab::MINIMUM),
+            max: at(vocab::MAXIMUM),
+            exclusive_min: at(vocab::EXCLUSIVE_MINIMUM),
+            exclusive_max: at(vocab::EXCLUSIVE_MAXIMUM),
+        }
     }
+
+    /// Whether the number written as `text` lies within every bound,
+    /// compared exactly: no width, no rounding, so `u64::MAX + 1` is past
+    /// a maximum of `u64::MAX` and `1.5` is past a maximum of `1`.
+    fn admit(&self, text: &str) -> bool {
+        let is = |bound: Option<&str>, ok: fn(Ordering) -> bool| {
+            bound.is_none_or(|b| compare(text, b).is_none_or(ok))
+        };
+        is(self.min, Ordering::is_ge)
+            && is(self.max, Ordering::is_le)
+            && is(self.exclusive_min, Ordering::is_gt)
+            && is(self.exclusive_max, Ordering::is_lt)
+    }
+
+    /// What a refusal says it wanted.
+    fn describe(&self) -> String {
+        if let (Some(lo), Some(hi), None, None) =
+            (self.min, self.max, self.exclusive_min, self.exclusive_max)
+        {
+            return format!("a number between {lo} and {hi}");
+        }
+        let parts: Vec<String> = [
+            self.min.map(|b| format!("no less than {b}")),
+            self.exclusive_min.map(|b| format!("greater than {b}")),
+            self.max.map(|b| format!("no greater than {b}")),
+            self.exclusive_max.map(|b| format!("less than {b}")),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        if parts.is_empty() {
+            "a number".to_string()
+        } else {
+            format!("a number {}", parts.join(" and "))
+        }
+    }
+}
+
+/// A number as JSON writes one, read exactly: `0.digits` times ten to
+/// `exponent`, with no leading or trailing zero digit. Zero has no digits.
+struct Decimal {
+    negative: bool,
+    digits: Vec<u8>,
+    exponent: i64,
+}
+
+/// An exponent past this is clamped: no two numbers a schema compares
+/// differ there, and the clamp keeps the arithmetic below in range.
+const EXPONENT_CLAMP: i64 = 1 << 40;
+
+fn decimal(text: &str) -> Option<Decimal> {
+    validate_json_number(text.as_bytes()).ok()?;
+    let (negative, rest) = match text.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, text),
+    };
+    let (mantissa, written) = match rest.find(['e', 'E']) {
+        Some(at) => (&rest[..at], &rest[at + 1..]),
+        None => (rest, ""),
+    };
+    let (exponent_negative, exponent_digits) = match written.as_bytes().first() {
+        Some(b'-') => (true, &written[1..]),
+        Some(b'+') => (false, &written[1..]),
+        _ => (false, written),
+    };
+    let mut exponent: i64 = 0;
+    for b in exponent_digits.bytes() {
+        exponent = (exponent * 10 + i64::from(b - b'0')).min(EXPONENT_CLAMP);
+    }
+    if exponent_negative {
+        exponent = -exponent;
+    }
+    let (whole, fraction) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    let mut digits: Vec<u8> = whole.bytes().chain(fraction.bytes()).collect();
+    let leading = digits.iter().take_while(|d| **d == b'0').count();
+    digits.drain(..leading);
+    while digits.last() == Some(&b'0') {
+        digits.pop();
+    }
+    let exponent = exponent + whole.len() as i64 - leading as i64;
+    Some(Decimal {
+        negative: negative && !digits.is_empty(),
+        digits,
+        exponent,
+    })
+}
+
+/// The order of two numbers written as JSON writes them, exactly, or
+/// `None` when either is not one. `-0` and `0` are equal.
+fn compare(a: &str, b: &str) -> Option<Ordering> {
+    let (a, b) = (decimal(a)?, decimal(b)?);
+    let sign = |d: &Decimal| match (d.digits.is_empty(), d.negative) {
+        (true, _) => 0,
+        (false, true) => -1,
+        (false, false) => 1,
+    };
+    let by_sign = sign(&a).cmp(&sign(&b));
+    if by_sign != Ordering::Equal || sign(&a) == 0 {
+        return Some(by_sign);
+    }
+    let magnitude = a
+        .exponent
+        .cmp(&b.exponent)
+        .then_with(|| a.digits.cmp(&b.digits));
+    Some(if a.negative {
+        magnitude.reverse()
+    } else {
+        magnitude
+    })
+}
+
+/// Whether a number written as `text` has no fractional part, which is
+/// what JSON Schema's `integer` type asks: `1.0` is one.
+fn is_whole(text: &str) -> bool {
+    decimal(text).is_some_and(|d| d.exponent >= d.digits.len() as i64)
 }
 
 /// Whether an integer written as `text` is a multiple of `step`.
@@ -321,15 +462,6 @@ fn lengths(min: Option<u64>, max: Option<u64>) -> String {
         (Some(lo), None) => format!("text of at least {lo} characters"),
         (None, Some(hi)) => format!("text of at most {hi} characters"),
         (None, None) => "text".to_string(),
-    }
-}
-
-fn bounds<T: core::fmt::Display>(min: Option<T>, max: Option<T>) -> String {
-    match (min, max) {
-        (Some(lo), Some(hi)) => format!("a number between {lo} and {hi}"),
-        (Some(lo), None) => format!("a number no less than {lo}"),
-        (None, Some(hi)) => format!("a number no greater than {hi}"),
-        (None, None) => "a number".to_string(),
     }
 }
 
@@ -412,16 +544,20 @@ fn value_against(
                     },
                 ));
             };
-            return against(kind, key, AsRef::<str>::as_ref(number), depth);
+            return against(schema, key, AsRef::<str>::as_ref(number), depth);
         }
         Kind::Str { .. } => {
             let Some(text) = TryAsRef::<str>::try_as_ref(value) else {
                 return Err(bad(key, "text"));
             };
-            return against(kind, key, text, depth);
+            return against(schema, key, text, depth);
         }
+        // Both keywords apply: a member of the `enum` is refused when it
+        // is not of the `type` beside it.
         Kind::Enum(owner) => {
-            return if members(owner).any(|(member, _)| same_json(member, value)) {
+            return if type_admits(owner, value)
+                && members(owner).any(|(member, _)| same_json(member, value))
+            {
                 Ok(())
             } else {
                 Err(bad(key, one_of_members(kind)))
@@ -489,38 +625,31 @@ fn value_against(
             }
             return Ok(());
         }
-        Kind::Map(_) => {
+        Kind::Map(owner) => {
             if tag != Ok(Tag::GUATIAO_MAP) {
                 return Err(bad(key, "an object"));
             }
             let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
                 return Err(bad(key, "keys that are text"));
             };
-            // The same two rules a variant arm's payload obeys, for the
-            // same reason: a key nobody declared is a mistake worth
-            // reporting rather than something to drop, and a required
-            // field that is absent is the other half of the same check.
+            // The same two rules a variant arm's payload obeys: a key the
+            // object does not declare answers to `additionalProperties`,
+            // and a required field that is absent is refused.
             for entry in map {
                 let name = entry.key();
-                let Some(field) = kind.fields().find(|f| f.key() == name) else {
-                    return Err(bad(
-                        format!("{key}{}{name}", NESTED),
-                        format!("nothing — '{name}' is not a declared field"),
-                    ));
-                };
-                value_against(
-                    field.as_value(),
-                    &format!("{key}{}{name}", NESTED),
-                    entry.value(),
-                    depth + 1,
-                )?;
+                let path = nested(key, name);
+                match kind.fields().find(|f| f.key() == name) {
+                    Some(field) => {
+                        value_against(field.as_value(), &path, entry.value(), depth + 1)?
+                    }
+                    None => undeclared(owner, &path, entry.value(), depth, || {
+                        format!("nothing — '{name}' is not a declared field")
+                    })?,
+                }
             }
             for field in kind.fields() {
                 if field.is_required() && !map.contains_key(field.key()) {
-                    return Err(bad(
-                        format!("{key}{}{}", NESTED, field.key()),
-                        "a value — it is required",
-                    ));
+                    return Err(bad(nested(key, field.key()), "a value — it is required"));
                 }
             }
             return Ok(());
@@ -561,37 +690,114 @@ fn value_against(
         ));
     };
 
-    // A field belonging to an arm that was not selected is an error, not
-    // something to drop silently — the same argument the schema makes for
-    // a field key it does not declare.
+    // A field belonging to an arm that was not selected answers to the
+    // arm's `additionalProperties`, which every arm the builders seal sets
+    // to `false`: an error, not something to drop silently.
     for entry in map {
         let name = entry.key();
         if name == discriminant {
             continue;
         }
-        let Some(field) = arm.fields().find(|f| f.key() == name) else {
-            return Err(bad(
-                format!("{key}{}{name}", NESTED),
-                format!("nothing — '{name}' is not declared by the '{chosen}' arm"),
-            ));
-        };
-        value_against(
-            field.as_value(),
-            &format!("{key}{}{name}", NESTED),
-            entry.value(),
-            depth + 1,
-        )?;
+        let path = nested(key, name);
+        match arm.fields().find(|f| f.key() == name) {
+            Some(field) => value_against(field.as_value(), &path, entry.value(), depth + 1)?,
+            None => undeclared(arm.schema(), &path, entry.value(), depth, || {
+                format!("nothing — '{name}' is not declared by the '{chosen}' arm")
+            })?,
+        }
     }
 
     for field in arm.fields() {
         if field.is_required() && !map.contains_key(field.key()) {
             return Err(bad(
-                format!("{key}{}{}", NESTED, field.key()),
+                nested(key, field.key()),
                 format!("a value — it is required by the '{chosen}' arm"),
             ));
         }
     }
     Ok(())
+}
+
+/// `key.name`, or `name` alone at the root, for the key an error reports.
+fn nested(key: &str, name: &str) -> String {
+    if key.is_empty() {
+        name.to_string()
+    } else {
+        format!("{key}{NESTED}{name}")
+    }
+}
+
+/// What an object's `additionalProperties` says about a key it does not
+/// declare.
+enum Undeclared<'a> {
+    /// `false`: refused. What every object the builders seal says.
+    Refused,
+    /// Absent or `true`: accepted unchecked, JSON Schema's default.
+    Accepted,
+    /// A schema: the value answers to it.
+    Checked(&'a Value),
+}
+
+fn undeclared_rule(owner: &Value) -> Undeclared<'_> {
+    match TryAsRef::<Map>::try_as_ref(owner).and_then(|m| m.get(vocab::ADDITIONAL_PROPERTIES)) {
+        Some(v) if v.tag() == Ok(Tag::GUATIAO_BOOL) && !bool_or(Some(v), true) => {
+            Undeclared::Refused
+        }
+        Some(v) if TryAsRef::<Map>::try_as_ref(v).is_some() => Undeclared::Checked(v),
+        _ => Undeclared::Accepted,
+    }
+}
+
+/// A value under a key `owner` does not declare, judged by its
+/// `additionalProperties`.
+fn undeclared(
+    owner: &Value,
+    path: &str,
+    value: &Value,
+    depth: u32,
+    refusal: impl FnOnce() -> String,
+) -> Result<(), ValidationError> {
+    match undeclared_rule(owner) {
+        Undeclared::Refused => Err(bad(path, refusal())),
+        Undeclared::Accepted => Ok(()),
+        Undeclared::Checked(schema) => value_against(schema, path, value, depth + 1),
+    }
+}
+
+/// Whether `value` is of a type the schema's `type` names; a schema with
+/// no `type`, or one naming a type this build does not know, admits it.
+fn type_admits(schema: &Value, value: &Value) -> bool {
+    let Some(ty) = TryAsRef::<Map>::try_as_ref(schema).and_then(|m| m.get(vocab::TYPE)) else {
+        return true;
+    };
+    if let Some(name) = TryAsRef::<str>::try_as_ref(ty) {
+        return admits(name, value);
+    }
+    let names: Vec<&str> = TryAsRef::<List>::try_as_ref(ty)
+        .map(|list| {
+            list.iter()
+                .filter_map(TryAsRef::<str>::try_as_ref)
+                .collect()
+        })
+        .unwrap_or_default();
+    names.is_empty() || names.iter().any(|name| admits(name, value))
+}
+
+fn admits(name: &str, value: &Value) -> bool {
+    let tag = value.tag();
+    match name {
+        vocab::TYPE_NULL => tag == Ok(Tag::GUATIAO_NULL),
+        vocab::TYPE_BOOLEAN => tag == Ok(Tag::GUATIAO_BOOL),
+        vocab::TYPE_STRING => tag == Ok(Tag::GUATIAO_STRING),
+        vocab::TYPE_BYTES => tag == Ok(Tag::GUATIAO_BYTES),
+        vocab::TYPE_ARRAY => tag == Ok(Tag::GUATIAO_LIST),
+        vocab::TYPE_OBJECT => tag == Ok(Tag::GUATIAO_MAP),
+        vocab::TYPE_NUMBER => tag == Ok(Tag::GUATIAO_NUMBER),
+        vocab::TYPE_INTEGER => {
+            TryAsRef::<Number>::try_as_ref(value).is_some_and(|n| is_whole(n.as_ref()))
+        }
+        _ => true,
+    }
 }
 
 /// Whether two values are the same JSON value: numbers by what they
@@ -632,13 +838,27 @@ pub(crate) fn accepts(schema: &Value, value: &Value) -> bool {
 /// Whether every entry of a map of **typed** values is accepted.
 ///
 /// Each value is the type its field's kind names (see [`validate_value`]),
-/// no key is undeclared and every required field is present.
+/// every required field is present, and a key the schema does not declare
+/// answers to its `additionalProperties`: refused for `false`, which every
+/// schema the builders and the derive write says, checked against a
+/// schema, and accepted when the document says nothing, as JSON Schema
+/// reads it. A root that is not a declared object -- a tagged enum's
+/// document -- is checked as the value it describes.
 ///
 /// **A `pattern` is checked only if this build enforces them**: without
 /// the `regex` feature it is carried and read but never evaluated, and a
 /// value it would refuse is accepted. [`PATTERNS_ENFORCED`](super::PATTERNS_ENFORCED)
 /// says which build this is.
 pub fn validate_map(schema: SchemaRef<'_>, values: &Value) -> Result<(), ValidationError> {
+    let root = schema.as_value();
+    // A root that is not a declared object -- a tagged enum's document, a
+    // map whose keys are data -- is checked as the value it describes.
+    if !matches!(
+        Kind::read(Some(root)),
+        Kind::Map(_) | Kind::Unknown(_) | Kind::Missing
+    ) {
+        return value_against(root, "", values, 0);
+    }
     if values.tag() != Ok(Tag::GUATIAO_MAP) {
         return Err(bad("", "a map of values"));
     }
@@ -648,10 +868,19 @@ pub fn validate_map(schema: SchemaRef<'_>, values: &Value) -> Result<(), Validat
     for entry in map {
         let key = entry.key();
         let Some(field) = schema.find(key) else {
-            return Err(ValidationError::UnknownOption {
-                key: key.to_string(),
-                known: schema.fields().map(|o| o.key().to_string()).collect(),
-            });
+            match undeclared_rule(root) {
+                Undeclared::Refused => {
+                    return Err(ValidationError::UnknownOption {
+                        key: key.to_string(),
+                        known: schema.fields().map(|o| o.key().to_string()).collect(),
+                    });
+                }
+                Undeclared::Accepted => continue,
+                Undeclared::Checked(element) => {
+                    value_against(element, key, entry.value(), 1)?;
+                    continue;
+                }
+            }
         };
         validate_value(field, entry.value())?;
     }

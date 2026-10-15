@@ -16,7 +16,7 @@ use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::schema::validate::validate_map;
 use guatiao::value::alloc::Alloc;
 use guatiao::value::convert::{TryAsMut, TryAsRef};
-use guatiao::{Bytes, Map, Number, Schema, Text, ToValue, ValueError};
+use guatiao::{Bytes, FromValue, Map, Number, Schema, Text, ToValue, Value, ValueError};
 
 fn alloc_and<R>(body: impl FnOnce(Alloc) -> R) -> R {
     let alloc = Alloc::rust();
@@ -99,8 +99,9 @@ fn an_integer_kind_carries_the_bounds_of_its_width() {
                 multiple_of: None
             }
         ));
-        // `u64::MAX` has no `i64` to be written as, so the upper bound is
-        // left off rather than clamped to something nobody declared.
+        // `u64::MAX` has no `i64` to be read as, so the kind's upper bound
+        // is `None`; the document carries its digits and validation
+        // enforces them.
         assert!(matches!(
             s.find("max-size").unwrap().kind(),
             Kind::Int {
@@ -458,4 +459,128 @@ fn a_map_field_describes_an_open_object() {
         let read = <Agent as guatiao::FromValue>::from_value(&written).expect("it reads back");
         assert_eq!(read, agent);
     });
+}
+
+#[derive(Debug, PartialEq, Clone, Copy, Schema, ToValue, FromValue)]
+enum Mode {
+    Fast,
+    Slow,
+}
+
+#[derive(Debug, PartialEq, Schema, ToValue, FromValue)]
+#[map(tag = "kind")]
+enum Auth {
+    Anonymous,
+    Password { user: String },
+}
+
+#[derive(Debug, PartialEq, Schema, ToValue, FromValue)]
+struct Optional {
+    plain: Option<String>,
+    list: Vec<Option<String>>,
+    env: alloc::collections::BTreeMap<String, Option<u8>>,
+    mode: Option<Mode>,
+    auth: Option<Auth>,
+}
+
+/// `FromValue` reads a stored null as `None` wherever an `Option` sits --
+/// a field, a list element, a map's value, an enum -- so the schema the
+/// same type declares accepts it there too.
+#[test]
+fn an_option_accepts_null_wherever_from_value_reads_one() {
+    let schema = Optional::schema().unwrap();
+    let s = SchemaRef::new(&schema).unwrap();
+    let mut env = alloc::collections::BTreeMap::new();
+    env.insert("A".to_string(), None);
+    env.insert("B".to_string(), Some(7));
+    let typed = Optional {
+        plain: None,
+        list: vec![Some("a".into()), None],
+        env,
+        mode: None,
+        auth: None,
+    };
+    let written = typed.to_value().unwrap();
+    assert_eq!(validate_map(s, &written), Ok(()));
+    assert_eq!(Optional::from_value(&written).unwrap(), typed);
+
+    let mut explicit = written.clone();
+    let m = TryAsMut::<Map>::try_as_mut(&mut explicit).unwrap();
+    for key in ["plain", "mode", "auth"] {
+        m.set(key, Value::null());
+    }
+    assert_eq!(Optional::from_value(&explicit).unwrap(), typed);
+    assert_eq!(validate_map(s, &explicit), Ok(()));
+
+    let mut wrong = written.clone();
+    TryAsMut::<Map>::try_as_mut(&mut wrong)
+        .unwrap()
+        .set("mode", Value::from("medium"));
+    assert!(validate_map(s, &wrong).is_err(), "null, not anything");
+    assert!(s.find("mode").unwrap().is_nullable());
+    assert!(matches!(s.find("mode").unwrap().kind(), Kind::Enum(_)));
+    assert!(matches!(
+        s.find("auth").unwrap().kind(),
+        Kind::Variant { .. }
+    ));
+}
+
+#[derive(Debug, PartialEq, Schema, ToValue, FromValue)]
+struct Widths {
+    big: u64,
+    huge: u128,
+    tiny: i128,
+    small: u8,
+    neg: i8,
+    f: f32,
+}
+
+/// At the edges of every width the schema agrees with `FromValue`: what
+/// one reads, the other accepts, and what one refuses, so does the other.
+#[test]
+fn the_schema_of_a_width_refuses_exactly_what_from_value_refuses() {
+    let schema = Widths::schema().unwrap();
+    let s = SchemaRef::new(&schema).unwrap();
+    let base = Widths {
+        big: 0,
+        huge: 0,
+        tiny: 0,
+        small: 0,
+        neg: 0,
+        f: 0.0,
+    }
+    .to_value()
+    .unwrap();
+    let cases: [(&str, &str, bool); 14] = [
+        ("big", "18446744073709551615", true),
+        ("big", "18446744073709551616", false),
+        ("big", "-1", false),
+        ("huge", "340282366920938463463374607431768211456", false),
+        ("tiny", "-170141183460469231731687303715884105728", true),
+        ("tiny", "-170141183460469231731687303715884105729", false),
+        ("small", "-0", false),
+        ("small", "256", false),
+        ("neg", "-0", true),
+        ("f", "3.4028235e38", true),
+        ("f", "340282356779733661637539395458142568447", true),
+        ("f", "340282356779733661637539395458142568448", false),
+        ("f", "-340282356779733661637539395458142568448", false),
+        ("f", "1e39", false),
+    ];
+    for (key, text, readable) in cases {
+        let mut value = base.clone();
+        TryAsMut::<Map>::try_as_mut(&mut value)
+            .unwrap()
+            .set(key, Number::new(text).unwrap());
+        assert_eq!(
+            Widths::from_value(&value).is_ok(),
+            readable,
+            "{key} = {text}: FromValue"
+        );
+        assert_eq!(
+            validate_map(s, &value).is_ok(),
+            readable,
+            "{key} = {text}: validate_map"
+        );
+    }
 }

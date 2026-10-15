@@ -66,7 +66,7 @@
 
 use super::vocab;
 use crate::value::alloc::Alloc;
-use crate::value::convert::TryAsMut;
+use crate::value::convert::{TryAsMut, TryAsRef};
 use crate::value::error::ValueError;
 use crate::value::types::{List, Map, Number, Text, Value};
 
@@ -111,6 +111,8 @@ pub struct ArmBuilder {
     alloc: Alloc,
     state: Result<Value, ValueError>,
     discriminant: Result<Value, ValueError>,
+    /// The discriminant's text, which the variant compares across arms.
+    value: String,
     fields: Vec<FieldBuilder>,
 }
 
@@ -978,6 +980,15 @@ impl KindBuilder {
         // Written even when empty, so a variant that declares no arms is a
         // variant with no arms rather than a kind that forgot to say.
         put(&mut k.state, vocab::ONE_OF, Ok(List::new_in(alloc).into()));
+        // Two arms stored as one discriminant cannot be told apart: a
+        // reader selects the first, and the second is unreachable.
+        let repeated = arms
+            .iter()
+            .enumerate()
+            .any(|(i, arm)| arms[..i].iter().any(|earlier| earlier.value == arm.value));
+        if repeated && k.state.is_ok() {
+            k.state = Err(ValueError::DuplicateKey);
+        }
         for arm in arms {
             let mut state = arm.state;
             seal(
@@ -994,6 +1005,73 @@ impl KindBuilder {
     /// The kind, or the first error that stopped it.
     pub fn finish(self) -> Result<Value, ValueError> {
         self.state
+    }
+
+    /// Sets `key` to the number written as `text`, exactly: a bound past
+    /// what an `i64` or an `f64` holds is written as its own digits.
+    pub(crate) fn number(mut self, key: &str, text: &str) -> KindBuilder {
+        let alloc = self.alloc;
+        put(
+            &mut self.state,
+            key,
+            Number::new_in(alloc, text).map(Value::from),
+        );
+        self
+    }
+
+    /// The same kind, accepting null as well: what an `Option` describes.
+    ///
+    /// A kind whose `type` alone says what it accepts gains `"null"` in a
+    /// `type` list, so a keyword chained on afterwards (`maxLength`) still
+    /// sits beside the type it constrains. Any other -- an enumeration, a
+    /// union, a variant, whose members or arms would refuse null -- is
+    /// wrapped as `anyOf: [kind, {"type": "null"}]`.
+    pub(crate) fn nullable(self) -> KindBuilder {
+        let alloc = self.alloc;
+        let Ok(mut kind) = self.state else {
+            return self;
+        };
+        if let Some(map) = TryAsMut::<Map>::try_as_mut(&mut kind) {
+            let constrained = [
+                vocab::ENUM,
+                vocab::CONST,
+                vocab::ANY_OF,
+                vocab::ONE_OF,
+                vocab::ALL_OF,
+                vocab::X_VARIANT_TAG,
+            ]
+            .iter()
+            .any(|key| map.get(key).is_some());
+            let named = map
+                .get(vocab::TYPE)
+                .and_then(TryAsRef::<str>::try_as_ref)
+                .map(str::to_string);
+            if let (false, Some(name)) = (constrained, named) {
+                if name == vocab::TYPE_NULL {
+                    return KindBuilder {
+                        alloc,
+                        state: Ok(kind),
+                    };
+                }
+                let mut types = Ok(List::new_in(alloc).into());
+                push_name(&mut types, alloc, &name);
+                push_name(&mut types, alloc, vocab::TYPE_NULL);
+                let mut state = Ok(kind);
+                put(&mut state, vocab::TYPE, types);
+                return KindBuilder { alloc, state };
+            }
+        }
+        let mut null_arm = Ok(Map::new_in(alloc).into());
+        put(
+            &mut null_arm,
+            vocab::TYPE,
+            Text::new_in(alloc, vocab::TYPE_NULL).map(Value::from),
+        );
+        let mut state = Ok(Map::new_in(alloc).into());
+        put(&mut state, vocab::ANY_OF, Ok(List::new_in(alloc).into()));
+        push(&mut state, vocab::ANY_OF, Ok(kind));
+        push(&mut state, vocab::ANY_OF, null_arm);
+        KindBuilder { alloc, state }
     }
 }
 
@@ -1034,6 +1112,7 @@ impl ArmBuilder {
             alloc,
             state,
             discriminant,
+            value: value.to_string(),
             fields: Vec::new(),
         }
     }

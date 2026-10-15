@@ -1156,6 +1156,62 @@ fn a_stored_absent_is_no_opinion_and_a_stored_null_is_a_value() {
     }
 }
 
+/// An absent entry inside a map or a list is no opinion in every mode,
+/// and the layer that wrote it claims nothing.
+#[test]
+fn an_absent_entry_keeps_the_earlier_value_in_every_mode() {
+    let earlier = m([("a", n(1)), ("b", n(2))]);
+    let later = m([("a", absent()), ("b", n(3))]);
+    for mode in [MergeMode::Simple, MergeMode::Substitute, MergeMode::Deep] {
+        let merged = merge(mode, &earlier, &later).unwrap();
+        assert_eq!(int_at(&merged, "a"), 1, "{mode:?}");
+        assert_eq!(int_at(&merged, "b"), 3, "{mode:?}");
+    }
+    let (_, provenance) = MergeMode::Simple
+        .merge_layers([("system", &earlier), ("user", &later)], alloc())
+        .unwrap();
+    assert_eq!(provenance.source_of(["a"]), Source::Layer("system"));
+    assert_eq!(provenance.source_of(["b"]), Source::Layer("user"));
+
+    // `Simple` overwrites a list by position, and an absent element keeps
+    // the earlier one at that position.
+    let earlier = l([n(1), n(2)]);
+    let later = l([absent(), n(20)]);
+    let merged = merge(MergeMode::Simple, &earlier, &later).unwrap();
+    assert!(
+        same(&merged, &l([n(1), n(20)])),
+        "a positional absent keeps the element"
+    );
+    let (_, provenance) = MergeMode::Simple
+        .merge_layers([("system", &earlier), ("user", &later)], alloc())
+        .unwrap();
+    assert_eq!(provenance.source_of(["0"]), Source::Layer("system"));
+    assert_eq!(provenance.source_of(["1"]), Source::Layer("user"));
+}
+
+/// `Simple` overwrites a list element by merging it into the earlier one,
+/// so two lists nested past `MAX_DEPTH` are refused rather than followed
+/// into a stack overflow. The other modes copy a list whole and never
+/// recurse into one.
+#[test]
+fn simple_refuses_lists_nested_past_the_bound() {
+    fn nested(depth: usize) -> Value {
+        let mut v = n(1);
+        for _ in 0..depth {
+            v = l([v]);
+        }
+        v
+    }
+    let deep = nested(1_000);
+    assert_eq!(
+        merge(MergeMode::Simple, &deep, &deep).map(|_| ()),
+        Err(MergeError::Build(ValueError::TooDeep))
+    );
+    for mode in [MergeMode::Substitute, MergeMode::Deep] {
+        assert!(merge(mode, &deep, &deep).is_ok(), "{mode:?}");
+    }
+}
+
 /// A value whose tag this build does not know **stops** the merge.
 ///
 /// Not because the merge refuses to reason about it -- it classifies

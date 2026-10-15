@@ -71,7 +71,8 @@
 //! JSON Schema validator refuses exactly what [`validate`](super::validate)
 //! refuses. A key nobody declared is a misspelling worth reporting, and
 //! silently dropping one is how somebody ends up convinced a setting does
-//! nothing.
+//! nothing. A document from elsewhere that does not say is read as JSON
+//! Schema reads it, and accepts one.
 //!
 //! # Rules a reader must follow
 //!
@@ -177,8 +178,9 @@ pub const PROPERTIES: &str = "properties";
 /// `finish`.
 pub const REQUIRED: &str = "required";
 /// `additionalProperties`: written as `false` on every object the
-/// builders seal, because [`validate`](super::validate) refuses an
-/// undeclared key and the document should say so.
+/// builders seal, so that a document refuses an undeclared key and says
+/// so. [`validate`](super::validate) refuses one under `false`, checks one
+/// against a schema here, and accepts one when the key is absent.
 pub const ADDITIONAL_PROPERTIES: &str = "additionalProperties";
 
 // --- an array ---------------------------------------------------------
@@ -192,6 +194,12 @@ pub const ITEMS: &str = "items";
 pub const MINIMUM: &str = "minimum";
 /// Inclusive upper bound of a numeric kind. Optional.
 pub const MAXIMUM: &str = "maximum";
+/// Exclusive lower bound of a numeric kind: the value must be greater.
+/// Optional.
+pub const EXCLUSIVE_MINIMUM: &str = "exclusiveMinimum";
+/// Exclusive upper bound of a numeric kind: the value must be less.
+/// Optional.
+pub const EXCLUSIVE_MAXIMUM: &str = "exclusiveMaximum";
 /// A number must be an exact multiple of this, which is also the step a
 /// slider moves by. Optional; greater than zero, or it is ignored.
 ///
@@ -286,6 +294,12 @@ pub const ANY_OF: &str = "anyOf";
 /// Exact here because the arms are told apart by a discriminant, so a value
 /// matching two of them is a contradiction rather than a convenience.
 pub const ONE_OF: &str = "oneOf";
+/// **Every** one of these schemas must accept. Read as the wrapper a
+/// generator writes around one schema to put a `description` beside a
+/// reference (`{"description": .., "allOf": [{"$ref": ..}]}`), which reads
+/// as that one schema. Beside a `type` it is not read; on its own with
+/// several members it is a kind to skip.
+pub const ALL_OF: &str = "allOf";
 
 // --- what this crate adds ---------------------------------------------
 //
@@ -388,6 +402,8 @@ pub const KEYWORDS: &[&str] = &[
     ITEMS,
     MINIMUM,
     MAXIMUM,
+    EXCLUSIVE_MINIMUM,
+    EXCLUSIVE_MAXIMUM,
     MULTIPLE_OF,
     MIN_LENGTH,
     MAX_LENGTH,
@@ -403,6 +419,7 @@ pub const KEYWORDS: &[&str] = &[
     CONST,
     ANY_OF,
     ONE_OF,
+    ALL_OF,
     ADDITIONAL_PROPERTIES,
 ];
 

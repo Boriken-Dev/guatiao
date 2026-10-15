@@ -640,13 +640,15 @@ fn record_simple<'a>(
     provenance: &mut Provenance<'a>,
     depth: u32,
 ) {
-    if depth >= MAX_DEPTH {
+    if depth >= MAX_DEPTH || kind(later) == Some(Tag::GUATIAO_ABSENT) {
         return;
     }
     if is_map(earlier) && is_map(later) {
         for entry in TryAsRef::<Map>::try_as_ref(later)
             .map(Map::entries)
             .unwrap_or(&[])
+            .iter()
+            .filter(|e| kind(e.value()) != Some(Tag::GUATIAO_ABSENT))
         {
             replace(
                 provenance,
@@ -735,9 +737,9 @@ fn merge_value(
 
 /// `Simple`: scalars and maps replace, lists overwrite positionally.
 ///
-/// Absence never reaches here -- the map arm only recurses into keys the
-/// later layer carries, so "absent means no opinion" holds structurally.
-/// A stored null is a value and *does* overwrite.
+/// A stored absent sentinel is no opinion here as everywhere else: an
+/// absent element or map entry keeps the earlier value. A stored null is a
+/// value and *does* overwrite.
 fn merge_simple(
     earlier: &Value,
     later: &Value,
@@ -746,6 +748,17 @@ fn merge_simple(
     alloc: Alloc,
     depth: u32,
 ) -> Result<Value, MergeError> {
+    // List elements recurse here directly, so the bound is checked here
+    // and not only in `merge_value`.
+    if depth >= MAX_DEPTH {
+        return Err(MergeError::Build(ValueError::TooDeep));
+    }
+    if kind(later) == Some(Tag::GUATIAO_ABSENT) {
+        return clone_into(earlier, alloc);
+    }
+    if kind(earlier) == Some(Tag::GUATIAO_ABSENT) {
+        return clone_into(later, alloc);
+    }
     if is_scalar(later) {
         return clone_into(later, alloc);
     }
@@ -770,6 +783,11 @@ fn merge_simple(
     let mut out: Map = Map::try_from(clone_into(earlier, alloc)?)
         .map_err(|_| MergeError::from(ValueError::WrongKind))?;
     for entry in <&Map>::try_from(later).map(Map::entries).unwrap_or(&[]) {
+        // An absent entry keeps whatever the earlier map holds there; over
+        // a key the earlier map lacks it is copied, as `Substitute` does.
+        if kind(entry.value()) == Some(Tag::GUATIAO_ABSENT) && out.contains_key(entry.key()) {
+            continue;
+        }
         out.set_in(entry.key(), clone_into(entry.value(), alloc)?, alloc)?;
     }
     Ok(out.into())

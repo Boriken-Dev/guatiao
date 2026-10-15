@@ -49,9 +49,12 @@
 //!
 //! Everything else — the key, whether it is required, its title, any
 //! hint hung beside it — belongs to the *field*, not to the type, and is
-//! read off the declaration by the derive. That split is why `Option<T>` contributes no
-//! kind of its own: optionality is the field's business, so
-//! `Option<T>::kind` is `T::kind` and the derive omits `required` instead.
+//! read off the declaration by the derive. `Option<T>` is the one wrapper
+//! with something to add: its kind is `T`'s, accepting null as well,
+//! because `FromValue` reads a stored null as `None` -- in a field, in a
+//! list, as a map's value -- and a schema must not refuse what the type
+//! reads. Whether the field may be left out is still the field's
+//! business: the derive omits `required`.
 
 #![forbid(unsafe_code)]
 
@@ -121,19 +124,17 @@ impl Schema for bool {
     }
 }
 
-/// Every integer width, with the bounds the width already implies.
-///
-/// A bound that does not fit an `i64` is **left off** rather than clamped:
-/// a clamped bound enforces a limit nobody declared, and `u64` genuinely
-/// has no upper bound this vocabulary can write down.
+/// Every integer width, with the bounds the width already implies,
+/// written as their exact digits: `u64::MAX` and `i128::MIN` too, which
+/// [`Kind::Int`](super::read::Kind::Int) cannot hold and validation still
+/// enforces.
 macro_rules! integer_schema {
     ($($t:ty),* $(,)?) => {$(
         impl Schema for $t {
             fn kind(alloc: Alloc) -> KindBuilder {
-                KindBuilder::int_bounds_in(alloc,
-                    i64::try_from(<$t>::MIN).ok(),
-                    i64::try_from(<$t>::MAX).ok(),
-                )
+                KindBuilder::int_in(alloc)
+                    .number(vocab::MINIMUM, &<$t>::MIN.to_string())
+                    .number(vocab::MAXIMUM, &<$t>::MAX.to_string())
             }
         }
     )*};
@@ -149,11 +150,17 @@ impl Schema for f64 {
     }
 }
 
-/// The same kind as [`f64`]: the vocabulary has one real-number type, and
-/// a narrower Rust width is not a bound this schema can write down.
+/// The magnitude from which a number has no finite `f32`: `f32::MAX`
+/// plus half its last place, `2^128 - 2^103`, which rounds to infinity.
+const F32_OVERFLOW: &str = "340282356779733661637539395458142568448";
+
+/// A real number strictly between the two magnitudes past which `FromValue`
+/// finds no finite `f32` to read.
 impl Schema for f32 {
     fn kind(alloc: Alloc) -> KindBuilder {
         KindBuilder::float_in(alloc)
+            .number(vocab::EXCLUSIVE_MINIMUM, &format!("-{F32_OVERFLOW}"))
+            .number(vocab::EXCLUSIVE_MAXIMUM, F32_OVERFLOW)
     }
 }
 
@@ -195,13 +202,15 @@ impl<T: Schema> Schema for std::collections::HashMap<String, T> {
     }
 }
 
-/// An `Option<T>` describes exactly what `T` describes.
+/// An `Option<T>` describes what `T` describes, and null.
 ///
-/// Optionality is the **field's** property, not the type's: a schema says
-/// so with `required`, which the derive leaves off, and a kind that tried
-/// to say it as well would let the two disagree.
+/// `FromValue` reads a stored null as `None` wherever the option sits, so
+/// the kind says so: `type: [T, "null"]` for a kind its `type` describes,
+/// `anyOf: [T, {"type": "null"}]` for an enumeration, a union or a
+/// variant. Whether a field may be left out is still the field's
+/// property, which the derive says by leaving it out of `required`.
 impl<T: Schema> Schema for Option<T> {
     fn kind(alloc: Alloc) -> KindBuilder {
-        T::kind(alloc)
+        T::kind(alloc).nullable()
     }
 }
