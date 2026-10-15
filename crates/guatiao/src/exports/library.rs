@@ -1376,7 +1376,7 @@ fn report_value(alloc: Alloc, report: &LoadReport) -> Result<Value, ValueError> 
     let mut map = Map::new_in(alloc);
 
     let mut loaded = List::new_in(alloc);
-    for path in &report.loaded {
+    for (path, _) in &report.loaded {
         loaded.push(Text::new_in(alloc, &path.to_string_lossy()).map(Value::from)?)?;
     }
     map.set("loaded", loaded)?;

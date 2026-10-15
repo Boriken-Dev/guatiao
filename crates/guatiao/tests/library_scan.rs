@@ -146,9 +146,14 @@ fn a_scan_reports_every_candidate_it_passed_over() {
 
     assert_eq!(report.loaded.len(), 1, "one library loaded: {report:#?}");
     assert_eq!(
-        report.loaded[0].file_name(),
+        report.loaded[0].0.file_name(),
         Some(std::ffi::OsStr::new(&dll_name("hello_library")))
     );
+    assert_eq!(
+        report.loaded[0].1, "hello_library",
+        "each loaded file carries the key it was filed under"
+    );
+    assert_eq!(*registry.loaded()[0].key, *report.loaded[0].1);
     assert!(report.failed.is_empty(), "nothing failed: {report:#?}");
 
     assert_eq!(
@@ -234,10 +239,10 @@ fn a_scan_with_rules_filters_before_mapping() {
         let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
         scan_dir_rules(&mut registry, &dir, Order::Ascending, &rules).expect("readable")
     };
-    let names = |paths: &[PathBuf]| {
-        let mut names: Vec<String> = paths
+    let names = |loaded: &[(PathBuf, String)]| {
+        let mut names: Vec<String> = loaded
             .iter()
-            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .map(|(p, _)| p.file_name().unwrap().to_string_lossy().into_owned())
             .collect();
         names.sort();
         names
@@ -453,7 +458,7 @@ fn a_search_path_is_walked_once_per_place_and_reports_what_it_could_not_read() {
 
     assert_eq!(
         report.loaded,
-        vec![copy.clone()],
+        vec![(copy.clone(), registry.loaded()[0].key.to_string())],
         "the copy in the directory loaded"
     );
     let skipped = report
@@ -503,7 +508,8 @@ fn a_search_path_is_walked_once_per_place_and_reports_what_it_could_not_read() {
     };
     let mut fresh = Registry::new("scan-test", "1.0");
     let report = scan_path_with(&mut fresh, &both, Order::Ascending, by_prefix("gree"));
-    assert_eq!(report.loaded, vec![copy.clone()], "{report:#?}");
+    let paths: Vec<&PathBuf> = report.loaded.iter().map(|(p, _)| p).collect();
+    assert_eq!(paths, [&copy], "{report:#?}");
 
     let mut fresh = Registry::new("scan-test", "1.0");
     let report = scan_path_with(&mut fresh, &both, Order::Ascending, by_prefix("nonesuch"));

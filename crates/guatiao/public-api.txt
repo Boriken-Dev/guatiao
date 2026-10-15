@@ -772,7 +772,7 @@ pub fn guatiao::library::scan::Declared::fmt(&self, &mut core::fmt::Formatter<'_
 impl core::marker::StructuralPartialEq for guatiao::library::scan::Declared
 pub struct guatiao::library::scan::LoadReport
 pub guatiao::library::scan::LoadReport::failed: alloc::vec::Vec<(std::path::PathBuf, guatiao::library::registry::LoadError)>
-pub guatiao::library::scan::LoadReport::loaded: alloc::vec::Vec<std::path::PathBuf>
+pub guatiao::library::scan::LoadReport::loaded: alloc::vec::Vec<(std::path::PathBuf, alloc::string::String)>
 pub guatiao::library::scan::LoadReport::skipped: alloc::vec::Vec<(std::path::PathBuf, guatiao::library::registry::Skipped)>
 pub guatiao::library::scan::LoadReport::unreadable: alloc::vec::Vec<(std::path::PathBuf, core::io::error::Error)>
 impl guatiao::library::scan::LoadReport
@@ -1219,7 +1219,7 @@ impl core::fmt::Debug for guatiao::library::raw::LibraryView
 pub fn guatiao::library::raw::LibraryView::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::library::LoadReport
 pub guatiao::library::LoadReport::failed: alloc::vec::Vec<(std::path::PathBuf, guatiao::library::registry::LoadError)>
-pub guatiao::library::LoadReport::loaded: alloc::vec::Vec<std::path::PathBuf>
+pub guatiao::library::LoadReport::loaded: alloc::vec::Vec<(std::path::PathBuf, alloc::string::String)>
 pub guatiao::library::LoadReport::skipped: alloc::vec::Vec<(std::path::PathBuf, guatiao::library::registry::Skipped)>
 pub guatiao::library::LoadReport::unreadable: alloc::vec::Vec<(std::path::PathBuf, core::io::error::Error)>
 impl guatiao::library::scan::LoadReport

@@ -52,9 +52,12 @@ use super::registry::{LoadError, Loading, Registry, Skipped};
 /// something to report.
 #[derive(Debug, Default)]
 pub struct LoadReport {
-    /// Files that loaded and registered at least one provider, in the
-    /// order they were read.
-    pub loaded: Vec<PathBuf>,
+    /// Files that loaded, in the order they were read, each with the
+    /// library key the registry filed it under: what
+    /// [`Registry::retire`] takes, and what tells a host which providers
+    /// came from this scan (each [`Provider::from`](super::Provider::from)
+    /// is the path).
+    pub loaded: Vec<(PathBuf, String)>,
     /// Files passed over, and why. **Never an error**: a directory of
     /// libraries may hold anything.
     pub skipped: Vec<(PathBuf, Skipped)>,
@@ -670,7 +673,10 @@ fn consider(
     }
 
     match registry.load_file(&path) {
-        Ok(Loading::Loaded(_)) => report.loaded.push(path),
+        Ok(Loading::Loaded(one)) => {
+            let key = one.key.to_string();
+            report.loaded.push((path, key));
+        }
         Ok(Loading::Skipped(why)) => report.skipped.push((path, why)),
         Err(e) => report.failed.push((path, e)),
     }
