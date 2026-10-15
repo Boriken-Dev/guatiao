@@ -35,6 +35,11 @@
  *
  * CHECK A VIEW'S LENGTH BEFORE ITS POINTER. An empty view may carry a
  * dangling pointer; it is never dereferenced when the length is zero.
+ *
+ * EVERY OUT-PARAMETER IS WRITTEN FIRST. A function taking a
+ * `guatiao_value *out` writes it ABSENT before anything else, so after
+ * any failure it holds nothing and freeing it frees nothing. So `out`
+ * must not hold a tree you still own: it is overwritten, not freed.
  * ----------------------------------------------------------------------
  */
 
@@ -1177,6 +1182,10 @@ struct guatiao_registry *guatiao_registry_new(struct guatiao_str id,
  unknown key; `GUATIAO_ERR_NULL` for a provider that builds no
  instances, which is its one instance.
 
+ Both are written first: `out` null and `err` an empty error
+ (`GUATIAO_OK`, empty message), so whatever the call answers, `err`'s
+ message may be freed and `out` read.
+
  `config` is checked against the provider's configuration schema first,
  as the Rust `instantiate` does: a misspelled or ill-typed setting is
  `GUATIAO_ERR_BAD_VALUE`, with the field and what it expected written
@@ -1862,12 +1871,15 @@ guatiao_status guatiao_value_bytes(const struct guatiao_alloc *alloc,
  Replaces any existing entry in place, keeping its position. To store
  something you only borrowed, call `guatiao_value_clone` first and pass
  the copy: there is no copying variant, so the cost is always a line you
- can see.
+ can see. **A refused call leaves `value` as it was**, still the
+ caller's to free.
 
  **`node` and `value` must not overlap**, and the same pointer for both
  is `GUATIAO_ERR_BAD_VALUE`: this moves the 40 bytes at `value` into
  `node`, which cannot be a slot inside the tree it is moving. A null or
- unusable allocator is `GUATIAO_ERR_ALLOC`.
+ unusable allocator is `GUATIAO_ERR_ALLOC`; a `node` that is not a map
+ is `GUATIAO_ERR_WRONG_KIND`, and a map whose keys are not UTF-8, or a
+ `key` that is not, is `GUATIAO_ERR_BAD_VALUE`.
 
  # Safety
 
@@ -1880,7 +1892,9 @@ guatiao_status guatiao_map_set(const struct guatiao_alloc *alloc,
                                struct guatiao_value *value);
 
 /*
- Removes `key` and frees its value. `GUATIAO_ERR_NOT_FOUND` if absent.
+ Removes `key` and frees its value. `GUATIAO_ERR_NOT_FOUND` if absent,
+ `GUATIAO_ERR_WRONG_KIND` if `node` is not a map, and
+ `GUATIAO_ERR_BAD_VALUE` for a key, or a map's keys, that are not UTF-8.
 
  # Safety
 
@@ -1923,7 +1937,8 @@ guatiao_status guatiao_map_copy_from(const struct guatiao_alloc *alloc,
  Appends `value`, **moving** it and leaving it null-tagged.
 
  To append something you only borrowed, call `guatiao_value_clone`
- first and pass the copy.
+ first and pass the copy. **A refused call leaves `value` as it was**,
+ still the caller's to free.
 
  **`node` and `value` must not overlap**, and the same pointer for both
  is `GUATIAO_ERR_BAD_VALUE`, as for `guatiao_map_set`. A null or
@@ -1939,11 +1954,12 @@ guatiao_status guatiao_list_push(const struct guatiao_alloc *alloc,
                                  struct guatiao_value *value);
 
 /*
- Removes and frees the element at `index`.
+ Removes and frees the element at `index`. `GUATIAO_ERR_NOT_FOUND` past
+ the end, `GUATIAO_ERR_WRONG_KIND` if `node` is not a list.
 
  # Safety
 
- `node` is null or a well-formed list.
+ `node` is null or a well-formed value.
  */
 guatiao_status guatiao_list_discard(struct guatiao_value *node, size_t index);
 
@@ -1960,7 +1976,9 @@ guatiao_status guatiao_list_clear(struct guatiao_value *node);
  Appends UTF-8 text to a string value.
 
  `text` may view the node's own bytes; an overlapping source is copied
- out first. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
+ out first. A null or unusable allocator is `GUATIAO_ERR_ALLOC`; a node
+ that is not a STRING (a NUMBER included) is `GUATIAO_ERR_WRONG_KIND`,
+ and a string, or `text`, that is not UTF-8 is `GUATIAO_ERR_BAD_VALUE`.
 
  # Safety
 

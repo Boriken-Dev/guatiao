@@ -47,6 +47,11 @@ header = """
  *
  * CHECK A VIEW'S LENGTH BEFORE ITS POINTER. An empty view may carry a
  * dangling pointer; it is never dereferenced when the length is zero.
+ *
+ * EVERY OUT-PARAMETER IS WRITTEN FIRST. A function taking a
+ * `guatiao_value *out` writes it ABSENT before anything else, so after
+ * any failure it holds nothing and freeing it frees nothing. So `out`
+ * must not hold a tree you still own: it is overwritten, not freed.
  * ----------------------------------------------------------------------
  */
 """

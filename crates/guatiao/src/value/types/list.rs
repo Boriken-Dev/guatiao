@@ -212,15 +212,22 @@ impl List {
     /// Appends an already-built node. A refused append frees what it was
     /// handed: it was moved in, so nothing else can.
     pub(crate) fn push_node(&mut self, value: Value, alloc: Alloc) -> Result<(), ValueError> {
+        self.push_with(alloc, || value)
+    }
+
+    /// Appends the node `make` hands over, calling it only once the room
+    /// is reserved: a refused append has not called it.
+    pub(crate) fn push_with(
+        &mut self,
+        alloc: Alloc,
+        make: impl FnOnce() -> Value,
+    ) -> Result<(), ValueError> {
         // SAFETY: the container is consistent.
-        if let Err(e) = unsafe { reserve(self, 1, Some(alloc)) } {
-            drop(value);
-            return Err(e.into());
-        }
+        unsafe { reserve(self, 1, Some(alloc)) }?;
         // SAFETY: `reserve` guaranteed room for one more element past
         // `len`, and that slot is uninitialised, so it is written rather
         // than assigned.
-        unsafe { self.ptr.add(self.len).write(value) };
+        unsafe { self.ptr.add(self.len).write(make()) };
         self.len += 1;
         Ok(())
     }

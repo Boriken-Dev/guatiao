@@ -276,47 +276,57 @@ impl Map {
     /// Stores an already-built node. A refused store frees it: the node
     /// was moved in, so nothing else can.
     fn set_node(&mut self, key: &str, value: Value, alloc: Alloc) -> Result<(), ValueError> {
+        self.set_with(key, alloc, || value)
+    }
+
+    /// Stores the node `make` hands over under `key`, calling it only
+    /// once nothing can fail: a refused store has not called it, so a
+    /// caller moving a node out of its own storage keeps it.
+    pub(crate) fn set_with(
+        &mut self,
+        key: &str,
+        alloc: Alloc,
+        make: impl FnOnce() -> Value,
+    ) -> Result<(), ValueError> {
         match self.position(key) {
             Some(i) => {
                 // SAFETY: `i < len`, so this entry is initialised. The
                 // replaced value is dropped, which frees what it owned.
                 let entry = unsafe { &mut *self.ptr.add(i) };
-                drop(core::mem::replace(&mut entry.value, value));
+                drop(core::mem::replace(&mut entry.value, make()));
                 Ok(())
             }
-            None => self.insert_node(key, value, alloc),
+            None => self.insert_with(key, alloc, make),
         }
     }
 
-    /// Appends an entry under a key known to be absent. The key copy is
-    /// made first, so a failure there leaves the map as it was.
+    /// Appends an entry under a key known to be absent. A refused append
+    /// frees the node it was handed.
     pub(crate) fn insert_node(
         &mut self,
         key: &str,
         value: Value,
         alloc: Alloc,
     ) -> Result<(), ValueError> {
-        let key_owned = match Text::new_in(alloc, key) {
-            Ok(k) => k,
-            Err(e) => {
-                drop(value);
-                return Err(e);
-            }
-        };
+        self.insert_with(key, alloc, || value)
+    }
+
+    /// Appends an entry under a key known to be absent. The key is copied
+    /// and the room reserved before `make` is called, so a failure leaves
+    /// the map as it was.
+    fn insert_with(
+        &mut self,
+        key: &str,
+        alloc: Alloc,
+        make: impl FnOnce() -> Value,
+    ) -> Result<(), ValueError> {
+        let key = Text::new_in(alloc, key)?;
         // SAFETY: the container is consistent.
-        if let Err(e) = unsafe { reserve(self, 1, Some(alloc)) } {
-            drop((key_owned, value));
-            return Err(e.into());
-        }
+        unsafe { reserve(self, 1, Some(alloc)) }?;
         // SAFETY: `reserve` guaranteed room for one more entry past `len`,
         // and that slot is uninitialised, so it is written rather than
         // assigned.
-        unsafe {
-            self.ptr.add(self.len).write(Entry {
-                key: key_owned,
-                value,
-            })
-        };
+        unsafe { self.ptr.add(self.len).write(Entry { key, value: make() }) };
         self.len += 1;
         Ok(())
     }

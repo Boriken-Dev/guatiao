@@ -52,7 +52,7 @@
 use core::ffi::c_void;
 use std::path::Path;
 
-use super::{guard, guard_with};
+use super::{guard, guard_with, out};
 use crate::library::ProviderError;
 use crate::library::{
     EntryPoint, HostInfo, LibraryInfo, LoadReport, Loading, Order, Provider, Registry, ScanRules,
@@ -372,6 +372,10 @@ pub unsafe extern "C" fn guatiao_registry_new(
 /// unknown key; `GUATIAO_ERR_NULL` for a provider that builds no
 /// instances, which is its one instance.
 ///
+/// Both are written first: `out` null and `err` an empty error
+/// (`GUATIAO_OK`, empty message), so whatever the call answers, `err`'s
+/// message may be freed and `out` read.
+///
 /// `config` is checked against the provider's configuration schema first,
 /// as the Rust `instantiate` does: a misspelled or ill-typed setting is
 /// `GUATIAO_ERR_BAD_VALUE`, with the field and what it expected written
@@ -390,16 +394,32 @@ pub unsafe extern "C" fn guatiao_registry_provider_create(
     out: *mut *mut c_void,
     err: *mut crate::library::ProviderError,
 ) -> Status {
+    // Both out-parameters first, so a caller that frees `err.message` or
+    // reads `out` after any failure finds nothing it must not touch.
+    if !out.is_null() {
+        // SAFETY: non-null, and writable by the caller's contract.
+        unsafe { out.write(core::ptr::null_mut()) };
+    }
+    if !err.is_null() {
+        // SAFETY: non-null, and writable by the caller's contract; the
+        // placeholder owns nothing.
+        unsafe { err.write(ProviderError::none()) };
+    }
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(key), Some(config), false) = (
-            unsafe { HostRegistry::get(reg) },
-            core::str::from_utf8(key.into()),
-            unsafe { config.as_ref() },
-            out.is_null(),
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
         };
+        let key = match core::str::from_utf8(key.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        let Some(config) = (unsafe { config.as_ref() }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        if out.is_null() {
+            return Status::GUATIAO_ERR_NULL;
+        }
         let Some(provider) = registry.inner.provider(key) else {
             return Status::GUATIAO_ERR_NOT_FOUND;
         };
@@ -506,11 +526,12 @@ pub unsafe extern "C" fn guatiao_registry_host(reg: *mut HostRegistry) -> *const
 pub unsafe extern "C" fn guatiao_registry_retire(reg: *mut HostRegistry, key: Str) -> Status {
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(key)) = (
-            unsafe { HostRegistry::get_mut(reg) },
-            core::str::from_utf8(key.into()),
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let key = match core::str::from_utf8(key.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
         };
         match registry.inner.retire(key) {
             Ok(_) => Status::GUATIAO_OK,
@@ -543,11 +564,12 @@ pub unsafe extern "C" fn guatiao_registry_retire(reg: *mut HostRegistry, key: St
 pub unsafe extern "C" fn guatiao_registry_unload(reg: *mut HostRegistry, key: Str) -> Status {
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(key)) = (
-            unsafe { HostRegistry::get_mut(reg) },
-            core::str::from_utf8(key.into()),
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let key = match core::str::from_utf8(key.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
         };
         // SAFETY: forwarded -- the caller stated the contract above.
         match unsafe { registry.inner.unload(key) } {
@@ -573,11 +595,12 @@ pub unsafe extern "C" fn guatiao_registry_unload_unchecked(
 ) -> Status {
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(key)) = (
-            unsafe { HostRegistry::get_mut(reg) },
-            core::str::from_utf8(key.into()),
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let key = match core::str::from_utf8(key.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
         };
         // SAFETY: forwarded -- the caller stated the contract above.
         match unsafe { registry.inner.unload_unchecked(key) } {
@@ -625,11 +648,12 @@ pub unsafe extern "C" fn guatiao_registry_keyed_by(
 ) -> Status {
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(template)) = (
-            unsafe { HostRegistry::get_mut(reg) },
-            core::str::from_utf8(template.into()),
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let template = match core::str::from_utf8(template.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
         };
         registry.rekey(template, false)
     })
@@ -648,11 +672,12 @@ pub unsafe extern "C" fn guatiao_registry_libraries_keyed_by(
 ) -> Status {
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(template)) = (
-            unsafe { HostRegistry::get_mut(reg) },
-            core::str::from_utf8(template.into()),
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let template = match core::str::from_utf8(template.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
         };
         registry.rekey(template, true)
     })
@@ -685,14 +710,19 @@ pub unsafe extern "C" fn guatiao_registry_load_file(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
+    out!(out);
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(path), Ok(alloc)) = (
-            unsafe { HostRegistry::get_mut(reg) },
-            core::str::from_utf8(path.into()),
-            unsafe { Alloc::from_raw(alloc) },
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let path = match core::str::from_utf8(path.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: as above.
         unsafe { deliver(out, registry.load(path, alloc)) }
@@ -719,15 +749,22 @@ pub unsafe extern "C" fn guatiao_registry_register_entry(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
+    out!(out);
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(name), Some(entry), Ok(alloc)) = (
-            unsafe { HostRegistry::get_mut(reg) },
-            core::str::from_utf8(name.into()),
-            entry,
-            unsafe { Alloc::from_raw(alloc) },
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let name = match core::str::from_utf8(name.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        let Some(entry) = entry else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: the caller's contract on `entry`.
         let entry = unsafe { EntryPoint::new(entry) };
@@ -762,14 +799,19 @@ pub unsafe extern "C" fn guatiao_registry_scan_dir(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
+    out!(out);
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(dir), Ok(alloc)) = (
-            unsafe { HostRegistry::get_mut(reg) },
-            core::str::from_utf8(dir.into()),
-            unsafe { Alloc::from_raw(alloc) },
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let dir = match core::str::from_utf8(dir.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
         };
         let order = if descending {
             Order::Descending
@@ -803,15 +845,23 @@ pub unsafe extern "C" fn guatiao_registry_scan_dir_rules(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
+    out!(out);
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(dir), Ok(rules), Ok(alloc)) = (
-            unsafe { HostRegistry::get_mut(reg) },
-            core::str::from_utf8(dir.into()),
-            core::str::from_utf8(rules.into()),
-            unsafe { Alloc::from_raw(alloc) },
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let dir = match core::str::from_utf8(dir.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        let rules = match core::str::from_utf8(rules.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
         };
         let Ok(rules) = ScanRules::parse(&rules.lines().collect::<Vec<_>>()) else {
             return Status::GUATIAO_ERR_BAD_VALUE;
@@ -850,15 +900,23 @@ pub unsafe extern "C" fn guatiao_registry_scan_path(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
+    out!(out);
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(spec), Ok(rules), Ok(alloc)) = (
-            unsafe { HostRegistry::get_mut(reg) },
-            core::str::from_utf8(spec.into()),
-            core::str::from_utf8(rules.into()),
-            unsafe { Alloc::from_raw(alloc) },
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let spec = match core::str::from_utf8(spec.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        let rules = match core::str::from_utf8(rules.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
         };
         let Ok(rules) = ScanRules::parse(&rules.lines().collect::<Vec<_>>()) else {
             return Status::GUATIAO_ERR_BAD_VALUE;
@@ -892,12 +950,15 @@ pub unsafe extern "C" fn guatiao_registry_libraries(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
+    out!(out);
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(alloc)) = (unsafe { HostRegistry::get(reg) }, unsafe {
-            Alloc::from_raw(alloc)
-        }) else {
+        let Some(registry) = (unsafe { HostRegistry::get(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: as above.
         unsafe { deliver(out, registry.libraries(alloc)) }
@@ -920,14 +981,19 @@ pub unsafe extern "C" fn guatiao_registry_providers(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
+    out!(out);
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(kind), Ok(alloc)) = (
-            unsafe { HostRegistry::get(reg) },
-            core::str::from_utf8(kind.into()),
-            unsafe { Alloc::from_raw(alloc) },
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let kind = match core::str::from_utf8(kind.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: as above.
         unsafe { deliver(out, registry.providers(kind, alloc)) }
@@ -948,14 +1014,19 @@ pub unsafe extern "C" fn guatiao_registry_provider(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
+    out!(out);
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(key), Ok(alloc)) = (
-            unsafe { HostRegistry::get(reg) },
-            core::str::from_utf8(key.into()),
-            unsafe { Alloc::from_raw(alloc) },
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let key = match core::str::from_utf8(key.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
         };
         match registry.provider(key, alloc) {
             // SAFETY: as above.
@@ -983,14 +1054,19 @@ pub unsafe extern "C" fn guatiao_registry_available(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
+    out!(out);
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(kind), Ok(alloc)) = (
-            unsafe { HostRegistry::get(reg) },
-            core::str::from_utf8(kind.into()),
-            unsafe { Alloc::from_raw(alloc) },
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let kind = match core::str::from_utf8(kind.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: as above.
         unsafe { deliver(out, registry.available(kind, alloc)) }
@@ -1018,14 +1094,19 @@ pub unsafe extern "C" fn guatiao_registry_why_not(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
+    out!(out);
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(kind), Ok(alloc)) = (
-            unsafe { HostRegistry::get(reg) },
-            core::str::from_utf8(kind.into()),
-            unsafe { Alloc::from_raw(alloc) },
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let kind = match core::str::from_utf8(kind.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: as above.
         unsafe { deliver(out, registry.why_not(kind, alloc)) }
@@ -1099,11 +1180,12 @@ pub unsafe extern "C" fn guatiao_registry_set_priority(
 ) -> Status {
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(id)) = (
-            unsafe { HostRegistry::get_mut(reg) },
-            core::str::from_utf8(id.into()),
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let id = match core::str::from_utf8(id.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
         };
         registry.set_priority(id, priority);
         Status::GUATIAO_OK
@@ -1147,14 +1229,19 @@ pub unsafe extern "C" fn guatiao_registry_best(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
+    out!(out);
     guard(|| {
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(kind), Ok(alloc)) = (
-            unsafe { HostRegistry::get(reg) },
-            core::str::from_utf8(kind.into()),
-            unsafe { Alloc::from_raw(alloc) },
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get(reg) }) else {
             return Status::GUATIAO_ERR_NULL;
+        };
+        let kind = match core::str::from_utf8(kind.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
         };
         match registry.best(kind, alloc) {
             // SAFETY: as above.

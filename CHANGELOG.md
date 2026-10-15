@@ -202,6 +202,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Every `guatiao` C function with an out-parameter writes it first.**
+  The value constructors (`guatiao_value_null` to `_bytes`) and the
+  registry's answers (`guatiao_registry_load_file`, `_register_entry`,
+  `_scan_dir`, `_scan_dir_rules`, `_scan_path`, `_libraries`,
+  `_providers`, `_provider`, `_available`, `_why_not`, `_best`) left `out`
+  as the caller had it on failure, so a caller freeing it afterwards freed
+  garbage; they now write it ABSENT on entry, as the header's new preamble
+  says of every such function. `guatiao_registry_provider_create` writes
+  `out` null and `err` an empty error first.
+- **A refused `guatiao_map_set` or `guatiao_list_push` leaves the caller's
+  value alone.** An allocation failure used to answer `GUATIAO_ERR_ALLOC`
+  after the value had been moved in and freed.
+- **Statuses say what was wrong.** `guatiao_map_discard` and
+  `guatiao_list_discard` on the wrong kind answer `GUATIAO_ERR_WRONG_KIND`
+  (they said `NOT_FOUND`); a string or map key that is not UTF-8 is
+  `GUATIAO_ERR_BAD_VALUE` (it was `WRONG_KIND`), and in Rust
+  `MapError::BadValue` (it was a `WrongType` naming the kind it was); a
+  registry function given text that is not UTF-8 answers
+  `GUATIAO_ERR_BAD_VALUE`, and one given an unusable allocator
+  `GUATIAO_ERR_ALLOC` (both were `GUATIAO_ERR_NULL`).
 - **Freeing a literal whose arrays are in read-only memory no longer
   faults.** The free walk moved each element out of a list or map by
   writing a null back into the array and released each key in place, so a
