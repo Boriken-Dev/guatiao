@@ -16,10 +16,11 @@
 use alloc::fmt;
 use core::mem::ManuallyDrop;
 
-use crate::value::alloc::Alloc;
+use crate::value::alloc::{Alloc, Allocator};
 use crate::value::convert::{MapError, TryAsMut, TryAsRef};
 use crate::value::error::ValueError;
 use crate::value::raw::dangling;
+use crate::value::status::Status;
 
 use super::types::number::validate_json_number;
 use super::types::{Buffer, Entry, List, Map, Number, Text};
@@ -319,6 +320,54 @@ impl Value {
     /// refers to what they own.
     pub unsafe fn free(&mut self) {
         drop(core::mem::take(self));
+    }
+
+    /// Hands this value to a C caller through `out`: how an export writes
+    /// its answer.
+    ///
+    /// A null `alloc` writes the tree as it was built, which is always
+    /// correct: every container records the allocator that made it, and
+    /// `guatiao_value_free` frees each through that one. A named `alloc`
+    /// is honoured by deep-copying the tree into it, so a host that wants
+    /// everything in its own arena gets that, unless the root already
+    /// records `alloc` (a tree built there with the `_in` forms), which
+    /// is written as it is.
+    ///
+    /// `GUATIAO_ERR_NULL` for a null `out`; `GUATIAO_ERR_ALLOC`, or the
+    /// copy's own refusal, when the copy fails, and `out` then holds
+    /// ABSENT. Either way this value is freed, never leaked.
+    ///
+    /// # Safety
+    ///
+    /// `out` is null or addresses writable storage for one value that
+    /// holds nothing the caller still owns: it is overwritten, not freed.
+    /// `alloc` is null or addresses an allocator that outlives every tree
+    /// built through it.
+    pub unsafe fn write_to(self, out: *mut Value, alloc: *const Allocator) -> Status {
+        if out.is_null() {
+            return Status::GUATIAO_ERR_NULL;
+        }
+        let in_place = alloc.is_null()
+            || !self.owns_storage()
+            || self.alloc().is_ok_and(|a| core::ptr::eq(a.as_raw(), alloc));
+        let written = if in_place {
+            Ok(self)
+        } else {
+            // SAFETY: non-null, and an allocator that outlives what is
+            // built through it, by this function's contract.
+            match unsafe { Alloc::from_raw(alloc) } {
+                Ok(alloc) => self.clone_in(alloc),
+                Err(e) => Err(e.into()),
+            }
+        };
+        let (value, status) = match written {
+            Ok(value) => (value, Status::GUATIAO_OK),
+            Err(e) => (Value::absent(), Status::from(e)),
+        };
+        // SAFETY: non-null, and writable storage holding nothing the
+        // caller owns, by this function's contract.
+        unsafe { out.write(value) };
+        status
     }
 }
 

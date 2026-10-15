@@ -724,8 +724,12 @@ pub unsafe extern "C" fn guatiao_registry_load_file(
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
-        // SAFETY: as above.
-        unsafe { deliver(out, registry.load(path, alloc)) }
+        match registry.load(path, alloc) {
+            // SAFETY: `out` is null or the caller's slot, written ABSENT on
+            // entry; `alloc` is the caller's own allocator.
+            Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+            Err(e) => e,
+        }
     })
 }
 
@@ -768,8 +772,12 @@ pub unsafe extern "C" fn guatiao_registry_register_entry(
         };
         // SAFETY: the caller's contract on `entry`.
         let entry = unsafe { EntryPoint::new(entry) };
-        // SAFETY: as above.
-        unsafe { deliver(out, registry.register(name, entry, alloc)) }
+        match registry.register(name, entry, alloc) {
+            // SAFETY: `out` is null or the caller's slot, written ABSENT on
+            // entry; `alloc` is the caller's own allocator.
+            Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+            Err(e) => e,
+        }
     })
 }
 
@@ -818,8 +826,12 @@ pub unsafe extern "C" fn guatiao_registry_scan_dir(
         } else {
             Order::Ascending
         };
-        // SAFETY: as above.
-        unsafe { deliver(out, registry.scan(dir, order, &ScanRules::default(), alloc)) }
+        match registry.scan(dir, order, &ScanRules::default(), alloc) {
+            // SAFETY: `out` is null or the caller's slot, written ABSENT on
+            // entry; `alloc` is the caller's own allocator.
+            Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+            Err(e) => e,
+        }
     })
 }
 
@@ -871,8 +883,12 @@ pub unsafe extern "C" fn guatiao_registry_scan_dir_rules(
         } else {
             Order::Ascending
         };
-        // SAFETY: as above.
-        unsafe { deliver(out, registry.scan(dir, order, &rules, alloc)) }
+        match registry.scan(dir, order, &rules, alloc) {
+            // SAFETY: `out` is null or the caller's slot, written ABSENT on
+            // entry; `alloc` is the caller's own allocator.
+            Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+            Err(e) => e,
+        }
     })
 }
 
@@ -926,14 +942,14 @@ pub unsafe extern "C" fn guatiao_registry_scan_path(
         } else {
             Order::Ascending
         };
-        // SAFETY: as above.
-        unsafe {
-            deliver(
-                out,
-                registry
-                    .scan_path(spec, order, &rules, alloc)
-                    .map_err(Status::from),
-            )
+        match registry
+            .scan_path(spec, order, &rules, alloc)
+            .map_err(Status::from)
+        {
+            // SAFETY: `out` is null or the caller's slot, written ABSENT on
+            // entry; `alloc` is the caller's own allocator.
+            Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+            Err(e) => e,
         }
     })
 }
@@ -960,8 +976,12 @@ pub unsafe extern "C" fn guatiao_registry_libraries(
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
-        // SAFETY: as above.
-        unsafe { deliver(out, registry.libraries(alloc)) }
+        match registry.libraries(alloc) {
+            // SAFETY: `out` is null or the caller's slot, written ABSENT on
+            // entry; `alloc` is the caller's own allocator.
+            Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+            Err(e) => e.into(),
+        }
     })
 }
 
@@ -995,8 +1015,12 @@ pub unsafe extern "C" fn guatiao_registry_providers(
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
-        // SAFETY: as above.
-        unsafe { deliver(out, registry.providers(kind, alloc)) }
+        match registry.providers(kind, alloc) {
+            // SAFETY: `out` is null or the caller's slot, written ABSENT on
+            // entry; `alloc` is the caller's own allocator.
+            Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+            Err(e) => e.into(),
+        }
     })
 }
 
@@ -1029,8 +1053,12 @@ pub unsafe extern "C" fn guatiao_registry_provider(
             return Status::GUATIAO_ERR_ALLOC;
         };
         match registry.provider(key, alloc) {
-            // SAFETY: as above.
-            Some(built) => unsafe { deliver(out, built) },
+            Some(built) => match built {
+                // SAFETY: `out` is null or the caller's slot, written ABSENT on
+                // entry; `alloc` is the caller's own allocator.
+                Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+                Err(e) => e.into(),
+            },
             None => Status::GUATIAO_ERR_NOT_FOUND,
         }
     })
@@ -1068,8 +1096,12 @@ pub unsafe extern "C" fn guatiao_registry_available(
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
-        // SAFETY: as above.
-        unsafe { deliver(out, registry.available(kind, alloc)) }
+        match registry.available(kind, alloc) {
+            // SAFETY: `out` is null or the caller's slot, written ABSENT on
+            // entry; `alloc` is the caller's own allocator.
+            Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+            Err(e) => e.into(),
+        }
     })
 }
 
@@ -1108,8 +1140,12 @@ pub unsafe extern "C" fn guatiao_registry_why_not(
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
-        // SAFETY: as above.
-        unsafe { deliver(out, registry.why_not(kind, alloc)) }
+        match registry.why_not(kind, alloc) {
+            // SAFETY: `out` is null or the caller's slot, written ABSENT on
+            // entry; `alloc` is the caller's own allocator.
+            Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+            Err(e) => e.into(),
+        }
     })
 }
 
@@ -1244,8 +1280,12 @@ pub unsafe extern "C" fn guatiao_registry_best(
             return Status::GUATIAO_ERR_ALLOC;
         };
         match registry.best(kind, alloc) {
-            // SAFETY: as above.
-            Some(built) => unsafe { deliver(out, built) },
+            Some(built) => match built {
+                // SAFETY: `out` is null or the caller's slot, written ABSENT on
+                // entry; `alloc` is the caller's own allocator.
+                Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+                Err(e) => e.into(),
+            },
             None => Status::GUATIAO_ERR_NOT_FOUND,
         }
     })
@@ -1386,28 +1426,6 @@ pub unsafe extern "C" fn guatiao_registry_provider_config(
             .config(key)
             .map_or(core::ptr::null(), |v| v as *const Value)
     })
-}
-
-// --- writing an answer out ----------------------------------------------
-
-/// Writes a built value to an out parameter, or reports why not.
-///
-/// # Safety
-///
-/// `out` is null, or addresses writable storage for one value whose
-/// previous contents are the caller's to have freed.
-unsafe fn deliver<E: Into<Status>>(out: *mut Value, built: Result<Value, E>) -> Status {
-    if out.is_null() {
-        return Status::GUATIAO_ERR_NULL;
-    }
-    match built {
-        Ok(value) => {
-            // SAFETY: the caller's contract.
-            unsafe { out.write(value) };
-            Status::GUATIAO_OK
-        }
-        Err(e) => e.into(),
-    }
 }
 
 // --- building the answers ----------------------------------------------

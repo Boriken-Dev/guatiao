@@ -189,7 +189,16 @@ v.tag() -> Result<Tag, ValueError>     v.alloc() -> Result<Alloc, ValueError>
 v.clone_in(alloc) -> Result<Value, ValueError>
 unsafe Value::from_raw_parts(tag: u32, Payload)   v.into_raw_parts() -> (u32, Payload)
 unsafe { v.free() }                    // the boundary's spelling of drop
+unsafe { v.write_to(out: *mut Value, alloc: *const Allocator) } -> Status
 ```
+
+`write_to` is how an export of your own hands an answer to a C caller:
+`GUATIAO_ERR_NULL` for a null `out`; a null `alloc` writes the tree as
+built (every container records its allocator, so `guatiao_value_free`
+frees it right wherever it lands); a named `alloc` gets a deep copy
+unless the root already records it, and a refused copy leaves `out`
+ABSENT with the status. The value is consumed on every path. `out` is
+overwritten, not freed.
 
 `Tag` is `#[non_exhaustive]`: new kinds are appended, so a `match` on one
 outside this crate keeps a `_` arm, which is also where `tag()`'s

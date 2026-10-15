@@ -3569,6 +3569,7 @@ impl guatiao::value::value::Value
 pub fn guatiao::value::value::Value::clone_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub unsafe fn guatiao::value::value::Value::free(&mut self)
 pub fn guatiao::value::value::Value::tag(&self) -> core::result::Result<guatiao::value::value::Tag, guatiao::value::error::ValueError>
+pub unsafe fn guatiao::value::value::Value::write_to(self, *mut guatiao::value::value::Value, *const guatiao::value::alloc::Allocator) -> guatiao::value::status::Status
 impl core::clone::Clone for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::clone(&self) -> guatiao::value::value::Value
 impl core::cmp::Eq for guatiao::value::value::Value
@@ -3789,6 +3790,7 @@ impl guatiao::value::value::Value
 pub fn guatiao::value::value::Value::clone_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub unsafe fn guatiao::value::value::Value::free(&mut self)
 pub fn guatiao::value::value::Value::tag(&self) -> core::result::Result<guatiao::value::value::Tag, guatiao::value::error::ValueError>
+pub unsafe fn guatiao::value::value::Value::write_to(self, *mut guatiao::value::value::Value, *const guatiao::value::alloc::Allocator) -> guatiao::value::status::Status
 impl core::clone::Clone for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::clone(&self) -> guatiao::value::value::Value
 impl core::cmp::Eq for guatiao::value::value::Value
@@ -4605,6 +4607,7 @@ impl guatiao::value::value::Value
 pub fn guatiao::value::value::Value::clone_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub unsafe fn guatiao::value::value::Value::free(&mut self)
 pub fn guatiao::value::value::Value::tag(&self) -> core::result::Result<guatiao::value::value::Tag, guatiao::value::error::ValueError>
+pub unsafe fn guatiao::value::value::Value::write_to(self, *mut guatiao::value::value::Value, *const guatiao::value::alloc::Allocator) -> guatiao::value::status::Status
 impl core::clone::Clone for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::clone(&self) -> guatiao::value::value::Value
 impl core::cmp::Eq for guatiao::value::value::Value
@@ -5578,6 +5581,7 @@ impl guatiao::value::value::Value
 pub fn guatiao::value::value::Value::clone_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub unsafe fn guatiao::value::value::Value::free(&mut self)
 pub fn guatiao::value::value::Value::tag(&self) -> core::result::Result<guatiao::value::value::Tag, guatiao::value::error::ValueError>
+pub unsafe fn guatiao::value::value::Value::write_to(self, *mut guatiao::value::value::Value, *const guatiao::value::alloc::Allocator) -> guatiao::value::status::Status
 impl core::clone::Clone for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::clone(&self) -> guatiao::value::value::Value
 impl core::cmp::Eq for guatiao::value::value::Value
