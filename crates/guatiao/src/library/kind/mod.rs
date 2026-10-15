@@ -99,18 +99,6 @@ pub trait Kind: 'static {
     /// ```
     const OBJECT: bool = false;
 
-    /// The table a value of this kind is lent through as `&mut dyn K` for
-    /// one call: each slot reads its `ctx` as the address of the lender's
-    /// `*mut dyn K`, and `destroy` does nothing. Written by
-    /// `#[guatiao::kind(object)]`; `None` for a provider kind.
-    #[doc(hidden)]
-    const LENT_MUT: Option<&'static Self::Vtable> = None;
-    /// The same as `&dyn K`: `ctx` addresses a `*const dyn K`, and a slot
-    /// whose method takes `&mut self` answers `GUATIAO_ERR_UNSUPPORTED`.
-    /// `None` also for an object kind with no `&self` method.
-    #[doc(hidden)]
-    const LENT: Option<&'static Self::Vtable> = None;
-
     /// How many objects of this kind, and of the kinds its methods hand
     /// back, this image has made and not yet seen destroyed. `seen` stops
     /// a cycle of kinds. What a derived library's `unload` refuses on; a

@@ -104,9 +104,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   on `K`, and lent that way a `&mut self` slot answers
   `GUATIAO_ERR_UNSUPPORTED`; lending a provider kind is a compile error
   with a sentence. A method lending one returns `Result<_,
-  ProviderError>`, as one passing an `Object` does. `Kind` gains two
-  hidden associated consts with defaults, so a hand-written `impl Kind`
-  compiles unchanged.
+  ProviderError>`, as one passing an `Object` does. The lent tables are
+  named by a hidden `unsafe` trait the attribute implements for every kind
+  it declares, so a hand-written `impl Kind` compiles unchanged and cannot
+  hand a callee a table of its own. A C lender fills `destroy` (every
+  required slot is checked non-null) with a function that frees nothing;
+  `guatiao.h` states the rest of the contract beside `guatiao_object`.
 - **`crate = <path>` on the derives and on `#[kind]`**: `#[map(crate =
   ..)]`, `#[provider(.., crate = ..)]` and `#[kind(crate = ..)]` root the
   generated code at a re-export of `guatiao` instead of at `::guatiao`.

@@ -452,6 +452,29 @@ impl<K: ?Sized + Kind> core::ops::DerefMut for BorrowedMut<'_, K> {
     }
 }
 
+/// The tables a value of a kind is lent through for one call.
+/// `#[guatiao::kind]` implements it for every kind it declares, with
+/// tables for an object kind and `None` for a provider kind; a lent
+/// argument's proxy reads them here, so a hand-written `impl Kind`
+/// cannot hand a callee a table of its choosing.
+///
+/// # Safety
+///
+/// `LENT_MUT`, when `Some`, is a table for `Self` whose every slot reads
+/// its `ctx` as the address of a `*mut Self` live for the call, takes a
+/// shared reference for a `&self` method and an exclusive one for a
+/// `&mut self` method, and whose `destroy` frees nothing. `LENT`, when
+/// `Some`, is the same over a `*const Self`, except that a slot whose
+/// method takes `&mut self` touches nothing and refuses.
+#[doc(hidden)]
+pub unsafe trait Lend: Kind {
+    /// The table a value is lent through as `&mut dyn K`.
+    const LENT_MUT: Option<&'static Self::Vtable> = None;
+    /// The table a value is lent through as `&dyn K`; `None` also for an
+    /// object kind with no `&self` method.
+    const LENT: Option<&'static Self::Vtable> = None;
+}
+
 /// `&mut dyn K` lent for one call, as it crosses: the kind's lent table,
 /// whose slots read `slot` as the address of the lender's `*mut dyn K`.
 /// A kind with no lent table (a provider kind) gives a null table, which
@@ -461,14 +484,14 @@ impl<K: ?Sized + Kind> core::ops::DerefMut for BorrowedMut<'_, K> {
 /// `slot` must outlive the call the result is passed to; the generated
 /// proxy keeps both on its stack.
 #[doc(hidden)]
-pub fn lend_mut<K: ?Sized + Kind>(slot: *mut c_void) -> ObjectRaw {
+pub fn lend_mut<K: ?Sized + Lend>(slot: *mut c_void) -> ObjectRaw {
     lent_raw::<K>(K::LENT_MUT, slot)
 }
 
 /// `&dyn K` lent for one call, as [`lend_mut`]: `slot` holds the
 /// lender's `*const dyn K`, and the table's `&mut self` slots refuse.
 #[doc(hidden)]
-pub fn lend<K: ?Sized + Kind>(slot: *mut c_void) -> ObjectRaw {
+pub fn lend<K: ?Sized + Lend>(slot: *mut c_void) -> ObjectRaw {
     lent_raw::<K>(K::LENT, slot)
 }
 
