@@ -152,7 +152,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   which for TOML shows the offending line and for YAML up to three lines
   around it. `Error::Syntax { format, position, detail }` holds the
   parser's message and where it stopped (`Error::position()`, a new
-  `Position { line, column }`, both from 1) and nothing from the text.
+  `Position { line, column }`, both from 1 and the column counted in
+  characters in every format) and nothing from the text.
   `Format` is now only a writer refusing a value. *Migration:* match
   `Error::Syntax` where you matched `Error::Format` on a `from_str`, and
   read the position instead of scraping the message.

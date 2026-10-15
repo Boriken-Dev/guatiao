@@ -175,16 +175,31 @@ pub mod json {
     }
 
     /// A parse refusal as its message and position. serde_json writes the
-    /// position into the message, so it is taken back out of it.
-    fn refusal(e: &serde_json::Error) -> Error {
+    /// position into the message, so it is taken back out of it, and
+    /// counts the column in bytes, so it is counted again in characters.
+    fn refusal(text: &str, e: &serde_json::Error) -> Error {
         let (line, column) = (e.line(), e.column());
         let full = e.to_string();
         let detail = full
             .strip_suffix(&format!(" at line {line} column {column}"))
             .unwrap_or(&full)
             .to_string();
-        let position = (line > 0).then_some(Position { line, column });
+        let position = (line > 0).then(|| Position {
+            line,
+            column: in_characters(text, line, column),
+        });
         Error::syntax(NAME, position, detail)
+    }
+
+    /// The column of byte `column` (from 1) of line `line`, counted in
+    /// characters. A byte inside a character counts as that character.
+    fn in_characters(text: &str, line: usize, column: usize) -> usize {
+        let row = text.split('\n').nth(line - 1).unwrap_or("");
+        let mut end = column.min(row.len());
+        while !row.is_char_boundary(end) {
+            end += 1;
+        }
+        row[..end].chars().count()
     }
 
     /// A value as compact JSON.
@@ -204,11 +219,11 @@ pub mod json {
         let mut de = serde_json::Deserializer::from_str(text);
         let value = ValueSeed::with(alloc, how)
             .deserialize(&mut de)
-            .map_err(|e| refusal(&e))?;
+            .map_err(|e| refusal(text, &e))?;
         // Trailing rubbish is a malformed document, not a value with a
         // tail: a reader that stopped at the first complete value would
         // accept `{} garbage` and report success.
-        de.end().map_err(|e| refusal(&e))?;
+        de.end().map_err(|e| refusal(text, &e))?;
         Ok(value)
     }
 }
