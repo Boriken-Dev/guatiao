@@ -159,6 +159,7 @@ impl ::guatiao::library::Kind for dyn Greeter {
         ::guatiao::__private::alloc::sync::Arc::new(remote)
     }
 }
+unsafe impl ::guatiao::library::kind::Lend for dyn Greeter {}
 #[allow(clippy::needless_question_mark)]
 impl Greeter for ::guatiao::library::Remote<dyn Greeter> {
     fn greet(&self, name: &str) -> Result<String, ProviderError> {

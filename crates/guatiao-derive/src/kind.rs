@@ -949,6 +949,9 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             #shared
         }
     });
+    // Every kind is `Lend`, so a lent argument of a provider kind meets the
+    // sentence below rather than a missing impl; only an object kind's
+    // carries tables.
     let lent_consts = object.then(|| {
         let shared = shared_methods.then(|| {
             quote! {
@@ -976,14 +979,14 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         .filter_map(|a| match &a.kind {
             ArgKind::BorrowMut(inner) => Some(quote! {
                 const _: () = ::core::assert!(
-                    <#inner as ::guatiao::library::Kind>::LENT_MUT.is_some(),
+                    <#inner as ::guatiao::library::kind::Lend>::LENT_MUT.is_some(),
                     "a `&mut dyn K` argument lends an object kind (`#[guatiao::kind(object)]`); a \
                      provider kind is shared and offered, never lent",
                 );
             }),
             ArgKind::Borrow(inner) => Some(quote! {
                 const _: () = ::core::assert!(
-                    <#inner as ::guatiao::library::Kind>::LENT.is_some(),
+                    <#inner as ::guatiao::library::kind::Lend>::LENT.is_some(),
                     "a `&dyn K` argument lends an object kind with a `&self` method; this one has \
                      none to call, or is a provider kind: take `&mut dyn K`, or give the kind one",
                 );
@@ -1120,7 +1123,6 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             const FLOOR_HASH: u32 = #table::FLOOR_HASH;
             const REQUIRED: &'static [(&'static str, usize)] = &[ #destroy_required #(#required_slots)* ];
             const OBJECT: bool = #object;
-            #lent_consts
 
             fn live_objects(seen: &mut ::guatiao::__private::alloc::vec::Vec<&'static str>) -> usize {
                 if seen.contains(&#name) {
@@ -1142,6 +1144,13 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             fn shared(remote: ::guatiao::library::Remote<Self>) -> ::guatiao::__private::alloc::sync::Arc<Self> {
                 ::guatiao::__private::alloc::sync::Arc::new(remote)
             }
+        }
+
+        // SAFETY: the tables are this kind's `lent_mut()` and `lent()`,
+        // whose slots read `ctx` as the lender's pointer, shared for a
+        // `&self` method, and whose `destroy` frees nothing.
+        unsafe impl ::guatiao::library::kind::Lend for dyn #trait_ident {
+            #lent_consts
         }
 
         #[allow(clippy::needless_question_mark)]
@@ -1874,6 +1883,7 @@ mod tests {
                 "struct GreeterVtable",
                 "impl inherent",
                 "impl :: guatiao :: library :: Kind",
+                "impl :: guatiao :: library :: kind :: Lend",
                 "impl Greeter",
                 "impl :: core :: convert :: From < :: guatiao :: library :: Remote < dyn Greeter > >",
                 "impl Greeter",
@@ -2012,12 +2022,14 @@ mod tests {
         // And the shape is checked where the lent kind's impl is visible.
         assert!(
             out.contains(
-                "< dyn Listener as :: guatiao :: library :: Kind > :: LENT_MUT . is_some ()"
+                "< dyn Listener as :: guatiao :: library :: kind :: Lend > :: LENT_MUT . is_some ()"
             ),
             "{out}"
         );
         assert!(
-            out.contains("< dyn Gauge as :: guatiao :: library :: Kind > :: LENT . is_some ()"),
+            out.contains(
+                "< dyn Gauge as :: guatiao :: library :: kind :: Lend > :: LENT . is_some ()"
+            ),
             "{out}"
         );
         // Hashed as spelled, canonically.
@@ -2056,9 +2068,14 @@ mod tests {
         assert!(out.contains("const LENT_MUT :"), "{out}");
         assert!(!out.contains("const LENT :"), "{out}");
         assert!(!out.contains("fn lent ()"), "{out}");
-        // A provider kind is never lent.
+        // A provider kind is never lent: it is `Lend` with no tables, so a
+        // lent argument of one meets the assertion's sentence.
         let out = expand_str("", GREETER).unwrap();
         assert!(!out.contains("LENT"), "{out}");
+        assert!(
+            out.contains("unsafe impl :: guatiao :: library :: kind :: Lend for dyn Greeter { }"),
+            "{out}"
+        );
     }
 
     /// Every function the table's inherent impl defines, by name.
