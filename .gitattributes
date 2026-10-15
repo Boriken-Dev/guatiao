@@ -5,3 +5,7 @@
 # the state that actually costs time: it defeats diffs and hides real changes
 # inside whitespace churn.
 * text=auto eol=lf
+
+# Object files the scan tests read as data: bytes, never converted.
+crates/guatiao/tests/fixtures/*.so -text
+crates/guatiao/tests/fixtures/*.dylib -text

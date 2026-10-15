@@ -311,23 +311,23 @@ pub(crate) unsafe fn read_library(
         unload = unsafe { core::ptr::addr_of!((*raw).unload).read() };
     }
 
-    // Every check on the array runs before anything is allocated for it:
-    // `len` is the library's number, and a corrupt one must be refused,
-    // never reserved for.
+    // `len` is the library's number: it bounds the walk and is never a
+    // capacity, so a corrupt one costs no allocation before an element is
+    // read.
     let stride = providers.stride;
     if providers.len > 0 && (providers.ptr.is_null() || stride < ProviderInfo::floor()) {
         return Err(Rejected::Malformed);
     }
     // The array's byte extent must be addressable at all.
-    let extent = providers
+    providers
         .len
         .checked_mul(stride)
         .filter(|&bytes| bytes <= isize::MAX as usize)
         .ok_or(Rejected::Malformed)?;
-    let mut out = Vec::with_capacity(extent / stride.max(1));
+    let mut out = Vec::new();
     for i in 0..providers.len {
         // SAFETY: the library declared `len` descriptors of `stride` bytes
-        // at `ptr`, `i * stride` is within `extent`, and byte arithmetic is
+        // at `ptr`, `i * stride` is within that addressable extent, and byte arithmetic is
         // what reaches element `i` at the library's own layout.
         let entry = unsafe { providers.ptr.cast::<u8>().add(i * stride) }.cast::<ProviderInfo>();
         // SAFETY: forwarded.
@@ -390,7 +390,12 @@ pub(super) unsafe fn read_provider(
         if kinds.len > 0 && kinds.ptr.is_null() {
             return None;
         }
-        let mut names = Vec::with_capacity(kinds.len);
+        // Addressable at all, and walked rather than reserved for.
+        kinds
+            .len
+            .checked_mul(size_of::<Str>())
+            .filter(|&bytes| bytes <= isize::MAX as usize)?;
+        let mut names = Vec::new();
         for i in 0..kinds.len {
             // SAFETY: the library declared `len` names at `ptr`.
             names.push(<&str>::from(Str::from_ptr(kinds.ptr.add(i)).ok()?).to_string());
@@ -486,14 +491,14 @@ unsafe fn read_kind_tables(
     if tables.ptr.is_null() || tables.stride < KindTable::floor() {
         return None;
     }
-    let extent = tables
+    tables
         .len
         .checked_mul(tables.stride)
         .filter(|&bytes| bytes <= isize::MAX as usize)?;
-    let mut out = Vec::with_capacity(extent / tables.stride);
+    let mut out = Vec::new();
     for i in 0..tables.len {
         // SAFETY: the library declared `len` tables of `stride` bytes at
-        // `ptr`, and `i * stride` is within `extent`.
+        // `ptr`, and `i * stride` is within that addressable extent.
         let entry = unsafe { tables.ptr.cast::<u8>().add(i * tables.stride) }.cast::<KindTable>();
         // SAFETY: the leading word is readable.
         let declared = unsafe { core::ptr::addr_of!((*entry).struct_size).read() } as usize;
@@ -957,6 +962,54 @@ mod tests {
         assert_eq!(view.providers.len(), 2);
         assert_eq!(view.providers[0].id, "hello");
         assert_eq!(view.providers[1].id, "second");
+    }
+
+    /// A length is a bound to walk, never a capacity: a huge one over a
+    /// short array is refused at the first element that is not one, and
+    /// nothing is reserved for the rest. One whose bytes are not even
+    /// addressable is refused before any element is read.
+    #[test]
+    fn a_huge_length_is_walked_and_never_reserved_for() {
+        let stride = size_of::<ProviderInfo>();
+        let mut below = a_provider(stride, 0);
+        below.struct_size = 0;
+        let array = [a_provider(stride, 0), below];
+        let mut value = a_library(size_of::<LibraryInfo>());
+        value.providers = Providers {
+            ptr: array.as_ptr(),
+            len: isize::MAX as usize / stride,
+            stride,
+        };
+        let (_buf, ptr) = short_of(&value, size_of::<LibraryInfo>());
+        // SAFETY: `_buf` owns the descriptor and `array` both elements the
+        // walk reaches; it stops at the second.
+        assert_eq!(
+            unsafe { read_library(ptr) }.unwrap_err(),
+            Rejected::Malformed
+        );
+
+        let mut value = a_provider(stride, 0);
+        value.kinds = Kinds {
+            ptr: KINDS.0.as_ptr(),
+            len: usize::MAX / 2,
+        };
+        let (_buf, ptr) = short_of(&value, stride);
+        // SAFETY: `_buf` owns the bytes; no name is read.
+        assert!(unsafe { read_provider(ptr, stride) }.is_none());
+
+        let mut short = KindTable::new("greeter", core::ptr::null(), 0);
+        short.struct_size = 0;
+        let tables = [KindTable::new("greeter", core::ptr::null(), 0), short];
+        let mut value = a_provider(stride, 0);
+        value.tables = crate::library::desc::KindTables {
+            ptr: tables.as_ptr(),
+            len: isize::MAX as usize / size_of::<KindTable>(),
+            stride: size_of::<KindTable>(),
+        };
+        let (_buf, ptr) = short_of(&value, stride);
+        // SAFETY: `_buf` owns the descriptor and `tables` both tables the
+        // walk reaches.
+        assert!(unsafe { read_provider(ptr, stride) }.is_none());
     }
 
     /// A stride below the floor cannot be an element, so the array is not
