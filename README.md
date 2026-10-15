@@ -79,12 +79,12 @@ are no per-kind getters on a map.
 use guatiao::Map;
 
 let mut options = Map::new();
-options.set("compression", 6)?;
+options.set("compression", 6);
 
 let mut map = Map::new();
-map.set("host", "10.0.0.1")?;
-map.set("port", 5900)?;
-map.set("options", options)?;
+map.set("host", "10.0.0.1");
+map.set("port", 5900);
+map.set("options", options);
 
 let host: &str = map.required("host")?.try_into()?;
 let port: u16 = map.required("port")?.try_into()?;

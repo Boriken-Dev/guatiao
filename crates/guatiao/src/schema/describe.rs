@@ -88,19 +88,19 @@ pub trait Schema {
     fn schema(alloc: Alloc) -> Result<Value, ValueError> {
         let kind = Self::kind(alloc).finish()?;
         let mut out = Map::new_in(alloc);
-        out.set(
+        out.try_set(
             vocab::SCHEMA,
             Text::new_in(alloc, vocab::DIALECT).map(Value::from)?,
         )?;
-        out.set(
+        out.try_set(
             vocab::TYPE,
             Text::new_in(alloc, vocab::TYPE_OBJECT).map(Value::from)?,
         )?;
         for entry in <&Map>::try_from(&kind).map(Map::entries).unwrap_or(&[]) {
-            out.set(entry.key(), entry.value().to_value(alloc)?)?;
+            out.try_set(entry.key(), entry.value().to_value(alloc)?)?;
         }
         if out.get(vocab::PROPERTIES).is_none() {
-            out.set(vocab::PROPERTIES, Map::new_in(alloc))?;
+            out.try_set(vocab::PROPERTIES, Map::new_in(alloc))?;
         }
         Ok(out.into())
     }

@@ -195,7 +195,7 @@ impl<'de> Visitor<'de> for ValueSeed {
         let inside = self.inside();
         let mut list = List::new_in(self.alloc);
         while let Some(item) = seq.next_element_seed(inside)? {
-            list.push(item).map_err(A::Error::custom)?;
+            list.try_push(item).map_err(A::Error::custom)?;
         }
         Ok(list.into())
     }
@@ -248,13 +248,13 @@ impl<'de> Visitor<'de> for ValueSeed {
         }
 
         let value = access.next_value_seed(inside)?;
-        map.set(&first, value).map_err(A::Error::custom)?;
+        map.try_set(&first, value).map_err(A::Error::custom)?;
         while let Some(key) = access.next_key::<String>()? {
             let value = access.next_value_seed(inside)?;
             // A repeated key REPLACES, which is what `set` does and what a
             // reader of the resulting map would expect. Refusing would be
             // defensible; silently keeping the first would not.
-            map.set(&key, value).map_err(A::Error::custom)?;
+            map.try_set(&key, value).map_err(A::Error::custom)?;
         }
         Ok(map.into())
     }

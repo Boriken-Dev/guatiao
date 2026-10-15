@@ -73,7 +73,7 @@ use serde::de::DeserializeSeed;
 # use guatiao_serde::Presentation;
 
 let mut map = Map::new();
-map.set("port", 5900)?;
+map.set("port", 5900);
 let map = Value::from(map);
 
 let text = json::to_string(&map, Presentation::new())?;        // {"port":5900}

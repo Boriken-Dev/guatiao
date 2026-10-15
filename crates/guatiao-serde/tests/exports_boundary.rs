@@ -26,8 +26,8 @@ use guatiao_serde::exports::{
 /// A value worth indenting: flat output has no newline in it.
 fn a_map() -> Value {
     let mut map = Map::new();
-    map.set("port", 5900).unwrap();
-    map.set("host", "example.test").unwrap();
+    map.set("port", 5900);
+    map.set("host", "example.test");
     map.into()
 }
 

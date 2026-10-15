@@ -144,10 +144,10 @@ fn a_derived_form_fits_its_derived_schema() {
 
     // And the guard holds.
     let mut values = Map::new();
-    values.set("verify", false).unwrap();
+    values.set("verify", false);
     assert!(!is_visible(s, f, "ca-file", &values.into()).unwrap());
     let mut values = Map::new();
-    values.set("verify", true).unwrap();
+    values.set("verify", true);
     assert!(is_visible(s, f, "ca-file", &values.into()).unwrap());
 }
 
@@ -353,7 +353,7 @@ fn every_new_attribute_lands_and_behaves() {
     assert_eq!(when.values().len(), 2);
     for (mode, expected) in [("tls", true), ("mtls", true), ("plain", false)] {
         let mut values = Map::new();
-        values.set("mode", mode).unwrap();
+        values.set("mode", mode);
         assert_eq!(
             is_visible(s, f, "ca", &values.into()).unwrap(),
             expected,

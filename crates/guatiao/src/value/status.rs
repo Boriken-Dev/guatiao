@@ -168,6 +168,12 @@ impl From<ValueError> for Status {
     }
 }
 
+impl From<crate::value::alloc::AllocError> for Status {
+    fn from(e: crate::value::alloc::AllocError) -> Status {
+        Status::from(ValueError::Alloc(e))
+    }
+}
+
 impl From<core::str::Utf8Error> for Status {
     fn from(e: core::str::Utf8Error) -> Status {
         Status::from(ValueError::from(e))

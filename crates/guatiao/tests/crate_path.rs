@@ -75,7 +75,7 @@ fn a_provider_written_against_a_re_export_builds_and_answers() {
     ));
 
     let mut config = Map::new();
-    config.set("prefix", "hey").unwrap();
+    config.set("prefix", "hey");
     let shouter = {
         // SAFETY: a derived provider's descriptor, leaked above.
         unsafe {

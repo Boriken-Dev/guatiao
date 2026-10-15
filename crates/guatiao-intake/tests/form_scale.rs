@@ -45,7 +45,7 @@ fn chain_of(n: usize, ring: Option<usize>) -> Value {
 fn all_true(n: usize) -> Value {
     let mut values = Map::new();
     for i in 0..n {
-        values.set(&format!("f{i}"), true).unwrap();
+        values.set(&format!("f{i}"), true);
     }
     Value::from(values)
 }
@@ -67,7 +67,7 @@ fn a_very_long_chain_of_conditions_is_walked_without_recursion() {
         // One link false anywhere down the chain hides the head.
         let mut values = Map::new();
         for i in 0..n {
-            values.set(&format!("f{i}"), i != n / 2).unwrap();
+            values.set(&format!("f{i}"), i != n / 2);
         }
         assert_eq!(
             is_visible(schema, form, "f0", &Value::from(values)),

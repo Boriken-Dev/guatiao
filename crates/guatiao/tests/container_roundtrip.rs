@@ -529,13 +529,13 @@ fn copy_from_preserves_the_keys_the_consumer_does_not_model() {
 fn a_nested_node_is_mutated_without_unsafe() {
     with_alloc(|alloc, counter| {
         let mut root = Map::new_in(alloc);
-        root.set("tls", Map::new_in(alloc)).unwrap();
-        root.set("tags", List::new_in(alloc)).unwrap();
+        root.set("tls", Map::new_in(alloc));
+        root.set("tags", List::new_in(alloc));
 
         let tls = root.get_mut("tls").expect("tls was set");
         TryAsMut::<Map>::try_as_mut(tls)
             .ok_or(ValueError::WrongKind)
-            .and_then(|m| {
+            .map(|m| {
                 m.set(
                     "ca",
                     Text::new_in(alloc, "/etc/ca.pem").map(Value::from).unwrap(),
@@ -544,7 +544,7 @@ fn a_nested_node_is_mutated_without_unsafe() {
             .unwrap();
         TryAsMut::<Map>::try_as_mut(tls)
             .ok_or(ValueError::WrongKind)
-            .and_then(|m| m.set("verify", Value::from(true)))
+            .map(|m| m.set("verify", Value::from(true)))
             .unwrap();
         TryAsMut::<Map>::try_as_mut(tls)
             .ok_or(ValueError::WrongKind)
@@ -567,7 +567,7 @@ fn a_nested_node_is_mutated_without_unsafe() {
         for tag in ["a", "b", "c"] {
             TryAsMut::<List>::try_as_mut(tags)
                 .ok_or(ValueError::WrongKind)
-                .and_then(|l| l.push(Text::new_in(alloc, tag).map(Value::from).unwrap()))
+                .map(|l| l.push(Text::new_in(alloc, tag).map(Value::from).unwrap()))
                 .unwrap();
         }
         assert!(TryAsMut::<List>::try_as_mut(tags).is_some_and(|l| l.discard(1)));
@@ -627,7 +627,7 @@ fn a_clone_is_deep_and_independent() {
         let orig_child = orig.get_mut("child").unwrap();
         TryAsMut::<Map>::try_as_mut(orig_child)
             .ok_or(ValueError::WrongKind)
-            .and_then(|m| m.set("v", after))
+            .map(|m| m.set("v", after))
             .unwrap();
 
         let copied_child = copy.get("child").unwrap();
@@ -999,8 +999,8 @@ fn a_map_a_foreign_producer_wrote_with_a_key_that_is_not_utf8_is_no_map_yet_is_f
  {
     with_alloc(|alloc, _| {
         let mut map = Map::new_in(alloc);
-        map.set("host", "h").unwrap();
-        map.set("port", 1).unwrap();
+        map.set("host", "h");
+        map.set("port", 1);
         let bad: Value = with_foreign_first_key(map, alloc, b"\xffhost").into();
 
         assert!(
@@ -1022,7 +1022,7 @@ fn a_map_a_foreign_producer_wrote_with_a_key_that_is_not_utf8_is_no_map_yet_is_f
         assert_eq!(bad.clone_in(alloc).unwrap_err(), ValueError::NotUtf8);
 
         let mut outer = List::new_in(alloc);
-        outer.push(bad).unwrap();
+        outer.push(bad);
         let outer: Value = outer.into();
         assert_eq!(
             outer.clone_in(alloc).unwrap_err(),
@@ -1113,7 +1113,7 @@ fn an_operation_on_the_wrong_kind_is_refused_by_name() {
         assert!(TryAsMut::<Buffer>::try_as_mut(&mut s).is_none());
 
         let mut l = List::new_in(alloc);
-        l.push(Value::from(true)).unwrap();
+        l.push(Value::from(true));
         l.clear();
         assert_eq!(l.len(), 0);
     });

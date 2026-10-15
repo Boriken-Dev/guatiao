@@ -299,12 +299,12 @@ fn rebuild(
             let mut map = Map::new_in(alloc);
             // The discriminant goes in FIRST, so re-emission is
             // byte-stable: a map is insertion-ordered by contract.
-            map.set(tag, Text::new_in(alloc, chosen).map(Value::from).ok()?)
+            map.try_set(tag, Text::new_in(alloc, chosen).map(Value::from).ok()?)
                 .ok()?;
             for member in arm.fields() {
                 let at = named(path, member.key());
                 if let Some(v) = rebuild(alloc, &at, member.kind(), store, depth + 1) {
-                    map.set(member.key(), v).ok()?;
+                    map.try_set(member.key(), v).ok()?;
                 }
             }
             Some(map.into())
@@ -315,7 +315,7 @@ fn rebuild(
             for declared in kind.fields() {
                 let at = named(path, declared.key());
                 if let Some(v) = rebuild(alloc, &at, declared.kind(), store, depth + 1) {
-                    map.set(declared.key(), v).ok()?;
+                    map.try_set(declared.key(), v).ok()?;
                     any = true;
                 }
             }
@@ -348,7 +348,7 @@ fn rebuild(
                     .filter(|at| holds(store, at))
                     .find_map(|at| rebuild(alloc, at, values, store, depth + 1));
                 if let Some(v) = found {
-                    map.set(&key, v).ok()?;
+                    map.try_set(&key, v).ok()?;
                     any = true;
                 }
             }

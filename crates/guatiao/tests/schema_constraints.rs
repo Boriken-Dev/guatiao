@@ -27,8 +27,7 @@ fn one(key: &str, kind: KindBuilder) -> Value {
 fn list_of(n: usize) -> Value {
     let mut l = List::new();
     for i in 0..n {
-        l.push(Value::from(Number::new(&i.to_string()).unwrap()))
-            .unwrap();
+        l.push(Value::from(Number::new(&i.to_string()).unwrap()));
     }
     l.into()
 }
@@ -290,12 +289,12 @@ fn a_list_of_constrained_strings_checks_each_element() {
     );
     let f = SchemaRef::new(&schema).unwrap().find("tags").unwrap();
     let mut ok = List::new();
-    ok.push(Value::from(guatiao::Text::new("ab"))).unwrap();
+    ok.push(Value::from(guatiao::Text::new("ab")));
     assert!(validate_value(f, &ok.into()).is_ok());
 
     let mut bad = List::new();
-    bad.push(Value::from(guatiao::Text::new("ab"))).unwrap();
-    bad.push(Value::from(guatiao::Text::new("abc"))).unwrap();
+    bad.push(Value::from(guatiao::Text::new("ab")));
+    bad.push(Value::from(guatiao::Text::new("abc")));
     let err = validate_value(f, &bad.into()).unwrap_err().to_string();
     assert!(err.contains("tags[1]"), "the element is named: {err}");
 }

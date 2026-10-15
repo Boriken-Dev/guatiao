@@ -309,7 +309,7 @@ fn a_skipped_field_reads_back_as_its_default() {
 #[test]
 fn a_missing_wrong_or_unknown_tag_is_named_under_the_tag() {
     let mut no_tag = Map::new();
-    no_tag.set("username", "ana").unwrap();
+    no_tag.set("username", "ana");
     assert_eq!(
         Auth::from_value(&Value::from(no_tag)).unwrap_err(),
         MapError::missing("auth"),
@@ -317,7 +317,7 @@ fn a_missing_wrong_or_unknown_tag_is_named_under_the_tag() {
     );
 
     let mut numeric = Map::new();
-    numeric.set("auth", 3).unwrap();
+    numeric.set("auth", 3);
     let error = Auth::from_value(&Value::from(numeric)).unwrap_err();
     assert!(
         matches!(&error, MapError::WrongType { key, .. } if key == "auth"),
@@ -325,7 +325,7 @@ fn a_missing_wrong_or_unknown_tag_is_named_under_the_tag() {
     );
 
     let mut unknown = Map::new();
-    unknown.set("auth", "kerberos").unwrap();
+    unknown.set("auth", "kerberos");
     let error = Auth::from_value(&Value::from(unknown)).unwrap_err();
     assert!(
         matches!(&error, MapError::BadValue { key, expected }
@@ -399,7 +399,7 @@ fn a_variant_it_writes_is_one_its_schema_accepts() {
     let mut foreign = userpass().to_value(alloc()).unwrap();
     TryAsMut::<Map>::try_as_mut(&mut foreign)
         .ok_or(ValueError::WrongKind)
-        .and_then(|m| m.set("realm", "EXAMPLE"))
+        .map(|m| m.set("realm", "EXAMPLE"))
         .unwrap();
     assert!(
         validate_value(field, &foreign).is_err(),

@@ -17,19 +17,19 @@ use serde::de::DeserializeSeed;
 /// A map with something of most kinds in it.
 fn a_configuration() -> Value {
     let mut inner = Map::new();
-    inner.set("timeout", 30).unwrap();
-    inner.set("verify", true).unwrap();
+    inner.set("timeout", 30);
+    inner.set("verify", true);
 
     let mut hosts = List::new();
-    hosts.push("alpha").unwrap();
-    hosts.push("beta").unwrap();
+    hosts.push("alpha");
+    hosts.push("beta");
 
     let mut map = Map::new();
-    map.set("name", "example").unwrap();
-    map.set("port", 5900).unwrap();
-    map.set("ratio", Number::new("1.5").unwrap()).unwrap();
-    map.set("hosts", hosts).unwrap();
-    map.set("tls", inner).unwrap();
+    map.set("name", "example");
+    map.set("port", 5900);
+    map.set("ratio", Number::new("1.5").unwrap());
+    map.set("hosts", hosts);
+    map.set("tls", inner);
     map.into()
 }
 

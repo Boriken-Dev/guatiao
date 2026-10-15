@@ -175,7 +175,7 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
         "the schema is Shouter's own"
     );
     let mut config = Map::new();
-    config.set("prefix", "hey").unwrap();
+    config.set("prefix", "hey");
     let config = Value::from(config);
     let loud = shouter
         .instantiate(&config)
@@ -188,7 +188,7 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
         Some("hey ANA")
     );
     let mut other = Map::new();
-    other.set("prefix", "yo").unwrap();
+    other.set("prefix", "yo");
     let quiet = shouter.instantiate(&Value::from(other)).unwrap();
     assert_eq!(
         quiet
@@ -207,7 +207,7 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
     );
     assert_eq!(e.status(), Status::GUATIAO_ERR_BAD_VALUE);
     let mut wrong = Map::new();
-    wrong.set("prefix", 7).unwrap();
+    wrong.set("prefix", 7);
     let e = shouter.instantiate(&Value::from(wrong)).unwrap_err();
     assert_eq!(
         e.status(),
@@ -446,8 +446,8 @@ fn the_c_surface_checks_a_configuration_before_the_provider() {
     let key = Str::new("derived_greeter_shouter");
 
     let mut misspelled = Map::new();
-    misspelled.set("prefix", "hey").unwrap();
-    misspelled.set("prefx", "typo").unwrap();
+    misspelled.set("prefix", "hey");
+    misspelled.set("prefx", "typo");
     let mut out: *mut c_void = core::ptr::null_mut();
     let mut err = ProviderError::none();
     // SAFETY: `reg` is live, the key readable, the rest writable locals.
@@ -460,7 +460,7 @@ fn the_c_surface_checks_a_configuration_before_the_provider() {
     assert!(out.is_null(), "nothing was built");
 
     let mut fitting = Map::new();
-    fitting.set("prefix", "hey").unwrap();
+    fitting.set("prefix", "hey");
     let mut err = ProviderError::none();
     // SAFETY: as above.
     let status = unsafe {

@@ -19,11 +19,11 @@
 //! use guatiao::{Map, TryAsRef};
 //!
 //! let mut tls = Map::new();
-//! tls.set("verify", true)?;
+//! tls.set("verify", true);
 //! let mut map = Map::new();
-//! map.set("host", "10.0.0.1")?;
-//! map.set("port", 5900)?;
-//! map.set("tls", tls)?;
+//! map.set("host", "10.0.0.1");
+//! map.set("port", 5900);
+//! map.set("tls", tls);
 //!
 //! let host: &str = map.required("host")?.try_into()?;
 //! let port: u16 = map.required("port")?.try_into()?;

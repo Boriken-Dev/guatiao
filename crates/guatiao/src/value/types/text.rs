@@ -9,11 +9,11 @@
 use core::marker::PhantomData;
 use core::mem::ManuallyDrop;
 
-use crate::value::alloc::{Alloc, Allocator};
+use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::error::ValueError;
 use crate::value::raw::{overlaps, release_buffer, reserve};
 
-use super::{Payload, Tag, Value, or_abort};
+use super::{Payload, Tag, Value, bytes_layout, only_alloc, or_abort, short_form_alloc};
 
 /// Borrowed UTF-8 text: a pointer and a length, no NUL terminator. Text
 /// that is not UTF-8 is refused where it crosses into Rust.
@@ -229,10 +229,10 @@ impl Text {
     }
 
     /// Text, copied onto Rust's heap. Unlike [`Map::new`](super::Map::new)
-    /// this owns a buffer the moment it exists, which is why it can fail
-    /// at all.
+    /// this owns a buffer the moment it exists, so it aborts if the heap
+    /// refuses, as `String::from` does.
     pub fn new(text: &str) -> Text {
-        or_abort(Text::new_in(Alloc::rust(), text))
+        or_abort(Text::new_in(Alloc::rust(), text), bytes_layout(text.len()))
     }
 
     /// The same, through an allocator you name. The buffer's storage
@@ -264,10 +264,18 @@ impl Text {
         Ok(unsafe { Alloc::from_raw(self.alloc) }?)
     }
 
-    /// Appends `text`, growing through the allocator this one recorded.
-    pub fn push_str(&mut self, text: &str) -> Result<(), ValueError> {
-        let alloc = self.alloc()?;
-        self.push_str_in(text, alloc)
+    /// Appends `text`, growing through the allocator this one recorded, or
+    /// Rust's own, and **aborts** if it refuses, as `String::push_str`
+    /// does.
+    pub fn push_str(&mut self, text: &str) {
+        let pushed = self.try_push_str(text).map_err(ValueError::from);
+        or_abort(pushed, bytes_layout(text.len()));
+    }
+
+    /// [`push_str`](Text::push_str), handing an allocation failure back.
+    pub fn try_push_str(&mut self, text: &str) -> Result<(), AllocError> {
+        let alloc = short_form_alloc(self.alloc());
+        self.push_str_in(text, alloc).map_err(only_alloc)
     }
 
     /// The same, adopting `alloc` for a buffer that carries none. `text`
@@ -422,7 +430,7 @@ impl core::hash::Hash for Text {
 /// An allocator's refusal is `fmt::Error`, which carries no detail.
 impl core::fmt::Write for Text {
     fn write_str(&mut self, text: &str) -> core::fmt::Result {
-        self.push_str(text).map_err(|_| core::fmt::Error)
+        self.try_push_str(text).map_err(|_| core::fmt::Error)
     }
 }
 

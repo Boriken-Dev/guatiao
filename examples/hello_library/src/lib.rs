@@ -179,7 +179,7 @@ unsafe extern "C" fn greet(_ctx: *mut c_void, config: *const Value, out: *mut Va
         Ok(t) => t,
         Err(e) => return Status::from(e),
     };
-    if let Err(e) = answer.set("greeting", text) {
+    if let Err(e) = answer.set_in("greeting", text, alloc) {
         return Status::from(e);
     }
 
@@ -350,7 +350,7 @@ unsafe extern "C" fn echo(_ctx: *mut c_void, name: Str, out: *mut Value) -> Stat
         Ok(t) => t,
         Err(e) => return Status::from(e),
     };
-    if let Err(e) = config.set("name", text) {
+    if let Err(e) = config.set_in("name", text, alloc) {
         return Status::from(e);
     }
     let mut answer = Value::absent();
@@ -436,10 +436,8 @@ fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> {
         // What the envelope did not think of. A host that does not know
         // these keys skips them — which is the point of the slot.
         let mut declared = Map::new_in(alloc);
-        declared
-            .set("built-with", env!("CARGO_PKG_NAME"))
-            .expect("a two-key map does not exhaust an allocator");
-        declared.set("greeting-language", "en").expect("as above");
+        declared.set("built-with", env!("CARGO_PKG_NAME"));
+        declared.set("greeting-language", "en");
         let meta = Box::new(declared);
 
         // One provider, two kinds. It greets, and it writes what it

@@ -10,11 +10,11 @@ use core::ptr;
 
 use core::marker::PhantomData;
 
-use crate::value::alloc::{Alloc, Allocator};
+use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::error::ValueError;
 use crate::value::raw::{dangling, release_buffer, reserve};
 
-use super::{Payload, Tag, Value, or_abort};
+use super::{Payload, Tag, Value, only_alloc, or_abort, short_form_alloc};
 
 /// A borrowed sequence of values, in order.
 #[repr(C)]
@@ -198,10 +198,18 @@ impl List {
     }
 
     /// Appends `value`, **consuming** it. Takes anything [`Map::set`](super::Map::set)
-    /// does.
-    pub fn push(&mut self, value: impl Into<Value>) -> Result<(), ValueError> {
-        let alloc = self.alloc()?;
-        self.push_in(value, alloc)
+    /// does, and like it grows through the allocator this list recorded,
+    /// or Rust's own, and **aborts** if it refuses, as `Vec::push` does.
+    pub fn push(&mut self, value: impl Into<Value>) {
+        let pushed = self.try_push(value).map_err(ValueError::from);
+        or_abort(pushed, core::alloc::Layout::new::<Value>());
+    }
+
+    /// [`push`](List::push), handing an allocation failure back. A refused
+    /// append has freed `value`.
+    pub fn try_push(&mut self, value: impl Into<Value>) -> Result<(), AllocError> {
+        let alloc = short_form_alloc(self.alloc());
+        self.push_in(value, alloc).map_err(only_alloc)
     }
 
     /// The same, adopting `alloc` for a list that carries none.
@@ -427,13 +435,12 @@ impl<T: Into<Value>> FromIterator<T> for List {
     }
 }
 
-/// Appends each item through the allocator this list recorded. Panics if
-/// it refuses, which for a list over storage another language owns is
-/// every time: that list has no allocator to grow through.
+/// Appends each item as [`List::push`] does, aborting if the allocator
+/// refuses.
 impl<T: Into<Value>> Extend<T> for List {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for item in iter {
-            or_abort(self.push(item));
+            self.push(item);
         }
     }
 }

@@ -30,12 +30,12 @@
 //! use guatiao::Map;
 //!
 //! let mut tls = Map::new();
-//! tls.set("verify", true)?;
+//! tls.set("verify", true);
 //!
 //! let mut map = Map::new();
-//! map.set("host", "10.0.0.1")?;
-//! map.set("port", 5900)?;
-//! map.set("tls", tls)?;
+//! map.set("host", "10.0.0.1");
+//! map.set("port", 5900);
+//! map.set("tls", tls);
 //!
 //! // Get the value, then convert it: no per-kind getters on a map and no
 //! // per-kind readers on a value, just a lookup and `TryInto`.

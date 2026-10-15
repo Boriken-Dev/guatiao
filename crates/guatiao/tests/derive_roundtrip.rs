@@ -167,7 +167,7 @@ fn none_omits_the_key_and_both_spellings_read_back_as_none() {
         let mut loud = sample().to_value(alloc).unwrap();
         TryAsMut::<Map>::try_as_mut(&mut loud)
             .ok_or(ValueError::WrongKind)
-            .and_then(|m| m.set("motd", Value::null()))
+            .map(|m| m.set("motd", Value::null()))
             .unwrap();
         assert_eq!(Connection::from_value(&loud).unwrap().motd, None);
     });
@@ -208,7 +208,7 @@ fn an_error_inside_a_list_names_the_index() {
         assert!(TryAsMut::<List>::try_as_mut(tags).is_some_and(|l| l.discard(1)));
         TryAsMut::<List>::try_as_mut(tags)
             .ok_or(ValueError::WrongKind)
-            .and_then(|l| {
+            .map(|l| {
                 l.push(
                     Number::new_in(alloc, &7.to_string())
                         .map(Value::from)
@@ -248,7 +248,7 @@ fn a_number_that_does_not_fit_is_bad_value_not_wrong_type() {
         let mut value = sample().to_value(alloc).unwrap();
         TryAsMut::<Map>::try_as_mut(&mut value)
             .ok_or(ValueError::WrongKind)
-            .and_then(|m| {
+            .map(|m| {
                 m.set(
                     "port",
                     Value::from(Number::new_in(alloc, "9223372036854775808").unwrap()),
@@ -262,7 +262,7 @@ fn a_number_that_does_not_fit_is_bad_value_not_wrong_type() {
         // ... and a fractional spelling is refused rather than truncated.
         TryAsMut::<Map>::try_as_mut(&mut value)
             .ok_or(ValueError::WrongKind)
-            .and_then(|m| {
+            .map(|m| {
                 m.set(
                     "port",
                     Value::from(Number::new_in(alloc, "5900.5").unwrap()),

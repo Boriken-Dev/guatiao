@@ -278,7 +278,7 @@ struct Builtin;
 impl Greeter for Builtin {
     fn greet(&self, name: &str) -> Result<Map, ProviderError> {
         let mut map = Map::new();
-        map.set("greeting", format!("hi from the host, {name}"))?;
+        map.set("greeting", format!("hi from the host, {name}"));
         Ok(map)
     }
 }

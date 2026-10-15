@@ -53,7 +53,7 @@ fn it_refuses_while_an_instance_or_an_object_is_alive() {
 
     // An instance built from a configuration.
     let mut config = Map::new();
-    config.set("prefix", "hey").unwrap();
+    config.set("prefix", "hey");
     let instance = registry
         .offer::<dyn Greeter>("derived_greeter_shouter")
         .unwrap()

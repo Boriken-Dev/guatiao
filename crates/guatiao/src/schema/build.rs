@@ -161,7 +161,7 @@ fn put(state: &mut Result<Value, ValueError>, key: &str, value: Result<Value, Va
     match value.and_then(|v| {
         TryAsMut::<Map>::try_as_mut(node)
             .ok_or(ValueError::WrongKind)
-            .and_then(|m| m.set(key, v))
+            .and_then(|m| Ok(m.try_set(key, v)?))
     }) {
         Ok(()) => {}
         Err(e) => *state = Err(e),
@@ -193,7 +193,7 @@ fn push_name(list: &mut Result<Value, ValueError>, alloc: Alloc, name: &str) {
     match Text::new_in(alloc, name).map(Value::from).and_then(|v| {
         TryAsMut::<List>::try_as_mut(node)
             .ok_or(ValueError::WrongKind)
-            .and_then(|l| l.push(v))
+            .and_then(|l| Ok(l.try_push(v)?))
     }) {
         Ok(()) => {}
         Err(e) => *list = Err(e),
@@ -535,7 +535,10 @@ impl FieldBuilder {
         V: Into<Value>,
     {
         let mut list = List::new_in(self.alloc);
-        let pushed = examples.into_iter().try_for_each(|v| list.push(v.into()));
+        let alloc = self.alloc;
+        let pushed = examples
+            .into_iter()
+            .try_for_each(|v| list.push_in(v.into(), alloc));
         put(
             &mut self.state,
             vocab::EXAMPLES,

@@ -154,12 +154,12 @@ pub fn declare_notice(meta: &mut Map, notice: Notice<'_>) -> Result<(), ValueErr
     }
     let alloc = meta.alloc()?;
     let mut one = Map::new_in(alloc);
-    one.set(
+    one.try_set(
         COMPONENT_KEY,
         Text::new_in(alloc, notice.component).map(Value::from)?,
     )?;
-    one.set(TEXT_KEY, Text::new_in(alloc, notice.text).map(Value::from)?)?;
-    one.set(
+    one.try_set(TEXT_KEY, Text::new_in(alloc, notice.text).map(Value::from)?)?;
+    one.try_set(
         FORMAT_KEY,
         Text::new_in(alloc, notice.format).map(Value::from)?,
     )?;
@@ -176,8 +176,7 @@ mod tests {
         assert!(notices(None).is_empty());
         assert!(notices(Some(&Map::new())).is_empty());
         let mut meta = Map::new();
-        meta.set(NOTICES_KEY, Value::from(Text::new("not a list")))
-            .unwrap();
+        meta.set(NOTICES_KEY, Value::from(Text::new("not a list")));
         assert!(
             notices(Some(&meta)).is_empty(),
             "a list is the only shape read"
@@ -216,14 +215,14 @@ mod tests {
         // that is not a map, and one with an unknown format.
         let mut list = List::new();
         let mut blank = Map::new();
-        blank.set(TEXT_KEY, "   ").unwrap();
-        list.push(blank).unwrap();
-        list.push(Value::from(7i64)).unwrap();
+        blank.set(TEXT_KEY, "   ");
+        list.push(blank);
+        list.push(Value::from(7i64));
         let mut odd = Map::new();
-        odd.set(TEXT_KEY, "some text").unwrap();
-        odd.set(FORMAT_KEY, "rtf").unwrap();
-        list.push(odd).unwrap();
-        meta.set(NOTICES_KEY, list).unwrap();
+        odd.set(TEXT_KEY, "some text");
+        odd.set(FORMAT_KEY, "rtf");
+        list.push(odd);
+        meta.set(NOTICES_KEY, list);
 
         let read = notices(Some(&meta));
         assert_eq!(read.len(), 1, "the blank and the non-map are dropped");

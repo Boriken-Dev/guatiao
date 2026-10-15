@@ -47,15 +47,15 @@
 //! use guatiao::{Alloc, Map, MergeMode, Source, Value};
 //!
 //! let mut system_tls = Map::new();
-//! system_tls.set("ca", "/etc/ca.pem")?;
-//! system_tls.set("verify", true)?;
+//! system_tls.set("ca", "/etc/ca.pem");
+//! system_tls.set("verify", true);
 //! let mut system = Map::new();
-//! system.set("tls", system_tls)?;
+//! system.set("tls", system_tls);
 //!
 //! let mut user_tls = Map::new();
-//! user_tls.set("verify", false)?;
+//! user_tls.set("verify", false);
 //! let mut user = Map::new();
-//! user.set("tls", user_tls)?;
+//! user.set("tls", user_tls);
 //!
 //! let (system, user) = (Value::from(system), Value::from(user));
 //! let (merged, provenance) = MergeMode::Substitute.merge_layers(
@@ -718,10 +718,10 @@ fn overwrite_positionally(
             )?,
             None => clone_into(later_item, alloc)?,
         };
-        out.push(combined)?;
+        out.push_in(combined, alloc)?;
     }
     for leftover in earlier_items.iter().skip(later_items.len()) {
-        out.push(clone_into(leftover, alloc)?)?;
+        out.push_in(clone_into(leftover, alloc)?, alloc)?;
     }
     Ok(out.into())
 }
@@ -852,7 +852,7 @@ fn merge_maps_recursively(
             )?,
             None => clone_into(earlier_value, alloc)?,
         };
-        out.set(key, child)?;
+        out.set_in(key, child, alloc)?;
     }
 
     for (key, later_value) in TryAsRef::<Map>::try_as_ref(later)
@@ -862,7 +862,7 @@ fn merge_maps_recursively(
         .map(|e| (e.key(), e.value()))
     {
         if !TryAsRef::<Map>::try_as_ref(earlier).is_some_and(|m| m.contains_key(key)) {
-            out.set(key, clone_into(later_value, alloc)?)?;
+            out.set_in(key, clone_into(later_value, alloc)?, alloc)?;
         }
     }
 
@@ -1019,7 +1019,7 @@ fn union_lists(
 
     let mut out = List::new_in(alloc);
     for item in result {
-        out.push(item)?;
+        out.push_in(item, alloc)?;
     }
     Ok(out.into())
 }

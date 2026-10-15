@@ -32,7 +32,7 @@ impl Greeter for Hello {
             ));
         }
         let mut map = Map::new();
-        map.set("greeting", format!("hello, {name}"))?;
+        map.set("greeting", format!("hello, {name}"));
         Ok(map)
     }
 
@@ -110,7 +110,7 @@ impl Greeter for Shouter {
         map.set(
             "greeting",
             format!("{} {}", self.prefix, name.to_uppercase()),
-        )?;
+        );
         Ok(map)
     }
 }

@@ -394,9 +394,7 @@ fn greet(registry: &Registry, name: &str) -> guatiao::Value {
         .expect("a greeter has a greet slot");
 
     let mut config = Map::new();
-    config
-        .set("name", Text::new(name))
-        .expect("a one-key map does not exhaust the allocator");
+    config.set("name", Text::new(name));
     let config = guatiao::Value::from(config);
     let mut answer = guatiao::Value::absent();
     // SAFETY: the greeter's contract; `config` is well formed and

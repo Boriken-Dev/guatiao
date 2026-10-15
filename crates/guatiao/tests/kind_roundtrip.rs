@@ -91,7 +91,7 @@ impl Greeter for Hello {
 
     fn describe(&self, name: &str) -> Result<Map, ProviderError> {
         let mut map = Map::new();
-        map.set("name", name)?;
+        map.set("name", name);
         Ok(map)
     }
 
@@ -197,10 +197,10 @@ fn a_call_round_trips_through_the_proxy() {
     );
 
     let mut config = Map::new();
-    config.set("port", 5900).unwrap();
+    config.set("port", 5900);
     let config = Value::from(config);
     let mut map = Map::new();
-    map.set("a", 1).unwrap();
+    map.set("a", 1);
     let got = r
         .shapes(
             true,

@@ -33,22 +33,25 @@ MSRV 1.89. No required dependencies; `derive` pulls `guatiao-derive`,
 
 # Building a value
 
-**Building in Rust names no allocator.** The short constructors use the
-crate's own allocator and abort on allocation failure, exactly as
-`String::from` does. The `_in` forms name one and stay fallible, because a
-foreign allocator refusing is recoverable.
+**Building in Rust names no allocator.** The short forms (`Map::new`,
+`Text::new`, `set`, `push`, `push_str`) use the allocator the container
+recorded, or the crate's own, and **abort** on allocation failure through
+`alloc::alloc::handle_alloc_error`, exactly as `String::from` and
+`Vec::push` do: they return no `Result`. The `_in` forms name an allocator
+and the `try_` forms use the recorded one; both stay fallible, because a
+foreign allocator refusing (a full arena) is recoverable.
 
 ```rust
 use guatiao::Map;
 
 let mut fields = Map::new();
-fields.set("compression", 6)?;
+fields.set("compression", 6);
 
 let mut map = Map::new();
-map.set("host", "10.0.0.1")?;
-map.set("port", 5900)?;
-map.set("tls", true)?;
-map.set("fields", fields)?;
+map.set("host", "10.0.0.1");
+map.set("port", 5900);
+map.set("tls", true);
+map.set("fields", fields);
 ```
 
 `set` and `push` take `impl Into<Value>`, which is implemented for
@@ -69,7 +72,8 @@ Map::new() -> Map                      List::new() -> List
 Map::new_in(alloc: Alloc) -> Map       List::new_in(alloc: Alloc) -> List
 map.alloc() -> Result<Alloc, ValueError>
 map.len() / map.is_empty() / map.entries() -> &[Entry]
-map.set(key: &str, value: impl Into<Value>) -> Result<(), ValueError>
+map.set(key: &str, value: impl Into<Value>)                 // aborts on OOM
+map.try_set(key, impl Into<Value>) -> Result<(), AllocError>  // recorded allocator
 map.set_in(key, impl Into<Value>, alloc) -> Result<(), ValueError>
 map.get(key) -> Option<&Value>         map.get_mut(key) -> Option<&mut Value>
 map.required(key) -> Result<&Value, MapError>   // names the key it lacks
@@ -84,6 +88,7 @@ map.clone_in(alloc) -> Result<Map, ValueError>
 for (key, value) in map { .. }         // owned: (Text, Value); &Map: &Entry; &mut Map: &mut Entry
 
 list.push(impl Into<Value>)            list.push_in(impl Into<Value>, alloc)
+list.try_push(impl Into<Value>) -> Result<(), AllocError>
 list.remove(i) / list.pop()            list.discard(i) -> bool     list.clear()
 list.clone_in(alloc) -> Result<List, ValueError>
 for value in list { .. }               // owned: Value; &List: &Value; &mut List: &mut Value
@@ -92,8 +97,8 @@ Text::new(&str) -> Text                Buffer::new(&[u8]) -> Buffer
 Text::new_in(alloc, &str) -> Result<Text, ValueError>
 Buffer::new_in(alloc, &[u8]) -> Result<Buffer, ValueError>
 &*text -> &str                         // Deref<Target = str>: every str method
-text.push_str(&str) / push_str_in(&str, alloc)
-buffer.push(&[u8]) / push_in(&[u8], alloc)
+text.push_str(&str) / try_push_str(&str) / push_str_in(&str, alloc)
+buffer.push(&[u8]) / try_push(&[u8]) / push_in(&[u8], alloc)
 
 Number::new(&str) -> Result<Number, ValueError>     // the JSON grammar
 Number::new_in(alloc, &str)            Number::float_in(alloc, f64)

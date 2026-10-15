@@ -26,9 +26,9 @@ pub fn schema() -> Value {
 pub fn nth(n: i64) -> Value {
     let mut map = Map::new();
     if n % 10 != 0 {
-        map.set("greeting", "hello").expect("a small map grows");
+        map.set("greeting", "hello");
     }
-    map.set("count", n).expect("a small map grows");
+    map.set("count", n);
     map.into()
 }
 

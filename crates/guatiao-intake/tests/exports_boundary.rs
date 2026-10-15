@@ -41,7 +41,7 @@ fn form() -> Value {
 
 fn values() -> Value {
     let mut map = Map::new();
-    map.set("verify", true).unwrap();
+    map.set("verify", true);
     map.into()
 }
 
@@ -113,7 +113,7 @@ fn a_condition_with_several_values_crosses_unchanged() {
         .expect("it builds");
     for (mode, expected) in [("tls", true), ("mtls", true), ("plain", false)] {
         let mut values = Map::new();
-        values.set("mode", mode).unwrap();
+        values.set("mode", mode);
         let values: Value = values.into();
         let mut shown = !expected;
         // SAFETY: every pointer addresses a live value, and `shown` is one
@@ -230,9 +230,9 @@ fn a_tagged_value_survives_the_round_trip_through_flat_text() {
     let schema = variant_schema();
 
     let mut chosen = Map::new();
-    chosen.set("auth", "userpass").unwrap();
-    chosen.set("username", "ana").unwrap();
-    chosen.set("password", "hunter2").unwrap();
+    chosen.set("auth", "userpass");
+    chosen.set("username", "ana");
+    chosen.set("password", "hunter2");
     let chosen: Value = chosen.into();
 
     let mut flat = Value::absent();
@@ -296,9 +296,9 @@ fn a_flat_store_that_is_not_all_text_is_refused() {
     let schema = variant_schema();
 
     let mut flat = Map::new();
-    flat.set("auth", "userpass").unwrap();
+    flat.set("auth", "userpass");
     // A number, where the projection's contract says text.
-    flat.set("username", 5900).unwrap();
+    flat.set("username", 5900);
     let flat: Value = flat.into();
 
     let mut back = Value::absent();

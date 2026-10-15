@@ -82,7 +82,7 @@ fn registry() -> Registry {
 
 fn config(key: &str, value: i64) -> Value {
     let mut map = Map::new();
-    map.set(key, value).unwrap();
+    map.set(key, value);
     map.into()
 }
 
@@ -146,7 +146,7 @@ fn a_configuration_is_checked_against_the_schema_before_the_provider_is_asked() 
         other => panic!("a misspelled setting is refused by name: {other:?}"),
     }
     let mut wrong = Map::new();
-    wrong.set("start", "five").unwrap();
+    wrong.set("start", "five");
     assert!(matches!(
         configured.instantiate(&Value::from(wrong)),
         Err(InstantiateError::Invalid(ValidationError::BadValue { .. }))

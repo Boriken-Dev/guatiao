@@ -25,7 +25,7 @@
 //!     .field(FieldBuilder::new("greeting", KindBuilder::string()))
 //!     .finish()?;
 //! let mut hello = Map::new();
-//! hello.set("greeting", "hello")?;
+//! hello.set("greeting", "hello");
 //!
 //! let mut receiver = Receiver::new();
 //! receiver.accept(&channel::announce(1, &schema)?)?;

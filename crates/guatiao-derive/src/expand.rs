@@ -743,7 +743,7 @@ fn field_builder(field: &FieldPlan) -> TokenStream {
                         if __ok.is_ok() {
                             __ok = (#examples)
                                 .to_value(__alloc)
-                                .and_then(|__v| __examples.push(__v));
+                                .and_then(|__v| __examples.push_in(__v, __alloc));
                         }
                     )*
                     __ok.map(|()| ::guatiao::Value::from(__examples))
