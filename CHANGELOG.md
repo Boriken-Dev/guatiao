@@ -62,9 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `ProviderInfo::{view, as_kind, offer, instantiate}` are `unsafe fn`.
     Migration: wrap the call in `unsafe` with the descriptor's contract;
     inside a library, `Host::get`/`list`/`offers` are the safe door.
-  - `ProviderParts::new` is `unsafe fn`, and `Object::from_cell` too (the
-    derives write the `unsafe`). Migration: a hand-built provider wraps
-    the call.
+  - A hand-built provider's descriptor comes from the `unsafe fn`
+    `ProviderPartsBuilder::build` (see `ProviderParts::builder` below),
+    and `Object::from_cell` is `unsafe fn` too (the derives write the
+    `unsafe`). Migration: a hand-built provider wraps the call.
 - **Breaking: `ProviderView`'s fields are private**, so a view can only
   come from reading a descriptor and its safe `available()` cannot be
   pointed at another `ctx`. Migration: `view.id` is `view.id()`, and so
