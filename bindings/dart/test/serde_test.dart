@@ -78,6 +78,40 @@ void main() {
   });
 
   test('parsing text that is not the format fails', () {
-    expect(() => serde.loads('{not json'), throwsA(isA<GuatiaoException>()));
+    expect(() => serde.loads('{not json'), throwsA(isA<BadValue>()));
+  });
+
+  test('a malformed document carries its format and position', () {
+    // Both catches find it: it is what a malformed document threw before,
+    // and a FormatException.
+    expect(
+      () => serde.loads('{"a":\n 1,,}'),
+      throwsA(
+        isA<ParseError>()
+            .having((e) => e, 'a BadValue', isA<BadValue>())
+            .having((e) => e, 'a FormatException', isA<FormatException>())
+            .having((e) => e.format, 'format', Format.json)
+            .having((e) => e.line, 'line', 2)
+            .having((e) => e.column, 'column', 4)
+            .having((e) => e.message, 'message', isNotEmpty),
+      ),
+    );
+    expect(
+      () => serde.loads('a = = 1', format: Format.toml),
+      throwsA(
+        isA<ParseError>()
+            .having((e) => e.format, 'format', Format.toml)
+            .having((e) => e.line, 'line', 1)
+            .having((e) => e.column, 'column', 5),
+      ),
+    );
+    expect(
+      () => serde.loads('a: [1', format: Format.yaml),
+      throwsA(
+        isA<ParseError>()
+            .having((e) => e.format, 'format', Format.yaml)
+            .having((e) => e.line, 'line', 1),
+      ),
+    );
   });
 }

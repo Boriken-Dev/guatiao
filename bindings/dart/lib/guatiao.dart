@@ -10,7 +10,7 @@
 /// The two optional halves are their own entry points, imported with a
 /// prefix so their verbs keep a namespace:
 /// `import 'package:guatiao/serde.dart' as serde;` and
-/// `import 'package:guatiao/intake.dart' as form;`.
+/// `import 'package:guatiao/intake.dart' as intake;`.
 library;
 
 export 'src/errors.dart'
@@ -37,6 +37,6 @@ export 'src/library.dart'
         surfaces,
         useLibrary;
 export 'src/registry.dart' show Instance, ProviderTable, Registry;
-export 'src/serde.dart' show Format;
+export 'src/serde.dart' show Format, ParseError;
 export 'src/value.dart'
     show Absent, ListRef, MapRef, Numbers, Ref, Tag, Value, ValueOwner, absent;
