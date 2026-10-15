@@ -1168,6 +1168,12 @@ struct guatiao_registry *guatiao_registry_new(struct guatiao_str id,
  unknown key; `GUATIAO_ERR_NULL` for a provider that builds no
  instances, which is its one instance.
 
+ `config` is checked against the provider's configuration schema first,
+ as the Rust `instantiate` does: a misspelled or ill-typed setting is
+ `GUATIAO_ERR_BAD_VALUE`, with the field and what it expected written
+ to `err`, and the provider is never asked. A schema this build cannot
+ read is not checked.
+
  # Safety
 
  `reg` is a live handle, `key` is readable, `config` addresses a

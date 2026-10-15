@@ -53,10 +53,13 @@ use core::ffi::c_void;
 use std::path::Path;
 
 use super::{guard, guard_with};
+use crate::library::ProviderError;
 use crate::library::{
     EntryPoint, HostInfo, LibraryInfo, LoadReport, Loading, Order, Provider, Registry, ScanRules,
     SearchPath, Skipped, UnloadError, WhyNot, scan_dir_rules, scan_path,
 };
+use crate::schema::read::SchemaRef;
+use crate::schema::validate::validate_map;
 use crate::value::ValueError;
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::status::Status;
@@ -369,6 +372,12 @@ pub unsafe extern "C" fn guatiao_registry_new(
 /// unknown key; `GUATIAO_ERR_NULL` for a provider that builds no
 /// instances, which is its one instance.
 ///
+/// `config` is checked against the provider's configuration schema first,
+/// as the Rust `instantiate` does: a misspelled or ill-typed setting is
+/// `GUATIAO_ERR_BAD_VALUE`, with the field and what it expected written
+/// to `err`, and the provider is never asked. A schema this build cannot
+/// read is not checked.
+///
 /// # Safety
 ///
 /// `reg` is a live handle, `key` is readable, `config` addresses a
@@ -398,6 +407,16 @@ pub unsafe extern "C" fn guatiao_registry_provider_create(
         let Some(create) = view.create else {
             return Status::GUATIAO_ERR_NULL;
         };
+        if let Some(schema) = view.config.as_ref().and_then(SchemaRef::new)
+            && let Err(why) = validate_map(schema, config)
+        {
+            let refusal = ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, &why.to_string());
+            if !err.is_null() {
+                // SAFETY: non-null, and writable by the caller's contract.
+                unsafe { err.write(refusal) };
+            }
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        }
         // SAFETY: the slot is the descriptor's own; the pointers are the
         // caller's, checked above; the library is mapped for the call.
         unsafe { create(view.ctx, config, out, err) }
