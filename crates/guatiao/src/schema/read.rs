@@ -401,6 +401,10 @@ impl<'a> ArmRef<'a> {
             .and_then(TryAsRef::<str>::try_as_ref)
             .unwrap_or("")
     }
+    /// The arm's own schema.
+    pub(crate) fn schema(&self) -> &'a Value {
+        self.schema
+    }
     /// The arm's `title`, falling back to its discriminant.
     pub fn title(&self) -> &'a str {
         let l = text(self.schema, vocab::TITLE);
