@@ -204,6 +204,13 @@ jobs:
           test "$wire" -eq 2 && test "$exports" -ge 20
       - name: The wire encoding
         run: cargo test -p guatiao --test wire_roundtrip --test wire_channel
+      - name: The WebTransport example's page
+        # Its own workspace and lockfile; `--locked` builds exactly the
+        # `wasm-bindgen` the README tells the reader to install a CLI for.
+        # It runs from the page's directory: that is where its target and
+        # rustflags are configured.
+        run: cargo build --release --locked
+        working-directory: examples/wire_over_webtransport/client
 
   python:
     name: Python bindings (py${{ matrix.python-version }}, ${{ matrix.os }})

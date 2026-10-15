@@ -24,9 +24,9 @@ cargo run -p wire_over_webtransport --bin wire-probe -- https://127.0.0.1:4433 <
 
 # 3. The page (needs wasm-bindgen-cli at the version in client/Cargo.lock).
 rustup target add wasm32-unknown-unknown
-cargo install wasm-bindgen-cli --version 0.2.128 --locked
+cargo install wasm-bindgen-cli --version 0.2.129 --locked
 cd examples/wire_over_webtransport/client
-cargo build --release
+cargo build --release --locked
 wasm-bindgen --target web --out-dir pkg target/wasm32-unknown-unknown/release/wire_client.wasm
 python -m http.server 8000
 # open http://localhost:8000/?hash=<sha256>
