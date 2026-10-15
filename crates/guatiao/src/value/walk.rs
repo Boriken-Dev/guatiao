@@ -13,14 +13,7 @@ use super::alloc::Alloc;
 use super::convert::TryAsRef;
 use super::error::ValueError;
 use super::types::{Buffer, Entry, List, Map, Number, Tag, Text, Value};
-
-/// The live arm as `T`, for a walk that has already read the tag.
-fn arm<T: ?Sized>(node: &Value) -> Result<&T, ValueError>
-where
-    Value: TryAsRef<T>,
-{
-    node.try_as_ref().ok_or(ValueError::WrongKind)
-}
+use super::value::arm;
 
 // --- copying ------------------------------------------------------------
 

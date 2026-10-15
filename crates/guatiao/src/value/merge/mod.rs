@@ -85,7 +85,7 @@
 use alloc::collections::BTreeMap;
 
 use crate::value::alloc::Alloc;
-use crate::value::convert::{ToValue, TryAsRef};
+use crate::value::convert::{ToValue, TryAsRef, describe};
 use crate::value::error::{MAX_DEPTH, ValueError};
 use crate::value::types::{List, Map, Tag, Value};
 
@@ -197,8 +197,8 @@ impl core::fmt::Display for MergeError {
                 write!(
                     f,
                     "cannot {mode:?}-merge {} into {}",
-                    kind_name(*later),
-                    kind_name(*earlier)
+                    describe(*later),
+                    describe(*earlier)
                 )?;
                 if path.is_empty() {
                     Ok(())
@@ -212,23 +212,6 @@ impl core::fmt::Display for MergeError {
 }
 
 impl core::error::Error for MergeError {}
-
-/// A kind in a sentence, for [`MergeError`]'s message.
-fn kind_name(tag: Option<Tag>) -> &'static str {
-    let Some(tag) = tag else {
-        return "a kind this build does not know";
-    };
-    match tag {
-        Tag::GUATIAO_ABSENT => "absent",
-        Tag::GUATIAO_NULL => "null",
-        Tag::GUATIAO_BOOL => "a boolean",
-        Tag::GUATIAO_NUMBER => "a number",
-        Tag::GUATIAO_STRING => "a string",
-        Tag::GUATIAO_BYTES => "a byte string",
-        Tag::GUATIAO_LIST => "a list",
-        Tag::GUATIAO_MAP => "a map",
-    }
-}
 
 /// Where a leaf's final value came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -834,14 +817,17 @@ fn merge_maps_recursively(
     depth: u32,
 ) -> Result<Value, MergeError> {
     let mut out = Map::new_in(alloc);
+    // Each door checks every key, so each side is read once, not per key.
+    let earlier_map = TryAsRef::<Map>::try_as_ref(earlier);
+    let later_map = TryAsRef::<Map>::try_as_ref(later);
 
-    for (key, earlier_value) in TryAsRef::<Map>::try_as_ref(earlier)
+    for (key, earlier_value) in earlier_map
         .map(Map::entries)
         .unwrap_or(&[])
         .iter()
         .map(|e| (e.key(), e.value()))
     {
-        let child = match TryAsRef::<Map>::try_as_ref(later).and_then(|m| m.get(key)) {
+        let child = match later_map.and_then(|m| m.get(key)) {
             Some(later_value) => merge_value(
                 earlier_value,
                 later_value,
@@ -855,13 +841,13 @@ fn merge_maps_recursively(
         out.set_in(key, child, alloc)?;
     }
 
-    for (key, later_value) in TryAsRef::<Map>::try_as_ref(later)
+    for (key, later_value) in later_map
         .map(Map::entries)
         .unwrap_or(&[])
         .iter()
         .map(|e| (e.key(), e.value()))
     {
-        if !TryAsRef::<Map>::try_as_ref(earlier).is_some_and(|m| m.contains_key(key)) {
+        if !earlier_map.is_some_and(|m| m.contains_key(key)) {
             out.set_in(key, clone_into(later_value, alloc)?, alloc)?;
         }
     }
