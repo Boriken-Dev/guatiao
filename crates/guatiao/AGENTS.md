@@ -801,7 +801,7 @@ let provider = unsafe {                  // vouches: each table fits its kind an
         .kinds(&["greeter"])
         .table(KindTable::new("greeter", &TABLE as *const _ as *const c_void,
                               size_of::<GreeterVtable>()))
-        .ctx(ctx)                        // .config(schema) .available(f) .create(f) .destroy(f)
+        .ctx(ctx)                        // .config(schema) .meta(map) .available(f) .create(f) .destroy(f)
         .build()
 };
 let library = LibraryParts::new("acme", "1.0.0", vec![provider]);   // .unloading(slot)

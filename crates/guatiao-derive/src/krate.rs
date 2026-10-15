@@ -20,25 +20,35 @@ use quote::quote;
 /// Done over the finished expansion rather than at each `quote!`, so an
 /// emitter writes `::guatiao::` and cannot forget the override.
 pub(crate) fn reroot(tokens: TokenStream, root: Option<&syn::Path>) -> TokenStream {
+    reroot_crate(tokens, "guatiao", root)
+}
+
+/// [`reroot`] for paths rooted at `::<name>`: `#[derive(Form)]` roots its
+/// paths at `::guatiao_intake`.
+pub(crate) fn reroot_crate(
+    tokens: TokenStream,
+    name: &str,
+    root: Option<&syn::Path>,
+) -> TokenStream {
     match root {
-        Some(root) => rewrite(tokens, &quote!(#root)),
+        Some(root) => rewrite(tokens, name, &quote!(#root)),
         None => tokens,
     }
 }
 
-fn rewrite(tokens: TokenStream, root: &TokenStream) -> TokenStream {
+fn rewrite(tokens: TokenStream, name: &str, root: &TokenStream) -> TokenStream {
     let tokens: Vec<TokenTree> = tokens.into_iter().collect();
     let mut out: Vec<TokenTree> = Vec::with_capacity(tokens.len());
     let mut i = 0;
     while i < tokens.len() {
-        if is_root(&tokens, i) {
+        if is_root(&tokens, i, name) {
             out.extend(root.clone());
             i += 3;
             continue;
         }
         match &tokens[i] {
             TokenTree::Group(group) => {
-                let mut inner = Group::new(group.delimiter(), rewrite(group.stream(), root));
+                let mut inner = Group::new(group.delimiter(), rewrite(group.stream(), name, root));
                 inner.set_span(group.span());
                 out.push(inner.into());
             }
@@ -49,9 +59,9 @@ fn rewrite(tokens: TokenStream, root: &TokenStream) -> TokenStream {
     out.into_iter().collect()
 }
 
-/// Whether `::guatiao` starts at `i` as the ROOT of a path: `::`, then the
+/// Whether `::<name>` starts at `i` as the ROOT of a path: `::`, then the
 /// ident, with nothing before the `::` that it could be separating from.
-fn is_root(tokens: &[TokenTree], i: usize) -> bool {
+fn is_root(tokens: &[TokenTree], i: usize, name: &str) -> bool {
     let joint = matches!(
         tokens.get(i),
         Some(TokenTree::Punct(p)) if p.as_char() == ':' && p.spacing() == Spacing::Joint
@@ -59,7 +69,7 @@ fn is_root(tokens: &[TokenTree], i: usize) -> bool {
     if !joint || !matches!(tokens.get(i + 1), Some(TokenTree::Punct(p)) if p.as_char() == ':') {
         return false;
     }
-    if !matches!(tokens.get(i + 2), Some(TokenTree::Ident(ident)) if ident == "guatiao") {
+    if !matches!(tokens.get(i + 2), Some(TokenTree::Ident(ident)) if ident == name) {
         return false;
     }
     match i.checked_sub(1).and_then(|before| tokens.get(before)) {

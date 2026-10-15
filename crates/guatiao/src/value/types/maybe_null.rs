@@ -31,6 +31,12 @@ impl<T> MaybeNull<T> {
         MaybeNull(value as *const T)
     }
 
+    /// A pointer whose owner keeps it valid, such as a descriptor's own
+    /// storage.
+    pub(crate) const fn from_ptr(ptr: *const T) -> MaybeNull<T> {
+        MaybeNull(ptr)
+    }
+
     /// Whether it points at anything: the only question answerable
     /// without the contract above.
     pub fn is_null(self) -> bool {

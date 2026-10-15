@@ -68,6 +68,9 @@ struct Decl {
     new: Option<Path>,
     new_with_host: Option<Path>,
     available: Option<Path>,
+    /// `form = Ty`: a type deriving `Form`, whose screen the descriptor's
+    /// `meta` carries under `form`.
+    form: Option<Type>,
     /// `crate = <path>`: where the expansion finds `guatiao`.
     krate: Option<Path>,
 }
@@ -178,6 +181,11 @@ fn read_attrs(ast: &DeriveInput) -> syn::Result<Decl> {
                     decl.krate = Some(meta.value()?.parse()?);
                     Ok(())
                 }
+                "form" => {
+                    once(&meta, decl.form.is_some(), "form")?;
+                    decl.form = Some(meta.value()?.parse()?);
+                    Ok(())
+                }
                 // A bare path with no `=` is a kind: `#[provider(Greeter)]`.
                 _ if !meta.input.peek(syn::Token![=]) => {
                     decl.kinds.push(meta.path.clone());
@@ -185,8 +193,8 @@ fn read_attrs(ast: &DeriveInput) -> syn::Result<Decl> {
                 }
                 other => Err(meta.error(format!(
                     "`{other}` is not a provider option; the options are `kinds(..)`, `id`, \
-                     `name`, `version`, `config`, `new`, `new_with_host`, `available` and \
-                     `crate`"
+                     `name`, `version`, `config`, `new`, `new_with_host`, `available`, `form` \
+                     and `crate`"
                 ))),
             }
         })?;
@@ -313,6 +321,17 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
         },
         None => quote! {},
     };
+    // The form the type deriving `Form` declares, under `meta["form"]`,
+    // the key `guatiao_intake::PROVIDER_FORM_KEY` names.
+    let form = decl.form.as_ref().map(|form| {
+        quote! {
+            let builder = {
+                let mut __meta = ::guatiao::Map::new_in(alloc);
+                __meta.set_in("form", <#form>::__guatiao_form(alloc)?, alloc)?;
+                builder.meta(__meta)
+            };
+        }
+    });
     // Instances from a configuration: decode it as `C`, build `Self`
     // through `TryFrom<C>`, box it. `C = Self` is the identity `From`.
     let (create_shims, create_slot, destroy_slot) = match &config_ty {
@@ -429,6 +448,7 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
                         #create_slot
                         #destroy_slot;
                     #config
+                    #form
                     // SAFETY: each table is `of::<Self>()` for the kind it
                     // names, `instance` is the leaked default instance or
                     // null, and every slot is this expansion's own shim.
@@ -555,7 +575,7 @@ mod tests {
     fn a_crate_path_reroots_every_generated_path() {
         for attr in [
             "#[provider(Greeter, counter::Counter, crate = ::kinds::guatiao)]",
-            "#[provider(Greeter, config, crate = ::kinds::guatiao)]",
+            "#[provider(Greeter, config, form = Hi, crate = ::kinds::guatiao)]",
             "#[provider(kinds(Greeter), config = HiConfig, new_with_host = Hi::build, \
              available = Hi::ready, crate = ::kinds::guatiao)]",
         ] {
@@ -567,6 +587,20 @@ mod tests {
                 "a path is still rooted at `::guatiao`: {rest}"
             );
         }
+    }
+
+    #[test]
+    fn a_form_lands_in_the_descriptor_s_meta() {
+        let out = expand_str("#[provider(Greeter, config, form = Settings)] struct Hi;").unwrap();
+        assert!(
+            out.contains(
+                "__meta . set_in (\"form\" , < Settings > :: __guatiao_form (alloc) ? , alloc) ?"
+            ),
+            "{out}"
+        );
+        assert!(out.contains("builder . meta (__meta)"), "{out}");
+        let out = expand_str("#[provider(Greeter)] struct Hi;").unwrap();
+        assert!(!out.contains("meta"), "no form, no meta: {out}");
     }
 
     #[test]
@@ -608,6 +642,10 @@ mod tests {
             (
                 "#[provider(Counter, Greeter, ::Counter)] struct Hello;",
                 "`Counter` is named twice",
+            ),
+            (
+                "#[provider(Greeter, form = A, form = B)] struct Hello;",
+                "`form` is given twice",
             ),
             (
                 "#[provider(kinds(k::Greeter), k::Greeter)] struct Hello;",

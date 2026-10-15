@@ -154,5 +154,12 @@ pub use flat::{SEPARATOR, flatten, is_sensitive, keys, resolve, resolve_in, spli
 pub use guatiao_derive::Form;
 pub use judge::{FormError, Group, Placed, check, is_visible, layout};
 pub use read::{Condition, FormRef, HintsRef, SectionRef};
-pub use screen::Screen;
+pub use screen::{PROVIDER_FORM_KEY, Screen};
+
+/// What `#[derive(Form)]` reaches through this crate, so a consumer
+/// naming only `guatiao_intake` (or a re-export of it) needs nothing else.
+#[doc(hidden)]
+pub mod __private {
+    pub use guatiao;
+}
 pub use texts::validate_texts;

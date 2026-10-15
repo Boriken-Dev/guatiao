@@ -12,6 +12,12 @@ use guatiao::value::types::Value;
 
 use crate::build::Form;
 
+/// The key a provider's descriptor `meta` carries its form under:
+/// `#[provider(.., form = Ty)]` writes `Ty`'s screen there, and a host
+/// reads it back with [`FormRef::new`](crate::FormRef::new) on
+/// `meta.get(PROVIDER_FORM_KEY)`.
+pub const PROVIDER_FORM_KEY: &str = "form";
+
 /// A type that declares its default screen.
 ///
 /// Implemented by `#[derive(Form)]` (behind the `derive` feature) from
