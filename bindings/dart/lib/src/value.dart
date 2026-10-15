@@ -804,11 +804,6 @@ class ListRef extends Ref {
   String toString() => 'ListRef($path)';
 }
 
-NativeFinalizer? _finalizerCache;
-
-NativeFinalizer _valueFinalizer() =>
-    _finalizerCache ??= NativeFinalizer(native.core().valueFreeFinalizer);
-
 /// Owns a root `guatiao_value` and the tree under it.
 ///
 /// [close] is the release and the package requires it. A [NativeFinalizer]
@@ -816,8 +811,10 @@ NativeFinalizer _valueFinalizer() =>
 /// it cannot also reclaim the 40-byte root box, because a finalizer runs
 /// one native function and those two frees must be ordered.
 class Value extends Ref implements ValueOwner, Finalizable {
-  Value._(this._raw, this._allocator) : super._(null, const []) {
-    _valueFinalizer().attach(this, _raw.cast<Void>(), detach: this);
+  Value._(this._raw, this._allocator)
+      : _finalizer = NativeFinalizer(native.core().valueFreeFinalizer),
+        super._(null, const []) {
+    _finalizer.attach(this, _raw.cast<Void>(), detach: this);
   }
 
   /// `Value(obj)` converts as [Value.fromDart] does; `Value()` is absent.
@@ -943,6 +940,10 @@ class Value extends Ref implements ValueOwner, Finalizable {
 
   final Pointer<guatiao_value> _raw;
   final Pointer<guatiao_alloc> _allocator;
+
+  /// Held per value because `detach` is per finalizer, and a value may
+  /// outlive the library handle it was built through.
+  final NativeFinalizer _finalizer;
   bool _closed = false;
 
   /// The root node, for a native call that takes one. Invalid after
@@ -964,7 +965,7 @@ class Value extends Ref implements ValueOwner, Finalizable {
   void close() {
     if (_closed) return;
     _closed = true;
-    _valueFinalizer().detach(this);
+    _finalizer.detach(this);
     native.core().bindings.guatiao_value_free(_raw);
     calloc.free(_raw);
   }
