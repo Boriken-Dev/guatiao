@@ -17,9 +17,13 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 /// A declaration at the start of a line that is not a `const`: a `final`,
-/// a `late`, a `var`, or a typed variable with an initialiser.
+/// a `late`, a `var`, or a typed variable, with an initialiser or without
+/// one (`NativeFinalizer? _cache;`).
 final _topLevelVariable = RegExp(
-  r'^(?:final|late|var)\b|^(?!const\b)[A-Za-z_][\w<>?, ]*\s+_?\w+\s*=[^=>]',
+  r'^(?:final|late|var)\b|'
+  r'^(?!(?:const|class|enum|abstract|base|sealed|mixin|extension|typedef|'
+  r'import|export|part|library|return|void|static|external)\b)'
+  r'[A-Za-z_][\w<>?,. ]*\s+_?\w+\s*(?:=[^=>]|;)',
 );
 
 void main() {
@@ -36,6 +40,12 @@ void main() {
   test('the check sees a top-level final when there is one', () {
     expect(_topLevelVariable.hasMatch('final int _x = sizeOf<T>();'), isTrue);
     expect(_topLevelVariable.hasMatch('int _count = 0;'), isTrue);
+    expect(_topLevelVariable.hasMatch('NativeFinalizer? _cache;'), isTrue,
+        reason: 'no initialiser is still state');
+    expect(_topLevelVariable.hasMatch('Map<String, int> _seen;'), isTrue);
+    expect(_topLevelVariable.hasMatch('class _Unset {'), isFalse);
+    expect(_topLevelVariable.hasMatch('void _writable(Ref ref) {'), isFalse);
+    expect(_topLevelVariable.hasMatch("import 'dart:ffi';"), isFalse);
     expect(_topLevelVariable.hasMatch('const Absent absent = Absent._();'),
         isFalse);
     expect(_topLevelVariable.hasMatch('  final x = 1;'), isFalse,
