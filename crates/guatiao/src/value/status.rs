@@ -12,16 +12,26 @@
 #![forbid(unsafe_code)]
 #![allow(non_camel_case_types)]
 
+use core::fmt;
+
 use super::error::ValueError;
 
-/// What an entry point reports.
+/// What an entry point reports: 0 is success and everything else is
+/// failure.
 ///
-/// The numbering is wider than the list because the space may be shared
-/// with a host's own, so one `switch` covers both. The whole contract is
-/// that 0 is success and everything else is failure.
+/// An integer, never an enum: the space may be shared with a host's own
+/// codes, so one `switch` covers both, and a code nobody here defines is
+/// still a status. The codes this crate defines are `GUATIAO_OK` and the
+/// `GUATIAO_ERR_*` constants.
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Status(u32);
+
+/// The codes this crate defines for a `guatiao_status`, as named
+/// constants. No slot, field or return value has this type: each is a
+/// `guatiao_status`, so a code outside this list is still a value of it.
 #[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Status {
+enum StatusCode {
     /// The operation happened.
     GUATIAO_OK = 0,
     /// A value could not be stored: text that is not a number, or bytes
@@ -50,6 +60,102 @@ pub enum Status {
     GUATIAO_ERR_INTERNAL = 100,
 }
 
+/// cbindgen:ignore
+impl Status {
+    /// The operation happened.
+    pub const GUATIAO_OK: Status = Status(StatusCode::GUATIAO_OK as u32);
+    /// A value could not be stored: text that is not a number, or bytes
+    /// that are not UTF-8. Nothing was written.
+    pub const GUATIAO_ERR_BAD_VALUE: Status = Status(StatusCode::GUATIAO_ERR_BAD_VALUE as u32);
+    /// The allocator could not satisfy the request, or was unusable.
+    /// Nothing was written.
+    pub const GUATIAO_ERR_ALLOC: Status = Status(StatusCode::GUATIAO_ERR_ALLOC as u32);
+    /// The operation does not apply to this value's kind.
+    pub const GUATIAO_ERR_WRONG_KIND: Status = Status(StatusCode::GUATIAO_ERR_WRONG_KIND as u32);
+    /// A key or index was not there.
+    pub const GUATIAO_ERR_NOT_FOUND: Status = Status(StatusCode::GUATIAO_ERR_NOT_FOUND as u32);
+    /// A required pointer was null.
+    pub const GUATIAO_ERR_NULL: Status = Status(StatusCode::GUATIAO_ERR_NULL as u32);
+    /// The thing asked is gone: a freed registry, asked through the
+    /// services a library kept.
+    pub const GUATIAO_ERR_GONE: Status = Status(StatusCode::GUATIAO_ERR_GONE as u32);
+    /// What was asked is not something this side offers: a library with
+    /// no `unload` slot, asked to unload.
+    pub const GUATIAO_ERR_UNSUPPORTED: Status = Status(StatusCode::GUATIAO_ERR_UNSUPPORTED as u32);
+    /// Not now: something is still in use. A library answers this from
+    /// its `unload` slot while anything it handed out is alive.
+    pub const GUATIAO_ERR_BUSY: Status = Status(StatusCode::GUATIAO_ERR_BUSY as u32);
+    /// A callback unwound, or a panic was caught here. The operation did
+    /// not happen; the process is still usable.
+    pub const GUATIAO_ERR_INTERNAL: Status = Status(StatusCode::GUATIAO_ERR_INTERNAL as u32);
+
+    /// Whether this is [`Status::GUATIAO_OK`].
+    #[must_use]
+    pub const fn is_ok(self) -> bool {
+        self.0 == 0
+    }
+
+    /// The name of a code this crate defines, or `None` for any other.
+    fn name(self) -> Option<&'static str> {
+        Some(match self {
+            Status::GUATIAO_OK => "GUATIAO_OK",
+            Status::GUATIAO_ERR_BAD_VALUE => "GUATIAO_ERR_BAD_VALUE",
+            Status::GUATIAO_ERR_ALLOC => "GUATIAO_ERR_ALLOC",
+            Status::GUATIAO_ERR_WRONG_KIND => "GUATIAO_ERR_WRONG_KIND",
+            Status::GUATIAO_ERR_NOT_FOUND => "GUATIAO_ERR_NOT_FOUND",
+            Status::GUATIAO_ERR_NULL => "GUATIAO_ERR_NULL",
+            Status::GUATIAO_ERR_GONE => "GUATIAO_ERR_GONE",
+            Status::GUATIAO_ERR_UNSUPPORTED => "GUATIAO_ERR_UNSUPPORTED",
+            Status::GUATIAO_ERR_BUSY => "GUATIAO_ERR_BUSY",
+            Status::GUATIAO_ERR_INTERNAL => "GUATIAO_ERR_INTERNAL",
+            _ => return None,
+        })
+    }
+}
+
+impl From<u32> for Status {
+    fn from(code: u32) -> Status {
+        Status(code)
+    }
+}
+
+impl From<Status> for u32 {
+    fn from(status: Status) -> u32 {
+        status.0
+    }
+}
+
+/// The constant's name for a code this crate defines, `Status(n)` for
+/// any other.
+impl fmt::Debug for Status {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.name() {
+            Some(name) => f.write_str(name),
+            None => write!(f, "Status({})", self.0),
+        }
+    }
+}
+
+/// What happened, as one lowercase clause; a code this crate does not
+/// define displays as its number.
+impl fmt::Display for Status {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match *self {
+            Status::GUATIAO_OK => "ok",
+            Status::GUATIAO_ERR_BAD_VALUE => "a value could not be stored",
+            Status::GUATIAO_ERR_ALLOC => "the allocator refused",
+            Status::GUATIAO_ERR_WRONG_KIND => "the operation does not apply to this kind",
+            Status::GUATIAO_ERR_NOT_FOUND => "not found",
+            Status::GUATIAO_ERR_NULL => "a required pointer was null",
+            Status::GUATIAO_ERR_GONE => "gone",
+            Status::GUATIAO_ERR_UNSUPPORTED => "unsupported",
+            Status::GUATIAO_ERR_BUSY => "busy",
+            Status::GUATIAO_ERR_INTERNAL => "internal error",
+            Status(code) => return write!(f, "status {code}"),
+        })
+    }
+}
+
 impl From<ValueError> for Status {
     fn from(e: ValueError) -> Status {
         match e {
@@ -65,5 +171,25 @@ impl From<ValueError> for Status {
 impl From<core::str::Utf8Error> for Status {
     fn from(e: core::str::Utf8Error) -> Status {
         Status::from(ValueError::from(e))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Status;
+
+    #[test]
+    fn any_code_is_a_status() {
+        let foreign = Status::from(1);
+        assert!(!foreign.is_ok());
+        assert_ne!(foreign, Status::GUATIAO_OK);
+        assert_eq!(u32::from(foreign), 1);
+        assert_eq!(alloc::format!("{foreign}"), "status 1");
+        assert_eq!(alloc::format!("{foreign:?}"), "Status(1)");
+        assert!(Status::GUATIAO_OK.is_ok());
+        assert_eq!(
+            alloc::format!("{:?}", Status::GUATIAO_ERR_NULL),
+            "GUATIAO_ERR_NULL"
+        );
     }
 }

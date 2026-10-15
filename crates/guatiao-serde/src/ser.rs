@@ -63,12 +63,6 @@ impl Serialize for Serializable<'_> {
         }
 
         match self.value.tag() {
-            // A tag this build does not know. Writing anything at all
-            // would put something in a document that a reader believes;
-            // refusing says what actually happened.
-            Err(_) => Err(S::Error::custom(
-                "a value tag this build does not know, which cannot be written",
-            )),
             // "There is no value here" — which a map expresses by not
             // holding the key. Reaching one means a list held it, and
             // `null` would turn "nothing" into "nothing, deliberately".
@@ -147,6 +141,12 @@ impl Serialize for Serializable<'_> {
                 }
                 map.end()
             }
+            // A tag this build does not know. Writing anything at all
+            // would put something in a document that a reader believes;
+            // refusing says what actually happened.
+            _ => Err(S::Error::custom(
+                "a value tag this build does not know, which cannot be written",
+            )),
         }
     }
 }
@@ -156,8 +156,8 @@ impl Serialize for Serializable<'_> {
 /// **Refused, the same way an unknown tag is.** A node this build cannot
 /// read is one some other producer built wrong, and writing `0`, `false`
 /// or `""` for it would put a value in the document that a reader
-/// believes -- a silent substitution, where the unknown-tag arm a few
-/// lines up says what actually happened.
+/// believes -- a silent substitution, where the unknown-tag arm says
+/// what actually happened.
 fn malformed<S: Serializer>(what: &str) -> S::Error {
     S::Error::custom(format!(
         "a node tagged as {what} whose payload cannot be read, which cannot be written"
