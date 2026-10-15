@@ -45,6 +45,11 @@ guatiao = { path = "../guatiao", version = "=0.0.0-alpha.0" }
 # The proc-macro half of `derive`, with only the form derive turned on.
 guatiao-derive = { path = "../guatiao-derive", version = "=0.0.0-alpha.0", optional = true, features = ["form"] }
 
+[dev-dependencies]
+# A provider carrying a form, registered as a linked library: the test
+# that `#[provider(.., form = ..)]` and this crate agree on the key.
+guatiao = { path = "../guatiao", features = ["provider", "load"] }
+
 [build-dependencies]
 # Optional, enabled only by `c-header`, so an ordinary build renders
 # nothing and pulls in no generator.

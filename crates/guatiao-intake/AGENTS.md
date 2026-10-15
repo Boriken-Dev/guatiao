@@ -250,7 +250,10 @@ struct T {
 // refused together: flattened into this screen, or given a screen of
 // its own.
 trait Screen { fn form(Alloc) -> Result<Value, ValueError>; fn hints(prefix: &str, into: Form) -> Form; }
+#[form(crate = ::acme_kinds::guatiao_intake)]  // on the type: a re-export of this crate; guatiao is reached through it
 T::form(alloc)                                 // sections, then hints at the root
+PROVIDER_FORM_KEY = "form"                     // #[provider(.., form = T)] writes T::form into a descriptor's meta here;
+                                               // a host: offer.meta().and_then(|m| m.get(PROVIDER_FORM_KEY)).and_then(FormRef::new)
 Auth::hints("session.auth.", Form::new())      // a member's hints under a prefix; no sections
 Form::alloc() -> Alloc                          // the builder's allocator, for hints built beside it
 

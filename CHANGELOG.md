@@ -57,6 +57,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `#[derive(Form)]`'s keys follow. A closed vocabulary in lower case is
   then a unit enum, validated by its schema, rather than a string with a
   `pattern`.
+- **A provider can carry its form.** `#[provider(.., form = Ty)]`, for a
+  `Ty` deriving `guatiao_intake::Form`, builds `Ty`'s screen into the
+  descriptor's `meta` under `form` (`guatiao_intake::PROVIDER_FORM_KEY`),
+  so a host shows a provider's configuration with its sections, labels
+  and hints rather than bare section ids. `ProviderPartsBuilder::meta`
+  sets a hand-built descriptor's `meta`. **`#[derive(Form)]` takes
+  `#[form(crate = <path>)]`**, a re-export of `guatiao_intake`, and now
+  reaches `guatiao` through `guatiao_intake` alone.
 - **Borrowed object arguments.** A kind method may take `&mut dyn K`, or
   `&dyn K`, for an object kind `K`: the caller's value is lent for that
   call. It crosses as a `const guatiao_object *` on the caller's stack,

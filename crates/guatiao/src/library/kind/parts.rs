@@ -50,6 +50,8 @@ pub struct ProviderParts {
     tables: Vec<KindTable<'static>>,
     #[allow(dead_code)]
     config: Vec<Value>,
+    #[allow(dead_code)]
+    meta: Vec<Map>,
     info: ProviderInfo<'static>,
 }
 
@@ -74,6 +76,7 @@ impl ProviderParts {
             kinds: Vec::new(),
             tables: Vec::new(),
             config: None,
+            meta: None,
             ctx: core::ptr::null_mut(),
             available: None,
             create: None,
@@ -99,6 +102,7 @@ pub struct ProviderPartsBuilder {
     kinds: Vec<&'static str>,
     tables: Vec<KindTable<'static>>,
     config: Option<Value>,
+    meta: Option<Map>,
     ctx: *mut c_void,
     available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
     create: Option<CreateFn>,
@@ -134,6 +138,13 @@ impl ProviderPartsBuilder {
     /// The schema of the configuration an instance is built from.
     pub fn config(mut self, schema: Value) -> Self {
         self.config = Some(schema);
+        self
+    }
+
+    /// Whatever else it declares, as a map a host reads: `notices`, or a
+    /// form under `form`. Absent by default.
+    pub fn meta(mut self, meta: Map) -> Self {
+        self.meta = Some(meta);
         self
     }
 
@@ -186,6 +197,7 @@ impl ProviderPartsBuilder {
             kinds,
             tables,
             config,
+            meta,
             ctx,
             available,
             create,
@@ -193,6 +205,7 @@ impl ProviderPartsBuilder {
         } = self;
         let kinds: Vec<Str> = kinds.iter().map(|k| Str::new(k)).collect();
         let config: Vec<Value> = config.into_iter().collect();
+        let meta: Vec<Map> = meta.into_iter().collect();
         // The heap storage does not move when the struct does.
         let info = ProviderInfo {
             struct_size: size_of::<ProviderInfo>() as u32,
@@ -210,7 +223,9 @@ impl ProviderPartsBuilder {
                 .map_or(core::ptr::null(), |v| v as *const Value),
             vtable: core::ptr::null(),
             ctx,
-            meta: crate::value::types::MaybeNull::null(),
+            meta: crate::value::types::MaybeNull::from_ptr(
+                meta.first().map_or(core::ptr::null(), |m| m as *const Map),
+            ),
             // SAFETY: as `id`.
             version: unsafe { crate::library::raw::view_of_owned(&version) },
             available,
@@ -229,6 +244,7 @@ impl ProviderPartsBuilder {
             kinds,
             tables,
             config,
+            meta,
             info,
         }
     }
@@ -295,9 +311,9 @@ impl LibraryParts {
     }
 }
 
-/// FNV-1a over a string, at compile time. The kind macro emits the
-/// normalised signature string and this hashes it, so the number is
-/// never computed by the macro itself.
+/// FNV-1a over a string, at compile time: the function the kind macro
+/// computes each table's hash with, as a literal. The two are pinned
+/// against each other by test.
 #[doc(hidden)]
 pub const fn fnv1a(s: &str) -> u32 {
     let bytes = s.as_bytes();

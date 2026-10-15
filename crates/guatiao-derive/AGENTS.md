@@ -94,14 +94,17 @@ through a re-export and names no such dependency itself:
 | `ToValue`, `FromValue`, `Schema` | `#[map(crate = ::acme_kinds::guatiao)]` on the struct or enum |
 | `#[derive(Provider)]` | `#[provider(Greeter, crate = ::acme_kinds::guatiao)]` |
 | `#[kind]` | `#[acme_kinds::guatiao::kind(crate = ::acme_kinds::guatiao)]` |
+| `#[derive(Form)]` | `#[form(crate = ::acme_kinds::guatiao_intake)]`: the path is `guatiao_intake`'s, and `guatiao`'s own items are reached through it |
 
 Every path the expansion would root at `::guatiao` is rooted at the
 path instead, so a crate that defines kinds can `pub use guatiao;` and
 be the one thing its providers depend on -- one version to agree on
 rather than two that must match. `providers!` needs nothing: it is
 `macro_rules!` and already resolves through the path it was called by
-(`acme_kinds::guatiao::providers!(Tuner);`). `#[derive(Form)]` has no
-such key.
+(`acme_kinds::guatiao::providers!(Tuner);`). `#[derive(Form)]` roots
+every path at `::guatiao_intake` (reaching `guatiao` through its hidden
+`__private` re-export), so its `crate =` names that crate's re-export and
+a consumer of the form derive needs no `guatiao` dependency of its own.
 
 **Enums**, in two shapes. Refused otherwise, with a sentence saying why.
 
@@ -272,6 +275,7 @@ implementation fills the same table and hands `{table, size, ctx}` as a
 | `config = C` | the provider is **built from `C`**: schema through `C: Schema`, decoded through `C: FromValue`, built through `Self: TryFrom<C, Error: Into<ProviderError>>` (`C = Self` is the identity); emits the `create`/`destroy` slots, so a host gets an `Instance` per configuration whose address is the `ctx` | none: the type is its one instance |
 | `new = path` / `new_with_host = path` | `fn() -> Self` / `fn(Host) -> Self` building the default instance (the descriptor's `ctx`); with `config` and neither, there is no default instance | `Default`, except with `config` |
 | `available = path` | `fn(&Self) -> Result<(), &'static str>`, asked on every call of the default instance; refused when there is none | always available |
+| `form = Ty` | `Ty` derives `Form` (from `guatiao-intake`): its screen is built into the descriptor's `meta` under `form` (`guatiao_intake::PROVIDER_FORM_KEY`), so a host shows the configuration with its sections and hints; reached through the hidden `Ty::__guatiao_form` the Form derive writes, so the provider names no `guatiao_intake` path | no `meta` |
 | `crate = path` | where the expansion finds `guatiao`, for a provider that reaches it through a re-export | `::guatiao` |
 
 Emits, inside a `const _` block: one `static` table per kind

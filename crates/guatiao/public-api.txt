@@ -467,6 +467,7 @@ pub fn guatiao::library::kind::ProviderPartsBuilder::create(self, guatiao::libra
 pub fn guatiao::library::kind::ProviderPartsBuilder::ctx(self, *mut core::ffi::c_void) -> Self
 pub fn guatiao::library::kind::ProviderPartsBuilder::destroy(self, guatiao::library::raw::DestroyFn) -> Self
 pub fn guatiao::library::kind::ProviderPartsBuilder::kinds(self, &[&'static str]) -> Self
+pub fn guatiao::library::kind::ProviderPartsBuilder::meta(self, guatiao::value::types::map::Map) -> Self
 pub fn guatiao::library::kind::ProviderPartsBuilder::name(self, &str) -> Self
 pub fn guatiao::library::kind::ProviderPartsBuilder::table(self, guatiao::library::desc::KindTable<'static>) -> Self
 pub fn guatiao::library::kind::ProviderPartsBuilder::version(self, &str) -> Self

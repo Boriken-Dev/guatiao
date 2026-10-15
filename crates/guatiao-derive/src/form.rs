@@ -119,7 +119,7 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
             format!("{LABEL} refuses a generic type: a screen is declared for one type"),
         ));
     }
-    let sections = read_sections(&ast.attrs)?;
+    let (sections, krate) = read_sections(&ast.attrs)?;
     let fields = match &ast.data {
         Data::Struct(data) => match &data.fields {
             Fields::Named(named) => read_fields(named.named.iter(), rename_all(&ast.attrs)?)?,
@@ -177,21 +177,35 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
             ));
         }
     };
-    Ok(emit(&ast.ident, &sections, &fields))
+    // Every path is rooted at `::guatiao_intake`, guatiao's own through
+    // its `__private` re-export, so `crate =` moves them all at once.
+    Ok(crate::krate::reroot_crate(
+        emit(&ast.ident, &sections, &fields),
+        "guatiao_intake",
+        krate.as_ref(),
+    ))
 }
 
-fn read_sections(attrs: &[Attribute]) -> syn::Result<Vec<SectionDecl>> {
+/// The sections declared on the type, in display order, and its
+/// `crate = <path>`: where the expansion finds `guatiao_intake`.
+fn read_sections(attrs: &[Attribute]) -> syn::Result<(Vec<SectionDecl>, Option<syn::Path>)> {
     let mut sections = Vec::new();
+    let mut krate = None;
     for attr in attrs {
         if !attr.path().is_ident("form") {
             continue;
         }
         attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("crate") {
+                krate = Some(meta.value()?.parse()?);
+                return Ok(());
+            }
             if !meta.path.is_ident("section") {
                 return Err(meta.error(format!(
                     "unrecognised `#[form(..)]` option on a type. {LABEL} knows \
                      `section(id = \"..\", label = \"..\", help = \"..\")`, repeated in \
-                     display order; hints go on the fields"
+                     display order, and `crate = <path>`, where `guatiao_intake` is \
+                     re-exported; hints go on the fields"
                 )));
             }
             let mut id = None;
@@ -218,7 +232,7 @@ fn read_sections(attrs: &[Attribute]) -> syn::Result<Vec<SectionDecl>> {
             Ok(())
         })?;
     }
-    Ok(sections)
+    Ok((sections, krate))
 }
 
 /// A struct's `#[map(rename_all = "..")]`, so a key here is the key the
@@ -432,7 +446,7 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
             {
                 quote! {
                     __form = __form.field(
-                        &::guatiao::__private::alloc::format!("{}{}", __prefix, #key),
+                        &::guatiao_intake::__private::guatiao::__private::alloc::format!("{}{}", __prefix, #key),
                         ::guatiao_intake::Hints::new_in(__alloc)
                             #(#widget)* #(#placeholder)* #(#unit)* #(#visible)* #(#form)*,
                     );
@@ -444,7 +458,7 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
         let nested = if f.hints.nested {
             quote! {
                 __form = <#ty as ::guatiao_intake::Screen>::hints(
-                    &::guatiao::__private::alloc::format!("{}{}.", __prefix, #key),
+                    &::guatiao_intake::__private::guatiao::__private::alloc::format!("{}{}.", __prefix, #key),
                     __form,
                 );
             }
@@ -458,8 +472,11 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
         #[automatically_derived]
         impl ::guatiao_intake::Screen for #name {
             fn form(
-                __alloc: ::guatiao::Alloc,
-            ) -> ::core::result::Result<::guatiao::Value, ::guatiao::ValueError> {
+                __alloc: ::guatiao_intake::__private::guatiao::Alloc,
+            ) -> ::core::result::Result<
+                ::guatiao_intake::__private::guatiao::Value,
+                ::guatiao_intake::__private::guatiao::ValueError,
+            > {
                 let mut __form = ::guatiao_intake::Form::new_in(__alloc);
                 #(#sections)*
                 __form = <#name as ::guatiao_intake::Screen>::hints("", __form);
@@ -471,6 +488,21 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
                 let __alloc = __form.alloc();
                 #(#hints)*
                 __form
+            }
+        }
+
+        #[automatically_derived]
+        impl #name {
+            /// This type's screen, by a name `#[provider(.., form = ..)]`
+            /// reaches without naming `guatiao_intake`.
+            #[doc(hidden)]
+            pub fn __guatiao_form(
+                __alloc: ::guatiao_intake::__private::guatiao::Alloc,
+            ) -> ::core::result::Result<
+                ::guatiao_intake::__private::guatiao::Value,
+                ::guatiao_intake::__private::guatiao::ValueError,
+            > {
+                <#name as ::guatiao_intake::Screen>::form(__alloc)
             }
         }
     }
@@ -504,7 +536,11 @@ mod tests {
         )
         .unwrap();
         let file: syn::File = syn::parse_str(&out).expect("parses");
-        assert_eq!(file.items.len(), 1);
+        assert_eq!(
+            file.items.len(),
+            2,
+            "the `Screen` impl and `__guatiao_form`"
+        );
         assert!(out.contains(
             "Section :: new_in (__alloc , \"net\") . label (\"Network\") . help (\"Where\")"
         ));
@@ -514,10 +550,37 @@ mod tests {
         );
         assert!(out.contains("format ! (\"{}{}\" , __prefix , \"api-token\") , :: guatiao_intake :: Hints :: new_in (__alloc) . widget (\"password\")"));
         assert!(out.contains(". placeholder (\"/etc/ca.pem\") . visible_when (\"verify\" , true)"));
-        assert!(out.contains("< Auth as :: guatiao_intake :: Screen > :: hints (& :: guatiao :: __private :: alloc :: format ! (\"{}{}.\" , __prefix , \"auth\") , __form ,)"));
+        assert!(out.contains("< Auth as :: guatiao_intake :: Screen > :: hints (& :: guatiao_intake :: __private :: guatiao :: __private :: alloc :: format ! (\"{}{}.\" , __prefix , \"auth\") , __form ,)"));
         assert!(
             !out.contains("\"host\"") && !out.contains("\"plain\"") && !out.contains("\"cache\""),
             "a field without hints is not named: {out}"
+        );
+    }
+
+    /// With `crate = <path>` nothing is rooted at `::guatiao_intake` or at
+    /// `::guatiao`: a consumer reaching both through a re-export names
+    /// neither.
+    #[test]
+    fn a_crate_path_reroots_every_generated_path() {
+        let out = expand_str(
+            "#[form(crate = ::kinds::guatiao_intake, section(id = \"a\"))] struct S { #[form(widget = \"x\")] a: i64, #[form(nested)] b: B }",
+        )
+        .unwrap();
+        assert!(
+            out.contains(":: kinds :: guatiao_intake :: Screen"),
+            "{out}"
+        );
+        assert!(
+            out.contains(":: kinds :: guatiao_intake :: __private :: guatiao :: Alloc"),
+            "{out}"
+        );
+        let rest = out.replace(":: kinds :: guatiao_intake", "");
+        assert!(!rest.contains(":: guatiao_intake"), "{rest}");
+        assert!(
+            !rest
+                .replace("__private :: guatiao ::", "")
+                .contains(":: guatiao ::"),
+            "guatiao is reached through the intake root alone: {rest}"
         );
     }
 
