@@ -376,6 +376,14 @@ impl ToValue for f64 {
     }
 }
 
+/// As its own shortest text: `1.1f32` writes `1.1`.
+impl ToValue for f32 {
+    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+        let text = crate::value::types::number::float32_text(*self)?;
+        Ok(Number::new_in(alloc, &text)?.into())
+    }
+}
+
 impl ToValue for str {
     fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
         Ok(Text::new_in(alloc, self)?.into())
@@ -488,7 +496,7 @@ macro_rules! try_from_value {
 }
 
 try_from_value!(
-    bool, f64, String, Bytes, i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize,
+    bool, f32, f64, String, Bytes, i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize,
 );
 
 /// Text borrowed from the value rather than copied out of it, which no
@@ -584,6 +592,18 @@ impl FromValue for f64 {
             .ok()
             .filter(|x| x.is_finite())
             .ok_or_else(|| MapError::bad_value("a number with a finite f64 value"))
+    }
+}
+
+/// The nearest `f32`, refused when there is no finite one: `1e39` is past
+/// `f32::MAX`.
+impl FromValue for f32 {
+    fn from_value(value: &Value) -> Result<f32, MapError> {
+        let text = number_text(value)?;
+        text.parse::<f32>()
+            .ok()
+            .filter(|x| x.is_finite())
+            .ok_or_else(|| MapError::bad_value("a number with a finite f32 value"))
     }
 }
 

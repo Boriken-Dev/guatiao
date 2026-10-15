@@ -62,6 +62,17 @@ fn float_text(v: f64) -> Result<String, ValueError> {
     }
 }
 
+/// An `f32`'s own shortest decimal text, so `1.1f32` is `1.1` rather than
+/// the `f64` it widens to (`1.100000023841858`); refused as [`float_text`]
+/// refuses.
+pub(crate) fn float32_text(v: f32) -> Result<String, ValueError> {
+    if v.is_finite() {
+        Ok(v.to_string())
+    } else {
+        Err(ValueError::NotANumber)
+    }
+}
+
 impl Number {
     /// The number `ptr` points at, its grammar checked: how a number C
     /// hands over by pointer is read.
@@ -191,7 +202,7 @@ impl TryFrom<f32> for Number {
     type Error = ValueError;
 
     fn try_from(v: f32) -> Result<Number, ValueError> {
-        Number::try_from(f64::from(v))
+        Number::new(&float32_text(v)?)
     }
 }
 

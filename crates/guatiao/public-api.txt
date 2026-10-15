@@ -2357,6 +2357,8 @@ impl guatiao::value::convert::FromValue for alloc::string::String
 pub fn alloc::string::String::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for bool
 pub fn bool::from_value(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for f32
+pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
 pub fn f64::from_value(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
@@ -2399,6 +2401,8 @@ impl guatiao::value::convert::ToValue for alloc::string::String
 pub fn alloc::string::String::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for bool
 pub fn bool::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for f32
+pub fn f32::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for f64
 pub fn f64::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
@@ -3596,6 +3600,9 @@ pub fn alloc::string::String::try_from(&guatiao::value::value::Value) -> core::r
 impl core::convert::TryFrom<&guatiao::value::value::Value> for bool
 pub type bool::Error = guatiao::value::convert::MapError
 pub fn bool::try_from(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl core::convert::TryFrom<&guatiao::value::value::Value> for f32
+pub type f32::Error = guatiao::value::convert::MapError
+pub fn f32::try_from(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl core::convert::TryFrom<&guatiao::value::value::Value> for f64
 pub type f64::Error = guatiao::value::convert::MapError
 pub fn f64::try_from(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
@@ -3813,6 +3820,9 @@ pub fn alloc::string::String::try_from(&guatiao::value::value::Value) -> core::r
 impl core::convert::TryFrom<&guatiao::value::value::Value> for bool
 pub type bool::Error = guatiao::value::convert::MapError
 pub fn bool::try_from(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl core::convert::TryFrom<&guatiao::value::value::Value> for f32
+pub type f32::Error = guatiao::value::convert::MapError
+pub fn f32::try_from(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl core::convert::TryFrom<&guatiao::value::value::Value> for f64
 pub type f64::Error = guatiao::value::convert::MapError
 pub fn f64::try_from(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
@@ -4626,6 +4636,9 @@ pub fn alloc::string::String::try_from(&guatiao::value::value::Value) -> core::r
 impl core::convert::TryFrom<&guatiao::value::value::Value> for bool
 pub type bool::Error = guatiao::value::convert::MapError
 pub fn bool::try_from(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl core::convert::TryFrom<&guatiao::value::value::Value> for f32
+pub type f32::Error = guatiao::value::convert::MapError
+pub fn f32::try_from(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl core::convert::TryFrom<&guatiao::value::value::Value> for f64
 pub type f64::Error = guatiao::value::convert::MapError
 pub fn f64::try_from(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
@@ -4756,6 +4769,8 @@ impl guatiao::value::convert::FromValue for alloc::string::String
 pub fn alloc::string::String::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for bool
 pub fn bool::from_value(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for f32
+pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
 pub fn f64::from_value(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
@@ -4798,6 +4813,8 @@ impl guatiao::value::convert::ToValue for alloc::string::String
 pub fn alloc::string::String::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for bool
 pub fn bool::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for f32
+pub fn f32::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for f64
 pub fn f64::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
@@ -5557,6 +5574,9 @@ pub fn alloc::string::String::try_from(&guatiao::value::value::Value) -> core::r
 impl core::convert::TryFrom<&guatiao::value::value::Value> for bool
 pub type bool::Error = guatiao::value::convert::MapError
 pub fn bool::try_from(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl core::convert::TryFrom<&guatiao::value::value::Value> for f32
+pub type f32::Error = guatiao::value::convert::MapError
+pub fn f32::try_from(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl core::convert::TryFrom<&guatiao::value::value::Value> for f64
 pub type f64::Error = guatiao::value::convert::MapError
 pub fn f64::try_from(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
@@ -5687,6 +5707,8 @@ impl guatiao::value::convert::FromValue for alloc::string::String
 pub fn alloc::string::String::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for bool
 pub fn bool::from_value(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for f32
+pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
 pub fn f64::from_value(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
@@ -5795,6 +5817,8 @@ impl guatiao::value::convert::ToValue for alloc::string::String
 pub fn alloc::string::String::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for bool
 pub fn bool::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for f32
+pub fn f32::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for f64
 pub fn f64::to_value(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes

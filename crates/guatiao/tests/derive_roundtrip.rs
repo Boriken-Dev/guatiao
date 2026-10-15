@@ -360,3 +360,27 @@ fn a_schema_attribute_is_accepted_by_the_other_two_derives() {
         );
     });
 }
+
+/// An `f32` field: the three derives take it, it writes its own shortest
+/// text, and a number with no finite `f32` is refused rather than read as
+/// infinity.
+#[test]
+fn an_f32_field_round_trips_and_refuses_what_it_cannot_hold() {
+    #[derive(Debug, PartialEq, guatiao::Schema, guatiao::ToValue, guatiao::FromValue)]
+    struct Ratio {
+        r: f32,
+    }
+    with_alloc(|alloc| {
+        let value = Ratio { r: 1.1 }.to_value(alloc).unwrap();
+        let map: &Map = TryAsRef::<Map>::try_as_ref(&value).unwrap();
+        assert_eq!(&**TryAsRef::<Number>::try_as_ref(&map["r"]).unwrap(), "1.1");
+        assert_eq!(Ratio::from_value(&value).unwrap(), Ratio { r: 1.1 });
+
+        let mut too_big = Map::new_in(alloc);
+        too_big.set("r", Number::new_in(alloc, "1e39").unwrap());
+        let e = Ratio::from_value(&Value::from(too_big)).unwrap_err();
+        assert!(matches!(e, MapError::BadValue { .. }), "{e:?}");
+        let max = Value::try_from(f32::MAX).unwrap();
+        assert_eq!(f32::try_from(&max).unwrap(), f32::MAX);
+    });
+}
