@@ -71,7 +71,8 @@
 //! JSON Schema validator refuses exactly what [`validate`](super::validate)
 //! refuses. A key nobody declared is a misspelling worth reporting, and
 //! silently dropping one is how somebody ends up convinced a setting does
-//! nothing.
+//! nothing. A document from elsewhere that does not say is read as JSON
+//! Schema reads it, and accepts one.
 //!
 //! # Rules a reader must follow
 //!
@@ -177,8 +178,9 @@ pub const PROPERTIES: &str = "properties";
 /// `finish`.
 pub const REQUIRED: &str = "required";
 /// `additionalProperties`: written as `false` on every object the
-/// builders seal, because [`validate`](super::validate) refuses an
-/// undeclared key and the document should say so.
+/// builders seal, so that a document refuses an undeclared key and says
+/// so. [`validate`](super::validate) refuses one under `false`, checks one
+/// against a schema here, and accepts one when the key is absent.
 pub const ADDITIONAL_PROPERTIES: &str = "additionalProperties";
 
 // --- an array ---------------------------------------------------------

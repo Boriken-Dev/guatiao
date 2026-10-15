@@ -12,22 +12,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`schema::redact(schema, &value, placeholder)`** (and `redact_in`):
   a copy of a value with every secret replaced -- each field whose schema
   sets `x-sensitive` or `writeOnly`, at any depth, through maps, lists and
-  a variant's selected arm. What the schema does not describe is hidden
-  too.
+  a variant's selected arm, and on the schema an optional wraps or any
+  `allOf` member. A value a union accepts is hidden when any accepting arm
+  is marked, and whole when the accepting arms would redact it
+  differently. What the schema does not describe is hidden too, a
+  discriminant that is not text included, and so is everything under a
+  `$ref`: run `inline_refs` first.
 - **`schema::inline_refs`** (and `inline_refs_in`): a copy of a schema with
   each local `$ref: "#/$defs/Name"` replaced by its definition, so the
   documents a serde-based generator writes are read as they are. A cycle,
   a remote reference or an undefined name stays as written and reads as a
-  kind to skip.
+  kind to skip. The copy is budgeted on what it copies, nodes plus bytes
+  of text (32 times the document plus 256 Ki), so definitions that name
+  each other twice stop growing; a reference naming a reference is
+  followed in place, not as a level of nesting; and under `default`,
+  `const`, `examples` and `enum` a `{"$ref": ..}` is data.
 - **The reader gives generator shapes their meaning.** `type: [T, "null"]`
   and `anyOf: [X, null]` read as an optional `T`/`X`
   (`FieldRef::is_nullable()`); `enum` of any type, a lone `const` and a
   `oneOf` of `const`s read as `Kind::Enum`, `choices()` listing strings and
-  numbers; `Kind::Null` is `type: "null"`; a shape not read at all is
-  `Kind::Unknown`, never `Kind::Missing`.
+  numbers; `Kind::Null` is `type: "null"`; a lone `allOf` member -- the
+  `{"description": .., "allOf": [{"$ref": ..}]}` written for a documented
+  field -- reads as that member. A shape not read at all, and a schema
+  that constrains nothing (`{}`, prose alone, an `allOf` of several, the
+  schema `true`, which is now a field too), is `Kind::Unknown`;
+  `Kind::Missing` is left for a value that is not a schema. Beside an
+  `enum`, a `type` admitting null makes a field nullable only when null is
+  a member.
 - **`schema::PATTERNS_ENFORCED`**: whether this build checks a `pattern`
-  (the `regex` feature). `vocab` gains `REF`, `DEFS` and `TYPE_NULL`, and
-  the C header their `GUATIAO_KEY_*` macros.
+  (the `regex` feature). `vocab` gains `REF`, `DEFS`, `TYPE_NULL`,
+  `ALL_OF`, `EXCLUSIVE_MINIMUM` and `EXCLUSIVE_MAXIMUM`, and the C header
+  their `GUATIAO_KEY_*` macros.
 - **`ValueError::DuplicateKey`**, the refusal of a field declared twice.
 
 - **`Text` and `Number` compare with `str`**, either way round
@@ -179,9 +194,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   it exports `acme_net_conn_schema`.
 - **`SchemaBuilder::finish`, `KindBuilder::map` and arms refuse a field key
   declared twice** with `ValueError::DuplicateKey`, where the second
-  silently replaced the first and `required` listed the name twice. The
-  builders are `#[must_use]`. `ValueError` is `#[non_exhaustive]`, so a
-  `match` already had a `_` arm.
+  silently replaced the first and `required` listed the name twice, and
+  `KindBuilder::variant` refuses two arms stored as one discriminant the
+  same way. The builders are `#[must_use]`. `ValueError` is
+  `#[non_exhaustive]`, so a `match` already had a `_` arm.
+- **Breaking: a schema that does not say accepts an undeclared key.** An
+  object without `additionalProperties` accepts a key it does not
+  declare, as JSON Schema reads it, and one whose `additionalProperties`
+  is a schema checks the key's value against it; `false` refuses, and
+  every object the builders and the derive seal writes `false`, so their
+  documents refuse what they did. Migration: a hand-written schema that
+  relied on the refusal writes `"additionalProperties": false`.
+- **Breaking: numeric bounds are compared as the exact text that declared
+  them, and every JSON Schema bound is enforced.** `exclusiveMinimum` and
+  `exclusiveMaximum` were carried and ignored; a bound past `i64` (`1e18`
+  on a long integer, `u64::MAX`) was read as no bound. An `enum` beside a
+  `type` now applies both, a `type` admitting null beside an `enum` admits
+  null only as a member, and below a minimum of zero an integer spelled
+  with a minus sign (`-0`) is refused, as an unsigned type refuses it.
+  Migration: none for a value the type it describes reads; a value one of
+  these keywords refuses was accepted by mistake.
+- **Breaking: a derived schema says what `FromValue` reads.**
+  `Option<T>`'s kind is `T`'s accepting null as well -- `type: [T,
+  "null"]`, or `anyOf: [T, {"type": "null"}]` for an enum, a union or a
+  variant -- so an explicit null field, a `None` in a `Vec<Option<T>>` and
+  a `None` value in a map of `Option<T>` validate. Integer widths write
+  their bounds as exact digits (a `u64` field's `maximum` is
+  `18446744073709551615`, `i128`'s `minimum` its own), and `f32` writes
+  the exclusive bounds past which no finite `f32` exists, so `2^64` for a
+  `u64` and `1e39` for an `f32` are refused by both. `Kind::Int` reads
+  `None` for a bound past `i64`, as before. Migration: a consumer reading
+  a derived document's `type` as one string reads it through
+  `FieldRef::kind` and `is_nullable`, which take either shape.
 - **`Kind` gains `Null`** (`#[non_exhaustive]`, so a `match` already had a
   `_` arm), and an integer `enum` reads as `Kind::Enum`, not `Kind::Int`.
   A non-integral integer bound rounds inward (`minimum: 1.5` is 2) instead
@@ -378,6 +422,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A `Simple` merge of two lists nested past `MAX_DEPTH` is
+  `MergeError::Build(TooDeep)`** (`GUATIAO_ERR_BAD_VALUE` from
+  `guatiao_merge`), where it overflowed the stack; and a stored absent map
+  entry or list element keeps the earlier value under `Simple`, as it did
+  under `Substitute` and `Deep`, instead of overwriting it with the absent
+  marker.
+- **`validate_map` checks a root that is not a declared object as the
+  value it describes**, so a provider configured by a tagged enum accepts
+  that enum's own value instead of refusing its discriminant as an
+  unknown field.
 - Merge provenance named the wrong layer when a later layer held an absent
   value (it claimed a leaf it did not set) and after a `Simple`-mode
   replace (the replaced subtree's leaves stayed attributed to the layer
