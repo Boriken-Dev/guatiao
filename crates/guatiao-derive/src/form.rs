@@ -50,6 +50,8 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Attribute, Data, DeriveInput, Fields, LitStr, Type};
 
+use crate::rename::RenameRule;
+
 const LABEL: &str = "#[derive(Form)]";
 
 /// Expands the derive, or emits a compile error at the user's span.
@@ -120,7 +122,7 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
     let sections = read_sections(&ast.attrs)?;
     let fields = match &ast.data {
         Data::Struct(data) => match &data.fields {
-            Fields::Named(named) => read_fields(named.named.iter())?,
+            Fields::Named(named) => read_fields(named.named.iter(), rename_all(&ast.attrs)?)?,
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
@@ -145,7 +147,9 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
                     Fields::Unit => {}
                     Fields::Named(named) => {
                         any_fields = true;
-                        fields.extend(read_fields(named.named.iter())?);
+                        // An enum's `rename_all` names its variants, not
+                        // their fields.
+                        fields.extend(read_fields(named.named.iter(), None)?);
                     }
                     Fields::Unnamed(unnamed) => {
                         return Err(syn::Error::new_spanned(
@@ -217,11 +221,34 @@ fn read_sections(attrs: &[Attribute]) -> syn::Result<Vec<SectionDecl>> {
     Ok(sections)
 }
 
-fn read_fields<'a>(fields: impl Iterator<Item = &'a syn::Field>) -> syn::Result<Vec<FieldDecl>> {
+/// A struct's `#[map(rename_all = "..")]`, so a key here is the key the
+/// value derives write. The other container keys are theirs to check.
+fn rename_all(attrs: &[Attribute]) -> syn::Result<Option<RenameRule>> {
+    let mut rule = None;
+    for attr in attrs.iter().filter(|a| a.path().is_ident("map")) {
+        attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("rename_all") {
+                rule = Some(RenameRule::parse(&meta.value()?.parse::<LitStr>()?)?);
+            } else if meta.input.peek(syn::Token![=]) {
+                let _: syn::Expr = meta.value()?.parse()?;
+            }
+            Ok(())
+        })?;
+    }
+    Ok(rule)
+}
+
+fn read_fields<'a>(
+    fields: impl Iterator<Item = &'a syn::Field>,
+    rule: Option<RenameRule>,
+) -> syn::Result<Vec<FieldDecl>> {
     let mut out = Vec::new();
     for field in fields {
         let ident = field.ident.as_ref().expect("only named fields reach here");
         let mut key = ident.to_string();
+        if let Some(rule) = rule {
+            key = rule.field(&key);
+        }
         let mut skip = false;
         let mut hints = FieldHints::default();
         for attr in &field.attrs {
@@ -492,6 +519,16 @@ mod tests {
             !out.contains("\"host\"") && !out.contains("\"plain\"") && !out.contains("\"cache\""),
             "a field without hints is not named: {out}"
         );
+    }
+
+    #[test]
+    fn a_struct_s_rename_all_reaches_its_keys() {
+        let out = expand_str(
+            "#[map(rename_all = \"kebab-case\", crate = ::k::guatiao)] struct S { #[form(widget = \"x\")] api_token: String, #[form(widget = \"y\")] #[map(rename = \"own\")] other_name: String }",
+        )
+        .unwrap();
+        assert!(out.contains("\"api-token\""), "{out}");
+        assert!(out.contains("\"own\""), "{out}");
     }
 
     #[test]

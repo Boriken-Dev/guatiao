@@ -66,7 +66,10 @@
 //!
 //! On an enum, `#[map(tag = "...")]` names the key a variant's name is
 //! stored under; on a variant, `#[map(rename = "...")]` changes the name
-//! stored. A variant cannot be skipped — a value of it would have no way to
+//! stored. On a struct or an enum, `#[map(rename_all = "...")]` names
+//! every field (a struct's) or every variant (an enum's) by one of
+//! serde's rules, `"lowercase"`, `"snake_case"`, `"kebab-case"` or
+//! `"SCREAMING_SNAKE_CASE"`, before any `rename`. A variant cannot be skipped — a value of it would have no way to
 //! be written.
 //!
 //! A skipped field must implement [`Default`]; nothing here can invent a
@@ -137,6 +140,7 @@ mod kind;
 mod krate;
 #[cfg(feature = "provider")]
 mod provider;
+mod rename;
 #[cfg(feature = "provider")]
 mod spelling;
 

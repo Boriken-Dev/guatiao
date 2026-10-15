@@ -482,3 +482,85 @@ fn a_tagged_enums_own_schema_carries_its_tag_and_its_arms() {
     let keys: Vec<&str> = s.fields().map(|f| f.key()).collect();
     assert_eq!(keys, ["level", "auth", "fallback"]);
 }
+
+// --- rename_all -------------------------------------------------------------
+
+/// A closed vocabulary spelled the way its documents spell it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ToValue, FromValue, Schema)]
+#[map(rename_all = "kebab-case")]
+enum Profile {
+    H264,
+    HighEfficiency,
+    /// Applied before `rename`, so a variant's own name wins.
+    #[map(rename = "av1-main")]
+    Av1,
+}
+
+#[test]
+fn rename_all_names_every_variant_and_round_trips() {
+    for (profile, stored) in [
+        (Profile::H264, "h264"),
+        (Profile::HighEfficiency, "high-efficiency"),
+        (Profile::Av1, "av1-main"),
+    ] {
+        let value = profile.to_value_in(alloc()).unwrap();
+        assert_eq!(TryAsRef::<str>::try_as_ref(&value), Some(stored));
+        assert_eq!(Profile::from_value(&value).unwrap(), profile);
+    }
+    assert!(
+        Profile::from_value(&Value::from(Text::new("HighEfficiency"))).is_err(),
+        "the Rust spelling is not a stored one"
+    );
+}
+
+#[test]
+fn rename_all_reaches_the_schema_s_choices() {
+    let (kind, key) = field_of::<Profile>("profile");
+    let field = FieldRef::new(key, &kind).unwrap();
+    let choices: Vec<String> = field
+        .kind()
+        .choices()
+        .map(|c| c.value().to_string())
+        .collect();
+    assert_eq!(choices, ["h264", "high-efficiency", "av1-main"]);
+    validate_value(field, &Value::from(Text::new("high-efficiency"))).unwrap();
+    assert!(validate_value(field, &Value::from(Text::new("HighEfficiency"))).is_err());
+}
+
+/// On a struct, the rule names the fields; a tagged enum's names its
+/// variants and leaves their fields alone, as serde does.
+#[derive(Debug, Clone, PartialEq, Eq, ToValue, FromValue, Schema)]
+#[map(rename_all = "SCREAMING_SNAKE_CASE")]
+struct Env {
+    view_only: bool,
+    #[map(rename = "Home")]
+    home_dir: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, ToValue, FromValue, Schema)]
+#[map(tag = "kind", rename_all = "snake_case")]
+enum Source {
+    LocalFile { file_path: String },
+}
+
+#[test]
+fn rename_all_on_a_struct_names_its_fields_and_on_a_tagged_enum_its_variants() {
+    let env = Env {
+        view_only: true,
+        home_dir: "/root".into(),
+    };
+    let value = env.to_value_in(alloc()).unwrap();
+    let map = TryAsRef::<Map>::try_as_ref(&value).unwrap();
+    let keys: Vec<&str> = map.keys().collect();
+    assert_eq!(keys, ["VIEW_ONLY", "Home"]);
+    assert_eq!(Env::from_value(&value).unwrap(), env);
+
+    let source = Source::LocalFile {
+        file_path: "/a".into(),
+    };
+    let value = source.to_value_in(alloc()).unwrap();
+    let map = TryAsRef::<Map>::try_as_ref(&value).unwrap();
+    assert_eq!(str_or(map.get("kind"), ""), "local_file");
+    assert_eq!(str_or(map.get("file_path"), ""), "/a");
+    assert_eq!(Source::from_value(&value).unwrap(), source);
+}

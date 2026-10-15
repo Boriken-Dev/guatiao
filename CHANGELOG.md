@@ -50,6 +50,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   fail to decode because the other side knows a newer name. Its schema is
   the new `KindBuilder::open_enumeration`: a string with the known names
   as `examples`, read with `FieldRef::suggestions()`.
+- **`#[map(rename_all = "...")]`** on a struct or an enum, as serde
+  spells and applies it: `"lowercase"`, `"snake_case"`, `"kebab-case"`,
+  `"SCREAMING_SNAKE_CASE"`. On a struct it names every field, on an enum
+  every variant, before any `rename`; the schema's `enum`, the reader and
+  `#[derive(Form)]`'s keys follow. A closed vocabulary in lower case is
+  then a unit enum, validated by its schema, rather than a string with a
+  `pattern`.
 - **Borrowed object arguments.** A kind method may take `&mut dyn K`, or
   `&dyn K`, for an object kind `K`: the caller's value is lent for that
   call. It crosses as a `const guatiao_object *` on the caller's stack,
