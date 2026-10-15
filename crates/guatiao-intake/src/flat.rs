@@ -23,7 +23,8 @@
 #![forbid(unsafe_code)]
 
 use alloc::borrow::Cow;
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, BTreeSet};
+use core::ops::Bound;
 use guatiao::value::convert::TryAsRef;
 
 use crate::path::{self, Segment};
@@ -52,7 +53,8 @@ pub const SEPARATOR: char = '.';
 /// a discriminant naming no arm — and the store is left cleared but
 /// otherwise untouched. **Deeper mismatches are skipped, not refused**:
 /// a member that cannot be spelled as text is not written, the way it
-/// never was.
+/// never was. A value nested deeper than [`MAX_DEPTH`] also answers
+/// `false`, and what lies past the bound is not written.
 ///
 /// # An empty container stores nothing
 ///
@@ -68,22 +70,26 @@ pub const SEPARATOR: char = '.';
 /// written ([`clear_under`]). See the module note: make it conditional
 /// and a field two arms happen to share keeps the old arm's value.
 pub fn flatten(field: FieldRef<'_>, value: &Value, store: &mut BTreeMap<String, String>) -> bool {
-    clear_under(store, field.key());
+    let root = root_path(field.key());
+    clear_under(store, &root);
     let mut stack = Vec::new();
     // The top frame decides the answer; everything it pushes is walked
     // for what it can offer.
-    let fits = visit(
-        store,
-        &mut stack,
-        field.key().to_string(),
-        field.kind(),
-        value,
-    );
-    while let Some((path, kind, value)) = stack.pop() {
-        let _ = visit(store, &mut stack, path, kind, value);
+    let mut fits = visit(store, &mut stack, root, field.kind(), value, 0);
+    while let Some((path, kind, value, depth)) = stack.pop() {
+        if depth >= MAX_DEPTH {
+            // Bounded like `unflatten`: a value is somebody else's input.
+            fits = false;
+            continue;
+        }
+        let _ = visit(store, &mut stack, path, kind, value, depth);
     }
     fits
 }
+
+/// A frame still to be walked: where it is stored, its kind, its value,
+/// and how many containers are open above it.
+type Frame<'a> = (String, Kind<'a>, &'a Value, u32);
 
 /// Removes every entry **at or under** `path`.
 ///
@@ -107,11 +113,13 @@ fn at_or_under(key: &str, path: &str) -> bool {
 /// the value fits the kind at all.
 fn visit<'a>(
     store: &mut BTreeMap<String, String>,
-    stack: &mut Vec<(String, Kind<'a>, &'a Value)>,
+    stack: &mut Vec<Frame<'a>>,
     path: String,
     kind: Kind<'a>,
     value: &'a Value,
+    depth: u32,
 ) -> bool {
+    let below = depth + 1;
     match kind {
         Kind::Variant { tag, .. } => {
             let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
@@ -126,7 +134,7 @@ fn visit<'a>(
             store.insert(path.clone(), chosen.to_string());
             for member in arm.fields() {
                 if let Some(v) = map.get(member.key()) {
-                    stack.push((named(&path, member.key()), member.kind(), v));
+                    stack.push((named(&path, member.key()), member.kind(), v, below));
                 }
             }
             true
@@ -140,7 +148,7 @@ fn visit<'a>(
             // is sorted anyway; this is for anything reading the walk.
             for declared in kind.fields() {
                 if let Some(v) = map.get(declared.key()) {
-                    stack.push((named(&path, declared.key()), declared.kind(), v));
+                    stack.push((named(&path, declared.key()), declared.kind(), v, below));
                 }
             }
             true
@@ -151,7 +159,7 @@ fn visit<'a>(
             };
             let values = kind.values();
             for entry in map {
-                stack.push((keyed(&path, entry.key()), values, entry.value()));
+                stack.push((keyed(&path, entry.key()), values, entry.value(), below));
             }
             true
         }
@@ -161,7 +169,7 @@ fn visit<'a>(
             };
             let items = kind.items();
             for (at, v) in list.iter().enumerate() {
-                stack.push((indexed(&path, at), items, v));
+                stack.push((indexed(&path, at), items, v, below));
             }
             true
         }
@@ -175,14 +183,27 @@ fn visit<'a>(
     }
 }
 
-/// `path.name`, or `path["na.me"]` when the name would not read back as
+/// `path.name`, or `path[na.me]` when the name would not read back as
 /// one segment. A declared key may hold a separator, so this is not
 /// always a dot.
 fn named(path: &str, name: &str) -> String {
-    if name.is_empty() || name.contains(['.', '[', ']']) {
-        keyed(path, name)
-    } else {
+    if path::is_bare_name(name) {
         format!("{path}{SEPARATOR}{name}")
+    } else {
+        keyed(path, name)
+    }
+}
+
+/// How the store spells a top-level field's own key: the name, or a
+/// bracket when the name holds a `.`, a bracket or nothing at all.
+///
+/// So a field called `a.b` is stored under `[a.b]` and cannot be mistaken
+/// for the member `b` of a field called `a`.
+pub(crate) fn root_path(name: &str) -> String {
+    if path::is_bare_name(name) {
+        name.to_string()
+    } else {
+        keyed("", name)
     }
 }
 
@@ -215,7 +236,7 @@ pub fn unflatten(
     field: FieldRef<'_>,
     store: &BTreeMap<String, String>,
 ) -> Option<Value> {
-    rebuild(alloc, field.key(), field.kind(), store, 0)
+    rebuild(alloc, &root_path(field.key()), field.kind(), store, 0)
 }
 
 /// One node of [`unflatten`], bounded like every other walk over two
@@ -311,7 +332,7 @@ fn rebuild(
 }
 
 /// One step below a path, as the store spells it.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum Step {
     /// A name or a quoted key: `path.name`, `path["a.b"]`.
     Named(String),
@@ -322,27 +343,27 @@ enum Step {
 /// The distinct next steps under `path`, in the order the store holds
 /// them.
 ///
-/// The keys of a `BTreeMap` are sorted, so everything under a prefix is
-/// contiguous: the scan starts at the prefix and stops at the first key
-/// that is not under it.
+/// The keys of a `BTreeMap` are sorted, so everything under one prefix is
+/// contiguous. There are two prefixes, `path.` and `path[`, and a sibling
+/// such as `pathName` or `path-file` can sort **between** them, so each is
+/// its own scan rather than one scan that stops at the first stranger.
+/// `.` sorts before `[`, which keeps the result in store order.
 fn children(store: &BTreeMap<String, String>, path: &str) -> Vec<Step> {
     let mut out: Vec<Step> = Vec::new();
-    for key in store.range(path.to_string()..).map(|(k, _)| k) {
-        if !at_or_under(key, path) {
-            // Sorted, so the first key outside the prefix ends the run --
-            // except the prefix itself, which sorts first and is the
-            // field's own entry rather than a child.
-            if key.as_str() == path {
+    let mut seen: BTreeSet<Step> = BTreeSet::new();
+    for opener in [SEPARATOR, '['] {
+        let prefix = format!("{path}{opener}");
+        for key in store
+            .range::<str, _>((Bound::Included(prefix.as_str()), Bound::Unbounded))
+            .map(|(k, _)| k)
+            .take_while(|k| k.starts_with(&prefix))
+        {
+            let Some(step) = first_step(&key[path.len()..]) else {
                 continue;
+            };
+            if seen.insert(step.clone()) {
+                out.push(step);
             }
-            break;
-        }
-        let rest = &key[path.len()..];
-        let Some(step) = first_step(rest) else {
-            continue;
-        };
-        if !out.contains(&step) {
-            out.push(step);
         }
     }
     out
@@ -352,7 +373,12 @@ fn children(store: &BTreeMap<String, String>, path: &str) -> Vec<Step> {
 fn first_step(rest: &str) -> Option<Step> {
     // A leading separator belongs to the segment after it; the grammar is
     // rootless, so it is stripped before parsing.
-    let text = rest.strip_prefix(SEPARATOR).unwrap_or(rest);
+    let text = match rest.strip_prefix(SEPARATOR) {
+        // A `.` is followed by a name: `agent.[0]` is no spelling at all.
+        Some(after) if after.starts_with('[') => return None,
+        Some(after) => after,
+        None => rest,
+    };
     let parsed = path::parse(text).ok()?;
     match parsed.segments().next()? {
         Segment::Field(name) => Some(Step::Named(name.to_string())),
@@ -367,13 +393,16 @@ fn first_step(rest: &str) -> Option<Step> {
 /// For a caller that has to decide whether a key it is holding belongs to
 /// this field at all — a config reader partitioning a flat record, say.
 pub fn keys(field: FieldRef<'_>) -> Vec<String> {
-    let mut out = vec![field.key().to_string()];
+    let own = root_path(field.key());
+    let mut out = vec![own.clone()];
     for arm in field.kind().arms() {
         // `member`, not `field`: the inner binding would shadow the
         // parameter and the key would be built from one of them twice.
         // It compiles either way, which is the whole danger.
         for member in arm.fields() {
-            let key = format!("{}{SEPARATOR}{}", field.key(), member.key());
+            // Spelled the way `flatten` writes it, so a member whose name
+            // holds a `.` is `owner[a.b]` here as it is in the store.
+            let key = named(&own, member.key());
             if !out.contains(&key) {
                 out.push(key);
             }
@@ -382,9 +411,17 @@ pub fn keys(field: FieldRef<'_>) -> Vec<String> {
     out
 }
 
-/// Splits a flat key into `(owner key, member key)`, if it is one.
-pub fn split(key: &str) -> Option<(&str, &str)> {
-    key.split_once(SEPARATOR)
+/// Splits a flat key into `(owner key, member name)`, if it is one: a key
+/// of at least two segments, split before the last.
+///
+/// Reads the key with the path grammar, so it agrees with [`flatten`] and
+/// [`keys`]: `auth.username` is `("auth", "username")` and `auth[c.d]`,
+/// the spelling of a member called `c.d`, is `("auth", "c.d")`. The member
+/// is a [`Cow`] because a quoted name with an escape is not a slice of the
+/// key. `None` for a key that is a single segment or is not a path.
+pub fn split(key: &str) -> Option<(&str, Cow<'_, str>)> {
+    let (owner, last) = path::split_last(key)?;
+    Some((owner, name_of_owned(last)))
 }
 
 /// The field governing a path, walking every segment of it.
@@ -433,6 +470,16 @@ fn name_of<'a>(segment: &'a Segment<'_>) -> Cow<'a, str> {
         Segment::Key(key) => Cow::Borrowed(key.as_ref()),
         // A number applied to something keyed is that key's text, the
         // same rule `path::get` follows over a value.
+        Segment::Index(at) => Cow::Owned(at.to_string()),
+    }
+}
+
+/// The same, consuming the segment, so a key borrowed from the text
+/// stays borrowed from it.
+fn name_of_owned(segment: Segment<'_>) -> Cow<'_, str> {
+    match segment {
+        Segment::Field(name) => Cow::Borrowed(name),
+        Segment::Key(key) => key,
         Segment::Index(at) => Cow::Owned(at.to_string()),
     }
 }
@@ -513,7 +560,7 @@ pub fn resolve_in<'a>(
 
     // The path walked so far, which is both what a refusal names and the
     // key a discriminant is stored under.
-    let mut walked = first.to_string();
+    let mut walked = root_path(&name_of(&first));
     for segment in segments {
         at = step_in(at, &segment, &walked, key, &selected)?;
         if !matches!(segment, Segment::Field(_)) {

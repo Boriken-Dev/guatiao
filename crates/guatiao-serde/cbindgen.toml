@@ -35,6 +35,21 @@ header = """
  * string is spelled where the format has none, and the bits above it are
  * flags. Zero is the default in every position.
  * ----------------------------------------------------------------------
+ * EVERY `out` IS WRITTEN ABSENT ON ENTRY.
+ *
+ * Before anything can fail, so a caller reading it after an error reads
+ * GUATIAO_ABSENT, the same convention guatiao.h and guatiao_intake.h
+ * follow. `out` must not hold a tree you still own.
+ * ----------------------------------------------------------------------
+ * WHERE A PARSE STOPPED.
+ *
+ * guatiao_json_parse_ex() and its TOML and YAML twins take one more
+ * pointer, a guatiao_parse_error that may be NULL. A document that does
+ * not parse fills it with the format, the line and the column (from 1,
+ * 0 when unknown) and a `message` string value, released with
+ * guatiao_value_free(). The message never quotes the document, which may
+ * hold a secret.
+ * ----------------------------------------------------------------------
  * A FORMAT IS A BUILD-TIME CHOICE, SO ITS DECLARATIONS ARE GUARDED.
  *
  * Only JSON is on by default. The TOML and YAML functions are in the
@@ -72,6 +87,9 @@ exclude = [
 "Str" = "guatiao_str"
 "Allocator" = "guatiao_alloc"
 "Status" = "guatiao_status"
+# This crate's own struct, spelled with the prefix every name in the header
+# carries.
+"ParseError" = "guatiao_parse_error"
 # A CARGO FEATURE BECOMES A C MACRO. cbindgen wraps everything behind
 # `#[cfg(feature = "...")]` in `#if defined(...)`, so a header rendered
 # with every format on still describes a library built with fewer: the

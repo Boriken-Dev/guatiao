@@ -38,6 +38,13 @@
 //! is there because a jq path is an expression over one input, and these
 //! are keys in a store.
 //!
+//! **One spelling means one thing.** After a segment comes a `.` and a
+//! name, a `[`, or the end: `a[0]b` and `a["x"]y` are refused, and so is
+//! `a.[0]`, because a `.` is followed by a name and a bracket needs none.
+//! A bare bracket holds no `[` (`[a[b]` is refused; `["a[b]"]` is the
+//! spelling of that key). Digits are a position only when they carry no
+//! leading zero: `[01]` is the key `01`, and `[0]` the position 0.
+//!
 //! # What a bracket means is decided where it is resolved
 //!
 //! `[1]` is a list index **and** the key `"1"`; which one it is depends on
@@ -167,13 +174,24 @@ pub fn is_bare_name(name: &str) -> bool {
 ///
 /// assert!(!path::needs_quoting("home"));
 /// assert!(path::needs_quoting("0"));      // bare, it would read as an index
+/// assert!(!path::needs_quoting("01"));    // a leading zero is a key already
 /// assert!(path::needs_quoting("a[b]"));
 /// ```
 pub fn needs_quoting(key: &str) -> bool {
-    key.is_empty()
-        || key.starts_with('"')
-        || key.contains(['[', ']'])
-        || key.bytes().all(|b| b.is_ascii_digit())
+    key.is_empty() || key.starts_with('"') || key.contains(['[', ']']) || index_of(key).is_some()
+}
+
+/// The position `text` spells inside a bare bracket, if it spells one: only
+/// digits, no leading zero, and small enough for a `usize`. Anything else
+/// in a bracket is a key.
+fn index_of(text: &str) -> Option<usize> {
+    if text.is_empty() || !text.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    if text.len() > 1 && text.starts_with('0') {
+        return None;
+    }
+    text.parse().ok()
 }
 
 /// A parsed path: valid, and borrowed from the text it was parsed from.
@@ -256,7 +274,7 @@ impl<'a> Iterator for Segments<'a> {
         // malformed remainder is unreachable, and it answers `None`
         // rather than panicking, because a panic in an iterator is a
         // denial of service dressed as an invariant.
-        let (segment, read) = step(self.rest).ok()??;
+        let (segment, read) = step(self.rest, self.at == 0).ok()??;
         self.rest = &self.rest[read..];
         self.at += read;
         Some(segment)
@@ -307,6 +325,12 @@ pub enum PathError {
         /// The first character after the closing `"`.
         at: usize,
     },
+    /// A segment after a bracket that starts with neither `.` nor `[`:
+    /// `a[0]b`.
+    MissingSeparator {
+        /// The first character of the segment.
+        at: usize,
+    },
 }
 
 impl PathError {
@@ -320,7 +344,8 @@ impl PathError {
             | PathError::UnclosedQuote { at }
             | PathError::BadEscape { at }
             | PathError::UnexpectedClose { at }
-            | PathError::TrailingQuote { at } => *at,
+            | PathError::TrailingQuote { at }
+            | PathError::MissingSeparator { at } => *at,
         }
     }
 }
@@ -338,11 +363,32 @@ impl fmt::Display for PathError {
             }
             PathError::UnexpectedClose { at } => write!(f, "a `]` at {at} with no `[`"),
             PathError::TrailingQuote { at } => write!(f, "text after a quoted key at {at}"),
+            PathError::MissingSeparator { at } => {
+                write!(f, "a segment at {at} that follows a bracket without a `.`")
+            }
         }
     }
 }
 
 impl core::error::Error for PathError {}
+
+/// A path without its last segment, and that segment: `agent[0].name`
+/// is `agent[0]` and `name`. `None` for a text that is not a path or has
+/// one segment only.
+pub(crate) fn split_last(text: &str) -> Option<(&str, Segment<'_>)> {
+    parse(text).ok()?;
+    let mut rest = text;
+    let mut at = 0;
+    let mut last = None;
+    while !rest.is_empty() {
+        let (segment, read) = step(rest, at == 0).ok()??;
+        last = Some((at, segment));
+        rest = &rest[read..];
+        at += read;
+    }
+    let (start, segment) = last?;
+    (start > 0).then(|| (&text[..start], segment))
+}
 
 /// Reads a path, checking the whole of it.
 ///
@@ -361,7 +407,7 @@ pub fn parse(text: &str) -> Result<Path<'_>, PathError> {
     let mut rest = text;
     let mut at = 0;
     while !rest.is_empty() {
-        let read = match step(rest) {
+        let read = match step(rest, at == 0) {
             Ok(Some((_, read))) => read,
             // `step` answers `None` only for an empty remainder, which the
             // loop condition already excluded.
@@ -385,14 +431,15 @@ fn offset_by(error: PathError, by: usize) -> PathError {
         PathError::BadEscape { at } => PathError::BadEscape { at: at + by },
         PathError::UnexpectedClose { at } => PathError::UnexpectedClose { at: at + by },
         PathError::TrailingQuote { at } => PathError::TrailingQuote { at: at + by },
+        PathError::MissingSeparator { at } => PathError::MissingSeparator { at: at + by },
     }
 }
 
 /// One segment off the front of `rest`, and how many bytes it took.
 ///
-/// `rest` starts at a segment boundary: either at the very beginning, or
-/// just after a segment, where a `.` may still be waiting.
-fn step(rest: &str) -> Result<Option<(Segment<'_>, usize)>, PathError> {
+/// `rest` starts at a segment boundary: either at the very beginning
+/// (`first`), or just after a segment, where a `.` or a `[` must follow.
+fn step(rest: &str, first: bool) -> Result<Option<(Segment<'_>, usize)>, PathError> {
     if rest.is_empty() {
         return Ok(None);
     }
@@ -402,8 +449,15 @@ fn step(rest: &str) -> Result<Option<(Segment<'_>, usize)>, PathError> {
         Some(body) => (body, 1),
         None => (rest, 0),
     };
+    if skipped == 0 && !first && !rest.starts_with('[') {
+        return Err(PathError::MissingSeparator { at: 0 });
+    }
     if body.starts_with('[') {
-        let (segment, read) = bracket(body).map_err(|e| offset_by(e, skipped))?;
+        if skipped == 1 {
+            // A `.` is followed by a name; a bracket is its own segment.
+            return Err(PathError::EmptyField { at: 1 });
+        }
+        let (segment, read) = bracket(body)?;
         return Ok(Some((segment, skipped + read)));
     }
     let end = body.find(NAME_ENDS).unwrap_or(body.len());
@@ -436,11 +490,13 @@ fn bracket(body: &str) -> Result<(Segment<'_>, usize), PathError> {
         return Err(PathError::EmptyIndex { at: 0 });
     }
     let text = &inside[..end];
-    let segment = match text.parse::<usize>() {
-        // Only a bare run of digits. `parse` would also take `+1` and
-        // whitespace, and a key called `+1` must stay a key.
-        Ok(at) if text.bytes().all(|b| b.is_ascii_digit()) => Segment::Index(at),
-        _ => Segment::Key(Cow::Borrowed(text)),
+    if text.contains('[') {
+        // The first `[` never closed: `["a[b]"]` is how a key holds one.
+        return Err(PathError::UnclosedIndex { at: 0 });
+    }
+    let segment = match index_of(text) {
+        Some(at) => Segment::Index(at),
+        None => Segment::Key(Cow::Borrowed(text)),
     };
     Ok((segment, 1 + end + 1))
 }

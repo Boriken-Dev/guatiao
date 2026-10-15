@@ -18,6 +18,7 @@
 
 #![forbid(unsafe_code)]
 
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::fmt;
 use guatiao::value::convert::TryAsRef;
 
@@ -315,10 +316,8 @@ fn check_at(schema: SchemaRef<'_>, form: FormRef<'_>, depth: u32) -> Result<(), 
         }
         // After every condition is known to be well formed, so a cycle is
         // reported as a cycle rather than as the malformed link in it.
-        for entry in entries {
-            if let Some(on_cycle) = cycle_from(form, entry.key()) {
-                return Err(FormError::CyclicCondition { path: on_cycle });
-            }
+        if let Some(on_cycle) = find_cycle(form) {
+            return Err(FormError::CyclicCondition { path: on_cycle });
         }
     }
     Ok(())
@@ -369,8 +368,9 @@ fn check_condition(schema: SchemaRef<'_>, condition: &Value, at: String) -> Resu
         // A variant named by its own key is compared with its
         // DISCRIMINANT, so what must be acceptable is the text form, which
         // for a variant is exactly the name of an arm.
-        let accepted = match (referenced.kind(), flat::split(field)) {
-            (Kind::Variant { .. }, None) => match TryAsRef::<str>::try_as_ref(value) {
+        let plain = schema.find(field).is_some() || flat::split(field).is_none();
+        let accepted = match (referenced.kind(), plain) {
+            (Kind::Variant { .. }, true) => match TryAsRef::<str>::try_as_ref(value) {
                 Some(arm) => validate_text(referenced, arm),
                 None => {
                     return Err(FormError::ConditionRefused {
@@ -399,22 +399,43 @@ fn expected_of(e: ValidationError) -> String {
     }
 }
 
-/// A field on a cycle reachable from `start`, if there is one.
+/// A field on a cycle among the form's conditions, if there is one: the
+/// first, in the order the form lists its fields, whose chain leads into
+/// one.
 ///
 /// Each field has at most one condition, so a chain has one successor per
-/// step and walking it either ends or repeats. The field that repeats is
-/// the one on the cycle; `start` may only lead into it.
-fn cycle_from(form: FormRef<'_>, start: &str) -> Option<String> {
-    let mut walked: Vec<String> = Vec::new();
-    let mut current = start.to_string();
-    loop {
-        if walked.contains(&current) {
-            return Some(current);
+/// step and walking it either ends or repeats; the field that repeats is
+/// the one on the cycle. A field whose chain was already walked and ended
+/// is not walked again, so the whole search visits each field once.
+fn find_cycle(form: FormRef<'_>) -> Option<String> {
+    let mut next: BTreeMap<&str, &str> = BTreeMap::new();
+    for (key, hints) in form.fields() {
+        if let Some(condition) = hints.visible_when() {
+            // The first declaration wins, as `FormRef::hints` reads it.
+            next.entry(key).or_insert(condition.field());
         }
-        let next = form.hints(&current).visible_when()?.field().to_string();
-        walked.push(current);
-        current = next;
     }
+    let mut cleared: BTreeSet<&str> = BTreeSet::new();
+    for (start, _) in form.fields() {
+        let mut trail: Vec<&str> = Vec::new();
+        let mut on_trail: BTreeSet<&str> = BTreeSet::new();
+        let mut at = start;
+        loop {
+            if cleared.contains(at) {
+                break;
+            }
+            if !on_trail.insert(at) {
+                return Some(at.to_string());
+            }
+            trail.push(at);
+            match next.get(at) {
+                Some(successor) => at = successor,
+                None => break,
+            }
+        }
+        cleared.extend(trail);
+    }
+    None
 }
 
 /// A group of fields a person sees together.
@@ -523,39 +544,45 @@ pub fn is_visible(
     path: &str,
     values: &Value,
 ) -> Result<bool, FormError> {
-    let mut walked = Vec::new();
-    visible(schema, form, path, values, &mut walked)
-}
-
-fn visible(
-    schema: SchemaRef<'_>,
-    form: FormRef<'_>,
-    path: &str,
-    values: &Value,
-    walked: &mut Vec<String>,
-) -> Result<bool, FormError> {
-    if flat::resolve(schema, path).is_none() {
-        return Err(FormError::UnknownField {
-            at: vocab::FIELDS.to_string(),
-            path: path.to_string(),
-        });
-    }
-    if walked.iter().any(|w| w == path) {
-        return Ok(false);
-    }
-    let Some(condition) = form.hints(path).visible_when() else {
-        return Ok(true);
+    // Each field has at most one condition, so the fields it waits on are
+    // a chain. Walked in a loop rather than by recursion, because a chain
+    // as long as a form's field count is a stack a caller's form controls.
+    let mut conditions = Vec::new();
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
+    let mut at = path;
+    let end = loop {
+        if flat::resolve(schema, at).is_none() {
+            return Err(FormError::UnknownField {
+                at: vocab::FIELDS.to_string(),
+                path: at.to_string(),
+            });
+        }
+        if !seen.insert(at) {
+            // Back at a field already on the chain: a cycle is not shown.
+            break false;
+        }
+        let Some(condition) = form.hints(at).visible_when() else {
+            break true;
+        };
+        at = condition.field();
+        conditions.push(condition);
     };
-    walked.push(path.to_string());
-    Ok(visible(schema, form, condition.field(), values, walked)?
-        && current(schema, values, condition.field())
-            .is_some_and(|held| condition.values().iter().any(|v| held == v)))
+    Ok(end
+        && conditions.iter().all(|condition| {
+            current(schema, values, condition.field())
+                .is_some_and(|held| condition.values().iter().any(|v| held == v))
+        }))
 }
 
 /// What the field at `path` holds now: its value, else its default, and
 /// for a variant named by its own key, the discriminant of either.
 fn current<'a>(schema: SchemaRef<'a>, values: &'a Value, path: &str) -> Option<&'a Value> {
-    match flat::split(path) {
+    // A key that names a field outright is that field, whatever it holds.
+    let split = match schema.find(path) {
+        Some(_) => None,
+        None => flat::split(path),
+    };
+    match split {
         None => {
             let field = schema.find(path)?;
             let held = TryAsRef::<Map>::try_as_ref(values)
@@ -570,8 +597,8 @@ fn current<'a>(schema: SchemaRef<'a>, values: &'a Value, path: &str) -> Option<&
         }
         Some((owner, member)) => TryAsRef::<Map>::try_as_ref(values)
             .and_then(|m| m.get(owner))
-            .filter(|_| declares(schema, values, owner, member))
-            .and_then(|o| TryAsRef::<Map>::try_as_ref(o).and_then(|m| m.get(member)))
+            .filter(|_| declares(schema, values, owner, &member))
+            .and_then(|o| TryAsRef::<Map>::try_as_ref(o).and_then(|m| m.get(&member)))
             .or_else(|| flat::resolve(schema, path).and_then(|f| f.default())),
     }
 }

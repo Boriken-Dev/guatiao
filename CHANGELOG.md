@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   A crate that defines kinds can `pub use guatiao;` and be the one thing
   its providers depend on, rather than every provider pinning `guatiao`
   at the same version beside it.
+- **`guatiao_json_parse_ex`, `guatiao_toml_parse_ex` and
+  `guatiao_yaml_parse_ex`**: the `_parse` calls with one more, nullable,
+  `guatiao_parse_error *`. A document that does not parse fills it with the
+  format (`GUATIAO_FORMAT_JSON`, `_TOML`, `_YAML`), the line and column and
+  a `message` string value that never quotes the document. A C, Python or
+  Dart caller can show where a configuration file is wrong instead of a
+  bare `GUATIAO_ERR_BAD_VALUE`.
 
 ### Changed
 
@@ -109,6 +116,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   answers the new `KindMismatch::ObjectKind` for one, and
   `#[provider(..)]` naming one is a compile error on the kind: its shims
   read `ctx` as an object one caller owns, and a provider's is shared.
+- **`guatiao-serde`'s C functions write `out` ABSENT on entry**, as the
+  `guatiao` and `guatiao-intake` ones do. A failed call used to leave `out`
+  as the caller had it; it now reads `GUATIAO_ABSENT`, and `out` must not
+  hold a tree the caller still owns. The headers say so, and the
+  `guatiao_intake_flatten`, `_unflatten` and `_flat_keys` docs now describe
+  lists, open maps and "nothing stored" and not only variants.
 - **A `std::` path now marks something that needs the operating system.**
   Everything `core` or `alloc` also holds is spelled that way, enforced by
   the `std_instead_of_core`, `std_instead_of_alloc` and
@@ -116,6 +129,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   implement `core::error::Error`, and the derives and `providers!` reach
   `alloc` items through a hidden `guatiao::__private::alloc`, so the crate
   that expands them declares nothing.
+- **`guatiao-serde`: reading a JSON number exactly is the opt-in
+  `exact-numbers` feature, and `json` no longer turns on
+  `serde_json/arbitrary_precision`.** With the default feature set on,
+  every crate in the build that deserialised `#[serde(untagged)]` or
+  `#[serde(flatten)]` numbers through `serde_json` stopped working, because
+  cargo unifies the feature. Without `exact-numbers`, an integer that fits
+  `i64`/`u64` is still exact, anything else reads through an `f64` (`1.10`
+  as `1.1`) and `1e400` is refused by the parser; writing a number
+  verbatim through `text::json` is unchanged. *Migration:* a binary that
+  relies on exact reading enables `guatiao-serde/exact-numbers`; a library
+  should not. The C and Python/Dart artifacts are built `--all-features` and
+  keep exact numbers.
+- **`guatiao-serde`: a document that does not parse is `Error::Syntax`, with
+  a `Position`, and its message never quotes the document.** A parse
+  refusal used to be `Error::Format` with the parser's whole `Display`,
+  which for TOML shows the offending line and for YAML up to three lines
+  around it. `Error::Syntax { format, position, detail }` holds the
+  parser's message and where it stopped (`Error::position()`, a new
+  `Position { line, column }`, both from 1) and nothing from the text.
+  `Format` is now only a writer refusing a value. *Migration:* match
+  `Error::Syntax` where you matched `Error::Format` on a `from_str`, and
+  read the position instead of scraping the message.
+- **`guatiao-intake`: the path grammar is stricter.** `a[0]b`, `a["x"]y`,
+  `a.[0]` and `[a[b]` are refused (`PathError::MissingSeparator` is new, and
+  `EmptyField` and `UnclosedIndex` now cover the others), and digits in a
+  bracket are a position only without a leading zero: `a[01]` is the key
+  `01` and `a[007]` the key `007`, no longer the positions 1 and 7.
+  `path::needs_quoting` follows. *Migration:* write a key that starts with
+  `0` as itself (`env[01]`) and a position as plain digits; a text that
+  relied on the old reading now fails to parse and names its offset.
+- **`guatiao-intake`: `flat::split` reads the key with the path grammar.**
+  It returns `Option<(&str, Cow<str>)>` (it was `Option<(&str, &str)>`),
+  splits before the **last** segment, and agrees with `flatten` and `keys`
+  for a member whose name needs a bracket. *Migration:* compare or borrow
+  the member through the `Cow` (`&*member`, `member == "x"`).
+- **`guatiao-intake`: a top-level field whose key holds a `.`, a bracket or
+  nothing is stored under a bracket key** (`a.b` as `[a.b]`), so it no
+  longer shares a key with the member `b` of a field `a`. A key written the
+  old way still resolves to the field. *Migration:* a front end that
+  builds store keys itself asks `flat::keys` for them.
 
 ### Fixed
 
@@ -154,6 +207,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   pointer taken earlier; they are `String`s and `Vec`s now.
 - **The host block a registry leaks is written through one raw pointer**,
   so the services' `ctx` it holds stays valid under Stacked Borrows.
+- **`guatiao-serde`: TOML is read in document order, and a TOML date or time
+  is its text.** Reading sorted every table's keys, unlike JSON and YAML
+  (`toml/preserve_order` is on now). An offset date-time, local date-time,
+  local date or local time read as a map under toml's private key
+  `$__toml_private_datetime` and were written back as a table; each now
+  reads as the text it was written as. A YAML `!!binary` scalar read as the
+  base64 payload decoded as UTF-8, or failed when it was not; it now reads as
+  its base64 text.
+- **`guatiao-intake`: `is_visible` no longer overflows the stack on a long
+  `visibleWhen` chain, and `check` no longer takes cubic time on one.** The
+  chain is walked in a loop (about 3000 links overflowed the stack of a
+  release build, which `catch_unwind` cannot catch, and `check` accepts such
+  a form), and cycles are found in one pass over the conditions instead of
+  one walk per field.
+- **`guatiao-intake`: `unflatten` no longer loses a list or an open map
+  when a sibling key sorts between the field name and its `[`.** A store
+  holding `agent[0]` beside `agentName` or `env[PATH]` beside `env-file`
+  read back as nothing, while `validate_texts` called it fine. `flatten`
+  also stops at `MAX_DEPTH` (answering `false`) as `unflatten` already did,
+  and `flat::keys` lists what `flatten` writes for a member with a `.` in
+  its name.
+
 - **A handle held across an `.await` no longer makes the future `!Send`.**
   `Remote`, `Instance` and `Object` were `Send` only for a kind that is
   `'static`, which a future cannot show, so `tokio::spawn` refused any task

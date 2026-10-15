@@ -17,8 +17,11 @@ use guatiao::value::convert::TryAsRef;
 
 use guatiao::value::alloc::{Allocator, rust_alloc};
 use guatiao::value::status::Status;
-use guatiao::value::types::{Map, Value};
-use guatiao_serde::exports::{GUATIAO_PRETTY, guatiao_json_emit};
+use guatiao::value::types::{Map, Str, Tag, Value};
+use guatiao_serde::exports::{
+    GUATIAO_FORMAT_JSON, GUATIAO_PRETTY, ParseError, guatiao_json_emit, guatiao_json_parse,
+    guatiao_json_parse_ex,
+};
 
 /// A value worth indenting: flat output has no newline in it.
 fn a_map() -> Value {
@@ -104,4 +107,95 @@ fn a_null_out_is_refused_before_anything_is_built() {
     // SAFETY: as above, with `out` writable and holding a null.
     let status = unsafe { guatiao_json_emit(ptr::null(), 0, &vt, &mut out) };
     assert_eq!(status, Status::GUATIAO_ERR_NULL);
+}
+
+/// **A failed call leaves `out` ABSENT**, as the other two crates' exports
+/// do, whatever it held: the first statement of every export writes it.
+#[test]
+fn a_failed_call_leaves_out_absent() {
+    let vt = rust_alloc();
+
+    let mut out = Value::null();
+    // SAFETY: `out` is writable and holds a null, which owns nothing.
+    let status = unsafe { guatiao_json_parse(Str::new("{ nope"), 0, &vt, &mut out) };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert_eq!(out.tag(), Ok(Tag::GUATIAO_ABSENT), "a refused document");
+
+    // The allocator is refused before the document is read.
+    let mut out = Value::null();
+    // SAFETY: as above.
+    let status = unsafe { guatiao_json_parse(Str::new("{}"), 0, ptr::null(), &mut out) };
+    assert_eq!(status, Status::GUATIAO_ERR_ALLOC);
+    assert_eq!(out.tag(), Ok(Tag::GUATIAO_ABSENT), "a bad allocator");
+
+    let mut out = Value::null();
+    // SAFETY: `out` writable; the null value is what this asserts about.
+    let status = unsafe { guatiao_json_emit(ptr::null(), 0, &vt, &mut out) };
+    assert_eq!(status, Status::GUATIAO_ERR_NULL);
+    assert_eq!(out.tag(), Ok(Tag::GUATIAO_ABSENT), "a null value");
+}
+
+/// `_parse_ex` says where a document stopped, and leaves the error empty
+/// when nothing went wrong.
+#[test]
+fn parse_ex_reports_where_a_document_stopped() {
+    let vt = rust_alloc();
+    let mut out = Value::null();
+    let mut error = ParseError {
+        format: 9,
+        line: 9,
+        column: 9,
+        message: Value::null(),
+    };
+
+    // SAFETY: both pointers address writable storage owning nothing.
+    let status =
+        unsafe { guatiao_json_parse_ex(Str::new("{\"a\": 1 x}"), 0, &vt, &mut out, &mut error) };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert_eq!(error.format, GUATIAO_FORMAT_JSON);
+    assert_eq!((error.line, error.column), (1, 9));
+    let message = TryAsRef::<str>::try_as_ref(&error.message).expect("a message");
+    assert!(!message.is_empty());
+    assert!(!message.contains("1 x"), "no excerpt: {message}");
+
+    // A secret on the line the parser objects to is not in the message.
+    let mut secret = ParseError {
+        format: 9,
+        line: 9,
+        column: 9,
+        message: Value::null(),
+    };
+    // SAFETY: as above.
+    let status = unsafe {
+        guatiao_json_parse_ex(
+            Str::new("{\"password\": \"hunter2-SECRET\" x}"),
+            0,
+            &vt,
+            &mut out,
+            &mut secret,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+    let message = TryAsRef::<str>::try_as_ref(&secret.message).expect("a message");
+    assert!(!message.contains("hunter2"), "{message}");
+
+    // A document that parses reports nothing.
+    let mut error = ParseError {
+        format: 9,
+        line: 9,
+        column: 9,
+        message: Value::null(),
+    };
+    // SAFETY: as above.
+    let status = unsafe { guatiao_json_parse_ex(Str::new("{}"), 0, &vt, &mut out, &mut error) };
+    assert_eq!(status, Status::GUATIAO_OK);
+    assert_eq!((error.format, error.line, error.column), (0, 0, 0));
+    assert_eq!(error.message.tag(), Ok(Tag::GUATIAO_ABSENT));
+
+    // And a null `out_error` is the plain call.
+    let mut again = Value::null();
+    // SAFETY: as above.
+    let status =
+        unsafe { guatiao_json_parse_ex(Str::new("{ nope"), 0, &vt, &mut again, ptr::null_mut()) };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
 }

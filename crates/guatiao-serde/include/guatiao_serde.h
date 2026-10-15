@@ -23,6 +23,21 @@
  * string is spelled where the format has none, and the bits above it are
  * flags. Zero is the default in every position.
  * ----------------------------------------------------------------------
+ * EVERY `out` IS WRITTEN ABSENT ON ENTRY.
+ *
+ * Before anything can fail, so a caller reading it after an error reads
+ * GUATIAO_ABSENT, the same convention guatiao.h and guatiao_intake.h
+ * follow. `out` must not hold a tree you still own.
+ * ----------------------------------------------------------------------
+ * WHERE A PARSE STOPPED.
+ *
+ * guatiao_json_parse_ex() and its TOML and YAML twins take one more
+ * pointer, a guatiao_parse_error that may be NULL. A document that does
+ * not parse fills it with the format, the line and the column (from 1,
+ * 0 when unknown) and a `message` string value, released with
+ * guatiao_value_free(). The message never quotes the document, which may
+ * hold a secret.
+ * ----------------------------------------------------------------------
  * A FORMAT IS A BUILD-TIME CHOICE, SO ITS DECLARATIONS ARE GUARDED.
  *
  * Only JSON is on by default. The TOML and YAML functions are in the
@@ -48,6 +63,21 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+
+/*
+ Which format refused a document: `guatiao_parse_error.format`.
+ */
+#define GUATIAO_FORMAT_JSON 0
+
+/*
+ See [`GUATIAO_FORMAT_JSON`].
+ */
+#define GUATIAO_FORMAT_TOML 1
+
+/*
+ See [`GUATIAO_FORMAT_JSON`].
+ */
+#define GUATIAO_FORMAT_YAML 2
 
 /*
  How a byte string is spelled where the format has none. The **low
@@ -88,12 +118,43 @@
  */
 #define GUATIAO_PRETTY (1 << 9)
 
+/*
+ Why a document did not parse, for a caller that can show where.
+
+ Filled by the `_parse_ex` functions. `line` and `column` count from 1
+ and are 0 when the parser did not say where. `message` is a string
+ value built through the caller's allocator, ABSENT when the call did
+ not fail on the document, and released with `guatiao_value_free`.
+ */
+typedef struct guatiao_parse_error {
+  /*
+   A `GUATIAO_FORMAT_*` constant.
+   */
+  uint32_t format;
+  /*
+   The line, from 1; 0 when unknown.
+   */
+  uint32_t line;
+  /*
+   The column, from 1; 0 when unknown.
+   */
+  uint32_t column;
+  /*
+   What the parser expected, without an excerpt of the document.
+   */
+  guatiao_value message;
+} guatiao_parse_error;
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
 
 /*
  Reads a JSON document into a value, built through `alloc`.
+
+ `out` is written ABSENT on entry, so a failed call leaves it ABSENT.
+ A document that does not parse is `GUATIAO_ERR_BAD_VALUE`; the `_ex`
+ twin says where.
 
  # Safety
 
@@ -108,11 +169,33 @@ guatiao_status guatiao_json_parse(guatiao_str text,
                                   guatiao_value *out);
 
 /*
+ [`guatiao_json_parse`], and where it stopped when the document is not
+ JSON.
+
+ `out_error` may be null, which is the same call. Otherwise it is
+ written empty on entry and, on a document that does not parse, receives
+ the format, the line and column and the parser's message (see
+ [`ParseError`]); free its `message` with `guatiao_value_free`.
+
+ # Safety
+
+ As [`guatiao_json_parse`]; `out_error` is null or addresses writable
+ storage for one `guatiao_parse_error` that holds no message the caller
+ still owns.
+ */
+guatiao_status guatiao_json_parse_ex(guatiao_str text,
+                                     uint32_t how,
+                                     const guatiao_alloc *alloc,
+                                     guatiao_value *out,
+                                     struct guatiao_parse_error *out_error);
+
+/*
  Writes a value as a JSON document.
 
  **`out` receives a value holding the text**, released with
  `guatiao_value_free` like any other tree — so there is no second thing
- to free and no second way to get it wrong.
+ to free and no second way to get it wrong. It is written ABSENT on
+ entry, so a failed call leaves it ABSENT.
 
  `GUATIAO_PRETTY` in `how` indents the output, which is the same thing
  `guatiao_json_emit_pretty` does.
@@ -160,6 +243,22 @@ guatiao_status guatiao_toml_parse(guatiao_str text,
 
 #if defined(GUATIAO_SERDE_TOML)
 /*
+ [`guatiao_toml_parse`], and where it stopped when the document is not
+ TOML. See [`guatiao_json_parse_ex`].
+
+ # Safety
+
+ As [`guatiao_json_parse_ex`].
+ */
+guatiao_status guatiao_toml_parse_ex(guatiao_str text,
+                                     uint32_t how,
+                                     const guatiao_alloc *alloc,
+                                     guatiao_value *out,
+                                     struct guatiao_parse_error *out_error);
+#endif
+
+#if defined(GUATIAO_SERDE_TOML)
+/*
  Writes a value as a TOML document.
 
  **A TOML document is a table**, so a value that is not a map is
@@ -188,6 +287,22 @@ guatiao_status guatiao_yaml_parse(guatiao_str text,
                                   uint32_t how,
                                   const guatiao_alloc *alloc,
                                   guatiao_value *out);
+#endif
+
+#if defined(GUATIAO_SERDE_YAML)
+/*
+ [`guatiao_yaml_parse`], and where it stopped when the document is not
+ YAML. See [`guatiao_json_parse_ex`].
+
+ # Safety
+
+ As [`guatiao_json_parse_ex`].
+ */
+guatiao_status guatiao_yaml_parse_ex(guatiao_str text,
+                                     uint32_t how,
+                                     const guatiao_alloc *alloc,
+                                     guatiao_value *out,
+                                     struct guatiao_parse_error *out_error);
 #endif
 
 #if defined(GUATIAO_SERDE_YAML)
