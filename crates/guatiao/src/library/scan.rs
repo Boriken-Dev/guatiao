@@ -303,28 +303,80 @@ impl Declared {
 
 /// Reads what a file says about itself, without executing it.
 ///
-/// `Ok` means the file parsed as PE, ELF or Mach-O; `entry` says whether
-/// it is a library and `declared` what it declares. `Err` means the bytes
-/// could not be read or parsed, or a declaration was present and
-/// malformed — a file that is not examinable.
+/// `Ok` means the file parsed as PE, ELF or Mach-O and its export table
+/// was readable; `entry` says whether it is a library and `declared` what
+/// it declares. `Err` means the bytes could not be read or parsed, the
+/// export table could not be read, or a declaration was present and
+/// malformed — a file that is not examinable. A universal (fat) Mach-O is
+/// probed through the slice for the architecture this build runs on, the
+/// one the loader would map; a fat file with no such slice is `Err`.
 ///
 /// # What it costs
 ///
-/// The whole file is read into memory. A shared library is measured in
-/// megabytes and this happens once per candidate at start-up, which is
-/// cheaper than the mapping it replaces. The declaration is read from
-/// the section it lives in, clamped to that section and to
-/// 4 KiB: the bytes are an untrusted file's.
+/// The file is read on demand, not whole: its headers, its export and
+/// dynamic symbol tables, and the declaration, which is clamped to the
+/// section it lives in and to 4 KiB because the bytes are an untrusted
+/// file's.
 pub fn probe(path: &Path) -> Result<Probe, std::io::Error> {
-    use object::{Object, ObjectSection, ObjectSymbol};
+    let cache = object::ReadCache::new(std::fs::File::open(path)?);
+    match object::FileKind::parse(&cache) {
+        Ok(object::FileKind::MachOFat32) => {
+            let fat = object::read::macho::MachOFatFile32::parse(&cache).map_err(|_| unparsed())?;
+            probe_slice(&cache, fat.arches())
+        }
+        Ok(object::FileKind::MachOFat64) => {
+            let fat = object::read::macho::MachOFatFile64::parse(&cache).map_err(|_| unparsed())?;
+            probe_slice(&cache, fat.arches())
+        }
+        _ => probe_object(&cache),
+    }
+}
 
-    let bytes = std::fs::read(path)?;
-    let Ok(file) = object::File::parse(&*bytes) else {
+fn unparsed() -> std::io::Error {
+    std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        "not an object file this build can parse",
+    )
+}
+
+/// The Mach-O CPU type of the architecture this build runs on, or `None`
+/// for one Mach-O does not name.
+fn running_cputype() -> Option<object::macho::CpuType> {
+    use object::macho;
+    if cfg!(target_arch = "aarch64") {
+        Some(macho::CPU_TYPE_ARM64)
+    } else if cfg!(target_arch = "x86_64") {
+        Some(macho::CPU_TYPE_X86_64)
+    } else if cfg!(target_arch = "x86") {
+        Some(macho::CPU_TYPE_X86)
+    } else if cfg!(target_arch = "arm") {
+        Some(macho::CPU_TYPE_ARM)
+    } else {
+        None
+    }
+}
+
+/// Probes the slice of a universal file the loader would map here.
+fn probe_slice<R: object::read::ReadCacheOps, A: object::read::macho::FatArch>(
+    cache: &object::ReadCache<R>,
+    arches: &[A],
+) -> Result<Probe, std::io::Error> {
+    let want = running_cputype();
+    let Some(arch) = arches.iter().find(|a| Some(a.cputype()) == want) else {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            "not an object file this build can parse",
+            "a universal file with no slice for this architecture",
         ));
     };
+    let (offset, size) = arch.file_range();
+    probe_object(cache.range(offset, size))
+}
+
+/// [`probe`] over one object file's bytes.
+fn probe_object<'data, R: object::ReadRef<'data>>(data: R) -> Result<Probe, std::io::Error> {
+    use object::{Object, ObjectSection, ObjectSymbol};
+
+    let file = object::File::parse(data).map_err(|_| unparsed())?;
 
     // The symbols as they are written in the export table, without the
     // trailing NUL the `dlsym` constants carry.
@@ -346,27 +398,37 @@ pub fn probe(path: &Path) -> Result<Probe, std::io::Error> {
     }
     let mut has_entry = false;
     let mut declares_at: Option<u64> = None;
-    if let Ok(exports) = file.exports() {
-        for export in exports.flatten() {
-            let Some(name) = export.name().into_name() else {
-                continue;
-            };
-            let name = plain(name, macho);
-            if name == entry {
-                has_entry = true;
-            } else if name == declares
-                && let object::ExportTarget::Address { address } = export.target()
-            {
-                declares_at = Some(address);
-            }
+    // A table that cannot be read says nothing about the symbol, which is
+    // not the same as saying it is absent.
+    let exports = file.exports().map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "the export table could not be read",
+        )
+    })?;
+    for export in exports.flatten() {
+        let Some(name) = export.name().into_name() else {
+            continue;
+        };
+        let name = plain(name, macho);
+        if name == entry {
+            has_entry = true;
+        } else if name == declares
+            && let object::ExportTarget::Address { address } = export.target()
+        {
+            declares_at = Some(address);
         }
     }
     for symbol in file.dynamic_symbols() {
+        // An import names the symbol too: only a definition is an export.
+        if symbol.is_undefined() || symbol.address() == 0 {
+            continue;
+        }
         if let Ok(name) = symbol.name_bytes() {
             let name = plain(name, macho);
             if name == entry {
                 has_entry = true;
-            } else if name == declares && declares_at.is_none() && symbol.address() != 0 {
+            } else if name == declares && declares_at.is_none() {
                 declares_at = Some(symbol.address());
             }
         }
@@ -374,16 +436,20 @@ pub fn probe(path: &Path) -> Result<Probe, std::io::Error> {
 
     let mut declared = Declared::default();
     if let Some(address) = declares_at {
-        // The section the address falls in, and the bytes from there to
-        // the smaller of the section's end and the window.
+        // The section the address falls in, and from there no more than
+        // the window, the section's end and its bytes in the file allow:
+        // only those bytes are read.
         let section = file
             .sections()
             .find(|s| address >= s.address() && address < s.address().saturating_add(s.size()));
         let window = section.and_then(|s| {
-            let offset = usize::try_from(address - s.address()).ok()?;
-            let data = s.data().ok()?;
-            let end = offset.saturating_add(DECLARES_WINDOW).min(data.len());
-            data.get(offset..end)
+            let into = address - s.address();
+            let (start, in_file) = s.file_range()?;
+            let len = in_file
+                .checked_sub(into)?
+                .min(s.size() - into)
+                .min(DECLARES_WINDOW as u64);
+            data.read_bytes_at(start.checked_add(into)?, len).ok()
         });
         match window.and_then(Declared::parse) {
             Some(found) => declared = found,

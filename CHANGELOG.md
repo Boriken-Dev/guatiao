@@ -88,6 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ProviderInfo::instantiate`. Migration: match the two variants, or
   call `.status()` where `.status` was read; a separate `validate_map`
   before `instantiate` is no longer needed.
+- **A scan reads a candidate on demand rather than whole**: headers,
+  export and dynamic symbol tables, and the 4 KiB declaration window.
 - **An object kind is never served by a provider.** A registry or host
   answers the new `KindMismatch::ObjectKind` for one, and
   `#[provider(..)]` naming one is a compile error on the kind: its shims
@@ -110,6 +112,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `guatiao_registry_free` and a Python `Registry.close()` go through the
   same drop. A file passed over by its library key, or refused as a
   duplicate, after its entry point ran keeps its mapping too.
+- **A scan reads hostile files as data, and answers what it read.** A file
+  that only imports the entry symbol is not a library (an undefined
+  dynamic symbol was taken for an export); an export table that cannot be
+  read is `Skipped::NotExaminable` rather than `NoEntrySymbol`; and a
+  universal Mach-O is probed through the slice for the running
+  architecture instead of being refused, so a universal plugin loads on
+  macOS.
+- **A descriptor's array lengths are walked, never reserved for.** A
+  corrupt `len` aborted the process allocating for it before a single
+  element was read.
 - **A panic in a configured instance's `Drop` no longer aborts the host.**
   The `destroy` slot `#[derive(Provider)]` writes runs under the same
   catch as every other shim.

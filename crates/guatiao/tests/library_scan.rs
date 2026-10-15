@@ -517,3 +517,110 @@ fn a_search_path_is_walked_once_per_place_and_reports_what_it_could_not_read() {
         "the directory's copy and the named file, each kept out before mapping"
     );
 }
+
+// --- a scan reads hostile and foreign files as data ---------------------
+
+/// A committed object file the scan reads as data, never maps.
+fn fixture(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join(name)
+}
+
+/// An ELF that only IMPORTS the entry symbol names it in its dynamic
+/// symbol table as undefined; that is not a library. The one that defines
+/// it is.
+#[test]
+fn a_file_that_only_imports_the_entry_symbol_is_not_a_library() {
+    let imports = probe(&fixture("libimports.so")).expect("an ELF this build parses");
+    assert!(!imports.entry, "an undefined symbol is not an export");
+    let exports = probe(&fixture("libexports.so")).expect("an ELF this build parses");
+    assert!(exports.entry);
+    let dylib = probe(&fixture("libexports.dylib")).expect("a Mach-O this build parses");
+    assert!(dylib.entry);
+}
+
+/// The Mach-O CPU type of the architecture this test runs on.
+fn running_cputype() -> Option<u32> {
+    if cfg!(target_arch = "aarch64") {
+        Some(0x0100_000c)
+    } else if cfg!(target_arch = "x86_64") {
+        Some(0x0100_0007)
+    } else if cfg!(target_arch = "x86") {
+        Some(7)
+    } else if cfg!(target_arch = "arm") {
+        Some(12)
+    } else {
+        None
+    }
+}
+
+/// `thin` wrapped as a universal file with one slice labelled `cputype`,
+/// laid out as `lipo -create` writes one.
+fn universal(thin: &[u8], cputype: u32) -> Vec<u8> {
+    const ALIGN: u32 = 14;
+    let offset = 1usize << ALIGN;
+    let mut out = Vec::new();
+    out.extend_from_slice(&0xCAFE_BABEu32.to_be_bytes());
+    out.extend_from_slice(&1u32.to_be_bytes());
+    out.extend_from_slice(&cputype.to_be_bytes());
+    out.extend_from_slice(&0u32.to_be_bytes());
+    out.extend_from_slice(&(offset as u32).to_be_bytes());
+    out.extend_from_slice(&(thin.len() as u32).to_be_bytes());
+    out.extend_from_slice(&ALIGN.to_be_bytes());
+    out.resize(offset, 0);
+    out.extend_from_slice(thin);
+    out
+}
+
+/// A universal Mach-O is probed through the slice for the architecture
+/// the loader would map here, and one with no such slice is not
+/// examinable.
+#[test]
+fn a_universal_mach_o_is_probed_through_the_slice_for_this_architecture() {
+    let Some(here) = running_cputype() else {
+        return;
+    };
+    let thin = std::fs::read(fixture("libexports.dylib")).expect("the fixture");
+    let dir = scratch("universal");
+
+    let fat = dir.join("libfat.dylib");
+    std::fs::write(&fat, universal(&thin, here)).unwrap();
+    assert!(
+        probe(&fat)
+            .expect("its slice for this architecture parses")
+            .entry
+    );
+
+    // PowerPC: a slice nothing this crate builds for runs.
+    let foreign = dir.join("libforeign.dylib");
+    std::fs::write(&foreign, universal(&thin, 18)).unwrap();
+    assert!(probe(&foreign).is_err(), "no slice the loader could map");
+}
+
+/// A file whose export table cannot be read is not examinable, never "a
+/// file that does not export the entry symbol": the scan cannot tell.
+#[test]
+fn a_truncated_library_is_never_read_as_one_without_the_entry_symbol() {
+    let Some(library) = built("derived_greeter") else {
+        return;
+    };
+    let bytes = std::fs::read(&library).expect("a built library");
+    let dir = scratch("truncated");
+    let at = dir.join(dll_name("truncated"));
+    let step = (bytes.len() / 160).max(1);
+    let mut misread = Vec::new();
+    for len in (0..bytes.len()).step_by(step) {
+        std::fs::write(&at, &bytes[..len]).unwrap();
+        if let Ok(found) = probe(&at)
+            && !found.entry
+        {
+            misread.push(len);
+        }
+    }
+    assert!(
+        misread.is_empty(),
+        "these lengths read as parsed, with no entry symbol: {misread:?}"
+    );
+}

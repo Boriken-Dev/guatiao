@@ -1275,7 +1275,12 @@ for every kind a provider serves, written by `providers!`, plus whatever
 B; declares = ["VIEWER=1"])` adds. `probe(path) -> Probe { entry,
 declared: Declared }` reads it as data (clamped to its section and 4 KiB;
 malformed is `NotExaminable`); `declared.has(k, v)`, `values(k)`,
-`kinds()`. A host filters with
+`kinds()`. **The probe reads the file on demand**, never whole: headers,
+export and dynamic symbol tables, the declaration. Only a DEFINED symbol
+counts (a library that imports the entry symbol is not one); an export
+table that cannot be read is `Err`, so `NotExaminable`, never "no entry
+symbol"; a universal (fat) Mach-O is probed through the slice for the
+architecture the host runs on, and is `Err` without one. A host filters with
 `scan_dir_rules(reg, dir, order, &ScanRules::parse(&["!VIEWER=1",
 "kind=session-backend"])?)` — `!KEY=VALUE` skips a file declaring the
 pair, `KEY=VALUE` skips one that does not, a file declaring nothing
