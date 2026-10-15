@@ -46,7 +46,7 @@ guatiao-intake = { version = "0.0.0-alpha.0", features = ["derive"] }
 use guatiao::schema::read::SchemaRef;
 use guatiao::schema::{FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao_intake::{Form, FormBuilder, FormRef, Hints, Section, check, is_visible, layout};
-# fn main() -> Result<(), Box<dyn std::error::Error>> {
+# fn main() -> Result<(), Box<dyn core::error::Error>> {
 
 let schema = SchemaBuilder::new()
     .field(

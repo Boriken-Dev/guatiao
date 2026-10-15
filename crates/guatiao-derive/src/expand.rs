@@ -845,7 +845,7 @@ fn emit_schema(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
                 // A plain `Vec` rather than `vec![]`: every path the
                 // expansion emits is rooted, and a macro invocation is one
                 // more name that has to resolve at the call site.
-                let mut __fields = ::std::vec::Vec::new();
+                let mut __fields = ::guatiao::__private::alloc::vec::Vec::new();
                 #(#fields)*
                 ::guatiao::schema::KindBuilder::map_in(__alloc, __fields)
             }
@@ -1460,7 +1460,7 @@ fn emit_arm_schema(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenSt
             fn kind(
                 __alloc: ::guatiao::Alloc,
             ) -> ::guatiao::schema::KindBuilder {
-                let mut __arms = ::std::vec::Vec::new();
+                let mut __arms = ::guatiao::__private::alloc::vec::Vec::new();
                 #(#arms)*
                 ::guatiao::schema::KindBuilder::variant_in(__alloc, #tag, __arms)
             }
@@ -1807,12 +1807,13 @@ mod tests {
         // a name appearing that is NOT here.
         const ALLOWED: &[&str] = &[
             // The crates generated code reaches into, and the modules on
-            // the way to their items. `std` is here for one call:
-            // `::std::vec::Vec::new()`, which the `Schema` emitters use
-            // instead of `vec![]` so the expansion names no macro the call
-            // site has to resolve. It is the one path that is neither
-            // `::guatiao::` nor `::core::`.
+            // the way to their items. `std` is here for what needs it:
+            // `::std::sync::OnceLock`. Everything `alloc` holds is reached
+            // as `::guatiao::__private::alloc::`, so the expansion needs no
+            // `extern crate alloc` at the call site.
             "guatiao",
+            "__private",
+            "alloc",
             "core",
             "std",
             "default",
@@ -1862,10 +1863,10 @@ mod tests {
         }
         // A guard against the guard: if the scan ever found nothing, the
         // loop above would pass while checking nothing at all. `schema`
-        // and `std` are named because they appear ONLY in the `Schema`
+        // and `__private` are named because they appear ONLY in the `Schema`
         // expansion -- this is what says that expansion was scanned, which
         // for a while it was not.
-        for expected in ["guatiao", "core", "schema", "std"] {
+        for expected in ["guatiao", "core", "schema", "__private"] {
             assert!(
                 segments.contains(&expected),
                 "the segment scan never saw `{expected}`, so it proved less than it \

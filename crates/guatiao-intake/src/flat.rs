@@ -22,9 +22,9 @@
 
 #![forbid(unsafe_code)]
 
+use alloc::borrow::Cow;
+use alloc::collections::BTreeMap;
 use guatiao::value::convert::TryAsRef;
-use std::borrow::Cow;
-use std::collections::BTreeMap;
 
 use crate::path::{self, Segment};
 use guatiao::schema::ValidationError;

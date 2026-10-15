@@ -6,7 +6,7 @@
 
 #![allow(missing_docs)]
 
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::error::ValueError;
@@ -42,7 +42,7 @@ impl<'a> Bytes<'a> {
     /// An empty view.
     pub const fn empty() -> Bytes<'a> {
         Bytes {
-            ptr: std::ptr::null(),
+            ptr: core::ptr::null(),
             len: 0,
             _borrows: PhantomData,
         }
@@ -84,7 +84,7 @@ impl<'a> Bytes<'a> {
         }
         // SAFETY: the view was made from a borrow of `'a`, or by
         // `from_raw_parts` or a foreign caller promising the same.
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+        unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
 
@@ -171,7 +171,7 @@ impl Buffer {
 
     /// The four fields, with ownership: this buffer no longer frees them.
     pub fn into_raw_parts(self) -> (*mut u8, usize, usize, *const Allocator) {
-        let this = std::mem::ManuallyDrop::new(self);
+        let this = core::mem::ManuallyDrop::new(self);
         (this.ptr, this.len, this.cap, this.alloc)
     }
 
@@ -200,7 +200,7 @@ impl Buffer {
             // SAFETY: `reserve` guaranteed room for `bytes.len()` elements
             // at `b.ptr`, and the two regions cannot overlap since one was
             // just allocated.
-            unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), b.ptr, bytes.len()) };
+            unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), b.ptr, bytes.len()) };
             b.len = bytes.len();
         }
         Ok(b)
@@ -246,7 +246,7 @@ impl Buffer {
         // `len`, and the source is disjoint from the buffer or a staged
         // copy of it.
         unsafe {
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), self.ptr.add(self.len), bytes.len())
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), self.ptr.add(self.len), bytes.len())
         };
         self.len += bytes.len();
         Ok(())
@@ -259,7 +259,7 @@ impl Buffer {
 }
 
 /// The bytes, as `Vec<u8>` gives them.
-impl std::ops::Deref for Buffer {
+impl core::ops::Deref for Buffer {
     type Target = [u8];
 
     fn deref(&self) -> &[u8] {
@@ -268,24 +268,24 @@ impl std::ops::Deref for Buffer {
         }
         // SAFETY: the first `len` bytes are initialised, and the borrow of
         // `self` keeps them alive.
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+        unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
 
 /// The bytes, mutably. A slice cannot change its length.
-impl std::ops::DerefMut for Buffer {
+impl core::ops::DerefMut for Buffer {
     fn deref_mut(&mut self) -> &mut [u8] {
         if self.len == 0 {
             return &mut [];
         }
         // SAFETY: as for `deref`, and `&mut self` makes the borrow unique.
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+        unsafe { core::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
 
 /// A `HashMap<Buffer, _>` is searched with a `&[u8]`: hash and equality
 /// are the slice's.
-impl std::borrow::Borrow<[u8]> for Buffer {
+impl core::borrow::Borrow<[u8]> for Buffer {
     fn borrow(&self) -> &[u8] {
         self
     }
@@ -304,8 +304,8 @@ impl AsMut<[u8]> for Buffer {
 }
 
 /// By bytes, as its equality is.
-impl std::hash::Hash for Buffer {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl core::hash::Hash for Buffer {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         (**self).hash(state);
     }
 }

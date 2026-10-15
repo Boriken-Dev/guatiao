@@ -28,8 +28,8 @@ impl<K: ?Sized> Clone for Remote<K> {
 
 impl<K: ?Sized> Copy for Remote<K> {}
 
-impl<K: ?Sized + Kind> std::fmt::Debug for Remote<K> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<K: ?Sized + Kind> core::fmt::Debug for Remote<K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Remote")
             .field("kind", &K::NAME)
             .field("size", &self.size)
@@ -214,8 +214,8 @@ pub struct Offer<K: ?Sized> {
     priority: i32,
 }
 
-impl<K: ?Sized + Kind> std::fmt::Debug for Offer<K> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<K: ?Sized + Kind> core::fmt::Debug for Offer<K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Offer")
             .field("kind", &K::NAME)
             .field("id", &self.view.id)
@@ -311,7 +311,7 @@ impl<K: ?Sized + Kind> Offer<K> {
     }
 }
 
-impl<K: ?Sized + Kind> std::ops::Deref for Offer<K> {
+impl<K: ?Sized + Kind> core::ops::Deref for Offer<K> {
     type Target = K;
 
     fn deref(&self) -> &K {
@@ -350,8 +350,8 @@ pub struct Instance<K: ?Sized> {
     destroy: Option<unsafe extern "C" fn(ctx: *mut c_void, instance: *mut c_void)>,
 }
 
-impl<K: ?Sized + Kind> std::fmt::Debug for Instance<K> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<K: ?Sized + Kind> core::fmt::Debug for Instance<K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Instance")
             .field("kind", &K::NAME)
             .finish_non_exhaustive()
@@ -378,7 +378,7 @@ impl<K: ?Sized + Kind> Instance<K> {
         // fit `K` never builds an instance it would then have to destroy.
         let remote = Remote::<K>::from_view(view)
             .map_err(|why| ProviderError::new(Status::GUATIAO_ERR_WRONG_KIND, &why.to_string()))?;
-        let mut instance: *mut c_void = std::ptr::null_mut();
+        let mut instance: *mut c_void = core::ptr::null_mut();
         let mut err = ProviderError::none();
         // SAFETY: the slot is the descriptor's own, read under its guard;
         // `config` is a well-formed value; the out-slots are writable
@@ -416,7 +416,7 @@ impl<K: ?Sized + Kind> Instance<K> {
     }
 }
 
-impl<K: ?Sized + Kind> std::ops::Deref for Instance<K> {
+impl<K: ?Sized + Kind> core::ops::Deref for Instance<K> {
     type Target = K;
 
     fn deref(&self) -> &K {

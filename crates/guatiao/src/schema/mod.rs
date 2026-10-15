@@ -145,8 +145,8 @@ pub enum ValidationError {
     },
 }
 
-impl std::fmt::Display for ValidationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             ValidationError::UnknownOption { key, known } => {
                 write!(f, "unknown field '{key}'")?;
@@ -162,4 +162,4 @@ impl std::fmt::Display for ValidationError {
     }
 }
 
-impl std::error::Error for ValidationError {}
+impl core::error::Error for ValidationError {}

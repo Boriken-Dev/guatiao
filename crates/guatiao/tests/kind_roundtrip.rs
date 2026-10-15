@@ -9,9 +9,10 @@
 #![cfg(feature = "provider")]
 // `shapes` takes every crossing shape at once, which is the point.
 #![allow(clippy::too_many_arguments)]
+extern crate alloc;
 
+use core::ffi::c_void;
 use guatiao::value::convert::TryAsRef;
-use std::ffi::c_void;
 
 use guatiao::library::{Kind, KindMismatch, ProviderError, Remote};
 use guatiao::{FromValue, Map, Schema, Status, ToValue, Value};
@@ -245,7 +246,7 @@ fn the_proxy_is_the_trait() {
     let r = hello();
     let kept: Box<dyn Greeter> = r.into();
     assert_eq!(kept.greet("cy").unwrap(), "hello, cy");
-    let shared: std::sync::Arc<dyn Greeter> = <dyn Greeter as Kind>::shared(hello());
+    let shared: alloc::sync::Arc<dyn Greeter> = <dyn Greeter as Kind>::shared(hello());
     assert_eq!(shared.count(), 7);
     let again: Box<dyn Greeter> = <dyn Greeter as Kind>::boxed(hello());
     assert_eq!(again.shout("di"), "HELLO, DI!");
@@ -324,7 +325,7 @@ pub trait Tally: Send {
 
 struct Sum {
     total: i64,
-    dropped: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    dropped: alloc::sync::Arc<core::sync::atomic::AtomicBool>,
 }
 
 impl Tally for Sum {
@@ -346,12 +347,12 @@ impl Tally for Sum {
 impl Drop for Sum {
     fn drop(&mut self) {
         self.dropped
-            .store(true, std::sync::atomic::Ordering::SeqCst);
+            .store(true, core::sync::atomic::Ordering::SeqCst);
     }
 }
 
-fn dropped_flag() -> std::sync::Arc<std::sync::atomic::AtomicBool> {
-    std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))
+fn dropped_flag() -> alloc::sync::Arc<core::sync::atomic::AtomicBool> {
+    alloc::sync::Arc::new(core::sync::atomic::AtomicBool::new(false))
 }
 
 // A compile-time check on purpose; clippy 1.89 reads it as a constant assertion.
@@ -425,10 +426,10 @@ fn an_object_is_driven_through_its_handle_and_destroyed_once() {
         1,
         "a short buffer is filled, not overrun"
     );
-    assert!(!dropped.load(std::sync::atomic::Ordering::SeqCst));
+    assert!(!dropped.load(core::sync::atomic::Ordering::SeqCst));
     drop(tally);
     assert!(
-        dropped.load(std::sync::atomic::Ordering::SeqCst),
+        dropped.load(core::sync::atomic::Ordering::SeqCst),
         "destroy ran once"
     );
 }
@@ -450,7 +451,7 @@ fn an_object_crosses_as_raw_parts_and_a_mismatch_destroys_it() {
     let mut back = unsafe { Object::<dyn Tally>::from_raw(raw) }.expect("the same table");
     assert_eq!(back.add(1), 8);
     drop(back);
-    assert!(dropped.load(std::sync::atomic::Ordering::SeqCst));
+    assert!(dropped.load(core::sync::atomic::Ordering::SeqCst));
 
     // Presented as the wrong kind: refused, and destroyed rather than
     // leaked, since whoever received it owned it.
@@ -466,7 +467,7 @@ fn an_object_crosses_as_raw_parts_and_a_mismatch_destroys_it() {
     let why = unsafe { Object::<dyn Greeter>::from_raw(raw) }.unwrap_err();
     assert!(matches!(why, KindMismatch::HashMismatch { .. }), "{why:?}");
     assert!(
-        dropped.load(std::sync::atomic::Ordering::SeqCst),
+        dropped.load(core::sync::atomic::Ordering::SeqCst),
         "destroyed on refusal"
     );
 

@@ -390,7 +390,7 @@ fn greet(registry: &Registry, name: &str) -> guatiao::Value {
     // SAFETY: the provider claims the `greeter` kind, whose table this
     // test's dev-dependency declares, and the size check established
     // `greet` is present.
-    let greet = unsafe { std::ptr::addr_of!((*(ptr as *const GreeterVtable)).greet).read() }
+    let greet = unsafe { core::ptr::addr_of!((*(ptr as *const GreeterVtable)).greet).read() }
         .expect("a greeter has a greet slot");
 
     let mut config = Map::new();
@@ -445,9 +445,9 @@ unsafe extern "C" fn describing(_host: *const guatiao::library::HostInfo) -> *co
             kinds: Kinds::new(&LINKED_KINDS.0),
             id: Str::new("linked_greeter"),
             display_name: Str::new("Linked"),
-            config: std::ptr::null(),
-            vtable: std::ptr::null(),
-            ctx: std::ptr::null_mut(),
+            config: core::ptr::null(),
+            vtable: core::ptr::null(),
+            ctx: core::ptr::null_mut(),
             meta: MaybeNull::null(),
             version: Str::new(""),
             available: None,

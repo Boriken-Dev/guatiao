@@ -38,7 +38,7 @@
 //!
 //! // `Option<T>` is how a field says it may be left out.
 //! assert!(!s.find("motd").unwrap().is_required());
-//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! # Ok::<(), Box<dyn core::error::Error>>(())
 //! ```
 //!
 //! # The kind comes from the type, the field comes from the field
@@ -172,7 +172,7 @@ impl<T: Schema> Schema for Vec<T> {
 /// The schema says what the values are and nothing about the keys,
 /// because there is nothing to say — a struct holding one of these is
 /// exactly that, and a schema describes the struct as it is.
-impl<T: Schema> Schema for std::collections::BTreeMap<String, T> {
+impl<T: Schema> Schema for alloc::collections::BTreeMap<String, T> {
     fn kind(alloc: Alloc) -> KindBuilder {
         KindBuilder::map_of_in(alloc, T::kind(alloc))
     }

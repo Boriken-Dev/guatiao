@@ -88,6 +88,7 @@
 // one exemption, and `tests/unsafe_stays_in_exports.rs` is what keeps
 // that true. Same arrangement as the core crate's `library` module.
 #![deny(missing_docs)]
+extern crate alloc;
 
 mod de;
 // The `extern "C"` surface. Always compiled, like the core's: this is
@@ -168,7 +169,7 @@ pub fn from_base64(text: &str) -> Option<Vec<u8>> {
                 // Padding, and it may only be at the end of the LAST
                 // chunk: `=` anywhere else is a malformed document rather
                 // than a zero.
-                if !std::ptr::eq(chunk.as_ptr(), bytes[bytes.len() - 4..].as_ptr()) {
+                if !core::ptr::eq(chunk.as_ptr(), bytes[bytes.len() - 4..].as_ptr()) {
                     return None;
                 }
                 0

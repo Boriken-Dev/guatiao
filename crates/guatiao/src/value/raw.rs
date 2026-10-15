@@ -23,8 +23,8 @@
 //! normal shape of a statically declared value, and every computation of
 //! spare capacity here handles it before subtracting.
 
-use std::mem::{align_of, size_of};
-use std::ptr;
+use core::mem::{align_of, size_of};
+use core::ptr;
 
 use super::alloc::{Alloc, AllocError, Allocator};
 use super::types::{Buffer, Entry, List, Map, Text, Value};
@@ -255,8 +255,8 @@ pub(crate) unsafe fn release_buffer<C: Container>(c: &mut C) {
 mod tests {
     use super::*;
     use crate::value::alloc::rust_alloc;
-    use std::cell::Cell;
-    use std::ffi::c_void;
+    use core::cell::Cell;
+    use core::ffi::c_void;
 
     fn empty_buffer(alloc: *const Allocator) -> Buffer {
         Buffer {
@@ -295,7 +295,7 @@ mod tests {
 
         assert!(b.cap >= 8);
         assert_ne!(b.ptr as *const u8, LITERAL.as_ptr(), "a fresh buffer");
-        assert_eq!(unsafe { std::slice::from_raw_parts(b.ptr, 5) }, LITERAL);
+        assert_eq!(unsafe { core::slice::from_raw_parts(b.ptr, 5) }, LITERAL);
         assert_eq!(LITERAL, b"hello", "the literal itself is untouched");
         assert!(!b.alloc.is_null(), "the allocator was adopted");
 
@@ -332,7 +332,7 @@ mod tests {
         }
         assert_eq!(b.len, 100);
         assert!(b.cap >= 100);
-        let seen = unsafe { std::slice::from_raw_parts(b.ptr, b.len) };
+        let seen = unsafe { core::slice::from_raw_parts(b.ptr, b.len) };
         assert!(seen.iter().copied().eq(0..100));
 
         unsafe { release_buffer(&mut b) };

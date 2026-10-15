@@ -49,7 +49,7 @@ use guatiao::value::alloc::Alloc;
 use guatiao::{Map, Value};
 use guatiao_serde::{Serializable, ValueSeed, text::json};
 use serde::de::DeserializeSeed;
-# fn main() -> Result<(), Box<dyn std::error::Error>> {
+# fn main() -> Result<(), Box<dyn core::error::Error>> {
 # use guatiao_serde::Presentation;
 
 let mut map = Map::new();

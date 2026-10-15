@@ -6,9 +6,9 @@
 
 #![allow(missing_docs)]
 
-use std::ptr;
+use core::ptr;
 
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::error::ValueError;
@@ -41,7 +41,7 @@ impl<'a> Values<'a> {
     /// An empty view.
     pub const fn empty() -> Values<'a> {
         Values {
-            ptr: std::ptr::null(),
+            ptr: core::ptr::null(),
             len: 0,
             _borrows: PhantomData,
         }
@@ -83,7 +83,7 @@ impl<'a> Values<'a> {
         }
         // SAFETY: the view was made from a borrow of `'a`, or by
         // `from_raw_parts` or a foreign caller promising the same.
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+        unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
 
@@ -156,7 +156,7 @@ impl List {
 
     /// The four fields, with ownership: this list no longer frees them.
     pub fn into_raw_parts(self) -> (*mut Value, usize, usize, *const Allocator) {
-        let this = std::mem::ManuallyDrop::new(self);
+        let this = core::mem::ManuallyDrop::new(self);
         (this.ptr, this.len, this.cap, this.alloc)
     }
 
@@ -278,7 +278,7 @@ impl List {
     pub(crate) fn dismantle_into(&mut self, stack: &mut Vec<Value>) {
         for i in 0..self.len {
             // SAFETY: the first `len` elements are initialised.
-            stack.push(std::mem::take(unsafe { &mut *self.ptr.add(i) }));
+            stack.push(core::mem::take(unsafe { &mut *self.ptr.add(i) }));
         }
         self.len = 0;
         // SAFETY: the elements have been moved out.
@@ -288,7 +288,7 @@ impl List {
 
 /// The elements, as `Vec` gives them: `len`, `get`, `iter`, indexing and
 /// every other slice method are the slice's own.
-impl std::ops::Deref for List {
+impl core::ops::Deref for List {
     type Target = [Value];
 
     fn deref(&self) -> &[Value] {
@@ -297,20 +297,20 @@ impl std::ops::Deref for List {
         }
         // SAFETY: the first `len` elements are initialised, and the borrow
         // of `self` keeps them alive and unaliased.
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+        unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
 
 /// The elements, mutably. A slice cannot change its length, so what this
 /// list owns and how it frees it are untouched: an element moved out of a
 /// slot is moved out whole, as `mem::replace` or `swap` does.
-impl std::ops::DerefMut for List {
+impl core::ops::DerefMut for List {
     fn deref_mut(&mut self) -> &mut [Value] {
         if self.len == 0 {
             return &mut [];
         }
         // SAFETY: as for `deref`, and `&mut self` makes the borrow unique.
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+        unsafe { core::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
 
@@ -360,18 +360,18 @@ impl IntoIterator for List {
 
 impl<'a> IntoIterator for &'a mut List {
     type Item = &'a mut Value;
-    type IntoIter = std::slice::IterMut<'a, Value>;
+    type IntoIter = core::slice::IterMut<'a, Value>;
 
-    fn into_iter(self) -> std::slice::IterMut<'a, Value> {
+    fn into_iter(self) -> core::slice::IterMut<'a, Value> {
         self.iter_mut()
     }
 }
 
 impl<'a> IntoIterator for &'a List {
     type Item = &'a Value;
-    type IntoIter = std::slice::Iter<'a, Value>;
+    type IntoIter = core::slice::Iter<'a, Value>;
 
-    fn into_iter(self) -> std::slice::Iter<'a, Value> {
+    fn into_iter(self) -> core::slice::Iter<'a, Value> {
         self.iter()
     }
 }

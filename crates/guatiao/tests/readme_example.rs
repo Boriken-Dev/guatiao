@@ -29,7 +29,7 @@
 //! marker comments below where they are: they are the second half of it.
 
 #[test]
-fn the_readme_example_compiles_and_holds() -> Result<(), Box<dyn std::error::Error>> {
+fn the_readme_example_compiles_and_holds() -> Result<(), Box<dyn core::error::Error>> {
     // README-EXAMPLE-BEGIN
     use guatiao::Map;
 

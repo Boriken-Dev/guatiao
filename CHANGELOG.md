@@ -39,6 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   its providers depend on, rather than every provider pinning `guatiao`
   at the same version beside it.
 
+### Changed
+
+- **A `std::` path now marks something that needs the operating system.**
+  Everything `core` or `alloc` also holds is spelled that way, enforced by
+  the `std_instead_of_core`, `std_instead_of_alloc` and
+  `alloc_instead_of_core` clippy lints for the whole workspace. Error types
+  implement `core::error::Error`, and the derives and `providers!` reach
+  `alloc` items through a hidden `guatiao::__private::alloc`, so the crate
+  that expands them declares nothing.
+
 ### Fixed
 
 - **A handle held across an `.await` no longer makes the future `!Send`.**

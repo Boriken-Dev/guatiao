@@ -22,7 +22,7 @@
 
 #![cfg(feature = "load")]
 
-use std::ffi::c_void;
+use core::ffi::c_void;
 use std::path::PathBuf;
 
 use guatiao::library::Registry;
@@ -143,27 +143,27 @@ fn a_derived_librarys_descriptor_lives_in_the_hosts_arena() {
         "the library built its descriptor in the host's arena"
     );
     assert!(
-        COUNTED.load(std::sync::atomic::Ordering::Relaxed) > 0,
+        COUNTED.load(core::sync::atomic::Ordering::Relaxed) > 0,
         "and it went through this test's own allocator"
     );
 }
 
 // --- a host allocator this test can recognise ---------------------------
 
-static COUNTED: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+static COUNTED: core::sync::atomic::AtomicI64 = core::sync::atomic::AtomicI64::new(0);
 
 unsafe extern "C" fn counted_alloc(_ctx: *mut c_void, size: usize, align: usize) -> *mut c_void {
-    COUNTED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    COUNTED.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
     let real = rust_alloc().alloc.expect("the rust allocator has an alloc");
     // SAFETY: forwarding an unchanged request to the allocator this one
     // wraps.
-    unsafe { real(std::ptr::null_mut(), size, align) }
+    unsafe { real(core::ptr::null_mut(), size, align) }
 }
 
 unsafe extern "C" fn counted_free(_ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
     let real = rust_alloc().free.expect("the rust allocator has a free");
     // SAFETY: the same block with the layout it was allocated with.
-    unsafe { real(std::ptr::null_mut(), p, size, align) }
+    unsafe { real(core::ptr::null_mut(), p, size, align) }
 }
 
 /// An `Allocator` holds a `*mut c_void`, so it is not `Sync` and cannot
@@ -175,7 +175,7 @@ unsafe impl Sync for VTable {}
 
 static HOST_ALLOC: VTable = VTable(Allocator {
     struct_size: size_of::<Allocator>() as u32,
-    ctx: std::ptr::null_mut(),
+    ctx: core::ptr::null_mut(),
     alloc: Some(counted_alloc),
     free: Some(counted_free),
     release: None,

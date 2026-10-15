@@ -21,9 +21,10 @@
 //! is not a mistake that can be made here.
 
 #![allow(non_camel_case_types)]
+extern crate alloc;
 
-use std::ffi::c_void;
-use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use core::ffi::c_void;
+use core::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 use std::sync::{OnceLock, PoisonError, RwLock};
 
 use guatiao::library::{Host, KindTables, Kinds, LibraryInfo, ProviderInfo, Providers};
@@ -76,12 +77,12 @@ impl GreeterVtable {
     /// tracked the newest slot would refuse every library built before
     /// that slot existed.
     pub const fn floor() -> usize {
-        std::mem::offset_of!(GreeterVtable, greet) + size_of::<usize>()
+        core::mem::offset_of!(GreeterVtable, greet) + size_of::<usize>()
     }
 
     /// Where the appended slot ends, for the guard that reads it.
     pub const fn outstanding_end() -> usize {
-        std::mem::offset_of!(GreeterVtable, outstanding) + size_of::<usize>()
+        core::mem::offset_of!(GreeterVtable, outstanding) + size_of::<usize>()
     }
 }
 
@@ -100,7 +101,7 @@ unsafe extern "C" fn counted_alloc(_ctx: *mut c_void, size: usize, align: usize)
     let real = rust_alloc().alloc.expect("the rust allocator has an alloc");
     // SAFETY: forwarding an unchanged request to the allocator this one
     // wraps.
-    unsafe { real(std::ptr::null_mut(), size, align) }
+    unsafe { real(core::ptr::null_mut(), size, align) }
 }
 
 unsafe extern "C" fn counted_free(_ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
@@ -108,7 +109,7 @@ unsafe extern "C" fn counted_free(_ctx: *mut c_void, p: *mut c_void, size: usize
     let real = rust_alloc().free.expect("the rust allocator has a free");
     // SAFETY: forwarding the same block with the same layout it was
     // allocated with.
-    unsafe { real(std::ptr::null_mut(), p, size, align) }
+    unsafe { real(core::ptr::null_mut(), p, size, align) }
 }
 
 /// This library's allocator, as a constant.
@@ -119,7 +120,7 @@ unsafe extern "C" fn counted_free(_ctx: *mut c_void, p: *mut c_void, size: usize
 /// refuses to be unloaded while one is still out.
 static LIBRARY_ALLOC: VTable = VTable(Allocator {
     struct_size: size_of::<Allocator>() as u32,
-    ctx: std::ptr::null_mut(),
+    ctx: core::ptr::null_mut(),
     alloc: Some(counted_alloc),
     free: Some(counted_free),
     release: None,
@@ -341,7 +342,7 @@ unsafe extern "C" fn echo(_ctx: *mut c_void, name: Str, out: *mut Value) -> Stat
         return Status::GUATIAO_ERR_WRONG_KIND;
     };
 
-    let Ok(name) = std::str::from_utf8(name.into()) else {
+    let Ok(name) = core::str::from_utf8(name.into()) else {
         return Status::GUATIAO_ERR_BAD_VALUE;
     };
     let alloc = library_alloc();
@@ -469,7 +470,7 @@ fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> {
                 display_name: Str::new("Hello"),
                 config: &*schema as *const Value,
                 vtable: &GREETER as *const GreeterVtable as *const c_void,
-                ctx: std::ptr::null_mut(),
+                ctx: core::ptr::null_mut(),
                 meta: MaybeNull::null(),
                 // Empty: this provider ships in this library and moves
                 // with it, so its version is the library's.
@@ -487,9 +488,9 @@ fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> {
                 kinds: Kinds::new(&ALMANAC_KINDS.0),
                 id: Str::new("hello_library_almanac"),
                 display_name: Str::new("Almanac"),
-                config: std::ptr::null(),
-                vtable: std::ptr::null(),
-                ctx: std::ptr::null_mut(),
+                config: core::ptr::null(),
+                vtable: core::ptr::null(),
+                ctx: core::ptr::null_mut(),
                 meta: MaybeNull::null(),
                 // Its own, because its contract froze while the library
                 // around it went on. This is the case the field exists for.
@@ -509,9 +510,9 @@ fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> {
                 kinds: Kinds::new(&SUNDIAL_KINDS.0),
                 id: Str::new("hello_library_sundial"),
                 display_name: Str::new("Sundial"),
-                config: std::ptr::null(),
-                vtable: std::ptr::null(),
-                ctx: std::ptr::null_mut(),
+                config: core::ptr::null(),
+                vtable: core::ptr::null(),
+                ctx: core::ptr::null_mut(),
                 meta: MaybeNull::null(),
                 version: Str::new(""),
                 available: Some(sundial_available),
@@ -528,9 +529,9 @@ fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> {
                 kinds: Kinds::new(&ECHO_KINDS.0),
                 id: Str::new("hello_library_echo"),
                 display_name: Str::new("Echo"),
-                config: std::ptr::null(),
+                config: core::ptr::null(),
                 vtable: &ECHO as *const EchoVtable as *const c_void,
-                ctx: std::ptr::null_mut(),
+                ctx: core::ptr::null_mut(),
                 meta: MaybeNull::null(),
                 version: Str::new(""),
                 available: None,

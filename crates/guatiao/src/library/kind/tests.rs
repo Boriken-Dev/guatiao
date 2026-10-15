@@ -5,7 +5,7 @@
 //! The kind runtime end to end, through one hand-written kind.
 
 use super::*;
-use std::mem::offset_of;
+use core::mem::offset_of;
 
 // A kind written by hand with only these helpers: what the macro
 // will emit, spelled out once.
@@ -43,7 +43,7 @@ unsafe extern "C" fn greet_shim<T: Greeter>(
             return Status::GUATIAO_ERR_NULL;
         };
         // SAFETY: the proxy passes a readable view.
-        let name = match std::str::from_utf8(name.into()) {
+        let name = match core::str::from_utf8(name.into()) {
             Ok(n) => n,
             Err(e) => return e.into(),
         };
@@ -293,7 +293,7 @@ fn each_check_names_itself() {
 
     // SAFETY: null is refused before anything is read.
     assert_eq!(
-        unsafe { Remote::<dyn Greeter>::from_raw(std::ptr::null(), 64, std::ptr::null_mut()) }
+        unsafe { Remote::<dyn Greeter>::from_raw(core::ptr::null(), 64, core::ptr::null_mut()) }
             .unwrap_err(),
         KindMismatch::NoTable
     );
@@ -314,13 +314,13 @@ fn a_zero_hash_is_accepted_only_at_the_raw_door() {
         id: "x".to_string(),
         display_name: String::new(),
         config: None,
-        vtable: std::ptr::null(),
+        vtable: core::ptr::null(),
         vtable_size: 0,
         ctx: ctx.cast_mut(),
         meta: None,
         version: None,
         available: None,
-        raw: std::ptr::null(),
+        raw: core::ptr::null(),
         create: None,
         destroy: None,
         tables: vec![(
@@ -376,13 +376,13 @@ fn a_registry_offers_every_valid_provider_and_reports_the_rest() {
         id: id.to_string(),
         display_name: String::new(),
         config: None,
-        vtable: std::ptr::null(),
+        vtable: core::ptr::null(),
         vtable_size: 0,
         ctx,
         meta: None,
         version: None,
         available,
-        raw: std::ptr::null(),
+        raw: core::ptr::null(),
         create: None,
         destroy: None,
         tables: vec![("greeter".to_string(), table, size)],

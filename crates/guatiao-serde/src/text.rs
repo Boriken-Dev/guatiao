@@ -17,7 +17,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::fmt;
+use alloc::fmt;
 
 /// Why a document could not be read or written.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,7 +60,7 @@ impl fmt::Display for Error {
     }
 }
 
-impl std::error::Error for Error {}
+impl core::error::Error for Error {}
 
 #[cfg(feature = "json")]
 pub mod json {

@@ -6,8 +6,8 @@
 //!
 //! Every rule the crate states has a test here that fails without it.
 
-use std::cell::Cell;
-use std::ffi::c_void;
+use core::cell::Cell;
+use core::ffi::c_void;
 
 use guatiao::schema::read::SchemaRef;
 use guatiao::schema::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
@@ -800,7 +800,7 @@ unsafe extern "C" fn counted_alloc(ctx: *mut c_void, size: usize, align: usize) 
     counter.outstanding.set(counter.outstanding.get() + 1);
     let real = rust_alloc().alloc.expect("the rust allocator has an alloc");
     // SAFETY: forwarding an unchanged request.
-    unsafe { real(std::ptr::null_mut(), size, align) }
+    unsafe { real(core::ptr::null_mut(), size, align) }
 }
 
 unsafe extern "C" fn counted_free(ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
@@ -809,7 +809,7 @@ unsafe extern "C" fn counted_free(ctx: *mut c_void, p: *mut c_void, size: usize,
     counter.outstanding.set(counter.outstanding.get() - 1);
     let real = rust_alloc().free.expect("the rust allocator has a free");
     // SAFETY: forwarding the same block with the same layout.
-    unsafe { real(std::ptr::null_mut(), p, size, align) }
+    unsafe { real(core::ptr::null_mut(), p, size, align) }
 }
 
 /// A form built into a named allocator is built entirely there and frees

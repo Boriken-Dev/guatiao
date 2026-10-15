@@ -7,10 +7,10 @@
 
 #![allow(missing_docs)]
 
-use std::fmt;
-use std::ptr;
+use alloc::fmt;
+use core::ptr;
 
-use std::marker::PhantomData;
+use core::marker::PhantomData;
 
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::convert::MapError;
@@ -46,7 +46,7 @@ impl<'a> Entries<'a> {
     /// An empty view.
     pub const fn empty() -> Entries<'a> {
         Entries {
-            ptr: std::ptr::null(),
+            ptr: core::ptr::null(),
             len: 0,
             _borrows: PhantomData,
         }
@@ -88,7 +88,7 @@ impl<'a> Entries<'a> {
         }
         // SAFETY: the view was made from a borrow of `'a`, or by
         // `from_raw_parts` or a foreign caller promising the same.
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+        unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
 
@@ -181,7 +181,7 @@ impl Map {
 
     /// The four fields, with ownership: this map no longer frees them.
     pub fn into_raw_parts(self) -> (*mut Entry, usize, usize, *const Allocator) {
-        let this = std::mem::ManuallyDrop::new(self);
+        let this = core::mem::ManuallyDrop::new(self);
         (this.ptr, this.len, this.cap, this.alloc)
     }
 
@@ -240,7 +240,7 @@ impl Map {
             return &[];
         }
         // SAFETY: the first `len` entries are initialised.
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+        unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
     }
 
     /// Stores `value` under `key`, **consuming** it. Takes anything a
@@ -281,7 +281,7 @@ impl Map {
                 // SAFETY: `i < len`, so this entry is initialised. The
                 // replaced value is dropped, which frees what it owned.
                 let entry = unsafe { &mut *self.ptr.add(i) };
-                drop(std::mem::replace(&mut entry.value, value));
+                drop(core::mem::replace(&mut entry.value, value));
                 Ok(())
             }
             None => self.insert_node(key, value, alloc),
@@ -350,7 +350,7 @@ impl Map {
     /// let host: &str = map.required("host")?.try_into()?;
     /// assert_eq!(host, "10.0.0.1");
     /// assert!(map.required("nothing").is_err());
-    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// # Ok::<(), Box<dyn core::error::Error>>(())
     /// ```
     pub fn required(&self, key: &str) -> Result<&Value, MapError> {
         self.get(key).ok_or_else(|| MapError::missing(key))
@@ -405,7 +405,7 @@ impl Map {
     }
 
     /// Its entries, in insertion order.
-    pub fn iter(&self) -> std::slice::Iter<'_, Entry> {
+    pub fn iter(&self) -> core::slice::Iter<'_, Entry> {
         self.entries().iter()
     }
 
@@ -491,7 +491,7 @@ impl Map {
         let entries = self.entries();
         let mut i = 0;
         while i < entries.len() {
-            if std::str::from_utf8(entries[i].key_bytes()).is_err() {
+            if core::str::from_utf8(entries[i].key_bytes()).is_err() {
                 return false;
             }
             i += 1;
@@ -513,7 +513,7 @@ impl Map {
         }
         // SAFETY: the first `len` entries are initialised, and `&mut self`
         // makes the borrow unique.
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+        unsafe { core::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 
     /// Removes the last entry.
@@ -534,7 +534,7 @@ impl Map {
             // SAFETY: the first `len` entries are initialised.
             let entry = unsafe { &mut *self.ptr.add(i) };
             entry.key.release();
-            stack.push(std::mem::take(&mut entry.value));
+            stack.push(core::mem::take(&mut entry.value));
         }
         self.len = 0;
         // SAFETY: the entries have been moved out.
@@ -546,7 +546,7 @@ impl Map {
 /// under the key. There is no `IndexMut`, for the same reason `HashMap`
 /// has none: it could only hand back a slot that already exists, so
 /// `map["new"] = v` would panic rather than insert. [`Map::set`] inserts.
-impl std::ops::Index<&str> for Map {
+impl core::ops::Index<&str> for Map {
     type Output = Value;
 
     fn index(&self, key: &str) -> &Value {
@@ -593,18 +593,18 @@ impl IntoIterator for Map {
 /// stays the key.
 impl<'a> IntoIterator for &'a mut Map {
     type Item = &'a mut Entry;
-    type IntoIter = std::slice::IterMut<'a, Entry>;
+    type IntoIter = core::slice::IterMut<'a, Entry>;
 
-    fn into_iter(self) -> std::slice::IterMut<'a, Entry> {
+    fn into_iter(self) -> core::slice::IterMut<'a, Entry> {
         self.entries_mut().iter_mut()
     }
 }
 
 impl<'a> IntoIterator for &'a Map {
     type Item = &'a Entry;
-    type IntoIter = std::slice::Iter<'a, Entry>;
+    type IntoIter = core::slice::Iter<'a, Entry>;
 
-    fn into_iter(self) -> std::slice::Iter<'a, Entry> {
+    fn into_iter(self) -> core::slice::Iter<'a, Entry> {
         self.iter()
     }
 }

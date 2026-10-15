@@ -50,7 +50,8 @@
 
 #![allow(non_camel_case_types)]
 
-use std::panic::{AssertUnwindSafe, catch_unwind};
+use core::panic::AssertUnwindSafe;
+use std::panic::catch_unwind;
 
 use guatiao::value::alloc::{Alloc, Allocator};
 use guatiao::value::status::Status;
@@ -140,7 +141,7 @@ fn guard(body: impl FnOnce() -> Status) -> Status {
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(s) => s,
         Err(payload) => {
-            std::mem::forget(payload);
+            core::mem::forget(payload);
             Status::GUATIAO_ERR_INTERNAL
         }
     }
@@ -169,7 +170,7 @@ unsafe fn inputs<'a>(
     let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
         return Err(Status::GUATIAO_ERR_ALLOC);
     };
-    let text = std::str::from_utf8(text.into()).map_err(Status::from)?;
+    let text = core::str::from_utf8(text.into()).map_err(Status::from)?;
     Ok((text, alloc))
 }
 

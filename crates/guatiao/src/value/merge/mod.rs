@@ -70,7 +70,7 @@
 //! assert_eq!(provenance.source_of("tls.verify"), Source::Layer("user"));
 //! assert_eq!(provenance.source_of("tls.ca"), Source::Layer("system"));
 //! assert_eq!(provenance.source_of("tls"), Source::Mixed);
-//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! # Ok::<(), Box<dyn core::error::Error>>(())
 //! ```
 //!
 //! [`MergeMode`] is a **call-site default**. A declarer that knows an
@@ -82,7 +82,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 
 use crate::value::alloc::Alloc;
 use crate::value::convert::{ToValue, TryAsRef};
@@ -185,8 +185,8 @@ impl From<ValueError> for MergeError {
     }
 }
 
-impl std::fmt::Display for MergeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for MergeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             MergeError::Kind {
                 path,
@@ -211,7 +211,7 @@ impl std::fmt::Display for MergeError {
     }
 }
 
-impl std::error::Error for MergeError {}
+impl core::error::Error for MergeError {}
 
 /// A kind in a sentence, for [`MergeError`]'s message.
 fn kind_name(tag: Option<Tag>) -> &'static str {

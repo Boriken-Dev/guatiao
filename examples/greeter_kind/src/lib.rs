@@ -11,6 +11,7 @@
 //! registry. An **object** kind (`Conversation`, `Listener`) is a handle
 //! one caller owns: a provider hands a `Conversation` back, the host
 //! hands a `Listener` in, and each is destroyed by whoever holds it last.
+extern crate alloc;
 
 use guatiao::Map;
 use guatiao::library::{Object, ProviderError};

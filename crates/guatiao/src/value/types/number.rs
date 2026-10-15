@@ -11,8 +11,8 @@
 //! number here and there is no `f64` for it.
 
 #![allow(missing_docs)]
-use std::fmt;
-use std::str::FromStr;
+use alloc::fmt;
+use core::str::FromStr;
 
 use crate::value::alloc::Alloc;
 use crate::value::error::ValueError;
@@ -108,7 +108,7 @@ impl PartialEq for Number {
 impl Eq for Number {}
 
 /// The text, as a `String` gives its `str`.
-impl std::ops::Deref for Number {
+impl core::ops::Deref for Number {
     type Target = str;
 
     fn deref(&self) -> &str {
@@ -131,14 +131,14 @@ impl AsRef<[u8]> for Number {
 }
 
 /// As its `str`, as its equality is: `1.10` and `1.1` hash apart.
-impl std::hash::Hash for Number {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl core::hash::Hash for Number {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         (**self).hash(state);
     }
 }
 
 /// A `HashMap<Number, _>` is searched with a `&str`.
-impl std::borrow::Borrow<str> for Number {
+impl core::borrow::Borrow<str> for Number {
     fn borrow(&self) -> &str {
         self
     }

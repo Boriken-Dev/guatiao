@@ -98,8 +98,8 @@ impl ProviderParts {
             display_name: unsafe { crate::library::raw::view_of_owned(&name) },
             config: config
                 .as_deref()
-                .map_or(std::ptr::null(), |v| v as *const Value),
-            vtable: std::ptr::null(),
+                .map_or(core::ptr::null(), |v| v as *const Value),
+            vtable: core::ptr::null(),
             ctx,
             meta: crate::value::types::MaybeNull::null(),
             // SAFETY: as `id`.

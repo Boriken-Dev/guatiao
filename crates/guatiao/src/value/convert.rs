@@ -15,7 +15,7 @@
 //!
 //! let value = "10.0.0.1".to_value(Alloc::rust())?;
 //! assert_eq!(String::from_value(&value)?, "10.0.0.1");
-//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! # Ok::<(), Box<dyn core::error::Error>>(())
 //! ```
 //!
 //! **Why a named trait beside `TryFrom`.** The orphan rule refuses
@@ -52,7 +52,7 @@
 //! `FromValue` for one, because reading it back would have to allocate
 //! and [`FromValue`] takes no allocator.
 
-use std::fmt;
+use alloc::fmt;
 
 use super::alloc::Alloc;
 use super::error::ValueError;
@@ -205,7 +205,7 @@ impl fmt::Display for MapError {
     }
 }
 
-impl std::error::Error for MapError {}
+impl core::error::Error for MapError {}
 
 /// How to refer to a key in a message. The empty key is a value passed
 /// in directly, which has no name.
@@ -419,7 +419,7 @@ impl<T: ToValue> ToValue for Vec<T> {
 /// order it has, and the value keeps that order because a map here is
 /// insertion-ordered by contract. Neither is wrong; only one is
 /// reproducible, which is worth knowing before a hash goes over a wire.
-impl<T: ToValue> ToValue for std::collections::BTreeMap<String, T> {
+impl<T: ToValue> ToValue for alloc::collections::BTreeMap<String, T> {
     fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
         entries_to_value(self.iter().map(|(k, v)| (k.as_str(), v)), alloc)
     }
@@ -599,9 +599,9 @@ impl<T: FromValue> FromValue for Vec<T> {
 ///
 /// An error inside one reports `env[PATH]`, so a caller is told which
 /// entry rather than only which field.
-impl<T: FromValue> FromValue for std::collections::BTreeMap<String, T> {
-    fn from_value(value: &Value) -> Result<std::collections::BTreeMap<String, T>, MapError> {
-        let mut out = std::collections::BTreeMap::new();
+impl<T: FromValue> FromValue for alloc::collections::BTreeMap<String, T> {
+    fn from_value(value: &Value) -> Result<alloc::collections::BTreeMap<String, T>, MapError> {
+        let mut out = alloc::collections::BTreeMap::new();
         for entry in <&Map>::try_from(value)? {
             let read = T::from_value(entry.value()).map_err(|e| e.at_key(entry.key()))?;
             out.insert(entry.key().to_string(), read);

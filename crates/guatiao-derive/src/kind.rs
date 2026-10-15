@@ -661,7 +661,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
     let required: Vec<&MethodPlan> = methods.iter().filter(|m| m.default.is_none()).collect();
     // An object kind's hash names the shape, so a provider table and an
     // object table with the same methods can never pass for each other.
-    let hash_input = std::iter::once(if object { "object" } else { "provider" }.to_string())
+    let hash_input = core::iter::once(if object { "object" } else { "provider" }.to_string())
         .chain(required.iter().map(|m| m.signature.clone()))
         .collect::<Vec<_>>()
         .join(";");
@@ -753,10 +753,10 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             }
 
             impl ::core::convert::From<::guatiao::library::Instance<dyn #trait_ident>>
-                for ::std::boxed::Box<dyn #trait_ident>
+                for ::guatiao::__private::alloc::boxed::Box<dyn #trait_ident>
             {
                 fn from(instance: ::guatiao::library::Instance<dyn #trait_ident>) -> Self {
-                    ::std::boxed::Box::new(instance)
+                    ::guatiao::__private::alloc::boxed::Box::new(instance)
                 }
             }
         }
@@ -798,7 +798,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             where
                 Self: Sized + Send + 'static,
             {
-                let object = ::guatiao::library::Object::from_cell(::std::boxed::Box::new(
+                let object = ::guatiao::library::Object::from_cell(::guatiao::__private::alloc::boxed::Box::new(
                     ::guatiao::library::kind::ObjectCell {
                         table: #table::of::<Self>(),
                         value: self,
@@ -867,7 +867,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             const REQUIRED: &'static [(&'static str, usize)] = &[ #destroy_required #(#required_slots)* ];
             const OBJECT: bool = #object;
 
-            fn live_objects(seen: &mut ::std::vec::Vec<&'static str>) -> usize {
+            fn live_objects(seen: &mut ::guatiao::__private::alloc::vec::Vec<&'static str>) -> usize {
                 if seen.contains(&#name) {
                     return 0;
                 }
@@ -881,11 +881,11 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             fn as_dyn_mut(remote: &mut ::guatiao::library::Remote<Self>) -> &mut Self {
                 remote
             }
-            fn boxed(remote: ::guatiao::library::Remote<Self>) -> ::std::boxed::Box<Self> {
-                ::std::boxed::Box::new(remote)
+            fn boxed(remote: ::guatiao::library::Remote<Self>) -> ::guatiao::__private::alloc::boxed::Box<Self> {
+                ::guatiao::__private::alloc::boxed::Box::new(remote)
             }
-            fn shared(remote: ::guatiao::library::Remote<Self>) -> ::std::sync::Arc<Self> {
-                ::std::sync::Arc::new(remote)
+            fn shared(remote: ::guatiao::library::Remote<Self>) -> ::guatiao::__private::alloc::sync::Arc<Self> {
+                ::guatiao::__private::alloc::sync::Arc::new(remote)
             }
         }
 
@@ -895,10 +895,10 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         }
 
         impl ::core::convert::From<::guatiao::library::Remote<dyn #trait_ident>>
-            for ::std::boxed::Box<dyn #trait_ident>
+            for ::guatiao::__private::alloc::boxed::Box<dyn #trait_ident>
         {
             fn from(remote: ::guatiao::library::Remote<dyn #trait_ident>) -> Self {
-                ::std::boxed::Box::new(remote)
+                ::guatiao::__private::alloc::boxed::Box::new(remote)
             }
         }
 
@@ -1297,7 +1297,7 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
             let f = fail(quote!(__e));
             quote! {
                 match ::guatiao::library::kind::text_ret(__out) {
-                    ::core::result::Result::Ok(__v) => ::std::string::ToString::to_string(&*__v),
+                    ::core::result::Result::Ok(__v) => ::guatiao::__private::alloc::string::ToString::to_string(&*__v),
                     ::core::result::Result::Err(__e) => { #f }
                 }
             }

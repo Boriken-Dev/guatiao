@@ -10,12 +10,14 @@
 //! maps the library, asks for every `dyn Greeter` on offer, and calls one.
 
 #![cfg(all(feature = "provider", feature = "load"))]
+extern crate alloc;
 
+use alloc::sync::Arc;
+use core::ffi::c_void;
+use core::sync::atomic::{AtomicBool, Ordering};
 use guatiao::value::convert::TryAsRef;
-use std::ffi::c_void;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use greeter_kind::{Counter, Greeter, GreeterVtable, Listener};
 use guatiao::library::{Kind, KindMismatch, Offer, Registry, Remote};
@@ -111,7 +113,7 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
     let truncated: &'static [u8] = Box::leak(
         // SAFETY: the table is `GreeterVtable`-sized bytes the library
         // keeps for the process; copying them is a read.
-        unsafe { std::slice::from_raw_parts(remote.table().cast::<u8>(), remote.size()) }
+        unsafe { core::slice::from_raw_parts(remote.table().cast::<u8>(), remote.size()) }
             .to_vec()
             .into_boxed_slice(),
     );
@@ -293,7 +295,7 @@ fn objects_cross_both_ways_and_are_destroyed_by_whoever_holds_them_last() {
     let truncated: &'static [u8] = Box::leak(
         // SAFETY: the table is `GreeterVtable`-sized bytes the library
         // keeps for the process; copying them is a read.
-        unsafe { std::slice::from_raw_parts(remote.table().cast::<u8>(), remote.size()) }
+        unsafe { core::slice::from_raw_parts(remote.table().cast::<u8>(), remote.size()) }
             .to_vec()
             .into_boxed_slice(),
     );
@@ -376,7 +378,7 @@ fn the_c_surface_hands_back_a_table_by_kind() {
         !table.is_null(),
         "a derived provider's greeter table is reachable"
     );
-    assert!(size >= std::mem::size_of::<greeter_kind::GreeterVtable>());
+    assert!(size >= core::mem::size_of::<greeter_kind::GreeterVtable>());
     // SAFETY: non-null, and a kind table leads with its header.
     let header = unsafe { &*table.cast::<KindHeader>() };
     assert_eq!(header.floor_hash, greeter_kind::GreeterVtable::FLOOR_HASH);

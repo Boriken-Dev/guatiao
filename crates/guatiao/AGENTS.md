@@ -136,7 +136,7 @@ made the way std makes `String`: a checked door, and `from_raw_parts`
 that trusts.
 
 ```rust
-Str::new(&str)  /  std::str::from_utf8(bytes)?.into()   // Str or Text
+Str::new(&str)  /  core::str::from_utf8(bytes)?.into()   // Str or Text
 unsafe Text::from_raw_parts(..) / Map::from_raw_parts(..) // trusts
 const unsafe Str::from_ptr(*const Str<'a>) -> Result<Str<'a>, ValueError>      // UTF-8
 const unsafe Text::from_ptr(*const Text) -> Result<&'a Text, ValueError>      // UTF-8
@@ -271,7 +271,7 @@ cannot be checked and is its contract to keep; its **content** (UTF-8, a
 number's text, a known tag) can, and is checked rather than trusted.
 
 **Crossing FFI**: a value handed to a foreign caller must be forgotten
-(`std::mem::forget`, `ManuallyDrop`, or a move into `ptr::write`) or Drop
+(`core::mem::forget`, `ManuallyDrop`, or a move into `ptr::write`) or Drop
 will free what the far side now owns. The far side frees with
 `guatiao_value_free`, which runs the same walk.
 

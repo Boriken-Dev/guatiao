@@ -255,8 +255,9 @@ writes the whole library.
 - **A key may contain a NUL.** Keys are pointer and length, so the derive
   does not invent a restriction the value model does not have.
 - **Every path the expansion emits is rooted** at `::guatiao::` (or at
-  the path `crate = ..` names instead), `::core::` or `::std::` — the last for `::std::vec::Vec::new()`, the
-  list a schema's fields are collected into. A test asserts this token by
+  the path `crate = ..` names instead), `::core::`, `::guatiao::__private::alloc::` for what `alloc` holds (the
+  list a schema's fields are collected into), or `::std::` for what needs
+  the operating system (`OnceLock`). A test asserts this token by
   token, over all three derives: generated code that named a third crate
   would fail in every consumer that expanded it while passing here.
 - Errors are `compile_error!` at the offending span, never a panic.

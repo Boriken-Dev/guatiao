@@ -325,7 +325,7 @@ fn lengths(min: Option<u64>, max: Option<u64>) -> String {
     }
 }
 
-fn bounds<T: std::fmt::Display>(min: Option<T>, max: Option<T>) -> String {
+fn bounds<T: core::fmt::Display>(min: Option<T>, max: Option<T>) -> String {
     match (min, max) {
         (Some(lo), Some(hi)) => format!("a number between {lo} and {hi}"),
         (Some(lo), None) => format!("a number no less than {lo}"),

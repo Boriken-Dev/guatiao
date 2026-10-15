@@ -32,7 +32,7 @@
 
 #![allow(non_camel_case_types)]
 
-use std::ptr;
+use core::ptr;
 
 use super::{entry, out};
 use crate::schema::ValidationError;

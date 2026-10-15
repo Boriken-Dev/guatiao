@@ -62,8 +62,8 @@ impl From<ValueError> for Status {
     }
 }
 
-impl From<std::str::Utf8Error> for Status {
-    fn from(e: std::str::Utf8Error) -> Status {
+impl From<core::str::Utf8Error> for Status {
+    fn from(e: core::str::Utf8Error) -> Status {
         Status::from(ValueError::from(e))
     }
 }

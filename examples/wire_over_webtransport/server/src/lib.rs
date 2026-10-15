@@ -4,6 +4,7 @@
 
 //! What both ends agree on: the channel, its schema, and how a frame is
 //! delimited on a stream — a little-endian `u32` length, then the frame.
+extern crate alloc;
 
 use guatiao::schema::{FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::{Map, Value};

@@ -90,11 +90,12 @@
 //! # Hygiene: the generated code names everything absolutely
 //!
 //! Every path it emits is rooted — `::guatiao::Value`,
-//! `::core::option::Option`, and `::std::vec::Vec` for the one list a
-//! schema builds — and it assumes **no** `use` at the call site. A derive
-//! that works only when the caller happens to have imported the right
-//! names is a derive that fails mysteriously in the one module that did
-//! not, and the person hitting it has no way to know what is missing.
+//! `::core::option::Option`, and `::guatiao::__private::alloc::vec::Vec`
+//! for the one list a schema builds — and it assumes **no** `use` at the
+//! call site. A derive that works only when the caller happens to have
+//! imported the right names is a derive that fails mysteriously in the
+//! one module that did not, and the person hitting it has no way to know
+//! what is missing.
 //!
 //! The local bindings it introduces are `__alloc`, `__map`, `__value`,
 //! `__field`, `__fields`, `__arms`, `__tag`, `__e`, and `__f0`, `__f1`, …
@@ -126,6 +127,7 @@
 // `forbid`.
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
+extern crate alloc;
 
 mod expand;
 #[cfg(feature = "form")]

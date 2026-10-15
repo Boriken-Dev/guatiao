@@ -34,8 +34,9 @@
 // things to keep in step than saying it once.
 #![cfg_attr(not(feature = "load"), allow(dead_code))]
 
-use std::ffi::c_void;
-use std::panic::{AssertUnwindSafe, catch_unwind};
+use core::ffi::c_void;
+use core::panic::AssertUnwindSafe;
+use std::panic::catch_unwind;
 
 use super::desc::{HostInfo, HostServices, KindTable, LibraryInfo, ProviderInfo};
 use crate::value::alloc::Alloc;
@@ -77,8 +78,8 @@ mod test_support {
         let base = buf.as_mut_ptr().cast::<u8>();
         // SAFETY: `words * 8` bytes are owned by `buf`.
         unsafe {
-            std::ptr::write_bytes(base, TAIL, words * size_of::<u64>());
-            std::ptr::copy_nonoverlapping((value as *const T).cast::<u8>(), base, declared);
+            core::ptr::write_bytes(base, TAIL, words * size_of::<u64>());
+            core::ptr::copy_nonoverlapping((value as *const T).cast::<u8>(), base, declared);
         }
         let ptr = buf.as_ptr().cast::<T>();
         (buf, ptr)
@@ -90,9 +91,9 @@ mod test_support {
             abi_version: crate::library::ABI_VERSION,
             host_id: Str::new("test-host"),
             host_version: Str::new("1.0"),
-            alloc: std::ptr::null(),
+            alloc: core::ptr::null(),
             meta: MaybeNull::null(),
-            services: std::ptr::null(),
+            services: core::ptr::null(),
         }
     }
 }

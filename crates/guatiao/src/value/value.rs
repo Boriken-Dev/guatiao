@@ -13,8 +13,8 @@
 #![allow(non_camel_case_types)]
 #![allow(missing_docs)]
 
-use std::fmt;
-use std::mem::ManuallyDrop;
+use alloc::fmt;
+use core::mem::ManuallyDrop;
 
 use crate::value::alloc::Alloc;
 use crate::value::convert::{MapError, TryAsMut, TryAsRef};
@@ -231,7 +231,7 @@ impl Value {
         let this = ManuallyDrop::new(self);
         // SAFETY: a bitwise copy out of a node that is never dropped, so
         // the arms have exactly one owner.
-        let payload = unsafe { std::ptr::read(&this.payload) };
+        let payload = unsafe { core::ptr::read(&this.payload) };
         (this.tag, payload)
     }
 
@@ -247,7 +247,7 @@ impl Value {
                 ptr: dangling::<Entry>(),
                 len: 0,
                 cap: 0,
-                alloc: std::ptr::null(),
+                alloc: core::ptr::null(),
             }),
         }
     }
@@ -316,7 +316,7 @@ impl Value {
     /// The node's containers describe their own storage, and nothing else
     /// refers to what they own.
     pub unsafe fn free(&mut self) {
-        drop(std::mem::take(self));
+        drop(core::mem::take(self));
     }
 }
 
@@ -407,7 +407,7 @@ impl Value {
     /// A STRING whose bytes are UTF-8.
     fn holds_text(&self) -> bool {
         self.text_bytes(Tag::GUATIAO_STRING)
-            .is_some_and(|bytes| std::str::from_utf8(bytes).is_ok())
+            .is_some_and(|bytes| core::str::from_utf8(bytes).is_ok())
     }
 
     /// A NUMBER whose text is one.
@@ -591,7 +591,7 @@ impl Drop for Value {
         // that Windows cannot catch. Every node is held in a
         // `ManuallyDrop`, or one this loop has already dismantled would
         // be freed again when its binding ended.
-        let mut stack = vec![std::mem::take(self)];
+        let mut stack = vec![core::mem::take(self)];
         while let Some(node) = stack.pop() {
             let mut node = ManuallyDrop::new(node);
             let node: &mut Value = &mut node;

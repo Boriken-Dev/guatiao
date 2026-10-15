@@ -12,8 +12,8 @@
 
 #![cfg(feature = "json")]
 
+use core::ptr;
 use guatiao::value::convert::TryAsRef;
-use std::ptr;
 
 use guatiao::value::alloc::{Allocator, rust_alloc};
 use guatiao::value::status::Status;

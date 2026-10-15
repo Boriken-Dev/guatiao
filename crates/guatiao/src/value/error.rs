@@ -49,8 +49,8 @@ impl From<AllocError> for ValueError {
     }
 }
 
-impl std::fmt::Display for ValueError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for ValueError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             ValueError::Alloc(e) => write!(f, "{e}"),
             ValueError::NotANumber => f.write_str("not a JSON number (RFC 8259 section 6)"),
@@ -63,11 +63,11 @@ impl std::fmt::Display for ValueError {
     }
 }
 
-impl std::error::Error for ValueError {}
+impl core::error::Error for ValueError {}
 
 /// Text that is not UTF-8, however it was found.
-impl From<std::str::Utf8Error> for ValueError {
-    fn from(_: std::str::Utf8Error) -> ValueError {
+impl From<core::str::Utf8Error> for ValueError {
+    fn from(_: core::str::Utf8Error) -> ValueError {
         ValueError::NotUtf8
     }
 }

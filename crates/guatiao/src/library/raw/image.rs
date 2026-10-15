@@ -116,7 +116,7 @@ impl ProviderView {
         }
         // SAFETY: the contract on the field is that a written reason
         // outlives every reader.
-        Err(std::str::from_utf8(reason.into()).ok().unwrap_or(""))
+        Err(core::str::from_utf8(reason.into()).ok().unwrap_or(""))
     }
 }
 
@@ -200,13 +200,13 @@ pub(crate) unsafe fn read_library(
         return Err(Rejected::Malformed);
     }
     // SAFETY: the caller guarantees the leading word is readable.
-    let declared = unsafe { std::ptr::addr_of!((*raw).struct_size).read() } as usize;
+    let declared = unsafe { core::ptr::addr_of!((*raw).struct_size).read() } as usize;
     if declared < LibraryInfo::floor() {
         return Err(Rejected::Malformed);
     }
 
     // SAFETY: `abi_version` lies within the floor.
-    let abi = unsafe { std::ptr::addr_of!((*raw).abi_version).read() };
+    let abi = unsafe { core::ptr::addr_of!((*raw).abi_version).read() };
     if abi != crate::library::desc::ABI_VERSION {
         return Err(Rejected::UnsupportedAbi { declared: abi });
     }
@@ -214,22 +214,22 @@ pub(crate) unsafe fn read_library(
     // SAFETY: each field lies within `declared` bytes.
     let (id, version, providers) = unsafe {
         (
-            std::str::from_utf8(std::ptr::addr_of!((*raw).id).read().into())
+            core::str::from_utf8(core::ptr::addr_of!((*raw).id).read().into())
                 .ok()
                 .ok_or(Rejected::Malformed)?
                 .to_string(),
-            std::str::from_utf8(std::ptr::addr_of!((*raw).version).read().into())
+            core::str::from_utf8(core::ptr::addr_of!((*raw).version).read().into())
                 .ok()
                 .ok_or(Rejected::Malformed)?
                 .to_string(),
-            std::ptr::addr_of!((*raw).providers).read(),
+            core::ptr::addr_of!((*raw).providers).read(),
         )
     };
 
     let mut meta = None;
     if declared >= LibraryInfo::meta_end() {
         // SAFETY: the guard established the field is present.
-        let raw_meta = unsafe { std::ptr::addr_of!((*raw).meta).read() };
+        let raw_meta = unsafe { core::ptr::addr_of!((*raw).meta).read() };
         // SAFETY: a non-null `meta` is a well-formed map by the contract
         // on the field, and it is readable for this call.
         meta = unsafe { raw_meta.get() }
@@ -241,7 +241,7 @@ pub(crate) unsafe fn read_library(
     let mut unload = None;
     if declared >= LibraryInfo::unload_end() {
         // SAFETY: the guard established the field is present.
-        unload = unsafe { std::ptr::addr_of!((*raw).unload).read() };
+        unload = unsafe { core::ptr::addr_of!((*raw).unload).read() };
     }
 
     // Every check on the array runs before anything is allocated for it:
@@ -296,7 +296,7 @@ impl ProviderInfo<'static> {
 /// `raw` points at a provider descriptor declaring its own size.
 unsafe fn read_provider(raw: *const ProviderInfo<'static>, limit: usize) -> Option<ProviderView> {
     // SAFETY: the caller guarantees the leading word is readable.
-    let declared = unsafe { std::ptr::addr_of!((*raw).struct_size).read() } as usize;
+    let declared = unsafe { core::ptr::addr_of!((*raw).struct_size).read() } as usize;
     // Above the floor, and not past its neighbour: an element claiming
     // more than the stride overlaps the next one, and every field it
     // reads beyond the stride belongs to that one.
@@ -305,10 +305,10 @@ unsafe fn read_provider(raw: *const ProviderInfo<'static>, limit: usize) -> Opti
     }
     // SAFETY: each field lies within `declared` bytes.
     unsafe {
-        let config = std::ptr::addr_of!((*raw).config).read();
+        let config = core::ptr::addr_of!((*raw).config).read();
         // A fixed stride, unlike the provider array: a `Str` declares no
         // `struct_size`, so it has no way to grow and no skew to survive.
-        let kinds = std::ptr::addr_of!((*raw).kinds).read();
+        let kinds = core::ptr::addr_of!((*raw).kinds).read();
         if kinds.len > 0 && kinds.ptr.is_null() {
             return None;
         }
@@ -320,11 +320,11 @@ unsafe fn read_provider(raw: *const ProviderInfo<'static>, limit: usize) -> Opti
 
         Some(ProviderView {
             kinds: names,
-            id: std::str::from_utf8(std::ptr::addr_of!((*raw).id).read().into())
+            id: core::str::from_utf8(core::ptr::addr_of!((*raw).id).read().into())
                 .ok()?
                 .to_string(),
-            display_name: std::str::from_utf8(
-                std::ptr::addr_of!((*raw).display_name).read().into(),
+            display_name: core::str::from_utf8(
+                core::ptr::addr_of!((*raw).display_name).read().into(),
             )
             .ok()?
             .to_string(),
@@ -335,14 +335,14 @@ unsafe fn read_provider(raw: *const ProviderInfo<'static>, limit: usize) -> Opti
                 .map(|v| v.clone_in(Alloc::rust()))
                 .transpose()
                 .ok()?,
-            vtable: std::ptr::addr_of!((*raw).vtable).read(),
-            vtable_size: std::ptr::addr_of!((*raw).vtable_size).read() as usize,
-            ctx: std::ptr::addr_of!((*raw).ctx).read(),
+            vtable: core::ptr::addr_of!((*raw).vtable).read(),
+            vtable_size: core::ptr::addr_of!((*raw).vtable_size).read() as usize,
+            ctx: core::ptr::addr_of!((*raw).ctx).read(),
             meta: if declared >= ProviderInfo::meta_end() {
                 // SAFETY: the guard established the field is present, and
                 // a non-null `meta` is a well-formed map by the contract
                 // on the field.
-                std::ptr::addr_of!((*raw).meta)
+                core::ptr::addr_of!((*raw).meta)
                     .read()
                     .get()
                     .map(|m| m.clone_in(Alloc::rust()))
@@ -353,7 +353,7 @@ unsafe fn read_provider(raw: *const ProviderInfo<'static>, limit: usize) -> Opti
             },
             available: if declared >= ProviderInfo::available_end() {
                 // SAFETY: the guard established the field is present.
-                std::ptr::addr_of!((*raw).available).read()
+                core::ptr::addr_of!((*raw).available).read()
             } else {
                 None
             },
@@ -363,7 +363,7 @@ unsafe fn read_provider(raw: *const ProviderInfo<'static>, limit: usize) -> Opti
                 // different statement from a descriptor that predates the
                 // field — and both land on `None` deliberately, because
                 // both mean the same thing to a reader.
-                std::str::from_utf8(std::ptr::addr_of!((*raw).version).read().into())
+                core::str::from_utf8(core::ptr::addr_of!((*raw).version).read().into())
                     .ok()
                     .filter(|v| !v.is_empty())
                     .map(str::to_string)
@@ -373,19 +373,19 @@ unsafe fn read_provider(raw: *const ProviderInfo<'static>, limit: usize) -> Opti
             raw,
             tables: if declared >= ProviderInfo::tables_end() {
                 // SAFETY: the guard established the field is present.
-                read_kind_tables(std::ptr::addr_of!((*raw).tables).read())?
+                read_kind_tables(core::ptr::addr_of!((*raw).tables).read())?
             } else {
                 Vec::new()
             },
             create: if declared >= ProviderInfo::create_end() {
                 // SAFETY: the guard established the field is present.
-                std::ptr::addr_of!((*raw).create).read()
+                core::ptr::addr_of!((*raw).create).read()
             } else {
                 None
             },
             destroy: if declared >= ProviderInfo::destroy_end() {
                 // SAFETY: the guard established the field is present.
-                std::ptr::addr_of!((*raw).destroy).read()
+                core::ptr::addr_of!((*raw).destroy).read()
             } else {
                 None
             },
@@ -418,18 +418,18 @@ unsafe fn read_kind_tables(
         // `ptr`, and `i * stride` is within `extent`.
         let entry = unsafe { tables.ptr.cast::<u8>().add(i * tables.stride) }.cast::<KindTable>();
         // SAFETY: the leading word is readable.
-        let declared = unsafe { std::ptr::addr_of!((*entry).struct_size).read() } as usize;
+        let declared = unsafe { core::ptr::addr_of!((*entry).struct_size).read() } as usize;
         if declared < KindTable::floor() || declared > tables.stride {
             return None;
         }
         // SAFETY: each field lies within `declared` bytes.
         let (kind, vtable, size) = unsafe {
             (
-                std::str::from_utf8(std::ptr::addr_of!((*entry).kind).read().into())
+                core::str::from_utf8(core::ptr::addr_of!((*entry).kind).read().into())
                     .ok()?
                     .to_string(),
-                std::ptr::addr_of!((*entry).vtable).read(),
-                std::ptr::addr_of!((*entry).vtable_size).read() as usize,
+                core::ptr::addr_of!((*entry).vtable).read(),
+                core::ptr::addr_of!((*entry).vtable_size).read() as usize,
             )
         };
         out.push((kind, vtable, size));
@@ -462,7 +462,7 @@ impl Origin {
     /// image address the library already handed out stays valid.
     pub(crate) fn keep(self) {
         if let Origin::Mapped(library) = self {
-            std::mem::forget(library);
+            core::mem::forget(library);
         }
     }
 
@@ -513,7 +513,7 @@ pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, 
     // signature this crate defines for it.
     let entry = unsafe { library.get::<EntryFn>(ENTRY_SYMBOL) };
     let Ok(entry) = entry else {
-        std::mem::forget(library);
+        core::mem::forget(library);
         return Ok(Opened::NoEntrySymbol);
     };
 
@@ -523,7 +523,7 @@ pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, 
     let desc = unsafe { entry(host.as_raw()) };
 
     if desc.is_null() {
-        std::mem::forget(library);
+        core::mem::forget(library);
         return Ok(Opened::Declined);
     }
     // SAFETY: non-null, from the entry point, and the mapping is held for
@@ -531,7 +531,7 @@ pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, 
     match unsafe { read_library(desc) } {
         Ok(view) => Ok(Opened::Loaded(view, Origin::Mapped(library))),
         Err(why) => {
-            std::mem::forget(library);
+            core::mem::forget(library);
             Ok(Opened::Rejected(why))
         }
     }
@@ -736,7 +736,7 @@ mod tests {
         unsafe extern "C" fn declining(
             _host: *const HostInfo<'static>,
         ) -> *const LibraryInfo<'static> {
-            std::ptr::null()
+            core::ptr::null()
         }
 
         let mut r = Registry::new("test-host", "1.0");
@@ -853,13 +853,13 @@ mod tests {
         // SAFETY: `array` owns `words * 8` bytes, which covers both
         // elements; the tail is the sentinel so a misread is visible.
         unsafe {
-            std::ptr::write_bytes(base, TAIL, words * size_of::<u64>());
-            std::ptr::copy_nonoverlapping(
+            core::ptr::write_bytes(base, TAIL, words * size_of::<u64>());
+            core::ptr::copy_nonoverlapping(
                 (&first as *const ProviderInfo).cast::<u8>(),
                 base,
                 stride,
             );
-            std::ptr::copy_nonoverlapping(
+            core::ptr::copy_nonoverlapping(
                 (&second as *const ProviderInfo).cast::<u8>(),
                 base.add(stride),
                 stride,
@@ -912,9 +912,9 @@ mod tests {
             kinds: Kinds::new(&KINDS.0),
             id: Str::new("hello"),
             display_name: Str::new("Hello"),
-            config: std::ptr::null(),
-            vtable: std::ptr::null(),
-            ctx: std::ptr::null_mut(),
+            config: core::ptr::null(),
+            vtable: core::ptr::null(),
+            ctx: core::ptr::null_mut(),
             meta: MaybeNull::null(),
             version: Str::new(""),
             available: None,

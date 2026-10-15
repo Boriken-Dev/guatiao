@@ -24,7 +24,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::fmt;
+use alloc::fmt;
 
 /// Which descriptor a template names the fields of.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,7 +154,7 @@ impl fmt::Display for KeyError {
     }
 }
 
-impl std::error::Error for KeyError {}
+impl core::error::Error for KeyError {}
 
 /// How a host names what it loads.
 ///
@@ -221,7 +221,7 @@ impl KeyTemplate {
             rest = &rest[end..];
 
             if !text.is_empty() {
-                parts.push(Part::Text(std::mem::take(&mut text)));
+                parts.push(Part::Text(core::mem::take(&mut text)));
             }
             parts.push(Part::Field(field));
             named_a_field = true;

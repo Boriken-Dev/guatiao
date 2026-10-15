@@ -7,8 +7,8 @@
 //! Moved here with the projection itself: a schema describes a struct,
 //! and naming a place inside one is this library's business.
 
-use std::collections::BTreeMap;
-use std::ptr;
+use alloc::collections::BTreeMap;
+use core::ptr;
 
 use guatiao::schema::read::{FieldRef, SchemaRef};
 use guatiao::value::alloc::{Alloc, Allocator};
@@ -69,7 +69,7 @@ unsafe fn field_at<'a>(schema: *const Value, key: Str) -> Option<FieldRef<'a>> {
     // SAFETY: the caller's contract.
     let schema = SchemaRef::new(unsafe { &*schema })?;
     // SAFETY: as above.
-    let key = std::str::from_utf8(key.into()).ok()?;
+    let key = core::str::from_utf8(key.into()).ok()?;
     crate::flat::resolve(schema, key)
 }
 
@@ -98,7 +98,7 @@ pub unsafe extern "C" fn guatiao_intake_path_get(value: *const Value, path: Str)
     }
     guard_with(ptr::null(), || {
         // SAFETY: as above.
-        let Ok(text) = std::str::from_utf8(path.into()) else {
+        let Ok(text) = core::str::from_utf8(path.into()) else {
             return ptr::null();
         };
         let Ok(parsed) = crate::path::parse(text) else {
@@ -136,7 +136,7 @@ pub unsafe extern "C" fn guatiao_intake_resolve(schema: *const Value, key: Str) 
             return ptr::null();
         };
         // SAFETY: as above.
-        let Ok(key) = std::str::from_utf8(key.into()) else {
+        let Ok(key) = core::str::from_utf8(key.into()) else {
             return ptr::null();
         };
         match crate::flat::resolve(schema, key) {

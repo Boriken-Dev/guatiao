@@ -27,9 +27,9 @@
 
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use super::key::{KeyError, KeyFields, KeyTemplate};
 use super::kind::{Kind, KindMismatch, Offer, Remote};
@@ -79,8 +79,8 @@ pub enum LoadError {
     },
 }
 
-impl std::fmt::Display for LoadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for LoadError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             LoadError::Open { path, reason } => {
                 write!(f, "{} could not be loaded: {reason}", path.display())
@@ -100,7 +100,7 @@ impl std::fmt::Display for LoadError {
     }
 }
 
-impl std::error::Error for LoadError {}
+impl core::error::Error for LoadError {}
 
 /// Why a file was passed over rather than loaded or failed.
 ///
@@ -171,8 +171,8 @@ pub enum Skipped {
 }
 
 /// One clause, to follow the file's name: `{path}: {skipped}`.
-impl std::fmt::Display for Skipped {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for Skipped {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             Skipped::NoEntrySymbol => f.write_str("not a guatiao library"),
             Skipped::DeclinedThisHost => f.write_str("declined this host"),
@@ -359,7 +359,7 @@ impl Provider {
     /// allocator: check the declared size against your own frozen floor,
     /// project each field through the raw pointer, and guard every field
     /// you appended later.
-    pub fn vtable(&self) -> (*const std::ffi::c_void, usize) {
+    pub fn vtable(&self) -> (*const core::ffi::c_void, usize) {
         (self.view.vtable, self.view.vtable_size)
     }
 
@@ -367,7 +367,7 @@ impl Provider {
     /// size it was compiled at: a per-kind table first, then
     /// [`vtable`](Provider::vtable) when it claims the kind. `None` for a
     /// kind it does not serve, or serves as a pure label.
-    pub fn table_for(&self, kind: &str) -> Option<(*const std::ffi::c_void, usize)> {
+    pub fn table_for(&self, kind: &str) -> Option<(*const core::ffi::c_void, usize)> {
         self.view.table_for(kind)
     }
 
@@ -410,7 +410,7 @@ impl Provider {
     }
 
     /// The context pointer to hand back to every call through the table.
-    pub fn ctx(&self) -> *mut std::ffi::c_void {
+    pub fn ctx(&self) -> *mut core::ffi::c_void {
         self.view.ctx
     }
 
@@ -529,8 +529,8 @@ pub enum UnloadError {
     },
 }
 
-impl std::fmt::Display for UnloadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for UnloadError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             UnloadError::NotFound { key } => write!(f, "no library answers to `{key}`"),
             UnloadError::Linked { key } => write!(
@@ -552,7 +552,7 @@ impl std::fmt::Display for UnloadError {
     }
 }
 
-impl std::error::Error for UnloadError {}
+impl core::error::Error for UnloadError {}
 
 /// The host's own table of what it has loaded.
 ///
@@ -1219,7 +1219,7 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::c_void;
+    use core::ffi::c_void;
 
     fn provider(id: &str, version: Option<&str>) -> ProviderView {
         ProviderView {
@@ -1227,13 +1227,13 @@ mod tests {
             id: id.to_string(),
             display_name: String::new(),
             config: None,
-            vtable: std::ptr::null(),
+            vtable: core::ptr::null(),
             vtable_size: 0,
-            ctx: std::ptr::null_mut::<c_void>(),
+            ctx: core::ptr::null_mut::<c_void>(),
             meta: None,
             version: version.map(str::to_string),
             available: None,
-            raw: std::ptr::null(),
+            raw: core::ptr::null(),
             tables: Vec::new(),
             create: None,
             destroy: None,

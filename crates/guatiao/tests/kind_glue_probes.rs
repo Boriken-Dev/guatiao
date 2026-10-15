@@ -8,10 +8,11 @@
 //! promise holds.
 
 #![cfg(feature = "provider")]
+extern crate alloc;
 
-use std::ffi::c_void;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use alloc::sync::Arc;
+use core::ffi::c_void;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use guatiao::library::{BytesMut, Object, ObjectRaw, ProviderError, Remote};
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
@@ -169,7 +170,7 @@ fn an_out_buffer_with_a_null_pointer_and_a_length_is_empty() {
     let status = unsafe {
         fill(
             raw.ctx,
-            BytesMut::from_raw_parts(std::ptr::null_mut(), 5),
+            BytesMut::from_raw_parts(core::ptr::null_mut(), 5),
             &mut out,
         )
     };
@@ -229,7 +230,7 @@ unsafe extern "C" fn count_alloc(ctx: *mut c_void, size: usize, align: usize) ->
         .fetch_add(1, Ordering::SeqCst);
     let real = rust_alloc().alloc.expect("an alloc");
     // SAFETY: forwarded unchanged.
-    unsafe { real(std::ptr::null_mut(), size, align) }
+    unsafe { real(core::ptr::null_mut(), size, align) }
 }
 
 unsafe extern "C" fn count_free(ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
@@ -239,7 +240,7 @@ unsafe extern "C" fn count_free(ctx: *mut c_void, p: *mut c_void, size: usize, a
         .fetch_sub(1, Ordering::SeqCst);
     let real = rust_alloc().free.expect("a free");
     // SAFETY: the block `count_alloc` handed out, with its layout.
-    unsafe { real(std::ptr::null_mut(), p, size, align) }
+    unsafe { real(core::ptr::null_mut(), p, size, align) }
 }
 
 #[test]

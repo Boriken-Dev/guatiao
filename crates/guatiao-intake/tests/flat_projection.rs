@@ -8,9 +8,10 @@
 //! field under `<key>.<field>`. That is the URI spelling too —
 //! `?auth=userpass&auth.username=alice` — which is what lets a command
 //! line select an arm at all.
+extern crate alloc;
 
+use alloc::collections::BTreeMap;
 use guatiao::value::convert::TryAsRef;
-use std::collections::BTreeMap;
 
 use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::schema::read::SchemaRef;

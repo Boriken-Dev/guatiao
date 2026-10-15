@@ -23,6 +23,7 @@
 //! envelope matters.
 
 #![cfg(feature = "load")]
+extern crate alloc;
 
 use guatiao::ValueError;
 use guatiao::value::convert::TryAsMut;
@@ -94,11 +95,11 @@ fn library_path() -> PathBuf {
 /// slot existed does not give you — and the point of the size check is to
 /// work with such a library rather than to reject it.
 fn read_greeter(
-    ptr: *const std::ffi::c_void,
+    ptr: *const core::ffi::c_void,
     size: usize,
 ) -> (
-    unsafe extern "C" fn(*mut std::ffi::c_void, *const Value, *mut Value) -> Status,
-    Option<unsafe extern "C" fn(*mut std::ffi::c_void) -> i64>,
+    unsafe extern "C" fn(*mut core::ffi::c_void, *const Value, *mut Value) -> Status,
+    Option<unsafe extern "C" fn(*mut core::ffi::c_void) -> i64>,
 ) {
     assert!(
         size >= GreeterVtable::floor(),
@@ -109,13 +110,13 @@ fn read_greeter(
 
     // SAFETY: the size check above established that `greet` is present,
     // and the registry holds the mapping it lives in.
-    let greet = unsafe { std::ptr::addr_of!((*table).greet).read() }
+    let greet = unsafe { core::ptr::addr_of!((*table).greet).read() }
         .expect("a greeter that declares no greet slot is not a greeter");
 
     // The appended slot, read only when the library was compiled with it.
     let outstanding = if size >= GreeterVtable::outstanding_end() {
         // SAFETY: the guard established the field is present.
-        unsafe { std::ptr::addr_of!((*table).outstanding).read() }
+        unsafe { core::ptr::addr_of!((*table).outstanding).read() }
     } else {
         None
     };
@@ -810,30 +811,30 @@ fn a_lookup_from_another_thread_never_deadlocks_a_load() {
     let mut registry = Registry::new("guatiao-tests", env!("CARGO_PKG_VERSION"));
     let host = registry.host();
 
-    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let stop = alloc::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
     // The asker says when it has started asking, so the load below runs
     // WHILE it asks rather than before the thread was scheduled at all —
     // which is what the test is about, and what `calls > 0` used to
     // assume on a machine that scheduled the thread promptly.
-    let started = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let started = alloc::sync::Arc::new(core::sync::atomic::AtomicBool::new(false));
     let asker = {
         let stop = stop.clone();
         let started = started.clone();
         std::thread::spawn(move || {
             let mut calls = 0usize;
-            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+            while !stop.load(core::sync::atomic::Ordering::Relaxed) {
                 let _ = host.list("greeter");
                 calls += 1;
-                started.store(true, std::sync::atomic::Ordering::Relaxed);
+                started.store(true, core::sync::atomic::Ordering::Relaxed);
             }
             calls
         })
     };
-    while !started.load(std::sync::atomic::Ordering::Relaxed) {
+    while !started.load(core::sync::atomic::Ordering::Relaxed) {
         std::thread::yield_now();
     }
 
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let deadline = std::time::Instant::now() + core::time::Duration::from_secs(10);
     registry
         .load_file(&library_path())
         .unwrap()
@@ -847,7 +848,7 @@ fn a_lookup_from_another_thread_never_deadlocks_a_load() {
         std::time::Instant::now() < deadline,
         "the load did not finish in time"
     );
-    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    stop.store(true, core::sync::atomic::Ordering::Relaxed);
     let calls = asker.join().expect("the asking thread did not panic");
     assert!(calls > 0);
     assert_eq!(host.list("greeter").unwrap().len(), 1);

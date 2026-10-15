@@ -48,20 +48,20 @@ pub struct Hints {
     state: Result<Value, ValueError>,
 }
 
-impl std::fmt::Debug for Form {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for Form {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         debug_state(f, "Form", &self.state)
     }
 }
 
-impl std::fmt::Debug for Section {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for Section {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         debug_state(f, "Section", &self.state)
     }
 }
 
-impl std::fmt::Debug for Hints {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for Hints {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         debug_state(f, "Hints", &self.state)
     }
 }
@@ -69,10 +69,10 @@ impl std::fmt::Debug for Hints {
 /// Whether a builder has failed, and with what — never what it has built
 /// so far, because a builder is printed when something already went wrong.
 fn debug_state(
-    f: &mut std::fmt::Formatter<'_>,
+    f: &mut core::fmt::Formatter<'_>,
     name: &str,
     state: &Result<Value, ValueError>,
-) -> std::fmt::Result {
+) -> core::fmt::Result {
     match state {
         Ok(_) => write!(f, "{name} {{ ok }}"),
         Err(e) => write!(f, "{name} {{ failed: {e} }}"),

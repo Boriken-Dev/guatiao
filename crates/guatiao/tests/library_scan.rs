@@ -402,12 +402,12 @@ fn a_macro_exported_schema_is_callable_by_name() {
     // A null out-parameter is refused rather than written through.
     // SAFETY: passing null is the case under test.
     assert_eq!(
-        unsafe { f(Alloc::rust().as_raw(), std::ptr::null_mut()) },
+        unsafe { f(Alloc::rust().as_raw(), core::ptr::null_mut()) },
         Status::GUATIAO_ERR_NULL
     );
 
     // Never unloaded: everything it handed over points into its mapping.
-    std::mem::forget(lib);
+    core::mem::forget(lib);
 }
 
 /// A search path is walked in order, each place once, and a library

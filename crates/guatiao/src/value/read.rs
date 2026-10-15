@@ -34,7 +34,7 @@
 //! // A key that is not there, and a value of another kind, each say so.
 //! assert!(map.required("nothing").is_err());
 //! assert!(TryInto::<i64>::try_into(map.required("host")?).is_err());
-//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! # Ok::<(), Box<dyn core::error::Error>>(())
 //! ```
 //!
 //! The defaulting getters answer "this or the fallback" where
@@ -43,7 +43,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::fmt;
+use alloc::fmt;
 
 use super::convert::TryAsRef;
 use super::types::{List, Map, Number, Tag, Value};

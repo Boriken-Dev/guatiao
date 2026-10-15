@@ -14,3 +14,6 @@ crate-type = ["cdylib"]
 [dependencies]
 guatiao = { path = "../../crates/guatiao", features = ["provider"] }
 greeter_kind = { path = "../greeter_kind" }
+
+[lints]
+workspace = true

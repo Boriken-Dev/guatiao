@@ -89,7 +89,7 @@ map.set("options", options)?;
 let host: &str = map.required("host")?.try_into()?;
 let port: u16 = map.required("port")?.try_into()?;
 assert_eq!((host, port), ("10.0.0.1", 5900));
-# Ok::<(), Box<dyn std::error::Error>>(())
+# Ok::<(), Box<dyn core::error::Error>>(())
 ```
 
 The same tree is what a C, C++ or Dart consumer reads directly, through

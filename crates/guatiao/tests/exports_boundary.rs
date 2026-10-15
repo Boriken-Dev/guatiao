@@ -79,10 +79,10 @@ fn a_merge_crosses_and_the_caller_owns_what_comes_back() {
             &later,
             alloc.as_raw(),
             0,
-            std::ptr::null(),
+            core::ptr::null(),
             0,
             &mut out,
-            std::ptr::null_mut(),
+            core::ptr::null_mut(),
         )
     };
     assert_eq!(status, Status::GUATIAO_OK);
@@ -119,10 +119,10 @@ fn a_mode_nobody_declared_is_refused() {
                 &b,
                 alloc.as_raw(),
                 0,
-                std::ptr::null(),
+                core::ptr::null(),
                 0,
                 &mut out,
-                std::ptr::null_mut(),
+                core::ptr::null_mut(),
             )
         };
         assert_eq!(
@@ -172,7 +172,7 @@ fn an_override_array_changes_the_mode_for_that_path_only() {
             overrides.as_ptr(),
             overrides.len(),
             &mut out,
-            std::ptr::null_mut(),
+            core::ptr::null_mut(),
         )
     };
     assert_eq!(status, Status::GUATIAO_OK);
@@ -206,7 +206,7 @@ fn an_override_array_changes_the_mode_for_that_path_only() {
             bad.as_ptr(),
             bad.len(),
             &mut out,
-            std::ptr::null_mut(),
+            core::ptr::null_mut(),
         )
     };
     assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
@@ -240,10 +240,10 @@ fn the_mergelists_bit_reaches_the_merge() {
                 &later,
                 alloc.as_raw(),
                 fields,
-                std::ptr::null(),
+                core::ptr::null(),
                 0,
                 &mut out,
-                std::ptr::null_mut(),
+                core::ptr::null_mut(),
             )
         };
         assert_eq!(status, Status::GUATIAO_OK);
@@ -281,7 +281,7 @@ fn a_failure_reports_its_path_through_the_error_value() {
             &later,
             alloc.as_raw(),
             0,
-            std::ptr::null(),
+            core::ptr::null(),
             0,
             &mut out,
             &mut error,
@@ -328,7 +328,7 @@ fn validation_crosses_and_never_quotes_the_refused_value() {
     let good = Value::from(good);
     // SAFETY: both are well-formed values.
     let status =
-        unsafe { guatiao_schema_validate(&schema, &good, alloc.as_raw(), std::ptr::null_mut()) };
+        unsafe { guatiao_schema_validate(&schema, &good, alloc.as_raw(), core::ptr::null_mut()) };
     assert_eq!(status, Status::GUATIAO_OK);
 
     let mut bad = Map::new();
@@ -372,21 +372,26 @@ fn a_null_is_refused_rather_than_dereferenced() {
     let status = unsafe {
         guatiao_merge(
             GUATIAO_MERGE_DEEP,
-            std::ptr::null(),
+            core::ptr::null(),
             &map,
             alloc.as_raw(),
             0,
-            std::ptr::null(),
+            core::ptr::null(),
             0,
             &mut out,
-            std::ptr::null_mut(),
+            core::ptr::null_mut(),
         )
     };
     assert_eq!(status, Status::GUATIAO_ERR_NULL);
 
     // SAFETY: as above.
     let status = unsafe {
-        guatiao_schema_validate(std::ptr::null(), &map, alloc.as_raw(), std::ptr::null_mut())
+        guatiao_schema_validate(
+            core::ptr::null(),
+            &map,
+            alloc.as_raw(),
+            core::ptr::null_mut(),
+        )
     };
     assert_eq!(status, Status::GUATIAO_ERR_NULL);
 }
@@ -432,7 +437,7 @@ fn the_map_clear_symbol_refuses_a_list() {
     );
 
     // SAFETY: null is the other case this symbol has to survive.
-    let status = unsafe { guatiao_map_clear(std::ptr::null_mut()) };
+    let status = unsafe { guatiao_map_clear(core::ptr::null_mut()) };
     assert_eq!(status, Status::GUATIAO_ERR_NULL);
 }
 
@@ -599,7 +604,7 @@ fn a_failed_call_leaves_its_out_parameters_absent() {
             &b,
             alloc.as_raw(),
             0,
-            std::ptr::null(),
+            core::ptr::null(),
             0,
             &mut out,
             &mut error,
@@ -615,14 +620,14 @@ fn a_failed_call_leaves_its_out_parameters_absent() {
     let status = unsafe {
         guatiao_merge(
             GUATIAO_MERGE_DEEP,
-            std::ptr::null(),
+            core::ptr::null(),
             &b,
             alloc.as_raw(),
             0,
-            std::ptr::null(),
+            core::ptr::null(),
             0,
             &mut out,
-            std::ptr::null_mut(),
+            core::ptr::null_mut(),
         )
     };
     assert_eq!(status, Status::GUATIAO_ERR_NULL);
@@ -632,13 +637,13 @@ fn a_failed_call_leaves_its_out_parameters_absent() {
     let mut error = Value::from(true);
     // SAFETY: as above.
     let status =
-        unsafe { guatiao_schema_validate(std::ptr::null(), &a, alloc.as_raw(), &mut error) };
+        unsafe { guatiao_schema_validate(core::ptr::null(), &a, alloc.as_raw(), &mut error) };
     assert_eq!(status, Status::GUATIAO_ERR_NULL);
     assert!(is_absent(&error));
 
     let mut out = Value::from(true);
     // SAFETY: a null allocator is the case under test.
-    let status = unsafe { guatiao_value_clone(std::ptr::null(), &a, &mut out) };
+    let status = unsafe { guatiao_value_clone(core::ptr::null(), &a, &mut out) };
     assert_eq!(status, Status::GUATIAO_ERR_ALLOC);
     assert!(is_absent(&out));
 }
@@ -705,7 +710,7 @@ fn text_a_c_caller_passes_that_is_not_utf8_is_refused_where_it_arrives() {
     // SAFETY: `Str` is `repr(C)` with exactly these two fields, the marker
     // being zero-sized, which is the layout the C header declares.
     let text: Str<'_> = unsafe {
-        std::mem::transmute(AsC {
+        core::mem::transmute(AsC {
             ptr: bytes.as_ptr(),
             len: bytes.len(),
         })

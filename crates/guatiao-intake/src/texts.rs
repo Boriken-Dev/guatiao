@@ -15,7 +15,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 
 use guatiao::schema::ValidationError;
 use guatiao::schema::read::SchemaRef;

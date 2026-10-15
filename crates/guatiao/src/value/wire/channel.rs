@@ -33,12 +33,12 @@
 //!     Received::Value { channel: 1, value } => assert!(value.tag().is_ok()),
 //!     other => panic!("{other:?}"),
 //! }
-//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! # Ok::<(), Box<dyn core::error::Error>>(())
 //! ```
 
 #![forbid(unsafe_code)]
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 
 use super::{Reader, WireError, decode_at, encode, put_len};
 use crate::schema::read::SchemaRef;

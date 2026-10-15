@@ -75,8 +75,8 @@ mod walk;
 
 pub use walk::{get, get_mut};
 
-use std::borrow::Cow;
-use std::fmt;
+use alloc::borrow::Cow;
+use alloc::fmt;
 
 /// One step of a path.
 ///
@@ -342,7 +342,7 @@ impl fmt::Display for PathError {
     }
 }
 
-impl std::error::Error for PathError {}
+impl core::error::Error for PathError {}
 
 /// Reads a path, checking the whole of it.
 ///

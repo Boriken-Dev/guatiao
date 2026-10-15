@@ -31,9 +31,9 @@ impl ObjectRaw {
     /// No object.
     pub const fn null() -> ObjectRaw {
         ObjectRaw {
-            table: std::ptr::null(),
+            table: core::ptr::null(),
             size: 0,
-            ctx: std::ptr::null_mut(),
+            ctx: core::ptr::null_mut(),
         }
     }
 }
@@ -119,7 +119,7 @@ impl<'a> From<BytesMut<'a>> for &'a mut [u8] {
         // SAFETY: the view was made from a `&'a mut`, or by
         // `from_raw_parts` or a foreign caller promising the same, and it
         // is consumed here, so this is the only `&mut` it gives.
-        unsafe { std::slice::from_raw_parts_mut(view.ptr, view.len) }
+        unsafe { core::slice::from_raw_parts_mut(view.ptr, view.len) }
     }
 }
 
@@ -139,8 +139,8 @@ pub struct ObjectCell<V, T> {
     pub value: T,
 }
 
-impl<V, T> std::fmt::Debug for ObjectCell<V, T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<V, T> core::fmt::Debug for ObjectCell<V, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("ObjectCell").finish_non_exhaustive()
     }
 }
@@ -164,8 +164,8 @@ pub struct Object<K: ?Sized> {
     remote: Remote<K>,
 }
 
-impl<K: ?Sized + Kind> std::fmt::Debug for Object<K> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<K: ?Sized + Kind> core::fmt::Debug for Object<K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Object")
             .field("kind", &K::NAME)
             .finish_non_exhaustive()
@@ -234,7 +234,7 @@ impl<K: ?Sized + Kind> Object<K> {
             size: self.remote.size,
             ctx: self.remote.ctx,
         };
-        std::mem::forget(self);
+        core::mem::forget(self);
         raw
     }
 
@@ -254,7 +254,7 @@ impl<K: ?Sized + Kind> Object<K> {
     }
 }
 
-impl<K: ?Sized + Kind> std::ops::Deref for Object<K> {
+impl<K: ?Sized + Kind> core::ops::Deref for Object<K> {
     type Target = K;
 
     fn deref(&self) -> &K {
@@ -262,7 +262,7 @@ impl<K: ?Sized + Kind> std::ops::Deref for Object<K> {
     }
 }
 
-impl<K: ?Sized + Kind> std::ops::DerefMut for Object<K> {
+impl<K: ?Sized + Kind> core::ops::DerefMut for Object<K> {
     fn deref_mut(&mut self) -> &mut K {
         K::as_dyn_mut(&mut self.remote)
     }

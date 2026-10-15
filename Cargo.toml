@@ -30,6 +30,13 @@ exclude = ["examples/wire_over_webtransport/client"]
 # builds one from a configuration (`greeter_host`); an envelope is not
 # something prose can demonstrate.
 
+# Every path that needs `std` says so: what `core` or `alloc` also holds is
+# spelled that way, in tests and build scripts too.
+[workspace.lints.clippy]
+std_instead_of_core = "warn"
+std_instead_of_alloc = "warn"
+alloc_instead_of_core = "warn"
+
 [workspace.package]
 version = "0.0.0-alpha.0"
 edition = "2024"

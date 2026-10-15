@@ -35,8 +35,8 @@
 #![forbid(unsafe_code)]
 #![allow(non_camel_case_types)]
 
-use std::ffi::c_void;
-use std::mem::{offset_of, size_of};
+use core::ffi::c_void;
+use core::mem::{offset_of, size_of};
 
 use super::kind::ProviderError;
 use crate::value::alloc::Allocator;
@@ -256,7 +256,7 @@ impl<'a> Kinds<'a> {
     /// No kinds: a provider that serves no vtable, reached by name alone.
     pub const fn empty() -> Kinds<'a> {
         Kinds {
-            ptr: std::ptr::null(),
+            ptr: core::ptr::null(),
             len: 0,
         }
     }
@@ -279,7 +279,7 @@ impl<'a> Providers<'a> {
     /// this host.
     pub const fn empty() -> Providers<'a> {
         Providers {
-            ptr: std::ptr::null(),
+            ptr: core::ptr::null(),
             len: 0,
             stride: size_of::<ProviderInfo>(),
         }
@@ -596,7 +596,7 @@ impl<'a> KindTables<'a> {
     /// No per-kind tables: `vtable` serves every kind.
     pub const fn empty() -> KindTables<'a> {
         KindTables {
-            ptr: std::ptr::null(),
+            ptr: core::ptr::null(),
             len: 0,
             stride: size_of::<KindTable>(),
         }

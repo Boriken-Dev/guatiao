@@ -18,7 +18,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::fmt;
+use alloc::fmt;
 
 use serde::Deserializer;
 use serde::de::{DeserializeSeed, Error as _, MapAccess, SeqAccess, Visitor};

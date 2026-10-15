@@ -108,3 +108,6 @@ derived_greeter = { path = "../../examples/derived_greeter" }
 # docs.rs documents every feature.
 [package.metadata.docs.rs]
 all-features = true
+
+[lints]
+workspace = true

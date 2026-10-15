@@ -323,7 +323,7 @@ macro_rules! __guatiao_unload {
         #[doc(hidden)]
         unsafe extern "C" fn __guatiao_unload() -> $crate::Status {
             $crate::library::kind::catch(|| {
-                let mut seen = ::std::vec::Vec::new();
+                let mut seen = $crate::__private::alloc::vec::Vec::new();
                 let live = 0usize
                     $(+ <$provider as $crate::library::kind::ProviderDecl>::live(&mut seen))+;
                 if live > 0 {
@@ -395,7 +395,7 @@ macro_rules! __guatiao_describe {
                     // The host's arena when it offers one, so what this
                     // library builds for the host outlives this mapping.
                     let alloc = host.alloc().unwrap_or_else($crate::Alloc::rust);
-                    let mut providers = ::std::vec::Vec::new();
+                    let mut providers = $crate::__private::alloc::vec::Vec::new();
                     $(
                         providers.push(
                             <$provider as $crate::library::kind::ProviderDecl>::provider(host, alloc).ok()?,
@@ -422,12 +422,12 @@ pub fn answer(
 ) -> *const LibraryInfo<'static> {
     match catch_unwind(AssertUnwindSafe(describe)) {
         Ok(Some(desc)) => desc as *const LibraryInfo,
-        Ok(None) => std::ptr::null(),
+        Ok(None) => core::ptr::null(),
         Err(payload) => {
             // Dropping a panic payload can panic, and a second panic
             // inside an `extern "C"` body is an abort.
-            std::mem::forget(payload);
-            std::ptr::null()
+            core::mem::forget(payload);
+            core::ptr::null()
         }
     }
 }

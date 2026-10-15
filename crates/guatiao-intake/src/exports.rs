@@ -47,7 +47,8 @@
 
 #![allow(non_camel_case_types)]
 
-use std::panic::{AssertUnwindSafe, catch_unwind};
+use core::panic::AssertUnwindSafe;
+use std::panic::catch_unwind;
 
 use guatiao::ToValue;
 use guatiao::schema::read::SchemaRef;
@@ -70,7 +71,7 @@ pub(crate) fn guard(body: impl FnOnce() -> Status) -> Status {
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(status) => status,
         Err(payload) => {
-            std::mem::forget(payload);
+            core::mem::forget(payload);
             Status::GUATIAO_ERR_INTERNAL
         }
     }
@@ -85,7 +86,7 @@ pub(crate) fn guard_with<T>(fallback: T, body: impl FnOnce() -> T) -> T {
     match catch_unwind(AssertUnwindSafe(body)) {
         Ok(v) => v,
         Err(payload) => {
-            std::mem::forget(payload);
+            core::mem::forget(payload);
             fallback
         }
     }
@@ -112,7 +113,7 @@ macro_rules! out {
             // SAFETY: checked non-null, and by the caller's contract it
             // addresses writable storage for one value that does not
             // already hold one the caller still owns.
-            unsafe { ::std::ptr::write($p, ::guatiao::Value::absent()) };
+            unsafe { ::core::ptr::write($p, ::guatiao::Value::absent()) };
         })*
     };
 }
@@ -341,7 +342,7 @@ pub unsafe extern "C" fn guatiao_intake_for_schema(
             Ok(form) => {
                 // SAFETY: `out` is writable by contract, and the tree
                 // MOVES into it rather than being copied.
-                unsafe { ::std::ptr::write(out, form) };
+                unsafe { ::core::ptr::write(out, form) };
                 Status::GUATIAO_OK
             }
             Err(e) => Status::from(e),
@@ -386,7 +387,7 @@ pub unsafe extern "C" fn guatiao_intake_form_for(
             return Status::GUATIAO_ERR_WRONG_KIND;
         };
         // SAFETY: as above.
-        let Ok(path) = ::std::str::from_utf8(path.into()) else {
+        let Ok(path) = ::core::str::from_utf8(path.into()) else {
             return Status::GUATIAO_ERR_BAD_VALUE;
         };
         // SAFETY: as above.
@@ -399,7 +400,7 @@ pub unsafe extern "C" fn guatiao_intake_form_for(
             None => Status::GUATIAO_OK,
             Some(Ok(found)) => {
                 // SAFETY: as above; the tree moves into `out`.
-                unsafe { ::std::ptr::write(out, found) };
+                unsafe { ::core::ptr::write(out, found) };
                 Status::GUATIAO_OK
             }
             Some(Err(e)) => Status::from(e),
@@ -439,7 +440,7 @@ pub unsafe extern "C" fn guatiao_intake_is_visible(
             Err(status) => return status,
         };
         // SAFETY: as above.
-        let key = match std::str::from_utf8(key.into()) {
+        let key = match core::str::from_utf8(key.into()) {
             Ok(k) => k,
             Err(e) => return e.into(),
         };

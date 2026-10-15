@@ -5,8 +5,8 @@
 //! The standard traits the containers implement, each doing what the
 //! standard library's own type does with it.
 
+use core::fmt::Write as _;
 use std::collections::HashSet;
-use std::fmt::Write as _;
 use std::io::Write as _;
 
 use guatiao::{Buffer, List, Map, Number, Text, TryAsRef, Value};
@@ -186,7 +186,7 @@ fn a_view_borrows_what_it_views() {
     let view = Str::new(&owned);
     assert_eq!(view.len(), 4);
     assert_eq!(<&str>::from(view), "host");
-    let checked: Str<'_> = std::str::from_utf8(b"host").unwrap().into();
+    let checked: Str<'_> = core::str::from_utf8(b"host").unwrap().into();
     assert_eq!(<&str>::from(checked), "host");
     let bad = [b'h', 0xff];
     // SAFETY: a readable array that outlives the call.
@@ -238,6 +238,6 @@ fn the_checked_reads_are_const() {
     const READ: Result<Str<'static>, ValueError> = unsafe { Str::from_ptr(&HOST) };
     assert!(matches!(READ, Ok(view) if view.len() == 4));
     // SAFETY: null is an empty view.
-    const NULL: Result<Str<'static>, ValueError> = unsafe { Str::from_ptr(std::ptr::null()) };
+    const NULL: Result<Str<'static>, ValueError> = unsafe { Str::from_ptr(core::ptr::null()) };
     assert!(matches!(NULL, Ok(view) if view.is_empty()));
 }

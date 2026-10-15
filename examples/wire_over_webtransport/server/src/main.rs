@@ -10,8 +10,8 @@
 //! only by its SHA-256 (`serverCertificateHashes`); the hash is printed at
 //! start.
 
-use std::error::Error;
-use std::time::Duration;
+use core::error::Error;
+use core::time::Duration;
 
 use guatiao::value::wire::channel;
 use wire_over_webtransport::{CHANNEL, delimited, nth, schema};

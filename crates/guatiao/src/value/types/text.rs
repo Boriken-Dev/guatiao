@@ -6,8 +6,8 @@
 
 #![allow(missing_docs)]
 
-use std::marker::PhantomData;
-use std::mem::ManuallyDrop;
+use core::marker::PhantomData;
+use core::mem::ManuallyDrop;
 
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::error::ValueError;
@@ -54,7 +54,7 @@ impl<'a> Str<'a> {
     /// An empty view.
     pub const fn empty() -> Str<'a> {
         Str {
-            ptr: std::ptr::null(),
+            ptr: core::ptr::null(),
             len: 0,
             _borrows: PhantomData,
         }
@@ -84,7 +84,7 @@ impl<'a> Str<'a> {
         }
         // SAFETY: the caller's contract.
         let view = unsafe { ptr.read() };
-        match std::str::from_utf8(view.items()) {
+        match core::str::from_utf8(view.items()) {
             Ok(_) => Ok(view),
             Err(_) => Err(ValueError::NotUtf8),
         }
@@ -127,7 +127,7 @@ impl<'a> Str<'a> {
         }
         // SAFETY: the view was made from a borrow of `'a`, or by
         // `from_raw_parts` or a foreign caller promising the same.
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+        unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
 
@@ -159,7 +159,7 @@ impl<'a> From<Str<'a>> for &'a str {
     fn from(view: Str<'a>) -> &'a str {
         // SAFETY: `new` took a `str`, and the caller of `from_raw_parts`
         // promised.
-        unsafe { std::str::from_utf8_unchecked(view.items()) }
+        unsafe { core::str::from_utf8_unchecked(view.items()) }
     }
 }
 
@@ -219,7 +219,7 @@ impl Text {
 
     /// The four fields, with ownership: this no longer frees them.
     pub fn into_raw_parts(self) -> (*mut u8, usize, usize, *const Allocator) {
-        let this = std::mem::ManuallyDrop::new(self);
+        let this = core::mem::ManuallyDrop::new(self);
         (this.ptr, this.len, this.cap, this.alloc)
     }
 
@@ -292,7 +292,7 @@ impl Text {
         // `len`, and the source is disjoint from the buffer or a staged
         // copy of it.
         unsafe {
-            std::ptr::copy_nonoverlapping(bytes.as_ptr(), self.ptr.add(self.len), bytes.len())
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), self.ptr.add(self.len), bytes.len())
         };
         self.len += bytes.len();
         Ok(())
@@ -313,7 +313,7 @@ impl Text {
     pub const unsafe fn from_ptr<'a>(ptr: *const Text) -> Result<&'a Text, ValueError> {
         // SAFETY: the caller's contract.
         let text = unsafe { &*ptr };
-        match std::str::from_utf8(text.bytes()) {
+        match core::str::from_utf8(text.bytes()) {
             Ok(_) => Ok(text),
             Err(_) => Err(ValueError::NotUtf8),
         }
@@ -326,26 +326,26 @@ impl Text {
             return &[];
         }
         // SAFETY: the first `len` bytes are initialised.
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
+        unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
 
 /// The text, as a `String` gives its `str`.
-impl std::ops::Deref for Text {
+impl core::ops::Deref for Text {
     type Target = str;
 
     fn deref(&self) -> &str {
         // SAFETY: a `Text` is checked once, when it is made: its
         // constructors take a `str`, and a foreign one is checked by the
         // door that reads it out of a value.
-        unsafe { std::str::from_utf8_unchecked(self.bytes()) }
+        unsafe { core::str::from_utf8_unchecked(self.bytes()) }
     }
 }
 
 /// The text to change in place, as `String` gives it: a `&mut str` can
 /// only stay UTF-8. Bytes a text does not own (`cap == 0`) are written
 /// where they are, which `from_raw_parts` asks of them, as `Buffer` does.
-impl std::ops::DerefMut for Text {
+impl core::ops::DerefMut for Text {
     fn deref_mut(&mut self) -> &mut str {
         if self.len == 0 {
             return <&mut str>::default();
@@ -353,7 +353,7 @@ impl std::ops::DerefMut for Text {
         // SAFETY: the first `len` bytes are initialised and UTF-8, and
         // `&mut self` makes the borrow unique.
         unsafe {
-            std::str::from_utf8_unchecked_mut(std::slice::from_raw_parts_mut(self.ptr, self.len))
+            core::str::from_utf8_unchecked_mut(core::slice::from_raw_parts_mut(self.ptr, self.len))
         }
     }
 }
@@ -373,14 +373,14 @@ impl AsMut<str> for Text {
 
 /// A `HashMap<Text, _>` is searched with a `&str`: hash and equality are
 /// the `str`'s.
-impl std::borrow::Borrow<str> for Text {
+impl core::borrow::Borrow<str> for Text {
     fn borrow(&self) -> &str {
         self
     }
 }
 
-impl std::fmt::Display for Text {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for Text {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(self)
     }
 }
@@ -412,17 +412,17 @@ impl AsRef<[u8]> for Text {
 }
 
 /// As its `str`, as its equality is.
-impl std::hash::Hash for Text {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl core::hash::Hash for Text {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         (**self).hash(state);
     }
 }
 
 /// Appends, as `String`'s `Write` does, so `write!(text, "{x}")` works.
 /// An allocator's refusal is `fmt::Error`, which carries no detail.
-impl std::fmt::Write for Text {
-    fn write_str(&mut self, text: &str) -> std::fmt::Result {
-        self.push_str(text).map_err(|_| std::fmt::Error)
+impl core::fmt::Write for Text {
+    fn write_str(&mut self, text: &str) -> core::fmt::Result {
+        self.push_str(text).map_err(|_| core::fmt::Error)
     }
 }
 

@@ -40,7 +40,7 @@ impl Host {
             return None;
         }
         // SAFETY: the caller guarantees the first four bytes are readable.
-        let declared = unsafe { std::ptr::addr_of!((*raw).struct_size).read() } as usize;
+        let declared = unsafe { core::ptr::addr_of!((*raw).struct_size).read() } as usize;
         if declared < HostInfo::floor() {
             return None;
         }
@@ -54,19 +54,19 @@ impl Host {
 
     fn declared(&self) -> usize {
         // SAFETY: `from_raw` established the leading word is readable.
-        unsafe { std::ptr::addr_of!((*self.raw).struct_size).read() as usize }
+        unsafe { core::ptr::addr_of!((*self.raw).struct_size).read() as usize }
     }
 
     /// The envelope version the host speaks.
     pub fn abi_version(&self) -> u32 {
         // SAFETY: within the floor.
-        unsafe { std::ptr::addr_of!((*self.raw).abi_version).read() }
+        unsafe { core::ptr::addr_of!((*self.raw).abi_version).read() }
     }
 
     /// Who the host is. Empty when it said nothing readable.
     pub fn id(&self) -> &'static str {
         // SAFETY: within the floor; the text lives in the host's block.
-        unsafe { std::str::from_utf8(std::ptr::addr_of!((*self.raw).host_id).read().into()).ok() }
+        unsafe { core::str::from_utf8(core::ptr::addr_of!((*self.raw).host_id).read().into()).ok() }
             .unwrap_or("")
     }
 
@@ -74,7 +74,7 @@ impl Host {
     pub fn version(&self) -> &'static str {
         // SAFETY: as `id`.
         unsafe {
-            std::str::from_utf8(std::ptr::addr_of!((*self.raw).host_version).read().into()).ok()
+            core::str::from_utf8(core::ptr::addr_of!((*self.raw).host_version).read().into()).ok()
         }
         .unwrap_or("")
     }
@@ -87,7 +87,7 @@ impl Host {
         }
         // SAFETY: the guard established the field is present, and the
         // allocator it names outlives the process by the block's contract.
-        let raw = unsafe { std::ptr::addr_of!((*self.raw).alloc).read() };
+        let raw = unsafe { core::ptr::addr_of!((*self.raw).alloc).read() };
         unsafe { Alloc::from_raw(raw) }.ok()
     }
 
@@ -99,7 +99,7 @@ impl Host {
         // SAFETY: the guard established the field is present; non-null
         // means a well-formed map by the contract on the field; the block
         // lives for the process.
-        unsafe { std::ptr::addr_of!((*self.raw).meta).read().get() }
+        unsafe { core::ptr::addr_of!((*self.raw).meta).read().get() }
     }
 
     /// A copy of the descriptor as it reads today, with absent fields
@@ -116,13 +116,13 @@ impl Host {
             return None;
         }
         // SAFETY: the guard established the field is present.
-        let table = unsafe { std::ptr::addr_of!((*self.raw).services).read() };
+        let table = unsafe { core::ptr::addr_of!((*self.raw).services).read() };
         if table.is_null() {
             return None;
         }
         // SAFETY: a non-null table points at one the host keeps for the
         // process, declaring its own size; the leading word is readable.
-        let size = unsafe { std::ptr::addr_of!((*table).struct_size).read() } as usize;
+        let size = unsafe { core::ptr::addr_of!((*table).struct_size).read() } as usize;
         if size < HostServices::floor() {
             return None;
         }
@@ -139,7 +139,7 @@ impl Host {
     pub fn get(&self, key: &str) -> Result<Option<&'static ProviderInfo<'static>>, Status> {
         let table = self.services().ok_or(Status::GUATIAO_ERR_NULL)?;
         let get = table.get.ok_or(Status::GUATIAO_ERR_NULL)?;
-        let mut out: *const ProviderInfo = std::ptr::null();
+        let mut out: *const ProviderInfo = core::ptr::null();
         // SAFETY: the slot is the host's own, read under its guard; `out`
         // is a writable local; `key` is readable for the call.
         match unsafe { get(table.ctx, Str::new(key), &mut out) } {
@@ -164,11 +164,11 @@ impl Host {
         let kind = Str::new(kind);
         let mut total = 0usize;
         // SAFETY: as `get`; a zero capacity asks for the count alone.
-        match unsafe { list(table.ctx, kind, std::ptr::null_mut(), 0, &mut total) } {
+        match unsafe { list(table.ctx, kind, core::ptr::null_mut(), 0, &mut total) } {
             Status::GUATIAO_OK => {}
             other => return Err(other),
         }
-        let mut found: Vec<*const ProviderInfo> = vec![std::ptr::null(); total];
+        let mut found: Vec<*const ProviderInfo> = vec![core::ptr::null(); total];
         let mut written = 0usize;
         // SAFETY: `found` has room for `total` entries.
         match unsafe {
@@ -214,7 +214,7 @@ pub(crate) struct HostBlock {
     id: Box<str>,
     #[allow(dead_code)]
     version: Box<str>,
-    state: std::sync::Weak<Shared>,
+    state: alloc::sync::Weak<Shared>,
 }
 
 /// What the registry publishes for its services to read: the providers
@@ -225,7 +225,7 @@ pub(crate) struct Snapshot {
     /// In `(priority DESC, key ASC)` order.
     pub(crate) entries: Vec<SnapshotEntry>,
     /// Rendered key to an index into `entries`.
-    pub(crate) by_key: std::collections::BTreeMap<String, usize>,
+    pub(crate) by_key: alloc::collections::BTreeMap<String, usize>,
 }
 
 /// One provider as the services see it.
@@ -309,7 +309,7 @@ pub(crate) fn leak_host_block(
     id: &str,
     version: &str,
     alloc: Option<Alloc>,
-    state: std::sync::Weak<Shared>,
+    state: alloc::sync::Weak<Shared>,
 ) -> &'static HostBlock {
     let id: Box<str> = id.into();
     let version: Box<str> = version.into();
@@ -321,13 +321,13 @@ pub(crate) fn leak_host_block(
             // block does, and the block is leaked with them.
             host_id: unsafe { view_of_owned(&id) },
             host_version: unsafe { view_of_owned(&version) },
-            alloc: alloc.map_or(std::ptr::null(), |a| a.as_raw()),
+            alloc: alloc.map_or(core::ptr::null(), |a| a.as_raw()),
             meta: MaybeNull::null(),
-            services: std::ptr::null(),
+            services: core::ptr::null(),
         },
         services: HostServices {
             struct_size: size_of::<HostServices>() as u32,
-            ctx: std::ptr::null_mut(),
+            ctx: core::ptr::null_mut(),
             get: Some(services_get),
             list: Some(services_list),
             alloc: Some(services_alloc),
@@ -381,7 +381,7 @@ unsafe extern "C" fn services_get(
             return Status::GUATIAO_ERR_GONE;
         };
         // SAFETY: the caller's contract.
-        let Ok(key) = std::str::from_utf8(key.into()) else {
+        let Ok(key) = core::str::from_utf8(key.into()) else {
             return Status::GUATIAO_ERR_BAD_VALUE;
         };
         let snapshot = shared.read();
@@ -422,7 +422,7 @@ unsafe extern "C" fn services_list(
             return Status::GUATIAO_ERR_GONE;
         };
         // SAFETY: the caller's contract.
-        let Ok(kind) = std::str::from_utf8(kind.into()) else {
+        let Ok(kind) = core::str::from_utf8(kind.into()) else {
             return Status::GUATIAO_ERR_BAD_VALUE;
         };
         let snapshot = shared.read();
@@ -451,11 +451,11 @@ unsafe extern "C" fn services_list(
 /// `ctx` is a leaked block's.
 #[cfg(feature = "load")]
 unsafe extern "C" fn services_alloc(ctx: *mut c_void) -> *const crate::value::alloc::Allocator {
-    crate::exports::guard_with(std::ptr::null(), || {
+    crate::exports::guard_with(core::ptr::null(), || {
         // SAFETY: the caller's contract.
         match unsafe { block_of(ctx) } {
             Some(block) => block.info.alloc,
-            None => std::ptr::null(),
+            None => core::ptr::null(),
         }
     })
 }
@@ -474,7 +474,7 @@ pub unsafe fn read_host(raw: *const HostInfo) -> Option<HostInfo> {
     // first would assert the whole struct is dereferenceable, which is
     // exactly what a caller with a smaller one does not have.
     // SAFETY: the caller guarantees the first four bytes are readable.
-    let declared = unsafe { std::ptr::addr_of!((*raw).struct_size).read() } as usize;
+    let declared = unsafe { core::ptr::addr_of!((*raw).struct_size).read() } as usize;
     if declared < HostInfo::floor() {
         return None;
     }
@@ -484,12 +484,12 @@ pub unsafe fn read_host(raw: *const HostInfo) -> Option<HostInfo> {
     let mut info = unsafe {
         HostInfo {
             struct_size: declared as u32,
-            abi_version: std::ptr::addr_of!((*raw).abi_version).read(),
-            host_id: std::ptr::addr_of!((*raw).host_id).read(),
-            host_version: std::ptr::addr_of!((*raw).host_version).read(),
-            alloc: std::ptr::null(),
+            abi_version: core::ptr::addr_of!((*raw).abi_version).read(),
+            host_id: core::ptr::addr_of!((*raw).host_id).read(),
+            host_version: core::ptr::addr_of!((*raw).host_version).read(),
+            alloc: core::ptr::null(),
             meta: MaybeNull::null(),
-            services: std::ptr::null(),
+            services: core::ptr::null(),
         }
     };
 
@@ -498,15 +498,15 @@ pub unsafe fn read_host(raw: *const HostInfo) -> Option<HostInfo> {
     // than handing back half a real pointer and half of whatever followed.
     if declared >= HostInfo::alloc_end() {
         // SAFETY: the guard just established the field is present.
-        info.alloc = unsafe { std::ptr::addr_of!((*raw).alloc).read() };
+        info.alloc = unsafe { core::ptr::addr_of!((*raw).alloc).read() };
     }
     if declared >= HostInfo::meta_end() {
         // SAFETY: as above.
-        info.meta = unsafe { std::ptr::addr_of!((*raw).meta).read() };
+        info.meta = unsafe { core::ptr::addr_of!((*raw).meta).read() };
     }
     if declared >= HostInfo::services_end() {
         // SAFETY: as above.
-        info.services = unsafe { std::ptr::addr_of!((*raw).services).read() };
+        info.services = unsafe { core::ptr::addr_of!((*raw).services).read() };
     }
     Some(info)
 }
@@ -582,7 +582,7 @@ mod tests {
             );
         }
         // SAFETY: null is the other case.
-        assert!(unsafe { read_host(std::ptr::null()) }.is_none());
+        assert!(unsafe { read_host(core::ptr::null()) }.is_none());
     }
 
     /// A NEWER host is accepted and its unknown tail ignored.

@@ -210,9 +210,9 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
     let name = decl.name.clone().unwrap_or_else(|| ty.to_string());
     let version = decl.version.clone().unwrap_or_default();
     let id = match &decl.id {
-        Some(id) => quote! { ::std::string::String::from(#id) },
+        Some(id) => quote! { ::guatiao::__private::alloc::string::String::from(#id) },
         None => quote! {
-            ::std::format!("{}_{}", env!("CARGO_PKG_NAME").replace('-', "_"), #snake)
+            ::guatiao::__private::alloc::format!("{}_{}", env!("CARGO_PKG_NAME").replace('-', "_"), #snake)
         },
     };
 
@@ -380,7 +380,7 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
             impl ::guatiao::library::kind::ProviderDecl for #ty {
                 const KINDS: &'static [&'static str] = &[ #(#kind_names)* ];
 
-                fn live(seen: &mut ::std::vec::Vec<&'static str>) -> usize {
+                fn live(seen: &mut ::guatiao::__private::alloc::vec::Vec<&'static str>) -> usize {
                     __GUATIAO_LIVE.load(::core::sync::atomic::Ordering::Relaxed)
                         #(+ <dyn #live_kinds as ::guatiao::library::Kind>::live_objects(seen))*
                 }
@@ -391,7 +391,7 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
                 ) -> ::core::result::Result<::guatiao::library::kind::ProviderParts, ::guatiao::ValueError> {
                     #instance
                     let kinds = <#ty as ::guatiao::library::kind::ProviderDecl>::KINDS;
-                    let tables = ::std::vec![ #(#table_entries)* ];
+                    let tables = ::guatiao::__private::alloc::vec![ #(#table_entries)* ];
                     let config = #config;
                     ::core::result::Result::Ok(::guatiao::library::kind::ProviderParts::new(
                         &#id,

@@ -289,7 +289,7 @@ impl Declared {
                 return Some(Declared { pairs });
             }
             // A pair that is not UTF-8 is dropped; the rest still count.
-            if let Ok(text) = std::str::from_utf8(&rest[..end]) {
+            if let Ok(text) = core::str::from_utf8(&rest[..end]) {
                 let (key, value) = text.split_once('=').unwrap_or((text, ""));
                 let pair = (key.to_string(), value.to_string());
                 if !pairs.contains(&pair) {
@@ -420,8 +420,8 @@ pub struct RuleError {
     pub rule: String,
 }
 
-impl std::fmt::Display for RuleError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for RuleError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
             "`{}` is not a scan rule; a rule is `KEY=VALUE` to require a declaration or \
@@ -431,7 +431,7 @@ impl std::fmt::Display for RuleError {
     }
 }
 
-impl std::error::Error for RuleError {}
+impl core::error::Error for RuleError {}
 
 impl ScanRules {
     /// Parses each rule, refusing the first that is not `[!]KEY=VALUE`.

@@ -43,3 +43,6 @@ form = []
 [dev-dependencies]
 # Renders the kind expansion for its snapshot test.
 prettyplease = "0.2"
+
+[lints]
+workspace = true

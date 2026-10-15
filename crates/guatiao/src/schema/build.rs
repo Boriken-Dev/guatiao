@@ -110,26 +110,26 @@ pub struct ArmBuilder {
     fields: Vec<FieldBuilder>,
 }
 
-impl std::fmt::Debug for SchemaBuilder {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for SchemaBuilder {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         debug_state(f, "SchemaBuilder", &self.state)
     }
 }
 
-impl std::fmt::Debug for FieldBuilder {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for FieldBuilder {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         debug_state(f, "FieldBuilder", &self.state)
     }
 }
 
-impl std::fmt::Debug for KindBuilder {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for KindBuilder {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         debug_state(f, "KindBuilder", &self.state)
     }
 }
 
-impl std::fmt::Debug for ArmBuilder {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for ArmBuilder {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         debug_state(f, "ArmBuilder", &self.state)
     }
 }
@@ -140,10 +140,10 @@ impl std::fmt::Debug for ArmBuilder {
 /// half-built tree is the worst possible thing to walk, and a builder is
 /// printed precisely when something has already gone wrong.
 fn debug_state(
-    f: &mut std::fmt::Formatter<'_>,
+    f: &mut core::fmt::Formatter<'_>,
     name: &str,
     state: &Result<Value, ValueError>,
-) -> std::fmt::Result {
+) -> core::fmt::Result {
     match state {
         Ok(_) => write!(f, "{name} {{ ok }}"),
         Err(e) => write!(f, "{name} {{ failed: {e} }}"),
@@ -397,7 +397,7 @@ impl SchemaBuilder {
     /// places inside a value has a grammar that can spell one
     /// (`guatiao-intake`'s `["a.b"]`).
     pub fn finish(mut self) -> Result<Value, ValueError> {
-        let (alloc, fields) = (self.alloc, std::mem::take(&mut self.fields));
+        let (alloc, fields) = (self.alloc, core::mem::take(&mut self.fields));
         seal(&mut self.state, alloc, None, fields);
         self.state
     }

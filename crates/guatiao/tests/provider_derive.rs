@@ -6,6 +6,7 @@
 //! descriptor a derived type builds, and the library a line names.
 
 #![cfg(all(feature = "provider", feature = "load"))]
+extern crate alloc;
 
 use guatiao::library::kind::{ProviderDecl, ProviderParts};
 use guatiao::library::{Host, ProviderError, Registry};
@@ -90,7 +91,7 @@ struct Shouter {
     bangs: usize,
 }
 
-static SHOUTERS_ALIVE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static SHOUTERS_ALIVE: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
 
 impl TryFrom<ShoutConfig> for Shouter {
     type Error = ProviderError;
@@ -101,7 +102,7 @@ impl TryFrom<ShoutConfig> for Shouter {
                 "a shout needs at least one bang",
             ));
         }
-        SHOUTERS_ALIVE.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        SHOUTERS_ALIVE.fetch_add(1, core::sync::atomic::Ordering::SeqCst);
         Ok(Shouter {
             prefix: config.prefix,
             bangs: usize::from(config.bangs),
@@ -111,7 +112,7 @@ impl TryFrom<ShoutConfig> for Shouter {
 
 impl Drop for Shouter {
     fn drop(&mut self) {
-        SHOUTERS_ALIVE.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        SHOUTERS_ALIVE.fetch_sub(1, core::sync::atomic::Ordering::SeqCst);
     }
 }
 
@@ -152,7 +153,7 @@ fn a_provider_builds_instances_from_a_configuration() {
     config.set("prefix", "hey").unwrap();
     config.set("bangs", 2).unwrap();
     let config = Value::from(config);
-    let before = SHOUTERS_ALIVE.load(std::sync::atomic::Ordering::SeqCst);
+    let before = SHOUTERS_ALIVE.load(core::sync::atomic::Ordering::SeqCst);
     let one = parts
         .info()
         .instantiate::<dyn Greeter>(&config)
@@ -167,14 +168,14 @@ fn a_provider_builds_instances_from_a_configuration() {
         .unwrap();
     assert_eq!(two.greet("bo").unwrap(), "yo BO!");
     assert_eq!(
-        SHOUTERS_ALIVE.load(std::sync::atomic::Ordering::SeqCst),
+        SHOUTERS_ALIVE.load(core::sync::atomic::Ordering::SeqCst),
         before + 2,
         "two instances, two contexts"
     );
     drop(one);
     drop(two);
     assert_eq!(
-        SHOUTERS_ALIVE.load(std::sync::atomic::Ordering::SeqCst),
+        SHOUTERS_ALIVE.load(core::sync::atomic::Ordering::SeqCst),
         before,
         "dropping an instance runs the provider's destroy"
     );
@@ -182,21 +183,21 @@ fn a_provider_builds_instances_from_a_configuration() {
     // An instance is the trait, so it is stored like any implementation
     // and released when its last owner goes.
     let build = || parts.info().instantiate::<dyn Greeter>(&config).unwrap();
-    let shared: std::sync::Arc<dyn Greeter> = std::sync::Arc::new(build());
-    let also = std::sync::Arc::clone(&shared);
+    let shared: alloc::sync::Arc<dyn Greeter> = alloc::sync::Arc::new(build());
+    let also = alloc::sync::Arc::clone(&shared);
     let boxed: Box<dyn Greeter> = build().into();
     drop(shared);
     assert_eq!(also.greet("ana").unwrap(), "hey ANA!!");
     assert_eq!(boxed.greet("bo").unwrap(), "hey BO!!");
     assert_eq!(
-        SHOUTERS_ALIVE.load(std::sync::atomic::Ordering::SeqCst),
+        SHOUTERS_ALIVE.load(core::sync::atomic::Ordering::SeqCst),
         before + 2,
         "one owner of the shared instance is left"
     );
     drop(also);
     drop(boxed);
     assert_eq!(
-        SHOUTERS_ALIVE.load(std::sync::atomic::Ordering::SeqCst),
+        SHOUTERS_ALIVE.load(core::sync::atomic::Ordering::SeqCst),
         before
     );
 
@@ -314,10 +315,10 @@ fn a_library_line_names_the_whole_library() {
     assert_eq!(info.abi_version, guatiao::library::ABI_VERSION);
     // Built once: the same descriptor comes back.
     let again = __guatiao_describe(registry.host()).unwrap();
-    assert!(std::ptr::eq(info, again));
+    assert!(core::ptr::eq(info, again));
 }
 
 /// A `Str` a descriptor names, checked as a host reading it would.
 fn unsafe_str(s: guatiao::Str<'static>) -> &'static str {
-    std::str::from_utf8(s.into()).unwrap()
+    core::str::from_utf8(s.into()).unwrap()
 }

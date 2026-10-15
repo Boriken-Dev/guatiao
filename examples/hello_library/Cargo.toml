@@ -22,3 +22,6 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 guatiao = { path = "../../crates/guatiao", features = ["derive"] }
+
+[lints]
+workspace = true

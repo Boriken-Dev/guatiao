@@ -8,7 +8,7 @@
 //!
 //! `wire-probe <url> <certificate-sha256 hex> <frames>`
 
-use std::error::Error;
+use core::error::Error;
 
 use guatiao::value::read::Dump;
 use guatiao::value::wire::channel::{Received, Receiver};

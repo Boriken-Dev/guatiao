@@ -6,7 +6,7 @@
 
 #![allow(missing_docs)]
 
-use std::fmt;
+use alloc::fmt;
 
 /// A `*const T` where **null is a value, not a mistake**.
 ///
@@ -23,7 +23,7 @@ pub struct MaybeNull<T>(*const T);
 impl<T> MaybeNull<T> {
     /// Nothing here.
     pub const fn null() -> MaybeNull<T> {
-        MaybeNull(std::ptr::null())
+        MaybeNull(core::ptr::null())
     }
 
     /// A pointer to something that outlives the reader.

@@ -5,8 +5,9 @@
 //! A library that is nothing but its trait impls. The descriptor, the
 //! tables, the entry symbol, the id (`derived_greeter_hello`) and the
 //! version all come from the derive and the one macro line at the end.
+extern crate alloc;
 
-use std::sync::atomic::{AtomicI64, Ordering};
+use core::sync::atomic::{AtomicI64, Ordering};
 
 use greeter_kind::{Conversation, Counter, Greeter, Listener};
 use guatiao::library::{Object, ProviderError};

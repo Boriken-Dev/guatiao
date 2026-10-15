@@ -9,8 +9,9 @@
 //! contract the wire decoder has, because a path comes from a command
 //! line or a stored record and "that path is wrong" without a position is
 //! a bug report nobody can act on.
+extern crate alloc;
 
-use std::borrow::Cow;
+use alloc::borrow::Cow;
 
 use guatiao::{List, Map, Value};
 use guatiao_intake::path::{self, PathError, Segment};
@@ -265,7 +266,7 @@ fn a_path_deeper_than_any_recursion_would_survive() {
         value = wrap.into();
     }
 
-    let text = std::iter::repeat_n("n", depth)
+    let text = core::iter::repeat_n("n", depth)
         .collect::<Vec<_>>()
         .join(".");
     let parsed = path::parse(&text).expect("a long path is still a path");

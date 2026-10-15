@@ -9,7 +9,7 @@
 //! there is no C compiler. These never skip: they are the statuses the
 //! header promises, asserted on every machine.
 
-use std::ptr;
+use core::ptr;
 
 use guatiao::schema::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::value::alloc::{Allocator, rust_alloc};
@@ -349,14 +349,19 @@ fn the_flat_exports_refuse_null() {
 
     // SAFETY: passing null is the case under test.
     unsafe {
-        assert!(guatiao_intake_resolve(std::ptr::null(), Str::new("k")).is_null());
+        assert!(guatiao_intake_resolve(core::ptr::null(), Str::new("k")).is_null());
         assert_eq!(
-            guatiao_intake_flat_keys(std::ptr::null(), Str::new("auth"), alloc.as_raw(), &mut out),
+            guatiao_intake_flat_keys(
+                core::ptr::null(),
+                Str::new("auth"),
+                alloc.as_raw(),
+                &mut out
+            ),
             Status::GUATIAO_ERR_NULL
         );
         assert_eq!(
             guatiao_intake_flatten(
-                std::ptr::null(),
+                core::ptr::null(),
                 Str::new("auth"),
                 &schema,
                 alloc.as_raw(),
@@ -366,7 +371,7 @@ fn the_flat_exports_refuse_null() {
         );
         assert_eq!(
             guatiao_intake_unflatten(
-                std::ptr::null(),
+                core::ptr::null(),
                 Str::new("auth"),
                 &schema,
                 alloc.as_raw(),

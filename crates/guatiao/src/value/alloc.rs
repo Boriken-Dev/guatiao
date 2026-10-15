@@ -26,9 +26,9 @@
 
 #![allow(non_camel_case_types)]
 
-use std::ffi::c_void;
-use std::mem::{offset_of, size_of};
-use std::ptr;
+use core::ffi::c_void;
+use core::mem::{offset_of, size_of};
+use core::ptr;
 
 /// Allocates `size` bytes aligned to `align`, or returns null.
 ///
@@ -126,8 +126,8 @@ pub enum AllocError {
     TooLarge,
 }
 
-impl std::fmt::Display for AllocError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for AllocError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             AllocError::Null => f.write_str("the allocator pointer was null"),
             AllocError::TooSmall { declared, need } => write!(
@@ -145,7 +145,7 @@ impl std::fmt::Display for AllocError {
     }
 }
 
-impl std::error::Error for AllocError {}
+impl core::error::Error for AllocError {}
 
 /// A checked view of a caller's allocator: the function pointers rather
 /// than the struct pointer, so the coverage question is answered once.
@@ -166,11 +166,11 @@ pub struct Alloc {
     raw: *const Allocator,
 }
 
-impl std::fmt::Debug for Alloc {
+impl core::fmt::Debug for Alloc {
     /// Deliberately does not print the function pointers: a raw address is
     /// not something a reader can act on. What is diagnostic is which
     /// optional slot survived the coverage check.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Alloc")
             .field("ctx_is_null", &self.ctx.is_null())
             .field("has_release", &self.release.is_some())
@@ -345,7 +345,7 @@ impl Alloc {
 // --- the allocator this crate supplies --------------------------------
 
 unsafe extern "C" fn rust_alloc_fn(_ctx: *mut c_void, size: usize, align: usize) -> *mut c_void {
-    let Ok(layout) = std::alloc::Layout::from_size_align(size, align) else {
+    let Ok(layout) = core::alloc::Layout::from_size_align(size, align) else {
         return ptr::null_mut();
     };
     if layout.size() == 0 {
@@ -356,19 +356,19 @@ unsafe extern "C" fn rust_alloc_fn(_ctx: *mut c_void, size: usize, align: usize)
         return ptr::null_mut();
     }
     // SAFETY: the layout has non-zero size, checked immediately above.
-    unsafe { std::alloc::alloc(layout).cast::<c_void>() }
+    unsafe { alloc::alloc::alloc(layout).cast::<c_void>() }
 }
 
 unsafe extern "C" fn rust_free_fn(_ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
     if p.is_null() || size == 0 {
         return;
     }
-    let Ok(layout) = std::alloc::Layout::from_size_align(size, align) else {
+    let Ok(layout) = core::alloc::Layout::from_size_align(size, align) else {
         return;
     };
     // SAFETY: the contract on `FreeFn` is that `p` came from the
     // matching `alloc` with this exact size and alignment.
-    unsafe { std::alloc::dealloc(p.cast::<u8>(), layout) }
+    unsafe { alloc::alloc::dealloc(p.cast::<u8>(), layout) }
 }
 
 /// An allocator over Rust's global allocator, as a raw vtable for a
@@ -535,7 +535,7 @@ mod tests {
         unsafe extern "C" fn skewed(_c: *mut c_void, _s: usize, _a: usize) -> *mut c_void {
             // Address 1: aligned for a byte, misaligned for anything
             // wider, and never dereferenced.
-            std::ptr::dangling_mut::<c_void>()
+            core::ptr::dangling_mut::<c_void>()
         }
         unsafe extern "C" fn nothing(_c: *mut c_void, _p: *mut c_void, _s: usize, _a: usize) {}
         unsafe extern "C" fn null(_c: *mut c_void, _s: usize, _a: usize) -> *mut c_void {

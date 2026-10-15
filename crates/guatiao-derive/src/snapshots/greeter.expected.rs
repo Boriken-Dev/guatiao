@@ -133,7 +133,9 @@ impl ::guatiao::library::Kind for dyn Greeter {
         ("greet", GreeterVtable::greet_end()),
     ];
     const OBJECT: bool = false;
-    fn live_objects(seen: &mut ::std::vec::Vec<&'static str>) -> usize {
+    fn live_objects(
+        seen: &mut ::guatiao::__private::alloc::vec::Vec<&'static str>,
+    ) -> usize {
         if seen.contains(&"greeter") {
             return 0;
         }
@@ -146,11 +148,15 @@ impl ::guatiao::library::Kind for dyn Greeter {
     fn as_dyn_mut(remote: &mut ::guatiao::library::Remote<Self>) -> &mut Self {
         remote
     }
-    fn boxed(remote: ::guatiao::library::Remote<Self>) -> ::std::boxed::Box<Self> {
-        ::std::boxed::Box::new(remote)
+    fn boxed(
+        remote: ::guatiao::library::Remote<Self>,
+    ) -> ::guatiao::__private::alloc::boxed::Box<Self> {
+        ::guatiao::__private::alloc::boxed::Box::new(remote)
     }
-    fn shared(remote: ::guatiao::library::Remote<Self>) -> ::std::sync::Arc<Self> {
-        ::std::sync::Arc::new(remote)
+    fn shared(
+        remote: ::guatiao::library::Remote<Self>,
+    ) -> ::guatiao::__private::alloc::sync::Arc<Self> {
+        ::guatiao::__private::alloc::sync::Arc::new(remote)
     }
 }
 #[allow(clippy::needless_question_mark)]
@@ -180,7 +186,7 @@ impl Greeter for ::guatiao::library::Remote<dyn Greeter> {
         ::core::result::Result::Ok(
             match ::guatiao::library::kind::text_ret(__out) {
                 ::core::result::Result::Ok(__v) => {
-                    ::std::string::ToString::to_string(&*__v)
+                    ::guatiao::__private::alloc::string::ToString::to_string(&*__v)
                 }
                 ::core::result::Result::Err(__e) => {
                     return ::core::result::Result::Err(__e);
@@ -222,9 +228,9 @@ impl Greeter for ::guatiao::library::Remote<dyn Greeter> {
     }
 }
 impl ::core::convert::From<::guatiao::library::Remote<dyn Greeter>>
-for ::std::boxed::Box<dyn Greeter> {
+for ::guatiao::__private::alloc::boxed::Box<dyn Greeter> {
     fn from(remote: ::guatiao::library::Remote<dyn Greeter>) -> Self {
-        ::std::boxed::Box::new(remote)
+        ::guatiao::__private::alloc::boxed::Box::new(remote)
     }
 }
 impl Greeter for ::guatiao::library::Instance<dyn Greeter> {
@@ -236,8 +242,8 @@ impl Greeter for ::guatiao::library::Instance<dyn Greeter> {
     }
 }
 impl ::core::convert::From<::guatiao::library::Instance<dyn Greeter>>
-for ::std::boxed::Box<dyn Greeter> {
+for ::guatiao::__private::alloc::boxed::Box<dyn Greeter> {
     fn from(instance: ::guatiao::library::Instance<dyn Greeter>) -> Self {
-        ::std::boxed::Box::new(instance)
+        ::guatiao::__private::alloc::boxed::Box::new(instance)
     }
 }

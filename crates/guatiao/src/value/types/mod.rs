@@ -66,7 +66,7 @@ pub use text::{Str, Text};
 // still reaches it.
 pub use super::value::{Payload, Tag, Value};
 
-use std::ffi::c_void;
+use core::ffi::c_void;
 
 use crate::value::error::ValueError;
 
@@ -90,7 +90,7 @@ pub(crate) fn or_abort<T>(built: Result<T, ValueError>) -> T {
 // numbers with `_Static_assert`, because Rust agreeing with itself
 // proves nothing about the header.
 const _: () = {
-    use std::mem::{align_of, offset_of, size_of};
+    use core::mem::{align_of, offset_of, size_of};
 
     // In pointer widths, so the one layout holds on every target: a view
     // is two words, an owned container four, a node a tag and its padding

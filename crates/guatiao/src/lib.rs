@@ -44,7 +44,7 @@
 //! let tls: &Map = map.required("tls")?.try_into()?;
 //! let verify: bool = tls.required("verify")?.try_into()?;
 //! assert_eq!((host, port, verify), ("10.0.0.1", 5900, true));
-//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! # Ok::<(), Box<dyn core::error::Error>>(())
 //! ```
 //!
 //! # Where things are
@@ -84,6 +84,7 @@
 
 #![warn(missing_debug_implementations)]
 #![warn(missing_docs)]
+extern crate alloc;
 
 // The value model: plain `repr(C)` structs a foreign consumer reads with
 // no call into any library, the allocator that travels with an owned
@@ -133,6 +134,13 @@ pub mod library;
 // them silently became a dead link the moment this was a `///`, and
 // rustdoc reports those with no file or line to find them by.
 pub mod schema;
+
+/// Paths generated code reaches `alloc` through, so a crate that expands a
+/// macro of ours need not declare `extern crate alloc` itself.
+#[doc(hidden)]
+pub mod __private {
+    pub extern crate alloc;
+}
 
 pub use value::convert::{Bytes, FromValue, MapError, ToValue, TryAsMut, TryAsRef};
 // The names generated code reaches for, at the root where it names them.
@@ -192,7 +200,7 @@ pub use value::{
 /// assert!(map.get("motd").is_none());
 ///
 /// assert_eq!(Connection::from_value(&node)?, original);
-/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// # Ok::<(), Box<dyn core::error::Error>>(())
 /// ```
 ///
 /// # The shapes it refuses, and that it really does refuse them
@@ -249,7 +257,7 @@ pub use value::{
 /// assert_eq!(tag, "Tcp");
 /// let level = Level::Warning.to_value(alloc)?;
 /// assert_eq!(<&str>::try_from(&level)?, "warn");
-/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// # Ok::<(), Box<dyn core::error::Error>>(())
 /// ```
 ///
 /// A generic parameter would need a bound the macro cannot infer:

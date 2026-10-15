@@ -70,7 +70,7 @@
 //! let mut values = guatiao::Map::new();
 //! values.set("verify", false)?;
 //! assert!(!is_visible(s, f, "ca", &values.into())?);
-//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! # Ok::<(), Box<dyn core::error::Error>>(())
 //! ```
 //!
 //! # What is code and what is data
@@ -83,6 +83,7 @@
 // NO `forbid(unsafe_code)` HERE: it would bind `exports` too. Every other
 // module carries it, and `tests/unsafe_stays_in_exports.rs` checks that.
 #![deny(missing_docs)]
+extern crate alloc;
 
 mod build;
 // The form a schema implies, for when nobody wrote one. A `//` comment,
@@ -128,7 +129,7 @@ pub mod vocab;
 ///
 /// let form = Form::new().section(Section::new("net").label("Network")).finish()?;
 /// check(SchemaRef::new(&schema).unwrap(), FormRef::new(&form).unwrap())?;
-/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// # Ok::<(), Box<dyn core::error::Error>>(())
 /// ```
 ///
 /// It re-exports, and adds nothing of its own — a name here is the same

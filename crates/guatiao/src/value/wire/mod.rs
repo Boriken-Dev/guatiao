@@ -35,7 +35,7 @@
 
 pub mod channel;
 
-use std::fmt;
+use alloc::fmt;
 
 use super::alloc::Alloc;
 use super::convert::TryAsRef;
@@ -151,14 +151,14 @@ impl fmt::Display for WireError {
     }
 }
 
-impl std::error::Error for WireError {}
+impl core::error::Error for WireError {}
 
 // --- encoding ---------------------------------------------------------------
 
 /// What is left of a container being written.
 enum Left<'a> {
-    Items(std::slice::Iter<'a, Value>),
-    Entries(std::slice::Iter<'a, Entry>),
+    Items(core::slice::Iter<'a, Value>),
+    Entries(core::slice::Iter<'a, Entry>),
 }
 
 /// Appends `value` to `out`.
@@ -446,7 +446,7 @@ impl<'a> Reader<'a> {
 
     fn text(&mut self) -> Result<&'a str, WireError> {
         let at = self.offset();
-        std::str::from_utf8(self.slice()?).map_err(|_| WireError::NotUtf8 { at })
+        core::str::from_utf8(self.slice()?).map_err(|_| WireError::NotUtf8 { at })
     }
 
     fn node(&mut self, alloc: Alloc) -> Result<Node, WireError> {

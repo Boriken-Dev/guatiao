@@ -39,10 +39,10 @@
 
 #![allow(non_camel_case_types)]
 
-use std::ffi::c_void;
-use std::marker::PhantomData;
-use std::mem::size_of;
-use std::sync::Arc;
+use alloc::sync::Arc;
+use core::ffi::c_void;
+use core::marker::PhantomData;
+use core::mem::size_of;
 
 use super::desc::{KindTable, KindTables, LibraryInfo, ProviderInfo};
 use super::raw::{Host, ProviderView};
@@ -166,14 +166,14 @@ impl From<ValueError> for ProviderError {
 /// So a provider built through an infallible `From<C>` (a type that IS
 /// its configuration, `config = Self`) satisfies `TryFrom<C, Error:
 /// Into<ProviderError>>` with nothing written.
-impl From<std::convert::Infallible> for ProviderError {
-    fn from(never: std::convert::Infallible) -> ProviderError {
+impl From<core::convert::Infallible> for ProviderError {
+    fn from(never: core::convert::Infallible) -> ProviderError {
         match never {}
     }
 }
 
-impl std::fmt::Display for ProviderError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for ProviderError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let message = self.message();
         if message.is_empty() {
             write!(f, "the provider answered {:?}", self.status)
@@ -183,7 +183,7 @@ impl std::fmt::Display for ProviderError {
     }
 }
 
-impl std::error::Error for ProviderError {}
+impl core::error::Error for ProviderError {}
 
 /// Why a table could not be used as a kind. Each names the check that
 /// failed.
@@ -210,8 +210,8 @@ pub enum KindMismatch {
     NullRequiredSlot(&'static str),
 }
 
-impl std::fmt::Display for KindMismatch {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for KindMismatch {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             KindMismatch::NoTable => f.write_str("the provider declares no table for this kind"),
             KindMismatch::BelowFloor { size, floor } => {
@@ -228,7 +228,7 @@ impl std::fmt::Display for KindMismatch {
     }
 }
 
-impl std::error::Error for KindMismatch {}
+impl core::error::Error for KindMismatch {}
 
 mod object;
 mod parts;

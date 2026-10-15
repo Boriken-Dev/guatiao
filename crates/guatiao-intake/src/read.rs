@@ -185,7 +185,7 @@ impl<'a> HintsRef<'a> {
         let m = TryAsRef::<Map>::try_as_ref(condition)?;
         let field = m.get(vocab::FIELD).and_then(TryAsRef::<str>::try_as_ref)?;
         let (values, single) = match (m.get(vocab::EQUALS), m.get(vocab::IN)) {
-            (Some(equals), None) => (std::slice::from_ref(equals), true),
+            (Some(equals), None) => (core::slice::from_ref(equals), true),
             // An empty list is malformed like the rest, and skipped like
             // the rest: read as "no condition", never as "never shown".
             (None, Some(any)) => match TryAsRef::<List>::try_as_ref(any) {

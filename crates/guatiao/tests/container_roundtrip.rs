@@ -27,10 +27,10 @@
 //! outstanding-block assertions would then hold for a tree they had not
 //! watched.
 
+use core::cell::Cell;
+use core::ffi::c_void;
 use guatiao::value::convert::TryAsMut;
 use guatiao::value::convert::TryAsRef;
-use std::cell::Cell;
-use std::ffi::c_void;
 
 use guatiao::value::alloc::{Alloc, AllocError, Allocator, rust_alloc};
 use guatiao::value::error::{MAX_DEPTH, ValueError};
@@ -59,12 +59,12 @@ unsafe extern "C" fn c_alloc(ctx: *mut c_void, size: usize, align: usize) -> *mu
     let c = unsafe { &*(ctx as *const Counter) };
     c.allocs.set(c.allocs.get() + 1);
     if c.fail_at.get() != 0 && c.allocs.get() >= c.fail_at.get() {
-        return std::ptr::null_mut();
+        return core::ptr::null_mut();
     }
     c.outstanding.set(c.outstanding.get() + 1);
     let real = rust_alloc().alloc.expect("the rust allocator has an alloc");
     // SAFETY: forwarding an unchanged request.
-    unsafe { real(std::ptr::null_mut(), size, align) }
+    unsafe { real(core::ptr::null_mut(), size, align) }
 }
 
 unsafe extern "C" fn c_free(ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
@@ -74,7 +74,7 @@ unsafe extern "C" fn c_free(ctx: *mut c_void, p: *mut c_void, size: usize, align
     c.outstanding.set(c.outstanding.get() - 1);
     let real = rust_alloc().free.expect("the rust allocator has a free");
     // SAFETY: forwarding the same block with the same layout.
-    unsafe { real(std::ptr::null_mut(), p, size, align) }
+    unsafe { real(core::ptr::null_mut(), p, size, align) }
 }
 
 fn vtable(c: &Counter) -> Allocator {
@@ -709,7 +709,7 @@ fn a_literal_tree_is_readable_growable_and_safe_to_free() {
                     TEXT.as_ptr().cast_mut(),
                     5,
                     0,
-                    std::ptr::null(),
+                    core::ptr::null(),
                 )),
             )
         };
@@ -737,7 +737,7 @@ fn a_literal_tree_is_readable_growable_and_safe_to_free() {
                     TEXT.as_ptr().cast_mut(),
                     5,
                     0,
-                    std::ptr::null(),
+                    core::ptr::null(),
                 )),
             )
         };
@@ -845,8 +845,8 @@ fn with_foreign_first_key(map: Map, alloc: Alloc, key: &[u8]) -> Map {
     // freed before the new one is written over it.
     unsafe {
         let slot = ptr.cast::<Text>();
-        std::ptr::drop_in_place(slot);
-        std::ptr::write(slot, foreign_text(alloc, key));
+        core::ptr::drop_in_place(slot);
+        core::ptr::write(slot, foreign_text(alloc, key));
         Map::from_raw_parts(ptr, len, cap, a)
     }
 }
@@ -903,7 +903,7 @@ fn a_map_a_foreign_producer_wrote_with_a_key_that_is_not_utf8_is_no_map_yet_is_f
         );
         let (_, payload) = bad.into_raw_parts();
         // SAFETY: the map arm is live under the MAP tag it was built with.
-        let arm = unsafe { &*std::ptr::addr_of!(payload).cast::<Map>() };
+        let arm = unsafe { &*core::ptr::addr_of!(payload).cast::<Map>() };
         // SAFETY: a live map.
         assert_eq!(
             unsafe { Map::from_ptr(arm) }.map(|_| ()),
@@ -1167,7 +1167,7 @@ fn the_debug_dump_walks_a_tree_and_shows_bytes_as_bytes() {
 fn text_lit(bytes: &'static [u8]) -> Text {
     // SAFETY: a borrowed literal: `cap == 0`, `len` readable bytes that
     // live for the program, never written through this text.
-    unsafe { Text::from_raw_parts(bytes.as_ptr().cast_mut(), bytes.len(), 0, std::ptr::null()) }
+    unsafe { Text::from_raw_parts(bytes.as_ptr().cast_mut(), bytes.len(), 0, core::ptr::null()) }
 }
 
 /// A STRING node over borrowed bytes, whatever those bytes are.
@@ -1208,7 +1208,7 @@ fn a_literal_list_and_map_are_mutated_in_place_and_free_to_nothing() {
         // which Rust would otherwise free a second time. Everything the
         // node really owns is released through `free` below, and the
         // counter is what proves it.
-        let mut items = std::mem::ManuallyDrop::new([string_lit(A), string_lit(B)]);
+        let mut items = core::mem::ManuallyDrop::new([string_lit(A), string_lit(B)]);
         // SAFETY: two well-formed nodes in a writable local array, borrowed
         // (`cap == 0`), and the tag selects the list arm.
         let mut list = unsafe {
@@ -1218,7 +1218,7 @@ fn a_literal_list_and_map_are_mutated_in_place_and_free_to_nothing() {
                     items.as_mut_ptr(),
                     2,
                     0,
-                    std::ptr::null(),
+                    core::ptr::null(),
                 )),
             )
         };
@@ -1280,7 +1280,7 @@ fn a_literal_list_and_map_are_mutated_in_place_and_free_to_nothing() {
 
         // --- a map of two borrowed entries, `ManuallyDrop` for the
         // reason above.
-        let mut entries = std::mem::ManuallyDrop::new([
+        let mut entries = core::mem::ManuallyDrop::new([
             Entry::new(text_lit(A), string_lit(A)),
             Entry::new(text_lit(B), string_lit(B)),
         ]);
@@ -1292,7 +1292,7 @@ fn a_literal_list_and_map_are_mutated_in_place_and_free_to_nothing() {
                     entries.as_mut_ptr(),
                     2,
                     0,
-                    std::ptr::null(),
+                    core::ptr::null(),
                 )),
             )
         };

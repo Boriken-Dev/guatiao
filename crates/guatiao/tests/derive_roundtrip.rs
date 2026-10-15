@@ -11,9 +11,9 @@
 
 #![cfg(feature = "derive")]
 
+use core::cell::Cell;
+use core::ffi::c_void;
 use guatiao::value::convert::{TryAsMut, TryAsRef};
-use std::cell::Cell;
-use std::ffi::c_void;
 
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::value::read::str_or;
@@ -31,7 +31,7 @@ unsafe extern "C" fn c_alloc(ctx: *mut c_void, size: usize, align: usize) -> *mu
     c.outstanding.set(c.outstanding.get() + 1);
     let real = rust_alloc().alloc.expect("the rust allocator has an alloc");
     // SAFETY: forwarding an unchanged request.
-    unsafe { real(std::ptr::null_mut(), size, align) }
+    unsafe { real(core::ptr::null_mut(), size, align) }
 }
 
 unsafe extern "C" fn c_free(ctx: *mut c_void, p: *mut c_void, size: usize, align: usize) {
@@ -40,7 +40,7 @@ unsafe extern "C" fn c_free(ctx: *mut c_void, p: *mut c_void, size: usize, align
     c.outstanding.set(c.outstanding.get() - 1);
     let real = rust_alloc().free.expect("the rust allocator has a free");
     // SAFETY: forwarding the same block with the same layout.
-    unsafe { real(std::ptr::null_mut(), p, size, align) }
+    unsafe { real(core::ptr::null_mut(), p, size, align) }
 }
 
 fn with_alloc(body: impl FnOnce(Alloc)) {

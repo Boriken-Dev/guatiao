@@ -65,7 +65,8 @@
 
 #![allow(non_camel_case_types)]
 
-use std::panic::{AssertUnwindSafe, catch_unwind};
+use core::panic::AssertUnwindSafe;
+use std::panic::catch_unwind;
 
 use crate::value::status::Status;
 
@@ -89,7 +90,7 @@ pub(crate) fn guard_with<T>(fallback: T, body: impl FnOnce() -> T) -> T {
         Err(payload) => {
             // As in `guard`: dropping the payload can panic, and a second
             // panic inside an `extern "C"` body is an abort.
-            std::mem::forget(payload);
+            core::mem::forget(payload);
             fallback
         }
     }
@@ -108,7 +109,7 @@ pub(crate) fn guard(body: impl FnOnce() -> Status) -> Status {
             // Dropping a panic payload can panic, and a second panic
             // inside an `extern "C"` body is the abort this whole
             // arrangement exists to avoid.
-            std::mem::forget(payload);
+            core::mem::forget(payload);
             Status::GUATIAO_ERR_INTERNAL
         }
     }
@@ -141,7 +142,7 @@ macro_rules! out {
             // SAFETY: checked non-null, and by the caller's contract it
             // addresses writable storage for one value that does not
             // already hold one the caller still owns.
-            unsafe { ::std::ptr::write($p, $crate::value::types::Value::absent()) };
+            unsafe { ::core::ptr::write($p, $crate::value::types::Value::absent()) };
         })*
     };
 }

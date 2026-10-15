@@ -18,8 +18,8 @@
 
 #![forbid(unsafe_code)]
 
+use alloc::fmt;
 use guatiao::value::convert::TryAsRef;
-use std::fmt;
 
 use crate::flat;
 use guatiao::schema::ValidationError;
@@ -107,7 +107,7 @@ impl fmt::Display for FormError {
     }
 }
 
-impl std::error::Error for FormError {}
+impl core::error::Error for FormError {}
 
 /// A field's own form: what it may be given to, and what it must be.
 ///
@@ -334,7 +334,7 @@ fn check_condition(schema: SchemaRef<'_>, condition: &Value, at: String) -> Resu
     // EXACTLY ONE spelling. Both would be two answers to "when is this
     // shown", and a renderer would have to pick one.
     let (values, here) = match (m.get(vocab::EQUALS), m.get(vocab::IN)) {
-        (Some(equals), None) => (std::slice::from_ref(equals), vocab::EQUALS),
+        (Some(equals), None) => (core::slice::from_ref(equals), vocab::EQUALS),
         (None, Some(any)) => match TryAsRef::<List>::try_as_ref(any) {
             Some(list) if !list.is_empty() => (&list[..], vocab::IN),
             Some(_) => {

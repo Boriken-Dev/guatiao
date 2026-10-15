@@ -40,8 +40,8 @@ enum Built {
 
 /// What is left of the source to copy.
 enum Left<'a> {
-    List(std::slice::Iter<'a, Value>),
-    Map(std::slice::Iter<'a, Entry>),
+    List(core::slice::Iter<'a, Value>),
+    Map(core::slice::Iter<'a, Entry>),
 }
 
 impl Built {

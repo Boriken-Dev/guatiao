@@ -405,7 +405,7 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
             {
                 quote! {
                     __form = __form.field(
-                        &::std::format!("{}{}", __prefix, #key),
+                        &::guatiao::__private::alloc::format!("{}{}", __prefix, #key),
                         ::guatiao_intake::Hints::new_in(__alloc)
                             #(#widget)* #(#placeholder)* #(#unit)* #(#visible)* #(#form)*,
                     );
@@ -417,7 +417,7 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
         let nested = if f.hints.nested {
             quote! {
                 __form = <#ty as ::guatiao_intake::Screen>::hints(
-                    &::std::format!("{}{}.", __prefix, #key),
+                    &::guatiao::__private::alloc::format!("{}{}.", __prefix, #key),
                     __form,
                 );
             }
@@ -487,7 +487,7 @@ mod tests {
         );
         assert!(out.contains("format ! (\"{}{}\" , __prefix , \"api-token\") , :: guatiao_intake :: Hints :: new_in (__alloc) . widget (\"password\")"));
         assert!(out.contains(". placeholder (\"/etc/ca.pem\") . visible_when (\"verify\" , true)"));
-        assert!(out.contains("< Auth as :: guatiao_intake :: Screen > :: hints (& :: std :: format ! (\"{}{}.\" , __prefix , \"auth\") , __form ,)"));
+        assert!(out.contains("< Auth as :: guatiao_intake :: Screen > :: hints (& :: guatiao :: __private :: alloc :: format ! (\"{}{}.\" , __prefix , \"auth\") , __form ,)"));
         assert!(
             !out.contains("\"host\"") && !out.contains("\"plain\"") && !out.contains("\"cache\""),
             "a field without hints is not named: {out}"

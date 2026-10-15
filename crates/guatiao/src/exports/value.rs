@@ -16,7 +16,7 @@
 #![allow(non_camel_case_types)]
 
 use crate::value::convert::{TryAsMut, TryAsRef};
-use std::ptr;
+use core::ptr;
 
 use super::{entry, out};
 
@@ -195,7 +195,7 @@ pub unsafe extern "C" fn guatiao_value_string(
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: the caller guarantees the view's bytes.
-        let t = match std::str::from_utf8(text.into()) { Ok(t) => t, Err(e) => return e.into() };
+        let t = match core::str::from_utf8(text.into()) { Ok(t) => t, Err(e) => return e.into() };
         match Text::new_in(a, t).map(Value::from) {
             // SAFETY: checked non-null and writable by contract.
             Ok(v) => { unsafe { ptr::write(out, v) }; Status::GUATIAO_OK }
@@ -227,7 +227,7 @@ pub unsafe extern "C" fn guatiao_value_number(
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: the caller guarantees the view's bytes.
-        let t = match std::str::from_utf8(text.into()) { Ok(t) => t, Err(e) => return e.into() };
+        let t = match core::str::from_utf8(text.into()) { Ok(t) => t, Err(e) => return e.into() };
         match Number::new_in(a, t).map(Value::from) {
             // SAFETY: checked non-null and writable by contract.
             Ok(v) => { unsafe { ptr::write(out, v) }; Status::GUATIAO_OK }
@@ -294,7 +294,7 @@ pub unsafe extern "C" fn guatiao_map_set(
         // The one overlap that can be checked. A `value` addressing some
         // deeper node inside `node` cannot be, which is why the contract
         // above says it and the header repeats it.
-        if std::ptr::eq(node.cast_const(), value.cast_const()) {
+        if core::ptr::eq(node.cast_const(), value.cast_const()) {
             return Status::GUATIAO_ERR_BAD_VALUE;
         }
         // SAFETY: null or valid by the caller's contract.
@@ -302,14 +302,14 @@ pub unsafe extern "C" fn guatiao_map_set(
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: the caller guarantees the key's bytes.
-        let k = match std::str::from_utf8(key.into()) { Ok(k) => k, Err(e) => return e.into() };
+        let k = match core::str::from_utf8(key.into()) { Ok(k) => k, Err(e) => return e.into() };
         // SAFETY: checked non-null and well-formed by contract; the
         // dereference is the only unsafety left.
         match unsafe { TryAsMut::<Map>::try_as_mut(&mut *node) } {
             // SAFETY: `value` is a well-formed node the caller hands
             // over; taking it leaves the caller's null-tagged, which is
             // what the contract promises.
-            Some(m) => match m.set_in(k, unsafe { std::mem::take(&mut *value) }, a) {
+            Some(m) => match m.set_in(k, unsafe { core::mem::take(&mut *value) }, a) {
                 Ok(()) => Status::GUATIAO_OK,
                 Err(e) => e.into(),
             },
@@ -327,7 +327,7 @@ pub unsafe extern "C" fn guatiao_map_set(
 pub unsafe extern "C" fn guatiao_map_discard(node: *mut Value, key: Str) -> Status {
     entry!(node => {
         // SAFETY: the caller guarantees the key's bytes.
-        let k = match std::str::from_utf8(key.into()) { Ok(k) => k, Err(e) => return e.into() };
+        let k = match core::str::from_utf8(key.into()) { Ok(k) => k, Err(e) => return e.into() };
         // SAFETY: checked non-null and well-formed by contract; the
         // dereference is the only unsafety left.
         if unsafe { TryAsMut::<Map>::try_as_mut(&mut *node).is_some_and(|m| m.discard(k)) } {
@@ -387,7 +387,7 @@ pub unsafe extern "C" fn guatiao_map_copy_from(
     entry!(dst, src => {
         // Copying a map onto itself is a caller mistake rather than a
         // no-op: every key would replace itself with a copy of itself.
-        if std::ptr::eq(dst.cast_const(), src) {
+        if core::ptr::eq(dst.cast_const(), src) {
             return Status::GUATIAO_ERR_BAD_VALUE;
         }
         // SAFETY: null or valid by the caller's contract.
@@ -443,7 +443,7 @@ pub unsafe extern "C" fn guatiao_list_push(
 ) -> Status {
     entry!(node, value => {
         // As in `guatiao_map_set`: the one overlap that can be checked.
-        if std::ptr::eq(node.cast_const(), value.cast_const()) {
+        if core::ptr::eq(node.cast_const(), value.cast_const()) {
             return Status::GUATIAO_ERR_BAD_VALUE;
         }
         // SAFETY: null or valid by the caller's contract.
@@ -454,7 +454,7 @@ pub unsafe extern "C" fn guatiao_list_push(
         // dereference is the only unsafety left.
         match unsafe { TryAsMut::<List>::try_as_mut(&mut *node) } {
             // SAFETY: as in `guatiao_map_set`.
-            Some(l) => match l.push_in(unsafe { std::mem::take(&mut *value) }, a) {
+            Some(l) => match l.push_in(unsafe { core::mem::take(&mut *value) }, a) {
                 Ok(()) => Status::GUATIAO_OK,
                 Err(e) => e.into(),
             },
@@ -527,7 +527,7 @@ pub unsafe extern "C" fn guatiao_string_push(
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: the caller guarantees the view's bytes.
-        let t = match std::str::from_utf8(text.into()) { Ok(t) => t, Err(e) => return e.into() };
+        let t = match core::str::from_utf8(text.into()) { Ok(t) => t, Err(e) => return e.into() };
         // A STRING only: `TryAsMut<Text>` refuses a NUMBER, whose digits
         // share the arm and not the type.
         //

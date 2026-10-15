@@ -33,7 +33,7 @@
 
 #![allow(non_camel_case_types)]
 
-use std::ptr;
+use core::ptr;
 
 use super::{entry, out};
 use crate::value::alloc::{Alloc, Allocator};
@@ -204,7 +204,7 @@ pub unsafe extern "C" fn guatiao_merge(
                     return Status::GUATIAO_ERR_BAD_VALUE;
                 };
                 // SAFETY: a view whose `len` bytes are readable.
-                let Some(path) = std::str::from_utf8(entry.path.into()).ok() else {
+                let Some(path) = core::str::from_utf8(entry.path.into()).ok() else {
                     return Status::GUATIAO_ERR_BAD_VALUE;
                 };
                 table.set(path, entry_mode);

@@ -33,12 +33,14 @@
 //! cargo run -p greeter_host          # scans target/debug
 //! cargo run -p greeter_host -- /some/dir /some/lib.so
 //! ```
+extern crate alloc;
 
+use alloc::sync::Arc;
+use core::sync::atomic::{AtomicBool, Ordering};
 use guatiao::value::convert::TryAsRef;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use greeter_kind::{Counter, Greeter, Listener};
 use guatiao::library::{

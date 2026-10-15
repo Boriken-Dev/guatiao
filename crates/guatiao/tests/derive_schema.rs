@@ -10,6 +10,7 @@
 //! provider rejects the exact configuration its own schema asked for.
 
 #![cfg(feature = "derive")]
+extern crate alloc;
 
 use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::schema::validate::validate_map;
@@ -263,8 +264,8 @@ fn a_map_with_a_key_that_is_not_text_is_refused() {
         // freed before a foreign producer's bytes are written over it.
         let map = unsafe {
             let slot = ptr.cast::<Text>();
-            std::ptr::drop_in_place(slot);
-            std::ptr::write(slot, Text::from_raw_parts(bptr, blen, bcap, ba));
+            core::ptr::drop_in_place(slot);
+            core::ptr::write(slot, Text::from_raw_parts(bptr, blen, bcap, ba));
             Map::from_raw_parts(ptr, len, cap, a)
         };
         let value: guatiao::Value = map.into();
@@ -409,7 +410,7 @@ fn a_defaulted_field_may_be_left_out_and_reads_as_its_default() {
 /// `BTreeMap<String, T>` is a set of keys nobody declared.
 #[test]
 fn a_map_field_describes_an_open_object() {
-    use std::collections::BTreeMap;
+    use alloc::collections::BTreeMap;
 
     #[derive(Debug, PartialEq, Schema, ToValue, guatiao::FromValue)]
     struct Agent {
