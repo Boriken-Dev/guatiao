@@ -51,6 +51,17 @@ class MissingSymbol implements Exception {
   }
 }
 
+/// Throws [UnsupportedError] unless a pointer is eight bytes wide: the
+/// structs this package reads are laid out for a 64-bit process.
+void requireWordSize(int bytes) {
+  if (bytes != 8) {
+    throw UnsupportedError(
+      'package:guatiao reads structs laid out for a 64-bit process; this '
+      'one has $bytes-byte pointers',
+    );
+  }
+}
+
 /// The platform's filename for a library of this base name.
 String dllFilename(String basename) {
   if (Platform.isWindows) return '$basename.dll';
@@ -121,7 +132,9 @@ String resolveLibraryPath(String basename) {
 /// Symbols are resolved lazily by [GuatiaoBindings]' own `late final`
 /// lookups, so opening a library costs nothing beyond the load itself.
 class NativeLib {
-  NativeLib._(this.path, this._dylib) : bindings = GuatiaoBindings(_dylib);
+  NativeLib._(this.path, this._dylib) : bindings = GuatiaoBindings(_dylib) {
+    requireWordSize(sizeOf<IntPtr>());
+  }
 
   /// Opens [basename]'s library, or throws [LibraryNotFound].
   factory NativeLib.open(String basename) {

@@ -9,4 +9,4 @@
 /// serde;`. Resolution is lazy, so importing touches no library.
 library;
 
-export 'src/serde.dart';
+export 'src/serde.dart' hide finishParse;
