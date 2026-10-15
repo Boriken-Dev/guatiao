@@ -506,6 +506,53 @@ fn a_condition_shows_the_field_only_while_it_is_met() {
     );
 }
 
+/// A condition may name a top-level field by its store spelling, which
+/// `check` accepts: `[a.b]` and `["a.b"]` read the field `a.b`, its own
+/// condition included, and a cycle through that spelling is still one.
+#[test]
+fn a_condition_may_name_a_field_by_its_store_spelling() {
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new("a.b", KindBuilder::bool()))
+        .field(FieldBuilder::new("guard", KindBuilder::bool()))
+        .field(FieldBuilder::new("c", KindBuilder::string()))
+        .finish()
+        .unwrap();
+    for spelling in ["[a.b]", "[\"a.b\"]"] {
+        let form = Form::new()
+            .field("a.b", Hints::new().visible_when("guard", true))
+            .field("c", Hints::new().visible_when(spelling, true))
+            .finish()
+            .unwrap();
+        let (s, f) = views(&schema, &form);
+        assert_eq!(check(s, f), Ok(()), "{spelling}");
+        let open = values(vec![
+            ("a.b", Value::from(true)),
+            ("guard", Value::from(true)),
+        ]);
+        assert!(shown(s, f, "c", &open), "{spelling} reads `a.b`");
+        let hidden = values(vec![
+            ("a.b", Value::from(true)),
+            ("guard", Value::from(false)),
+        ]);
+        assert!(
+            !shown(s, f, "c", &hidden),
+            "{spelling} follows `a.b`'s own condition"
+        );
+        assert!(shown(s, f, spelling, &open), "and names the field itself");
+    }
+
+    let ring = Form::new()
+        .field("a.b", Hints::new().visible_when("[c]", "x"))
+        .field("c", Hints::new().visible_when("[a.b]", true))
+        .finish()
+        .unwrap();
+    let (s, f) = views(&schema, &ring);
+    assert!(
+        matches!(check(s, f), Err(FormError::CyclicCondition { .. })),
+        "a cycle through the store spelling is a cycle"
+    );
+}
+
 #[test]
 fn a_field_with_no_value_and_no_default_does_not_meet_a_condition() {
     let schema = schema();
