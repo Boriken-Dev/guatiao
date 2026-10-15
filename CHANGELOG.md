@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`f32` is `ToValue`, `FromValue` and `TryFrom<&Value>`**, so the three
+  derives take an `f32` field as they take an `f64` one. It writes its own
+  shortest text (`1.1`, not the widened `1.100000023841858`), as
+  `Number::try_from(f32)` now does too, and a number with no finite `f32`
+  (`1e39`) is `MapError::BadValue`.
 - **`Skipped` implements `Display`**: one clause to print after the file's
   name, so every host reports a skip in the same words.
 - **`scan_path_with`**: a search-path scan under a closure over what each
