@@ -109,7 +109,7 @@ one declaration, so the schema cannot describe a value the type refuses.
 | Module | Purpose |
 | --- | --- |
 | `guatiao::value` | the value model: `Value`, `Map`, `List`, `Text`, `Buffer`, `Number`, the allocator, conversion, merging, and the `wire` byte format |
-| `guatiao::schema` | JSON Schema as a value: `SchemaBuilder`/`FieldBuilder`/`KindBuilder`, the `SchemaRef` reader, `validate_*` |
+| `guatiao::schema` | JSON Schema as a value: `SchemaBuilder`/`FieldBuilder`/`KindBuilder`, the `SchemaRef` reader, `validate_*`, `redact`, `inline_refs` |
 | `guatiao::library` | the envelope: one entry symbol, provider descriptors, a `Registry` a host owns, and (with `load`) scanning and loading |
 | `guatiao::exports` | the `extern "C"` surface declared in `include/guatiao.h` |
 
