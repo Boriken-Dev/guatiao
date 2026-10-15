@@ -211,8 +211,33 @@ def _number_text_for(value: Number) -> str:
     return str(value)
 
 
+def _free(raw: "_abi.Value") -> None:
+    """Frees whatever `raw` owns; harmless on an absent, null-tagged or
+    already-moved-from value."""
+    _lib.core().guatiao_value_free(ctypes.byref(raw))
+
+
+def _free_all(values: list) -> None:
+    for raw in values:
+        _free(raw)
+
+
 def _write_python(raw: "_abi.Value", obj: Any, alloc: "_abi.Alloc") -> None:
-    """Writes `obj` into `raw`, which must be absent or null-tagged."""
+    """Writes `obj` into `raw`, which must be absent or null-tagged.
+
+    On any failure `raw` is freed and left empty, so a caller never holds
+    a half-built tree. A node built here and then moved into a container
+    is built in a scratch value that is freed afterwards: a refused move
+    leaves it the caller's to free, and a completed one leaves it null.
+    """
+    try:
+        _write_node(raw, obj, alloc)
+    except BaseException:
+        _free(raw)
+        raise
+
+
+def _write_node(raw: "_abi.Value", obj: Any, alloc: "_abi.Alloc") -> None:
     lib = _lib.core()
     if obj is None:
         check(lib.guatiao_value_null(ctypes.byref(raw)))
@@ -244,7 +269,10 @@ def _write_python(raw: "_abi.Value", obj: Any, alloc: "_abi.Alloc") -> None:
         for item in obj:
             tmp = _abi.Value()
             _write_python(tmp, item, alloc)
-            check(lib.guatiao_list_push(ctypes.byref(alloc), ctypes.byref(raw), ctypes.byref(tmp)))
+            try:
+                check(lib.guatiao_list_push(ctypes.byref(alloc), ctypes.byref(raw), ctypes.byref(tmp)))
+            finally:
+                _free(tmp)
         return
     if isinstance(obj, Mapping):
         check(lib.guatiao_value_map(ctypes.byref(alloc), ctypes.byref(raw)))
@@ -253,12 +281,15 @@ def _write_python(raw: "_abi.Value", obj: Any, alloc: "_abi.Alloc") -> None:
                 raise TypeError("a map key must be str")
             tmp = _abi.Value()
             _write_python(tmp, item, alloc)
-            key_view, _buf = _make_str(key.encode("utf-8"))
-            check(
-                lib.guatiao_map_set(
-                    ctypes.byref(alloc), ctypes.byref(raw), key_view, ctypes.byref(tmp)
+            try:
+                key_view, _buf = _make_str(key.encode("utf-8"))
+                check(
+                    lib.guatiao_map_set(
+                        ctypes.byref(alloc), ctypes.byref(raw), key_view, ctypes.byref(tmp)
+                    )
                 )
-            )
+            finally:
+                _free(tmp)
         return
     raise TypeError(f"cannot convert {type(obj)!r} to a guatiao value")
 
@@ -362,12 +393,15 @@ class Map(Ref):
         alloc = self.owner._ensure_alloc()
         tmp = _abi.Value()
         _write_python(tmp, value, alloc)
-        key_view, _buf = _make_str(key.encode("utf-8"))
-        check(
-            _lib.core().guatiao_map_set(
-                ctypes.byref(alloc), self._ptr(), key_view, ctypes.byref(tmp)
+        try:
+            key_view, _buf = _make_str(key.encode("utf-8"))
+            check(
+                _lib.core().guatiao_map_set(
+                    ctypes.byref(alloc), self._ptr(), key_view, ctypes.byref(tmp)
+                )
             )
-        )
+        finally:
+            _free(tmp)
 
     def __delitem__(self, key: str) -> None:
         key_view, _buf = _make_str(key.encode("utf-8"))
@@ -442,27 +476,35 @@ class List(Ref):
         alloc = self.owner._ensure_alloc()
         tmp = _abi.Value()
         _write_python(tmp, value, alloc)
-        check(_lib.core().guatiao_list_push(ctypes.byref(alloc), self._ptr(), ctypes.byref(tmp)))
+        try:
+            check(_lib.core().guatiao_list_push(ctypes.byref(alloc), self._ptr(), ctypes.byref(tmp)))
+        finally:
+            _free(tmp)
 
     def clear(self) -> None:
         check(_lib.core().guatiao_list_clear(self._ptr()))
 
     def _cloned_elements(self) -> list:
+        """Clones of every element; none is left allocated when one fails."""
         node = self._require_node()
         if node.tag != _abi.Tag.LIST:
             raise TypeError("value is not a list")
         alloc = self.owner._ensure_alloc()
         lib = _lib.core()
-        out = []
-        for i in range(node.payload.list.len):
-            src = node.payload.list.ptr[i]
-            tmp = _abi.Value()
-            check(
-                lib.guatiao_value_clone(
-                    ctypes.byref(alloc), ctypes.byref(src), ctypes.byref(tmp)
+        out: list = []
+        try:
+            for i in range(node.payload.list.len):
+                src = node.payload.list.ptr[i]
+                tmp = _abi.Value()
+                out.append(tmp)
+                check(
+                    lib.guatiao_value_clone(
+                        ctypes.byref(alloc), ctypes.byref(src), ctypes.byref(tmp)
+                    )
                 )
-            )
-            out.append(tmp)
+        except BaseException:
+            _free_all(out)
+            raise
         return out
 
     def _rebuild(self, elements: list) -> None:
@@ -474,24 +516,30 @@ class List(Ref):
 
     def __setitem__(self, index: int, value: Any) -> None:
         elements = self._cloned_elements()
-        index = index + len(elements) if index < 0 else index
-        if not (0 <= index < len(elements)):
-            raise IndexError(index)
-        replacement = _abi.Value()
-        _write_python(replacement, value, self.owner._ensure_alloc())
-        check(_lib.core().guatiao_value_free(ctypes.byref(elements[index])))
-        elements[index] = replacement
-        self._rebuild(elements)
+        try:
+            index = index + len(elements) if index < 0 else index
+            if not (0 <= index < len(elements)):
+                raise IndexError(index)
+            replacement = _abi.Value()
+            _write_python(replacement, value, self.owner._ensure_alloc())
+            _free(elements[index])
+            elements[index] = replacement
+            self._rebuild(elements)
+        finally:
+            _free_all(elements)
 
     def insert(self, index: int, value: Any) -> None:
         elements = self._cloned_elements()
-        length = len(elements)
-        index = max(0, length + index) if index < 0 else index
-        index = min(index, length)
-        replacement = _abi.Value()
-        _write_python(replacement, value, self.owner._ensure_alloc())
-        elements.insert(index, replacement)
-        self._rebuild(elements)
+        try:
+            length = len(elements)
+            index = max(0, length + index) if index < 0 else index
+            index = min(index, length)
+            replacement = _abi.Value()
+            _write_python(replacement, value, self.owner._ensure_alloc())
+            elements.insert(index, replacement)
+            self._rebuild(elements)
+        finally:
+            _free_all(elements)
 
 
 _UNSET: Any = object()
