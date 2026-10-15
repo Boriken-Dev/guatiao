@@ -255,7 +255,7 @@ pub struct Provider {
     priority: i32,
 }
 
-// `Send` and `Sync` for this type are declared in `raw.rs`; see there.
+// `Send` and `Sync` for this type are declared in `raw/host.rs`; see there.
 
 impl Provider {
     /// Every kind it speaks. May be empty, which is a provider reached by
@@ -611,8 +611,8 @@ pub struct Registry {
     block: Option<&'static HostBlock>,
 }
 
-// `Send` and `Sync` for this type are declared in `raw.rs`, the one file
-// here allowed to say `unsafe`; the reasoning is beside them.
+// `Send` and `Sync` for this type are declared in `raw/host.rs`, where
+// `unsafe` is allowed; the reasoning is beside them.
 
 impl Registry {
     /// A registry that introduces its host as `id`/`version`, offering
@@ -741,10 +741,11 @@ impl Registry {
     ///
     /// With `%id` and a directory scan, **which** build survives is the
     /// scan's order: [`scan_dir`](super::scan::scan_dir) visits names in
-    /// order and the first to claim a key keeps it, so a host wanting the
-    /// newest of `libfoo-1.2.0` and `libfoo-1.10.0` scans descending. The
-    /// loader sorts names and does not parse versions — ordering a version
-    /// is a host's policy, with the semver library it already has.
+    /// byte order and the first to claim a key keeps it. That is not
+    /// version order: of `libfoo-1.2.0` and `libfoo-1.10.0` a descending
+    /// scan loads 1.2.0. A host wanting the newest uses `"%id@%version"`,
+    /// loads every build, and picks with the semver library it already
+    /// has; the loader never parses a version.
     pub fn libraries_keyed_by(&mut self, template: &str) -> Result<(), KeyError> {
         let key = KeyTemplate::library(template)?;
         let mut seen: BTreeMap<String, usize> = BTreeMap::new();
@@ -1065,8 +1066,8 @@ impl Registry {
     ///
     /// Safe for that reason: retiring dangles nothing.
     /// [`unload`](Registry::unload) is the one that unmaps, and it is
-    /// `unsafe`; it is written in `raw.rs`, the file here allowed to say
-    /// so.
+    /// `unsafe`; it is written in `raw/image.rs`, where `unsafe` is
+    /// allowed.
     pub fn retire(&mut self, key: &str) -> Result<Retired, UnloadError> {
         let (retired, origin) = self.take_library(key)?;
         origin.keep();
@@ -1075,7 +1076,7 @@ impl Registry {
 
     /// The record one library key answers to.
     ///
-    /// For `unload`, which lives in `raw.rs` because this module carries
+    /// For `unload`, which lives in `raw/image.rs` because this module carries
     /// `#![forbid(unsafe_code)]`.
     pub(crate) fn library(&self, key: &str) -> Option<&Loaded> {
         self.loaded.iter().find(|l| *l.key == *key)

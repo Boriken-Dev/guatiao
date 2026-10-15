@@ -79,8 +79,9 @@ pub mod kind;
 // The notices convention on `meta`. Safe code over ordinary values. A
 // `//` comment, never a `///`.
 pub mod notices;
-// The one file here with `unsafe` in it: raw descriptor reads, the entry
-// macro, and the loader. A `//` comment, never a `///`.
+// The loader's `unsafe`, one directory: raw descriptor reads, the entry
+// macros, the host block. Listed in `tests/forbid_unsafe_per_module.rs`
+// with `kind/`'s files. A `//` comment, never a `///`.
 pub mod raw;
 // Loading is behind the `load` feature, so a library AUTHOR — who needs
 // the descriptors and the macro and never loads anything — builds with

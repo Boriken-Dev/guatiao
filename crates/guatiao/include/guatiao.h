@@ -1369,9 +1369,11 @@ guatiao_status guatiao_registry_register_entry(struct guatiao_registry *reg,
  export table as data**, to declare the entry symbol — so a directory
  full of ordinary libraries costs no static initialisers.
 
- `descending` visits names highest-first, which under a `%id` library
- key is how a host takes the newest of several builds. That is byte
- order, not version order; nothing here parses a version.
+ `descending` visits names highest-first, and under a `%id` library key
+ the first to claim a key keeps it. That is byte order, not version
+ order: `libfoo-1.2.0` sorts above `libfoo-1.10.0`. Nothing here parses
+ a version; a host wanting the newest keys libraries by
+ `%id@%version` and picks.
 
  # Safety
 

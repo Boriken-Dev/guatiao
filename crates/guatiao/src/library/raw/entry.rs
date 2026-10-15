@@ -319,9 +319,11 @@ macro_rules! __guatiao_declares {
 /// The two symbols this writes are `no_mangle`, and a `cdylib` exports
 /// every `no_mangle` symbol of the Rust libraries linked into it. A crate
 /// that calls this and is an `rlib` as well therefore makes each `cdylib`
-/// depending on it scan and load as a library offering these providers;
-/// with two such dependencies one entry symbol wins and nothing reports
-/// it.
+/// depending on it scan and load as a library offering these providers.
+/// Two such dependencies are a link error (`LNK2005` on MSVC, a multiple
+/// definition elsewhere), or, where the linker never pulls one
+/// dependency's object in, the other's entry symbol wins and nothing
+/// reports it.
 ///
 /// A provider that is also an ordinary Rust library is two crates: the
 /// library derives `Provider` and exports the type, and a plugin crate of
