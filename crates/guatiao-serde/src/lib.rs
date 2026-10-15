@@ -102,7 +102,7 @@ pub mod text;
 
 pub use de::{ValueSeed, from_serde};
 pub use ser::Serializable;
-pub use text::Error;
+pub use text::{Error, Position};
 
 /// Standard base64 (RFC 4648 §4), the `A-Za-z0-9+/` alphabet padded to a
 /// multiple of four.

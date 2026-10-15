@@ -64,7 +64,9 @@ serde = { version = "1", default-features = false, features = ["std"] }
 # Each named only by its feature above. This crate speaks serde; a format
 # is a convenience it offers, not something it insists on.
 serde_json = { version = "1", optional = true }
-toml = { version = "1", optional = true }
+# `preserve_order`: a table is read in the order the document wrote it, as
+# JSON and YAML are, rather than sorted.
+toml = { version = "1", optional = true, features = ["preserve_order"] }
 serde-saphyr = { version = "1", optional = true }
 
 [build-dependencies]

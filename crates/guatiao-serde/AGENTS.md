@@ -51,8 +51,12 @@ base64(&[u8]) -> String        from_base64(&str) -> Option<Vec<u8>>
 data_uri(&[u8]) -> String      from_data_uri(&str) -> Option<Vec<u8>>
 
 // the formats: `pub mod text`, one module per feature; `Error` is re-exported
-enum Error { Format { format, detail }, Unsupported { format, detail } }  // #[non_exhaustive]
+enum Error { Format { format, detail },              // a writer refused a value
+             Syntax { format, position: Option<Position>, detail },  // not a document
+             Unsupported { format, detail } }        // #[non_exhaustive]
+struct Position { line: usize, column: usize }       // both from 1; a column counts chars
   Error::format() -> &'static str                    // which format refused
+  Error::position() -> Option<Position>              // where a parser stopped, if it said
 text::json::{NAME, to_string, to_string_pretty, from_str}   // feature `json`
 text::toml::{NAME, to_string, from_str}                     // feature `toml`
 text::yaml::{NAME, to_string, from_str}                     // feature `yaml`
@@ -133,6 +137,19 @@ the reason.)
   an integer that fits `i64`/`u64` is exact and anything else is an `f64`:
   `1.10` reads `1.1`, a 30-digit integer reads as a float, and `1e400` is
   refused by the parser. Writing is exact either way under `text::json`.
+- **A parse error is its message and a position, never the document.**
+  `Error::Syntax` carries the parser's own wording and where it stopped;
+  the line of the document a parser's `Display` would show (TOML, YAML),
+  and a key, value, tag or anchor its message would quote (YAML), are
+  dropped, because a document can hold a secret. `Debug`, every field and
+  the source chain are free of document text too.
+- **A TOML table is read in document order**, and **a TOML date or time**
+  (offset date-time, local date-time, local date, local time) **reads as
+  the text it was written as** and is written back as a string.
+- **A YAML `!!binary` scalar reads as its base64 text.** Reading goes
+  through `deserialize_any`, which gives the seed no tag, so bytes are out
+  of reach; the text is not decoded behind your back and a payload that is
+  not UTF-8 is not an error.
 - **A document nests at most `MAX_DEPTH` containers deep**, refused past
   that. `serde_json` caps its own recursion; another format need not, and
   this crate reads them all.

@@ -125,7 +125,7 @@ type Write = fn(&Value, Presentation) -> Result<String, Error>;
 /// API carries it; a caller that needs it has that.
 fn status_of(e: &Error) -> Status {
     match e {
-        Error::Format { .. } => Status::GUATIAO_ERR_BAD_VALUE,
+        Error::Format { .. } | Error::Syntax { .. } => Status::GUATIAO_ERR_BAD_VALUE,
         Error::Unsupported { .. } => Status::GUATIAO_ERR_WRONG_KIND,
         // No wildcard arm. `Error` is `#[non_exhaustive]` for a CONSUMER;
         // in here every variant is known, so appending one is a compile

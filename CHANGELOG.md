@@ -60,6 +60,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   relies on exact reading enables `guatiao-serde/exact-numbers`; a library
   should not. The C and Python/Dart artifacts are built `--all-features` and
   keep exact numbers.
+- **`guatiao-serde`: a document that does not parse is `Error::Syntax`, with
+  a `Position`, and its message never quotes the document.** A parse
+  refusal used to be `Error::Format` with the parser's whole `Display`,
+  which for TOML shows the offending line and for YAML up to three lines
+  around it. `Error::Syntax { format, position, detail }` holds the
+  parser's message and where it stopped (`Error::position()`, a new
+  `Position { line, column }`, both from 1) and nothing from the text.
+  `Format` is now only a writer refusing a value. *Migration:* match
+  `Error::Syntax` where you matched `Error::Format` on a `from_str`, and
+  read the position instead of scraping the message.
 - **`guatiao-intake`: the path grammar is stricter.** `a[0]b`, `a["x"]y`,
   `a.[0]` and `[a[b]` are refused (`PathError::MissingSeparator` is new, and
   `EmptyField` and `UnclosedIndex` now cover the others), and digits in a
@@ -81,6 +91,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`guatiao-serde`: TOML is read in document order, and a TOML date or time
+  is its text.** Reading sorted every table's keys, unlike JSON and YAML
+  (`toml/preserve_order` is on now). An offset date-time, local date-time,
+  local date or local time read as a map under toml's private key
+  `$__toml_private_datetime` and were written back as a table; each now
+  reads as the text it was written as. A YAML `!!binary` scalar read as the
+  base64 payload decoded as UTF-8, or failed when it was not; it now reads as
+  its base64 text.
 - **`guatiao-intake`: `is_visible` no longer overflows the stack on a long
   `visibleWhen` chain, and `check` no longer takes cubic time on one.** The
   chain is walked in a loop (about 3000 links overflowed the stack of a

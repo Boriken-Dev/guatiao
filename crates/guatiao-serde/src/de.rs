@@ -233,6 +233,19 @@ impl<'de> Visitor<'de> for ValueSeed {
             return number(self.alloc, &text);
         }
 
+        // THE SAME DISGUISE ON A TOML DATE OR TIME. `toml` reports each as
+        // a one-entry map under its own reserved key whose value is the
+        // text, and reading it as a map would hand a consumer a table with
+        // a startling key in place of `1979-05-27T07:32:00Z`. All four
+        // forms (offset date-time, local date-time, local date, local time)
+        // arrive this way, and read as the text they were written as.
+        if first == TOML_DATETIME {
+            let text: String = access.next_value()?;
+            return Text::new_in(self.alloc, &text)
+                .map(Value::from)
+                .map_err(A::Error::custom);
+        }
+
         let value = access.next_value_seed(inside)?;
         map.set(&first, value).map_err(A::Error::custom)?;
         while let Some(key) = access.next_key::<String>()? {
@@ -255,6 +268,9 @@ impl<'de> Visitor<'de> for ValueSeed {
 /// that one can safely be read as a number. Measured, after assuming they
 /// were the same and watching every number become a map.
 const RAW_NUMBER: &str = "$serde_json::private::Number";
+
+/// The `toml` crate's reserved key for a date or time carried as its text.
+const TOML_DATETIME: &str = "$__toml_private_datetime";
 
 /// A number from its text, or the error saying it is not one.
 fn number<E: serde::de::Error>(alloc: Alloc, text: &str) -> Result<Value, E> {
