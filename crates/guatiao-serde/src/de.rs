@@ -228,7 +228,9 @@ impl<'de> Visitor<'de> for ValueSeed {
         // writes -- and the alternative is worse: reading the value first
         // to decide would mean buffering every map's first value on the
         // chance that it was a number. A document that spells that key
-        // deliberately gets the number and loses the rest.
+        // first is read as that number. A format whose deserializer insists
+        // on the map's remaining entries (JSON, YAML) refuses such a document
+        // when it has any; one that does not (TOML) drops them.
         if first == RAW_NUMBER {
             let text = reserved_text(&mut access, inside)?;
             return number(self.alloc, &text);
