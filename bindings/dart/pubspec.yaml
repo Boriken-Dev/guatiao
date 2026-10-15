@@ -7,6 +7,14 @@ repository: https://github.com/Boriken-Dev/guatiao
 issue_tracker: https://github.com/Boriken-Dev/guatiao/issues
 documentation: https://boriken-dev.github.io/guatiao/
 
+# `dart:ffi` is not available in a browser, so there is no `web`.
+platforms:
+  android:
+  ios:
+  linux:
+  macos:
+  windows:
+
 environment:
   sdk: ^3.6.0
 
