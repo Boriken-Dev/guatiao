@@ -1119,7 +1119,17 @@ typedef struct guatiao_kind_header {
  during the call, never keeps the pointer, and **never calls its
  `destroy`**. A table Rust lends as `&dyn K` answers
  `GUATIAO_ERR_UNSUPPORTED` from each slot whose method takes `&mut
- self`.
+ self`. What a C side keeps to:
+
+ - A C lender fills `destroy` all the same, since every required slot
+   is checked non-null, with a function that frees nothing; it is
+   never called.
+ - Lent as `&mut dyn K`, nothing but the callee reaches the object
+   until the call returns, and the callee calls one slot at a time.
+ - Lent as `&dyn K`, the callee calls only the `&self` slots, and from
+   two threads at once only when `K`'s trait names `Sync`.
+ - An object of a kind whose trait names `Sync`, owned or lent, may
+   have its `&self` slots called from several threads at once.
  */
 typedef struct guatiao_object {
   /*

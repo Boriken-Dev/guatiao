@@ -1443,12 +1443,23 @@ fn emit_shim(
     // Who `ctx` is: a provider's `&T`, the cell an object was boxed in, or
     // the address of a lender's pointer.
     let this = match receiver {
-        Receiver::Cell => quote! {
+        Receiver::Cell if m.mutable => quote! {
             // SAFETY: the table was built for `__T` and an object's `ctx`
-            // is the cell `into_object` boxed; the handle is the one
-            // reference to it.
+            // is the cell `into_object` boxed; a `&mut self` slot is
+            // reached through `&mut` to the one handle.
             let ::core::option::Option::Some(__this) =
                 (unsafe { ::guatiao::library::kind::object_mut::<#table, __T>(__ctx) })
+            else {
+                return ::guatiao::Status::GUATIAO_ERR_NULL;
+            };
+        },
+        Receiver::Cell => quote! {
+            // SAFETY: the table was built for `__T` and an object's `ctx`
+            // is the cell `into_object` boxed; a `&self` slot is reached
+            // through a shared borrow, shared across threads only when the
+            // kind is `Sync`.
+            let ::core::option::Option::Some(__this) =
+                (unsafe { ::guatiao::library::kind::object_ref::<#table, __T>(__ctx) })
             else {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
@@ -1462,19 +1473,32 @@ fn emit_shim(
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
         },
-        Receiver::LentMut => quote! {
+        Receiver::LentMut if m.mutable => quote! {
             // SAFETY: a table `lent_mut()` built is lent with `ctx` the
-            // address of the lender's `*mut dyn` for the call, which no
-            // other reference reaches meanwhile.
+            // address of the lender's `*mut dyn` for the call; a `&mut self`
+            // slot is reached through `&mut` to the one `BorrowedMut`.
             let ::core::option::Option::Some(__this) =
                 (unsafe { ::guatiao::library::kind::lent_mut::<dyn #trait_ident>(__ctx) })
             else {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
         },
+        Receiver::LentMut => quote! {
+            // SAFETY: a table `lent_mut()` built is lent with `ctx` the
+            // address of the lender's `*mut dyn`, read here as a `*const
+            // dyn`; a `&self` slot is reached through a shared borrow of the
+            // `BorrowedMut`, shared across threads only when the kind is
+            // `Sync`.
+            let ::core::option::Option::Some(__this) =
+                (unsafe { ::guatiao::library::kind::lent_ref::<dyn #trait_ident>(__ctx) })
+            else {
+                return ::guatiao::Status::GUATIAO_ERR_NULL;
+            };
+        },
         Receiver::Lent => quote! {
             // SAFETY: a table `lent()` built is lent with `ctx` the address
-            // of the lender's `*const dyn` for the call.
+            // of the lender's `*const dyn` for the call; shared across
+            // threads only when the kind is `Sync`.
             let ::core::option::Option::Some(__this) =
                 (unsafe { ::guatiao::library::kind::lent_ref::<dyn #trait_ident>(__ctx) })
             else {
@@ -1973,8 +1997,19 @@ mod tests {
         // `&mut self` reaches the proxy; the out-buffer crosses as BytesMut.
         assert!(out.contains("fn say (& mut self , what : & str)"));
         assert!(out.contains("dst : :: guatiao :: library :: BytesMut"));
-        assert!(out.contains("object_mut :: < ConversationVtable , __T >"));
         assert!(out.contains("destroy_object :: < Self , __T >"));
+        // A `&mut self` slot takes the value exclusively, a `&self` one
+        // shared: an object of a `Sync` kind is shared between threads.
+        assert!(
+            shim_body(&out, "__guatiao_shim_say")
+                .contains("object_mut :: < ConversationVtable , __T >")
+        );
+        let turns = shim_body(&out, "__guatiao_shim_turns");
+        assert!(
+            turns.contains("object_ref :: < ConversationVtable , __T >"),
+            "{turns}"
+        );
+        assert!(!turns.contains("object_mut"), "{turns}");
     }
 
     #[test]
@@ -2050,17 +2085,32 @@ mod tests {
             out.contains("pub unsafe extern \"C\" fn __guatiao_lent_destroy"),
             "{out}"
         );
+        // Lent `&mut`, a `&mut self` slot takes the lender's object
+        // exclusively and a `&self` one shared.
+        let say = shim_body(&out, "__guatiao_lentmut__say");
         assert!(
-            out.contains("lent_mut :: < dyn Conversation > (__ctx)"),
-            "{out}"
+            say.contains("lent_mut :: < dyn Conversation > (__ctx)"),
+            "{say}"
         );
+        let turns = shim_body(&out, "__guatiao_lentmut__turns");
+        assert!(
+            turns.contains("lent_ref :: < dyn Conversation > (__ctx)"),
+            "{turns}"
+        );
+        assert!(!turns.contains("lent_mut ::"), "{turns}");
         // `turns(&self)`: it can be lent shared, and there `say` refuses.
         assert!(out.contains("pub const fn lent () -> Self"), "{out}");
+        let turns = shim_body(&out, "__guatiao_lent__turns");
         assert!(
-            out.contains("lent_ref :: < dyn Conversation > (__ctx)"),
+            turns.contains("lent_ref :: < dyn Conversation > (__ctx)"),
+            "{turns}"
+        );
+        let say = shim_body(&out, "__guatiao_lent__say");
+        assert!(say.contains("GUATIAO_ERR_UNSUPPORTED"), "{say}");
+        assert!(
+            out.contains("unsafe impl :: guatiao :: library :: kind :: Lend for dyn Conversation"),
             "{out}"
         );
-        assert!(out.contains("GUATIAO_ERR_UNSUPPORTED"), "{out}");
         assert!(out.contains("const LENT_MUT :"), "{out}");
         assert!(out.contains("const LENT :"), "{out}");
         // Every method `&mut self`: nothing to call through `&dyn`.
@@ -2076,6 +2126,16 @@ mod tests {
             out.contains("unsafe impl :: guatiao :: library :: kind :: Lend for dyn Greeter { }"),
             "{out}"
         );
+    }
+
+    /// The text of one generated shim, from its name to the next item.
+    fn shim_body<'a>(out: &'a str, name: &str) -> &'a str {
+        let start = out
+            .find(&format!("fn {name}"))
+            .unwrap_or_else(|| panic!("no shim `{name}` in {out}"));
+        let rest = &out[start..];
+        let end = rest[1..].find("pub ").map_or(rest.len(), |i| i + 1);
+        &rest[..end]
     }
 
     /// Every function the table's inherent impl defines, by name.
