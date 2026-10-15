@@ -484,8 +484,8 @@ fn a_malformed_field_is_skipped_not_fatal() {
 
         let mut properties = Map::new_in(alloc);
         properties.set("good", good);
-        // Not a map, so not a schema.
-        properties.set("bad", Value::from(true));
+        // Neither a map nor `true`, so not a schema.
+        properties.set("bad", Value::from(5i64));
 
         let mut schema = Map::new_in(alloc);
         schema.set(vocab::PROPERTIES, properties);

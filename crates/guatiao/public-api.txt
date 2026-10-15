@@ -1963,6 +1963,7 @@ pub fn guatiao::schema::validate::validate_text(guatiao::schema::read::FieldRef<
 pub fn guatiao::schema::validate::validate_value(guatiao::schema::read::FieldRef<'_>, &guatiao::value::value::Value) -> core::result::Result<(), guatiao::schema::ValidationError>
 pub mod guatiao::schema::vocab
 pub const guatiao::schema::vocab::ADDITIONAL_PROPERTIES: &str
+pub const guatiao::schema::vocab::ALL_OF: &str
 pub const guatiao::schema::vocab::ANY_OF: &str
 pub const guatiao::schema::vocab::CONST: &str
 pub const guatiao::schema::vocab::DEFAULT: &str
@@ -1972,6 +1973,8 @@ pub const guatiao::schema::vocab::DESCRIPTION: &str
 pub const guatiao::schema::vocab::DIALECT: &str
 pub const guatiao::schema::vocab::ENUM: &str
 pub const guatiao::schema::vocab::EXAMPLES: &str
+pub const guatiao::schema::vocab::EXCLUSIVE_MAXIMUM: &str
+pub const guatiao::schema::vocab::EXCLUSIVE_MINIMUM: &str
 pub const guatiao::schema::vocab::EXTENSIONS: &[&str]
 pub const guatiao::schema::vocab::FORMAT: &str
 pub const guatiao::schema::vocab::ITEMS: &str

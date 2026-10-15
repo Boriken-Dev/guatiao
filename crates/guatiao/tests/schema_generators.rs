@@ -381,3 +381,102 @@ fn definitions_that_name_each_other_twice_do_not_explode() {
     }
     assert!(skipped, "past the budget a reference stays as written");
 }
+
+/// `{"description": .., "allOf": [X]}` is how a generator puts a
+/// description beside a reference, and reads as `X`. A schema that
+/// constrains nothing -- `{}`, prose alone, `true`, an `allOf` of several
+/// -- reads as a kind to skip, which accepts any value, and never as
+/// `Kind::Missing`.
+#[test]
+fn all_of_empty_and_true_schemas_read_as_what_json_schema_means() {
+    let lone = obj(vec![
+        ("description", s("The name")),
+        ("allOf", arr(vec![typed("string")])),
+    ]);
+    let several = obj(vec![(
+        "allOf",
+        arr(vec![typed("string"), obj(vec![("maxLength", n("3"))])]),
+    )]);
+    let schema = obj(vec![
+        ("type", s("object")),
+        (
+            "properties",
+            obj(vec![
+                ("lone", lone),
+                ("several", several),
+                ("empty", obj(vec![])),
+                ("prose", obj(vec![("description", s("Anything"))])),
+                ("any", Value::from(true)),
+            ]),
+        ),
+    ]);
+    let read = SchemaRef::new(&schema).unwrap();
+    let lone = read.find("lone").unwrap();
+    assert!(matches!(lone.kind(), Kind::Str { .. }));
+    assert_eq!(lone.description(), "The name");
+    assert!(matches!(
+        read.find("several").unwrap().kind(),
+        Kind::Unknown("allOf")
+    ));
+    for key in ["empty", "prose", "any"] {
+        let field = read
+            .find(key)
+            .expect("a schema that accepts anything is a field");
+        assert!(
+            matches!(field.kind(), Kind::Unknown(_)),
+            "{key} reads as {:?}",
+            field.kind()
+        );
+    }
+
+    let good = doc(vec![
+        ("lone", s("ok")),
+        ("several", n("5")),
+        ("empty", s("x")),
+        ("prose", n("5")),
+        ("any", obj(vec![("deep", arr(vec![]))])),
+    ]);
+    assert_eq!(validate_map(read, &good), Ok(()));
+    assert!(validate_map(read, &doc(vec![("lone", n("5"))])).is_err());
+}
+
+/// The shape a generator writes for a documented field whose type is a
+/// shared definition: `allOf` around a reference, under the older
+/// `definitions`. Inlined, it is checked as the definition.
+#[test]
+fn a_documented_reference_is_checked_once_inlined() {
+    let schema = obj(vec![
+        ("type", s("object")),
+        (
+            "properties",
+            obj(vec![(
+                "inner",
+                obj(vec![
+                    ("description", s("d")),
+                    (
+                        "allOf",
+                        arr(vec![obj(vec![("$ref", s("#/definitions/Inner"))])]),
+                    ),
+                ]),
+            )]),
+        ),
+        (
+            "definitions",
+            obj(vec![(
+                "Inner",
+                obj(vec![
+                    ("type", s("object")),
+                    ("properties", obj(vec![("a", typed("integer"))])),
+                    ("required", arr(vec![s("a")])),
+                ]),
+            )]),
+        ),
+    ]);
+    let inlined = inline_refs(&schema).unwrap();
+    let read = SchemaRef::new(&inlined).unwrap();
+    assert!(matches!(read.find("inner").unwrap().kind(), Kind::Map(_)));
+    let good = doc(vec![("inner", obj(vec![("a", n("1"))]))]);
+    assert_eq!(validate_map(read, &good), Ok(()));
+    let bad = doc(vec![("inner", obj(vec![("a", s("1"))]))]);
+    assert!(validate_map(read, &bad).is_err());
+}

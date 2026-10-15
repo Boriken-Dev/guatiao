@@ -77,9 +77,20 @@ fn text<'a>(v: &'a Value, key: &str) -> &'a str {
         .unwrap_or("")
 }
 
-/// Whether `v` is a map, which every part of a schema is.
+/// Whether `v` is a map, which every part of a schema this crate writes is.
 fn is_map(v: &Value) -> bool {
     TryAsRef::<Map>::try_as_ref(v).is_some()
+}
+
+/// Whether `v` is the boolean schema `true`, which accepts any value: what
+/// a generator writes for a field of any JSON value.
+pub(crate) fn is_true_schema(v: &Value) -> bool {
+    v.tag() == Ok(Tag::GUATIAO_BOOL) && bool_or(Some(v), false)
+}
+
+/// Whether `v` can be read as a field's schema: a map, or `true`.
+fn is_schema(v: &Value) -> bool {
+    is_map(v) || is_true_schema(v)
 }
 
 /// Whether `owner`'s `required` list names `key`.
@@ -103,8 +114,10 @@ fn is_required_in(owner: &Value, key: &str) -> bool {
 /// The one place that joins the two halves JSON Schema keeps apart: a name
 /// from `properties`, a requiredness from `required`.
 ///
-/// Anything whose name is not text, or whose schema is not a map, is
-/// skipped — dropping the one is better than refusing the rest.
+/// Anything whose name is not text, or whose schema is neither a map nor
+/// `true`, is skipped — dropping the one is better than refusing the rest.
+/// A property whose schema is `false` accepts no value, which is what
+/// skipping it says: a value under that key is undeclared.
 fn fields_of(owner: &Value) -> impl Iterator<Item = FieldRef<'_>> {
     TryAsRef::<Map>::try_as_ref(owner)
         .and_then(|m| m.get(vocab::PROPERTIES))
@@ -115,7 +128,7 @@ fn fields_of(owner: &Value) -> impl Iterator<Item = FieldRef<'_>> {
         .filter_map(move |e| {
             let key = e.key();
             let schema = e.value();
-            is_map(schema).then(|| FieldRef {
+            is_schema(schema).then(|| FieldRef {
                 key,
                 schema,
                 required: is_required_in(owner, key),
@@ -177,7 +190,7 @@ impl<'a> SchemaRef<'a> {
             .find(|e| e.key() == key)
             .and_then(|e| {
                 let name = e.key();
-                is_map(e.value()).then(|| FieldRef {
+                is_schema(e.value()).then(|| FieldRef {
                     key: name,
                     schema: e.value(),
                     required: is_required_in(self.0, name),
@@ -216,14 +229,14 @@ fn extras_of(schema: &Value) -> impl Iterator<Item = (&str, &Value)> {
 
 impl<'a> FieldRef<'a> {
     /// Views `schema` as the field declared under `key`, or `None` when it
-    /// is not a map.
+    /// is neither a map nor the schema `true`.
     ///
     /// **Says nothing about requiredness**, which belongs to the object
     /// this field sits in and is not readable from the field alone. A field
     /// made this way answers `false`; one from [`SchemaRef::fields`] or
     /// [`SchemaRef::find`] answers what the owner declared.
     pub fn new(key: &'a str, schema: &'a Value) -> Option<FieldRef<'a>> {
-        is_map(schema).then_some(FieldRef {
+        is_schema(schema).then_some(FieldRef {
             key,
             schema,
             required: false,
@@ -251,7 +264,8 @@ impl<'a> FieldRef<'a> {
     /// Whether a null is a value this field accepts: the schema says
     /// `type: [T, "null"]` or `anyOf: [X, null]`, the shapes a generator
     /// writes for an optional value. [`kind`](FieldRef::kind) is the `T`
-    /// either way.
+    /// either way. Beside an `enum` or a `const`, a `type` admitting null
+    /// is not enough: null must also be one of the members.
     pub fn is_nullable(&self) -> bool {
         is_nullable(self.schema)
     }
@@ -505,24 +519,32 @@ pub enum Kind<'a> {
         /// The arms, as the `oneOf` list holding them.
         arms: &'a Value,
     },
-    /// A kind this build does not know, by name. **Skip the field; do not
-    /// reject the schema.**
+    /// A kind this build does not know, by name, or a schema that
+    /// constrains nothing it reads: `{}`, `true`, a `description` alone,
+    /// an `allOf` of several schemas, a `$ref` not yet inlined. **Skip the
+    /// field; do not reject the schema.** Validation accepts any value.
     Unknown(&'a str),
-    /// No kind was declared at all, which is a malformed field rather
-    /// than a new one.
+    /// Not a schema at all: no value, or one that is neither a map nor
+    /// `true` -- also what [`items`](Kind::items) and
+    /// [`values`](Kind::values) answer for another kind. Never the
+    /// reading of a map.
     Missing,
 }
 
 impl<'a> Kind<'a> {
-    /// The kind `schema` declares, or [`Kind::Missing`] when it is not a
-    /// map at all.
+    /// The kind `schema` declares, or [`Kind::Missing`] when it is neither
+    /// a map nor `true`.
     pub(crate) fn read(schema: Option<&'a Value>) -> Kind<'a> {
-        let Some(k) = schema.filter(|v| is_map(v)) else {
+        let Some(k) = schema else {
             return Kind::Missing;
         };
-        // An optional value reads as the value it holds; whether it may
-        // also be null is `is_nullable`'s question.
-        let k = strip_null(k);
+        // An optional value reads as the value it holds, and a lone
+        // `allOf` member as itself; whether null is accepted too is
+        // `is_nullable`'s question.
+        let k = peel(k);
+        if is_true_schema(k) {
+            return Kind::Unknown(TRUE_SCHEMA);
+        }
         let Some(m) = TryAsRef::<Map>::try_as_ref(k) else {
             return Kind::Missing;
         };
@@ -550,8 +572,12 @@ impl<'a> Kind<'a> {
                     // Arms that are not all constants are a shape this
                     // build does not read.
                     Kind::Unknown(vocab::ONE_OF)
+                } else if m.get(vocab::ALL_OF).is_some() {
+                    Kind::Unknown(vocab::ALL_OF)
                 } else {
-                    Kind::Missing
+                    // Nothing that constrains a value: `{}` or prose
+                    // alone, which JSON Schema reads as accepting any.
+                    Kind::Unknown(vocab::TYPE)
                 };
             }
         };
@@ -730,6 +756,9 @@ impl<'a> Kind<'a> {
     }
 }
 
+/// What [`Kind::Unknown`] names for the schema `true`.
+const TRUE_SCHEMA: &str = "true";
+
 /// Which way a fractional bound moves to land on a whole number that
 /// accepts exactly the integers the bound does.
 #[derive(Clone, Copy)]
@@ -854,37 +883,85 @@ fn nullable_pair(any_of: &Value) -> Option<&Value> {
     }
 }
 
-/// `k` with any `anyOf: [X, null]` wrapper removed, however deep the
-/// wrapping: a loop, because the schema is not ours to bound.
-fn strip_null(mut k: &Value) -> &Value {
-    while let Some(inner) = TryAsRef::<Map>::try_as_ref(k)
-        .filter(|m| m.get(vocab::TYPE).is_none())
-        .and_then(|m| m.get(vocab::ANY_OF))
-        .and_then(nullable_pair)
+/// The one member of an `allOf` that is a wrapper and nothing more: a
+/// single schema, on a map that names no `type`, `enum`, `const`, `anyOf`
+/// or `oneOf` of its own beside it.
+fn lone_all_of(m: &Map) -> Option<&Value> {
+    if [
+        vocab::TYPE,
+        vocab::ENUM,
+        vocab::CONST,
+        vocab::ANY_OF,
+        vocab::ONE_OF,
+    ]
+    .iter()
+    .any(|key| m.get(key).is_some())
     {
-        k = inner;
+        return None;
     }
-    k
+    let list = m
+        .get(vocab::ALL_OF)
+        .and_then(TryAsRef::<List>::try_as_ref)?;
+    match &list[..] {
+        [only] if is_schema(only) => Some(only),
+        _ => None,
+    }
+}
+
+/// `k` with every wrapper that only says "this, or null" or "this, with a
+/// description" removed: `anyOf: [X, null]` and a lone `allOf: [X]`,
+/// however deep. A loop, because the schema is not ours to bound.
+pub(crate) fn peel(mut k: &Value) -> &Value {
+    loop {
+        let Some(m) = TryAsRef::<Map>::try_as_ref(k) else {
+            return k;
+        };
+        let inner = if m.get(vocab::TYPE).is_none() {
+            m.get(vocab::ANY_OF).and_then(nullable_pair)
+        } else {
+            None
+        };
+        match inner.or_else(|| lone_all_of(m)) {
+            Some(inner) => k = inner,
+            None => return k,
+        }
+    }
 }
 
 /// Whether a null is a value this schema accepts: `type: [T, "null"]`
-/// or `anyOf: [X, null]`.
+/// (with null a member, when an `enum` or `const` sits beside it), or
+/// `anyOf: [X, null]`, at any level of the wrappers [`peel`] removes.
 pub(crate) fn is_nullable(schema: &Value) -> bool {
-    let Some(m) = TryAsRef::<Map>::try_as_ref(schema) else {
-        return false;
-    };
-    if let Some(list) = m.get(vocab::TYPE).and_then(TryAsRef::<List>::try_as_ref) {
-        return list
-            .iter()
-            .filter_map(TryAsRef::<str>::try_as_ref)
-            .any(|t| t == vocab::TYPE_NULL);
+    let mut k = schema;
+    loop {
+        let Some(m) = TryAsRef::<Map>::try_as_ref(k) else {
+            return false;
+        };
+        if let Some(ty) = m.get(vocab::TYPE) {
+            let Some(list) = TryAsRef::<List>::try_as_ref(ty) else {
+                return false;
+            };
+            let admits_null = list
+                .iter()
+                .filter_map(TryAsRef::<str>::try_as_ref)
+                .any(|t| t == vocab::TYPE_NULL);
+            return admits_null
+                && (!is_enumeration(k)
+                    || members(k).any(|(member, _)| member.tag() == Ok(Tag::GUATIAO_NULL)));
+        }
+        if m.get(vocab::ANY_OF).and_then(nullable_pair).is_some() {
+            return true;
+        }
+        match lone_all_of(m) {
+            Some(inner) => k = inner,
+            None => return false,
+        }
     }
-    m.get(vocab::TYPE).is_none() && m.get(vocab::ANY_OF).and_then(nullable_pair).is_some()
 }
 
 /// Whether `k` lists a fixed set of values: an `enum`, a `const`, or a
 /// `oneOf` of constants that is not a tagged variant's arms.
-fn is_enumeration(k: &Value) -> bool {
+pub(crate) fn is_enumeration(k: &Value) -> bool {
     let Some(m) = TryAsRef::<Map>::try_as_ref(k) else {
         return false;
     };
