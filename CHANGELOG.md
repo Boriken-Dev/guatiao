@@ -92,6 +92,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   one of those paths: it gets a new `FLOOR_HASH` once, so rebuild its
   providers (a C table takes the new `*_FLOOR_HASH`). A kind spelled with
   bare names keeps its hash.
+- **`#[guatiao::kind]` and `#[derive(Provider)]` refuse with a
+  sentence what used to fail inside the expansion.** An argument named
+  `ctx`, `out` or `err` now compiles (the shim's own parameters are
+  `__ctx`, `__out`, `__err`, and the slot type renders it as `ctx_`).
+  Types are read by path: guatiao's under `guatiao::`, `::guatiao::` or
+  the `crate =` root, the standard ones under `std::`, `core::`,
+  `alloc::`, both bare; a type ending in `Value`, `Map`, `List`,
+  `String`, `Object` or `ProviderError` under another root is refused,
+  naming the accepted spellings. Also refused: a method named `header` or
+  `destroy` (or `into_object` on an object kind), an argument whose name
+  starts with `__`, and a kind named twice in `#[provider(..)]`.
+  *Migration:* breaking only where such code compiled: a provider kind
+  with a method named `destroy` or an argument starting with `__` renames
+  it, and `#[provider(K, K)]` drops the repeat.
 - **Breaking: no safe function reads a descriptor safe code could have
   forged.** The registry reads every pointer in a descriptor and calls its
   slots from safe code, so the promise that they are real is now made in

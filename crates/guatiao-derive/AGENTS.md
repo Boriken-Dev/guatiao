@@ -192,8 +192,27 @@ self`/`self`/no receiver, a `&mut` argument other than a lent object, a
 lent object with another bound beside the trait (`&mut (dyn K + Send)`),
 a borrowed argument of any other type, a value type by value as an argument, `impl Trait` anywhere,
 a function argument, a borrowed or `impl Trait` return, a `Result` whose
-error is not `ProviderError`, and an attribute key other than `name`,
-`object` and `crate`. Every message is pinned by text in
+error is not `ProviderError`, a method named `header` or `destroy` (or
+`into_object` on an object kind), an argument whose name starts with
+`__`, and an attribute key other than `name`, `object` and `crate`.
+
+**Types are read by path, not by last segment.** guatiao's `Value`,
+`Map`, `List`, `Text`, `ProviderError`, `Object`, `Status` are recognised
+bare, under `guatiao::`/`::guatiao::` or under the `crate =` root; the
+standard `String`, `Vec`, `Option`, `Result`, `Box` bare or under
+`std::`/`core::`/`alloc::`. A path ending in `Value`, `Map`, `List`,
+`String`, `Object` or `ProviderError` under any other root
+(`&foreign::Value`, `-> Result<model::String, _>`) is refused with a
+sentence naming the accepted spellings, rather than misread and failing
+inside the expansion; a type of your own with such a name needs another
+in the signature (`use .. as ..`). Any other type of yours crosses
+through `ToValue`/`FromValue` whatever its name (`proto::Text` by value
+is fine).
+
+**Hygiene.** A shim's own parameters are `__ctx`, `__out` and `__err`,
+so an argument may be named `ctx`, `out` or `err`; in the slot's type,
+which a C header renders, such an argument is written `ctx_`, `out_`,
+`err_`, so no prototype names a parameter twice. Every message is pinned by text in
 `kind::tests::kind_rejects_by_name`; the expansion of a two-method trait
 is pinned by `src/snapshots/greeter.expected.rs`.
 
@@ -250,7 +269,8 @@ Emits, inside a `const _` block: one `static` table per kind
 (`<dyn K as Kind>::Vtable::of::<T>()`, reached through the trait so only
 the trait need be in scope), a `OnceLock<T>` holding the instance, and
 `impl ProviderDecl for T` building a `ProviderParts`. Refused: a generic
-type, no kinds, an unknown key, a key given twice, both `new` and
+type, no kinds, a kind named twice (by its spelling, a leading `::`
+aside), an unknown key, a key given twice, both `new` and
 `new_with_host`. `guatiao::providers!(A, B)` (in the core crate) then
 writes the whole library.
 

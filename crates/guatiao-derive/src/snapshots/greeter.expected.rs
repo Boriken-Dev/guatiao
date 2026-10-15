@@ -63,14 +63,14 @@ impl GreeterVtable {
     /// that table's provider declared: a `&__T`.
     #[doc(hidden)]
     pub unsafe extern "C" fn __guatiao_shim_greet<__T: Greeter>(
-        ctx: *mut ::core::ffi::c_void,
+        __ctx: *mut ::core::ffi::c_void,
         name: ::guatiao::Str,
-        out: *mut ::guatiao::Text,
-        err: *mut ::guatiao::library::ProviderError,
+        __out: *mut ::guatiao::Text,
+        __err: *mut ::guatiao::library::ProviderError,
     ) -> ::guatiao::Status {
         ::guatiao::library::kind::catch(|| {
             let ::core::option::Option::Some(__this) = (unsafe {
-                ::guatiao::library::kind::ctx_ref::<__T>(ctx)
+                ::guatiao::library::kind::ctx_ref::<__T>(__ctx)
             }) else {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
@@ -79,7 +79,7 @@ impl GreeterVtable {
                 ::core::result::Result::Err(__e) => {
                     return unsafe {
                         ::guatiao::library::kind::write_err(
-                            err,
+                            __err,
                             ::guatiao::Status::from(__e).into(),
                         )
                     };
@@ -89,13 +89,13 @@ impl GreeterVtable {
                 ::core::result::Result::Ok(__answer) => {
                     unsafe {
                         ::guatiao::library::kind::write_out(
-                            out,
+                            __out,
                             ::guatiao::Text::new(&__answer),
                         )
                     }
                 }
                 ::core::result::Result::Err(__e) => {
-                    unsafe { ::guatiao::library::kind::write_err(err, __e) }
+                    unsafe { ::guatiao::library::kind::write_err(__err, __e) }
                 }
             }
         })
@@ -106,20 +106,20 @@ impl GreeterVtable {
     /// that table's provider declared: a `&__T`.
     #[doc(hidden)]
     pub unsafe extern "C" fn __guatiao_shim_count<__T: Greeter>(
-        ctx: *mut ::core::ffi::c_void,
+        __ctx: *mut ::core::ffi::c_void,
         bytes: ::guatiao::value::types::Bytes,
         flag: bool,
-        out: *mut i64,
+        __out: *mut i64,
     ) -> ::guatiao::Status {
         ::guatiao::library::kind::catch(|| {
             let ::core::option::Option::Some(__this) = (unsafe {
-                ::guatiao::library::kind::ctx_ref::<__T>(ctx)
+                ::guatiao::library::kind::ctx_ref::<__T>(__ctx)
             }) else {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
             let bytes: &[u8] = ::core::convert::From::from(bytes);
             unsafe {
-                ::guatiao::library::kind::write_out(out, __this.count(bytes, flag))
+                ::guatiao::library::kind::write_out(__out, __this.count(bytes, flag))
             }
         })
     }
