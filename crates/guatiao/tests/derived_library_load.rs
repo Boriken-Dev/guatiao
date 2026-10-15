@@ -419,3 +419,57 @@ fn the_c_surface_hands_back_a_table_by_kind() {
     // SAFETY: `reg` came from `guatiao_registry_new` and is not used again.
     unsafe { guatiao_registry_free(reg) };
 }
+
+/// A C host's `create` checks the configuration against the provider's
+/// schema first, as `instantiate` does: a misspelled setting is refused
+/// with the field named, and the provider is never asked.
+#[test]
+fn the_c_surface_checks_a_configuration_before_the_provider() {
+    use guatiao::exports::library::{
+        guatiao_registry_free, guatiao_registry_load_file, guatiao_registry_new,
+        guatiao_registry_provider_create, guatiao_registry_provider_destroy,
+    };
+    use guatiao::library::ProviderError;
+    use guatiao::value::types::Str;
+
+    let path = library_path("derived_greeter");
+    let path = path.to_string_lossy().into_owned();
+    let alloc = guatiao::Alloc::rust().as_raw();
+    // SAFETY: the names are readable for the call; the allocator is ours.
+    let reg = unsafe { guatiao_registry_new(Str::new("c-create"), Str::new("1.0"), alloc) };
+    assert!(!reg.is_null());
+    let mut answer = Value::absent();
+    // SAFETY: `reg` is live, the path readable, `answer` writable.
+    let status = unsafe { guatiao_registry_load_file(reg, Str::new(&path), alloc, &mut answer) };
+    assert_eq!(status, Status::GUATIAO_OK);
+    drop(answer);
+    let key = Str::new("derived_greeter_shouter");
+
+    let mut misspelled = Map::new();
+    misspelled.set("prefix", "hey").unwrap();
+    misspelled.set("prefx", "typo").unwrap();
+    let mut out: *mut c_void = core::ptr::null_mut();
+    let mut err = ProviderError::none();
+    // SAFETY: `reg` is live, the key readable, the rest writable locals.
+    let status = unsafe {
+        guatiao_registry_provider_create(reg, key, &Value::from(misspelled), &mut out, &mut err)
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE, "{err}");
+    assert_eq!(err.status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert!(err.message().contains("prefx"), "the field is named: {err}");
+    assert!(out.is_null(), "nothing was built");
+
+    let mut fitting = Map::new();
+    fitting.set("prefix", "hey").unwrap();
+    let mut err = ProviderError::none();
+    // SAFETY: as above.
+    let status = unsafe {
+        guatiao_registry_provider_create(reg, key, &Value::from(fitting), &mut out, &mut err)
+    };
+    assert_eq!(status, Status::GUATIAO_OK, "{err}");
+    assert!(!out.is_null());
+    // SAFETY: the instance came from this provider's `create` just now.
+    unsafe { guatiao_registry_provider_destroy(reg, key, out) };
+    // SAFETY: `reg` came from `guatiao_registry_new` and is not used again.
+    unsafe { guatiao_registry_free(reg) };
+}

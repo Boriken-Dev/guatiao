@@ -98,9 +98,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Invalid(ValidationError)` names a misspelled or ill-typed setting
   before the provider is asked, `Refused(ProviderError)` is the
   provider's own answer. Applies to `Offer`, `Provider` and
-  `ProviderInfo::instantiate`. Migration: match the two variants, or
-  call `.status()` where `.status` was read; a separate `validate_map`
-  before `instantiate` is no longer needed.
+  `ProviderInfo::instantiate`, and to the C
+  `guatiao_registry_provider_create` (so the Python and Dart `create`),
+  which answers `GUATIAO_ERR_BAD_VALUE` with the refusal in `err`.
+  Migration: match the two variants, or call `.status()` where `.status`
+  was read; a separate `validate_map` before `instantiate` is no longer
+  needed.
 - **Breaking: `LoadReport.loaded` is `Vec<(PathBuf, String)>`**, each
   loaded file with the library key the registry filed it under, so a host
   can tell which providers a scan added, or retire what it loaded,

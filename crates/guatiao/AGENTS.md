@@ -1207,7 +1207,9 @@ drop(s);                                                             // the libr
   slots are `ProviderInfo::create` / `destroy`; from C,
   `guatiao_registry_provider_create(reg, key, config, &instance, &err)`
   and `_destroy(reg, key, instance)`, the instance being the `ctx` for
-  that provider's tables.
+  that provider's tables; `_create` checks `config` against the schema
+  first, as `instantiate` does (`GUATIAO_ERR_BAD_VALUE`, the refusal in
+  `err`).
 - A provider that cannot build its config schema makes the library
   decline the host.
 
