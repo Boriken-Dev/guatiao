@@ -41,7 +41,7 @@ guatiao-serde = { version = "0.0.0-alpha.0", features = ["toml", "yaml"] }
 | --- | --- | --- |
 | `json` (default) | `serde_json`, with `raw_value` | `text::json` |
 | `exact-numbers` | `json`, and `serde_json/arbitrary_precision` | reading a JSON number as its own text; **read the cost below** |
-| `toml` | `toml` | `text::toml` |
+| `toml` | `toml`, with `preserve_order` | `text::toml`; **read the note below** |
 | `yaml` | `serde-saphyr` | `text::yaml` |
 | `c-header` | `cbindgen` | regenerating the committed C header |
 
@@ -51,8 +51,16 @@ uses `serde_json`: `#[serde(untagged)]` and `#[serde(flatten)]` numbers in
 unrelated crates stop deserialising (`data did not match any variant`,
 `invalid type: map, expected f64`). That is why it is not part of `json`.
 A binary that is the only thing in its build, or a C library built from
-this workspace (the artifacts are built with `--all-features`), can turn it
-on; a library crate should not.
+this crate with `--all-features`, can turn it on; a library crate should
+not.
+
+**`toml` turns on `toml/preserve_order` for the whole build**, so a table
+is read in the order the document wrote it, as JSON and YAML are, instead
+of sorted. Cargo unifies that feature too: every other crate in the build
+using `toml` gets a `toml::Table` that keeps its keys in insertion order
+rather than sorting them, so iterating one, or the text `toml` writes from
+one, comes out in that order, and `indexmap` joins the build. Reading a
+table by key is unaffected.
 
 ## Quick start
 
