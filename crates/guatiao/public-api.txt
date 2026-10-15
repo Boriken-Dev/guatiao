@@ -434,12 +434,26 @@ impl core::fmt::Display for guatiao::library::kind::ProviderError
 pub fn guatiao::library::kind::ProviderError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::library::kind::ProviderParts
 impl guatiao::library::kind::ProviderParts
+pub fn guatiao::library::kind::ProviderParts::builder(&str) -> guatiao::library::kind::ProviderPartsBuilder
 pub fn guatiao::library::kind::ProviderParts::info(&self) -> &guatiao::library::desc::ProviderInfo<'_>
-pub unsafe fn guatiao::library::kind::ProviderParts::new(&str, &str, &str, &[&'static str], alloc::vec::Vec<guatiao::library::desc::KindTable<'static>>, core::option::Option<guatiao::value::value::Value>, *mut core::ffi::c_void, core::option::Option<fn(*mut core::ffi::c_void, *mut guatiao::value::types::text::Str<'_>) -> bool>, core::option::Option<fn(*mut core::ffi::c_void, *const guatiao::value::value::Value, *mut *mut core::ffi::c_void, *mut guatiao::library::kind::ProviderError) -> guatiao::value::status::Status>, core::option::Option<fn(*mut core::ffi::c_void, *mut core::ffi::c_void)>) -> guatiao::library::kind::ProviderParts
 impl core::fmt::Debug for guatiao::library::kind::ProviderParts
 pub fn guatiao::library::kind::ProviderParts::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Send for guatiao::library::kind::ProviderParts
 impl core::marker::Sync for guatiao::library::kind::ProviderParts
+pub struct guatiao::library::kind::ProviderPartsBuilder
+impl guatiao::library::kind::ProviderPartsBuilder
+pub fn guatiao::library::kind::ProviderPartsBuilder::available(self, fn(*mut core::ffi::c_void, *mut guatiao::value::types::text::Str<'_>) -> bool) -> Self
+pub unsafe fn guatiao::library::kind::ProviderPartsBuilder::build(self) -> guatiao::library::kind::ProviderParts
+pub fn guatiao::library::kind::ProviderPartsBuilder::config(self, guatiao::value::value::Value) -> Self
+pub fn guatiao::library::kind::ProviderPartsBuilder::create(self, guatiao::library::raw::CreateFn) -> Self
+pub fn guatiao::library::kind::ProviderPartsBuilder::ctx(self, *mut core::ffi::c_void) -> Self
+pub fn guatiao::library::kind::ProviderPartsBuilder::destroy(self, guatiao::library::raw::DestroyFn) -> Self
+pub fn guatiao::library::kind::ProviderPartsBuilder::kinds(self, &[&'static str]) -> Self
+pub fn guatiao::library::kind::ProviderPartsBuilder::name(self, &str) -> Self
+pub fn guatiao::library::kind::ProviderPartsBuilder::table(self, guatiao::library::desc::KindTable<'static>) -> Self
+pub fn guatiao::library::kind::ProviderPartsBuilder::version(self, &str) -> Self
+impl core::fmt::Debug for guatiao::library::kind::ProviderPartsBuilder
+pub fn guatiao::library::kind::ProviderPartsBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::library::kind::Remote<K: ?core::marker::Sized>
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> guatiao::library::kind::Remote<K>
 pub fn guatiao::library::kind::Remote<K>::as_dyn(&self) -> &K

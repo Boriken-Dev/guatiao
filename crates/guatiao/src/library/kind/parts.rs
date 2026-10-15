@@ -2,10 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! What a derived provider and library build: the descriptors, and the
-//! storage they point into.
+//! What a provider and a library are built from, by the derives or by
+//! hand: the descriptors, and the storage they point into.
 
 use super::*;
+use crate::library::raw::{CreateFn, DestroyFn};
 
 // --- what a derived provider and library build --------------------------
 
@@ -55,6 +56,113 @@ unsafe impl Send for ProviderParts {}
 unsafe impl Sync for ProviderParts {}
 
 impl ProviderParts {
+    /// A provider descriptor assembled by hand: the path for a provider
+    /// written without `#[derive(Provider)]`, a C table offered from Rust,
+    /// or a host's own adapter. Every slot defaults to absent, so a slot
+    /// appended to the envelope later leaves a hand-built provider
+    /// compiling and correct.
+    pub fn builder(id: &str) -> ProviderPartsBuilder {
+        ProviderPartsBuilder {
+            id: id.into(),
+            name: String::new(),
+            version: String::new(),
+            kinds: Vec::new(),
+            tables: Vec::new(),
+            config: None,
+            ctx: core::ptr::null_mut(),
+            available: None,
+            create: None,
+            destroy: None,
+        }
+    }
+
+    /// The descriptor, pointing into this.
+    pub fn info(&self) -> &ProviderInfo<'_> {
+        &self.info
+    }
+}
+
+/// One provider's descriptor, assembled field by field. See
+/// [`ProviderParts::builder`]; [`build`](ProviderPartsBuilder::build) is
+/// where the pointers it carries are vouched for.
+#[derive(Debug)]
+#[must_use = "a builder does nothing until it is built"]
+pub struct ProviderPartsBuilder {
+    id: String,
+    name: String,
+    version: String,
+    kinds: Vec<&'static str>,
+    tables: Vec<KindTable<'static>>,
+    config: Option<Value>,
+    ctx: *mut c_void,
+    available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
+    create: Option<CreateFn>,
+    destroy: Option<DestroyFn>,
+}
+
+impl ProviderPartsBuilder {
+    /// A name to show a person. Empty by default.
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = name.into();
+        self
+    }
+
+    /// The provider's own version; empty, the default, means its
+    /// library's.
+    pub fn version(mut self, version: &str) -> Self {
+        self.version = version.into();
+        self
+    }
+
+    /// Kinds it serves, appended to any given before.
+    pub fn kinds(mut self, kinds: &[&'static str]) -> Self {
+        self.kinds.extend_from_slice(kinds);
+        self
+    }
+
+    /// One kind's function table. See [`KindTable::new`].
+    pub fn table(mut self, table: KindTable<'static>) -> Self {
+        self.tables.push(table);
+        self
+    }
+
+    /// The schema of the configuration an instance is built from.
+    pub fn config(mut self, schema: Value) -> Self {
+        self.config = Some(schema);
+        self
+    }
+
+    /// What every slot and table is called with: the provider's default
+    /// instance. Null by default, for a provider that only builds
+    /// instances (with [`create`](ProviderPartsBuilder::create)).
+    pub fn ctx(mut self, ctx: *mut c_void) -> Self {
+        self.ctx = ctx;
+        self
+    }
+
+    /// The runtime-availability slot. See [`ProviderInfo::available`].
+    pub fn available(
+        mut self,
+        slot: unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool,
+    ) -> Self {
+        self.available = Some(slot);
+        self
+    }
+
+    /// The slot that builds an instance from a configuration. See
+    /// [`ProviderInfo::create`].
+    pub fn create(mut self, slot: CreateFn) -> Self {
+        self.create = Some(slot);
+        self
+    }
+
+    /// The slot that releases an instance `create` built. See
+    /// [`ProviderInfo::destroy`].
+    pub fn destroy(mut self, slot: DestroyFn) -> Self {
+        self.destroy = Some(slot);
+        self
+    }
+
     /// Owns the parts and builds the descriptor over them.
     ///
     /// # Safety
@@ -62,35 +170,17 @@ impl ProviderParts {
     /// A registry reads this descriptor and calls through it from safe
     /// code, so: each table is one for the kind it names, built for what
     /// `ctx` points at; `available`, `create` and `destroy` expect that
-    /// `ctx`; and `ctx` and every table live for the process, as a
+    /// `ctx`; an instance `create` writes is what each table expects as
+    /// its `ctx`; and `ctx` and every table live for the process, as a
     /// `static` or a leaked instance does.
-    #[allow(clippy::too_many_arguments)]
-    pub unsafe fn new(
-        id: &str,
-        name: &str,
-        version: &str,
-        kinds: &[&'static str],
-        tables: Vec<KindTable<'static>>,
-        config: Option<Value>,
-        ctx: *mut c_void,
-        available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
-        create: Option<
-            unsafe extern "C" fn(
-                ctx: *mut c_void,
-                config: *const Value,
-                out: *mut *mut c_void,
-                err: *mut ProviderError,
-            ) -> Status,
-        >,
-        destroy: Option<unsafe extern "C" fn(ctx: *mut c_void, instance: *mut c_void)>,
-    ) -> ProviderParts {
-        let id: Box<str> = id.into();
-        let name: Box<str> = name.into();
-        let version: Box<str> = version.into();
-        let kinds: Box<[Str]> = kinds.iter().map(|k| Str::new(k)).collect();
-        let tables: Box<[KindTable]> = tables.into_boxed_slice();
-        let config = config.map(Box::new);
-        // The boxes' heap storage does not move when this struct does.
+    pub unsafe fn build(self) -> ProviderParts {
+        let id: Box<str> = self.id.into();
+        let name: Box<str> = self.name.into();
+        let version: Box<str> = self.version.into();
+        let kinds: Box<[Str]> = self.kinds.iter().map(|k| Str::new(k)).collect();
+        let tables: Box<[KindTable]> = self.tables.into_boxed_slice();
+        let config = self.config.map(Box::new);
+        // The boxes' heap storage does not move when the struct does.
         let info = ProviderInfo {
             struct_size: size_of::<ProviderInfo>() as u32,
             vtable_size: 0,
@@ -100,23 +190,24 @@ impl ProviderParts {
             },
             // SAFETY: the boxes are kept beside `info`, below.
             id: unsafe { crate::library::raw::view_of_owned(&id) },
+            // SAFETY: as `id`.
             display_name: unsafe { crate::library::raw::view_of_owned(&name) },
             config: config
                 .as_deref()
                 .map_or(core::ptr::null(), |v| v as *const Value),
             vtable: core::ptr::null(),
-            ctx,
+            ctx: self.ctx,
             meta: crate::value::types::MaybeNull::null(),
             // SAFETY: as `id`.
             version: unsafe { crate::library::raw::view_of_owned(&version) },
-            available,
+            available: self.available,
             tables: KindTables {
                 ptr: tables.as_ptr(),
                 len: tables.len(),
                 stride: size_of::<KindTable>(),
             },
-            create,
-            destroy,
+            create: self.create,
+            destroy: self.destroy,
         };
         ProviderParts {
             id,
@@ -127,11 +218,6 @@ impl ProviderParts {
             config,
             info,
         }
-    }
-
-    /// The descriptor, pointing into this.
-    pub fn info(&self) -> &ProviderInfo<'_> {
-        &self.info
     }
 }
 

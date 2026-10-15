@@ -37,9 +37,9 @@
 //! What is emitted: one `static` table per kind (`<Kind>Vtable::of::<T>()`),
 //! a `OnceLock<T>` holding the default instance, the `create`/`destroy`
 //! shims when `config` is given, an `impl ProviderDecl for T` building a
-//! `ProviderParts`, and a compile-time check that `T` implements every
-//! kind named — so a missing `impl` reads as an ordinary trait error on
-//! the type's own span.
+//! `ProviderParts` through its builder, and compile-time checks that `T`
+//! implements every kind named — so a missing `impl` reads as an ordinary
+//! trait error on the type's own span — and that none is an object kind.
 
 #![forbid(unsafe_code)]
 
@@ -245,11 +245,11 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
         let table = format_ident!("__GUATIAO_TABLE_{}", i);
         let vtable = vtable_type(kind);
         quote! {
-            ::guatiao::library::KindTable::new(
+            .table(::guatiao::library::KindTable::new(
                 <dyn #kind as ::guatiao::library::Kind>::NAME,
                 &#table as *const #vtable as *const ::core::ffi::c_void,
                 ::core::mem::size_of::<#vtable>(),
-            ),
+            ))
         }
     });
     let kind_names: Vec<TokenStream> = decl
@@ -291,9 +291,9 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
     };
     let config = match &config_ty {
         Some(config) => quote! {
-            ::core::option::Option::Some(<#config as ::guatiao::Schema>::schema(alloc)?)
+            let builder = builder.config(<#config as ::guatiao::Schema>::schema(alloc)?);
         },
-        None => quote! { ::core::option::Option::None },
+        None => quote! {},
     };
     // Instances from a configuration: decode it as `C`, build `Self`
     // through `TryFrom<C>`, box it. `C = Self` is the identity `From`.
@@ -344,14 +344,10 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
                     });
                 }
             },
-            quote! { ::core::option::Option::Some(__guatiao_create) },
-            quote! { ::core::option::Option::Some(__guatiao_destroy) },
+            quote! { .create(__guatiao_create) },
+            quote! { .destroy(__guatiao_destroy) },
         ),
-        None => (
-            quote! {},
-            quote! { ::core::option::Option::None },
-            quote! { ::core::option::Option::None },
-        ),
+        None => (quote! {}, quote! {}, quote! {}),
     };
     let (available_shim, available_slot) = match &decl.available {
         Some(ask) => (
@@ -369,9 +365,9 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
                     }
                 }
             },
-            quote! { ::core::option::Option::Some(__guatiao_available) },
+            quote! { .available(__guatiao_available) },
         ),
-        None => (quote! {}, quote! { ::core::option::Option::None }),
+        None => (quote! {}, quote! {}),
     };
 
     quote! {
@@ -405,26 +401,20 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
                 ) -> ::core::result::Result<::guatiao::library::kind::ProviderParts, ::guatiao::ValueError> {
                     #instance
                     let id = #id;
-                    let kinds = <#ty as ::guatiao::library::kind::ProviderDecl>::KINDS;
-                    let tables = ::guatiao::__private::alloc::vec![ #(#table_entries)* ];
-                    let config = #config;
+                    let builder = ::guatiao::library::kind::ProviderParts::builder(&id)
+                        .name(#name)
+                        .version(#version)
+                        .kinds(<#ty as ::guatiao::library::kind::ProviderDecl>::KINDS)
+                        #(#table_entries)*
+                        .ctx(instance)
+                        #available_slot
+                        #create_slot
+                        #destroy_slot;
+                    #config
                     // SAFETY: each table is `of::<Self>()` for the kind it
                     // names, `instance` is the leaked default instance or
                     // null, and every slot is this expansion's own shim.
-                    let parts = unsafe {
-                        ::guatiao::library::kind::ProviderParts::new(
-                            &id,
-                            #name,
-                            #version,
-                            kinds,
-                            tables,
-                            config,
-                            instance,
-                            #available_slot,
-                            #create_slot,
-                            #destroy_slot,
-                        )
-                    };
+                    let parts = unsafe { builder.build() };
                     ::core::result::Result::Ok(parts)
                 }
             }
@@ -455,14 +445,13 @@ mod tests {
         assert!(out.contains("< Hello as :: core :: default :: Default > :: default ()"));
         assert!(out.contains("env ! (\"CARGO_PKG_NAME\") . replace ('-' , \"_\") , \"hello\""));
         assert!(
-            out.contains("\"Hello\" , \"\" , kinds"),
+            out.contains(". name (\"Hello\") . version (\"\")"),
             "name defaults to the ident, version to empty"
         );
         assert!(
-            out.contains(
-                ":: core :: option :: Option :: None , :: core :: option :: Option :: None , \
-                 :: core :: option :: Option :: None ,)"
-            ),
+            !out.contains(". available (")
+                && !out.contains(". create (")
+                && !out.contains(". destroy ("),
             "no available, create or destroy slot"
         );
         assert!(
@@ -483,9 +472,7 @@ mod tests {
         let out = expand_str("#[provider(Greeter, config = HiConfig)] struct Hi;").unwrap();
         assert!(out.contains("config_arg :: < HiConfig > (config)"));
         assert!(out.contains("< Hi as :: core :: convert :: TryFrom < HiConfig >> :: try_from"));
-        assert!(out.contains(
-            "Some (__guatiao_create) , :: core :: option :: Option :: Some (__guatiao_destroy) ,)"
-        ));
+        assert!(out.contains(". create (__guatiao_create) . destroy (__guatiao_destroy)"));
         assert!(
             out.contains(":: core :: ptr :: null_mut ()") && !out.contains("get_or_init"),
             "no default instance without `new`: {out}"
@@ -529,7 +516,7 @@ mod tests {
         )
         .unwrap();
         assert!(out.contains("String :: from (\"acme_hi\")"));
-        assert!(out.contains("\"Hi\" , \"2.0.0\" , kinds"));
+        assert!(out.contains(". name (\"Hi\") . version (\"2.0.0\")"));
         assert!(out.contains("< HiConfig as :: guatiao :: Schema > :: schema (alloc) ?"));
         assert!(out.contains("Hi :: build (host)"));
         assert!(

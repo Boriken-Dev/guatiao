@@ -751,6 +751,30 @@ array states its stride and the kind array does not, because a `Str`
 declares no `struct_size` and so has no way to grow. Build them with
 `Providers::new(&SLICE)` / `Kinds::new(&SLICE)` rather than by hand.
 
+**A provider written without the derive** is assembled with
+`ProviderParts::builder`, and its library with `LibraryParts`, rather than
+by filling the `repr(C)` structs: every slot defaults to absent, so a slot
+the envelope appends later leaves it compiling and correct, and the
+builder owns the strings and the schema the descriptor points into.
+
+```rust
+static TABLE: GreeterVtable = GreeterVtable::of::<Hello>();     // a kind's table, or a C one
+let ctx: *mut c_void = Box::into_raw(Box::new(Hello)).cast();    // lives for the process
+let provider = unsafe {                  // vouches: each table fits its kind and its ctx
+    ProviderParts::builder("acme_hello")  // id; then any of:
+        .name("Hello")                   // .version(..)  empty = the library's
+        .kinds(&["greeter"])
+        .table(KindTable::new("greeter", &TABLE as *const _ as *const c_void,
+                              size_of::<GreeterVtable>()))
+        .ctx(ctx)                        // .config(schema) .available(f) .create(f) .destroy(f)
+        .build()
+};
+let library = LibraryParts::new("acme", "1.0.0", vec![provider]);   // .unloading(slot)
+// keep it for the process (a OnceLock of the library's own), then:
+//   loaded: guatiao_library!(describe), describe answering Some(library.info())
+//   linked: register_local(name, describe), describe answering Some(LocalLibrary::from(library))
+```
+
 `meta` is a `MaybeNull<Map>` on all three — an open-ended map for
 whatever the envelope did not think of, and the escape hatch that keeps a
 vendor's own key out of the fields everyone shares. A reader that does not
