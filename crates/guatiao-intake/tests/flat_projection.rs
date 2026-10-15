@@ -14,7 +14,7 @@ use alloc::collections::BTreeMap;
 use guatiao::value::convert::TryAsRef;
 
 use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
-use guatiao::schema::read::SchemaRef;
+use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::value::alloc::Alloc;
 use guatiao::value::read::str_or;
 use guatiao::{Map, Text, Value};
@@ -1081,4 +1081,94 @@ fn flatten_stops_at_the_depth_bound() {
         "a value nested past the bound does not fit"
     );
     assert!(store.is_empty(), "and nothing past the bound is written");
+}
+
+/// A store written in an earlier spelling reads back, and validates, as
+/// the one `flatten` writes now: an open map's key `01` quoted
+/// (`env["01"]`), a top-level field holding a `.` under its bare name
+/// (`a.b`, `x.y[k]`), and a variant under such a key, whose discriminant
+/// is found where the store spelled it. Where both spellings are present,
+/// the current one wins.
+#[test]
+fn a_store_in_an_earlier_spelling_reads_back() {
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new(
+            "env",
+            KindBuilder::map_of(KindBuilder::string()),
+        ))
+        .field(FieldBuilder::new("a.b", KindBuilder::string()))
+        .field(FieldBuilder::new(
+            "x.y",
+            KindBuilder::map_of(KindBuilder::string()),
+        ))
+        .field(FieldBuilder::new(
+            "m",
+            KindBuilder::map_of(KindBuilder::variant(
+                "kind",
+                vec![
+                    ArmBuilder::new("userpass", "User and password")
+                        .field(FieldBuilder::new("username", KindBuilder::string())),
+                ],
+            )),
+        ))
+        .finish()
+        .unwrap();
+    let s = SchemaRef::new(&schema).unwrap();
+    let alloc = Alloc::rust();
+    let read = |field: &str, store: &BTreeMap<String, String>| {
+        flat::unflatten(alloc, s.find(field).unwrap(), store)
+    };
+
+    let old = store_of(&[
+        ("env[\"01\"]", "old"),
+        ("env[PATH]", "/bin"),
+        ("a.b", "dotted"),
+        ("x.y[k]", "v"),
+        ("m[\"01\"]", "userpass"),
+        ("m[\"01\"].username", "alice"),
+    ]);
+    assert_eq!(guatiao_intake::validate_texts(s, &old), Ok(()));
+    assert_eq!(
+        texts_of(&read("env", &old).expect("the open map reads")),
+        [
+            ("01".to_string(), "old".to_string()),
+            ("PATH".to_string(), "/bin".to_string())
+        ]
+    );
+    let dotted = read("a.b", &old).expect("the bare top-level key reads");
+    assert_eq!(TryAsRef::<str>::try_as_ref(&dotted), Some("dotted"));
+    assert_eq!(
+        texts_of(&read("x.y", &old).expect("so does a container under it")),
+        [("k".to_string(), "v".to_string())]
+    );
+    let m = read("m", &old).expect("the variant under a quoted key reads");
+    let one = TryAsRef::<Map>::try_as_ref(&m)
+        .and_then(|m| m.get("01"))
+        .expect("under its key");
+    assert_eq!(
+        texts_of(one),
+        [
+            ("kind".to_string(), "userpass".to_string()),
+            ("username".to_string(), "alice".to_string())
+        ]
+    );
+    assert_eq!(
+        flat::resolve(s, "x.y[k]").map(|f| matches!(f.kind(), Kind::Str { .. })),
+        Some(true),
+        "the bare spelling resolves into the field"
+    );
+
+    let both = store_of(&[
+        ("env[\"01\"]", "old"),
+        ("env[01]", "new"),
+        ("a.b", "old"),
+        ("[a.b]", "new"),
+    ]);
+    assert_eq!(guatiao_intake::validate_texts(s, &both), Ok(()));
+    assert_eq!(
+        texts_of(&read("env", &both).unwrap()),
+        [("01".to_string(), "new".to_string())]
+    );
+    let dotted = read("a.b", &both).unwrap();
+    assert_eq!(TryAsRef::<str>::try_as_ref(&dotted), Some("new"));
 }

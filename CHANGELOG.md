@@ -171,9 +171,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the member through the `Cow` (`&*member`, `member == "x"`).
 - **`guatiao-intake`: a top-level field whose key holds a `.`, a bracket or
   nothing is stored under a bracket key** (`a.b` as `[a.b]`), so it no
-  longer shares a key with the member `b` of a field `a`. A key written the
-  old way still resolves to the field. *Migration:* a front end that
-  builds store keys itself asks `flat::keys` for them.
+  longer shares a key with the member `b` of a field `a`. A store written
+  the old way still reads back: `unflatten`, `resolve`, `resolve_in` and
+  `validate_texts` take a top-level field under its bare name (`a.b`,
+  `x.y[k]`) and an open map's key in any spelling the grammar reads
+  (`env["01"]` as well as `env[01]`); where both spellings are present the
+  new one wins. *Migration:* a front end that builds store keys itself
+  asks `flat::keys` for them.
 
 ### Fixed
 
