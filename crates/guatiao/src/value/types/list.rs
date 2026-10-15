@@ -274,11 +274,13 @@ impl List {
     }
 
     /// Moves every element onto `stack` and frees the storage, so a
-    /// value's drop takes a tree apart without recursing.
+    /// value's drop takes a tree apart without recursing. Nothing is
+    /// written into the elements: a literal's array may be read-only.
     pub(crate) fn dismantle_into(&mut self, stack: &mut Vec<Value>) {
         for i in 0..self.len {
-            // SAFETY: the first `len` elements are initialised.
-            stack.push(core::mem::take(unsafe { &mut *self.ptr.add(i) }));
+            // SAFETY: the first `len` elements are initialised, and each
+            // is read exactly once -- `len` is zeroed below.
+            stack.push(unsafe { self.ptr.add(i).read() });
         }
         self.len = 0;
         // SAFETY: the elements have been moved out.

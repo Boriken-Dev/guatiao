@@ -528,13 +528,15 @@ impl Map {
     }
 
     /// Frees every key, moves every value onto `stack` and frees the
-    /// storage. See [`List::dismantle_into`](super::List).
+    /// storage, writing nothing into the entries: a literal's array may be
+    /// read-only. See [`List::dismantle_into`](super::List).
     pub(crate) fn dismantle_into(&mut self, stack: &mut Vec<Value>) {
         for i in 0..self.len {
-            // SAFETY: the first `len` entries are initialised.
-            let entry = unsafe { &mut *self.ptr.add(i) };
-            entry.key.release();
-            stack.push(core::mem::take(&mut entry.value));
+            // SAFETY: the first `len` entries are initialised, and each is
+            // read exactly once -- `len` is zeroed below.
+            let Entry { key, value } = unsafe { self.ptr.add(i).read() };
+            drop(key);
+            stack.push(value);
         }
         self.len = 0;
         // SAFETY: the entries have been moved out.

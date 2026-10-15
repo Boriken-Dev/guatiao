@@ -202,6 +202,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Freeing a literal whose arrays are in read-only memory no longer
+  faults.** The free walk moved each element out of a list or map by
+  writing a null back into the array and released each key in place, so a
+  `GUATIAO_VALUE_LIST_LIT` or `_MAP_LIT` over a `const` array crashed
+  `guatiao_value_free` (and a `Value`'s drop), though `guatiao.h` says such
+  a literal may be freed. Elements are now read out and nothing is written
+  into a literal's storage.
 - **Dropping a `Registry` leaves its libraries mapped.** It used to close
   every library it had loaded, while a `Remote`, an `Offer`, a boxed
   trait or an `Instance` taken from it is `'static` and could still be
