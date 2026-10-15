@@ -89,8 +89,8 @@ guatiao_status guatiao_json_parse_ex    (guatiao_str text, uint32_t how, const g
 guatiao_status guatiao_toml_parse_ex    (/* as _json_parse_ex */);   // GUATIAO_SERDE_TOML
 guatiao_status guatiao_yaml_parse_ex    (/* as _json_parse_ex */);   // GUATIAO_SERDE_YAML
 typedef struct guatiao_parse_error {
-  uint32_t format;          /* GUATIAO_FORMAT_JSON 0, _TOML 1, _YAML 2 */
-  uint32_t line, column;    /* from 1; 0 when the parser did not say */
+  uint32_t format;          /* GUATIAO_FORMAT_JSON 0, _TOML 1, _YAML 2: the call's, on every return */
+  uint32_t line, column;    /* from 1, column in chars; 0 when unknown; not UTF-8: its first bad byte */
   guatiao_value message;    /* a string value, freed with guatiao_value_free; ABSENT if none */
 } guatiao_parse_error;
 
