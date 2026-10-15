@@ -20,8 +20,6 @@ import 'dart:io';
 
 import 'package:ffi/ffi.dart';
 import 'package:guatiao/guatiao.dart';
-// The raw type, as a consumer's own symbol-file bindings would alias it.
-import 'package:guatiao/src/bindings.g.dart' show guatiao_value;
 import 'package:test/test.dart';
 
 import 'support.dart';
