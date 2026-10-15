@@ -75,22 +75,6 @@ use guatiao::value::types::{Str, Text, Value};
 use crate::text::{Error, Position, position_at};
 use crate::{Bytes, Presentation};
 
-/// Writes the absent marker through a pointer, if it is not null.
-///
-/// **The first statement of every function that has an out-pointer**, so a
-/// caller reading it after a failure reads ABSENT.
-///
-/// # Safety
-///
-/// `out` is null or addresses writable storage for one value that does not
-/// hold a tree the caller still owns.
-unsafe fn absent(out: *mut Value) {
-    if !out.is_null() {
-        // SAFETY: checked non-null, and the caller's contract.
-        unsafe { core::ptr::write(out, Value::absent()) };
-    }
-}
-
 /// Which format refused a document: `guatiao_parse_error.format`.
 pub const GUATIAO_FORMAT_JSON: u32 = 0;
 /// See [`GUATIAO_FORMAT_JSON`].
@@ -270,25 +254,6 @@ unsafe fn inputs<'a>(
     Ok((text, alloc))
 }
 
-/// Writes an emitted document out as a STRING VALUE.
-///
-/// # Safety
-///
-/// As [`deliver`].
-unsafe fn deliver_text(out: *mut Value, built: Result<String, Error>, alloc: Alloc) -> Status {
-    match built {
-        Ok(text) => match Text::new_in(alloc, &text).map(Value::from) {
-            Ok(value) => {
-                // SAFETY: the caller's contract.
-                unsafe { out.write(value) };
-                Status::GUATIAO_OK
-            }
-            Err(e) => Status::from(e),
-        },
-        Err(e) => status_of(&e),
-    }
-}
-
 /// One parse, whichever format's reader is handed in.
 ///
 /// The six `extern "C"` functions below are written out rather than
@@ -316,9 +281,12 @@ unsafe fn parse_with(
     format: u32,
     read: Read,
 ) -> Status {
+    // Both out-pointers first, so a failure leaves neither holding
+    // anything. A null `out` is refused below, by `inputs`.
+    //
     // SAFETY: the caller's contract, for both pointers.
     unsafe {
-        absent(out);
+        let _ = Value::absent().write_to(out, core::ptr::null());
         if !out_error.is_null() {
             core::ptr::write(out_error, ParseError::none(format));
         }
@@ -356,12 +324,9 @@ unsafe fn parse_with(
             }
         };
         match read(text, alloc, presentation(how)) {
-            Ok(value) => {
-                // SAFETY: `out` is non-null (`inputs` checked) and writable
-                // by contract; the tree moves into it.
-                unsafe { out.write(value) };
-                Status::GUATIAO_OK
-            }
+            // SAFETY: `out` is writable by contract and was written ABSENT
+            // on entry; the tree, built through `alloc`, moves into it.
+            Ok(value) => unsafe { value.write_to(out, alloc.as_raw()) },
             Err(e) => report(ParseError::of(&e, format, alloc), status_of(&e)),
         }
     })
@@ -384,8 +349,11 @@ unsafe fn emit_with(
     write: Write,
     indented: Option<Write>,
 ) -> Status {
+    // `out` first, so a failure leaves it holding nothing; a null one is
+    // refused below, by `inputs`.
+    //
     // SAFETY: the caller's contract.
-    unsafe { absent(out) };
+    let _ = unsafe { Value::absent().write_to(out, core::ptr::null()) };
     guard(|| {
         if value.is_null() {
             return Status::GUATIAO_ERR_NULL;
@@ -401,8 +369,14 @@ unsafe fn emit_with(
             Some(indented) if pretty(how) => indented,
             _ => write,
         };
-        // SAFETY: as above.
-        unsafe { deliver_text(out, write(value, presentation(how)), alloc) }
+        // The document crosses as a STRING value built through `alloc`.
+        match write(value, presentation(how)).map(|text| Text::new_in(alloc, &text)) {
+            // SAFETY: `out` is writable by contract and was written ABSENT
+            // on entry.
+            Ok(Ok(text)) => unsafe { Value::from(text).write_to(out, alloc.as_raw()) },
+            Ok(Err(e)) => Status::from(e),
+            Err(e) => status_of(&e),
+        }
     })
 }
 

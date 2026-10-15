@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`Value::write_to(out, alloc)`**, the `unsafe` step an export of a
+  library or host takes to hand its answer to a C caller: a null `out` is
+  `GUATIAO_ERR_NULL`, a null `alloc` writes the tree as built, a named one
+  gets a deep copy unless the root already records it, and a refused copy
+  leaves `out` ABSENT with the status. The registry's and
+  `guatiao-serde`'s exports write their answers through it.
 - **`guatiao::Payload` and `guatiao::AllocError`** at the crate root,
   beside the `Value::from_raw_parts` that takes the one and the `try_`
   forms that answer the other.

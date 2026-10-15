@@ -691,6 +691,82 @@ fn an_allocation_failure_leaves_the_target_unchanged_and_leaks_nothing() {
     assert_eq!(counter.outstanding(), 0);
 }
 
+// --- handing a value to a C caller --------------------------------------
+
+/// `write_to` hands a tree over through an out-pointer: as it is when no
+/// allocator is named or the root already records the one named, copied
+/// into a named one otherwise, and ABSENT with the status when that copy
+/// is refused. Every case frees what it was given.
+#[test]
+fn write_to_hands_a_tree_over_or_copies_it_into_the_named_allocator() {
+    use guatiao::Status;
+
+    let tree = |alloc: Alloc| {
+        let mut map = Map::new_in(alloc);
+        map.set_in("k", Text::new_in(alloc, "v").unwrap(), alloc)
+            .unwrap();
+        Value::from(map)
+    };
+
+    with_alloc(|alloc, counter| {
+        let mut out = Value::from(true);
+        // SAFETY: a writable slot holding nothing owned, and no allocator.
+        let status = unsafe { tree(Alloc::rust()).write_to(&mut out, core::ptr::null()) };
+        assert_eq!(status, Status::GUATIAO_OK);
+        assert_eq!(
+            counter.allocs.get(),
+            0,
+            "no allocator named: written as built"
+        );
+        assert_eq!(out.alloc().map(|a| a.as_raw()), Ok(Alloc::rust().as_raw()));
+
+        // Named, and the tree is elsewhere: copied into it. `out` is
+        // overwritten, not freed, so what it holds is freed first.
+        // SAFETY: as above, with an allocator that outlives the copy.
+        let status = unsafe {
+            out.free();
+            tree(Alloc::rust()).write_to(&mut out, alloc.as_raw())
+        };
+        assert_eq!(status, Status::GUATIAO_OK);
+        assert!(
+            counter.allocs.get() > 0,
+            "the copy was built through the one named"
+        );
+        assert_eq!(out.alloc().map(|a| a.as_raw()), Ok(alloc.as_raw()));
+        assert_eq!(out, tree(Alloc::rust()));
+
+        // Already there: written as it is.
+        let built = tree(alloc);
+        let before = counter.allocs.get();
+        // SAFETY: as above; `out` is overwritten, so it is freed first.
+        let status = unsafe {
+            out.free();
+            built.write_to(&mut out, alloc.as_raw())
+        };
+        assert_eq!(status, Status::GUATIAO_OK);
+        assert_eq!(
+            counter.allocs.get(),
+            before,
+            "a root in the named allocator is not copied"
+        );
+        drop(out);
+
+        // A copy refused: ABSENT, with the status, and nothing leaked.
+        counter.fail_at.set(counter.allocs.get() + 1);
+        let mut out = Value::from(true);
+        // SAFETY: as above.
+        let status = unsafe { tree(Alloc::rust()).write_to(&mut out, alloc.as_raw()) };
+        assert_eq!(status, Status::GUATIAO_ERR_ALLOC);
+        assert_eq!(out.tag(), Ok(Tag::GUATIAO_ABSENT));
+        counter.fail_at.set(0);
+
+        // No slot at all.
+        // SAFETY: null is the case under test.
+        let status = unsafe { tree(Alloc::rust()).write_to(core::ptr::null_mut(), alloc.as_raw()) };
+        assert_eq!(status, Status::GUATIAO_ERR_NULL);
+    });
+}
+
 // --- literals ----------------------------------------------------------
 
 /// A tree written as a C brace initialiser has `cap == 0` everywhere. It
