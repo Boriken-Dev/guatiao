@@ -730,11 +730,15 @@ impl crate::library::registry::Registry {
     ///
     /// What no library can count is still the caller's word: every
     /// [`Remote`](crate::library::kind::Remote) and
-    /// [`Offer`](crate::library::kind::Offer) copied out of it, every raw vtable,
-    /// `ctx` or descriptor pointer, every value it built through its own
-    /// allocator that its slot does not track, and every descriptor
-    /// pointer another library fetched from it through the host's
-    /// services, is not used again.
+    /// [`Offer`](crate::library::kind::Offer) copied out of it, every
+    /// [`ProviderView`] of one of its providers (from
+    /// [`Provider::view`](crate::library::Provider::view),
+    /// [`Offer::view`](crate::library::kind::Offer::view) or a
+    /// [`Host`]'s `get` and `list`, whose `available()` calls into the
+    /// image), every raw vtable, `ctx` or descriptor pointer, every value
+    /// it built through its own allocator that its slot does not track,
+    /// and every descriptor pointer another library fetched from it
+    /// through the host's services, is not used again.
     pub unsafe fn unload(
         &mut self,
         key: &str,
