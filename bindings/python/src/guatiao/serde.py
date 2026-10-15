@@ -11,7 +11,7 @@ from __future__ import annotations
 import ctypes
 
 from . import _abi, _lib
-from .errors import ParseError, check
+from .errors import ParseError, check, raise_for_status
 from .value import Value, _make_str, _string_view
 
 #: How a byte string is spelled where the format has none -- the low
@@ -71,6 +71,14 @@ def loads(
     status = fn(
         view, how, ctypes.byref(alloc_struct), ctypes.byref(raw), ctypes.byref(error)
     )
+    _finish_parse(status, error, format)
+    return Value(_raw=raw, alloc=alloc_struct)
+
+
+def _finish_parse(status: int, error: "_abi.ParseError", format: str) -> None:
+    """Frees the error's message and raises for a failing `status`: a
+    `ParseError` for a document that does not parse, any other refusal as
+    its own exception with the message the library gave it."""
     message = _take_message(error)
     if status == _abi.Status.ERR_BAD_VALUE:
         raise ParseError(
@@ -79,8 +87,7 @@ def loads(
             line=error.line,
             column=error.column,
         )
-    check(status)
-    return Value(_raw=raw, alloc=alloc_struct)
+    raise_for_status(status, message)
 
 
 def _take_message(error: "_abi.ParseError") -> str:
