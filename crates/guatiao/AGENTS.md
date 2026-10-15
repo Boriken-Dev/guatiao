@@ -910,7 +910,9 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   library with no slot. A library that HAS a slot is still asked, and its
   refusal still stands.
 - **Both are `unsafe` for what no library can count**: a `Remote` or
-  `Offer` copied out of it, a raw vtable, `ctx` or descriptor pointer, a
+  `Offer` copied out of it, a `ProviderView` of one of its providers
+  (`Provider::view`, `Offer::view`, `Host::get`/`list`: its `available()`
+  calls into the image), a raw vtable, `ctx` or descriptor pointer, a
   value it built through its own allocator that its slot does not track,
   and a descriptor another library fetched from it through the services.
   None is used again. A registry made with `with_alloc` takes the
