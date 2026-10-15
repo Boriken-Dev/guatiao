@@ -13,6 +13,10 @@
 /// not what keeps that out: one callback in a fresh process never reads the
 /// global as 0, and the failure seen elsewhere needed an earlier callback
 /// first. `read_path_test.dart` guards that rule in the source instead.
+///
+/// `NativeCallable.isolateGroupBound` is not in SDK 3.6, so this file does
+/// not compile there. It lives in `stable_only/`, which the floor leg of CI
+/// leaves out by running `test/*_test.dart`.
 library;
 
 import 'dart:ffi';
@@ -22,7 +26,7 @@ import 'package:ffi/ffi.dart';
 import 'package:guatiao/guatiao.dart';
 import 'package:test/test.dart';
 
-import 'support.dart';
+import '../support.dart';
 
 /// What the thread is handed, and where it writes what it read.
 final class _Job extends Struct {
