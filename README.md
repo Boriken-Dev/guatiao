@@ -1,9 +1,10 @@
 # guatiao
 
-[![Crate](https://img.shields.io/crates/v/guatiao.svg)](https://crates.io/crates/guatiao)
+[![Version](https://img.shields.io/crates/v/guatiao.svg)](https://crates.io/crates/guatiao)
+[![Rust version](https://img.shields.io/crates/msrv/guatiao.svg)](https://crates.io/crates/guatiao)
 [![PyPI](https://img.shields.io/pypi/v/guatiao.svg)](https://pypi.org/project/guatiao/)
 [![pub package](https://img.shields.io/pub/v/guatiao.svg)](https://pub.dev/packages/guatiao)
-[![License: MPL 2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](LICENSE)
+[![License: MPL-2.0](https://img.shields.io/badge/license-MPL--2.0-blue.svg)](https://github.com/Boriken-Dev/guatiao/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://boriken-dev.github.io/guatiao/)
 [![CI](https://img.shields.io/github/actions/workflow/status/Boriken-Dev/guatiao/test.yaml)](https://github.com/Boriken-Dev/guatiao/actions/workflows/test.yaml)
 
@@ -13,7 +14,8 @@ a schema through which a provider says what it needs to be initialised, and a
 library envelope through which one library registers any number of providers.
 The design rule that makes it trustworthy: nothing is opaque, so a C, C++,
 Dart or Rust consumer reads a tree, a schema or a descriptor with no call
-into any library.
+into any library. The [documentation](https://boriken-dev.github.io/guatiao/)
+has the tour and the API references.
 
 *Guatiao* is the Taíno pact in which two people exchange names and become
 kin. An ABI is the same agreement between two sides of a boundary.
@@ -41,9 +43,12 @@ kin. An ABI is the same agreement between two sides of a boundary.
 
 ## Installation
 
+A pre-release is only selected when it is named exactly, so the version is
+spelled out:
+
 ```toml
 [dependencies]
-guatiao = { git = "https://github.com/Boriken-Dev/guatiao.git" }
+guatiao = "=0.0.0-alpha.1"
 ```
 
 Optional features:
@@ -62,8 +67,8 @@ Bindings over the same C ABI, for a consumer that is not Rust:
 
 | Language | Package | Install |
 | --- | --- | --- |
-| Python | [`bindings/python/`](bindings/python/README.md) | `pip install guatiao` |
-| Dart | [`bindings/dart/`](bindings/dart/README.md) | `dart pub add guatiao` |
+| Python | [`bindings/python/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/README.md) | `pip install guatiao` |
+| Dart | [`bindings/dart/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/README.md) | `dart pub add guatiao` |
 
 Each drives a shared library that exports the ABI — `guatiao` itself, or
 an application that carries it — named by `GUATIAO_LIBRARY`.
@@ -94,14 +99,25 @@ assert_eq!((host, port), ("10.0.0.1", 5900));
 
 The same tree is what a C, C++ or Dart consumer reads directly, through
 the generated header in `crates/guatiao/include/`. The full quick start,
-including the derives, is in [that crate's README](crates/guatiao/README.md)
-— which is compiled and checked by a test, unlike this one.
+including the derives, is in
+[that crate's README](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao/README.md).
+Both snippets are compiled by a test, and checked against the text shown
+here.
+
+## API overview
+
+| Crate | Purpose |
+| --- | --- |
+| [`guatiao`](https://crates.io/crates/guatiao) | the value model, the C type vocabulary, the schema, the library envelope and the loader; the `guatiao.h` header |
+| [`guatiao-derive`](https://crates.io/crates/guatiao-derive) | `#[derive(ToValue, FromValue, Schema)]` and the provider derives, reached through `guatiao`'s features |
+| [`guatiao-serde`](https://crates.io/crates/guatiao-serde) | a value in and out of JSON, TOML and YAML, and the same through a C surface |
+| [`guatiao-intake`](https://crates.io/crates/guatiao-intake) | taking a value in from a person: the path grammar, flat key-to-text storage, and how a schema is shown as a form |
 
 ## Development
 
 ```bash
 cargo test --workspace --all-features
-cargo clippy --workspace --all-features -- -D warnings
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all --check
 ```
 
@@ -114,10 +130,24 @@ rendered, so it cannot go stale. To refresh it:
 GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-header
 ```
 
-## Licence
+The remaining gates (Miri, the public-API snapshots, the bindings' tests) are
+in [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/AGENTS.md).
 
-**Mozilla Public License 2.0** — see [`LICENSE`](LICENSE). Every file in this
-repository is Covered Software under that licence.
+### Releasing
+
+This project follows [Semantic Versioning](https://semver.org/) and keeps a
+[`CHANGELOG.md`](https://github.com/Boriken-Dev/guatiao/blob/main/CHANGELOG.md).
+Pushing a tag matching `v*` triggers the release workflow: test gate, a strict
+docs build as a gate, packaging of the crates, the Python package and the Dart
+package, the GitHub release, then publishing each. The release workflow never
+deploys the docs site itself: for a final release its last job dispatches the
+docs workflow at the tag, which owns every Pages deploy.
+
+## License
+
+**Mozilla Public License 2.0** — see
+[`LICENSE`](https://github.com/Boriken-Dev/guatiao/blob/main/LICENSE). Every
+file in this repository is Covered Software under that licence.
 
 Its copyleft is per file, which is the whole point for a library like this
 one:
@@ -132,5 +162,7 @@ one:
   section 3.3), and the licence stays GPL-compatible, so a GPL consumer can
   use this too.
 
-Contributions need a one-time [contributor licence agreement](CLA.md); see
-[`CONTRIBUTING.md`](CONTRIBUTING.md).
+Contributions need a one-time
+[contributor licence agreement](https://github.com/Boriken-Dev/guatiao/blob/main/CLA.md);
+see
+[`CONTRIBUTING.md`](https://github.com/Boriken-Dev/guatiao/blob/main/CONTRIBUTING.md).

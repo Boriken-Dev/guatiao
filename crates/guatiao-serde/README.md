@@ -34,7 +34,7 @@ rather than any one format.
 
 ```toml
 [dependencies]
-guatiao-serde = { version = "0.0.0-alpha.0", features = ["toml", "yaml"] }
+guatiao-serde = { version = "=0.0.0-alpha.1", features = ["toml", "yaml"] }
 ```
 
 | Flag | Adds | Needed for |

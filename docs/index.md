@@ -12,11 +12,12 @@ kin. An ABI is the same agreement between two sides of a boundary.
 
 ## Installation
 
-The crate is not on a registry yet, so a Rust consumer takes it from git:
+The crates are on crates.io. A pre-release is only selected when it is named
+exactly, so the version is spelled out:
 
 ```toml
 [dependencies]
-guatiao = { git = "https://github.com/Boriken-Dev/guatiao" }
+guatiao = "=0.0.0-alpha.1"
 ```
 
 Every dependency sits behind a default-off feature, so a default build
@@ -53,7 +54,7 @@ Build a value in Rust, and read it back by converting rather than by a
 getter per kind:
 
 ```rust
-use guatiao::{Map, ReadValue};
+use guatiao::Map;
 
 let mut map = Map::new();
 map.set("host", "10.0.0.1");
@@ -72,12 +73,15 @@ with Value(host="10.0.0.1", port=5900) as v:
     v.as_map()["port"].to_python()     # 5900
 ```
 
-Load the plugins in a directory and call one through the table its kind
-declares:
+Load the plugins in a directory (the `load` feature) and call one through the
+table its kind declares:
 
 ```rust
-let mut registry = guatiao::library::Registry::new("my-host", "1.0");
-registry.scan_dir("/opt/myapp/plugins")?;
+use guatiao::library::{Registry, scan_dir};
+use std::path::Path;
+
+let mut registry = Registry::new("my-host", "1.0");
+scan_dir(&mut registry, Path::new("/opt/myapp/plugins"))?;
 let greeter = registry.best("greeter").expect("something serves it");
 ```
 

@@ -33,7 +33,7 @@ Not named directly. Enable it through the crate it serves:
 
 ```toml
 [dependencies]
-guatiao = { version = "0.0.0-alpha.0", features = ["derive"] }
+guatiao = { version = "=0.0.0-alpha.1", features = ["derive"] }
 ```
 
 The traits the generated code implements live in `guatiao`; this crate

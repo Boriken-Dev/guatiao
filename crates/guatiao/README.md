@@ -41,7 +41,7 @@ kin. An ABI is the same agreement between two sides of a boundary.
 
 ```toml
 [dependencies]
-guatiao = { version = "0.0.0-alpha.0", features = ["derive"] }
+guatiao = { version = "=0.0.0-alpha.1", features = ["derive"] }
 ```
 
 Optional features:

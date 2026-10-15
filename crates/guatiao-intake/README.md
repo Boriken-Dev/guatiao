@@ -32,7 +32,7 @@ and never repeats it.
 
 ```toml
 [dependencies]
-guatiao-intake = { version = "0.0.0-alpha.0", features = ["derive"] }
+guatiao-intake = { version = "=0.0.0-alpha.1", features = ["derive"] }
 ```
 
 | Flag | Adds | Needed for |
