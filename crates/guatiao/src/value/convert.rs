@@ -52,6 +52,8 @@
 //! `FromValue` for one, because reading it back would have to allocate
 //! and [`FromValue`] takes no allocator.
 
+#![forbid(unsafe_code)]
+
 use alloc::fmt;
 
 use super::alloc::Alloc;
