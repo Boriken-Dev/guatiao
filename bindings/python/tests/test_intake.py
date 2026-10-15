@@ -17,6 +17,7 @@ except _lib.LibraryNotFound:
     pytest.skip("no guatiao_intake library built", allow_module_level=True)
 
 from guatiao import intake
+from guatiao.errors import WrongKind
 from guatiao.value import Value
 
 _SCHEMA = {
@@ -142,3 +143,117 @@ def test_a_form_can_be_made_out_of_a_schema_and_a_member_carries_its_own():
             blank.close()
     finally:
         schema.close()
+
+
+_FLAT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "auth": {
+            "type": "object",
+            "x-variant-tag": "auth",
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {"auth": {"const": "sso"}},
+                    "required": ["auth"],
+                },
+                {
+                    "type": "object",
+                    "properties": {
+                        "auth": {"const": "userpass"},
+                        "username": {"type": "string"},
+                        "password": {"type": "string", "x-sensitive": True},
+                    },
+                    "required": ["auth"],
+                },
+            ],
+        },
+        "agent": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+            },
+        },
+        "env": {"type": "object", "additionalProperties": {"type": "string"}},
+        "host": {"type": "string", "title": "Host"},
+    },
+}
+
+
+def test_resolve_answers_the_field_that_governs_a_flat_key():
+    with Value.from_python(_FLAT_SCHEMA) as schema:
+        host = intake.resolve(schema, "host")
+        assert host is not None
+        assert host.as_map()["title"].to_python() == "Host"
+        # One level of projection: a key inside an arm answers that field.
+        password = intake.resolve(schema, "auth.password")
+        assert password is not None
+        assert password.as_map()["x-sensitive"].to_python() is True
+        assert intake.resolve(schema, "nonesuch") is None
+
+
+def test_flat_keys_lists_a_variant_field_and_its_arms():
+    with Value.from_python(_FLAT_SCHEMA) as schema:
+        assert intake.flat_keys(schema, "auth") == [
+            "auth",
+            "auth.username",
+            "auth.password",
+        ]
+        with pytest.raises(WrongKind):
+            intake.flat_keys(schema, "nonesuch")
+
+
+@pytest.mark.parametrize(
+    "key, value, flat",
+    [
+        (
+            "auth",
+            {"auth": "userpass", "username": "alice", "password": "s3cret"},
+            {
+                "auth": "userpass",
+                "auth.username": "alice",
+                "auth.password": "s3cret",
+            },
+        ),
+        ("auth", {"auth": "sso"}, {"auth": "sso"}),
+        (
+            "agent",
+            [{"name": "one"}, {"name": "two"}],
+            {"agent[0].name": "one", "agent[1].name": "two"},
+        ),
+        (
+            "env",
+            {"PATH": "/bin", "a.b": "dotted"},
+            {"env[PATH]": "/bin", "env[a.b]": "dotted"},
+        ),
+        ("host", "example.org", {"host": "example.org"}),
+    ],
+)
+def test_a_value_flattens_and_reads_back(key, value, flat):
+    with Value.from_python(_FLAT_SCHEMA) as schema, Value.from_python(value) as given:
+        assert intake.flatten(schema, key, given) == flat
+        back = intake.unflatten(schema, key, flat)
+        assert back is not None
+        with back:
+            assert back.to_python() == value
+
+
+def test_unflatten_takes_a_value_and_answers_none_when_it_does_not_apply():
+    with Value.from_python(_FLAT_SCHEMA) as schema:
+        with Value.from_python({"env[PATH]": "/bin"}) as store:
+            with intake.unflatten(schema, "env", store) as env:
+                assert env.to_python() == {"PATH": "/bin"}
+        # A tag that names no arm, a key that names no field, and nothing
+        # stored under the field are all "does not apply".
+        assert intake.unflatten(schema, "auth", {"auth": "nonesuch"}) is None
+        assert intake.unflatten(schema, "nonesuch", {}) is None
+        assert intake.unflatten(schema, "host", {}) is None
+        with pytest.raises(TypeError):
+            intake.unflatten(schema, "host", {"host": 1})
+
+
+def test_flatten_refuses_a_value_of_the_wrong_shape():
+    with Value.from_python(_FLAT_SCHEMA) as schema, Value.from_python([1]) as given:
+        with pytest.raises(WrongKind):
+            intake.flatten(schema, "auth", given)

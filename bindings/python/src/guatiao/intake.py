@@ -3,12 +3,13 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 """Naming a place inside a value, whether a form fits a schema, its
-layout, and field visibility, over `guatiao_intake`. Resolved lazily,
-like `serde.py`."""
+layout, field visibility and the flat `key -> text` projection, over
+`guatiao_intake`. Resolved lazily, like `serde.py`."""
 
 from __future__ import annotations
 
 import ctypes
+from collections.abc import Mapping
 
 from . import _abi, _lib
 from .errors import check as _check_status
@@ -157,3 +158,111 @@ def form_for(
         value.close()
         return None
     return value
+
+
+def resolve(schema: Value, key: str) -> "Ref | None":
+    """The schema field governing the flat `key`, or `None`.
+
+    Follows one level of projection, so `auth.password` answers the field
+    of that name inside the arm rather than `auth`. Everything a front end
+    shows about a field -- `title`, `required`, `x-widget`, a secret mark --
+    is read off the node returned. It **borrows** from `schema`, is
+    read-only, and must not outlive it.
+    """
+    lib = _lib.form()
+    view, _buf = _make_str(key.encode("utf-8"))
+    ptr = lib.guatiao_intake_resolve(ctypes.byref(schema._raw), view)
+    if not ptr:
+        return None
+    return Ref(_Borrowed(ptr.contents), ())
+
+
+def _flat_call(function, schema: Value, key: str, middle: tuple, alloc):
+    lib = _lib.form()
+    alloc_struct = _alloc(alloc, lib)
+    view, _buf = _make_str(key.encode("utf-8"))
+    out = _abi.Value()
+    status = function(
+        ctypes.byref(schema._raw),
+        view,
+        *middle,
+        ctypes.byref(alloc_struct),
+        ctypes.byref(out),
+    )
+    return status, Value(_raw=out, alloc=alloc_struct)
+
+
+def flat_keys(
+    schema: Value, key: str, *, alloc: "_abi.Alloc | None" = None
+) -> "list[str]":
+    """The flat keys the field `key` projects onto: its own, then one per
+    field of every arm. A member that is itself a container stores its
+    leaves below its key and those are not listed. `WrongKind` when `key`
+    names no field."""
+    status, out = _flat_call(_lib.form().guatiao_intake_flat_keys, schema, key, (), alloc)
+    try:
+        _check_status(status)
+        return out.to_python()
+    finally:
+        out.close()
+
+
+def flatten(
+    schema: Value, key: str, value: Value, *, alloc: "_abi.Alloc | None" = None
+) -> "dict[str, str]":
+    """`value` as the flat store of `key -> text` the field `key` keeps:
+    one entry per scalar leaf (a tagged field's discriminant under its own
+    key and its payload under `key.member`, a list indexed as
+    `agent[0].name`, an open map bracketed as `env[PATH]`). An empty
+    container stores nothing. `WrongKind` when `key` names no field or the
+    value's shape contradicts it."""
+    lib = _lib.form()
+    status, out = _flat_call(
+        lib.guatiao_intake_flatten, schema, key, (ctypes.byref(value._raw),), alloc
+    )
+    try:
+        _check_status(status)
+        return out.to_python()
+    finally:
+        out.close()
+
+
+def unflatten(
+    schema: Value,
+    key: str,
+    flat: "Mapping[str, str] | Value",
+    *,
+    alloc: "_abi.Alloc | None" = None,
+) -> "Value | None":
+    """The value the flat store `flat` holds for the field `key`, the
+    reverse of `flatten`; the caller closes it. `None` when `key` names no
+    field, nothing is stored under it, or the stored shape cannot be its
+    kind (a tagged field whose discriminant is missing or names no arm).
+    An entry the schema does not declare is dropped. `flat` maps `str` to
+    `str`, or is such a `Value`."""
+    lib = _lib.form()
+    owned = None
+    if isinstance(flat, Value):
+        store = flat
+    else:
+        if not isinstance(flat, Mapping) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in flat.items()
+        ):
+            raise TypeError("a flat store maps str to str")
+        store = owned = Value.from_python(dict(flat), alloc=alloc)
+    try:
+        status, out = _flat_call(
+            lib.guatiao_intake_unflatten, schema, key, (ctypes.byref(store._raw),), alloc
+        )
+        if status == _abi.Status.ERR_WRONG_KIND:
+            out.close()
+            return None
+        try:
+            _check_status(status)
+        except BaseException:
+            out.close()
+            raise
+        return out
+    finally:
+        if owned is not None:
+            owned.close()

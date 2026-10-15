@@ -11,8 +11,8 @@ from __future__ import annotations
 import ctypes
 
 from . import _abi, _lib
-from .errors import check
-from .value import Value, _make_str
+from .errors import ParseError, check
+from .value import Value, _make_str, _string_view
 
 #: How a byte string is spelled where the format has none -- the low
 #: byte of `how`.
@@ -26,11 +26,11 @@ READ_DATA_URIS = 1 << 8
 PRETTY = 1 << 9
 
 # format -> (parse export, emit export, dedicated pretty-emit export or
-# None, the cargo feature that must be on, or None for JSON).
+# None, the feature that must be on in the loaded library, or None for JSON).
 _FORMATS = {
-    "json": ("guatiao_json_parse", "guatiao_json_emit", "guatiao_json_emit_pretty", None),
-    "toml": ("guatiao_toml_parse", "guatiao_toml_emit", None, "toml"),
-    "yaml": ("guatiao_yaml_parse", "guatiao_yaml_emit", None, "yaml"),
+    "json": ("guatiao_json_parse_ex", "guatiao_json_emit", "guatiao_json_emit_pretty", None),
+    "toml": ("guatiao_toml_parse_ex", "guatiao_toml_emit", None, "toml"),
+    "yaml": ("guatiao_yaml_parse_ex", "guatiao_yaml_emit", None, "yaml"),
 }
 
 
@@ -57,14 +57,40 @@ def loads(
     how: int = 0,
     alloc: "_abi.Alloc | None" = None,
 ) -> Value:
-    """Parses `text` as `format` into a new `Value`."""
+    """Parses `text` as `format` into a new `Value`.
+
+    A document that does not parse raises `guatiao.errors.ParseError`
+    (a `BadValue` and a `ValueError`) carrying `format`, `line` and
+    `column`."""
     parse_name, _emit, _emit_pretty, feature = _format(format)
     lib, fn = _resolved(parse_name, feature)
     view, _buf = _make_str(text.encode("utf-8"))
     alloc_struct = alloc if alloc is not None else lib.alloc
     raw = _abi.Value()
-    check(fn(view, how, ctypes.byref(alloc_struct), ctypes.byref(raw)))
+    error = _abi.ParseError()
+    status = fn(
+        view, how, ctypes.byref(alloc_struct), ctypes.byref(raw), ctypes.byref(error)
+    )
+    message = _take_message(error)
+    if status == _abi.Status.ERR_BAD_VALUE:
+        raise ParseError(
+            message,
+            format=_abi.FORMAT_NAMES.get(error.format, format),
+            line=error.line,
+            column=error.column,
+        )
+    check(status)
     return Value(_raw=raw, alloc=alloc_struct)
+
+
+def _take_message(error: "_abi.ParseError") -> str:
+    """The parse error's message as text; its string is freed here."""
+    try:
+        if error.message.tag != _abi.Tag.STRING:
+            return ""
+        return _string_view(error.message.payload.text).decode("utf-8", "replace")
+    finally:
+        _lib.core().guatiao_value_free(ctypes.byref(error.message))
 
 
 def dumps(

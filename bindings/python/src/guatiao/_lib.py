@@ -9,7 +9,7 @@ so ctypes passes the width the function actually expects rather than
 whatever the platform's default promotion happens to produce. This
 declares the 50 real, linkable exports of `guatiao.h` -- not the 22
 `static inline` helpers alongside them, which have no symbol in any
-library and are reimplemented in `value.py` instead -- plus the 7 of
+library and are reimplemented in `value.py` instead -- plus the 10 of
 `guatiao_serde.h` and the 10 of `guatiao_intake.h`, each of which also
 re-exports `guatiao_alloc_default`: any cdylib linking the `guatiao`
 crate carries its plain value-level functions along, and `Library.alloc`
@@ -39,6 +39,7 @@ Bytes = _abi.Bytes
 Value = _abi.Value
 Alloc = _abi.Alloc
 ProviderError = _abi.ProviderError
+ParseError = _abi.ParseError
 
 _P = ctypes.POINTER
 
@@ -264,6 +265,11 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
 
 _SERDE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
     "guatiao_json_parse": ([Str, c_uint32, _P(Alloc), _P(Value)], c_uint32, None),
+    "guatiao_json_parse_ex": (
+        [Str, c_uint32, _P(Alloc), _P(Value), _P(ParseError)],
+        c_uint32,
+        None,
+    ),
     "guatiao_json_emit": (
         [_P(Value), c_uint32, _P(Alloc), _P(Value)],
         c_uint32,
@@ -279,6 +285,11 @@ _SERDE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
         c_uint32,
         "toml",
     ),
+    "guatiao_toml_parse_ex": (
+        [Str, c_uint32, _P(Alloc), _P(Value), _P(ParseError)],
+        c_uint32,
+        "toml",
+    ),
     "guatiao_toml_emit": (
         [_P(Value), c_uint32, _P(Alloc), _P(Value)],
         c_uint32,
@@ -286,6 +297,11 @@ _SERDE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
     ),
     "guatiao_yaml_parse": (
         [Str, c_uint32, _P(Alloc), _P(Value)],
+        c_uint32,
+        "yaml",
+    ),
+    "guatiao_yaml_parse_ex": (
+        [Str, c_uint32, _P(Alloc), _P(Value), _P(ParseError)],
         c_uint32,
         "yaml",
     ),

@@ -45,6 +45,24 @@ class NullArgument(GuatiaoError):
     pass
 
 
+class ParseError(BadValue, ValueError):
+    """A document that does not parse, and where it stopped.
+
+    `format` is `"json"`, `"toml"` or `"yaml"`; `line` and `column` count
+    from 1 (the column in characters) and are 0 when the parser did not
+    say where; `message` says what it expected, without quoting the
+    document. For text that is not UTF-8 they name its first bad byte.
+    """
+
+    def __init__(self, message: str, *, format: str, line: int, column: int) -> None:
+        where = f" at line {line}, column {column}" if line else ""
+        super().__init__(int(_abi.Status.ERR_BAD_VALUE), f"{message}{where}")
+        self.message = message
+        self.format = format
+        self.line = line
+        self.column = column
+
+
 class Unsupported(GuatiaoError):
     """What was asked is not something the other side offers."""
 

@@ -177,6 +177,22 @@ class ProviderError(ctypes.Structure):
     _fields_ = [("status", c_uint32), ("message", String)]
 
 
+class ParseError(ctypes.Structure):
+    """`guatiao_parse_error`: where a document stopped parsing. `message`
+    is an owned string value, released with `guatiao_value_free`."""
+
+    _fields_ = [
+        ("format", c_uint32),
+        ("line", c_uint32),
+        ("column", c_uint32),
+        ("message", Value),
+    ]
+
+
+#: `GUATIAO_FORMAT_*`: which format a `ParseError` names.
+FORMAT_NAMES = {0: "json", 1: "toml", 2: "yaml"}
+
+
 class KindHeader(ctypes.Structure):
     """`guatiao_kind_header`: the first eight bytes of every kind table."""
 
