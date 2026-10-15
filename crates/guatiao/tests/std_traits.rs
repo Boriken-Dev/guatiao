@@ -249,3 +249,31 @@ fn the_checked_reads_are_const() {
     const NULL: Result<Str<'static>, ValueError> = unsafe { Str::from_ptr(core::ptr::null()) };
     assert!(matches!(NULL, Ok(view) if view.is_empty()));
 }
+
+/// `clone()` cannot report content this build refuses, so it panics on it
+/// as documented; `clone_in` reports it, and equality still holds.
+#[test]
+fn clone_panics_on_refused_content_and_clone_in_reports_it() {
+    use guatiao::value::Payload;
+    use guatiao::{Alloc, ValueError};
+
+    // SAFETY: an unknown tag over a fully initialised payload that owns
+    // nothing: the way a newer producer's kind arrives.
+    let unknown = unsafe { Value::from_raw_parts(99, Payload::bool(false)) };
+    let mut list = List::new();
+    list.push(unknown);
+    let tree = Value::from(list);
+
+    assert_eq!(
+        tree.clone_in(Alloc::rust()).map(|_| ()),
+        Err(ValueError::UnknownTag(99))
+    );
+    let caught = std::panic::catch_unwind(|| tree.clone());
+    let message = caught.expect_err("clone panics on it");
+    let message = message
+        .downcast_ref::<String>()
+        .map(String::as_str)
+        .unwrap_or("");
+    assert!(message.contains("clone_in"), "{message}");
+    assert!(tree == tree);
+}

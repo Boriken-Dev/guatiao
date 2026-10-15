@@ -92,6 +92,18 @@ pub(crate) fn or_abort<T>(built: Result<T, ValueError>, layout: Layout) -> T {
     }
 }
 
+/// What `Clone` does with a copy `clone_in` refused: an allocation
+/// failure aborts, as the short forms do, and content this build refuses
+/// (an unknown tag, text that is not UTF-8, a number outside the grammar,
+/// a tree past `MAX_DEPTH`) panics, because `Clone` cannot report it.
+pub(crate) fn cloned<T>(copy: Result<T, ValueError>, layout: Layout) -> T {
+    match copy {
+        Ok(v) => v,
+        Err(ValueError::Alloc(_)) => alloc::alloc::handle_alloc_error(layout),
+        Err(e) => panic!("guatiao: cannot clone content this build refuses ({e}); use clone_in"),
+    }
+}
+
 /// The layout of `n` bytes, for [`or_abort`]: one byte when `n` has none.
 pub(crate) fn bytes_layout(n: usize) -> Layout {
     Layout::array::<u8>(n).unwrap_or(Layout::new::<u8>())

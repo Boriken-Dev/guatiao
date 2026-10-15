@@ -17,7 +17,7 @@ use crate::value::convert::MapError;
 use crate::value::error::ValueError;
 use crate::value::raw::{dangling, release_buffer, reserve};
 
-use super::{List, Payload, Tag, Text, Value, only_alloc, or_abort, short_form_alloc};
+use super::{List, Payload, Tag, Text, Value, cloned, only_alloc, or_abort, short_form_alloc};
 
 /// A borrowed sequence of key/value pairs, in **insertion order**, which
 /// is part of the contract: consumers render maps as forms, print them
@@ -676,11 +676,15 @@ impl<'a> IntoIterator for &'a Map {
 
 impl Clone for Map {
     /// A deep copy through the allocator this container recorded, or the
-    /// crate's own when it has none yet. Panics as [`Value::clone`] does.
+    /// crate's own when it has none yet.
+    ///
+    /// # Panics
+    ///
+    /// As [`Value::clone`]: on content this build refuses, which only a
+    /// foreign producer can write. [`clone_in`](Map::clone_in) reports it.
     fn clone(&self) -> Map {
         let alloc = Alloc::recorded_or_rust(self.alloc);
-        self.clone_in(alloc)
-            .expect("a well-formed container clones through a working allocator")
+        cloned(self.clone_in(alloc), core::alloc::Layout::new::<Entry>())
     }
 }
 
