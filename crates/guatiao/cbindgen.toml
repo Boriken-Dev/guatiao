@@ -366,6 +366,8 @@ static inline double guatiao_float_or(const guatiao_value *v, double fallback) {
 
 #define GUATIAO_KEY_SCHEMA "$schema"
 #define GUATIAO_KEY_DIALECT "https://json-schema.org/draft/2020-12/schema"
+#define GUATIAO_KEY_REF "$ref"
+#define GUATIAO_KEY_DEFS "$defs"
 #define GUATIAO_KEY_TYPE "type"
 #define GUATIAO_KEY_TITLE "title"
 #define GUATIAO_KEY_DESCRIPTION "description"
@@ -394,6 +396,7 @@ static inline double guatiao_float_or(const guatiao_value *v, double fallback) {
 #define GUATIAO_KEY_X_SENSITIVE "x-sensitive"
 #define GUATIAO_KEY_X_ENUM_LABELS "x-enum-labels"
 #define GUATIAO_KEY_X_VARIANT_TAG "x-variant-tag"
+#define GUATIAO_KEY_TYPE_NULL "null"
 #define GUATIAO_KEY_TYPE_BOOLEAN "boolean"
 #define GUATIAO_KEY_TYPE_INTEGER "integer"
 #define GUATIAO_KEY_TYPE_NUMBER "number"
