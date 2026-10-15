@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "guatiao"
-version = "0.0.0a0"
+version = "0.0.0a1"
 authors = [{ name = "jose-pr" }]
 description = "ctypes bindings over the guatiao C ABI"
 readme = "README.md"
