@@ -638,8 +638,7 @@ Presentation is optional and substance is not: every presentation key may
 be missing and the schema is still correct and still usable. Never make a
 validation or type decision depend on one.
 
-`FieldBuilder` rather than `OptionBuilder`, because the same builder
-produces an entry in a schema's `properties` **and** in a map kind's.
+`FieldBuilder` builds an entry in a schema's `properties` **and** in a map kind's.
 
 **Building names no allocator**, the same rule the value API has. Every
 constructor has an `_in` twin that takes one — `SchemaBuilder::new_in`,
@@ -1697,15 +1696,15 @@ Values: `guatiao_value_{free,clone,null,absent,bool,map,list,string,
 number,bytes}`, `guatiao_map_{set,discard,clear,copy_from}`,
 `guatiao_list_{push,discard,clear}`, `guatiao_string_push`,
 `guatiao_buffer_push`, `guatiao_alloc_default`.
-Also `guatiao_merge`, and the schema surface:
-`guatiao_schema_{validate,resolve,flat_keys,flatten,unflatten}`.
+Also `guatiao_merge` and `guatiao_schema_validate`. The path and flat-key
+functions (`guatiao_intake_{resolve,flat_keys,flatten,unflatten}`) are
+`guatiao-intake`'s, declared in its own `guatiao_intake.h`.
 
-Every one returns `Status` **except the two that answer a borrowed
-pointer** (`guatiao_intake_resolve` and `guatiao_intake_path_get`, in
-the other library), which
-answers a `const guatiao_value *` borrowed from the schema it was given,
-or null — a function returning a pointer has no way to report a status,
-so null is the only failure it can express.
+Every function in `guatiao.h` returns `Status`. The two in
+`guatiao_intake.h` that answer a borrowed pointer (`guatiao_intake_resolve`
+and `guatiao_intake_path_get`) answer a `const guatiao_value *` borrowed from
+the schema they were given, or null: a function returning a pointer has no
+way to report a status, so null is the only failure it can express.
 
 The statuses (`guatiao_status` is a `uint32_t`; in Rust, `Status` is a
 `repr(transparent)` `u32` with these as associated constants):

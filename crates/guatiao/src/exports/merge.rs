@@ -172,6 +172,9 @@ impl From<&MergeError> for Status {
 /// Every non-null pointer addresses what its type says, `out` addresses
 /// writable storage for one value that does not already hold one the
 /// caller still owns, and `overrides` addresses `overrides_len` entries.
+/// `out` and `out_error` are not an input: pointing either at `earlier`,
+/// `later` or `overrides` is a contract violation, because the marker
+/// written on entry replaces the input before it is read.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_merge(
     mode: u32,
