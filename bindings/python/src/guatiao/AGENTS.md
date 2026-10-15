@@ -95,7 +95,7 @@ Also: `load_file`, `scan_path`, `register_entry(name, EntryFn(...))`, `libraries
 `provider(key)`, `available(kind)`, `provider_available(key)`,
 `keyed_by`/`libraries_keyed_by`, `set_priority`/`priority`,
 `provider_config(key)` (a borrowed, read-only `Ref` onto the schema --
-never `.close()` it), `host()` (the raw `host_info` pointer, for driving
+writing through it raises `TypeError`, and it is never `.close()`d), `host()` (the raw `host_info` pointer, for driving
 a `guatiao_library_entry` by hand). Every answer that is data comes back
 as a plain `dict`/`list`, already freed.
 
@@ -167,12 +167,21 @@ intake.resolve(schema, "auth.password")    # borrowed Ref onto the field, or Non
 intake.flat_keys(schema, "auth")           # list[str]; WrongKind for an unknown key
 intake.flatten(schema, "auth", value)      # dict[str, str]; WrongKind when it does not apply
 intake.unflatten(schema, "auth", store)    # Value (close it), or None; store is a
-                                           # Mapping[str, str] or such a Value
+                                           # Mapping[str, str] or a Value/Ref onto one
 ```
 
-What `resolve` and `at` return borrows from the schema or value passed
-and must not outlive it. An empty container flattens to nothing, and an
-entry the schema does not declare is dropped by `unflatten`.
+Every `schema`, `form`, `value` and `values` argument is a `Value` or a
+`Ref`. What `resolve` and `at` return is a read-only view: it keeps the
+schema or value it came from alive, is found again from it on every
+access, and raises `ValueError` once that is closed. Nothing can be
+changed through it (`TypeError` on any write), and `.clone()` copies it
+out. An empty container flattens to nothing, and an entry the schema
+does not declare is dropped by `unflatten`.
+
+`unflatten` answers `None` only for "nothing stored": no such field, no
+entry under it, or a discriminant that names no arm. A `store` that is not
+text to text -- a mapping, `Value` or `Ref` holding anything but `str`
+values, or not a map at all -- raises `TypeError`.
 
 ## Errors
 
@@ -180,6 +189,8 @@ Every failing `guatiao_status` raises `guatiao.GuatiaoError` (`.status`
 the raw code, `.message` a provider's own words when there were any), as
 one of its subclasses: `BadValue`, `AllocFailed`, `WrongKind`,
 `NotFound`, `NullArgument`, `Gone`, `Unsupported`, `Busy`, `Internal`.
+They pickle, `ParseError` included. A refusal the library words itself
+(a `WrongKind` from `serde.loads`, say) carries those words in `.message`.
 
 ## Not offered
 
