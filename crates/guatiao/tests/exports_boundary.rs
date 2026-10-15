@@ -18,8 +18,8 @@
 extern crate alloc;
 
 use guatiao::exports::merge::{
-    GUATIAO_MERGE_DEEP, GUATIAO_MERGE_OPT_MERGELISTS, GUATIAO_MERGE_SUBSTITUTE, MergeOverride,
-    guatiao_merge,
+    GUATIAO_MERGE_DEEP, GUATIAO_MERGE_OPT_MERGELISTS, GUATIAO_MERGE_SIMPLE,
+    GUATIAO_MERGE_SUBSTITUTE, MergeOverride, guatiao_merge,
 };
 use guatiao::exports::schema::guatiao_schema_validate;
 use guatiao::exports::value::{
@@ -97,6 +97,40 @@ fn a_merge_crosses_and_the_caller_owns_what_comes_back() {
         ["prod", "eu", "canary"],
         "Deep unions the two lists"
     );
+}
+
+/// Two lists nested a thousand deep, merged positionally, are refused with
+/// a status rather than followed into a stack overflow that would take the
+/// caller's process down.
+#[test]
+fn a_simple_merge_of_lists_nested_past_the_bound_is_refused() {
+    let alloc = Alloc::rust();
+    let mut deep = Value::from(1i64);
+    for _ in 0..1_000 {
+        let mut list = List::new();
+        list.push(deep);
+        deep = list.into();
+    }
+    let mut out = Value::null();
+    let mut error = Value::null();
+
+    // SAFETY: every pointer addresses what its type says, and `out` and
+    // `error` are writable storage holding nothing the caller owns.
+    let status = unsafe {
+        guatiao_merge(
+            GUATIAO_MERGE_SIMPLE,
+            &deep,
+            &deep,
+            alloc.as_raw(),
+            0,
+            core::ptr::null(),
+            0,
+            &mut out,
+            &mut error,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert!(is_absent(&out));
 }
 
 /// A mode nobody declared is refused rather than transmuted.
