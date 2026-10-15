@@ -57,10 +57,15 @@ unsafe impl Sync for ProviderParts {}
 impl ProviderParts {
     /// Owns the parts and builds the descriptor over them.
     ///
-    /// `ctx` and every table must live for the process, as a `static` or
-    /// a leaked instance does.
+    /// # Safety
+    ///
+    /// A registry reads this descriptor and calls through it from safe
+    /// code, so: each table is one for the kind it names, built for what
+    /// `ctx` points at; `available`, `create` and `destroy` expect that
+    /// `ctx`; and `ctx` and every table live for the process, as a
+    /// `static` or a leaked instance does.
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub unsafe fn new(
         id: &str,
         name: &str,
         version: &str,

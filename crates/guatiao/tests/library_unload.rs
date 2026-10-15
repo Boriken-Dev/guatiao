@@ -104,7 +104,7 @@ fn retiring_one_library_leaves_the_others() {
     let _one = one_at_a_time();
     let mut registry = Registry::new("retire-tests", "1.0");
     registry
-        .register_entry("cli", describing)
+        .register_entry("cli", describing())
         .expect("a linked library registers")
         .loaded()
         .expect("it accepts this host");
@@ -145,7 +145,7 @@ fn a_linked_library_retires() {
     let _one = one_at_a_time();
     let mut registry = Registry::new("retire-tests", "1.0");
     registry
-        .register_entry("cli", describing)
+        .register_entry("cli", describing())
         .expect("a linked library registers")
         .loaded()
         .expect("it accepts this host");
@@ -158,7 +158,7 @@ fn a_linked_library_retires() {
     // And the name is free again, as a file's path would be.
     assert!(
         registry
-            .register_entry("cli", describing)
+            .register_entry("cli", describing())
             .expect("it registers")
             .loaded()
             .is_some()
@@ -293,7 +293,7 @@ fn a_linked_library_cannot_be_unloaded() {
     let _one = one_at_a_time();
     let mut registry = Registry::new("unload-tests", "1.0");
     registry
-        .register_entry("cli", describing)
+        .register_entry("cli", describing())
         .expect("a linked library registers")
         .loaded()
         .expect("it accepts this host");
@@ -417,13 +417,20 @@ unsafe impl<const N: usize> Sync for Names<N> {}
 
 static LINKED_KINDS: Names<1> = Names([guatiao::value::types::Str::new("greeter")]);
 
+/// The linked library's entry point, vouched for.
+fn describing() -> guatiao::library::EntryPoint {
+    // SAFETY: `entry` answers a leaked descriptor that is well-formed for
+    // its own size.
+    unsafe { guatiao::library::EntryPoint::new(entry) }
+}
+
 /// Built once and leaked, which is the contract an entry point makes: the
 /// descriptor lives as long as the code that answered with it.
 ///
 /// # Safety
 ///
 /// Called by the registry with this host's descriptor.
-unsafe extern "C" fn describing(_host: *const guatiao::library::HostInfo) -> *const LibraryInfo {
+unsafe extern "C" fn entry(_host: *const guatiao::library::HostInfo) -> *const LibraryInfo {
     use guatiao::library::{Kinds, ProviderInfo, Providers};
     use guatiao::value::types::{MaybeNull, Str};
 

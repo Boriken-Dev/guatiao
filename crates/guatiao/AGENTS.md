@@ -775,9 +775,9 @@ reg.load_file(&path)?;                     // Result<Loading, LoadError>
 reg.register_local("engine", crate::library)?;   // a library the host LINKS: the same absorb, keys,
                                                  // dedup and `Loaded` record, from `<engine>` instead
                                                  // of a file; `library` is what `local_providers!`
-                                                 // writes (or a hand-written `describe`)
-reg.register_entry("engine", entry)?;          // the same from a C entry point (`EntryFn`): a linked
-                                                 // C library; C hosts: guatiao_registry_register_entry
+                                                 // writes: a fn(Host) -> Option<LocalLibrary>
+reg.register_entry("engine", unsafe { EntryPoint::new(entry) })?;   // the same from a C entry point
+                                                 // (`EntryFn`); C hosts: guatiao_registry_register_entry
 reg.providers("greeter")                   // by kind, BEST FIRST
 reg.available("greeter")                   // the same, that can run here
 reg.best("greeter")                        // the head of that
@@ -792,9 +792,22 @@ provider.kinds() -> &[String] / provider.supports(kind)   // what it serves
 provider.config_schema()                   // Option<&Value>, the registry's copy
 provider.vtable() -> (*const c_void, usize)
 provider.view().vtable_as::<T>()           // unsafe; checks vtable_size >= size_of::<T>()
+provider.view()                            // &ProviderView: getters id(), kinds(), config(), ctx(),
+                                           // tables(), raw(), create(), destroy(); no public fields
 provider.meta()                            // Option<&Map>, the registry's copy
 loaded.meta                                // Option<Map>, the registry's copy
 ```
+
+**A safe door never trusts a pointer safe code could have written.** The
+registry reads every pointer in a descriptor and calls through its slots
+from safe code, so whoever hands one over vouches for it once, in an
+`unsafe` constructor: `LocalLibrary::new(&'static LibraryInfo)` for a
+hand-written describe (`local_providers!` builds one from its
+`LibraryParts` with no `unsafe`), `EntryPoint::new(EntryFn)` for
+`register_entry`, `ProviderParts::new` for a hand-built provider, and
+`ProviderInfo::{view, as_kind, offer, instantiate}` are `unsafe fn` for a
+descriptor read by reference. `ProviderView`'s fields are private, so its
+safe `available()` can only call a slot with the `ctx` it was read with.
 
 **Everything a registry reports is OWNED.** `ProviderView` and
 `LibraryView` copy every string (`String`) and every value (`Value`,
@@ -922,17 +935,20 @@ fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> { .. }
 host.id() / host.version() / host.abi_version()
 host.alloc() -> Option<Alloc>                // the host's, or None
 host.meta() -> Option<&'static Map>
-host.get(key) -> Result<Option<&'static ProviderInfo<'static>>, Status>
-host.list(kind) -> Result<Vec<&'static ProviderInfo<'static>>, Status>  // "" lists all
-provider_info.view() -> Option<ProviderView>  // then .vtable_as::<T>(), .id, .ctx
+host.get(key) -> Result<Option<ProviderView>, Status>   // read under the size it declares
+host.list(kind) -> Result<Vec<ProviderView>, Status>    // "" lists all
+view.id() / .ctx() / .raw()                   // raw(): the descriptor's address, for C
+host.offers::<dyn K>() / host.offer::<dyn K>(key) / host.mismatches::<dyn K>()
 host.snapshot() -> HostInfo                   // a copy, absent fields nulled
 ```
 
-- **Answers are pointers to other libraries' own descriptors**, which
-  live for the process. Nothing borrowed from the registry escapes.
+- **Answers are other libraries' own descriptors, read** under the
+  `struct_size` each declares, so an older library's shorter descriptor
+  reads its newer fields as absent and nothing forms a reference past it.
+  Nothing borrowed from the registry escapes.
 - `list` returns **every** provider claiming the kind, unavailable ones
   included, in the host's order. **There is no best-pick**: ask each
-  (`view().available()`) and choose.
+  (`view.available()`) and choose.
 - `Err(GUATIAO_ERR_NULL)`: the host offers no services (older host, or a
   host that passed none). `Err(GUATIAO_ERR_GONE)`: the registry was
   dropped; the block is still readable, the lookups are not.

@@ -131,34 +131,37 @@ impl Host {
         Some(unsafe { &*table })
     }
 
-    /// One provider by the key the host files it under.
+    /// One provider by the key the host files it under, read out of the
+    /// offering library's descriptor under the size that library declared.
     ///
-    /// `Ok(None)` when nothing answers to the key. `Err` when the host
-    /// offers no services (`GUATIAO_ERR_NULL`) or its registry is gone
-    /// (`GUATIAO_ERR_GONE`).
-    pub fn get(&self, key: &str) -> Result<Option<&'static ProviderInfo<'static>>, Status> {
+    /// `Ok(None)` when nothing answers to the key, or the descriptor is
+    /// not one this build can read. `Err` when the host offers no services
+    /// (`GUATIAO_ERR_NULL`) or its registry is gone (`GUATIAO_ERR_GONE`).
+    /// [`ProviderView::raw`] is the descriptor's address, for a caller that
+    /// speaks C.
+    pub fn get(&self, key: &str) -> Result<Option<ProviderView>, Status> {
         let table = self.services().ok_or(Status::GUATIAO_ERR_NULL)?;
         let get = table.get.ok_or(Status::GUATIAO_ERR_NULL)?;
         let mut out: *const ProviderInfo = core::ptr::null();
         // SAFETY: the slot is the host's own, read under its guard; `out`
         // is a writable local; `key` is readable for the call.
         match unsafe { get(table.ctx, Str::new(key), &mut out) } {
-            Status::GUATIAO_OK if !out.is_null() => {
-                // SAFETY: the host answers with a descriptor the offering
-                // library keeps for the life of the process.
-                Ok(Some(unsafe { &*out }))
-            }
+            // SAFETY: the host answers with a descriptor the offering
+            // library keeps while it is registered; it is read through the
+            // raw pointer, never as a reference to a whole `ProviderInfo`.
+            Status::GUATIAO_OK if !out.is_null() => Ok(unsafe { read_answer(out) }),
             Status::GUATIAO_OK | Status::GUATIAO_ERR_NOT_FOUND => Ok(None),
             other => Err(other),
         }
     }
 
     /// Every provider serving `kind` — every provider when it is empty —
-    /// in the host's own order, unavailable ones included. The caller asks
-    /// each and chooses.
+    /// in the host's own order, unavailable ones included, each read as
+    /// [`get`](Host::get) reads one. The caller asks each and chooses. A
+    /// descriptor this build cannot read is left out.
     ///
     /// `Err` when the host offers no services or its registry is gone.
-    pub fn list(&self, kind: &str) -> Result<Vec<&'static ProviderInfo<'static>>, Status> {
+    pub fn list(&self, kind: &str) -> Result<Vec<ProviderView>, Status> {
         let table = self.services().ok_or(Status::GUATIAO_ERR_NULL)?;
         let list = table.list.ok_or(Status::GUATIAO_ERR_NULL)?;
         let kind = Str::new(kind);
@@ -189,11 +192,27 @@ impl Host {
         Ok(found
             .into_iter()
             .filter(|p| !p.is_null())
-            // SAFETY: each is a descriptor its library keeps for the life
-            // of the process.
-            .map(|p| unsafe { &*p })
+            // SAFETY: as `get`.
+            .filter_map(|p| unsafe { read_answer(p) })
             .collect())
     }
+}
+
+/// A descriptor a host's services answered with, read under its own
+/// declared size.
+///
+/// # Safety
+///
+/// `raw` is non-null and addresses a provider descriptor a library
+/// declared, readable for its `struct_size`, valid while that library is
+/// mapped.
+unsafe fn read_answer(raw: *const ProviderInfo<'static>) -> Option<ProviderView> {
+    // SAFETY: the caller guarantees the leading word is readable.
+    let declared = unsafe { core::ptr::addr_of!((*raw).struct_size).read() } as usize;
+    // SAFETY: the caller's contract; `declared` is the descriptor's own
+    // limit, which the registry already checked against its array's
+    // stride when it read the library.
+    unsafe { super::image::read_provider(raw, declared) }
 }
 
 // --- what a host keeps for its libraries -------------------------------
@@ -313,7 +332,10 @@ pub(crate) fn leak_host_block(
 ) -> &'static HostBlock {
     let id: Box<str> = id.into();
     let version: Box<str> = version.into();
-    let block = Box::leak(Box::new(HostBlock {
+    // Leaked as a raw pointer, and the two self-references written through
+    // it: a `&mut` taken first and written through after `ctx` is derived
+    // would invalidate `ctx` under Stacked Borrows.
+    let block = Box::into_raw(Box::new(HostBlock {
         info: HostInfo {
             struct_size: size_of::<HostInfo>() as u32,
             abi_version: crate::library::desc::ABI_VERSION,
@@ -336,9 +358,15 @@ pub(crate) fn leak_host_block(
         version,
         state,
     }));
-    block.services.ctx = (block as *mut HostBlock).cast::<c_void>();
-    block.info.services = &block.services;
-    block
+    // SAFETY: `block` is a live, never-freed allocation; both writes are
+    // field projections through it, and the shared reference handed back
+    // is the last thing derived, after every write.
+    unsafe {
+        core::ptr::addr_of_mut!((*block).services.ctx).write(block.cast::<c_void>());
+        core::ptr::addr_of_mut!((*block).info.services)
+            .write(core::ptr::addr_of!((*block).services));
+        &*block
+    }
 }
 
 #[cfg(feature = "load")]

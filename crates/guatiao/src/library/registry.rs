@@ -34,8 +34,8 @@ use std::path::{Path, PathBuf};
 use super::key::{KeyError, KeyFields, KeyTemplate};
 use super::kind::{Kind, KindMismatch, Offer, Remote};
 use super::raw::{
-    EntryFn, Host, HostBlock, LibraryView, Opened, Origin, ProviderView, Rejected, Shared,
-    Snapshot, SnapshotEntry,
+    EntryPoint, Host, HostBlock, LibraryView, LocalLibrary, Opened, Origin, ProviderView, Rejected,
+    Shared, Snapshot, SnapshotEntry,
 };
 use crate::value::alloc::Alloc;
 use crate::value::types::Text;
@@ -879,11 +879,14 @@ impl Registry {
     /// `describe` is what `guatiao::local_providers!` writes as
     /// `library`, or a hand-written library's own `describe`; it sees
     /// this registry's [`Host`] exactly as a loaded library's entry would.
-    /// A `None` is the library declining this host.
+    /// A `None` is the library declining this host. A hand-written one
+    /// vouches for its descriptor with the `unsafe`
+    /// [`LocalLibrary::new`], since the registry reads every pointer in
+    /// it.
     pub fn register_local(
         &mut self,
         name: &str,
-        describe: fn(Host) -> Option<&'static super::desc::LibraryInfo<'static>>,
+        describe: fn(Host) -> Option<LocalLibrary>,
     ) -> Result<Loading<'_>, LoadError> {
         let path = PathBuf::from(format!("<{name}>"));
         if let Some(already) = self.loaded_from_path(&path) {
@@ -903,11 +906,16 @@ impl Registry {
     ///
     /// **Handing over an entry point is choosing to run it**, as naming a
     /// file is for [`load_file`](Registry::load_file): `entry` is called
-    /// with this registry's host block and is expected to answer null or
-    /// a descriptor well-formed for its own `struct_size` that lives for
-    /// the process -- exactly what a loaded library's entry point promises,
-    /// and read under the same guards.
-    pub fn register_entry(&mut self, name: &str, entry: EntryFn) -> Result<Loading<'_>, LoadError> {
+    /// with this registry's host block and answers null or a descriptor
+    /// well-formed for its own `struct_size` that lives for the process --
+    /// exactly what a loaded library's entry point promises, and read under
+    /// the same guards. [`EntryPoint::new`] is where that is promised, and
+    /// it is `unsafe`.
+    pub fn register_entry(
+        &mut self,
+        name: &str,
+        entry: EntryPoint,
+    ) -> Result<Loading<'_>, LoadError> {
         let path = PathBuf::from(format!("<{name}>"));
         if let Some(already) = self.loaded_from_path(&path) {
             let from = already.path.clone();

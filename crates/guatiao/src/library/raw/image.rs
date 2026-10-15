@@ -14,52 +14,119 @@ use super::*;
 /// library's image at the read. That is what lets a library be unmapped
 /// while a host still holds what it said about itself. The code pointers
 /// below are not copied and cannot be: they address the image.
+///
+/// **Built only by reading a descriptor**, so its fields are private: a
+/// safe [`available`](ProviderView::available) calls a slot with `ctx`,
+/// and a view whose `ctx` safe code could set would let it call that slot
+/// with anything.
 #[derive(Debug, Clone)]
 pub struct ProviderView {
+    pub(crate) kinds: Vec<String>,
+    pub(crate) id: String,
+    pub(crate) display_name: String,
+    pub(crate) config: Option<Value>,
+    pub(crate) vtable: *const c_void,
+    pub(crate) vtable_size: usize,
+    pub(crate) ctx: *mut c_void,
+    pub(crate) meta: Option<Map>,
+    pub(crate) version: Option<String>,
+    pub(crate) available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
+    pub(crate) raw: *const ProviderInfo<'static>,
+    pub(crate) tables: Vec<(String, *const c_void, usize)>,
+    pub(crate) create: Option<CreateFn>,
+    pub(crate) destroy: Option<DestroyFn>,
+}
+
+/// [`ProviderInfo::create`]'s slot.
+pub type CreateFn = unsafe extern "C" fn(
+    ctx: *mut c_void,
+    config: *const Value,
+    out: *mut *mut c_void,
+    err: *mut crate::library::kind::ProviderError,
+) -> Status;
+
+/// [`ProviderInfo::destroy`]'s slot.
+pub type DestroyFn = unsafe extern "C" fn(ctx: *mut c_void, instance: *mut c_void);
+
+impl ProviderView {
     /// Every kind it serves. May be empty.
-    pub kinds: Vec<String>,
+    pub fn kinds(&self) -> &[String] {
+        &self.kinds
+    }
+
     /// Its identifier, unique across every provider a host loads.
-    pub id: String,
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
     /// A name to show a person, possibly empty.
-    pub display_name: String,
+    pub fn display_name(&self) -> &str {
+        &self.display_name
+    }
+
     /// Its configuration schema, or `None`. A copy in this process's own
     /// heap, not the library's.
-    pub config: Option<Value>,
-    /// The function table, whose shape the kind defines.
-    pub vtable: *const c_void,
-    /// The size the library compiled that table at.
-    pub vtable_size: usize,
-    /// Handed back to every call through the table.
-    pub ctx: *mut c_void,
+    pub fn config(&self) -> Option<&Value> {
+        self.config.as_ref()
+    }
+
     /// Whatever else the provider declared, or `None`. A copy, as
     /// [`config`](ProviderView::config) is. See [`ProviderInfo::meta`].
-    pub meta: Option<Map>,
+    pub fn meta(&self) -> Option<&Map> {
+        self.meta.as_ref()
+    }
+
     /// The version it declared for itself, or `None` to inherit its
     /// library's. See [`ProviderInfo::version`].
-    pub version: Option<String>,
-    /// Its runtime-availability slot, or `None` when it declares none —
-    /// which means available. See [`ProviderInfo::available`].
-    pub available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
-    /// The descriptor this was read from, in the library's image, valid
-    /// until that library is unloaded. What a host's services hand a
-    /// library that asks.
-    pub raw: *const ProviderInfo<'static>,
+    pub fn version(&self) -> Option<&str> {
+        self.version.as_deref()
+    }
+
+    /// The shared function table, whose shape the kind defines.
+    pub fn vtable(&self) -> *const c_void {
+        self.vtable
+    }
+
+    /// The size the library compiled [`vtable`](ProviderView::vtable) at.
+    pub fn vtable_size(&self) -> usize {
+        self.vtable_size
+    }
+
+    /// Handed back to every call through a table, for a caller that
+    /// speaks C. Null for a provider built only from a configuration.
+    pub fn ctx(&self) -> *mut c_void {
+        self.ctx
+    }
+
     /// One table per kind, as `(kind, vtable, vtable_size)`, for a
     /// provider serving several kinds with a table each. Empty when
     /// `vtable` serves them all. See [`ProviderInfo::tables`].
-    pub tables: Vec<(String, *const c_void, usize)>,
+    pub fn tables(&self) -> &[(String, *const c_void, usize)] {
+        &self.tables
+    }
+
+    /// The descriptor this was read from, in the library's image, valid
+    /// until that library is unloaded. What a host's services hand a
+    /// library that asks.
+    pub fn raw(&self) -> *const ProviderInfo<'static> {
+        self.raw
+    }
+
     /// Builds an instance from a configuration, or `None`. See
     /// [`ProviderInfo::create`].
-    pub create: Option<
-        unsafe extern "C" fn(
-            ctx: *mut c_void,
-            config: *const Value,
-            out: *mut *mut c_void,
-            err: *mut crate::library::kind::ProviderError,
-        ) -> Status,
-    >,
+    pub fn create(&self) -> Option<CreateFn> {
+        self.create
+    }
+
     /// Releases an instance `create` built. See [`ProviderInfo::destroy`].
-    pub destroy: Option<unsafe extern "C" fn(ctx: *mut c_void, instance: *mut c_void)>,
+    pub fn destroy(&self) -> Option<DestroyFn> {
+        self.destroy
+    }
+
+    /// Whether it builds instances from a configuration.
+    pub fn builds_instances(&self) -> bool {
+        self.create.is_some()
+    }
 }
 
 // SAFETY: the pointers address a loaded library's image, which this side
@@ -107,10 +174,10 @@ impl ProviderView {
             return Ok(());
         };
         let mut reason = Str::empty();
-        // SAFETY: the slot's signature is this envelope's own, checked
-        // present by `read_provider`'s guard; `reason` is a writable
-        // local; and a provider is only asked while its library is
-        // registered, which means mapped.
+        // SAFETY: the slot and `ctx` were read together from one
+        // descriptor, and no safe code can change either; `reason` is a
+        // writable local; the library stays mapped until the host's
+        // `unsafe` unload, whose contract is that this view is not used.
         if unsafe { ask(self.ctx, &mut reason) } {
             return Ok(());
         }
@@ -278,12 +345,20 @@ pub(crate) unsafe fn read_library(
 impl ProviderInfo<'static> {
     /// Reads this descriptor out, honouring its declared size.
     ///
-    /// For a descriptor a host's services handed over: it lives as long as
-    /// the library that declared it, which is for the life of the process.
     /// `None` when it is below the floor or names text that is not UTF-8.
-    pub fn view(&'static self) -> Option<ProviderView> {
-        // SAFETY: a `&'static ProviderInfo` is a readable descriptor whose
-        // declared size is its own limit.
+    /// A host's services answer with views already read
+    /// ([`Host::get`], [`Host::list`]); this is for a descriptor a library
+    /// built itself.
+    ///
+    /// # Safety
+    ///
+    /// `self` is a descriptor as a library hands one to its host: every
+    /// pointer in it addresses what its field says (text, a well-formed
+    /// configuration value and `meta` map, its kind names and tables), its
+    /// slots and tables expect its `ctx`, and all of it stays valid for as
+    /// long as the view, and anything taken from it, is used.
+    pub unsafe fn view(&'static self) -> Option<ProviderView> {
+        // SAFETY: the caller's contract; the declared size is the limit.
         unsafe { read_provider(self, self.struct_size as usize) }
     }
 }
@@ -294,7 +369,10 @@ impl ProviderInfo<'static> {
 /// # Safety
 ///
 /// `raw` points at a provider descriptor declaring its own size.
-unsafe fn read_provider(raw: *const ProviderInfo<'static>, limit: usize) -> Option<ProviderView> {
+pub(super) unsafe fn read_provider(
+    raw: *const ProviderInfo<'static>,
+    limit: usize,
+) -> Option<ProviderView> {
     // SAFETY: the caller guarantees the leading word is readable.
     let declared = unsafe { core::ptr::addr_of!((*raw).struct_size).read() } as usize;
     // Above the floor, and not past its neighbour: an element claiming
@@ -546,19 +624,14 @@ pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, 
 
 /// What a library the host LINKS came to: its describe function's answer,
 /// read the way a loaded library's entry answer is read.
-///
-/// Safe to call, because a `&'static LibraryInfo` is the whole contract
-/// an entry point makes and a Rust reference already states it: the
-/// descriptor is well-formed for its own `struct_size` and lives for the
-/// process.
 #[cfg(feature = "load")]
-pub(crate) fn open_local(described: Option<&'static LibraryInfo>) -> Opened {
+pub(crate) fn open_local(described: Option<LocalLibrary>) -> Opened {
     let Some(info) = described else {
         return Opened::Declined;
     };
-    // SAFETY: a `'static` reference to a descriptor the library built and
-    // keeps for the process, which is what an entry point promises.
-    match unsafe { read_library(info) } {
+    // SAFETY: a `LocalLibrary` is a descriptor its maker vouched for, in
+    // `LocalLibrary::new` or by building it from `LibraryParts`.
+    match unsafe { read_library(info.info()) } {
         Ok(view) => Opened::Loaded(view, Origin::Linked),
         Err(why) => Opened::Rejected(why),
     }
@@ -566,17 +639,12 @@ pub(crate) fn open_local(described: Option<&'static LibraryInfo>) -> Opened {
 
 /// What a library the host LINKS and that speaks C came to: its entry
 /// point's answer, read exactly as a loaded library's is.
-///
-/// Safe to CALL for the reason [`open_library`] is: handing over an
-/// entry point is choosing to run it, which is the contract
-/// [`crate::library::Registry::register_entry`] states, and what it
-/// answers is read under the same guards as a loaded library's answer.
 #[cfg(feature = "load")]
-pub(crate) fn open_entry(entry: EntryFn, host: Host) -> Opened {
-    // SAFETY: the caller chose to run this entry point, which is the
-    // contract stated on `Registry::register_entry`; its answer is null
-    // or a descriptor read under `read_library`'s own guards.
-    let desc = unsafe { entry(host.as_raw()) };
+pub(crate) fn open_entry(entry: EntryPoint, host: Host) -> Opened {
+    // SAFETY: an `EntryPoint` is a function its maker vouched for in
+    // `EntryPoint::new`; its answer is null or a descriptor read under
+    // `read_library`'s own guards.
+    let desc = unsafe { (entry.function())(host.as_raw()) };
     if desc.is_null() {
         return Opened::Declined;
     }
@@ -746,6 +814,9 @@ mod tests {
             core::ptr::null()
         }
 
+        // SAFETY: both answer null or a leaked, well-formed descriptor.
+        let (describing, declining) =
+            unsafe { (EntryPoint::new(describing), EntryPoint::new(declining)) };
         let mut r = Registry::new("test-host", "1.0");
         let loaded = r.register_entry("cli", describing).unwrap();
         assert_eq!(

@@ -132,7 +132,7 @@ fn a_derived_librarys_descriptor_lives_in_the_hosts_arena() {
         .expect("the configured provider is loaded");
     // The registry keeps its own copy of the schema; the question here is
     // where the LIBRARY built the one in its descriptor.
-    let raw = provider.view().raw;
+    let raw = provider.view().raw();
     // SAFETY: `raw` is the descriptor this provider was read from, in a
     // mapping this registry still holds; `config` is non-null because
     // this provider declares a configuration.

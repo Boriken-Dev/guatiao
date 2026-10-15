@@ -104,6 +104,75 @@ const fn put(out: &mut [u8], at: usize, bytes: &[u8]) -> usize {
 /// by another says so this way, and the loader reports it as skipped.
 pub type EntryFn = unsafe extern "C" fn(*const HostInfo<'static>) -> *const LibraryInfo<'static>;
 
+/// An entry point a host links rather than loads, vouched for: what
+/// [`Registry::register_entry`](crate::library::Registry::register_entry)
+/// takes.
+///
+/// A safe `extern "C" fn` coerces to an [`EntryFn`], and the registry
+/// reads whatever it answers, so the promise that the answer is a real
+/// descriptor is made here, once, by whoever has it.
+#[derive(Debug, Clone, Copy)]
+pub struct EntryPoint(EntryFn);
+
+impl EntryPoint {
+    /// Vouches for `entry`.
+    ///
+    /// # Safety
+    ///
+    /// `entry` behaves as a library's `guatiao_library_entry` does: called
+    /// with a host descriptor, it answers null or a [`LibraryInfo`]
+    /// well-formed for its own `struct_size` (text, values, arrays at
+    /// their stride, tables of the kinds they name, slots expecting their
+    /// `ctx`), all of it valid for the life of the process.
+    pub const unsafe fn new(entry: EntryFn) -> EntryPoint {
+        EntryPoint(entry)
+    }
+
+    /// The function, for a caller that speaks C.
+    pub const fn function(&self) -> EntryFn {
+        self.0
+    }
+}
+
+/// A library descriptor a host links rather than loads, vouched for: what
+/// a describe function hands
+/// [`Registry::register_local`](crate::library::Registry::register_local).
+///
+/// [`local_providers!`](crate::local_providers) writes one from the
+/// descriptor it built, through `From<&'static LibraryParts>`; a
+/// hand-written descriptor states its contract in
+/// [`new`](LocalLibrary::new).
+#[derive(Debug, Clone, Copy)]
+pub struct LocalLibrary(&'static LibraryInfo<'static>);
+
+impl LocalLibrary {
+    /// Vouches for `info`.
+    ///
+    /// # Safety
+    ///
+    /// `info` is well-formed for its own `struct_size`, as an entry point's
+    /// answer is: every pointer in it, and in each provider it lists,
+    /// addresses what its field says, each table is one for the kind it
+    /// names, and each slot expects its provider's `ctx`, for the life of
+    /// the process.
+    pub const unsafe fn new(info: &'static LibraryInfo<'static>) -> LocalLibrary {
+        LocalLibrary(info)
+    }
+
+    /// The descriptor.
+    pub const fn info(&self) -> &'static LibraryInfo<'static> {
+        self.0
+    }
+}
+
+/// A descriptor [`LibraryParts`](crate::library::kind::LibraryParts)
+/// built is one its builder vouched for, provider by provider.
+impl From<&'static crate::library::kind::LibraryParts> for LocalLibrary {
+    fn from(parts: &'static crate::library::kind::LibraryParts) -> LocalLibrary {
+        LocalLibrary(parts.info())
+    }
+}
+
 /// Writes a library's entry point.
 ///
 /// Give it a function taking a [`Host`] and answering
@@ -279,7 +348,8 @@ macro_rules! providers {
         );
         $crate::__guatiao_describe!(
             #[doc(hidden)]
-            fn __guatiao_describe;
+            fn __guatiao_describe -> &'static $crate::library::LibraryInfo<'static>
+                = $crate::library::kind::LibraryParts::info;
             id = $id, version = $version, providers = [$($provider),+],
             unload = ::core::option::Option::Some(__guatiao_unload)
         );
@@ -302,7 +372,8 @@ macro_rules! providers {
         );
         $crate::__guatiao_describe!(
             #[doc(hidden)]
-            fn __guatiao_describe;
+            fn __guatiao_describe -> &'static $crate::library::LibraryInfo<'static>
+                = $crate::library::kind::LibraryParts::info;
             id = $id, version = $version, providers = [$($provider),+],
             unload = ::core::option::Option::Some(__guatiao_unload)
         );
@@ -368,7 +439,7 @@ macro_rules! local_providers {
         $crate::__guatiao_describe!(
             /// What this crate offers as a library the host links: hand
             /// it to `Registry::register_local`.
-            pub fn library;
+            pub fn library -> $crate::library::LocalLibrary = $crate::library::LocalLibrary::from;
             id = $id, version = $version, providers = [$($provider),+],
             unload = ::core::option::Option::None
         );
@@ -376,19 +447,20 @@ macro_rules! local_providers {
 }
 
 /// The describe function behind [`providers!`](crate::providers) and
-/// [`local_providers!`](crate::local_providers).
+/// [`local_providers!`](crate::local_providers): builds the descriptor
+/// once and answers it through `$answer`.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __guatiao_describe {
     (
-        $(#[$attr:meta])* $vis:vis fn $name:ident;
+        $(#[$attr:meta])* $vis:vis fn $name:ident -> $ret:ty = $answer:path;
         id = $id:expr, version = $version:expr, providers = [$($provider:ty),+],
         unload = $unload:expr
     ) => {
         $(#[$attr])*
         $vis fn $name(
             host: $crate::library::Host,
-        ) -> ::core::option::Option<&'static $crate::library::LibraryInfo<'static>> {
+        ) -> ::core::option::Option<$ret> {
             static REGISTERED: ::std::sync::OnceLock<::core::option::Option<$crate::library::kind::LibraryParts>> = ::std::sync::OnceLock::new();
             REGISTERED
                 .get_or_init(|| {
@@ -407,7 +479,7 @@ macro_rules! __guatiao_describe {
                     )
                 })
                 .as_ref()
-                .map($crate::library::kind::LibraryParts::info)
+                .map($answer)
         }
     };
 }

@@ -18,8 +18,10 @@
 //! - From a registry: [`Registry::offers`](super::Registry::offers) and
 //!   [`Provider::as_kind`](super::Provider::as_kind). Safe, because the
 //!   registry read the descriptor under its guards.
-//! - From a host, inside a library: [`Host::offers`] and
-//!   [`ProviderInfo::as_kind`]. Safe for the same reason.
+//! - From a host, inside a library: [`Host::offers`] and [`Host::offer`].
+//!   Safe for the same reason: the host's answers are read under each
+//!   descriptor's declared size. [`ProviderInfo::as_kind`], over a
+//!   descriptor a library built itself, is `unsafe`.
 //! - From anywhere else: [`Remote::from_raw`], `unsafe`, with one promise
 //!   — the bytes are a table for this kind's name.
 //!

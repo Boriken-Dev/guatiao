@@ -440,29 +440,53 @@ impl<K: ?Sized + Kind> From<Offer<K>> for Remote<K> {
     }
 }
 
-impl ProviderInfo<'static> {
-    /// This provider's table for `K`, validated.
-    ///
-    /// For a descriptor a host's services handed over.
-    pub fn as_kind<K: ?Sized + Kind>(&'static self) -> Result<Remote<K>, KindMismatch> {
-        let view = self.view().ok_or(KindMismatch::NoTable)?;
-        Remote::from_view(&view)
-    }
-
-    /// The same, as an offer carrying what a chooser needs.
-    pub fn offer<K: ?Sized + Kind>(&'static self) -> Result<Offer<K>, KindMismatch> {
-        let view = self.view().ok_or(KindMismatch::NoTable)?;
+impl<K: ?Sized + Kind> Offer<K> {
+    /// An offer from a view alone, as a host's services hand one over:
+    /// no registry key, no library id, no rank.
+    pub(crate) fn from_view(view: ProviderView) -> Result<Offer<K>, KindMismatch> {
         let remote = Remote::from_view(&view)?;
         let version = view.version.clone().unwrap_or_default();
         Ok(Offer::new(remote, view, None, None, version, 0))
     }
+}
+
+impl ProviderInfo<'static> {
+    /// This provider's table for `K`, validated.
+    ///
+    /// For a descriptor a library built itself; a host's services answer
+    /// with views, and [`Host::offers`] is the door there.
+    ///
+    /// # Safety
+    ///
+    /// As [`ProviderInfo::view`].
+    pub unsafe fn as_kind<K: ?Sized + Kind>(&'static self) -> Result<Remote<K>, KindMismatch> {
+        // SAFETY: forwarded.
+        let view = unsafe { self.view() }.ok_or(KindMismatch::NoTable)?;
+        Remote::from_view(&view)
+    }
+
+    /// The same, as an offer carrying what a chooser needs.
+    ///
+    /// # Safety
+    ///
+    /// As [`ProviderInfo::view`].
+    pub unsafe fn offer<K: ?Sized + Kind>(&'static self) -> Result<Offer<K>, KindMismatch> {
+        // SAFETY: forwarded.
+        let view = unsafe { self.view() }.ok_or(KindMismatch::NoTable)?;
+        Offer::from_view(view)
+    }
 
     /// An instance built from `config`, as `K`. See [`Offer::instantiate`].
-    pub fn instantiate<K: ?Sized + Kind>(
+    ///
+    /// # Safety
+    ///
+    /// As [`ProviderInfo::view`].
+    pub unsafe fn instantiate<K: ?Sized + Kind>(
         &'static self,
         config: &Value,
     ) -> Result<Instance<K>, ProviderError> {
-        let view = self.view().ok_or_else(|| {
+        // SAFETY: forwarded.
+        let view = unsafe { self.view() }.ok_or_else(|| {
             ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, "an unreadable descriptor")
         })?;
         Instance::build(&view, config)
@@ -478,7 +502,7 @@ impl Host {
         Ok(self
             .list(K::NAME)?
             .into_iter()
-            .filter_map(|p| p.offer::<K>().ok())
+            .filter_map(|view| Offer::from_view(view).ok())
             .collect())
     }
 
@@ -487,12 +511,14 @@ impl Host {
     /// One with no per-kind table is neither an offer nor a mismatch.
     pub fn mismatches<K: ?Sized + Kind>(
         &self,
-    ) -> Result<Vec<(&'static ProviderInfo<'static>, KindMismatch)>, Status> {
+    ) -> Result<Vec<(ProviderView, KindMismatch)>, Status> {
         Ok(self
             .list(K::NAME)?
             .into_iter()
-            .filter_map(|p| p.as_kind::<K>().err().map(|why| (p, why)))
-            .filter(|(_, why)| *why != KindMismatch::NoTable)
+            .filter_map(|view| match Remote::<K>::from_view(&view) {
+                Ok(_) | Err(KindMismatch::NoTable) => None,
+                Err(why) => Some((view, why)),
+            })
             .collect())
     }
 
@@ -503,6 +529,6 @@ impl Host {
         &self,
         key: &str,
     ) -> Result<Option<Result<Offer<K>, KindMismatch>>, Status> {
-        Ok(self.get(key)?.map(|p| p.offer::<K>()))
+        Ok(self.get(key)?.map(Offer::from_view))
     }
 }

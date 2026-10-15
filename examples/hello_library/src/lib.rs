@@ -328,8 +328,7 @@ unsafe extern "C" fn echo(_ctx: *mut c_void, name: Str, out: *mut Value) -> Stat
     };
     let Some(greeter) = greeters
         .into_iter()
-        .filter_map(ProviderInfo::view)
-        .find(|p| p.id == "hello_library_greeter")
+        .find(|p| p.id() == "hello_library_greeter")
     else {
         return Status::GUATIAO_ERR_NOT_FOUND;
     };
@@ -360,7 +359,7 @@ unsafe extern "C" fn echo(_ctx: *mut c_void, name: Str, out: *mut Value) -> Stat
     let config = Value::from(config);
     // SAFETY: the greeter's contract, as declared on `greet` above; the
     // config is a well-formed value and `answer` is a writable local.
-    let status = unsafe { greet(greeter.ctx, &config, &mut answer) };
+    let status = unsafe { greet(greeter.ctx(), &config, &mut answer) };
     if status != Status::GUATIAO_OK {
         return status;
     }

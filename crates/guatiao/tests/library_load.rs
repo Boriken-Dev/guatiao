@@ -30,7 +30,7 @@ use guatiao::value::convert::TryAsMut;
 use guatiao::value::convert::TryAsRef;
 use std::path::PathBuf;
 
-use guatiao::library::{KeyError, Provider, ProviderInfo, Registry, Skipped, Subject, WhyNot};
+use guatiao::library::{KeyError, Provider, Registry, Skipped, Subject, WhyNot};
 use guatiao::schema::read::SchemaRef;
 use guatiao::schema::validate_map;
 use guatiao::value::status::Status;
@@ -721,14 +721,13 @@ fn the_host_a_library_keeps_outlives_the_registry() {
     // to the library's own descriptors.
     let greeters = host.list("greeter").expect("the services answer");
     assert_eq!(greeters.len(), 1);
-    let view = greeters[0].view().expect("a readable descriptor");
-    assert_eq!(view.id, "hello_library_greeter");
+    assert_eq!(greeters[0].id(), "hello_library_greeter");
     assert_eq!(
         host.get("hello_library_greeter")
             .expect("the services answer")
-            .map(|p| p as *const ProviderInfo),
-        Some(greeters[0] as *const ProviderInfo),
-        "get and list hand back the same descriptor"
+            .map(|p| p.raw()),
+        Some(greeters[0].raw()),
+        "get and list read the same descriptor"
     );
     assert!(matches!(host.get("nobody"), Ok(None)));
 
@@ -737,8 +736,7 @@ fn the_host_a_library_keeps_outlives_the_registry() {
         .list("everything")
         .unwrap()
         .into_iter()
-        .filter_map(ProviderInfo::view)
-        .map(|v| v.id)
+        .map(|v| v.id().to_string())
         .collect();
     let seen: Vec<String> = registry
         .providers("everything")
@@ -753,7 +751,7 @@ fn the_host_a_library_keeps_outlives_the_registry() {
 
     // Ranking changes what the services answer, on the next call.
     registry.set_priority("hello_library_sundial", 10);
-    let first = host.list("everything").unwrap()[0].view().unwrap().id;
+    let first = host.list("everything").unwrap()[0].id().to_string();
     assert_eq!(first, "hello_library_sundial");
 
     drop(registry);

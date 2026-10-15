@@ -390,21 +390,28 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
                     alloc: ::guatiao::Alloc,
                 ) -> ::core::result::Result<::guatiao::library::kind::ProviderParts, ::guatiao::ValueError> {
                     #instance
+                    let id = #id;
                     let kinds = <#ty as ::guatiao::library::kind::ProviderDecl>::KINDS;
                     let tables = ::guatiao::__private::alloc::vec![ #(#table_entries)* ];
                     let config = #config;
-                    ::core::result::Result::Ok(::guatiao::library::kind::ProviderParts::new(
-                        &#id,
-                        #name,
-                        #version,
-                        kinds,
-                        tables,
-                        config,
-                        instance,
-                        #available_slot,
-                        #create_slot,
-                        #destroy_slot,
-                    ))
+                    // SAFETY: each table is `of::<Self>()` for the kind it
+                    // names, `instance` is the leaked default instance or
+                    // null, and every slot is this expansion's own shim.
+                    let parts = unsafe {
+                        ::guatiao::library::kind::ProviderParts::new(
+                            &id,
+                            #name,
+                            #version,
+                            kinds,
+                            tables,
+                            config,
+                            instance,
+                            #available_slot,
+                            #create_slot,
+                            #destroy_slot,
+                        )
+                    };
+                    ::core::result::Result::Ok(parts)
                 }
             }
         };

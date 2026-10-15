@@ -62,9 +62,9 @@
 //! The [`Host`] a library is handed is valid for the life of the process:
 //! a block the host leaks, carrying its name, its allocator and a
 //! [`HostServices`] table. Through it a library asks `get(key)` and
-//! `list(kind)` and gets **pointers to other libraries' own descriptors**,
-//! in the host's order, unavailable ones included — the caller asks each
-//! and chooses. Nothing borrowed from the registry escapes, so the
+//! `list(kind)` and gets **other libraries' own descriptors**, read under
+//! the size each declares, in the host's order, unavailable ones included
+//! — the caller asks each and chooses. Nothing borrowed from the registry escapes, so the
 //! registry may change or be dropped while a library holds an answer;
 //! after a drop every lookup answers `GUATIAO_ERR_GONE`. A lookup from an
 //! entry point sees the libraries registered before it.
@@ -103,7 +103,8 @@ pub use kind::{
 };
 pub use notices::{Notice, declare_notice, notices};
 pub use raw::{
-    DECLARES_SYMBOL, ENTRY_SYMBOL, EntryFn, Host, LibraryView, ProviderView, answer, read_host,
+    DECLARES_SYMBOL, ENTRY_SYMBOL, EntryFn, EntryPoint, Host, LibraryView, LocalLibrary,
+    ProviderView, answer, read_host,
 };
 #[doc(hidden)]
 pub use raw::{declaration, declaration_len};

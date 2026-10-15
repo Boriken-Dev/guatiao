@@ -138,14 +138,15 @@ fn a_provider_builds_instances_from_a_configuration() {
     let parts: &'static ProviderParts = Box::leak(Box::new(
         Shouter::provider(registry.host(), Alloc::rust()).expect("builds"),
     ));
-    let view = parts.info().view().unwrap();
+    // SAFETY: a derived provider's descriptor, leaked above.
+    let view = unsafe { parts.info().view() }.unwrap();
     assert!(
-        view.ctx.is_null(),
+        view.ctx().is_null(),
         "no default instance: built only from a configuration"
     );
-    assert!(view.create.is_some() && view.destroy.is_some());
+    assert!(view.create().is_some() && view.destroy().is_some());
     assert!(
-        view.config.is_some(),
+        view.config().is_some(),
         "the schema is the configuration's, so a host can ask before building"
     );
 
@@ -154,18 +155,20 @@ fn a_provider_builds_instances_from_a_configuration() {
     config.set("bangs", 2).unwrap();
     let config = Value::from(config);
     let before = SHOUTERS_ALIVE.load(core::sync::atomic::Ordering::SeqCst);
-    let one = parts
-        .info()
-        .instantiate::<dyn Greeter>(&config)
-        .expect("a fitting configuration builds");
+    let one = {
+        // SAFETY: a derived provider's descriptor, leaked above.
+        unsafe { parts.info().instantiate::<dyn Greeter>(&config) }
+    }
+    .expect("a fitting configuration builds");
     assert_eq!(one.greet("ana").unwrap(), "hey ANA!!");
     let mut other = Map::new();
     other.set("prefix", "yo").unwrap();
     other.set("bangs", 1).unwrap();
-    let two = parts
-        .info()
-        .instantiate::<dyn Greeter>(&Value::from(other))
-        .unwrap();
+    let two = {
+        // SAFETY: a derived provider's descriptor, leaked above.
+        unsafe { parts.info().instantiate::<dyn Greeter>(&Value::from(other)) }
+    }
+    .unwrap();
     assert_eq!(two.greet("bo").unwrap(), "yo BO!");
     assert_eq!(
         SHOUTERS_ALIVE.load(core::sync::atomic::Ordering::SeqCst),
@@ -182,7 +185,8 @@ fn a_provider_builds_instances_from_a_configuration() {
 
     // An instance is the trait, so it is stored like any implementation
     // and released when its last owner goes.
-    let build = || parts.info().instantiate::<dyn Greeter>(&config).unwrap();
+    // SAFETY: a derived provider's descriptor, leaked above.
+    let build = || unsafe { parts.info().instantiate::<dyn Greeter>(&config) }.unwrap();
     let shared: alloc::sync::Arc<dyn Greeter> = alloc::sync::Arc::new(build());
     let also = alloc::sync::Arc::clone(&shared);
     let boxed: Box<dyn Greeter> = build().into();
@@ -205,25 +209,32 @@ fn a_provider_builds_instances_from_a_configuration() {
     let mut bad = Map::new();
     bad.set("prefix", "x").unwrap();
     bad.set("bangs", 0).unwrap();
-    let e = parts
-        .info()
-        .instantiate::<dyn Greeter>(&Value::from(bad))
-        .unwrap_err();
+    let e = {
+        // SAFETY: a derived provider's descriptor, leaked above.
+        unsafe { parts.info().instantiate::<dyn Greeter>(&Value::from(bad)) }
+    }
+    .unwrap_err();
     assert_eq!(e.message(), "a shout needs at least one bang");
-    let e = parts
-        .info()
-        .instantiate::<dyn Greeter>(&Value::from(Map::new()))
-        .unwrap_err();
+    let e = {
+        // SAFETY: a derived provider's descriptor, leaked above.
+        unsafe {
+            parts
+                .info()
+                .instantiate::<dyn Greeter>(&Value::from(Map::new()))
+        }
+    }
+    .unwrap_err();
     assert_eq!(e.status, guatiao::Status::GUATIAO_ERR_BAD_VALUE, "{e}");
 
     // A provider that is its one instance builds none.
     let hello: &'static ProviderParts = Box::leak(Box::new(
         Hello::provider(registry.host(), Alloc::rust()).unwrap(),
     ));
-    let e = hello
-        .info()
-        .instantiate::<dyn Greeter>(&config)
-        .unwrap_err();
+    let e = {
+        // SAFETY: a derived provider's descriptor, leaked above.
+        unsafe { hello.info().instantiate::<dyn Greeter>(&config) }
+    }
+    .unwrap_err();
     assert_eq!(e.status, guatiao::Status::GUATIAO_ERR_NULL);
 }
 
@@ -233,18 +244,20 @@ fn a_derived_provider_describes_itself_with_the_defaults() {
     let parts: &'static ProviderParts = Box::leak(Box::new(
         Hello::provider(registry.host(), Alloc::rust()).expect("builds"),
     ));
-    let view = parts.info().view().expect("a readable descriptor");
+    // SAFETY: a derived provider's descriptor, leaked above.
+    let view = unsafe { parts.info().view() }.expect("a readable descriptor");
     assert_eq!(
-        view.id, "guatiao_hello",
+        view.id(),
+        "guatiao_hello",
         "{{package}}_{{type}}, with `-` as `_`"
     );
-    assert_eq!(view.display_name, "Hello");
-    assert_eq!(view.version, None, "empty means the library's");
-    assert_eq!(view.kinds, ["greeter", "tally"]);
-    assert!(view.config.is_none());
+    assert_eq!(view.display_name(), "Hello");
+    assert_eq!(view.version(), None, "empty means the library's");
+    assert_eq!(view.kinds(), ["greeter", "tally"]);
+    assert!(view.config().is_none());
     assert_eq!(view.available(), Ok(()));
     let sizes: Vec<(&str, usize)> = view
-        .tables
+        .tables()
         .iter()
         .map(|(k, _, s)| (k.as_str(), *s))
         .collect();
@@ -256,20 +269,22 @@ fn a_derived_provider_describes_itself_with_the_defaults() {
         ]
     );
     assert!(
-        view.vtable.is_null(),
+        view.vtable().is_null(),
         "a derived provider has per-kind tables only"
     );
 
     // And the tables call through.
-    let greeter = parts
-        .info()
-        .as_kind::<dyn Greeter>()
-        .expect("a valid table");
+    let greeter = {
+        // SAFETY: as above.
+        unsafe { parts.info().as_kind::<dyn Greeter>() }
+    }
+    .expect("a valid table");
     assert_eq!(greeter.greet("ana").unwrap(), "hello, ana");
-    let counter = parts
-        .info()
-        .as_kind::<dyn Counter>()
-        .expect("a valid table");
+    let counter = {
+        // SAFETY: as above.
+        unsafe { parts.info().as_kind::<dyn Counter>() }
+    }
+    .expect("a valid table");
     assert_eq!(counter.count(), 1);
 }
 
@@ -279,13 +294,14 @@ fn a_derived_provider_takes_every_override() {
     let parts: &'static ProviderParts = Box::leak(Box::new(
         Loud::provider(registry.host(), Alloc::rust()).expect("builds"),
     ));
-    let view = parts.info().view().unwrap();
-    assert_eq!(view.id, "acme_loud");
-    assert_eq!(view.display_name, "Loud");
-    assert_eq!(view.version.as_deref(), Some("2.0.0"));
-    assert_eq!(view.kinds, ["greeter"]);
+    // SAFETY: a derived provider's descriptor, leaked above.
+    let view = unsafe { parts.info().view() }.unwrap();
+    assert_eq!(view.id(), "acme_loud");
+    assert_eq!(view.display_name(), "Loud");
+    assert_eq!(view.version(), Some("2.0.0"));
+    assert_eq!(view.kinds(), ["greeter"]);
     assert!(
-        view.config.is_none(),
+        view.config().is_none(),
         "no configuration: its one instance is built at load"
     );
     assert_eq!(
@@ -293,7 +309,8 @@ fn a_derived_provider_takes_every_override() {
         Err("this host does not want it loud"),
         "`available` saw the host `new_with_host` was given"
     );
-    let greeter = parts.info().as_kind::<dyn Greeter>().unwrap();
+    // SAFETY: a derived provider's descriptor, leaked above.
+    let greeter = unsafe { parts.info().as_kind::<dyn Greeter>() }.unwrap();
     assert_eq!(greeter.greet("bo").unwrap(), "HELLO, BO!");
 }
 

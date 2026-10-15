@@ -76,10 +76,15 @@ fn a_provider_written_against_a_re_export_builds_and_answers() {
 
     let mut config = Map::new();
     config.set("prefix", "hey").unwrap();
-    let shouter = parts
-        .info()
-        .instantiate::<dyn Greeter>(&Value::from(config))
-        .expect("a configuration with the default left out builds");
+    let shouter = {
+        // SAFETY: a derived provider's descriptor, leaked above.
+        unsafe {
+            parts
+                .info()
+                .instantiate::<dyn Greeter>(&Value::from(config))
+        }
+    }
+    .expect("a configuration with the default left out builds");
     assert_eq!(shouter.greet("ana").unwrap(), "hey ana!!");
     assert_eq!(
         shouter.settings().unwrap(),

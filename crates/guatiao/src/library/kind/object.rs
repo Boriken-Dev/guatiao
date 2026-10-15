@@ -183,7 +183,14 @@ impl<K: ?Sized + Kind> Object<K> {
     ///
     /// `Err` only for a table that does not fit the kind, which a table
     /// `of::<T>()` built cannot be; the derive `expect`s it.
-    pub fn from_cell<V: 'static, T: 'static>(
+    ///
+    /// # Safety
+    ///
+    /// `cell.table` is the table `#[guatiao::kind]` emits for an object
+    /// kind, built by its `of::<T>()` for this `T`: its shims read the
+    /// value past the table as a `T`, and its `destroy` frees the cell as
+    /// an `ObjectCell<V, T>`. Validation checks the header, not that.
+    pub unsafe fn from_cell<V: 'static, T: 'static>(
         cell: Box<ObjectCell<V, T>>,
     ) -> Result<Object<K>, KindMismatch> {
         let size = size_of::<V>();

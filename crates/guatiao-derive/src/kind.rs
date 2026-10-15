@@ -798,13 +798,15 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             where
                 Self: Sized + Send + 'static,
             {
-                let object = ::guatiao::library::Object::from_cell(::guatiao::__private::alloc::boxed::Box::new(
+                let cell = ::guatiao::__private::alloc::boxed::Box::new(
                     ::guatiao::library::kind::ObjectCell {
                         table: #table::of::<Self>(),
                         value: self,
                     },
-                ))
-                .expect("a table the kind attribute built fits its own kind");
+                );
+                // SAFETY: the table is `of::<Self>()` and the value is `self`.
+                let object = unsafe { ::guatiao::library::Object::from_cell(cell) }
+                    .expect("a table the kind attribute built fits its own kind");
                 #live.fetch_add(1, ::core::sync::atomic::Ordering::Relaxed);
                 object
             }

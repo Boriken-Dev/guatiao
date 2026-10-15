@@ -41,6 +41,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking: no safe function reads a descriptor safe code could have
+  forged.** The registry reads every pointer in a descriptor and calls its
+  slots from safe code, so the promise that they are real is now made in
+  an `unsafe` constructor, once:
+  - `Registry::register_local` takes `fn(Host) -> Option<LocalLibrary>`.
+    Migration: `local_providers!` writes the new signature, so a host
+    using it changes nothing; a hand-written describe returns
+    `Some(unsafe { LocalLibrary::new(info) })`.
+  - `Registry::register_entry` takes an `EntryPoint`. Migration:
+    `register_entry(name, unsafe { EntryPoint::new(entry) })`. The C
+    `guatiao_registry_register_entry` is unchanged.
+  - `ProviderInfo::{view, as_kind, offer, instantiate}` are `unsafe fn`.
+    Migration: wrap the call in `unsafe` with the descriptor's contract;
+    inside a library, `Host::get`/`list`/`offers` are the safe door.
+  - `ProviderParts::new` is `unsafe fn`, and `Object::from_cell` too (the
+    derives write the `unsafe`). Migration: a hand-built provider wraps
+    the call.
+- **Breaking: `ProviderView`'s fields are private**, so a view can only
+  come from reading a descriptor and its safe `available()` cannot be
+  pointed at another `ctx`. Migration: `view.id` is `view.id()`, and so
+  on for `kinds`, `display_name`, `config`, `meta`, `version`, `vtable`,
+  `vtable_size`, `ctx`, `tables`, `raw`, `create` and `destroy`
+  (`version()` is `Option<&str>`, `config()`/`meta()` are
+  `Option<&_>`).
+- **Breaking: `Host::get` and `Host::list` answer `ProviderView`s**, read
+  under the size each descriptor declares, rather than `&'static
+  ProviderInfo`: a reference to an older library's shorter descriptor
+  claimed bytes it never wrote. `Host::mismatches` pairs a view with its
+  mismatch. Migration: drop the `.view()` call; `view.raw()` is the
+  descriptor's address.
 - **A `std::` path now marks something that needs the operating system.**
   Everything `core` or `alloc` also holds is spelled that way, enforced by
   the `std_instead_of_core`, `std_instead_of_alloc` and
@@ -59,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `guatiao_registry_free` and a Python `Registry.close()` go through the
   same drop. A file passed over by its library key, or refused as a
   duplicate, after its entry point ran keeps its mapping too.
+- **The host block a registry leaks is written through one raw pointer**,
+  so the services' `ctx` it holds stays valid under Stacked Borrows.
 - **A handle held across an `.await` no longer makes the future `!Send`.**
   `Remote`, `Instance` and `Object` were `Send` only for a kind that is
   `'static`, which a future cannot show, so `tokio::spawn` refused any task
