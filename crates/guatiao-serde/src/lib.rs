@@ -45,18 +45,18 @@
 //! `a_spelling_survives_only_under_the_raw_text_policy` in `src/ser.rs`
 //! pins both halves.
 //!
-//! **Numbers on the way IN, as far as the format carries them.** The
-//! **`json`** feature — on by default — turns on
-//! `serde_json/arbitrary_precision`, so a number arrives as its own text
-//! and `1.10` reads back `1.10`. That is more than an arbitrary-precision
-//! *number type* preserves, because those hold a value and normalise the
-//! spelling; this model holds the text.
+//! **Numbers on the way IN, as far as the format carries them.** With the
+//! **`exact-numbers`** feature, `serde_json/arbitrary_precision` is on, so a
+//! number arrives as its own text and `1.10` reads back `1.10`. That is
+//! more than an arbitrary-precision *number type* preserves, because those
+//! hold a value and normalise the spelling; this model holds the text.
+//! Without it, a number that does not fit `i64`/`u64` is whatever
+//! serde_json resolves it to, an `f64`, and `1.10` reads back `1.1`.
 //!
-//! It rides with the format rather than being offered separately, because
-//! cargo unifies features across a build: turning it on reaches
-//! `serde_json::Value` in every other crate in a consumer's graph. A
-//! consumer who does not want that turns the `json` feature off and hands
-//! a `serde_json::Deserializer` to [`ValueSeed`] themselves.
+//! It is its own feature, not part of `json`, because cargo unifies
+//! features across a build: turning it on reaches `serde_json::Value` in
+//! every other crate in a consumer's graph and breaks `#[serde(untagged)]`
+//! and `#[serde(flatten)]` numbers there.
 //!
 //! **Reading the token is not behind any feature of this crate**, and that
 //! is deliberate: because features unify, *any* crate in a graph can turn
@@ -65,8 +65,10 @@
 //! map. A bug with no error attached, caused by a dependency this crate
 //! never named.
 //!
-//! `a_number_keeps_its_spelling_through_a_round_trip` in `src/de.rs` pins
-//! both halves, so a change to either is a decision rather than a surprise.
+//! `a_number_keeps_its_spelling_through_a_round_trip` and
+//! `without_exact_numbers_a_wide_number_reads_through_an_f64` in
+//! `src/de.rs` pin both halves, so a change to either is a decision rather
+//! than a surprise.
 //!
 //! **A document nests only as deep as a value can.** Reading stops at
 //! `guatiao::value::error::MAX_DEPTH` containers with an error, because a
@@ -100,7 +102,7 @@ pub mod text;
 
 pub use de::{ValueSeed, from_serde};
 pub use ser::Serializable;
-pub use text::Error;
+pub use text::{Error, Position};
 
 /// Standard base64 (RFC 4648 §4), the `A-Za-z0-9+/` alphabet padded to a
 /// multiple of four.

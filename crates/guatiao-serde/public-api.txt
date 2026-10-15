@@ -1,18 +1,29 @@
 pub mod guatiao_serde
 pub mod guatiao_serde::exports
+#[repr(C)] pub struct guatiao_serde::exports::ParseError
+pub guatiao_serde::exports::ParseError::column: u32
+pub guatiao_serde::exports::ParseError::format: u32
+pub guatiao_serde::exports::ParseError::line: u32
+pub guatiao_serde::exports::ParseError::message: guatiao::value::value::Value
 pub const guatiao_serde::exports::GUATIAO_BYTES_ARRAY: u32
 pub const guatiao_serde::exports::GUATIAO_BYTES_BASE64: u32
 pub const guatiao_serde::exports::GUATIAO_BYTES_DATA_URI: u32
 pub const guatiao_serde::exports::GUATIAO_BYTES_REFUSE: u32
+pub const guatiao_serde::exports::GUATIAO_FORMAT_JSON: u32
+pub const guatiao_serde::exports::GUATIAO_FORMAT_TOML: u32
+pub const guatiao_serde::exports::GUATIAO_FORMAT_YAML: u32
 pub const guatiao_serde::exports::GUATIAO_PRETTY: u32
 pub const guatiao_serde::exports::GUATIAO_READ_DATA_URIS: u32
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_emit(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_emit_pretty(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_parse(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_parse_ex(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_emit(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_parse(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_parse_ex(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_emit(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_parse(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_parse_ex(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
 pub mod guatiao_serde::text
 pub mod guatiao_serde::text::json
 pub const guatiao_serde::text::json::NAME: &str
@@ -31,11 +42,16 @@ pub fn guatiao_serde::text::yaml::to_string(&guatiao::value::value::Value, guati
 pub guatiao_serde::text::Error::Format
 pub guatiao_serde::text::Error::Format::detail: alloc::string::String
 pub guatiao_serde::text::Error::Format::format: &'static str
+pub guatiao_serde::text::Error::Syntax
+pub guatiao_serde::text::Error::Syntax::detail: alloc::string::String
+pub guatiao_serde::text::Error::Syntax::format: &'static str
+pub guatiao_serde::text::Error::Syntax::position: core::option::Option<guatiao_serde::text::Position>
 pub guatiao_serde::text::Error::Unsupported
 pub guatiao_serde::text::Error::Unsupported::detail: alloc::string::String
 pub guatiao_serde::text::Error::Unsupported::format: &'static str
 impl guatiao_serde::text::Error
 pub fn guatiao_serde::text::Error::format(&self) -> &'static str
+pub fn guatiao_serde::text::Error::position(&self) -> core::option::Option<guatiao_serde::text::Position>
 impl core::clone::Clone for guatiao_serde::text::Error
 pub fn guatiao_serde::text::Error::clone(&self) -> Self
 impl core::cmp::Eq for guatiao_serde::text::Error
@@ -47,6 +63,18 @@ pub fn guatiao_serde::text::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> 
 impl core::fmt::Display for guatiao_serde::text::Error
 pub fn guatiao_serde::text::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao_serde::text::Error
+pub struct guatiao_serde::text::Position
+pub guatiao_serde::text::Position::column: usize
+pub guatiao_serde::text::Position::line: usize
+impl core::clone::Clone for guatiao_serde::text::Position
+pub fn guatiao_serde::text::Position::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_serde::text::Position
+impl core::cmp::PartialEq for guatiao_serde::text::Position
+pub fn guatiao_serde::text::Position::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_serde::text::Position
+pub fn guatiao_serde::text::Position::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao_serde::text::Position
+impl core::marker::StructuralPartialEq for guatiao_serde::text::Position
 #[non_exhaustive] pub enum guatiao_serde::Bytes
 pub guatiao_serde::Bytes::Array
 pub guatiao_serde::Bytes::Base64
@@ -69,11 +97,16 @@ impl core::marker::StructuralPartialEq for guatiao_serde::Bytes
 pub guatiao_serde::Error::Format
 pub guatiao_serde::Error::Format::detail: alloc::string::String
 pub guatiao_serde::Error::Format::format: &'static str
+pub guatiao_serde::Error::Syntax
+pub guatiao_serde::Error::Syntax::detail: alloc::string::String
+pub guatiao_serde::Error::Syntax::format: &'static str
+pub guatiao_serde::Error::Syntax::position: core::option::Option<guatiao_serde::text::Position>
 pub guatiao_serde::Error::Unsupported
 pub guatiao_serde::Error::Unsupported::detail: alloc::string::String
 pub guatiao_serde::Error::Unsupported::format: &'static str
 impl guatiao_serde::text::Error
 pub fn guatiao_serde::text::Error::format(&self) -> &'static str
+pub fn guatiao_serde::text::Error::position(&self) -> core::option::Option<guatiao_serde::text::Position>
 impl core::clone::Clone for guatiao_serde::text::Error
 pub fn guatiao_serde::text::Error::clone(&self) -> Self
 impl core::cmp::Eq for guatiao_serde::text::Error
@@ -99,6 +132,18 @@ impl core::fmt::Debug for guatiao_serde::Numbers
 pub fn guatiao_serde::Numbers::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for guatiao_serde::Numbers
 impl core::marker::StructuralPartialEq for guatiao_serde::Numbers
+pub struct guatiao_serde::Position
+pub guatiao_serde::Position::column: usize
+pub guatiao_serde::Position::line: usize
+impl core::clone::Clone for guatiao_serde::text::Position
+pub fn guatiao_serde::text::Position::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_serde::text::Position
+impl core::cmp::PartialEq for guatiao_serde::text::Position
+pub fn guatiao_serde::text::Position::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_serde::text::Position
+pub fn guatiao_serde::text::Position::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao_serde::text::Position
+impl core::marker::StructuralPartialEq for guatiao_serde::text::Position
 pub struct guatiao_serde::Presentation
 impl guatiao_serde::Presentation
 pub const fn guatiao_serde::Presentation::bytes(self, guatiao_serde::Bytes) -> guatiao_serde::Presentation

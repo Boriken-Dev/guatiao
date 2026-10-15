@@ -47,7 +47,7 @@ pub fn guatiao_intake::flat::is_sensitive(guatiao::schema::read::SchemaRef<'_>, 
 pub fn guatiao_intake::flat::keys(guatiao::schema::read::FieldRef<'_>) -> alloc::vec::Vec<alloc::string::String>
 pub fn guatiao_intake::flat::resolve<'a>(guatiao::schema::read::SchemaRef<'a>, &str) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
 pub fn guatiao_intake::flat::resolve_in<'a>(guatiao::schema::read::SchemaRef<'a>, &str, impl core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String>) -> core::result::Result<guatiao::schema::read::FieldRef<'a>, guatiao::schema::ValidationError>
-pub fn guatiao_intake::flat::split(&str) -> core::option::Option<(&str, &str)>
+pub fn guatiao_intake::flat::split(&str) -> core::option::Option<(&str, alloc::borrow::Cow<'_, str>)>
 pub fn guatiao_intake::flat::unflatten(guatiao::value::alloc::Alloc, guatiao::schema::read::FieldRef<'_>, &alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>) -> core::option::Option<guatiao::value::value::Value>
 pub type guatiao_intake::flat::Error = guatiao::value::error::ValueError
 pub mod guatiao_intake::path
@@ -59,6 +59,8 @@ pub guatiao_intake::path::PathError::EmptyField
 pub guatiao_intake::path::PathError::EmptyField::at: usize
 pub guatiao_intake::path::PathError::EmptyIndex
 pub guatiao_intake::path::PathError::EmptyIndex::at: usize
+pub guatiao_intake::path::PathError::MissingSeparator
+pub guatiao_intake::path::PathError::MissingSeparator::at: usize
 pub guatiao_intake::path::PathError::TrailingQuote
 pub guatiao_intake::path::PathError::TrailingQuote::at: usize
 pub guatiao_intake::path::PathError::UnclosedIndex
@@ -443,6 +445,6 @@ pub fn guatiao_intake::keys(guatiao::schema::read::FieldRef<'_>) -> alloc::vec::
 pub fn guatiao_intake::layout<'a>(guatiao::schema::read::SchemaRef<'a>, guatiao_intake::FormRef<'a>) -> alloc::vec::Vec<guatiao_intake::Group<'a>>
 pub fn guatiao_intake::resolve<'a>(guatiao::schema::read::SchemaRef<'a>, &str) -> core::option::Option<guatiao::schema::read::FieldRef<'a>>
 pub fn guatiao_intake::resolve_in<'a>(guatiao::schema::read::SchemaRef<'a>, &str, impl core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String>) -> core::result::Result<guatiao::schema::read::FieldRef<'a>, guatiao::schema::ValidationError>
-pub fn guatiao_intake::split(&str) -> core::option::Option<(&str, &str)>
+pub fn guatiao_intake::split(&str) -> core::option::Option<(&str, alloc::borrow::Cow<'_, str>)>
 pub fn guatiao_intake::unflatten(guatiao::value::alloc::Alloc, guatiao::schema::read::FieldRef<'_>, &alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>) -> core::option::Option<guatiao::value::value::Value>
 pub fn guatiao_intake::validate_texts(guatiao::schema::read::SchemaRef<'_>, &alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>) -> core::result::Result<(), guatiao::schema::ValidationError>

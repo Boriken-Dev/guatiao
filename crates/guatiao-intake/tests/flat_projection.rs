@@ -817,3 +817,268 @@ fn clear_under_takes_a_subtree_and_nothing_else() {
     let keys: Vec<&str> = store.keys().map(String::as_str).collect();
     assert_eq!(keys, ["authority", "other"]);
 }
+
+// --- the store round-trips ----------------------------------------------
+
+fn texts_of(value: &Value) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::new();
+    for entry in TryAsRef::<Map>::try_as_ref(value).unwrap().entries() {
+        out.push((
+            entry.key().to_string(),
+            str_or(Some(entry.value()), "").to_string(),
+        ));
+    }
+    out
+}
+
+/// A sibling whose name sorts between `agent.` and `agent[` -- a capital, a
+/// digit, a hyphen, an underscore -- must not hide the list or the open map
+/// from `unflatten`.
+#[test]
+fn a_sibling_that_sorts_between_a_field_and_its_elements_loses_nothing() {
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new(
+            "agent",
+            KindBuilder::list(KindBuilder::string()),
+        ))
+        .field(FieldBuilder::new("agentName", KindBuilder::string()))
+        .field(FieldBuilder::new("agent0", KindBuilder::string()))
+        .field(FieldBuilder::new("agent-x", KindBuilder::string()))
+        .field(FieldBuilder::new("agent_x", KindBuilder::string()))
+        .field(FieldBuilder::new(
+            "env",
+            KindBuilder::map_of(KindBuilder::string()),
+        ))
+        .field(FieldBuilder::new("env-file", KindBuilder::string()))
+        .field(FieldBuilder::new("envZ", KindBuilder::string()))
+        .finish()
+        .unwrap();
+    let s = SchemaRef::new(&schema).unwrap();
+    let alloc = Alloc::rust();
+
+    let mut agents = guatiao::List::new();
+    agents.push("one").unwrap();
+    agents.push("two").unwrap();
+    let mut env = Map::new();
+    env.set("PATH", "/bin").unwrap();
+    env.set("HOME", "/root").unwrap();
+
+    let mut store = BTreeMap::new();
+    assert!(flat::flatten(
+        s.find("agent").unwrap(),
+        &Value::from(agents),
+        &mut store
+    ));
+    assert!(flat::flatten(
+        s.find("env").unwrap(),
+        &Value::from(env),
+        &mut store
+    ));
+    for sibling in [
+        "agentName",
+        "agent0",
+        "agent-x",
+        "agent_x",
+        "env-file",
+        "envZ",
+    ] {
+        store.insert(sibling.to_string(), "sibling".to_string());
+    }
+
+    let agents = flat::unflatten(alloc, s.find("agent").unwrap(), &store)
+        .expect("the list is still there beside its siblings");
+    let list = TryAsRef::<guatiao::List>::try_as_ref(&agents).unwrap();
+    assert_eq!(list.len(), 2);
+
+    let env = flat::unflatten(alloc, s.find("env").unwrap(), &store)
+        .expect("the open map is still there beside its siblings");
+    assert_eq!(
+        texts_of(&env),
+        [
+            ("HOME".to_string(), "/root".to_string()),
+            ("PATH".to_string(), "/bin".to_string())
+        ]
+    );
+    assert_eq!(guatiao_intake::validate_texts(s, &store), Ok(()));
+}
+
+/// A field called `a.b` and a field `a` with a member `b` are two keys in
+/// a store, not one.
+#[test]
+fn a_dotted_top_level_field_is_stored_apart_from_a_member() {
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new(
+            "a",
+            KindBuilder::map(vec![FieldBuilder::new("b", KindBuilder::string())]),
+        ))
+        .field(FieldBuilder::new("a.b", KindBuilder::string()))
+        .finish()
+        .unwrap();
+    let s = SchemaRef::new(&schema).unwrap();
+    let alloc = Alloc::rust();
+
+    let mut inner = Map::new();
+    inner.set("b", "member").unwrap();
+    let mut store = BTreeMap::new();
+    assert!(flat::flatten(
+        s.find("a.b").unwrap(),
+        &Value::from("top"),
+        &mut store
+    ));
+    assert!(flat::flatten(
+        s.find("a").unwrap(),
+        &Value::from(inner),
+        &mut store
+    ));
+    assert_eq!(
+        store,
+        store_of(&[("[a.b]", "top"), ("a.b", "member")]),
+        "the dotted field is spelled as a bracket key"
+    );
+
+    let top = flat::unflatten(alloc, s.find("a.b").unwrap(), &store).unwrap();
+    assert_eq!(TryAsRef::<str>::try_as_ref(&top), Some("top"));
+    let member = flat::unflatten(alloc, s.find("a").unwrap(), &store).unwrap();
+    assert_eq!(texts_of(&member), [("b".to_string(), "member".to_string())]);
+
+    assert_eq!(flat::keys(s.find("a.b").unwrap()), ["[a.b]"]);
+    assert_eq!(
+        flat::resolve(s, "[a.b]").map(|f| f.key()),
+        Some("a.b"),
+        "the spelling the store uses names the field"
+    );
+}
+
+/// `keys` and `split` read the key the way `flatten` writes it.
+#[test]
+fn keys_and_split_agree_with_flatten_for_a_member_that_needs_quoting() {
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new(
+            "auth",
+            KindBuilder::variant(
+                "auth",
+                vec![
+                    ArmBuilder::new("x", "X")
+                        .field(FieldBuilder::new("c.d", KindBuilder::string()))
+                        .field(FieldBuilder::new(r#""q""#, KindBuilder::string()))
+                        .field(FieldBuilder::new("plain", KindBuilder::string())),
+                ],
+            ),
+        ))
+        .finish()
+        .unwrap();
+    let s = SchemaRef::new(&schema).unwrap();
+    let auth = s.find("auth").unwrap();
+
+    let value = tagged(
+        "x",
+        &[("c.d", "one"), (r#""q""#, "two"), ("plain", "three")],
+    );
+    let mut store = BTreeMap::new();
+    assert!(flat::flatten(auth, &value, &mut store));
+    assert_eq!(store.len(), 4, "{store:?}");
+
+    let mut written: Vec<&str> = store.keys().map(String::as_str).collect();
+    written.sort_unstable();
+    let mut offered = flat::keys(auth);
+    offered.sort();
+    assert_eq!(offered, written, "keys lists what flatten writes");
+
+    assert_eq!(
+        flat::split("auth[c.d]"),
+        Some(("auth", "c.d".into())),
+        "split reads the bracket as one member"
+    );
+    assert_eq!(
+        flat::split(r#"auth["\"q\""]"#),
+        Some(("auth", r#""q""#.into())),
+        "and unescapes a quoted one"
+    );
+    assert_eq!(flat::split("auth.plain"), Some(("auth", "plain".into())));
+    assert_eq!(
+        flat::split("agent[0].name"),
+        Some(("agent[0]", "name".into()))
+    );
+    assert_eq!(flat::split("auth"), None);
+    assert_eq!(flat::split("not[a path"), None);
+}
+
+/// A spelling the grammar refuses is not a key the store can hold for a
+/// field: validation names it and reading skips it.
+#[test]
+fn a_store_key_off_the_grammar_is_refused_and_not_read() {
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new(
+            "agent",
+            KindBuilder::list(KindBuilder::string()),
+        ))
+        .field(FieldBuilder::new(
+            "env",
+            KindBuilder::map_of(KindBuilder::string()),
+        ))
+        .finish()
+        .unwrap();
+    let s = SchemaRef::new(&schema).unwrap();
+    let alloc = Alloc::rust();
+    let agent = s.find("agent").unwrap();
+
+    for off in ["agent.[0]", "agent[0]x", "agent[a[b]"] {
+        let store = store_of(&[(off, "x")]);
+        assert!(
+            guatiao_intake::validate_texts(s, &store).is_err(),
+            "`{off}` is refused"
+        );
+        assert!(
+            flat::unflatten(alloc, agent, &store).is_none(),
+            "`{off}` is not an element"
+        );
+    }
+
+    // A leading zero makes a key, and a key under a list is no element.
+    assert!(flat::unflatten(alloc, agent, &store_of(&[("agent[01]", "x")])).is_none());
+    // Under an open map it is an ordinary key, and survives a round trip.
+    let env = s.find("env").unwrap();
+    let read = flat::unflatten(alloc, env, &store_of(&[("env[01]", "z")])).unwrap();
+    assert_eq!(texts_of(&read), [("01".to_string(), "z".to_string())]);
+    let mut again = BTreeMap::new();
+    assert!(flat::flatten(env, &read, &mut again));
+    assert_eq!(again, store_of(&[("env[01]", "z")]));
+}
+
+/// A value nested past the bound answers `false` and does not recurse or
+/// grow without limit.
+#[test]
+fn flatten_stops_at_the_depth_bound() {
+    let nest = |levels: usize| {
+        let mut kind = KindBuilder::string();
+        for _ in 0..levels {
+            kind = KindBuilder::list(kind);
+        }
+        let schema = SchemaBuilder::new()
+            .field(FieldBuilder::new("x", kind))
+            .finish()
+            .unwrap();
+        let mut value = Value::from("leaf");
+        for _ in 0..levels {
+            let mut list = guatiao::List::new();
+            list.push(value).unwrap();
+            value = list.into();
+        }
+        (schema, value)
+    };
+
+    let (schema, shallow) = nest(20);
+    let s = SchemaRef::new(&schema).unwrap();
+    let mut store = BTreeMap::new();
+    assert!(flat::flatten(s.find("x").unwrap(), &shallow, &mut store));
+    assert_eq!(store.len(), 1);
+
+    let (schema, deep) = nest(300);
+    let s = SchemaRef::new(&schema).unwrap();
+    let mut store = BTreeMap::new();
+    assert!(
+        !flat::flatten(s.find("x").unwrap(), &deep, &mut store),
+        "a value nested past the bound does not fit"
+    );
+    assert!(store.is_empty(), "and nothing past the bound is written");
+}
