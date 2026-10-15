@@ -87,6 +87,24 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
             "a provider names at least one kind: `#[provider(Greeter)]`",
         ));
     }
+    // Each kind once: a second table for one kind would be a second
+    // `tables` entry under one name, and only the first would be read.
+    let spelled = |kind: &Path| -> String {
+        let mut kind = kind.clone();
+        kind.leading_colon = None;
+        quote!(#kind).to_string().split_whitespace().collect()
+    };
+    for (i, kind) in decl.kinds.iter().enumerate() {
+        if decl.kinds[..i].iter().any(|k| spelled(k) == spelled(kind)) {
+            return Err(syn::Error::new_spanned(
+                kind,
+                format!(
+                    "`{}` is named twice: a provider serves a kind through one table",
+                    spelled(kind)
+                ),
+            ));
+        }
+    }
     if decl.new.is_some() && decl.new_with_host.is_some() {
         return Err(syn::Error::new_spanned(
             &ast.ident,
@@ -586,6 +604,14 @@ mod tests {
             (
                 "#[provider(Greeter, config = C, available = Hello::ready)] struct Hello;",
                 "`available` asks the provider's default instance",
+            ),
+            (
+                "#[provider(Counter, Greeter, ::Counter)] struct Hello;",
+                "`Counter` is named twice",
+            ),
+            (
+                "#[provider(kinds(k::Greeter), k::Greeter)] struct Hello;",
+                "`k::Greeter` is named twice",
             ),
         ];
         for (item, expected) in cases {

@@ -74,6 +74,45 @@ impl<'a> Roots<'a> {
         (bare || under).then_some(name)
     }
 
+    /// The name of guatiao's or the standard library's type that `path`
+    /// ends in while spelled under a root this macro does not know
+    /// (`foreign::Value`). `None` when it is recognised, or ends in no such
+    /// name.
+    pub(crate) fn unrecognised(&self, path: &Path) -> Option<&'static str> {
+        if self.guatiao(path).is_some() || self.std(path).is_some() {
+            return None;
+        }
+        let (_, name) = split(path)?;
+        GUATIAO_NAMES
+            .iter()
+            .chain(STD_NAMES)
+            .find(|n| **n == name)
+            .copied()
+    }
+
+    /// The refusal for a type [`Roots::unrecognised`] named, saying which
+    /// spellings are read.
+    pub(crate) fn refusal(&self, spanned: &impl quote::ToTokens, name: &str) -> syn::Error {
+        let accepted = if STD_NAMES.contains(&name) {
+            format!(
+                "the standard `{name}` is spelled `{name}` or under `std::`, `core::` or `alloc::`"
+            )
+        } else {
+            format!(
+                "guatiao's `{name}` is spelled `{name}`, or under `guatiao::`, `::guatiao::` or \
+                 the `crate =` root"
+            )
+        };
+        syn::Error::new_spanned(
+            spanned,
+            format!(
+                "this type ends in `{name}` under a path the kind attribute does not read, so it \
+                 cannot tell which `{name}` it is: {accepted}; a type of your own needs another \
+                 name in the signature (`use .. as ..`)"
+            ),
+        )
+    }
+
     /// `ty` with every recognised path bare, no leading `::`, no
     /// lifetime on a reference and no parentheses: what the hash reads.
     pub(crate) fn canonical(&self, ty: &Type) -> Type {

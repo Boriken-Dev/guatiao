@@ -162,6 +162,100 @@ pub use value::{
     Value, ValueError,
 };
 
+/// # What `#[derive(Provider)]` refuses
+///
+/// Each kind once: a second table for one kind would never be read.
+///
+/// ```compile_fail
+/// use greeter_kind::Counter;
+///
+/// #[derive(Default, guatiao::Provider)]
+/// #[provider(Counter, Counter)]
+/// struct Twice;
+///
+/// impl Counter for Twice {
+///     fn count(&self) -> i64 { 0 }
+/// }
+/// ```
+///
+/// Named once, the same provider is accepted:
+///
+/// ```
+/// use greeter_kind::Counter;
+///
+/// #[derive(Default, guatiao::Provider)]
+/// #[provider(Counter)]
+/// struct Once;
+///
+/// impl Counter for Once {
+///     fn count(&self) -> i64 { 0 }
+/// }
+/// ```
+#[cfg(feature = "provider")]
+pub use guatiao_derive::Provider;
+/// # What `#[guatiao::kind]` refuses, and that it really does
+///
+/// The messages are pinned by unit tests in `guatiao-derive`; these pin
+/// that the compiler agrees. An argument may be named like the glue's own
+/// parameters, and guatiao's and the standard types are read under any
+/// of their usual paths:
+///
+/// ```
+/// use guatiao::library::ProviderError;
+///
+/// #[guatiao::kind]
+/// pub trait Named: Send + Sync {
+///     fn f(&self, ctx: i64, out: &str, err: bool) -> Result<String, ProviderError>;
+///     fn g(&self, v: &::guatiao::Value) -> Result<std::string::String, guatiao::library::ProviderError>;
+/// }
+/// ```
+///
+/// A method cannot take the name of a field every table has:
+///
+/// ```compile_fail
+/// #[guatiao::kind]
+/// pub trait Headed: Send + Sync {
+///     fn header(&self) -> i64;
+/// }
+/// ```
+///
+/// ```compile_fail
+/// #[guatiao::kind(object)]
+/// pub trait Destroyed: Send {
+///     fn destroy(&mut self) -> i64;
+/// }
+/// ```
+///
+/// A type ending in `Value` (or `Map`, `List`, `String`, `Object`,
+/// `ProviderError`) under a path the attribute does not read is refused,
+/// since it cannot tell whether the type is guatiao's:
+///
+/// ```compile_fail
+/// mod foreign {
+///     pub struct Value(pub u8);
+/// }
+/// use guatiao::library::ProviderError;
+///
+/// #[guatiao::kind]
+/// pub trait Foreign: Send + Sync {
+///     fn f(&self, v: &foreign::Value) -> Result<i64, ProviderError>;
+/// }
+/// ```
+///
+/// ```compile_fail
+/// mod foreign {
+///     #[derive(Debug)]
+///     pub struct String(pub u8);
+/// }
+/// use guatiao::library::ProviderError;
+///
+/// #[guatiao::kind]
+/// pub trait Foreign: Send + Sync {
+///     fn f(&self) -> Result<foreign::String, ProviderError>;
+/// }
+/// ```
+#[cfg(feature = "provider")]
+pub use guatiao_derive::kind;
 /// `#[derive(ToValue)]` and `#[derive(FromValue)]`, behind the
 /// `derive` feature.
 ///
@@ -289,6 +383,4 @@ pub use value::{
 /// ```
 #[cfg(feature = "derive")]
 pub use guatiao_derive::{FromValue, Schema, ToValue};
-#[cfg(feature = "provider")]
-pub use guatiao_derive::{Provider, kind};
 pub use value::merge::{MergeError, MergeMode, MergeOptions, MergeOverrides, Provenance, Source};

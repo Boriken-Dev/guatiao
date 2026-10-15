@@ -364,6 +364,21 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
             "a kind method cannot be variadic",
         ));
     }
+    let reserved = match sig.ident.to_string().as_str() {
+        "header" => Some("the table's first field is its `header`"),
+        "destroy" => Some("an object kind's table carries its own `destroy` slot"),
+        "into_object" if object => Some("the attribute adds `into_object` to an object kind"),
+        _ => None,
+    };
+    if let Some(why) = reserved {
+        return Err(syn::Error::new_spanned(
+            &sig.ident,
+            format!(
+                "a kind method cannot be named `{}`: {why}; give the method another name",
+                sig.ident
+            ),
+        ));
+    }
     let mutable = match sig.receiver() {
         Some(r) if r.reference.is_some() && r.mutability.is_none() => false,
         Some(r) if r.reference.is_some() && object => true,
@@ -397,7 +412,14 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
                 ));
             }
         };
-        let kind = arg_kind(&pat.ty, object)?;
+        if ident.to_string().starts_with("__") {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "a kind method's argument cannot start with `__`: those names are the generated \
+                 glue's",
+            ));
+        }
+        let kind = arg_kind(&pat.ty, object, roots)?;
         args.push(ArgPlan {
             ident,
             kind,
@@ -405,7 +427,7 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
         });
     }
 
-    let (ret, fallible) = ret_kind(&sig.output)?;
+    let (ret, fallible) = ret_kind(&sig.output, roots)?;
     let converts = args.iter().any(|a| {
         matches!(
             a.kind,
@@ -452,22 +474,51 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
     })
 }
 
-/// The `dyn K` inside an `Object<dyn K>` path, or `None` for any other
-/// type.
-fn object_inner(ty: &Type) -> Option<Type> {
-    let Type::Path(p) = ty else {
-        return None;
+/// The `dyn K` inside an `Object<dyn K>` path, `None` for any other
+/// type, or a refusal for an `Object` the attribute cannot tell is
+/// guatiao's.
+fn object_inner(ty: &Type, roots: Roots<'_>) -> syn::Result<Option<Type>> {
+    let Some(name) = special(ty, roots)? else {
+        return Ok(None);
     };
-    let last = p.path.segments.last()?;
-    if last.ident != "Object" {
-        return None;
+    let Type::Path(p) = ty else {
+        return Ok(None);
+    };
+    let last = p.path.segments.last().expect("a path has a segment");
+    if name != "Object" {
+        return Ok(None);
     }
     let PathArguments::AngleBracketed(a) = &last.arguments else {
-        return None;
+        return Ok(None);
     };
-    match a.args.first()? {
-        GenericArgument::Type(inner) => Some(inner.clone()),
+    Ok(match a.args.first() {
+        Some(GenericArgument::Type(inner)) => Some(inner.clone()),
         _ => None,
+    })
+}
+
+/// Which of the types the glue treats specially `ty` names — guatiao's
+/// `Value`, `Map`, `List`, `Text`, `ProviderError`, `Object`, `Status`
+/// or the standard `String`, `Vec`, `Option`, `Result`, `Box` — or
+/// `None`. A path ending in `Value`, `Map`, `List`, `String`,
+/// `ProviderError` or `Object` under a root the attribute does not read
+/// is refused here: classified by its last segment it would fail to
+/// compile inside the expansion, far from what was written.
+fn special(ty: &Type, roots: Roots<'_>) -> syn::Result<Option<&'static str>> {
+    let Type::Path(p) = ty else {
+        return Ok(None);
+    };
+    if p.qself.is_some() {
+        return Ok(None);
+    }
+    if let Some(name) = roots.guatiao(&p.path).or_else(|| roots.std(&p.path)) {
+        return Ok(Some(name));
+    }
+    match roots.unrecognised(&p.path) {
+        Some(name @ ("Value" | "Map" | "List" | "String" | "ProviderError" | "Object")) => {
+            Err(roots.refusal(ty, name))
+        }
+        _ => Ok(None),
     }
 }
 
@@ -524,8 +575,8 @@ fn lent_inner(r: &TypeReference) -> Option<syn::Result<(bool, Type)>> {
     Some(Ok((r.mutability.is_some(), syn::parse_quote!(dyn #path))))
 }
 
-fn arg_kind(ty: &Type, object: bool) -> syn::Result<ArgKind> {
-    if let Some(inner) = object_inner(ty) {
+fn arg_kind(ty: &Type, object: bool, roots: Roots<'_>) -> syn::Result<ArgKind> {
+    if let Some(inner) = object_inner(ty, roots)? {
         return Ok(ArgKind::Object(inner));
     }
     if let Type::Reference(r) = ty
@@ -560,10 +611,8 @@ fn arg_kind(ty: &Type, object: bool) -> syn::Result<ArgKind> {
         Type::Reference(TypeReference { elem, .. }) => match &**elem {
             Type::Path(_) if last_ident(elem).is_some_and(|i| i == "str") => Ok(ArgKind::Str),
             Type::Slice(s) if last_ident(&s.elem).is_some_and(|i| i == "u8") => Ok(ArgKind::Bytes),
-            Type::Path(_) if last_ident(elem).is_some_and(|i| i == "Value") => {
-                Ok(ArgKind::ValueRef)
-            }
-            Type::Path(_) if last_ident(elem).is_some_and(|i| i == "Map") => Ok(ArgKind::MapRef),
+            Type::Path(_) if special(elem, roots)? == Some("Value") => Ok(ArgKind::ValueRef),
+            Type::Path(_) if special(elem, roots)? == Some("Map") => Ok(ArgKind::MapRef),
             _ => Err(syn::Error::new_spanned(
                 ty,
                 "a borrowed argument of this type cannot cross; `&str`, `&[u8]`, `&Value` and \
@@ -583,17 +632,16 @@ fn arg_kind(ty: &Type, object: bool) -> syn::Result<ArgKind> {
             if is_scalar(&last.ident) && last.arguments.is_none() {
                 return Ok(ArgKind::Scalar(ty.clone()));
             }
-            if last.ident == "Option"
+            if special(ty, roots)? == Some("Option")
                 && let PathArguments::AngleBracketed(a) = &last.arguments
                 && let Some(GenericArgument::Type(Type::Reference(r))) = a.args.first()
-                && last_ident(&r.elem).is_some_and(|i| i == "Value")
+                && special(&r.elem, roots)? == Some("Value")
             {
                 return Ok(ArgKind::ValueOpt);
             }
-            if matches!(
-                last.ident.to_string().as_str(),
-                "Value" | "Map" | "List" | "Text" | "Buffer"
-            ) {
+            if matches!(special(ty, roots)?, Some("Value" | "Map" | "List" | "Text"))
+                || last.ident == "Buffer"
+            {
                 return Err(syn::Error::new_spanned(
                     ty,
                     "take a value argument by reference (`&Value`, `&Map`); by value it would \
@@ -609,7 +657,7 @@ fn arg_kind(ty: &Type, object: bool) -> syn::Result<ArgKind> {
     }
 }
 
-fn ret_kind(output: &ReturnType) -> syn::Result<(RetKind, bool)> {
+fn ret_kind(output: &ReturnType, roots: Roots<'_>) -> syn::Result<(RetKind, bool)> {
     let ty = match output {
         ReturnType::Default => return Ok((RetKind::Unit, false)),
         ReturnType::Type(_, ty) => &**ty,
@@ -634,20 +682,20 @@ fn ret_kind(output: &ReturnType) -> syn::Result<(RetKind, bool)> {
                 "spell the error type: `Result<_, ProviderError>`",
             ));
         };
-        if last_ident(err).is_none_or(|i| i != "ProviderError") {
+        if special(err, roots)? != Some("ProviderError") {
             return Err(syn::Error::new_spanned(
                 err,
                 "the error of a kind method is `ProviderError`, the one error type both sides \
                  of the table share",
             ));
         }
-        return Ok((plain_ret(ok)?, true));
+        return Ok((plain_ret(ok, roots)?, true));
     }
-    Ok((plain_ret(ty)?, false))
+    Ok((plain_ret(ty, roots)?, false))
 }
 
-fn plain_ret(ty: &Type) -> syn::Result<RetKind> {
-    if let Some(inner) = object_inner(ty) {
+fn plain_ret(ty: &Type, roots: Roots<'_>) -> syn::Result<RetKind> {
+    if let Some(inner) = object_inner(ty, roots)? {
         return Ok(RetKind::Object(inner));
     }
     match ty {
@@ -666,11 +714,11 @@ fn plain_ret(ty: &Type) -> syn::Result<RetKind> {
             if is_scalar(&last.ident) && last.arguments.is_none() {
                 return Ok(RetKind::Scalar(ty.clone()));
             }
-            Ok(match last.ident.to_string().as_str() {
-                "Value" => RetKind::Value,
-                "Map" => RetKind::Map,
-                "List" => RetKind::List,
-                "String" => RetKind::Text,
+            Ok(match special(ty, roots)? {
+                Some("Value") => RetKind::Value,
+                Some("Map") => RetKind::Map,
+                Some("List") => RetKind::List,
+                Some("String") => RetKind::Text,
                 _ => RetKind::Owned(ty.clone()),
             })
         }
@@ -1143,10 +1191,21 @@ fn ret_c_type(ret: &RetKind) -> Option<TokenStream> {
     }
 }
 
+/// An argument's name in the slot's type, which a C header renders: one
+/// named `ctx`, `out` or `err` gains a `_`, so no two parameters of the
+/// prototype share a name.
+fn c_param(ident: &Ident) -> Ident {
+    if matches!(ident.to_string().as_str(), "ctx" | "out" | "err") {
+        format_ident!("{}_", ident)
+    } else {
+        ident.clone()
+    }
+}
+
 /// The slot's function-pointer type.
 fn slot_type(m: &MethodPlan) -> TokenStream {
     let args = m.args.iter().map(|a| {
-        let ident = &a.ident;
+        let ident = c_param(&a.ident);
         let ty = arg_c_type(&a.kind);
         quote!(#ident: #ty)
     });
@@ -1196,10 +1255,10 @@ fn emit_shim(
         let ty = arg_c_type(&a.kind);
         quote!(#ident: #ty)
     });
-    let out_param = ret_c_type(&m.ret).map(|ty| quote!(, out: #ty));
+    let out_param = ret_c_type(&m.ret).map(|ty| quote!(, __out: #ty));
     let err_param = m
         .fallible
-        .then(|| quote!(, err: *mut ::guatiao::library::ProviderError));
+        .then(|| quote!(, __err: *mut ::guatiao::library::ProviderError));
 
     // A conversion failure inside a fallible method is an error the
     // caller sees; the plan refuses conversions in infallible ones.
@@ -1207,7 +1266,7 @@ fn emit_shim(
         if m.fallible {
             quote! {
                 // SAFETY: the proxy passes a writable error slot.
-                return unsafe { ::guatiao::library::kind::write_err(err, #status.into()) };
+                return unsafe { ::guatiao::library::kind::write_err(__err, #status.into()) };
             }
         } else {
             quote! { return #status; }
@@ -1232,7 +1291,7 @@ fn emit_shim(
                 ::core::result::Result::Ok(__v) => __v,
                 // SAFETY: the proxy passes a writable error slot.
                 ::core::result::Result::Err(__e) => {
-                    return unsafe { ::guatiao::library::kind::write_err(err, __e) };
+                    return unsafe { ::guatiao::library::kind::write_err(__err, __e) };
                 }
             };
         })
@@ -1312,7 +1371,7 @@ fn emit_shim(
                     ::core::result::Result::Ok(__v) => __v,
                     // SAFETY: the proxy passes a writable error slot.
                     ::core::result::Result::Err(__e) => {
-                        return unsafe { ::guatiao::library::kind::write_err(err, __e) };
+                        return unsafe { ::guatiao::library::kind::write_err(__err, __e) };
                     }
                 };
             },
@@ -1322,7 +1381,7 @@ fn emit_shim(
                     ::core::result::Result::Ok(__v) => __v,
                     // SAFETY: the proxy passes a writable error slot.
                     ::core::result::Result::Err(__e) => {
-                        return unsafe { ::guatiao::library::kind::write_err(err, __e) };
+                        return unsafe { ::guatiao::library::kind::write_err(__err, __e) };
                     }
                 };
             },
@@ -1347,7 +1406,7 @@ fn emit_shim(
             // is the cell `into_object` boxed; the handle is the one
             // reference to it.
             let ::core::option::Option::Some(__this) =
-                (unsafe { ::guatiao::library::kind::object_mut::<#table, __T>(ctx) })
+                (unsafe { ::guatiao::library::kind::object_mut::<#table, __T>(__ctx) })
             else {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
@@ -1356,7 +1415,7 @@ fn emit_shim(
             // SAFETY: the table was built for `__T` and the descriptor's
             // `ctx` is a `&__T`.
             let ::core::option::Option::Some(__this) =
-                (unsafe { ::guatiao::library::kind::ctx_ref::<__T>(ctx) })
+                (unsafe { ::guatiao::library::kind::ctx_ref::<__T>(__ctx) })
             else {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
@@ -1366,7 +1425,7 @@ fn emit_shim(
             // address of the lender's `*mut dyn` for the call, which no
             // other reference reaches meanwhile.
             let ::core::option::Option::Some(__this) =
-                (unsafe { ::guatiao::library::kind::lent_mut::<dyn #trait_ident>(ctx) })
+                (unsafe { ::guatiao::library::kind::lent_mut::<dyn #trait_ident>(__ctx) })
             else {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
@@ -1375,7 +1434,7 @@ fn emit_shim(
             // SAFETY: a table `lent()` built is lent with `ctx` the address
             // of the lender's `*const dyn` for the call.
             let ::core::option::Option::Some(__this) =
-                (unsafe { ::guatiao::library::kind::lent_ref::<dyn #trait_ident>(ctx) })
+                (unsafe { ::guatiao::library::kind::lent_ref::<dyn #trait_ident>(__ctx) })
             else {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
@@ -1387,25 +1446,25 @@ fn emit_shim(
         RetKind::Unit => quote! { { let _ = #answer; ::guatiao::Status::GUATIAO_OK } },
         RetKind::Scalar(_) | RetKind::Value | RetKind::Map | RetKind::List => quote! {
             // SAFETY: the proxy passes a writable out slot.
-            unsafe { ::guatiao::library::kind::write_out(out, #answer) }
+            unsafe { ::guatiao::library::kind::write_out(__out, #answer) }
         },
         RetKind::Text => quote! {
             // SAFETY: the proxy passes a writable out slot.
-            unsafe { ::guatiao::library::kind::write_out(out, ::guatiao::Text::new(&#answer)) }
+            unsafe { ::guatiao::library::kind::write_out(__out, ::guatiao::Text::new(&#answer)) }
         },
         RetKind::Owned(ty) => quote! {
             match <#ty as ::guatiao::ToValue>::to_value_in(&#answer, ::guatiao::Alloc::rust()) {
                 // SAFETY: the proxy passes a writable out slot.
-                ::core::result::Result::Ok(__v) => unsafe { ::guatiao::library::kind::write_out(out, __v) },
+                ::core::result::Result::Ok(__v) => unsafe { ::guatiao::library::kind::write_out(__out, __v) },
                 // SAFETY: the proxy passes a writable error slot.
                 ::core::result::Result::Err(__e) => unsafe {
-                    ::guatiao::library::kind::write_err(err, ::guatiao::library::ProviderError::from(__e))
+                    ::guatiao::library::kind::write_err(__err, ::guatiao::library::ProviderError::from(__e))
                 },
             }
         },
         RetKind::Object(inner) => quote! {
             // SAFETY: the proxy passes a writable out slot.
-            unsafe { ::guatiao::library::kind::object_out::<#inner>(out, #answer) }
+            unsafe { ::guatiao::library::kind::object_out::<#inner>(__out, #answer) }
         },
     };
     let body = if m.fallible {
@@ -1414,7 +1473,7 @@ fn emit_shim(
             match #call {
                 ::core::result::Result::Ok(__answer) => { #ok }
                 // SAFETY: the proxy passes a writable error slot.
-                ::core::result::Result::Err(__e) => unsafe { ::guatiao::library::kind::write_err(err, __e) },
+                ::core::result::Result::Err(__e) => unsafe { ::guatiao::library::kind::write_err(__err, __e) },
             }
         }
     } else {
@@ -1432,7 +1491,7 @@ fn emit_shim(
                 // SAFETY: the caller passes a writable error slot.
                 unsafe {
                     ::guatiao::library::kind::write_err(
-                        err,
+                        __err,
                         ::guatiao::library::ProviderError::new(
                             ::guatiao::Status::GUATIAO_ERR_UNSUPPORTED,
                             #message,
@@ -1450,7 +1509,7 @@ fn emit_shim(
             #[doc(hidden)]
             #[allow(unused_variables)]
             pub unsafe extern "C" fn #shim(
-                ctx: *mut ::core::ffi::c_void
+                __ctx: *mut ::core::ffi::c_void
                 #(, #params)*
                 #out_param
                 #err_param
@@ -1483,7 +1542,7 @@ fn emit_shim(
         #safety
         #[doc(hidden)]
         pub unsafe extern "C" fn #shim #generics(
-            ctx: *mut ::core::ffi::c_void
+            __ctx: *mut ::core::ffi::c_void
             #(, #params)*
             #out_param
             #err_param
@@ -1947,13 +2006,13 @@ mod tests {
             "{out}"
         );
         assert!(
-            out.contains("lent_mut :: < dyn Conversation > (ctx)"),
+            out.contains("lent_mut :: < dyn Conversation > (__ctx)"),
             "{out}"
         );
         // `turns(&self)`: it can be lent shared, and there `say` refuses.
         assert!(out.contains("pub const fn lent () -> Self"), "{out}");
         assert!(
-            out.contains("lent_ref :: < dyn Conversation > (ctx)"),
+            out.contains("lent_ref :: < dyn Conversation > (__ctx)"),
             "{out}"
         );
         assert!(out.contains("GUATIAO_ERR_UNSUPPORTED"), "{out}");
@@ -2065,6 +2124,55 @@ mod tests {
                 "pub trait P: Send + Sync { fn f(&self, v: &'static ::guatiao::Value, m: &guatiao::Map) -> i64; }"
             ),
             fnv1a("provider;f(&Value,&Map)->i64")
+        );
+    }
+
+    /// The shim's own parameters are `__ctx`, `__out` and `__err`, so an
+    /// argument may take any of the plain names; in the slot's type, which
+    /// a C header renders, such an argument gains a `_`.
+    #[test]
+    fn arguments_named_like_the_glue_s_parameters_cross() {
+        let out = expand_str(
+            "",
+            "pub trait G: Send + Sync { fn f(&self, ctx: i64, out: &str, err: bool) -> Result<String, ProviderError>; }",
+        )
+        .expect("expands");
+        assert!(out.contains("__ctx : * mut :: core :: ffi :: c_void , ctx : i64 , out : :: guatiao :: Str , err : bool , __out"), "{out}");
+        assert!(
+            out.contains("ctx_ : i64 , out_ : :: guatiao :: Str , err_ : bool , out : * mut"),
+            "{out}"
+        );
+        // Every spelling of guatiao's and the standard types is read.
+        for (spelled, shape) in [
+            ("&::guatiao::Value", "value_arg"),
+            ("&guatiao::value::types::Map", "map_arg"),
+            ("::core::option::Option<&guatiao::Value>", "value_opt"),
+        ] {
+            let out = expand_str(
+                "",
+                &format!("pub trait G: Send + Sync {{ fn f(&self, v: {spelled}) -> Result<std::string::String, ::guatiao::library::ProviderError>; }}"),
+            )
+            .expect("expands");
+            assert!(out.contains(shape), "{spelled}: {out}");
+            assert!(out.contains("text_ret"), "{spelled}: {out}");
+        }
+        // Under a `crate =` root too.
+        let out = expand_str(
+            "crate = ::kinds::guatiao",
+            "pub trait G: Send + Sync { fn f(&self, v: &kinds::guatiao::Value) -> Result<kinds::guatiao::Map, kinds::guatiao::library::ProviderError>; }",
+        )
+        .expect("expands");
+        assert!(out.contains("value_arg"), "{out}");
+        assert!(out.contains("map_ret"), "{out}");
+        // A type of the caller's that merely ends in `Text` crosses by value.
+        let out = expand_str(
+            "",
+            "pub trait G: Send + Sync { fn f(&self, t: proto::Text) -> Result<(), ProviderError>; }",
+        )
+        .expect("expands");
+        assert!(
+            out.contains("< proto :: Text as :: guatiao :: FromValue >"),
+            "{out}"
         );
     }
 
@@ -2242,6 +2350,61 @@ mod tests {
                 "nam = \"x\"",
                 "pub trait G: Send + Sync { fn f(&self) -> i64; }",
                 "#[kind] takes only `name = \"...\"`",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn header(&self) -> i64; }",
+                "a kind method cannot be named `header`",
+            ),
+            (
+                "object",
+                "pub trait G: Send { fn destroy(&mut self) -> i64; }",
+                "a kind method cannot be named `destroy`",
+            ),
+            (
+                "object",
+                "pub trait G: Send { fn into_object(&self) -> i64; }",
+                "a kind method cannot be named `into_object`",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, __out: i64) -> i64; }",
+                "cannot start with `__`",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, v: &foreign::Value) -> Result<i64, ProviderError>; }",
+                "this type ends in `Value` under a path the kind attribute does not read",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, v: Option<&foreign::Value>) -> i64; }",
+                "guatiao's `Value` is spelled `Value`, or under `guatiao::`, `::guatiao::` or the `crate =` root",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, m: foreign::Map) -> Result<i64, ProviderError>; }",
+                "this type ends in `Map`",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self) -> Result<foreign::String, ProviderError>; }",
+                "the standard `String` is spelled `String` or under `std::`, `core::` or `alloc::`",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self) -> Result<model::List, ProviderError>; }",
+                "this type ends in `List`",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, o: other::Object<dyn K>) -> Result<(), ProviderError>; }",
+                "this type ends in `Object`",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self) -> Result<i64, mine::ProviderError>; }",
+                "this type ends in `ProviderError`",
             ),
             (
                 "name = \"\"",
