@@ -148,6 +148,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `set`/`push`/`push_str`; where the container lives in an allocator that
   may refuse and the caller handles it, call `try_set`/`try_push`/
   `try_push_str` (or the `_in` form) instead.
+- **Breaking: iterating a `&mut Map` yields `(&Text, &mut Value)`**, as
+  `HashMap::iter_mut` does, through the new `Map::iter_mut` and its
+  `IterMut`. It yielded `&mut Entry`, so safe code could overwrite a whole
+  entry and give a map a repeated key that its own wire encoding then
+  refused. *Migration:* `for entry in &mut map { *entry.value_mut() = v }`
+  is `for (_key, value) in &mut map { *value = v }`.
 - **A scan reads a candidate on demand rather than whole**: headers,
   export and dynamic symbol tables, and the 4 KiB declaration window.
 - **An object kind is never served by a provider.** A registry or host

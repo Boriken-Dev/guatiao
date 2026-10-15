@@ -2864,6 +2864,16 @@ impl core::iter::traits::iterator::Iterator for guatiao::value::types::map::Into
 pub type guatiao::value::types::map::IntoIter::Item = (guatiao::value::types::text::Text, guatiao::value::value::Value)
 pub fn guatiao::value::types::map::IntoIter::next(&mut self) -> core::option::Option<(guatiao::value::types::text::Text, guatiao::value::value::Value)>
 pub fn guatiao::value::types::map::IntoIter::size_hint(&self) -> (usize, core::option::Option<usize>)
+pub struct guatiao::value::types::map::IterMut<'a>
+impl core::iter::traits::double_ended::DoubleEndedIterator for guatiao::value::types::map::IterMut<'_>
+pub fn guatiao::value::types::map::IterMut<'_>::next_back(&mut self) -> core::option::Option<Self::Item>
+impl core::iter::traits::exact_size::ExactSizeIterator for guatiao::value::types::map::IterMut<'_>
+impl<'a> core::fmt::Debug for guatiao::value::types::map::IterMut<'a>
+pub fn guatiao::value::types::map::IterMut<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::iter::traits::iterator::Iterator for guatiao::value::types::map::IterMut<'a>
+pub type guatiao::value::types::map::IterMut<'a>::Item = (&'a guatiao::value::types::text::Text, &'a mut guatiao::value::value::Value)
+pub fn guatiao::value::types::map::IterMut<'a>::next(&mut self) -> core::option::Option<(&'a guatiao::value::types::text::Text, &'a mut guatiao::value::value::Value)>
+pub fn guatiao::value::types::map::IterMut<'a>::size_hint(&self) -> (usize, core::option::Option<usize>)
 #[repr(C)] pub struct guatiao::value::types::map::Map
 impl guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::alloc(&self) -> core::result::Result<guatiao::value::alloc::Alloc, guatiao::value::error::ValueError>
@@ -2882,6 +2892,7 @@ pub fn guatiao::value::types::map::Map::get_mut(&mut self, &str) -> core::option
 pub fn guatiao::value::types::map::Map::into_raw_parts(self) -> (*mut guatiao::value::types::map::Entry, usize, usize, *const guatiao::value::alloc::Allocator)
 pub fn guatiao::value::types::map::Map::is_empty(&self) -> bool
 pub fn guatiao::value::types::map::Map::iter(&self) -> core::slice::iter::Iter<'_, guatiao::value::types::map::Entry>
+pub fn guatiao::value::types::map::Map::iter_mut(&mut self) -> guatiao::value::types::map::IterMut<'_>
 pub fn guatiao::value::types::map::Map::keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
 pub fn guatiao::value::types::map::Map::len(&self) -> usize
 pub fn guatiao::value::types::map::Map::new() -> guatiao::value::types::map::Map
@@ -2930,9 +2941,9 @@ pub type &'a guatiao::value::types::map::Map::IntoIter = core::slice::iter::Iter
 pub type &'a guatiao::value::types::map::Map::Item = &'a guatiao::value::types::map::Entry
 pub fn &'a guatiao::value::types::map::Map::into_iter(self) -> core::slice::iter::Iter<'a, guatiao::value::types::map::Entry>
 impl<'a> core::iter::traits::collect::IntoIterator for &'a mut guatiao::value::types::map::Map
-pub type &'a mut guatiao::value::types::map::Map::IntoIter = core::slice::iter::IterMut<'a, guatiao::value::types::map::Entry>
-pub type &'a mut guatiao::value::types::map::Map::Item = &'a mut guatiao::value::types::map::Entry
-pub fn &'a mut guatiao::value::types::map::Map::into_iter(self) -> core::slice::iter::IterMut<'a, guatiao::value::types::map::Entry>
+pub type &'a mut guatiao::value::types::map::Map::IntoIter = guatiao::value::types::map::IterMut<'a>
+pub type &'a mut guatiao::value::types::map::Map::Item = (&'a guatiao::value::types::text::Text, &'a mut guatiao::value::value::Value)
+pub fn &'a mut guatiao::value::types::map::Map::into_iter(self) -> guatiao::value::types::map::IterMut<'a>
 impl<K: core::convert::AsRef<str>, V: core::convert::Into<guatiao::value::value::Value>> core::iter::traits::collect::Extend<(K, V)> for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::extend<I: core::iter::traits::collect::IntoIterator<Item = (K, V)>>(&mut self, I)
 impl<K: core::convert::AsRef<str>, V: core::convert::Into<guatiao::value::value::Value>> core::iter::traits::collect::FromIterator<(K, V)> for guatiao::value::types::map::Map
@@ -3321,6 +3332,7 @@ pub fn guatiao::value::types::map::Map::get_mut(&mut self, &str) -> core::option
 pub fn guatiao::value::types::map::Map::into_raw_parts(self) -> (*mut guatiao::value::types::map::Entry, usize, usize, *const guatiao::value::alloc::Allocator)
 pub fn guatiao::value::types::map::Map::is_empty(&self) -> bool
 pub fn guatiao::value::types::map::Map::iter(&self) -> core::slice::iter::Iter<'_, guatiao::value::types::map::Entry>
+pub fn guatiao::value::types::map::Map::iter_mut(&mut self) -> guatiao::value::types::map::IterMut<'_>
 pub fn guatiao::value::types::map::Map::keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
 pub fn guatiao::value::types::map::Map::len(&self) -> usize
 pub fn guatiao::value::types::map::Map::new() -> guatiao::value::types::map::Map
@@ -3369,9 +3381,9 @@ pub type &'a guatiao::value::types::map::Map::IntoIter = core::slice::iter::Iter
 pub type &'a guatiao::value::types::map::Map::Item = &'a guatiao::value::types::map::Entry
 pub fn &'a guatiao::value::types::map::Map::into_iter(self) -> core::slice::iter::Iter<'a, guatiao::value::types::map::Entry>
 impl<'a> core::iter::traits::collect::IntoIterator for &'a mut guatiao::value::types::map::Map
-pub type &'a mut guatiao::value::types::map::Map::IntoIter = core::slice::iter::IterMut<'a, guatiao::value::types::map::Entry>
-pub type &'a mut guatiao::value::types::map::Map::Item = &'a mut guatiao::value::types::map::Entry
-pub fn &'a mut guatiao::value::types::map::Map::into_iter(self) -> core::slice::iter::IterMut<'a, guatiao::value::types::map::Entry>
+pub type &'a mut guatiao::value::types::map::Map::IntoIter = guatiao::value::types::map::IterMut<'a>
+pub type &'a mut guatiao::value::types::map::Map::Item = (&'a guatiao::value::types::text::Text, &'a mut guatiao::value::value::Value)
+pub fn &'a mut guatiao::value::types::map::Map::into_iter(self) -> guatiao::value::types::map::IterMut<'a>
 impl<K: core::convert::AsRef<str>, V: core::convert::Into<guatiao::value::value::Value>> core::iter::traits::collect::Extend<(K, V)> for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::extend<I: core::iter::traits::collect::IntoIterator<Item = (K, V)>>(&mut self, I)
 impl<K: core::convert::AsRef<str>, V: core::convert::Into<guatiao::value::value::Value>> core::iter::traits::collect::FromIterator<(K, V)> for guatiao::value::types::map::Map
@@ -4324,6 +4336,7 @@ pub fn guatiao::value::types::map::Map::get_mut(&mut self, &str) -> core::option
 pub fn guatiao::value::types::map::Map::into_raw_parts(self) -> (*mut guatiao::value::types::map::Entry, usize, usize, *const guatiao::value::alloc::Allocator)
 pub fn guatiao::value::types::map::Map::is_empty(&self) -> bool
 pub fn guatiao::value::types::map::Map::iter(&self) -> core::slice::iter::Iter<'_, guatiao::value::types::map::Entry>
+pub fn guatiao::value::types::map::Map::iter_mut(&mut self) -> guatiao::value::types::map::IterMut<'_>
 pub fn guatiao::value::types::map::Map::keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
 pub fn guatiao::value::types::map::Map::len(&self) -> usize
 pub fn guatiao::value::types::map::Map::new() -> guatiao::value::types::map::Map
@@ -4372,9 +4385,9 @@ pub type &'a guatiao::value::types::map::Map::IntoIter = core::slice::iter::Iter
 pub type &'a guatiao::value::types::map::Map::Item = &'a guatiao::value::types::map::Entry
 pub fn &'a guatiao::value::types::map::Map::into_iter(self) -> core::slice::iter::Iter<'a, guatiao::value::types::map::Entry>
 impl<'a> core::iter::traits::collect::IntoIterator for &'a mut guatiao::value::types::map::Map
-pub type &'a mut guatiao::value::types::map::Map::IntoIter = core::slice::iter::IterMut<'a, guatiao::value::types::map::Entry>
-pub type &'a mut guatiao::value::types::map::Map::Item = &'a mut guatiao::value::types::map::Entry
-pub fn &'a mut guatiao::value::types::map::Map::into_iter(self) -> core::slice::iter::IterMut<'a, guatiao::value::types::map::Entry>
+pub type &'a mut guatiao::value::types::map::Map::IntoIter = guatiao::value::types::map::IterMut<'a>
+pub type &'a mut guatiao::value::types::map::Map::Item = (&'a guatiao::value::types::text::Text, &'a mut guatiao::value::value::Value)
+pub fn &'a mut guatiao::value::types::map::Map::into_iter(self) -> guatiao::value::types::map::IterMut<'a>
 impl<K: core::convert::AsRef<str>, V: core::convert::Into<guatiao::value::value::Value>> core::iter::traits::collect::Extend<(K, V)> for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::extend<I: core::iter::traits::collect::IntoIterator<Item = (K, V)>>(&mut self, I)
 impl<K: core::convert::AsRef<str>, V: core::convert::Into<guatiao::value::value::Value>> core::iter::traits::collect::FromIterator<(K, V)> for guatiao::value::types::map::Map
@@ -5207,6 +5220,7 @@ pub fn guatiao::value::types::map::Map::get_mut(&mut self, &str) -> core::option
 pub fn guatiao::value::types::map::Map::into_raw_parts(self) -> (*mut guatiao::value::types::map::Entry, usize, usize, *const guatiao::value::alloc::Allocator)
 pub fn guatiao::value::types::map::Map::is_empty(&self) -> bool
 pub fn guatiao::value::types::map::Map::iter(&self) -> core::slice::iter::Iter<'_, guatiao::value::types::map::Entry>
+pub fn guatiao::value::types::map::Map::iter_mut(&mut self) -> guatiao::value::types::map::IterMut<'_>
 pub fn guatiao::value::types::map::Map::keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
 pub fn guatiao::value::types::map::Map::len(&self) -> usize
 pub fn guatiao::value::types::map::Map::new() -> guatiao::value::types::map::Map
@@ -5255,9 +5269,9 @@ pub type &'a guatiao::value::types::map::Map::IntoIter = core::slice::iter::Iter
 pub type &'a guatiao::value::types::map::Map::Item = &'a guatiao::value::types::map::Entry
 pub fn &'a guatiao::value::types::map::Map::into_iter(self) -> core::slice::iter::Iter<'a, guatiao::value::types::map::Entry>
 impl<'a> core::iter::traits::collect::IntoIterator for &'a mut guatiao::value::types::map::Map
-pub type &'a mut guatiao::value::types::map::Map::IntoIter = core::slice::iter::IterMut<'a, guatiao::value::types::map::Entry>
-pub type &'a mut guatiao::value::types::map::Map::Item = &'a mut guatiao::value::types::map::Entry
-pub fn &'a mut guatiao::value::types::map::Map::into_iter(self) -> core::slice::iter::IterMut<'a, guatiao::value::types::map::Entry>
+pub type &'a mut guatiao::value::types::map::Map::IntoIter = guatiao::value::types::map::IterMut<'a>
+pub type &'a mut guatiao::value::types::map::Map::Item = (&'a guatiao::value::types::text::Text, &'a mut guatiao::value::value::Value)
+pub fn &'a mut guatiao::value::types::map::Map::into_iter(self) -> guatiao::value::types::map::IterMut<'a>
 impl<K: core::convert::AsRef<str>, V: core::convert::Into<guatiao::value::value::Value>> core::iter::traits::collect::Extend<(K, V)> for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::extend<I: core::iter::traits::collect::IntoIterator<Item = (K, V)>>(&mut self, I)
 impl<K: core::convert::AsRef<str>, V: core::convert::Into<guatiao::value::value::Value>> core::iter::traits::collect::FromIterator<(K, V)> for guatiao::value::types::map::Map

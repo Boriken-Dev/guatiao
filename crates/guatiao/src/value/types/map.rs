@@ -430,6 +430,13 @@ impl Map {
         self.entries().iter()
     }
 
+    /// Its pairs, in insertion order, each value mutably. See [`IterMut`].
+    pub fn iter_mut(&mut self) -> IterMut<'_> {
+        IterMut {
+            entries: self.entries_mut().iter_mut(),
+        }
+    }
+
     /// Its keys, in insertion order.
     pub fn keys(&self) -> impl Iterator<Item = &str> {
         self.iter().map(Entry::key)
@@ -612,14 +619,49 @@ impl IntoIterator for Map {
     }
 }
 
-/// Each entry, mutably. [`Entry::value_mut`] reaches the value; the key
-/// stays the key.
-impl<'a> IntoIterator for &'a mut Map {
-    type Item = &'a mut Entry;
-    type IntoIter = core::slice::IterMut<'a, Entry>;
+/// The pairs of a map, in order, as `HashMap::iter_mut` gives them: the
+/// key shared and the value mutable, so a key cannot change in place and
+/// move a value to a key nobody searches for, or repeat another.
+///
+/// ```compile_fail
+/// use guatiao::{Entry, Map, Text, Value};
+/// let mut map = Map::new();
+/// map.set("a", 1);
+/// for entry in &mut map {
+///     *entry = Entry::new(Text::new("b"), Value::from(2));
+/// }
+/// ```
+#[derive(Debug)]
+pub struct IterMut<'a> {
+    entries: core::slice::IterMut<'a, Entry>,
+}
 
-    fn into_iter(self) -> core::slice::IterMut<'a, Entry> {
-        self.entries_mut().iter_mut()
+impl<'a> Iterator for IterMut<'a> {
+    type Item = (&'a Text, &'a mut Value);
+
+    fn next(&mut self) -> Option<(&'a Text, &'a mut Value)> {
+        self.entries.next().map(|e| (&e.key, &mut e.value))
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.entries.size_hint()
+    }
+}
+
+impl DoubleEndedIterator for IterMut<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        self.entries.next_back().map(|e| (&e.key, &mut e.value))
+    }
+}
+
+impl ExactSizeIterator for IterMut<'_> {}
+
+impl<'a> IntoIterator for &'a mut Map {
+    type Item = (&'a Text, &'a mut Value);
+    type IntoIter = IterMut<'a>;
+
+    fn into_iter(self) -> IterMut<'a> {
+        self.iter_mut()
     }
 }
 
