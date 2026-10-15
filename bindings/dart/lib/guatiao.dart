@@ -13,6 +13,7 @@
 /// `import 'package:guatiao/intake.dart' as intake;`.
 library;
 
+export 'src/bindings.g.dart' show guatiao_alloc, guatiao_value;
 export 'src/errors.dart'
     show
         AllocFailed,
