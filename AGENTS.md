@@ -144,8 +144,9 @@ Four workflows:
 
 - `test.yaml` runs on `workflow_dispatch` or a `ci-*` tag; push a uniquely
   named `ci-*` tag, watch the run, then delete the tag. Its `python` job
-  builds the workspace once, then runs `bindings/python`'s tests on 3.9 and
-  3.14. `release.yml` calls it as its test gate.
+  builds the workspace in each leg, then runs `bindings/python`'s tests: every
+  Python from 3.9 to 3.14 on Linux, 3.9 and 3.14 on Windows and macOS.
+  `release.yml` calls it as its test gate.
 - `docs.yml` owns every Pages deploy: a push to `main` touching a docs
   source, or a dispatch at any ref. `release.yml` calls it with
   `deploy: false` as a strict build gate, and dispatches it at a final tag.
