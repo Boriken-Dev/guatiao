@@ -2250,6 +2250,8 @@ impl core::cmp::PartialEq for guatiao::value::alloc::AllocError
 pub fn guatiao::value::alloc::AllocError::eq(&self, &Self) -> bool
 impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::error::ValueError
 pub fn guatiao::value::error::ValueError::from(guatiao::value::alloc::AllocError) -> guatiao::value::error::ValueError
+impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(guatiao::value::alloc::AllocError) -> guatiao::value::status::Status
 impl core::error::Error for guatiao::value::alloc::AllocError
 impl core::fmt::Debug for guatiao::value::alloc::AllocError
 pub fn guatiao::value::alloc::AllocError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -2642,6 +2644,8 @@ impl core::convert::From<&guatiao::value::merge::MergeError> for guatiao::value:
 pub fn guatiao::value::status::Status::from(&guatiao::value::merge::MergeError) -> guatiao::value::status::Status
 impl core::convert::From<core::str::error::Utf8Error> for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::from(core::str::error::Utf8Error) -> guatiao::value::status::Status
+impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(guatiao::value::alloc::AllocError) -> guatiao::value::status::Status
 impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::from(guatiao::value::error::ValueError) -> guatiao::value::status::Status
 impl core::convert::From<guatiao::value::status::Status> for guatiao::library::kind::ProviderError
@@ -2669,8 +2673,9 @@ pub unsafe fn guatiao::value::types::buffer::Buffer::from_raw_parts(*mut u8, usi
 pub fn guatiao::value::types::buffer::Buffer::into_raw_parts(self) -> (*mut u8, usize, usize, *const guatiao::value::alloc::Allocator)
 pub fn guatiao::value::types::buffer::Buffer::new(&[u8]) -> guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::new_in(guatiao::value::alloc::Alloc, &[u8]) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::error::ValueError>
-pub fn guatiao::value::types::buffer::Buffer::push(&mut self, &[u8]) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::buffer::Buffer::push(&mut self, &[u8])
 pub fn guatiao::value::types::buffer::Buffer::push_in(&mut self, &[u8], guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::buffer::Buffer::try_push(&mut self, &[u8]) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 impl core::borrow::Borrow<[u8]> for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::borrow(&self) -> &[u8]
 impl core::clone::Clone for guatiao::value::types::buffer::Buffer
@@ -2753,9 +2758,10 @@ pub fn guatiao::value::types::list::List::into_raw_parts(self) -> (*mut guatiao:
 pub fn guatiao::value::types::list::List::new() -> guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::new_in(guatiao::value::alloc::Alloc) -> guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::pop(&mut self) -> core::option::Option<guatiao::value::value::Value>
-pub fn guatiao::value::types::list::List::push(&mut self, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::list::List::push(&mut self, impl core::convert::Into<guatiao::value::value::Value>)
 pub fn guatiao::value::types::list::List::push_in(&mut self, impl core::convert::Into<guatiao::value::value::Value>, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 pub fn guatiao::value::types::list::List::remove(&mut self, usize) -> core::option::Option<guatiao::value::value::Value>
+pub fn guatiao::value::types::list::List::try_push(&mut self, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 impl core::clone::Clone for guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::clone(&self) -> guatiao::value::types::list::List
 impl core::cmp::Eq for guatiao::value::types::list::List
@@ -2883,8 +2889,9 @@ pub fn guatiao::value::types::map::Map::new_in(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::types::map::Map::push_into(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::error::ValueError>
 pub fn guatiao::value::types::map::Map::remove(&mut self, &str) -> core::option::Option<guatiao::value::value::Value>
 pub fn guatiao::value::types::map::Map::required(&self, &str) -> core::result::Result<&guatiao::value::value::Value, guatiao::value::convert::MapError>
-pub fn guatiao::value::types::map::Map::set(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::map::Map::set(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>)
 pub fn guatiao::value::types::map::Map::set_in(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::map::Map::try_set(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 pub fn guatiao::value::types::map::Map::values(&self) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::value::value::Value>
 impl core::clone::Clone for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::clone(&self) -> guatiao::value::types::map::Map
@@ -3046,8 +3053,9 @@ pub unsafe fn guatiao::value::types::text::Text::from_raw_parts(*mut u8, usize, 
 pub fn guatiao::value::types::text::Text::into_raw_parts(self) -> (*mut u8, usize, usize, *const guatiao::value::alloc::Allocator)
 pub fn guatiao::value::types::text::Text::new(&str) -> guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::new_in(guatiao::value::alloc::Alloc, &str) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::error::ValueError>
-pub fn guatiao::value::types::text::Text::push_str(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::text::Text::push_str(&mut self, &str)
 pub fn guatiao::value::types::text::Text::push_str_in(&mut self, &str, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::text::Text::try_push_str(&mut self, &str) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 impl core::borrow::Borrow<str> for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::borrow(&self) -> &str
 impl core::clone::Clone for guatiao::value::types::text::Text
@@ -3139,8 +3147,9 @@ pub unsafe fn guatiao::value::types::buffer::Buffer::from_raw_parts(*mut u8, usi
 pub fn guatiao::value::types::buffer::Buffer::into_raw_parts(self) -> (*mut u8, usize, usize, *const guatiao::value::alloc::Allocator)
 pub fn guatiao::value::types::buffer::Buffer::new(&[u8]) -> guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::new_in(guatiao::value::alloc::Alloc, &[u8]) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::error::ValueError>
-pub fn guatiao::value::types::buffer::Buffer::push(&mut self, &[u8]) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::buffer::Buffer::push(&mut self, &[u8])
 pub fn guatiao::value::types::buffer::Buffer::push_in(&mut self, &[u8], guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::buffer::Buffer::try_push(&mut self, &[u8]) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 impl core::borrow::Borrow<[u8]> for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::borrow(&self) -> &[u8]
 impl core::clone::Clone for guatiao::value::types::buffer::Buffer
@@ -3240,9 +3249,10 @@ pub fn guatiao::value::types::list::List::into_raw_parts(self) -> (*mut guatiao:
 pub fn guatiao::value::types::list::List::new() -> guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::new_in(guatiao::value::alloc::Alloc) -> guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::pop(&mut self) -> core::option::Option<guatiao::value::value::Value>
-pub fn guatiao::value::types::list::List::push(&mut self, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::list::List::push(&mut self, impl core::convert::Into<guatiao::value::value::Value>)
 pub fn guatiao::value::types::list::List::push_in(&mut self, impl core::convert::Into<guatiao::value::value::Value>, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 pub fn guatiao::value::types::list::List::remove(&mut self, usize) -> core::option::Option<guatiao::value::value::Value>
+pub fn guatiao::value::types::list::List::try_push(&mut self, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 impl core::clone::Clone for guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::clone(&self) -> guatiao::value::types::list::List
 impl core::cmp::Eq for guatiao::value::types::list::List
@@ -3318,8 +3328,9 @@ pub fn guatiao::value::types::map::Map::new_in(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::types::map::Map::push_into(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::error::ValueError>
 pub fn guatiao::value::types::map::Map::remove(&mut self, &str) -> core::option::Option<guatiao::value::value::Value>
 pub fn guatiao::value::types::map::Map::required(&self, &str) -> core::result::Result<&guatiao::value::value::Value, guatiao::value::convert::MapError>
-pub fn guatiao::value::types::map::Map::set(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::map::Map::set(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>)
 pub fn guatiao::value::types::map::Map::set_in(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::map::Map::try_set(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 pub fn guatiao::value::types::map::Map::values(&self) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::value::value::Value>
 impl core::clone::Clone for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::clone(&self) -> guatiao::value::types::map::Map
@@ -3478,8 +3489,9 @@ pub unsafe fn guatiao::value::types::text::Text::from_raw_parts(*mut u8, usize, 
 pub fn guatiao::value::types::text::Text::into_raw_parts(self) -> (*mut u8, usize, usize, *const guatiao::value::alloc::Allocator)
 pub fn guatiao::value::types::text::Text::new(&str) -> guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::new_in(guatiao::value::alloc::Alloc, &str) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::error::ValueError>
-pub fn guatiao::value::types::text::Text::push_str(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::text::Text::push_str(&mut self, &str)
 pub fn guatiao::value::types::text::Text::push_str_in(&mut self, &str, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::text::Text::try_push_str(&mut self, &str) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 impl core::borrow::Borrow<str> for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::borrow(&self) -> &str
 impl core::clone::Clone for guatiao::value::types::text::Text
@@ -4001,6 +4013,8 @@ impl core::cmp::PartialEq for guatiao::value::alloc::AllocError
 pub fn guatiao::value::alloc::AllocError::eq(&self, &Self) -> bool
 impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::error::ValueError
 pub fn guatiao::value::error::ValueError::from(guatiao::value::alloc::AllocError) -> guatiao::value::error::ValueError
+impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(guatiao::value::alloc::AllocError) -> guatiao::value::status::Status
 impl core::error::Error for guatiao::value::alloc::AllocError
 impl core::fmt::Debug for guatiao::value::alloc::AllocError
 pub fn guatiao::value::alloc::AllocError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -4134,8 +4148,9 @@ pub unsafe fn guatiao::value::types::buffer::Buffer::from_raw_parts(*mut u8, usi
 pub fn guatiao::value::types::buffer::Buffer::into_raw_parts(self) -> (*mut u8, usize, usize, *const guatiao::value::alloc::Allocator)
 pub fn guatiao::value::types::buffer::Buffer::new(&[u8]) -> guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::new_in(guatiao::value::alloc::Alloc, &[u8]) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::error::ValueError>
-pub fn guatiao::value::types::buffer::Buffer::push(&mut self, &[u8]) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::buffer::Buffer::push(&mut self, &[u8])
 pub fn guatiao::value::types::buffer::Buffer::push_in(&mut self, &[u8], guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::buffer::Buffer::try_push(&mut self, &[u8]) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 impl core::borrow::Borrow<[u8]> for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::borrow(&self) -> &[u8]
 impl core::clone::Clone for guatiao::value::types::buffer::Buffer
@@ -4237,9 +4252,10 @@ pub fn guatiao::value::types::list::List::into_raw_parts(self) -> (*mut guatiao:
 pub fn guatiao::value::types::list::List::new() -> guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::new_in(guatiao::value::alloc::Alloc) -> guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::pop(&mut self) -> core::option::Option<guatiao::value::value::Value>
-pub fn guatiao::value::types::list::List::push(&mut self, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::list::List::push(&mut self, impl core::convert::Into<guatiao::value::value::Value>)
 pub fn guatiao::value::types::list::List::push_in(&mut self, impl core::convert::Into<guatiao::value::value::Value>, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 pub fn guatiao::value::types::list::List::remove(&mut self, usize) -> core::option::Option<guatiao::value::value::Value>
+pub fn guatiao::value::types::list::List::try_push(&mut self, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 impl core::clone::Clone for guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::clone(&self) -> guatiao::value::types::list::List
 impl core::cmp::Eq for guatiao::value::types::list::List
@@ -4315,8 +4331,9 @@ pub fn guatiao::value::types::map::Map::new_in(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::types::map::Map::push_into(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::error::ValueError>
 pub fn guatiao::value::types::map::Map::remove(&mut self, &str) -> core::option::Option<guatiao::value::value::Value>
 pub fn guatiao::value::types::map::Map::required(&self, &str) -> core::result::Result<&guatiao::value::value::Value, guatiao::value::convert::MapError>
-pub fn guatiao::value::types::map::Map::set(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::map::Map::set(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>)
 pub fn guatiao::value::types::map::Map::set_in(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::map::Map::try_set(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 pub fn guatiao::value::types::map::Map::values(&self) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::value::value::Value>
 impl core::clone::Clone for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::clone(&self) -> guatiao::value::types::map::Map
@@ -4453,6 +4470,8 @@ impl core::convert::From<&guatiao::value::merge::MergeError> for guatiao::value:
 pub fn guatiao::value::status::Status::from(&guatiao::value::merge::MergeError) -> guatiao::value::status::Status
 impl core::convert::From<core::str::error::Utf8Error> for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::from(core::str::error::Utf8Error) -> guatiao::value::status::Status
+impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(guatiao::value::alloc::AllocError) -> guatiao::value::status::Status
 impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::from(guatiao::value::error::ValueError) -> guatiao::value::status::Status
 impl core::convert::From<guatiao::value::status::Status> for guatiao::library::kind::ProviderError
@@ -4499,8 +4518,9 @@ pub unsafe fn guatiao::value::types::text::Text::from_raw_parts(*mut u8, usize, 
 pub fn guatiao::value::types::text::Text::into_raw_parts(self) -> (*mut u8, usize, usize, *const guatiao::value::alloc::Allocator)
 pub fn guatiao::value::types::text::Text::new(&str) -> guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::new_in(guatiao::value::alloc::Alloc, &str) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::error::ValueError>
-pub fn guatiao::value::types::text::Text::push_str(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::text::Text::push_str(&mut self, &str)
 pub fn guatiao::value::types::text::Text::push_str_in(&mut self, &str, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::text::Text::try_push_str(&mut self, &str) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 impl core::borrow::Borrow<str> for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::borrow(&self) -> &str
 impl core::clone::Clone for guatiao::value::types::text::Text
@@ -5014,8 +5034,9 @@ pub unsafe fn guatiao::value::types::buffer::Buffer::from_raw_parts(*mut u8, usi
 pub fn guatiao::value::types::buffer::Buffer::into_raw_parts(self) -> (*mut u8, usize, usize, *const guatiao::value::alloc::Allocator)
 pub fn guatiao::value::types::buffer::Buffer::new(&[u8]) -> guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::new_in(guatiao::value::alloc::Alloc, &[u8]) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::error::ValueError>
-pub fn guatiao::value::types::buffer::Buffer::push(&mut self, &[u8]) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::buffer::Buffer::push(&mut self, &[u8])
 pub fn guatiao::value::types::buffer::Buffer::push_in(&mut self, &[u8], guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::buffer::Buffer::try_push(&mut self, &[u8]) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 impl core::borrow::Borrow<[u8]> for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::borrow(&self) -> &[u8]
 impl core::clone::Clone for guatiao::value::types::buffer::Buffer
@@ -5114,9 +5135,10 @@ pub fn guatiao::value::types::list::List::into_raw_parts(self) -> (*mut guatiao:
 pub fn guatiao::value::types::list::List::new() -> guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::new_in(guatiao::value::alloc::Alloc) -> guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::pop(&mut self) -> core::option::Option<guatiao::value::value::Value>
-pub fn guatiao::value::types::list::List::push(&mut self, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::list::List::push(&mut self, impl core::convert::Into<guatiao::value::value::Value>)
 pub fn guatiao::value::types::list::List::push_in(&mut self, impl core::convert::Into<guatiao::value::value::Value>, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 pub fn guatiao::value::types::list::List::remove(&mut self, usize) -> core::option::Option<guatiao::value::value::Value>
+pub fn guatiao::value::types::list::List::try_push(&mut self, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 impl core::clone::Clone for guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::clone(&self) -> guatiao::value::types::list::List
 impl core::cmp::Eq for guatiao::value::types::list::List
@@ -5192,8 +5214,9 @@ pub fn guatiao::value::types::map::Map::new_in(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::types::map::Map::push_into(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::error::ValueError>
 pub fn guatiao::value::types::map::Map::remove(&mut self, &str) -> core::option::Option<guatiao::value::value::Value>
 pub fn guatiao::value::types::map::Map::required(&self, &str) -> core::result::Result<&guatiao::value::value::Value, guatiao::value::convert::MapError>
-pub fn guatiao::value::types::map::Map::set(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::map::Map::set(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>)
 pub fn guatiao::value::types::map::Map::set_in(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::map::Map::try_set(&mut self, &str, impl core::convert::Into<guatiao::value::value::Value>) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 pub fn guatiao::value::types::map::Map::values(&self) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::value::value::Value>
 impl core::clone::Clone for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::clone(&self) -> guatiao::value::types::map::Map
@@ -5377,6 +5400,8 @@ impl core::convert::From<&guatiao::value::merge::MergeError> for guatiao::value:
 pub fn guatiao::value::status::Status::from(&guatiao::value::merge::MergeError) -> guatiao::value::status::Status
 impl core::convert::From<core::str::error::Utf8Error> for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::from(core::str::error::Utf8Error) -> guatiao::value::status::Status
+impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(guatiao::value::alloc::AllocError) -> guatiao::value::status::Status
 impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::from(guatiao::value::error::ValueError) -> guatiao::value::status::Status
 impl core::convert::From<guatiao::value::status::Status> for guatiao::library::kind::ProviderError
@@ -5423,8 +5448,9 @@ pub unsafe fn guatiao::value::types::text::Text::from_raw_parts(*mut u8, usize, 
 pub fn guatiao::value::types::text::Text::into_raw_parts(self) -> (*mut u8, usize, usize, *const guatiao::value::alloc::Allocator)
 pub fn guatiao::value::types::text::Text::new(&str) -> guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::new_in(guatiao::value::alloc::Alloc, &str) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::error::ValueError>
-pub fn guatiao::value::types::text::Text::push_str(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::text::Text::push_str(&mut self, &str)
 pub fn guatiao::value::types::text::Text::push_str_in(&mut self, &str, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::types::text::Text::try_push_str(&mut self, &str) -> core::result::Result<(), guatiao::value::alloc::AllocError>
 impl core::borrow::Borrow<str> for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::borrow(&self) -> &str
 impl core::clone::Clone for guatiao::value::types::text::Text

@@ -8,11 +8,11 @@
 
 use core::marker::PhantomData;
 
-use crate::value::alloc::{Alloc, Allocator};
+use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::error::ValueError;
 use crate::value::raw::{dangling, overlaps, release_buffer, reserve};
 
-use super::{Payload, Tag, Value, or_abort};
+use super::{Payload, Tag, Value, bytes_layout, only_alloc, or_abort, short_form_alloc};
 
 /// Borrowed bytes: any content at all, NULs included.
 ///
@@ -183,7 +183,10 @@ impl Buffer {
 
     /// Bytes, copied onto Rust's heap. See [`Text::new`](super::Text::new).
     pub fn new(bytes: &[u8]) -> Buffer {
-        or_abort(Buffer::new_in(Alloc::rust(), bytes))
+        or_abort(
+            Buffer::new_in(Alloc::rust(), bytes),
+            bytes_layout(bytes.len()),
+        )
     }
 
     /// The same, through an allocator you name.
@@ -220,10 +223,17 @@ impl Buffer {
         Ok(unsafe { Alloc::from_raw(self.alloc) }?)
     }
 
-    /// Appends `bytes`, growing through the allocator this one recorded.
-    pub fn push(&mut self, bytes: &[u8]) -> Result<(), ValueError> {
-        let alloc = self.alloc()?;
-        self.push_in(bytes, alloc)
+    /// Appends `bytes`, growing through the allocator this one recorded,
+    /// or Rust's own, and **aborts** if it refuses, as `Vec::extend` does.
+    pub fn push(&mut self, bytes: &[u8]) {
+        let pushed = self.try_push(bytes).map_err(ValueError::from);
+        or_abort(pushed, bytes_layout(bytes.len()));
+    }
+
+    /// [`push`](Buffer::push), handing an allocation failure back.
+    pub fn try_push(&mut self, bytes: &[u8]) -> Result<(), AllocError> {
+        let alloc = short_form_alloc(self.alloc());
+        self.push_in(bytes, alloc).map_err(only_alloc)
     }
 
     /// The same, adopting `alloc` for a buffer that carries none.
@@ -314,7 +324,7 @@ impl core::hash::Hash for Buffer {
 /// error.
 impl std::io::Write for Buffer {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-        self.push(bytes).map_err(std::io::Error::other)?;
+        self.try_push(bytes).map_err(std::io::Error::other)?;
         Ok(bytes.len())
     }
 

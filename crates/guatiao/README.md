@@ -62,13 +62,13 @@ A default build pulls in nothing.
 use guatiao::Map;
 
 let mut options = Map::new();
-options.set("compression", 6)?;
+options.set("compression", 6);
 
 let mut map = Map::new();
-map.set("host", "10.0.0.1")?;
-map.set("port", 5900)?;
-map.set("tls", true)?;
-map.set("options", options)?;
+map.set("host", "10.0.0.1");
+map.set("port", 5900);
+map.set("tls", true);
+map.set("options", options);
 
 // Get the value, then convert it: no per-kind getters on a map, and no
 // per-kind readers on a value. `required` is the step from a lookup to a

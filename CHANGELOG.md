@@ -133,6 +133,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking: `Tag` is `#[non_exhaustive]`**, as its documentation already
   said kinds are appended. *Migration:* a `match` on a `Tag` outside this
   crate gains a `_` arm.
+- **Breaking: the short `set`, `push` and `push_str` abort on an
+  allocation failure, as `Vec::push` does, and return no `Result`.**
+  `Map::set` and `List::push` return `()`, as do `Text::push_str` and
+  `Buffer::push`; each grows through the allocator its container recorded,
+  or Rust's own for one that recorded none (a literal), and a refusal goes
+  to `alloc::alloc::handle_alloc_error`. The short constructors
+  (`Text::new`, `Buffer::new`) abort the same way rather than panicking.
+  The fallible paths stay: `try_set`, `try_push` and `try_push_str`
+  (`Buffer::try_push`) report an `AllocError` through the recorded
+  allocator, for a container built in an arena that may be full, and the
+  `_in` forms are unchanged. `Status` converts from an `AllocError`.
+  *Migration:* drop the `?`, `.unwrap()` or `let _ =` after
+  `set`/`push`/`push_str`; where the container lives in an allocator that
+  may refuse and the caller handles it, call `try_set`/`try_push`/
+  `try_push_str` (or the `_in` form) instead.
 - **A scan reads a candidate on demand rather than whole**: headers,
   export and dynamic symbol tables, and the 4 KiB declaration window.
 - **An object kind is never served by a provider.** A registry or host

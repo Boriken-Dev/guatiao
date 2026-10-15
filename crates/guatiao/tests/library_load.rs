@@ -454,11 +454,11 @@ fn the_host_validates_a_configuration_against_the_librarys_own_schema() {
     assert_eq!(name.description(), "Who to greet.");
 
     let mut config = Map::new();
-    config.set("name", Value::from(Text::new("ana"))).unwrap();
+    config.set("name", Value::from(Text::new("ana")));
     assert_eq!(validate_map(schema, &Value::from(config)), Ok(()));
 
     let mut wrong = Map::new();
-    wrong.set("nonesuch", Value::from(true)).unwrap();
+    wrong.set("nonesuch", Value::from(true));
     assert!(
         validate_map(schema, &Value::from(wrong)).is_err(),
         "a key the schema does not declare is refused"
@@ -491,7 +491,7 @@ fn a_tree_the_library_built_is_extended_and_freed_by_the_host() {
     let before = unsafe { outstanding(provider.ctx()) };
 
     let mut config = Map::new();
-    config.set("name", Value::from(Text::new("ana"))).unwrap();
+    config.set("name", Value::from(Text::new("ana")));
     let config = Value::from(config);
 
     let mut out = Value::absent();
@@ -524,7 +524,7 @@ fn a_tree_the_library_built_is_extended_and_freed_by_the_host() {
     // own copy of `set`, and never names the library's allocator.
     TryAsMut::<Map>::try_as_mut(&mut greeting)
         .ok_or(ValueError::WrongKind)
-        .and_then(|m| m.set("seen_by", Value::from(Text::new("the host"))))
+        .map(|m| m.set("seen_by", Value::from(Text::new("the host"))))
         .expect("the host can add to a map the library built");
     assert_eq!(
         TryAsRef::<Map>::try_as_ref(&greeting)

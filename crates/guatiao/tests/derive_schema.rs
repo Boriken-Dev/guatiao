@@ -240,7 +240,7 @@ fn a_key_the_schema_does_not_declare_is_refused() {
         let mut value = sample().to_value(alloc).unwrap();
         TryAsMut::<Map>::try_as_mut(&mut value)
             .ok_or(ValueError::WrongKind)
-            .and_then(|m| m.set("nonesuch", guatiao::Value::from(Text::new("x"))))
+            .map(|m| m.set("nonesuch", guatiao::Value::from(Text::new("x"))))
             .unwrap();
         assert!(validate_map(s, &value).is_err());
     });
@@ -358,7 +358,7 @@ fn a_defaulted_field_may_be_left_out_and_reads_as_its_default() {
         // A document that leaves both out is one the schema accepts and
         // the type reads.
         let mut doc = Map::new();
-        doc.set("name", "one").unwrap();
+        doc.set("name", "one");
         let doc = guatiao::Value::from(doc);
         assert_eq!(validate_map(s, &doc), Ok(()));
         assert_eq!(
@@ -383,15 +383,15 @@ fn a_defaulted_field_may_be_left_out_and_reads_as_its_default() {
         // A stored value of the wrong kind is refused under its key, not
         // replaced by the default.
         let mut wrong = Map::new();
-        wrong.set("name", "three").unwrap();
-        wrong.set("channels", "many").unwrap();
+        wrong.set("name", "three");
+        wrong.set("channels", "many");
         let refused = Tuner::from_value(&guatiao::Value::from(wrong)).unwrap_err();
         assert!(refused.to_string().contains("channels"), "{refused}");
 
         // A tagged variant's field takes one the same way.
         let mut http = Map::new();
-        http.set("via", "Http").unwrap();
-        http.set("url", "http://x").unwrap();
+        http.set("via", "Http");
+        http.set("url", "http://x");
         assert_eq!(
             Source::from_value(&guatiao::Value::from(http)).unwrap(),
             Source::Http {

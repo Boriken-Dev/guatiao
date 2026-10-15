@@ -88,7 +88,7 @@ fn put(state: &mut Result<Value, ValueError>, key: &str, value: Result<Value, Va
     if let Err(e) = value.and_then(|v| {
         TryAsMut::<Map>::try_as_mut(node)
             .ok_or(ValueError::WrongKind)
-            .and_then(|m| m.set(key, v))
+            .and_then(|m| Ok(m.try_set(key, v)?))
     }) {
         *state = Err(e);
     }
@@ -149,7 +149,7 @@ impl Form {
             if !TryAsRef::<Map>::try_as_ref(node).is_some_and(|m| m.contains_key(vocab::FIELDS)) {
                 TryAsMut::<Map>::try_as_mut(node)
                     .ok_or(ValueError::WrongKind)
-                    .and_then(|m| m.set(vocab::FIELDS, Map::new_in(alloc)))?;
+                    .and_then(|m| m.set_in(vocab::FIELDS, Map::new_in(alloc), alloc))?;
             }
             // Present, because it was just ensured; a caller who put
             // something that is not a map there through `option` gets
@@ -157,7 +157,7 @@ impl Form {
             match TryAsMut::<Map>::try_as_mut(node).and_then(|m| m.get_mut(vocab::FIELDS)) {
                 Some(fields) => TryAsMut::<Map>::try_as_mut(fields)
                     .ok_or(ValueError::WrongKind)
-                    .and_then(|m| m.set(path, hints)),
+                    .and_then(|m| m.set_in(path, hints, alloc)),
                 None => Err(ValueError::WrongKind),
             }
         });
@@ -288,8 +288,8 @@ impl Hints {
         let alloc = self.alloc;
         let mut condition = Map::new_in(alloc);
         let built = Text::new_in(alloc, path)
-            .and_then(|p| condition.set(vocab::FIELD, p))
-            .and_then(|()| condition.set(vocab::EQUALS, equals.into()))
+            .and_then(|p| condition.set_in(vocab::FIELD, p, alloc))
+            .and_then(|()| condition.set_in(vocab::EQUALS, equals.into(), alloc))
             .map(|()| Value::from(condition));
         put(&mut self.state, vocab::VISIBLE_WHEN, built);
         self
@@ -310,10 +310,10 @@ impl Hints {
         let mut condition = Map::new_in(alloc);
         let built = values
             .into_iter()
-            .try_for_each(|v| list.push(v.into()))
+            .try_for_each(|v| list.push_in(v.into(), alloc))
             .and_then(|()| Text::new_in(alloc, path))
-            .and_then(|p| condition.set(vocab::FIELD, p))
-            .and_then(|()| condition.set(vocab::IN, list))
+            .and_then(|p| condition.set_in(vocab::FIELD, p, alloc))
+            .and_then(|()| condition.set_in(vocab::IN, list, alloc))
             .map(|()| Value::from(condition));
         put(&mut self.state, vocab::VISIBLE_WHEN, built);
         self

@@ -38,10 +38,10 @@ use guatiao::{Alloc, List, Map};
 fn list_map(key: &str, values: &[&str]) -> Value {
     let mut list = List::new();
     for v in values {
-        list.push(Value::from(Text::new(v))).unwrap();
+        list.push(Value::from(Text::new(v)));
     }
     let mut map = Map::new();
-    map.set(key, list).unwrap();
+    map.set(key, list);
     map.into()
 }
 
@@ -145,16 +145,16 @@ fn an_override_array_changes_the_mode_for_that_path_only() {
     for (key, values) in [("tags", &["prod"][..]), ("fallbacks", &["a"][..])] {
         let mut list = List::new();
         for v in values {
-            list.push(Value::from(Text::new(v))).unwrap();
+            list.push(Value::from(Text::new(v)));
         }
-        earlier.set(key, list).unwrap();
+        earlier.set(key, list);
     }
     for (key, values) in [("tags", &["canary"][..]), ("fallbacks", &["b"][..])] {
         let mut list = List::new();
         for v in values {
-            list.push(Value::from(Text::new(v))).unwrap();
+            list.push(Value::from(Text::new(v)));
         }
-        later.set(key, list).unwrap();
+        later.set(key, list);
     }
     let (earlier, later) = (Value::from(earlier), Value::from(later));
 
@@ -221,14 +221,14 @@ fn an_override_array_changes_the_mode_for_that_path_only() {
 fn the_mergelists_bit_reaches_the_merge() {
     let alloc = Alloc::rust();
     let mut inner_a = Map::new();
-    inner_a.set("a", Value::from(1i64)).unwrap();
+    inner_a.set("a", Value::from(1i64));
     let mut earlier = List::new();
-    earlier.push(inner_a).unwrap();
+    earlier.push(inner_a);
 
     let mut inner_b = Map::new();
-    inner_b.set("a", Value::from(2i64)).unwrap();
+    inner_b.set("a", Value::from(2i64));
     let mut later = List::new();
-    later.push(inner_b).unwrap();
+    later.push(inner_b);
 
     let (earlier, later) = (Value::from(earlier), Value::from(later));
 
@@ -268,9 +268,9 @@ fn the_mergelists_bit_reaches_the_merge() {
 fn a_failure_reports_its_path_through_the_error_value() {
     let alloc = Alloc::rust();
     let mut earlier = Map::new();
-    earlier.set("k", List::new()).unwrap();
+    earlier.set("k", List::new());
     let mut later = Map::new();
-    later.set("k", Map::new()).unwrap();
+    later.set("k", Map::new());
     let (earlier, later) = (Value::from(earlier), Value::from(later));
 
     let mut out = Value::absent();
@@ -326,7 +326,7 @@ fn validation_crosses_and_never_quotes_the_refused_value() {
         .unwrap();
 
     let mut good = Map::new();
-    good.set("port", Value::from(5900i64)).unwrap();
+    good.set("port", Value::from(5900i64));
     let good = Value::from(good);
     // SAFETY: both are well-formed values.
     let status =
@@ -334,7 +334,7 @@ fn validation_crosses_and_never_quotes_the_refused_value() {
     assert_eq!(status, Status::GUATIAO_OK);
 
     let mut bad = Map::new();
-    bad.set("port", Value::from(Text::new("hunter2"))).unwrap();
+    bad.set("port", Value::from(Text::new("hunter2")));
     let bad = Value::from(bad);
     let mut error = Value::absent();
     // SAFETY: as above, and `error` is writable.
@@ -408,7 +408,7 @@ fn a_null_is_refused_rather_than_dereferenced() {
 #[test]
 fn the_map_clear_symbol_refuses_a_list() {
     let mut map = Map::new();
-    map.set("k", 1).unwrap();
+    map.set("k", 1);
     let mut map: Value = map.into();
     // SAFETY: a well-formed map, and the pointer is valid for the call.
     let status = unsafe { guatiao_map_clear(&mut map) };
@@ -423,7 +423,7 @@ fn the_map_clear_symbol_refuses_a_list() {
     );
 
     let mut list = List::new();
-    list.push("x").unwrap();
+    list.push("x");
     let mut list: Value = list.into();
     // SAFETY: a well-formed list — the wrong kind, which is the case
     // under test.
@@ -456,8 +456,8 @@ fn the_map_clear_symbol_refuses_a_list() {
 fn a_map_copied_onto_itself_is_refused() {
     let alloc = Alloc::rust();
     let mut map = Map::new_in(alloc);
-    map.set("a", 1).unwrap();
-    map.set("b", 2).unwrap();
+    map.set("a", 1);
+    map.set("b", 2);
     let mut map: Value = map.into();
 
     // SAFETY: one well-formed map, passed as both arguments, which is the
@@ -484,12 +484,12 @@ fn a_map_copied_onto_itself_is_refused() {
 fn a_source_inside_the_target_copies_whole() {
     let alloc = Alloc::rust();
     let mut child = Map::new_in(alloc);
-    child.set("x", 1).unwrap();
-    child.set("y", 2).unwrap();
+    child.set("x", 1);
+    child.set("y", 2);
 
     let mut map = Map::new_in(alloc);
-    map.set("child", child).unwrap();
-    map.set("a", 3).unwrap();
+    map.set("child", child);
+    map.set("a", 3);
     let mut map: Value = map.into();
 
     let child_ptr: *const Value = TryAsRef::<Map>::try_as_ref(&map)
@@ -1144,11 +1144,11 @@ fn a_tree_nested_past_the_bound_is_refused_rather_than_followed() {
     let mut value = Map::new_in(alloc);
     for _ in 0..DEPTH {
         let mut outer = Map::new_in(alloc);
-        outer.set("next", value).unwrap();
+        outer.set("next", value);
         value = outer;
     }
     let mut config = Map::new_in(alloc);
-    config.set("root", value).unwrap();
+    config.set("root", value);
     let config = Value::from(config);
 
     let mut error = Value::absent();
@@ -1201,8 +1201,8 @@ fn a_value_crosses_the_wire_surface_and_back() {
 
     let alloc = Alloc::rust();
     let mut map = Map::new();
-    map.set("n", guatiao::Number::new("1.10").unwrap()).unwrap();
-    map.set("s", "text").unwrap();
+    map.set("n", guatiao::Number::new("1.10").unwrap());
+    map.set("s", "text");
     let value: Value = map.into();
 
     let mut encoded = Value::null();

@@ -424,46 +424,36 @@ fn a_union_and_a_variant_are_different_features() {
 fn an_unknown_kind_leaves_the_field_readable_and_the_rest_intact() {
     with_alloc(|alloc| {
         let mut known = Map::new_in(alloc);
-        known
-            .set(
-                vocab::TYPE,
-                Text::new_in(alloc, "string").map(Value::from).unwrap(),
-            )
-            .unwrap();
-        known
-            .set(
-                vocab::TITLE,
-                Text::new_in(alloc, "Known").map(Value::from).unwrap(),
-            )
-            .unwrap();
+        known.set(
+            vocab::TYPE,
+            Text::new_in(alloc, "string").map(Value::from).unwrap(),
+        );
+        known.set(
+            vocab::TITLE,
+            Text::new_in(alloc, "Known").map(Value::from).unwrap(),
+        );
 
         // A type this build has never heard of, on a field that is
         // otherwise ordinary.
         let mut future = Map::new_in(alloc);
-        future
-            .set(
-                vocab::TYPE,
-                Text::new_in(alloc, "duration").map(Value::from).unwrap(),
-            )
-            .unwrap();
-        future
-            .set(
-                vocab::TITLE,
-                Text::new_in(alloc, "Timeout").map(Value::from).unwrap(),
-            )
-            .unwrap();
+        future.set(
+            vocab::TYPE,
+            Text::new_in(alloc, "duration").map(Value::from).unwrap(),
+        );
+        future.set(
+            vocab::TITLE,
+            Text::new_in(alloc, "Timeout").map(Value::from).unwrap(),
+        );
 
         let mut properties = Map::new_in(alloc);
-        properties.set("known", known).unwrap();
-        properties.set("timeout", future).unwrap();
+        properties.set("known", known);
+        properties.set("timeout", future);
         let mut schema = Map::new_in(alloc);
-        schema
-            .set(
-                vocab::TYPE,
-                Text::new_in(alloc, "object").map(Value::from).unwrap(),
-            )
-            .unwrap();
-        schema.set(vocab::PROPERTIES, properties).unwrap();
+        schema.set(
+            vocab::TYPE,
+            Text::new_in(alloc, "object").map(Value::from).unwrap(),
+        );
+        schema.set(vocab::PROPERTIES, properties);
 
         let schema = Value::from(schema);
         let s = SchemaRef::new(&schema).unwrap();
@@ -490,16 +480,15 @@ fn a_malformed_field_is_skipped_not_fatal() {
         good.set(
             vocab::TYPE,
             Text::new_in(alloc, "boolean").map(Value::from).unwrap(),
-        )
-        .unwrap();
+        );
 
         let mut properties = Map::new_in(alloc);
-        properties.set("good", good).unwrap();
+        properties.set("good", good);
         // Not a map, so not a schema.
-        properties.set("bad", Value::from(true)).unwrap();
+        properties.set("bad", Value::from(true));
 
         let mut schema = Map::new_in(alloc);
-        schema.set(vocab::PROPERTIES, properties).unwrap();
+        schema.set(vocab::PROPERTIES, properties);
 
         let schema = Value::from(schema);
         let s = SchemaRef::new(&schema).unwrap();
@@ -671,8 +660,8 @@ fn an_open_map_declares_its_values_and_not_its_keys() {
         // Every entry answers to the value schema, and a bad one is named
         // by its key.
         let mut values = Map::new_in(alloc);
-        values.set("PATH", "/bin").unwrap();
-        values.set("HOME", "/root").unwrap();
+        values.set("PATH", "/bin");
+        values.set("HOME", "/root");
         assert!(guatiao::schema::validate_value(env, &Value::from(values)).is_ok());
 
         // A scalar is checked by its TEXT form, here and everywhere:
@@ -693,15 +682,11 @@ fn an_open_map_declares_its_values_and_not_its_keys() {
             .expect("ports is declared");
 
         let mut wrong = Map::new_in(alloc);
-        wrong
-            .set("http", Text::new_in(alloc, "80").map(Value::from).unwrap())
-            .unwrap();
-        wrong
-            .set(
-                "shell",
-                Text::new_in(alloc, "nope").map(Value::from).unwrap(),
-            )
-            .unwrap();
+        wrong.set("http", Text::new_in(alloc, "80").map(Value::from).unwrap());
+        wrong.set(
+            "shell",
+            Text::new_in(alloc, "nope").map(Value::from).unwrap(),
+        );
         let refused = guatiao::schema::validate_value(ports, &Value::from(wrong))
             .expect_err("`nope` is not a number between 1 and 65535");
         assert!(

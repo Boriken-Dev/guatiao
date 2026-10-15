@@ -97,26 +97,26 @@ fn describe_validation(error: &ValidationError, alloc: Alloc) -> Option<Value> {
     let mut out = Map::new_in(alloc);
     match error {
         ValidationError::UnknownOption { key, known } => {
-            out.set("key", Text::new_in(alloc, key).map(Value::from).ok()?)
+            out.try_set("key", Text::new_in(alloc, key).map(Value::from).ok()?)
                 .ok()?;
             let mut list = List::new_in(alloc);
             for name in known {
-                list.push(Text::new_in(alloc, name).map(Value::from).ok()?)
+                list.try_push(Text::new_in(alloc, name).map(Value::from).ok()?)
                     .ok()?;
             }
-            out.set("known", list).ok()?;
+            out.try_set("known", list).ok()?;
         }
         ValidationError::BadValue { key, expected } => {
-            out.set("key", Text::new_in(alloc, key).map(Value::from).ok()?)
+            out.try_set("key", Text::new_in(alloc, key).map(Value::from).ok()?)
                 .ok()?;
-            out.set(
+            out.try_set(
                 "expected",
                 Text::new_in(alloc, expected).map(Value::from).ok()?,
             )
             .ok()?;
         }
     }
-    out.set(
+    out.try_set(
         "message",
         Text::new_in(alloc, &error.to_string())
             .map(Value::from)

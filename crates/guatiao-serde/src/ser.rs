@@ -241,8 +241,8 @@ mod tests {
         assert_eq!(json(&Value::from(Text::new("hi"))), "\"hi\"");
 
         let mut list = List::new();
-        list.push(1).unwrap();
-        list.push("two").unwrap();
+        list.push(1);
+        list.push("two");
         assert_eq!(json(&Value::from(list)), "[1,\"two\"]");
     }
 
@@ -254,8 +254,8 @@ mod tests {
     #[test]
     fn a_map_keeps_the_order_it_was_built_in() {
         let mut map = Map::new();
-        map.set("zebra", 1).unwrap();
-        map.set("aardvark", 2).unwrap();
+        map.set("zebra", 1);
+        map.set("aardvark", 2);
         assert_eq!(json(&Value::from(map)), r#"{"zebra":1,"aardvark":2}"#);
     }
 
@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn an_absent_value_has_no_spelling() {
         let mut list = List::new();
-        list.push(Value::absent()).unwrap();
+        list.push(Value::absent());
         let list = Value::from(list);
         assert!(serde_json::to_string(&Serializable::from(&list)).is_err());
     }

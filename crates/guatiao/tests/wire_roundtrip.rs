@@ -20,19 +20,19 @@ fn round_trip(value: &Value) -> Value {
 #[test]
 fn every_tag_comes_back_as_itself() {
     let mut inner = List::new();
-    inner.push(Value::null()).unwrap();
-    inner.push(Value::absent()).unwrap();
+    inner.push(Value::null());
+    inner.push(Value::absent());
     let mut map = Map::new();
-    map.set("absent", Value::absent()).unwrap();
-    map.set("null", Value::null()).unwrap();
-    map.set("true", true).unwrap();
-    map.set("false", false).unwrap();
-    map.set("number", Number::new("1.10").unwrap()).unwrap();
-    map.set("string", "hello").unwrap();
-    map.set("bytes", Buffer::new(&[0x00, 0xff])).unwrap();
-    map.set("list", inner).unwrap();
-    map.set("empty list", List::new()).unwrap();
-    map.set("empty map", Map::new()).unwrap();
+    map.set("absent", Value::absent());
+    map.set("null", Value::null());
+    map.set("true", true);
+    map.set("false", false);
+    map.set("number", Number::new("1.10").unwrap());
+    map.set("string", "hello");
+    map.set("bytes", Buffer::new(&[0x00, 0xff]));
+    map.set("list", inner);
+    map.set("empty list", List::new());
+    map.set("empty map", Map::new());
     let back = round_trip(&map.into());
 
     let back = TryAsRef::<Map>::try_as_ref(&back).unwrap();
@@ -65,9 +65,9 @@ fn a_number_crosses_as_its_own_text() {
 #[test]
 fn a_key_with_a_nul_and_a_thousand_keys_keep_their_order() {
     let mut map = Map::new();
-    map.set("a\0b", 1).unwrap();
+    map.set("a\0b", 1);
     for i in 0..1000 {
-        map.set(&format!("k{}", 999 - i), i).unwrap();
+        map.set(&format!("k{}", 999 - i), i);
     }
     let back = round_trip(&map.into());
     let back = TryAsRef::<Map>::try_as_ref(&back).unwrap();
@@ -80,7 +80,7 @@ fn a_tree_deeper_than_any_recursive_walk_decodes() {
     let mut value: Value = List::new().into();
     for _ in 0..MAX_DEPTH * 4 {
         let mut outer = List::new();
-        outer.push(value).unwrap();
+        outer.push(value);
         value = outer.into();
     }
     round_trip(&value);
@@ -89,8 +89,8 @@ fn a_tree_deeper_than_any_recursive_walk_decodes() {
 #[test]
 fn the_bytes_are_the_documented_ones() {
     let mut map = Map::new();
-    map.set("n", Number::new("1.5").unwrap()).unwrap();
-    map.set("b", true).unwrap();
+    map.set("n", Number::new("1.5").unwrap());
+    map.set("b", true);
     assert_eq!(
         to_bytes(&map.into()).unwrap(),
         [7, 2, 1, b'n', 3, 3, b'1', b'.', b'5', 1, b'b', 2, 1],

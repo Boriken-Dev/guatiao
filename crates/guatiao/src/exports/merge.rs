@@ -101,22 +101,22 @@ fn describe(error: &MergeError, alloc: Alloc) -> Option<Value> {
             later,
             mode,
         } => {
-            out.set("path", Text::new_in(alloc, path).map(Value::from).ok()?)
+            out.try_set("path", Text::new_in(alloc, path).map(Value::from).ok()?)
                 .ok()?;
-            out.set(
+            out.try_set(
                 "mode",
                 Number::new_in(alloc, &mode_number(*mode).to_string()).ok()?,
             )
             .ok()?;
             if let Some(tag) = earlier {
-                out.set(
+                out.try_set(
                     "earlier",
                     Number::new_in(alloc, &u32::from(*tag).to_string()).ok()?,
                 )
                 .ok()?;
             }
             if let Some(tag) = later {
-                out.set(
+                out.try_set(
                     "later",
                     Number::new_in(alloc, &u32::from(*tag).to_string()).ok()?,
                 )
@@ -124,11 +124,11 @@ fn describe(error: &MergeError, alloc: Alloc) -> Option<Value> {
             }
         }
         MergeError::Build(_) => {
-            out.set("path", Text::new_in(alloc, "").map(Value::from).ok()?)
+            out.try_set("path", Text::new_in(alloc, "").map(Value::from).ok()?)
                 .ok()?;
         }
     }
-    out.set(
+    out.try_set(
         "message",
         Text::new_in(alloc, &error.to_string())
             .map(Value::from)

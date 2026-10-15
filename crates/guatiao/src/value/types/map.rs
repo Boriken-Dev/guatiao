@@ -12,12 +12,12 @@ use core::ptr;
 
 use core::marker::PhantomData;
 
-use crate::value::alloc::{Alloc, Allocator};
+use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::convert::MapError;
 use crate::value::error::ValueError;
 use crate::value::raw::{dangling, release_buffer, reserve};
 
-use super::{List, Payload, Tag, Text, Value, or_abort};
+use super::{List, Payload, Tag, Text, Value, only_alloc, or_abort, short_form_alloc};
 
 /// A borrowed sequence of key/value pairs, in **insertion order**, which
 /// is part of the contract: consumers render maps as forms, print them
@@ -250,17 +250,28 @@ impl Map {
     /// ```
     /// # use guatiao::Map;
     /// let mut map = Map::new();
-    /// map.set("host", "10.0.0.1")?;
-    /// map.set("port", 5900)?;
-    /// map.set("options", Map::new())?;
-    /// # Ok::<(), guatiao::ValueError>(())
+    /// map.set("host", "10.0.0.1");
+    /// map.set("port", 5900);
+    /// map.set("options", Map::new());
     /// ```
     ///
     /// Replacing an existing key keeps its position: moving it to the end
     /// would re-order a caller's rendered form.
-    pub fn set(&mut self, key: &str, value: impl Into<Value>) -> Result<(), ValueError> {
-        let alloc = self.alloc()?;
-        self.set_in(key, value, alloc)
+    ///
+    /// Grows through the allocator this map recorded, or Rust's own for a
+    /// map that recorded none, and **aborts** if it refuses, as
+    /// `Vec::push` does; [`try_set`](Map::try_set) reports it instead.
+    pub fn set(&mut self, key: &str, value: impl Into<Value>) {
+        let stored = self.try_set(key, value).map_err(ValueError::from);
+        or_abort(stored, core::alloc::Layout::new::<Entry>());
+    }
+
+    /// [`set`](Map::set), handing an allocation failure back, for a map
+    /// built in an allocator that may refuse: an arena that is full. A
+    /// refused store has freed `value`.
+    pub fn try_set(&mut self, key: &str, value: impl Into<Value>) -> Result<(), AllocError> {
+        let alloc = short_form_alloc(self.alloc());
+        self.set_in(key, value, alloc).map_err(only_alloc)
     }
 
     /// The same, adopting `alloc` for a map that carries none.
@@ -356,7 +367,7 @@ impl Map {
     /// ```
     /// # use guatiao::Map;
     /// let mut map = Map::new();
-    /// map.set("host", "10.0.0.1")?;
+    /// map.set("host", "10.0.0.1");
     /// let host: &str = map.required("host")?.try_into()?;
     /// assert_eq!(host, "10.0.0.1");
     /// assert!(map.required("nothing").is_err());
@@ -666,12 +677,12 @@ impl<K: AsRef<str>, V: Into<Value>> FromIterator<(K, V)> for Map {
     }
 }
 
-/// Sets each pair through the allocator this map recorded. Panics if it
-/// refuses, as [`List`]'s `Extend` does.
+/// Sets each pair as [`Map::set`] does, aborting if the allocator
+/// refuses.
 impl<K: AsRef<str>, V: Into<Value>> Extend<(K, V)> for Map {
     fn extend<I: IntoIterator<Item = (K, V)>>(&mut self, iter: I) {
         for (key, value) in iter {
-            or_abort(self.set(key.as_ref(), value));
+            self.set(key.as_ref(), value);
         }
     }
 }

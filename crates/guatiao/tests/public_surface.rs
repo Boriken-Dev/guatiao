@@ -56,13 +56,13 @@ fn the_root_exports_the_names_the_header_names() {
     assert_eq!(&buffer[..], b"\x00\xff");
 
     let mut map = Map::new();
-    map.set("k", "v").unwrap();
+    map.set("k", "v");
     let entry: &Entry = &map.entries()[0];
     assert_eq!(entry.key(), "k");
     assert_eq!(entry.value().tag(), Ok(Tag::GUATIAO_STRING));
 
     let mut list = List::new();
-    list.push(1).unwrap();
+    list.push(1);
     assert_eq!(list.len(), 1);
 
     let view = Str::new("k");
@@ -138,11 +138,11 @@ fn the_owned_types_are_clone_eq_send_and_sync() {
     is_send_sync::<Buffer>();
 
     let mut inner = List::new();
-    inner.push(1).unwrap();
-    inner.push("two").unwrap();
+    inner.push(1);
+    inner.push("two");
     let mut map = Map::new();
-    map.set("k", "v").unwrap();
-    map.set("l", inner).unwrap();
+    map.set("k", "v");
+    map.set("l", inner);
 
     let copy = map.clone();
     assert_eq!(copy, map);
@@ -158,7 +158,7 @@ fn the_owned_types_are_clone_eq_send_and_sync() {
     );
 
     let mut other = map.clone();
-    other.set("k", "w").unwrap();
+    other.set("k", "w");
     assert_ne!(other, map, "a changed copy is a different map");
     drop(other);
     assert_eq!(copy, map, "and dropping it touched neither");
@@ -208,7 +208,7 @@ fn a_value_gives_up_its_container_by_value() {
     use guatiao::{List, Map, Text, Value};
 
     let mut map = Map::new();
-    map.set("k", "v").unwrap();
+    map.set("k", "v");
     let value: Value = map.into();
     let mut map = Map::try_from(value).expect("a map");
     assert_eq!(
@@ -219,7 +219,7 @@ fn a_value_gives_up_its_container_by_value() {
     );
 
     let mut list = List::new();
-    list.push(1).unwrap();
+    list.push(1);
     let list = List::try_from(Value::from(list)).expect("a list");
     assert_eq!(list.len(), 1);
 

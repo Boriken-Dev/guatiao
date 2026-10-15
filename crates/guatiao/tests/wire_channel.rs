@@ -20,7 +20,7 @@ fn greeting_schema() -> Value {
 
 fn greeting(text: impl Into<Value>) -> Value {
     let mut map = Map::new();
-    map.set("greeting", text).unwrap();
+    map.set("greeting", text);
     map.into()
 }
 

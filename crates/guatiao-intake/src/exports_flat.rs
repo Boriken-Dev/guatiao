@@ -50,7 +50,7 @@ fn store_of(v: &Value) -> Option<BTreeMap<String, String>> {
 fn store_into(alloc: Alloc, store: &BTreeMap<String, String>) -> Option<Value> {
     let mut out = Map::new_in(alloc);
     for (k, v) in store {
-        out.set(k, Text::new_in(alloc, v).map(Value::from).ok()?)
+        out.try_set(k, Text::new_in(alloc, v).map(Value::from).ok()?)
             .ok()?;
     }
     Some(out.into())
@@ -187,7 +187,7 @@ pub unsafe extern "C" fn guatiao_intake_flat_keys(
             let Ok(item) = Text::new_in(alloc, &key).map(Value::from) else {
                 return Status::GUATIAO_ERR_ALLOC;
             };
-            if list.push(item).is_err() {
+            if list.try_push(item).is_err() {
                 return Status::GUATIAO_ERR_ALLOC;
             }
         }

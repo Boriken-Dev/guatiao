@@ -12,11 +12,11 @@
 //! use guatiao_intake::path;
 //!
 //! let mut inner = guatiao::Map::new();
-//! inner.set("host", "10.0.0.1")?;
+//! inner.set("host", "10.0.0.1");
 //! let mut list = guatiao::List::new();
-//! list.push(inner)?;
+//! list.push(inner);
 //! let mut root = guatiao::Map::new();
-//! root.set("agent", list)?;
+//! root.set("agent", list);
 //! let value = guatiao::Value::from(root);
 //!
 //! let at = path::parse("agent[0].host").expect("a path");

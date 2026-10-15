@@ -210,19 +210,19 @@ fn a_path_splits_into_a_head_and_the_rest() {
 /// A tree three containers deep, walked.
 fn tree() -> Value {
     let mut inner = Map::new();
-    inner.set("host", "10.0.0.1").unwrap();
-    inner.set("port", 5900i64.to_string().as_str()).unwrap();
+    inner.set("host", "10.0.0.1");
+    inner.set("port", 5900i64.to_string().as_str());
 
     let mut env = Map::new();
-    env.set("PATH", "/bin").unwrap();
-    env.set("0", "a key that looks like a position").unwrap();
-    inner.set("env", env).unwrap();
+    env.set("PATH", "/bin");
+    env.set("0", "a key that looks like a position");
+    inner.set("env", env);
 
     let mut agents = List::new();
-    agents.push(inner).unwrap();
+    agents.push(inner);
 
     let mut root = Map::new();
-    root.set("agent", agents).unwrap();
+    root.set("agent", agents);
     root.into()
 }
 
@@ -287,7 +287,7 @@ fn a_path_deeper_than_any_recursion_would_survive() {
     let mut value = Value::from("leaf");
     for _ in 0..depth {
         let mut wrap = Map::new();
-        wrap.set("n", value).unwrap();
+        wrap.set("n", value);
         value = wrap.into();
     }
 

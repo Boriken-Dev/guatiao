@@ -198,7 +198,7 @@ pub unsafe extern "C" fn guatiao_intake_check(
 fn describe(error: &FormError, alloc: Alloc) -> Option<Value> {
     let mut out = Map::new_in(alloc);
     let mut text = |key: &str, text: &str| -> Option<()> {
-        out.set(key, Text::new_in(alloc, text).map(Value::from).ok()?)
+        out.try_set(key, Text::new_in(alloc, text).map(Value::from).ok()?)
             .ok()
     };
     match error {
@@ -290,7 +290,7 @@ fn layout_value(schema: SchemaRef<'_>, form: FormRef<'_>, alloc: Alloc) -> Optio
         };
         let mut keys = List::new_in(alloc);
         for placed in &group.fields {
-            keys.push(
+            keys.try_push(
                 Text::new_in(alloc, placed.field.key())
                     .map(Value::from)
                     .ok()?,
@@ -298,9 +298,9 @@ fn layout_value(schema: SchemaRef<'_>, form: FormRef<'_>, alloc: Alloc) -> Optio
             .ok()?;
         }
         let mut entry = Map::new_in(alloc);
-        entry.set(GROUP_SECTION, section).ok()?;
-        entry.set(GROUP_FIELDS, keys).ok()?;
-        groups.push(entry).ok()?;
+        entry.try_set(GROUP_SECTION, section).ok()?;
+        entry.try_set(GROUP_FIELDS, keys).ok()?;
+        groups.try_push(entry).ok()?;
     }
     Some(groups.into())
 }

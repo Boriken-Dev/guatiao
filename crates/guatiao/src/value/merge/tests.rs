@@ -25,7 +25,7 @@ fn alloc() -> Alloc {
 fn m(pairs: impl IntoIterator<Item = (&'static str, Value)>) -> Value {
     let mut built = Map::new();
     for (key, value) in pairs {
-        built.set(key, value).expect("a test map is small");
+        built.set(key, value);
     }
     built.into()
 }
@@ -34,7 +34,7 @@ fn m(pairs: impl IntoIterator<Item = (&'static str, Value)>) -> Value {
 fn l(values: impl IntoIterator<Item = Value>) -> Value {
     let mut built = List::new();
     for value in values {
-        built.push(value).expect("a test list is small");
+        built.push(value);
     }
     built.into()
 }

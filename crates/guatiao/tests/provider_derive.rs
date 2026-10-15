@@ -151,8 +151,8 @@ fn a_provider_builds_instances_from_a_configuration() {
     );
 
     let mut config = Map::new();
-    config.set("prefix", "hey").unwrap();
-    config.set("bangs", 2).unwrap();
+    config.set("prefix", "hey");
+    config.set("bangs", 2);
     let config = Value::from(config);
     let before = SHOUTERS_ALIVE.load(core::sync::atomic::Ordering::SeqCst);
     let one = {
@@ -162,8 +162,8 @@ fn a_provider_builds_instances_from_a_configuration() {
     .expect("a fitting configuration builds");
     assert_eq!(one.greet("ana").unwrap(), "hey ANA!!");
     let mut other = Map::new();
-    other.set("prefix", "yo").unwrap();
-    other.set("bangs", 1).unwrap();
+    other.set("prefix", "yo");
+    other.set("bangs", 1);
     let two = {
         // SAFETY: a derived provider's descriptor, leaked above.
         unsafe { parts.info().instantiate::<dyn Greeter>(&Value::from(other)) }
@@ -207,8 +207,8 @@ fn a_provider_builds_instances_from_a_configuration() {
 
     // A configuration the type refuses, and one the schema refuses.
     let mut bad = Map::new();
-    bad.set("prefix", "x").unwrap();
-    bad.set("bangs", 0).unwrap();
+    bad.set("prefix", "x");
+    bad.set("bangs", 0);
     let e = {
         // SAFETY: a derived provider's descriptor, leaked above.
         unsafe { parts.info().instantiate::<dyn Greeter>(&Value::from(bad)) }

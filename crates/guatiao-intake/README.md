@@ -67,7 +67,7 @@ check(s, f)?;                       // every path names a field; every condition
 let groups = layout(s, f);          // sections in order, fields in order
 
 let mut entered_so_far = guatiao::Map::new();
-entered_so_far.set("verify", false)?;
+entered_so_far.set("verify", false);
 let shown = is_visible(s, f, "ca", &entered_so_far.into())?;
 # assert_eq!(groups.len(), 2, "the default section, then Network");
 # assert!(!shown, "`ca` waits on `verify`, which holds false");

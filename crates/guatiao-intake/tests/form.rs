@@ -318,11 +318,11 @@ fn every_shape_mistake_names_where_it_is() {
         (
             {
                 let mut section = Map::new();
-                section.set(vocab::TITLE, "no id").unwrap();
+                section.set(vocab::TITLE, "no id");
                 Form::new()
                     .option(vocab::SECTIONS, {
                         let mut l = guatiao::List::new();
-                        l.push(section).unwrap();
+                        l.push(section);
                         l
                     })
                     .finish()
@@ -347,7 +347,7 @@ fn every_shape_mistake_names_where_it_is() {
         (
             {
                 let mut fields = Map::new();
-                fields.set("port", true).unwrap();
+                fields.set("port", true);
                 Form::new().option(vocab::FIELDS, fields).finish().unwrap()
             },
             "fields[\"port\"]",
@@ -356,7 +356,7 @@ fn every_shape_mistake_names_where_it_is() {
         (
             {
                 let mut condition = Map::new();
-                condition.set(vocab::FIELD, "verify").unwrap();
+                condition.set(vocab::FIELD, "verify");
                 Form::new()
                     .field("ca", Hints::new().option(vocab::VISIBLE_WHEN, condition))
                     .finish()
@@ -466,7 +466,7 @@ fn shown(s: SchemaRef<'_>, f: FormRef<'_>, path: &str, values: &Value) -> bool {
 fn values(pairs: Vec<(&str, Value)>) -> Value {
     let mut map = Map::new();
     for (key, value) in pairs {
-        map.set(key, value).unwrap();
+        map.set(key, value);
     }
     map.into()
 }
@@ -576,8 +576,8 @@ fn a_variant_is_compared_by_its_discriminant() {
     let (s, f) = views(&schema, &form);
 
     let mut userpass = Map::new();
-    userpass.set("auth", "userpass").unwrap();
-    userpass.set("username", "root").unwrap();
+    userpass.set("auth", "userpass");
+    userpass.set("username", "root");
     let picked = values(vec![("auth", userpass.into())]);
     assert!(shown(s, f, "ca", &picked));
     assert!(
@@ -586,7 +586,7 @@ fn a_variant_is_compared_by_its_discriminant() {
     );
 
     let mut ambient = Map::new();
-    ambient.set("auth", "ambient").unwrap();
+    ambient.set("auth", "ambient");
     let other = values(vec![("auth", ambient.into())]);
     assert!(!shown(s, f, "ca", &other));
     assert!(!shown(s, f, "host", &other));
@@ -698,7 +698,7 @@ fn a_variant_is_compared_by_its_discriminant_for_each_listed_arm() {
     check(s, f).expect("both are arms");
 
     let mut ambient = Map::new();
-    ambient.set("auth", "ambient").unwrap();
+    ambient.set("auth", "ambient");
     let picked = values(vec![("auth", ambient.into())]);
     assert!(shown(s, f, "ca", &picked));
     assert!(
@@ -755,17 +755,17 @@ fn a_condition_names_its_values_exactly_once() {
     };
     let base = || {
         let mut m = Map::new();
-        m.set(vocab::FIELD, "verify").unwrap();
+        m.set(vocab::FIELD, "verify");
         m
     };
 
     let mut both = base();
-    both.set(vocab::EQUALS, true).unwrap();
-    both.set(vocab::IN, guatiao::List::new()).unwrap();
+    both.set(vocab::EQUALS, true);
+    both.set(vocab::IN, guatiao::List::new());
     let mut empty = base();
-    empty.set(vocab::IN, guatiao::List::new()).unwrap();
+    empty.set(vocab::IN, guatiao::List::new());
     let mut not_a_list = base();
-    not_a_list.set(vocab::IN, true).unwrap();
+    not_a_list.set(vocab::IN, true);
     let neither = base();
 
     for (why, condition, place) in [
@@ -970,8 +970,8 @@ fn an_arm_field_is_read_only_while_its_arm_is_picked() {
     let (s, f) = views(&schema, &form);
 
     let mut picked = Map::new();
-    picked.set("auth", "userpass").unwrap();
-    picked.set("username", "root").unwrap();
+    picked.set("auth", "userpass");
+    picked.set("username", "root");
     assert!(
         shown(s, f, "ca", &values(vec![("auth", picked.into())])),
         "`userpass` declares `username`, so the condition reads it"
@@ -980,8 +980,8 @@ fn an_arm_field_is_read_only_while_its_arm_is_picked() {
     // The same map, with the discriminant moved to an arm that declares no
     // `username`. The key is still there; it belongs to nothing now.
     let mut stale = Map::new();
-    stale.set("auth", "ambient").unwrap();
-    stale.set("username", "root").unwrap();
+    stale.set("auth", "ambient");
+    stale.set("username", "root");
     assert!(
         !shown(s, f, "ca", &values(vec![("auth", stale.into())])),
         "`ambient` declares no `username`, so the value left behind is not read"

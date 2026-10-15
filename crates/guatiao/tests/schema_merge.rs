@@ -43,7 +43,7 @@ fn schema_with(alloc: Alloc, pairs: &[(&str, &str)]) -> Value {
 fn map_of_lists(pairs: &[(&str, &[&str])]) -> Value {
     let mut built = Map::new();
     for (key, values) in pairs {
-        built.set(key, list(values)).unwrap();
+        built.set(key, list(values));
     }
     built.into()
 }
@@ -51,7 +51,7 @@ fn map_of_lists(pairs: &[(&str, &[&str])]) -> Value {
 fn list(values: &[&str]) -> Value {
     let mut built = List::new();
     for value in values {
-        built.push(Value::from(Text::new(value))).unwrap();
+        built.push(Value::from(Text::new(value)));
     }
     built.into()
 }
@@ -320,8 +320,8 @@ fn a_nested_mergelists_declaration_is_resolved_across_the_schema() {
 /// A map of one nested map holding one list.
 fn nested(key: &str, values: &[&str]) -> Value {
     let mut inner = Map::new();
-    inner.set(key, list(values)).unwrap();
+    inner.set(key, list(values));
     let mut outer = Map::new();
-    outer.set("tls", inner).unwrap();
+    outer.set("tls", inner);
     outer.into()
 }

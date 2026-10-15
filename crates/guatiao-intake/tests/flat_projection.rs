@@ -59,9 +59,9 @@ fn schema(alloc: Alloc) -> Value {
 /// A tagged value: the discriminant plus whatever fields are given.
 fn tagged(chosen: &str, fields: &[(&str, &str)]) -> Value {
     let mut m = Map::new();
-    m.set("auth", chosen).unwrap();
+    m.set("auth", chosen);
     for (k, v) in fields {
-        m.set(k, *v).unwrap();
+        m.set(k, *v);
     }
     m.into()
 }
@@ -341,12 +341,10 @@ fn a_field_key_may_hold_a_delimiter_and_is_named_by_quoting_it() {
     // one key, and `auth.username` is a two-step path that finds nothing
     // here.
     let mut values = Map::new_in(alloc);
-    values
-        .set(
-            "auth.username",
-            Text::new_in(alloc, "ana").map(Value::from).unwrap(),
-        )
-        .unwrap();
+    values.set(
+        "auth.username",
+        Text::new_in(alloc, "ana").map(Value::from).unwrap(),
+    );
     let values = Value::from(values);
 
     let quoted = path::parse("[\"auth.username\"]").expect("a path");
@@ -572,32 +570,26 @@ fn a_store_refusal_names_the_prefix_that_failed() {
 /// map.
 fn nested_value(alloc: Alloc) -> Value {
     let mut tls = Map::new_in(alloc);
-    tls.set("verify", true).unwrap();
+    tls.set("verify", true);
     tls.set(
         "ca",
         Text::new_in(alloc, "/etc/ca.pem").map(Value::from).unwrap(),
-    )
-    .unwrap();
+    );
     let mut connection = Map::new_in(alloc);
-    connection
-        .set(
-            "host",
-            Text::new_in(alloc, "10.0.0.1").map(Value::from).unwrap(),
-        )
-        .unwrap();
-    connection.set("tls", tls).unwrap();
+    connection.set(
+        "host",
+        Text::new_in(alloc, "10.0.0.1").map(Value::from).unwrap(),
+    );
+    connection.set("tls", tls);
 
     let mut one = Map::new_in(alloc);
-    one.set("name", Text::new_in(alloc, "one").map(Value::from).unwrap())
-        .unwrap();
+    one.set("name", Text::new_in(alloc, "one").map(Value::from).unwrap());
     one.set(
         "secret",
         Text::new_in(alloc, "s1").map(Value::from).unwrap(),
-    )
-    .unwrap();
+    );
     let mut two = Map::new_in(alloc);
-    two.set("name", Text::new_in(alloc, "two").map(Value::from).unwrap())
-        .unwrap();
+    two.set("name", Text::new_in(alloc, "two").map(Value::from).unwrap());
     let mut agents = guatiao::List::new_in(alloc);
     agents.push_in(one, alloc).unwrap();
     agents.push_in(two, alloc).unwrap();
@@ -606,18 +598,16 @@ fn nested_value(alloc: Alloc) -> Value {
     env.set(
         "PATH",
         Text::new_in(alloc, "/bin").map(Value::from).unwrap(),
-    )
-    .unwrap();
+    );
     env.set(
         "a.b",
         Text::new_in(alloc, "dotted").map(Value::from).unwrap(),
-    )
-    .unwrap();
+    );
 
     let mut root = Map::new_in(alloc);
-    root.set("connection", connection).unwrap();
-    root.set("agent", agents).unwrap();
-    root.set("env", env).unwrap();
+    root.set("connection", connection);
+    root.set("agent", agents);
+    root.set("env", env);
     root.into()
 }
 
@@ -781,8 +771,7 @@ fn writing_clears_everything_under_the_path_first() {
     one.set(
         "name",
         Text::new_in(alloc, "fresh").map(Value::from).unwrap(),
-    )
-    .unwrap();
+    );
     let mut agents = guatiao::List::new_in(alloc);
     agents.push_in(one, alloc).unwrap();
 
@@ -857,11 +846,11 @@ fn a_sibling_that_sorts_between_a_field_and_its_elements_loses_nothing() {
     let alloc = Alloc::rust();
 
     let mut agents = guatiao::List::new();
-    agents.push("one").unwrap();
-    agents.push("two").unwrap();
+    agents.push("one");
+    agents.push("two");
     let mut env = Map::new();
-    env.set("PATH", "/bin").unwrap();
-    env.set("HOME", "/root").unwrap();
+    env.set("PATH", "/bin");
+    env.set("HOME", "/root");
 
     let mut store = BTreeMap::new();
     assert!(flat::flatten(
@@ -918,7 +907,7 @@ fn a_dotted_top_level_field_is_stored_apart_from_a_member() {
     let alloc = Alloc::rust();
 
     let mut inner = Map::new();
-    inner.set("b", "member").unwrap();
+    inner.set("b", "member");
     let mut store = BTreeMap::new();
     assert!(flat::flatten(
         s.find("a.b").unwrap(),
@@ -1061,7 +1050,7 @@ fn flatten_stops_at_the_depth_bound() {
         let mut value = Value::from("leaf");
         for _ in 0..levels {
             let mut list = guatiao::List::new();
-            list.push(value).unwrap();
+            list.push(value);
             value = list.into();
         }
         (schema, value)

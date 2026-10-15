@@ -66,23 +66,53 @@ pub use text::{Str, Text};
 // still reaches it.
 pub use super::value::{Payload, Tag, Value};
 
+use core::alloc::Layout;
 use core::ffi::c_void;
+
+use crate::value::alloc::{Alloc, AllocError};
 
 use crate::value::error::ValueError;
 
-/// The short constructors abort on an allocation failure; the `_in` ones
-/// report it.
+/// The short forms abort on an allocation failure; the `_in` and `try_`
+/// ones report it.
 ///
-/// A short constructor allocates on Rust's own heap, and a failure there
-/// is the condition `String::from` and `Vec::push` already meet: the
-/// standard library aborts rather than returning. A foreign allocator
-/// returning null is a different statement -- it may be an arena that is
-/// merely full -- so `_in` hands the refusal back.
-pub(crate) fn or_abort<T>(built: Result<T, ValueError>) -> T {
+/// A short form allocates on Rust's own heap or through the allocator its
+/// container recorded, and a failure there is the condition
+/// `String::from` and `Vec::push` already meet: the standard library
+/// aborts, through the global allocation-error handler, rather than
+/// returning. A foreign allocator returning null may be an arena that is
+/// merely full, so `_in` and `try_` hand the refusal back.
+///
+/// `layout` is the request as nearly as the caller knows it: the element
+/// being added, or the bytes being copied.
+pub(crate) fn or_abort<T>(built: Result<T, ValueError>, layout: Layout) -> T {
     match built {
         Ok(v) => v,
-        Err(e) => panic!("guatiao: building a value on Rust's heap failed: {e}"),
+        Err(_) => alloc::alloc::handle_alloc_error(layout),
     }
+}
+
+/// The layout of `n` bytes, for [`or_abort`]: one byte when `n` has none.
+pub(crate) fn bytes_layout(n: usize) -> Layout {
+    Layout::array::<u8>(n).unwrap_or(Layout::new::<u8>())
+}
+
+/// The allocation failure inside a store's error. A store can fail on
+/// nothing else: its key and value are already text and a node.
+pub(crate) fn only_alloc(e: ValueError) -> AllocError {
+    match e {
+        ValueError::Alloc(e) => e,
+        _ => {
+            debug_assert!(false, "a store failed on something other than memory: {e}");
+            AllocError::Failed
+        }
+    }
+}
+
+/// The allocator a short form grows a container through: the one it
+/// recorded, or Rust's own for one that recorded none.
+pub(crate) fn short_form_alloc(recorded: Result<Alloc, ValueError>) -> Alloc {
+    recorded.unwrap_or_else(|_| Alloc::rust())
 }
 
 // The numbers a foreign consumer compiles against: a change to one is an

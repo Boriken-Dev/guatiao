@@ -68,7 +68,7 @@
 //!
 //! // `ca` shows only while `verify` holds true.
 //! let mut values = guatiao::Map::new();
-//! values.set("verify", false)?;
+//! values.set("verify", false);
 //! assert!(!is_visible(s, f, "ca", &values.into())?);
 //! # Ok::<(), Box<dyn core::error::Error>>(())
 //! ```

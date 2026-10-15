@@ -266,7 +266,7 @@ fn describe(tag: Option<Tag>) -> &'static str {
 /// use guatiao::{List, Map, TryAsRef, Value};
 ///
 /// let mut map = Map::new();
-/// map.set("host", "10.0.0.1")?;
+/// map.set("host", "10.0.0.1");
 /// let v = Value::from(map);
 ///
 /// let m: &Map = v.try_as_ref().unwrap();
@@ -294,7 +294,7 @@ pub trait TryAsRef<T: ?Sized> {
 ///
 /// let mut v = Value::from(Map::new());
 /// let m: &mut Map = v.try_as_mut().unwrap();
-/// m.set("port", 5900)?;
+/// m.set("port", 5900);
 /// # Ok::<(), guatiao::ValueError>(())
 /// ```
 pub trait TryAsMut<T: ?Sized> {
