@@ -1,0 +1,30 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# The C names of guatiao's types that a kind table names, for a kind crate
+# rendering its own header with cbindgen against `guatiao.h`.
+#
+# A kind crate renders with `parse_deps = false`, so cbindgen never sees
+# these types and writes them under the names this table gives -- the
+# names `guatiao.h` declares them by. The file is itself a cbindgen
+# configuration, so a build script reads it with `Config::from_file` and
+# extends its own `export.rename` with it. Cargo hands its directory to a
+# direct dependent's build script as `DEP_GUATIAO_INCLUDE`;
+# `examples/greeter_kind/build.rs` in the repository does exactly that.
+#
+# `tests/header_covers_every_type.rs` checks that every entry matches
+# guatiao's own table and that every guatiao type a kind table can name
+# has one.
+[export.rename]
+"KindHeader" = "guatiao_kind_header"
+"ProviderError" = "guatiao_provider_error"
+"Status" = "guatiao_status"
+"Str" = "guatiao_str"
+"Bytes" = "guatiao_bytes"
+"Text" = "guatiao_string"
+"Map" = "guatiao_map"
+"List" = "guatiao_list"
+"Value" = "guatiao_value"
+"ObjectRaw" = "guatiao_object"
+"BytesMut" = "guatiao_bytes_mut"

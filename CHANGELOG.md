@@ -65,6 +65,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   sets a hand-built descriptor's `meta`. **`#[derive(Form)]` takes
   `#[form(crate = <path>)]`**, a re-export of `guatiao_intake`, and now
   reaches `guatiao` through `guatiao_intake` alone.
+- **`include/kind_rename.toml`**, shipped beside `guatiao.h`: the C names
+  of every guatiao type a kind table names, as a cbindgen configuration.
+  A kind crate rendering its own header reads it from
+  `DEP_GUATIAO_INCLUDE` and extends its `export.rename` with it, instead
+  of copying the list; a test keeps it in step with `guatiao.h` and with
+  what the kind attribute writes.
 - **Borrowed object arguments.** A kind method may take `&mut dyn K`, or
   `&dyn K`, for an object kind `K`: the caller's value is lent for that
   call. It crosses as a `const guatiao_object *` on the caller's stack,
