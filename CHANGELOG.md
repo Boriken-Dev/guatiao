@@ -131,9 +131,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   built provider. A type of the kind crate's own is still hashed by the
   name it is written with; the rule is in `guatiao-derive`'s `AGENTS.md`.
   *Migration:* breaking only for a kind whose required methods spelled
-  one of those paths: it gets a new `FLOOR_HASH` once, so rebuild its
-  providers (a C table takes the new `*_FLOOR_HASH`). A kind spelled with
-  bare names keeps its hash.
+  one of those paths, or a reference's lifetime (`&'_ str` now hashes as
+  `&str`): it gets a new `FLOOR_HASH` once, so rebuild its providers (a C
+  table takes the new `*_FLOOR_HASH`). A kind spelled with bare names
+  keeps its hash.
 - **`#[guatiao::kind]` and `#[derive(Provider)]` refuse with a
   sentence what used to fail inside the expansion.** An argument named
   `ctx`, `out` or `err` now compiles (the shim's own parameters are
@@ -141,13 +142,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Types are read by path: guatiao's under `guatiao::`, `::guatiao::` or
   the `crate =` root, the standard ones under `std::`, `core::`,
   `alloc::`, both bare; a type ending in `Value`, `Map`, `List`,
-  `String`, `Object` or `ProviderError` under another root is refused,
-  naming the accepted spellings. Also refused: a method named `header` or
-  `destroy` (or `into_object` on an object kind), an argument whose name
-  starts with `__`, and a kind named twice in `#[provider(..)]`.
-  *Migration:* breaking only where such code compiled: a provider kind
-  with a method named `destroy` or an argument starting with `__` renames
-  it, and `#[provider(K, K)]` drops the repeat.
+  `String`, `Object` or `ProviderError` under another root is refused
+  where it can only mean one of those -- borrowed, returned, as the error,
+  or as `other::Object<dyn K>` -- naming the accepted spellings, and taken
+  by value as an argument it crosses through `ToValue`/`FromValue` as any
+  type of the caller's does (`proto::String`). Also refused: a method
+  named `header`, one named `destroy` or `into_object` on an object kind,
+  an argument whose name starts with `__`, and a kind named twice in
+  `#[provider(..)]`. *Migration:* breaking only where such code compiled:
+  an object kind's method named `destroy` or an argument starting with
+  `__` is renamed, and `#[provider(K, K)]` drops the repeat.
 - **Breaking: a typed value is checked as the type its kind names.**
   `validate_value` and `validate_map` required only that a scalar's text
   passed, so a boolean field took `yes`, a string field took `5900` and a
@@ -485,6 +489,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   holding one with "implementation of `Kind` is not general enough". The
   `Kind` bound is off those types and their marker impls, and `Offer` and
   `ProviderView` are `Send + Sync` as well.
+- **An object kind with methods `x` and `mut_x` compiles.** Its lent
+  tables' shims for the two had one name; they are `__guatiao_lentmut__<m>`
+  and `__guatiao_lent__<m>` now, which no pair of method names can meet.
 
 ## [0.0.0-alpha.0] - 2026-09-27
 

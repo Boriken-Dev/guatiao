@@ -78,6 +78,7 @@
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 use syn::{
     Block, FnArg, GenericArgument, Ident, ItemTrait, PathArguments, ReturnType, TraitItem,
     TraitItemFn, Type, TypeReference,
@@ -364,9 +365,9 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
             "a kind method cannot be variadic",
         ));
     }
-    let reserved = match sig.ident.to_string().as_str() {
+    let reserved = match sig.ident.unraw().to_string().as_str() {
         "header" => Some("the table's first field is its `header`"),
-        "destroy" => Some("an object kind's table carries its own `destroy` slot"),
+        "destroy" if object => Some("an object kind's table carries its own `destroy` slot"),
         "into_object" if object => Some("the attribute adds `into_object` to an object kind"),
         _ => None,
     };
@@ -475,44 +476,49 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
 }
 
 /// The `dyn K` inside an `Object<dyn K>` path, `None` for any other
-/// type, or a refusal for an `Object` the attribute cannot tell is
-/// guatiao's.
+/// type, or a refusal for `other::Object<dyn K>`: that shape is only ever
+/// guatiao's handle, which the attribute cannot tell it is.
 fn object_inner(ty: &Type, roots: Roots<'_>) -> syn::Result<Option<Type>> {
-    let Some(name) = special(ty, roots)? else {
-        return Ok(None);
-    };
-    let Type::Path(p) = ty else {
-        return Ok(None);
-    };
-    let last = p.path.segments.last().expect("a path has a segment");
-    if name != "Object" {
-        return Ok(None);
-    }
-    let PathArguments::AngleBracketed(a) = &last.arguments else {
-        return Ok(None);
-    };
-    Ok(match a.args.first() {
-        Some(GenericArgument::Type(inner)) => Some(inner.clone()),
-        _ => None,
-    })
-}
-
-/// Which of the types the glue treats specially `ty` names — guatiao's
-/// `Value`, `Map`, `List`, `Text`, `ProviderError`, `Object`, `Status`
-/// or the standard `String`, `Vec`, `Option`, `Result`, `Box` — or
-/// `None`. A path ending in `Value`, `Map`, `List`, `String`,
-/// `ProviderError` or `Object` under a root the attribute does not read
-/// is refused here: classified by its last segment it would fail to
-/// compile inside the expansion, far from what was written.
-fn special(ty: &Type, roots: Roots<'_>) -> syn::Result<Option<&'static str>> {
     let Type::Path(p) = ty else {
         return Ok(None);
     };
     if p.qself.is_some() {
         return Ok(None);
     }
-    if let Some(name) = roots.guatiao(&p.path).or_else(|| roots.std(&p.path)) {
-        return Ok(Some(name));
+    let last = p.path.segments.last().expect("a path has a segment");
+    let PathArguments::AngleBracketed(a) = &last.arguments else {
+        return Ok(None);
+    };
+    let Some(GenericArgument::Type(inner)) = a.args.first() else {
+        return Ok(None);
+    };
+    if roots.guatiao(&p.path) == Some("Object") {
+        return Ok(Some(inner.clone()));
+    }
+    if roots.unrecognised(&p.path) == Some("Object") && matches!(inner, Type::TraitObject(_)) {
+        return Err(roots.refusal(ty, "Object"));
+    }
+    Ok(None)
+}
+
+/// Which of the types the glue treats specially `ty` names — guatiao's
+/// `Value`, `Map`, `List`, `Text`, `ProviderError`, `Object`, `Status`
+/// or the standard `String`, `Vec`, `Option`, `Result`, `Box` — or
+/// `None`. Used where a type is borrowed, returned or named as the error:
+/// there a path ending in `Value`, `Map`, `List`, `String`,
+/// `ProviderError` or `Object` under a root the attribute does not read
+/// can only be meant as guatiao's or the standard one, so it is refused
+/// rather than misread. An argument by value reads [`special_by_value`].
+fn special(ty: &Type, roots: Roots<'_>) -> syn::Result<Option<&'static str>> {
+    let name = special_by_value(ty, roots);
+    if name.is_some() {
+        return Ok(name);
+    }
+    let Type::Path(p) = ty else {
+        return Ok(None);
+    };
+    if p.qself.is_some() {
+        return Ok(None);
     }
     match roots.unrecognised(&p.path) {
         Some(name @ ("Value" | "Map" | "List" | "String" | "ProviderError" | "Object")) => {
@@ -520,6 +526,19 @@ fn special(ty: &Type, roots: Roots<'_>) -> syn::Result<Option<&'static str>> {
         }
         _ => Ok(None),
     }
+}
+
+/// [`special`] for an argument taken by value: a path the attribute does
+/// not read is an ordinary type of the caller's whatever its last
+/// segment, crossing through `ToValue`/`FromValue` (`proto::String`).
+fn special_by_value(ty: &Type, roots: Roots<'_>) -> Option<&'static str> {
+    let Type::Path(p) = ty else {
+        return None;
+    };
+    if p.qself.is_some() {
+        return None;
+    }
+    roots.guatiao(&p.path).or_else(|| roots.std(&p.path))
 }
 
 /// The last path segment's ident, for a plain path type.
@@ -632,15 +651,17 @@ fn arg_kind(ty: &Type, object: bool, roots: Roots<'_>) -> syn::Result<ArgKind> {
             if is_scalar(&last.ident) && last.arguments.is_none() {
                 return Ok(ArgKind::Scalar(ty.clone()));
             }
-            if special(ty, roots)? == Some("Option")
+            if special_by_value(ty, roots) == Some("Option")
                 && let PathArguments::AngleBracketed(a) = &last.arguments
                 && let Some(GenericArgument::Type(Type::Reference(r))) = a.args.first()
                 && special(&r.elem, roots)? == Some("Value")
             {
                 return Ok(ArgKind::ValueOpt);
             }
-            if matches!(special(ty, roots)?, Some("Value" | "Map" | "List" | "Text"))
-                || last.ident == "Buffer"
+            if matches!(
+                special_by_value(ty, roots),
+                Some("Value" | "Map" | "List" | "Text")
+            ) || last.ident == "Buffer"
             {
                 return Err(syn::Error::new_spanned(
                     ty,
@@ -873,7 +894,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             .map(|m| emit_shim(trait_ident, &table, Receiver::LentMut, m));
         let lent_mut_inits = methods.iter().map(|m| {
             let ident = &m.ident;
-            let shim = format_ident!("__guatiao_lent_mut_{}", m.ident);
+            let shim = lent_mut_shim_ident(&m.ident);
             quote! { #ident: ::core::option::Option::Some(Self::#shim), }
         });
         let shared = shared_methods.then(|| {
@@ -882,7 +903,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
                 .map(|m| emit_shim(trait_ident, &table, Receiver::Lent, m));
             let lent_inits = methods.iter().map(|m| {
                 let ident = &m.ident;
-                let shim = format_ident!("__guatiao_lent_{}", m.ident);
+                let shim = lent_shim_ident(&m.ident);
                 quote! { #ident: ::core::option::Option::Some(Self::#shim), }
             });
             quote! {
@@ -1159,6 +1180,18 @@ fn shim_ident(method: &Ident) -> Ident {
     format_ident!("__guatiao_shim_{}", method)
 }
 
+/// The `&mut` lent table's shim. Its prefix and [`lent_shim_ident`]'s
+/// differ before either ends, so no two methods' shims share a name, `x`
+/// and `mut_x` included.
+fn lent_mut_shim_ident(method: &Ident) -> Ident {
+    format_ident!("__guatiao_lentmut__{}", method)
+}
+
+/// The shared lent table's shim.
+fn lent_shim_ident(method: &Ident) -> Ident {
+    format_ident!("__guatiao_lent__{}", method)
+}
+
 /// The C type of one argument.
 fn arg_c_type(kind: &ArgKind) -> TokenStream {
     match kind {
@@ -1242,8 +1275,8 @@ fn emit_shim(
 ) -> TokenStream {
     let shim = match receiver {
         Receiver::Provider | Receiver::Cell => shim_ident(&m.ident),
-        Receiver::LentMut => format_ident!("__guatiao_lent_mut_{}", m.ident),
-        Receiver::Lent => format_ident!("__guatiao_lent_{}", m.ident),
+        Receiver::LentMut => lent_mut_shim_ident(&m.ident),
+        Receiver::Lent => lent_shim_ident(&m.ident),
     };
     let generics = match receiver {
         Receiver::Provider | Receiver::Cell => quote!(<__T: #trait_ident>),
@@ -2028,6 +2061,97 @@ mod tests {
         assert!(!out.contains("LENT"), "{out}");
     }
 
+    /// Every function the table's inherent impl defines, by name.
+    fn table_fns(out: &str, table: &str) -> Vec<String> {
+        let file: syn::File = syn::parse_str(out).expect("the expansion parses as Rust");
+        file.items
+            .iter()
+            .filter_map(|i| match i {
+                syn::Item::Impl(imp) if imp.trait_.is_none() => match &*imp.self_ty {
+                    Type::Path(p) if p.path.is_ident(table) => Some(imp),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .flat_map(|imp| &imp.items)
+            .filter_map(|item| match item {
+                syn::ImplItem::Fn(f) => Some(f.sig.ident.to_string()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn no_two_methods_generate_the_same_name() {
+        // `x` lent `&mut` and `mut_x` lent shared, and every other pair
+        // whose names a plain `_` join would run together.
+        let out = expand_str(
+            "object",
+            "pub trait Pair: Send { fn x(&self) -> i64; fn mut_x(&mut self) -> i64; \
+             fn lent_x(&self) -> i64; fn shim_x(&self) -> i64; fn _x(&self) -> i64; }",
+        )
+        .expect("expands");
+        let mut fns = table_fns(&out, "PairVtable");
+        let all = fns.len();
+        fns.sort();
+        fns.dedup();
+        assert_eq!(fns.len(), all, "a name is generated twice: {fns:?}");
+        assert!(fns.contains(&"__guatiao_lentmut__x".to_string()), "{fns:?}");
+        assert!(
+            fns.contains(&"__guatiao_lent__mut_x".to_string()),
+            "{fns:?}"
+        );
+    }
+
+    #[test]
+    fn a_provider_kind_may_name_a_method_destroy() {
+        // Only an object kind's table has a `destroy` slot of its own.
+        let out = expand_str(
+            "",
+            "pub trait Pool: Send + Sync { fn destroy(&self) -> i64; }",
+        )
+        .expect("expands");
+        assert!(
+            out.contains("pub destroy : :: core :: option :: Option"),
+            "{out}"
+        );
+        assert!(!out.contains("__guatiao_destroy"), "{out}");
+        assert!(
+            out.contains("(\"destroy\" , PoolVtable :: destroy_end ())"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn a_type_of_the_callers_crosses_by_value_whatever_its_last_name() {
+        for ty in [
+            "proto::String",
+            "foreign::Map",
+            "model::Value",
+            "model::List",
+            "mine::ProviderError",
+            "json::Object",
+            "json::Object<String>",
+        ] {
+            let out = expand_str(
+                "",
+                &format!(
+                    "pub trait Echo: Send + Sync {{ fn take(&self, s: {ty}) -> Result<i64, ProviderError>; }}"
+                ),
+            )
+            .unwrap_or_else(|e| panic!("{ty} is refused: {e}"));
+            let read: Type = syn::parse_str(ty).unwrap();
+            let read = quote!(#read).to_string();
+            assert!(
+                out.contains(&format!("< {read} as :: guatiao :: FromValue >")),
+                "{ty}: {out}"
+            );
+        }
+        // Borrowed, returned or as the error, such a path can only be
+        // meant as guatiao's or the standard type, and is still refused
+        // (`kind_rejects_by_name`); so is `other::Object<dyn K>`.
+    }
+
     /// With `crate = <path>` nothing is rooted at `::guatiao`: a consumer
     /// reaching the crate through a re-export has no such name.
     #[test]
@@ -2383,7 +2507,7 @@ mod tests {
             ),
             (
                 "",
-                "pub trait G: Send + Sync { fn f(&self, m: foreign::Map) -> Result<i64, ProviderError>; }",
+                "pub trait G: Send + Sync { fn f(&self, m: &foreign::Map) -> Result<foreign::Map, ProviderError>; }",
                 "this type ends in `Map`",
             ),
             (

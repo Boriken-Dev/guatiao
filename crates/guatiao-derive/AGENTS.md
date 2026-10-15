@@ -204,7 +204,7 @@ self`/`self`/no receiver, a `&mut` argument other than a lent object, a
 lent object with another bound beside the trait (`&mut (dyn K + Send)`),
 a borrowed argument of any other type, a value type by value as an argument, `impl Trait` anywhere,
 a function argument, a borrowed or `impl Trait` return, a `Result` whose
-error is not `ProviderError`, a method named `header` or `destroy` (or
+error is not `ProviderError`, a method named `header` (or `destroy` or
 `into_object` on an object kind), an argument whose name starts with
 `__`, and an attribute key other than `name`, `object` and `crate`.
 
@@ -213,13 +213,16 @@ error is not `ProviderError`, a method named `header` or `destroy` (or
 bare, under `guatiao::`/`::guatiao::` or under the `crate =` root; the
 standard `String`, `Vec`, `Option`, `Result`, `Box` bare or under
 `std::`/`core::`/`alloc::`. A path ending in `Value`, `Map`, `List`,
-`String`, `Object` or `ProviderError` under any other root
-(`&foreign::Value`, `-> Result<model::String, _>`) is refused with a
-sentence naming the accepted spellings, rather than misread and failing
-inside the expansion; a type of your own with such a name needs another
-in the signature (`use .. as ..`). Any other type of yours crosses
-through `ToValue`/`FromValue` whatever its name (`proto::Text` by value
-is fine).
+`String`, `Object` or `ProviderError` under any other root is
+refused where it could only mean guatiao's or the standard type —
+borrowed (`&foreign::Value`, `Option<&foreign::Value>`), returned
+(`-> Result<model::String, _>`), as the error, or as
+`other::Object<dyn K>` — with a sentence naming the accepted spellings,
+rather than misread and failing inside the expansion; a type of your own
+returned under such a name needs another in the signature (`use .. as
+..`). **As an argument by value, a type of yours crosses through
+`ToValue`/`FromValue` whatever its last name** (`proto::String`,
+`json::Object`, `proto::Text`).
 
 **Hygiene.** A shim's own parameters are `__ctx`, `__out` and `__err`,
 so an argument may be named `ctx`, `out` or `err`; in the slot's type,
