@@ -31,26 +31,31 @@ pub trait ProviderDecl {
 
 /// Everything one provider's descriptor points at, owned in one place so
 /// the descriptor stays valid for as long as this does.
+///
+/// The owners are `String` and `Vec`, never `Box`: a `Box` is retagged as
+/// unique every time this struct moves, which under Stacked Borrows
+/// invalidates the pointers `info` holds into it. `config` is a `Vec` of
+/// at most one value for that reason.
 #[derive(Debug)]
 pub struct ProviderParts {
     #[allow(dead_code)]
-    id: Box<str>,
+    id: String,
     #[allow(dead_code)]
-    name: Box<str>,
+    name: String,
     #[allow(dead_code)]
-    version: Box<str>,
+    version: String,
     #[allow(dead_code)]
-    kinds: Box<[Str<'static>]>,
+    kinds: Vec<Str<'static>>,
     #[allow(dead_code)]
-    tables: Box<[KindTable<'static>]>,
+    tables: Vec<KindTable<'static>>,
     #[allow(dead_code)]
-    config: Option<Box<Value>>,
+    config: Vec<Value>,
     info: ProviderInfo<'static>,
 }
 
 // SAFETY: built once and never written; every pointer in `info` addresses
-// this struct's own boxes, a `static`, or an instance that lives for the
-// process.
+// this struct's own heap storage, a `static`, or an instance that lives
+// for the process.
 unsafe impl Send for ProviderParts {}
 // SAFETY: as above.
 unsafe impl Sync for ProviderParts {}
@@ -174,13 +179,21 @@ impl ProviderPartsBuilder {
     /// its `ctx`; and `ctx` and every table live for the process, as a
     /// `static` or a leaked instance does.
     pub unsafe fn build(self) -> ProviderParts {
-        let id: Box<str> = self.id.into();
-        let name: Box<str> = self.name.into();
-        let version: Box<str> = self.version.into();
-        let kinds: Box<[Str]> = self.kinds.iter().map(|k| Str::new(k)).collect();
-        let tables: Box<[KindTable]> = self.tables.into_boxed_slice();
-        let config = self.config.map(Box::new);
-        // The boxes' heap storage does not move when the struct does.
+        let ProviderPartsBuilder {
+            id,
+            name,
+            version,
+            kinds,
+            tables,
+            config,
+            ctx,
+            available,
+            create,
+            destroy,
+        } = self;
+        let kinds: Vec<Str> = kinds.iter().map(|k| Str::new(k)).collect();
+        let config: Vec<Value> = config.into_iter().collect();
+        // The heap storage does not move when the struct does.
         let info = ProviderInfo {
             struct_size: size_of::<ProviderInfo>() as u32,
             vtable_size: 0,
@@ -188,26 +201,26 @@ impl ProviderPartsBuilder {
                 ptr: kinds.as_ptr(),
                 len: kinds.len(),
             },
-            // SAFETY: the boxes are kept beside `info`, below.
+            // SAFETY: the strings are kept beside `info`, below.
             id: unsafe { crate::library::raw::view_of_owned(&id) },
             // SAFETY: as `id`.
             display_name: unsafe { crate::library::raw::view_of_owned(&name) },
             config: config
-                .as_deref()
+                .first()
                 .map_or(core::ptr::null(), |v| v as *const Value),
             vtable: core::ptr::null(),
-            ctx: self.ctx,
+            ctx,
             meta: crate::value::types::MaybeNull::null(),
             // SAFETY: as `id`.
             version: unsafe { crate::library::raw::view_of_owned(&version) },
-            available: self.available,
+            available,
             tables: KindTables {
                 ptr: tables.as_ptr(),
                 len: tables.len(),
                 stride: size_of::<KindTable>(),
             },
-            create: self.create,
-            destroy: self.destroy,
+            create,
+            destroy,
         };
         ProviderParts {
             id,
@@ -221,17 +234,18 @@ impl ProviderPartsBuilder {
     }
 }
 
-/// Everything a derived library's descriptor points at.
+/// Everything a library's descriptor points at, owned as
+/// [`ProviderParts`] owns its own and for the same reason.
 #[derive(Debug)]
 pub struct LibraryParts {
     #[allow(dead_code)]
-    id: Box<str>,
+    id: String,
     #[allow(dead_code)]
-    version: Box<str>,
+    version: String,
     #[allow(dead_code)]
     providers: Vec<ProviderParts>,
     #[allow(dead_code)]
-    infos: Box<[ProviderInfo<'static>]>,
+    infos: Vec<ProviderInfo<'static>>,
     info: LibraryInfo<'static>,
 }
 
@@ -243,13 +257,13 @@ unsafe impl Sync for LibraryParts {}
 impl LibraryParts {
     /// Owns the providers and builds the library descriptor over them.
     pub fn new(id: &str, version: &str, providers: Vec<ProviderParts>) -> LibraryParts {
-        let id: Box<str> = id.into();
-        let version: Box<str> = version.into();
-        let infos: Box<[ProviderInfo<'static>]> = providers.iter().map(|p| p.info).collect();
+        let id = String::from(id);
+        let version = String::from(version);
+        let infos: Vec<ProviderInfo<'static>> = providers.iter().map(|p| p.info).collect();
         let info = LibraryInfo {
             struct_size: size_of::<LibraryInfo>() as u32,
             abi_version: crate::library::desc::ABI_VERSION,
-            // SAFETY: the boxes are kept beside `info`, below.
+            // SAFETY: the strings are kept beside `info`, below.
             id: unsafe { crate::library::raw::view_of_owned(&id) },
             version: unsafe { crate::library::raw::view_of_owned(&version) },
             providers: crate::library::desc::Providers {
