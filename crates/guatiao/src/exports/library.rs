@@ -694,6 +694,10 @@ pub unsafe extern "C" fn guatiao_registry_libraries_keyed_by(
 /// (`already-loaded`). A failure is a file the loader could not map or a
 /// descriptor this build cannot read.
 ///
+/// `GUATIAO_ERR_BAD_VALUE` when `path` is not UTF-8, and
+/// `GUATIAO_ERR_ALLOC` when `alloc` is null or incomplete; `out` is
+/// written ABSENT first, so either leaves it ABSENT.
+///
 /// **Mapping a library runs its static initialisers**, which may do
 /// anything, including abort the process. Name files you are willing to
 /// run.
@@ -736,7 +740,9 @@ pub unsafe extern "C" fn guatiao_registry_load_file(
 /// Registers a library the host LINKS rather than loads: `entry` is its
 /// `guatiao_library_entry`, called with this registry's host block, and
 /// `name` stands in for the path (`<name>`) in every report. The report
-/// is [`guatiao_registry_load_file`]'s: `loaded`, `skipped` or `failed`.
+/// is [`guatiao_registry_load_file`]'s: `loaded`, `skipped` or `failed`,
+/// and so are its statuses: `GUATIAO_ERR_BAD_VALUE` for a `name` that is
+/// not UTF-8, `GUATIAO_ERR_ALLOC` for a null or incomplete `alloc`.
 ///
 /// # Safety
 ///
@@ -795,6 +801,10 @@ pub unsafe extern "C" fn guatiao_registry_register_entry(
 /// order: `libfoo-1.2.0` sorts above `libfoo-1.10.0`. Nothing here parses
 /// a version; a host wanting the newest keys libraries by
 /// `%id@%version` and picks.
+///
+/// Statuses are [`guatiao_registry_load_file`]'s: `GUATIAO_ERR_BAD_VALUE`
+/// for a `dir` that is not UTF-8, `GUATIAO_ERR_ALLOC` for a null or
+/// incomplete `alloc`.
 ///
 /// # Safety
 ///
@@ -955,6 +965,12 @@ pub unsafe extern "C" fn guatiao_registry_scan_path(
 }
 
 /// Every library loaded, as a list of maps.
+///
+/// `GUATIAO_ERR_ALLOC` when `alloc` is null or incomplete; `out` is
+/// written ABSENT first, so it is left ABSENT. The providers, the
+/// availability and the best-provider questions below answer the same
+/// way, and add `GUATIAO_ERR_BAD_VALUE` for a `kind` or `key` that is
+/// not UTF-8.
 ///
 /// # Safety
 ///
