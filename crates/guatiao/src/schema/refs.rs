@@ -40,7 +40,12 @@ const POINTER_PREFIXES: [(&str, &str); 2] =
 const BUDGET: usize = 10_000;
 
 /// A copy of `schema` with every local reference replaced by the schema it
-/// names. See the [module](self) for what stays as written.
+/// names.
+///
+/// **What it leaves alone is skipped, not refused**: a reference to
+/// somewhere else, to a name that is not defined, back into a definition
+/// already being expanded (a recursive type has no finite inline form) or
+/// past the expansion budget stays as written and reads as a kind to skip.
 ///
 /// The root's `$defs` (and the older `definitions`) are not copied: after
 /// inlining nothing refers to them. A schema with sibling keywords next
