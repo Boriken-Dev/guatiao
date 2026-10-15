@@ -381,3 +381,224 @@ fn definitions_that_name_each_other_twice_do_not_explode() {
     }
     assert!(skipped, "past the budget a reference stays as written");
 }
+
+/// `{"description": .., "allOf": [X]}` is how a generator puts a
+/// description beside a reference, and reads as `X`. A schema that
+/// constrains nothing -- `{}`, prose alone, `true`, an `allOf` of several
+/// -- reads as a kind to skip, which accepts any value, and never as
+/// `Kind::Missing`.
+#[test]
+fn all_of_empty_and_true_schemas_read_as_what_json_schema_means() {
+    let lone = obj(vec![
+        ("description", s("The name")),
+        ("allOf", arr(vec![typed("string")])),
+    ]);
+    let several = obj(vec![(
+        "allOf",
+        arr(vec![typed("string"), obj(vec![("maxLength", n("3"))])]),
+    )]);
+    let schema = obj(vec![
+        ("type", s("object")),
+        (
+            "properties",
+            obj(vec![
+                ("lone", lone),
+                ("several", several),
+                ("empty", obj(vec![])),
+                ("prose", obj(vec![("description", s("Anything"))])),
+                ("any", Value::from(true)),
+            ]),
+        ),
+    ]);
+    let read = SchemaRef::new(&schema).unwrap();
+    let lone = read.find("lone").unwrap();
+    assert!(matches!(lone.kind(), Kind::Str { .. }));
+    assert_eq!(lone.description(), "The name");
+    assert!(matches!(
+        read.find("several").unwrap().kind(),
+        Kind::Unknown("allOf")
+    ));
+    for key in ["empty", "prose", "any"] {
+        let field = read
+            .find(key)
+            .expect("a schema that accepts anything is a field");
+        assert!(
+            matches!(field.kind(), Kind::Unknown(_)),
+            "{key} reads as {:?}",
+            field.kind()
+        );
+    }
+
+    let good = doc(vec![
+        ("lone", s("ok")),
+        ("several", n("5")),
+        ("empty", s("x")),
+        ("prose", n("5")),
+        ("any", obj(vec![("deep", arr(vec![]))])),
+    ]);
+    assert_eq!(validate_map(read, &good), Ok(()));
+    assert!(validate_map(read, &doc(vec![("lone", n("5"))])).is_err());
+}
+
+/// The shape a generator writes for a documented field whose type is a
+/// shared definition: `allOf` around a reference, under the older
+/// `definitions`. Inlined, it is checked as the definition.
+#[test]
+fn a_documented_reference_is_checked_once_inlined() {
+    let schema = obj(vec![
+        ("type", s("object")),
+        (
+            "properties",
+            obj(vec![(
+                "inner",
+                obj(vec![
+                    ("description", s("d")),
+                    (
+                        "allOf",
+                        arr(vec![obj(vec![("$ref", s("#/definitions/Inner"))])]),
+                    ),
+                ]),
+            )]),
+        ),
+        (
+            "definitions",
+            obj(vec![(
+                "Inner",
+                obj(vec![
+                    ("type", s("object")),
+                    ("properties", obj(vec![("a", typed("integer"))])),
+                    ("required", arr(vec![s("a")])),
+                ]),
+            )]),
+        ),
+    ]);
+    let inlined = inline_refs(&schema).unwrap();
+    let read = SchemaRef::new(&inlined).unwrap();
+    assert!(matches!(read.find("inner").unwrap().kind(), Kind::Map(_)));
+    let good = doc(vec![("inner", obj(vec![("a", n("1"))]))]);
+    assert_eq!(validate_map(read, &good), Ok(()));
+    let bad = doc(vec![("inner", obj(vec![("a", s("1"))]))]);
+    assert!(validate_map(read, &bad).is_err());
+}
+
+/// What copying a tree costs, as `inline_refs` counts it: one per node
+/// and one per byte of text, a key's included.
+fn units(v: &Value) -> usize {
+    let mut total = 0;
+    let mut stack = vec![v];
+    while let Some(v) = stack.pop() {
+        total += 1;
+        if let Some(m) = TryAsRef::<Map>::try_as_ref(v) {
+            for e in m {
+                total += e.key().len();
+                stack.push(e.value());
+            }
+        } else if let Some(l) = TryAsRef::<List>::try_as_ref(v) {
+            stack.extend(l.iter());
+        } else if let Some(text) = TryAsRef::<str>::try_as_ref(v) {
+            total += text.len();
+        }
+    }
+    total
+}
+
+/// Definitions that each name the one before twice, over a leaf holding
+/// ten kilobytes of description: a few kilobytes written, gigabytes if
+/// expanded in full. What is copied stays within the budget.
+#[test]
+fn expansion_is_bounded_by_what_it_copies() {
+    let mut defs = Map::new();
+    defs.set(
+        "a20",
+        obj(vec![
+            ("type", s("string")),
+            ("description", s(&"x".repeat(10_000))),
+        ]),
+    );
+    for i in (0..20).rev() {
+        let next = format!("a{}", i + 1);
+        defs.set(
+            &format!("a{i}"),
+            obj(vec![(
+                "anyOf",
+                arr(vec![reference(&next), reference(&next)]),
+            )]),
+        );
+    }
+    let schema = obj(vec![
+        ("type", s("object")),
+        ("properties", obj(vec![("x", reference("a0"))])),
+        ("$defs", defs.into()),
+    ]);
+    let written = units(&schema);
+    let inlined = inline_refs(&schema).expect("it finishes");
+    let copied = units(&inlined);
+    assert!(
+        copied <= 32 * written + 256 * 1024 + written,
+        "{written} units written became {copied}"
+    );
+}
+
+/// A reference naming a reference is followed where it stands, so a chain
+/// of aliases longer than the nesting bound still resolves.
+#[test]
+fn a_chain_of_aliases_resolves_without_counting_as_nesting() {
+    let mut defs = Map::new();
+    for i in 0..300 {
+        defs.set(&format!("c{i}"), reference(&format!("c{}", i + 1)));
+    }
+    defs.set(
+        "c300",
+        obj(vec![("type", s("string")), ("maxLength", n("2"))]),
+    );
+    let schema = obj(vec![
+        ("type", s("object")),
+        ("properties", obj(vec![("x", reference("c0"))])),
+        ("$defs", defs.into()),
+    ]);
+    let inlined = inline_refs(&schema).expect("a chain is not nesting");
+    let read = SchemaRef::new(&inlined).unwrap();
+    assert!(matches!(read.find("x").unwrap().kind(), Kind::Str { .. }));
+    assert!(validate_map(read, &doc(vec![("x", s("abc"))])).is_err());
+}
+
+/// `default`, `const`, `examples` and `enum` hold instances, and a
+/// `{"$ref": ..}` in one is data. A property NAMED `default` is a schema,
+/// and its reference is followed.
+#[test]
+fn a_reference_inside_an_instance_is_data() {
+    let data = || obj(vec![("$ref", s("#/$defs/A"))]);
+    let schema = obj(vec![
+        ("type", s("object")),
+        (
+            "properties",
+            obj(vec![
+                (
+                    "p",
+                    obj(vec![
+                        ("type", s("object")),
+                        ("default", data()),
+                        ("examples", arr(vec![data()])),
+                    ]),
+                ),
+                ("q", obj(vec![("const", data())])),
+                ("r", obj(vec![("enum", arr(vec![data()]))])),
+                ("default", reference("A")),
+            ]),
+        ),
+        ("$defs", obj(vec![("A", typed("string"))])),
+    ]);
+    let inlined = inline_refs(&schema).unwrap();
+    let read = SchemaRef::new(&inlined).unwrap();
+    let p = read.find("p").unwrap();
+    assert_eq!(p.default(), Some(&data()));
+    assert_eq!(p.examples(), [data()]);
+    let field =
+        |key: &str| TryAsRef::<Map>::try_as_ref(read.find(key).unwrap().as_value()).unwrap();
+    assert_eq!(field("q").get("const"), Some(&data()));
+    assert_eq!(field("r").get("enum"), Some(&arr(vec![data()])));
+    assert!(matches!(
+        read.find("default").unwrap().kind(),
+        Kind::Str { .. }
+    ));
+}

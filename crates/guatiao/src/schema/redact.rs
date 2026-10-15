@@ -20,28 +20,35 @@
 
 #![forbid(unsafe_code)]
 
-use super::read::{Kind, SchemaRef};
+use super::read::{Kind, SchemaRef, peel_once};
 use super::validate::accepts;
 use super::vocab;
 use crate::value::alloc::Alloc;
 use crate::value::convert::{ToValue, TryAsRef};
 use crate::value::error::{MAX_DEPTH, ValueError};
-use crate::value::read::{bool_or, str_or};
+use crate::value::read::bool_or;
 use crate::value::types::{List, Map, Tag, Text, Value};
 
 /// A copy of `value` with every secret replaced by `placeholder`.
 ///
 /// A value is a secret when its field's schema sets `x-sensitive` or
 /// `writeOnly`, at any depth -- inside a nested object, in every element
-/// of a list, in the selected arm of a variant -- whatever it holds (a null
-/// included, so the copy does not say whether one was set).
+/// of a list, in the selected arm of a variant, on the schema an optional
+/// wraps (`anyOf: [X, null]`) or on any member of an `allOf` -- whatever it
+/// holds (a null included, so the copy does not say whether one was set).
+/// A value a union accepts is a secret when **any** arm accepting it is
+/// marked, and is hidden whole when the accepting arms would redact it
+/// differently.
 ///
 /// **Where the schema stops describing the value, the value is hidden**,
 /// because a secret may be there and nothing says it is not: a key the
 /// schema does not declare, a container where it names a scalar, a variant
-/// whose discriminant names no arm, a union no arm accepts, and the
-/// contents of a kind this build does not read. A scalar of an unreadable
-/// kind is kept, since only a mark makes a scalar secret.
+/// whose discriminant names no arm or is not text, a union no arm accepts,
+/// and the contents of a kind this build does not read. A scalar of an
+/// unreadable kind is kept, since only a mark makes a scalar secret --
+/// except under a `$ref`, where the mark may be on the definition: **run
+/// [`inline_refs`](super::inline_refs) first**, or everything under a
+/// reference is hidden.
 ///
 /// Built with the crate's allocator; [`redact_in`] names one.
 ///
@@ -82,7 +89,7 @@ enum Part<'s> {
     Hide,
 }
 
-/// Whether a schema marks its value as a secret.
+/// Whether a schema marks its value as a secret, by itself.
 fn is_secret(schema: &Value) -> bool {
     let flag = |key| {
         bool_or(
@@ -93,8 +100,43 @@ fn is_secret(schema: &Value) -> bool {
     flag(vocab::X_SENSITIVE) || flag(vocab::WRITE_ONLY)
 }
 
+/// Whether a schema marks its value as a secret: by itself, on any member
+/// of an `allOf` (every member describes the whole value), or on what an
+/// optional or a lone `allOf` wraps. Past the depth bound, assumed so.
+fn marks_secret(schema: &Value, depth: u32) -> bool {
+    if depth >= MAX_DEPTH {
+        return true;
+    }
+    let mut k = schema;
+    loop {
+        if is_secret(k) {
+            return true;
+        }
+        let members = TryAsRef::<Map>::try_as_ref(k)
+            .and_then(|m| m.get(vocab::ALL_OF))
+            .and_then(TryAsRef::<List>::try_as_ref)
+            .map(|list| &list[..])
+            .unwrap_or(&[]);
+        if members.iter().any(|m| marks_secret(m, depth + 1)) {
+            return true;
+        }
+        match peel_once(k) {
+            Some(inner) => k = inner,
+            None => return false,
+        }
+    }
+}
+
 fn is_container(value: &Value) -> bool {
     matches!(value.tag(), Ok(Tag::GUATIAO_MAP | Tag::GUATIAO_LIST))
+}
+
+/// The schema an object gives a key it does not declare: its
+/// `additionalProperties`, when that is a schema.
+fn undeclared(owner: &Value) -> Option<&Value> {
+    TryAsRef::<Map>::try_as_ref(owner)
+        .and_then(|m| m.get(vocab::ADDITIONAL_PROPERTIES))
+        .filter(|v| TryAsRef::<Map>::try_as_ref(*v).is_some())
 }
 
 impl Redactor<'_> {
@@ -111,7 +153,7 @@ impl Redactor<'_> {
         if depth >= MAX_DEPTH {
             return Err(ValueError::TooDeep);
         }
-        if is_secret(schema) {
+        if marks_secret(schema, depth) {
             return self.mask();
         }
         let kind = Kind::read(Some(schema));
@@ -130,21 +172,21 @@ impl Redactor<'_> {
                 let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
                     return self.fallback(value);
                 };
-                let element = TryAsRef::<Map>::try_as_ref(owner)
-                    .and_then(|m| m.get(vocab::ADDITIONAL_PROPERTIES));
-                self.entries(map, depth, |_| match element {
+                let element = undeclared(owner);
+                self.entries(map, depth, |_, _| match element {
                     Some(schema) => Part::Described(schema),
                     None => Part::Hide,
                 })
             }
-            Kind::Map(_) => {
+            Kind::Map(owner) => {
                 let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
                     return self.fallback(value);
                 };
-                self.entries(map, depth, |key| {
+                let extra = undeclared(owner);
+                self.entries(map, depth, |key, _| {
                     match kind.fields().find(|f| f.key() == key) {
                         Some(field) => Part::Described(field.as_value()),
-                        None => Part::Hide,
+                        None => extra.map_or(Part::Hide, Part::Described),
                     }
                 })
             }
@@ -152,11 +194,18 @@ impl Redactor<'_> {
                 let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
                     return self.fallback(value);
                 };
-                let chosen = str_or(map.get(tag), "");
-                let arm = kind.arms().find(|a| a.value() == chosen);
-                self.entries(map, depth, |key| {
+                // Only a discriminant that is text names an arm, and only
+                // text is kept as one: anything else under the tag's key
+                // is data nothing describes.
+                let chosen = map.get(tag).and_then(TryAsRef::<str>::try_as_ref);
+                let arm = chosen.and_then(|c| kind.arms().find(|a| a.value() == c));
+                self.entries(map, depth, |key, entry| {
                     if key == tag {
-                        return Part::Keep;
+                        return if TryAsRef::<str>::try_as_ref(entry).is_some() {
+                            Part::Keep
+                        } else {
+                            Part::Hide
+                        };
                     }
                     match arm.and_then(|a| a.fields().find(|f| f.key() == key)) {
                         Some(field) => Part::Described(field.as_value()),
@@ -165,15 +214,31 @@ impl Redactor<'_> {
                 })
             }
             Kind::Union(any_of) => {
-                let arm = TryAsRef::<List>::try_as_ref(any_of)
-                    .into_iter()
-                    .flat_map(|list| list.iter())
-                    .find(|arm| accepts(arm, value));
-                match arm {
-                    Some(arm) => self.node(arm, value, depth + 1),
-                    None => self.fallback(value),
+                let accepting: Vec<&Value> = TryAsRef::<List>::try_as_ref(any_of)
+                    .map(|list| &list[..])
+                    .unwrap_or(&[])
+                    .iter()
+                    .filter(|arm| accepts(arm, value))
+                    .collect();
+                let Some((first, rest)) = accepting.split_first() else {
+                    return self.fallback(value);
+                };
+                if accepting.iter().any(|arm| marks_secret(arm, depth + 1)) {
+                    return self.mask();
                 }
+                // Two arms accepting one value may describe it differently,
+                // and the copy must hide what either would.
+                let redacted = self.node(first, value, depth + 1)?;
+                for arm in rest {
+                    if self.node(arm, value, depth + 1)? != redacted {
+                        return self.mask();
+                    }
+                }
+                Ok(redacted)
             }
+            // A reference not inlined: its definition may carry the mark,
+            // so nothing under it is shown.
+            Kind::Unknown(vocab::REF) => self.mask(),
             // A scalar with no mark is not a secret, and a container
             // where the schema names a scalar is not what it described.
             Kind::Null
@@ -198,16 +263,16 @@ impl Redactor<'_> {
         }
     }
 
-    /// A map's entries, each treated as `part` says for its key.
+    /// A map's entries, each treated as `part` says for its key and value.
     fn entries<'s>(
         &self,
         map: &Map,
         depth: u32,
-        part: impl Fn(&str) -> Part<'s>,
+        part: impl Fn(&str, &Value) -> Part<'s>,
     ) -> Result<Value, ValueError> {
         let mut out = Map::new_in(self.alloc);
         for entry in map {
-            let child = match part(entry.key()) {
+            let child = match part(entry.key(), entry.value()) {
                 Part::Keep => self.keep(entry.value())?,
                 Part::Described(schema) => self.node(schema, entry.value(), depth + 1)?,
                 Part::Hide => self.mask()?,

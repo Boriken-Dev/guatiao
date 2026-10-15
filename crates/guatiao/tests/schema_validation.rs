@@ -5,7 +5,7 @@
 //! A schema refuses what the type it describes refuses: a value is checked
 //! as the type its kind names, not as the text it would print.
 
-use guatiao::schema::build::{FieldBuilder, KindBuilder, SchemaBuilder};
+use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::schema::read::{Kind, SchemaRef};
 use guatiao::schema::validate::{validate_map, validate_text, validate_value};
 use guatiao::{List, Map, Value};
@@ -383,4 +383,215 @@ fn a_pattern_digit_is_ascii_as_ecma_262_has_it() {
     let literal = one("l", KindBuilder::string().pattern(r"^\\d$"));
     assert!(validate_text(field_of(&literal, "l"), r"\d").is_ok());
     assert!(validate_text(field_of(&literal, "l"), "5").is_err());
+}
+
+/// A map from `(key, value)` pairs, for a schema written by hand.
+fn map(pairs: Vec<(&str, Value)>) -> Value {
+    let mut m = Map::new();
+    for (key, value) in pairs {
+        m.set(key, value);
+    }
+    m.into()
+}
+
+/// A root document declaring one field `f` with `schema`, written the way
+/// another tool writes one: no `additionalProperties`.
+fn root_of(schema: Value) -> Value {
+    map(vec![
+        ("type", Value::from("object")),
+        ("properties", map(vec![("f", schema)])),
+    ])
+}
+
+#[test]
+fn exclusive_bounds_are_enforced_on_values_and_texts() {
+    let schema = root_of(map(vec![
+        ("type", Value::from("integer")),
+        ("exclusiveMinimum", number("0")),
+    ]));
+    assert!(!accepts(&schema, "f", &number("0")));
+    assert!(accepts(&schema, "f", &number("1")));
+    assert!(validate_text(field_of(&schema, "f"), "0").is_err());
+
+    let schema = root_of(map(vec![
+        ("type", Value::from("number")),
+        ("exclusiveMaximum", number("1")),
+    ]));
+    assert!(!accepts(&schema, "f", &number("1")));
+    assert!(!accepts(&schema, "f", &number("1.0")));
+    assert!(accepts(&schema, "f", &number("0.999")));
+    assert!(validate_text(field_of(&schema, "f"), "1").is_err());
+}
+
+#[test]
+fn a_bound_past_every_rust_width_is_compared_exactly() {
+    let schema = root_of(map(vec![
+        ("type", Value::from("integer")),
+        ("maximum", number("18446744073709551615")),
+        (
+            "minimum",
+            number("-170141183460469231731687303715884105728"),
+        ),
+    ]));
+    assert!(accepts(&schema, "f", &number("18446744073709551615")));
+    assert!(!accepts(&schema, "f", &number("18446744073709551616")));
+    assert!(accepts(
+        &schema,
+        "f",
+        &number("-170141183460469231731687303715884105728")
+    ));
+    assert!(!accepts(
+        &schema,
+        "f",
+        &number("-170141183460469231731687303715884105729")
+    ));
+
+    let schema = root_of(map(vec![
+        ("type", Value::from("integer")),
+        ("maximum", number("1e18")),
+    ]));
+    assert!(accepts(&schema, "f", &number("1000000000000000000")));
+    assert!(!accepts(&schema, "f", &number("1000000000000000001")));
+}
+
+/// `-0` is zero, but an unsigned Rust type refuses the spelling, and the
+/// schema agrees with the type: below a minimum of zero, a minus sign is
+/// refused.
+#[test]
+fn minus_zero_is_refused_where_the_minimum_is_zero() {
+    let unsigned = one("n", KindBuilder::int_range(0, 255));
+    assert!(!accepts(&unsigned, "n", &number("-0")));
+    assert!(validate_text(field_of(&unsigned, "n"), "-0").is_err());
+    assert!(accepts(&unsigned, "n", &number("0")));
+
+    let signed = one("n", KindBuilder::int_range(-128, 127));
+    assert!(accepts(&signed, "n", &number("-0")));
+}
+
+#[test]
+fn an_enum_beside_a_type_keeps_both_constraints() {
+    let schema = root_of(map(vec![
+        ("type", Value::from("string")),
+        ("enum", list_of(vec![Value::from("a"), number("1")])),
+    ]));
+    assert!(accepts(&schema, "f", &Value::from("a")));
+    assert!(!accepts(&schema, "f", &number("1")), "1 is not a string");
+
+    // A type admitting null is not enough: null must be a member too.
+    let schema = root_of(map(vec![
+        (
+            "type",
+            list_of(vec![Value::from("string"), Value::from("null")]),
+        ),
+        ("enum", list_of(vec![Value::from("a"), Value::from("b")])),
+    ]));
+    assert!(!accepts(&schema, "f", &Value::null()));
+    assert!(!field_of(&schema, "f").is_nullable());
+    let schema = root_of(map(vec![
+        (
+            "type",
+            list_of(vec![Value::from("string"), Value::from("null")]),
+        ),
+        ("enum", list_of(vec![Value::from("a"), Value::null()])),
+    ]));
+    assert!(accepts(&schema, "f", &Value::null()));
+    assert!(field_of(&schema, "f").is_nullable());
+}
+
+/// JSON Schema accepts a key an object does not declare unless its
+/// `additionalProperties` says otherwise. Every object the builders seal
+/// says `false`, so a schema built here still refuses one.
+#[test]
+fn an_undeclared_key_answers_to_additional_properties() {
+    let declared = map(vec![("a", map(vec![("type", Value::from("integer"))]))]);
+    let open = map(vec![
+        ("type", Value::from("object")),
+        ("properties", declared.clone()),
+    ]);
+    let extra = map(vec![("a", number("1")), ("b", number("2"))]);
+    let schema = root_of(open.clone());
+    assert!(accepts(&schema, "f", &extra), "nothing says otherwise");
+    assert!(validate_map(SchemaRef::new(&open).unwrap(), &extra).is_ok());
+
+    let typed_extras = map(vec![
+        ("type", Value::from("object")),
+        ("properties", declared),
+        (
+            "additionalProperties",
+            map(vec![("type", Value::from("string"))]),
+        ),
+    ]);
+    let schema = root_of(typed_extras.clone());
+    assert!(accepts(
+        &schema,
+        "f",
+        &map(vec![("a", number("1")), ("b", Value::from("x"))])
+    ));
+    assert!(!accepts(&schema, "f", &extra), "b answers to the schema");
+    assert!(validate_map(SchemaRef::new(&typed_extras).unwrap(), &extra).is_err());
+
+    let built = SchemaBuilder::new()
+        .field(FieldBuilder::new("a", KindBuilder::int()))
+        .finish()
+        .unwrap();
+    assert!(validate_map(SchemaRef::new(&built).unwrap(), &extra).is_err());
+}
+
+/// A document whose root is a tagged variant -- what a configuration typed
+/// as an enum describes -- is checked as that variant.
+#[test]
+fn a_variant_at_the_root_is_checked_as_a_variant() {
+    let root = KindBuilder::variant(
+        "kind",
+        vec![
+            ArmBuilder::new("anonymous", ""),
+            ArmBuilder::new("password", "")
+                .field(FieldBuilder::new("user", KindBuilder::string()).required()),
+        ],
+    )
+    .finish()
+    .unwrap();
+    let schema = SchemaRef::new(&root).unwrap();
+    let ok = map(vec![
+        ("kind", Value::from("password")),
+        ("user", Value::from("u")),
+    ]);
+    assert_eq!(validate_map(schema, &ok), Ok(()));
+    assert!(validate_map(schema, &map(vec![("kind", Value::from("anonymous"))])).is_ok());
+    for refused in [
+        map(vec![("kind", Value::from("nope"))]),
+        map(vec![("kind", Value::from("password"))]),
+        map(vec![
+            ("kind", Value::from("anonymous")),
+            ("user", Value::from("u")),
+        ]),
+    ] {
+        assert!(validate_map(schema, &refused).is_err(), "{refused:?}");
+    }
+}
+
+/// Two arms stored as one discriminant cannot be told apart: a reader
+/// selects the first and the second is unreachable, so the variant is
+/// refused when it is built.
+#[test]
+fn a_variant_with_two_arms_of_one_discriminant_is_refused() {
+    let built = KindBuilder::variant(
+        "kind",
+        vec![
+            ArmBuilder::new("a", "").field(FieldBuilder::new("x", KindBuilder::string())),
+            ArmBuilder::new("a", "").field(FieldBuilder::new("y", KindBuilder::string())),
+        ],
+    )
+    .finish();
+    assert_eq!(built.err(), Some(guatiao::ValueError::DuplicateKey));
+    let inside = SchemaBuilder::new()
+        .field(FieldBuilder::new(
+            "v",
+            KindBuilder::variant(
+                "kind",
+                vec![ArmBuilder::new("a", ""), ArmBuilder::new("a", "")],
+            ),
+        ))
+        .finish();
+    assert_eq!(inside.err(), Some(guatiao::ValueError::DuplicateKey));
 }

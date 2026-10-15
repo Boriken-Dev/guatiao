@@ -400,7 +400,7 @@ with `guatiao_alloc_default()`.
 
 ```rust
 ValueError = Alloc(AllocError) | NotANumber | NotUtf8 | WrongKind
-           | UnknownTag(u32) | OutOfRange | TooDeep
+           | UnknownTag(u32) | OutOfRange | TooDeep | DuplicateKey
 MapError   = MissingKey | WrongType | BadValue     // carries the path
 ```
 
@@ -483,7 +483,13 @@ hand-written impl reports a missing key, and where in the tree an error
 happened, the same way.
 
 An `Option<T>` field is omitted when `None` rather than written as null,
-and both spellings read back as `None`.
+and both spellings read back as `None`. Its schema is `T`'s accepting
+null as well (`type: [T, "null"]`, or `anyOf: [T, {"type": "null"}]` for
+an enum or a variant), so validation accepts a null wherever `FromValue`
+reads one: the field, a `Vec<Option<T>>` element, a map's value. An
+integer width writes its bounds as exact digits (`u64::MAX`, `i128::MIN`)
+and `f32` the exclusive bounds past which no finite `f32` exists, so the
+schema refuses exactly what `FromValue` refuses at the edges.
 
 Generated code names only `::guatiao::` paths, checked by a test.
 
@@ -527,12 +533,15 @@ the builders seal — a struct's document and each arm's subschema — carries
 `additionalProperties: false`, so a general JSON Schema validator refuses
 exactly what `validate_map` refuses. Refusing is deliberate: silently
 dropping a misspelled field is how somebody ends up convinced a setting
-does nothing.
+does nothing. A schema read from elsewhere that does not say is read as
+JSON Schema reads it: an undeclared key is accepted, and one an
+`additionalProperties` schema describes answers to that schema.
 
 `Schema::schema()` carries **every key of the finished kind** onto the
 root document, not only `properties`/`required`: a tagged enum's
 `schema()` is its `x-variant-tag` and its `oneOf`. `SchemaBuilder::finish`
 refuses a field key declared twice, or one that repeats a variant's
+discriminant, and `KindBuilder::variant` two arms stored as one
 discriminant (`ValueError::DuplicateKey`); the four builders are
 `#[must_use]`.
 
@@ -709,13 +718,24 @@ Kind: .choices() .alternatives() .arms() .items() .values() .fields() .name()
 `is_nullable()`; `enum` of any type, a lone `const`, and a `oneOf` whose
 arms are all `const` (the arm's `title` is the choice's label) are
 `Kind::Enum`, and `choices()` lists the members that are strings or
-numbers. A shape this build does not read (`$ref`, a `type` list of several
-types, a `oneOf` of non-constants) is `Kind::Unknown`, which validation
-accepts and a renderer skips -- never `Kind::Missing`. A local
+numbers. Beside an `enum` or a `const`, a `type` admitting null makes a
+field nullable only when null is a member. A lone `allOf` member -- the
+`{"description": .., "allOf": [{"$ref": ..}]}` a generator writes for a
+documented field -- reads as that member. A shape this build does not
+read (`$ref`, a `type` list of several types, a `oneOf` of non-constants,
+an `allOf` of several) and a schema that constrains nothing (`{}`, prose
+alone, `true`, which is a field too) are `Kind::Unknown`, which validation
+accepts and a renderer skips. `Kind::Missing` is only for a value that is
+not a schema at all (neither a map nor `true`). A local
 `$ref: "#/$defs/Name"` is read after `schema::inline_refs(&schema)` has
 copied the document with each reference replaced by its definition; a
 cycle, a remote reference or a name that is not defined stays as written.
-An integer `minimum: 1.5` or `maximum: 1e1` rounds inward (2, 10).
+The copy is budgeted on what it copies (nodes plus bytes of text, 32
+times the document plus 256 Ki), a reference naming a reference is
+followed in place rather than as a level of nesting, and under `default`,
+`const`, `examples` and `enum` a `{"$ref": ..}` is data. An integer
+`minimum: 1.5` or `maximum: 1e1` reads as 2 and 10 in `Kind::Int`, and
+`Kind::Int` reads `None` for a bound past `i64`.
 
 Validate:
 
@@ -731,9 +751,17 @@ schema::redact(schema, &value, "***") -> Result<Value, ValueError>
 boolean, a number (`Number`), a string or bytes before it applies the
 bounds, so `validate_map` refuses `5900` for a string field, `"5900"` for
 an integer and `"yes"` for a boolean -- exactly what `FromValue` refuses.
-`enum` is enforced by value equality on every type (`1` equals `1.0`); a
-union accepts what any arm accepts, a list for an array arm included;
-null is accepted only by a nullable field or a `null` arm.
+`enum` is enforced by value equality on every type (`1` equals `1.0`),
+and a `type` beside it still applies; a union accepts what any arm
+accepts, a list for an array arm included; null is accepted only by a
+nullable field or a `null` arm. **Every numeric bound is compared as the
+exact text that declared it** -- `minimum`, `maximum`, `exclusiveMinimum`,
+`exclusiveMaximum`, on values and on texts -- so a bound past `i64` or
+`f64` still holds; below a minimum of zero an integer spelled with a minus
+sign is refused, `-0` included, as an unsigned type refuses it. A key an
+object does not declare answers to its `additionalProperties` (above).
+`validate_map` over a root that is not a declared object -- a tagged
+enum's document -- checks it as that value.
 
 **`validate_text` is the check for a store of text** (a flat map, a query
 string): a boolean is one of `BOOL_WORDS` (`1 0 true false yes no` and the
@@ -745,10 +773,14 @@ spelling, `""` for a container.
 
 **`redact` replaces every secret by the placeholder**: a field whose
 schema sets `x-sensitive` or `writeOnly`, at any depth, through maps, lists
-and the selected arm of a variant. What the schema does not describe is
-hidden too (an undeclared key, a container where a scalar is named, an
-unknown arm, a union no arm accepts), because a secret may be there.
-`redact_in` names the allocator.
+and the selected arm of a variant, and on the schema an optional wraps or
+any `allOf` member. A value a union accepts is hidden when any accepting
+arm is marked, and whole when the accepting arms would redact it
+differently. What the schema does not describe is hidden too (an
+undeclared key, a container where a scalar is named, an unknown arm or a
+discriminant that is not text, a union no arm accepts), because a secret
+may be there. **Run `inline_refs` first**: everything under a `$ref` is
+hidden, a scalar included. `redact_in` names the allocator.
 
 `ValidationError` is `UnknownOption { .. }` or `BadValue { .. }`. **An
 error never quotes the value it refused** — a field may be sensitive —
@@ -784,7 +816,8 @@ MergeMode::{Simple, Deep, Substitute}
       -> Result<(Value, Provenance), MergeError>
 ```
 
-- **Simple** — scalars and maps replace, lists overwrite positionally.
+- **Simple** — scalars and maps replace, lists overwrite positionally
+  (two lists nested past `MAX_DEPTH` are `MergeError::Build(TooDeep)`).
 - **Substitute** — recursive maps, wholesale list replacement.
 - **Deep** — recursive maps, lists union.
 
@@ -807,8 +840,11 @@ spelling `guatiao-intake` reads (`tls.ca`, `peers[0].name`, `["a.b"]`).
 **Provenance is keyed by leaf path**, not by top-level key: after a
 recursive merge `tls.ca` and `tls.verify` may come from different layers,
 so `source_of(["tls"])` answers `Source::Mixed` rather than a confident
-lie. A stored absent value claims nothing, and `Simple` mode attributes a
-replaced key (with its whole old subtree) to the layer that replaced it.
+lie. A stored absent value keeps the earlier one -- a map entry in every
+mode, a list element under `Simple`'s positional overwrite -- and claims
+nothing, and `Simple` mode
+attributes a replaced key (with its whole old subtree) to the layer that
+replaced it.
 
 Merging **builds a new tree** and borrows its inputs. A value whose tag
 this build does not know stops the merge rather than being copied, because
