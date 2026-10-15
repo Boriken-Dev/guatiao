@@ -90,8 +90,12 @@ let back = ValueSeed::new(Alloc::rust()).deserialize(&mut de)?;
 | numbers past that, via `text::json` | **exact** (`1.10`, `1e400`, 200 digits) | read through an `f64`: `1.10` is `1.1`; `1e400` is refused |
 | ... and with `exact-numbers` | exact | **exact**, spelling included |
 | numbers past that, default `Presentation` | rounded through `f64` | — |
+| numbers in TOML | integers and floats as the format has them | an integer exact, even 30 digits; a float through `f64` (`1.10` is `1.1`) |
+| numbers in YAML | the same | through `f64`: `1.10` is `1.1`, `007` is `7.0`, an integer past `u64` is a float |
+| a TOML date or time | its text, as a string | the text it was written as |
 | bytes, binary format | native | native |
 | bytes, JSON | per `Presentation` | string, unless asked |
+| bytes, YAML `!!binary` | per `Presentation` | its base64 text |
 | absent | refused | n/a |
 
 Two asymmetries are worth knowing before you rely on them.
@@ -109,6 +113,11 @@ becomes `1.1`.
 rather than as an `f64` resolved before a visitor ever runs. Without it
 the number is whatever serde_json hands the visitor: an integer that fits
 `i64`/`u64` exact, anything else an `f64`.
+
+A repeated key is replaced by JSON and refuses the document in TOML and
+YAML. A document that does not parse is `Error::Syntax`: the parser's
+message and a `Position`, never a line of the document, which may hold a
+secret. TOML tables are read in document order.
 
 ## API overview
 

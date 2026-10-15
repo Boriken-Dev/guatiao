@@ -1,18 +1,29 @@
 pub mod guatiao_serde
 pub mod guatiao_serde::exports
+#[repr(C)] pub struct guatiao_serde::exports::ParseError
+pub guatiao_serde::exports::ParseError::column: u32
+pub guatiao_serde::exports::ParseError::format: u32
+pub guatiao_serde::exports::ParseError::line: u32
+pub guatiao_serde::exports::ParseError::message: guatiao::value::value::Value
 pub const guatiao_serde::exports::GUATIAO_BYTES_ARRAY: u32
 pub const guatiao_serde::exports::GUATIAO_BYTES_BASE64: u32
 pub const guatiao_serde::exports::GUATIAO_BYTES_DATA_URI: u32
 pub const guatiao_serde::exports::GUATIAO_BYTES_REFUSE: u32
+pub const guatiao_serde::exports::GUATIAO_FORMAT_JSON: u32
+pub const guatiao_serde::exports::GUATIAO_FORMAT_TOML: u32
+pub const guatiao_serde::exports::GUATIAO_FORMAT_YAML: u32
 pub const guatiao_serde::exports::GUATIAO_PRETTY: u32
 pub const guatiao_serde::exports::GUATIAO_READ_DATA_URIS: u32
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_emit(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_emit_pretty(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_parse(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_parse_ex(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_emit(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_parse(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_parse_ex(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_emit(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_parse(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_parse_ex(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
 pub mod guatiao_serde::text
 pub mod guatiao_serde::text::json
 pub const guatiao_serde::text::json::NAME: &str

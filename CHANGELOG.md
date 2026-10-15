@@ -38,9 +38,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   A crate that defines kinds can `pub use guatiao;` and be the one thing
   its providers depend on, rather than every provider pinning `guatiao`
   at the same version beside it.
+- **`guatiao_json_parse_ex`, `guatiao_toml_parse_ex` and
+  `guatiao_yaml_parse_ex`**: the `_parse` calls with one more, nullable,
+  `guatiao_parse_error *`. A document that does not parse fills it with the
+  format (`GUATIAO_FORMAT_JSON`, `_TOML`, `_YAML`), the line and column and
+  a `message` string value that never quotes the document. A C, Python or
+  Dart caller can show where a configuration file is wrong instead of a
+  bare `GUATIAO_ERR_BAD_VALUE`.
 
 ### Changed
 
+- **`guatiao-serde`'s C functions write `out` ABSENT on entry**, as the
+  `guatiao` and `guatiao-intake` ones do. A failed call used to leave `out`
+  as the caller had it; it now reads `GUATIAO_ABSENT`, and `out` must not
+  hold a tree the caller still owns. The headers say so, and the
+  `guatiao_intake_flatten`, `_unflatten` and `_flat_keys` docs now describe
+  lists, open maps and "nothing stored" and not only variants.
 - **A `std::` path now marks something that needs the operating system.**
   Everything `core` or `alloc` also holds is spelled that way, enforced by
   the `std_instead_of_core`, `std_instead_of_alloc` and

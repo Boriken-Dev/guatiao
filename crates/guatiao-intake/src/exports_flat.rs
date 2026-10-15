@@ -146,7 +146,9 @@ pub unsafe extern "C" fn guatiao_intake_resolve(schema: *const Value, key: Str) 
     })
 }
 
-/// The flat keys one field projects onto, as a list of strings.
+/// The flat keys one field projects onto, as a list of strings: its own,
+/// then one per field of every arm, spelled the way `guatiao_intake_flatten`
+/// writes them (a name holding a `.` or a bracket is `owner[a.b]`).
 ///
 /// Takes the schema and a key rather than a field, because **a field's
 /// name is not inside the field**: it is the key it is filed under in
@@ -193,11 +195,17 @@ pub unsafe extern "C" fn guatiao_intake_flat_keys(
     })
 }
 
-/// Writes a tagged value into a flat store of `key -> text`.
+/// Writes a value into a flat store of `key -> text`, one entry per scalar
+/// leaf: a tagged field keeps its discriminant under its own key and its
+/// payload under `key.member`, a nested object dots, a list indexes
+/// (`agent[0].name`) and an open map brackets (`env[PATH]`).
 ///
-/// `GUATIAO_ERR_WRONG_KIND` when the key names no field, the field is not
-/// a variant, or the value is not a map — all of which are the same "it
-/// does not apply" the Rust side reports as `false`.
+/// `GUATIAO_ERR_WRONG_KIND` when the key names no field, or the value's
+/// shape contradicts the field's kind at the top — a list where an object
+/// is declared, a tag naming no arm, a scalar field given a container — or
+/// it nests more than 128 containers deep; all of which are the same "it
+/// does not apply" the Rust side reports as `false`. **An empty container
+/// stores nothing**, and is `GUATIAO_OK` with an empty store.
 ///
 /// `out` is written the absent marker on entry, so a failed call leaves
 /// it ABSENT. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.
@@ -240,11 +248,18 @@ pub unsafe extern "C" fn guatiao_intake_flatten(
     })
 }
 
-/// Rebuilds a tagged value from a flat store.
+/// Rebuilds a value from a flat store: a tagged field, an object, a list
+/// or an open map.
 ///
 /// The reverse of [`guatiao_intake_flatten`], and the round trip is what
 /// makes the projection usable: a front end reads text, hands it back, and
 /// gets the value the schema describes.
+///
+/// `GUATIAO_ERR_WRONG_KIND` when the key names no field, `flat` is not a
+/// map of strings, **nothing is stored under the field** (an absent value
+/// and an empty container are the same here), or the stored shape cannot
+/// be this kind — a tagged field whose discriminant is missing or names no
+/// arm. An entry the schema does not declare is dropped.
 ///
 /// `out` is written the absent marker on entry, so a failed call leaves
 /// it ABSENT. A null or unusable allocator is `GUATIAO_ERR_ALLOC`.

@@ -27,6 +27,20 @@
 //! tree this library hands over, and it carries the allocator that made
 //! it.
 //!
+//! **`out` is written ABSENT on entry**, before anything can fail, so a
+//! caller reading it after an error reads `GUATIAO_ABSENT` rather than
+//! whatever it held — the same convention `guatiao` and `guatiao-intake`
+//! follow. It must not hold a tree the caller still owns.
+//!
+//! # Where a parse stopped
+//!
+//! Each `_parse` has a twin, `_parse_ex`, taking one more pointer, a
+//! `guatiao_parse_error *` that may be null. On a document that does not
+//! parse it receives the format, the line and the column (from 1, 0 when
+//! the parser did not say) and a `message` string value, freed with
+//! `guatiao_value_free`. The message is the parser's wording and never
+//! quotes the document, which may hold a secret.
+//!
 //! # The policy is one integer
 //!
 //! Its low byte is the byte-string spelling and the bits above are flags,
@@ -59,6 +73,76 @@ use guatiao::value::types::{Str, Text, Value};
 
 use crate::text::Error;
 use crate::{Bytes, Presentation};
+
+/// Writes the absent marker through a pointer, if it is not null.
+///
+/// **The first statement of every function that has an out-pointer**, so a
+/// caller reading it after a failure reads ABSENT.
+///
+/// # Safety
+///
+/// `out` is null or addresses writable storage for one value that does not
+/// hold a tree the caller still owns.
+unsafe fn absent(out: *mut Value) {
+    if !out.is_null() {
+        // SAFETY: checked non-null, and the caller's contract.
+        unsafe { core::ptr::write(out, Value::absent()) };
+    }
+}
+
+/// Which format refused a document: `guatiao_parse_error.format`.
+pub const GUATIAO_FORMAT_JSON: u32 = 0;
+/// See [`GUATIAO_FORMAT_JSON`].
+pub const GUATIAO_FORMAT_TOML: u32 = 1;
+/// See [`GUATIAO_FORMAT_JSON`].
+pub const GUATIAO_FORMAT_YAML: u32 = 2;
+
+/// Why a document did not parse, for a caller that can show where.
+///
+/// Filled by the `_parse_ex` functions. `line` and `column` count from 1
+/// and are 0 when the parser did not say where. `message` is a string
+/// value built through the caller's allocator, ABSENT when the call did
+/// not fail on the document, and released with `guatiao_value_free`.
+#[repr(C)]
+pub struct ParseError {
+    /// A `GUATIAO_FORMAT_*` constant.
+    pub format: u32,
+    /// The line, from 1; 0 when unknown.
+    pub line: u32,
+    /// The column, from 1; 0 when unknown.
+    pub column: u32,
+    /// What the parser expected, without an excerpt of the document.
+    pub message: Value,
+}
+
+impl ParseError {
+    /// Nothing happened: no position and no message.
+    fn none() -> ParseError {
+        ParseError {
+            format: 0,
+            line: 0,
+            column: 0,
+            message: Value::absent(),
+        }
+    }
+
+    /// The refusal, with its message built through `alloc`.
+    fn of(error: &Error, format: u32, alloc: Alloc) -> Option<ParseError> {
+        let at = error.position();
+        let detail = match error {
+            Error::Format { detail, .. }
+            | Error::Syntax { detail, .. }
+            | Error::Unsupported { detail, .. } => detail,
+        };
+        let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+        Some(ParseError {
+            format,
+            line: at.map_or(0, |p| count(p.line)),
+            column: at.map_or(0, |p| count(p.column)),
+            message: Text::new_in(alloc, detail).map(Value::from).ok()?,
+        })
+    }
+}
 
 // --- the policy, as one integer ----------------------------------------
 
@@ -174,23 +258,6 @@ unsafe fn inputs<'a>(
     Ok((text, alloc))
 }
 
-/// Writes a parsed value out, or the status saying why not.
-///
-/// # Safety
-///
-/// `out` addresses writable storage for one value, whose previous
-/// contents are the caller's to have freed.
-unsafe fn deliver(out: *mut Value, built: Result<Value, Error>) -> Status {
-    match built {
-        Ok(value) => {
-            // SAFETY: the caller's contract.
-            unsafe { out.write(value) };
-            Status::GUATIAO_OK
-        }
-        Err(e) => status_of(&e),
-    }
-}
-
 /// Writes an emitted document out as a STRING VALUE.
 ///
 /// # Safety
@@ -220,6 +287,11 @@ unsafe fn deliver_text(out: *mut Value, built: Result<String, Error>, alloc: All
 ///
 /// The body still exists once. Only the declarations are repeated.
 ///
+/// `out_error` is null for the plain `_parse` functions; the `_parse_ex`
+/// ones pass the caller's. Both pointers are written on entry (`out`
+/// ABSENT, `out_error` empty), so a failure leaves neither holding
+/// anything.
+///
 /// # Safety
 ///
 /// As the functions that call it.
@@ -228,16 +300,43 @@ unsafe fn parse_with(
     how: u32,
     alloc: *const Allocator,
     out: *mut Value,
+    out_error: *mut ParseError,
+    format: u32,
     read: Read,
 ) -> Status {
+    // SAFETY: the caller's contract, for both pointers.
+    unsafe {
+        absent(out);
+        if !out_error.is_null() {
+            core::ptr::write(out_error, ParseError::none());
+        }
+    }
     guard(|| {
         // SAFETY: the caller's contract.
         let (text, alloc) = match unsafe { inputs(text, alloc, out) } {
             Ok(pair) => pair,
             Err(status) => return status,
         };
-        // SAFETY: as above.
-        unsafe { deliver(out, read(text, alloc, presentation(how))) }
+        match read(text, alloc, presentation(how)) {
+            Ok(value) => {
+                // SAFETY: `out` is non-null (`inputs` checked) and writable
+                // by contract; the tree moves into it.
+                unsafe { out.write(value) };
+                Status::GUATIAO_OK
+            }
+            Err(e) => {
+                if !out_error.is_null() {
+                    let Some(detail) = ParseError::of(&e, format, alloc) else {
+                        // The refusal is known and its message cannot be
+                        // built: the allocator is what to fix first.
+                        return Status::GUATIAO_ERR_ALLOC;
+                    };
+                    // SAFETY: non-null, and writable by contract.
+                    unsafe { out_error.write(detail) };
+                }
+                status_of(&e)
+            }
+        }
     })
 }
 
@@ -258,6 +357,8 @@ unsafe fn emit_with(
     write: Write,
     indented: Option<Write>,
 ) -> Status {
+    // SAFETY: the caller's contract.
+    unsafe { absent(out) };
     guard(|| {
         if value.is_null() {
             return Status::GUATIAO_ERR_NULL;
@@ -280,6 +381,10 @@ unsafe fn emit_with(
 
 /// Reads a JSON document into a value, built through `alloc`.
 ///
+/// `out` is written ABSENT on entry, so a failed call leaves it ABSENT.
+/// A document that does not parse is `GUATIAO_ERR_BAD_VALUE`; the `_ex`
+/// twin says where.
+///
 /// # Safety
 ///
 /// `text` is a readable view for this call, `alloc` addresses a complete
@@ -295,14 +400,61 @@ pub unsafe extern "C" fn guatiao_json_parse(
     out: *mut Value,
 ) -> Status {
     // SAFETY: forwarded, with this crate's JSON reader.
-    unsafe { parse_with(text, how, alloc, out, crate::text::json::from_str) }
+    unsafe {
+        parse_with(
+            text,
+            how,
+            alloc,
+            out,
+            core::ptr::null_mut(),
+            GUATIAO_FORMAT_JSON,
+            crate::text::json::from_str,
+        )
+    }
+}
+
+/// [`guatiao_json_parse`], and where it stopped when the document is not
+/// JSON.
+///
+/// `out_error` may be null, which is the same call. Otherwise it is
+/// written empty on entry and, on a document that does not parse, receives
+/// the format, the line and column and the parser's message (see
+/// [`ParseError`]); free its `message` with `guatiao_value_free`.
+///
+/// # Safety
+///
+/// As [`guatiao_json_parse`]; `out_error` is null or addresses writable
+/// storage for one `guatiao_parse_error` that holds no message the caller
+/// still owns.
+#[cfg(feature = "json")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_json_parse_ex(
+    text: Str,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+    out_error: *mut ParseError,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe {
+        parse_with(
+            text,
+            how,
+            alloc,
+            out,
+            out_error,
+            GUATIAO_FORMAT_JSON,
+            crate::text::json::from_str,
+        )
+    }
 }
 
 /// Writes a value as a JSON document.
 ///
 /// **`out` receives a value holding the text**, released with
 /// `guatiao_value_free` like any other tree — so there is no second thing
-/// to free and no second way to get it wrong.
+/// to free and no second way to get it wrong. It is written ABSENT on
+/// entry, so a failed call leaves it ABSENT.
 ///
 /// `GUATIAO_PRETTY` in `how` indents the output, which is the same thing
 /// `guatiao_json_emit_pretty` does.
@@ -377,7 +529,46 @@ pub unsafe extern "C" fn guatiao_toml_parse(
     out: *mut Value,
 ) -> Status {
     // SAFETY: forwarded.
-    unsafe { parse_with(text, how, alloc, out, crate::text::toml::from_str) }
+    unsafe {
+        parse_with(
+            text,
+            how,
+            alloc,
+            out,
+            core::ptr::null_mut(),
+            GUATIAO_FORMAT_TOML,
+            crate::text::toml::from_str,
+        )
+    }
+}
+
+/// [`guatiao_toml_parse`], and where it stopped when the document is not
+/// TOML. See [`guatiao_json_parse_ex`].
+///
+/// # Safety
+///
+/// As [`guatiao_json_parse_ex`].
+#[cfg(feature = "toml")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_toml_parse_ex(
+    text: Str,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+    out_error: *mut ParseError,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe {
+        parse_with(
+            text,
+            how,
+            alloc,
+            out,
+            out_error,
+            GUATIAO_FORMAT_TOML,
+            crate::text::toml::from_str,
+        )
+    }
 }
 
 /// Writes a value as a TOML document.
@@ -415,7 +606,46 @@ pub unsafe extern "C" fn guatiao_yaml_parse(
     out: *mut Value,
 ) -> Status {
     // SAFETY: forwarded.
-    unsafe { parse_with(text, how, alloc, out, crate::text::yaml::from_str) }
+    unsafe {
+        parse_with(
+            text,
+            how,
+            alloc,
+            out,
+            core::ptr::null_mut(),
+            GUATIAO_FORMAT_YAML,
+            crate::text::yaml::from_str,
+        )
+    }
+}
+
+/// [`guatiao_yaml_parse`], and where it stopped when the document is not
+/// YAML. See [`guatiao_json_parse_ex`].
+///
+/// # Safety
+///
+/// As [`guatiao_json_parse_ex`].
+#[cfg(feature = "yaml")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_yaml_parse_ex(
+    text: Str,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+    out_error: *mut ParseError,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe {
+        parse_with(
+            text,
+            how,
+            alloc,
+            out,
+            out_error,
+            GUATIAO_FORMAT_YAML,
+            crate::text::yaml::from_str,
+        )
+    }
 }
 
 /// Writes a value as a YAML document.

@@ -36,6 +36,15 @@ static int failures = 0;
 
 static guatiao_str s(const char *lit) { return guatiao_cstr(lit); }
 
+/* Whether `haystack` holds `needle` anywhere: memmem is not C11. */
+static bool contains(guatiao_str haystack, const char *needle) {
+  size_t n = strlen(needle);
+  for (size_t i = 0; i + n <= haystack.len; i++) {
+    if (memcmp(haystack.ptr + i, needle, n) == 0) return true;
+  }
+  return false;
+}
+
 /* Everything the document says, however it was written down. */
 static void check_shape(const char *what, const guatiao_value *v) {
   const guatiao_value *name = guatiao_map_find(v, s("name"));
@@ -162,6 +171,69 @@ int main(void) {
     CHECK(st != GUATIAO_OK, "malformed JSON is refused");
     st = guatiao_json_parse(s("{} and then some"), 0, &alloc, &nope);
     CHECK(st != GUATIAO_OK, "trailing rubbish is refused");
+  }
+
+  /* ---- a failed call leaves `out` ABSENT ------------------------------ */
+
+  {
+    /* Not zero: a caller's leftover must not survive the failure. */
+    guatiao_value left = GUATIAO_VALUE_STRING_LIT("left over");
+    st = guatiao_json_parse(s("{ nope"), 0, &alloc, &left);
+    CHECK(st == GUATIAO_ERR_BAD_VALUE, "a bad document is BAD_VALUE, got %d", (int)st);
+    CHECK(guatiao_tag_of(&left) == (uint32_t)GUATIAO_ABSENT,
+          "out is ABSENT after a failed parse");
+
+    guatiao_value bare = GUATIAO_VALUE_STRING_LIT("not a table");
+    guatiao_value kept = GUATIAO_VALUE_STRING_LIT("left over");
+    st = guatiao_toml_emit(&bare, 0, &alloc, &kept);
+    CHECK(st == GUATIAO_ERR_WRONG_KIND && guatiao_tag_of(&kept) == (uint32_t)GUATIAO_ABSENT,
+          "out is ABSENT after a failed emit");
+  }
+
+  /* ---- where a parse stopped ------------------------------------------- */
+
+  {
+    guatiao_parse_error err = {0};
+    guatiao_value nope = {0};
+
+    /* The secret sits on line 2, and a message must not quote it. */
+    st = guatiao_toml_parse_ex(s("user = \"alice\"\npassword = \"hunter2-SECRET\" trailing\n"), 0,
+                               &alloc, &nope, &err);
+    CHECK(st == GUATIAO_ERR_BAD_VALUE, "toml_parse_ex returned %d", (int)st);
+    CHECK(err.format == GUATIAO_FORMAT_TOML, "format %u", (unsigned)err.format);
+    CHECK(err.line == 2 && err.column == 29, "position %u:%u", (unsigned)err.line,
+          (unsigned)err.column);
+    CHECK(guatiao_tag_of(&err.message) == (uint32_t)GUATIAO_STRING, "a message");
+    {
+      guatiao_str message = guatiao_string_text(&err.message);
+      CHECK(message.len > 0, "a message with some words in it");
+      CHECK(!contains(message, "hunter2"), "the message does not quote the document");
+    }
+    guatiao_value_free(&err.message);
+
+    st = guatiao_yaml_parse_ex(s("a: 1\nb: \"unclosed\n  x: ["), 0, &alloc, &nope, &err);
+    CHECK(st == GUATIAO_ERR_BAD_VALUE && err.format == GUATIAO_FORMAT_YAML && err.line == 2,
+          "yaml: status %d line %u", (int)st, (unsigned)err.line);
+    guatiao_value_free(&err.message);
+
+    st = guatiao_json_parse_ex(s("{\"a\": 1 x}"), 0, &alloc, &nope, &err);
+    CHECK(st == GUATIAO_ERR_BAD_VALUE && err.format == GUATIAO_FORMAT_JSON && err.line == 1 &&
+              err.column == 9,
+          "json: status %d at %u:%u", (int)st, (unsigned)err.line, (unsigned)err.column);
+    guatiao_value_free(&err.message);
+
+    /* A good document leaves the error empty, and a null error is the
+       plain call. */
+    {
+      guatiao_value fine = {0};
+      st = guatiao_json_parse_ex(s("{}"), 0, &alloc, &fine, &err);
+      CHECK(st == GUATIAO_OK && err.line == 0 &&
+                guatiao_tag_of(&err.message) == (uint32_t)GUATIAO_ABSENT,
+            "a parse that works reports no error");
+      guatiao_value_free(&fine);
+      st = guatiao_json_parse_ex(s("{ nope"), 0, &alloc, &nope, NULL);
+      CHECK(st == GUATIAO_ERR_BAD_VALUE, "a null out_error is the plain call");
+    }
   }
 
   /* A null out-parameter is a status, never a fault. */

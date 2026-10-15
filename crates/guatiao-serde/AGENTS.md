@@ -83,6 +83,17 @@ guatiao_status guatiao_toml_emit        (/* as _json_emit  */);   // GUATIAO_SER
 guatiao_status guatiao_yaml_parse       (/* as _json_parse */);   // GUATIAO_SERDE_YAML
 guatiao_status guatiao_yaml_emit        (/* as _json_emit  */);   // GUATIAO_SERDE_YAML
 
+/* where a parse stopped: the same call with one more pointer, which may be NULL */
+guatiao_status guatiao_json_parse_ex    (guatiao_str text, uint32_t how, const guatiao_alloc *alloc,
+                                         guatiao_value *out, guatiao_parse_error *out_error);
+guatiao_status guatiao_toml_parse_ex    (/* as _json_parse_ex */);   // GUATIAO_SERDE_TOML
+guatiao_status guatiao_yaml_parse_ex    (/* as _json_parse_ex */);   // GUATIAO_SERDE_YAML
+typedef struct guatiao_parse_error {
+  uint32_t format;          /* GUATIAO_FORMAT_JSON 0, _TOML 1, _YAML 2 */
+  uint32_t line, column;    /* from 1; 0 when the parser did not say */
+  guatiao_value message;    /* a string value, freed with guatiao_value_free; ABSENT if none */
+} guatiao_parse_error;
+
 #define GUATIAO_BYTES_DATA_URI 0          /* the `how` argument's LOW BYTE */
 #define GUATIAO_BYTES_BASE64   1
 #define GUATIAO_BYTES_ARRAY    2
@@ -93,6 +104,12 @@ guatiao_status guatiao_yaml_emit        (/* as _json_emit  */);   // GUATIAO_SER
 
 - **Emitting answers a VALUE holding the text**, freed with
   `guatiao_value_free` like any other tree. No second thing to free.
+- **`out` is written ABSENT on entry**, before anything can fail, as in
+  `guatiao.h` and `guatiao_intake.h`: read after an error it is
+  `GUATIAO_ABSENT`, never what it held. It must not hold a tree you still
+  own. `out_error` of a `_parse_ex` is written empty on entry too, and is
+  filled only for a document that does not parse; its `message` is the
+  parser's wording and never quotes the document.
 - **A format is a build-time choice, so its declarations are guarded.**
   Only `json` is on by default; compile with `-DGUATIAO_SERDE_TOML` and/or
   `-DGUATIAO_SERDE_YAML` to declare the pairs the library was built with.
@@ -120,7 +137,9 @@ the reason.)
 - **A map is written in insertion order, never sorted.** A reader that
   wants them sorted can sort them; a writer that sorted them would destroy
   an order somebody chose and no reader could get it back.
-- **A repeated key on read REPLACES**, the same thing `Map::set` does.
+- **A repeated key on read depends on the format.** JSON **replaces**, as
+  `Map::set` does (`{"a":1,"a":2}` reads `a = 2`); TOML and YAML **refuse
+  the document** (`Error::Syntax`).
 - **A number goes out verbatim under `Numbers::RawText`, and only then.**
   `i64`/`u64` go out native whatever the policy, which is exact either
   way. Past that, `RawText` splices the number's own text in through
@@ -150,9 +169,20 @@ the reason.)
   through `deserialize_any`, which gives the seed no tag, so bytes are out
   of reach; the text is not decoded behind your back and a payload that is
   not UTF-8 is not an error.
-- **A document nests at most `MAX_DEPTH` containers deep**, refused past
-  that. `serde_json` caps its own recursion; another format need not, and
+- **A document nests at most `MAX_DEPTH` (128) containers deep**, refused
+  past that. `serde_json` caps its own recursion at 128 and `toml` and
+  `serde-saphyr` at less (TOML arrays about 80, YAML about 64, flow or
+  block), so those refuse first; another format need not cap at all, and
   this crate reads them all.
+- **What each format reads as a number.** JSON: an `i64`/`u64` is exact and
+  anything else is an `f64`, unless `exact-numbers` keeps the text; `NaN`
+  and infinity do not exist in JSON, and `1e400` is refused. TOML: an
+  integer is exact (a 30-digit one included), a float goes through `f64`
+  (`1.10` reads `1.1`), `inf` and `nan` are refused. YAML 1.2 through
+  `serde-saphyr`: `1.10` reads `1.1`, `007` reads `7.0`, an integer past
+  `u64` reads as a float, `0x10` and `0o17` and `1_000` read as integers
+  (`16`, `15`, `1000`), `.inf`, `.nan` and `1e400` are refused, `-0` reads
+  `0`. Alias expansion is bounded by the parser's budget.
 - **The raw-number token is read whether or not that feature is on.**
   Any crate in a consumer's graph can enable
   `serde_json/arbitrary_precision`; a reader that did not know the token
