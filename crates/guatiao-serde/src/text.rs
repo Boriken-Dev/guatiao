@@ -126,8 +126,7 @@ impl fmt::Display for Error {
 }
 
 /// The 1-based line and column of byte `offset` in `text`.
-#[cfg(feature = "toml")]
-fn position_at(text: &str, offset: usize) -> Position {
+pub(crate) fn position_at(text: &str, offset: usize) -> Position {
     let mut end = offset.min(text.len());
     while !text.is_char_boundary(end) {
         end -= 1;

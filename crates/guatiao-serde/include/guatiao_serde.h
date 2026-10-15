@@ -121,14 +121,16 @@
 /*
  Why a document did not parse, for a caller that can show where.
 
- Filled by the `_parse_ex` functions. `line` and `column` count from 1
- and are 0 when the parser did not say where. `message` is a string
- value built through the caller's allocator, ABSENT when the call did
- not fail on the document, and released with `guatiao_value_free`.
+ Filled by the `_parse_ex` functions. `format` is the call's on every
+ return, whatever failed. `line` and `column` count from 1, the column
+ in characters, and are 0 when the parser did not say where; for text
+ that is not UTF-8 they name its first byte that is not. `message` is a
+ string value built through the caller's allocator, ABSENT when the
+ call did not fail on the text, and released with `guatiao_value_free`.
  */
 typedef struct guatiao_parse_error {
   /*
-   A `GUATIAO_FORMAT_*` constant.
+   A `GUATIAO_FORMAT_*` constant: the format the call reads.
    */
   uint32_t format;
   /*
@@ -136,7 +138,7 @@ typedef struct guatiao_parse_error {
    */
   uint32_t line;
   /*
-   The column, from 1; 0 when unknown.
+   The column, from 1, in characters; 0 when unknown.
    */
   uint32_t column;
   /*

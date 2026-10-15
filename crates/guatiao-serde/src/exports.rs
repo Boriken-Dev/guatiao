@@ -35,11 +35,12 @@
 //! # Where a parse stopped
 //!
 //! Each `_parse` has a twin, `_parse_ex`, taking one more pointer, a
-//! `guatiao_parse_error *` that may be null. On a document that does not
-//! parse it receives the format, the line and the column (from 1, 0 when
-//! the parser did not say) and a `message` string value, freed with
-//! `guatiao_value_free`. The message is the parser's wording and never
-//! quotes the document, which may hold a secret.
+//! `guatiao_parse_error *` that may be null. Its `format` is the call's on
+//! every return. On a document that does not parse, or text that is not
+//! UTF-8, it receives the line and the column (from 1, the column in
+//! characters, 0 when the parser did not say) and a `message` string
+//! value, freed with `guatiao_value_free`. The message is the parser's
+//! wording and never quotes the document, which may hold a secret.
 //!
 //! # The policy is one integer
 //!
@@ -71,7 +72,7 @@ use guatiao::value::alloc::{Alloc, Allocator};
 use guatiao::value::status::Status;
 use guatiao::value::types::{Str, Text, Value};
 
-use crate::text::Error;
+use crate::text::{Error, Position, position_at};
 use crate::{Bytes, Presentation};
 
 /// Writes the absent marker through a pointer, if it is not null.
@@ -99,27 +100,29 @@ pub const GUATIAO_FORMAT_YAML: u32 = 2;
 
 /// Why a document did not parse, for a caller that can show where.
 ///
-/// Filled by the `_parse_ex` functions. `line` and `column` count from 1
-/// and are 0 when the parser did not say where. `message` is a string
-/// value built through the caller's allocator, ABSENT when the call did
-/// not fail on the document, and released with `guatiao_value_free`.
+/// Filled by the `_parse_ex` functions. `format` is the call's on every
+/// return, whatever failed. `line` and `column` count from 1, the column
+/// in characters, and are 0 when the parser did not say where; for text
+/// that is not UTF-8 they name its first byte that is not. `message` is a
+/// string value built through the caller's allocator, ABSENT when the
+/// call did not fail on the text, and released with `guatiao_value_free`.
 #[repr(C)]
 pub struct ParseError {
-    /// A `GUATIAO_FORMAT_*` constant.
+    /// A `GUATIAO_FORMAT_*` constant: the format the call reads.
     pub format: u32,
     /// The line, from 1; 0 when unknown.
     pub line: u32,
-    /// The column, from 1; 0 when unknown.
+    /// The column, from 1, in characters; 0 when unknown.
     pub column: u32,
     /// What the parser expected, without an excerpt of the document.
     pub message: Value,
 }
 
 impl ParseError {
-    /// Nothing happened: no position and no message.
-    fn none() -> ParseError {
+    /// Nothing known yet but the format: no position and no message.
+    fn none(format: u32) -> ParseError {
         ParseError {
-            format: 0,
+            format,
             line: 0,
             column: 0,
             message: Value::absent(),
@@ -128,17 +131,26 @@ impl ParseError {
 
     /// The refusal, with its message built through `alloc`.
     fn of(error: &Error, format: u32, alloc: Alloc) -> Option<ParseError> {
-        let at = error.position();
         let detail = match error {
             Error::Format { detail, .. }
             | Error::Syntax { detail, .. }
             | Error::Unsupported { detail, .. } => detail,
         };
+        ParseError::at(format, error.position(), detail, alloc)
+    }
+
+    /// A refusal at `position`, its message built through `alloc`.
+    fn at(
+        format: u32,
+        position: Option<Position>,
+        detail: &str,
+        alloc: Alloc,
+    ) -> Option<ParseError> {
         let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
         Some(ParseError {
             format,
-            line: at.map_or(0, |p| count(p.line)),
-            column: at.map_or(0, |p| count(p.column)),
+            line: position.map_or(0, |p| count(p.line)),
+            column: position.map_or(0, |p| count(p.column)),
             message: Text::new_in(alloc, detail).map(Value::from).ok()?,
         })
     }
@@ -289,8 +301,8 @@ unsafe fn deliver_text(out: *mut Value, built: Result<String, Error>, alloc: All
 ///
 /// `out_error` is null for the plain `_parse` functions; the `_parse_ex`
 /// ones pass the caller's. Both pointers are written on entry (`out`
-/// ABSENT, `out_error` empty), so a failure leaves neither holding
-/// anything.
+/// ABSENT, `out_error` empty but for its format), so a failure leaves
+/// neither holding anything.
 ///
 /// # Safety
 ///
@@ -308,14 +320,40 @@ unsafe fn parse_with(
     unsafe {
         absent(out);
         if !out_error.is_null() {
-            core::ptr::write(out_error, ParseError::none());
+            core::ptr::write(out_error, ParseError::none(format));
         }
     }
+    // Writes a refusal through `out_error` when there is one, or answers
+    // that its message could not be built: the allocator is what to fix
+    // first.
+    let report = |detail: Option<ParseError>, status: Status| {
+        if out_error.is_null() {
+            return status;
+        }
+        let Some(detail) = detail else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        // SAFETY: non-null, and writable by the caller's contract.
+        unsafe { out_error.write(detail) };
+        status
+    };
     guard(|| {
-        // SAFETY: the caller's contract.
-        let (text, alloc) = match unsafe { inputs(text, alloc, out) } {
+        let bytes: &[u8] = text.into();
+        // SAFETY: the caller's contract; an empty view never dereferences.
+        let (_, alloc) = match unsafe { inputs(Str::empty(), alloc, out) } {
             Ok(pair) => pair,
             Err(status) => return status,
+        };
+        let text = match core::str::from_utf8(bytes) {
+            Ok(text) => text,
+            Err(e) => {
+                // Where the text stops being UTF-8, counted over the part
+                // that is.
+                let valid = core::str::from_utf8(&bytes[..e.valid_up_to()]).unwrap_or("");
+                let at = position_at(valid, valid.len());
+                let detail = ParseError::at(format, Some(at), "the text is not UTF-8", alloc);
+                return report(detail, Status::from(e));
+            }
         };
         match read(text, alloc, presentation(how)) {
             Ok(value) => {
@@ -324,18 +362,7 @@ unsafe fn parse_with(
                 unsafe { out.write(value) };
                 Status::GUATIAO_OK
             }
-            Err(e) => {
-                if !out_error.is_null() {
-                    let Some(detail) = ParseError::of(&e, format, alloc) else {
-                        // The refusal is known and its message cannot be
-                        // built: the allocator is what to fix first.
-                        return Status::GUATIAO_ERR_ALLOC;
-                    };
-                    // SAFETY: non-null, and writable by contract.
-                    unsafe { out_error.write(detail) };
-                }
-                status_of(&e)
-            }
+            Err(e) => report(ParseError::of(&e, format, alloc), status_of(&e)),
         }
     })
 }

@@ -199,3 +199,63 @@ fn parse_ex_reports_where_a_document_stopped() {
         unsafe { guatiao_json_parse_ex(Str::new("{ nope"), 0, &vt, &mut again, ptr::null_mut()) };
     assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
 }
+
+/// `_parse_ex` fills what it can for every failure: the format of the
+/// call whatever went wrong, and for text that is not UTF-8, where it
+/// stops being UTF-8 and a message saying so.
+#[test]
+fn parse_ex_names_the_format_and_the_place_for_every_failure() {
+    let vt = rust_alloc();
+    let blank = || ParseError {
+        format: 9,
+        line: 9,
+        column: 9,
+        message: Value::null(),
+    };
+    // `"é": ` and then a byte no UTF-8 text holds, on the second line.
+    let bytes = b"{\n\"\xc3\xa9\": \xff}";
+    // SAFETY: the bytes outlive every call below.
+    let text = || unsafe { Str::from_raw_parts(bytes.as_ptr(), bytes.len()) };
+
+    let mut out = Value::null();
+    let mut error = blank();
+    // SAFETY: both pointers address writable storage owning nothing.
+    let status = unsafe { guatiao_json_parse_ex(text(), 0, &vt, &mut out, &mut error) };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert_eq!(
+        (error.format, error.line, error.column),
+        (GUATIAO_FORMAT_JSON, 2, 6),
+        "the column counts characters up to the first byte that is not UTF-8"
+    );
+    let message = TryAsRef::<str>::try_as_ref(&error.message).expect("a message");
+    assert!(message.contains("UTF-8"), "{message}");
+
+    #[cfg(feature = "toml")]
+    {
+        use guatiao_serde::exports::{GUATIAO_FORMAT_TOML, guatiao_toml_parse_ex};
+        let mut error = blank();
+        // SAFETY: a null `out` is refused before anything is written there.
+        let status = unsafe {
+            guatiao_toml_parse_ex(Str::new("a = 1"), 0, &vt, ptr::null_mut(), &mut error)
+        };
+        assert_eq!(status, Status::GUATIAO_ERR_NULL);
+        assert_eq!(
+            (error.format, error.line, error.column),
+            (GUATIAO_FORMAT_TOML, 0, 0),
+            "a TOML call does not read as JSON when nothing was parsed"
+        );
+        assert_eq!(error.message.tag(), Ok(Tag::GUATIAO_ABSENT));
+    }
+    #[cfg(feature = "yaml")]
+    {
+        use guatiao_serde::exports::{GUATIAO_FORMAT_YAML, guatiao_yaml_parse_ex};
+        let mut error = blank();
+        // SAFETY: as above.
+        let status = unsafe { guatiao_yaml_parse_ex(text(), 0, &vt, &mut out, &mut error) };
+        assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+        assert_eq!(
+            (error.format, error.line, error.column),
+            (GUATIAO_FORMAT_YAML, 2, 6)
+        );
+    }
+}

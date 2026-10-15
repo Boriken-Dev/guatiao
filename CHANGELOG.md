@@ -40,9 +40,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   at the same version beside it.
 - **`guatiao_json_parse_ex`, `guatiao_toml_parse_ex` and
   `guatiao_yaml_parse_ex`**: the `_parse` calls with one more, nullable,
-  `guatiao_parse_error *`. A document that does not parse fills it with the
-  format (`GUATIAO_FORMAT_JSON`, `_TOML`, `_YAML`), the line and column and
-  a `message` string value that never quotes the document. A C, Python or
+  `guatiao_parse_error *`. Its `format` (`GUATIAO_FORMAT_JSON`, `_TOML`,
+  `_YAML`) is the call's on every return; a document that does not parse,
+  or text that is not UTF-8, also fills the line and column and a
+  `message` string value that never quotes the document. A C, Python or
   Dart caller can show where a configuration file is wrong instead of a
   bare `GUATIAO_ERR_BAD_VALUE`.
 
