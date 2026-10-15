@@ -178,6 +178,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   not UTF-8, a number outside the grammar, nesting past `MAX_DEPTH`),
   which only a foreign producer can write. Its message points at
   `clone_in`, the form that reports it.
+- **Breaking: `ToValue::to_value_in(alloc)` and `Schema::schema_in(alloc)`
+  take the allocator, and `to_value()` and `schema()` take none**, using
+  the crate's own, as building does everywhere else. The derives write
+  `to_value_in`. *Migration:* a hand-written `impl ToValue` renames its
+  `to_value(&self, alloc)` to `to_value_in`; a call
+  `x.to_value(Alloc::rust())` is `x.to_value()` and `T::schema(Alloc::rust())`
+  is `T::schema()`; a call naming another allocator is `to_value_in(alloc)`
+  or `schema_in(alloc)`.
 - **A scan reads a candidate on demand rather than whole**: headers,
   export and dynamic symbol tables, and the 4 KiB declaration window.
 - **An object kind is never served by a provider.** A registry or host

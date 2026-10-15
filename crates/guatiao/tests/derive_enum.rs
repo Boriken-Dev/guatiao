@@ -75,7 +75,7 @@ fn a_unit_enum_is_stored_as_its_name() {
         (Level::Warning, "warn"),
         (Level::On, "On"),
     ] {
-        let value = level.to_value(alloc()).unwrap();
+        let value = level.to_value_in(alloc()).unwrap();
         assert_eq!(
             TryAsRef::<str>::try_as_ref(&value),
             Some(stored),
@@ -150,7 +150,7 @@ fn a_choice_it_writes_is_one_its_schema_accepts() {
     let (kind, key) = field_of::<Level>("level");
     let field = FieldRef::new(key, &kind).unwrap();
     for level in [Level::Off, Level::Warning, Level::On] {
-        let value = level.to_value(alloc()).unwrap();
+        let value = level.to_value_in(alloc()).unwrap();
         validate_value(field, &value)
             .unwrap_or_else(|e| panic!("{level:?} wrote a value its own schema refuses: {e}"));
     }
@@ -186,10 +186,10 @@ fn a_catch_all_keeps_a_name_no_variant_declares() {
 
     // And it is written as the text it was read from, so a host passing
     // the value on loses nothing it did not understand.
-    let written = unknown.to_value(alloc()).unwrap();
+    let written = unknown.to_value_in(alloc()).unwrap();
     assert_eq!(TryAsRef::<str>::try_as_ref(&written), Some("av1"));
     assert_eq!(
-        TryAsRef::<str>::try_as_ref(&Codec::H264.to_value(alloc()).unwrap()),
+        TryAsRef::<str>::try_as_ref(&Codec::H264.to_value_in(alloc()).unwrap()),
         Some("h264")
     );
 
@@ -224,7 +224,7 @@ fn a_catch_all_describes_itself_as_text_that_suggests_its_names() {
     // What the type writes, its schema accepts: a known name and an
     // unknown one alike.
     for codec in [Codec::H264, Codec::Hevc, Codec::Other("av1".to_string())] {
-        let value = codec.to_value(alloc()).unwrap();
+        let value = codec.to_value_in(alloc()).unwrap();
         validate_value(field, &value)
             .unwrap_or_else(|e| panic!("{codec:?} wrote a value its own schema refuses: {e}"));
     }
@@ -242,7 +242,7 @@ fn userpass() -> Auth {
 
 #[test]
 fn a_tagged_enum_is_a_map_with_its_name_under_the_tag() {
-    let value = userpass().to_value(alloc()).unwrap();
+    let value = userpass().to_value_in(alloc()).unwrap();
     let keys: Vec<&str> = TryAsRef::<Map>::try_as_ref(&value)
         .map(Map::entries)
         .unwrap()
@@ -262,7 +262,7 @@ fn a_tagged_enum_is_a_map_with_its_name_under_the_tag() {
         "userpass"
     );
 
-    let ambient = Auth::Ambient.to_value(alloc()).unwrap();
+    let ambient = Auth::Ambient.to_value_in(alloc()).unwrap();
     assert_eq!(
         TryAsRef::<Map>::try_as_ref(&ambient)
             .map(Map::entries)
@@ -281,11 +281,11 @@ fn a_tagged_enum_round_trips() {
         attempts: 0,
     };
     for auth in [Auth::Ambient, userpass(), absent_password.clone()] {
-        let value = auth.to_value(alloc()).unwrap();
+        let value = auth.to_value_in(alloc()).unwrap();
         assert_eq!(Auth::from_value(&value).unwrap(), auth);
     }
     assert!(
-        TryAsRef::<Map>::try_as_ref(&absent_password.to_value(alloc()).unwrap())
+        TryAsRef::<Map>::try_as_ref(&absent_password.to_value_in(alloc()).unwrap())
             .and_then(|m| m.get("password"))
             .is_none(),
         "None omits the key, exactly as it does in a struct"
@@ -299,7 +299,7 @@ fn a_skipped_field_reads_back_as_its_default() {
         password: None,
         attempts: 7,
     };
-    let read = Auth::from_value(&written.to_value(alloc()).unwrap()).unwrap();
+    let read = Auth::from_value(&written.to_value_in(alloc()).unwrap()).unwrap();
     assert!(
         matches!(read, Auth::UserPass { attempts: 0, .. }),
         "never stored, so `Default::default()` on the way back: {read:?}"
@@ -391,12 +391,12 @@ fn a_variant_it_writes_is_one_its_schema_accepts() {
     let (kind, key) = field_of::<Auth>("auth");
     let field = FieldRef::new(key, &kind).unwrap();
     for auth in [Auth::Ambient, userpass()] {
-        let value = auth.to_value(alloc()).unwrap();
+        let value = auth.to_value_in(alloc()).unwrap();
         validate_value(field, &value)
             .unwrap_or_else(|e| panic!("{auth:?} wrote a value its own schema refuses: {e}"));
     }
 
-    let mut foreign = userpass().to_value(alloc()).unwrap();
+    let mut foreign = userpass().to_value_in(alloc()).unwrap();
     TryAsMut::<Map>::try_as_mut(&mut foreign)
         .ok_or(ValueError::WrongKind)
         .map(|m| m.set("realm", "EXAMPLE"))
@@ -416,8 +416,8 @@ fn a_struct_holding_both_validates_against_its_own_schema() {
         auth: userpass(),
         fallback: Some(Level::Off),
     };
-    let value = config.to_value(alloc()).unwrap();
-    let schema = Config::schema(alloc()).unwrap();
+    let value = config.to_value_in(alloc()).unwrap();
+    let schema = Config::schema_in(alloc()).unwrap();
     let s = SchemaRef::new(&schema).unwrap();
 
     validate_map(s, &value).unwrap_or_else(|e| panic!("its own schema refuses it: {e}"));
@@ -441,7 +441,7 @@ fn a_struct_holding_both_validates_against_its_own_schema() {
 /// readable back.
 #[test]
 fn a_tagged_enums_own_schema_carries_its_tag_and_its_arms() {
-    let declared = Auth::schema(alloc()).unwrap();
+    let declared = Auth::schema_in(alloc()).unwrap();
 
     assert_eq!(
         str_or(
@@ -470,14 +470,14 @@ fn a_tagged_enums_own_schema_carries_its_tag_and_its_arms() {
     assert_eq!(names, ["Ambient", "userpass"]);
 
     // A unit enum is the other non-object kind, and keeps its choices.
-    let declared = Level::schema(alloc()).unwrap();
+    let declared = Level::schema_in(alloc()).unwrap();
     let field = FieldRef::new("level", &declared).expect("a schema is a map");
     assert!(matches!(field.kind(), Kind::Enum(_)));
     let choices: Vec<&str> = field.kind().choices().map(|c| c.value()).collect();
     assert_eq!(choices, ["Off", "warn", "On"]);
 
     // A struct still answers what it always did.
-    let declared = Config::schema(alloc()).unwrap();
+    let declared = Config::schema_in(alloc()).unwrap();
     let s = SchemaRef::new(&declared).expect("a schema is a map");
     let keys: Vec<&str> = s.fields().map(|f| f.key()).collect();
     assert_eq!(keys, ["level", "auth", "fallback"]);

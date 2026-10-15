@@ -291,7 +291,7 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
     };
     let config = match &config_ty {
         Some(config) => quote! {
-            let builder = builder.config(<#config as ::guatiao::Schema>::schema(alloc)?);
+            let builder = builder.config(<#config as ::guatiao::Schema>::schema_in(alloc)?);
         },
         None => quote! {},
     };
@@ -504,7 +504,7 @@ mod tests {
                 out.contains("config_arg :: < Hi > (config)"),
                 "{attr}: {out}"
             );
-            assert!(out.contains("< Hi as :: guatiao :: Schema > :: schema (alloc) ?"));
+            assert!(out.contains("< Hi as :: guatiao :: Schema > :: schema_in (alloc) ?"));
             assert!(
                 out.contains("< Hi as :: core :: convert :: TryFrom < Hi >> :: try_from"),
                 "the identity conversion: {attr}"
@@ -521,7 +521,7 @@ mod tests {
         .unwrap();
         assert!(out.contains("String :: from (\"acme_hi\")"));
         assert!(out.contains(". name (\"Hi\") . version (\"2.0.0\")"));
-        assert!(out.contains("< HiConfig as :: guatiao :: Schema > :: schema (alloc) ?"));
+        assert!(out.contains("< HiConfig as :: guatiao :: Schema > :: schema_in (alloc) ?"));
         assert!(out.contains("Hi :: build (host)"));
         assert!(
             out.contains(

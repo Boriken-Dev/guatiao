@@ -13,7 +13,7 @@
 //! use guatiao::Alloc;
 //! use guatiao::value::convert::{FromValue, ToValue};
 //!
-//! let value = "10.0.0.1".to_value(Alloc::rust())?;
+//! let value = "10.0.0.1".to_value()?;
 //! assert_eq!(String::from_value(&value)?, "10.0.0.1");
 //! # Ok::<(), Box<dyn core::error::Error>>(())
 //! ```
@@ -331,11 +331,22 @@ impl AsRef<[u8]> for Bytes {
 }
 
 /// Builds a value from a borrowed `self`. Borrowed, because a generated
-/// `to_value(&self)` has only a borrow and a consuming trait would make
-/// it clone every field.
+/// conversion has only a borrow and a consuming trait would make it clone
+/// every field.
+///
+/// Building names no allocator: [`to_value`](ToValue::to_value) uses the
+/// crate's own, and [`to_value_in`](ToValue::to_value_in), the one an
+/// impl writes, builds through the one it is handed, which is what a
+/// library building into its host's arena calls.
 pub trait ToValue {
-    /// Performs the conversion. A derived struct produces a map.
-    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError>;
+    /// Performs the conversion through `alloc`. A derived struct produces
+    /// a map.
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError>;
+
+    /// Performs the conversion through the crate's own allocator.
+    fn to_value(&self) -> Result<Value, ValueError> {
+        self.to_value_in(Alloc::rust())
+    }
 }
 
 /// Reads `Self` out of a borrowed value.
@@ -351,7 +362,7 @@ pub trait FromValue: Sized {
 // --- ToValue ----------------------------------------------------------
 
 impl ToValue for bool {
-    fn to_value(&self, _alloc: Alloc) -> Result<Value, ValueError> {
+    fn to_value_in(&self, _alloc: Alloc) -> Result<Value, ValueError> {
         Ok(Value::from(*self))
     }
 }
@@ -361,7 +372,7 @@ impl ToValue for bool {
 macro_rules! integer_to_value {
     ($($t:ty),* $(,)?) => {$(
         impl ToValue for $t {
-            fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+            fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
                 Ok(Number::new_in(alloc, &self.to_string())?.into())
             }
         }
@@ -373,68 +384,68 @@ integer_to_value!(
 );
 
 impl ToValue for f64 {
-    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
         Ok(Number::float_in(alloc, *self)?.into())
     }
 }
 
 /// As its own shortest text: `1.1f32` writes `1.1`.
 impl ToValue for f32 {
-    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
         let text = crate::value::types::number::float32_text(*self)?;
         Ok(Number::new_in(alloc, &text)?.into())
     }
 }
 
 impl ToValue for str {
-    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
         Ok(Text::new_in(alloc, self)?.into())
     }
 }
 
 impl ToValue for String {
-    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
         Ok(Text::new_in(alloc, self)?.into())
     }
 }
 
 impl ToValue for Bytes {
-    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
         Ok(Buffer::new_in(alloc, &self.0)?.into())
     }
 }
 
 /// A borrow converts as the thing it borrows does.
 impl<T: ToValue + ?Sized> ToValue for &T {
-    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
-        (**self).to_value(alloc)
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
+        (**self).to_value_in(alloc)
     }
 }
 
 /// `None` becomes a null **here**; the derive omits the key instead when
 /// it can see the field is an `Option`. Both read back as `None`.
 impl<T: ToValue> ToValue for Option<T> {
-    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
         match self {
-            Some(v) => v.to_value(alloc),
+            Some(v) => v.to_value_in(alloc),
             None => Ok(Value::null()),
         }
     }
 }
 
 impl<T: ToValue> ToValue for [T] {
-    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
         let mut list = List::new_in(alloc);
         for item in self {
-            list.push_in(item.to_value(alloc)?, alloc)?;
+            list.push_in(item.to_value_in(alloc)?, alloc)?;
         }
         Ok(list.into())
     }
 }
 
 impl<T: ToValue> ToValue for Vec<T> {
-    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
-        self.as_slice().to_value(alloc)
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
+        self.as_slice().to_value_in(alloc)
     }
 }
 
@@ -446,14 +457,14 @@ impl<T: ToValue> ToValue for Vec<T> {
 /// insertion-ordered by contract. Neither is wrong; only one is
 /// reproducible, which is worth knowing before a hash goes over a wire.
 impl<T: ToValue> ToValue for alloc::collections::BTreeMap<String, T> {
-    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
         entries_to_value(self.iter().map(|(k, v)| (k.as_str(), v)), alloc)
     }
 }
 
 /// The same, unordered. See [`BTreeMap`](std::collections::BTreeMap).
 impl<T: ToValue> ToValue for std::collections::HashMap<String, T> {
-    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
         entries_to_value(self.iter().map(|(k, v)| (k.as_str(), v)), alloc)
     }
 }
@@ -465,7 +476,7 @@ fn entries_to_value<'a, T: ToValue + 'a>(
 ) -> Result<Value, ValueError> {
     let mut out = Map::new_in(alloc);
     for (key, value) in entries {
-        out.set_in(key, value.to_value(alloc)?, alloc)?;
+        out.set_in(key, value.to_value_in(alloc)?, alloc)?;
     }
     Ok(out.into())
 }
@@ -473,7 +484,7 @@ fn entries_to_value<'a, T: ToValue + 'a>(
 /// A raw subtree is deep-copied into the target allocator: an owned tree
 /// carries its own, which may not be the one the result belongs to.
 impl ToValue for Value {
-    fn to_value(&self, alloc: Alloc) -> Result<Value, ValueError> {
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
         self.clone_in(alloc)
     }
 }

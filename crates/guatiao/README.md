@@ -99,7 +99,7 @@ struct Connection {
 }
 ```
 
-`Connection::schema(alloc)` is what a consumer reads to know it must ask for
+`Connection::schema()` is what a consumer reads to know it must ask for
 a host, may leave out a password, and should not log it. `to_value` and
 `from_value` move the struct across the boundary, and the three derives read
 one declaration, so the schema cannot describe a value the type refuses.

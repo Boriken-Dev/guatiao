@@ -70,7 +70,7 @@ fn sample() -> Connection {
 #[test]
 fn the_schema_lists_the_stored_fields_in_declaration_order() {
     alloc_and(|alloc| {
-        let declared = Connection::schema(alloc).unwrap();
+        let declared = Connection::schema_in(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
         let keys: Vec<String> = s.fields().map(|o| o.key().to_string()).collect();
         assert_eq!(
@@ -88,7 +88,7 @@ fn the_schema_lists_the_stored_fields_in_declaration_order() {
 #[test]
 fn an_integer_kind_carries_the_bounds_of_its_width() {
     alloc_and(|alloc| {
-        let declared = Connection::schema(alloc).unwrap();
+        let declared = Connection::schema_in(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
 
         assert!(matches!(
@@ -125,7 +125,7 @@ fn an_integer_kind_carries_the_bounds_of_its_width() {
 #[test]
 fn required_comes_from_the_type_not_from_an_attribute() {
     alloc_and(|alloc| {
-        let declared = Connection::schema(alloc).unwrap();
+        let declared = Connection::schema_in(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
         assert!(s.find("host").unwrap().is_required());
         assert!(s.find("tls").unwrap().is_required());
@@ -141,7 +141,7 @@ fn required_comes_from_the_type_not_from_an_attribute() {
 #[test]
 fn a_doc_comment_becomes_the_help_text() {
     alloc_and(|alloc| {
-        let declared = Connection::schema(alloc).unwrap();
+        let declared = Connection::schema_in(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
         assert_eq!(
             s.find("host").unwrap().description(),
@@ -165,7 +165,7 @@ fn a_doc_comment_becomes_the_help_text() {
 #[test]
 fn the_schema_attributes_reach_the_option() {
     alloc_and(|alloc| {
-        let declared = Connection::schema(alloc).unwrap();
+        let declared = Connection::schema_in(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
 
         let password = s.find("password").unwrap();
@@ -186,7 +186,7 @@ fn the_schema_attributes_reach_the_option() {
 #[test]
 fn a_sequence_a_blob_and_a_nested_struct_each_have_a_kind() {
     alloc_and(|alloc| {
-        let declared = Connection::schema(alloc).unwrap();
+        let declared = Connection::schema_in(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
 
         let tags = s.find("tags").unwrap().kind();
@@ -217,9 +217,9 @@ fn a_sequence_a_blob_and_a_nested_struct_each_have_a_kind() {
 #[test]
 fn a_value_the_type_writes_validates_against_the_schema_it_declares() {
     alloc_and(|alloc| {
-        let declared = Connection::schema(alloc).unwrap();
+        let declared = Connection::schema_in(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
-        let value = sample().to_value(alloc).unwrap();
+        let value = sample().to_value_in(alloc).unwrap();
 
         assert_eq!(
             validate_map(s, &value),
@@ -234,10 +234,10 @@ fn a_value_the_type_writes_validates_against_the_schema_it_declares() {
 #[test]
 fn a_key_the_schema_does_not_declare_is_refused() {
     alloc_and(|alloc| {
-        let declared = Connection::schema(alloc).unwrap();
+        let declared = Connection::schema_in(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
 
-        let mut value = sample().to_value(alloc).unwrap();
+        let mut value = sample().to_value_in(alloc).unwrap();
         TryAsMut::<Map>::try_as_mut(&mut value)
             .ok_or(ValueError::WrongKind)
             .map(|m| m.set("nonesuch", guatiao::Value::from(Text::new("x"))))
@@ -251,10 +251,10 @@ fn a_key_the_schema_does_not_declare_is_refused() {
 #[test]
 fn a_map_with_a_key_that_is_not_text_is_refused() {
     alloc_and(|alloc| {
-        let declared = Connection::schema(alloc).unwrap();
+        let declared = Connection::schema_in(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
 
-        let value = sample().to_value(alloc).unwrap();
+        let value = sample().to_value_in(alloc).unwrap();
         let map = Map::try_from(value).expect("a map");
         let (ptr, len, cap, a) = map.into_raw_parts();
         let (bptr, blen, bcap, ba) = guatiao::Buffer::new_in(alloc, b"\xff")
@@ -292,7 +292,7 @@ fn a_declared_default_lands_in_the_document() {
     }
 
     alloc_and(|alloc| {
-        let declared = Listener::schema(alloc).unwrap();
+        let declared = Listener::schema_in(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
         let port = s.find("port").unwrap();
 
@@ -336,7 +336,7 @@ fn a_defaulted_field_may_be_left_out_and_reads_as_its_default() {
     }
 
     alloc_and(|alloc| {
-        let declared = Tuner::schema(alloc).unwrap();
+        let declared = Tuner::schema_in(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
         assert!(s.find("name").unwrap().is_required());
         assert!(!s.find("channels").unwrap().is_required());
@@ -376,7 +376,7 @@ fn a_defaulted_field_may_be_left_out_and_reads_as_its_default() {
             channels: 2,
             tags: vec!["a".into()],
         };
-        let written = full.to_value(alloc).unwrap();
+        let written = full.to_value_in(alloc).unwrap();
         assert_eq!(validate_map(s, &written), Ok(()));
         assert_eq!(Tuner::from_value(&written).unwrap(), full);
 
@@ -420,7 +420,7 @@ fn a_map_field_describes_an_open_object() {
     }
 
     alloc_and(|alloc| {
-        let declared = Agent::schema(alloc).unwrap();
+        let declared = Agent::schema_in(alloc).unwrap();
         let s = SchemaRef::new(&declared).unwrap();
         let env = s.find("env").expect("env is declared");
         assert!(matches!(env.kind(), Kind::MapOf(_)));
@@ -438,7 +438,7 @@ fn a_map_field_describes_an_open_object() {
                 ("HOME".into(), "/root".into()),
             ]),
         };
-        let written = agent.to_value(alloc).expect("it writes");
+        let written = agent.to_value_in(alloc).expect("it writes");
 
         // What the type writes validates against what the same type
         // declares. That is the agreement the derives exist for.

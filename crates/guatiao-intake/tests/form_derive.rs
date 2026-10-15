@@ -79,7 +79,7 @@ struct Tunnel {
 }
 
 fn pair() -> (Value, Value) {
-    let schema = Connection::schema(Alloc::rust()).expect("the schema builds");
+    let schema = Connection::schema().expect("the schema builds");
     let form = Connection::form(Alloc::rust()).expect("the form builds");
     (schema, form)
 }
@@ -158,7 +158,7 @@ fn a_derived_form_fits_its_derived_schema() {
 /// places, and this is what notices when they stop being.
 #[test]
 fn the_schema_derive_writes_the_keys_this_crate_names() {
-    let schema = Connection::schema(Alloc::rust()).expect("the schema builds");
+    let schema = Connection::schema().expect("the schema builds");
     let s = SchemaRef::new(&schema).expect("a schema");
 
     let host = s.find("host").expect("host is declared");
@@ -239,7 +239,7 @@ struct Server {
 /// and hints, and the pair still fits.
 #[test]
 fn a_member_may_be_drawn_by_its_own_screen() {
-    let schema = Server::schema(Alloc::rust()).expect("the schema builds");
+    let schema = Server::schema().expect("the schema builds");
     let form = Server::form(Alloc::rust()).expect("the form builds");
     let (s, f) = (
         SchemaRef::new(&schema).expect("a schema"),
@@ -281,7 +281,7 @@ fn every_new_attribute_lands_and_behaves() {
     use guatiao::schema::read::Kind;
     use guatiao::schema::validate::{validate_text, validate_value};
 
-    let schema = Tunnel::schema(Alloc::rust()).expect("the schema builds");
+    let schema = Tunnel::schema().expect("the schema builds");
     let form = Tunnel::form(Alloc::rust()).expect("the form builds");
     let (s, f) = (
         SchemaRef::new(&schema).unwrap(),

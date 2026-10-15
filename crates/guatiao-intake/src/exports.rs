@@ -285,7 +285,7 @@ fn layout_value(schema: SchemaRef<'_>, form: FormRef<'_>, alloc: Alloc) -> Optio
             // A copy of the section as the form wrote it, annotations and
             // all, so the caller reads it with the same code it reads the
             // form with.
-            Some(section) => section.as_value().to_value(alloc).ok()?,
+            Some(section) => section.as_value().to_value_in(alloc).ok()?,
             None => Value::null(),
         };
         let mut keys = List::new_in(alloc);
