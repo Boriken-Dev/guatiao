@@ -5,7 +5,9 @@ Self-contained — this file ships with the package, so it names no repo path.
 
 A plain Dart package with one dependency, `package:ffi`. It does **not**
 depend on Flutter: a plain Dart package works inside a Flutter app, and
-the reverse is not true. 64-bit platforms only.
+the reverse is not true. 64-bit platforms only, and **not on the web**:
+`dart:ffi` does not exist in a browser, so `pubspec.yaml` declares
+Android, iOS, Linux, macOS and Windows and no `web`.
 
 ## Finding the native library
 
@@ -23,7 +25,7 @@ native call is resolved lazily, on first use, in this order:
 
 Not found throws `LibraryNotFound` naming all three. `guatiao_serde` and
 `guatiao_intake` resolve the same way, independently, only when
-`package:guatiao/serde.dart` or `.../form.dart` is first used. A symbol a
+`package:guatiao/serde.dart` or `.../intake.dart` is first used. A symbol a
 build does not export throws `MissingSymbol` naming it.
 
 ## Values
@@ -157,15 +159,34 @@ owns: an exponent is read back with its sign written (`1e400` parses as
 The `how` flag takes `bytesDataUri`, `bytesBase64`, `bytesArray`,
 `bytesRefuse`, `readDataUris` and `prettyFlag`.
 
-## form
+## intake
 
 ```dart
-import 'package:guatiao/intake.dart' as form;
+import 'package:guatiao/intake.dart' as intake;
 
-form.check(schema, formDoc);          // null, or the error map
-form.layout(schema, formDoc);         // [{'section': ..., 'fields': [...]}, ...]
-form.isVisible(schema, formDoc, 'key', values);   // bool
+intake.check(schema, formDoc);          // null, or the error map
+intake.layout(schema, formDoc);         // [{'section': ..., 'fields': [...]}, ...]
+intake.isVisible(schema, formDoc, 'key', values);   // bool
+intake.at(value, 'agent[1].name');      // a borrowed Ref, or null
+intake.forSchema(schema);               // the form a schema implies (a Value to close)
+intake.formFor(formDoc, schema, 'path');   // a Value to close, or null
 ```
+
+The flat projection keeps a value as `key -> text`, one entry per scalar
+leaf (a tagged field's discriminant under its key and its payload under
+`key.member`, a list as `agent[0].name`, an open map as `env[PATH]`):
+
+```dart
+intake.resolve(schema, 'auth.password');  // borrowed Ref onto the field, or null
+intake.flatKeys(schema, 'auth');          // List<String>; WrongKind for an unknown key
+intake.flatten(schema, 'auth', value);    // Map<String, String>; WrongKind when it does not apply
+intake.unflatten(schema, 'auth', store);  // Value to close, or null; store is a
+                                          // Map<String, String> or a Ref onto one
+```
+
+What `resolve` and `at` return borrows from the schema or value passed
+and must not outlive it. An empty container flattens to nothing, and an
+entry the schema does not declare is dropped by `unflatten`.
 
 ## Reading memory you do not own
 
@@ -173,7 +194,7 @@ form.isVisible(schema, formDoc, 'key', values);   // bool
 someone else keeps alive: a value an engine hands a callback, or one a
 registry lends. Writing through it throws and nothing frees it. Reading
 touches no library and no top-level state, so it works inside an
-`isolateGroupBound` callback that a native thread calls. The form
+`isolateGroupBound` callback that a native thread calls. The intake
 functions take any `Ref`, so a borrowed schema is passed as it is, with
 no copy.
 
@@ -182,7 +203,7 @@ no copy.
 `useLibrary(DynamicLibrary, {Iterable<String>? forSurfaces, String path})`
 registers an open library ahead of every other route. With no
 `forSurfaces` it is registered for each surface it exports and no other,
-so a host that carries the value and form surfaces in one file registers
+so a host that carries the value and intake surfaces in one file registers
 that file once. It is also the way in when the symbols are already in
 the process and there is no file to open. `forgetLibraries()` undoes it.
 `surfaces` lists the three base names.
@@ -203,6 +224,13 @@ one of `BadValue`, `AllocFailed`, `WrongKind`, `NotFound`,
 
 `LibraryNotFound`, `MissingSymbol` and `FloorMismatch` are this
 binding's own, and are not status failures.
+
+## Not offered
+
+A kind's borrowed object arguments (an object lent to a call for its
+duration, `const guatiao_object *` in a kind table) are not wrapped: this
+binding drives a kind's table through the pointer `providerTable` answers
+and builds no object for a callee to borrow.
 
 ## Isolates
 
