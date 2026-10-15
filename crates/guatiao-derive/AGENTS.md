@@ -43,7 +43,8 @@ one case rule, as serde spells and applies them: `"lowercase"`,
 `"snake_case"`, `"kebab-case"`, `"SCREAMING_SNAKE_CASE"`. A field or
 variant's own `rename` wins. All three derives and `#[derive(Form)]` read
 it, so the value, the schema's `enum` and the form's keys agree; any
-other rule is refused by name.
+other rule is refused by name. A raw identifier is named without its
+`r#`, as serde names it: a field `r#type` is keyed `type` by all four.
 
 **`#[schema(...)]`** — what `Schema` adds. Registered by all three, so
 a field carrying one compiles under `ToValue` and `FromValue` alone; those

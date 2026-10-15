@@ -78,6 +78,27 @@ struct Tunnel {
     peers: Vec<String>,
 }
 
+/// A field named with a raw identifier.
+#[derive(Schema, Form)]
+struct Typed {
+    #[form(widget = "select")]
+    r#type: String,
+}
+
+/// Its hint is keyed `type`, as the value and the schema key it.
+#[test]
+fn a_raw_identifier_is_keyed_without_its_prefix() {
+    let schema = Typed::schema().expect("the schema builds");
+    let form = Typed::form(Alloc::rust()).expect("the form builds");
+    let (s, f) = (
+        SchemaRef::new(&schema).expect("a schema"),
+        FormRef::new(&form).expect("a form"),
+    );
+    check(s, f).expect("the derived pair agrees");
+    assert_eq!(f.hints("type").widget(), "select");
+    assert_eq!(f.hints("r#type").widget(), "");
+}
+
 fn pair() -> (Value, Value) {
     let schema = Connection::schema().expect("the schema builds");
     let form = Connection::form(Alloc::rust()).expect("the form builds");

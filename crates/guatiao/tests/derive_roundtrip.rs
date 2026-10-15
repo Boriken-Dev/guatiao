@@ -384,3 +384,37 @@ fn an_f32_field_round_trips_and_refuses_what_it_cannot_hold() {
         assert_eq!(f32::try_from(&max).unwrap(), f32::MAX);
     });
 }
+
+/// A raw identifier is keyed by its name, as serde keys it: `r#type` is
+/// `type` for the writer, the reader and the schema alike, `rename_all`
+/// included.
+#[test]
+fn a_raw_identifier_is_keyed_without_its_prefix() {
+    #[derive(Debug, PartialEq, guatiao::Schema, guatiao::ToValue, guatiao::FromValue)]
+    struct Raw {
+        r#type: String,
+        r#match_count: Option<i64>,
+    }
+    #[derive(Debug, PartialEq, guatiao::Schema, guatiao::ToValue, guatiao::FromValue)]
+    #[map(rename_all = "kebab-case")]
+    struct Kebab {
+        r#match_count: i64,
+    }
+    let raw = Raw {
+        r#type: "t".into(),
+        r#match_count: Some(3),
+    };
+    let value = raw.to_value().unwrap();
+    let map: &Map = TryAsRef::<Map>::try_as_ref(&value).unwrap();
+    assert_eq!(map.keys().collect::<Vec<_>>(), ["type", "match_count"]);
+    assert_eq!(Raw::from_value(&value).unwrap(), raw);
+    let schema = <Raw as guatiao::Schema>::schema().unwrap();
+    let sref = guatiao::schema::SchemaRef::new(&schema).expect("a schema");
+    let keys: Vec<&str> = sref.fields().map(|f| f.key()).collect();
+    assert_eq!(keys, ["type", "match_count"]);
+    guatiao::schema::validate_map(sref, &value).expect("the schema takes the value");
+
+    let value = Kebab { r#match_count: 1 }.to_value().unwrap();
+    let map: &Map = TryAsRef::<Map>::try_as_ref(&value).unwrap();
+    assert_eq!(map.keys().collect::<Vec<_>>(), ["match-count"]);
+}

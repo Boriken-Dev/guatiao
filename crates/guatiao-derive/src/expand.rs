@@ -36,6 +36,7 @@
 
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt;
 use syn::{
     Attribute, Data, DataEnum, DeriveInput, Field, Fields, FieldsNamed, GenericArgument, Ident,
     LitStr, PathArguments, Type, Variant,
@@ -212,7 +213,7 @@ impl FieldPlan {
         let attrs = FieldAttrs::read(derive, field)?;
         Ok(FieldPlan {
             key: attrs.rename.unwrap_or_else(|| {
-                let name = ident.to_string();
+                let name = ident.unraw().to_string();
                 rule.map_or(name.clone(), |rule| rule.field(&name))
             }),
             inner: option_inner(&field.ty).cloned(),
@@ -1094,7 +1095,7 @@ impl VariantPlan {
 
         Ok(VariantPlan {
             stored: rename.unwrap_or_else(|| {
-                let name = variant.ident.to_string();
+                let name = variant.ident.unraw().to_string();
                 rule.map_or(name.clone(), |rule| rule.variant(&name))
             }),
             unit: matches!(variant.fields, Fields::Unit),
