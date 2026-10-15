@@ -67,6 +67,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A kind's table hash reads standard and `guatiao` paths as their bare
+  names.** `std::vec::Vec<T>` and `Vec<T>`, `guatiao::library::ProviderError`
+  and `ProviderError` (and the same under a `crate =` root) now hash
+  alike, so respelling a path in a kind crate no longer refuses every
+  built provider. A type of the kind crate's own is still hashed by the
+  name it is written with; the rule is in `guatiao-derive`'s `AGENTS.md`.
+  *Migration:* breaking only for a kind whose required methods spelled
+  one of those paths: it gets a new `FLOOR_HASH` once, so rebuild its
+  providers (a C table takes the new `*_FLOOR_HASH`). A kind spelled with
+  bare names keeps its hash.
 - **Breaking: no safe function reads a descriptor safe code could have
   forged.** The registry reads every pointer in a descriptor and calls its
   slots from safe code, so the promise that they are real is now made in

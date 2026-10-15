@@ -67,6 +67,11 @@ pub trait Kind: 'static {
     /// FNV-1a over the required methods' names and normalised signatures.
     /// A table carrying another number was built from a different
     /// declaration of this kind.
+    ///
+    /// The signatures are read as spelled, with standard and `guatiao`
+    /// paths reduced to the bare name (`std::vec::Vec<T>` is `Vec<T>`);
+    /// a type of the kind crate's own is hashed by the name it is written
+    /// with, so renaming one is a new declaration.
     const FLOOR_HASH: u32;
     /// Every required slot as `(method name, one past its end)`, so a
     /// null one is refused by name.
