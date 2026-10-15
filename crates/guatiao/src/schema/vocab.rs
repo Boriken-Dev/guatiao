@@ -51,6 +51,10 @@
 //!          | { "type": "object", "properties", "required" }
 //!          | { "type": "object", "x-variant-tag": key, "oneOf": [arm, …] }
 //!          | { "anyOf": [schema, …] }
+//!          | { "enum": [value, …] }        (any type; also "const", and
+//!                                           a "oneOf" of "const" arms)
+//!          | { "type": [T, "null"] }       (an optional T; also
+//!                                           { "anyOf": [schema, { "type": "null" }] })
 //! arm     := { "title", "description",
 //!              "properties": { <tag>: {"const": value}, … },
 //!              "required": [<tag>, …] }
@@ -76,6 +80,13 @@
 //! newer producer hides every field that would have rendered fine. This
 //! is the same rule as an unknown value tag, and it is the whole
 //! forward-compatibility story.
+//!
+//! **An optional value reads as the value it holds.** `type: [T, "null"]`
+//! and `anyOf: [X, null]` are what serde-based generators write for an
+//! `Option`; the reader gives the `T` or the `X`, and
+//! [`FieldRef::is_nullable`](super::FieldRef::is_nullable) says null is
+//! accepted too. A `$ref` is read once [`inline_refs`](super::inline_refs)
+//! has replaced it; a shape this build does not read is skipped.
 //!
 //! **Presentation keys are optional; substance is not.** `title`,
 //! `description` and every `x-` key another crate hangs on a field may be
@@ -117,7 +128,20 @@ pub const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
 // --- any schema -------------------------------------------------------
 
-/// Which kind this is: one of the `TYPE_*` constants below.
+/// A reference to another schema: `{"$ref": "#/$defs/Name"}`.
+///
+/// **Read as a kind this build skips** ([`Kind::Unknown`](super::KindRef::Unknown)),
+/// because a borrowed view has no root to look the target up in.
+/// [`inline_refs`](super::inline_refs) replaces every local reference with
+/// the schema it names, and what it cannot resolve it leaves for the
+/// reader to skip.
+pub const REF: &str = "$ref";
+/// Where a document keeps the schemas its [`REF`]s name: a map from name
+/// to schema. Carried; [`inline_refs`](super::inline_refs) reads it.
+pub const DEFS: &str = "$defs";
+
+/// Which kind this is: one of the `TYPE_*` constants below, or a list of
+/// them in which `"null"` marks an optional value (`["string", "null"]`).
 pub const TYPE: &str = "type";
 /// A short human name. Optional.
 ///
@@ -191,9 +215,20 @@ pub const MAX_LENGTH: &str = "maxLength";
 ///
 /// **Unanchored**, as JSON Schema specifies: `[0-9]+` accepts `a1`, and a
 /// pattern that means the whole string says `^...$`. Enforced only with
-/// the `regex` feature, and only for a pattern that crate's syntax accepts
-/// -- ECMA-262 lookaround and backreferences are carried, never enforced.
-/// Carried either way, so a renderer can still check as a person types.
+/// the `regex` feature ([`PATTERNS_ENFORCED`](super::PATTERNS_ENFORCED)
+/// says whether this build has it), and only for a pattern that crate's
+/// syntax accepts -- ECMA-262 lookaround and backreferences are carried,
+/// never enforced. Carried either way, so a renderer can still check as a
+/// person types.
+///
+/// **The dialect is ECMA-262's, with these differences.** `\d`, `\D`,
+/// `\w` and `\W` are the ASCII classes ECMA-262 defines (`[0-9]`,
+/// `[A-Za-z0-9_]` and their complements), where the `regex` crate's own
+/// are Unicode; a `\D` or `\W` *inside* a character class is the one
+/// place that is not rewritten and stays Unicode. `\s`, `\b` and
+/// `\p{..}` keep the `regex` crate's Unicode meaning, and a pattern
+/// using syntax only one of the two dialects has is carried, not
+/// enforced.
 pub const PATTERN: &str = "pattern";
 /// What a string holds: `email`, `uri`, `hostname`, `ipv4`, `ipv6`,
 /// `date`, `date-time`, `uuid` and the rest JSON Schema names. Optional.
@@ -308,6 +343,9 @@ pub const X_VARIANT_TAG: &str = "x-variant-tag";
 
 /// True or false.
 pub const TYPE_BOOLEAN: &str = "boolean";
+/// Nothing: the only value is null. Chiefly an arm of [`ANY_OF`] or an
+/// entry of a [`TYPE`] list that makes a value optional.
+pub const TYPE_NULL: &str = "null";
 /// A whole number, optionally bounded by [`MINIMUM`] and [`MAXIMUM`].
 pub const TYPE_INTEGER: &str = "integer";
 /// A real number, optionally bounded by [`MINIMUM`] and [`MAXIMUM`].
@@ -339,6 +377,8 @@ pub const TYPE_BYTES: &str = "bytes";
 /// Every key JSON Schema assigns a meaning that this crate writes.
 pub const KEYWORDS: &[&str] = &[
     SCHEMA,
+    REF,
+    DEFS,
     TYPE,
     TITLE,
     DESCRIPTION,
@@ -382,6 +422,7 @@ pub fn known(key: &str) -> bool {
 
 /// Every type name this vocabulary assigns a meaning.
 pub const TYPES: &[&str] = &[
+    TYPE_NULL,
     TYPE_BOOLEAN,
     TYPE_INTEGER,
     TYPE_NUMBER,

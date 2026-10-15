@@ -30,8 +30,10 @@
 use crate::value::convert::TryAsRef;
 
 use super::ValidationError;
-use super::read::{FieldRef, Kind, SchemaRef};
+use super::read::{FieldRef, Kind, SchemaRef, is_nullable, members};
+use super::vocab;
 use crate::value::error::MAX_DEPTH;
+use crate::value::types::number::validate_json_number;
 
 /// Between an owner and one of its members, in the KEY an error
 /// reports: `"tls.verify"`.
@@ -90,6 +92,14 @@ fn bad(key: impl Into<String>, expected: impl Into<String>) -> ValidationError {
 }
 
 /// Whether `field` accepts `text`.
+///
+/// **The check for a store of text** (a flat `key -> text` map, a query
+/// string, a command line), where a value has no type but its spelling:
+/// a boolean is one of [`BOOL_WORDS`], a number is written as JSON
+/// writes one (no `inf`, no `+1`, no leading zero), and a container has no
+/// text form, so it is accepted here and checked by [`validate_value`].
+/// A typed value is checked by [`validate_value`], which also requires
+/// the type the kind names.
 pub fn validate_text(field: FieldRef<'_>, text: &str) -> Result<(), ValidationError> {
     against(field.kind(), field.key(), text, 0)
 }
@@ -134,7 +144,7 @@ fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), Val
                 return Err(bad(key, lengths(min_length, max_length)));
             }
             if let Some(pattern) = pattern
-                && !matches_pattern(pattern, value)
+                && !super::pattern::matches(pattern, value)
             {
                 return Err(bad(key, format!("text matching {pattern}")));
             }
@@ -170,13 +180,12 @@ fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), Val
             max,
             multiple_of,
         } => {
-            let x: f64 = value.parse().map_err(|_| bad(key, "a number"))?;
-            // NaN fails every comparison, so it needs rejecting on its
-            // own: without this, `NaN < min` is false, `NaN > max` is
-            // false, and a NaN sails through a bounded range.
-            if x.is_nan() {
+            // The JSON number grammar and a finite result: `inf`, `NaN`
+            // and `1e999` are not numbers, and NaN would otherwise sail
+            // through a bounded range, failing every comparison.
+            let Some(x) = number_of(value) else {
                 return Err(bad(key, "a number"));
-            }
+            };
             if min.is_some_and(|m| x < m) || max.is_some_and(|m| x > m) {
                 return Err(bad(key, bounds(min, max)));
             }
@@ -191,10 +200,10 @@ fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), Val
             if kind.choices().any(|c| c.value() == value) {
                 Ok(())
             } else {
-                let names: Vec<&str> = kind.choices().map(|c| c.value()).collect();
-                Err(bad(key, format!("one of {}", names.join(", "))))
+                Err(bad(key, one_of_members(kind)))
             }
         }
+        Kind::Null => Err(bad(key, "null")),
         // THE TEXT FORM OF A TAGGED FIELD IS ITS DISCRIMINANT, and
         // nothing else. Behaviourally identical to an enum over the arm
         // values, which is what lets a flat `?auth=userpass` keep
@@ -241,8 +250,8 @@ fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), Val
     }
 }
 
-/// Whether `text` is a whole number written plainly: an optional sign and
-/// then digits.
+/// Whether `text` is a whole number written plainly: a JSON number with an
+/// optional minus, digits, no leading zero, and no fraction or exponent.
 ///
 /// Deliberately not a parse into any width. **A number is the exact text
 /// that declared it**, and an integer too large for an `i64` is still an
@@ -250,8 +259,17 @@ fn against(kind: Kind<'_>, key: &str, value: &str, depth: u32) -> Result<(), Val
 /// its own maximum, which is the failure the derive's own agreement test
 /// found.
 fn is_integer_text(text: &str) -> bool {
-    let digits = text.strip_prefix('-').unwrap_or(text);
-    !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
+    validate_json_number(text.as_bytes()).is_ok()
+        && !text.bytes().any(|b| matches!(b, b'.' | b'e' | b'E'))
+}
+
+/// The value of a number written as JSON writes one, or `None` for text
+/// outside that grammar and for one too large for an `f64`.
+///
+/// Not `str::parse`, which takes `inf`, `NaN`, `.5` and `+1`.
+fn number_of(text: &str) -> Option<f64> {
+    validate_json_number(text.as_bytes()).ok()?;
+    text.parse::<f64>().ok().filter(|x| x.is_finite())
 }
 
 /// Whether an integer written as `text` satisfies the declared bounds.
@@ -296,25 +314,6 @@ fn float_is_multiple(x: f64, step: f64) -> bool {
     (nearest - x).abs() <= f64::EPSILON * x.abs().max(1.0) * 4.0
 }
 
-/// Whether `text` matches `pattern`, unanchored, as JSON Schema specifies.
-///
-/// A pattern the `regex` crate cannot compile -- ECMA-262 lookaround or a
-/// backreference -- is carried, not enforced: refusing every value for a
-/// schema this build cannot evaluate would make the field unusable, the
-/// same argument [`Kind::Unknown`] makes. Compiled per call, because this
-/// crate keeps no process-global cache; `regex` matches in linear time,
-/// so a hostile pattern costs its compile and nothing worse.
-#[cfg(feature = "regex")]
-fn matches_pattern(pattern: &str, text: &str) -> bool {
-    regex::Regex::new(pattern).map_or(true, |re| re.is_match(text))
-}
-
-/// Without the `regex` feature a pattern is carried and never enforced.
-#[cfg(not(feature = "regex"))]
-fn matches_pattern(_pattern: &str, _text: &str) -> bool {
-    true
-}
-
 /// What a length refusal says it wanted.
 fn lengths(min: Option<u64>, max: Option<u64>) -> String {
     match (min, max) {
@@ -350,21 +349,21 @@ fn bounds<T: core::fmt::Display>(min: Option<T>, max: Option<T>) -> String {
 /// discriminant names a declared arm, every key present is declared **by
 /// that arm**, and every required field of that arm is present.
 pub fn validate_value(field: FieldRef<'_>, value: &Value) -> Result<(), ValidationError> {
-    value_against(field.kind(), field.key(), value, 0)
+    value_against(field.as_value(), field.key(), value, 0)
 }
 
-/// The body of [`validate_value`], written over a kind rather than an
+/// The body of [`validate_value`], written over a schema rather than a
 /// field.
 ///
-/// A list's elements have a kind and no key of their own, so the recursion
-/// cannot be written over fields. The key is carried along only to build
-/// the path an error reports.
+/// A list's elements have a schema and no key of their own, so the
+/// recursion cannot be written over fields. The key is carried along only
+/// to build the path an error reports.
 ///
 /// `depth` bounds the walk: a schema and a value that nest each other
 /// past [`MAX_DEPTH`] are refused rather than followed, because this
 /// recursion runs over two trees a caller did not write.
 fn value_against(
-    kind: Kind<'_>,
+    schema: &Value,
     key: &str,
     value: &Value,
     depth: u32,
@@ -372,19 +371,80 @@ fn value_against(
     if depth >= MAX_DEPTH {
         return Err(too_deep(key));
     }
+    let kind = Kind::read(Some(schema));
+    let tag = value.tag();
+    if tag == Ok(Tag::GUATIAO_NULL) && is_nullable(schema) {
+        return Ok(());
+    }
     match kind {
+        Kind::Null => {
+            return if tag == Ok(Tag::GUATIAO_NULL) {
+                Ok(())
+            } else {
+                Err(bad(key, "null"))
+            };
+        }
         Kind::Bytes => {
-            return if value.tag() == Ok(Tag::GUATIAO_BYTES) {
+            return if tag == Ok(Tag::GUATIAO_BYTES) {
                 Ok(())
             } else {
                 Err(bad(key, "bytes"))
             };
         }
-        Kind::List { min, max, .. } => {
-            let Some(items) = TryAsRef::<List>::try_as_ref(value).map(|list| &list[..]) else {
+        // A scalar is the type its kind names, and only then are its
+        // text rules applied: `5900` is not a string and `"yes"` is not a
+        // boolean, whatever their spelling would pass.
+        Kind::Bool => {
+            return if tag == Ok(Tag::GUATIAO_BOOL) {
+                Ok(())
+            } else {
+                Err(bad(key, "a boolean (true or false)"))
+            };
+        }
+        Kind::Int { .. } | Kind::Float { .. } => {
+            let Some(number) = TryAsRef::<Number>::try_as_ref(value) else {
+                return Err(bad(
+                    key,
+                    if matches!(kind, Kind::Int { .. }) {
+                        "a whole number"
+                    } else {
+                        "a number"
+                    },
+                ));
+            };
+            return against(kind, key, AsRef::<str>::as_ref(number), depth);
+        }
+        Kind::Str { .. } => {
+            let Some(text) = TryAsRef::<str>::try_as_ref(value) else {
+                return Err(bad(key, "text"));
+            };
+            return against(kind, key, text, depth);
+        }
+        Kind::Enum(owner) => {
+            return if members(owner).any(|(member, _)| same_json(member, value)) {
+                Ok(())
+            } else {
+                Err(bad(key, one_of_members(kind)))
+            };
+        }
+        Kind::Union(any_of) => {
+            let arms = TryAsRef::<List>::try_as_ref(any_of)
+                .map(|list| &list[..])
+                .unwrap_or(&[]);
+            return if arms
+                .iter()
+                .any(|arm| value_against(arm, key, value, depth + 1).is_ok())
+            {
+                Ok(())
+            } else {
+                Err(bad(key, "one of the accepted forms"))
+            };
+        }
+        Kind::List { items, min, max } => {
+            let Some(elements) = TryAsRef::<List>::try_as_ref(value).map(|list| &list[..]) else {
                 return Err(bad(key, "a list"));
             };
-            let n = items.len() as u64;
+            let n = elements.len() as u64;
             if min.is_some_and(|m| n < m) || max.is_some_and(|m| n > m) {
                 return Err(bad(
                     key,
@@ -396,23 +456,26 @@ fn value_against(
                     },
                 ));
             }
-            let element = kind.items();
-            for (i, item) in items.iter().enumerate() {
-                value_against(element, &format!("{key}[{i}]"), item, depth + 1)?;
+            for (i, element) in elements.iter().enumerate() {
+                value_against(items, &format!("{key}[{i}]"), element, depth + 1)?;
             }
             return Ok(());
         }
-        Kind::MapOf(_) => {
+        Kind::MapOf(owner) => {
             // The keys are data, so there is nothing to check about them
             // and no such thing as an undeclared one. What is declared is
             // the value, and every entry answers to it.
-            if value.tag() != Ok(Tag::GUATIAO_MAP) {
+            if tag != Ok(Tag::GUATIAO_MAP) {
                 return Err(bad(key, "an object"));
             }
             let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
                 return Err(bad(key, "keys that are text"));
             };
-            let element = kind.values();
+            let Some(element) = TryAsRef::<Map>::try_as_ref(owner)
+                .and_then(|m| m.get(vocab::ADDITIONAL_PROPERTIES))
+            else {
+                return Ok(());
+            };
             for entry in map {
                 // `[key]` rather than `.key`, the same bracket the list
                 // branch writes for a position: an entry of an open map
@@ -427,7 +490,7 @@ fn value_against(
             return Ok(());
         }
         Kind::Map(_) => {
-            if value.tag() != Ok(Tag::GUATIAO_MAP) {
+            if tag != Ok(Tag::GUATIAO_MAP) {
                 return Err(bad(key, "an object"));
             }
             let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
@@ -446,17 +509,14 @@ fn value_against(
                     ));
                 };
                 value_against(
-                    field.kind(),
+                    field.as_value(),
                     &format!("{key}{}{name}", NESTED),
                     entry.value(),
                     depth + 1,
                 )?;
             }
             for field in kind.fields() {
-                if field.is_required()
-                    && !TryAsRef::<Map>::try_as_ref(value)
-                        .is_some_and(|m| m.contains_key(field.key()))
-                {
+                if field.is_required() && !map.contains_key(field.key()) {
                     return Err(bad(
                         format!("{key}{}{}", NESTED, field.key()),
                         "a value — it is required",
@@ -465,35 +525,39 @@ fn value_against(
             }
             return Ok(());
         }
+        // A kind from a newer producer, or a shape this build does not
+        // read: it cannot say whether the value is acceptable, so it does
+        // not pretend to, and the provider validates again on entry.
+        Kind::Unknown(_) => return Ok(()),
+        Kind::Missing => {
+            return Err(bad(key, "a declared kind — this field declares none"));
+        }
         _ => {}
     }
 
-    let Kind::Variant { tag, .. } = kind else {
-        // A scalar's own check is its text form, and a container reaching
-        // here has none: it is rejected by name rather than silently
-        // validated as the empty string.
-        return match value.tag() {
-            Ok(Tag::GUATIAO_NULL | Tag::GUATIAO_LIST | Tag::GUATIAO_MAP) => {
-                Err(bad(key, "a single value, not a container"))
-            }
-            _ => against(kind, key, &text_of(value), depth),
-        };
+    let Kind::Variant {
+        tag: discriminant, ..
+    } = kind
+    else {
+        // A kind added after this was written: not one this build can
+        // judge, which is what `Unknown` means.
+        return Ok(());
     };
 
-    if value.tag() != Ok(Tag::GUATIAO_MAP) {
+    if tag != Ok(Tag::GUATIAO_MAP) {
         return Err(bad(
             key,
-            format!("an object carrying a '{tag}' discriminant"),
+            format!("an object carrying a '{discriminant}' discriminant"),
         ));
     }
     let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
         return Err(bad(key, "keys that are text"));
     };
-    let chosen = str_or(map.get(tag), "");
+    let chosen = str_or(map.get(discriminant), "");
     let Some(arm) = kind.arms().find(|a| a.value() == chosen) else {
         return Err(bad(
             key,
-            format!("a '{tag}' naming one of {}", arm_names(kind)),
+            format!("a '{discriminant}' naming one of {}", arm_names(kind)),
         ));
     };
 
@@ -502,7 +566,7 @@ fn value_against(
     // a field key it does not declare.
     for entry in map {
         let name = entry.key();
-        if name == tag {
+        if name == discriminant {
             continue;
         }
         let Some(field) = arm.fields().find(|f| f.key() == name) else {
@@ -512,7 +576,7 @@ fn value_against(
             ));
         };
         value_against(
-            field.kind(),
+            field.as_value(),
             &format!("{key}{}{name}", NESTED),
             entry.value(),
             depth + 1,
@@ -520,9 +584,7 @@ fn value_against(
     }
 
     for field in arm.fields() {
-        if field.is_required()
-            && !TryAsRef::<Map>::try_as_ref(value).is_some_and(|m| m.contains_key(field.key()))
-        {
+        if field.is_required() && !map.contains_key(field.key()) {
             return Err(bad(
                 format!("{key}{}{}", NESTED, field.key()),
                 format!("a value — it is required by the '{chosen}' arm"),
@@ -530,6 +592,35 @@ fn value_against(
         }
     }
     Ok(())
+}
+
+/// Whether two values are the same JSON value: numbers by what they
+/// denote (`1` and `1.0`), everything else structurally.
+fn same_json(a: &Value, b: &Value) -> bool {
+    match (
+        TryAsRef::<Number>::try_as_ref(a).map(AsRef::<str>::as_ref),
+        TryAsRef::<Number>::try_as_ref(b).map(AsRef::<str>::as_ref),
+    ) {
+        (Some(x), Some(y)) => {
+            // Past 15 significant digits `f64` conflates neighbours, so
+            // only the exact text speaks for a long number.
+            x == y
+                || (x.len() <= 15
+                    && y.len() <= 15
+                    && matches!((x.parse::<f64>(), y.parse::<f64>()), (Ok(p), Ok(q)) if p == q))
+        }
+        _ => a == b,
+    }
+}
+
+/// `"one of a, b"` for an enumeration's refusal.
+fn one_of_members(kind: Kind<'_>) -> String {
+    let names: Vec<&str> = kind.choices().map(|c| c.value()).collect();
+    if names.is_empty() {
+        "one of the listed values".to_string()
+    } else {
+        format!("one of {}", names.join(", "))
+    }
 }
 
 /// Whether every entry of a map of **typed** values is accepted.
