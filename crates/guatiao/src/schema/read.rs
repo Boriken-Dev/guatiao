@@ -32,8 +32,8 @@
 
 use super::vocab;
 use crate::value::convert::TryAsRef;
-use crate::value::read::{bool_or, float_or, int_or};
-use crate::value::types::{List, Map, Number, Value};
+use crate::value::read::{bool_or, float_or};
+use crate::value::types::{List, Map, Number, Tag, Value};
 
 /// A schema: what a value is, and what a valid one looks like.
 #[derive(Clone, Copy, Debug)]
@@ -248,6 +248,14 @@ impl<'a> FieldRef<'a> {
         Kind::read(Some(self.schema))
     }
 
+    /// Whether a null is a value this field accepts: the schema says
+    /// `type: [T, "null"]` or `anyOf: [X, null]`, the shapes a generator
+    /// writes for an optional value. [`kind`](FieldRef::kind) is the `T`
+    /// either way.
+    pub fn is_nullable(&self) -> bool {
+        is_nullable(self.schema)
+    }
+
     /// The field's `title`: what a person sees it called. May be empty.
     pub fn title(&self) -> &'a str {
         text(self.schema, vocab::TITLE)
@@ -412,6 +420,10 @@ impl<'a> ArmRef<'a> {
 #[derive(Clone, Copy, Debug)]
 #[non_exhaustive]
 pub enum Kind<'a> {
+    /// Nothing: the only value is null. Reached as an arm of a
+    /// [`Union`](Kind::Union); a field that is merely optional reads as
+    /// the kind it holds, see [`FieldRef::is_nullable`].
+    Null,
     /// True or false.
     Bool,
     /// A whole number, with optional inclusive bounds.
@@ -471,8 +483,14 @@ pub enum Kind<'a> {
     /// document carrying both reads as a `Map`, because the declared half
     /// is the half a reader can act on.
     MapOf(&'a Value),
-    /// Exactly one of a fixed set of alternatives. Carries the schema
-    /// holding both `enum` and `x-labels`.
+    /// Exactly one of a fixed set of values, of any type. Carries the
+    /// schema listing them: an `enum`, a single `const`, or a `oneOf` whose
+    /// every arm is a `const` (each arm's `title` is that choice's label),
+    /// with the labels of an `enum` in `x-enum-labels`.
+    ///
+    /// A value is accepted when it equals a member, and
+    /// [`choices`](Kind::choices) lists the members that have a text
+    /// spelling: the strings and the numbers.
     Enum(&'a Value),
     /// Any one of several kinds. **Untagged**: validation succeeds if any
     /// arm accepts, and which arm took the value is not the point. Carries
@@ -496,41 +514,50 @@ pub enum Kind<'a> {
 }
 
 impl<'a> Kind<'a> {
-    fn read(schema: Option<&'a Value>) -> Kind<'a> {
+    /// The kind `schema` declares, or [`Kind::Missing`] when it is not a
+    /// map at all.
+    pub(crate) fn read(schema: Option<&'a Value>) -> Kind<'a> {
         let Some(k) = schema.filter(|v| is_map(v)) else {
             return Kind::Missing;
         };
-        let Some(ty) = TryAsRef::<Map>::try_as_ref(k)
-            .and_then(|m| m.get(vocab::TYPE))
-            .and_then(TryAsRef::<str>::try_as_ref)
-        else {
-            // No `type` is not automatically malformed: `anyOf` alone is
-            // what an untagged union is, and a bare `enum` is a schema
-            // somebody else wrote that still says exactly what it accepts.
-            return if let Some(any_of) =
-                TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(vocab::ANY_OF))
-            {
-                Kind::Union(any_of)
-            } else if TryAsRef::<Map>::try_as_ref(k)
-                .and_then(|m| m.get(vocab::ENUM))
-                .is_some()
-            {
-                Kind::Enum(k)
-            } else {
-                Kind::Missing
-            };
+        // An optional value reads as the value it holds; whether it may
+        // also be null is `is_nullable`'s question.
+        let k = strip_null(k);
+        let Some(m) = TryAsRef::<Map>::try_as_ref(k) else {
+            return Kind::Missing;
+        };
+        // A reference this view cannot follow: skip the field, never
+        // refuse the schema.
+        if m.get(vocab::REF).is_some() {
+            return Kind::Unknown(vocab::REF);
+        }
+        let declared = declared_type(k);
+        // An enumeration narrows whatever type it sits on, so it is read
+        // first: `{"type":"string","enum":[...]}` is a choice, not free
+        // text. A tagged variant's `oneOf` is arms, not choices.
+        if is_enumeration(k) {
+            return Kind::Enum(k);
+        }
+        let ty = match declared {
+            Declared::Named(ty) => ty,
+            Declared::Several => return Kind::Unknown(vocab::TYPE),
+            Declared::Absent => {
+                // No `type` is not automatically malformed: `anyOf` alone
+                // is what an untagged union is.
+                return if let Some(any_of) = m.get(vocab::ANY_OF) {
+                    Kind::Union(any_of)
+                } else if m.get(vocab::ONE_OF).is_some() {
+                    // Arms that are not all constants are a shape this
+                    // build does not read.
+                    Kind::Unknown(vocab::ONE_OF)
+                } else {
+                    Kind::Missing
+                };
+            }
         };
         match ty {
+            vocab::TYPE_NULL => Kind::Null,
             vocab::TYPE_BOOLEAN => Kind::Bool,
-            // An `enum` narrows the type it sits on, so it is read first:
-            // `{"type":"string","enum":[…]}` is a choice, not free text.
-            vocab::TYPE_STRING
-                if TryAsRef::<Map>::try_as_ref(k)
-                    .and_then(|m| m.get(vocab::ENUM))
-                    .is_some() =>
-            {
-                Kind::Enum(k)
-            }
             vocab::TYPE_STRING => Kind::Str {
                 min_length: opt_count(k, vocab::MIN_LENGTH),
                 max_length: opt_count(k, vocab::MAX_LENGTH),
@@ -541,37 +568,29 @@ impl<'a> Kind<'a> {
             // An array with no element schema says nothing about what it
             // holds, which is a kind this build cannot use rather than an
             // array of anything.
-            vocab::TYPE_ARRAY => {
-                match TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(vocab::ITEMS)) {
-                    Some(items) => Kind::List {
-                        items,
-                        min: opt_count(k, vocab::MIN_ITEMS),
-                        max: opt_count(k, vocab::MAX_ITEMS),
-                    },
-                    None => Kind::Unknown(ty),
-                }
-            }
+            vocab::TYPE_ARRAY => match m.get(vocab::ITEMS) {
+                Some(items) => Kind::List {
+                    items,
+                    min: opt_count(k, vocab::MIN_ITEMS),
+                    max: opt_count(k, vocab::MAX_ITEMS),
+                },
+                None => Kind::Unknown(ty),
+            },
             // An object with no properties is ordinary and complete, the
             // same way an arm with no fields is: it is an object nothing
             // further is declared about. With a tag it is a variant, and a
             // variant with no arms cannot be selected from.
-            vocab::TYPE_OBJECT => match TryAsRef::<Map>::try_as_ref(k)
-                .and_then(|m| m.get(vocab::X_VARIANT_TAG))
+            vocab::TYPE_OBJECT => match m
+                .get(vocab::X_VARIANT_TAG)
                 .and_then(TryAsRef::<str>::try_as_ref)
             {
-                Some(tag) => {
-                    match TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(vocab::ONE_OF)) {
-                        Some(arms) => Kind::Variant { tag, arms },
-                        None => Kind::Unknown(ty),
-                    }
-                }
+                Some(tag) => match m.get(vocab::ONE_OF) {
+                    Some(arms) => Kind::Variant { tag, arms },
+                    None => Kind::Unknown(ty),
+                },
                 None => {
-                    let declares_keys = TryAsRef::<Map>::try_as_ref(k)
-                        .and_then(|m| m.get(vocab::PROPERTIES))
-                        .is_some();
-                    let values_declared = TryAsRef::<Map>::try_as_ref(k)
-                        .and_then(|m| m.get(vocab::ADDITIONAL_PROPERTIES))
-                        .is_some_and(is_map);
+                    let declares_keys = m.get(vocab::PROPERTIES).is_some();
+                    let values_declared = m.get(vocab::ADDITIONAL_PROPERTIES).is_some_and(is_map);
                     if !declares_keys && values_declared {
                         Kind::MapOf(k)
                     } else {
@@ -580,8 +599,8 @@ impl<'a> Kind<'a> {
                 }
             },
             vocab::TYPE_INTEGER => Kind::Int {
-                min: opt_int(k, vocab::MINIMUM),
-                max: opt_int(k, vocab::MAXIMUM),
+                min: opt_bound(k, vocab::MINIMUM, Round::Up),
+                max: opt_bound(k, vocab::MAXIMUM, Round::Down),
                 multiple_of: opt_step(k),
             },
             vocab::TYPE_NUMBER => Kind::Float {
@@ -594,29 +613,30 @@ impl<'a> Kind<'a> {
     }
 
     /// The alternatives of an enumeration, or nothing for any other kind.
+    ///
+    /// Only the members with a text spelling appear: strings, and numbers
+    /// as the text that declared them. A member of another type is still
+    /// accepted by validation and has no choice to show.
     pub fn choices(self) -> impl Iterator<Item = ChoiceRef<'a>> {
-        let (values, labels): (&[Value], Option<&Map>) = match self {
+        let (owner, labels) = match self {
             Kind::Enum(k) => (
-                TryAsRef::<Map>::try_as_ref(k)
-                    .and_then(|m| m.get(vocab::ENUM))
-                    .and_then(TryAsRef::<List>::try_as_ref)
-                    .map(|list| &list[..])
-                    .unwrap_or(&[]),
+                Some(k),
                 TryAsRef::<Map>::try_as_ref(k)
                     .and_then(|m| m.get(vocab::X_ENUM_LABELS))
                     .and_then(TryAsRef::<Map>::try_as_ref),
             ),
-            _ => (&[][..], None),
+            _ => (None, None),
         };
-        values
-            .iter()
-            .filter_map(TryAsRef::<str>::try_as_ref)
-            .map(move |value| {
+        owner
+            .into_iter()
+            .flat_map(members)
+            .filter_map(move |(member, title)| {
+                let value = member_text(member)?;
                 let label = labels
                     .and_then(|m| m.get(value))
                     .and_then(TryAsRef::<str>::try_as_ref)
-                    .unwrap_or("");
-                ChoiceRef { value, label }
+                    .unwrap_or(title);
+                Some(ChoiceRef { value, label })
             })
     }
 
@@ -691,10 +711,15 @@ impl<'a> Kind<'a> {
     /// The name this kind is written with, for a diagnostic.
     pub fn name(self) -> &'a str {
         match self {
+            Kind::Null => vocab::TYPE_NULL,
             Kind::Bool => vocab::TYPE_BOOLEAN,
             Kind::Int { .. } => vocab::TYPE_INTEGER,
             Kind::Float { .. } => vocab::TYPE_NUMBER,
-            Kind::Str { .. } | Kind::Enum(_) => vocab::TYPE_STRING,
+            Kind::Str { .. } => vocab::TYPE_STRING,
+            Kind::Enum(k) => match declared_type(k) {
+                Declared::Named(ty) => ty,
+                _ => vocab::TYPE_STRING,
+            },
             Kind::Bytes => vocab::TYPE_BYTES,
             Kind::List { .. } => vocab::TYPE_ARRAY,
             Kind::Map(_) | Kind::MapOf(_) | Kind::Variant { .. } => vocab::TYPE_OBJECT,
@@ -705,23 +730,44 @@ impl<'a> Kind<'a> {
     }
 }
 
-fn opt_int(k: &Value, key: &str) -> Option<i64> {
+/// Which way a fractional bound moves to land on a whole number that
+/// accepts exactly the integers the bound does.
+#[derive(Clone, Copy)]
+enum Round {
+    /// A lower bound: `minimum: 1.5` admits 2 and up.
+    Up,
+    /// An upper bound: `maximum: 9.5` admits 9 and down.
+    Down,
+}
+
+/// A bound on an integer, rounded inward when it is not whole.
+///
+/// Exact for a plain integer, whatever its width up to `i64`; a
+/// fractional or exponent spelling (`1.5`, `1e1`) goes through `f64`.
+/// A bound outside `i64` is no bound this build can apply, and silently
+/// clamping it would enforce a limit nobody declared.
+fn opt_bound(k: &Value, key: &str, round: Round) -> Option<i64> {
     let v = TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(key))?;
-    // A bound written outside `i64` is no bound this build can apply, and
-    // silently clamping it would enforce a limit nobody declared.
-    TryAsRef::<Number>::try_as_ref(v).map(AsRef::<str>::as_ref)?;
-    let got = int_or(Some(v), i64::MIN);
-    (got != i64::MIN
-        || TryAsRef::<Number>::try_as_ref(v).map(AsRef::<str>::as_ref)
-            == Some("-9223372036854775808"))
-    .then_some(got)
+    let text: &str = TryAsRef::<Number>::try_as_ref(v).map(AsRef::<str>::as_ref)?;
+    if let Ok(n) = text.parse::<i64>() {
+        return Some(n);
+    }
+    let x: f64 = text.parse().ok().filter(|x: &f64| x.is_finite())?;
+    let x = match round {
+        Round::Up => x.ceil(),
+        Round::Down => x.floor(),
+    };
+    // `i64::MAX as f64` is 2^63, which is itself out of range.
+    (x >= i64::MIN as f64 && x < i64::MAX as f64).then_some(x as i64)
 }
 
 /// A count JSON Schema requires to be a non-negative integer. Anything
 /// else -- negative, fractional, past `i64` -- is no count this build can
 /// apply, and is read as absent rather than guessed at.
 fn opt_count(k: &Value, key: &str) -> Option<u64> {
-    opt_int(k, key).and_then(|n| u64::try_from(n).ok())
+    let v = TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(key))?;
+    let text: &str = TryAsRef::<Number>::try_as_ref(v).map(AsRef::<str>::as_ref)?;
+    text.parse::<u64>().ok()
 }
 
 /// `multipleOf`, which JSON Schema requires to be greater than zero. A
@@ -741,6 +787,156 @@ fn opt_float(k: &Value, key: &str) -> Option<f64> {
     TryAsRef::<Number>::try_as_ref(v).map(AsRef::<str>::as_ref)?;
     let got = float_or(Some(v), f64::NAN);
     got.is_finite().then_some(got)
+}
+
+/// What a schema's `type` says.
+enum Declared<'a> {
+    /// One type, possibly beside `"null"` in a list.
+    Named(&'a str),
+    /// More than one non-null type, or something that is not a type.
+    Several,
+    /// No `type` at all.
+    Absent,
+}
+
+fn declared_type(k: &Value) -> Declared<'_> {
+    let Some(v) = TryAsRef::<Map>::try_as_ref(k).and_then(|m| m.get(vocab::TYPE)) else {
+        return Declared::Absent;
+    };
+    if let Some(name) = TryAsRef::<str>::try_as_ref(v) {
+        return Declared::Named(name);
+    }
+    let Some(list) = TryAsRef::<List>::try_as_ref(v) else {
+        return Declared::Several;
+    };
+    let mut only: Option<&str> = None;
+    for entry in list.iter() {
+        let Some(name) = TryAsRef::<str>::try_as_ref(entry) else {
+            return Declared::Several;
+        };
+        if name == vocab::TYPE_NULL {
+            continue;
+        }
+        if only.replace(name).is_some() {
+            return Declared::Several;
+        }
+    }
+    match only {
+        Some(name) => Declared::Named(name),
+        None if list.is_empty() => Declared::Several,
+        None => Declared::Named(vocab::TYPE_NULL),
+    }
+}
+
+/// Whether `v` is `{"type": "null"}` or `{"const": null}`.
+fn is_null_schema(v: &Value) -> bool {
+    let Some(m) = TryAsRef::<Map>::try_as_ref(v) else {
+        return false;
+    };
+    m.get(vocab::TYPE)
+        .and_then(TryAsRef::<str>::try_as_ref)
+        .is_some_and(|t| t == vocab::TYPE_NULL)
+        || m.get(vocab::CONST)
+            .is_some_and(|c| c.tag() == Ok(Tag::GUATIAO_NULL))
+}
+
+/// The other arm of an `anyOf` that is exactly a schema and null: how a
+/// generator spells an optional value.
+fn nullable_pair(any_of: &Value) -> Option<&Value> {
+    let list = TryAsRef::<List>::try_as_ref(any_of)?;
+    let [a, b] = &list[..] else {
+        return None;
+    };
+    match (is_null_schema(a), is_null_schema(b)) {
+        (true, false) if is_map(b) => Some(b),
+        (false, true) if is_map(a) => Some(a),
+        _ => None,
+    }
+}
+
+/// `k` with any `anyOf: [X, null]` wrapper removed, however deep the
+/// wrapping: a loop, because the schema is not ours to bound.
+fn strip_null(mut k: &Value) -> &Value {
+    while let Some(inner) = TryAsRef::<Map>::try_as_ref(k)
+        .filter(|m| m.get(vocab::TYPE).is_none())
+        .and_then(|m| m.get(vocab::ANY_OF))
+        .and_then(nullable_pair)
+    {
+        k = inner;
+    }
+    k
+}
+
+/// Whether a null is a value this schema accepts: `type: [T, "null"]`
+/// or `anyOf: [X, null]`.
+pub(crate) fn is_nullable(schema: &Value) -> bool {
+    let Some(m) = TryAsRef::<Map>::try_as_ref(schema) else {
+        return false;
+    };
+    if let Some(list) = m.get(vocab::TYPE).and_then(TryAsRef::<List>::try_as_ref) {
+        return list
+            .iter()
+            .filter_map(TryAsRef::<str>::try_as_ref)
+            .any(|t| t == vocab::TYPE_NULL);
+    }
+    m.get(vocab::TYPE).is_none() && m.get(vocab::ANY_OF).and_then(nullable_pair).is_some()
+}
+
+/// Whether `k` lists a fixed set of values: an `enum`, a `const`, or a
+/// `oneOf` of constants that is not a tagged variant's arms.
+fn is_enumeration(k: &Value) -> bool {
+    let Some(m) = TryAsRef::<Map>::try_as_ref(k) else {
+        return false;
+    };
+    if m.get(vocab::ENUM)
+        .is_some_and(|e| TryAsRef::<List>::try_as_ref(e).is_some())
+        || m.get(vocab::CONST).is_some()
+    {
+        return true;
+    }
+    m.get(vocab::X_VARIANT_TAG).is_none()
+        && m.get(vocab::ONE_OF)
+            .and_then(TryAsRef::<List>::try_as_ref)
+            .is_some_and(|arms| {
+                !arms.is_empty()
+                    && arms.iter().all(|arm| {
+                        TryAsRef::<Map>::try_as_ref(arm)
+                            .is_some_and(|a| a.get(vocab::CONST).is_some())
+                    })
+            })
+}
+
+/// The members of an enumeration, each with the `title` its `oneOf` arm
+/// gave it (`""` for an `enum` entry or a `const`).
+pub(crate) fn members(k: &Value) -> impl Iterator<Item = (&Value, &str)> {
+    let m = TryAsRef::<Map>::try_as_ref(k);
+    let listed = m
+        .and_then(|m| m.get(vocab::ENUM))
+        .and_then(TryAsRef::<List>::try_as_ref)
+        .map(|list| &list[..]);
+    let single = m
+        .and_then(|m| m.get(vocab::CONST))
+        .filter(|_| listed.is_none());
+    let arms = m
+        .and_then(|m| m.get(vocab::ONE_OF))
+        .and_then(TryAsRef::<List>::try_as_ref)
+        .map(|list| &list[..])
+        .filter(|_| listed.is_none() && single.is_none());
+    listed
+        .into_iter()
+        .flatten()
+        .map(|v| (v, ""))
+        .chain(single.map(|v| (v, "")))
+        .chain(arms.into_iter().flatten().filter_map(|arm| {
+            let constant = TryAsRef::<Map>::try_as_ref(arm).and_then(|a| a.get(vocab::CONST))?;
+            Some((constant, text(arm, vocab::TITLE)))
+        }))
+}
+
+/// A member's text spelling: a string, or a number's own text.
+fn member_text(member: &Value) -> Option<&str> {
+    TryAsRef::<str>::try_as_ref(member)
+        .or_else(|| TryAsRef::<Number>::try_as_ref(member).map(AsRef::<str>::as_ref))
 }
 
 /// Every entry of a map, as `(key, value)`, for a caller walking

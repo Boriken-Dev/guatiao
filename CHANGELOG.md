@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`schema::redact(schema, &value, placeholder)`** (and `redact_in`):
+  a copy of a value with every secret replaced -- each field whose schema
+  sets `x-sensitive` or `writeOnly`, at any depth, through maps, lists and
+  a variant's selected arm. What the schema does not describe is hidden
+  too.
+- **`schema::inline_refs`** (and `inline_refs_in`): a copy of a schema with
+  each local `$ref: "#/$defs/Name"` replaced by its definition, so the
+  documents a serde-based generator writes are read as they are. A cycle,
+  a remote reference or an undefined name stays as written and reads as a
+  kind to skip.
+- **The reader gives generator shapes their meaning.** `type: [T, "null"]`
+  and `anyOf: [X, null]` read as an optional `T`/`X`
+  (`FieldRef::is_nullable()`); `enum` of any type, a lone `const` and a
+  `oneOf` of `const`s read as `Kind::Enum`, `choices()` listing strings and
+  numbers; `Kind::Null` is `type: "null"`; a shape not read at all is
+  `Kind::Unknown`, never `Kind::Missing`.
+- **`schema::PATTERNS_ENFORCED`**: whether this build checks a `pattern`
+  (the `regex` feature). `vocab` gains `REF`, `DEFS` and `TYPE_NULL`, and
+  the C header their `GUATIAO_KEY_*` macros.
+- **`ValueError::DuplicateKey`**, the refusal of a field declared twice.
+
 - **`Text` and `Number` compare with `str`**, either way round
   (`text == "host"`, `"1.10" == number`); **`Text` is `Ord`** by its text,
   so it sorts and keys a `BTreeMap` as `String` does; **`Entry` is
@@ -127,6 +148,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   *Migration:* breaking only where such code compiled: a provider kind
   with a method named `destroy` or an argument starting with `__` renames
   it, and `#[provider(K, K)]` drops the repeat.
+- **Breaking: a typed value is checked as the type its kind names.**
+  `validate_value` and `validate_map` required only that a scalar's text
+  passed, so a boolean field took `yes`, a string field took `5900` and a
+  number field took `inf` -- values the type's own `FromValue` refuses.
+  Now a boolean field takes a boolean, an integer or number field a
+  `Number`, a string field text, and `enum` is enforced by value on every
+  type. A union tries each arm with the value itself, so a list is
+  accepted by an array arm and text by no arm of `anyOf[integer,
+  array<string>]`. Migration: build the value as the field's type (a
+  `Number` for an integer, `Value::from(true)` for a boolean); a store of
+  text keeps `validate_text`, which now reads a number as JSON writes one
+  (`inf`, `+1`, `007` and `1e999` are refused).
+- **Breaking: `schema::merge::merge_overrides` and `merge_options` return a
+  `Result`**, and `merge_with_schema` can fail the same way: a schema
+  nested past `MAX_DEPTH` is `MergeError::Build(ValueError::TooDeep)`
+  instead of overflowing the stack. Migration: `?` or `.unwrap()`.
+- **Breaking: merge paths are segments.** The top-level key `tls.ca` and
+  the key `ca` inside `tls` were one leaf; `Provenance::source_of`,
+  `Provenance::leaves`, `MergeOverrides::{set, with, get}` now take and
+  return a list of segments. Migration: `source_of("tls.ca")` is
+  `source_of(["tls", "ca"])`, `.with("tls.ciphers", m)` is
+  `.with(["tls", "ciphers"], m)`, and `leaves()` yields `(&[String], &str)`
+  (a list position is its decimal text). `MergeError::Kind::path` and the C
+  override table's `path` use `guatiao-intake`'s path text (`tls.ca`,
+  `peers[0].name`, `["a.b"]`); a plain dotted path is unchanged.
+- **Breaking: the symbol `export_schema!` emits uses the crate's name**
+  (`CARGO_CRATE_NAME`), as its documentation said. Migration: a crate
+  `acme-net` exported `acme-net_conn_schema`, which C could not declare;
+  it exports `acme_net_conn_schema`.
+- **`SchemaBuilder::finish`, `KindBuilder::map` and arms refuse a field key
+  declared twice** with `ValueError::DuplicateKey`, where the second
+  silently replaced the first and `required` listed the name twice. The
+  builders are `#[must_use]`. `ValueError` is `#[non_exhaustive]`, so a
+  `match` already had a `_` arm.
+- **`Kind` gains `Null`** (`#[non_exhaustive]`, so a `match` already had a
+  `_` arm), and an integer `enum` reads as `Kind::Enum`, not `Kind::Int`.
+  A non-integral integer bound rounds inward (`minimum: 1.5` is 2) instead
+  of being dropped.
+- **A `pattern` matches ECMA-262's ASCII `\d \D \w \W`**, where the `regex`
+  crate's are Unicode (Arabic-Indic digits matched `\d`). `vocab::PATTERN`
+  lists the differences that remain.
+
 - **Breaking: no safe function reads a descriptor safe code could have
   forged.** The registry reads every pointer in a descriptor and calls its
   slots from safe code, so the promise that they are real is now made in
@@ -314,6 +377,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   asks `flat::keys` for them.
 
 ### Fixed
+
+- Merge provenance named the wrong layer when a later layer held an absent
+  value (it claimed a leaf it did not set) and after a `Simple`-mode
+  replace (the replaced subtree's leaves stayed attributed to the layer
+  that no longer held them; the root could not be forgotten).
 
 - **Every `guatiao` C function with an out-parameter writes it first.**
   The value constructors (`guatiao_value_null` to `_bytes`) and the

@@ -102,14 +102,28 @@ pub mod describe;
 // because the merge touches values only — it is this side that
 // knows both halves. A `//` comment, never a `///`.
 pub mod merge;
+mod pattern;
 pub mod read;
+mod redact;
+mod refs;
 pub mod validate;
 pub mod vocab;
 
 pub use build::{ArmBuilder, Extras, FieldBuilder, KindBuilder, SchemaBuilder};
 pub use describe::Schema;
 pub use read::{ArmRef, ChoiceRef, FieldRef, Kind as KindRef, SchemaRef};
+pub use redact::{redact, redact_in};
+pub use refs::{inline_refs, inline_refs_in};
 pub use validate::{validate_map, validate_text, validate_value};
+
+/// Whether this build enforces a schema's `pattern`: `true` only with the
+/// `regex` feature.
+///
+/// Without it a pattern is carried and read but never checked, and
+/// [`validate_map`], [`validate_value`] and [`validate_text`] accept text
+/// the pattern would refuse. A host that relies on patterns tests this at
+/// start-up rather than finding out from a value that got through.
+pub const PATTERNS_ENFORCED: bool = cfg!(feature = "regex");
 
 /// Why a value was rejected by [`validate_value`] or [`validate_map`].
 ///

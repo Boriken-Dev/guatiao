@@ -532,8 +532,9 @@ does nothing.
 `Schema::schema()` carries **every key of the finished kind** onto the
 root document, not only `properties`/`required`: a tagged enum's
 `schema()` is its `x-variant-tag` and its `oneOf`. `SchemaBuilder::finish`
-refuses a field key containing `.` (`WrongKind`), which is
-any field key at all, including one holding a `.`.
+refuses a field key declared twice, or one that repeats a variant's
+discriminant (`ValueError::DuplicateKey`); the four builders are
+`#[must_use]`.
 
 Build:
 
@@ -656,7 +657,7 @@ Constraints chain onto a kind, each JSON Schema's own keyword:
 | method | key | on | checked |
 | --- | --- | --- | --- |
 | `.min_length(n)`, `.max_length(n)` | `minLength`, `maxLength` | string | yes, in **code points** |
-| `.pattern(re)` | `pattern` | string | with the `regex` feature; **unanchored** |
+| `.pattern(re)` | `pattern` | string | with the `regex` feature (`schema::PATTERNS_ENFORCED` says whether this build has it); **unanchored**; `\d \D \w \W` are ECMA-262's ASCII classes |
 | `.format(name)` | `format` | string | **never** — an annotation, as 2020-12 defaults |
 | `.multiple_of(step)` | `multipleOf` | integer, number | yes; exact for a whole step on an integer |
 | `.min_items(n)`, `.max_items(n)` | `minItems`, `maxItems` | list | yes, on the value |
@@ -666,7 +667,11 @@ A count that is negative or fractional, and a step of zero or less, is
 read as absent rather than guessed at. A `pattern` the `regex` crate
 cannot compile (ECMA-262 lookaround, backreferences) is carried and not
 enforced -- refusing every value for a schema this build cannot evaluate
-would make the field unusable.
+would make the field unusable. Without the `regex` feature **no pattern is
+checked** and `validate_*` accepts what one would refuse; test
+`schema::PATTERNS_ENFORCED` rather than finding out from a value that got
+through. `\s`, `\b` and `\p{..}` keep the `regex` crate's Unicode meaning
+(the list is on `vocab::PATTERN`).
 | `map(fields)` | `type: "object"` + `properties`/`required` |
 | `map_of(values)` | `type: "object"` + `additionalProperties`: the value schema |
 | `enumeration(choices)` | `type: "string"` + `enum` + `x-enum-labels` (a map, keyed by value) |
@@ -686,17 +691,31 @@ SchemaRef::new(&value) -> Option<SchemaRef>
 FieldRef::new(key, &schema) -> Option<FieldRef>   // answers is_required() false
 FieldRef: .key() .kind() .title() .description() .default() .is_sensitive()
            .is_read_only() .is_deprecated() .examples() -> &[Value]
-           .is_required() .extra(key) .extras()
+           .is_required() .is_nullable() .extra(key) .extras()
            // a hint this crate does not name is read with .extra(key),
            // or by an extension trait the crate that named it provides
 Kind::Str { min_length, max_length, pattern, format }   // all Option
 Kind::Int { min, max, multiple_of }  /  Kind::Float { min, max, multiple_of }
 Kind::List { items, min, max }       // min/max: minItems/maxItems
+Kind::Enum(schema) / Kind::Null / Kind::Union(anyOf) / Kind::Variant { tag, arms }
 Kind: .choices() .alternatives() .arms() .items() .values() .fields() .name()
       // Map vs MapOf: a declared object vs one whose KEYS ARE DATA.
       // Told apart by having `properties`; `.values()` answers MapOf's
       // one value kind, as `.items()` answers a list's.
 ```
+
+**The shapes a serde-based generator writes read as what they mean.**
+`type: [T, "null"]` and `anyOf: [X, null]` are a `T` / `X` that is
+`is_nullable()`; `enum` of any type, a lone `const`, and a `oneOf` whose
+arms are all `const` (the arm's `title` is the choice's label) are
+`Kind::Enum`, and `choices()` lists the members that are strings or
+numbers. A shape this build does not read (`$ref`, a `type` list of several
+types, a `oneOf` of non-constants) is `Kind::Unknown`, which validation
+accepts and a renderer skips -- never `Kind::Missing`. A local
+`$ref: "#/$defs/Name"` is read after `schema::inline_refs(&schema)` has
+copied the document with each reference replaced by its definition; a
+cycle, a remote reference or a name that is not defined stays as written.
+An integer `minimum: 1.5` or `maximum: 1e1` rounds inward (2, 10).
 
 Validate:
 
@@ -704,7 +723,32 @@ Validate:
 validate_map(schema, &values)   -> Result<(), ValidationError>
 validate_value(field, &value)  -> Result<(), ValidationError>
 validate_text(field, text)     // one text against one field's kind
+schema::validate::{bool_is_true, text_of, BOOL_WORDS}   // the text grammar
+schema::redact(schema, &value, "***") -> Result<Value, ValueError>
 ```
+
+**A typed value is the type its kind names.** `validate_value` requires a
+boolean, a number (`Number`), a string or bytes before it applies the
+bounds, so `validate_map` refuses `5900` for a string field, `"5900"` for
+an integer and `"yes"` for a boolean -- exactly what `FromValue` refuses.
+`enum` is enforced by value equality on every type (`1` equals `1.0`); a
+union accepts what any arm accepts, a list for an array arm included;
+null is accepted only by a nullable field or a `null` arm.
+
+**`validate_text` is the check for a store of text** (a flat map, a query
+string): a boolean is one of `BOOL_WORDS` (`1 0 true false yes no` and the
+empty string, which is a flag written bare -- `bool_is_true` says whether
+that reads as true), a number is a JSON number (no `inf`, `+1`, leading
+zero or `1e999`), and a container has no text form, so it is accepted and
+`validate_value` checks it. `text_of(&value)` is a scalar's one-line
+spelling, `""` for a container.
+
+**`redact` replaces every secret by the placeholder**: a field whose
+schema sets `x-sensitive` or `writeOnly`, at any depth, through maps, lists
+and the selected arm of a variant. What the schema does not describe is
+hidden too (an undeclared key, a container where a scalar is named, an
+unknown arm, a union no arm accepts), because a secret may be there.
+`redact_in` names the allocator.
 
 `ValidationError` is `UnknownOption { .. }` or `BadValue { .. }`. **An
 error never quotes the value it refused** — a field may be sensitive —
@@ -720,8 +764,7 @@ store of text are `guatiao-intake`'s: `path`, `flat` and
 `validate_texts`. They are decisions about how a consumer reads, enters
 and stores a value, and a schema describes the struct exactly as it is.
 `validate_text` stays, because "is this text acceptable for this field"
-asks about the schema alone -- it is also the check `validate_value`
-performs on every scalar.
+asks about the schema alone.
 
 One consequence: **a field key may hold a `.`, a `[` or a `]`**, and
 `finish` says nothing about it: `guatiao-intake`'s path grammar reaches
@@ -749,14 +792,23 @@ MergeMode::{Simple, Deep, Substitute}
 by position; **off by default**. `MergeOverrides` is a `path -> mode`
 lookup for per-key control, and `schema::merge` reads the same thing from
 a schema's own `x-merge` annotation (`merge_overrides`, `merge_options`,
-`merge_with_schema`). **Nested objects are walked**: a declaration on a
-field of a nested object governs its dotted path (`tls.ciphers`), which
-is the path the merge matches. A variant's arms are not walked — two arms
-may declare different modes for one path.
+`merge_with_schema`, each a `Result`: a schema nested past `MAX_DEPTH` is
+`MergeError::Build(ValueError::TooDeep)`). **Nested objects are walked**: a
+declaration on a field of a nested object governs its path
+(`["tls", "ciphers"]`). A variant's arms are not walked — two arms may
+declare different modes for one path.
+
+**A path is a list of segments**, never joined text, so the key `tls.ca`
+and the key `ca` inside `tls` are different places:
+`MergeOverrides::new().with(["tls", "ciphers"], MergeMode::Deep)`. A
+`MergeError::Kind` path and the C override table's `path` are the text
+spelling `guatiao-intake` reads (`tls.ca`, `peers[0].name`, `["a.b"]`).
 
 **Provenance is keyed by leaf path**, not by top-level key: after a
 recursive merge `tls.ca` and `tls.verify` may come from different layers,
-so `source_of("tls")` answers `Source::Mixed` rather than a confident lie.
+so `source_of(["tls"])` answers `Source::Mixed` rather than a confident
+lie. A stored absent value claims nothing, and `Simple` mode attributes a
+replaced key (with its whole old subtree) to the layer that replaced it.
 
 Merging **builds a new tree** and borrows its inputs. A value whose tag
 this build does not know stops the merge rather than being copied, because

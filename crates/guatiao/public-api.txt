@@ -1846,8 +1846,8 @@ impl core::marker::StructuralPartialEq for guatiao::schema::merge::DeclaredMerge
 pub const guatiao::schema::merge::X_MERGE: &str
 pub fn guatiao::schema::merge::annotation(guatiao::value::alloc::Alloc, guatiao::schema::merge::DeclaredMerge) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::schema::merge::declared_for(guatiao::schema::read::FieldRef<'_>) -> core::option::Option<guatiao::schema::merge::DeclaredMerge>
-pub fn guatiao::schema::merge::merge_options(guatiao::schema::read::SchemaRef<'_>) -> guatiao::value::merge::MergeOptions
-pub fn guatiao::schema::merge::merge_overrides(guatiao::schema::read::SchemaRef<'_>) -> guatiao::value::merge::MergeOverrides
+pub fn guatiao::schema::merge::merge_options(guatiao::schema::read::SchemaRef<'_>) -> core::result::Result<guatiao::value::merge::MergeOptions, guatiao::value::merge::MergeError>
+pub fn guatiao::schema::merge::merge_overrides(guatiao::schema::read::SchemaRef<'_>) -> core::result::Result<guatiao::value::merge::MergeOverrides, guatiao::value::merge::MergeError>
 pub fn guatiao::schema::merge::merge_with_schema(guatiao::schema::read::SchemaRef<'_>, guatiao::value::merge::MergeMode, &guatiao::value::value::Value, &guatiao::value::value::Value, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::merge::MergeError>
 pub fn guatiao::schema::merge::parse_mode(&str) -> core::option::Option<guatiao::schema::merge::DeclaredMerge>
 pub mod guatiao::schema::read
@@ -1870,6 +1870,7 @@ pub guatiao::schema::read::Kind::List::min: core::option::Option<u64>
 pub guatiao::schema::read::Kind::Map(&'a guatiao::value::value::Value)
 pub guatiao::schema::read::Kind::MapOf(&'a guatiao::value::value::Value)
 pub guatiao::schema::read::Kind::Missing
+pub guatiao::schema::read::Kind::Null
 pub guatiao::schema::read::Kind::Str
 pub guatiao::schema::read::Kind::Str::format: core::option::Option<&'a str>
 pub guatiao::schema::read::Kind::Str::max_length: core::option::Option<u64>
@@ -1922,6 +1923,7 @@ pub fn guatiao::schema::read::FieldRef<'a>::examples(&self) -> &'a [guatiao::val
 pub fn guatiao::schema::read::FieldRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao::schema::read::FieldRef<'a>::extras(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&'a str, &'a guatiao::value::value::Value)>
 pub fn guatiao::schema::read::FieldRef<'a>::is_deprecated(&self) -> bool
+pub fn guatiao::schema::read::FieldRef<'a>::is_nullable(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_read_only(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_required(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_sensitive(&self) -> bool
@@ -1964,6 +1966,7 @@ pub const guatiao::schema::vocab::ADDITIONAL_PROPERTIES: &str
 pub const guatiao::schema::vocab::ANY_OF: &str
 pub const guatiao::schema::vocab::CONST: &str
 pub const guatiao::schema::vocab::DEFAULT: &str
+pub const guatiao::schema::vocab::DEFS: &str
 pub const guatiao::schema::vocab::DEPRECATED: &str
 pub const guatiao::schema::vocab::DESCRIPTION: &str
 pub const guatiao::schema::vocab::DIALECT: &str
@@ -1984,6 +1987,7 @@ pub const guatiao::schema::vocab::ONE_OF: &str
 pub const guatiao::schema::vocab::PATTERN: &str
 pub const guatiao::schema::vocab::PROPERTIES: &str
 pub const guatiao::schema::vocab::READ_ONLY: &str
+pub const guatiao::schema::vocab::REF: &str
 pub const guatiao::schema::vocab::REQUIRED: &str
 pub const guatiao::schema::vocab::SCHEMA: &str
 pub const guatiao::schema::vocab::TITLE: &str
@@ -1993,6 +1997,7 @@ pub const guatiao::schema::vocab::TYPE_ARRAY: &str
 pub const guatiao::schema::vocab::TYPE_BOOLEAN: &str
 pub const guatiao::schema::vocab::TYPE_BYTES: &str
 pub const guatiao::schema::vocab::TYPE_INTEGER: &str
+pub const guatiao::schema::vocab::TYPE_NULL: &str
 pub const guatiao::schema::vocab::TYPE_NUMBER: &str
 pub const guatiao::schema::vocab::TYPE_OBJECT: &str
 pub const guatiao::schema::vocab::TYPE_STRING: &str
@@ -2020,6 +2025,7 @@ pub guatiao::schema::KindRef::List::min: core::option::Option<u64>
 pub guatiao::schema::KindRef::Map(&'a guatiao::value::value::Value)
 pub guatiao::schema::KindRef::MapOf(&'a guatiao::value::value::Value)
 pub guatiao::schema::KindRef::Missing
+pub guatiao::schema::KindRef::Null
 pub guatiao::schema::KindRef::Str
 pub guatiao::schema::KindRef::Str::format: core::option::Option<&'a str>
 pub guatiao::schema::KindRef::Str::max_length: core::option::Option<u64>
@@ -2123,6 +2129,7 @@ pub fn guatiao::schema::read::FieldRef<'a>::examples(&self) -> &'a [guatiao::val
 pub fn guatiao::schema::read::FieldRef<'a>::extra(&self, &str) -> core::option::Option<&'a guatiao::value::value::Value>
 pub fn guatiao::schema::read::FieldRef<'a>::extras(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&'a str, &'a guatiao::value::value::Value)>
 pub fn guatiao::schema::read::FieldRef<'a>::is_deprecated(&self) -> bool
+pub fn guatiao::schema::read::FieldRef<'a>::is_nullable(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_read_only(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_required(&self) -> bool
 pub fn guatiao::schema::read::FieldRef<'a>::is_sensitive(&self) -> bool
@@ -2210,6 +2217,7 @@ pub fn guatiao::schema::read::SchemaRef<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::schema::read::SchemaRef<'a>
 pub fn guatiao::schema::read::SchemaRef<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<'a> core::marker::Copy for guatiao::schema::read::SchemaRef<'a>
+pub const guatiao::schema::PATTERNS_ENFORCED: bool
 pub trait guatiao::schema::Extras: core::marker::Sized
 pub fn guatiao::schema::Extras::extra(self, &str, core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>) -> Self
 pub fn guatiao::schema::Extras::extra_alloc(&self) -> guatiao::value::alloc::Alloc
@@ -2310,6 +2318,10 @@ impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for
 pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn std::collections::hash::map::HashMap<alloc::string::String, T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::schema::inline_refs(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::schema::inline_refs_in(&guatiao::value::value::Value, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::schema::redact(guatiao::schema::read::SchemaRef<'_>, &guatiao::value::value::Value, &str) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::schema::redact_in(guatiao::schema::read::SchemaRef<'_>, &guatiao::value::value::Value, &str, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::schema::validate_map(guatiao::schema::read::SchemaRef<'_>, &guatiao::value::value::Value) -> core::result::Result<(), guatiao::schema::ValidationError>
 pub fn guatiao::schema::validate_text(guatiao::schema::read::FieldRef<'_>, &str) -> core::result::Result<(), guatiao::schema::ValidationError>
 pub fn guatiao::schema::validate_value(guatiao::schema::read::FieldRef<'_>, &guatiao::value::value::Value) -> core::result::Result<(), guatiao::schema::ValidationError>
@@ -2591,6 +2603,7 @@ pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&
 pub mod guatiao::value::error
 #[non_exhaustive] pub enum guatiao::value::error::ValueError
 pub guatiao::value::error::ValueError::Alloc(guatiao::value::alloc::AllocError)
+pub guatiao::value::error::ValueError::DuplicateKey
 pub guatiao::value::error::ValueError::NotANumber
 pub guatiao::value::error::ValueError::NotUtf8
 pub guatiao::value::error::ValueError::OutOfRange
@@ -2696,11 +2709,11 @@ impl core::marker::Copy for guatiao::value::merge::MergeOptions
 impl core::marker::StructuralPartialEq for guatiao::value::merge::MergeOptions
 pub struct guatiao::value::merge::MergeOverrides
 impl guatiao::value::merge::MergeOverrides
-pub fn guatiao::value::merge::MergeOverrides::get(&self, &str) -> core::option::Option<guatiao::value::merge::MergeMode>
+pub fn guatiao::value::merge::MergeOverrides::get<I, S>(&self, I) -> core::option::Option<guatiao::value::merge::MergeMode> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
 pub fn guatiao::value::merge::MergeOverrides::is_empty(&self) -> bool
 pub fn guatiao::value::merge::MergeOverrides::new() -> guatiao::value::merge::MergeOverrides
-pub fn guatiao::value::merge::MergeOverrides::set(&mut self, impl core::convert::Into<alloc::string::String>, guatiao::value::merge::MergeMode)
-pub fn guatiao::value::merge::MergeOverrides::with(self, impl core::convert::Into<alloc::string::String>, guatiao::value::merge::MergeMode) -> guatiao::value::merge::MergeOverrides
+pub fn guatiao::value::merge::MergeOverrides::set<I, S>(&mut self, I, guatiao::value::merge::MergeMode) where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>
+pub fn guatiao::value::merge::MergeOverrides::with<I, S>(self, I, guatiao::value::merge::MergeMode) -> guatiao::value::merge::MergeOverrides where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>
 impl core::clone::Clone for guatiao::value::merge::MergeOverrides
 pub fn guatiao::value::merge::MergeOverrides::clone(&self) -> Self
 impl core::cmp::Eq for guatiao::value::merge::MergeOverrides
@@ -2713,8 +2726,8 @@ pub fn guatiao::value::merge::MergeOverrides::fmt(&self, &mut core::fmt::Formatt
 impl core::marker::StructuralPartialEq for guatiao::value::merge::MergeOverrides
 pub struct guatiao::value::merge::Provenance<'a>
 impl<'a> guatiao::value::merge::Provenance<'a>
-pub fn guatiao::value::merge::Provenance<'a>::leaves(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&str, &'a str)>
-pub fn guatiao::value::merge::Provenance<'a>::source_of(&self, &str) -> guatiao::value::merge::Source<'a>
+pub fn guatiao::value::merge::Provenance<'a>::leaves(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&[alloc::string::String], &'a str)>
+pub fn guatiao::value::merge::Provenance<'a>::source_of<I, S>(&self, I) -> guatiao::value::merge::Source<'a> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
 impl<'a> core::clone::Clone for guatiao::value::merge::Provenance<'a>
 pub fn guatiao::value::merge::Provenance<'a>::clone(&self) -> Self
 impl<'a> core::cmp::Eq for guatiao::value::merge::Provenance<'a>
@@ -4261,6 +4274,7 @@ impl core::marker::Copy for guatiao::value::value::Tag
 impl core::marker::StructuralPartialEq for guatiao::value::value::Tag
 #[non_exhaustive] pub enum guatiao::value::ValueError
 pub guatiao::value::ValueError::Alloc(guatiao::value::alloc::AllocError)
+pub guatiao::value::ValueError::DuplicateKey
 pub guatiao::value::ValueError::NotANumber
 pub guatiao::value::ValueError::NotUtf8
 pub guatiao::value::ValueError::OutOfRange
@@ -5256,6 +5270,7 @@ impl core::marker::Copy for guatiao::value::value::Tag
 impl core::marker::StructuralPartialEq for guatiao::value::value::Tag
 #[non_exhaustive] pub enum guatiao::ValueError
 pub guatiao::ValueError::Alloc(guatiao::value::alloc::AllocError)
+pub guatiao::ValueError::DuplicateKey
 pub guatiao::ValueError::NotANumber
 pub guatiao::ValueError::NotUtf8
 pub guatiao::ValueError::OutOfRange
@@ -5571,11 +5586,11 @@ impl core::marker::Copy for guatiao::value::merge::MergeOptions
 impl core::marker::StructuralPartialEq for guatiao::value::merge::MergeOptions
 pub struct guatiao::MergeOverrides
 impl guatiao::value::merge::MergeOverrides
-pub fn guatiao::value::merge::MergeOverrides::get(&self, &str) -> core::option::Option<guatiao::value::merge::MergeMode>
+pub fn guatiao::value::merge::MergeOverrides::get<I, S>(&self, I) -> core::option::Option<guatiao::value::merge::MergeMode> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
 pub fn guatiao::value::merge::MergeOverrides::is_empty(&self) -> bool
 pub fn guatiao::value::merge::MergeOverrides::new() -> guatiao::value::merge::MergeOverrides
-pub fn guatiao::value::merge::MergeOverrides::set(&mut self, impl core::convert::Into<alloc::string::String>, guatiao::value::merge::MergeMode)
-pub fn guatiao::value::merge::MergeOverrides::with(self, impl core::convert::Into<alloc::string::String>, guatiao::value::merge::MergeMode) -> guatiao::value::merge::MergeOverrides
+pub fn guatiao::value::merge::MergeOverrides::set<I, S>(&mut self, I, guatiao::value::merge::MergeMode) where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>
+pub fn guatiao::value::merge::MergeOverrides::with<I, S>(self, I, guatiao::value::merge::MergeMode) -> guatiao::value::merge::MergeOverrides where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>
 impl core::clone::Clone for guatiao::value::merge::MergeOverrides
 pub fn guatiao::value::merge::MergeOverrides::clone(&self) -> Self
 impl core::cmp::Eq for guatiao::value::merge::MergeOverrides
@@ -5665,8 +5680,8 @@ impl guatiao::value::convert::TryAsRef<guatiao::value::types::number::Number> fo
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::number::Number>
 pub struct guatiao::Provenance<'a>
 impl<'a> guatiao::value::merge::Provenance<'a>
-pub fn guatiao::value::merge::Provenance<'a>::leaves(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&str, &'a str)>
-pub fn guatiao::value::merge::Provenance<'a>::source_of(&self, &str) -> guatiao::value::merge::Source<'a>
+pub fn guatiao::value::merge::Provenance<'a>::leaves(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&[alloc::string::String], &'a str)>
+pub fn guatiao::value::merge::Provenance<'a>::source_of<I, S>(&self, I) -> guatiao::value::merge::Source<'a> where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
 impl<'a> core::clone::Clone for guatiao::value::merge::Provenance<'a>
 pub fn guatiao::value::merge::Provenance<'a>::clone(&self) -> Self
 impl<'a> core::cmp::Eq for guatiao::value::merge::Provenance<'a>

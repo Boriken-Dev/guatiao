@@ -41,6 +41,9 @@ pub enum ValueError {
     OutOfRange,
     /// The tree is nested deeper than [`MAX_DEPTH`].
     TooDeep,
+    /// A key was declared twice where each must be one: two fields of a
+    /// schema under one name.
+    DuplicateKey,
 }
 
 impl From<AllocError> for ValueError {
@@ -59,6 +62,7 @@ impl core::fmt::Display for ValueError {
             ValueError::UnknownTag(t) => write!(f, "tag {t} is not one this build knows"),
             ValueError::OutOfRange => f.write_str("the index is past the end"),
             ValueError::TooDeep => write!(f, "nested deeper than {MAX_DEPTH}"),
+            ValueError::DuplicateKey => f.write_str("a key was declared twice"),
         }
     }
 }
