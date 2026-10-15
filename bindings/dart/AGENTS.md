@@ -184,15 +184,25 @@ intake.unflatten(schema, 'auth', store);  // Value to close, or null; store is a
                                           // Map<String, String> or a Ref onto one
 ```
 
-What `resolve` and `at` return borrows from the schema or value passed
-and must not outlive it. An empty container flattens to nothing, and an
-entry the schema does not declare is dropped by `unflatten`.
+What `resolve` and `at` return is a read-only view: it holds the schema or
+value it came from, is found again from it on every access, and throws
+`StateError` once that is closed. Writing through it throws `StateError`
+(every write, not only one that allocates), and `.clone()` copies it out.
+An empty container flattens to nothing, and an entry the schema does not
+declare is dropped by `unflatten`.
+
+`unflatten` answers `null` only for "nothing stored": no such field, no
+entry under it, or a discriminant that names no arm. A `store` that is not
+text to text -- a `Map`, or a `Ref` onto anything but a map of strings --
+throws `ArgumentError`.
 
 ## Reading memory you do not own
 
 `Ref.borrowed(Pointer<guatiao_value>)` is a read-only view of a tree
 someone else keeps alive: a value an engine hands a callback, or one a
-registry lends. Writing through it throws and nothing frees it. Reading
+registry lends. Writing through it throws and nothing frees it. It does not
+keep that memory alive: that is the caller's (`Ref.borrowedFrom(source,
+find)` is the form that does, for a view inside another `Ref`). Reading
 touches no library and no top-level state, so it works inside an
 `isolateGroupBound` callback that a native thread calls. The intake
 functions take any `Ref`, so a borrowed schema is passed as it is, with
@@ -223,7 +233,10 @@ one of `BadValue`, `AllocFailed`, `WrongKind`, `NotFound`,
 `NullArgument`, `Gone`, `Unsupported`, `Busy`, `InternalError`.
 
 `LibraryNotFound`, `MissingSymbol` and `FloorMismatch` are this
-binding's own, and are not status failures.
+binding's own, and are not status failures. A refusal the library words
+itself (a `WrongKind` from `loads`, say) carries those words in `message`.
+A process whose pointers are not eight bytes wide gets `UnsupportedError`
+when the first library loads.
 
 ## Not offered
 
