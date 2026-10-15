@@ -163,6 +163,7 @@ pub unsafe extern "C" fn guatiao_intake_check(
 ) -> Status {
     // `out_error` is the one optional pointer here: a caller that only
     // wants the verdict passes null and gets no detail.
+    out!(out_error);
     if schema.is_null() || form.is_null() {
         return Status::GUATIAO_ERR_NULL;
     }
@@ -254,6 +255,7 @@ pub unsafe extern "C" fn guatiao_intake_layout(
     alloc: *const Allocator,
     out: *mut Value,
 ) -> Status {
+    out!(out);
     if schema.is_null() || form.is_null() || out.is_null() {
         return Status::GUATIAO_ERR_NULL;
     }

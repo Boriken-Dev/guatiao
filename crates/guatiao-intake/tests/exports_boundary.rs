@@ -9,6 +9,8 @@
 //! there is no C compiler. These never skip: they are the statuses the
 //! header promises, asserted on every machine.
 
+extern crate alloc;
+
 use core::ptr;
 
 use guatiao::schema::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
@@ -402,4 +404,154 @@ fn a_refused_flat_call_still_writes_its_out_parameter() {
         out.tag() == Ok(guatiao::Tag::GUATIAO_ABSENT),
         "a refused call still wrote the slot"
     );
+}
+
+// --- what a failed call leaves behind --------------------------------------
+
+/// Whether a node is the absent marker.
+fn is_absent(value: &Value) -> bool {
+    value.tag() == Ok(guatiao::Tag::GUATIAO_ABSENT)
+}
+
+/// Runs `call` with a stale out-slot and checks it answered `status` and
+/// left the slot ABSENT.
+fn leaves_absent(name: &str, status: Status, call: impl FnOnce(*mut Value) -> Status) {
+    let mut out = V::from(true);
+    assert_eq!(call(&mut out), status, "{name}");
+    assert!(is_absent(&out), "{name} left its out-parameter as it was");
+}
+
+/// Every export of this crate with an out-parameter, called so that it
+/// fails, and checked to have written the slot. The names are what the
+/// coverage test compares with the header.
+fn out_parameter_cases() -> Vec<(&'static str, fn())> {
+    use guatiao_intake::exports::{
+        guatiao_intake_check, guatiao_intake_for_schema, guatiao_intake_form_for,
+    };
+    vec![
+        ("guatiao_intake_check", || {
+            let form = form();
+            // SAFETY: a null schema is the failure under test.
+            leaves_absent("check", Status::GUATIAO_ERR_NULL, |out| unsafe {
+                guatiao_intake_check(ptr::null(), &form, ptr::null(), out)
+            });
+        }),
+        ("guatiao_intake_layout", || {
+            let (schema, form) = (schema(), form());
+            // SAFETY: a null allocator is the failure under test.
+            leaves_absent("layout", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+                guatiao_intake_layout(&schema, &form, ptr::null(), out)
+            });
+        }),
+        ("guatiao_intake_for_schema", || {
+            let schema = schema();
+            // SAFETY: a null allocator is the failure under test.
+            leaves_absent("for_schema", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+                guatiao_intake_for_schema(&schema, ptr::null(), out)
+            });
+        }),
+        ("guatiao_intake_form_for", || {
+            let (schema, form) = (schema(), form());
+            // SAFETY: a null allocator is the failure under test.
+            leaves_absent("form_for", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+                guatiao_intake_form_for(&form, &schema, key("ca"), ptr::null(), out)
+            });
+        }),
+        ("guatiao_intake_flat_keys", || {
+            let (schema, alloc) = (variant_schema(), Alloc::rust());
+            // SAFETY: a key naming no field is the failure under test.
+            leaves_absent("flat_keys", Status::GUATIAO_ERR_WRONG_KIND, |out| unsafe {
+                guatiao_intake_flat_keys(&schema, key("nonesuch"), alloc.as_raw(), out)
+            });
+        }),
+        ("guatiao_intake_flatten", || {
+            let (schema, alloc) = (variant_schema(), Alloc::rust());
+            let value = V::null();
+            // SAFETY: a key naming no field is the failure under test.
+            leaves_absent("flatten", Status::GUATIAO_ERR_WRONG_KIND, |out| unsafe {
+                guatiao_intake_flatten(&schema, key("nonesuch"), &value, alloc.as_raw(), out)
+            });
+        }),
+        ("guatiao_intake_unflatten", || {
+            let (schema, alloc) = (variant_schema(), Alloc::rust());
+            let flat = V::from(Map::new());
+            // SAFETY: a key naming no field is the failure under test.
+            leaves_absent("unflatten", Status::GUATIAO_ERR_WRONG_KIND, |out| unsafe {
+                guatiao_intake_unflatten(&schema, key("nonesuch"), &flat, alloc.as_raw(), out)
+            });
+        }),
+        // Its out-parameter is a `bool`, and the header says a key naming no
+        // field leaves it unwritten.
+        ("guatiao_intake_is_visible", || {
+            let (schema, form, values) = (schema(), form(), values());
+            let mut shown = true;
+            // SAFETY: a key naming no field is the failure under test.
+            let status = unsafe {
+                guatiao_intake_is_visible(&schema, &form, key("nonesuch"), &values, &mut shown)
+            };
+            assert_eq!(status, Status::GUATIAO_ERR_NOT_FOUND);
+            assert!(shown, "is_visible wrote its out-parameter on a refusal");
+        }),
+    ]
+}
+
+#[test]
+fn every_export_with_an_out_parameter_writes_it_before_failing() {
+    for (_, case) in out_parameter_cases() {
+        case();
+    }
+}
+
+/// The cases above against the header: an export that gains an
+/// out-parameter without a case here fails this test.
+#[test]
+#[cfg_attr(miri, ignore = "reads the committed header from disk")]
+fn the_out_parameter_cases_name_every_export_that_has_one() {
+    let header = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("include/guatiao_intake.h"),
+    )
+    .unwrap();
+    // Comments first: a doc comment holds parentheses and semicolons.
+    let mut code = String::new();
+    let mut rest = header.as_str();
+    while let Some(start) = rest.find("/*") {
+        code.push_str(&rest[..start]);
+        let end = rest[start..].find("*/").expect("a closed comment");
+        rest = &rest[start + end + 2..];
+    }
+    code.push_str(rest);
+    let code: String = code
+        .lines()
+        .map(|line| line.split("//").next().unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let flat = code.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut declared = alloc::collections::BTreeSet::new();
+    for statement in flat.split(';') {
+        let Some(open) = statement.find('(') else {
+            continue;
+        };
+        let Some(name) = statement[..open].split(' ').next_back() else {
+            continue;
+        };
+        if !name.starts_with("guatiao_intake_") || !statement.ends_with(')') {
+            continue;
+        }
+        let params = &statement[open + 1..statement.len() - 1];
+        let has_out = params.split(',').any(|p| {
+            p.trim()
+                .rsplit(['*', ' '])
+                .next()
+                .is_some_and(|param| param.starts_with("out"))
+        });
+        if has_out {
+            declared.insert(name.to_string());
+        }
+    }
+    let covered: alloc::collections::BTreeSet<String> = out_parameter_cases()
+        .into_iter()
+        .map(|(name, _)| name.to_string())
+        .collect();
+    assert!(declared.len() >= 8, "the header parse found {declared:?}");
+    assert_eq!(declared, covered);
 }
