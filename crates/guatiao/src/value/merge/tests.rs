@@ -140,25 +140,23 @@ macro_rules! assert_merges_to {
     }};
 }
 
-/// A case-for-case port of the reference suite, which is the closest
-/// thing to a written specification of the three strategies: the
-/// positional list rule, the `mergelists` overlap condition and the
-/// map-absorbs-list-of-maps behaviour are pinned only here. Each test
-/// names its reference so the two can be diffed by hand.
-mod port_of_the_reference_suite {
+/// The three strategies one rule at a time: the positional list rule,
+/// the `mergelists` overlap condition and the map-absorbs-list-of-maps
+/// behaviour are pinned only here, so each test states the rule it checks.
+mod the_three_strategies {
     use super::*;
 
     // ------------------------------------------------------------------
-    // Simple  (reference: TestSimpleMerge)
+    // Simple
     // ------------------------------------------------------------------
 
-    /// Reference: `test_scalar_replaces`.
+    /// A scalar on the later side replaces the earlier value.
     #[test]
     fn simple_scalar_replaces() {
         assert_merges_to!(merge(MergeMode::Simple, &n(1), &n(2)), n(2));
     }
 
-    /// Reference: `test_dict_update_shallow`.
+    /// A map updates the earlier one key by key, one level deep.
     #[test]
     fn simple_dict_update_shallow() {
         let earlier = m([("x", n(1)), ("y", n(2))]);
@@ -170,7 +168,7 @@ mod port_of_the_reference_suite {
         assert_eq!(len_of(&merged), 3);
     }
 
-    /// Reference: `test_dict_replaces_scalar`.
+    /// A map replaces a scalar.
     #[test]
     fn simple_dict_replaces_scalar() {
         let later = m([("k", s("v"))]);
@@ -178,7 +176,7 @@ mod port_of_the_reference_suite {
         assert_eq!(str_at(&merged, "k"), "v");
     }
 
-    /// Reference: `test_list_element_replace` — `[1,2,3]` updated with
+    /// `[1,2,3]` updated with
     /// `[10,20]` is `[10,20,3]`. The element that SURVIVES is the point:
     /// `Simple` cannot shorten a list.
     #[test]
@@ -191,7 +189,7 @@ mod port_of_the_reference_suite {
         );
     }
 
-    /// Reference: `test_list_extends_when_b_longer`.
+    /// A longer later list extends the earlier one.
     #[test]
     fn simple_list_extends_when_later_is_longer() {
         let earlier = l([n(1)]);
@@ -202,7 +200,7 @@ mod port_of_the_reference_suite {
         );
     }
 
-    /// Reference: `test_list_replaces_scalar`.
+    /// A list replaces a scalar.
     #[test]
     fn simple_list_replaces_scalar() {
         let later = l([n(1), n(2)]);
@@ -210,16 +208,16 @@ mod port_of_the_reference_suite {
     }
 
     // ------------------------------------------------------------------
-    // Substitute  (reference: TestSubstituteMerge)
+    // Substitute
     // ------------------------------------------------------------------
 
-    /// Reference: `test_scalar_replaces`.
+    /// A scalar on the later side replaces the earlier value.
     #[test]
     fn substitute_scalar_replaces() {
         assert_merges_to!(merge(MergeMode::Substitute, &s("a"), &s("b")), s("b"));
     }
 
-    /// Reference: `test_list_replaces` — wholesale, unlike `Simple`'s
+    /// A later list replaces the earlier one wholesale, unlike `Simple`'s
     /// positional rule.
     #[test]
     fn substitute_list_replaces() {
@@ -231,7 +229,7 @@ mod port_of_the_reference_suite {
         );
     }
 
-    /// Reference: `test_list_replaces_scalar`.
+    /// A list replaces a scalar.
     #[test]
     fn substitute_list_replaces_scalar() {
         let later = l([n(1), n(2)]);
@@ -241,7 +239,7 @@ mod port_of_the_reference_suite {
         );
     }
 
-    /// Reference: `test_dict_recursive`.
+    /// Maps merge recursively, and a key only the earlier layer had stands.
     #[test]
     fn substitute_dict_recursive() {
         let earlier = m([("a", n(1)), ("b", m([("x", n(10)), ("y", n(20))]))]);
@@ -264,7 +262,7 @@ mod port_of_the_reference_suite {
         assert_eq!(int_at(b, "z"), 30);
     }
 
-    /// Reference: `test_dict_from_list_of_dicts` — a map on the left
+    /// A map on the left
     /// absorbs a list of maps on the right, folded in sequentially. The
     /// non-obvious one.
     #[test]
@@ -277,8 +275,7 @@ mod port_of_the_reference_suite {
         assert_eq!(int_at(&merged, "c"), 3);
     }
 
-    /// Reference: `test_dict_from_list_with_non_dict_raises` — a
-    /// `TypeError` there, a `MergeError` here.
+    /// A non-map element in the list is a `MergeError`, not a skip.
     #[test]
     fn substitute_map_absorbing_a_non_map_element_is_an_error() {
         let earlier = m([("a", n(1))]);
@@ -291,16 +288,16 @@ mod port_of_the_reference_suite {
     }
 
     // ------------------------------------------------------------------
-    // Deep  (reference: TestDeepMerge)
+    // Deep
     // ------------------------------------------------------------------
 
-    /// Reference: `test_scalar_replaces`.
+    /// A scalar on the later side replaces the earlier value.
     #[test]
     fn deep_scalar_replaces() {
         assert_merges_to!(merge(MergeMode::Deep, &n(1), &n(2)), n(2));
     }
 
-    /// Reference: `test_none_a_takes_b` — the earlier side being nothing
+    /// A null on the earlier side
     /// means the later value simply stands. This is where `Deep` and
     /// `Substitute` deliberately differ; see
     /// `the_a_is_none_handling_differs_between_deep_and_substitute`.
@@ -309,7 +306,7 @@ mod port_of_the_reference_suite {
         assert_merges_to!(merge(MergeMode::Deep, &null(), &n(42)), n(42));
     }
 
-    /// Reference: `test_dict_deep`.
+    /// Maps merge recursively.
     #[test]
     fn deep_dict_recursive() {
         let earlier = m([("a", n(1)), ("b", m([("x", n(10)), ("y", n(20))]))]);
@@ -327,7 +324,7 @@ mod port_of_the_reference_suite {
         assert_eq!((int_at(&merged, "a"), int_at(&merged, "c")), (1, 3));
     }
 
-    /// Reference: `test_list_extends_unique_scalars` — `3` is already
+    /// Items already present are skipped: `3` is already
     /// present, so only `4` and `5` are appended.
     #[test]
     fn deep_list_extends_with_unique_scalars() {
@@ -339,7 +336,7 @@ mod port_of_the_reference_suite {
         );
     }
 
-    /// Reference: `test_list_does_not_duplicate`.
+    /// Equal items are not appended twice.
     #[test]
     fn deep_list_does_not_duplicate() {
         let earlier = l([n(1), n(2)]);
@@ -347,7 +344,7 @@ mod port_of_the_reference_suite {
         assert_merges_to!(merge(MergeMode::Deep, &earlier, &later), l([n(1), n(2)]));
     }
 
-    /// Reference: `test_dict_from_list` — `Deep` absorbs a list of maps
+    /// `Deep` absorbs a list of maps
     /// into a map too.
     #[test]
     fn deep_map_absorbs_a_list_of_maps() {
@@ -357,8 +354,7 @@ mod port_of_the_reference_suite {
         assert_eq!((int_at(&merged, "a"), int_at(&merged, "b")), (1, 2));
     }
 
-    /// Reference: `test_mergelists_false_no_positional_dict_merge` —
-    /// without `mergelists`, maps inside lists are appended, never merged.
+    /// Without `mergelists`, maps inside lists are appended, never merged.
     #[test]
     fn deep_mergelists_off_appends_maps_in_lists() {
         let earlier = l([m([("k", n(1))])]);
@@ -389,7 +385,7 @@ mod port_of_the_reference_suite {
         );
     }
 
-    /// Reference: `test_mergelists_true_merges_matching_dicts` — the maps
+    /// The maps
     /// share the key `k`, so they merge positionally into one.
     #[test]
     fn deep_mergelists_on_merges_positionally_matching_maps() {
@@ -416,11 +412,10 @@ mod port_of_the_reference_suite {
 }
 
 // ----------------------------------------------------------------------
-// Beyond the reference: what this port has that the original did not.
+// Further rules: the overlap condition, the sub-option, the axes.
 // ----------------------------------------------------------------------
 
-/// The overlap condition on `mergelists`, which the reference's own
-/// suite only tests in the positive.
+/// The overlap condition on `mergelists`.
 ///
 /// Two positionally-matching maps with **no** shared key are two
 /// adjacent records, not one described twice, so the later is
@@ -464,8 +459,7 @@ fn mergelists_on_appends_a_positional_map_with_no_overlapping_key() {
 /// effect is one diff rather than two unrelated assertions.
 #[test]
 fn mergelists_on_and_off_over_the_same_input() {
-    // One binding each rather than the reference's two closures: a merge
-    // borrows its inputs now, so the same pair feeds both calls.
+    // A merge borrows its inputs, so the same pair feeds both calls.
     let earlier = l([m([("id", n(1)), ("v", s("old"))])]);
     let later = l([m([("id", n(1)), ("v", s("new"))])]);
 
@@ -498,7 +492,7 @@ fn mergelists_on_and_off_over_the_same_input() {
 }
 
 /// The map axis and the list axis are **independent**, and conflating
-/// them is what made the original design question wrong. Asserted
+/// them would make the table in the module doc wrong. Asserted
 /// separately per mode, over one shared input, so the table in the module
 /// doc is checked column by column.
 #[test]
@@ -512,9 +506,8 @@ fn each_modes_map_and_list_axes_are_independent() {
     let outer = TryAsRef::<Map>::try_as_ref(&simple)
         .and_then(|m| m.get("outer"))
         .expect("the outer key survives");
-    // The reference asserted `ValueType::Absent` here; this model spells
-    // the same thing as the key simply not being in the map, since a
-    // merge never writes the stored-absent sentinel.
+    // A merge never writes the stored-absent sentinel, so a dropped key
+    // is simply not in the map.
     assert!(
         TryAsRef::<Map>::try_as_ref(outer)
             .and_then(|m| m.get("kept"))
@@ -666,7 +659,7 @@ fn a_list_shrinks_under_substitute_and_provably_cannot_under_deep() {
 #[test]
 fn a_type_mismatch_is_an_error_and_never_a_silent_replacement() {
     // A map arriving where the earlier layer has a scalar, under
-    // `Substitute` -- the reference raises here.
+    // `Substitute` -- an error here.
     let err = merge(MergeMode::Substitute, &s("a string"), &m([("k", n(1))]))
         .expect_err("a map replacing a scalar must not pass silently");
     let MergeError::Kind { mode, later, .. } = err else {
@@ -875,7 +868,7 @@ fn a_per_path_override_beats_the_call_site_mode_for_that_key_only() {
 
     // `tags` is declared as an unordered set, so it unions; `fallbacks`
     // takes the call-site default and is replaced wholesale.
-    let overrides = MergeOverrides::new().with("tags", MergeMode::Deep);
+    let overrides = MergeOverrides::new().with(["tags"], MergeMode::Deep);
     let merged = merge_with(
         MergeMode::Substitute,
         &earlier,
@@ -907,7 +900,7 @@ fn an_override_applies_at_a_nested_path() {
     let earlier = m([("tls", m([("ciphers", l([s("aes")]))]))]);
     let later = m([("tls", m([("ciphers", l([s("chacha")]))]))]);
 
-    let overrides = MergeOverrides::new().with("tls.ciphers", MergeMode::Deep);
+    let overrides = MergeOverrides::new().with(["tls", "ciphers"], MergeMode::Deep);
     let merged = merge_with(
         MergeMode::Substitute,
         &earlier,
@@ -977,16 +970,19 @@ fn provenance_is_per_leaf_and_reports_mixed_for_an_interior_node() {
         "/etc/ca.pem"
     );
 
-    assert_eq!(provenance.source_of("tls.verify"), Source::Layer("user"));
-    assert_eq!(provenance.source_of("tls.ca"), Source::Layer("system"));
     assert_eq!(
-        provenance.source_of("tls"),
+        provenance.source_of(["tls", "verify"]),
+        Source::Layer("user")
+    );
+    assert_eq!(provenance.source_of(["tls", "ca"]), Source::Layer("system"));
+    assert_eq!(
+        provenance.source_of(["tls"]),
         Source::Mixed,
         "the map was drawn from both layers; naming one would be a lie"
     );
-    assert_eq!(provenance.source_of("host"), Source::Layer("system"));
-    assert_eq!(provenance.source_of("theme"), Source::Layer("user"));
-    assert_eq!(provenance.source_of("nothing.here"), Source::Absent);
+    assert_eq!(provenance.source_of(["host"]), Source::Layer("system"));
+    assert_eq!(provenance.source_of(["theme"]), Source::Layer("user"));
+    assert_eq!(provenance.source_of(["nothing", "here"]), Source::Absent);
 }
 
 /// An interior node whose leaves ALL came from one layer answers with
@@ -1000,7 +996,7 @@ fn an_interior_node_from_a_single_layer_names_that_layer() {
         .merge_layers([("system", &system), ("user", &user)], alloc())
         .unwrap();
     assert_eq!(
-        provenance.source_of("db"),
+        provenance.source_of(["db"]),
         Source::Layer("user"),
         "every leaf under `db` was overridden, so `user` is the honest answer"
     );
@@ -1017,11 +1013,11 @@ fn an_interior_lookup_does_not_match_a_sibling_with_a_shared_prefix() {
         .merge_layers([("system", &system), ("user", &user)], alloc())
         .unwrap();
     assert_eq!(
-        provenance.source_of("tls"),
+        provenance.source_of(["tls"]),
         Source::Layer("system"),
         "`tlsv2` is a different key and must not make `tls` look mixed"
     );
-    assert_eq!(provenance.source_of("tlsv2"), Source::Layer("user"));
+    assert_eq!(provenance.source_of(["tlsv2"]), Source::Layer("user"));
 }
 
 /// A single layer attributes everything to itself, and no layers at all
@@ -1033,11 +1029,11 @@ fn one_layer_and_no_layers_are_both_well_defined() {
         .merge_layers([("only", &only)], alloc())
         .unwrap();
     assert_eq!(str_at(&merged, "k"), "v");
-    assert_eq!(provenance.source_of("k"), Source::Layer("only"));
+    assert_eq!(provenance.source_of(["k"]), Source::Layer("only"));
 
     let (empty, provenance) = MergeMode::Substitute.merge_layers([], alloc()).unwrap();
     assert_eq!(len_of(&empty), 0);
-    assert_eq!(provenance.source_of("anything"), Source::Absent);
+    assert_eq!(provenance.source_of(["anything"]), Source::Absent);
 }
 
 /// A third layer overriding a leaf takes provenance from the second, not
@@ -1055,8 +1051,8 @@ fn a_later_layer_takes_provenance_from_the_one_before_it() {
         )
         .unwrap();
     assert_eq!(str_at(&merged, "k"), "3");
-    assert_eq!(provenance.source_of("k"), Source::Layer("user"));
-    assert_eq!(provenance.source_of("untouched"), Source::Layer("system"));
+    assert_eq!(provenance.source_of(["k"]), Source::Layer("user"));
+    assert_eq!(provenance.source_of(["untouched"]), Source::Layer("system"));
 }
 
 /// A later layer replacing a subtree with a differently-shaped value must
@@ -1071,9 +1067,9 @@ fn replacing_a_subtree_forgets_the_paths_that_no_longer_exist() {
         .unwrap();
 
     assert_eq!(str_at(&merged, "thing"), "just a string now");
-    assert_eq!(provenance.source_of("thing"), Source::Layer("user"));
+    assert_eq!(provenance.source_of(["thing"]), Source::Layer("user"));
     assert_eq!(
-        provenance.source_of("thing.a"),
+        provenance.source_of(["thing", "a"]),
         Source::Absent,
         "the old leaf is gone from the value and must be gone from the record"
     );
@@ -1088,10 +1084,10 @@ fn list_elements_get_indexed_leaf_paths() {
         .merge_layers([("system", &system)], alloc())
         .unwrap();
     assert_eq!(
-        provenance.source_of("peers.0.name"),
+        provenance.source_of(["peers", "0", "name"]),
         Source::Layer("system")
     );
-    assert_eq!(provenance.source_of("peers"), Source::Layer("system"));
+    assert_eq!(provenance.source_of(["peers"]), Source::Layer("system"));
 }
 
 /// A merge that fails reports the error rather than producing a partial
@@ -1183,4 +1179,145 @@ fn a_kind_this_build_cannot_read_stops_the_merge_rather_than_being_copied() {
     // on the earlier side, where the later value wins outright, merges
     // without ever touching it.
     assert_merges_to!(merge(MergeMode::Substitute, &future, &s("wins")), s("wins"));
+}
+
+// --- provenance names the layer a value came from ------------------------
+
+/// A stored absent is no opinion, so the layer that wrote one claims
+/// nothing: the value is still the earlier layer's.
+#[test]
+fn an_absent_value_in_a_later_layer_claims_nothing() {
+    let system = m([("a", n(1)), ("b", n(2))]);
+    let user = m([("a", absent()), ("b", n(3))]);
+    let (merged, provenance) = MergeMode::Substitute
+        .merge_layers([("system", &system), ("user", &user)], alloc())
+        .unwrap();
+
+    assert_eq!(int_at(&merged, "a"), 1, "the earlier value stands");
+    assert_eq!(provenance.source_of(["a"]), Source::Layer("system"));
+    assert_eq!(provenance.source_of(["b"]), Source::Layer("user"));
+}
+
+/// `Simple` replaces a top-level key outright, so a nested key the later
+/// layer left out is gone from the result and from provenance, while a
+/// top-level key the later layer never mentioned is still the earlier
+/// layer's.
+#[test]
+fn simple_replaces_a_key_and_its_provenance_with_it() {
+    let system = m([
+        ("tls", m([("ca", s("/ca.pem")), ("verify", b(true))])),
+        ("host", s("h")),
+    ]);
+    let user = m([("tls", m([("verify", b(false))]))]);
+    let (merged, provenance) = MergeMode::Simple
+        .merge_layers([("system", &system), ("user", &user)], alloc())
+        .unwrap();
+
+    let tls = TryAsRef::<Map>::try_as_ref(&merged)
+        .and_then(|m| m.get("tls"))
+        .expect("tls is there");
+    assert_eq!(len_of(tls), 1, "the whole inner map was replaced");
+    assert_eq!(provenance.source_of(["tls", "ca"]), Source::Absent);
+    assert_eq!(
+        provenance.source_of(["tls", "verify"]),
+        Source::Layer("user")
+    );
+    assert_eq!(provenance.source_of(["tls"]), Source::Layer("user"));
+    assert_eq!(provenance.source_of(["host"]), Source::Layer("system"));
+}
+
+/// `Simple` overwrites a list by position and leaves the excess: the
+/// overwritten positions change hands, the excess stays where it was.
+#[test]
+fn simple_list_provenance_follows_the_positions() {
+    let system = l([n(1), n(2), n(3)]);
+    let user = l([n(10), n(20)]);
+    let (merged, provenance) = MergeMode::Simple
+        .merge_layers([("system", &system), ("user", &user)], alloc())
+        .unwrap();
+
+    assert!(same(&merged, &l([n(10), n(20), n(3)])));
+    assert_eq!(provenance.source_of(["0"]), Source::Layer("user"));
+    assert_eq!(provenance.source_of(["1"]), Source::Layer("user"));
+    assert_eq!(provenance.source_of(["2"]), Source::Layer("system"));
+}
+
+/// A later layer that is not a map replaces the root, and the root's
+/// provenance goes with what it replaced.
+#[test]
+fn replacing_the_root_forgets_every_path_beneath_it() {
+    let system = m([("a", n(1)), ("b", m([("c", n(2))]))]);
+    let user = n(5);
+    let (merged, provenance) = MergeMode::Deep
+        .merge_layers([("system", &system), ("user", &user)], alloc())
+        .unwrap();
+
+    assert!(same(&merged, &n(5)));
+    assert_eq!(
+        provenance.source_of(Vec::<&str>::new()),
+        Source::Layer("user")
+    );
+    assert_eq!(provenance.source_of(["a"]), Source::Absent);
+    assert_eq!(provenance.source_of(["b", "c"]), Source::Absent);
+}
+
+// --- a key holding a dot is not a nested path ------------------------------
+
+/// The top-level key `tls.ca` and the key `ca` inside `tls` are two
+/// leaves, in provenance and in the overrides that govern them.
+#[test]
+fn a_dotted_key_and_a_nested_path_are_different_leaves() {
+    let system = m([("tls.ca", s("flat")), ("tls", m([("ca", s("nested"))]))]);
+    let user = m([("tls", m([("ca", s("user"))]))]);
+    let (_, provenance) = MergeMode::Substitute
+        .merge_layers([("system", &system), ("user", &user)], alloc())
+        .unwrap();
+
+    assert_eq!(provenance.source_of(["tls.ca"]), Source::Layer("system"));
+    assert_eq!(provenance.source_of(["tls", "ca"]), Source::Layer("user"));
+    assert_eq!(provenance.leaves().count(), 2);
+}
+
+#[test]
+fn an_override_on_a_dotted_key_does_not_govern_the_nested_path() {
+    let earlier = m([("tls.ca", l([n(1)])), ("tls", m([("ca", l([n(1)]))]))]);
+    let later = m([("tls.ca", l([n(2)])), ("tls", m([("ca", l([n(2)]))]))]);
+    let overrides = MergeOverrides::new().with(["tls.ca"], MergeMode::Deep);
+
+    let merged = merge_with(
+        MergeMode::Substitute,
+        &earlier,
+        &later,
+        MergeOptions::new(),
+        Some(&overrides),
+    )
+    .unwrap();
+    let root = TryAsRef::<Map>::try_as_ref(&merged).unwrap();
+    assert!(
+        same(root.get("tls.ca").unwrap(), &l([n(1), n(2)])),
+        "the override unions the key it names"
+    );
+    let nested = TryAsRef::<Map>::try_as_ref(root.get("tls").unwrap())
+        .and_then(|m| m.get("ca"))
+        .unwrap();
+    assert!(same(nested, &l([n(2)])), "the nested list is replaced");
+}
+
+/// An error names the place with the spelling the intake grammar reads, so
+/// a dotted key stays distinguishable from a nested path.
+#[test]
+fn an_error_path_quotes_a_key_holding_a_dot() {
+    let earlier = m([("a.b", n(1))]);
+    let later = m([("a.b", m([("x", n(1))]))]);
+    let Err(MergeError::Kind { path, .. }) = merge(MergeMode::Substitute, &earlier, &later) else {
+        panic!("a map cannot replace a scalar under Substitute");
+    };
+    assert_eq!(path, "[\"a.b\"]");
+
+    let earlier = m([("a", m([("b", n(1))]))]);
+    let later = m([("a", m([("b", m([("x", n(1))]))]))]);
+    let Err(MergeError::Kind { path, .. }) = merge(MergeMode::Substitute, &earlier, &later) else {
+        panic!("a map cannot replace a scalar under Substitute");
+    };
+    assert_eq!(path, "a.b");
 }

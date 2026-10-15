@@ -235,21 +235,6 @@ pub unsafe fn schema_export<T: crate::schema::Schema>(
 /// the right trade when the host resolves it by name at run time rather
 /// than linking against it.
 ///
-/// `versioned` uses the **major** version and nothing else, which is what
-/// a C library already does: a soname is `libfoo.so.<major>`, because
-/// major versions are presumed ABI incompatible and minor ones presumed
-/// compatible. The real filename carries major.minor so builds coexist on
-/// disk, while the linking identity stays major — and a symbol that
-/// changed on every minor bump would break exactly what that convention
-/// protects.
-///
-/// **Below 1.0 this separates nothing**, since the major is always 0.
-/// That is a real gap rather than an oversight: Cargo treats 0.y as the
-/// compatibility unit and C has no equivalent, so the two cannot both be
-/// honoured in one name. A pre-1.0 library that genuinely needs two
-/// schemas in one process should name them itself with `symbol = `, the
-/// way a C library hand-picks `_v2` when a signature changes.
-///
 /// # What the caller gets
 ///
 /// An **owned** tree, built through the allocator it passed, which it
@@ -269,14 +254,14 @@ macro_rules! export_schema {
     ($ty:ty, $label:literal) => {
         $crate::export_schema!(
             @emit $ty,
-            ::core::concat!(::core::env!("CARGO_PKG_NAME"), "_", $label, "_schema")
+            ::core::concat!(::core::env!("CARGO_CRATE_NAME"), "_", $label, "_schema")
         );
     };
     ($ty:ty, $label:literal, version = major) => {
         $crate::export_schema!(
             @emit $ty,
             ::core::concat!(
-                ::core::env!("CARGO_PKG_NAME"),
+                ::core::env!("CARGO_CRATE_NAME"),
                 "_v",
                 ::core::env!("CARGO_PKG_VERSION_MAJOR"),
                 "_",
@@ -289,7 +274,7 @@ macro_rules! export_schema {
         $crate::export_schema!(
             @emit $ty,
             ::core::concat!(
-                ::core::env!("CARGO_PKG_NAME"),
+                ::core::env!("CARGO_CRATE_NAME"),
                 "_v",
                 ::core::env!("CARGO_PKG_VERSION_MAJOR"),
                 "_",
@@ -304,7 +289,7 @@ macro_rules! export_schema {
         $crate::export_schema!(
             @emit $ty,
             ::core::concat!(
-                ::core::env!("CARGO_PKG_NAME"),
+                ::core::env!("CARGO_CRATE_NAME"),
                 "_v",
                 ::core::env!("CARGO_PKG_VERSION_MAJOR"),
                 "_",

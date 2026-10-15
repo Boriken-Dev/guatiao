@@ -664,10 +664,8 @@ fn an_open_map_declares_its_values_and_not_its_keys() {
         values.set("HOME", "/root");
         assert!(guatiao::schema::validate_value(env, &Value::from(values)).is_ok());
 
-        // A scalar is checked by its TEXT form, here and everywhere:
-        // `true` is acceptable text for a string, so refusing needs a
-        // kind text can fail. A list is refused too, by not being one
-        // value at all.
+        // A typed value is the type its kind names: `nope` is text, not a
+        // number, and a list is not one value at all.
         let ports = SchemaBuilder::new_in(alloc)
             .field(FieldBuilder::new_in(
                 alloc,
@@ -682,7 +680,10 @@ fn an_open_map_declares_its_values_and_not_its_keys() {
             .expect("ports is declared");
 
         let mut wrong = Map::new_in(alloc);
-        wrong.set("http", Text::new_in(alloc, "80").map(Value::from).unwrap());
+        wrong.set(
+            "http",
+            Number::new_in(alloc, "80").map(Value::from).unwrap(),
+        );
         wrong.set(
             "shell",
             Text::new_in(alloc, "nope").map(Value::from).unwrap(),

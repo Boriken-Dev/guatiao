@@ -57,7 +57,9 @@ pub const GUATIAO_MERGE_OPT_MERGELISTS: u32 = 1;
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct MergeOverride<'a> {
-    /// The dotted path this governs, matched exactly.
+    /// The path this governs, matched exactly, spelled as `guatiao-intake`
+    /// spells one: `tls.ciphers`, `peers[0].name`, `["a.b"]` for a key
+    /// holding a dot. Text that is not a path is `GUATIAO_ERR_BAD_VALUE`.
     pub path: Str<'a>,
     /// One of the `GUATIAO_MERGE_*` mode constants.
     pub mode: u32,
@@ -207,7 +209,10 @@ pub unsafe extern "C" fn guatiao_merge(
                 let Some(path) = core::str::from_utf8(entry.path.into()).ok() else {
                     return Status::GUATIAO_ERR_BAD_VALUE;
                 };
-                table.set(path, entry_mode);
+                let Some(segments) = crate::value::merge::path::parse(path) else {
+                    return Status::GUATIAO_ERR_BAD_VALUE;
+                };
+                table.set(segments, entry_mode);
             }
         }
 

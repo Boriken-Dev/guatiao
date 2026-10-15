@@ -67,9 +67,9 @@
 //! let tls: &Map = merged_map.required("tls")?.try_into()?;
 //! let verify: bool = tls.required("verify")?.try_into()?;
 //! assert!(!verify);
-//! assert_eq!(provenance.source_of("tls.verify"), Source::Layer("user"));
-//! assert_eq!(provenance.source_of("tls.ca"), Source::Layer("system"));
-//! assert_eq!(provenance.source_of("tls"), Source::Mixed);
+//! assert_eq!(provenance.source_of(["tls", "verify"]), Source::Layer("user"));
+//! assert_eq!(provenance.source_of(["tls", "ca"]), Source::Layer("system"));
+//! assert_eq!(provenance.source_of(["tls"]), Source::Mixed);
 //! # Ok::<(), Box<dyn core::error::Error>>(())
 //! ```
 //!
@@ -81,6 +81,8 @@
 //! merge itself never learns what a schema is.
 
 #![forbid(unsafe_code)]
+
+pub(crate) mod path;
 
 use alloc::collections::BTreeMap;
 
@@ -159,7 +161,9 @@ impl MergeOptions {
 pub enum MergeError {
     /// The two sides cannot combine under this mode at this path.
     Kind {
-        /// The dotted path where they disagreed, empty at the root.
+        /// Where they disagreed, spelled as `guatiao-intake` spells a path
+        /// (`tls.ca`, `peers[0].name`, `["a.b"]` for a key holding a dot),
+        /// empty at the root.
         path: String,
         /// The kind on the earlier side, or `None` for a tag this build
         /// does not know.
@@ -227,30 +231,38 @@ pub enum Source<'a> {
 
 /// Which layer each leaf of a merged value came from.
 ///
-/// Keyed by **leaf path** — `"tls.ca"` — because an interior node has no
-/// single answer after a recursive merge. Sorted, so the prefix scan
+/// Keyed by **leaf path** -- `["tls", "ca"]` -- because an interior node
+/// has no single answer after a recursive merge. A path is a list of
+/// segments, never joined text: the top-level key `tls.ca` and the key
+/// `ca` inside `tls` are different leaves. Sorted, so the prefix scan
 /// [`Provenance::source_of`] does is a range rather than a full walk.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Provenance<'a> {
-    leaves: BTreeMap<String, &'a str>,
+    leaves: BTreeMap<Vec<String>, &'a str>,
 }
 
 impl<'a> Provenance<'a> {
-    /// Where the value at `path` came from.
+    /// Where the value at `path` came from: the keys from the root, and a
+    /// list position as its decimal text (`["peers", "0", "name"]`).
     ///
     /// An exact leaf answers its layer. An interior node answers the layer
     /// every leaf beneath it agrees on, [`Source::Mixed`] when they do
-    /// not, and [`Source::Absent`] when nothing is recorded there.
-    pub fn source_of(&self, path: &str) -> Source<'a> {
-        if let Some(layer) = self.leaves.get(path) {
+    /// not, and [`Source::Absent`] when nothing is recorded there. The
+    /// empty path is the whole value.
+    pub fn source_of<I, S>(&self, path: I) -> Source<'a>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let path: Vec<String> = path.into_iter().map(|s| s.as_ref().to_string()).collect();
+        if let Some(layer) = self.leaves.get(&path) {
             return Source::Layer(layer);
         }
-        let prefix = format!("{path}.");
         let mut found: Option<&'a str> = None;
         for (_, layer) in self
             .leaves
-            .range(prefix.clone()..)
-            .take_while(|(k, _)| k.starts_with(&prefix))
+            .range(path.clone()..)
+            .take_while(|(k, _)| k.starts_with(&path))
         {
             match found {
                 None => found = Some(layer),
@@ -264,33 +276,37 @@ impl<'a> Provenance<'a> {
         }
     }
 
-    /// Every recorded leaf path and its layer, in sorted path order.
-    pub fn leaves(&self) -> impl Iterator<Item = (&str, &'a str)> {
-        self.leaves.iter().map(|(k, v)| (k.as_str(), *v))
+    /// Every recorded leaf path, as its segments, and its layer, in
+    /// sorted path order.
+    pub fn leaves(&self) -> impl Iterator<Item = (&[String], &'a str)> {
+        self.leaves.iter().map(|(k, v)| (k.as_slice(), *v))
     }
 
     /// Records `layer` as the source of every leaf under `path`.
     ///
     /// An empty map or list is itself a leaf: there is nothing beneath it
     /// to attribute, and attributing nothing would make it invisible to
-    /// [`Provenance::source_of`].
-    fn claim(&mut self, path: &str, value: &Value, layer: &'a str, depth: u32) {
+    /// [`Provenance::source_of`]. An absent value is not: it is no
+    /// opinion, so it has no layer.
+    fn claim(&mut self, path: &mut Vec<String>, value: &Value, layer: &'a str, depth: u32) {
         if depth >= MAX_DEPTH {
-            self.leaves.insert(path.to_string(), layer);
+            self.leaves.insert(path.clone(), layer);
             return;
         }
         match kind(value) {
+            Some(Tag::GUATIAO_ABSENT) => {}
             Some(Tag::GUATIAO_MAP) => {
                 let entries = TryAsRef::<Map>::try_as_ref(value)
                     .map(Map::entries)
                     .unwrap_or(&[]);
                 if entries.is_empty() {
-                    self.leaves.insert(path.to_string(), layer);
+                    self.leaves.insert(path.clone(), layer);
                     return;
                 }
                 for entry in entries {
-                    let child = join(path, entry.key());
-                    self.claim(&child, entry.value(), layer, depth + 1);
+                    path.push(entry.key().to_string());
+                    self.claim(path, entry.value(), layer, depth + 1);
+                    path.pop();
                 }
             }
             Some(Tag::GUATIAO_LIST) => {
@@ -298,36 +314,35 @@ impl<'a> Provenance<'a> {
                     .map(|list| &list[..])
                     .unwrap_or(&[]);
                 if items.is_empty() {
-                    self.leaves.insert(path.to_string(), layer);
+                    self.leaves.insert(path.clone(), layer);
                     return;
                 }
                 for (index, child) in items.iter().enumerate() {
-                    let child_path = join(path, &index.to_string());
-                    self.claim(&child_path, child, layer, depth + 1);
+                    path.push(index.to_string());
+                    self.claim(path, child, layer, depth + 1);
+                    path.pop();
                 }
             }
             _ => {
-                self.leaves.insert(path.to_string(), layer);
+                self.leaves.insert(path.clone(), layer);
             }
         }
     }
 
     /// Drops `path` and everything beneath it, so a subtree the later
     /// layer replaced stops being attributed to the layer it came from.
-    fn forget_subtree(&mut self, path: &str) {
-        let prefix = format!("{path}.");
-        self.leaves
-            .retain(|k, _| k != path && !k.starts_with(&prefix));
+    /// The empty path is the root, and drops everything.
+    fn forget_subtree(&mut self, path: &[String]) {
+        self.leaves.retain(|k, _| !k.starts_with(path));
     }
 }
 
-/// Joins a parent path and a segment with the dot the whole crate uses.
-fn join(parent: &str, segment: &str) -> String {
-    if parent.is_empty() {
-        segment.to_string()
-    } else {
-        format!("{parent}.{segment}")
-    }
+/// `parent` with one more segment: the path of a child.
+fn child(parent: &[String], segment: &str) -> Vec<String> {
+    let mut path = Vec::with_capacity(parent.len() + 1);
+    path.extend_from_slice(parent);
+    path.push(segment.to_string());
+    path
 }
 
 /// A per-path mode override: what a *declarer* of an option knows that
@@ -335,16 +350,17 @@ fn join(parent: &str, segment: &str) -> String {
 /// [`MergeMode::Deep`] is right) or an ordered fallback chain.
 /// Deliberately a plain path-to-mode map and not a schema type.
 ///
-/// Paths match **exactly**, in [`Provenance`]'s dotted spelling: an
-/// override on `"tls"` does not govern `"tls.ciphers"`, which keeps a
-/// declaration's blast radius visible.
+/// A path is a list of segments, matched **exactly**: an override on
+/// `["tls"]` does not govern `["tls", "ciphers"]`, which keeps a
+/// declaration's blast radius visible, and one on the key `tls.ciphers`
+/// (a single segment) does not govern the key `ciphers` inside `tls`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MergeOverrides {
-    by_path: BTreeMap<String, MergeMode>,
+    by_path: BTreeMap<Vec<String>, MergeMode>,
 }
 
 impl MergeOverrides {
-    /// No overrides — every path takes the call-site mode.
+    /// No overrides -- every path takes the call-site mode.
     pub fn new() -> MergeOverrides {
         MergeOverrides {
             by_path: BTreeMap::new(),
@@ -352,20 +368,34 @@ impl MergeOverrides {
     }
 
     /// Declares `mode` for `path`, replacing any previous declaration.
-    pub fn set(&mut self, path: impl Into<String>, mode: MergeMode) {
-        self.by_path.insert(path.into(), mode);
+    pub fn set<I, S>(&mut self, path: I, mode: MergeMode)
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.by_path
+            .insert(path.into_iter().map(Into::into).collect(), mode);
     }
 
     /// Chained form of [`MergeOverrides::set`].
     #[must_use]
-    pub fn with(mut self, path: impl Into<String>, mode: MergeMode) -> MergeOverrides {
+    pub fn with<I, S>(mut self, path: I, mode: MergeMode) -> MergeOverrides
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
         self.set(path, mode);
         self
     }
 
     /// The mode declared for `path`, if any.
-    pub fn get(&self, path: &str) -> Option<MergeMode> {
-        self.by_path.get(path).copied()
+    pub fn get<I, S>(&self, path: I) -> Option<MergeMode>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let path: Vec<String> = path.into_iter().map(|s| s.as_ref().to_string()).collect();
+        self.by_path.get(&path).copied()
     }
 
     /// Whether anything is declared at all.
@@ -387,9 +417,9 @@ struct Context<'o> {
 impl Context<'_> {
     /// The mode in force at `path`: a schema-declared override if there
     /// is one, else the call-site default.
-    fn mode_at(&self, path: &str) -> MergeMode {
+    fn mode_at(&self, path: &[String]) -> MergeMode {
         self.overrides
-            .and_then(|o| o.get(path))
+            .and_then(|o| o.by_path.get(path).copied())
             .unwrap_or(self.mode)
     }
 }
@@ -419,7 +449,7 @@ impl MergeMode {
             options,
             overrides,
         };
-        merge_value(earlier, later, "", &ctx, alloc, 0)
+        merge_value(earlier, later, &[], &ctx, alloc, 0)
     }
 
     /// Folds labelled layers left to right, later winning, recording
@@ -453,12 +483,12 @@ impl MergeMode {
         for (label, layer) in layers {
             match accumulated {
                 None => {
-                    provenance.claim("", layer, label, 0);
+                    provenance.claim(&mut Vec::new(), layer, label, 0);
                     accumulated = Some(clone_into(layer, alloc)?);
                 }
                 Some(previous) => {
-                    record_claims(&previous, layer, "", &ctx, label, &mut provenance, 0);
-                    accumulated = Some(merge_value(&previous, layer, "", &ctx, alloc, 0)?);
+                    record_claims(&previous, layer, &[], &ctx, label, &mut provenance, 0);
+                    accumulated = Some(merge_value(&previous, layer, &[], &ctx, alloc, 0)?);
                 }
             }
         }
@@ -529,7 +559,7 @@ fn shares_a_key(a: &Value, b: &Value) -> bool {
 fn record_claims<'a>(
     earlier: &Value,
     later: &Value,
-    path: &str,
+    path: &[String],
     ctx: &Context<'_>,
     label: &'a str,
     provenance: &mut Provenance<'a>,
@@ -538,7 +568,17 @@ fn record_claims<'a>(
     if depth >= MAX_DEPTH {
         return;
     }
+    // Absent means no opinion: the merge keeps what the earlier layers
+    // had, so this layer claims nothing here.
+    if kind(later) == Some(Tag::GUATIAO_ABSENT) {
+        return;
+    }
     let mode = ctx.mode_at(path);
+
+    if mode == MergeMode::Simple {
+        record_simple(earlier, later, path, label, provenance, depth);
+        return;
+    }
 
     // Recursive map-into-map: descend, so only the keys the later layer
     // actually carries change hands.
@@ -549,7 +589,7 @@ fn record_claims<'a>(
             .iter()
             .map(|e| (e.key(), e.value()))
         {
-            let child_path = join(path, key);
+            let child_path = child(path, key);
             match TryAsRef::<Map>::try_as_ref(earlier).and_then(|m| m.get(key)) {
                 Some(earlier_child) => record_claims(
                     earlier_child,
@@ -560,10 +600,7 @@ fn record_claims<'a>(
                     provenance,
                     depth + 1,
                 ),
-                None => {
-                    provenance.forget_subtree(&child_path);
-                    provenance.claim(&child_path, later_child, label, depth + 1);
-                }
+                None => replace(provenance, child_path, later_child, label, depth + 1),
             }
         }
         return;
@@ -580,23 +617,95 @@ fn record_claims<'a>(
             .unwrap_or(&[])
             .is_empty()
         {
-            provenance.forget_subtree(path);
-            provenance.claim(path, later, label, depth);
+            replace(provenance, path.to_vec(), later, label, depth);
         }
         return;
     }
 
     // Everything else: the later value wins this path outright, so the old
     // subtree's paths are forgotten and the new one claimed.
-    provenance.forget_subtree(path);
-    provenance.claim(path, later, label, depth);
+    replace(provenance, path.to_vec(), later, label, depth);
+}
+
+/// `Simple`'s claims: the shape [`merge_simple`] builds. A map replaces
+/// key by key, each key's old subtree and all; a list overwrites by
+/// position and leaves the earlier excess where it was; anything else
+/// replaces the path outright. The root is never forgotten for a map
+/// merge, because the earlier layer's other keys stand.
+fn record_simple<'a>(
+    earlier: &Value,
+    later: &Value,
+    path: &[String],
+    label: &'a str,
+    provenance: &mut Provenance<'a>,
+    depth: u32,
+) {
+    if depth >= MAX_DEPTH {
+        return;
+    }
+    if is_map(earlier) && is_map(later) {
+        for entry in TryAsRef::<Map>::try_as_ref(later)
+            .map(Map::entries)
+            .unwrap_or(&[])
+        {
+            replace(
+                provenance,
+                child(path, entry.key()),
+                entry.value(),
+                label,
+                depth + 1,
+            );
+        }
+        return;
+    }
+    if is_list(earlier) && is_list(later) {
+        let earlier_items = TryAsRef::<List>::try_as_ref(earlier)
+            .map(|list| &list[..])
+            .unwrap_or(&[]);
+        for (index, later_item) in TryAsRef::<List>::try_as_ref(later)
+            .map(|list| &list[..])
+            .unwrap_or(&[])
+            .iter()
+            .enumerate()
+        {
+            let item_path = child(path, &index.to_string());
+            match earlier_items.get(index) {
+                Some(earlier_item) => {
+                    record_simple(
+                        earlier_item,
+                        later_item,
+                        &item_path,
+                        label,
+                        provenance,
+                        depth + 1,
+                    );
+                }
+                None => replace(provenance, item_path, later_item, label, depth + 1),
+            }
+        }
+        return;
+    }
+    replace(provenance, path.to_vec(), later, label, depth);
+}
+
+/// `later` takes `path` outright: whatever was recorded there is
+/// forgotten and every leaf of `later` is claimed for `label`.
+fn replace<'a>(
+    provenance: &mut Provenance<'a>,
+    mut path: Vec<String>,
+    later: &Value,
+    label: &'a str,
+    depth: u32,
+) {
+    provenance.forget_subtree(&path);
+    provenance.claim(&mut path, later, label, depth);
 }
 
 /// The core: one merge step, dispatching on the mode in force at `path`.
 fn merge_value(
     earlier: &Value,
     later: &Value,
-    path: &str,
+    path: &[String],
     ctx: &Context<'_>,
     alloc: Alloc,
     depth: u32,
@@ -632,7 +741,7 @@ fn merge_value(
 fn merge_simple(
     earlier: &Value,
     later: &Value,
-    path: &str,
+    path: &[String],
     ctx: &Context<'_>,
     alloc: Alloc,
     depth: u32,
@@ -676,7 +785,7 @@ fn merge_simple(
 fn overwrite_positionally(
     earlier: &Value,
     later: &Value,
-    path: &str,
+    path: &[String],
     ctx: &Context<'_>,
     alloc: Alloc,
     depth: u32,
@@ -694,7 +803,7 @@ fn overwrite_positionally(
             Some(earlier_item) => merge_simple(
                 earlier_item,
                 later_item,
-                &join(path, &index.to_string()),
+                &child(path, &index.to_string()),
                 ctx,
                 alloc,
                 depth + 1,
@@ -718,7 +827,7 @@ fn overwrite_positionally(
 fn merge_substitute(
     earlier: &Value,
     later: &Value,
-    path: &str,
+    path: &[String],
     ctx: &Context<'_>,
     alloc: Alloc,
     depth: u32,
@@ -733,7 +842,7 @@ fn merge_substitute(
         // than "fixed", because a map replacing a scalar silently is
         // exactly the discard this mode refuses to make.
         return Err(MergeError::Kind {
-            path: path.to_string(),
+            path: path::render(path),
             earlier: kind(earlier),
             later: kind(later),
             mode: MergeMode::Substitute,
@@ -745,8 +854,8 @@ fn merge_substitute(
     }
     if is_list(later) {
         // A map on the left absorbs a LIST OF MAPS on the right, folding
-        // each element in sequentially. Non-obvious, taken from the prior
-        // implementation, and shared with `Deep`.
+        // each element in sequentially. Non-obvious, and shared with
+        // `Deep`.
         return absorb_list_of_maps(
             earlier,
             later,
@@ -758,7 +867,7 @@ fn merge_substitute(
         );
     }
     Err(MergeError::Kind {
-        path: path.to_string(),
+        path: path::render(path),
         earlier: Some(Tag::GUATIAO_MAP),
         later: kind(later),
         mode: MergeMode::Substitute,
@@ -772,7 +881,7 @@ fn merge_substitute(
 fn merge_deep(
     earlier: &Value,
     later: &Value,
-    path: &str,
+    path: &[String],
     ctx: &Context<'_>,
     alloc: Alloc,
     depth: u32,
@@ -793,7 +902,7 @@ fn merge_deep(
         return absorb_list_of_maps(earlier, later, path, ctx, MergeMode::Deep, alloc, depth);
     }
     Err(MergeError::Kind {
-        path: path.to_string(),
+        path: path::render(path),
         earlier: kind(earlier),
         later: kind(later),
         mode: MergeMode::Deep,
@@ -811,7 +920,7 @@ fn merge_deep(
 fn merge_maps_recursively(
     earlier: &Value,
     later: &Value,
-    path: &str,
+    path: &[String],
     ctx: &Context<'_>,
     alloc: Alloc,
     depth: u32,
@@ -831,7 +940,7 @@ fn merge_maps_recursively(
             Some(later_value) => merge_value(
                 earlier_value,
                 later_value,
-                &join(path, key),
+                &child(path, key),
                 ctx,
                 alloc,
                 depth + 1,
@@ -865,7 +974,7 @@ fn merge_maps_recursively(
 fn absorb_list_of_maps(
     earlier: &Value,
     later: &Value,
-    path: &str,
+    path: &[String],
     ctx: &Context<'_>,
     mode: MergeMode,
     alloc: Alloc,
@@ -879,7 +988,7 @@ fn absorb_list_of_maps(
     {
         if !is_map(item) {
             return Err(MergeError::Kind {
-                path: path.to_string(),
+                path: path::render(path),
                 earlier: Some(Tag::GUATIAO_MAP),
                 later: kind(item),
                 mode,
@@ -904,7 +1013,7 @@ fn absorb_list_of_maps(
 fn union_lists(
     earlier: &Value,
     later: &Value,
-    path: &str,
+    path: &[String],
     ctx: &Context<'_>,
     alloc: Alloc,
     depth: u32,
@@ -965,7 +1074,7 @@ fn union_lists(
             let merged = merge_deep(
                 &result[index],
                 later_item,
-                &join(path, &index.to_string()),
+                &child(path, &index.to_string()),
                 ctx,
                 alloc,
                 depth + 1,

@@ -71,6 +71,7 @@ use crate::value::error::ValueError;
 use crate::value::types::{List, Map, Number, Text, Value};
 
 /// Builds a schema: the root document, with its dialect declared.
+#[must_use = "a builder does nothing until it is finished or handed on"]
 pub struct SchemaBuilder {
     alloc: Alloc,
     state: Result<Value, ValueError>,
@@ -82,6 +83,7 @@ pub struct SchemaBuilder {
 ///
 /// The name and the requiredness are the owner's to write; everything else
 /// goes onto the field's own subschema, which is what `state` holds.
+#[must_use = "a builder does nothing until it is finished or handed on"]
 pub struct FieldBuilder {
     alloc: Alloc,
     state: Result<Value, ValueError>,
@@ -93,6 +95,7 @@ pub struct FieldBuilder {
 ///
 /// Holds its allocator, as the other builders do, so a constraint chained
 /// onto it -- `.max_length(64)` -- lands in the same arena as the kind.
+#[must_use = "a builder does nothing until it is finished or handed on"]
 pub struct KindBuilder {
     alloc: Alloc,
     state: Result<Value, ValueError>,
@@ -103,6 +106,7 @@ pub struct KindBuilder {
 /// Holds its discriminant until the variant assembles it, because an arm
 /// does not know which key the discriminant is stored under — that is the
 /// variant's declaration, not the arm's.
+#[must_use = "a builder does nothing until it is finished or handed on"]
 pub struct ArmBuilder {
     alloc: Alloc,
     state: Result<Value, ValueError>,
@@ -218,11 +222,25 @@ fn seal(
     let mut properties = Ok(Map::new_in(alloc).into());
     let mut required = Ok(List::new_in(alloc).into());
     let mut any_required = false;
+    let tag_key = tag.as_ref().map(|(tag, _)| *tag);
 
     if let Some((tag, discriminant)) = tag {
         put(&mut properties, tag, discriminant);
         push_name(&mut required, alloc, tag);
         any_required = true;
+    }
+    // Two fields under one name write one property and, if both are
+    // required, the same name twice in `required`, which a general
+    // validator rejects. The derive refuses it at compile time; a
+    // builder refuses it here.
+    let mut seen: Vec<&str> = tag_key.into_iter().collect();
+    let mut repeated = false;
+    for field in &fields {
+        repeated |= seen.contains(&field.key.as_str());
+        seen.push(&field.key);
+    }
+    if repeated && state.is_ok() {
+        *state = Err(ValueError::DuplicateKey);
     }
     for field in fields {
         put(&mut properties, &field.key, field.state);
