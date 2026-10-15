@@ -4,8 +4,8 @@ files:
     used-config:
       ffi-native: false
     symbols:
-      c:@E@guatiao_status:
-        name: guatiao_status
+      c:@E@guatiao_status_code:
+        name: guatiao_status_code
       c:@E@guatiao_tag:
         name: guatiao_tag
       c:@F@guatiao_alloc_default:
@@ -38,6 +38,8 @@ files:
         name: guatiao_json_emit_pretty
       c:@F@guatiao_json_parse:
         name: guatiao_json_parse
+      c:@F@guatiao_json_parse_ex:
+        name: guatiao_json_parse_ex
       c:@F@guatiao_list_clear:
         name: guatiao_list_clear
       c:@F@guatiao_list_discard:
@@ -118,6 +120,8 @@ files:
         name: guatiao_toml_emit
       c:@F@guatiao_toml_parse:
         name: guatiao_toml_parse
+      c:@F@guatiao_toml_parse_ex:
+        name: guatiao_toml_parse_ex
       c:@F@guatiao_value_absent:
         name: guatiao_value_absent
       c:@F@guatiao_value_bool:
@@ -146,6 +150,8 @@ files:
         name: guatiao_yaml_emit
       c:@F@guatiao_yaml_parse:
         name: guatiao_yaml_parse
+      c:@F@guatiao_yaml_parse_ex:
+        name: guatiao_yaml_parse_ex
       c:@S@guatiao_alloc:
         name: guatiao_alloc
       c:@S@guatiao_buffer:
@@ -180,6 +186,8 @@ files:
         name: guatiao_merge_override
       c:@S@guatiao_object:
         name: guatiao_object
+      c:@S@guatiao_parse_error:
+        name: guatiao_parse_error
       c:@S@guatiao_provider_error:
         name: guatiao_provider_error
       c:@S@guatiao_provider_info:
@@ -203,8 +211,11 @@ files:
       c:guatiao.h@T@guatiao_number:
         name: guatiao_number
       c:guatiao.h@T@guatiao_status:
-        name: guatiao_status$1
+        name: guatiao_status
         dart-name: Dartguatiao_status
+      c:guatiao.h@T@guatiao_status_code:
+        name: guatiao_status_code$1
+        dart-name: Dartguatiao_status_code
       c:guatiao.h@T@guatiao_tag:
         name: guatiao_tag$1
         dart-name: Dartguatiao_tag
