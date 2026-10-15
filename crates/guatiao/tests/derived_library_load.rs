@@ -243,6 +243,42 @@ impl Drop for Tape {
 }
 
 #[test]
+fn a_listener_lent_across_the_dlopen_stays_the_hosts() {
+    let registry = loaded();
+    let offer = registry
+        .offer::<dyn Greeter>("derived_greeter_hello")
+        .expect("filed under its id")
+        .expect("a valid table");
+    let greeter = offer
+        .default_instance()
+        .expect("the default greeter is its own instance");
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    let dropped = Arc::new(AtomicBool::new(false));
+    let mut tape = Tape {
+        heard: Arc::clone(&heard),
+        dropped: Arc::clone(&dropped),
+    };
+
+    // The library's `greet_into` (the trait's default body, compiled
+    // there) tells the host's listener, which never left this stack.
+    greeter
+        .greet_into("eve", &mut tape)
+        .expect("the library greets");
+    assert_eq!(*heard.lock().unwrap(), ["hello, eve"]);
+    assert!(
+        !dropped.load(Ordering::SeqCst),
+        "lent, not handed over: nothing destroyed it"
+    );
+
+    // A refusal leaves it with its owner as well.
+    let e = greeter.greet_into("", &mut tape).unwrap_err();
+    assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert!(!dropped.load(Ordering::SeqCst));
+    drop(tape);
+    assert!(dropped.load(Ordering::SeqCst), "its owner drops it, here");
+}
+
+#[test]
 fn objects_cross_both_ways_and_are_destroyed_by_whoever_holds_them_last() {
     let registry = loaded();
     let offer = registry

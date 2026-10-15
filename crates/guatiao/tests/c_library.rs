@@ -18,9 +18,43 @@ use guatiao::value::convert::TryAsRef;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use core::ffi::c_void;
+use core::ptr::NonNull;
+
 use greeter_kind::{Greeter, GreeterVtable, Listener};
-use guatiao::Status;
-use guatiao::library::{Kind, Registry};
+use guatiao::library::{Kind, ProviderError, Registry};
+use guatiao::{Map, Status, Str};
+
+/// Counts this thread's heap allocations, so a call can be shown to make
+/// none: the other tests run on other threads.
+struct PerThread;
+
+std::thread_local! {
+    static ALLOCATIONS: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+// SAFETY: every call is forwarded to the system allocator unchanged.
+unsafe impl core::alloc::GlobalAlloc for PerThread {
+    unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
+        let _ = ALLOCATIONS.try_with(|n| n.set(n.get() + 1));
+        // SAFETY: forwarded.
+        unsafe { std::alloc::System.alloc(layout) }
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
+        // SAFETY: forwarded.
+        unsafe { std::alloc::System.dealloc(ptr, layout) }
+    }
+}
+
+#[global_allocator]
+static HEAP: PerThread = PerThread;
+
+/// `f`, and how many allocations it made on this thread.
+fn allocations<R>(f: impl FnOnce() -> R) -> (R, usize) {
+    let before = ALLOCATIONS.with(|n| n.get());
+    let r = f();
+    (r, ALLOCATIONS.with(|n| n.get()) - before)
+}
 
 /// The C compilers worth trying, in order (as `c_consumer.rs`).
 fn find_compiler() -> Option<PathBuf> {
@@ -142,7 +176,50 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     // sides of the boundary.
     assert_eq!(<dyn Greeter as Kind>::FLOOR_HASH, GreeterVtable::FLOOR_HASH);
 
-    // 6. A C library with no `unload` slot promises nothing, so the host
+    // 6. A listener LENT to C for one call: C calls its `heard` slot
+    // through the `const guatiao_object *` it was given, which is this
+    // stack's, and keeps nothing. Nothing is allocated to lend it.
+    let mut ear = Ear::default();
+    let (answer, allocated) = allocations(|| greeter.greet_into("cy", &mut ear));
+    answer.expect("the C greeter answers");
+    assert_eq!(allocated, 0, "lending to C allocates nothing");
+    assert_eq!(ear.heard, 1);
+    assert_eq!(&ear.last[..ear.len], b"hello from C, cy");
+
+    // 7. And C lending ITS object to a Rust greeter: the table is the one
+    // `of::<Plain>()` built, the listener C's own, on C's stack. The Rust
+    // shim calls it through C's table and never calls its `destroy`.
+    {
+        // SAFETY: the library the registry mapped above; opening it again
+        // only takes another reference to the same image.
+        let image = unsafe { libloading::Library::new(&library) }.expect("the same file");
+        // SAFETY: the signature `greeter_in_c.c` declares.
+        let lend: libloading::Symbol<
+            unsafe extern "C" fn(*const GreeterVtable, *mut c_void, Str<'_>, *mut Tape) -> Status,
+        > = unsafe { image.get(b"c_greeter_lend_tape\0") }.expect("exported");
+        let mut tape = Tape::default();
+        let (status, allocated) = allocations(|| {
+            // SAFETY: a Rust table over a ZST `ctx`, and a tape C writes.
+            unsafe {
+                lend(
+                    &PLAIN,
+                    NonNull::<Plain>::dangling().as_ptr().cast(),
+                    Str::new("dee"),
+                    &mut tape,
+                )
+            }
+        });
+        assert_eq!(status, Status::GUATIAO_OK);
+        assert_eq!(allocated, 0, "lending from C allocates nothing here");
+        assert_eq!(
+            (tape.heard, tape.destroyed),
+            (1, 0),
+            "heard once, never destroyed"
+        );
+        assert_eq!(&tape.last[..tape.len], b"dee");
+    }
+
+    // 8. A C library with no `unload` slot promises nothing, so the host
     // is refused until it insists.
     drop(offer);
     // SAFETY: nothing taken from the library is held any more.
@@ -163,3 +240,45 @@ struct NoListener;
 impl Listener for NoListener {
     fn heard(&mut self, _what: &str) {}
 }
+
+/// A listener that keeps what it heard in place, allocating nothing.
+#[derive(Default)]
+struct Ear {
+    heard: usize,
+    last: [u8; 32],
+    len: usize,
+}
+
+impl Listener for Ear {
+    fn heard(&mut self, what: &str) {
+        self.heard += 1;
+        self.len = what.len().min(self.last.len());
+        self.last[..self.len].copy_from_slice(&what.as_bytes()[..self.len]);
+    }
+}
+
+/// What `c_greeter_lend_tape` writes, laid out as `greeter_in_c.c`'s
+/// `tape`.
+#[repr(C)]
+#[derive(Default)]
+struct Tape {
+    heard: i64,
+    destroyed: i64,
+    len: usize,
+    last: [u8; 32],
+}
+
+/// A Rust greeter that tells its listener the name it was given.
+struct Plain;
+
+impl Greeter for Plain {
+    fn greet(&self, _: &str) -> Result<Map, ProviderError> {
+        Ok(Map::new())
+    }
+    fn greet_into(&self, name: &str, listener: &mut dyn Listener) -> Result<(), ProviderError> {
+        listener.heard(name);
+        Ok(())
+    }
+}
+
+static PLAIN: GreeterVtable = GreeterVtable::of::<Plain>();

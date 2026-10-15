@@ -230,8 +230,9 @@ pub fn derive_from_value(input: TokenStream) -> TokenStream {
 ///
 /// The trait names `Send + Sync`, and every method takes `&self`.
 /// Arguments: integers, floats, `bool`, `&str`, `&[u8]`, `&Value`,
-/// `Option<&Value>`, `&Map`, or any other type by value through
-/// `ToValue`. Returns: `()`, the scalars, `Value`, `Map`, `List`, `String`,
+/// `Option<&Value>`, `&Map`, an object kind's `Object<dyn K>` (handed
+/// over) or `&mut dyn K`/`&dyn K` (lent for the call), or any other type
+/// by value through `ToValue`. Returns: `()`, the scalars, `Value`, `Map`, `List`, `String`,
 /// or any other type through `FromValue`; each optionally inside
 /// `Result<_, ProviderError>`, which a method that converts must use. A
 /// method with a default body is an appended slot; a required method may

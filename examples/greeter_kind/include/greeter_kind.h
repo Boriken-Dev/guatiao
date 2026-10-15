@@ -36,6 +36,10 @@ typedef struct greeter_vtable {
                           guatiao_object listener,
                           guatiao_object *out,
                           guatiao_provider_error *err);
+  guatiao_status (*greet_into)(void *ctx,
+                               guatiao_str name,
+                               const guatiao_object *listener,
+                               guatiao_provider_error *err);
 } greeter_vtable;
 /*
  FNV-1a over the shape and the required signatures, as a

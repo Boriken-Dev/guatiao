@@ -22,9 +22,15 @@
  *   `free` here ever meets a block from over there. The allocator is the
  *   header's own malloc wrapper, `static inline`, nothing linked.
  *
- * Only `greet` is filled. `shout` and `start` are left null: to the host
- * that is an older table, and its proxy runs the trait's default bodies
- * -- `shout` through this file's `greet`.
+ * `greet` and `greet_into` are filled. `shout` and `start` are left null:
+ * to the host that is an older table, and its proxy runs the trait's
+ * default bodies -- `shout` through this file's `greet`.
+ *
+ * `greet_into` takes its listener LENT: a `const guatiao_object *` on the
+ * caller's stack, valid for the call. This file calls the listener's
+ * slots through it and neither keeps it nor calls its `destroy`. And
+ * `c_greeter_lend_tape` is the other direction: C lending an object of
+ * its own to a greeter's `greet_into`, whoever wrote the greeter.
  */
 
 #include <stdlib.h>
@@ -66,18 +72,24 @@ static bool owned_string(guatiao_string *out, const char *a, guatiao_str b) {
 
 /* ---- the provider ------------------------------------------------------ */
 
+/* A refusal whose message is a literal: never freed. */
+static guatiao_status refuse(guatiao_provider_error *err, guatiao_status status,
+                             const char *why) {
+  err->status = status;
+  err->message.ptr = (uint8_t *)why;
+  err->message.len = strlen(why);
+  err->message.cap = 0;
+  err->message.alloc = NULL;
+  return status;
+}
+
 static int64_t GREETED = 0;
 
 static guatiao_status greet(void *ctx, guatiao_str name, guatiao_map *out,
                             guatiao_provider_error *err) {
   int64_t *greeted = (int64_t *)ctx;
   if (name.len == 0) {
-    err->status = GUATIAO_ERR_BAD_VALUE;
-    err->message.ptr = (uint8_t *)"nobody to greet, says C";
-    err->message.len = strlen("nobody to greet, says C");
-    err->message.cap = 0; /* a literal: never freed */
-    err->message.alloc = NULL;
-    return GUATIAO_ERR_BAD_VALUE;
+    return refuse(err, GUATIAO_ERR_BAD_VALUE, "nobody to greet, says C");
   }
 
   /* One entry, in a block ALLOC owns, holding a string ALLOC owns. */
@@ -102,13 +114,90 @@ static guatiao_status greet(void *ctx, guatiao_str name, guatiao_map *out,
   return GUATIAO_OK;
 }
 
-/* The table: size and hash from the header, one slot filled. */
+/* The greeting, told to a listener the caller lent for this call. */
+static guatiao_status greet_into(void *ctx, guatiao_str name,
+                                 const guatiao_object *listener,
+                                 guatiao_provider_error *err) {
+  (void)ctx;
+  if (!listener || !listener->table ||
+      listener->size < sizeof(listener_vtable)) {
+    return refuse(err, GUATIAO_ERR_WRONG_KIND, "no listener was lent, says C");
+  }
+  const listener_vtable *table = (const listener_vtable *)listener->table;
+  if (table->header.floor_hash != listener_vtable_FLOOR_HASH || !table->heard) {
+    return refuse(err, GUATIAO_ERR_WRONG_KIND, "not a listener, says C");
+  }
+  /* Built on this stack: the listener reads it during the call only. */
+  uint8_t buf[64];
+  const char *hello = "hello from C, ";
+  size_t len = strlen(hello);
+  memcpy(buf, hello, len);
+  size_t room = sizeof(buf) - len;
+  size_t n = name.len < room ? name.len : room;
+  if (n) {
+    memcpy(buf + len, name.ptr, n);
+  }
+  guatiao_str what = {buf, len + n};
+  return table->heard(listener->ctx, what);
+}
+
+/* The table: size and hash from the header, two slots filled. */
 static const greeter_vtable TABLE = {
     {(uint32_t)sizeof(greeter_vtable), greeter_vtable_FLOOR_HASH},
     greet,
     NULL, /* shout: the host's default body runs, through `greet` */
     NULL, /* start: likewise -- this greeter holds no conversations */
+    greet_into,
 };
+
+/* ---- C lending an object of its own ------------------------------------ */
+
+/* What the test reads back: laid out as the Rust test declares it. */
+typedef struct tape {
+  int64_t heard;
+  int64_t destroyed;
+  size_t len;
+  uint8_t last[32];
+} tape;
+
+/* Never called on a lent object; counted, so a test can say so. */
+static void tape_destroy(void *ctx) { ((tape *)ctx)->destroyed++; }
+
+static guatiao_status tape_heard(void *ctx, guatiao_str what) {
+  tape *t = (tape *)ctx;
+  t->heard++;
+  t->len = what.len < sizeof(t->last) ? what.len : sizeof(t->last);
+  if (t->len) {
+    memcpy(t->last, what.ptr, t->len);
+  }
+  return GUATIAO_OK;
+}
+
+static const listener_vtable TAPE = {
+    {(uint32_t)sizeof(listener_vtable), listener_vtable_FLOOR_HASH},
+    tape_destroy,
+    tape_heard,
+};
+
+/* Calls a greeter's `greet_into` -- any greeter's table, Rust's included
+ * -- lending `t` as the listener. The object lives on this stack. */
+EXPORT guatiao_status c_greeter_lend_tape(const greeter_vtable *greeter,
+                                          void *ctx, guatiao_str name,
+                                          tape *t) {
+  if (!greeter || greeter->header.struct_size < sizeof(greeter_vtable) ||
+      !greeter->greet_into) {
+    return GUATIAO_ERR_NULL;
+  }
+  guatiao_object lent = {&TAPE, sizeof(listener_vtable), t};
+  guatiao_provider_error err;
+  memset(&err, 0, sizeof(err));
+  guatiao_status status = greeter->greet_into(ctx, name, &lent, &err);
+  if (err.message.cap && err.message.alloc) {
+    err.message.alloc->free(err.message.alloc->ctx, err.message.ptr,
+                            err.message.cap, 1);
+  }
+  return status;
+}
 
 static const guatiao_str KINDS[] = {{(const uint8_t *)"greeter", 7}};
 

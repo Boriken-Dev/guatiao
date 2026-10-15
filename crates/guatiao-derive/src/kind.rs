@@ -46,6 +46,15 @@
 //! argument (ownership crosses with it) — a host implementing an object
 //! kind and handing it in is how a callback crosses.
 //!
+//! Or **lend** one for the call: an argument `&mut dyn K` (or `&dyn K`,
+//! when `K` has a `&self` method) crosses as a pointer to an `ObjectRaw`
+//! on the caller's stack, its `ctx` the address of the caller's own
+//! `*mut dyn K` and its table the kind's lent table (`lent_mut()`,
+//! `lent()`), whose slots call through that pointer and whose `destroy`
+//! does nothing. The callee gets a `BorrowedMut`/`Borrowed`, which has no
+//! `Drop`. Nothing is allocated and nothing is owed back. Lent shared, a
+//! slot whose method takes `&mut self` answers `GUATIAO_ERR_UNSUPPORTED`.
+//!
 //! # Versioning
 //!
 //! Slots follow declaration order. A method **with a default body** is an
@@ -238,6 +247,12 @@ enum ArgKind {
     /// `Object<dyn K>`: an object kind's handle, ownership crossing with
     /// it. Holds the `dyn K` inside.
     Object(Type),
+    /// `&mut dyn K` (`K` an object kind): the caller's object, lent for the
+    /// call as a pointer to an `ObjectRaw` on its stack; nothing is owed.
+    /// Holds the `dyn K`.
+    BorrowMut(Type),
+    /// `&dyn K`: the same, shared.
+    Borrow(Type),
 }
 
 /// How a return crosses.
@@ -391,16 +406,18 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
     }
 
     let (ret, fallible) = ret_kind(&sig.output)?;
-    let converts = args
-        .iter()
-        .any(|a| matches!(a.kind, ArgKind::Owned(_) | ArgKind::Object(_)))
-        || matches!(ret, RetKind::Owned(_) | RetKind::Object(_));
+    let converts = args.iter().any(|a| {
+        matches!(
+            a.kind,
+            ArgKind::Owned(_) | ArgKind::Object(_) | ArgKind::BorrowMut(_) | ArgKind::Borrow(_)
+        )
+    }) || matches!(ret, RetKind::Owned(_) | RetKind::Object(_));
     if converts && !fallible {
         return Err(syn::Error::new_spanned(
             &sig.ident,
             "a method converting an argument or its return through `ToValue`/`FromValue`, or \
              passing an `Object`, must return `Result<_, ProviderError>`, because the conversion \
-             or the validation can fail",
+             or the validation can fail; so must one lending an object (`&mut dyn K`, `&dyn K`)",
         ));
     }
 
@@ -483,9 +500,43 @@ fn is_scalar(ident: &Ident) -> bool {
     )
 }
 
+/// `&mut dyn K` or `&dyn K`: whether it is mutable, and the `dyn K`.
+/// `None` for a reference to anything else.
+fn lent_inner(r: &TypeReference) -> Option<syn::Result<(bool, Type)>> {
+    let mut elem = &*r.elem;
+    while let Type::Paren(syn::TypeParen { elem: inner, .. })
+    | Type::Group(syn::TypeGroup { elem: inner, .. }) = elem
+    {
+        elem = inner;
+    }
+    let Type::TraitObject(t) = elem else {
+        return None;
+    };
+    let mut bounds = t.bounds.iter();
+    let (Some(syn::TypeParamBound::Trait(bound)), None) = (bounds.next(), bounds.next()) else {
+        return Some(Err(syn::Error::new_spanned(
+            elem,
+            "lend an object as `&mut dyn K` or `&dyn K`, naming the kind's trait alone: the \
+             table is the kind's, and another bound or a lifetime has none",
+        )));
+    };
+    let path = &bound.path;
+    Some(Ok((r.mutability.is_some(), syn::parse_quote!(dyn #path))))
+}
+
 fn arg_kind(ty: &Type, object: bool) -> syn::Result<ArgKind> {
     if let Some(inner) = object_inner(ty) {
         return Ok(ArgKind::Object(inner));
+    }
+    if let Type::Reference(r) = ty
+        && let Some(lent) = lent_inner(r)
+    {
+        let (mutable, inner) = lent?;
+        return Ok(if mutable {
+            ArgKind::BorrowMut(inner)
+        } else {
+            ArgKind::Borrow(inner)
+        });
     }
     match ty {
         Type::Reference(TypeReference {
@@ -748,15 +799,128 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             }
         }
     });
+    let receiver = if object {
+        Receiver::Cell
+    } else {
+        Receiver::Provider
+    };
     let shims = methods
         .iter()
-        .map(|m| emit_shim(trait_ident, &table, object, m));
+        .map(|m| emit_shim(trait_ident, &table, receiver, m));
     let required_slots = required.iter().map(|m| {
         let name = m.ident.to_string();
         let end = end_ident(&m.ident);
         quote! { (#name, #table::#end()), }
     });
     let proxies = methods.iter().map(|m| emit_proxy(&table, m));
+
+    // An object kind's lent tables: one whose slots reach the lender's
+    // `*mut dyn Trait`, and, when the kind has a `&self` method, one over
+    // a `*const dyn Trait` whose `&mut self` slots refuse. `destroy` does
+    // nothing in either: a lent object stays its lender's.
+    let shared_methods = methods.iter().any(|m| !m.mutable);
+    let lent_items = object.then(|| {
+        let lent_mut_shims = methods
+            .iter()
+            .map(|m| emit_shim(trait_ident, &table, Receiver::LentMut, m));
+        let lent_mut_inits = methods.iter().map(|m| {
+            let ident = &m.ident;
+            let shim = format_ident!("__guatiao_lent_mut_{}", m.ident);
+            quote! { #ident: ::core::option::Option::Some(Self::#shim), }
+        });
+        let shared = shared_methods.then(|| {
+            let lent_shims = methods
+                .iter()
+                .map(|m| emit_shim(trait_ident, &table, Receiver::Lent, m));
+            let lent_inits = methods.iter().map(|m| {
+                let ident = &m.ident;
+                let shim = format_ident!("__guatiao_lent_{}", m.ident);
+                quote! { #ident: ::core::option::Option::Some(Self::#shim), }
+            });
+            quote! {
+                /// The table a value is lent through as `&dyn` for one call.
+                #[doc(hidden)]
+                pub const fn lent() -> Self {
+                    Self {
+                        header: ::guatiao::library::KindHeader::new(
+                            ::core::mem::size_of::<Self>(),
+                            <dyn #trait_ident as ::guatiao::library::Kind>::FLOOR_HASH,
+                        ),
+                        destroy: ::core::option::Option::Some(Self::__guatiao_lent_destroy),
+                        #(#lent_inits)*
+                    }
+                }
+
+                #(#lent_shims)*
+            }
+        });
+        quote! {
+            /// The table a value is lent through as `&mut dyn` for one call.
+            #[doc(hidden)]
+            pub const fn lent_mut() -> Self {
+                Self {
+                    header: ::guatiao::library::KindHeader::new(
+                        ::core::mem::size_of::<Self>(),
+                        <dyn #trait_ident as ::guatiao::library::Kind>::FLOOR_HASH,
+                    ),
+                    destroy: ::core::option::Option::Some(Self::__guatiao_lent_destroy),
+                    #(#lent_mut_inits)*
+                }
+            }
+
+            /// # Safety
+            ///
+            /// None needed: a lent object is its lender's, so this frees
+            /// nothing, whoever calls it.
+            #[doc(hidden)]
+            pub unsafe extern "C" fn __guatiao_lent_destroy(_ctx: *mut ::core::ffi::c_void) {}
+
+            #(#lent_mut_shims)*
+
+            #shared
+        }
+    });
+    let lent_consts = object.then(|| {
+        let shared = shared_methods.then(|| {
+            quote! {
+                const LENT: ::core::option::Option<&'static #table> = {
+                    const __LENT: #table = #table::lent();
+                    ::core::option::Option::Some(&__LENT)
+                };
+            }
+        });
+        quote! {
+            const LENT_MUT: ::core::option::Option<&'static #table> = {
+                const __LENT: #table = #table::lent_mut();
+                ::core::option::Option::Some(&__LENT)
+            };
+            #shared
+        }
+    });
+
+    // A lent argument names an object kind that can be lent that way,
+    // checked where the kind's impl is visible: at compile time, with a
+    // sentence, rather than as a null table refused at run time.
+    let lent_checks = methods
+        .iter()
+        .flat_map(|m| &m.args)
+        .filter_map(|a| match &a.kind {
+            ArgKind::BorrowMut(inner) => Some(quote! {
+                const _: () = ::core::assert!(
+                    <#inner as ::guatiao::library::Kind>::LENT_MUT.is_some(),
+                    "a `&mut dyn K` argument lends an object kind (`#[guatiao::kind(object)]`); a \
+                     provider kind is shared and offered, never lent",
+                );
+            }),
+            ArgKind::Borrow(inner) => Some(quote! {
+                const _: () = ::core::assert!(
+                    <#inner as ::guatiao::library::Kind>::LENT.is_some(),
+                    "a `&dyn K` argument lends an object kind with a `&self` method; this one has \
+                     none to call, or is a provider kind: take `&mut dyn K`, or give the kind one",
+                );
+            }),
+            _ => None,
+        });
     // A provider kind's instance is the trait as well, so a host stores it
     // as `Arc<dyn Trait>` or `Box<dyn Trait>` and it is released with the
     // last owner. An object kind has no instances.
@@ -874,7 +1038,11 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             #(#end_fns)*
 
             #(#shims)*
+
+            #lent_items
         }
+
+        #(#lent_checks)*
 
         impl ::guatiao::library::Kind for dyn #trait_ident {
             const NAME: &'static str = #name;
@@ -883,6 +1051,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             const FLOOR_HASH: u32 = #table::FLOOR_HASH;
             const REQUIRED: &'static [(&'static str, usize)] = &[ #destroy_required #(#required_slots)* ];
             const OBJECT: bool = #object;
+            #lent_consts
 
             fn live_objects(seen: &mut ::guatiao::__private::alloc::vec::Vec<&'static str>) -> usize {
                 if seen.contains(&#name) {
@@ -954,6 +1123,9 @@ fn arg_c_type(kind: &ArgKind) -> TokenStream {
         ArgKind::MapRef => quote!(*const ::guatiao::Map),
         ArgKind::BytesMut => quote!(::guatiao::library::BytesMut),
         ArgKind::Object(_) => quote!(::guatiao::library::ObjectRaw),
+        ArgKind::BorrowMut(_) | ArgKind::Borrow(_) => {
+            quote!(*const ::guatiao::library::ObjectRaw)
+        }
     }
 }
 
@@ -987,10 +1159,37 @@ fn slot_type(m: &MethodPlan) -> TokenStream {
     }
 }
 
+/// What a shim's `ctx` is, and so how it reaches the implementation.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Receiver {
+    /// A provider's `&T`; the shim is generic over `T`.
+    Provider,
+    /// The `ObjectCell` an object was boxed in; generic over `T`.
+    Cell,
+    /// The address of a lender's `*mut dyn Trait`, for one call.
+    LentMut,
+    /// The address of a lender's `*const dyn Trait`, for one call: a
+    /// `&mut self` method refuses.
+    Lent,
+}
+
 /// The shim: reads its arguments, calls the implementation, writes the
 /// answer. Every `unsafe` is a call into the runtime.
-fn emit_shim(trait_ident: &Ident, table: &Ident, object: bool, m: &MethodPlan) -> TokenStream {
-    let shim = shim_ident(&m.ident);
+fn emit_shim(
+    trait_ident: &Ident,
+    table: &Ident,
+    receiver: Receiver,
+    m: &MethodPlan,
+) -> TokenStream {
+    let shim = match receiver {
+        Receiver::Provider | Receiver::Cell => shim_ident(&m.ident),
+        Receiver::LentMut => format_ident!("__guatiao_lent_mut_{}", m.ident),
+        Receiver::Lent => format_ident!("__guatiao_lent_{}", m.ident),
+    };
+    let generics = match receiver {
+        Receiver::Provider | Receiver::Cell => quote!(<__T: #trait_ident>),
+        Receiver::LentMut | Receiver::Lent => quote!(),
+    };
     let method = &m.ident;
     let params = m.args.iter().map(|a| {
         let ident = &a.ident;
@@ -1105,15 +1304,45 @@ fn emit_shim(trait_ident: &Ident, table: &Ident, object: bool, m: &MethodPlan) -
                     let #ident: &mut [u8] = ::core::convert::From::from(#ident);
                 }
             }
+            // Always fallible: the plan requires `Result` for a lent object.
+            // Nothing is owned, so a refusal destroys nothing.
+            ArgKind::BorrowMut(inner) => quote! {
+                // SAFETY: the proxy passes an object lent for the call.
+                let mut #ident = match unsafe { ::guatiao::library::kind::borrowed_mut_arg::<#inner>(#ident) } {
+                    ::core::result::Result::Ok(__v) => __v,
+                    // SAFETY: the proxy passes a writable error slot.
+                    ::core::result::Result::Err(__e) => {
+                        return unsafe { ::guatiao::library::kind::write_err(err, __e) };
+                    }
+                };
+            },
+            ArgKind::Borrow(inner) => quote! {
+                // SAFETY: the proxy passes an object lent for the call.
+                let #ident = match unsafe { ::guatiao::library::kind::borrowed_arg::<#inner>(#ident) } {
+                    ::core::result::Result::Ok(__v) => __v,
+                    // SAFETY: the proxy passes a writable error slot.
+                    ::core::result::Result::Err(__e) => {
+                        return unsafe { ::guatiao::library::kind::write_err(err, __e) };
+                    }
+                };
+            },
         }
     });
 
-    let arg_idents = m.args.iter().map(|a| &a.ident);
-    let call = quote!(__this.#method(#(#arg_idents),*));
+    let call_args = m.args.iter().map(|a| {
+        let ident = &a.ident;
+        match &a.kind {
+            ArgKind::BorrowMut(_) => quote!(&mut *#ident),
+            ArgKind::Borrow(_) => quote!(&*#ident),
+            _ => quote!(#ident),
+        }
+    });
+    let call = quote!(__this.#method(#(#call_args),*));
 
-    // Who `ctx` is: a provider's `&T`, or the cell an object was boxed in.
-    let this = if object {
-        quote! {
+    // Who `ctx` is: a provider's `&T`, the cell an object was boxed in, or
+    // the address of a lender's pointer.
+    let this = match receiver {
+        Receiver::Cell => quote! {
             // SAFETY: the table was built for `__T` and an object's `ctx`
             // is the cell `into_object` boxed; the handle is the one
             // reference to it.
@@ -1122,9 +1351,8 @@ fn emit_shim(trait_ident: &Ident, table: &Ident, object: bool, m: &MethodPlan) -
             else {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
-        }
-    } else {
-        quote! {
+        },
+        Receiver::Provider => quote! {
             // SAFETY: the table was built for `__T` and the descriptor's
             // `ctx` is a `&__T`.
             let ::core::option::Option::Some(__this) =
@@ -1132,7 +1360,26 @@ fn emit_shim(trait_ident: &Ident, table: &Ident, object: bool, m: &MethodPlan) -
             else {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
-        }
+        },
+        Receiver::LentMut => quote! {
+            // SAFETY: a table `lent_mut()` built is lent with `ctx` the
+            // address of the lender's `*mut dyn` for the call, which no
+            // other reference reaches meanwhile.
+            let ::core::option::Option::Some(__this) =
+                (unsafe { ::guatiao::library::kind::lent_mut::<dyn #trait_ident>(ctx) })
+            else {
+                return ::guatiao::Status::GUATIAO_ERR_NULL;
+            };
+        },
+        Receiver::Lent => quote! {
+            // SAFETY: a table `lent()` built is lent with `ctx` the address
+            // of the lender's `*const dyn` for the call.
+            let ::core::option::Option::Some(__this) =
+                (unsafe { ::guatiao::library::kind::lent_ref::<dyn #trait_ident>(ctx) })
+            else {
+                return ::guatiao::Status::GUATIAO_ERR_NULL;
+            };
+        },
     };
 
     // What the implementation answered, as the status the shim returns.
@@ -1174,13 +1421,68 @@ fn emit_shim(trait_ident: &Ident, table: &Ident, object: bool, m: &MethodPlan) -
         write(call)
     };
 
+    // Lent as `&dyn`, a `&mut self` method has no receiver it may use: the
+    // slot refuses, after taking any object it was handed.
+    if receiver == Receiver::Lent && m.mutable {
+        let message = format!(
+            "lent as `&dyn {trait_ident}`, which cannot call `{method}`: it takes `&mut self`"
+        );
+        let refuse = if m.fallible {
+            quote! {
+                // SAFETY: the caller passes a writable error slot.
+                unsafe {
+                    ::guatiao::library::kind::write_err(
+                        err,
+                        ::guatiao::library::ProviderError::new(
+                            ::guatiao::Status::GUATIAO_ERR_UNSUPPORTED,
+                            #message,
+                        ),
+                    )
+                }
+            }
+        } else {
+            quote!(::guatiao::Status::GUATIAO_ERR_UNSUPPORTED)
+        };
+        return quote! {
+            /// # Safety
+            ///
+            /// Called through the table `lent()` built.
+            #[doc(hidden)]
+            #[allow(unused_variables)]
+            pub unsafe extern "C" fn #shim(
+                ctx: *mut ::core::ffi::c_void
+                #(, #params)*
+                #out_param
+                #err_param
+            ) -> ::guatiao::Status {
+                ::guatiao::library::kind::catch(|| {
+                    #(#object_reads)*
+                    #refuse
+                })
+            }
+        };
+    }
+
+    let safety = match receiver {
+        Receiver::Provider => quote! {
+            /// Called through the table `of::<__T>()` built, with the `ctx`
+            /// that table's provider declared: a `&__T`.
+        },
+        Receiver::Cell => quote! {
+            /// Called through the table `of::<__T>()` built, with the `ctx`
+            /// `into_object` boxed for a `__T`.
+        },
+        Receiver::LentMut | Receiver::Lent => quote! {
+            /// Called through the lent table, with `ctx` the address of the
+            /// lender's pointer, for the call.
+        },
+    };
     quote! {
         /// # Safety
         ///
-        /// Called through the table `of::<__T>()` built, with the `ctx`
-        /// that table's provider declared: a `&__T`.
+        #safety
         #[doc(hidden)]
-        pub unsafe extern "C" fn #shim<__T: #trait_ident>(
+        pub unsafe extern "C" fn #shim #generics(
             ctx: *mut ::core::ffi::c_void
             #(, #params)*
             #out_param
@@ -1255,6 +1557,30 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
             },
             // Ownership crosses with the call: the callee destroys it.
             ArgKind::Object(_) => quote! { let #name = #ident.into_raw(); },
+            // Lent for the call: the lent table's slots read `ctx` as the
+            // address of this pointer, and both stay on this stack.
+            ArgKind::BorrowMut(inner) => {
+                let slot = format_ident!("__lent_{}", ident);
+                let raw = format_ident!("__raw_{}", ident);
+                quote! {
+                    let #slot: *mut _ = #ident;
+                    let #raw = ::guatiao::library::kind::lend_mut::<#inner>(
+                        ::core::ptr::addr_of!(#slot).cast_mut().cast(),
+                    );
+                    let #name = &#raw as *const ::guatiao::library::ObjectRaw;
+                }
+            }
+            ArgKind::Borrow(inner) => {
+                let slot = format_ident!("__lent_{}", ident);
+                let raw = format_ident!("__raw_{}", ident);
+                quote! {
+                    let #slot: *const _ = #ident;
+                    let #raw = ::guatiao::library::kind::lend::<#inner>(
+                        ::core::ptr::addr_of!(#slot).cast_mut().cast(),
+                    );
+                    let #name = &#raw as *const ::guatiao::library::ObjectRaw;
+                }
+            }
         }
     });
     let arg_names = m.args.iter().map(|a| format_ident!("__arg_{}", a.ident));
@@ -1564,6 +1890,85 @@ mod tests {
         assert!(out.contains("let __arg_listener = listener . into_raw ()"));
     }
 
+    #[test]
+    fn a_lent_object_crosses_as_a_pointer_to_its_raw_form() {
+        let out = expand_str(
+            "",
+            "pub trait Greeter: Send + Sync { fn f(&self, l: &mut dyn Listener, g: &(dyn Gauge)) -> Result<(), ProviderError>; }",
+        )
+        .expect("expands");
+        // In C, a `const guatiao_object *` on the caller's stack.
+        assert!(
+            out.contains("l : * const :: guatiao :: library :: ObjectRaw"),
+            "{out}"
+        );
+        assert!(
+            out.contains("g : * const :: guatiao :: library :: ObjectRaw"),
+            "{out}"
+        );
+        // The shim borrows it, owning nothing, and lends it on.
+        assert!(
+            out.contains("borrowed_mut_arg :: < dyn Listener >"),
+            "{out}"
+        );
+        assert!(out.contains("borrowed_arg :: < dyn Gauge >"), "{out}");
+        assert!(out.contains("__this . f (& mut * l , & * g)"), "{out}");
+        // The proxy lends from its own stack.
+        assert!(out.contains("let __lent_l : * mut _ = l ;"), "{out}");
+        assert!(out.contains("lend_mut :: < dyn Listener >"), "{out}");
+        assert!(out.contains("lend :: < dyn Gauge >"), "{out}");
+        // And the shape is checked where the lent kind's impl is visible.
+        assert!(
+            out.contains(
+                "< dyn Listener as :: guatiao :: library :: Kind > :: LENT_MUT . is_some ()"
+            ),
+            "{out}"
+        );
+        assert!(
+            out.contains("< dyn Gauge as :: guatiao :: library :: Kind > :: LENT . is_some ()"),
+            "{out}"
+        );
+        // Hashed as spelled, canonically.
+        assert_eq!(
+            floor_hash(
+                "",
+                "pub trait Greeter: Send + Sync { fn f(&self, l: &mut dyn Listener, g: &(dyn Gauge)) -> Result<(), ProviderError>; }"
+            ),
+            fnv1a("provider;f(&mutdynListener,&dynGauge)->Result<(),ProviderError>")
+        );
+    }
+
+    #[test]
+    fn an_object_kind_carries_its_lent_tables() {
+        let out = expand_str("object", CONVERSATION).expect("expands");
+        assert!(out.contains("pub const fn lent_mut () -> Self"), "{out}");
+        assert!(
+            out.contains("pub unsafe extern \"C\" fn __guatiao_lent_destroy"),
+            "{out}"
+        );
+        assert!(
+            out.contains("lent_mut :: < dyn Conversation > (ctx)"),
+            "{out}"
+        );
+        // `turns(&self)`: it can be lent shared, and there `say` refuses.
+        assert!(out.contains("pub const fn lent () -> Self"), "{out}");
+        assert!(
+            out.contains("lent_ref :: < dyn Conversation > (ctx)"),
+            "{out}"
+        );
+        assert!(out.contains("GUATIAO_ERR_UNSUPPORTED"), "{out}");
+        assert!(out.contains("const LENT_MUT :"), "{out}");
+        assert!(out.contains("const LENT :"), "{out}");
+        // Every method `&mut self`: nothing to call through `&dyn`.
+        let out = expand_str("object", "pub trait W: Send { fn w(&mut self) -> i64; }").unwrap();
+        assert!(out.contains("const LENT_MUT :"), "{out}");
+        assert!(!out.contains("const LENT :"), "{out}");
+        assert!(!out.contains("fn lent ()"), "{out}");
+        // A provider kind is never lent.
+        let out = expand_str("", GREETER).unwrap();
+        assert!(!out.contains("LENT"), "{out}");
+    }
+
     /// With `crate = <path>` nothing is rooted at `::guatiao`: a consumer
     /// reaching the crate through a re-export has no such name.
     #[test]
@@ -1578,6 +1983,7 @@ mod tests {
             fn e(&self, l: Object<dyn Listener>) \
                 -> Result<Object<dyn Conversation>, ProviderError>; \
             fn f(&self) -> i64; \
+            fn h(&self, l: &mut dyn Listener, c: &dyn Conversation) -> Result<(), ProviderError>; \
             fn g(&self) -> String { String::new() } }";
         for (attr, item) in [
             ("crate = ::kinds::guatiao", EVERYTHING),
@@ -1796,6 +2202,21 @@ mod tests {
                 "",
                 "pub trait G: Send + Sync { fn f(&self, dst: &mut [u8]) -> i64; }",
                 "the one exception is `&mut [u8]` on an object kind",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, l: &mut dyn Listener) -> i64; }",
+                "so must one lending an object",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, l: &mut (dyn Listener + Send)) -> Result<(), ProviderError>; }",
+                "naming the kind's trait alone",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self) -> &mut dyn Listener; }",
+                "a borrowed return cannot cross",
             ),
             (
                 "object",

@@ -176,10 +176,11 @@ Accepted method shapes — receiver `&self`, the trait names `Send + Sync`:
 | `Option<&Value>` | a pointer that may be null |
 | any other argument type, by value | `*const Value` via `ToValue` (the shim reads it with `FromValue`) |
 | `Object<dyn K>` (`K` an object kind) | an `ObjectRaw` by value; **ownership crosses with the call**, the callee destroys it — taken first in the shim, before anything can fail |
+| `&mut dyn K` / `&dyn K` (`K` an object kind) | **lent for the call**: `*const ObjectRaw` (`const guatiao_object *`) on the caller's stack, `ctx` the address of the caller's `*mut dyn K`, the table `K`'s lent table; the callee gets `BorrowedMut`/`Borrowed` (no `Drop`) and never calls `destroy`; nothing is allocated. `&dyn K` needs a `&self` method on `K`; lent shared, a `&mut self` slot answers `GUATIAO_ERR_UNSUPPORTED`. A provider kind, or `&dyn K` of a kind with no `&self` method, is a compile error with a sentence (a `const` assertion on `Kind::LENT_MUT`/`LENT`) |
 | return `()`, scalar, `Value`, `Map`, `List`, `String` | an out-pointer (`String` as `Text`) |
 | any other return type | `*mut Value` via `ToValue`, read back with `FromValue` |
 | return `Object<dyn K>` | `out: *mut ObjectRaw`; the caller owns what it receives |
-| `Result<X, ProviderError>` | `X` as above plus `err: *mut ProviderError`; **required** for any method that converts or passes an `Object` |
+| `Result<X, ProviderError>` | `X` as above plus `err: *mut ProviderError`; **required** for any method that converts, passes an `Object` or lends one |
 
 A method **with a default body** is an appended slot: an older table
 lacks it and the proxy runs the default. A required method after a
@@ -187,8 +188,9 @@ defaulted one is refused. A method that cannot fail propagates a provider
 failure as a panic. Refused by name, on the author's span: a generic or
 `unsafe` trait, a `where` clause, missing `Send + Sync`, an empty trait,
 associated consts/types, `async`, generic or variadic methods, `&mut
-self`/`self`/no receiver, a `&mut` argument, a borrowed argument of any
-other type, a value type by value as an argument, `impl Trait` anywhere,
+self`/`self`/no receiver, a `&mut` argument other than a lent object, a
+lent object with another bound beside the trait (`&mut (dyn K + Send)`),
+a borrowed argument of any other type, a value type by value as an argument, `impl Trait` anywhere,
 a function argument, a borrowed or `impl Trait` return, a `Result` whose
 error is not `ProviderError`, and an attribute key other than `name`,
 `object` and `crate`. Every message is pinned by text in
@@ -223,6 +225,7 @@ a `&mut [u8]` argument crosses as a `BytesMut` out-buffer (the one
 | `Kind::OBJECT` | `true`; the hash is over `object;` + the required signatures, so an object table never passes for a provider table with the same methods |
 | the trait | gains `fn into_object(self) -> Object<dyn Trait> where Self: Sized + Send + 'static`: boxes the value beside a table `of::<Self>()` (an `ObjectCell`) and hands back the handle |
 | the shims | address the value through that cell (`object_mut`), `&mut` for every method; `__guatiao_destroy::<T>` frees the cell |
+| `lent_mut()`, `lent()` | the lent tables: slots `__guatiao_lent_mut_<m>`/`__guatiao_lent_<m>` reach the lender's `*mut dyn Trait`/`*const dyn Trait` behind `ctx`, `destroy` is `__guatiao_lent_destroy` (does nothing); `lent()` exists only when a method takes `&self`, and its `&mut self` slots refuse. `Kind::LENT_MUT`/`LENT` name them |
 
 A Rust implementation becomes a handle with `value.into_object()`; the
 receiving side drives it through `Object<dyn Trait>` (`Deref`/`DerefMut`

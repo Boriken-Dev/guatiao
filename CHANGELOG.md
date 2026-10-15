@@ -50,6 +50,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   fail to decode because the other side knows a newer name. Its schema is
   the new `KindBuilder::open_enumeration`: a string with the known names
   as `examples`, read with `FieldRef::suggestions()`.
+- **Borrowed object arguments.** A kind method may take `&mut dyn K`, or
+  `&dyn K`, for an object kind `K`: the caller's value is lent for that
+  call. It crosses as a `const guatiao_object *` on the caller's stack,
+  whose `ctx` is the address of the caller's own pointer and whose table
+  is the kind's lent table, so nothing is allocated and no `destroy` is
+  owed. The callee's method gets a `&mut dyn K` over
+  `guatiao::library::BorrowedMut` (or `Borrowed`), which has no `Drop`; a
+  callee written in C calls its slots during the call, never keeps the
+  pointer and never calls its `destroy`. `&dyn K` needs a `&self` method
+  on `K`, and lent that way a `&mut self` slot answers
+  `GUATIAO_ERR_UNSUPPORTED`; lending a provider kind is a compile error
+  with a sentence. A method lending one returns `Result<_,
+  ProviderError>`, as one passing an `Object` does. `Kind` gains two
+  hidden associated consts with defaults, so a hand-written `impl Kind`
+  compiles unchanged.
 - **`crate = <path>` on the derives and on `#[kind]`**: `#[map(crate =
   ..)]`, `#[provider(.., crate = ..)]` and `#[kind(crate = ..)]` root the
   generated code at a re-export of `guatiao` instead of at `::guatiao`.
