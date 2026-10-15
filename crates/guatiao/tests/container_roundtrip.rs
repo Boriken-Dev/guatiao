@@ -751,6 +751,112 @@ fn a_literal_tree_is_readable_growable_and_safe_to_free() {
     });
 }
 
+/// The C header's promise for a literal in read-only memory: it "may be
+/// read, cloned, merged, grown and freed, but not emptied". The arrays
+/// here are `static`, not `static mut`, so a free that wrote into them
+/// would fault natively and is undefined behaviour under Miri.
+#[test]
+fn a_literal_in_read_only_memory_is_freed_without_writing_to_it() {
+    /// The four words every owned container is: `{ptr, len, cap, alloc}`.
+    #[repr(C)]
+    struct Parts {
+        ptr: *const c_void,
+        len: usize,
+        cap: usize,
+        alloc: *const c_void,
+    }
+    /// A node as C declares one, with the payload as its container.
+    #[repr(C)]
+    struct Node {
+        tag: u32,
+        pad: u32,
+        payload: Parts,
+    }
+    #[repr(C)]
+    struct Pair {
+        key: Parts,
+        value: Node,
+    }
+    const _: () =
+        assert!(size_of::<Node>() == size_of::<Value>() && size_of::<Pair>() == size_of::<Entry>());
+    /// Raw pointers are not `Sync`; these point only at other statics.
+    struct ReadOnly<T>(T);
+    // SAFETY: nothing here is ever written, through any pointer.
+    unsafe impl<T> Sync for ReadOnly<T> {}
+
+    const fn borrowed(ptr: *const c_void, len: usize) -> Parts {
+        Parts {
+            ptr,
+            len,
+            cap: 0,
+            alloc: core::ptr::null(),
+        }
+    }
+    const fn node(tag: Tag, payload: Parts) -> Node {
+        Node {
+            tag: tag as u32,
+            pad: 0,
+            payload,
+        }
+    }
+
+    static NAME: [u8; 4] = *b"name";
+    static HELLO: [u8; 5] = *b"hello";
+    static ITEMS: [u8; 5] = *b"items";
+    static FIVE: [u8; 1] = *b"5";
+    static INNER: ReadOnly<[Node; 2]> = ReadOnly([
+        node(Tag::GUATIAO_STRING, borrowed(HELLO.as_ptr().cast(), 5)),
+        node(Tag::GUATIAO_NULL, borrowed(core::ptr::null(), 0)),
+    ]);
+    static ENTRIES: ReadOnly<[Pair; 2]> = ReadOnly([
+        Pair {
+            key: borrowed(NAME.as_ptr().cast(), 4),
+            value: node(Tag::GUATIAO_STRING, borrowed(HELLO.as_ptr().cast(), 5)),
+        },
+        Pair {
+            key: borrowed(ITEMS.as_ptr().cast(), 5),
+            value: node(Tag::GUATIAO_LIST, borrowed(INNER.0.as_ptr().cast(), 2)),
+        },
+    ]);
+    static ROOT: ReadOnly<[Node; 2]> = ReadOnly([
+        node(Tag::GUATIAO_MAP, borrowed(ENTRIES.0.as_ptr().cast(), 2)),
+        node(Tag::GUATIAO_NUMBER, borrowed(FIVE.as_ptr().cast(), 1)),
+    ]);
+
+    let literal = || {
+        // SAFETY: `cap == 0` and a null allocator throughout, every array
+        // initialised with well-formed nodes of the declared lengths.
+        unsafe { List::from_raw_parts(ROOT.0.as_ptr().cast_mut().cast(), 2, 0, core::ptr::null()) }
+    };
+
+    with_alloc(|alloc, counter| {
+        let read = Value::from(literal());
+        let copy = read.clone_in(alloc).unwrap();
+        assert_eq!(copy, read, "read and cloned");
+        drop(copy);
+
+        // Freed through the value's iterative walk, and as a list.
+        drop(read);
+        drop(literal());
+        // And through the export a C caller frees it with.
+        let mut c_side = Value::from(literal());
+        // SAFETY: a well-formed tree nothing else frees.
+        let status = unsafe { guatiao::exports::value::guatiao_value_free(&mut c_side) };
+        assert!(status.is_ok());
+
+        let again = Value::from(literal());
+        let list: &List = TryAsRef::<List>::try_as_ref(&again).unwrap();
+        let map: &Map = TryAsRef::<Map>::try_as_ref(&list[0]).unwrap();
+        assert_eq!(
+            map.keys().collect::<Vec<_>>(),
+            ["name", "items"],
+            "untouched"
+        );
+        assert_eq!(TryAsRef::<str>::try_as_ref(&map["name"]), Some("hello"));
+        assert_eq!(counter.outstanding(), 0);
+    });
+}
+
 /// The boolean arm is a `bool`, and reads back as one.
 #[test]
 fn a_bool_byte_a_producer_should_not_have_written_is_still_defined() {
