@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.0.0-alpha.1] - 2026-10-16
+
+### Changed
+
+- The generated bindings follow the C header: the status enum's tag is
+  `guatiao_status_code`, and `guatiao_status` is the plain integer
+  typedef. No name this package exports changes.
+- `pubspec.yaml` declares the platforms the package runs on (Android, iOS,
+  Linux, macOS and Windows). `dart:ffi` is not available on the web, so
+  pub.dev no longer lists it there.
+
 ### Added
 
 - `package:guatiao/intake.dart` wraps the flat `key -> text` projection:
@@ -14,16 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `loads` reads through the `_parse_ex` entry points and throws
   `ParseError` (a `BadValue` and a `FormatException`) carrying `format`,
   `line` and `column`.
+
+### Fixed
+
 - `guatiao_value` and `guatiao_alloc` are exported from
   `package:guatiao/guatiao.dart`, which the public API names in its
-  signatures.
-
-### Changed
-
-- The generated bindings follow the C header: the status enum's tag is
-  `guatiao_status_code`, and `guatiao_status` is the plain integer
-  typedef. No name this package exports changes.
-
+  signatures; a consumer can write `Pointer<guatiao_value>` without
+  importing a `src/` file.
 ## [0.0.0-alpha.0] - 2026-09-27
 
 ### Added
