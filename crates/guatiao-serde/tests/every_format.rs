@@ -435,6 +435,53 @@ fn a_parse_error_carries_no_text_from_the_document() {
     }
 }
 
+/// A column counts characters in every format: a key written outside
+/// ASCII moves it by its length, not by its UTF-8 bytes.
+#[test]
+fn a_column_counts_characters() {
+    use guatiao_serde::{Error, Position};
+
+    let column = |e: Error| e.position().map(|Position { column, .. }| column);
+    #[cfg(feature = "json")]
+    {
+        let json = |doc: &str| {
+            guatiao_serde::text::json::from_str(doc, Alloc::rust(), Presentation::new())
+                .unwrap_err()
+        };
+        assert_eq!(column(json("{\"ab\": 1 x}")), Some(10));
+        assert_eq!(
+            column(json("{\"\u{e9}\u{e9}\": 1 x}")),
+            Some(10),
+            "two characters of two bytes each"
+        );
+        assert_eq!(column(json("{\"\u{1f600}\": 1 x}")), Some(9));
+        assert_eq!(
+            json("{\n\"\u{e9}\": 1 x}").position(),
+            Some(Position { line: 2, column: 8 })
+        );
+    }
+    #[cfg(feature = "toml")]
+    {
+        let toml = |doc: &str| {
+            guatiao_serde::text::toml::from_str(doc, Alloc::rust(), Presentation::new())
+                .unwrap_err()
+        };
+        assert_eq!(column(toml("\"ab\" = 1 x\n")), Some(8));
+        assert_eq!(column(toml("\"\u{e9}\u{e9}\" = 1 x\n")), Some(8));
+    }
+    #[cfg(feature = "yaml")]
+    {
+        let yaml = |doc: &str| {
+            guatiao_serde::text::yaml::from_str(doc, Alloc::rust(), Presentation::new())
+                .unwrap_err()
+        };
+        assert_eq!(
+            column(yaml("ab: [1, @\n")),
+            column(yaml("\u{e9}\u{e9}: [1, @\n"))
+        );
+    }
+}
+
 /// The same for the other things a parser quotes: a key it refuses to see
 /// twice, and a value it will not accept.
 #[test]
