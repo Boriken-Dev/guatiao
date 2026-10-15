@@ -840,6 +840,17 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   it. Safe, because it dangles nothing. `Retired { key, id, version,
   providers }` says what left; `UnloadError::NotFound { key }` is the
   only refusal.
+- **Dropping a registry leaves every library mapped**, as retiring does:
+  a `Remote`, `Offer`, boxed trait or `Instance` taken from it is
+  `'static` and keeps working (`guatiao_registry_free` the same). A file
+  passed over by its library key, or refused as `Duplicate`, after its
+  entry point ran keeps its mapping as well.
+- **A registry does not isolate an image.** The loader maps a file once
+  per process, so a second registry loading it shares its statics and the
+  descriptor a derived library built on its first entry call, with the
+  `Host` and allocator of the registry that loaded it first; that host's
+  lookups answer `GUATIAO_ERR_GONE` once the first registry drops. A host
+  rebuilding its registry on a reload carries the library's state over.
 - **And unloaded, when the library agrees.** `unsafe
   Registry::unload(key)` asks the library's `unload` slot first, then
   retires it, then closes the mapping. The slot is the library's promise

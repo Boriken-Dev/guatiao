@@ -442,35 +442,42 @@ unsafe fn read_kind_tables(
 ///
 /// The handle is what `Registry::unload` closes; `Linked` is what it
 /// refuses, because there is nothing to unmap.
+///
+/// **Dropping one never unmaps.** The handle is held in `ManuallyDrop`, so
+/// a registry going out of scope, or a file skipped after its entry point
+/// ran, leaves the image where every `'static` handle into it expects it;
+/// [`close`](Origin::close) is the one path to the loader's close.
 #[cfg(feature = "load")]
 #[derive(Debug)]
 pub(crate) enum Origin {
     /// A file this registry mapped and can close.
-    Mapped(libloading::Library),
+    Mapped(core::mem::ManuallyDrop<libloading::Library>),
     /// Code in the host's own binary: `register_local`, `register_entry`.
     Linked,
 }
 
 #[cfg(feature = "load")]
 impl Origin {
+    /// A mapping this registry holds.
+    pub(crate) fn mapped(library: libloading::Library) -> Origin {
+        Origin::Mapped(core::mem::ManuallyDrop::new(library))
+    }
+
     /// Whether there is a mapping to close at all.
     pub(crate) fn is_mapped(&self) -> bool {
         matches!(self, Origin::Mapped(_))
     }
 
     /// Gives up the handle and leaves the mapping in place, so every
-    /// image address the library already handed out stays valid.
-    pub(crate) fn keep(self) {
-        if let Origin::Mapped(library) = self {
-            core::mem::forget(library);
-        }
-    }
+    /// image address the library already handed out stays valid. What
+    /// dropping it does too; spelled out where that is the point.
+    pub(crate) fn keep(self) {}
 
     /// Closes the mapping. A close error leaves the handle given up, as
     /// `libloading` does.
     pub(crate) fn close(self) -> Result<(), libloading::Error> {
         match self {
-            Origin::Mapped(library) => library.close(),
+            Origin::Mapped(library) => core::mem::ManuallyDrop::into_inner(library).close(),
             Origin::Linked => Ok(()),
         }
     }
@@ -529,7 +536,7 @@ pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, 
     // SAFETY: non-null, from the entry point, and the mapping is held for
     // the whole read.
     match unsafe { read_library(desc) } {
-        Ok(view) => Ok(Opened::Loaded(view, Origin::Mapped(library))),
+        Ok(view) => Ok(Opened::Loaded(view, Origin::mapped(library))),
         Err(why) => {
             core::mem::forget(library);
             Ok(Opened::Rejected(why))

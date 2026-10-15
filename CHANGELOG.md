@@ -51,6 +51,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Dropping a `Registry` leaves its libraries mapped.** It used to close
+  every library it had loaded, while a `Remote`, an `Offer`, a boxed
+  trait or an `Instance` taken from it is `'static` and could still be
+  called, which jumped into unmapped memory from safe code. A library is
+  unmapped only by `unload`, as the documentation already said;
+  `guatiao_registry_free` and a Python `Registry.close()` go through the
+  same drop. A file passed over by its library key, or refused as a
+  duplicate, after its entry point ran keeps its mapping too.
 - **A handle held across an `.await` no longer makes the future `!Send`.**
   `Remote`, `Instance` and `Object` were `Send` only for a kind that is
   `'static`, which a future cannot show, so `tokio::spawn` refused any task

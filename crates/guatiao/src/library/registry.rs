@@ -451,8 +451,8 @@ pub struct Loaded {
     /// `path` resolved once at load time, for the dedup that runs before
     /// anything is opened. Falls back to `path` when it cannot be resolved.
     canonical: PathBuf,
-    /// The mapping, when this registry made one. Dropping it is what
-    /// unmaps the library, which only `unload` does.
+    /// The mapping, when this registry made one. Dropping it leaves the
+    /// library mapped; only `unload` closes it.
     origin: Origin,
     /// Its say in being unmapped, or `None` for a library that declares
     /// none. See [`LibraryInfo::unload`](super::desc::LibraryInfo::unload).
@@ -567,6 +567,24 @@ impl core::error::Error for UnloadError {}
 /// entry point sees every library registered before it, not the one being
 /// loaded. Once this registry is dropped the block answers
 /// `GUATIAO_ERR_GONE`.
+///
+/// # Dropping it leaves every library mapped
+///
+/// A [`Remote`], an [`Offer`] or a boxed trait taken from it is
+/// `'static` and may outlive it, so a drop forgets each mapping rather
+/// than closing it, as [`retire`](Registry::retire) does.
+/// [`unload`](Registry::unload) is the only way a library is unmapped.
+///
+/// # A registry does not isolate an image
+///
+/// The loader maps one file once per process, however many registries
+/// load it. A second registry loading a file the first already loaded
+/// gets the same image: the same statics, and the same descriptor a
+/// derived library built on its first entry call, with the [`Host`] and
+/// allocator of the registry that loaded it first. Its lookups through
+/// that host then answer `GUATIAO_ERR_GONE` once that first registry is
+/// dropped. A host that rebuilds its registry on a reload carries the
+/// library's state over; it does not start it again.
 #[derive(Debug)]
 pub struct Registry {
     /// The host's own name and version, OWNED. The block a library keeps
@@ -931,6 +949,9 @@ impl Registry {
         let library_key = self.library_key.render(KeyFields::library(&id, &version));
         if let Some(already) = self.loaded.iter().find(|l| *l.key == *library_key) {
             let from = already.path.clone();
+            // Its entry point has run, and whatever it started may still
+            // address its image.
+            origin.keep();
             return Ok(Loading::Skipped(Skipped::AlreadyLoaded { from }));
         }
 
@@ -980,6 +1001,7 @@ impl Registry {
                     });
                 }
                 Some((_, first)) => {
+                    origin.keep();
                     return Err(LoadError::Duplicate {
                         key,
                         first,
