@@ -282,13 +282,15 @@ fn a_derived_provider_describes_itself_with_the_defaults() {
         // SAFETY: as above.
         unsafe { parts.info().as_kind::<dyn Greeter>() }
     }
-    .expect("a valid table");
+    .expect("a valid table")
+    .expect("its own instance");
     assert_eq!(greeter.greet("ana").unwrap(), "hello, ana");
     let counter = {
         // SAFETY: as above.
         unsafe { parts.info().as_kind::<dyn Counter>() }
     }
-    .expect("a valid table");
+    .expect("a valid table")
+    .expect("its own instance");
     assert_eq!(counter.count(), 1);
 }
 
@@ -314,7 +316,9 @@ fn a_derived_provider_takes_every_override() {
         "`available` saw the host `new_with_host` was given"
     );
     // SAFETY: a derived provider's descriptor, leaked above.
-    let greeter = unsafe { parts.info().as_kind::<dyn Greeter>() }.unwrap();
+    let greeter = unsafe { parts.info().as_kind::<dyn Greeter>() }
+        .unwrap()
+        .expect("its own instance");
     assert_eq!(greeter.greet("bo").unwrap(), "HELLO, BO!");
 }
 

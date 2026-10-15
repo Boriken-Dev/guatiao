@@ -71,6 +71,7 @@ fn it_refuses_while_an_instance_or_an_object_is_alive() {
         .unwrap()
         .unwrap()
         .remote()
+        .expect("the default greeter is its own instance")
         .start(Deaf.into_object())
         .expect("the derived greeter holds conversations");
     // SAFETY: as above.

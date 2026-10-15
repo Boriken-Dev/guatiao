@@ -127,6 +127,15 @@ impl ProviderView {
     pub fn builds_instances(&self) -> bool {
         self.create.is_some()
     }
+
+    /// Whether its table can be called as it stands: `false` for a
+    /// provider that builds instances and keeps no default one (`create`
+    /// present, `ctx` null). A provider with no `create` is called with
+    /// whatever `ctx` it declared, null included, as a stateless C table
+    /// expects.
+    pub(crate) fn has_default_instance(&self) -> bool {
+        !(self.ctx.is_null() && self.create.is_some())
+    }
 }
 
 // SAFETY: the pointers address a loaded library's image, which this side

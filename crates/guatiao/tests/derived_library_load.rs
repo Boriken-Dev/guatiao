@@ -115,7 +115,9 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
 
     // 5. A default-bodied method runs the host's default when the table
     // ends before its slot: the same table, copied with a smaller size.
-    let remote = offer.remote();
+    let remote = offer
+        .remote()
+        .expect("the default greeter is its own instance");
     let truncated: &'static [u8] = Box::leak(
         // SAFETY: the table is `GreeterVtable`-sized bytes the library
         // keeps for the process; copying them is a read.
@@ -300,7 +302,9 @@ fn objects_cross_both_ways_and_are_destroyed_by_whoever_holds_them_last() {
     // 6. A greeter built before `start` existed: the table ends before
     // the slot, so the PROXY runs the default body here, and the listener
     // it was handed is dropped on this side. Nothing crossed.
-    let remote = offer.remote();
+    let remote = offer
+        .remote()
+        .expect("the default greeter is its own instance");
     let truncated: &'static [u8] = Box::leak(
         // SAFETY: the table is `GreeterVtable`-sized bytes the library
         // keeps for the process; copying them is a read.
@@ -332,21 +336,31 @@ fn objects_cross_both_ways_and_are_destroyed_by_whoever_holds_them_last() {
         "the default body dropped the listener on this side"
     );
 
-    // 7. A provider with no default instance refuses the call before it
-    // runs anything -- and still destroys the object it was handed,
-    // because ownership crossed with the call. The one leak an early
-    // return could cause, and the reason objects are taken first.
+    // 7. A provider with no default instance has no proxy to call, and
+    // a C caller handing its table a null `ctx` is refused before
+    // anything runs -- and the shim still destroys the object it was
+    // handed, because ownership crossed with the call. The one leak an
+    // early return could cause, and the reason objects are taken first.
     let shouter = registry
         .offer::<dyn Greeter>("derived_greeter_shouter")
         .unwrap()
         .unwrap();
+    assert!(shouter.remote().is_none(), "no instance, so no proxy");
+    let (table, size) = shouter
+        .view()
+        .table_for("greeter")
+        .expect("it serves the greeter kind");
+    // SAFETY: the provider's own greeter table, in a library this registry
+    // keeps mapped; every shim refuses a null `ctx` before reading it.
+    let null_ctx = unsafe { Remote::<dyn Greeter>::from_raw(table, size, core::ptr::null_mut()) }
+        .expect("the table validates");
     let dropped = Arc::new(AtomicBool::new(false));
     let listener = Tape {
         heard: Arc::new(Mutex::new(Vec::new())),
         dropped: Arc::clone(&dropped),
     }
     .into_object();
-    let e = shouter.remote().start(listener).unwrap_err();
+    let e = null_ctx.start(listener).unwrap_err();
     assert_eq!(e.status, Status::GUATIAO_ERR_NULL, "{e}");
     assert!(
         dropped.load(Ordering::SeqCst),

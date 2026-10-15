@@ -98,6 +98,17 @@ fn a_provider_built_only_from_a_configuration_offers_no_default_instance() {
         configured.default_instance().is_none(),
         "its ctx is null: nothing to call until it is instantiated"
     );
+    assert!(
+        configured.remote().is_none(),
+        "nor a proxy, whose infallible methods could only panic"
+    );
+    assert!(matches!(
+        registry
+            .provider("guatiao_configured")
+            .expect("filed under its id")
+            .as_kind::<dyn Counter>(),
+        Ok(None)
+    ));
     let built = configured
         .instantiate(&config("start", 5))
         .expect("a fitting configuration builds");
@@ -109,6 +120,14 @@ fn a_provider_built_only_from_a_configuration_offers_no_default_instance() {
         .expect("filed under its id")
         .expect("a valid table");
     assert_eq!(plain.default_instance().map(|c| c.count()), Some(1));
+    assert_eq!(plain.remote().map(|r| r.as_dyn().count()), Some(1));
+    let plain_kind = registry
+        .provider("guatiao_plain")
+        .expect("filed under its id")
+        .as_kind::<dyn Counter>()
+        .expect("a valid table")
+        .expect("its own instance");
+    assert_eq!(plain_kind.as_dyn().count(), 1);
     assert_eq!(plain.boxed().map(|c| c.count()), Some(1));
 }
 

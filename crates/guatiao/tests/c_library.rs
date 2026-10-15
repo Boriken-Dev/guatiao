@@ -108,7 +108,10 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
         .expect("a table the header described validates");
     assert_eq!(offer.display_name(), "Greeter, in C");
     assert_eq!(offer.version(), "1.0");
-    assert_eq!(offer.remote().size(), core::mem::size_of::<GreeterVtable>());
+    assert_eq!(
+        offer.remote().expect("its ctx is its instance").size(),
+        core::mem::size_of::<GreeterVtable>()
+    );
     let greeter = offer.default_instance().expect("its ctx is its instance");
 
     // 2. A call crosses into C and back: the answer is a map C built

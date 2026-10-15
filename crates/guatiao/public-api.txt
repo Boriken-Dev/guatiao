@@ -187,7 +187,7 @@ pub const fn guatiao::library::desc::ProviderInfo<'_>::meta_end() -> usize
 pub const fn guatiao::library::desc::ProviderInfo<'_>::tables_end() -> usize
 pub const fn guatiao::library::desc::ProviderInfo<'_>::version_end() -> usize
 impl guatiao::library::desc::ProviderInfo<'static>
-pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::as_kind<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<guatiao::library::kind::Remote<K>, guatiao::library::kind::KindMismatch>
+pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::as_kind<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<core::option::Option<guatiao::library::kind::Remote<K>>, guatiao::library::kind::KindMismatch>
 pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::instantiate<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self, &guatiao::value::value::Value) -> core::result::Result<guatiao::library::kind::Instance<K>, guatiao::library::kind::InstantiateError>
 pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::offer<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<guatiao::library::kind::Offer<K>, guatiao::library::kind::KindMismatch>
 impl guatiao::library::desc::ProviderInfo<'static>
@@ -403,7 +403,7 @@ pub fn guatiao::library::kind::Offer<K>::key(&self) -> core::option::Option<&str
 pub fn guatiao::library::kind::Offer<K>::library(&self) -> core::option::Option<&str>
 pub fn guatiao::library::kind::Offer<K>::meta(&self) -> core::option::Option<&guatiao::value::types::map::Map>
 pub fn guatiao::library::kind::Offer<K>::priority(&self) -> i32
-pub fn guatiao::library::kind::Offer<K>::remote(&self) -> guatiao::library::kind::Remote<K>
+pub fn guatiao::library::kind::Offer<K>::remote(&self) -> core::option::Option<guatiao::library::kind::Remote<K>>
 pub fn guatiao::library::kind::Offer<K>::shared(self) -> core::option::Option<alloc::sync::Arc<K>>
 pub fn guatiao::library::kind::Offer<K>::version(&self) -> &str
 pub fn guatiao::library::kind::Offer<K>::view(&self) -> &guatiao::library::raw::ProviderView
@@ -679,7 +679,7 @@ impl core::fmt::Debug for guatiao::library::registry::Loaded
 pub fn guatiao::library::registry::Loaded::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::library::registry::Provider
 impl guatiao::library::registry::Provider
-pub fn guatiao::library::registry::Provider::as_kind<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&self) -> core::result::Result<guatiao::library::kind::Remote<K>, guatiao::library::kind::KindMismatch>
+pub fn guatiao::library::registry::Provider::as_kind<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&self) -> core::result::Result<core::option::Option<guatiao::library::kind::Remote<K>>, guatiao::library::kind::KindMismatch>
 pub fn guatiao::library::registry::Provider::available(&self) -> core::result::Result<(), &'static str>
 pub fn guatiao::library::registry::Provider::config_schema(&self) -> core::option::Option<&guatiao::value::value::Value>
 pub fn guatiao::library::registry::Provider::ctx(&self) -> *mut core::ffi::c_void
@@ -1322,7 +1322,7 @@ pub fn guatiao::library::kind::Offer<K>::key(&self) -> core::option::Option<&str
 pub fn guatiao::library::kind::Offer<K>::library(&self) -> core::option::Option<&str>
 pub fn guatiao::library::kind::Offer<K>::meta(&self) -> core::option::Option<&guatiao::value::types::map::Map>
 pub fn guatiao::library::kind::Offer<K>::priority(&self) -> i32
-pub fn guatiao::library::kind::Offer<K>::remote(&self) -> guatiao::library::kind::Remote<K>
+pub fn guatiao::library::kind::Offer<K>::remote(&self) -> core::option::Option<guatiao::library::kind::Remote<K>>
 pub fn guatiao::library::kind::Offer<K>::shared(self) -> core::option::Option<alloc::sync::Arc<K>>
 pub fn guatiao::library::kind::Offer<K>::version(&self) -> &str
 pub fn guatiao::library::kind::Offer<K>::view(&self) -> &guatiao::library::raw::ProviderView
@@ -1346,7 +1346,7 @@ pub fn guatiao::library::scan::Probe::fmt(&self, &mut core::fmt::Formatter<'_>) 
 impl core::marker::StructuralPartialEq for guatiao::library::scan::Probe
 pub struct guatiao::library::Provider
 impl guatiao::library::registry::Provider
-pub fn guatiao::library::registry::Provider::as_kind<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&self) -> core::result::Result<guatiao::library::kind::Remote<K>, guatiao::library::kind::KindMismatch>
+pub fn guatiao::library::registry::Provider::as_kind<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&self) -> core::result::Result<core::option::Option<guatiao::library::kind::Remote<K>>, guatiao::library::kind::KindMismatch>
 pub fn guatiao::library::registry::Provider::available(&self) -> core::result::Result<(), &'static str>
 pub fn guatiao::library::registry::Provider::config_schema(&self) -> core::option::Option<&guatiao::value::value::Value>
 pub fn guatiao::library::registry::Provider::ctx(&self) -> *mut core::ffi::c_void
@@ -1413,7 +1413,7 @@ pub const fn guatiao::library::desc::ProviderInfo<'_>::meta_end() -> usize
 pub const fn guatiao::library::desc::ProviderInfo<'_>::tables_end() -> usize
 pub const fn guatiao::library::desc::ProviderInfo<'_>::version_end() -> usize
 impl guatiao::library::desc::ProviderInfo<'static>
-pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::as_kind<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<guatiao::library::kind::Remote<K>, guatiao::library::kind::KindMismatch>
+pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::as_kind<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<core::option::Option<guatiao::library::kind::Remote<K>>, guatiao::library::kind::KindMismatch>
 pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::instantiate<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self, &guatiao::value::value::Value) -> core::result::Result<guatiao::library::kind::Instance<K>, guatiao::library::kind::InstantiateError>
 pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::offer<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<guatiao::library::kind::Offer<K>, guatiao::library::kind::KindMismatch>
 impl guatiao::library::desc::ProviderInfo<'static>
