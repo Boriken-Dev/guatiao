@@ -66,6 +66,13 @@ jobs:
       - name: Test
         run: cargo test --workspace --all-features
 
+      - name: Test guatiao-serde with its default features
+        # `--all-features` turns on `exact-numbers`, which compiles out the
+        # tests only a default build has: that the crate leaves other
+        # crates' serde_json numbers alone, and that a wide number reads
+        # through an `f64` without the feature.
+        run: cargo test -p guatiao-serde
+
       - name: Docs
         # Strict, so a broken intra-doc link fails here rather than
         # accumulating. `--all-features` because that is the build docs.rs

@@ -10,7 +10,7 @@
 
 use guatiao::value::alloc::Alloc;
 use guatiao::value::convert::TryAsRef;
-use guatiao::value::types::{List, Map, Number, Text, Value};
+use guatiao::value::types::{List, Map, Number, Value};
 use guatiao_serde::{Presentation, Serializable, ValueSeed};
 use serde::de::DeserializeSeed;
 
@@ -163,6 +163,7 @@ fn toml_round_trips() {
 #[test]
 #[cfg(feature = "toml")]
 fn toml_refuses_what_it_cannot_spell() {
+    use guatiao::value::types::Text;
     use guatiao_serde::text::toml;
 
     for v in [

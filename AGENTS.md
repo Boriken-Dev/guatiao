@@ -27,6 +27,7 @@ public surface); this file is about the repository.
 
 ```bash
 cargo test --workspace --all-features
+cargo test -p guatiao-serde        # its default features: the tests `exact-numbers` compiles out
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo fmt --all --check
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --all-features
