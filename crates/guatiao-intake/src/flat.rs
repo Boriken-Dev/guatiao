@@ -231,12 +231,52 @@ fn indexed(path: &str, at: usize) -> String {
 /// discriminant is missing or names no arm is the case that matters,
 /// because "no tagged value here" and "an arm with an empty payload" are
 /// different answers and must not be confused.
+///
+/// # Every spelling the path grammar reads is read
+///
+/// An open map's key is found however the store spelled it (`env[01]`,
+/// `env["01"]`, `env.PATH`), and a top-level field whose name holds a `.`
+/// or a bracket under its bare name (`a.b`) as well as under `[a.b]`, so a
+/// store [`flatten`] wrote in an earlier spelling reads back. Where two
+/// spellings of one key are both present, the one [`flatten`] writes now
+/// wins and the other is ignored.
 pub fn unflatten(
     alloc: Alloc,
     field: FieldRef<'_>,
     store: &BTreeMap<String, String>,
 ) -> Option<Value> {
-    rebuild(alloc, &root_path(field.key()), field.kind(), store, 0)
+    let kind = field.kind();
+    root_spellings(field.key())
+        .into_iter()
+        .filter(|root| holds(store, root))
+        .find_map(|root| rebuild(alloc, &root, kind, store, 0))
+}
+
+/// How a top-level field's own key can be spelled in a store: the way
+/// [`flatten`] writes it, then the bare name when that differs, which is
+/// how a name holding a `.` or a bracket was once written.
+///
+/// An empty name has no bare spelling: an empty root followed by `[`
+/// would read every bracketed key in the store as its own.
+fn root_spellings(name: &str) -> Vec<String> {
+    let written = root_path(name);
+    if written == name || name.is_empty() {
+        vec![written]
+    } else {
+        vec![written, name.to_string()]
+    }
+}
+
+/// Whether anything is stored at or under `path`.
+fn holds(store: &BTreeMap<String, String>, path: &str) -> bool {
+    store.contains_key(path)
+        || [SEPARATOR, '['].into_iter().any(|opener| {
+            let prefix = format!("{path}{opener}");
+            store
+                .range::<str, _>((Bound::Included(prefix.as_str()), Bound::Unbounded))
+                .next()
+                .is_some_and(|(k, _)| k.starts_with(&prefix))
+        })
 }
 
 /// One node of [`unflatten`], bounded like every other walk over two
@@ -284,17 +324,29 @@ fn rebuild(
             let values = kind.values();
             let mut map = Map::new_in(alloc);
             let mut any = false;
-            for step in children(store, path) {
-                let (key, at) = match step {
-                    Step::Named(key) => {
-                        let at = keyed(path, &key);
-                        (key, at)
-                    }
-                    // A key that reads as a position is still a key here:
-                    // an open map's keys are data.
-                    Step::At(index) => (index.to_string(), indexed(path, index)),
+            // A key that reads as a position is still a key here: an open
+            // map's keys are data. So `[1]` and `["1"]` are one key, read
+            // through the spelling `flatten` writes first.
+            let mut keys: Vec<(String, Vec<String>)> = Vec::new();
+            for (step, spelled) in children(store, path) {
+                let key = match step {
+                    Step::Named(key) => key,
+                    Step::At(index) => index.to_string(),
                 };
-                if let Some(v) = rebuild(alloc, &at, values, store, depth + 1) {
+                match keys.iter_mut().find(|(k, _)| *k == key) {
+                    Some((_, spellings)) => spellings.push(spelled),
+                    None => keys.push((key, vec![spelled])),
+                }
+            }
+            for (key, mut spellings) in keys {
+                let written = keyed(path, &key);
+                spellings.retain(|s| *s != written);
+                spellings.insert(0, written);
+                let found = spellings
+                    .iter()
+                    .filter(|at| holds(store, at))
+                    .find_map(|at| rebuild(alloc, at, values, store, depth + 1));
+                if let Some(v) = found {
                     map.set(&key, v).ok()?;
                     any = true;
                 }
@@ -305,7 +357,7 @@ fn rebuild(
             let items = kind.items();
             let mut at: Vec<usize> = children(store, path)
                 .into_iter()
-                .filter_map(|step| match step {
+                .filter_map(|(step, _)| match step {
                     Step::At(index) => Some(index),
                     // A key under a list is not a position, so there is
                     // no element it could be.
@@ -313,6 +365,7 @@ fn rebuild(
                 })
                 .collect();
             at.sort_unstable();
+            at.dedup();
             let mut list = List::new_in(alloc);
             for index in at {
                 if let Some(v) = rebuild(alloc, &indexed(path, index), items, store, depth + 1) {
@@ -340,17 +393,18 @@ enum Step {
     At(usize),
 }
 
-/// The distinct next steps under `path`, in the order the store holds
-/// them.
+/// The distinct next steps under `path`, each with the prefix that spells
+/// it (`path.name`, `path[3]`, `path["a.b"]`), in the order the store
+/// holds them. One step spelled two ways appears once per spelling.
 ///
 /// The keys of a `BTreeMap` are sorted, so everything under one prefix is
 /// contiguous. There are two prefixes, `path.` and `path[`, and a sibling
 /// such as `pathName` or `path-file` can sort **between** them, so each is
 /// its own scan rather than one scan that stops at the first stranger.
 /// `.` sorts before `[`, which keeps the result in store order.
-fn children(store: &BTreeMap<String, String>, path: &str) -> Vec<Step> {
-    let mut out: Vec<Step> = Vec::new();
-    let mut seen: BTreeSet<Step> = BTreeSet::new();
+fn children(store: &BTreeMap<String, String>, path: &str) -> Vec<(Step, String)> {
+    let mut out: Vec<(Step, String)> = Vec::new();
+    let mut seen: BTreeSet<&str> = BTreeSet::new();
     for opener in [SEPARATOR, '['] {
         let prefix = format!("{path}{opener}");
         for key in store
@@ -358,33 +412,30 @@ fn children(store: &BTreeMap<String, String>, path: &str) -> Vec<Step> {
             .map(|(k, _)| k)
             .take_while(|k| k.starts_with(&prefix))
         {
-            let Some(step) = first_step(&key[path.len()..]) else {
+            let Some((step, read)) = first_step(&key[path.len()..]) else {
                 continue;
             };
-            if seen.insert(step.clone()) {
-                out.push(step);
+            let spelled = &key[..path.len() + read];
+            if seen.insert(spelled) {
+                out.push((step, spelled.to_string()));
             }
         }
     }
     out
 }
 
-/// The first segment of what follows a prefix: `.name`, `[3]`, `["a.b"]`.
-fn first_step(rest: &str) -> Option<Step> {
-    // A leading separator belongs to the segment after it; the grammar is
-    // rootless, so it is stripped before parsing.
-    let text = match rest.strip_prefix(SEPARATOR) {
-        // A `.` is followed by a name: `agent.[0]` is no spelling at all.
-        Some(after) if after.starts_with('[') => return None,
-        Some(after) => after,
-        None => rest,
+/// The first segment of what follows a prefix (`.name`, `[3]`,
+/// `["a.b"]`) and how many bytes spell it, when all of `rest` reads as
+/// the path's continuation.
+fn first_step(rest: &str) -> Option<(Step, usize)> {
+    let mut segments = path::spelled(rest, true)?.into_iter();
+    let (segment, read) = segments.next()?;
+    let step = match segment {
+        Segment::Field(name) => Step::Named(name.to_string()),
+        Segment::Key(key) => Step::Named(key.into_owned()),
+        Segment::Index(at) => Step::At(at),
     };
-    let parsed = path::parse(text).ok()?;
-    match parsed.segments().next()? {
-        Segment::Field(name) => Some(Step::Named(name.to_string())),
-        Segment::Key(key) => Some(Step::Named(key.into_owned())),
-        Segment::Index(at) => Some(Step::At(at)),
-    }
+    Some((step, read))
 }
 
 /// Every flat key this field can occupy: its own, plus one per field of
@@ -441,17 +492,51 @@ pub fn split(key: &str) -> Option<(&str, Cow<'_, str>)> {
 /// [`FieldRef`] over the **element's** schema with an **empty key**: such
 /// a thing has no declared name, and the path that reached it is the
 /// caller's to keep.
+///
+/// A key that does not walk but starts with the bare name of a top-level
+/// field holding a `.` or a bracket (`a.b[x]` for a field `a.b`) is read
+/// under that field, as [`unflatten`] reads it.
 pub fn resolve<'a>(schema: SchemaRef<'a>, key: &str) -> Option<FieldRef<'a>> {
     if let Some(direct) = schema.find(key) {
         return Some(direct);
     }
-    let parsed = path::parse(key).ok()?;
-    let mut segments = parsed.segments();
-    let mut at = root(schema, &segments.next()?)?;
-    for segment in segments {
+    let walked = path::spelled(key, false).and_then(|segments| {
+        let mut segments = segments.into_iter();
+        let (first, _) = segments.next()?;
+        walk_from(root(schema, &first)?, segments)
+    });
+    walked.or_else(|| {
+        let (field, rest) = bare_root(schema, key)?;
+        walk_from(field, path::spelled(rest, true)?.into_iter())
+    })
+}
+
+/// Steps into `at` by each segment in turn.
+fn walk_from<'a, 's>(
+    at: FieldRef<'a>,
+    segments: impl Iterator<Item = (Segment<'s>, usize)>,
+) -> Option<FieldRef<'a>> {
+    let mut at = at;
+    for (segment, _) in segments {
         at = into(at, &segment)?;
     }
     Some(at)
+}
+
+/// The top-level field whose bare name, holding a `.` or a bracket,
+/// starts `key` and is followed by a `.` or a `[`, and what follows it.
+///
+/// The longest such name, so `a.b.c[x]` belongs to a field `a.b.c`
+/// before a field `a.b`.
+fn bare_root<'a, 'k>(schema: SchemaRef<'a>, key: &'k str) -> Option<(FieldRef<'a>, &'k str)> {
+    schema
+        .fields()
+        .filter(|f| !f.key().is_empty() && !path::is_bare_name(f.key()))
+        .filter_map(|f| {
+            let rest = key.strip_prefix(f.key())?;
+            (rest.starts_with(SEPARATOR) || rest.starts_with('[')).then_some((f, rest))
+        })
+        .max_by_key(|(f, _)| f.key().len())
 }
 
 /// The top-level field a path's first segment names.
@@ -547,28 +632,67 @@ pub fn resolve_in<'a>(
         key: key.to_string(),
         known: schema.fields().map(|f| f.key().to_string()).collect(),
     };
-    let Ok(parsed) = path::parse(key) else {
-        return Err(unknown());
+    let walked = path::spelled(key, false).and_then(|segments| {
+        let mut segments = segments.into_iter();
+        let (first, end) = segments.next()?;
+        let at = root(schema, &first)?;
+        Some(walk_in(
+            at,
+            &first_name(&first),
+            end,
+            segments,
+            key,
+            &selected,
+        ))
+    });
+    // A key that does not walk may be spelled under a top-level field's
+    // bare name, as `unflatten` reads it; if that does not walk either,
+    // the first answer stands.
+    let bare = || {
+        let (field, rest) = bare_root(schema, key)?;
+        let base = key.len() - rest.len();
+        let segments = path::spelled(rest, true)?
+            .into_iter()
+            .map(move |(segment, end)| (segment, base + end));
+        walk_in(field, field.key(), base, segments, key, &selected).ok()
     };
-    let mut segments = parsed.segments();
-    let Some(first) = segments.next() else {
-        return Err(unknown());
-    };
-    let Some(mut at) = root(schema, &first) else {
-        return Err(unknown());
-    };
+    match walked {
+        Some(Ok(at)) => Ok(at),
+        Some(Err(e)) => bare().ok_or(e),
+        None => bare().ok_or_else(unknown),
+    }
+}
 
-    // The path walked so far, which is both what a refusal names and the
-    // key a discriminant is stored under.
-    let mut walked = root_path(&name_of(&first));
-    for segment in segments {
-        at = step_in(at, &segment, &walked, key, &selected)?;
+/// A first segment as the name of the top-level field it reaches.
+fn first_name(first: &Segment<'_>) -> String {
+    name_of(first).into_owned()
+}
+
+/// The walk of [`resolve_in`] from a top-level field called `name`, whose
+/// spelling in `key` ends at `end`.
+fn walk_in<'a, 's>(
+    field: FieldRef<'a>,
+    name: &str,
+    end: usize,
+    segments: impl Iterator<Item = (Segment<'s>, usize)>,
+    key: &str,
+    selected: &impl Fn(&str) -> Option<String>,
+) -> Result<FieldRef<'a>, ValidationError> {
+    let mut at = field;
+    // The path walked so far as `flatten` spells it, which is what a
+    // refusal names and where a discriminant is stored; and as `key`
+    // spells it, which is where a store written another way holds it.
+    let mut walked = root_path(name);
+    let mut spelled = end;
+    for (segment, end) in segments {
+        at = step_in(at, &segment, &walked, &key[..spelled], key, selected)?;
         if !matches!(segment, Segment::Field(_)) {
             walked.push_str(&segment.to_string());
         } else {
             walked.push(SEPARATOR);
             walked.push_str(&segment.to_string());
         }
+        spelled = end;
     }
     Ok(at)
 }
@@ -578,6 +702,7 @@ fn step_in<'a>(
     field: FieldRef<'a>,
     segment: &Segment<'_>,
     walked: &str,
+    spelled: &str,
     whole: &str,
     selected: &impl Fn(&str) -> Option<String>,
 ) -> Result<FieldRef<'a>, ValidationError> {
@@ -606,6 +731,7 @@ fn step_in<'a>(
 
     let chosen = selected(walked)
         .filter(|t| !t.is_empty())
+        .or_else(|| selected(spelled).filter(|t| !t.is_empty()))
         .or_else(|| field.default().map(text_of))
         .unwrap_or_default();
     let Some(arm) = kind.arms().find(|a| a.value() == chosen) else {

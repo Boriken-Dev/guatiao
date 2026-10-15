@@ -390,6 +390,24 @@ pub(crate) fn split_last(text: &str) -> Option<(&str, Segment<'_>)> {
     (start > 0).then(|| (&text[..start], segment))
 }
 
+/// Each segment of `text` with the byte offset where it ends, so a caller
+/// can name the prefix as it was spelled. `None` for a text that is not a
+/// path. `continued` reads `text` as what follows a segment, starting at
+/// a `.` or a `[`.
+pub(crate) fn spelled(text: &str, continued: bool) -> Option<Vec<(Segment<'_>, usize)>> {
+    if !continued && text.starts_with('.') {
+        return None;
+    }
+    let mut out = Vec::new();
+    let mut at = 0;
+    while at < text.len() {
+        let (segment, read) = step(&text[at..], at == 0 && !continued).ok()??;
+        at += read;
+        out.push((segment, at));
+    }
+    (!out.is_empty()).then_some(out)
+}
+
 /// Reads a path, checking the whole of it.
 ///
 /// The returned [`Path`] borrows `text`, and iterating it cannot fail.
