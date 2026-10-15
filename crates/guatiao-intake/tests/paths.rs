@@ -344,7 +344,9 @@ fn what_parses_renders_back_to_the_same_segments() {
         state
     };
     let mut parsed = 0;
-    for _ in 0..200_000 {
+    // Miri interprets every step, so it samples rather than sweeps.
+    let rounds = if cfg!(miri) { 300 } else { 200_000 };
+    for _ in 0..rounds {
         let len = (next() % 12) as usize;
         let text: String = (0..len)
             .map(|_| alphabet[(next() % alphabet.len() as u64) as usize])
@@ -367,5 +369,8 @@ fn what_parses_renders_back_to_the_same_segments() {
             .collect();
         assert_eq!(first, second, "`{text}` rendered as `{again}`");
     }
-    assert!(parsed > 1000, "the generator should reach real paths");
+    assert!(
+        parsed > rounds / 20,
+        "the generator should reach real paths"
+    );
 }
