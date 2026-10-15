@@ -2620,17 +2620,19 @@ pub fn guatiao::value::read::float_or(core::option::Option<&guatiao::value::valu
 pub fn guatiao::value::read::int_or(core::option::Option<&guatiao::value::value::Value>, i64) -> i64
 pub fn guatiao::value::read::str_or<'a>(core::option::Option<&'a guatiao::value::value::Value>, &'a str) -> &'a str
 pub mod guatiao::value::status
-#[repr(u32)] pub enum guatiao::value::status::Status
-pub guatiao::value::status::Status::GUATIAO_ERR_ALLOC = 8
-pub guatiao::value::status::Status::GUATIAO_ERR_BAD_VALUE = 7
-pub guatiao::value::status::Status::GUATIAO_ERR_BUSY = 14
-pub guatiao::value::status::Status::GUATIAO_ERR_GONE = 12
-pub guatiao::value::status::Status::GUATIAO_ERR_INTERNAL = 100
-pub guatiao::value::status::Status::GUATIAO_ERR_NOT_FOUND = 10
-pub guatiao::value::status::Status::GUATIAO_ERR_NULL = 11
-pub guatiao::value::status::Status::GUATIAO_ERR_UNSUPPORTED = 13
-pub guatiao::value::status::Status::GUATIAO_ERR_WRONG_KIND = 9
-pub guatiao::value::status::Status::GUATIAO_OK = 0
+#[repr(transparent)] pub struct guatiao::value::status::Status(_)
+impl guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_ALLOC: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_BAD_VALUE: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_BUSY: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_GONE: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_INTERNAL: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_NOT_FOUND: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_NULL: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_UNSUPPORTED: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_WRONG_KIND: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_OK: guatiao::value::status::Status
+pub const fn guatiao::value::status::Status::is_ok(self) -> bool
 impl core::clone::Clone for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::clone(&self) -> Self
 impl core::cmp::Eq for guatiao::value::status::Status
@@ -2644,8 +2646,16 @@ impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::
 pub fn guatiao::value::status::Status::from(guatiao::value::error::ValueError) -> guatiao::value::status::Status
 impl core::convert::From<guatiao::value::status::Status> for guatiao::library::kind::ProviderError
 pub fn guatiao::library::kind::ProviderError::from(guatiao::value::status::Status) -> guatiao::library::kind::ProviderError
+impl core::convert::From<guatiao::value::status::Status> for u32
+pub fn u32::from(guatiao::value::status::Status) -> u32
+impl core::convert::From<u32> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(u32) -> guatiao::value::status::Status
 impl core::fmt::Debug for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::hash<__H: core::hash::Hasher>(&self, &mut __H)
 impl core::marker::Copy for guatiao::value::status::Status
 impl core::marker::StructuralPartialEq for guatiao::value::status::Status
 pub mod guatiao::value::types
@@ -3087,7 +3097,7 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::text::Text> for gu
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::text::Text>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::text::Text> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::text::Text>
-#[repr(u32)] pub enum guatiao::value::types::Tag
+#[non_exhaustive] #[repr(u32)] pub enum guatiao::value::types::Tag
 pub guatiao::value::types::Tag::GUATIAO_ABSENT = 0
 pub guatiao::value::types::Tag::GUATIAO_BOOL = 2
 pub guatiao::value::types::Tag::GUATIAO_BYTES = 5
@@ -3703,7 +3713,7 @@ impl<'a> core::fmt::Debug for guatiao::value::types::list::Values<'a>
 pub fn guatiao::value::types::list::Values<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<'a> core::marker::Copy for guatiao::value::types::list::Values<'a>
 pub mod guatiao::value::value
-#[repr(u32)] pub enum guatiao::value::value::Tag
+#[non_exhaustive] #[repr(u32)] pub enum guatiao::value::value::Tag
 pub guatiao::value::value::Tag::GUATIAO_ABSENT = 0
 pub guatiao::value::value::Tag::GUATIAO_BOOL = 2
 pub guatiao::value::value::Tag::GUATIAO_BYTES = 5
@@ -4027,35 +4037,7 @@ pub fn guatiao::value::convert::MapError::fmt(&self, &mut core::fmt::Formatter<'
 impl core::fmt::Display for guatiao::value::convert::MapError
 pub fn guatiao::value::convert::MapError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao::value::convert::MapError
-#[repr(u32)] pub enum guatiao::value::Status
-pub guatiao::value::Status::GUATIAO_ERR_ALLOC = 8
-pub guatiao::value::Status::GUATIAO_ERR_BAD_VALUE = 7
-pub guatiao::value::Status::GUATIAO_ERR_BUSY = 14
-pub guatiao::value::Status::GUATIAO_ERR_GONE = 12
-pub guatiao::value::Status::GUATIAO_ERR_INTERNAL = 100
-pub guatiao::value::Status::GUATIAO_ERR_NOT_FOUND = 10
-pub guatiao::value::Status::GUATIAO_ERR_NULL = 11
-pub guatiao::value::Status::GUATIAO_ERR_UNSUPPORTED = 13
-pub guatiao::value::Status::GUATIAO_ERR_WRONG_KIND = 9
-pub guatiao::value::Status::GUATIAO_OK = 0
-impl core::clone::Clone for guatiao::value::status::Status
-pub fn guatiao::value::status::Status::clone(&self) -> Self
-impl core::cmp::Eq for guatiao::value::status::Status
-impl core::cmp::PartialEq for guatiao::value::status::Status
-pub fn guatiao::value::status::Status::eq(&self, &Self) -> bool
-impl core::convert::From<&guatiao::value::merge::MergeError> for guatiao::value::status::Status
-pub fn guatiao::value::status::Status::from(&guatiao::value::merge::MergeError) -> guatiao::value::status::Status
-impl core::convert::From<core::str::error::Utf8Error> for guatiao::value::status::Status
-pub fn guatiao::value::status::Status::from(core::str::error::Utf8Error) -> guatiao::value::status::Status
-impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::status::Status
-pub fn guatiao::value::status::Status::from(guatiao::value::error::ValueError) -> guatiao::value::status::Status
-impl core::convert::From<guatiao::value::status::Status> for guatiao::library::kind::ProviderError
-pub fn guatiao::library::kind::ProviderError::from(guatiao::value::status::Status) -> guatiao::library::kind::ProviderError
-impl core::fmt::Debug for guatiao::value::status::Status
-pub fn guatiao::value::status::Status::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl core::marker::Copy for guatiao::value::status::Status
-impl core::marker::StructuralPartialEq for guatiao::value::status::Status
-#[repr(u32)] pub enum guatiao::value::Tag
+#[non_exhaustive] #[repr(u32)] pub enum guatiao::value::Tag
 pub guatiao::value::Tag::GUATIAO_ABSENT = 0
 pub guatiao::value::Tag::GUATIAO_BOOL = 2
 pub guatiao::value::Tag::GUATIAO_BYTES = 5
@@ -4449,6 +4431,44 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::number::Number> fo
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::number::Number>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::number::Number> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::number::Number>
+#[repr(transparent)] pub struct guatiao::value::Status(_)
+impl guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_ALLOC: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_BAD_VALUE: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_BUSY: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_GONE: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_INTERNAL: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_NOT_FOUND: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_NULL: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_UNSUPPORTED: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_WRONG_KIND: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_OK: guatiao::value::status::Status
+pub const fn guatiao::value::status::Status::is_ok(self) -> bool
+impl core::clone::Clone for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::value::status::Status
+impl core::cmp::PartialEq for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::eq(&self, &Self) -> bool
+impl core::convert::From<&guatiao::value::merge::MergeError> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(&guatiao::value::merge::MergeError) -> guatiao::value::status::Status
+impl core::convert::From<core::str::error::Utf8Error> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(core::str::error::Utf8Error) -> guatiao::value::status::Status
+impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(guatiao::value::error::ValueError) -> guatiao::value::status::Status
+impl core::convert::From<guatiao::value::status::Status> for guatiao::library::kind::ProviderError
+pub fn guatiao::library::kind::ProviderError::from(guatiao::value::status::Status) -> guatiao::library::kind::ProviderError
+impl core::convert::From<guatiao::value::status::Status> for u32
+pub fn u32::from(guatiao::value::status::Status) -> u32
+impl core::convert::From<u32> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(u32) -> guatiao::value::status::Status
+impl core::fmt::Debug for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::value::status::Status
+impl core::marker::StructuralPartialEq for guatiao::value::status::Status
 #[repr(C)] pub struct guatiao::value::Str<'a>
 impl<'a> guatiao::value::types::text::Str<'a>
 pub const fn guatiao::value::types::text::Str<'a>::empty() -> guatiao::value::types::text::Str<'a>
@@ -4918,35 +4938,7 @@ impl<'a> core::fmt::Debug for guatiao::value::merge::Source<'a>
 pub fn guatiao::value::merge::Source<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<'a> core::marker::Copy for guatiao::value::merge::Source<'a>
 impl<'a> core::marker::StructuralPartialEq for guatiao::value::merge::Source<'a>
-#[repr(u32)] pub enum guatiao::Status
-pub guatiao::Status::GUATIAO_ERR_ALLOC = 8
-pub guatiao::Status::GUATIAO_ERR_BAD_VALUE = 7
-pub guatiao::Status::GUATIAO_ERR_BUSY = 14
-pub guatiao::Status::GUATIAO_ERR_GONE = 12
-pub guatiao::Status::GUATIAO_ERR_INTERNAL = 100
-pub guatiao::Status::GUATIAO_ERR_NOT_FOUND = 10
-pub guatiao::Status::GUATIAO_ERR_NULL = 11
-pub guatiao::Status::GUATIAO_ERR_UNSUPPORTED = 13
-pub guatiao::Status::GUATIAO_ERR_WRONG_KIND = 9
-pub guatiao::Status::GUATIAO_OK = 0
-impl core::clone::Clone for guatiao::value::status::Status
-pub fn guatiao::value::status::Status::clone(&self) -> Self
-impl core::cmp::Eq for guatiao::value::status::Status
-impl core::cmp::PartialEq for guatiao::value::status::Status
-pub fn guatiao::value::status::Status::eq(&self, &Self) -> bool
-impl core::convert::From<&guatiao::value::merge::MergeError> for guatiao::value::status::Status
-pub fn guatiao::value::status::Status::from(&guatiao::value::merge::MergeError) -> guatiao::value::status::Status
-impl core::convert::From<core::str::error::Utf8Error> for guatiao::value::status::Status
-pub fn guatiao::value::status::Status::from(core::str::error::Utf8Error) -> guatiao::value::status::Status
-impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::status::Status
-pub fn guatiao::value::status::Status::from(guatiao::value::error::ValueError) -> guatiao::value::status::Status
-impl core::convert::From<guatiao::value::status::Status> for guatiao::library::kind::ProviderError
-pub fn guatiao::library::kind::ProviderError::from(guatiao::value::status::Status) -> guatiao::library::kind::ProviderError
-impl core::fmt::Debug for guatiao::value::status::Status
-pub fn guatiao::value::status::Status::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl core::marker::Copy for guatiao::value::status::Status
-impl core::marker::StructuralPartialEq for guatiao::value::status::Status
-#[repr(u32)] pub enum guatiao::Tag
+#[non_exhaustive] #[repr(u32)] pub enum guatiao::Tag
 pub guatiao::Tag::GUATIAO_ABSENT = 0
 pub guatiao::Tag::GUATIAO_BOOL = 2
 pub guatiao::Tag::GUATIAO_BYTES = 5
@@ -5363,6 +5355,44 @@ pub fn guatiao::value::merge::Provenance<'a>::default() -> Self
 impl<'a> core::fmt::Debug for guatiao::value::merge::Provenance<'a>
 pub fn guatiao::value::merge::Provenance<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<'a> core::marker::StructuralPartialEq for guatiao::value::merge::Provenance<'a>
+#[repr(transparent)] pub struct guatiao::Status(_)
+impl guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_ALLOC: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_BAD_VALUE: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_BUSY: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_GONE: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_INTERNAL: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_NOT_FOUND: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_NULL: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_UNSUPPORTED: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_ERR_WRONG_KIND: guatiao::value::status::Status
+pub const guatiao::value::status::Status::GUATIAO_OK: guatiao::value::status::Status
+pub const fn guatiao::value::status::Status::is_ok(self) -> bool
+impl core::clone::Clone for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::value::status::Status
+impl core::cmp::PartialEq for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::eq(&self, &Self) -> bool
+impl core::convert::From<&guatiao::value::merge::MergeError> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(&guatiao::value::merge::MergeError) -> guatiao::value::status::Status
+impl core::convert::From<core::str::error::Utf8Error> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(core::str::error::Utf8Error) -> guatiao::value::status::Status
+impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(guatiao::value::error::ValueError) -> guatiao::value::status::Status
+impl core::convert::From<guatiao::value::status::Status> for guatiao::library::kind::ProviderError
+pub fn guatiao::library::kind::ProviderError::from(guatiao::value::status::Status) -> guatiao::library::kind::ProviderError
+impl core::convert::From<guatiao::value::status::Status> for u32
+pub fn u32::from(guatiao::value::status::Status) -> u32
+impl core::convert::From<u32> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(u32) -> guatiao::value::status::Status
+impl core::fmt::Debug for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::value::status::Status
+impl core::marker::StructuralPartialEq for guatiao::value::status::Status
 #[repr(C)] pub struct guatiao::Str<'a>
 impl<'a> guatiao::value::types::text::Str<'a>
 pub const fn guatiao::value::types::text::Str<'a>::empty() -> guatiao::value::types::text::Str<'a>

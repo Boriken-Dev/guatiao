@@ -37,6 +37,7 @@ use super::types::{Buffer, Entry, List, Map, Number, Text};
 /// story and works only if numbers never move.
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Tag {
     /// No value: the answer to a lookup that found nothing, and the tag of
     /// an optional slot that is not filled in. Never stored in a list.

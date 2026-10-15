@@ -120,6 +120,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ProviderParts::builder(id).name(name).version(version).kinds(kinds)`,
   a `.table(..)` per table, `.ctx(ctx)`, a call per slot that is not
   `None`, then `unsafe { .build() }`.
+- **Breaking: `Status` is a `u32`, not an enum.** A library or host may
+  return a code of its own, as `guatiao.h` allows, and reading one into a
+  `repr(u32)` enum was undefined behaviour in the host. `Status` is now
+  `#[repr(transparent)]` over `u32` with the same `GUATIAO_*` associated
+  constants, `is_ok()`, `Display`, and `From` both ways; any code is a
+  `Status`. The C names and values are unchanged; the header's constants
+  now belong to `enum guatiao_status_code`, and `guatiao_status` is
+  `typedef uint32_t` in C and C++ alike. *Migration:* a `match` on a
+  `Status` gains a `_` arm; `status as u32` is `u32::from(status)`, and a
+  code read from C is `Status::from(code)`.
+- **Breaking: `Tag` is `#[non_exhaustive]`**, as its documentation already
+  said kinds are appended. *Migration:* a `match` on a `Tag` outside this
+  crate gains a `_` arm.
 - **A scan reads a candidate on demand rather than whole**: headers,
   export and dynamic symbol tables, and the 4 KiB declaration window.
 - **An object kind is never served by a provider.** A registry or host

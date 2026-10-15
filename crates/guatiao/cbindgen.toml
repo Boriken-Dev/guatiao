@@ -488,6 +488,7 @@ static inline void guatiao_malloc_free(void *ctx, void *p, size_t size,
 include = [
   "Tag",
   "Status",
+  "StatusCode",
   "Str",
   "Bytes",
   "Values",
@@ -556,6 +557,7 @@ exclude = ["Entry"]
 "Entries" = "guatiao_entries"
 "Allocator" = "guatiao_alloc"
 "Status" = "guatiao_status"
+"StatusCode" = "guatiao_status_code"
 "HostInfo" = "guatiao_host_info"
 "HostServices" = "guatiao_host_services"
 "LibraryInfo" = "guatiao_library_info"

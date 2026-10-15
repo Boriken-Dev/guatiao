@@ -119,13 +119,58 @@ typedef struct guatiao_entry guatiao_entry;
 #define GUATIAO_ABI_VERSION 1
 
 /*
- What an entry point reports.
+ The kind of a stored value.
 
- The numbering is wider than the list because the space may be shared
- with a host's own, so one `switch` covers both. The whole contract is
- that 0 is success and everything else is failure.
+ **Not used as a field type.** A value's `tag` field is a plain
+ `uint32_t`: a `repr(u32)` enum has a restricted set of valid values,
+ so a ninth bit pattern from a foreign caller would be undefined the
+ instant the struct is read, before any `match` could reject it. As an
+ integer it is merely out of range, and a reader skips it. The layout
+ is identical either way.
+
+ **New kinds are APPENDED**, which is the whole forward-compatibility
+ story and works only if numbers never move.
  */
-enum guatiao_status
+enum guatiao_tag
+#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+  : uint32_t
+#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
+ {
+  /*
+   No value: the answer to a lookup that found nothing, and the tag of
+   an optional slot that is not filled in. Never stored in a list.
+   */
+  GUATIAO_ABSENT = 0,
+  /*
+   The stored nothing. Distinct from absent, the same way JSON
+   distinguishes a missing member from a null one.
+   */
+  GUATIAO_NULL = 1,
+  GUATIAO_BOOL = 2,
+  /*
+   A number, carried as the exact text that declared it. Read it with
+   `guatiao_value_number`, not `guatiao_value_str`.
+   */
+  GUATIAO_NUMBER = 3,
+  GUATIAO_STRING = 4,
+  GUATIAO_BYTES = 5,
+  GUATIAO_LIST = 6,
+  GUATIAO_MAP = 7,
+};
+#ifndef __cplusplus
+#if __STDC_VERSION__ >= 202311L
+typedef enum guatiao_tag guatiao_tag;
+#else
+typedef uint32_t guatiao_tag;
+#endif // __STDC_VERSION__ >= 202311L
+#endif // __cplusplus
+
+/*
+ The codes this crate defines for a `guatiao_status`, as named
+ constants. No slot, field or return value has this type: each is a
+ `guatiao_status`, so a code outside this list is still a value of it.
+ */
+enum guatiao_status_code
 #if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
   : uint32_t
 #endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
@@ -179,56 +224,9 @@ enum guatiao_status
 };
 #ifndef __cplusplus
 #if __STDC_VERSION__ >= 202311L
-typedef enum guatiao_status guatiao_status;
+typedef enum guatiao_status_code guatiao_status_code;
 #else
-typedef uint32_t guatiao_status;
-#endif // __STDC_VERSION__ >= 202311L
-#endif // __cplusplus
-
-/*
- The kind of a stored value.
-
- **Not used as a field type.** A value's `tag` field is a plain
- `uint32_t`: a `repr(u32)` enum has a restricted set of valid values,
- so a ninth bit pattern from a foreign caller would be undefined the
- instant the struct is read, before any `match` could reject it. As an
- integer it is merely out of range, and a reader skips it. The layout
- is identical either way.
-
- **New kinds are APPENDED**, which is the whole forward-compatibility
- story and works only if numbers never move.
- */
-enum guatiao_tag
-#if defined(__cplusplus) || __STDC_VERSION__ >= 202311L
-  : uint32_t
-#endif // defined(__cplusplus) || __STDC_VERSION__ >= 202311L
- {
-  /*
-   No value: the answer to a lookup that found nothing, and the tag of
-   an optional slot that is not filled in. Never stored in a list.
-   */
-  GUATIAO_ABSENT = 0,
-  /*
-   The stored nothing. Distinct from absent, the same way JSON
-   distinguishes a missing member from a null one.
-   */
-  GUATIAO_NULL = 1,
-  GUATIAO_BOOL = 2,
-  /*
-   A number, carried as the exact text that declared it. Read it with
-   `guatiao_value_number`, not `guatiao_value_str`.
-   */
-  GUATIAO_NUMBER = 3,
-  GUATIAO_STRING = 4,
-  GUATIAO_BYTES = 5,
-  GUATIAO_LIST = 6,
-  GUATIAO_MAP = 7,
-};
-#ifndef __cplusplus
-#if __STDC_VERSION__ >= 202311L
-typedef enum guatiao_tag guatiao_tag;
-#else
-typedef uint32_t guatiao_tag;
+typedef uint32_t guatiao_status_code;
 #endif // __STDC_VERSION__ >= 202311L
 #endif // __cplusplus
 
@@ -307,6 +305,17 @@ typedef struct guatiao_alloc {
    */
   void (*release)(void *ctx);
 } guatiao_alloc;
+
+/*
+ What an entry point reports: 0 is success and everything else is
+ failure.
+
+ An integer, never an enum: the space may be shared with a host's own
+ codes, so one `switch` covers both, and a code nobody here defines is
+ still a status. The codes this crate defines are `GUATIAO_OK` and the
+ `GUATIAO_ERR_*` constants.
+ */
+typedef uint32_t guatiao_status;
 
 /*
  Owned, growable UTF-8 text. `cap == 0` means the buffer is **not

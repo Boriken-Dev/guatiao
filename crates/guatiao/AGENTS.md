@@ -184,6 +184,10 @@ Value::from_raw_parts(tag: u32, Payload)   v.into_raw_parts() -> (u32, Payload)
 unsafe { v.free() }                    // the boundary's spelling of drop
 ```
 
+`Tag` is `#[non_exhaustive]`: new kinds are appended, so a `match` on one
+outside this crate keeps a `_` arm, which is also where `tag()`'s
+`Err(UnknownTag)` belongs.
+
 Everything else is a conversion:
 
 ```rust
@@ -1553,12 +1557,18 @@ answers a `const guatiao_value *` borrowed from the schema it was given,
 or null — a function returning a pointer has no way to report a status,
 so null is the only failure it can express.
 
-The statuses:
+The statuses (`guatiao_status` is a `uint32_t`; in Rust, `Status` is a
+`repr(transparent)` `u32` with these as associated constants):
 
 ```
-GUATIAO_OK 0   BAD_VALUE 7   ALLOC 8   WRONG_KIND 9
-NOT_FOUND 10   NULL 11       INTERNAL 100
+GUATIAO_OK 0   BAD_VALUE 7   ALLOC 8   WRONG_KIND 9   NOT_FOUND 10
+NULL 11        GONE 12       UNSUPPORTED 13  BUSY 14  INTERNAL 100
 ```
+
+**Any `u32` is a `Status`.** A library or host may return a code of its
+own; it compares unequal to every constant, `is_ok()` is false, and it
+displays as `status <n>`. `From<u32>` and `From<Status> for u32` convert;
+there is no `TryFrom`, because there is nothing to refuse.
 
 Contracts that are not in the signatures:
 
