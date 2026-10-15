@@ -456,7 +456,7 @@ impl MergeMode {
     /// which layer each **leaf path** came from. Labels are the caller's,
     /// so a settings form can show "inherited from system" rather than an
     /// index. An empty list yields an empty map and empty provenance.
-    pub fn merge_layers<'a, 'l>(
+    pub fn merge_layers<'l>(
         &self,
         layers: impl IntoIterator<Item = (&'l str, &'l Value)>,
         alloc: Alloc,
@@ -465,7 +465,7 @@ impl MergeMode {
     }
 
     /// [`MergeMode::merge_layers`] with sub-options and overrides.
-    pub fn merge_layers_with<'a, 'l>(
+    pub fn merge_layers_with<'l>(
         &self,
         layers: impl IntoIterator<Item = (&'l str, &'l Value)>,
         alloc: Alloc,
