@@ -185,22 +185,16 @@ fn object_library(_host: Host) -> Option<LocalLibrary> {
     // a leaked `Talk`; both live for the process. That the registry still
     // refuses to serve it is the property under test.
     let provider = unsafe {
-        ProviderParts::new(
-            "talker",
-            "Talker",
-            "",
-            &["conversation"],
-            vec![KindTable::new(
+        ProviderParts::builder("talker")
+            .name("Talker")
+            .kinds(&["conversation"])
+            .table(KindTable::new(
                 "conversation",
                 (table as *const ConversationVtable).cast(),
                 size_of::<ConversationVtable>(),
-            )],
-            None,
-            ctx,
-            None,
-            None,
-            None,
-        )
+            ))
+            .ctx(ctx)
+            .build()
     };
     let parts: &'static LibraryParts = Box::leak(Box::new(LibraryParts::new(
         "objects",

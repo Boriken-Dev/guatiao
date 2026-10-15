@@ -93,6 +93,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   can tell which providers a scan added, or retire what it loaded,
   without counting. Migration: `for (path, key) in &report.loaded`; the C
   report is unchanged.
+- **Breaking: `ProviderParts::builder(id)` replaces `ProviderParts::new`**
+  and its ten positional arguments: `.name`, `.version`, `.kinds`,
+  `.table`, `.config`, `.ctx`, `.available`, `.create`, `.destroy`, then
+  the `unsafe` `.build()`. Every slot defaults to absent, so a provider
+  written without the derive keeps compiling when the envelope appends
+  one. Migration: `ProviderParts::new(id, name, version, kinds, tables,
+  config, ctx, available, create, destroy)` is
+  `ProviderParts::builder(id).name(name).version(version).kinds(kinds)`,
+  a `.table(..)` per table, `.ctx(ctx)`, a call per slot that is not
+  `None`, then `unsafe { .build() }`.
 - **A scan reads a candidate on demand rather than whole**: headers,
   export and dynamic symbol tables, and the 4 KiB declaration window.
 - **An object kind is never served by a provider.** A registry or host
