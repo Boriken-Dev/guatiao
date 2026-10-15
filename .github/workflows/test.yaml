@@ -81,7 +81,7 @@ jobs:
     # library run here -- Miri cannot map one -- and the one deep-tree test is
     # skipped for time, not weakened. The nightly is pinned so a run means
     # the same thing twice.
-    name: Miri (value model)
+    name: Miri (value model, loader)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -114,6 +114,27 @@ jobs:
         run: >-
           cargo miri test -p guatiao --all-features --test wire_roundtrip --test wire_channel
           -- --skip ten_thousand_random --skip a_tree_deeper_than --skip a_thousand_keys
+      - name: The loader and the kind runtime, under Stacked Borrows
+        # The directories with the most `unsafe`, through descriptors the
+        # host links rather than loads. Registering resolves a path, hence
+        # isolation off; the block a registry hands its libraries is leaked
+        # by design, hence the leak check off. `scan::` holds no `unsafe`
+        # and reads directories, so it runs natively only.
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-ignore-leaks
+        run: >-
+          cargo miri test -p guatiao --all-features --lib
+          -- library::raw:: library::kind:: library::registry::
+          && cargo miri test -p guatiao --all-features
+          --test host_lookups --test provider_offers
+      - name: The loader and the kind runtime, under Tree Borrows
+        env:
+          MIRIFLAGS: -Zmiri-disable-isolation -Zmiri-ignore-leaks -Zmiri-tree-borrows
+        run: >-
+          cargo miri test -p guatiao --all-features --lib
+          -- library::raw:: library::kind:: library::registry::
+          && cargo miri test -p guatiao --all-features
+          --test host_lookups --test provider_offers
 
   public-api:
     # A change to what a consumer can name must be a line somebody wrote:
