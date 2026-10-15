@@ -958,9 +958,7 @@ impl Registry {
         let library_key = self.library_key.render(KeyFields::library(&id, &version));
         if let Some(already) = self.loaded.iter().find(|l| *l.key == *library_key) {
             let from = already.path.clone();
-            // Its entry point has run, and whatever it started may still
-            // address its image.
-            origin.keep();
+            self.pass_over(origin);
             return Ok(Loading::Skipped(Skipped::AlreadyLoaded { from }));
         }
 
@@ -1010,7 +1008,7 @@ impl Registry {
                     });
                 }
                 Some((_, first)) => {
-                    origin.keep();
+                    self.pass_over(origin);
                     return Err(LoadError::Duplicate {
                         key,
                         first,
@@ -1050,6 +1048,22 @@ impl Registry {
         });
         self.publish();
         Ok(Loading::Loaded(self.loaded.last().expect("just pushed")))
+    }
+
+    /// Gives up the handle of a file passed over after its entry point ran.
+    ///
+    /// A second handle to an image this registry already holds is closed:
+    /// the loader counted the open against that image, so closing is a
+    /// decrement and the image stays, and keeping it would leave `unload`
+    /// unable to unmap. Any other image keeps its mapping, since whatever
+    /// its entry point started may still address it.
+    fn pass_over(&self, origin: Origin) {
+        if self.loaded.iter().any(|l| l.origin.same_image(&origin)) {
+            // A failed close leaves the handle given up, which is `keep`.
+            let _ = origin.close();
+        } else {
+            origin.keep();
+        }
     }
 
     /// Takes one library out of this registry, **leaving it mapped**.
