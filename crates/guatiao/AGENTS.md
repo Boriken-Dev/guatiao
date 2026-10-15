@@ -1134,7 +1134,13 @@ drop(s);                                                             // the libr
 - **Versioning.** Slots follow declaration order; a defaulted method is an
   appended slot an older table may lack (the proxy runs the default). The
   table header `KindHeader { struct_size, floor_hash }` carries FNV-1a
-  over the required signatures; a mismatch is refused, never called.
+  over the required signatures; a mismatch is refused, never called. The
+  signatures are hashed as spelled, with `std`/`core`/`alloc` paths of
+  `Vec`, `String`, `Option`, `Result`, `Box` and `guatiao` paths of
+  `Value`, `Map`, `List`, `Text`, `ProviderError`, `Object`, `Status`
+  reduced to the bare name; any other type by the name it is written
+  with, so renaming a model type in a kind crate breaks every built
+  provider (`HashMismatch`). Pin each kind's `FLOOR_HASH` in a test.
 - **Only a per-kind table** (`ProviderInfo::tables`) is validated as a
   kind. A hand-written `vtable` is neither an offer nor a mismatch; it
   keeps working through `provider.table_for(kind)` / `vtable_as`.

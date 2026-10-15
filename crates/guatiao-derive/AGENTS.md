@@ -195,6 +195,22 @@ error is not `ProviderError`, and an attribute key other than `name`,
 `kind::tests::kind_rejects_by_name`; the expansion of a two-method trait
 is pinned by `src/snapshots/greeter.expected.rs`.
 
+**What the hash covers.** `FLOOR_HASH` is FNV-1a over `provider;` or
+`object;` and each required method's `name(arg,..)->ret`, every type in a
+canonical spelling with the spaces removed. The canonical spelling makes
+these equal: a `std::`, `core::` or `alloc::` path of `Vec`, `String`,
+`Option`, `Result` or `Box` and its bare name; a `guatiao::` or
+`::guatiao::` path (or one under the `crate =` root) of `Value`, `Map`,
+`List`, `Text`, `ProviderError`, `Object` or `Status` and its bare name;
+a leading `::`; a reference's lifetime; parentheses. **Every other type
+is hashed as written**: the macro sees tokens, not types, so
+`Vec<Channel>` and `Vec<RenamedChannel>` hash differently though they
+cross identically, and so do `Channel` and `model::Channel`. Renaming or
+re-pathing a model type in a kind crate is therefore a new declaration of
+the kind, and every built provider is refused with `HashMismatch` until
+rebuilt; pin each kind's `FLOOR_HASH` in a test of the kind crate so
+that is a decision, not a surprise.
+
 **`#[kind(object)]` on a trait** — an **object kind**: a handle one
 caller owns (a session, a scan, a stream), never offered by a registry.
 The trait names `Send` (`Sync` optional); methods may take `&mut self`;

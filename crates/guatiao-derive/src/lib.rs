@@ -137,6 +137,8 @@ mod kind;
 mod krate;
 #[cfg(feature = "provider")]
 mod provider;
+#[cfg(feature = "provider")]
+mod spelling;
 
 use proc_macro::TokenStream;
 

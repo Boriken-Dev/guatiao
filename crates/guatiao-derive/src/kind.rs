@@ -54,6 +54,16 @@
 //! floor is one contiguous prefix. The header's hash covers the required
 //! methods' names and signatures, so a table built from a different
 //! declaration is refused rather than called with the wrong ABI.
+//!
+//! The signatures are hashed as **spelled**, after one canonical rewrite
+//! (`crate::spelling`): `std`/`core`/`alloc` paths of `Vec`, `String`,
+//! `Option`, `Result` and `Box`, and `guatiao` paths (or the `crate =`
+//! root's) of `Value`, `Map`, `List`, `Text`, `ProviderError`, `Object`
+//! and `Status`, become the bare name; a leading `::`, a reference's
+//! lifetime and parentheses go. Anything else is hashed as written,
+//! because a proc macro has no type information: renaming a model type, or
+//! naming it through an alias or another module path, changes the hash
+//! even where the wire shape does not.
 
 #![forbid(unsafe_code)]
 
@@ -63,6 +73,8 @@ use syn::{
     Block, FnArg, GenericArgument, Ident, ItemTrait, PathArguments, ReturnType, TraitItem,
     TraitItemFn, Type, TypeReference,
 };
+
+use crate::spelling::Roots;
 
 /// Expands `#[kind(...)]` over a trait, or emits a compile error at the
 /// user's span.
@@ -77,7 +89,7 @@ fn try_expand(attr: TokenStream, item: TokenStream) -> syn::Result<TokenStream> 
     let tr: ItemTrait = syn::parse2(item)?;
     let attr = parse_attr(attr, &tr.ident)?;
     check_trait(&tr, attr.object)?;
-    let methods = plan_methods(&tr, attr.object)?;
+    let methods = plan_methods(&tr, attr.object, Roots::new(attr.krate.as_ref()))?;
     Ok(crate::krate::reroot(
         emit(&tr, &attr, &methods),
         attr.krate.as_ref(),
@@ -265,7 +277,7 @@ struct MethodPlan {
     signature: String,
 }
 
-fn plan_methods(tr: &ItemTrait, object: bool) -> syn::Result<Vec<MethodPlan>> {
+fn plan_methods(tr: &ItemTrait, object: bool, roots: Roots<'_>) -> syn::Result<Vec<MethodPlan>> {
     let mut plans = Vec::new();
     let mut seen_default = false;
     for item in &tr.items {
@@ -290,7 +302,7 @@ fn plan_methods(tr: &ItemTrait, object: bool) -> syn::Result<Vec<MethodPlan>> {
                 ));
             }
         };
-        let plan = plan_method(f, object)?;
+        let plan = plan_method(f, object, roots)?;
         if plan.default.is_some() {
             seen_default = true;
         } else if seen_default {
@@ -311,7 +323,7 @@ fn plan_methods(tr: &ItemTrait, object: bool) -> syn::Result<Vec<MethodPlan>> {
     Ok(plans)
 }
 
-fn plan_method(f: &TraitItemFn, object: bool) -> syn::Result<MethodPlan> {
+fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<MethodPlan> {
     let sig = &f.sig;
     if let Some(a) = &sig.asyncness {
         return Err(syn::Error::new_spanned(
@@ -410,7 +422,7 @@ fn plan_method(f: &TraitItemFn, object: bool) -> syn::Result<MethodPlan> {
     // section of the shipped `AGENTS.md` instead, and pinned by
     // `tests/kind_glue_probes.rs`.
 
-    let signature = normalised_signature(sig);
+    let signature = normalised_signature(sig, roots);
     Ok(MethodPlan {
         ident: sig.ident.clone(),
         args,
@@ -618,25 +630,28 @@ fn plain_ret(ty: &Type) -> syn::Result<RetKind> {
     }
 }
 
-/// `name(ty,ty)->ret` with every space removed, so a re-typed or
-/// reordered required slot changes the hash and a reformatted one does
-/// not.
-fn normalised_signature(sig: &syn::Signature) -> String {
+/// `name(ty,ty)->ret`, each type in its canonical spelling with every
+/// space removed: a re-typed or reordered required slot changes the hash,
+/// and a reformatted one, or one naming a standard or `guatiao` type by
+/// another path, does not. See [`Roots::canonical`] for what is
+/// recognised; any other spelling is hashed as written.
+fn normalised_signature(sig: &syn::Signature, roots: Roots<'_>) -> String {
+    let spelled = |ty: &Type| {
+        let ty = roots.canonical(ty);
+        strip(&quote!(#ty))
+    };
     let args: Vec<String> = sig
         .inputs
         .iter()
         .skip(1)
         .filter_map(|a| match a {
-            FnArg::Typed(t) => {
-                let ty = &t.ty;
-                Some(strip(&quote!(#ty)))
-            }
+            FnArg::Typed(t) => Some(spelled(&t.ty)),
             FnArg::Receiver(_) => None,
         })
         .collect();
     let ret = match &sig.output {
         ReturnType::Default => "()".to_string(),
-        ReturnType::Type(_, ty) => strip(&quote!(#ty)),
+        ReturnType::Type(_, ty) => spelled(ty),
     };
     format!("{}({})->{}", sig.ident, args.join(","), ret)
 }
@@ -1594,6 +1609,57 @@ mod tests {
                 "the expansion changed; compare src/snapshots/greeter.actual.rs with greeter.expected.rs and move it over if the change is intended"
             );
         }
+    }
+
+    /// The literal the expansion writes as the table's hash.
+    fn floor_hash(attr: &str, item: &str) -> u32 {
+        let out = expand_str(attr, item).expect("expands");
+        let (_, rest) = out
+            .split_once("pub const FLOOR_HASH : u32 = ")
+            .expect("the hash literal");
+        rest.split_once(' ').unwrap().0.parse().unwrap()
+    }
+
+    #[test]
+    fn the_hash_reads_std_and_guatiao_paths_as_their_bare_names() {
+        let spelled = |ret: &str| {
+            floor_hash(
+                "",
+                &format!("pub trait P: Send + Sync {{ fn channels(&self) -> {ret}; }}"),
+            )
+        };
+        let bare = spelled("Result<Vec<Channel>, ProviderError>");
+        assert_eq!(
+            bare,
+            fnv1a("provider;channels()->Result<Vec<Channel>,ProviderError>")
+        );
+        for ret in [
+            "Result<std::vec::Vec<Channel>, ProviderError>",
+            "Result<Vec<Channel>, guatiao::library::ProviderError>",
+            "::core::result::Result<::alloc::vec::Vec<Channel>, ::guatiao::library::ProviderError>",
+        ] {
+            assert_eq!(spelled(ret), bare, "{ret}");
+        }
+        // A type of the caller's is hashed as written: a proc macro cannot
+        // see that two names describe one wire shape.
+        assert_ne!(spelled("Result<Vec<RenamedChannel>, ProviderError>"), bare);
+        assert_ne!(spelled("Result<Vec<model::Channel>, ProviderError>"), bare);
+        // The `crate =` root is guatiao's too.
+        assert_eq!(
+            floor_hash(
+                "crate = ::kinds::guatiao",
+                "pub trait P: Send + Sync { fn channels(&self) -> Result<Vec<Channel>, ::kinds::guatiao::library::ProviderError>; }",
+            ),
+            bare
+        );
+        // Arguments as well as returns, and a lifetime is not part of it.
+        assert_eq!(
+            floor_hash(
+                "",
+                "pub trait P: Send + Sync { fn f(&self, v: &'static ::guatiao::Value, m: &guatiao::Map) -> i64; }"
+            ),
+            fnv1a("provider;f(&Value,&Map)->i64")
+        );
     }
 
     #[test]
