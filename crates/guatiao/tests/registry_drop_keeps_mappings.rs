@@ -111,11 +111,7 @@ fn scratch(name: &str) -> PathBuf {
 #[test]
 fn a_library_skipped_by_key_keeps_its_mapping() {
     let source = library_path("hello_library");
-    let dir = source
-        .parent()
-        .expect("the library is in a directory")
-        .join(format!("skip-by-key-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("a scratch directory beside the build");
+    let dir = scratch("skip-by-key");
     let first = dir.join(source.file_name().expect("a file name"));
     let second = dir.join(format!(
         "{}second_hello{}",
@@ -142,6 +138,10 @@ fn a_library_skipped_by_key_keeps_its_mapping() {
         1,
         "the skipped copy's entry ran once, and its image is the one still mapped"
     );
+    drop(registry);
+    // Works where a mapped file can be unlinked; on Windows the next run
+    // removes it.
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// A hard link to a loaded library, passed over by its key, leaves no
