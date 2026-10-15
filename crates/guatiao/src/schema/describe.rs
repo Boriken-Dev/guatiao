@@ -23,7 +23,7 @@
 //!
 //! let alloc = Alloc::rust();
 //!
-//! let declared = Connection::schema(alloc)?;
+//! let declared = Connection::schema_in(alloc)?;
 //! let s = SchemaRef::new(&declared).unwrap();
 //!
 //! let host = s.find("host").unwrap();
@@ -85,7 +85,10 @@ pub trait Schema {
     /// place. `properties` is written even when the kind declares none,
     /// so a reader can tell an object that declares nothing from a
     /// document that forgot to say.
-    fn schema(alloc: Alloc) -> Result<Value, ValueError> {
+    ///
+    /// [`schema`](Schema::schema) is the same through the crate's own
+    /// allocator.
+    fn schema_in(alloc: Alloc) -> Result<Value, ValueError> {
         let kind = Self::kind(alloc).finish()?;
         let mut out = Map::new_in(alloc);
         out.try_set(
@@ -97,12 +100,18 @@ pub trait Schema {
             Text::new_in(alloc, vocab::TYPE_OBJECT).map(Value::from)?,
         )?;
         for entry in <&Map>::try_from(&kind).map(Map::entries).unwrap_or(&[]) {
-            out.try_set(entry.key(), entry.value().to_value(alloc)?)?;
+            out.try_set(entry.key(), entry.value().to_value_in(alloc)?)?;
         }
         if out.get(vocab::PROPERTIES).is_none() {
             out.try_set(vocab::PROPERTIES, Map::new_in(alloc))?;
         }
         Ok(out.into())
+    }
+
+    /// The whole schema, built through the crate's own allocator. See
+    /// [`schema_in`](Schema::schema_in).
+    fn schema() -> Result<Value, ValueError> {
+        Self::schema_in(Alloc::rust())
     }
 }
 

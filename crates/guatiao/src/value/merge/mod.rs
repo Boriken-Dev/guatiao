@@ -498,7 +498,7 @@ fn is_scalar(value: &Value) -> bool {
 /// A deep copy of `value` into `alloc`, which is how anything from either
 /// input reaches the result.
 fn clone_into(value: &Value, alloc: Alloc) -> Result<Value, MergeError> {
-    Ok(value.to_value(alloc)?)
+    Ok(value.to_value_in(alloc)?)
 }
 
 /// Whether the two maps share at least one key, compared as raw bytes so

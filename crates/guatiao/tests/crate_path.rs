@@ -96,13 +96,13 @@ fn a_provider_written_against_a_re_export_builds_and_answers() {
         "a derived type crosses as a value, in both directions"
     );
 
-    let schema = Settings::schema(Alloc::rust()).expect("a schema");
+    let schema = Settings::schema().expect("a schema");
     let written = Settings {
         prefix: "x".into(),
         bangs: 1,
         tone: Some(Tone::Loud),
     }
-    .to_value(Alloc::rust())
+    .to_value()
     .unwrap();
     kinds::guatiao::schema::validate_map(
         kinds::guatiao::schema::SchemaRef::new(&schema).unwrap(),

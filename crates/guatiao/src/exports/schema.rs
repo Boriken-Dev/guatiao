@@ -150,7 +150,7 @@ pub unsafe fn schema_export<T: crate::schema::Schema>(
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
-        let Ok(schema) = T::schema(alloc) else {
+        let Ok(schema) = T::schema_in(alloc) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
         // SAFETY: `out` is writable by contract, and the tree MOVES into

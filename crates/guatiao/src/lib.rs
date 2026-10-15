@@ -192,7 +192,7 @@ pub use value::{
 ///     motd: None,
 /// };
 ///
-/// let node = original.to_value(alloc)?;
+/// let node = original.to_value_in(alloc)?;
 /// let map: &guatiao::Map = (&node).try_into()?;
 /// assert_eq!(str_or(map.get("host"), ""), "10.0.0.1");
 /// assert_eq!(int_or(map.get("port"), 0), 5900);
@@ -252,11 +252,11 @@ pub use value::{
 /// enum Level { Off, #[map(rename = "warn")] Warning, On }
 ///
 /// let alloc = guatiao::Alloc::rust();
-/// let tcp = Transport::Tcp { port: 5900 }.to_value(alloc)?;
+/// let tcp = Transport::Tcp { port: 5900 }.to_value_in(alloc)?;
 /// let tcp: &guatiao::Map = (&tcp).try_into()?;
 /// let tag: &str = tcp.required("transport")?.try_into()?;
 /// assert_eq!(tag, "Tcp");
-/// let level = Level::Warning.to_value(alloc)?;
+/// let level = Level::Warning.to_value_in(alloc)?;
 /// assert_eq!(<&str>::try_from(&level)?, "warn");
 /// # Ok::<(), Box<dyn core::error::Error>>(())
 /// ```

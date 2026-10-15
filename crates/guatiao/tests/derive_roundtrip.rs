@@ -103,7 +103,7 @@ fn a_struct_round_trips_through_a_map() {
     with_alloc(|alloc| {
         let original = sample();
         let value = original
-            .to_value(alloc)
+            .to_value_in(alloc)
             .expect("the allocator is not refusing");
 
         let back = Connection::from_value(&value).expect("what was just written reads");
@@ -124,7 +124,7 @@ fn a_struct_round_trips_through_a_map() {
 #[test]
 fn the_map_holds_exactly_the_keys_the_declaration_asks_for() {
     with_alloc(|alloc| {
-        let value = sample().to_value(alloc).unwrap();
+        let value = sample().to_value_in(alloc).unwrap();
         let keys: Vec<String> = TryAsRef::<Map>::try_as_ref(&value)
             .map(Map::entries)
             .unwrap_or(&[])
@@ -154,7 +154,7 @@ fn none_omits_the_key_and_both_spellings_read_back_as_none() {
     with_alloc(|alloc| {
         let mut quiet = sample();
         quiet.motd = None;
-        let value = quiet.to_value(alloc).unwrap();
+        let value = quiet.to_value_in(alloc).unwrap();
         assert!(
             TryAsRef::<Map>::try_as_ref(&value)
                 .and_then(|m| m.get("motd"))
@@ -164,7 +164,7 @@ fn none_omits_the_key_and_both_spellings_read_back_as_none() {
         assert_eq!(Connection::from_value(&value).unwrap().motd, None);
 
         // The other spelling: a producer that writes an explicit null.
-        let mut loud = sample().to_value(alloc).unwrap();
+        let mut loud = sample().to_value_in(alloc).unwrap();
         TryAsMut::<Map>::try_as_mut(&mut loud)
             .ok_or(ValueError::WrongKind)
             .map(|m| m.set("motd", Value::null()))
@@ -178,7 +178,7 @@ fn none_omits_the_key_and_both_spellings_read_back_as_none() {
 #[test]
 fn an_error_inside_a_nested_struct_names_the_dotted_path() {
     with_alloc(|alloc| {
-        let mut value = sample().to_value(alloc).unwrap();
+        let mut value = sample().to_value_in(alloc).unwrap();
         let tls = TryAsMut::<Map>::try_as_mut(&mut value)
             .and_then(|m| m.get_mut("tls"))
             .expect("tls was written");
@@ -200,7 +200,7 @@ fn an_error_inside_a_nested_struct_names_the_dotted_path() {
 #[test]
 fn an_error_inside_a_list_names_the_index() {
     with_alloc(|alloc| {
-        let mut value = sample().to_value(alloc).unwrap();
+        let mut value = sample().to_value_in(alloc).unwrap();
         let tags = TryAsMut::<Map>::try_as_mut(&mut value)
             .and_then(|m| m.get_mut("tags"))
             .expect("tags was written");
@@ -245,7 +245,7 @@ fn a_value_that_is_not_a_map_is_rejected_as_that() {
 #[test]
 fn a_number_that_does_not_fit_is_bad_value_not_wrong_type() {
     with_alloc(|alloc| {
-        let mut value = sample().to_value(alloc).unwrap();
+        let mut value = sample().to_value_in(alloc).unwrap();
         TryAsMut::<Map>::try_as_mut(&mut value)
             .ok_or(ValueError::WrongKind)
             .map(|m| {
@@ -290,7 +290,7 @@ fn bytes_and_a_sequence_are_different_kinds() {
             blob: Bytes(vec![1, 2, 3]),
             numbers: vec![1, 2, 3],
         };
-        let value = original.to_value(alloc).unwrap();
+        let value = original.to_value_in(alloc).unwrap();
 
         assert_eq!(
             guatiao::value::read::bytes_or(
@@ -324,7 +324,7 @@ fn a_key_with_a_nul_in_it_works() {
             field: i64,
         }
 
-        let value = Odd { field: 7 }.to_value(alloc).unwrap();
+        let value = Odd { field: 7 }.to_value_in(alloc).unwrap();
         assert_eq!(
             str_or(
                 TryAsRef::<Map>::try_as_ref(&value).and_then(|m| m.get("a\0b")),
@@ -353,7 +353,7 @@ fn a_schema_attribute_is_accepted_by_the_other_two_derives() {
             secret: i64,
         }
 
-        let value = Described { secret: 1 }.to_value(alloc).unwrap();
+        let value = Described { secret: 1 }.to_value_in(alloc).unwrap();
         assert_eq!(
             Described::from_value(&value).unwrap(),
             Described { secret: 1 }
@@ -371,7 +371,7 @@ fn an_f32_field_round_trips_and_refuses_what_it_cannot_hold() {
         r: f32,
     }
     with_alloc(|alloc| {
-        let value = Ratio { r: 1.1 }.to_value(alloc).unwrap();
+        let value = Ratio { r: 1.1 }.to_value_in(alloc).unwrap();
         let map: &Map = TryAsRef::<Map>::try_as_ref(&value).unwrap();
         assert_eq!(&**TryAsRef::<Number>::try_as_ref(&map["r"]).unwrap(), "1.1");
         assert_eq!(Ratio::from_value(&value).unwrap(), Ratio { r: 1.1 });

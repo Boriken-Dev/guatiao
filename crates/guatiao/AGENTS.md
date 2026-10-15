@@ -424,6 +424,18 @@ struct Connection {
 }
 ```
 
+Building names no allocator here either:
+
+```rust
+value.to_value() -> Result<Value, ValueError>          // the crate's allocator
+value.to_value_in(alloc) -> Result<Value, ValueError>  // what an impl writes
+Connection::schema() -> Result<Value, ValueError>
+Connection::schema_in(alloc) -> Result<Value, ValueError>
+```
+
+A hand-written `ToValue` implements `to_value_in`; a hand-written
+`Schema` implements `kind(alloc)`, and both short forms are provided.
+
 `#[map(rename = "...")]`, `#[map(skip)]`, `#[map(default)]` or
 `#[map(default = <expr>)]` (an absent key reads as it, the field is not
 required, and the schema carries it); `#[schema(title, description,
@@ -1048,7 +1060,7 @@ unsafe { Remote::<dyn Greeter>::from_raw(table, size, ctx) }   // a table from a
 
 // Building a configured provider, from the host's own type:
 #[derive(ToValue, Schema)] struct Settings { prefix: String }
-let config = Settings { prefix: "hey".into() }.to_value(Alloc::rust())?;
+let config = Settings { prefix: "hey".into() }.to_value()?;
 let instance = offer.instantiate(&config)?;   // checked against config_schema() first;
                                               // derefs to dyn Greeter; drop runs `destroy`
 ```

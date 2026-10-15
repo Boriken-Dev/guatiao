@@ -565,7 +565,7 @@ fn set_field(field: &FieldPlan, access: &TokenStream) -> TokenStream {
                 ::guatiao::Map::set_in(
                     &mut __map,
                     #key,
-                    <#inner as ::guatiao::ToValue>::to_value(__value, __alloc)?,
+                    <#inner as ::guatiao::ToValue>::to_value_in(__value, __alloc)?,
                     __alloc,
                 )?;
             }
@@ -576,7 +576,7 @@ fn set_field(field: &FieldPlan, access: &TokenStream) -> TokenStream {
             ::guatiao::Map::set_in(
                 &mut __map,
                 #key,
-                <#ty as ::guatiao::ToValue>::to_value(#access, __alloc)?,
+                <#ty as ::guatiao::ToValue>::to_value_in(#access, __alloc)?,
                 __alloc,
             )?;
         }
@@ -742,7 +742,7 @@ fn field_builder(field: &FieldPlan) -> TokenStream {
                     #(
                         if __ok.is_ok() {
                             __ok = (#examples)
-                                .to_value(__alloc)
+                                .to_value_in(__alloc)
                                 .and_then(|__v| __examples.push_in(__v, __alloc));
                         }
                     )*
@@ -762,7 +762,7 @@ fn field_builder(field: &FieldPlan) -> TokenStream {
         // so a consumer filling a form starts from what the reader uses.
         built = quote! {
             #built.default_checked(
-                <#ty as ::guatiao::ToValue>::to_value(&#default, __alloc),
+                <#ty as ::guatiao::ToValue>::to_value_in(&#default, __alloc),
             )
         };
     }
@@ -773,7 +773,7 @@ fn field_builder(field: &FieldPlan) -> TokenStream {
         // and `finish` reports it.
         built = quote! {
             #built.default_checked(
-                <#ty as ::guatiao::ToValue>::to_value(&(#default), __alloc),
+                <#ty as ::guatiao::ToValue>::to_value_in(&(#default), __alloc),
             )
         };
     }
@@ -791,7 +791,7 @@ fn emit_to(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
     quote! {
         #[automatically_derived]
         impl ::guatiao::ToValue for #name {
-            fn to_value(
+            fn to_value_in(
                 &self,
                 __alloc: ::guatiao::Alloc,
             ) -> ::core::result::Result<
@@ -1236,7 +1236,7 @@ fn emit_choice_to(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
     quote! {
         #[automatically_derived]
         impl ::guatiao::ToValue for #name {
-            fn to_value(
+            fn to_value_in(
                 &self,
                 __alloc: ::guatiao::Alloc,
             ) -> ::core::result::Result<
@@ -1372,7 +1372,7 @@ fn emit_arm_to(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStream
     quote! {
         #[automatically_derived]
         impl ::guatiao::ToValue for #name {
-            fn to_value(
+            fn to_value_in(
                 &self,
                 __alloc: ::guatiao::Alloc,
             ) -> ::core::result::Result<

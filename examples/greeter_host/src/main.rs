@@ -47,7 +47,7 @@ use guatiao::library::{
     Kind, Offer, Order, ProviderError, Registry, ScanRules, SearchPath, scan_path,
 };
 use guatiao::schema::{SchemaRef, validate_map};
-use guatiao::{Alloc, Map, Provider, Schema, ToValue, Value};
+use guatiao::{Map, Provider, Schema, ToValue, Value};
 
 /// What this host wants a shouting greeter to start with.
 ///
@@ -183,9 +183,7 @@ fn main() -> ExitCode {
         let settings = ShoutSettings {
             prefix: "hey".to_string(),
         };
-        let config = settings
-            .to_value(Alloc::rust())
-            .expect("a host's own type converts");
+        let config = settings.to_value().expect("a host's own type converts");
         // The host's schema for the type it wrote, beside the provider's
         // for the value it takes: the two are independent documents that
         // happen to agree, and `validate_map` is what says so.

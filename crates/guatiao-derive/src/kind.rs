@@ -1132,7 +1132,7 @@ fn emit_shim(trait_ident: &Ident, table: &Ident, object: bool, m: &MethodPlan) -
             unsafe { ::guatiao::library::kind::write_out(out, ::guatiao::Text::new(&#answer)) }
         },
         RetKind::Owned(ty) => quote! {
-            match <#ty as ::guatiao::ToValue>::to_value(&#answer, ::guatiao::Alloc::rust()) {
+            match <#ty as ::guatiao::ToValue>::to_value_in(&#answer, ::guatiao::Alloc::rust()) {
                 // SAFETY: the proxy passes a writable out slot.
                 ::core::result::Result::Ok(__v) => unsafe { ::guatiao::library::kind::write_out(out, __v) },
                 // SAFETY: the proxy passes a writable error slot.
@@ -1228,7 +1228,7 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
             ArgKind::Owned(ty) => {
                 let f = fail(quote!(::guatiao::library::ProviderError::from(__e)));
                 quote! {
-                    let #name = match <#ty as ::guatiao::ToValue>::to_value(&#ident, ::guatiao::Alloc::rust()) {
+                    let #name = match <#ty as ::guatiao::ToValue>::to_value_in(&#ident, ::guatiao::Alloc::rust()) {
                         ::core::result::Result::Ok(__v) => __v,
                         ::core::result::Result::Err(__e) => { #f }
                     };
