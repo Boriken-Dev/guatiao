@@ -22,17 +22,41 @@ EntryFn = ctypes.CFUNCTYPE(ctypes.c_void_p, ctypes.c_void_p)
 
 
 class _Borrowed:
-    """A read-only `Ref` owner for memory this binding does not free --
-    a provider's config schema, borrowed from the library's own image."""
+    """A read-only `Ref` owner for memory this binding does not free.
 
-    def __init__(self, raw: "_abi.Value") -> None:
-        self._raw = raw
+    With `keep` -- the owner the memory belongs to -- it holds that owner
+    alive and refuses access once it is closed. With `find` it asks the
+    owner for the node again on every access, so a tree that was changed
+    since is read as it is now, or not at all, never through a stale
+    address. With neither it is a view of memory that outlives it, such
+    as a provider's config schema in the library's own image."""
+
+    def __init__(self, raw=None, *, keep=None, find=None) -> None:
+        self._fixed = raw
+        self._keep = keep
+        self._find = find
+
+    @property
+    def _raw(self) -> "_abi.Value":
+        if self._find is not None:
+            node = self._find()
+            if node is None:
+                raise LookupError("the borrowed value is gone")
+            return node
+        return self._fixed
 
     def _check_open(self) -> None:
-        return None
+        if self._keep is not None:
+            self._keep._check_open()
+
+    def _check_writable(self) -> None:
+        raise TypeError("a borrowed value is read-only")
 
     def _ensure_alloc(self) -> "_abi.Alloc":
-        raise RuntimeError("a borrowed value cannot be mutated")
+        raise TypeError("a borrowed value is read-only")
+
+    def _clone_alloc(self) -> "_abi.Alloc":
+        return _lib.core().alloc
 
 
 class Instance:
