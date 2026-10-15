@@ -916,20 +916,21 @@ fn lone_all_of(m: &Map) -> Option<&Value> {
 /// description" removed: `anyOf: [X, null]` and a lone `allOf: [X]`,
 /// however deep. A loop, because the schema is not ours to bound.
 pub(crate) fn peel(mut k: &Value) -> &Value {
-    loop {
-        let Some(m) = TryAsRef::<Map>::try_as_ref(k) else {
-            return k;
-        };
-        let inner = if m.get(vocab::TYPE).is_none() {
-            m.get(vocab::ANY_OF).and_then(nullable_pair)
-        } else {
-            None
-        };
-        match inner.or_else(|| lone_all_of(m)) {
-            Some(inner) => k = inner,
-            None => return k,
-        }
+    while let Some(inner) = peel_once(k) {
+        k = inner;
     }
+    k
+}
+
+/// What one wrapper [`peel`] removes holds, or `None` when `k` is not one.
+pub(crate) fn peel_once(k: &Value) -> Option<&Value> {
+    let m = TryAsRef::<Map>::try_as_ref(k)?;
+    let inner = if m.get(vocab::TYPE).is_none() {
+        m.get(vocab::ANY_OF).and_then(nullable_pair)
+    } else {
+        None
+    };
+    inner.or_else(|| lone_all_of(m))
 }
 
 /// Whether a null is a value this schema accepts: `type: [T, "null"]`
