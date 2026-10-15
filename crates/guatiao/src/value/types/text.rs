@@ -13,7 +13,7 @@ use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::error::ValueError;
 use crate::value::raw::{overlaps, release_buffer, reserve};
 
-use super::{Payload, Tag, Value, bytes_layout, only_alloc, or_abort, short_form_alloc};
+use super::{Payload, Tag, Value, bytes_layout, cloned, only_alloc, or_abort, short_form_alloc};
 
 /// Borrowed UTF-8 text: a pointer and a length, no NUL terminator. Text
 /// that is not UTF-8 is refused where it crosses into Rust.
@@ -405,11 +405,10 @@ impl Default for Text {
 
 impl Clone for Text {
     /// A copy through the allocator this text recorded, or the crate's
-    /// own. Panics as [`Value::clone`] does.
+    /// own. Aborts if it refuses, as [`Value::clone`] does.
     fn clone(&self) -> Text {
         let alloc = Alloc::recorded_or_rust(self.alloc);
-        self.clone_in(alloc)
-            .expect("a text clones through a working allocator")
+        cloned(self.clone_in(alloc), bytes_layout(self.len))
     }
 }
 

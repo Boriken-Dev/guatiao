@@ -12,7 +12,7 @@ use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::error::ValueError;
 use crate::value::raw::{dangling, overlaps, release_buffer, reserve};
 
-use super::{Payload, Tag, Value, bytes_layout, only_alloc, or_abort, short_form_alloc};
+use super::{Payload, Tag, Value, bytes_layout, cloned, only_alloc, or_abort, short_form_alloc};
 
 /// Borrowed bytes: any content at all, NULs included.
 ///
@@ -117,11 +117,11 @@ pub struct Buffer {
 
 impl Clone for Buffer {
     /// A copy through the allocator this buffer recorded, or the crate's
-    /// own when it has none. Panics as [`Value::clone`] does.
+    /// own when it has none. Aborts if it refuses, as [`Value::clone`]
+    /// does.
     fn clone(&self) -> Buffer {
         let alloc = Alloc::recorded_or_rust(self.alloc);
-        self.clone_in(alloc)
-            .expect("a buffer clones through a working allocator")
+        cloned(self.clone_in(alloc), bytes_layout(self.len))
     }
 }
 

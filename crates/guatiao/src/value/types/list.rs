@@ -14,7 +14,7 @@ use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::error::ValueError;
 use crate::value::raw::{dangling, release_buffer, reserve};
 
-use super::{Payload, Tag, Value, only_alloc, or_abort, short_form_alloc};
+use super::{Payload, Tag, Value, cloned, only_alloc, or_abort, short_form_alloc};
 
 /// A borrowed sequence of values, in order.
 #[repr(C)]
@@ -395,11 +395,15 @@ impl<'a> IntoIterator for &'a List {
 
 impl Clone for List {
     /// A deep copy through the allocator this container recorded, or the
-    /// crate's own when it has none yet. Panics as [`Value::clone`] does.
+    /// crate's own when it has none yet.
+    ///
+    /// # Panics
+    ///
+    /// As [`Value::clone`]: on content this build refuses, which only a
+    /// foreign producer can write. [`clone_in`](List::clone_in) reports it.
     fn clone(&self) -> List {
         let alloc = Alloc::recorded_or_rust(self.alloc);
-        self.clone_in(alloc)
-            .expect("a well-formed container clones through a working allocator")
+        cloned(self.clone_in(alloc), core::alloc::Layout::new::<Value>())
     }
 }
 

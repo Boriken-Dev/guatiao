@@ -243,8 +243,10 @@ target is touched.
 **`Value`, `Map`, `List`, `Text`, `Buffer` and `Number` are `Clone`,
 `PartialEq`, `Eq`, `Send` and `Sync`.** `clone()` is a deep copy through
 the allocator the source recorded (the crate's own for a scalar or a
-literal), and panics where the short constructors do; `clone_in(alloc)`
-is the fallible form that names one. Both copying and equality are loops
+literal); it aborts on an allocation failure, as the short forms do, and
+**panics on content this build refuses** (an unknown tag, text that is
+not UTF-8, a number outside the grammar, nesting past `MAX_DEPTH`).
+`clone_in(alloc)` is the fallible form that names one. Both copying and equality are loops
 over a heap stack, so they work at **any depth** and a value is always
 equal to itself. `Send` and `Sync` rest on the allocator contract below:
 an `Allocator` may be called from any thread.
@@ -1668,6 +1670,10 @@ An implementer must guarantee, and `struct_size` cannot express:
 
 - **A `Value` is not `Copy`**, and neither are the four containers. They
   have `Drop`.
+- **`clone()` panics on a tree a foreign producer wrote wrong**: an
+  unknown tag, text that is not UTF-8, a number outside the grammar. A
+  tree that crossed from another language is copied with
+  `clone_in(alloc)`, which reports those; `v == v` still holds for it.
 - **The fields of `Value`, `Payload`, `Entry` and the four containers are
   private.** Safe code cannot forge a node, corrupt a length, or copy a
   container's fields into a second owner; the compiler refuses all three

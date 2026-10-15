@@ -541,12 +541,20 @@ arm_borrowed!(List, Tag::GUATIAO_LIST);
 
 impl Clone for Value {
     /// A deep copy through the allocator this tree recorded, so a copy
-    /// lives where its source did. Panics where the short constructors
-    /// do; [`clone_in`](Value::clone_in) is the fallible form.
+    /// lives where its source did. An allocation failure aborts, as the
+    /// short forms do.
+    ///
+    /// # Panics
+    ///
+    /// On content this build refuses: an unknown tag, text that is not
+    /// UTF-8, a number outside the JSON grammar, or nesting past
+    /// [`MAX_DEPTH`](crate::MAX_DEPTH). Only a foreign producer can write
+    /// those, so for a tree from another language call
+    /// [`clone_in`](Value::clone_in), which reports them. Equality reads
+    /// the same bytes and never fails, so `v == v` holds for such a tree.
     fn clone(&self) -> Value {
         let alloc = self.alloc().unwrap_or_else(|_| Alloc::rust());
-        self.clone_in(alloc)
-            .expect("a well-formed tree clones through a working allocator")
+        super::types::cloned(self.clone_in(alloc), core::alloc::Layout::new::<Value>())
     }
 }
 

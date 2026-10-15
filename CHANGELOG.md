@@ -154,6 +154,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   entry and give a map a repeated key that its own wire encoding then
   refused. *Migration:* `for entry in &mut map { *entry.value_mut() = v }`
   is `for (_key, value) in &mut map { *value = v }`.
+- **`clone()` on `Value`, `Map`, `List`, `Text` and `Buffer` aborts on an
+  allocation failure**, as the short forms do, and its documented panic is
+  the one left: content this build refuses (an unknown tag, text that is
+  not UTF-8, a number outside the grammar, nesting past `MAX_DEPTH`),
+  which only a foreign producer can write. Its message points at
+  `clone_in`, the form that reports it.
 - **A scan reads a candidate on demand rather than whole**: headers,
   export and dynamic symbol tables, and the 4 KiB declaration window.
 - **An object kind is never served by a provider.** A registry or host
