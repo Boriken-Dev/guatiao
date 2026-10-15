@@ -828,7 +828,8 @@ from safe code, so whoever hands one over vouches for it once, in an
 `unsafe` constructor: `LocalLibrary::new(&'static LibraryInfo)` for a
 hand-written describe (`local_providers!` builds one from its
 `LibraryParts` with no `unsafe`), `EntryPoint::new(EntryFn)` for
-`register_entry`, `ProviderParts::new` for a hand-built provider, and
+`register_entry`, `ProviderPartsBuilder::build` for a hand-built
+provider, and
 `ProviderInfo::{view, as_kind, offer, instantiate}` are `unsafe fn` for a
 descriptor read by reference. `ProviderView`'s fields are private, so its
 safe `available()` can only call a slot with the `ctx` it was read with.
