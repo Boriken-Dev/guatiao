@@ -212,8 +212,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   pointer dereference there compiled with none written; it is now bound
   to a typed `let` first, and the slot the macro writes is a safe
   `extern "C" fn`. The macros also name `::core::env!` and
-  `::core::option::Option::Some`, so a caller's own `env!` or `Some`
-  cannot change their expansion.
+  `::core::option::Option::Some`, and `#[derive(Provider)]` names
+  `::core::env!` for the id it gives a provider that names none, so a
+  caller's own `env!` or `Some` cannot change their expansion.
 - **A panic in a configured instance's `Drop` no longer aborts the host.**
   The `destroy` slot `#[derive(Provider)]` writes runs under the same
   catch as every other shim.
