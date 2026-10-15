@@ -106,18 +106,21 @@ bool isVisible(Ref schema, Ref form, String key, Ref values) {
 /// what it is applied to -- so `env[PATH]` needs no quoting, while
 /// `env["1"]` is a key rather than a position.
 ///
-/// What comes back **borrows** from [value]: it is a view into that
-/// tree, not a copy, and it must not outlive it. A path that names
-/// nothing and a path that is not a path at all both answer `null`.
+/// What comes back **borrows** from [value] and is read-only: it is a view
+/// into that tree, not a copy. It holds [value] alive and is found again on
+/// every access, so reading it after [value] is closed throws a
+/// [StateError], and a change to [value] is seen as it is now. A path that
+/// names nothing and a path that is not a path at all both answer `null`.
 Ref? at(Ref value, String path) {
   final lib = native.formLib();
-  return using((arena) {
-    final found = lib.bindings.guatiao_intake_path_get(
-      value.requireNode(),
-      strOf(arena, path).ref,
-    );
-    return found == nullptr ? null : Ref.borrowed(found);
-  });
+  Pointer<guatiao_value> find() => using(
+        (arena) => lib.bindings.guatiao_intake_path_get(
+          value.requireNode(),
+          strOf(arena, path).ref,
+        ),
+      );
+  if (find() == nullptr) return null;
+  return Ref.borrowedFrom(value, find);
 }
 
 /// The form [schema] implies, for when nobody wrote one.
@@ -201,16 +204,18 @@ Value? formFor(
 /// of that name inside the arm rather than `auth`. Everything a front end
 /// shows about a field -- `title`, `required`, `x-widget`, a secret mark
 /// -- is read off the node returned. It **borrows** from [schema], is
-/// read-only, and must not outlive it.
+/// read-only, holds [schema] alive and is found again on every access:
+/// reading it after [schema] is closed throws a [StateError].
 Ref? resolve(Ref schema, String key) {
   final lib = native.formLib();
-  return using((arena) {
-    final found = lib.bindings.guatiao_intake_resolve(
-      schema.requireNode(),
-      strOf(arena, key).ref,
-    );
-    return found == nullptr ? null : Ref.borrowed(found);
-  });
+  Pointer<guatiao_value> find() => using(
+        (arena) => lib.bindings.guatiao_intake_resolve(
+          schema.requireNode(),
+          strOf(arena, key).ref,
+        ),
+      );
+  if (find() == nullptr) return null;
+  return Ref.borrowedFrom(schema, find);
 }
 
 /// Calls a flat-projection export that fills one value, and returns that
@@ -288,6 +293,10 @@ Map<String, String> flatten(
 /// when [key] names no field, nothing is stored under it, or the stored
 /// shape cannot be its kind (a tagged field whose discriminant is missing
 /// or names no arm). An entry the schema does not declare is dropped.
+///
+/// A store that is not text to text, in either form, throws an
+/// [ArgumentError]: `null` answers "nothing stored", never a malformed
+/// store.
 Value? unflatten(
   Ref schema,
   String key,
@@ -299,6 +308,11 @@ Value? unflatten(
   Value? owned;
   final Ref store;
   if (flat is Ref) {
+    final plain = flat.toDart();
+    if (plain is! Map || !plain.values.every((v) => v is String)) {
+      throw ArgumentError.value(
+          flat, 'flat', 'a flat store maps String to String');
+    }
     store = flat;
   } else if (flat is Map &&
       flat.entries.every((e) => e.key is String && e.value is String)) {

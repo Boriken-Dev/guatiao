@@ -21,7 +21,7 @@ def _alloc(given: "_abi.Alloc | None", lib) -> "_abi.Alloc":
     return given if given is not None else lib.alloc
 
 
-def check(schema: Value, form: Value, *, alloc: "_abi.Alloc | None" = None):
+def check(schema: Ref, form: Ref, *, alloc: "_abi.Alloc | None" = None):
     """`None` when `form` fits `schema`; otherwise the error map
     (`kind`, `at`, and whichever of `path`/`id`/`field`/`expected`/
     `message` apply) `guatiao_intake_check` writes."""
@@ -29,8 +29,8 @@ def check(schema: Value, form: Value, *, alloc: "_abi.Alloc | None" = None):
     alloc_struct = _alloc(alloc, lib)
     out = _abi.Value()
     status = lib.guatiao_intake_check(
-        ctypes.byref(schema._raw),
-        ctypes.byref(form._raw),
+        schema._ptr(),
+        form._ptr(),
         ctypes.byref(alloc_struct),
         ctypes.byref(out),
     )
@@ -45,7 +45,7 @@ def check(schema: Value, form: Value, *, alloc: "_abi.Alloc | None" = None):
         value.close()
 
 
-def layout(schema: Value, form: Value, *, alloc: "_abi.Alloc | None" = None):
+def layout(schema: Ref, form: Ref, *, alloc: "_abi.Alloc | None" = None):
     """The schema's fields grouped into sections and put in order, as
     `[{"section": <map or None>, "fields": [key, ...]}, ...]`."""
     lib = _lib.form()
@@ -53,8 +53,8 @@ def layout(schema: Value, form: Value, *, alloc: "_abi.Alloc | None" = None):
     out = _abi.Value()
     _check_status(
         lib.guatiao_intake_layout(
-            ctypes.byref(schema._raw),
-            ctypes.byref(form._raw),
+            schema._ptr(),
+            form._ptr(),
             ctypes.byref(alloc_struct),
             ctypes.byref(out),
         )
@@ -66,7 +66,7 @@ def layout(schema: Value, form: Value, *, alloc: "_abi.Alloc | None" = None):
         value.close()
 
 
-def is_visible(schema: Value, form: Value, key: str, values: Value) -> bool:
+def is_visible(schema: Ref, form: Ref, key: str, values: Ref) -> bool:
     """Whether the field under `key` is shown, given `values` entered
     so far."""
     lib = _lib.form()
@@ -74,17 +74,17 @@ def is_visible(schema: Value, form: Value, key: str, values: Value) -> bool:
     out = ctypes.c_bool(False)
     _check_status(
         lib.guatiao_intake_is_visible(
-            ctypes.byref(schema._raw),
-            ctypes.byref(form._raw),
+            schema._ptr(),
+            form._ptr(),
             key_view,
-            ctypes.byref(values._raw),
+            values._ptr(),
             ctypes.byref(out),
         )
     )
     return bool(out.value)
 
 
-def at(value: Value, path: str):
+def at(value: Ref, path: str):
     """The value at `path`, or `None`.
 
     `agent[1].name[home].host`: a dot is a member, a bracket is a list
@@ -93,19 +93,25 @@ def at(value: Value, path: str):
     `env["1"]` is a key rather than a position.
 
     What comes back **borrows** from `value` and is read-only: it is a
-    view into the tree you passed, not a copy, so it must not outlive it.
+    view into the tree you passed, not a copy. It keeps `value` alive and
+    is found again on every access, so reading it after `value` is closed
+    raises `ValueError`, and a change to `value` is seen as it is now.
     A path that names nothing and a path that is not a path at all both
     answer `None`.
     """
     lib = _lib.form()
     view, _buf = _make_str(path.encode("utf-8"))
-    ptr = lib.guatiao_intake_path_get(ctypes.byref(value._raw), view)
-    if not ptr:
+
+    def find():
+        ptr = lib.guatiao_intake_path_get(value._ptr(), view)
+        return ptr.contents if ptr else None
+
+    if find() is None:
         return None
-    return Ref(_Borrowed(ptr.contents), ())
+    return Ref(_Borrowed(keep=value.owner, find=find), ())
 
 
-def for_schema(schema: Value, *, alloc: "_abi.Alloc | None" = None) -> Value:
+def for_schema(schema: Ref, *, alloc: "_abi.Alloc | None" = None) -> Value:
     """The form `schema` implies, for when nobody wrote one.
 
     One section per distinct `x-section` the fields name, in
@@ -119,7 +125,7 @@ def for_schema(schema: Value, *, alloc: "_abi.Alloc | None" = None) -> Value:
     out = _abi.Value()
     _check_status(
         lib.guatiao_intake_for_schema(
-            ctypes.byref(schema._raw),
+            schema._ptr(),
             ctypes.byref(alloc_struct),
             ctypes.byref(out),
         )
@@ -128,8 +134,8 @@ def for_schema(schema: Value, *, alloc: "_abi.Alloc | None" = None) -> Value:
 
 
 def form_for(
-    form: Value,
-    schema: Value,
+    form: Ref,
+    schema: Ref,
     path: str,
     *,
     alloc: "_abi.Alloc | None" = None,
@@ -146,8 +152,8 @@ def form_for(
     out = _abi.Value()
     _check_status(
         lib.guatiao_intake_form_for(
-            ctypes.byref(form._raw),
-            ctypes.byref(schema._raw),
+            form._ptr(),
+            schema._ptr(),
             view,
             ctypes.byref(alloc_struct),
             ctypes.byref(out),
@@ -160,30 +166,35 @@ def form_for(
     return value
 
 
-def resolve(schema: Value, key: str) -> "Ref | None":
+def resolve(schema: Ref, key: str) -> "Ref | None":
     """The schema field governing the flat `key`, or `None`.
 
     Follows one level of projection, so `auth.password` answers the field
     of that name inside the arm rather than `auth`. Everything a front end
     shows about a field -- `title`, `required`, `x-widget`, a secret mark --
     is read off the node returned. It **borrows** from `schema`, is
-    read-only, and must not outlive it.
+    read-only, keeps `schema` alive and is found again on every access:
+    reading it after `schema` is closed raises `ValueError`.
     """
     lib = _lib.form()
     view, _buf = _make_str(key.encode("utf-8"))
-    ptr = lib.guatiao_intake_resolve(ctypes.byref(schema._raw), view)
-    if not ptr:
+
+    def find():
+        ptr = lib.guatiao_intake_resolve(schema._ptr(), view)
+        return ptr.contents if ptr else None
+
+    if find() is None:
         return None
-    return Ref(_Borrowed(ptr.contents), ())
+    return Ref(_Borrowed(keep=schema.owner, find=find), ())
 
 
-def _flat_call(function, schema: Value, key: str, middle: tuple, alloc):
+def _flat_call(function, schema: Ref, key: str, middle: tuple, alloc):
     lib = _lib.form()
     alloc_struct = _alloc(alloc, lib)
     view, _buf = _make_str(key.encode("utf-8"))
     out = _abi.Value()
     status = function(
-        ctypes.byref(schema._raw),
+        schema._ptr(),
         view,
         *middle,
         ctypes.byref(alloc_struct),
@@ -193,7 +204,7 @@ def _flat_call(function, schema: Value, key: str, middle: tuple, alloc):
 
 
 def flat_keys(
-    schema: Value, key: str, *, alloc: "_abi.Alloc | None" = None
+    schema: Ref, key: str, *, alloc: "_abi.Alloc | None" = None
 ) -> "list[str]":
     """The flat keys the field `key` projects onto: its own, then one per
     field of every arm. A member that is itself a container stores its
@@ -208,7 +219,7 @@ def flat_keys(
 
 
 def flatten(
-    schema: Value, key: str, value: Value, *, alloc: "_abi.Alloc | None" = None
+    schema: Ref, key: str, value: Ref, *, alloc: "_abi.Alloc | None" = None
 ) -> "dict[str, str]":
     """`value` as the flat store of `key -> text` the field `key` keeps:
     one entry per scalar leaf (a tagged field's discriminant under its own
@@ -218,7 +229,7 @@ def flatten(
     value's shape contradicts it."""
     lib = _lib.form()
     status, out = _flat_call(
-        lib.guatiao_intake_flatten, schema, key, (ctypes.byref(value._raw),), alloc
+        lib.guatiao_intake_flatten, schema, key, (value._ptr(),), alloc
     )
     try:
         _check_status(status)
@@ -227,10 +238,17 @@ def flatten(
         out.close()
 
 
+def _is_text_store(node: "_abi.Value") -> bool:
+    if node.tag != _abi.Tag.MAP:
+        return False
+    entries = node.payload.map
+    return all(entries.ptr[i].value.tag == _abi.Tag.STRING for i in range(entries.len))
+
+
 def unflatten(
-    schema: Value,
+    schema: Ref,
     key: str,
-    flat: "Mapping[str, str] | Value",
+    flat: "Mapping[str, str] | Ref",
     *,
     alloc: "_abi.Alloc | None" = None,
 ) -> "Value | None":
@@ -238,11 +256,16 @@ def unflatten(
     reverse of `flatten`; the caller closes it. `None` when `key` names no
     field, nothing is stored under it, or the stored shape cannot be its
     kind (a tagged field whose discriminant is missing or names no arm).
-    An entry the schema does not declare is dropped. `flat` maps `str` to
-    `str`, or is such a `Value`."""
+    An entry the schema does not declare is dropped.
+
+    `flat` maps `str` to `str`, or is a `Value` or `Ref` onto such a map.
+    A store that is not, in either form, raises `TypeError`: `None` is the
+    answer for "nothing stored", never for a malformed store."""
     lib = _lib.form()
     owned = None
-    if isinstance(flat, Value):
+    if isinstance(flat, Ref):
+        if not _is_text_store(flat._require_node()):
+            raise TypeError("a flat store maps str to str")
         store = flat
     else:
         if not isinstance(flat, Mapping) or not all(
@@ -252,7 +275,7 @@ def unflatten(
         store = owned = Value.from_python(dict(flat), alloc=alloc)
     try:
         status, out = _flat_call(
-            lib.guatiao_intake_unflatten, schema, key, (ctypes.byref(store._raw),), alloc
+            lib.guatiao_intake_unflatten, schema, key, (store._ptr(),), alloc
         )
         if status == _abi.Status.ERR_WRONG_KIND:
             out.close()

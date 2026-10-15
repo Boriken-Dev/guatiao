@@ -78,18 +78,37 @@ abstract class ValueOwner {
   Pointer<guatiao_alloc> get allocator;
 }
 
-/// A root this binding reads but does not own. See [Ref.borrowed].
+/// A root this binding reads but does not own. See [Ref.borrowed] and
+/// [Ref.borrowedFrom].
+///
+/// With a [keep] it holds that owner and refuses access once it is closed;
+/// with a [find] it asks for the node again on every access, so a tree that
+/// changed since is read as it is now, or not at all.
 class _BorrowedRoot implements ValueOwner {
-  _BorrowedRoot(this._root);
+  _BorrowedRoot(this._root, {this.keep, this.find});
 
   final Pointer<guatiao_value> _root;
+  final ValueOwner? keep;
+  final Pointer<guatiao_value> Function()? find;
 
   @override
-  Pointer<guatiao_value> get rootNode => _root;
+  Pointer<guatiao_value> get rootNode {
+    // Throws when the owner is closed.
+    keep?.rootNode;
+    final again = find;
+    return again == null ? _root : again();
+  }
 
   @override
   Pointer<guatiao_alloc> get allocator =>
-      throw StateError('a borrowed value cannot be mutated');
+      throw StateError('a borrowed value is read-only');
+}
+
+/// Throws unless the tree [ref] belongs to may be changed through it.
+void _writable(Ref ref) {
+  if (ref.owner is _BorrowedRoot) {
+    throw StateError('a borrowed value is read-only');
+  }
 }
 
 // ---- reading, with no library needed ---------------------------------
@@ -425,6 +444,19 @@ class Ref {
   /// inside an `isolateGroupBound` callback.
   factory Ref.borrowed(Pointer<guatiao_value> root) => Ref(_BorrowedRoot(root));
 
+  /// A read-only view of a node inside [source]'s tree, which [find]
+  /// locates and which is found again on every access.
+  ///
+  /// It holds [source] alive and throws [StateError] once [source] is
+  /// closed, rather than reading memory that was freed. [find] answers
+  /// `nullptr` when the node is no longer there, and the view then reads as
+  /// absent. Writing through it throws.
+  factory Ref.borrowedFrom(
+    Ref source,
+    Pointer<guatiao_value> Function() find,
+  ) =>
+      Ref(_BorrowedRoot(nullptr, keep: source.owner, find: find));
+
   final ValueOwner? _ownerOrNull;
 
   /// The keys and indices from the owning value's root to this node.
@@ -505,7 +537,8 @@ class Ref {
   /// A deep, independent copy of this node, as its own [Value].
   Value clone() {
     final source = requireNode();
-    final alloc = owner.allocator;
+    final alloc =
+        owner is _BorrowedRoot ? native.core().alloc : owner.allocator;
     return Value._build(
       alloc,
       (out) => native.core().bindings.guatiao_value_clone(alloc, source, out),
@@ -540,6 +573,7 @@ class MapRef extends Ref {
 
   /// Stores `value` under `key`, replacing any entry in place.
   void operator []=(String key, Object? value) {
+    _writable(this);
     final alloc = owner.allocator;
     final target = requireNode();
     _buildInto(
@@ -560,6 +594,7 @@ class MapRef extends Ref {
 
   /// Drops the entry under `key`, if there is one.
   void remove(String key) {
+    _writable(this);
     final target = requireNode();
     using(
       (arena) => checkStatus(
@@ -589,11 +624,14 @@ class MapRef extends Ref {
     }
   }
 
-  void clear() =>
-      checkStatus(native.core().bindings.guatiao_map_clear(requireNode()));
+  void clear() {
+    _writable(this);
+    checkStatus(native.core().bindings.guatiao_map_clear(requireNode()));
+  }
 
   /// Copies every entry of `src`, replacing collisions in place.
   void copyFrom(Ref src) {
+    _writable(this);
     final alloc = owner.allocator;
     checkStatus(
       native.core().bindings.guatiao_map_copy_from(
@@ -642,6 +680,7 @@ class ListRef extends Ref {
   Ref operator [](int index) => Ref(owner, [...path, _checkedIndex(index)]);
 
   void operator []=(int index, Object? value) {
+    _writable(this);
     final bindings = native.core().bindings;
     final elements = _clonedElements();
     try {
@@ -673,6 +712,7 @@ class ListRef extends Ref {
       ];
 
   void add(Object? value) {
+    _writable(this);
     final alloc = owner.allocator;
     final target = requireNode();
     _buildInto(
@@ -685,6 +725,7 @@ class ListRef extends Ref {
   }
 
   void insert(int index, Object? value) {
+    _writable(this);
     final elements = _clonedElements();
     try {
       final length = elements.length;
@@ -707,12 +748,15 @@ class ListRef extends Ref {
   }
 
   void removeAt(int index) {
+    _writable(this);
     final i = _checkedIndex(index);
     checkStatus(native.core().bindings.guatiao_list_discard(requireNode(), i));
   }
 
-  void clear() =>
-      checkStatus(native.core().bindings.guatiao_list_clear(requireNode()));
+  void clear() {
+    _writable(this);
+    checkStatus(native.core().bindings.guatiao_list_clear(requireNode()));
+  }
 
   /// Every element, deep-copied into its own scratch node. The caller
   /// owns each one until [_rebuild] moves it back in.
@@ -760,11 +804,6 @@ class ListRef extends Ref {
   String toString() => 'ListRef($path)';
 }
 
-NativeFinalizer? _finalizerCache;
-
-NativeFinalizer _valueFinalizer() =>
-    _finalizerCache ??= NativeFinalizer(native.core().valueFreeFinalizer);
-
 /// Owns a root `guatiao_value` and the tree under it.
 ///
 /// [close] is the release and the package requires it. A [NativeFinalizer]
@@ -772,8 +811,10 @@ NativeFinalizer _valueFinalizer() =>
 /// it cannot also reclaim the 40-byte root box, because a finalizer runs
 /// one native function and those two frees must be ordered.
 class Value extends Ref implements ValueOwner, Finalizable {
-  Value._(this._raw, this._allocator) : super._(null, const []) {
-    _valueFinalizer().attach(this, _raw.cast<Void>(), detach: this);
+  Value._(this._raw, this._allocator)
+      : _finalizer = NativeFinalizer(native.core().valueFreeFinalizer),
+        super._(null, const []) {
+    _finalizer.attach(this, _raw.cast<Void>(), detach: this);
   }
 
   /// `Value(obj)` converts as [Value.fromDart] does; `Value()` is absent.
@@ -899,6 +940,10 @@ class Value extends Ref implements ValueOwner, Finalizable {
 
   final Pointer<guatiao_value> _raw;
   final Pointer<guatiao_alloc> _allocator;
+
+  /// Held per value because `detach` is per finalizer, and a value may
+  /// outlive the library handle it was built through.
+  final NativeFinalizer _finalizer;
   bool _closed = false;
 
   /// The root node, for a native call that takes one. Invalid after
@@ -920,7 +965,7 @@ class Value extends Ref implements ValueOwner, Finalizable {
   void close() {
     if (_closed) return;
     _closed = true;
-    _valueFinalizer().detach(this);
+    _finalizer.detach(this);
     native.core().bindings.guatiao_value_free(_raw);
     calloc.free(_raw);
   }

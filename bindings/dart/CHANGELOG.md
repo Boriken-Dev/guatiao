@@ -25,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `loads` reads through the `_parse_ex` entry points and throws
   `ParseError` (a `BadValue` and a `FormatException`) carrying `format`,
   `line` and `column`.
+- `Ref.borrowedFrom(source, find)`: a read-only view of a node inside
+  another `Ref`, which holds `source` and finds the node again on every
+  access.
 
 ### Fixed
 
@@ -32,6 +35,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `package:guatiao/guatiao.dart`, which the public API names in its
   signatures; a consumer can write `Pointer<guatiao_value>` without
   importing a `src/` file.
+- What `intake.resolve` and `intake.at` return no longer outlives the
+  schema or value it borrows from: it holds its owner, and reading it after
+  the owner is closed throws a `StateError` instead of reading freed memory.
+- Every write through a borrowed `Ref` throws, including `remove`,
+  `removeAt` and `clear`, which used to change the tree they viewed.
+- `intake.unflatten` throws an `ArgumentError` for a `Ref` store that is not
+  a map of strings, as it already did for a `Map`; `null` stays the answer
+  for nothing stored.
+- A parse refusal that is not a syntax error keeps the library's message in
+  the thrown exception.
+- `ParseError`'s message is located from the struct's size, not a pinned
+  offset, and a process with pointers that are not eight bytes wide gets an
+  `UnsupportedError` when the first library loads.
+- The 3.6.0 test leg no longer fails to compile on a suite that needs
+  `NativeCallable.isolateGroupBound`; that suite runs on the stable leg only.
+
 ## [0.0.0-alpha.0] - 2026-09-27
 
 ### Added

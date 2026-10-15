@@ -577,6 +577,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **An object kind with methods `x` and `mut_x` compiles.** Its lent
   tables' shims for the two had one name; they are `__guatiao_lentmut__<m>`
   and `__guatiao_lent__<m>` now, which no pair of method names can meet.
+- **Python and Dart bindings: a borrowed view no longer outlives what it
+  borrows from.** What `intake.resolve` and `intake.at` return holds the
+  schema or value it views and refuses access once that is closed
+  (`ValueError` in Python, `StateError` in Dart), where it read freed
+  memory. Every write through a borrowed view is refused (`TypeError`,
+  `StateError`), including deletes that allocate nothing.
+- **Python and Dart bindings: `intake.unflatten` raises `TypeError`
+  (Python) or `ArgumentError` (Dart) for any store that is not text to
+  text**, whether it is a mapping or a value; `None`/`null` means only
+  "nothing stored". The Python intake functions accept a `Ref` wherever
+  they took a `Value`.
+- **Python and Dart bindings: a parse refusal that is not a syntax error
+  keeps the library's message** in the exception. Python `GuatiaoError` and
+  `ParseError` pickle.
 
 ## [0.0.0-alpha.0] - 2026-09-27
 
