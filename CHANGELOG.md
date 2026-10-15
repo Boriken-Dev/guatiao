@@ -180,6 +180,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `guatiao_registry_free` and a Python `Registry.close()` go through the
   same drop. A file passed over by its library key, or refused as a
   duplicate, after its entry point ran keeps its mapping too.
+- **`unload` unmaps a library that a hard link to it was passed over
+  for.** On Linux the loader answers a hard link to a loaded file with
+  the image it already mapped and counts a second reference; the registry
+  kept that handle, so `unload` reported success while the image stayed
+  mapped. A skipped file whose handle names an image the registry already
+  holds is now closed, which only gives that reference back.
 - **A scan reads hostile files as data, and answers what it read.** A file
   that only imports the entry symbol is not a library (an undefined
   dynamic symbol was taken for an export); an export table that cannot be

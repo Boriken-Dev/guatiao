@@ -881,7 +881,9 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   a `Remote`, `Offer`, boxed trait or `Instance` taken from it is
   `'static` and keeps working (`guatiao_registry_free` the same). A file
   passed over by its library key, or refused as `Duplicate`, after its
-  entry point ran keeps its mapping as well.
+  entry point ran keeps its mapping as well — unless the loader answered
+  it with an image the registry already holds (a hard link to a loaded
+  file, on Linux), whose extra handle is closed so `unload` still unmaps.
 - **A registry does not isolate an image.** The loader maps a file once
   per process, so a second registry loading it shares its statics and the
   descriptor a derived library built on its first entry call, with the

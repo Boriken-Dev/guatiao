@@ -3,12 +3,14 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! A registry gives up its mappings without closing them: dropped, or
-//! passing over a file whose entry point already ran.
+//! passing over a file whose entry point already ran. A file that is a
+//! second handle to an image it already holds is the exception, and is
+//! closed.
 //!
-//! A test binary of its own, because both are measured on a library's
+//! A test binary of its own, because each is measured on a library's
 //! first mapping: a second loader in the same process would hold the
 //! image open and make "still mapped" the answer whatever the registry
-//! did.
+//! did. Each test maps copies of its own, in a directory of its own.
 
 #![cfg(feature = "load")]
 
@@ -80,6 +82,29 @@ fn entry_calls(path: &Path) -> u64 {
     }
 }
 
+/// A directory of this process's own beside the build, named `<name>-<pid>`.
+///
+/// Those of earlier runs are removed first: a library a run kept mapped
+/// cannot be deleted on Windows while that run is alive, so each run
+/// clears what the ones before it left.
+fn scratch(name: &str) -> PathBuf {
+    let source = library_path("hello_library");
+    let parent = source.parent().expect("the library is in a directory");
+    let ours = format!("{name}-{}", std::process::id());
+    if let Ok(entries) = std::fs::read_dir(parent) {
+        for entry in entries.flatten() {
+            let file_name = entry.file_name();
+            let file_name = file_name.to_string_lossy();
+            if file_name.starts_with(&format!("{name}-")) && file_name != ours {
+                let _ = std::fs::remove_dir_all(entry.path());
+            }
+        }
+    }
+    let dir = parent.join(ours);
+    std::fs::create_dir_all(&dir).expect("a scratch directory beside the build");
+    dir
+}
+
 /// The same library at a second path is passed over by its key after its
 /// entry point ran, and its image stays mapped: the counter reads that one
 /// entry call rather than a fresh image's zero.
@@ -117,4 +142,54 @@ fn a_library_skipped_by_key_keeps_its_mapping() {
         1,
         "the skipped copy's entry ran once, and its image is the one still mapped"
     );
+}
+
+/// A hard link to a loaded library, passed over by its key, leaves no
+/// second reference to the image behind: on Linux the loader answers the
+/// link with the image it already mapped, and once the library is
+/// unloaded a fresh load enters it once. macOS never unmaps a closed
+/// library, so there is nothing to measure there.
+#[cfg(not(target_os = "macos"))]
+#[test]
+fn a_hard_link_passed_over_does_not_pin_the_image() {
+    let source = library_path("hello_library");
+    let dir = scratch("hard-link");
+    let first = dir.join(source.file_name().expect("a file name"));
+    let link = dir.join(format!(
+        "{}linked_hello{}",
+        std::env::consts::DLL_PREFIX,
+        std::env::consts::DLL_SUFFIX
+    ));
+    std::fs::copy(&source, &first).expect("a copy of its own");
+    std::fs::hard_link(&first, &link).expect("a hard link to the copy");
+
+    let mut registry = Registry::new("link-tests", "1.0");
+    assert!(matches!(
+        registry.load_file(&first).expect("the copy loads"),
+        Loading::Loaded(_)
+    ));
+    let skipped = registry
+        .load_file(&link)
+        .expect("the link is an answer, not an error");
+    assert!(matches!(
+        skipped.skipped(),
+        Some(Skipped::AlreadyLoaded { .. })
+    ));
+    // SAFETY: nothing was taken from the library: no tree, no table, no
+    // instance, and no handle of this test's own is open.
+    unsafe { registry.unload("hello_library") }.expect("nothing is outstanding");
+
+    assert!(matches!(
+        registry.load_file(&first).expect("it loads again"),
+        Loading::Loaded(_)
+    ));
+    assert_eq!(
+        entry_calls(&first),
+        1,
+        "the image went away at the unload, so its statics started again"
+    );
+    drop(registry);
+    // Works where a mapped file can be unlinked; on Windows the next run
+    // removes it.
+    let _ = std::fs::remove_dir_all(&dir);
 }

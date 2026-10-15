@@ -529,12 +529,18 @@ unsafe fn read_kind_tables(
 /// **Dropping one never unmaps.** The handle is held in `ManuallyDrop`, so
 /// a registry going out of scope, or a file skipped after its entry point
 /// ran, leaves the image where every `'static` handle into it expects it;
-/// [`close`](Origin::close) is the one path to the loader's close.
+/// [`close`](Origin::close) is the one path to the loader's close, taken
+/// by `unload` and for a skipped file that is a second handle to an image
+/// the registry already holds.
 #[cfg(feature = "load")]
 #[derive(Debug)]
 pub(crate) enum Origin {
-    /// A file this registry mapped and can close.
-    Mapped(core::mem::ManuallyDrop<libloading::Library>),
+    /// A file this registry mapped and can close, and the loader's handle
+    /// for its image: two opens of one image answer the same handle.
+    Mapped {
+        library: core::mem::ManuallyDrop<libloading::Library>,
+        image: usize,
+    },
     /// Code in the host's own binary: `register_local`, `register_entry`.
     Linked,
 }
@@ -543,12 +549,26 @@ pub(crate) enum Origin {
 impl Origin {
     /// A mapping this registry holds.
     pub(crate) fn mapped(library: libloading::Library) -> Origin {
-        Origin::Mapped(core::mem::ManuallyDrop::new(library))
+        let (library, image) = image_of(library);
+        Origin::Mapped {
+            library: core::mem::ManuallyDrop::new(library),
+            image,
+        }
     }
 
     /// Whether there is a mapping to close at all.
     pub(crate) fn is_mapped(&self) -> bool {
-        matches!(self, Origin::Mapped(_))
+        matches!(self, Origin::Mapped { .. })
+    }
+
+    /// Whether both are handles to one image: a second open the loader
+    /// counted against a mapping already held, as a hard link to a loaded
+    /// file is on Linux.
+    pub(crate) fn same_image(&self, other: &Origin) -> bool {
+        matches!(
+            (self, other),
+            (Origin::Mapped { image: a, .. }, Origin::Mapped { image: b, .. }) if a == b
+        )
     }
 
     /// Gives up the handle and leaves the mapping in place, so every
@@ -560,10 +580,28 @@ impl Origin {
     /// `libloading` does.
     pub(crate) fn close(self) -> Result<(), libloading::Error> {
         match self {
-            Origin::Mapped(library) => core::mem::ManuallyDrop::into_inner(library).close(),
+            Origin::Mapped { library, .. } => core::mem::ManuallyDrop::into_inner(library).close(),
             Origin::Linked => Ok(()),
         }
     }
+}
+
+/// The library, and the loader's handle for its image as a number.
+#[cfg(all(feature = "load", unix))]
+fn image_of(library: libloading::Library) -> (libloading::Library, usize) {
+    let raw = libloading::os::unix::Library::from(library).into_raw();
+    // SAFETY: `raw` is the handle just given up, taken back exactly once.
+    let library = unsafe { libloading::os::unix::Library::from_raw(raw) };
+    (library.into(), raw as usize)
+}
+
+/// The library, and the loader's handle for its image as a number.
+#[cfg(all(feature = "load", windows))]
+fn image_of(library: libloading::Library) -> (libloading::Library, usize) {
+    let raw = libloading::os::windows::Library::from(library).into_raw();
+    // SAFETY: `raw` is the handle just given up, taken back exactly once.
+    let library = unsafe { libloading::os::windows::Library::from_raw(raw) };
+    (library.into(), raw as usize)
 }
 
 /// What opening one file came to. Four outcomes, because the registry
