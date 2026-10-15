@@ -111,6 +111,8 @@ pub struct ArmBuilder {
     alloc: Alloc,
     state: Result<Value, ValueError>,
     discriminant: Result<Value, ValueError>,
+    /// The discriminant's text, which the variant compares across arms.
+    value: String,
     fields: Vec<FieldBuilder>,
 }
 
@@ -978,6 +980,15 @@ impl KindBuilder {
         // Written even when empty, so a variant that declares no arms is a
         // variant with no arms rather than a kind that forgot to say.
         put(&mut k.state, vocab::ONE_OF, Ok(List::new_in(alloc).into()));
+        // Two arms stored as one discriminant cannot be told apart: a
+        // reader selects the first, and the second is unreachable.
+        let repeated = arms
+            .iter()
+            .enumerate()
+            .any(|(i, arm)| arms[..i].iter().any(|earlier| earlier.value == arm.value));
+        if repeated && k.state.is_ok() {
+            k.state = Err(ValueError::DuplicateKey);
+        }
         for arm in arms {
             let mut state = arm.state;
             seal(
@@ -1101,6 +1112,7 @@ impl ArmBuilder {
             alloc,
             state,
             discriminant,
+            value: value.to_string(),
             fields: Vec::new(),
         }
     }

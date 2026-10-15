@@ -569,3 +569,29 @@ fn a_variant_at_the_root_is_checked_as_a_variant() {
         assert!(validate_map(schema, &refused).is_err(), "{refused:?}");
     }
 }
+
+/// Two arms stored as one discriminant cannot be told apart: a reader
+/// selects the first and the second is unreachable, so the variant is
+/// refused when it is built.
+#[test]
+fn a_variant_with_two_arms_of_one_discriminant_is_refused() {
+    let built = KindBuilder::variant(
+        "kind",
+        vec![
+            ArmBuilder::new("a", "").field(FieldBuilder::new("x", KindBuilder::string())),
+            ArmBuilder::new("a", "").field(FieldBuilder::new("y", KindBuilder::string())),
+        ],
+    )
+    .finish();
+    assert_eq!(built.err(), Some(guatiao::ValueError::DuplicateKey));
+    let inside = SchemaBuilder::new()
+        .field(FieldBuilder::new(
+            "v",
+            KindBuilder::variant(
+                "kind",
+                vec![ArmBuilder::new("a", ""), ArmBuilder::new("a", "")],
+            ),
+        ))
+        .finish();
+    assert_eq!(inside.err(), Some(guatiao::ValueError::DuplicateKey));
+}
