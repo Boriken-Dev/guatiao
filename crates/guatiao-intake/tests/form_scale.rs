@@ -50,9 +50,8 @@ fn all_true(n: usize) -> Value {
     Value::from(values)
 }
 
-/// 3 000 links on a stack of 192 KiB: a walk that recursed once per link
-/// needs several times that, and 3 000 links overflowed the stack of a
-/// release build on the default one.
+/// 3 000 links on a stack of 192 KiB, which a walk recursing once per
+/// link could not fit.
 #[test]
 fn a_very_long_chain_of_conditions_is_walked_without_recursion() {
     let walk = || {
@@ -122,12 +121,14 @@ fn a_chain_leading_into_a_cycle_names_the_field_that_repeats() {
     );
 }
 
-/// `check` is linear in the chain, not cubic: a thousand links took
-/// seconds when every field re-walked its whole chain. The bound is
-/// generous, so it fails for an algorithm and not for a slow machine.
+/// `check` does not re-walk the chain from every field, which is cubic in
+/// its length. An order-of-magnitude check: on a debug build a thousand
+/// links take about 0.1 s here and about 13 s when every field re-walks,
+/// so the bound sits roughly ten times from each and fails for the
+/// algorithm, not for a slow machine.
 #[test]
 fn check_does_not_rewalk_the_chain_for_every_field() {
-    let n = 2_000;
+    let n = 1_000;
     let schema = schema_of(n);
     let schema = guatiao::schema::read::SchemaRef::new(&schema).unwrap();
     let form = chain_of(n, None);
@@ -137,7 +138,7 @@ fn check_does_not_rewalk_the_chain_for_every_field() {
     assert_eq!(check(schema, form), Ok(()));
     let took = started.elapsed();
     assert!(
-        took < Duration::from_secs(20),
+        took < Duration::from_millis(1_500),
         "checking a {n}-field chain took {took:?}"
     );
 }

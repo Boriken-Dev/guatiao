@@ -275,8 +275,8 @@ fn a_toml_date_or_time_reads_as_text() {
 }
 
 /// A `!!binary` scalar reads as its base64 text, decoded for nobody: the
-/// seed is told nothing of the tag, a payload that is not UTF-8 used to be
-/// refused, and one that is used to come back as different text.
+/// seed is told nothing of the tag, so a payload that is not UTF-8 is not
+/// refused and none comes back as different text.
 #[test]
 #[cfg(feature = "yaml")]
 fn yaml_binary_reads_as_its_base64_text() {
