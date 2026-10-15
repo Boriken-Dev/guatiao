@@ -1110,6 +1110,14 @@ typedef struct guatiao_kind_header {
  The out-parameter of a method returning [`Object`], and the argument
  type of a method taking one. All three fields null or zero is "no
  object".
+
+ **Lent, it is passed by pointer and ownership stays.** A method taking
+ `&mut dyn K` or `&dyn K` receives a `const guatiao_object *` on the
+ caller's stack, valid for that call only: the callee calls its slots
+ during the call, never keeps the pointer, and **never calls its
+ `destroy`**. A table Rust lends as `&dyn K` answers
+ `GUATIAO_ERR_UNSUPPORTED` from each slot whose method takes `&mut
+ self`.
  */
 typedef struct guatiao_object {
   /*

@@ -16,6 +16,14 @@ use super::*;
 /// The out-parameter of a method returning [`Object`], and the argument
 /// type of a method taking one. All three fields null or zero is "no
 /// object".
+///
+/// **Lent, it is passed by pointer and ownership stays.** A method taking
+/// `&mut dyn K` or `&dyn K` receives a `const guatiao_object *` on the
+/// caller's stack, valid for that call only: the callee calls its slots
+/// during the call, never keeps the pointer, and **never calls its
+/// `destroy`**. A table Rust lends as `&dyn K` answers
+/// `GUATIAO_ERR_UNSUPPORTED` from each slot whose method takes `&mut
+/// self`.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ObjectRaw {
@@ -309,5 +317,168 @@ unsafe fn destroy_raw(raw: ObjectRaw) {
     if let Some(destroy) = destroy {
         // SAFETY: the caller's contract.
         unsafe { destroy(raw.ctx) };
+    }
+}
+
+// --- lent objects: a borrow for one call ----------------------------------
+
+/// An object lent for one call as `&dyn K`: what a generated shim hands
+/// the method for a `&dyn K` argument. Derefs to the kind's trait.
+///
+/// **No `Drop`**: the lender owns the object, so nothing here can destroy
+/// it. Built from the `const guatiao_object *` the caller passed, which
+/// is valid for the call alone, so this does not outlive it.
+///
+/// A kind method lends an object kind's value with `&mut dyn K`, or with
+/// `&dyn K` when the kind has a `&self` method to call:
+///
+/// ```
+/// use guatiao::library::ProviderError;
+///
+/// #[guatiao::kind]
+/// pub trait Tell: Send + Sync {
+///     fn tell(&self, to: &mut dyn greeter_kind::Listener) -> Result<(), ProviderError>;
+///     fn look(&self, at: &dyn greeter_kind::Conversation) -> Result<i64, ProviderError>;
+/// }
+/// ```
+///
+/// `Listener` has only `&mut self` methods, so lending it shared would
+/// leave nothing to call, and is refused at compile time:
+///
+/// ```compile_fail
+/// use guatiao::library::ProviderError;
+///
+/// #[guatiao::kind]
+/// pub trait Tell: Send + Sync {
+///     fn tell(&self, to: &dyn greeter_kind::Listener) -> Result<(), ProviderError>;
+/// }
+/// ```
+pub struct Borrowed<'a, K: ?Sized> {
+    remote: Remote<K>,
+    _lent: PhantomData<&'a K>,
+}
+
+/// An object lent for one call as `&mut dyn K`: what a generated shim
+/// hands the method for a `&mut dyn K` argument. Derefs, mutably, to the
+/// kind's trait. **No `Drop`**, as [`Borrowed`].
+///
+/// Only an object kind is lent; a provider kind is shared and offered,
+/// and lending one is refused at compile time:
+///
+/// ```compile_fail
+/// use guatiao::library::ProviderError;
+///
+/// #[guatiao::kind]
+/// pub trait Relay: Send + Sync {
+///     fn relay(&self, to: &mut dyn greeter_kind::Greeter) -> Result<(), ProviderError>;
+/// }
+/// ```
+pub struct BorrowedMut<'a, K: ?Sized> {
+    remote: Remote<K>,
+    _lent: PhantomData<&'a mut K>,
+}
+
+impl<K: ?Sized + Kind> core::fmt::Debug for Borrowed<'_, K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Borrowed")
+            .field("kind", &K::NAME)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<K: ?Sized + Kind> core::fmt::Debug for BorrowedMut<'_, K> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("BorrowedMut")
+            .field("kind", &K::NAME)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<'a, K: ?Sized + Kind> Borrowed<'a, K> {
+    /// A lent object, validated for `K`.
+    ///
+    /// # Safety
+    ///
+    /// `raw.table` addresses `raw.size` readable bytes that are a table
+    /// for the kind named [`K::NAME`](Kind::NAME), laid out as its
+    /// `Vtable`, and every slot of a method taking `&self` may be called
+    /// with `raw.ctx` from any thread, for `'a`.
+    pub unsafe fn from_raw(raw: &'a ObjectRaw) -> Result<Borrowed<'a, K>, KindMismatch> {
+        // SAFETY: forwarded.
+        let remote = unsafe { Remote::<K>::validate(raw.table, raw.size, raw.ctx, false) }?;
+        Ok(Borrowed {
+            remote,
+            _lent: PhantomData,
+        })
+    }
+}
+
+impl<'a, K: ?Sized + Kind> BorrowedMut<'a, K> {
+    /// A lent object, validated for `K`.
+    ///
+    /// # Safety
+    ///
+    /// As [`Borrowed::from_raw`], for every slot, and nothing else
+    /// reaches the object through `raw.ctx` for `'a`.
+    pub unsafe fn from_raw(raw: &'a ObjectRaw) -> Result<BorrowedMut<'a, K>, KindMismatch> {
+        // SAFETY: forwarded.
+        let remote = unsafe { Remote::<K>::validate(raw.table, raw.size, raw.ctx, false) }?;
+        Ok(BorrowedMut {
+            remote,
+            _lent: PhantomData,
+        })
+    }
+}
+
+impl<K: ?Sized + Kind> core::ops::Deref for Borrowed<'_, K> {
+    type Target = K;
+
+    fn deref(&self) -> &K {
+        K::as_dyn(&self.remote)
+    }
+}
+
+impl<K: ?Sized + Kind> core::ops::Deref for BorrowedMut<'_, K> {
+    type Target = K;
+
+    fn deref(&self) -> &K {
+        K::as_dyn(&self.remote)
+    }
+}
+
+impl<K: ?Sized + Kind> core::ops::DerefMut for BorrowedMut<'_, K> {
+    fn deref_mut(&mut self) -> &mut K {
+        K::as_dyn_mut(&mut self.remote)
+    }
+}
+
+/// `&mut dyn K` lent for one call, as it crosses: the kind's lent table,
+/// whose slots read `slot` as the address of the lender's `*mut dyn K`.
+/// A kind with no lent table (a provider kind) gives a null table, which
+/// the callee refuses; the kind attribute refuses that shape at compile
+/// time first.
+///
+/// `slot` must outlive the call the result is passed to; the generated
+/// proxy keeps both on its stack.
+#[doc(hidden)]
+pub fn lend_mut<K: ?Sized + Kind>(slot: *mut c_void) -> ObjectRaw {
+    lent_raw::<K>(K::LENT_MUT, slot)
+}
+
+/// `&dyn K` lent for one call, as [`lend_mut`]: `slot` holds the
+/// lender's `*const dyn K`, and the table's `&mut self` slots refuse.
+#[doc(hidden)]
+pub fn lend<K: ?Sized + Kind>(slot: *mut c_void) -> ObjectRaw {
+    lent_raw::<K>(K::LENT, slot)
+}
+
+fn lent_raw<K: ?Sized + Kind>(table: Option<&'static K::Vtable>, slot: *mut c_void) -> ObjectRaw {
+    match table {
+        Some(table) => ObjectRaw {
+            table: (table as *const K::Vtable).cast::<c_void>(),
+            size: size_of::<K::Vtable>(),
+            ctx: slot,
+        },
+        None => ObjectRaw::null(),
     }
 }

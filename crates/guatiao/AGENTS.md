@@ -1083,7 +1083,16 @@ repository (`cargo run -p greeter_host` after a workspace build).
   `Object<dyn K>` or take one; both need `Result<_, ProviderError>`
   (validation can fail), and **ownership crosses with the call**: the
   callee destroys an argument it was handed, even when it refuses the
-  call, and the caller owns a return. `Kind::OBJECT` says which a kind
+  call, and the caller owns a return. **Or lend one for the call**:
+  an argument `&mut dyn K` (or `&dyn K`, for a `K` with a `&self`
+  method) crosses as a `const guatiao_object *` on the caller's stack,
+  with no allocation and nothing owed; the callee's shim hands the method
+  a `BorrowedMut<'_, dyn K>`/`Borrowed` (no `Drop`), and a C callee calls
+  the slots during the call, never keeps the pointer and never calls
+  `destroy` (on a table Rust lends it does nothing; lent shared, a
+  `&mut self` slot answers `GUATIAO_ERR_UNSUPPORTED`). Lending a provider
+  kind, or `&dyn K` of a kind with no `&self` method, is a compile error.
+  `Kind::OBJECT` says which a kind
   is; an object table's hash covers `object;` so it never passes for a
   provider table. A registry or host never serves one
   (`KindMismatch::ObjectKind`), and `#[provider(..)]` naming one is a
@@ -1125,7 +1134,8 @@ drop(s);                                                             // the libr
 
 - **What may cross.** Receiver `&self`; the trait names `Send + Sync`.
   Arguments: integers, floats, `bool`, `&str`, `&[u8]`, `&Value`,
-  `Option<&Value>`, `&Map`, any other type by value through `ToValue`.
+  `Option<&Value>`, `&Map`, `Object<dyn K>` (handed over), `&mut dyn K`
+  and `&dyn K` (lent), any other type by value through `ToValue`.
   Returns: `()`, the scalars, `Value`, `Map`, `List`, `String`, any other
   type through `FromValue`; each optionally in `Result<_, ProviderError>`.
   A method that converts must return `Result`. Refused by name: generics,

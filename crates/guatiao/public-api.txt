@@ -311,6 +311,24 @@ pub fn guatiao::library::kind::KindMismatch::fmt(&self, &mut core::fmt::Formatte
 impl core::fmt::Display for guatiao::library::kind::KindMismatch
 pub fn guatiao::library::kind::KindMismatch::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao::library::kind::KindMismatch
+pub struct guatiao::library::kind::Borrowed<'a, K: ?core::marker::Sized>
+impl<'a, K: ?core::marker::Sized + guatiao::library::kind::Kind> guatiao::library::kind::Borrowed<'a, K>
+pub unsafe fn guatiao::library::kind::Borrowed<'a, K>::from_raw(&'a guatiao::library::kind::ObjectRaw) -> core::result::Result<guatiao::library::kind::Borrowed<'a, K>, guatiao::library::kind::KindMismatch>
+impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::fmt::Debug for guatiao::library::kind::Borrowed<'_, K>
+pub fn guatiao::library::kind::Borrowed<'_, K>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::ops::deref::Deref for guatiao::library::kind::Borrowed<'_, K>
+pub type guatiao::library::kind::Borrowed<'_, K>::Target = K
+pub fn guatiao::library::kind::Borrowed<'_, K>::deref(&self) -> &K
+pub struct guatiao::library::kind::BorrowedMut<'a, K: ?core::marker::Sized>
+impl<'a, K: ?core::marker::Sized + guatiao::library::kind::Kind> guatiao::library::kind::BorrowedMut<'a, K>
+pub unsafe fn guatiao::library::kind::BorrowedMut<'a, K>::from_raw(&'a guatiao::library::kind::ObjectRaw) -> core::result::Result<guatiao::library::kind::BorrowedMut<'a, K>, guatiao::library::kind::KindMismatch>
+impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::fmt::Debug for guatiao::library::kind::BorrowedMut<'_, K>
+pub fn guatiao::library::kind::BorrowedMut<'_, K>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::ops::deref::Deref for guatiao::library::kind::BorrowedMut<'_, K>
+pub type guatiao::library::kind::BorrowedMut<'_, K>::Target = K
+pub fn guatiao::library::kind::BorrowedMut<'_, K>::deref(&self) -> &K
+impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::ops::deref::DerefMut for guatiao::library::kind::BorrowedMut<'_, K>
+pub fn guatiao::library::kind::BorrowedMut<'_, K>::deref_mut(&mut self) -> &mut K
 #[repr(C)] pub struct guatiao::library::kind::BytesMut<'a>
 impl<'a> guatiao::library::kind::BytesMut<'a>
 pub unsafe const fn guatiao::library::kind::BytesMut<'a>::from_raw_parts(*mut u8, usize) -> guatiao::library::kind::BytesMut<'a>
@@ -1015,6 +1033,24 @@ pub guatiao::library::WhyNot::NoneAvailable(alloc::vec::Vec<(&'a guatiao::librar
 pub guatiao::library::WhyNot::NothingClaimsIt
 impl<'a> core::fmt::Debug for guatiao::library::registry::WhyNot<'a>
 pub fn guatiao::library::registry::WhyNot<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::library::Borrowed<'a, K: ?core::marker::Sized>
+impl<'a, K: ?core::marker::Sized + guatiao::library::kind::Kind> guatiao::library::kind::Borrowed<'a, K>
+pub unsafe fn guatiao::library::kind::Borrowed<'a, K>::from_raw(&'a guatiao::library::kind::ObjectRaw) -> core::result::Result<guatiao::library::kind::Borrowed<'a, K>, guatiao::library::kind::KindMismatch>
+impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::fmt::Debug for guatiao::library::kind::Borrowed<'_, K>
+pub fn guatiao::library::kind::Borrowed<'_, K>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::ops::deref::Deref for guatiao::library::kind::Borrowed<'_, K>
+pub type guatiao::library::kind::Borrowed<'_, K>::Target = K
+pub fn guatiao::library::kind::Borrowed<'_, K>::deref(&self) -> &K
+pub struct guatiao::library::BorrowedMut<'a, K: ?core::marker::Sized>
+impl<'a, K: ?core::marker::Sized + guatiao::library::kind::Kind> guatiao::library::kind::BorrowedMut<'a, K>
+pub unsafe fn guatiao::library::kind::BorrowedMut<'a, K>::from_raw(&'a guatiao::library::kind::ObjectRaw) -> core::result::Result<guatiao::library::kind::BorrowedMut<'a, K>, guatiao::library::kind::KindMismatch>
+impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::fmt::Debug for guatiao::library::kind::BorrowedMut<'_, K>
+pub fn guatiao::library::kind::BorrowedMut<'_, K>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::ops::deref::Deref for guatiao::library::kind::BorrowedMut<'_, K>
+pub type guatiao::library::kind::BorrowedMut<'_, K>::Target = K
+pub fn guatiao::library::kind::BorrowedMut<'_, K>::deref(&self) -> &K
+impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::ops::deref::DerefMut for guatiao::library::kind::BorrowedMut<'_, K>
+pub fn guatiao::library::kind::BorrowedMut<'_, K>::deref_mut(&mut self) -> &mut K
 #[repr(C)] pub struct guatiao::library::BytesMut<'a>
 impl<'a> guatiao::library::kind::BytesMut<'a>
 pub unsafe const fn guatiao::library::kind::BytesMut<'a>::from_raw_parts(*mut u8, usize) -> guatiao::library::kind::BytesMut<'a>

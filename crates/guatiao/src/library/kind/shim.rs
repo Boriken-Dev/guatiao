@@ -206,6 +206,72 @@ pub unsafe fn object_arg<K: ?Sized + Kind>(raw: ObjectRaw) -> Result<Object<K>, 
         .map_err(|why| ProviderError::new(Status::GUATIAO_ERR_WRONG_KIND, &why.to_string()))
 }
 
+/// A `&mut dyn K` argument: the lent object, validated for `K`, or the
+/// error a shim answers. Nothing is owned, so nothing is destroyed.
+///
+/// # Safety
+///
+/// `raw` is null, or addresses an [`ObjectRaw`] as
+/// [`BorrowedMut::from_raw`] takes one, for `'a`.
+#[doc(hidden)]
+pub unsafe fn borrowed_mut_arg<'a, K: ?Sized + Kind>(
+    raw: *const ObjectRaw,
+) -> Result<BorrowedMut<'a, K>, ProviderError> {
+    // SAFETY: the caller's contract.
+    let raw = unsafe { raw.as_ref() }
+        .ok_or_else(|| ProviderError::new(Status::GUATIAO_ERR_NULL, "no object was lent"))?;
+    // SAFETY: the caller's contract.
+    unsafe { BorrowedMut::from_raw(raw) }
+        .map_err(|why| ProviderError::new(Status::GUATIAO_ERR_WRONG_KIND, &why.to_string()))
+}
+
+/// A `&dyn K` argument, as [`borrowed_mut_arg`].
+///
+/// # Safety
+///
+/// `raw` is null, or addresses an [`ObjectRaw`] as [`Borrowed::from_raw`]
+/// takes one, for `'a`.
+#[doc(hidden)]
+pub unsafe fn borrowed_arg<'a, K: ?Sized + Kind>(
+    raw: *const ObjectRaw,
+) -> Result<Borrowed<'a, K>, ProviderError> {
+    // SAFETY: the caller's contract.
+    let raw = unsafe { raw.as_ref() }
+        .ok_or_else(|| ProviderError::new(Status::GUATIAO_ERR_NULL, "no object was lent"))?;
+    // SAFETY: the caller's contract.
+    unsafe { Borrowed::from_raw(raw) }
+        .map_err(|why| ProviderError::new(Status::GUATIAO_ERR_WRONG_KIND, &why.to_string()))
+}
+
+/// The lender's object behind a lent table's `ctx`, mutably: `ctx`
+/// addresses the `*mut K` [`lend_mut`] was given. `None` for null.
+///
+/// # Safety
+///
+/// `ctx` is null or addresses a `*mut K` that is null or points at a
+/// live `K` this call has the only reference to for `'a`.
+#[doc(hidden)]
+pub unsafe fn lent_mut<'a, K: ?Sized>(ctx: *mut c_void) -> Option<&'a mut K> {
+    // SAFETY: the caller's contract.
+    let object = unsafe { ctx.cast::<*mut K>().as_ref() }?;
+    // SAFETY: the caller's contract.
+    unsafe { object.as_mut() }
+}
+
+/// The same for a table lent as `&dyn K`: `ctx` addresses a `*const K`.
+///
+/// # Safety
+///
+/// `ctx` is null or addresses a `*const K` that is null or points at a
+/// live `K` shared for `'a`.
+#[doc(hidden)]
+pub unsafe fn lent_ref<'a, K: ?Sized>(ctx: *mut c_void) -> Option<&'a K> {
+    // SAFETY: the caller's contract.
+    let object = unsafe { ctx.cast::<*const K>().as_ref() }?;
+    // SAFETY: the caller's contract.
+    unsafe { object.as_ref() }
+}
+
 /// Writes an object through its out-slot, handing it across. A null
 /// `out` destroys the object and answers the status.
 ///

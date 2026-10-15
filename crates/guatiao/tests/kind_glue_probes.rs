@@ -18,6 +18,54 @@ use guatiao::library::{BytesMut, Object, ObjectRaw, ProviderError, Remote};
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::{Buffer, Status, Str, Text};
 
+/// Counts this thread's heap allocations, so a test can say a call made
+/// none: other tests run on other threads and are not counted.
+///
+/// Not installed under Miri: there, `System` runs the standard library's
+/// own Windows allocator code, which reads an over-aligned block's header
+/// outside the `Box` being freed (the test harness's channel), and Miri
+/// refuses that. The count is a native measurement; Miri checks the same
+/// calls for undefined behaviour.
+#[cfg_attr(miri, allow(dead_code))]
+struct PerThread;
+
+std::thread_local! {
+    static ALLOCATIONS: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
+}
+
+// SAFETY: every call is forwarded to the system allocator unchanged.
+unsafe impl core::alloc::GlobalAlloc for PerThread {
+    unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
+        let _ = ALLOCATIONS.try_with(|n| n.set(n.get() + 1));
+        // SAFETY: forwarded.
+        unsafe { std::alloc::System.alloc(layout) }
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
+        // SAFETY: forwarded.
+        unsafe { std::alloc::System.dealloc(ptr, layout) }
+    }
+}
+
+#[cfg(not(miri))]
+#[global_allocator]
+static HEAP: PerThread = PerThread;
+
+/// How many allocations `f` made on this thread; `None` under Miri, where
+/// nothing counts them.
+fn allocations<R>(f: impl FnOnce() -> R) -> (R, Option<usize>) {
+    let before = ALLOCATIONS.with(|n| n.get());
+    let r = f();
+    let made = ALLOCATIONS.with(|n| n.get()) - before;
+    (r, (!cfg!(miri)).then_some(made))
+}
+
+/// `f` made no allocation on this thread (natively; Miri counts nothing).
+fn assert_allocates_nothing<R>(f: impl FnOnce() -> R) -> R {
+    let (r, made) = allocations(f);
+    assert!(made.is_none_or(|n| n == 0), "{made:?} allocations");
+    r
+}
+
 #[guatiao::kind]
 pub trait Probe: Send + Sync {
     /// Text in, text out.
@@ -26,6 +74,19 @@ pub trait Probe: Send + Sync {
     fn keep(&self, sink: Object<dyn Sink>, text: &str) -> Result<(), ProviderError>;
     /// Infallible.
     fn quiet(&self) -> i64;
+    /// A sink lent for the call, then a text: puts the text, answers how
+    /// many bytes the sink filled.
+    fn lend(&self, sink: &mut dyn Sink, text: &str) -> Result<i64, ProviderError>;
+    /// A gauge lent shared: answers its level.
+    fn peek(&self, gauge: &dyn Gauge) -> Result<i64, ProviderError>;
+}
+
+#[guatiao::kind(object)]
+pub trait Gauge: Send {
+    /// Read.
+    fn level(&self) -> i64;
+    /// Written: refused when lent as `&dyn Gauge`.
+    fn bump(&mut self) -> Result<(), ProviderError>;
 }
 
 #[guatiao::kind(object)]
@@ -55,6 +116,49 @@ impl Probe for Counted {
     fn quiet(&self) -> i64 {
         self.calls.fetch_add(1, Ordering::SeqCst);
         7
+    }
+    fn lend(&self, sink: &mut dyn Sink, text: &str) -> Result<i64, ProviderError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        sink.put(text);
+        let mut buf = [0u8; 3];
+        Ok(sink.fill(&mut buf))
+    }
+    fn peek(&self, gauge: &dyn Gauge) -> Result<i64, ProviderError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(gauge.level())
+    }
+}
+
+/// A sink that keeps what it was told in place, allocating nothing.
+#[derive(Default)]
+struct Recorder {
+    puts: usize,
+    last: [u8; 8],
+    last_len: usize,
+}
+
+impl Sink for Recorder {
+    fn put(&mut self, what: &str) {
+        self.puts += 1;
+        let n = what.len().min(self.last.len());
+        self.last[..n].copy_from_slice(&what.as_bytes()[..n]);
+        self.last_len = n;
+    }
+    fn fill(&mut self, dst: &mut [u8]) -> i64 {
+        dst.fill(b'x');
+        dst.len() as i64
+    }
+}
+
+struct Level(i64);
+
+impl Gauge for Level {
+    fn level(&self) -> i64 {
+        self.0
+    }
+    fn bump(&mut self) -> Result<(), ProviderError> {
+        self.0 += 1;
+        Ok(())
     }
 }
 
@@ -271,5 +375,217 @@ fn a_text_a_shim_wrote_that_is_not_utf8_is_refused_and_freed() {
         count.outstanding.load(Ordering::SeqCst),
         0,
         "the refused text was freed"
+    );
+}
+
+// --- lent objects: `&mut dyn K` and `&dyn K` arguments --------------------
+
+static COUNTED: ProbeVtable = ProbeVtable::of::<Counted>();
+
+/// The generated proxy over a `Counted`, as a host holds one.
+fn probe(counted: &Counted) -> Remote<dyn Probe> {
+    // SAFETY: the table `of::<Counted>()` built, over a `&Counted` that
+    // outlives every call the test makes.
+    unsafe {
+        Remote::<dyn Probe>::from_raw(
+            (&COUNTED as *const ProbeVtable).cast(),
+            size_of::<ProbeVtable>(),
+            ctx(counted),
+        )
+    }
+    .expect("the table validates")
+}
+
+#[test]
+fn a_lent_object_crosses_and_comes_back_with_nothing_allocated() {
+    let counted = Counted::default();
+    let remote = probe(&counted);
+    let mut recorder = Recorder::default();
+    // The proxy lends the recorder through the lent table, the shim
+    // validates it and hands the method a `&mut dyn Sink` whose calls come
+    // back through the lent slots to `recorder` itself.
+    let filled = assert_allocates_nothing(|| remote.lend(&mut recorder, "hey"));
+    assert_eq!(filled.expect("the call succeeds"), 3);
+    assert_eq!(recorder.puts, 1);
+    assert_eq!(&recorder.last[..recorder.last_len], b"hey");
+    // Still the caller's, and still usable: nothing was destroyed.
+    recorder.put("again");
+    assert_eq!(recorder.puts, 2);
+
+    let level = Level(41);
+    let seen = assert_allocates_nothing(|| remote.peek(&level));
+    assert_eq!(seen.expect("the call succeeds"), 41);
+
+    // The counter does count: a call answering a `String` allocates.
+    let (_, allocated) = allocations(|| remote.name("abc"));
+    assert!(
+        allocated.is_none_or(|n| n > 0),
+        "the counter sees an allocation"
+    );
+    assert_eq!(counted.calls.load(Ordering::SeqCst), 3);
+}
+
+/// A greeter whose `greet_into` tells the listener the name it was given.
+struct Plain;
+
+impl greeter_kind::Greeter for Plain {
+    fn greet(&self, _: &str) -> Result<guatiao::Map, ProviderError> {
+        Ok(guatiao::Map::new())
+    }
+    fn greet_into(
+        &self,
+        name: &str,
+        listener: &mut dyn greeter_kind::Listener,
+    ) -> Result<(), ProviderError> {
+        listener.heard(name);
+        Ok(())
+    }
+}
+
+/// A listener that counts what it heard, allocating nothing.
+#[derive(Default)]
+struct Ear {
+    heard: usize,
+    bytes: usize,
+}
+
+impl greeter_kind::Listener for Ear {
+    fn heard(&mut self, what: &str) {
+        self.heard += 1;
+        self.bytes += what.len();
+    }
+}
+
+static PLAIN: greeter_kind::GreeterVtable = greeter_kind::GreeterVtable::of::<Plain>();
+
+#[test]
+fn greet_into_lends_its_listener_rust_to_rust() {
+    use greeter_kind::Greeter;
+
+    // SAFETY: the table `of::<Plain>()` built; `Plain` is a ZST read only
+    // through `&Plain`, so any aligned non-null address serves as its
+    // `ctx`.
+    let remote = unsafe {
+        Remote::<dyn Greeter>::from_raw(
+            (&PLAIN as *const greeter_kind::GreeterVtable).cast(),
+            size_of::<greeter_kind::GreeterVtable>(),
+            core::ptr::NonNull::<Plain>::dangling().as_ptr().cast(),
+        )
+    }
+    .expect("the table validates");
+    let mut ear = Ear::default();
+    assert_allocates_nothing(|| remote.greet_into("ana", &mut ear)).expect("the call succeeds");
+    assert_eq!((ear.heard, ear.bytes), (1, 3));
+}
+
+#[test]
+fn a_lent_table_frees_nothing_and_a_shared_one_refuses_mut_methods() {
+    let mut level = Level(1);
+    // `destroy` on either lent table does nothing: the object is the
+    // lender's, even if a callee breaks the rule and calls it.
+    let slot: *mut dyn Gauge = &mut level;
+    let ctx = core::ptr::addr_of!(slot).cast_mut().cast::<c_void>();
+    let destroy = GaugeVtable::lent_mut().destroy.expect("a slot");
+    // SAFETY: a no-op on any pointer.
+    unsafe { destroy(ctx) };
+    let destroy = GaugeVtable::lent().destroy.expect("a slot");
+    // SAFETY: as above.
+    unsafe { destroy(ctx) };
+    assert_eq!(level.level(), 1, "the lender's object is untouched");
+
+    // Lent shared, a `&mut self` slot answers UNSUPPORTED and leaves the
+    // object alone; a `&self` slot answers.
+    let shared: *const dyn Gauge = &level;
+    let ctx = core::ptr::addr_of!(shared).cast_mut().cast::<c_void>();
+    let table = GaugeVtable::lent();
+    let mut err = ProviderError::none();
+    // SAFETY: the lent table's slot, with the address of a `*const dyn
+    // Gauge` as `ctx` and a writable error slot.
+    let status = unsafe { (table.bump.expect("a slot"))(ctx, &mut err) };
+    assert_eq!(status, Status::GUATIAO_ERR_UNSUPPORTED);
+    assert_eq!(err.status, Status::GUATIAO_ERR_UNSUPPORTED);
+    assert!(err.message().contains("bump"), "{}", err.message());
+    let mut out = 0i64;
+    // SAFETY: as above.
+    let status = unsafe { (table.level.expect("a slot"))(ctx, &mut out) };
+    assert_eq!(status, Status::GUATIAO_OK);
+    assert_eq!(out, 1);
+    assert_eq!(level.level(), 1);
+}
+
+#[test]
+fn a_callee_lent_an_owned_object_never_destroys_it() {
+    // What a C caller lends is its own table, `destroy` and all: the shim
+    // takes it as a borrow and leaves it to its owner.
+    let counted = Counted::default();
+    let (sink, drops, asked) = tracked();
+    let raw = sink.into_raw();
+    let mut err = ProviderError::none();
+    let mut out = 0i64;
+    // SAFETY: `ctx` is a `&Counted`; `raw` is an object of this kind,
+    // lent for the call; the out-slots are writable.
+    let status = unsafe {
+        ProbeVtable::__guatiao_shim_lend::<Counted>(
+            ctx(&counted),
+            &raw,
+            Str::new("lent"),
+            &mut out,
+            &mut err,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_OK);
+    assert_eq!(out, 3);
+    assert_eq!(asked.load(Ordering::SeqCst), 3);
+    assert_eq!(
+        drops.load(Ordering::SeqCst),
+        0,
+        "a lent object is not destroyed"
+    );
+    // SAFETY: `raw` came from `into_raw` and is still owned here.
+    drop(unsafe { Object::<dyn Sink>::from_raw(raw) }.expect("the same table"));
+    assert_eq!(
+        drops.load(Ordering::SeqCst),
+        1,
+        "its owner destroys it, once"
+    );
+}
+
+#[test]
+fn a_null_or_foreign_lent_object_is_refused_before_the_method_runs() {
+    let counted = Counted::default();
+    let mut err = ProviderError::none();
+    let mut out = 0i64;
+    // SAFETY: as above, with a null lent object.
+    let status = unsafe {
+        ProbeVtable::__guatiao_shim_lend::<Counted>(
+            ctx(&counted),
+            core::ptr::null(),
+            Str::new("x"),
+            &mut out,
+            &mut err,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_NULL);
+    // A gauge's table lent where a sink is expected.
+    let mut level = Level(0);
+    let slot: *mut dyn Gauge = &mut level;
+    let wrong =
+        guatiao::library::kind::lend_mut::<dyn Gauge>(core::ptr::addr_of!(slot).cast_mut().cast());
+    let mut err = ProviderError::none();
+    // SAFETY: as above; the table is readable for its size.
+    let status = unsafe {
+        ProbeVtable::__guatiao_shim_lend::<Counted>(
+            ctx(&counted),
+            &wrong,
+            Str::new("x"),
+            &mut out,
+            &mut err,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_WRONG_KIND);
+    assert_eq!(
+        counted.calls.load(Ordering::SeqCst),
+        0,
+        "the method never ran"
     );
 }

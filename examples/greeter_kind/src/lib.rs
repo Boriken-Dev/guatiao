@@ -46,6 +46,20 @@ pub trait Greeter: Send + Sync {
             "this greeter holds no conversations",
         ))
     }
+    /// Appended: the greeting, told to a listener the caller LENDS for
+    /// this call alone. It stays on the caller's side: nothing is
+    /// allocated to pass it and nothing is destroyed after. A greeter
+    /// built before this slot existed greets through `greet`.
+    fn greet_into(&self, name: &str, listener: &mut dyn Listener) -> Result<(), ProviderError> {
+        let greeting = self.greet(name)?;
+        listener.heard(
+            greeting
+                .get("greeting")
+                .and_then(TryAsRef::<str>::try_as_ref)
+                .unwrap_or_default(),
+        );
+        Ok(())
+    }
 }
 
 /// What a conversation tells whoever is listening. Implemented by the
