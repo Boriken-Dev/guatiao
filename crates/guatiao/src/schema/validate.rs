@@ -623,6 +623,12 @@ fn one_of_members(kind: Kind<'_>) -> String {
     }
 }
 
+/// Whether `schema` accepts `value`, for a caller that has the schema as a
+/// bare value (an arm of a union) and no field to name.
+pub(crate) fn accepts(schema: &Value, value: &Value) -> bool {
+    value_against(schema, "", value, 0).is_ok()
+}
+
 /// Whether every entry of a map of **typed** values is accepted.
 ///
 /// Each value is the type its field's kind names (see [`validate_value`]),

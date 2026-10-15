@@ -104,6 +104,7 @@ pub mod describe;
 pub mod merge;
 mod pattern;
 pub mod read;
+mod redact;
 mod refs;
 pub mod validate;
 pub mod vocab;
@@ -111,6 +112,7 @@ pub mod vocab;
 pub use build::{ArmBuilder, Extras, FieldBuilder, KindBuilder, SchemaBuilder};
 pub use describe::Schema;
 pub use read::{ArmRef, ChoiceRef, FieldRef, Kind as KindRef, SchemaRef};
+pub use redact::{redact, redact_in};
 pub use refs::{inline_refs, inline_refs_in};
 pub use validate::{validate_map, validate_text, validate_value};
 
