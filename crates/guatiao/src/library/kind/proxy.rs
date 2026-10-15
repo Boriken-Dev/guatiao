@@ -302,30 +302,27 @@ impl<K: ?Sized + Kind> Offer<K> {
         self.view.available()
     }
 
-    /// Whether this offer can be called as it stands: `false` for a
-    /// provider that builds instances and keeps no default one (`create`
-    /// present, `ctx` null). A provider with no `create` is called with
-    /// whatever `ctx` it declared, null included, as a stateless C table
-    /// expects.
+    /// Whether this offer can be called as it stands. See
+    /// [`default_instance`](Offer::default_instance).
     fn callable(&self) -> bool {
-        !(self.view.ctx.is_null() && self.view.create.is_some())
+        self.view.has_default_instance()
     }
 
     /// The provider's default instance, as the trait, or `None` for a
-    /// provider built only from a configuration: call
-    /// [`instantiate`](Offer::instantiate) for one of those.
+    /// provider built only from a configuration (`create` present, `ctx`
+    /// null): call [`instantiate`](Offer::instantiate) for one of those. A
+    /// provider with no `create` is its own instance, whatever `ctx` it
+    /// declared, null included, as a stateless C table expects.
     pub fn default_instance(&self) -> Option<&K> {
         self.callable().then(|| K::as_dyn(&self.remote))
     }
 
     /// The validated proxy over the provider's own `ctx`, for a caller
-    /// that speaks C or keeps the table: unchecked, like
-    /// [`Provider::as_kind`](crate::library::Provider::as_kind), so for a
-    /// provider built only from a configuration its `ctx` is null and
-    /// every call through it fails.
-    /// [`default_instance`](Offer::default_instance) is the checked door.
-    pub fn remote(&self) -> Remote<K> {
-        self.remote
+    /// that speaks C or keeps the table; `None` exactly when
+    /// [`default_instance`](Offer::default_instance) is, since a proxy
+    /// over no instance could only fail.
+    pub fn remote(&self) -> Option<Remote<K>> {
+        self.callable().then_some(self.remote)
     }
 
     /// The descriptor as read.
@@ -484,7 +481,9 @@ impl<K: ?Sized + Kind> Offer<K> {
 }
 
 impl ProviderInfo<'static> {
-    /// This provider's table for `K`, validated.
+    /// This provider's table for `K`, validated, over its own `ctx`; `Ok(None)`
+    /// for a provider built only from a configuration, as
+    /// [`Provider::as_kind`](crate::library::Provider::as_kind).
     ///
     /// For a descriptor a library built itself; a host's services answer
     /// with views, and [`Host::offers`] is the door there.
@@ -492,10 +491,13 @@ impl ProviderInfo<'static> {
     /// # Safety
     ///
     /// As [`ProviderInfo::view`].
-    pub unsafe fn as_kind<K: ?Sized + Kind>(&'static self) -> Result<Remote<K>, KindMismatch> {
+    pub unsafe fn as_kind<K: ?Sized + Kind>(
+        &'static self,
+    ) -> Result<Option<Remote<K>>, KindMismatch> {
         // SAFETY: forwarded.
         let view = unsafe { self.view() }.ok_or(KindMismatch::NoTable)?;
-        Remote::from_view(&view)
+        let remote = Remote::from_view(&view)?;
+        Ok(view.has_default_instance().then_some(remote))
     }
 
     /// The same, as an offer carrying what a chooser needs.

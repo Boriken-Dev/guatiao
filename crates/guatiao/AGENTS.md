@@ -1016,7 +1016,7 @@ for offer in registry.offers::<dyn Greeter>() {
 }
 registry.offer::<dyn Greeter>("acme_hello")    // Option<Result<Offer, KindMismatch>>
 registry.mismatches::<dyn Greeter>()           // (&Provider, KindMismatch): tables that failed
-provider.as_kind::<dyn Greeter>()              // Result<Remote<dyn Greeter>, KindMismatch>
+provider.as_kind::<dyn Greeter>()              // Result<Option<Remote<dyn Greeter>>, KindMismatch>; None: built only from a config
 host.offers::<dyn Greeter>() / host.offer(key) / host.mismatches()
 unsafe { Remote::<dyn Greeter>::from_raw(table, size, ctx) }   // a table from anywhere else
 
@@ -1102,12 +1102,13 @@ drop(s);                                                             // the libr
   keeps working through `provider.table_for(kind)` / `vtable_as`.
 - **`Offer<K>`** carries `id`, `display_name`, `version`, `library`,
   `key`, `priority`, `meta`, `config_schema`, `available()` (asked live),
-  `builds_instances()`, `instantiate(&config)` and `remote()` (the
-  validated proxy over its `ctx`, unchecked). **It does not deref**: a
-  provider built only from a configuration has a null `ctx` and nothing
-  to call, so the default instance is `default_instance() -> Option<&K>`,
-  `boxed() -> Option<Box<K>>`, `shared() -> Option<Arc<K>>`, `None` for
-  one with `create` and a null `ctx`. Unavailable providers ARE offered;
+  `builds_instances()` and `instantiate(&config)`. **It does not
+  deref**: a provider built only from a configuration has a null `ctx`
+  and nothing to call, so the default instance is `default_instance() ->
+  Option<&K>`, `boxed() -> Option<Box<K>>`, `shared() -> Option<Arc<K>>`
+  and the proxy over its `ctx` `remote() -> Option<Remote<K>>`, each
+  `None` for one with `create` and a null `ctx`; `Provider::as_kind` and
+  `ProviderInfo::as_kind` answer `Ok(None)` for it by the same rule. Unavailable providers ARE offered;
   the consumer chooses. `Remote<K>` is `Copy + Send + Sync + 'static`;
   `Box<dyn K>: From<Remote<dyn K>>`.
 - **Every handle may be held across an `.await`.** `Remote`, `Offer` and

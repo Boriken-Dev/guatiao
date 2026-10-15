@@ -371,10 +371,17 @@ impl Provider {
         self.view.table_for(kind)
     }
 
-    /// This provider's per-kind table for `K`, validated. The typed path:
-    /// only a table in the descriptor's `tables` qualifies.
-    pub fn as_kind<K: ?Sized + Kind>(&self) -> Result<Remote<K>, KindMismatch> {
-        Remote::from_view(&self.view)
+    /// This provider's per-kind table for `K`, validated, as a proxy over
+    /// its own `ctx`. The typed path: only a table in the descriptor's
+    /// `tables` qualifies.
+    ///
+    /// `Ok(None)` for a provider built only from a configuration (`create`
+    /// present, `ctx` null): its table fits `K`, and with no instance a
+    /// call through it could only fail. [`instantiate`](Provider::instantiate)
+    /// builds one; [`Offer::default_instance`] follows the same rule.
+    pub fn as_kind<K: ?Sized + Kind>(&self) -> Result<Option<Remote<K>>, KindMismatch> {
+        let remote = Remote::from_view(&self.view)?;
+        Ok(self.view.has_default_instance().then_some(remote))
     }
 
     /// An instance of this provider built from `config`, as `K`. See
@@ -388,7 +395,7 @@ impl Provider {
 
     /// The same, as an offer carrying what a chooser needs to show.
     pub fn offer<K: ?Sized + Kind>(&self) -> Result<Offer<K>, KindMismatch> {
-        let remote = self.as_kind::<K>()?;
+        let remote = Remote::from_view(&self.view)?;
         Ok(Offer::new(
             remote,
             self.view.clone(),

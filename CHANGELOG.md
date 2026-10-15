@@ -81,12 +81,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking: an `Offer` no longer derefs to its kind.** A provider built
   only from a configuration has no default instance, so calling it
   through its offer could only fail, and an infallible method panicked
-  the host. `Offer::default_instance()` is `Option<&K>`, and `boxed()`
-  and `shared()` answer `Option`, `None` for such a provider;
+  the host. `Offer::default_instance()` is `Option<&K>`, and `boxed()`,
+  `shared()` and `remote()` answer `Option`, `None` for such a provider;
+  `Provider::as_kind` and `ProviderInfo::as_kind` answer
+  `Result<Option<Remote<K>>, KindMismatch>`, `Ok(None)` for it;
   `From<Offer<K>> for Remote<K>` is gone. Migration: `offer.greet(..)` is
   `offer.default_instance().expect(..).greet(..)`, or skip the offers
-  answering `None` and `instantiate` them; `Remote::from(offer)` is
-  `offer.remote()`.
+  answering `None` and `instantiate` them; `Remote::from(offer)` and
+  `offer.remote()` are `offer.remote().expect(..)`, and
+  `provider.as_kind()?` is `provider.as_kind()?.expect(..)`. A caller
+  speaking C that wants the table of such a provider reads it with
+  `table_for(kind)`.
 - **Breaking: `instantiate` checks the configuration against the
   provider's schema first**, and answers `InstantiateError`:
   `Invalid(ValidationError)` names a misspelled or ill-typed setting
