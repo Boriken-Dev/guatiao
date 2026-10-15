@@ -213,12 +213,12 @@ impl<'de> Visitor<'de> for ValueSeed {
         // A NUMBER WEARING A MAP'S CLOTHES. With
         // `serde_json/arbitrary_precision` on, `deserialize_any` reports
         // every number as a one-entry map under this reserved key, whose
-        // value is the number's text. Reading it is NOT behind a feature
-        // of this crate, and that is the point: cargo unifies features, so
-        // ANY crate in a consumer's graph can turn that on. A reader that
-        // did not know the token would then quietly turn every number in
-        // every document into a map — a bug with no error attached, caused
-        // by a dependency this crate never named.
+        // value is the number's text. Reading it is NOT behind this
+        // crate's `exact-numbers` feature, and that is the point: cargo
+        // unifies features, so ANY crate in a consumer's graph can turn
+        // that on. A reader that did not know the token would then quietly
+        // turn every number in every document into a map — a bug with no
+        // error attached, caused by a dependency this crate never named.
         //
         // A MAP WHOSE FIRST KEY IS THAT TOKEN IS READ AS A NUMBER
         // UNCONDITIONALLY, and the rest of it is not drained. No format
@@ -310,17 +310,13 @@ mod tests {
 
     /// **A number keeps its SPELLING, not merely its magnitude.**
     ///
-    /// The `json` feature carries `serde_json/arbitrary_precision`, so a
-    /// number arrives as its own text rather than as an `f64`. That is
+    /// The `exact-numbers` feature turns on `serde_json/arbitrary_precision`,
+    /// so a number arrives as its own text rather than as an `f64`. That is
     /// more than an arbitrary-precision number TYPE preserves: those hold
     /// a value and normalise `1.10` to `1.1`, where this model holds the
     /// text and does not.
-    ///
-    /// Without the feature, `serde_json` resolves anything past
-    /// `i64`/`u64` to an `f64` before a visitor is ever called and the
-    /// spelling is gone before this crate can see it. That is why the
-    /// feature rides with the format rather than being offered separately.
     #[test]
+    #[cfg(feature = "exact-numbers")]
     fn a_number_keeps_its_spelling_through_a_round_trip() {
         // Exact in, exact out, for everything that fits.
         assert_eq!(
@@ -357,6 +353,37 @@ mod tests {
         assert_eq!(write(&Value::from(Number::new(huge).unwrap())), huge);
         assert_eq!(write(&Value::from(Number::new("1.10").unwrap())), "1.10");
         assert_eq!(write(&Value::from(Number::new("1e400").unwrap())), "1e400");
+    }
+
+    /// Without `exact-numbers`, `serde_json` resolves anything past
+    /// `i64`/`u64` to an `f64` before a visitor is called, so the spelling
+    /// is gone before this crate can see it: `1.10` reads as `1.1` and a
+    /// number no `f64` holds is refused by the parser.
+    #[test]
+    #[cfg(not(feature = "exact-numbers"))]
+    fn without_exact_numbers_a_wide_number_reads_through_an_f64() {
+        let text = |json: &str| {
+            TryAsRef::<Number>::try_as_ref(&read(json))
+                .map(AsRef::<str>::as_ref)
+                .map(str::to_string)
+        };
+        assert_eq!(text("5900").as_deref(), Some("5900"));
+        assert_eq!(
+            text("18446744073709551615").as_deref(),
+            Some("18446744073709551615"),
+            "an integer that fits a u64 is exact either way"
+        );
+        assert_eq!(text("1.10").as_deref(), Some("1.1"));
+        assert_eq!(
+            text("123456789012345678901234567890").as_deref(),
+            Some("1.2345678901234568e29")
+        );
+        let mut de = serde_json::Deserializer::from_str("1e400");
+        assert!(ValueSeed::new(Alloc::rust()).deserialize(&mut de).is_err());
+
+        // Writing is exact all the same: that is a policy of the writer.
+        let huge = "123456789012345678901234567890123456789012345678901234567890";
+        assert_eq!(write(&Value::from(Number::new(huge).unwrap())), huge);
     }
 
     /// Absent by default, on when asked: the trade is the caller's.

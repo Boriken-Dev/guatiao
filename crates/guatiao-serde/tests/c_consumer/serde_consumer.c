@@ -139,8 +139,9 @@ int main(void) {
     CHECK(st != GUATIAO_OK, "a refusal is a refusal");
   }
 
-  /* ---- a number keeps its spelling ----------------------------------- */
+  /* ---- a number keeps its spelling, in a build with exact numbers ----- */
 
+#ifdef EXACT_NUMBERS
   {
     guatiao_value back = {0};
     st = guatiao_json_parse(s("{\"ratio\":1.10}"), 0, &alloc, &back);
@@ -151,6 +152,7 @@ int main(void) {
           "a number is its exact text, not an f64's idea of it");
     guatiao_value_free(&back);
   }
+#endif
 
   /* ---- malformed input is refused, not guessed ----------------------- */
 

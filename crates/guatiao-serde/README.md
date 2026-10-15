@@ -24,8 +24,10 @@ rather than any one format.
   arguments to name one with. `ValueSeed` is serde's own answer —
   `DeserializeSeed` exists to carry state into a deserialisation — and it is
   what lets a host read a document straight into its own arena.
-- **Numbers stay exact through `text::json`**, spelling included — `1.10`,
-  `1e400`, a 200-digit integer.
+- **Numbers are written exactly through `text::json`**, spelling included —
+  `1.10`, `1e400`, a 200-digit integer — and read exactly with the
+  `exact-numbers` feature, which has a cost in the rest of your build (see
+  below).
 - **A C surface** with its own `include/guatiao_serde.h`.
 
 ## Installation
@@ -37,10 +39,20 @@ guatiao-serde = { version = "0.0.0-alpha.0", features = ["toml", "yaml"] }
 
 | Flag | Adds | Needed for |
 | --- | --- | --- |
-| `json` (default) | `serde_json`, with `arbitrary_precision` | `text::json`, and numbers read exactly |
+| `json` (default) | `serde_json`, with `raw_value` | `text::json` |
+| `exact-numbers` | `json`, and `serde_json/arbitrary_precision` | reading a JSON number as its own text; **read the cost below** |
 | `toml` | `toml` | `text::toml` |
 | `yaml` | `serde-saphyr` | `text::yaml` |
 | `c-header` | `cbindgen` | regenerating the committed C header |
+
+**`exact-numbers` reaches the rest of your build.** Cargo unifies features,
+so with it on, `serde_json/arbitrary_precision` is on for every crate that
+uses `serde_json`: `#[serde(untagged)]` and `#[serde(flatten)]` numbers in
+unrelated crates stop deserialising (`data did not match any variant`,
+`invalid type: map, expected f64`). That is why it is not part of `json`.
+A binary that is the only thing in its build, or a C library built from
+this workspace (the artifacts are built with `--all-features`), can turn it
+on; a library crate should not.
 
 ## Quick start
 
@@ -75,7 +87,8 @@ let back = ValueSeed::new(Alloc::rust()).deserialize(&mut de)?;
 | | out | in |
 |---|---|---|
 | numbers within `i64`/`u64` | exact | exact |
-| numbers past that, via `text::json` | **exact** (`1.10`, `1e400`, 200 digits) | **exact**, spelling included |
+| numbers past that, via `text::json` | **exact** (`1.10`, `1e400`, 200 digits) | read through an `f64`: `1.10` is `1.1`; `1e400` is refused |
+| ... and with `exact-numbers` | exact | **exact**, spelling included |
 | numbers past that, default `Presentation` | rounded through `f64` | — |
 | bytes, binary format | native | native |
 | bytes, JSON | per `Presentation` | string, unless asked |
@@ -91,12 +104,11 @@ nothing to TOML or YAML, which would write it out literally. Under the
 default, anything past `i64`/`u64` goes out through an `f64`, so `1.10`
 becomes `1.1`.
 
-**Reading is exact because `json` turns `arbitrary_precision` on.** That
-is a default feature of this crate: a number arrives as its own text
-rather than as an `f64` resolved before a visitor ever runs. Cargo unifies
-features across a build, so it reaches `serde_json::Value` everywhere in a
-consumer's graph — turn the `json` feature off and hand a
-`serde_json::Deserializer` to `ValueSeed` yourself if that is not wanted.
+**Reading is exact only with `exact-numbers`.** It turns
+`serde_json/arbitrary_precision` on, so a number arrives as its own text
+rather than as an `f64` resolved before a visitor ever runs. Without it
+the number is whatever serde_json hands the visitor: an integer that fits
+`i64`/`u64` exact, anything else an `f64`.
 
 ## API overview
 

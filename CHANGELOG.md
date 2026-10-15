@@ -48,6 +48,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   implement `core::error::Error`, and the derives and `providers!` reach
   `alloc` items through a hidden `guatiao::__private::alloc`, so the crate
   that expands them declares nothing.
+- **`guatiao-serde`: reading a JSON number exactly is the opt-in
+  `exact-numbers` feature, and `json` no longer turns on
+  `serde_json/arbitrary_precision`.** With the default feature set on,
+  every crate in the build that deserialised `#[serde(untagged)]` or
+  `#[serde(flatten)]` numbers through `serde_json` stopped working, because
+  cargo unifies the feature. Without `exact-numbers`, an integer that fits
+  `i64`/`u64` is still exact, anything else reads through an `f64` (`1.10`
+  as `1.1`) and `1e400` is refused by the parser; writing a number
+  verbatim through `text::json` is unchanged. *Migration:* a binary that
+  relies on exact reading enables `guatiao-serde/exact-numbers`; a library
+  should not. The C and Python/Dart artifacts are built `--all-features` and
+  keep exact numbers.
 - **`guatiao-intake`: the path grammar is stricter.** `a[0]b`, `a["x"]y`,
   `a.[0]` and `[a[b]` are refused (`PathError::MissingSeparator` is new, and
   `EmptyField` and `UnclosedIndex` now cover the others), and digits in a

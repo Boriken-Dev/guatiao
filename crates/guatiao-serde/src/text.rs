@@ -66,13 +66,14 @@ impl core::error::Error for Error {}
 pub mod json {
     //! JSON, through `serde_json`.
     //!
-    //! **`arbitrary_precision` is on**, so a number arrives as its own
-    //! text: `1.10` reads back `1.10` rather than `1.1`, and a 200-digit
-    //! integer survives. That reaches `serde_json::Value` everywhere in a
-    //! consumer's graph, because cargo unifies features — a consumer who
-    //! does not want it turns off this crate's `json` feature and hands a
-    //! `serde_json::Deserializer` to [`ValueSeed`]
-    //! themselves.
+    //! **Writing is exact; reading is exact with `exact-numbers`.** A
+    //! number goes out as its own text (`1.10`, a 200-digit integer,
+    //! `1e400`). It comes back as that text only when this crate's
+    //! `exact-numbers` feature turns `serde_json/arbitrary_precision` on;
+    //! without it, a number that fits no `i64`/`u64` reads as an `f64` and
+    //! `1.10` reads back `1.1`. The feature reaches `serde_json::Value`
+    //! everywhere in a consumer's graph, because cargo unifies features,
+    //! which is why it is not part of `json`.
 
     use serde::de::DeserializeSeed;
 

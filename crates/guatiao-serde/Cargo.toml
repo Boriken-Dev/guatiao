@@ -26,14 +26,17 @@ path = "src/lib.rs"
 # saying so. The others are named.
 default = ["json"]
 
-# `arbitrary_precision` rides with it, so a number arrives as its own TEXT
-# rather than as an `f64` -- `1.10` reads back `1.10`, and a 200-digit
-# integer survives. Cargo unifies features across a build, so this reaches
-# `serde_json::Value` everywhere in a consumer's graph; a consumer who does
-# not want that turns this feature off and hands a
-# `serde_json::Deserializer` to `ValueSeed` themselves.
-# `raw_value` is what writes a number's exact text as a bare token.
-json = ["dep:serde_json", "serde_json/arbitrary_precision", "serde_json/raw_value"]
+# `raw_value` only adds a type; it is what writes a number's exact text as a
+# bare token. Reading a number goes through serde_json's own visitors, so
+# one past `i64`/`u64` arrives as an `f64` (`1.10` as `1.1`).
+json = ["dep:serde_json", "serde_json/raw_value"]
+
+# A number read from JSON arrives as its own TEXT -- `1.10` stays `1.10`, a
+# 200-digit integer survives -- because serde_json keeps it. Its own opt-in,
+# not part of `json`: Cargo unifies features across a build, so this reaches
+# `serde_json::Value` in every crate of the graph and breaks
+# `#[serde(untagged)]` and `#[serde(flatten)]` numbers there.
+exact-numbers = ["json", "serde_json/arbitrary_precision"]
 
 # A TOML document is a TABLE: writing a bare scalar or array is refused
 # rather than wrapped in a key the value never had.
@@ -74,6 +77,9 @@ cbindgen = { version = "0.29", optional = true }
 # purpose: this crate speaks serde and takes no position on which format a
 # consumer reaches for.
 serde_json = { version = "1", features = ["raw_value"] }
+# `derive` is for the test that a default build leaves other crates' numbers
+# alone; the library itself derives nothing.
+serde = { version = "1", features = ["derive"] }
 rmp-serde = "1"
 # A real JSON Schema 2020-12 validator, so "a schema IS a JSON Schema" is
 # something a third party checked rather than something we assert. A DEV

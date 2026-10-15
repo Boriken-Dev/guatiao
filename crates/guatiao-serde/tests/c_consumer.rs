@@ -139,6 +139,11 @@ fn a_c_program_loads_and_dumps_a_value() {
     });
 
     let mut compile = Command::new(&cc);
+    if cfg!(feature = "exact-numbers") {
+        // What the library under test was built with: the C program checks
+        // that a number keeps its spelling only when it was.
+        compile.arg("-DEXACT_NUMBERS");
+    }
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
         // The TOML and YAML declarations are guarded, because a library

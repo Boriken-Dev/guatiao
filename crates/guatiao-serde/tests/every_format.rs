@@ -98,10 +98,10 @@ fn json_round_trips() {
     );
 }
 
-/// **`arbitrary_precision` is on**, so a number keeps its spelling through
-/// a JSON round trip — not merely its magnitude.
+/// **With `exact-numbers`**, a number keeps its spelling through a JSON
+/// round trip — not merely its magnitude.
 #[test]
-#[cfg(feature = "json")]
+#[cfg(feature = "exact-numbers")]
 fn json_keeps_a_numbers_spelling() {
     use guatiao_serde::text::json;
 
@@ -116,6 +116,24 @@ fn json_keeps_a_numbers_spelling() {
             "and read back verbatim"
         );
     }
+}
+
+/// Without it, a number is written verbatim and read through an `f64`
+/// when it is wider than an integer: the asymmetry the README states.
+#[test]
+#[cfg(all(feature = "json", not(feature = "exact-numbers")))]
+fn json_without_exact_numbers_writes_verbatim_and_reads_an_f64() {
+    use guatiao_serde::text::json;
+
+    let v = Value::from(Number::new("1.10").unwrap());
+    let doc = json::to_string(&v, Presentation::new()).unwrap();
+    assert_eq!(doc, "1.10", "written verbatim");
+    let back = json::from_str(&doc, Alloc::rust(), Presentation::new()).unwrap();
+    assert_eq!(
+        TryAsRef::<Number>::try_as_ref(&back).map(AsRef::<str>::as_ref),
+        Some("1.1"),
+        "read through serde_json's own f64"
+    );
 }
 
 /// Trailing rubbish is a malformed document, not a value with a tail.

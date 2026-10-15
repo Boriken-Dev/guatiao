@@ -3,9 +3,25 @@
 serde for guatiao values. One `Serialize` and one `DeserializeSeed`, so
 every serde data format can carry a value.
 
-Depends on `guatiao` and `serde`. Nothing else: the formats in
+Depends on `guatiao` and `serde`; each format is a feature that adds its
+parser (`json` is on by default and adds `serde_json`). The formats in
 `[dev-dependencies]` are there to test against and are not a position on
 which format you should use.
+
+| Flag | Adds | Needed for | Default |
+| --- | --- | --- | --- |
+| `json` | `serde_json` (with `raw_value`) | `text::json` | yes |
+| `exact-numbers` | `json` and `serde_json/arbitrary_precision` | reading a JSON number as its own text | no |
+| `toml` | `toml` | `text::toml` | no |
+| `yaml` | `serde-saphyr` | `text::yaml` | no |
+| `c-header` | `cbindgen` | regenerating `include/guatiao_serde.h` | no |
+
+**`exact-numbers` is not additive for the rest of your build.** Cargo
+unifies `serde_json`'s features, so with it on every crate using
+`serde_json` sees `arbitrary_precision`, and `#[serde(untagged)]` and
+`#[serde(flatten)]` numbers there stop deserialising. A library crate
+should leave it off; a binary, or the C artifacts (built `--all-features`),
+may turn it on.
 
 ## The whole surface
 
@@ -111,13 +127,12 @@ the reason.)
   token means nothing to TOML or YAML, which would write the struct out
   literally. Use `text::json`, or state the policy, when the spelling
   matters.
-- **A number comes back exactly**, because the default **`json`** feature
-  turns `serde_json/arbitrary_precision` on and a number arrives as its
-  own text rather than as an `f64` resolved before a visitor runs. It
-  rides with the format rather than being offered separately: cargo
-  unifies features across a build, so it reaches `serde_json::Value`
-  everywhere in a consumer's graph. A consumer who does not want that
-  turns `json` off and hands a `serde_json::Deserializer` to `ValueSeed`.
+- **A JSON number comes back exactly only with `exact-numbers`**, which
+  turns `serde_json/arbitrary_precision` on so a number arrives as its own
+  text rather than as an `f64` resolved before a visitor runs. Without it,
+  an integer that fits `i64`/`u64` is exact and anything else is an `f64`:
+  `1.10` reads `1.1`, a 30-digit integer reads as a float, and `1e400` is
+  refused by the parser. Writing is exact either way under `text::json`.
 - **A document nests at most `MAX_DEPTH` containers deep**, refused past
   that. `serde_json` caps its own recursion; another format need not, and
   this crate reads them all.
