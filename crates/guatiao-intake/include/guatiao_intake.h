@@ -204,7 +204,10 @@ const guatiao_value *guatiao_intake_resolve(const guatiao_value *schema, guatiao
 /*
  The flat keys one field projects onto, as a list of strings: its own,
  then one per field of every arm, spelled the way `guatiao_intake_flatten`
- writes them (a name holding a `.` or a bracket is `owner[a.b]`).
+ writes them (a name holding a `.` or a bracket is `owner[a.b]`). A
+ member that is itself a container stores its leaves below its key
+ (`auth.inner.plain`, `agent[0]`), and those are not listed: everything
+ the field writes is at or under one of these keys.
 
  Takes the schema and a key rather than a field, because **a field's
  name is not inside the field**: it is the key it is filed under in
@@ -233,7 +236,7 @@ guatiao_status guatiao_intake_flat_keys(const guatiao_value *schema,
  `GUATIAO_ERR_WRONG_KIND` when the key names no field, or the value's
  shape contradicts the field's kind at the top — a list where an object
  is declared, a tag naming no arm, a scalar field given a container — or
- it nests more than 128 containers deep; all of which are the same "it
+ it nests 128 or more containers deep; all of which are the same "it
  does not apply" the Rust side reports as `false`. **An empty container
  stores nothing**, and is `GUATIAO_OK` with an empty store.
 
