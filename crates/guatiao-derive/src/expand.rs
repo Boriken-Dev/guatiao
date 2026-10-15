@@ -41,6 +41,8 @@ use syn::{
     LitStr, PathArguments, Type, Variant,
 };
 
+use crate::rename::RenameRule;
+
 /// Which of the three derives is being expanded.
 ///
 /// They share every check — the shapes one supports, all three support —
@@ -87,12 +89,13 @@ fn try_expand(derive: Derive, input: TokenStream) -> syn::Result<TokenStream> {
             // The same reader the enum path uses, so a container-level
             // `#[map(...)]` is refused on a struct rather than ignored --
             // ignoring one would change the wire shape silently.
-            let krate = ContainerAttrs::read(derive, &ast.attrs, false)?.krate;
+            let container = ContainerAttrs::read(derive, &ast.attrs, false)?;
+            let krate = container.krate;
             let named = named_fields(derive, &ast.ident, &data.fields)?;
 
             let mut plan: Vec<FieldPlan> = Vec::new();
             for field in &named.named {
-                plan.push(FieldPlan::read(derive, field)?);
+                plan.push(FieldPlan::read(derive, field, container.rename_all)?);
             }
             reject_duplicate_keys(&plan)?;
 
@@ -200,14 +203,18 @@ enum MapDefault {
 }
 
 impl FieldPlan {
-    fn read(derive: Derive, field: &Field) -> syn::Result<FieldPlan> {
+    /// `rule` is the struct's `rename_all`; a field's own `rename` wins.
+    fn read(derive: Derive, field: &Field, rule: Option<RenameRule>) -> syn::Result<FieldPlan> {
         let ident = field
             .ident
             .clone()
             .expect("only named fields reach a FieldPlan");
         let attrs = FieldAttrs::read(derive, field)?;
         Ok(FieldPlan {
-            key: attrs.rename.unwrap_or_else(|| ident.to_string()),
+            key: attrs.rename.unwrap_or_else(|| {
+                let name = ident.to_string();
+                rule.map_or(name.clone(), |rule| rule.field(&name))
+            }),
             inner: option_inner(&field.ty).cloned(),
             skip: attrs.skip,
             default: attrs.default,
@@ -870,6 +877,9 @@ struct ContainerAttrs {
     /// `#[map(crate = <path>)]`: where the expansion finds `guatiao`,
     /// for a consumer that reaches it through a re-export.
     krate: Option<syn::Path>,
+    /// `#[map(rename_all = "..")]`: the case rule for every field of a
+    /// struct, or every variant of an enum.
+    rename_all: Option<RenameRule>,
 }
 
 impl ContainerAttrs {
@@ -883,6 +893,9 @@ impl ContainerAttrs {
             attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("crate") {
                     out.krate = Some(meta.value()?.parse()?);
+                    Ok(())
+                } else if meta.path.is_ident("rename_all") {
+                    out.rename_all = Some(RenameRule::parse(&meta.value()?.parse::<LitStr>()?)?);
                     Ok(())
                 } else if meta.path.is_ident("tag") && is_enum {
                     out.tag = Some(meta.value()?.parse::<LitStr>()?.value());
@@ -898,14 +911,16 @@ impl ContainerAttrs {
                     // silently ignored would change the wire shape.
                     Err(meta.error(format!(
                         "unrecognised `#[map(...)]` option on an enum. {label} knows \
-                         two: `tag = \"...\"`, the key a variant's name is stored under, \
-                         and `crate = <path>`, where `guatiao` is re-exported."
+                         three: `tag = \"...\"`, the key a variant's name is stored under, \
+                         `rename_all = \"...\"`, the case of every variant's name, and \
+                         `crate = <path>`, where `guatiao` is re-exported."
                     )))
                 } else {
                     Err(meta.error(format!(
                         "unrecognised `#[map(...)]` option on a struct. {label} takes \
-                         one here, `crate = <path>`: `rename = \"...\"`, `skip` and \
-                         `default` go on a field, and `tag` is an enum's."
+                         two here, `rename_all = \"...\"` and `crate = <path>`: \
+                         `rename = \"...\"`, `skip` and `default` go on a field, and \
+                         `tag` is an enum's."
                     )))
                 }
             })?;
@@ -945,7 +960,15 @@ impl VariantPlan {
     /// has**: an arm has a description as well as a title, so its doc
     /// comment is the description, the same as a struct field's; a choice
     /// has only a label, so its doc comment is the label.
-    fn read(derive: Derive, variant: &Variant, tagged: bool) -> syn::Result<VariantPlan> {
+    ///
+    /// `rule` is the enum's `rename_all`, for the variant's name only, as
+    /// serde applies it; a variant's own `rename` wins.
+    fn read(
+        derive: Derive,
+        variant: &Variant,
+        tagged: bool,
+        rule: Option<RenameRule>,
+    ) -> syn::Result<VariantPlan> {
         let label = derive.spelled();
         let mut rename = None;
         let mut other_span = None;
@@ -1052,7 +1075,7 @@ impl VariantPlan {
             Fields::Named(named) => {
                 let mut plan = Vec::new();
                 for field in &named.named {
-                    plan.push(FieldPlan::read(derive, field)?);
+                    plan.push(FieldPlan::read(derive, field, None)?);
                 }
                 reject_duplicate_keys(&plan)?;
                 plan
@@ -1070,7 +1093,10 @@ impl VariantPlan {
         };
 
         Ok(VariantPlan {
-            stored: rename.unwrap_or_else(|| variant.ident.to_string()),
+            stored: rename.unwrap_or_else(|| {
+                let name = variant.ident.to_string();
+                rule.map_or(name.clone(), |rule| rule.variant(&name))
+            }),
             unit: matches!(variant.fields, Fields::Unit),
             ident: variant.ident.clone(),
             fields,
@@ -1095,7 +1121,11 @@ fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Resul
         ));
     }
 
-    let ContainerAttrs { tag, krate } = ContainerAttrs::read(derive, &ast.attrs, true)?;
+    let ContainerAttrs {
+        tag,
+        krate,
+        rename_all,
+    } = ContainerAttrs::read(derive, &ast.attrs, true)?;
     let reroot = |tokens| crate::krate::reroot(tokens, krate.as_ref());
 
     // Before reading any variant, so the message is about the decision
@@ -1121,7 +1151,12 @@ fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Resul
 
     let mut variants = Vec::new();
     for variant in &data.variants {
-        variants.push(VariantPlan::read(derive, variant, tag.is_some())?);
+        variants.push(VariantPlan::read(
+            derive,
+            variant,
+            tag.is_some(),
+            rename_all,
+        )?);
     }
     reject_duplicate_variants(&variants)?;
     if let Some(second) = variants.iter().filter(|v| v.other.is_some()).nth(1) {

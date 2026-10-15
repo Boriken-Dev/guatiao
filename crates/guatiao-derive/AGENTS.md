@@ -37,6 +37,14 @@ cannot describe a value it refuses.
 | `default` | an absent key reads as the field type's `Default`; the field leaves the schema's `required` and the schema's `default` is that value |
 | `default = <expr>` | the same, with an expression of the field's type |
 
+On the struct or enum, **`#[map(rename_all = "...")]`** names every field
+of a struct, or every variant of an enum (its fields are left alone), by
+one case rule, as serde spells and applies them: `"lowercase"`,
+`"snake_case"`, `"kebab-case"`, `"SCREAMING_SNAKE_CASE"`. A field or
+variant's own `rename` wins. All three derives and `#[derive(Form)]` read
+it, so the value, the schema's `enum` and the form's keys agree; any
+other rule is refused by name.
+
 **`#[schema(...)]`** — what `Schema` adds. Registered by all three, so
 a field carrying one compiles under `ToValue` and `FromValue` alone; those
 two parse it and ignore it.
@@ -106,6 +114,7 @@ such key.
 | on | attribute | effect |
 | --- | --- | --- |
 | enum | `#[map(tag = "...")]` | the key the variant's name is stored under; required when any variant has fields |
+| enum | `#[map(rename_all = "...")]` | every variant's stored name by one case rule (`kebab-case`: `HighEfficiency` → `high-efficiency`); `rename` on a variant wins |
 | variant | `#[map(rename = "...")]` | the name stored instead of the variant's own |
 | variant | `#[map(other)]` | **unit enums only**, on one variant of the shape `Other(T)` with `T: From<&str> + AsRef<str>` (`String`): a name no other variant is stored as is kept there rather than refused, and written back as that text |
 | variant | `#[schema(title = "...")]` | an arm's title — **tagged enums only**: an arm is a subschema |
