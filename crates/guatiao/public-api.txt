@@ -4902,6 +4902,31 @@ pub macro guatiao::export_schema!
 pub macro guatiao::guatiao_library!
 pub macro guatiao::local_providers!
 pub macro guatiao::providers!
+#[non_exhaustive] pub enum guatiao::AllocError
+pub guatiao::AllocError::Failed
+pub guatiao::AllocError::NoAllocFn
+pub guatiao::AllocError::NoFreeFn
+pub guatiao::AllocError::Null
+pub guatiao::AllocError::TooLarge
+pub guatiao::AllocError::TooSmall
+pub guatiao::AllocError::TooSmall::declared: usize
+pub guatiao::AllocError::TooSmall::need: usize
+impl core::clone::Clone for guatiao::value::alloc::AllocError
+pub fn guatiao::value::alloc::AllocError::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::value::alloc::AllocError
+impl core::cmp::PartialEq for guatiao::value::alloc::AllocError
+pub fn guatiao::value::alloc::AllocError::eq(&self, &Self) -> bool
+impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::error::ValueError
+pub fn guatiao::value::error::ValueError::from(guatiao::value::alloc::AllocError) -> guatiao::value::error::ValueError
+impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(guatiao::value::alloc::AllocError) -> guatiao::value::status::Status
+impl core::error::Error for guatiao::value::alloc::AllocError
+impl core::fmt::Debug for guatiao::value::alloc::AllocError
+pub fn guatiao::value::alloc::AllocError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::value::alloc::AllocError
+pub fn guatiao::value::alloc::AllocError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::value::alloc::AllocError
+impl core::marker::StructuralPartialEq for guatiao::value::alloc::AllocError
 #[non_exhaustive] pub enum guatiao::MapError
 pub guatiao::MapError::BadValue
 pub guatiao::MapError::BadValue::expected: alloc::string::String
@@ -5041,6 +5066,16 @@ impl core::fmt::Display for guatiao::value::error::ValueError
 pub fn guatiao::value::error::ValueError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for guatiao::value::error::ValueError
 impl core::marker::StructuralPartialEq for guatiao::value::error::ValueError
+#[repr(C)] pub union guatiao::Payload
+impl guatiao::value::value::Payload
+pub fn guatiao::value::value::Payload::bool(bool) -> guatiao::value::value::Payload
+pub fn guatiao::value::value::Payload::bytes(guatiao::value::types::buffer::Buffer) -> guatiao::value::value::Payload
+pub fn guatiao::value::value::Payload::list(guatiao::value::types::list::List) -> guatiao::value::value::Payload
+pub fn guatiao::value::value::Payload::map(guatiao::value::types::map::Map) -> guatiao::value::value::Payload
+pub fn guatiao::value::value::Payload::number(guatiao::value::types::number::Number) -> guatiao::value::value::Payload
+pub fn guatiao::value::value::Payload::text(guatiao::value::types::text::Text) -> guatiao::value::value::Payload
+impl core::fmt::Debug for guatiao::value::value::Payload
+pub fn guatiao::value::value::Payload::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::Alloc
 impl guatiao::value::alloc::Alloc
 pub fn guatiao::value::alloc::Alloc::alloc(&self, usize, usize) -> core::result::Result<*mut u8, guatiao::value::alloc::AllocError>
