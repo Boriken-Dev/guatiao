@@ -52,7 +52,9 @@ pub unsafe extern "C" fn guatiao_value_free(v: *mut Value) -> Status {
 /// # Safety
 ///
 /// The pointers are null or valid, and `out` addresses writable storage
-/// for one value that does not already hold one.
+/// for one value that does not already hold one. `out` is not an input:
+/// pointing it at `src` is a contract violation, because the marker written
+/// on entry replaces `src` before it is read.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_value_clone(
     alloc: *const Allocator,
