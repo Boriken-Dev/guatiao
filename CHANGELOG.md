@@ -504,6 +504,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **An object kind with methods `x` and `mut_x` compiles.** Its lent
   tables' shims for the two had one name; they are `__guatiao_lentmut__<m>`
   and `__guatiao_lent__<m>` now, which no pair of method names can meet.
+- **A raw identifier is keyed without its `r#`.** A field `r#type` was
+  written, read, described and given form hints under the key `r#type`;
+  `ToValue`, `FromValue`, `Schema` and `Form` now key it `type`, as serde
+  does. *Migration:* a stored value keyed `r#type` is read as `type`;
+  rename the stored key, or keep it with `#[map(rename = "r#type")]`.
 
 ## [0.0.0-alpha.0] - 2026-09-27
 

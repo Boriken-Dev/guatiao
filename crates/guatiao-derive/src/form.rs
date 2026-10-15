@@ -48,6 +48,7 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
+use syn::ext::IdentExt;
 use syn::{Attribute, Data, DeriveInput, Fields, LitStr, Type};
 
 use crate::rename::RenameRule;
@@ -259,7 +260,7 @@ fn read_fields<'a>(
     let mut out = Vec::new();
     for field in fields {
         let ident = field.ident.as_ref().expect("only named fields reach here");
-        let mut key = ident.to_string();
+        let mut key = ident.unraw().to_string();
         if let Some(rule) = rule {
             key = rule.field(&key);
         }
