@@ -235,3 +235,47 @@ fn an_object_kind_is_never_served_by_a_provider() {
         Err(KindMismatch::ObjectKind)
     ));
 }
+
+/// The long form's `unload = <fn>`: asked after the live counts, and
+/// bound outside the macro's `unsafe`, so a plain function path is what it
+/// takes.
+mod unloading {
+    use core::sync::atomic::{AtomicUsize, Ordering};
+
+    use greeter_kind::Counter;
+
+    static ASKED: AtomicUsize = AtomicUsize::new(0);
+
+    /// The library's own say, counted.
+    unsafe extern "C" fn refuse() -> guatiao::Status {
+        ASKED.fetch_add(1, Ordering::SeqCst);
+        guatiao::Status::GUATIAO_ERR_BUSY
+    }
+
+    #[derive(Default, guatiao::Provider)]
+    #[provider(Counter)]
+    pub struct Idle;
+
+    impl Counter for Idle {
+        fn count(&self) -> i64 {
+            0
+        }
+    }
+
+    guatiao::providers!(
+        id = "unloading",
+        version = "1.0.0",
+        providers = [Idle],
+        unload = refuse
+    );
+
+    #[test]
+    fn the_long_forms_unload_is_asked_after_the_counts() {
+        assert_eq!(__guatiao_unload(), guatiao::Status::GUATIAO_ERR_BUSY);
+        assert_eq!(
+            ASKED.load(Ordering::SeqCst),
+            1,
+            "nothing alive, so it was asked"
+        );
+    }
+}

@@ -218,7 +218,7 @@ macro_rules! guatiao_library {
             // null or points at a host descriptor declaring its own size
             // that stays valid for the life of the process.
             let host = unsafe { $crate::library::Host::from_raw(host) };
-            let Some(host) = host else {
+            let ::core::option::Option::Some(host) = host else {
                 return ::core::ptr::null();
             };
             $crate::library::answer(|| $describe(host))
@@ -295,7 +295,24 @@ macro_rules! __guatiao_declares {
 /// writes answers `GUATIAO_ERR_BUSY` until the count is zero. The
 /// long form also takes `unload = <fn>`, an
 /// `unsafe extern "C" fn() -> Status` asked after that, for what only the
-/// library knows. See [`LibraryInfo::unload`].
+/// library knows. See [`LibraryInfo::unload`]. The expression is the
+/// caller's own code and gets no `unsafe` from the macro:
+///
+/// ```compile_fail
+/// use greeter_kind::Counter;
+/// #[derive(Default, guatiao::Provider)]
+/// #[provider(Counter)]
+/// pub struct C;
+/// impl Counter for C {
+///     fn count(&self) -> i64 { 0 }
+/// }
+/// guatiao::providers!(
+///     id = "leak",
+///     version = "1",
+///     providers = [C],
+///     unload = *(16usize as *const unsafe extern "C" fn() -> guatiao::Status)
+/// );
+/// ```
 ///
 /// # Call it from a crate that is only a `cdylib`
 ///
@@ -322,15 +339,15 @@ macro_rules! __guatiao_declares {
 macro_rules! providers {
     ($($provider:ty),+ $(,)?) => {
         $crate::providers!(
-            id = env!("CARGO_PKG_NAME"),
-            version = env!("CARGO_PKG_VERSION"),
+            id = ::core::env!("CARGO_PKG_NAME"),
+            version = ::core::env!("CARGO_PKG_VERSION"),
             providers = [$($provider),+]
         );
     };
     ($($provider:ty),+ ; declares = [$($pair:expr),* $(,)?]) => {
         $crate::providers!(
-            id = env!("CARGO_PKG_NAME"),
-            version = env!("CARGO_PKG_VERSION"),
+            id = ::core::env!("CARGO_PKG_NAME"),
+            version = ::core::env!("CARGO_PKG_VERSION"),
             providers = [$($provider),+],
             declares = [$($pair),*]
         );
@@ -355,8 +372,13 @@ macro_rules! providers {
         );
         $crate::__guatiao_unload!(
             providers = [$($provider),+],
-            // SAFETY: the library's own slot, called as the host would.
-            then = unsafe { ($unload)() }
+            then = {
+                // Bound outside the `unsafe` block, so the caller's
+                // expression gets none of it.
+                let unload: unsafe extern "C" fn() -> $crate::Status = $unload;
+                // SAFETY: the library's own slot, called as the host would.
+                unsafe { unload() }
+            }
         );
         $crate::guatiao_library!(__guatiao_describe);
     };
@@ -391,8 +413,10 @@ macro_rules! providers {
 #[macro_export]
 macro_rules! __guatiao_unload {
     (providers = [$($provider:ty),+], then = $then:expr) => {
+        // Safe to call, so its body is no `unsafe` context for `$then`;
+        // it coerces to the slot's `unsafe extern "C" fn` type.
         #[doc(hidden)]
-        unsafe extern "C" fn __guatiao_unload() -> $crate::Status {
+        extern "C" fn __guatiao_unload() -> $crate::Status {
             $crate::library::kind::catch(|| {
                 let mut seen = $crate::__private::alloc::vec::Vec::new();
                 let live = 0usize
@@ -426,8 +450,8 @@ macro_rules! __guatiao_unload {
 macro_rules! local_providers {
     ($($provider:ty),+ $(,)?) => {
         $crate::local_providers!(
-            id = env!("CARGO_PKG_NAME"),
-            version = env!("CARGO_PKG_VERSION"),
+            id = ::core::env!("CARGO_PKG_NAME"),
+            version = ::core::env!("CARGO_PKG_VERSION"),
             providers = [$($provider),+]
         );
     };
