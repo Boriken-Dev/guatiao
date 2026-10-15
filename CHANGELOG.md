@@ -127,6 +127,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A descriptor's array lengths are walked, never reserved for.** A
   corrupt `len` aborted the process allocating for it before a single
   element was read.
+- **`providers!(.., unload = <expr>)` gives the expression no `unsafe`.**
+  It was evaluated inside the macro's own `unsafe` block, so a raw
+  pointer dereference there compiled with none written; it is now bound
+  to a typed `let` first, and the slot the macro writes is a safe
+  `extern "C" fn`. The macros also name `::core::env!` and
+  `::core::option::Option::Some`, so a caller's own `env!` or `Some`
+  cannot change their expansion.
 - **A panic in a configured instance's `Drop` no longer aborts the host.**
   The `destroy` slot `#[derive(Provider)]` writes runs under the same
   catch as every other shim.
