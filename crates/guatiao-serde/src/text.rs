@@ -327,6 +327,10 @@ pub mod yaml {
                 E::SerdeUnknownVariant { .. } | E::SerdeUnknownField { .. } => "an unknown name",
                 E::TaggedEnumMismatch { .. } | E::UnsupportedTag { .. } => "an unsupported tag",
                 E::UnknownAnchor { .. } => "an alias names no anchor",
+                // The scanner's own message quotes the character.
+                E::ExternalMessage { msg, .. } if msg.starts_with("unexpected character") => {
+                    "an unexpected character"
+                }
                 _ => return DefaultMessageFormatter.format_message(err),
             })
         }
@@ -343,9 +347,18 @@ pub mod yaml {
             })
         });
         // The formatter's text is not neutralised the way the parser's own
-        // rendering is, so control characters are made inert here.
+        // rendering is, so control characters are made inert here, and
+        // only those: a quote is the parser's wording, not an escape.
         let detail = WithoutExcerpts.format_message(e.without_snippet());
-        Error::syntax(NAME, position, detail.escape_debug().to_string())
+        let mut inert = String::with_capacity(detail.len());
+        for c in detail.chars() {
+            if c.is_control() {
+                inert.extend(c.escape_default());
+            } else {
+                inert.push(c);
+            }
+        }
+        Error::syntax(NAME, position, inert)
     }
 
     /// A value as YAML.

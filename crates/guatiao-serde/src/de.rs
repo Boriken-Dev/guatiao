@@ -24,6 +24,7 @@ use serde::Deserializer;
 use serde::de::{DeserializeSeed, Error as _, MapAccess, SeqAccess, Visitor};
 
 use guatiao::value::alloc::Alloc;
+use guatiao::value::convert::TryAsRef;
 use guatiao::value::error::MAX_DEPTH;
 use guatiao::value::types::{Buffer, List, Map, Number, Text, Value};
 
@@ -229,7 +230,7 @@ impl<'de> Visitor<'de> for ValueSeed {
         // chance that it was a number. A document that spells that key
         // deliberately gets the number and loses the rest.
         if first == RAW_NUMBER {
-            let text: String = access.next_value()?;
+            let text = reserved_text(&mut access, inside)?;
             return number(self.alloc, &text);
         }
 
@@ -240,7 +241,7 @@ impl<'de> Visitor<'de> for ValueSeed {
         // forms (offset date-time, local date-time, local date, local time)
         // arrive this way, and read as the text they were written as.
         if first == TOML_DATETIME {
-            let text: String = access.next_value()?;
+            let text = reserved_text(&mut access, inside)?;
             return Text::new_in(self.alloc, &text)
                 .map(Value::from)
                 .map_err(A::Error::custom);
@@ -272,6 +273,19 @@ const RAW_NUMBER: &str = "$serde_json::private::Number";
 /// The `toml` crate's reserved key for a date or time carried as its text.
 const TOML_DATETIME: &str = "$__toml_private_datetime";
 
+/// The text under a reserved key, or an error that does not say what was
+/// there instead: reading it as a `String` refuses anything else with
+/// serde's own message, which quotes the value.
+fn reserved_text<'de, A: MapAccess<'de>>(
+    access: &mut A,
+    seed: ValueSeed,
+) -> Result<String, A::Error> {
+    let value = access.next_value_seed(seed)?;
+    TryAsRef::<str>::try_as_ref(&value)
+        .map(str::to_string)
+        .ok_or_else(|| A::Error::custom("a reserved key holds something other than text"))
+}
+
 /// A number from its text, or the error saying it is not one.
 fn number<E: serde::de::Error>(alloc: Alloc, text: &str) -> Result<Value, E> {
     Number::new_in(alloc, text)
@@ -285,7 +299,6 @@ fn number<E: serde::de::Error>(alloc: Alloc, text: &str) -> Result<Value, E> {
 mod tests {
     use super::*;
     use crate::{Bytes, Serializable};
-    use guatiao::value::convert::TryAsRef;
 
     fn read(json: &str) -> Value {
         let mut de = serde_json::Deserializer::from_str(json);
