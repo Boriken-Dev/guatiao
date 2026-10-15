@@ -320,6 +320,10 @@ class Ref:
     def _ptr(self):
         return ctypes.byref(self._require_node())
 
+    def _writable(self) -> None:
+        """Raises unless this node's tree may be changed through it."""
+        self.owner._check_writable()
+
     @property
     def tag(self) -> int:
         return _tag_of(self._node())
@@ -358,7 +362,7 @@ class Ref:
     def clone(self) -> "Value":
         """A deep, independent copy of this node, as its own `Value`."""
         node = self._require_node()
-        alloc = self.owner._ensure_alloc()
+        alloc = self.owner._clone_alloc()
         out = _abi.Value()
         check(
             _lib.core().guatiao_value_clone(
@@ -390,6 +394,7 @@ class Map(Ref):
         return Ref(self.owner, self.path + (key,))
 
     def __setitem__(self, key: str, value: Any) -> None:
+        self._writable()
         alloc = self.owner._ensure_alloc()
         tmp = _abi.Value()
         _write_python(tmp, value, alloc)
@@ -404,6 +409,7 @@ class Map(Ref):
             _free(tmp)
 
     def __delitem__(self, key: str) -> None:
+        self._writable()
         key_view, _buf = _make_str(key.encode("utf-8"))
         check(_lib.core().guatiao_map_discard(self._ptr(), key_view))
 
@@ -422,10 +428,12 @@ class Map(Ref):
             yield key, self[key]
 
     def clear(self) -> None:
+        self._writable()
         check(_lib.core().guatiao_map_clear(self._ptr()))
 
     def copy_from(self, src: Ref) -> None:
         """Copies every entry of `src`, replacing collisions in place."""
+        self._writable()
         alloc = self.owner._ensure_alloc()
         check(
             _lib.core().guatiao_map_copy_from(
@@ -465,6 +473,7 @@ class List(Ref):
         return Ref(self.owner, self.path + (index,))
 
     def __delitem__(self, index: int) -> None:
+        self._writable()
         index = self._checked_index(index)
         check(_lib.core().guatiao_list_discard(self._ptr(), index))
 
@@ -473,6 +482,7 @@ class List(Ref):
             yield Ref(self.owner, self.path + (i,))
 
     def append(self, value: Any) -> None:
+        self._writable()
         alloc = self.owner._ensure_alloc()
         tmp = _abi.Value()
         _write_python(tmp, value, alloc)
@@ -482,6 +492,7 @@ class List(Ref):
             _free(tmp)
 
     def clear(self) -> None:
+        self._writable()
         check(_lib.core().guatiao_list_clear(self._ptr()))
 
     def _cloned_elements(self) -> list:
@@ -515,6 +526,7 @@ class List(Ref):
             check(lib.guatiao_list_push(ctypes.byref(alloc), self._ptr(), ctypes.byref(tmp)))
 
     def __setitem__(self, index: int, value: Any) -> None:
+        self._writable()
         elements = self._cloned_elements()
         try:
             index = index + len(elements) if index < 0 else index
@@ -529,6 +541,7 @@ class List(Ref):
             _free_all(elements)
 
     def insert(self, index: int, value: Any) -> None:
+        self._writable()
         elements = self._cloned_elements()
         try:
             length = len(elements)
@@ -581,10 +594,16 @@ class Value(Ref):
         if self._closed:
             raise ValueError("this value is closed")
 
+    def _check_writable(self) -> None:
+        self._check_open()
+
     def _ensure_alloc(self) -> "_abi.Alloc":
         if self._alloc_override is not None:
             return self._alloc_override
         return _lib.core().alloc
+
+    def _clone_alloc(self) -> "_abi.Alloc":
+        return self._ensure_alloc()
 
     def close(self) -> None:
         if getattr(self, "_closed", True):

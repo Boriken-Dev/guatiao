@@ -24,6 +24,9 @@ class GuatiaoError(RuntimeError):
         text = f"{name}: {message}" if message else name
         super().__init__(text)
 
+    def __reduce__(self):
+        return (type(self), (self.status, self.message))
+
 
 class BadValue(GuatiaoError):
     pass
@@ -61,6 +64,13 @@ class ParseError(BadValue, ValueError):
         self.format = format
         self.line = line
         self.column = column
+
+    def __reduce__(self):
+        return (_parse_error, (self.message, self.format, self.line, self.column))
+
+
+def _parse_error(message: str, format: str, line: int, column: int) -> ParseError:
+    return ParseError(message, format=format, line=line, column=column)
 
 
 class Unsupported(GuatiaoError):

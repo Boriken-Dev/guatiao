@@ -18,6 +18,12 @@ import 'support.dart';
 void main() {
   setUpAll(libraryDir);
 
+  test('a process with narrow pointers is refused', () {
+    expect(() => native.requireWordSize(4), throwsUnsupportedError);
+    native.requireWordSize(8);
+    expect(sizeOf<IntPtr>(), 8);
+  });
+
   test('the core library loads and fills its allocator once', () {
     final lib = native.core();
     final first = lib.alloc;

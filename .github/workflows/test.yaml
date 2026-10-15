@@ -313,6 +313,18 @@ jobs:
         if: matrix.sdk == 'stable'
       - name: Test
         run: dart test
+        if: matrix.sdk == 'stable'
+        working-directory: bindings/dart
+        env:
+          # Absolute: the job runs from the package directory, so a path
+          # relative to the workspace would not resolve.
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+      - name: Test on the floor
+        # Only the top-level suites: `test/stable_only/` holds what needs an
+        # SDK newer than the floor, and one file that does not compile there
+        # fails the whole run.
+        run: dart test test/*_test.dart
+        if: matrix.sdk != 'stable'
         working-directory: bindings/dart
         env:
           # Absolute: the job runs from the package directory, so a path

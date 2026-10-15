@@ -257,3 +257,109 @@ def test_flatten_refuses_a_value_of_the_wrong_shape():
     with Value.from_python(_FLAT_SCHEMA) as schema, Value.from_python([1]) as given:
         with pytest.raises(WrongKind):
             intake.flatten(schema, "auth", given)
+
+def _churn():
+    """Reuses freed heap blocks, so a read through a stale address shows."""
+    return [Value.from_python({"k" * 40: ["x" * 64] * 8}) for _ in range(200)]
+
+
+def test_a_resolved_field_refuses_to_be_read_once_its_schema_is_closed():
+    schema = Value.from_python(_FLAT_SCHEMA)
+    host = intake.resolve(schema, "host")
+    schema.close()
+    junk = _churn()
+    with pytest.raises(ValueError, match="closed"):
+        host.to_python()
+    for item in junk:
+        item.close()
+
+
+def test_an_at_view_refuses_to_be_read_once_its_value_is_closed():
+    value = Value.from_python({"a": {"b": "c" * 50}})
+    view = intake.at(value, "a")
+    value.close()
+    junk = _churn()
+    with pytest.raises(ValueError, match="closed"):
+        view.to_python()
+    for item in junk:
+        item.close()
+
+
+def test_a_temporary_schema_lives_as_long_as_the_field_resolved_from_it():
+    import gc
+
+    host = intake.resolve(Value.from_python(_FLAT_SCHEMA), "host")
+    gc.collect()
+    junk = _churn()
+    assert host.as_map()["title"].to_python() == "Host"
+    for item in junk:
+        item.close()
+
+
+def test_a_resolved_field_follows_a_change_to_its_schema():
+    with Value.from_python(_FLAT_SCHEMA) as schema:
+        host = intake.resolve(schema, "host")
+        schema.as_map()["properties"].as_map()["host"] = {"title": "Moved"}
+        assert host.as_map()["title"].to_python() == "Moved"
+
+
+def test_nothing_can_be_changed_through_a_borrowed_view():
+    with Value.from_python(_FLAT_SCHEMA) as schema:
+        host = intake.resolve(schema, "host")
+        as_map = host.as_map()
+        with pytest.raises(TypeError):
+            del as_map["title"]
+        with pytest.raises(TypeError):
+            as_map["title"] = "x"
+        with pytest.raises(TypeError):
+            as_map.clear()
+        with pytest.raises(TypeError):
+            as_map.copy_from(as_map)
+        assert host.as_map()["title"].to_python() == "Host"
+
+    with Value.from_python({"tags": ["a", "b"]}) as value:
+        tags = intake.at(value, "tags").as_list()
+        with pytest.raises(TypeError):
+            tags.append("c")
+        with pytest.raises(TypeError):
+            del tags[0]
+        with pytest.raises(TypeError):
+            tags[0] = "z"
+        with pytest.raises(TypeError):
+            tags.insert(0, "z")
+        with pytest.raises(TypeError):
+            tags.clear()
+        assert value.to_python() == {"tags": ["a", "b"]}
+        # Reading, and copying out, are not changes.
+        with tags.clone() as copy:
+            assert copy.to_python() == ["a", "b"]
+
+
+def test_the_flat_calls_take_a_ref_where_they_take_a_value():
+    with Value.from_python(_FLAT_SCHEMA) as schema, Value.from_python(
+        {"host": "h", "env": {"PATH": "/bin"}}
+    ) as config:
+        fields = config.as_map()
+        assert intake.flatten(schema, "host", fields["host"]) == {"host": "h"}
+        assert intake.flatten(schema, "env", fields["env"]) == {"env[PATH]": "/bin"}
+        with Value.from_python({"flat": {"env[PATH]": "/bin"}}) as holder:
+            back = intake.unflatten(schema, "env", holder.as_map()["flat"])
+            with back:
+                assert back.to_python() == {"PATH": "/bin"}
+
+
+def test_a_store_that_is_not_text_to_text_is_a_type_error_in_every_form():
+    with Value.from_python(_FLAT_SCHEMA) as schema:
+        with Value.from_python({"host": 1}) as numbers:
+            with pytest.raises(TypeError):
+                intake.unflatten(schema, "host", numbers)
+        with Value.from_python(["host"]) as not_a_map:
+            with pytest.raises(TypeError):
+                intake.unflatten(schema, "host", not_a_map)
+        with pytest.raises(TypeError):
+            intake.unflatten(schema, "host", {"host": 1})
+        with pytest.raises(TypeError):
+            intake.unflatten(schema, "host", ["host"])
+        # Nothing stored is not a malformed store.
+        with Value.from_python({}) as empty:
+            assert intake.unflatten(schema, "host", empty) is None

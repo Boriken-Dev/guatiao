@@ -285,6 +285,29 @@ void main() {
       );
     });
 
+    test('a store that is not text to text is refused in every form', () {
+      final numbers = Value.fromDart({'host': 1});
+      addTearDown(numbers.close);
+      final notAMap = Value.fromDart(['host']);
+      addTearDown(notAMap.close);
+      expect(
+        () => intake.unflatten(flat, 'host', numbers),
+        throwsArgumentError,
+      );
+      expect(
+        () => intake.unflatten(flat, 'host', notAMap),
+        throwsArgumentError,
+      );
+      expect(
+        () => intake.unflatten(flat, 'host', {'host': 1}),
+        throwsArgumentError,
+      );
+      // Nothing stored is not a malformed store.
+      final empty = Value.fromDart(<String, Object?>{});
+      addTearDown(empty.close);
+      expect(intake.unflatten(flat, 'host', empty), isNull);
+    });
+
     test('flatten refuses a value of the wrong shape', () {
       final given = Value.fromDart([1]);
       addTearDown(given.close);
