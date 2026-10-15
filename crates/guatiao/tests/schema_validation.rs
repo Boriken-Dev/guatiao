@@ -272,3 +272,115 @@ mod derived {
         }
     }
 }
+
+#[test]
+fn a_field_declared_twice_is_refused_when_the_schema_is_finished() {
+    let twice = SchemaBuilder::new()
+        .field(FieldBuilder::new("a", KindBuilder::int()).required())
+        .field(FieldBuilder::new("b", KindBuilder::int()))
+        .field(FieldBuilder::new("a", KindBuilder::string()).required())
+        .finish();
+    assert_eq!(twice, Err(guatiao::ValueError::DuplicateKey));
+
+    // Inside an object kind, and against an arm's discriminant.
+    let nested = SchemaBuilder::new()
+        .field(FieldBuilder::new(
+            "tls",
+            KindBuilder::map(vec![
+                FieldBuilder::new("verify", KindBuilder::bool()),
+                FieldBuilder::new("verify", KindBuilder::bool()),
+            ]),
+        ))
+        .finish();
+    assert_eq!(nested, Err(guatiao::ValueError::DuplicateKey));
+
+    let arm_clash = SchemaBuilder::new()
+        .field(FieldBuilder::new(
+            "auth",
+            KindBuilder::variant(
+                "kind",
+                vec![
+                    guatiao::schema::build::ArmBuilder::new("pw", "Password")
+                        .field(FieldBuilder::new("kind", KindBuilder::string())),
+                ],
+            ),
+        ))
+        .finish();
+    assert_eq!(arm_clash, Err(guatiao::ValueError::DuplicateKey));
+
+    // The same names in different objects are different fields.
+    let fine = SchemaBuilder::new()
+        .field(FieldBuilder::new("a", KindBuilder::int()).required())
+        .field(FieldBuilder::new(
+            "inner",
+            KindBuilder::map(vec![FieldBuilder::new("a", KindBuilder::int())]),
+        ))
+        .finish();
+    assert!(fine.is_ok());
+}
+
+#[test]
+fn the_required_list_names_each_field_once() {
+    use guatiao::schema::vocab;
+    use guatiao::value::convert::TryAsRef;
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new("a", KindBuilder::int()).required())
+        .field(FieldBuilder::new("b", KindBuilder::int()).required())
+        .finish()
+        .unwrap();
+    let required = TryAsRef::<Map>::try_as_ref(&schema)
+        .and_then(|m| m.get(vocab::REQUIRED))
+        .and_then(TryAsRef::<List>::try_as_ref)
+        .expect("a required list");
+    let names: Vec<&str> = required
+        .iter()
+        .filter_map(TryAsRef::<str>::try_as_ref)
+        .collect();
+    assert_eq!(names, ["a", "b"]);
+}
+
+#[test]
+fn a_build_says_whether_it_enforces_patterns() {
+    assert_eq!(guatiao::schema::PATTERNS_ENFORCED, cfg!(feature = "regex"));
+    let schema = one("v", KindBuilder::string().pattern("^(first|all)$"));
+    let accepted = validate_text(field_of(&schema, "v"), "bogus").is_ok();
+    assert_eq!(
+        accepted,
+        !guatiao::schema::PATTERNS_ENFORCED,
+        "a build that does not enforce patterns accepts what they refuse"
+    );
+}
+
+#[cfg(feature = "regex")]
+#[test]
+fn a_pattern_digit_is_ascii_as_ecma_262_has_it() {
+    let schema = one("n", KindBuilder::string().pattern(r"^\d+$"));
+    let f = field_of(&schema, "n");
+    assert!(validate_text(f, "0123456789").is_ok());
+    assert!(
+        validate_text(f, "\u{663}\u{664}").is_err(),
+        "Arabic-Indic digits"
+    );
+    assert!(validate_value(f, &Value::from("\u{663}")).is_err());
+
+    let word = one("w", KindBuilder::string().pattern(r"^\w+$"));
+    let w = field_of(&word, "w");
+    assert!(validate_text(w, "snake_Case9").is_ok());
+    assert!(
+        validate_text(w, "caf\u{e9}").is_err(),
+        "word characters are ASCII"
+    );
+
+    let not_digit = one("d", KindBuilder::string().pattern(r"^\D+$"));
+    assert!(validate_text(field_of(&not_digit, "d"), "abc").is_ok());
+    assert!(validate_text(field_of(&not_digit, "d"), "1").is_err());
+    assert!(
+        validate_text(field_of(&not_digit, "d"), "a\u{663}").is_ok(),
+        "an Arabic-Indic digit is not an ASCII digit, so it is a non-digit"
+    );
+
+    // A backslash escaped is a backslash, then a letter.
+    let literal = one("l", KindBuilder::string().pattern(r"^\\d$"));
+    assert!(validate_text(field_of(&literal, "l"), r"\d").is_ok());
+    assert!(validate_text(field_of(&literal, "l"), "5").is_err());
+}

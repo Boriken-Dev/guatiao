@@ -163,7 +163,7 @@ impl From<ValueError> for Status {
             ValueError::NotANumber | ValueError::NotUtf8 => Status::GUATIAO_ERR_BAD_VALUE,
             ValueError::WrongKind | ValueError::UnknownTag(_) => Status::GUATIAO_ERR_WRONG_KIND,
             ValueError::OutOfRange => Status::GUATIAO_ERR_NOT_FOUND,
-            ValueError::TooDeep => Status::GUATIAO_ERR_BAD_VALUE,
+            ValueError::TooDeep | ValueError::DuplicateKey => Status::GUATIAO_ERR_BAD_VALUE,
         }
     }
 }
