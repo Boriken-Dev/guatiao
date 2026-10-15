@@ -435,6 +435,56 @@ fn a_parse_error_carries_no_text_from_the_document() {
     }
 }
 
+/// What is under a reserved key that is not text is refused without
+/// saying what it was, a scanner's refusal names no character of the
+/// document, and a message is not escaped beyond its control characters.
+#[test]
+fn reserved_keys_and_the_scanner_quote_nothing_either() {
+    let number = "4111111111111111";
+    let quotes_nothing = |what: &str, e: guatiao_serde::Error| {
+        for shown in [format!("{e}"), format!("{e:?}")] {
+            assert!(!shown.contains(number), "{what}: {shown}");
+        }
+    };
+
+    #[cfg(feature = "json")]
+    for key in ["$serde_json::private::Number", "$__toml_private_datetime"] {
+        let doc = format!("{{\"{key}\": {number}}}");
+        let e = guatiao_serde::text::json::from_str(&doc, Alloc::rust(), Presentation::new())
+            .unwrap_err();
+        quotes_nothing("json", e);
+    }
+    #[cfg(feature = "toml")]
+    {
+        let doc = format!("\"$__toml_private_datetime\" = {number}\n");
+        let e = guatiao_serde::text::toml::from_str(&doc, Alloc::rust(), Presentation::new())
+            .unwrap_err();
+        quotes_nothing("toml", e);
+    }
+    #[cfg(feature = "yaml")]
+    {
+        use guatiao_serde::text::yaml;
+
+        let doc = format!("\"$__toml_private_datetime\": {number}\n");
+        quotes_nothing(
+            "yaml",
+            yaml::from_str(&doc, Alloc::rust(), Presentation::new()).unwrap_err(),
+        );
+        for doc in ["x: @tok\n", "x: `tok\n"] {
+            let e = yaml::from_str(doc, Alloc::rust(), Presentation::new()).unwrap_err();
+            let guatiao_serde::Error::Syntax { detail, .. } = &e else {
+                panic!("a parse refusal: {e:?}");
+            };
+            assert_eq!(detail, "an unexpected character", "{doc:?}");
+        }
+        let e = yaml::from_str("a: [1,\n", Alloc::rust(), Presentation::new()).unwrap_err();
+        assert!(
+            !format!("{e}").contains('\\'),
+            "a quote is not escaped: {e}"
+        );
+    }
+}
+
 /// A column counts characters in every format: a key written outside
 /// ASCII moves it by its length, not by its UTF-8 bytes.
 #[test]
