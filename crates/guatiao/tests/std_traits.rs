@@ -5,6 +5,8 @@
 //! The standard traits the containers implement, each doing what the
 //! standard library's own type does with it.
 
+extern crate alloc;
+
 use core::fmt::Write as _;
 use std::collections::HashSet;
 use std::io::Write as _;
@@ -276,4 +278,32 @@ fn clone_panics_on_refused_content_and_clone_in_reports_it() {
         .unwrap_or("");
     assert!(message.contains("clone_in"), "{message}");
     assert!(tree == tree);
+}
+
+/// A text and a number compare with a `str` either way round, a text
+/// orders as its `str` does, and an entry clones and compares whole.
+#[test]
+fn text_compares_and_orders_as_str_and_an_entry_clones() {
+    use alloc::collections::BTreeMap;
+    use guatiao::Entry;
+
+    let text = Text::new("host");
+    assert!(text == "host" && "host" == text);
+    assert!(text == *"host" && *"host" == text);
+    assert!(text != "port");
+    let number = Number::new("1.10").unwrap();
+    assert!(number == "1.10" && "1.10" == number);
+    assert!(number != "1.1", "a number compares as the text it is");
+
+    let mut sorted: Vec<Text> = ["b", "a", "\u{e9}", "B"].map(Text::new).into();
+    sorted.sort();
+    assert_eq!(sorted, ["B", "a", "b", "\u{e9}"]);
+    let by_key: BTreeMap<Text, i32> = [(Text::new("z"), 1), (Text::new("m"), 2)].into();
+    assert_eq!(by_key.keys().map(|k| &**k).collect::<Vec<_>>(), ["m", "z"]);
+    assert_eq!(by_key.get("z"), Some(&1), "searched by its borrowed form");
+
+    let entry = Entry::new(Text::new("k"), Value::from(1));
+    let copy = entry.clone();
+    assert_eq!(copy, entry);
+    assert_ne!(copy, Entry::new(Text::new("k"), Value::from(2)));
 }

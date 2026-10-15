@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`Text` and `Number` compare with `str`**, either way round
+  (`text == "host"`, `"1.10" == number`); **`Text` is `Ord`** by its text,
+  so it sorts and keys a `BTreeMap` as `String` does; **`Entry` is
+  `Clone`, `PartialEq` and `Eq`**.
 - **`Value::write_to(out, alloc)`**, the `unsafe` step an export of a
   library or host takes to hand its answer to a C caller: a null `out` is
   `GUATIAO_ERR_NULL`, a null `alloc` writes the tree as built, a named one

@@ -441,6 +441,45 @@ impl PartialEq for Text {
 
 impl Eq for Text {}
 
+/// Compared with text as `String` is: `text == "host"`, either way round.
+impl PartialEq<str> for Text {
+    fn eq(&self, other: &str) -> bool {
+        **self == *other
+    }
+}
+
+impl PartialEq<&str> for Text {
+    fn eq(&self, other: &&str) -> bool {
+        **self == **other
+    }
+}
+
+impl PartialEq<Text> for str {
+    fn eq(&self, other: &Text) -> bool {
+        *self == **other
+    }
+}
+
+impl PartialEq<Text> for &str {
+    fn eq(&self, other: &Text) -> bool {
+        **self == **other
+    }
+}
+
+/// By the text, which for UTF-8 is byte order, as `str` and `String`
+/// order: what a `BTreeMap` or a sort of keys goes by.
+impl PartialOrd for Text {
+    fn partial_cmp(&self, other: &Text) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Text {
+    fn cmp(&self, other: &Text) -> core::cmp::Ordering {
+        (**self).cmp(&**other)
+    }
+}
+
 // SAFETY: the buffer is owned outright and reached only through `&self`
 // or `&mut self`; the allocator it recorded outlives it and may be
 // called from any thread, which is the contract on `Allocator`.

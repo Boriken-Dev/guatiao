@@ -2858,6 +2858,11 @@ pub fn guatiao::value::types::map::Entry::key(&self) -> &str
 pub fn guatiao::value::types::map::Entry::new(guatiao::value::types::text::Text, guatiao::value::value::Value) -> guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::value(&self) -> &guatiao::value::value::Value
 pub fn guatiao::value::types::map::Entry::value_mut(&mut self) -> &mut guatiao::value::value::Value
+impl core::clone::Clone for guatiao::value::types::map::Entry
+pub fn guatiao::value::types::map::Entry::clone(&self) -> guatiao::value::types::map::Entry
+impl core::cmp::Eq for guatiao::value::types::map::Entry
+impl core::cmp::PartialEq for guatiao::value::types::map::Entry
+pub fn guatiao::value::types::map::Entry::eq(&self, &guatiao::value::types::map::Entry) -> bool
 impl core::fmt::Debug for guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::value::types::map::IntoIter
@@ -2984,6 +2989,14 @@ pub fn guatiao::value::types::number::Number::clone(&self) -> guatiao::value::ty
 impl core::cmp::Eq for guatiao::value::types::number::Number
 impl core::cmp::PartialEq for guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::eq(&self, &guatiao::value::types::number::Number) -> bool
+impl core::cmp::PartialEq<&str> for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::eq(&self, &&str) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::number::Number> for &str
+pub fn &str::eq(&self, &guatiao::value::types::number::Number) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::number::Number> for str
+pub fn str::eq(&self, &guatiao::value::types::number::Number) -> bool
+impl core::cmp::PartialEq<str> for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::eq(&self, &str) -> bool
 impl core::convert::AsRef<[u8]> for guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::as_ref(&self) -> &[u8]
 impl core::convert::AsRef<str> for guatiao::value::types::number::Number
@@ -3076,8 +3089,20 @@ pub fn guatiao::value::types::text::Text::borrow(&self) -> &str
 impl core::clone::Clone for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::clone(&self) -> guatiao::value::types::text::Text
 impl core::cmp::Eq for guatiao::value::types::text::Text
+impl core::cmp::Ord for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::cmp(&self, &guatiao::value::types::text::Text) -> core::cmp::Ordering
 impl core::cmp::PartialEq for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::eq(&self, &guatiao::value::types::text::Text) -> bool
+impl core::cmp::PartialEq<&str> for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::eq(&self, &&str) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::text::Text> for &str
+pub fn &str::eq(&self, &guatiao::value::types::text::Text) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::text::Text> for str
+pub fn str::eq(&self, &guatiao::value::types::text::Text) -> bool
+impl core::cmp::PartialEq<str> for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::eq(&self, &str) -> bool
+impl core::cmp::PartialOrd for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::partial_cmp(&self, &guatiao::value::types::text::Text) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::AsMut<str> for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::as_mut(&mut self) -> &mut str
 impl core::convert::AsRef<[u8]> for guatiao::value::types::text::Text
@@ -3250,6 +3275,11 @@ pub fn guatiao::value::types::map::Entry::key(&self) -> &str
 pub fn guatiao::value::types::map::Entry::new(guatiao::value::types::text::Text, guatiao::value::value::Value) -> guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::value(&self) -> &guatiao::value::value::Value
 pub fn guatiao::value::types::map::Entry::value_mut(&mut self) -> &mut guatiao::value::value::Value
+impl core::clone::Clone for guatiao::value::types::map::Entry
+pub fn guatiao::value::types::map::Entry::clone(&self) -> guatiao::value::types::map::Entry
+impl core::cmp::Eq for guatiao::value::types::map::Entry
+impl core::cmp::PartialEq for guatiao::value::types::map::Entry
+pub fn guatiao::value::types::map::Entry::eq(&self, &guatiao::value::types::map::Entry) -> bool
 impl core::fmt::Debug for guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[repr(C)] pub struct guatiao::value::types::List
@@ -3422,6 +3452,14 @@ pub fn guatiao::value::types::number::Number::clone(&self) -> guatiao::value::ty
 impl core::cmp::Eq for guatiao::value::types::number::Number
 impl core::cmp::PartialEq for guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::eq(&self, &guatiao::value::types::number::Number) -> bool
+impl core::cmp::PartialEq<&str> for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::eq(&self, &&str) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::number::Number> for &str
+pub fn &str::eq(&self, &guatiao::value::types::number::Number) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::number::Number> for str
+pub fn str::eq(&self, &guatiao::value::types::number::Number) -> bool
+impl core::cmp::PartialEq<str> for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::eq(&self, &str) -> bool
 impl core::convert::AsRef<[u8]> for guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::as_ref(&self) -> &[u8]
 impl core::convert::AsRef<str> for guatiao::value::types::number::Number
@@ -3513,8 +3551,20 @@ pub fn guatiao::value::types::text::Text::borrow(&self) -> &str
 impl core::clone::Clone for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::clone(&self) -> guatiao::value::types::text::Text
 impl core::cmp::Eq for guatiao::value::types::text::Text
+impl core::cmp::Ord for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::cmp(&self, &guatiao::value::types::text::Text) -> core::cmp::Ordering
 impl core::cmp::PartialEq for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::eq(&self, &guatiao::value::types::text::Text) -> bool
+impl core::cmp::PartialEq<&str> for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::eq(&self, &&str) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::text::Text> for &str
+pub fn &str::eq(&self, &guatiao::value::types::text::Text) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::text::Text> for str
+pub fn str::eq(&self, &guatiao::value::types::text::Text) -> bool
+impl core::cmp::PartialEq<str> for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::eq(&self, &str) -> bool
+impl core::cmp::PartialOrd for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::partial_cmp(&self, &guatiao::value::types::text::Text) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::AsMut<str> for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::as_mut(&mut self) -> &mut str
 impl core::convert::AsRef<[u8]> for guatiao::value::types::text::Text
@@ -4262,6 +4312,11 @@ pub fn guatiao::value::types::map::Entry::key(&self) -> &str
 pub fn guatiao::value::types::map::Entry::new(guatiao::value::types::text::Text, guatiao::value::value::Value) -> guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::value(&self) -> &guatiao::value::value::Value
 pub fn guatiao::value::types::map::Entry::value_mut(&mut self) -> &mut guatiao::value::value::Value
+impl core::clone::Clone for guatiao::value::types::map::Entry
+pub fn guatiao::value::types::map::Entry::clone(&self) -> guatiao::value::types::map::Entry
+impl core::cmp::Eq for guatiao::value::types::map::Entry
+impl core::cmp::PartialEq for guatiao::value::types::map::Entry
+pub fn guatiao::value::types::map::Entry::eq(&self, &guatiao::value::types::map::Entry) -> bool
 impl core::fmt::Debug for guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[repr(C)] pub struct guatiao::value::List
@@ -4420,6 +4475,14 @@ pub fn guatiao::value::types::number::Number::clone(&self) -> guatiao::value::ty
 impl core::cmp::Eq for guatiao::value::types::number::Number
 impl core::cmp::PartialEq for guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::eq(&self, &guatiao::value::types::number::Number) -> bool
+impl core::cmp::PartialEq<&str> for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::eq(&self, &&str) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::number::Number> for &str
+pub fn &str::eq(&self, &guatiao::value::types::number::Number) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::number::Number> for str
+pub fn str::eq(&self, &guatiao::value::types::number::Number) -> bool
+impl core::cmp::PartialEq<str> for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::eq(&self, &str) -> bool
 impl core::convert::AsRef<[u8]> for guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::as_ref(&self) -> &[u8]
 impl core::convert::AsRef<str> for guatiao::value::types::number::Number
@@ -4551,8 +4614,20 @@ pub fn guatiao::value::types::text::Text::borrow(&self) -> &str
 impl core::clone::Clone for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::clone(&self) -> guatiao::value::types::text::Text
 impl core::cmp::Eq for guatiao::value::types::text::Text
+impl core::cmp::Ord for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::cmp(&self, &guatiao::value::types::text::Text) -> core::cmp::Ordering
 impl core::cmp::PartialEq for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::eq(&self, &guatiao::value::types::text::Text) -> bool
+impl core::cmp::PartialEq<&str> for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::eq(&self, &&str) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::text::Text> for &str
+pub fn &str::eq(&self, &guatiao::value::types::text::Text) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::text::Text> for str
+pub fn str::eq(&self, &guatiao::value::types::text::Text) -> bool
+impl core::cmp::PartialEq<str> for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::eq(&self, &str) -> bool
+impl core::cmp::PartialOrd for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::partial_cmp(&self, &guatiao::value::types::text::Text) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::AsMut<str> for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::as_mut(&mut self) -> &mut str
 impl core::convert::AsRef<[u8]> for guatiao::value::types::text::Text
@@ -5189,6 +5264,11 @@ pub fn guatiao::value::types::map::Entry::key(&self) -> &str
 pub fn guatiao::value::types::map::Entry::new(guatiao::value::types::text::Text, guatiao::value::value::Value) -> guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::value(&self) -> &guatiao::value::value::Value
 pub fn guatiao::value::types::map::Entry::value_mut(&mut self) -> &mut guatiao::value::value::Value
+impl core::clone::Clone for guatiao::value::types::map::Entry
+pub fn guatiao::value::types::map::Entry::clone(&self) -> guatiao::value::types::map::Entry
+impl core::cmp::Eq for guatiao::value::types::map::Entry
+impl core::cmp::PartialEq for guatiao::value::types::map::Entry
+pub fn guatiao::value::types::map::Entry::eq(&self, &guatiao::value::types::map::Entry) -> bool
 impl core::fmt::Debug for guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[repr(C)] pub struct guatiao::List
@@ -5380,6 +5460,14 @@ pub fn guatiao::value::types::number::Number::clone(&self) -> guatiao::value::ty
 impl core::cmp::Eq for guatiao::value::types::number::Number
 impl core::cmp::PartialEq for guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::eq(&self, &guatiao::value::types::number::Number) -> bool
+impl core::cmp::PartialEq<&str> for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::eq(&self, &&str) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::number::Number> for &str
+pub fn &str::eq(&self, &guatiao::value::types::number::Number) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::number::Number> for str
+pub fn str::eq(&self, &guatiao::value::types::number::Number) -> bool
+impl core::cmp::PartialEq<str> for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::eq(&self, &str) -> bool
 impl core::convert::AsRef<[u8]> for guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::as_ref(&self) -> &[u8]
 impl core::convert::AsRef<str> for guatiao::value::types::number::Number
@@ -5525,8 +5613,20 @@ pub fn guatiao::value::types::text::Text::borrow(&self) -> &str
 impl core::clone::Clone for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::clone(&self) -> guatiao::value::types::text::Text
 impl core::cmp::Eq for guatiao::value::types::text::Text
+impl core::cmp::Ord for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::cmp(&self, &guatiao::value::types::text::Text) -> core::cmp::Ordering
 impl core::cmp::PartialEq for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::eq(&self, &guatiao::value::types::text::Text) -> bool
+impl core::cmp::PartialEq<&str> for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::eq(&self, &&str) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::text::Text> for &str
+pub fn &str::eq(&self, &guatiao::value::types::text::Text) -> bool
+impl core::cmp::PartialEq<guatiao::value::types::text::Text> for str
+pub fn str::eq(&self, &guatiao::value::types::text::Text) -> bool
+impl core::cmp::PartialEq<str> for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::eq(&self, &str) -> bool
+impl core::cmp::PartialOrd for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::partial_cmp(&self, &guatiao::value::types::text::Text) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::AsMut<str> for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::as_mut(&mut self) -> &mut str
 impl core::convert::AsRef<[u8]> for guatiao::value::types::text::Text
