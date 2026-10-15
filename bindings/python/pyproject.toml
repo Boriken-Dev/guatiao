@@ -34,7 +34,7 @@ Homepage = "https://github.com/Boriken-Dev/guatiao/"
 Issues = "https://github.com/Boriken-Dev/guatiao/issues"
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/.*"]
+exclude = ["/.*", "*.local.*"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/guatiao"]
