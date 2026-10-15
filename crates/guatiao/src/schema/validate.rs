@@ -624,6 +624,14 @@ fn one_of_members(kind: Kind<'_>) -> String {
 }
 
 /// Whether every entry of a map of **typed** values is accepted.
+///
+/// Each value is the type its field's kind names (see [`validate_value`]),
+/// no key is undeclared and every required field is present.
+///
+/// **A `pattern` is checked only if this build enforces them**: without
+/// the `regex` feature it is carried and read but never evaluated, and a
+/// value it would refuse is accepted. [`PATTERNS_ENFORCED`](super::PATTERNS_ENFORCED)
+/// says which build this is.
 pub fn validate_map(schema: SchemaRef<'_>, values: &Value) -> Result<(), ValidationError> {
     if values.tag() != Ok(Tag::GUATIAO_MAP) {
         return Err(bad("", "a map of values"));
