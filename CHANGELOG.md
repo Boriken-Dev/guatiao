@@ -139,6 +139,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `message` string value that never quotes the document. A C, Python or
   Dart caller can show where a configuration file is wrong instead of a
   bare `GUATIAO_ERR_BAD_VALUE`.
+- **The Python and Dart bindings wrap the flat projection and the parse
+  positions.** `guatiao.intake` / `package:guatiao/intake.dart` gain
+  `resolve`, `flat_keys`, `flatten` and `unflatten` (Dart `resolve`,
+  `flatKeys`, `flatten`, `unflatten`) over `guatiao_intake_resolve`,
+  `_flat_keys`, `_flatten` and `_unflatten`, and `serde.loads` reads through
+  the `_parse_ex` entry points, raising `ParseError` with `format`, `line`
+  and `column`: in Python a `BadValue` and a `ValueError`, in Dart a
+  `BadValue` and a `FormatException`, so an existing `except BadValue` /
+  `on BadValue` still catches it. A kind's borrowed object arguments are
+  not wrapped by either binding.
 
 ### Changed
 
@@ -429,6 +439,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The Python binding frees what it builds when a conversion fails.** A
+  value that failed half way (an element that cannot convert, a refused
+  map or list move), and a list assignment or insert that raised after
+  cloning its siblings, each left blocks allocated; the builder now frees
+  its target on any failure and the cloned elements on every path.
+- **The Dart package exports the struct types its public API names**
+  (`guatiao_value`, `guatiao_alloc`) from `package:guatiao/guatiao.dart`,
+  so a consumer can write `Pointer<guatiao_value>` without importing a
+  `src/` file.
 - **A `Simple` merge of two lists nested past `MAX_DEPTH` is
   `MergeError::Build(TooDeep)`** (`GUATIAO_ERR_BAD_VALUE` from
   `guatiao_merge`), where it overflowed the stack; and a stored absent map

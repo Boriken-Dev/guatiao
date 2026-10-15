@@ -176,6 +176,10 @@ provider's own words when it gave any.
   Everything else about a number's text survives a round trip.
 - `List.insert` and `list[i] = x` rebuild the list, because the C ABI
   only appends and removes. `append` and `del list[i]` are direct.
+- Runs where CPython can load a native library, on 64-bit targets only:
+  every pointer and `size_t` in the ABI is eight bytes. It does not run in
+  a browser (Pyodide has no way to load the library) or on a 32-bit
+  interpreter.
 - A `Registry` is used from one thread at a time, and a `Value` is not
   shared between threads without a lock of your own.
 - `Registry.unload` unmaps a library, and nothing can check that you have

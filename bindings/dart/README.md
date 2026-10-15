@@ -30,6 +30,14 @@ It works with any shared library that exports the ABI, whether that is
 - **Importing never fails** — a native library is looked for on first
   use, and a missing one says every place that was searched.
 
+## Platforms
+
+Android, iOS, Linux, macOS and Windows, on 64-bit targets only: every
+pointer and `size_t` in the ABI is eight bytes. **Not on the web**:
+`dart:ffi` does not exist in a browser, so the package cannot load there
+and `pubspec.yaml` declares no `web` platform. The package asks for Dart
+3.6 or newer.
+
 ## Installation
 
 ```bash
@@ -66,7 +74,7 @@ lacks throws `MissingSymbol` naming it, and everything else works.
 | `guatiao_intake` | `package:guatiao/intake.dart` |
 
 The two optional libraries are looked for the same way, in the same
-directory, only when `serde` or `form` is first used.
+directory, only when `serde` or `intake` is first used.
 
 ## Quick start
 
@@ -164,19 +172,28 @@ is a complete worked example.
 ```dart
 import 'package:guatiao/guatiao.dart';
 import 'package:guatiao/serde.dart' as serde;
-import 'package:guatiao/intake.dart' as form;
+import 'package:guatiao/intake.dart' as intake;
 
 final value = serde.loads('{"port": 5900}');            // Format.json by default
 final text = serde.dumps(value, format: Format.yaml);
 final pretty = serde.dumps(value, pretty: true);
 
-final problem = form.check(schema, formDoc);            // null when the form fits
-final sections = form.layout(schema, formDoc);
-final shown = form.isVisible(schema, formDoc, 'tls.verify', values);
+final problem = intake.check(schema, formDoc);          // null when the form fits
+final sections = intake.layout(schema, formDoc);
+final shown = intake.isVisible(schema, formDoc, 'tls.verify', values);
+
+// A front end that keeps text under flat keys (`agent[0].name`, `env[PATH]`):
+final field = intake.resolve(schema, 'auth.password');  // the schema field, or null
+final keys = intake.flatKeys(schema, 'auth');           // ['auth', 'auth.username', ...]
+final store = intake.flatten(schema, 'auth', authValue);// {'auth': 'userpass', ...}
+final back = intake.unflatten(schema, 'auth', store);   // a Value to close, or null
 ```
 
-A format the loaded library does not export throws `UnsupportedError`
-naming the symbol and the feature it belongs to.
+A document that does not parse throws `ParseError`, which is a
+`BadValue` and a `FormatException` carrying `format`, `line` and
+`column` (from 1; 0 when the parser did not say where). A format the
+loaded library does not export throws `UnsupportedError` naming the
+symbol and the feature it belongs to.
 
 ### Reading a value you were handed
 
@@ -189,8 +206,8 @@ view.toDart();
 ```
 
 It touches no library and no global state, so it is safe inside an
-`isolateGroupBound` callback that a native thread calls. The form
-functions take any `Ref`, a borrowed one included.
+`isolateGroupBound` callback that a native thread calls. The
+intake functions take any `Ref`, a borrowed one included.
 
 ## Embedding it, and sharing its types
 
@@ -249,8 +266,7 @@ words when it gave any.
   released what you took from it first — every value it built through its
   own allocator, every table, `ctx` and `Instance`. `retire` has no such
   condition and leaves the library mapped.
-- 64-bit platforms only: every pointer and `size_t` in the ABI is eight
-  bytes.
+- 64-bit platforms only, and not in a browser (see Platforms above).
 
 ## API overview
 
@@ -258,7 +274,7 @@ words when it gave any.
 | --- | --- |
 | `package:guatiao/guatiao.dart` | `Value`, `Ref`, `MapRef`, `ListRef`, `absent`, `Registry`, `Instance`, `kindTable`, the error classes |
 | `package:guatiao/serde.dart` | `loads` / `dumps` for JSON, TOML, YAML |
-| `package:guatiao/intake.dart` | `check`, `layout`, `isVisible` |
+| `package:guatiao/intake.dart` | `check`, `layout`, `isVisible`, `at`, `forSchema`, `formFor`, `resolve`, `flatKeys`, `flatten`, `unflatten` |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/AGENTS.md)
 is the full API reference and ships with the package. The C ABI is

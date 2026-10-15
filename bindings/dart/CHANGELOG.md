@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `package:guatiao/intake.dart` wraps the flat `key -> text` projection:
+  `resolve`, `flatKeys`, `flatten` and `unflatten`.
+- `loads` reads through the `_parse_ex` entry points and throws
+  `ParseError` (a `BadValue` and a `FormatException`) carrying `format`,
+  `line` and `column`.
+- `guatiao_value` and `guatiao_alloc` are exported from
+  `package:guatiao/guatiao.dart`, which the public API names in its
+  signatures.
+
+### Changed
+
+- The generated bindings follow the C header: the status enum's tag is
+  `guatiao_status_code`, and `guatiao_status` is the plain integer
+  typedef. No name this package exports changes.
+
 ## [0.0.0-alpha.0] - 2026-09-27
 
 ### Added
