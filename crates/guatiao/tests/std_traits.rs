@@ -288,11 +288,14 @@ fn text_compares_and_orders_as_str_and_an_entry_clones() {
     use guatiao::Entry;
 
     let text = Text::new("host");
-    assert!(text == "host" && "host" == text);
-    assert!(text == *"host" && *"host" == text);
+    assert!(text == "host");
+    assert!("host" == text);
+    assert!(text == *"host");
+    assert!(*"host" == text);
     assert!(text != "port");
     let number = Number::new("1.10").unwrap();
-    assert!(number == "1.10" && "1.10" == number);
+    assert!(number == "1.10");
+    assert!("1.10" == number);
     assert!(number != "1.1", "a number compares as the text it is");
 
     let mut sorted: Vec<Text> = ["b", "a", "\u{e9}", "B"].map(Text::new).into();
