@@ -6,8 +6,8 @@ trait. **Do not depend on this crate directly**; it is re-exported from
 the crate it serves:
 
 ```toml
-guatiao = { version = "0.1", features = ["derive"] }     # ToValue, FromValue, Schema
-guatiao = { version = "0.1", features = ["provider"] }   # plus #[guatiao::kind], #[derive(Provider)]
+guatiao = { version = "=0.0.0-alpha.1", features = ["derive"] }     # ToValue, FromValue, Schema
+guatiao = { version = "=0.0.0-alpha.1", features = ["provider"] }   # plus #[guatiao::kind], #[derive(Provider)]
 ```
 
 A macro and a trait live in different namespaces, so `ToValue` names both

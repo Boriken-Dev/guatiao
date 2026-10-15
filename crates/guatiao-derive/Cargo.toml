@@ -1,6 +1,6 @@
 [package]
 name = "guatiao-derive"
-description = "`#[derive(ToValue)]` and `#[derive(FromValue)]` for guatiao -- the proc-macro half, re-exported by `guatiao = { features = [\"derive\"] }`"
+description = "Derive macros for guatiao: ToValue, FromValue and Schema, and, behind features, the `kind` attribute and the Provider and Form derives -- the proc-macro half, reached through `guatiao` features"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

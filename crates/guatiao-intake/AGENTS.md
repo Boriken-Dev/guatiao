@@ -369,7 +369,7 @@ guatiao_status guatiao_intake_is_visible(const guatiao_value *schema, const guat
 
 ## Gotchas
 
-- `equals` is compared **structurally**, as `guatiao::value::read::equal`
+- `equals` is compared **structurally**, as `==` on `guatiao::Value`
   does. A number is its text, so `443` and `443.0` are different values.
 - **A condition compares; it does not evaluate a schema.** `in` covers
   "any of these values", which is what every surveyed form needed. A

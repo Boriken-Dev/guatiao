@@ -5,7 +5,7 @@ name = "guatiao-intake"
 # `DEP_GUATIAO_INTAKE_INCLUDE` and copies `guatiao_intake.h` beside its own
 # header -- the arrangement `guatiao` itself has.
 links = "guatiao-intake"
-description = "how a guatiao schema is shown -- sections, widget hints and conditional visibility, as a value beside the schema"
+description = "Taking a guatiao value in from a person: the path grammar, flat key-to-text storage, checking a store of text, and how a schema is shown -- sections, widget hints and conditional visibility"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
