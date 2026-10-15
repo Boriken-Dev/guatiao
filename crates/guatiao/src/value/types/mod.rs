@@ -104,7 +104,8 @@ pub(crate) fn cloned<T>(copy: Result<T, ValueError>, layout: Layout) -> T {
     }
 }
 
-/// The layout of `n` bytes, for [`or_abort`]: one byte when `n` has none.
+/// The layout of `n` bytes, for [`or_abort`]: `Layout::array::<u8>(n)`, and
+/// one byte when `n` exceeds `isize::MAX`, which has no layout.
 pub(crate) fn bytes_layout(n: usize) -> Layout {
     Layout::array::<u8>(n).unwrap_or(Layout::new::<u8>())
 }

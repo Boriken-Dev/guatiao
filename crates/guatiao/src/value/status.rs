@@ -35,10 +35,10 @@ enum StatusCode {
     /// The operation happened.
     GUATIAO_OK = 0,
     /// A value could not be stored: text that is not a number, or bytes
-    /// that are not UTF-8. Nothing was written.
+    /// that are not UTF-8. An `out` parameter is left ABSENT.
     GUATIAO_ERR_BAD_VALUE = 7,
     /// The allocator could not satisfy the request, or was unusable.
-    /// Nothing was written.
+    /// An `out` parameter is left ABSENT.
     GUATIAO_ERR_ALLOC = 8,
     /// The operation does not apply to this value's kind.
     GUATIAO_ERR_WRONG_KIND = 9,
@@ -65,10 +65,10 @@ impl Status {
     /// The operation happened.
     pub const GUATIAO_OK: Status = Status(StatusCode::GUATIAO_OK as u32);
     /// A value could not be stored: text that is not a number, or bytes
-    /// that are not UTF-8. Nothing was written.
+    /// that are not UTF-8. An `out` parameter is left ABSENT.
     pub const GUATIAO_ERR_BAD_VALUE: Status = Status(StatusCode::GUATIAO_ERR_BAD_VALUE as u32);
     /// The allocator could not satisfy the request, or was unusable.
-    /// Nothing was written.
+    /// An `out` parameter is left ABSENT.
     pub const GUATIAO_ERR_ALLOC: Status = Status(StatusCode::GUATIAO_ERR_ALLOC as u32);
     /// The operation does not apply to this value's kind.
     pub const GUATIAO_ERR_WRONG_KIND: Status = Status(StatusCode::GUATIAO_ERR_WRONG_KIND as u32);
