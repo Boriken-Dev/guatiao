@@ -48,8 +48,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   implement `core::error::Error`, and the derives and `providers!` reach
   `alloc` items through a hidden `guatiao::__private::alloc`, so the crate
   that expands them declares nothing.
+- **`guatiao-intake`: the path grammar is stricter.** `a[0]b`, `a["x"]y`,
+  `a.[0]` and `[a[b]` are refused (`PathError::MissingSeparator` is new, and
+  `EmptyField` and `UnclosedIndex` now cover the others), and digits in a
+  bracket are a position only without a leading zero: `a[01]` is the key
+  `01` and `a[007]` the key `007`, no longer the positions 1 and 7.
+  `path::needs_quoting` follows. *Migration:* write a key that starts with
+  `0` as itself (`env[01]`) and a position as plain digits; a text that
+  relied on the old reading now fails to parse and names its offset.
+- **`guatiao-intake`: `flat::split` reads the key with the path grammar.**
+  It returns `Option<(&str, Cow<str>)>` (it was `Option<(&str, &str)>`),
+  splits before the **last** segment, and agrees with `flatten` and `keys`
+  for a member whose name needs a bracket. *Migration:* compare or borrow
+  the member through the `Cow` (`&*member`, `member == "x"`).
+- **`guatiao-intake`: a top-level field whose key holds a `.`, a bracket or
+  nothing is stored under a bracket key** (`a.b` as `[a.b]`), so it no
+  longer shares a key with the member `b` of a field `a`. A key written the
+  old way still resolves to the field. *Migration:* a front end that
+  builds store keys itself asks `flat::keys` for them.
 
 ### Fixed
+
+- **`guatiao-intake`: `unflatten` no longer loses a list or an open map
+  when a sibling key sorts between the field name and its `[`.** A store
+  holding `agent[0]` beside `agentName` or `env[PATH]` beside `env-file`
+  read back as nothing, while `validate_texts` called it fine. `flatten`
+  also stops at `MAX_DEPTH` (answering `false`) as `unflatten` already did,
+  and `flat::keys` lists what `flatten` writes for a member with a `.` in
+  its name.
 
 - **A handle held across an `.await` no longer makes the future `!Send`.**
   `Remote`, `Instance` and `Object` were `Send` only for a kind that is

@@ -93,10 +93,14 @@ Segment::{Field(&str), Index(usize), Key(Cow<str>)}
 
 // projecting a value onto flat `key -> text` storage
 flatten(field, &value, &mut BTreeMap<String, String>) -> bool
+                       // false: the shape contradicts the kind, or the value
+                       // nests past MAX_DEPTH (what lies past it is not written)
 unflatten(alloc, field, &store) -> Option<Value>
 resolve(schema, key) -> Option<FieldRef>         // for the schema alone
 resolve_in(schema, key, selected) -> Result<FieldRef, ValidationError>
-keys(field) -> Vec<String>  /  split(key)  /  is_sensitive(schema, key)
+keys(field) -> Vec<String>                       // every key flatten can write for it
+split(key) -> Option<(&str, Cow<str>)>           // (owner key, last segment's name)
+is_sensitive(schema, key) -> bool
 clear_under(&mut store, path)                    // everything AT or UNDER it
 SEPARATOR = '.'
 
@@ -111,11 +115,28 @@ applied, not by how it is written -- so `env[PATH]` needs no ceremony
 and `["1"]` is the escape for a key that looks like a position. A path
 is rootless: no leading `.`, no `$`.
 
+**One spelling means one thing, and the parser refuses the near misses**:
+`a[0]b` and `a["x"]y` (a segment after a bracket needs a `.`), `a.[0]` (a
+`.` is followed by a name), and `[a[b]` (a bare bracket holds no `[`;
+`["a[b]"]` is that key) are `PathError`s (`MissingSeparator`,
+`EmptyField`, `UnclosedIndex`). A position is digits **without a leading
+zero**: `[01]` is the key `01`, not position 1, and a number too large for
+a `usize` is a key too.
+
+**The store spells a key the way `named` does**: `owner.member`, or
+`owner[a.b]` when the member's name holds a `.`, a bracket or nothing; a
+top-level field called `a.b` is stored under `[a.b]`, so it never shares a
+key with the member `b` of a field `a`. `keys` lists exactly what
+`flatten` writes and `split` reads the key with the path grammar. A
+store key off the grammar (`agent.[0]`) is not found by `unflatten` and
+`validate_texts` refuses it as undeclared.
+
 ```rust
 // can this name be written as it stands?
 path::is_bare_name(name) -> bool    // a Field segment: non-empty, no `.` `[` `]`
 path::needs_quoting(key) -> bool    // a bracket key: empty, leading `"`, a
-                                    // bracket, or all digits
+                                    // bracket, or a position (digits, no
+                                    // leading zero, fits a usize)
 ```
 
 **Ask `is_bare_name` when your own surface cannot quote.** A schema may

@@ -58,12 +58,23 @@ fn a_path_may_start_with_a_bracket() {
     assert_eq!(segments("[0].host"), [Segment::Index(0), field("host")]);
 }
 
-/// Digits and only digits are a position. Everything else in brackets is
-/// a key, and a key is never read as a position.
+/// Digits with no leading zero are a position. Everything else in brackets
+/// is a key, and a key is never read as a position.
 #[test]
 fn what_counts_as_an_index() {
     assert_eq!(segments("a[0]"), [field("a"), Segment::Index(0)]);
-    assert_eq!(segments("a[007]"), [field("a"), Segment::Index(7)]);
+    assert_eq!(segments("a[10]"), [field("a"), Segment::Index(10)]);
+    assert_eq!(
+        segments("a[007]"),
+        [field("a"), key("007")],
+        "a leading zero makes it a key: `[01]` and `[1]` are different entries"
+    );
+    assert_eq!(segments("a[00]"), [field("a"), key("00")]);
+    assert_eq!(
+        segments("a[18446744073709551616]"),
+        [field("a"), key("18446744073709551616")],
+        "too large for a position, so a key"
+    );
     assert_eq!(segments("a[+1]"), [field("a"), key("+1")]);
     assert_eq!(segments("a[ 1]"), [field("a"), key(" 1")]);
     assert_eq!(segments("a[1x]"), [field("a"), key("1x")]);
@@ -108,6 +119,11 @@ fn every_malformation_says_where() {
     // The offset is the `\` itself: `a [ " k \ x " ]` puts it at 4.
     assert_eq!(refused(r#"a["k\x"]"#), PathError::BadEscape { at: 4 });
     assert_eq!(refused(r#"a["k\"#), PathError::BadEscape { at: 4 });
+    assert_eq!(refused("a[0]b"), PathError::MissingSeparator { at: 4 });
+    assert_eq!(refused("a[\"x\"]y"), PathError::MissingSeparator { at: 6 });
+    assert_eq!(refused("a.[0]"), PathError::EmptyField { at: 2 });
+    assert_eq!(refused("[a[b]"), PathError::UnclosedIndex { at: 0 });
+    assert_eq!(refused("x.[a]"), PathError::EmptyField { at: 2 });
 
     // And the offset is reachable without matching on the variant.
     assert_eq!(refused("a..b").offset(), 2);
@@ -138,9 +154,18 @@ fn a_segment_renders_as_what_it_parses_from() {
     );
     assert_eq!(render(key("\"hi\"")), r#"["\"hi\""]"#, "this one does");
 
+    assert_eq!(render(key("01")), "[01]", "a leading zero is a key already");
+    assert_eq!(
+        render(key("18446744073709551616")),
+        "[18446744073709551616]",
+        "too large to be a position"
+    );
+
     // Rendered, then parsed, is the same segment.
     for original in [
         key("1"),
+        key("01"),
+        key("18446744073709551616"),
         key(""),
         key("a[b]"),
         key("say \"hi\""),
@@ -275,4 +300,72 @@ fn a_path_deeper_than_any_recursion_would_survive() {
         path::get(&value, parsed).and_then(|v| TryInto::<&str>::try_into(v).ok()),
         Some("leaf")
     );
+}
+
+/// One spelling means one thing: what the grammar does not define is
+/// refused rather than read as the near miss it resembles.
+#[test]
+fn a_near_miss_is_refused_rather_than_read_as_something_else() {
+    for text in [
+        "a[0]b",
+        "a[\"x\"]y",
+        "a[0][1]b",
+        "a.[0]",
+        "a.[b]",
+        "[a[b]",
+        "[0]x",
+    ] {
+        assert!(path::parse(text).is_err(), "`{text}` is not a path");
+    }
+
+    // And the spellings next to them still are.
+    for text in [
+        "a[0].b",
+        "a[0][1]",
+        "a.b[0]",
+        "[a][b]",
+        "a[\"x\"].y",
+        "[0].x",
+    ] {
+        assert!(path::parse(text).is_ok(), "`{text}` is a path");
+    }
+}
+
+/// Every text that parses renders to a text that parses to the same
+/// segments, so a store key built from segments can be read back.
+#[test]
+fn what_parses_renders_back_to_the_same_segments() {
+    let alphabet = ['a', 'b', '.', '[', ']', '"', '\\', '0', '1', '\u{e9}', ' '];
+    let mut state = 0x9e37_79b9_7f4a_7c15_u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    let mut parsed = 0;
+    for _ in 0..200_000 {
+        let len = (next() % 12) as usize;
+        let text: String = (0..len)
+            .map(|_| alphabet[(next() % alphabet.len() as u64) as usize])
+            .collect();
+        let Ok(path) = path::parse(&text) else {
+            continue;
+        };
+        parsed += 1;
+        let first: Vec<_> = path.segments().collect();
+        let mut again = String::new();
+        for (at, segment) in first.iter().enumerate() {
+            if at > 0 && matches!(segment, Segment::Field(_)) {
+                again.push('.');
+            }
+            again.push_str(&segment.to_string());
+        }
+        let second: Vec<_> = path::parse(&again)
+            .unwrap_or_else(|e| panic!("`{text}` rendered as `{again}`, which is refused: {e}"))
+            .segments()
+            .collect();
+        assert_eq!(first, second, "`{text}` rendered as `{again}`");
+    }
+    assert!(parsed > 1000, "the generator should reach real paths");
 }

@@ -369,8 +369,9 @@ fn check_condition(schema: SchemaRef<'_>, condition: &Value, at: String) -> Resu
         // A variant named by its own key is compared with its
         // DISCRIMINANT, so what must be acceptable is the text form, which
         // for a variant is exactly the name of an arm.
-        let accepted = match (referenced.kind(), flat::split(field)) {
-            (Kind::Variant { .. }, None) => match TryAsRef::<str>::try_as_ref(value) {
+        let plain = schema.find(field).is_some() || flat::split(field).is_none();
+        let accepted = match (referenced.kind(), plain) {
+            (Kind::Variant { .. }, true) => match TryAsRef::<str>::try_as_ref(value) {
                 Some(arm) => validate_text(referenced, arm),
                 None => {
                     return Err(FormError::ConditionRefused {
@@ -555,7 +556,12 @@ fn visible(
 /// What the field at `path` holds now: its value, else its default, and
 /// for a variant named by its own key, the discriminant of either.
 fn current<'a>(schema: SchemaRef<'a>, values: &'a Value, path: &str) -> Option<&'a Value> {
-    match flat::split(path) {
+    // A key that names a field outright is that field, whatever it holds.
+    let split = match schema.find(path) {
+        Some(_) => None,
+        None => flat::split(path),
+    };
+    match split {
         None => {
             let field = schema.find(path)?;
             let held = TryAsRef::<Map>::try_as_ref(values)
@@ -570,8 +576,8 @@ fn current<'a>(schema: SchemaRef<'a>, values: &'a Value, path: &str) -> Option<&
         }
         Some((owner, member)) => TryAsRef::<Map>::try_as_ref(values)
             .and_then(|m| m.get(owner))
-            .filter(|_| declares(schema, values, owner, member))
-            .and_then(|o| TryAsRef::<Map>::try_as_ref(o).and_then(|m| m.get(member)))
+            .filter(|_| declares(schema, values, owner, &member))
+            .and_then(|o| TryAsRef::<Map>::try_as_ref(o).and_then(|m| m.get(&member)))
             .or_else(|| flat::resolve(schema, path).and_then(|f| f.default())),
     }
 }
