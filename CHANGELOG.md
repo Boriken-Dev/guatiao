@@ -149,8 +149,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   as `1.1`) and `1e400` is refused by the parser; writing a number
   verbatim through `text::json` is unchanged. *Migration:* a binary that
   relies on exact reading enables `guatiao-serde/exact-numbers`; a library
-  should not. The C and Python/Dart artifacts are built `--all-features` and
-  keep exact numbers.
+  should not. A C host, and the Python and Dart bindings, which ship no
+  library of their own, read numbers exactly when the `guatiao_serde`
+  library they load was built with `exact-numbers`; a workspace build with
+  `--all-features` is.
 - **`guatiao-serde`: a document that does not parse is `Error::Syntax`, with
   a `Position`, and its message never quotes the document.** A parse
   refusal used to be `Error::Format` with the parser's whole `Display`,

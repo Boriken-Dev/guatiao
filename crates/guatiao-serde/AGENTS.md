@@ -12,7 +12,7 @@ which format you should use.
 | --- | --- | --- | --- |
 | `json` | `serde_json` (with `raw_value`) | `text::json` | yes |
 | `exact-numbers` | `json` and `serde_json/arbitrary_precision` | reading a JSON number as its own text | no |
-| `toml` | `toml` | `text::toml` | no |
+| `toml` | `toml` (with `preserve_order`) | `text::toml` | no |
 | `yaml` | `serde-saphyr` | `text::yaml` | no |
 | `c-header` | `cbindgen` | regenerating `include/guatiao_serde.h` | no |
 
@@ -20,8 +20,14 @@ which format you should use.
 unifies `serde_json`'s features, so with it on every crate using
 `serde_json` sees `arbitrary_precision`, and `#[serde(untagged)]` and
 `#[serde(flatten)]` numbers there stop deserialising. A library crate
-should leave it off; a binary, or the C artifacts (built `--all-features`),
-may turn it on.
+should leave it off; a binary, or a C library built with
+`--all-features`, may turn it on.
+
+**`toml` turns on `toml/preserve_order` for the whole build**, so a table
+reads in document order. Unified like any feature, it makes every other
+crate's `toml::Table` keep insertion order instead of sorting its keys:
+iteration and the text `toml` writes follow that order, and `indexmap` is
+built. Lookups by key are unaffected.
 
 ## The whole surface
 
