@@ -5,8 +5,15 @@
 /// `guatiao_serde` against a real `--all-features` build.
 library;
 
+import 'dart:ffi';
+
+import 'package:ffi/ffi.dart';
 import 'package:guatiao/guatiao.dart';
 import 'package:guatiao/serde.dart' as serde;
+import 'package:guatiao/src/bindings.g.dart';
+import 'package:guatiao/src/library.dart' as native;
+import 'package:guatiao/src/serde.dart' as inner;
+import 'package:guatiao/src/value.dart' show strOf;
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -111,6 +118,36 @@ void main() {
         isA<ParseError>()
             .having((e) => e.format, 'format', Format.yaml)
             .having((e) => e.line, 'line', 1),
+      ),
+    );
+  });
+
+  test('a refusal that is not a syntax error keeps its message', () {
+    final error = calloc<guatiao_parse_error>();
+    addTearDown(() => calloc.free(error));
+    final core = native.core();
+    // `message` is the last field of the struct.
+    final message = (error.cast<Uint8>() +
+            (sizeOf<guatiao_parse_error>() - sizeOf<guatiao_value>()))
+        .cast<guatiao_value>();
+    using((arena) {
+      expect(
+        core.bindings.guatiao_value_string(
+          core.alloc,
+          strOf(arena, 'the library words this itself').ref,
+          message,
+        ),
+        0,
+      );
+    });
+    expect(
+      () => inner.finishParse(Status.wrongKind.code, error),
+      throwsA(
+        isA<WrongKind>().having(
+          (e) => e.message,
+          'message',
+          'the library words this itself',
+        ),
       ),
     );
   });

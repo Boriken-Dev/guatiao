@@ -109,15 +109,7 @@ Value loads(
         Format.yaml =>
           lib.bindings.guatiao_yaml_parse_ex(view, how, allocator, out, error),
       };
-      if (status == Status.badValue.code) {
-        throw ParseError(
-          _takeMessage(error),
-          format: Format.values[error.ref.format],
-          line: error.ref.line,
-          column: error.ref.column,
-        );
-      }
-      checkStatus(status);
+      finishParse(status, error);
     });
   } catch (_) {
     native.core().bindings.guatiao_value_free(out);
@@ -130,10 +122,29 @@ Value loads(
   return Value.adopt(out, alloc: allocator);
 }
 
-/// `guatiao_parse_error.message`: three `uint32_t` and four bytes of
-/// padding precede the value. Pinned by `test/abi_test.dart`.
+/// Throws for a failing [status]: a [ParseError] for a document that does
+/// not parse, any other refusal as its own exception with the message the
+/// library gave it. Not part of the package's API.
+void finishParse(int status, Pointer<guatiao_parse_error> error) {
+  if (status == Status.ok.code) return;
+  final message = _takeMessage(error);
+  if (status == Status.badValue.code) {
+    throw ParseError(
+      message,
+      format: Format.values[error.ref.format],
+      line: error.ref.line,
+      column: error.ref.column,
+    );
+  }
+  checkStatus(status, message);
+}
+
+/// `guatiao_parse_error.message`, the last field: it ends the struct, so
+/// it starts where the struct's size less a value's does.
 Pointer<guatiao_value> _messageOf(Pointer<guatiao_parse_error> error) =>
-    (error.cast<Uint8>() + 16).cast<guatiao_value>();
+    (error.cast<Uint8>() +
+            (sizeOf<guatiao_parse_error>() - sizeOf<guatiao_value>()))
+        .cast<guatiao_value>();
 
 String _takeMessage(Pointer<guatiao_parse_error> error) =>
     Ref.borrowed(_messageOf(error)).stringOr('');
