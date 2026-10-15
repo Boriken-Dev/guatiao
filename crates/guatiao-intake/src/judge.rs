@@ -316,7 +316,7 @@ fn check_at(schema: SchemaRef<'_>, form: FormRef<'_>, depth: u32) -> Result<(), 
         }
         // After every condition is known to be well formed, so a cycle is
         // reported as a cycle rather than as the malformed link in it.
-        if let Some(on_cycle) = find_cycle(form) {
+        if let Some(on_cycle) = find_cycle(schema, form) {
             return Err(FormError::CyclicCondition { path: on_cycle });
         }
     }
@@ -407,12 +407,13 @@ fn expected_of(e: ValidationError) -> String {
 /// step and walking it either ends or repeats; the field that repeats is
 /// the one on the cycle. A field whose chain was already walked and ended
 /// is not walked again, so the whole search visits each field once.
-fn find_cycle(form: FormRef<'_>) -> Option<String> {
+fn find_cycle(schema: SchemaRef<'_>, form: FormRef<'_>) -> Option<String> {
     let mut next: BTreeMap<&str, &str> = BTreeMap::new();
     for (key, hints) in form.fields() {
         if let Some(condition) = hints.visible_when() {
             // The first declaration wins, as `FormRef::hints` reads it.
-            next.entry(key).or_insert(condition.field());
+            next.entry(key)
+                .or_insert(form_key(schema, condition.field()));
         }
     }
     let mut cleared: BTreeSet<&str> = BTreeSet::new();
@@ -528,6 +529,8 @@ fn order_key(field: FieldRef<'_>) -> (bool, i64) {
 /// - A field that holds nothing yet reads as its schema `default`, and one
 ///   with no default does not meet the condition.
 /// - A variant named by its own key reads as its discriminant.
+/// - A top-level field named by its store spelling (`[a.b]`, `["a.b"]`) is
+///   that field, as [`check`] reads it.
 /// - A cycle is not shown; [`check`] reports it.
 ///
 /// **A path the schema does not declare is an error**, the same
@@ -549,7 +552,7 @@ pub fn is_visible(
     // as long as a form's field count is a stack a caller's form controls.
     let mut conditions = Vec::new();
     let mut seen: BTreeSet<&str> = BTreeSet::new();
-    let mut at = path;
+    let mut at = form_key(schema, path);
     let end = loop {
         if flat::resolve(schema, at).is_none() {
             return Err(FormError::UnknownField {
@@ -564,7 +567,7 @@ pub fn is_visible(
         let Some(condition) = form.hints(at).visible_when() else {
             break true;
         };
-        at = condition.field();
+        at = form_key(schema, condition.field());
         conditions.push(condition);
     };
     Ok(end
@@ -577,30 +580,51 @@ pub fn is_visible(
 /// What the field at `path` holds now: its value, else its default, and
 /// for a variant named by its own key, the discriminant of either.
 fn current<'a>(schema: SchemaRef<'a>, values: &'a Value, path: &str) -> Option<&'a Value> {
-    // A key that names a field outright is that field, whatever it holds.
-    let split = match schema.find(path) {
-        Some(_) => None,
-        None => flat::split(path),
-    };
-    match split {
-        None => {
-            let field = schema.find(path)?;
-            let held = TryAsRef::<Map>::try_as_ref(values)
-                .and_then(|m| m.get(path))
-                .or_else(|| field.default())?;
-            match field.kind() {
-                Kind::Variant { tag, .. } if is_map(held) => {
-                    TryAsRef::<Map>::try_as_ref(held).and_then(|m| m.get(tag))
-                }
-                _ => Some(held),
+    // A key that names a field outright is that field, whatever it holds,
+    // and so is its store spelling (`[a.b]`).
+    if let Some(field) = top_level(schema, path) {
+        let held = TryAsRef::<Map>::try_as_ref(values)
+            .and_then(|m| m.get(field.key()))
+            .or_else(|| field.default())?;
+        return match field.kind() {
+            Kind::Variant { tag, .. } if is_map(held) => {
+                TryAsRef::<Map>::try_as_ref(held).and_then(|m| m.get(tag))
             }
-        }
-        Some((owner, member)) => TryAsRef::<Map>::try_as_ref(values)
-            .and_then(|m| m.get(owner))
-            .filter(|_| declares(schema, values, owner, &member))
-            .and_then(|o| TryAsRef::<Map>::try_as_ref(o).and_then(|m| m.get(&member)))
-            .or_else(|| flat::resolve(schema, path).and_then(|f| f.default())),
+            _ => Some(held),
+        };
     }
+    let (owner, member) = flat::split(path)?;
+    let owner = form_key(schema, owner);
+    TryAsRef::<Map>::try_as_ref(values)
+        .and_then(|m| m.get(owner))
+        .filter(|_| declares(schema, values, owner, &member))
+        .and_then(|o| TryAsRef::<Map>::try_as_ref(o).and_then(|m| m.get(&member)))
+        .or_else(|| flat::resolve(schema, path).and_then(|f| f.default()))
+}
+
+/// The top-level field `path` names: by its key, or by a path of one
+/// segment spelling it, as a flat store does (`[a.b]`, `["a.b"]`).
+fn top_level<'a>(schema: SchemaRef<'a>, path: &str) -> Option<FieldRef<'a>> {
+    schema.find(path).or_else(|| {
+        let parsed = crate::path::parse(path).ok()?;
+        let mut segments = parsed.segments();
+        let only = segments.next()?;
+        if segments.next().is_some() {
+            return None;
+        }
+        let name = match only {
+            crate::path::Segment::Field(name) => alloc::borrow::Cow::Borrowed(name),
+            crate::path::Segment::Key(key) => key,
+            crate::path::Segment::Index(at) => alloc::borrow::Cow::Owned(at.to_string()),
+        };
+        schema.find(&name)
+    })
+}
+
+/// `path` as a form files its hints: a top-level field by its key however
+/// `path` spells it, anything else as written.
+fn form_key<'a>(schema: SchemaRef<'a>, path: &'a str) -> &'a str {
+    top_level(schema, path).map_or(path, |field| field.key())
 }
 
 /// Whether the arm `values` currently picks for `owner` declares `member`.

@@ -323,8 +323,10 @@ distinct.
   name. An `owner.member` path is read **only while the arm that declares
   `member` is the one picked** — a variant's value is one map, so moving
   between arms leaves keys behind and a stale one is not what the field
-  holds. A cycle is never shown. A path the schema does not declare is an
-  error. `values` is shaped like the schema's values: a variant's value is
+  holds. A top-level field may be named by its store spelling (`[a.b]`,
+  `["a.b"]`) as well as its key, and is the same field, its own condition
+  included. A cycle is never shown. A path the schema does not declare is
+  an error. `values` is shaped like the schema's values: a variant's value is
   a map carrying its tag.
 
 ## From C (`include/guatiao_intake.h`)

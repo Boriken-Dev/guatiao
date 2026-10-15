@@ -242,6 +242,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   release build, which `catch_unwind` cannot catch, and `check` accepts such
   a form), and cycles are found in one pass over the conditions instead of
   one walk per field.
+- **`guatiao-intake`: a `visibleWhen` naming a field by its store spelling
+  is read.** `check` accepted `[a.b]` or `["a.b"]` for the field `a.b`,
+  and `is_visible` then never found it, so the field waiting on it was
+  never shown; that spelling now names the field there too, its own
+  condition and any cycle through it included.
 - **`guatiao-intake`: `unflatten` no longer loses a list or an open map
   when a sibling key sorts between the field name and its `[`.** A store
   holding `agent[0]` beside `agentName` or `env[PATH]` beside `env-file`
