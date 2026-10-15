@@ -69,6 +69,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`guatiao-intake`: `is_visible` no longer overflows the stack on a long
+  `visibleWhen` chain, and `check` no longer takes cubic time on one.** The
+  chain is walked in a loop (about 3000 links overflowed the stack of a
+  release build, which `catch_unwind` cannot catch, and `check` accepts such
+  a form), and cycles are found in one pass over the conditions instead of
+  one walk per field.
 - **`guatiao-intake`: `unflatten` no longer loses a list or an open map
   when a sibling key sorts between the field name and its `[`.** A store
   holding `agent[0]` beside `agentName` or `env[PATH]` beside `env-file`
