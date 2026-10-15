@@ -65,7 +65,6 @@ use std::path::{Path, PathBuf};
 const UNSAFE_PATHS: &[&str] = &[
     // The value model.
     "value/alloc.rs",
-    "value/convert.rs",
     "value/raw.rs",
     "value/types",
     "value/value.rs",
@@ -199,6 +198,38 @@ fn unsafe_is_confined_to_one_module() {
         "expected at least the six ported model modules to be scanned, saw {safe_modules} — \
          the scan is looking in the wrong place, which would make this test pass by seeing \
          nothing"
+    );
+}
+
+/// The other direction: a listed path that no longer holds `unsafe` is an
+/// exemption nobody needs, and the list stays only as wide as the code
+/// that needs it.
+#[test]
+fn every_listed_path_still_needs_unsafe() {
+    let src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut unneeded = Vec::new();
+    for listed in UNSAFE_PATHS {
+        let path = src.join(listed.replace('/', std::path::MAIN_SEPARATOR_STR));
+        let files = if path.is_dir() {
+            rust_files(&path)
+        } else {
+            vec![path.clone()]
+        };
+        let holds_unsafe = files.iter().any(|file| {
+            fs::read_to_string(file)
+                .unwrap_or_else(|e| panic!("cannot read {}: {e}", file.display()))
+                .lines()
+                .map(str::trim)
+                .any(|t| !t.starts_with("//") && t.contains("unsafe") && !t.contains("unsafe_code"))
+        });
+        if !holds_unsafe {
+            unneeded.push(*listed);
+        }
+    }
+    assert!(
+        unneeded.is_empty(),
+        "these paths are allowed `unsafe` and hold none; take them off UNSAFE_PATHS and give \
+         them #![forbid(unsafe_code)]: {unneeded:?}"
     );
 }
 
