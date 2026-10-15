@@ -129,11 +129,19 @@ fn a_map_hands_its_pairs_out_in_order() {
         .collect();
     assert_eq!(pairs, [("b".to_string(), 1), ("a".to_string(), 2)]);
 
-    let mut map: Map = [("n", 1)].into_iter().collect();
-    for entry in &mut map {
-        *entry.value_mut() = Value::from(7);
+    let mut map: Map = [("n", 1), ("m", 2)].into_iter().collect();
+    for (key, value) in &mut map {
+        if &**key == "n" {
+            *value = Value::from(7);
+        }
     }
     assert_eq!(i64::try_from(&map["n"]).unwrap(), 7);
+    let keys: Vec<&str> = map.iter_mut().rev().map(|(k, _)| &**k).collect();
+    assert_eq!(
+        keys,
+        ["m", "n"],
+        "the keys came through unchanged, in order"
+    );
 }
 
 #[test]

@@ -85,7 +85,8 @@ map.copy_from(&Map) / copy_from_in(&Map, alloc) -> Result<usize, ValueError>
 map.iter() / map.keys() / map.values()
 map["host"] -> &Value                  // panics when absent, as HashMap does
 map.clone_in(alloc) -> Result<Map, ValueError>
-for (key, value) in map { .. }         // owned: (Text, Value); &Map: &Entry; &mut Map: &mut Entry
+for (key, value) in map { .. }         // owned: (Text, Value); &Map: &Entry
+for (key, value) in &mut map { .. }    // (&Text, &mut Value), as map.iter_mut(): a key never changes in place
 
 list.push(impl Into<Value>)            list.push_in(impl Into<Value>, alloc)
 list.try_push(impl Into<Value>) -> Result<(), AllocError>
