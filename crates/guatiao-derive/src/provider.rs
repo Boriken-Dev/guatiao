@@ -213,7 +213,7 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
     let id = match &decl.id {
         Some(id) => quote! { ::guatiao::__private::alloc::string::String::from(#id) },
         None => quote! {
-            ::guatiao::__private::alloc::format!("{}_{}", env!("CARGO_PKG_NAME").replace('-', "_"), #snake)
+            ::guatiao::__private::alloc::format!("{}_{}", ::core::env!("CARGO_PKG_NAME").replace('-', "_"), #snake)
         },
     };
 
@@ -443,7 +443,11 @@ mod tests {
         assert!(out.contains(":: Vtable > :: of :: < Hello > ()"));
         assert!(out.contains("static __GUATIAO_TABLE_1 : < dyn counter :: Counter as"));
         assert!(out.contains("< Hello as :: core :: default :: Default > :: default ()"));
-        assert!(out.contains("env ! (\"CARGO_PKG_NAME\") . replace ('-' , \"_\") , \"hello\""));
+        assert!(
+            out.contains(
+                ":: core :: env ! (\"CARGO_PKG_NAME\") . replace ('-' , \"_\") , \"hello\""
+            )
+        );
         assert!(
             out.contains(". name (\"Hello\") . version (\"\")"),
             "name defaults to the ident, version to empty"
