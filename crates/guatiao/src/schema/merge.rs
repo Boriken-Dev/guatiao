@@ -44,9 +44,8 @@
 #![forbid(unsafe_code)]
 
 use crate::schema::read::{FieldRef, Kind, SchemaRef};
-use crate::schema::validate::NESTED;
 use crate::value::alloc::Alloc;
-use crate::value::error::ValueError;
+use crate::value::error::{MAX_DEPTH, ValueError};
 use crate::value::read::str_or;
 use crate::value::types::{Text, Value};
 use crate::{MergeError, MergeMode, MergeOptions, MergeOverrides};
@@ -119,14 +118,11 @@ pub fn declared_for(field: FieldRef<'_>) -> Option<DeclaredMerge> {
 /// Every `x-merge` declaration in `schema`, as the lookup
 /// [`MergeMode::merge_with`] takes.
 ///
-/// Keyed by the **path** the field occupies in a values map, which is the
-/// spelling the merge matches against: a top-level field's own key, and a
-/// field of a nested object joined to its owner's with a dot
-/// (`"tls.ciphers"`). A key holding a `.` of its own is reported the
-/// same way, which is ambiguous to read and unambiguous to act on: the
-/// path is built from the fields walked, not parsed back out of the
-/// text. A reader that needs to parse one wants `guatiao-intake`'s path
-/// grammar, where a key like that is written `["tls.ciphers"]`.
+/// Keyed by the **path** the field occupies in a values map, as segments:
+/// a top-level field's own key, and a field of a nested object that key
+/// followed by its own (`["tls", "ciphers"]`). A key holding a `.` is one
+/// segment, so it is not confused with a nested path: the path is built
+/// from the fields walked and never parsed back out of text.
 ///
 /// **Nested objects are walked**, because the declaration lives with the
 /// field and a field two levels down declares just as meaningfully as one
@@ -135,36 +131,45 @@ pub fn declared_for(field: FieldRef<'_>) -> Option<DeclaredMerge> {
 /// consults this table.
 ///
 /// Fields with no declaration are simply absent, and absent means "take
-/// the call-site mode" — so a schema that declares nothing produces an
+/// the call-site mode" -- so a schema that declares nothing produces an
 /// empty override set and changes nothing.
-pub fn merge_overrides(schema: SchemaRef<'_>) -> MergeOverrides {
+///
+/// # Errors
+///
+/// A schema nested past `MAX_DEPTH` is [`MergeError::Build`] with
+/// [`ValueError::TooDeep`]: a provider's schema comes from a library, and
+/// a walk its author controls is not a stack.
+pub fn merge_overrides(schema: SchemaRef<'_>) -> Result<MergeOverrides, MergeError> {
     let mut overrides = MergeOverrides::new();
-    collect_overrides(schema.fields(), "", &mut overrides);
-    overrides
+    let mut path = Vec::new();
+    collect_overrides(schema.fields(), &mut path, &mut overrides, 0)?;
+    Ok(overrides)
 }
 
 /// The recursion behind [`merge_overrides`], over one level of fields.
 ///
-/// `prefix` is the path of the object these fields belong to, empty at
-/// the root.
+/// `path` is the path of the object these fields belong to, empty at the
+/// root; `depth` counts the objects already entered.
 fn collect_overrides<'a>(
     fields: impl Iterator<Item = FieldRef<'a>>,
-    prefix: &str,
+    path: &mut Vec<String>,
     overrides: &mut MergeOverrides,
-) {
+    depth: u32,
+) -> Result<(), MergeError> {
+    if depth >= MAX_DEPTH {
+        return Err(MergeError::Build(ValueError::TooDeep));
+    }
     for field in fields {
-        let path = if prefix.is_empty() {
-            field.key().to_string()
-        } else {
-            format!("{prefix}{NESTED}{}", field.key())
-        };
+        path.push(field.key().to_string());
         if let Some(declared) = declared_for(field) {
-            overrides.set(path.clone(), declared.mode);
+            overrides.set(path.iter().cloned(), declared.mode);
         }
         if let Kind::Map(_) = field.kind() {
-            collect_overrides(field.kind().fields(), &path, overrides);
+            collect_overrides(field.kind().fields(), path, overrides, depth + 1)?;
         }
+        path.pop();
     }
+    Ok(())
 }
 
 /// The `mergelists` sub-option, resolved across a whole schema.
@@ -178,24 +183,40 @@ fn collect_overrides<'a>(
 /// which subtree you were in would be very hard to reason about.
 ///
 /// So a schema resolves it once: **on if any field asked for it.** The
-/// alternative — silently ignoring the declaration on fields that asked
-/// — would make a written declaration do nothing, which is worse than
+/// alternative -- silently ignoring the declaration on fields that asked
+/// -- would make a written declaration do nothing, which is worse than
 /// applying it slightly more widely than asked. A caller that needs the
 /// finer distinction merges the subtrees separately.
-pub fn merge_options(schema: SchemaRef<'_>) -> MergeOptions {
-    let any = any_mergelists(schema.fields());
-    MergeOptions::new().with_mergelists(any)
+///
+/// # Errors
+///
+/// As [`merge_overrides`]: a schema nested past `MAX_DEPTH`.
+pub fn merge_options(schema: SchemaRef<'_>) -> Result<MergeOptions, MergeError> {
+    let any = any_mergelists(schema.fields(), 0)?;
+    Ok(MergeOptions::new().with_mergelists(any))
 }
 
 /// Whether any field at or below this level asked for `mergelists`.
 ///
 /// Nested objects are walked, for the reason [`merge_overrides`] walks
 /// them: a declaration is a declaration wherever it sits.
-fn any_mergelists<'a>(fields: impl Iterator<Item = FieldRef<'a>>) -> bool {
-    fields.into_iter().any(|field| {
-        declared_for(field).is_some_and(|d| d.options.mergelists)
-            || (matches!(field.kind(), Kind::Map(_)) && any_mergelists(field.kind().fields()))
-    })
+fn any_mergelists<'a>(
+    fields: impl Iterator<Item = FieldRef<'a>>,
+    depth: u32,
+) -> Result<bool, MergeError> {
+    if depth >= MAX_DEPTH {
+        return Err(MergeError::Build(ValueError::TooDeep));
+    }
+    for field in fields {
+        if declared_for(field).is_some_and(|d| d.options.mergelists) {
+            return Ok(true);
+        }
+        if matches!(field.kind(), Kind::Map(_)) && any_mergelists(field.kind().fields(), depth + 1)?
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Merges two values with this schema's declarations applied over
@@ -216,8 +237,8 @@ pub fn merge_with_schema(
     later: &Value,
     alloc: Alloc,
 ) -> Result<Value, MergeError> {
-    let overrides = merge_overrides(schema);
-    let fields = merge_options(schema);
+    let overrides = merge_overrides(schema)?;
+    let fields = merge_options(schema)?;
     call_site_mode.merge_with(earlier, later, alloc, fields, Some(&overrides))
 }
 

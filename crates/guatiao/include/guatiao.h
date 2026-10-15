@@ -1032,7 +1032,9 @@ typedef struct guatiao_library_info {
  */
 typedef struct guatiao_merge_override {
   /*
-   The dotted path this governs, matched exactly.
+   The path this governs, matched exactly, spelled as `guatiao-intake`
+   spells one: `tls.ciphers`, `peers[0].name`, `["a.b"]` for a key
+   holding a dot. Text that is not a path is `GUATIAO_ERR_BAD_VALUE`.
    */
   struct guatiao_str path;
   /*

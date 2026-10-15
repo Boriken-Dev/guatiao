@@ -17,7 +17,7 @@ use guatiao::schema::read::SchemaRef;
 use guatiao::value::alloc::Alloc;
 use guatiao::value::convert::TryAsRef;
 
-use guatiao::{List, Map, MergeMode, MergeOptions, Text, Value};
+use guatiao::{List, Map, MergeError, MergeMode, MergeOptions, Text, Value, ValueError};
 
 /// A schema carrying one string field per pair, annotated whenever the
 /// declaration is not empty.
@@ -127,11 +127,11 @@ fn overrides_carry_only_the_declared_options() {
         alloc,
         &[("tags", "deep"), ("fallbacks", ""), ("mode", "simple")],
     );
-    let overrides = merge_overrides(SchemaRef::new(&schema).unwrap());
-    assert_eq!(overrides.get("tags"), Some(MergeMode::Deep));
-    assert_eq!(overrides.get("mode"), Some(MergeMode::Simple));
-    assert_eq!(overrides.get("fallbacks"), None);
-    assert_eq!(overrides.get("never-mentioned"), None);
+    let overrides = merge_overrides(SchemaRef::new(&schema).unwrap()).unwrap();
+    assert_eq!(overrides.get(["tags"]), Some(MergeMode::Deep));
+    assert_eq!(overrides.get(["mode"]), Some(MergeMode::Simple));
+    assert_eq!(overrides.get(["fallbacks"]), None);
+    assert_eq!(overrides.get(["never-mentioned"]), None);
 }
 
 #[test]
@@ -139,8 +139,8 @@ fn a_schema_that_declares_nothing_produces_no_overrides() {
     let alloc = Alloc::rust();
     let schema = schema_with(alloc, &[("a", ""), ("b", "")]);
     let s = SchemaRef::new(&schema).unwrap();
-    assert!(merge_overrides(s).is_empty());
-    assert!(!merge_options(s).mergelists);
+    assert!(merge_overrides(s).unwrap().is_empty());
+    assert!(!merge_options(s).unwrap().mergelists);
 }
 
 /// **The behaviour the merge design asks for**: a declared mode beats the
@@ -202,8 +202,16 @@ fn mergelists_is_on_when_any_option_declares_it() {
     let alloc = Alloc::rust();
     let on = schema_with(alloc, &[("a", "deep+mergelists"), ("b", "deep")]);
     let off = schema_with(alloc, &[("a", "deep"), ("b", "simple")]);
-    assert!(merge_options(SchemaRef::new(&on).unwrap()).mergelists);
-    assert!(!merge_options(SchemaRef::new(&off).unwrap()).mergelists);
+    assert!(
+        merge_options(SchemaRef::new(&on).unwrap())
+            .unwrap()
+            .mergelists
+    );
+    assert!(
+        !merge_options(SchemaRef::new(&off).unwrap())
+            .unwrap()
+            .mergelists
+    );
 }
 
 /// The annotation helper and the parser are inverses, so a declaration
@@ -261,19 +269,19 @@ fn a_declaration_on_a_nested_field_is_read_as_its_dotted_path() {
         .expect("a schema this small builds");
 
     let read = SchemaRef::new(&schema).expect("a schema is a map");
-    let overrides = merge_overrides(read);
+    let overrides = merge_overrides(read).unwrap();
     assert_eq!(
-        overrides.get("tls.ciphers"),
+        overrides.get(["tls", "ciphers"]),
         Some(MergeMode::Substitute),
         "a nested field declares the path it occupies"
     );
-    assert_eq!(overrides.get("tags"), Some(MergeMode::Deep));
+    assert_eq!(overrides.get(["tags"]), Some(MergeMode::Deep));
     assert_eq!(
-        overrides.get("tls"),
+        overrides.get(["tls"]),
         None,
         "an owner declares nothing of its own"
     );
-    assert_eq!(overrides.get("tls.roots"), None);
+    assert_eq!(overrides.get(["tls", "roots"]), None);
 
     // And the nested declaration is what the merge then applies: `deep`
     // would union the two lists, `substitute` replaces them.
@@ -312,7 +320,7 @@ fn a_nested_mergelists_declaration_is_resolved_across_the_schema() {
 
     let read = SchemaRef::new(&schema).expect("a schema is a map");
     assert_eq!(
-        merge_options(read),
+        merge_options(read).unwrap(),
         MergeOptions::new().with_mergelists(true)
     );
 }
@@ -324,4 +332,39 @@ fn nested(key: &str, values: &[&str]) -> Value {
     let mut outer = Map::new();
     outer.set("tls", inner);
     outer.into()
+}
+
+/// A schema nested ten thousand times deeper than `MAX_DEPTH` is handed
+/// over by a library and walked by the host: the walk refuses it, and the
+/// stack is untouched.
+#[test]
+fn a_schema_nested_past_the_depth_bound_is_refused_not_followed() {
+    let mut inner: Value = {
+        let mut leaf = Map::new();
+        leaf.set("type", "string");
+        leaf.into()
+    };
+    for _ in 0..200_000 {
+        let mut props = Map::new();
+        props.set("x", inner);
+        let mut object = Map::new();
+        object.set("type", "object");
+        object.set("properties", props);
+        inner = object.into();
+    }
+    let read = SchemaRef::new(&inner).unwrap();
+
+    assert_eq!(
+        merge_overrides(read),
+        Err(MergeError::Build(ValueError::TooDeep))
+    );
+    assert_eq!(
+        merge_options(read),
+        Err(MergeError::Build(ValueError::TooDeep))
+    );
+    let (a, b) = (Map::new().into(), Map::new().into());
+    assert_eq!(
+        merge_with_schema(read, MergeMode::Substitute, &a, &b, Alloc::rust()),
+        Err(MergeError::Build(ValueError::TooDeep))
+    );
 }
