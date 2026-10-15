@@ -1582,9 +1582,27 @@ Contracts that are not in the signatures:
   Rust `Value::clear`, which dispatches on the tag.
 - **Every out-parameter is written `absent` on entry**, before anything
   can fail, so a caller reading one back after a failure reads what the
-  call produced rather than its own uninitialised local.
+  call produced rather than its own uninitialised local. That includes
+  the constructors and the registry's answers;
+  `guatiao_registry_provider_create` writes `out` null and `err` an empty
+  error (`GUATIAO_OK`, empty message). `tests/exports_boundary.rs` holds a
+  case per export with an out-parameter and checks the list against the
+  header.
 - **A null or unusable allocator is `GUATIAO_ERR_ALLOC`**, in every
-  module, however it is wrong.
+  module, however it is wrong. A `Str` argument that is not UTF-8 is
+  `GUATIAO_ERR_BAD_VALUE`, the registry's included; `GUATIAO_ERR_NULL` is
+  only ever a null pointer.
+- **The kind is checked before the content.** A node of the wrong kind is
+  `GUATIAO_ERR_WRONG_KIND` (`guatiao_map_discard` and
+  `guatiao_list_discard` included, which answer `NOT_FOUND` only for a
+  missing key or index); the right kind with content a reader refuses (a
+  string or a map key that is not UTF-8) is `GUATIAO_ERR_BAD_VALUE`. In
+  Rust, `<&str>::try_from`, `<&Map>::try_from` and the number readers
+  answer `MapError::BadValue` for that case and `WrongType` for the
+  other.
+- **A refused `guatiao_map_set` or `guatiao_list_push` takes nothing**:
+  the key is copied and the room reserved before `value` is moved, so on
+  `GUATIAO_ERR_ALLOC` the caller still owns it.
 - **The two pointers of `guatiao_map_set`, `guatiao_list_push` and
   `guatiao_map_copy_from` must not overlap**, and the same pointer for
   both is `GUATIAO_ERR_BAD_VALUE`. `guatiao_map_copy_from` does accept a

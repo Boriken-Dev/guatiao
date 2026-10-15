@@ -530,7 +530,7 @@ macro_rules! arm_borrowed {
             fn try_from(value: &'a Value) -> Result<&'a $ty, MapError> {
                 value
                     .try_as_ref()
-                    .ok_or_else(|| MapError::wrong_type($tag, value))
+                    .ok_or_else(|| MapError::refused($tag, value))
             }
         }
     };

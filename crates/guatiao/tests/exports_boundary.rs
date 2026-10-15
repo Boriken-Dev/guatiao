@@ -15,6 +15,8 @@
 //! an artifact that exports them; this is the half that proves the
 //! functions behave.
 
+extern crate alloc;
+
 use guatiao::exports::merge::{
     GUATIAO_MERGE_DEEP, GUATIAO_MERGE_OPT_MERGELISTS, GUATIAO_MERGE_SUBSTITUTE, MergeOverride,
     guatiao_merge,
@@ -646,6 +648,473 @@ fn a_failed_call_leaves_its_out_parameters_absent() {
     let status = unsafe { guatiao_value_clone(core::ptr::null(), &a, &mut out) };
     assert_eq!(status, Status::GUATIAO_ERR_ALLOC);
     assert!(is_absent(&out));
+}
+
+/// Bytes that are not UTF-8, as a C caller can pass them: Rust cannot
+/// build such a `Str`, so this writes the two fields as C lays them out.
+fn not_utf8() -> Str<'static> {
+    static BYTES: [u8; 2] = [b'h', 0xff];
+    #[repr(C)]
+    struct AsC {
+        ptr: *const u8,
+        len: usize,
+    }
+    // SAFETY: `Str` is `repr(C)` with exactly these two fields, the marker
+    // being zero-sized, which is the layout the C header declares.
+    unsafe {
+        core::mem::transmute::<AsC, Str<'static>>(AsC {
+            ptr: BYTES.as_ptr(),
+            len: BYTES.len(),
+        })
+    }
+}
+
+/// An out-slot holding something that owns nothing, so a test can tell
+/// "written" from "left as it was" without leaking.
+fn stale() -> Value {
+    Value::from(true)
+}
+
+/// Runs `call` with a stale out-slot and checks it answered `status` and
+/// left the slot ABSENT.
+fn leaves_absent(name: &str, status: Status, call: impl FnOnce(*mut Value) -> Status) {
+    let mut out = stale();
+    assert_eq!(call(&mut out), status, "{name}");
+    assert!(is_absent(&out), "{name} left its out-parameter as it was");
+}
+
+/// Every export of this crate with an out-parameter, called so that it
+/// fails after its prologue, and checked to have written the slot. The
+/// names are what the coverage test compares with the header.
+fn out_parameter_cases() -> Vec<(&'static str, fn())> {
+    use guatiao::exports::value::*;
+    let mut cases: Vec<(&'static str, fn())> = vec![
+        ("guatiao_value_clone", || {
+            let src = Value::null();
+            // SAFETY: a null allocator is the failure under test.
+            leaves_absent("clone", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+                guatiao_value_clone(core::ptr::null(), &src, out)
+            });
+        }),
+        // The three that need no allocator fail only on a null `out`,
+        // which leaves nothing to write.
+        ("guatiao_value_null", || {
+            // SAFETY: null is the case under test.
+            let status = unsafe { guatiao_value_null(core::ptr::null_mut()) };
+            assert_eq!(status, Status::GUATIAO_ERR_NULL);
+        }),
+        ("guatiao_value_absent", || {
+            // SAFETY: as above.
+            let status = unsafe { guatiao_value_absent(core::ptr::null_mut()) };
+            assert_eq!(status, Status::GUATIAO_ERR_NULL);
+        }),
+        ("guatiao_value_bool", || {
+            // SAFETY: as above.
+            let status = unsafe { guatiao_value_bool(true, core::ptr::null_mut()) };
+            assert_eq!(status, Status::GUATIAO_ERR_NULL);
+        }),
+        ("guatiao_value_map", || {
+            // SAFETY: a null allocator is the failure under test.
+            leaves_absent("map", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+                guatiao_value_map(core::ptr::null(), out)
+            });
+        }),
+        ("guatiao_value_list", || {
+            // SAFETY: as above.
+            leaves_absent("list", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+                guatiao_value_list(core::ptr::null(), out)
+            });
+        }),
+        ("guatiao_value_string", || {
+            let alloc = Alloc::rust();
+            // SAFETY: a readable view; its content is the failure.
+            leaves_absent("string", Status::GUATIAO_ERR_BAD_VALUE, |out| unsafe {
+                guatiao_value_string(alloc.as_raw(), not_utf8(), out)
+            });
+        }),
+        ("guatiao_value_number", || {
+            let alloc = Alloc::rust();
+            // SAFETY: as above.
+            leaves_absent("number", Status::GUATIAO_ERR_BAD_VALUE, |out| unsafe {
+                guatiao_value_number(alloc.as_raw(), Str::new("not a number"), out)
+            });
+        }),
+        ("guatiao_value_bytes", || {
+            // SAFETY: a null allocator is the failure under test.
+            leaves_absent("bytes", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+                guatiao_value_bytes(
+                    core::ptr::null(),
+                    guatiao::value::types::Bytes::new(b"x"),
+                    out,
+                )
+            });
+        }),
+        ("guatiao_alloc_default", || {
+            // Its one failure is a null `out`.
+            // SAFETY: null is the case under test.
+            let status = unsafe { guatiao_alloc_default(core::ptr::null_mut()) };
+            assert_eq!(status, Status::GUATIAO_ERR_NULL);
+        }),
+        ("guatiao_wire_encode", || {
+            let value = Value::null();
+            // SAFETY: a null allocator is the failure under test.
+            leaves_absent("wire_encode", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+                guatiao_wire_encode(core::ptr::null(), &value, out)
+            });
+        }),
+        ("guatiao_wire_decode", || {
+            let alloc = Alloc::rust();
+            // SAFETY: readable bytes that are not a value.
+            leaves_absent("wire_decode", Status::GUATIAO_ERR_BAD_VALUE, |out| unsafe {
+                guatiao_wire_decode(
+                    alloc.as_raw(),
+                    guatiao::value::types::Bytes::new(b"\xff"),
+                    out,
+                )
+            });
+        }),
+        ("guatiao_merge", || {
+            let (a, b) = (Value::from(Map::new()), Value::from(Map::new()));
+            let mut error = stale();
+            // SAFETY: an undeclared mode is the failure under test.
+            leaves_absent("merge", Status::GUATIAO_ERR_BAD_VALUE, |out| unsafe {
+                guatiao_merge(
+                    0,
+                    &a,
+                    &b,
+                    Alloc::rust().as_raw(),
+                    0,
+                    core::ptr::null(),
+                    0,
+                    out,
+                    &mut error,
+                )
+            });
+            assert!(is_absent(&error), "merge's error slot");
+        }),
+        ("guatiao_schema_validate", || {
+            let config = Value::from(Map::new());
+            // SAFETY: a null schema is the failure under test.
+            leaves_absent("schema_validate", Status::GUATIAO_ERR_NULL, |out| unsafe {
+                guatiao_schema_validate(core::ptr::null(), &config, Alloc::rust().as_raw(), out)
+            });
+        }),
+    ];
+    #[cfg(feature = "load")]
+    cases.extend(registry_cases());
+    cases
+}
+
+/// The registry's exports: a null handle fails after the prologue.
+#[cfg(feature = "load")]
+fn registry_cases() -> Vec<(&'static str, fn())> {
+    use guatiao::exports::library::*;
+    fn reg() -> *mut HostRegistry {
+        core::ptr::null_mut()
+    }
+    fn a() -> *const guatiao::value::alloc::Allocator {
+        Alloc::rust().as_raw()
+    }
+    const NULL: Status = Status::GUATIAO_ERR_NULL;
+    vec![
+        ("guatiao_registry_provider_create", || {
+            let config = Value::from(Map::new());
+            let mut instance = core::ptr::NonNull::<core::ffi::c_void>::dangling().as_ptr();
+            let mut err = guatiao::library::ProviderError::new(Status::GUATIAO_ERR_BUSY, "");
+            // SAFETY: a null handle is the failure under test.
+            let status = unsafe {
+                guatiao_registry_provider_create(
+                    reg(),
+                    Str::new("k"),
+                    &config,
+                    &mut instance,
+                    &mut err,
+                )
+            };
+            assert_eq!(status, NULL);
+            assert!(
+                instance.is_null(),
+                "create left its instance slot as it was"
+            );
+            assert_eq!(
+                err.status,
+                Status::GUATIAO_OK,
+                "create left its error slot as it was"
+            );
+            assert!(err.message().is_empty());
+        }),
+        ("guatiao_registry_load_file", || {
+            // SAFETY: a null handle is the failure under test.
+            leaves_absent("load_file", NULL, |out| unsafe {
+                guatiao_registry_load_file(reg(), Str::new("x"), a(), out)
+            });
+        }),
+        ("guatiao_registry_register_entry", || {
+            // SAFETY: as above.
+            leaves_absent("register_entry", NULL, |out| unsafe {
+                guatiao_registry_register_entry(reg(), Str::new("x"), None, a(), out)
+            });
+        }),
+        ("guatiao_registry_scan_dir", || {
+            // SAFETY: as above.
+            leaves_absent("scan_dir", NULL, |out| unsafe {
+                guatiao_registry_scan_dir(reg(), Str::new("x"), false, a(), out)
+            });
+        }),
+        ("guatiao_registry_scan_dir_rules", || {
+            // SAFETY: as above.
+            leaves_absent("scan_dir_rules", NULL, |out| unsafe {
+                guatiao_registry_scan_dir_rules(reg(), Str::new("x"), false, Str::new(""), a(), out)
+            });
+        }),
+        ("guatiao_registry_scan_path", || {
+            // SAFETY: as above.
+            leaves_absent("scan_path", NULL, |out| unsafe {
+                guatiao_registry_scan_path(reg(), Str::new("x"), false, Str::new(""), a(), out)
+            });
+        }),
+        ("guatiao_registry_libraries", || {
+            // SAFETY: as above.
+            leaves_absent("libraries", NULL, |out| unsafe {
+                guatiao_registry_libraries(reg(), a(), out)
+            });
+        }),
+        ("guatiao_registry_providers", || {
+            // SAFETY: as above.
+            leaves_absent("providers", NULL, |out| unsafe {
+                guatiao_registry_providers(reg(), Str::new(""), a(), out)
+            });
+        }),
+        ("guatiao_registry_provider", || {
+            // SAFETY: as above.
+            leaves_absent("provider", NULL, |out| unsafe {
+                guatiao_registry_provider(reg(), Str::new("k"), a(), out)
+            });
+        }),
+        ("guatiao_registry_available", || {
+            // SAFETY: as above.
+            leaves_absent("available", NULL, |out| unsafe {
+                guatiao_registry_available(reg(), Str::new(""), a(), out)
+            });
+        }),
+        ("guatiao_registry_why_not", || {
+            // SAFETY: as above.
+            leaves_absent("why_not", NULL, |out| unsafe {
+                guatiao_registry_why_not(reg(), Str::new(""), a(), out)
+            });
+        }),
+        ("guatiao_registry_best", || {
+            // SAFETY: as above.
+            leaves_absent("best", NULL, |out| unsafe {
+                guatiao_registry_best(reg(), Str::new(""), a(), out)
+            });
+        }),
+    ]
+}
+
+#[test]
+fn every_export_with_an_out_parameter_writes_it_before_failing() {
+    for (_, case) in out_parameter_cases() {
+        case();
+    }
+}
+
+/// The cases above against the header: an export that gains an
+/// out-parameter without a case here fails this test.
+#[test]
+#[cfg_attr(miri, ignore = "reads the committed header from disk")]
+fn the_out_parameter_cases_name_every_export_that_has_one() {
+    let header = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("include/guatiao.h"),
+    )
+    .unwrap();
+    // Comments first: a doc comment holds parentheses and semicolons.
+    let mut code = String::new();
+    let mut rest = header.as_str();
+    while let Some(start) = rest.find("/*") {
+        code.push_str(&rest[..start]);
+        let end = rest[start..].find("*/").expect("a closed comment");
+        rest = &rest[start + end + 2..];
+    }
+    code.push_str(rest);
+    let code: String = code
+        .lines()
+        .map(|line| line.split("//").next().unwrap_or(""))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let flat = code.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut declared = alloc::collections::BTreeSet::new();
+    for statement in flat.split(';') {
+        let Some(open) = statement.find('(') else {
+            continue;
+        };
+        let Some(name) = statement[..open].split(' ').next_back() else {
+            continue;
+        };
+        if !name.starts_with("guatiao_") || !statement.ends_with(')') {
+            continue;
+        }
+        let params = &statement[open + 1..statement.len() - 1];
+        let has_out = params.split(',').any(|p| {
+            p.trim()
+                .rsplit(['*', ' '])
+                .next()
+                .is_some_and(|param| param.starts_with("out"))
+        });
+        if has_out {
+            declared.insert(name.to_string());
+        }
+    }
+    let covered: alloc::collections::BTreeSet<String> = out_parameter_cases()
+        .into_iter()
+        .map(|(name, _)| name.to_string())
+        .collect();
+    assert!(declared.len() > 20, "the header parse found {declared:?}");
+    assert_eq!(declared, covered);
+}
+
+/// A registry export reports what is wrong with each argument by the
+/// status that names it, not as a null.
+#[cfg(feature = "load")]
+#[test]
+fn a_registry_argument_is_refused_by_what_is_wrong_with_it() {
+    use guatiao::exports::library::{
+        guatiao_registry_free, guatiao_registry_load_file, guatiao_registry_new,
+    };
+    // SAFETY: two readable views and no allocator.
+    let reg = unsafe { guatiao_registry_new(Str::new("host"), Str::new("1"), core::ptr::null()) };
+    assert!(!reg.is_null());
+    let alloc = Alloc::rust();
+    // SAFETY: a live handle; the path's content is the failure.
+    leaves_absent(
+        "non-UTF-8 path",
+        Status::GUATIAO_ERR_BAD_VALUE,
+        |out| unsafe { guatiao_registry_load_file(reg, not_utf8(), alloc.as_raw(), out) },
+    );
+    // SAFETY: a live handle; the null allocator is the failure.
+    leaves_absent("null allocator", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+        guatiao_registry_load_file(reg, Str::new("x"), core::ptr::null(), out)
+    });
+    // SAFETY: the handle from `guatiao_registry_new`, freed once.
+    unsafe { guatiao_registry_free(reg) };
+}
+
+// --- statuses ------------------------------------------------------------
+
+/// The kind is checked before the content: the wrong kind is
+/// `GUATIAO_ERR_WRONG_KIND`, and the right kind holding text that is not
+/// UTF-8 is `GUATIAO_ERR_BAD_VALUE`.
+#[test]
+fn the_wrong_kind_and_bad_content_are_told_apart() {
+    use guatiao::exports::value::{guatiao_list_discard, guatiao_map_discard};
+    static BAD: [u8; 2] = [0xff, 0xfe];
+    let bad_string = || {
+        // SAFETY: memory shape right (a borrowed, readable buffer); only
+        // the content is wrong, which is what a reader must refuse.
+        unsafe {
+            Value::from_raw_parts(
+                u32::from(Tag::GUATIAO_STRING),
+                guatiao::value::types::Payload::text(Text::from_raw_parts(
+                    BAD.as_ptr().cast_mut(),
+                    2,
+                    0,
+                    core::ptr::null(),
+                )),
+            )
+        }
+    };
+    let alloc = Alloc::rust();
+    let mut list = Value::from(List::new());
+    let mut map = Value::from(Map::new());
+    // SAFETY: every pointer addresses a well-formed value.
+    unsafe {
+        assert_eq!(
+            guatiao_map_discard(&mut list, Str::new("a")),
+            Status::GUATIAO_ERR_WRONG_KIND
+        );
+        assert_eq!(
+            guatiao_map_discard(&mut map, Str::new("a")),
+            Status::GUATIAO_ERR_NOT_FOUND
+        );
+        assert_eq!(
+            guatiao_map_discard(&mut map, not_utf8()),
+            Status::GUATIAO_ERR_BAD_VALUE
+        );
+        assert_eq!(
+            guatiao_list_discard(&mut map, 0),
+            Status::GUATIAO_ERR_WRONG_KIND
+        );
+        assert_eq!(
+            guatiao_list_discard(&mut list, 0),
+            Status::GUATIAO_ERR_NOT_FOUND
+        );
+
+        let mut number = Value::from(5i64);
+        assert_eq!(
+            guatiao_string_push(alloc.as_raw(), &mut number, Str::new("x")),
+            Status::GUATIAO_ERR_WRONG_KIND
+        );
+        let mut bad = bad_string();
+        assert_eq!(
+            guatiao_string_push(alloc.as_raw(), &mut bad, Str::new("x")),
+            Status::GUATIAO_ERR_BAD_VALUE
+        );
+    }
+
+    let bad = bad_string();
+    let refused = <&str>::try_from(&bad).unwrap_err();
+    assert!(
+        matches!(refused, guatiao::MapError::BadValue { .. }),
+        "{refused:?}"
+    );
+    let refused = <&str>::try_from(&Value::from(5i64)).unwrap_err();
+    assert!(
+        matches!(refused, guatiao::MapError::WrongType { .. }),
+        "{refused:?}"
+    );
+}
+
+/// A store refused for want of memory leaves the caller's value where it
+/// was: `GUATIAO_ERR_ALLOC` means nothing was written, and nothing taken.
+#[test]
+fn a_refused_store_leaves_the_callers_value_alone() {
+    use core::ffi::c_void;
+    use guatiao::exports::value::{guatiao_value_list, guatiao_value_map};
+    unsafe extern "C" fn refuse(_: *mut c_void, _: usize, _: usize) -> *mut c_void {
+        core::ptr::null_mut()
+    }
+    unsafe extern "C" fn release(_: *mut c_void, _: *mut c_void, _: usize, _: usize) {}
+    let mut full = guatiao::value::alloc::rust_alloc();
+    full.alloc = Some(refuse);
+    full.free = Some(release);
+
+    let mut map = Value::null();
+    let mut list = Value::null();
+    let mut value = Value::from("keep me");
+    // SAFETY: every pointer addresses a well-formed value, and the
+    // allocator outlives the call and every container recording it.
+    unsafe {
+        assert!(guatiao_value_map(&full, &mut map).is_ok());
+        assert!(guatiao_value_list(&full, &mut list).is_ok());
+        assert_eq!(
+            guatiao_map_set(&full, &mut map, Str::new("k"), &mut value),
+            Status::GUATIAO_ERR_ALLOC
+        );
+        assert_eq!(
+            TryAsRef::<str>::try_as_ref(&value),
+            Some("keep me"),
+            "map_set took it"
+        );
+        assert_eq!(
+            guatiao_list_push(&full, &mut list, &mut value),
+            Status::GUATIAO_ERR_ALLOC
+        );
+        assert_eq!(
+            TryAsRef::<str>::try_as_ref(&value),
+            Some("keep me"),
+            "list_push took it"
+        );
+    }
 }
 
 // --- depth ---------------------------------------------------------------

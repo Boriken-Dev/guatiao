@@ -119,6 +119,22 @@ impl MapError {
         }
     }
 
+    /// What a reader for `expected` says when it refuses `found`: the
+    /// wrong kind is [`MapError::WrongType`], and the right kind whose
+    /// content is refused (text that is not UTF-8, a number outside the
+    /// grammar) is [`MapError::BadValue`].
+    pub(crate) fn refused(expected: Tag, found: &Value) -> MapError {
+        if found.tag() != Ok(expected) {
+            return MapError::wrong_type(expected, found);
+        }
+        MapError::bad_value(match expected {
+            Tag::GUATIAO_STRING => "text that is UTF-8",
+            Tag::GUATIAO_NUMBER => "a number in the JSON number grammar",
+            Tag::GUATIAO_MAP => "a map whose keys are text that is UTF-8",
+            _ => describe(Some(expected)),
+        })
+    }
+
     /// The dotted path this error is about.
     pub fn key(&self) -> &str {
         match self {
@@ -482,7 +498,7 @@ impl<'a> TryFrom<&'a Value> for &'a str {
 
     fn try_from(value: &'a Value) -> Result<&'a str, MapError> {
         TryAsRef::<str>::try_as_ref(value)
-            .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_STRING, value))
+            .ok_or_else(|| MapError::refused(Tag::GUATIAO_STRING, value))
     }
 }
 
@@ -528,7 +544,7 @@ impl FromValue for bool {
 fn number_text(value: &Value) -> Result<&str, MapError> {
     TryAsRef::<Number>::try_as_ref(value)
         .map(AsRef::<str>::as_ref)
-        .ok_or_else(|| MapError::wrong_type(Tag::GUATIAO_NUMBER, value))
+        .ok_or_else(|| MapError::refused(Tag::GUATIAO_NUMBER, value))
 }
 
 /// An integer read **never truncates**: a fractional or exponent
