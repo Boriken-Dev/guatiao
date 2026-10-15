@@ -1297,6 +1297,7 @@ let path = SearchPath::parse(&std::env::var("MY_HOST_PLUGIN_PATH").unwrap_or_def
     .with(exe_dir.join("plugins"));            // adjacency accumulates, never replaced
 let report = scan_path(&mut reg, &path, Order::Ascending, &rules);
 report.loaded / report.skipped / report.failed / report.unreadable
+// loaded: Vec<(PathBuf, String)>, each file with the library key it was filed under
 ```
 
 - **A list of directories or files**, split on the platform's own

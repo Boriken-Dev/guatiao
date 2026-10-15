@@ -88,6 +88,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ProviderInfo::instantiate`. Migration: match the two variants, or
   call `.status()` where `.status` was read; a separate `validate_map`
   before `instantiate` is no longer needed.
+- **Breaking: `LoadReport.loaded` is `Vec<(PathBuf, String)>`**, each
+  loaded file with the library key the registry filed it under, so a host
+  can tell which providers a scan added, or retire what it loaded,
+  without counting. Migration: `for (path, key) in &report.loaded`; the C
+  report is unchanged.
 - **A scan reads a candidate on demand rather than whole**: headers,
   export and dynamic symbol tables, and the 4 KiB declaration window.
 - **An object kind is never served by a provider.** A registry or host

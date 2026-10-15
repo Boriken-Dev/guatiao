@@ -88,8 +88,8 @@ fn main() -> ExitCode {
     let report = scan_path(&mut registry, &path, Order::Ascending, &rules);
 
     println!("\nloaded ({}):", report.loaded.len());
-    for file in &report.loaded {
-        println!("  {}", file.display());
+    for (file, key) in &report.loaded {
+        println!("  {} as {key}", file.display());
     }
     if !report.skipped.is_empty() {
         println!("skipped ({}):", report.skipped.len());
