@@ -76,3 +76,31 @@ def test_unknown_format_raises():
     with Value.null() as doc:
         with pytest.raises(ValueError):
             serde.dumps(doc, format="xml")
+
+def test_a_malformed_document_carries_its_format_and_position():
+    from guatiao.errors import BadValue, ParseError
+
+    with pytest.raises(ParseError) as caught:
+        serde.loads('{"a":\n 1,,}')
+    error = caught.value
+    assert isinstance(error, ValueError) and isinstance(error, BadValue)
+    assert (error.format, error.line, error.column) == ("json", 2, 4)
+    assert error.message and "line 2, column 4" in str(error)
+
+    with pytest.raises(ParseError) as caught:
+        serde.loads("a = = 1", format="toml")
+    assert (caught.value.format, caught.value.line, caught.value.column) == ("toml", 1, 5)
+
+    with pytest.raises(ParseError) as caught:
+        serde.loads("a: [1", format="yaml")
+    assert (caught.value.format, caught.value.line) == ("yaml", 1)
+
+
+def test_a_parse_error_leaves_no_block_allocated():
+    from guatiao.errors import ParseError
+    from counting import Counting
+
+    counting = Counting()
+    with pytest.raises(ParseError):
+        serde.loads('{"a": [1,, 2]}', alloc=counting.alloc)
+    assert counting.live == 0

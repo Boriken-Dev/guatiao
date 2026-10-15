@@ -141,19 +141,27 @@ is a complete worked example.
 ### JSON, TOML, YAML and forms
 
 ```python
-from guatiao import serde, form
+from guatiao import intake, serde
 
 value = serde.loads('{"port": 5900}')                  # format="json" by default
 text = serde.dumps(value, format="yaml")
 pretty = serde.dumps(value, pretty=True)
 
-problem = form.check(schema, form_doc)                 # None when the form fits the schema
-sections = form.layout(schema, form_doc)
-shown = form.is_visible(schema, form_doc, "tls.verify", values)
+problem = intake.check(schema, form_doc)               # None when the form fits the schema
+sections = intake.layout(schema, form_doc)
+shown = intake.is_visible(schema, form_doc, "tls.verify", values)
+
+# A front end that keeps text under flat keys (`agent[0].name`, `env[PATH]`):
+field = intake.resolve(schema, "auth.password")        # the schema field, or None
+keys = intake.flat_keys(schema, "auth")                # ["auth", "auth.username", ...]
+store = intake.flatten(schema, "auth", auth_value)     # {"auth": "userpass", ...}
+back = intake.unflatten(schema, "auth", store)         # a Value, or None
 ```
 
-A format the loaded library does not export raises
-`NotImplementedError` naming it.
+A document that does not parse raises `guatiao.errors.ParseError`, a
+`ValueError` carrying `format`, `line` and `column` (from 1; 0 when the
+parser did not say where). A format the loaded library does not export
+raises `NotImplementedError` naming it.
 
 ### Errors
 
@@ -183,7 +191,7 @@ provider's own words when it gave any.
 | `guatiao.registry` | the plugin host: load, scan, list, rank, configure, instantiate |
 | `guatiao.kinds` | check and cast a provider's function table |
 | `guatiao.serde` | `loads` / `dumps` for JSON, TOML, YAML |
-| `guatiao.intake` | `check`, `layout`, `is_visible` |
+| `guatiao.intake` | `check`, `layout`, `is_visible`, `at`, `for_schema`, `form_for`, `resolve`, `flat_keys`, `flatten`, `unflatten` |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/src/guatiao/AGENTS.md) is
 the full API reference and ships inside the wheel. The C ABI is described

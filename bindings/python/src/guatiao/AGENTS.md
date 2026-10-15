@@ -135,19 +135,44 @@ value = serde.loads(text, format="json")
 loaded `guatiao_serde` was not built with it. A TOML document must be a
 map (`WrongKind` otherwise).
 
+A document that does not parse raises `guatiao.errors.ParseError`: a
+`BadValue` and a `ValueError` with `.format` (`"json"`, `"toml"` or
+`"yaml"`), `.line` and `.column` (from 1, the column in characters; 0 when
+the parser did not say where; for text that is not UTF-8, its first bad
+byte) and `.message`, which never quotes the document.
+
 A number keeps its exact text through JSON, with one exception the
 parser owns: an exponent is read back with its sign written (`1e400`
 parses as `1e+400`).
 
-## form
+## intake
 
 ```python
 from guatiao import intake
 
-form.check(schema, form_doc)             # None, or an error map
-form.layout(schema, form_doc)            # [{"section": ..., "fields": [...]}, ...]
-form.is_visible(schema, form_doc, "key", values)   # bool
+intake.check(schema, form_doc)             # None, or an error map
+intake.layout(schema, form_doc)            # [{"section": ..., "fields": [...]}, ...]
+intake.is_visible(schema, form_doc, "key", values)   # bool
+intake.at(value, "agent[1].name")          # a borrowed Ref, or None
+intake.for_schema(schema)                  # the form a schema implies (a Value)
+intake.form_for(form_doc, schema, "path")  # a Value, or None
 ```
+
+The flat projection keeps a value as `key -> text`, one entry per scalar
+leaf (a tagged field's discriminant under its key and its payload under
+`key.member`, a list as `agent[0].name`, an open map as `env[PATH]`):
+
+```python
+intake.resolve(schema, "auth.password")    # borrowed Ref onto the field, or None
+intake.flat_keys(schema, "auth")           # list[str]; WrongKind for an unknown key
+intake.flatten(schema, "auth", value)      # dict[str, str]; WrongKind when it does not apply
+intake.unflatten(schema, "auth", store)    # Value (close it), or None; store is a
+                                           # Mapping[str, str] or such a Value
+```
+
+What `resolve` and `at` return borrows from the schema or value passed
+and must not outlive it. An empty container flattens to nothing, and an
+entry the schema does not declare is dropped by `unflatten`.
 
 ## Errors
 
@@ -155,6 +180,13 @@ Every failing `guatiao_status` raises `guatiao.GuatiaoError` (`.status`
 the raw code, `.message` a provider's own words when there were any), as
 one of its subclasses: `BadValue`, `AllocFailed`, `WrongKind`,
 `NotFound`, `NullArgument`, `Gone`, `Unsupported`, `Busy`, `Internal`.
+
+## Not offered
+
+A kind's borrowed object arguments (an object lent to a call for its
+duration, `const guatiao_object *` in a kind table) are not wrapped: this
+binding drives a kind's table through the pointer `provider_table` answers
+and builds no object for a callee to borrow.
 
 ## Threading
 
