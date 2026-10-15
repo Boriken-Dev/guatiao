@@ -23,8 +23,11 @@ CLAUDE*
 # Rust
 /target/
 **/*.rs.bk
-# A library workspace: consumers resolve their own lockfile.
+# A library workspace: consumers resolve their own lockfile. The browser
+# example is a program, and its README pins a tool to the version this
+# lockfile names.
 Cargo.lock
+!/examples/wire_over_webtransport/client/Cargo.lock
 
 # OS/editor
 .DS_Store
