@@ -238,7 +238,7 @@ fn named(key: &str) -> String {
 /// A kind in a sentence. Beside [`MapError`] rather than on the tag:
 /// diagnostic phrasing is not part of the value model, and on the enum it
 /// would invite a consumer to key off the words.
-fn describe(tag: Option<Tag>) -> &'static str {
+pub(crate) fn describe(tag: Option<Tag>) -> &'static str {
     let Some(tag) = tag else {
         // A newer producer's kind is one this build carries and cannot
         // name.

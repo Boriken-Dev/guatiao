@@ -199,8 +199,9 @@ impl Payload {
     }
 }
 
-/// The live arm as `T`, for a dispatch that has already read the tag.
-fn arm<T: ?Sized>(v: &Value) -> Result<&T, ValueError>
+/// The live arm as `T`, for a dispatch or a walk that has already read
+/// the tag.
+pub(crate) fn arm<T: ?Sized>(v: &Value) -> Result<&T, ValueError>
 where
     Value: TryAsRef<T>,
 {
