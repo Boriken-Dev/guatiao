@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`guatiao::Payload` and `guatiao::AllocError`** at the crate root,
+  beside the `Value::from_raw_parts` that takes the one and the `try_`
+  forms that answer the other.
 - **`f32` is `ToValue`, `FromValue` and `TryFrom<&Value>`**, so the three
   derives take an `f32` field as they take an `f64` one. It writes its own
   shortest text (`1.1`, not the widened `1.100000023841858`), as

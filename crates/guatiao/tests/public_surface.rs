@@ -48,7 +48,10 @@ fn the_error_module_exposes_the_depth_bound_and_the_error() {
 /// an import that did not compile.
 #[test]
 fn the_root_exports_the_names_the_header_names() {
-    use guatiao::{Alloc, Buffer, Entry, List, Map, Status, Str, Tag, Text, Value, ValueError};
+    use guatiao::{
+        Alloc, AllocError, Buffer, Entry, List, Map, Payload, Status, Str, Tag, Text, Value,
+        ValueError,
+    };
 
     let text = Text::new("hello");
     assert_eq!(&*text, "hello");
@@ -74,6 +77,14 @@ fn the_root_exports_the_names_the_header_names() {
         Status::GUATIAO_ERR_WRONG_KIND
     );
     let _ = Alloc::rust();
+
+    // What `from_raw_parts` takes and what the `try_` forms answer.
+    let (tag, payload): (u32, Payload) = Value::from(true).into_raw_parts();
+    // SAFETY: the parts a value just handed over, put back once.
+    let back = unsafe { Value::from_raw_parts(tag, payload) };
+    assert_eq!(back, Value::from(true));
+    let pushed: Result<(), AllocError> = list.try_push(2);
+    assert_eq!(pushed, Ok(()));
 }
 
 /// The standard traits a container is expected to have.

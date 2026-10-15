@@ -112,8 +112,9 @@ Text::default() / Buffer::default()    // empty, allocating nothing
 
 Every name above is at the **crate root**: `guatiao::Text`,
 `guatiao::Entry`, `guatiao::Tag`, `guatiao::Str`, `guatiao::Number`,
-beside `Alloc`, `Buffer`, `List`, `Map`, `MAX_DEPTH`, `Status`,
-`TryAsMut`, `TryAsRef`, `Value` and `ValueError`.
+`guatiao::Payload` (what `from_raw_parts` takes), beside `Alloc`,
+`AllocError` (what the `try_` forms answer), `Buffer`, `List`, `Map`,
+`MAX_DEPTH`, `Status`, `TryAsMut`, `TryAsRef`, `Value` and `ValueError`.
 
 **The short form uses the allocator the container recorded**; the `_in`
 form adopts one and is what a literal with a null `alloc` field needs.
@@ -186,7 +187,7 @@ container to live on:
 Value::null()      Value::absent()     Value::default()   // = null
 v.tag() -> Result<Tag, ValueError>     v.alloc() -> Result<Alloc, ValueError>
 v.clone_in(alloc) -> Result<Value, ValueError>
-Value::from_raw_parts(tag: u32, Payload)   v.into_raw_parts() -> (u32, Payload)
+unsafe Value::from_raw_parts(tag: u32, Payload)   v.into_raw_parts() -> (u32, Payload)
 unsafe { v.free() }                    // the boundary's spelling of drop
 ```
 
