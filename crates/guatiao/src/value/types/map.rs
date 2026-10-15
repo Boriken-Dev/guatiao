@@ -135,6 +135,29 @@ pub struct Entry {
     pub(crate) value: Value,
 }
 
+/// A deep copy of the key and the value.
+///
+/// # Panics
+///
+/// As [`Value::clone`], on a value whose content this build refuses.
+impl Clone for Entry {
+    fn clone(&self) -> Entry {
+        Entry {
+            key: self.key.clone(),
+            value: self.value.clone(),
+        }
+    }
+}
+
+/// The same key, byte for byte, and an equal value.
+impl PartialEq for Entry {
+    fn eq(&self, other: &Entry) -> bool {
+        self.key == other.key && self.value == other.value
+    }
+}
+
+impl Eq for Entry {}
+
 impl fmt::Debug for Entry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Entry")

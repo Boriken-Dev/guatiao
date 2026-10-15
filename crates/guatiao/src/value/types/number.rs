@@ -118,6 +118,31 @@ impl PartialEq for Number {
 
 impl Eq for Number {}
 
+/// Compared with its text, byte for byte: `number == "1.10"`, either way round.
+impl PartialEq<str> for Number {
+    fn eq(&self, other: &str) -> bool {
+        **self == *other
+    }
+}
+
+impl PartialEq<&str> for Number {
+    fn eq(&self, other: &&str) -> bool {
+        **self == **other
+    }
+}
+
+impl PartialEq<Number> for str {
+    fn eq(&self, other: &Number) -> bool {
+        *self == **other
+    }
+}
+
+impl PartialEq<Number> for &str {
+    fn eq(&self, other: &Number) -> bool {
+        **self == **other
+    }
+}
+
 /// The text, as a `String` gives its `str`.
 impl core::ops::Deref for Number {
     type Target = str;

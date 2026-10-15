@@ -105,6 +105,7 @@ Number::new(&str) -> Result<Number, ValueError>     // the JSON grammar
 Number::new_in(alloc, &str)            Number::float_in(alloc, f64)
 &*number -> &str                       // Deref<Target = str>: every str method
 
+text == "host" / "host" == text       // and Number; Text is Ord by its str
 Entry::key() -> &str                   Entry::value() -> &Value
 Entry::value_mut() -> &mut Value       // the key is not offered this way
 Text::default() / Buffer::default()    // empty, allocating nothing
