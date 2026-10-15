@@ -8,7 +8,7 @@
 
 use guatiao::schema::build::{ArmBuilder, FieldBuilder, KindBuilder, SchemaBuilder};
 use guatiao::schema::read::SchemaRef;
-use guatiao::schema::redact;
+use guatiao::schema::{inline_refs, redact};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{List, Map, Value};
 
@@ -263,4 +263,138 @@ fn the_input_is_left_alone() {
     let before = value.clone();
     let _ = redact(SchemaRef::new(&schema).unwrap(), &value, HIDDEN).unwrap();
     assert_eq!(value, before);
+}
+
+/// `{"type": ..}`.
+fn typed(name: &str) -> Value {
+    map(vec![("type", text(name))])
+}
+
+/// A root document declaring each `(key, schema)`, with `$defs` beside
+/// them, written as another tool writes one.
+fn document(fields: Vec<(&str, Value)>, defs: Vec<(&str, Value)>) -> Value {
+    map(vec![
+        ("type", text("object")),
+        ("properties", map(fields)),
+        ("$defs", map(defs)),
+    ])
+}
+
+fn redacted(schema: &Value, value: &Value) -> Value {
+    redact(SchemaRef::new(schema).unwrap(), value, HIDDEN).unwrap()
+}
+
+/// The marks a generator writes on an optional value, on a definition an
+/// optional names, and on one arm of a union a value two arms accept.
+#[test]
+fn a_mark_inside_an_optional_or_a_union_arm_hides_the_value() {
+    let marked = || {
+        map(vec![
+            ("type", text("string")),
+            ("writeOnly", Value::from(true)),
+        ])
+    };
+    let schema = document(
+        vec![
+            (
+                "nullable",
+                map(vec![("anyOf", list(vec![marked(), typed("null")]))]),
+            ),
+            (
+                "by_ref",
+                map(vec![(
+                    "anyOf",
+                    list(vec![
+                        map(vec![("$ref", text("#/$defs/Secret"))]),
+                        typed("null"),
+                    ]),
+                )]),
+            ),
+            (
+                "documented",
+                map(vec![
+                    ("description", text("d")),
+                    (
+                        "allOf",
+                        list(vec![map(vec![("$ref", text("#/$defs/Secret"))])]),
+                    ),
+                ]),
+            ),
+            (
+                "either",
+                map(vec![("anyOf", list(vec![typed("string"), marked()]))]),
+            ),
+        ],
+        vec![("Secret", marked())],
+    );
+    let value = map(vec![
+        ("nullable", text("hunter2")),
+        ("by_ref", text("hunter2")),
+        ("documented", text("hunter2")),
+        ("either", text("hunter2")),
+    ]);
+    let out = redacted(&inline_refs(&schema).unwrap(), &value);
+    for key in ["nullable", "by_ref", "documented", "either"] {
+        assert!(is_text(at(&out, &[key]), HIDDEN), "{key}");
+    }
+}
+
+/// Two arms accepting one value but declaring different secrets: the copy
+/// hides what either would.
+#[test]
+fn arms_that_disagree_about_a_value_hide_it() {
+    let object = |secret: bool| {
+        let mut p = typed("string");
+        if secret {
+            p = map(vec![
+                ("type", text("string")),
+                ("x-sensitive", Value::from(true)),
+            ]);
+        }
+        map(vec![
+            ("type", text("object")),
+            ("properties", map(vec![("p", p)])),
+        ])
+    };
+    let schema = document(
+        vec![(
+            "u",
+            map(vec![("anyOf", list(vec![object(false), object(true)]))]),
+        )],
+        vec![],
+    );
+    let value = map(vec![("u", map(vec![("p", text("hunter2"))]))]);
+    let out = redacted(&schema, &value);
+    assert!(is_text(at(&out, &["u"]), HIDDEN));
+}
+
+/// A reference not inlined may name a marked definition, so whatever sits
+/// under one is hidden, a scalar included.
+#[test]
+fn a_value_under_a_reference_not_inlined_is_hidden() {
+    let schema = document(
+        vec![("pw", map(vec![("$ref", text("#/$defs/Secret"))]))],
+        vec![(
+            "Secret",
+            map(vec![
+                ("type", text("string")),
+                ("writeOnly", Value::from(true)),
+            ]),
+        )],
+    );
+    let value = map(vec![("pw", text("hunter2"))]);
+    assert!(is_text(at(&redacted(&schema, &value), &["pw"]), HIDDEN));
+}
+
+/// Only text names an arm. A container under the discriminant's key is
+/// data nothing describes, and is hidden rather than kept.
+#[test]
+fn a_discriminant_that_is_not_text_is_hidden() {
+    let schema = schema();
+    let value = map(vec![(
+        "auth",
+        map(vec![("kind", map(vec![("pass", text("hunter2"))]))]),
+    )]);
+    let out = redacted(&schema, &value);
+    assert!(is_text(at(&out, &["auth", "kind"]), HIDDEN));
 }
