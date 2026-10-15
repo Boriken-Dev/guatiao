@@ -157,7 +157,10 @@ Four workflows:
 **Cutting a release.** One version everywhere: `[workspace.package] version`
 in `Cargo.toml`, `bindings/dart/pubspec.yaml`, and the same version the
 PEP 440 way in `bindings/python/pyproject.toml` and its `__version__`
-(`0.0.0-alpha.0` is `0.0.0a0`). A `## [x.y.z] - <date>` section in
+(`0.0.0-alpha.0` is `0.0.0a0`), the `=x.y.z` pins between the crates, and the
+`guatiao` entry of `examples/wire_over_webtransport/client/Cargo.lock` (a
+`--locked` build refuses a stale one; `cargo build` in that directory
+rewrites it). A `## [x.y.z] - <date>` section in
 `CHANGELOG.md` (its body becomes the release notes) and in
 `bindings/dart/CHANGELOG.md`. Rehearse with `gh workflow run release.yml`,
 then push the tag `vx.y.z` -- the tag is the release, and a registry never

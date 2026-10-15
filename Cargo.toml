@@ -38,7 +38,7 @@ std_instead_of_alloc = "warn"
 alloc_instead_of_core = "warn"
 
 [workspace.package]
-version = "0.0.0-alpha.0"
+version = "0.0.0-alpha.1"
 edition = "2024"
 # MSRV: the lowest toolchain every step of the test workflow has been run
 # on. Let chains, used throughout, set a floor of 1.88 by themselves; 1.88
