@@ -1144,7 +1144,16 @@ repository (`cargo run -p greeter_host` after a workspace build).
   `destroy` (on a table Rust lends it does nothing; lent shared, a
   `&mut self` slot answers `GUATIAO_ERR_UNSUPPORTED`). Lending a provider
   kind, or `&dyn K` of a kind with no `&self` method, is a compile error.
-  `Kind::OBJECT` says which a kind
+  A `&self` method reaches the value through a shared reference and a
+  `&mut self` one through an exclusive one, so `Object<dyn K>` is `Sync`
+  exactly when `K`'s trait names `Sync`, and an object of such a kind,
+  owned or lent, may have its `&self` slots called from two threads at
+  once — a C implementation of one allows that. A C lender fills
+  `destroy` (every required slot is checked non-null) with a function
+  that frees nothing; lent as `&mut dyn K`, nothing but the callee
+  reaches the object until the call returns; lent as `&dyn K` of a kind
+  that does not name `Sync`, its slots are never called from two threads
+  at once. `Kind::OBJECT` says which a kind
   is; an object table's hash covers `object;` so it never passes for a
   provider table. A registry or host never serves one
   (`KindMismatch::ObjectKind`), and `#[provider(..)]` naming one is a
@@ -1224,7 +1233,8 @@ drop(s);                                                             // the libr
   `Box<dyn K>: From<Remote<dyn K>>`.
 - **Every handle may be held across an `.await`.** `Remote`, `Offer` and
   `Instance` are `Send + Sync` and `Object` is `Send`, with no bound on
-  `K`, so a future holding one stays `Send` and can be spawned.
+  `K`, so a future holding one stays `Send` and can be spawned. (`Object`
+  is `Sync` only for a kind whose trait names `Sync`.)
 - **`KindMismatch`** (`#[non_exhaustive]`): `NoTable`, `BelowFloor {
   size, floor }`, `HashMismatch { expected, found }`,
   `NullRequiredSlot(name)`, `ObjectKind`. A `floor_hash` of `0` passes

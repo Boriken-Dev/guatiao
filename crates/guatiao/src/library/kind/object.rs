@@ -23,7 +23,17 @@ use super::*;
 /// during the call, never keeps the pointer, and **never calls its
 /// `destroy`**. A table Rust lends as `&dyn K` answers
 /// `GUATIAO_ERR_UNSUPPORTED` from each slot whose method takes `&mut
-/// self`.
+/// self`. What a C side keeps to:
+///
+/// - A C lender fills `destroy` all the same, since every required slot
+///   is checked non-null, with a function that frees nothing; it is
+///   never called.
+/// - Lent as `&mut dyn K`, nothing but the callee reaches the object
+///   until the call returns, and the callee calls one slot at a time.
+/// - Lent as `&dyn K`, the callee calls only the `&self` slots, and from
+///   two threads at once only when `K`'s trait names `Sync`.
+/// - An object of a kind whose trait names `Sync`, owned or lent, may
+///   have its `&self` slots called from several threads at once.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ObjectRaw {
@@ -165,11 +175,19 @@ const DESTROY_END: usize = size_of::<KindHeader>() + size_of::<*const c_void>();
 /// generated proxy, and destroyed exactly once through the table's
 /// `destroy` slot when this is dropped.
 ///
-/// `Send` (an object kind names `Send`); not `Sync` and not `Clone`,
-/// because the shims hand out `&mut` to the value behind it. Share one
-/// through a `Mutex` if two threads need it.
+/// `Send` (an object kind names `Send`), and `Sync` exactly when the
+/// kind's trait is: a `&self` method reaches the value through a shared
+/// reference, a `&mut self` one only through `&mut Object`. Not `Clone`.
+///
+/// ```compile_fail
+/// fn shared<T: Sync>() {}
+/// // `Conversation` names `Send` alone.
+/// shared::<guatiao::library::Object<dyn greeter_kind::Conversation>>();
+/// ```
 pub struct Object<K: ?Sized> {
     remote: Remote<K>,
+    /// `Remote` is `Sync` whatever `K` is; this one is not.
+    _unsync: PhantomData<*const ()>,
 }
 
 impl<K: ?Sized + Kind> core::fmt::Debug for Object<K> {
@@ -184,6 +202,10 @@ impl<K: ?Sized + Kind> core::fmt::Debug for Object<K> {
 // handle to the value; the table addresses a library that is never
 // unloaded or the cell the handle owns. Unbounded in `K`, as `Remote` is.
 unsafe impl<K: ?Sized> Send for Object<K> {}
+// SAFETY: shared, the handle reaches only the `&self` slots, whose shims
+// take a shared reference to the value; `K: Sync` makes that sound from
+// several threads at once.
+unsafe impl<K: ?Sized + Sync> Sync for Object<K> {}
 
 impl<K: ?Sized + Kind> Object<K> {
     /// An object from a cell the derive's `into_object` built: the table
@@ -209,7 +231,10 @@ impl<K: ?Sized + Kind> Object<K> {
             Remote::<K>::validate(ctx.cast::<c_void>(), size, ctx.cast::<c_void>(), false)
         };
         match validated {
-            Ok(remote) => Ok(Object { remote }),
+            Ok(remote) => Ok(Object {
+                remote,
+                _unsync: PhantomData,
+            }),
             Err(why) => {
                 // SAFETY: the box was made just above and is not used again.
                 drop(unsafe { Box::from_raw(ctx) });
@@ -231,7 +256,10 @@ impl<K: ?Sized + Kind> Object<K> {
     pub unsafe fn from_raw(raw: ObjectRaw) -> Result<Object<K>, KindMismatch> {
         // SAFETY: forwarded.
         match unsafe { Remote::<K>::validate(raw.table, raw.size, raw.ctx, false) } {
-            Ok(remote) => Ok(Object { remote }),
+            Ok(remote) => Ok(Object {
+                remote,
+                _unsync: PhantomData,
+            }),
             Err(why) => {
                 // SAFETY: the caller's contract; a table long enough to hold
                 // the destroy slot has one.
@@ -402,7 +430,8 @@ impl<'a, K: ?Sized + Kind> Borrowed<'a, K> {
     /// `raw.table` addresses `raw.size` readable bytes that are a table
     /// for the kind named [`K::NAME`](Kind::NAME), laid out as its
     /// `Vtable`, and every slot of a method taking `&self` may be called
-    /// with `raw.ctx` from any thread, for `'a`.
+    /// with `raw.ctx` for `'a`, from several threads at once when `K` is
+    /// `Sync`.
     pub unsafe fn from_raw(raw: &'a ObjectRaw) -> Result<Borrowed<'a, K>, KindMismatch> {
         // SAFETY: forwarded.
         let remote = unsafe { Remote::<K>::validate(raw.table, raw.size, raw.ctx, false) }?;

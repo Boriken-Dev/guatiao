@@ -589,3 +589,87 @@ fn a_null_or_foreign_lent_object_is_refused_before_the_method_runs() {
         "the method never ran"
     );
 }
+
+/// An object kind whose trait names `Sync`: shared, its `&self` methods
+/// may run on two threads at once.
+#[guatiao::kind(object)]
+pub trait Meter: Send + Sync {
+    /// Read.
+    fn read(&self) -> i64;
+    /// Written.
+    fn add(&mut self, n: i64);
+}
+
+#[guatiao::kind]
+pub trait Reader: Send + Sync {
+    /// Reads the meter it was lent from two threads at once.
+    fn twice(&self, meter: &mut dyn Meter) -> Result<i64, ProviderError>;
+}
+
+/// A meter whose `read` waits for the other reader, so the two calls
+/// overlap: under Miri, a shim taking `&mut` for a `&self` method is a
+/// data race.
+struct Gated {
+    value: i64,
+    gate: Arc<std::sync::Barrier>,
+}
+
+impl Meter for Gated {
+    fn read(&self) -> i64 {
+        self.gate.wait();
+        self.value
+    }
+    fn add(&mut self, n: i64) {
+        self.value += n;
+    }
+}
+
+fn read_on_two_threads(meter: &dyn Meter) -> i64 {
+    std::thread::scope(|s| {
+        let a = s.spawn(|| meter.read());
+        let b = s.spawn(|| meter.read());
+        a.join().expect("a reader") + b.join().expect("a reader")
+    })
+}
+
+struct Twice;
+
+impl Reader for Twice {
+    fn twice(&self, meter: &mut dyn Meter) -> Result<i64, ProviderError> {
+        Ok(read_on_two_threads(meter))
+    }
+}
+
+static TWICE: ReaderVtable = ReaderVtable::of::<Twice>();
+
+#[test]
+fn a_sync_object_is_read_from_two_threads_at_once_owned_or_lent() {
+    // The handle of a `Sync` kind is `Sync`; of a kind naming `Send`
+    // alone it is not (a `compile_fail` example on `Object`).
+    fn shared<T: Sync>(_: &T) {}
+    let gate = Arc::new(std::sync::Barrier::new(2));
+    // Owned: the handle derefs to `&dyn Meter`, which is `Sync`.
+    let mut meter = Gated {
+        value: 20,
+        gate: gate.clone(),
+    }
+    .into_object();
+    shared(&meter);
+    assert_eq!(read_on_two_threads(&*meter), 40);
+    meter.add(1);
+    assert_eq!(read_on_two_threads(&*meter), 42);
+
+    // Lent `&mut` through a proxy: the callee shares what it was lent.
+    // SAFETY: the table `of::<Twice>()` built; `Twice` is a ZST read only
+    // through `&Twice`, so any aligned non-null address serves as `ctx`.
+    let reader = unsafe {
+        Remote::<dyn Reader>::from_raw(
+            (&TWICE as *const ReaderVtable).cast(),
+            size_of::<ReaderVtable>(),
+            core::ptr::NonNull::<Twice>::dangling().as_ptr().cast(),
+        )
+    }
+    .expect("the table validates");
+    let mut lent = Gated { value: 21, gate };
+    assert_eq!(reader.twice(&mut lent).expect("the call succeeds"), 42);
+}

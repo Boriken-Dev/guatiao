@@ -388,6 +388,7 @@ pub unsafe fn guatiao::library::kind::Object<K>::from_raw(guatiao::library::kind
 pub fn guatiao::library::kind::Object<K>::into_raw(self) -> guatiao::library::kind::ObjectRaw
 pub fn guatiao::library::kind::Object<K>::size(&self) -> usize
 pub fn guatiao::library::kind::Object<K>::table(&self) -> *const core::ffi::c_void
+impl<K: ?core::marker::Sized + core::marker::Sync> core::marker::Sync for guatiao::library::kind::Object<K>
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::fmt::Debug for guatiao::library::kind::Object<K>
 pub fn guatiao::library::kind::Object<K>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::ops::deref::Deref for guatiao::library::kind::Object<K>
@@ -1326,6 +1327,7 @@ pub unsafe fn guatiao::library::kind::Object<K>::from_raw(guatiao::library::kind
 pub fn guatiao::library::kind::Object<K>::into_raw(self) -> guatiao::library::kind::ObjectRaw
 pub fn guatiao::library::kind::Object<K>::size(&self) -> usize
 pub fn guatiao::library::kind::Object<K>::table(&self) -> *const core::ffi::c_void
+impl<K: ?core::marker::Sized + core::marker::Sync> core::marker::Sync for guatiao::library::kind::Object<K>
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::fmt::Debug for guatiao::library::kind::Object<K>
 pub fn guatiao::library::kind::Object<K>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::ops::deref::Deref for guatiao::library::kind::Object<K>

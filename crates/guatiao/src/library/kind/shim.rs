@@ -166,17 +166,41 @@ pub unsafe fn destroy_instance<T>(instance: *mut c_void) {
 }
 
 /// The value behind an object kind's `ctx`, mutably: the cell the
-/// derive's `into_object` boxed, past its table. `None` for null.
+/// derive's `into_object` boxed, past its table. `None` for null. What a
+/// `&mut self` slot reads.
 ///
 /// # Safety
 ///
-/// `ctx` is null or addresses an `ObjectCell<V, T>` this call has the
-/// only reference to for its duration — which an [`Object`] guarantees by
-/// being the one handle and handing out `&mut`.
+/// `ctx` is null or addresses an `ObjectCell<V, T>` whose value nothing
+/// else reaches for `'a` — which an [`Object`] guarantees by being the one
+/// handle and reaching a `&mut self` slot only through `&mut` to it.
 #[doc(hidden)]
 pub unsafe fn object_mut<'a, V: 'a, T: 'a>(ctx: *mut c_void) -> Option<&'a mut T> {
-    // SAFETY: the caller's contract.
-    unsafe { ctx.cast::<ObjectCell<V, T>>().as_mut() }.map(|cell| &mut cell.value)
+    let cell = ctx.cast::<ObjectCell<V, T>>();
+    if cell.is_null() {
+        return None;
+    }
+    // SAFETY: the caller's contract; only the value is borrowed, not the
+    // table beside it.
+    Some(unsafe { &mut (*cell).value })
+}
+
+/// The same, shared: what a `&self` slot reads.
+///
+/// # Safety
+///
+/// `ctx` is null or addresses an `ObjectCell<V, T>` whose value nothing
+/// reaches mutably for `'a`, and from one thread at a time unless `T` is
+/// `Sync` — which an [`Object`] guarantees by reaching a `&self` slot
+/// through a shared borrow, and being `Sync` only for a `Sync` kind.
+#[doc(hidden)]
+pub unsafe fn object_ref<'a, V: 'a, T: 'a>(ctx: *const c_void) -> Option<&'a T> {
+    let cell = ctx.cast::<ObjectCell<V, T>>();
+    if cell.is_null() {
+        return None;
+    }
+    // SAFETY: the caller's contract; only the value is borrowed.
+    Some(unsafe { &(*cell).value })
 }
 
 /// Releases the cell [`Object::from_cell`] took. Null is a no-op.
@@ -244,7 +268,8 @@ pub unsafe fn borrowed_arg<'a, K: ?Sized + Kind>(
 }
 
 /// The lender's object behind a lent table's `ctx`, mutably: `ctx`
-/// addresses the `*mut K` [`lend_mut`] was given. `None` for null.
+/// addresses the `*mut K` [`lend_mut`] was given. `None` for null. What a
+/// `&mut self` slot of the `&mut` lent table reads.
 ///
 /// # Safety
 ///
@@ -258,12 +283,15 @@ pub unsafe fn lent_mut<'a, K: ?Sized>(ctx: *mut c_void) -> Option<&'a mut K> {
     unsafe { object.as_mut() }
 }
 
-/// The same for a table lent as `&dyn K`: `ctx` addresses a `*const K`.
+/// The same, shared: what a `&self` slot of either lent table reads.
+/// `ctx` addresses a `*const K`, or the `*mut K` [`lend_mut`] was given,
+/// read as one.
 ///
 /// # Safety
 ///
-/// `ctx` is null or addresses a `*const K` that is null or points at a
-/// live `K` shared for `'a`.
+/// `ctx` is null or addresses such a pointer that is null or points at a
+/// live `K` nothing reaches mutably for `'a`, and from one thread at a
+/// time unless `K` is `Sync`.
 #[doc(hidden)]
 pub unsafe fn lent_ref<'a, K: ?Sized>(ctx: *mut c_void) -> Option<&'a K> {
     // SAFETY: the caller's contract.

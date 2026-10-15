@@ -60,7 +60,11 @@ impl<K: ?Sized + Kind> Remote<K> {
     /// `table` is null, or addresses `size` readable bytes that are a
     /// table for the kind named [`K::NAME`](Kind::NAME), laid out as its
     /// `Vtable`, that stay valid for the life of the process; `ctx` is
-    /// what the table's slots expect.
+    /// what the table's slots expect. For an object kind, the caller also
+    /// keeps the borrow rules a `Remote` cannot, being `Copy` and `Sync`:
+    /// no method runs through one copy while a `&mut self` method runs
+    /// through another, and `&self` methods run on two threads at once
+    /// only for a kind whose trait names `Sync`.
     pub unsafe fn from_raw(
         table: *const c_void,
         size: usize,

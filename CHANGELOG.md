@@ -492,6 +492,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   holding one with "implementation of `Kind` is not general enough". The
   `Kind` bound is off those types and their marker impls, and `Offer` and
   `ProviderView` are `Send + Sync` as well.
+- **An object's `&self` methods take the value shared.** Every slot of an
+  object kind's table, and of its `&mut` lent table, took the value as
+  `&mut`, so an object of a kind naming `Sync` called from two threads
+  through `&dyn K` made two exclusive references at once, which is
+  undefined behaviour; a `&self` slot now takes `&`, a `&mut self` slot
+  still `&mut`. Slot signatures and table hashes are unchanged.
+  *Breaking:* `Object<dyn K>` was `Sync` for every kind and is now `Sync`
+  only when `K`'s trait names `Sync`. *Migration:* share the handle of a
+  kind naming `Send` alone through a `Mutex`, or name `Sync` on the kind.
 - **An object kind with methods `x` and `mut_x` compiles.** Its lent
   tables' shims for the two had one name; they are `__guatiao_lentmut__<m>`
   and `__guatiao_lent__<m>` now, which no pair of method names can meet.
