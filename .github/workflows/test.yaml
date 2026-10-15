@@ -257,15 +257,20 @@ jobs:
           GUATIAO_LIBRARY: target/debug
 
   dart:
-    name: Dart bindings (${{ matrix.os }})
+    name: Dart bindings (${{ matrix.os }}, ${{ matrix.sdk }})
     runs-on: ${{ matrix.os }}
     # The same three platforms as the Python job, for the same reason: a
     # binding breaks where the platforms differ -- the library's filename,
-    # how it is found, and how the loader treats an unmapped image.
+    # how it is found, and how the loader treats an unmapped image. One
+    # more leg runs the floor `pubspec.yaml` declares.
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        sdk: [stable]
+        include:
+          - os: ubuntu-latest
+            sdk: '3.6.0'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -278,17 +283,27 @@ jobs:
         run: cargo build --workspace --all-features
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: stable
+          sdk: ${{ matrix.sdk }}
       - name: Install
         run: dart pub get
         working-directory: bindings/dart
+        if: matrix.sdk == 'stable'
+      - name: Install without the tooling that needs a newer SDK
+        # `ffigen` and `lints` ask for a newer SDK than the package does and
+        # only the stable leg uses them; the floor leg builds and tests the
+        # package against what its own `sdk:` constraint admits.
+        run: dart pub remove ffigen lints
+        working-directory: bindings/dart
+        if: matrix.sdk != 'stable'
       - name: Analyze
         # `--fatal-infos`, because a lint at info level is still a lint.
         run: dart analyze --fatal-infos
         working-directory: bindings/dart
+        if: matrix.sdk == 'stable'
       - name: Format check
         run: dart format --output=none --set-exit-if-changed .
         working-directory: bindings/dart
+        if: matrix.sdk == 'stable'
       - name: Test
         run: dart test
         working-directory: bindings/dart
