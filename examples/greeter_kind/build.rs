@@ -20,8 +20,11 @@
 //!    functions; naming the tables is what makes them appear.
 //! 3. `parse_deps = false` with a `[export.rename]` table mapping
 //!    guatiao's type names onto the names `guatiao.h` declares, which the
-//!    header includes. The tables are rendered against those names and
-//!    guatiao's own types are not emitted a second time.
+//!    header includes. guatiao ships that table beside its header
+//!    (`kind_rename.toml`, a cbindgen configuration of its own), found
+//!    through `DEP_GUATIAO_INCLUDE` and merged into this crate's renames.
+//!    The tables are rendered against those names and guatiao's own types
+//!    are not emitted a second time.
 //!
 //! The expansion re-enters cargo from inside a build script. It runs in
 //! its own target directory (`CARGO_EXPAND_TARGET_DIR`) so it never waits
@@ -62,8 +65,17 @@ fn render() {
         std::env::set_var("CARGO_EXPAND_TARGET_DIR", out_dir.join("expand"));
     }
 
-    let config = cbindgen::Config::from_file(crate_dir.join("cbindgen.toml"))
+    let mut config = cbindgen::Config::from_file(crate_dir.join("cbindgen.toml"))
         .expect("cbindgen.toml is committed beside this script");
+    // guatiao's own types, under the names `guatiao.h` gives them.
+    let include = PathBuf::from(
+        std::env::var("DEP_GUATIAO_INCLUDE").expect("guatiao says `links = \"guatiao\"`"),
+    );
+    let shipped = include.join("kind_rename.toml");
+    println!("cargo::rerun-if-changed={}", shipped.display());
+    let guatiao_names = cbindgen::Config::from_file(&shipped)
+        .expect("guatiao ships its rename table beside guatiao.h");
+    config.export.rename.extend(guatiao_names.export.rename);
     let generated = match cbindgen::generate_with_config(&crate_dir, config) {
         Ok(g) => g,
         Err(e) => {

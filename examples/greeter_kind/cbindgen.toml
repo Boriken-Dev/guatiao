@@ -34,27 +34,18 @@ header = """
 [export]
 include = ["GreeterVtable", "CounterVtable", "ConversationVtable", "ListenerVtable"]
 
-# The tables are named for Rust here and for C in the header; the types
-# they refer to are guatiao's, under the names guatiao.h declares them.
-# `parse_deps` is off, so those names are looked up nowhere and rendered
-# through this table -- which is what keeps guatiao's types out of a
-# header that includes the one defining them.
+# The tables are named for Rust here and for C in the header. The types
+# they refer to are guatiao's, under the names guatiao.h declares them:
+# `build.rs` adds those renames from the table guatiao ships beside its
+# header (`include/kind_rename.toml`). `parse_deps` is off, so those names
+# are looked up nowhere and rendered through the merged table -- which is
+# what keeps guatiao's types out of a header that includes the one
+# defining them.
 [export.rename]
 "GreeterVtable" = "greeter_vtable"
 "CounterVtable" = "counter_vtable"
 "ConversationVtable" = "conversation_vtable"
 "ListenerVtable" = "listener_vtable"
-"KindHeader" = "guatiao_kind_header"
-"ProviderError" = "guatiao_provider_error"
-"Status" = "guatiao_status"
-"Str" = "guatiao_str"
-"Bytes" = "guatiao_bytes"
-"Text" = "guatiao_string"
-"Map" = "guatiao_map"
-"List" = "guatiao_list"
-"Value" = "guatiao_value"
-"ObjectRaw" = "guatiao_object"
-"BytesMut" = "guatiao_bytes_mut"
 
 [parse]
 parse_deps = false

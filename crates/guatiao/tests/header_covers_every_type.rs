@@ -179,14 +179,78 @@ fn every_repr_c_type_is_in_the_generated_header() {
     );
 }
 
+/// The rename table a kind crate merges into its own, shipped beside the
+/// header: every entry is guatiao's own spelling, and every guatiao type
+/// a kind table can name has one. Without it a type outside the list
+/// renders into a kind header under its Rust name, which no C compiler
+/// has heard of.
+#[test]
+fn the_shipped_kind_rename_table_covers_every_type_a_kind_table_names() {
+    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let shipped = parse_rename(&manifest.join("include/kind_rename.toml"));
+    let ours = rename_table(&manifest);
+    for (rust, c_name) in &shipped {
+        assert_eq!(
+            ours.get(rust),
+            Some(c_name),
+            "kind_rename.toml spells {rust} as {c_name}, guatiao.h does not"
+        );
+    }
+
+    // What the kind attribute writes into a table: its header, and the C
+    // type of every argument, out-slot and error slot, read off the
+    // functions that build them.
+    let kind = std::fs::read_to_string(manifest.join("../guatiao-derive/src/kind.rs"))
+        .expect("the kind attribute's source is in the repository");
+    let start = kind.find("fn arg_c_type").expect("arg_c_type");
+    let end = kind.find("fn emit_shim").expect("emit_shim");
+    let mut named: Vec<String> = kind[start..end]
+        .split("::guatiao::")
+        .skip(1)
+        .map(|rest| {
+            rest.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':'))
+                .next()
+                .unwrap_or_default()
+                .rsplit("::")
+                .next()
+                .unwrap_or_default()
+                .to_string()
+        })
+        .collect();
+    named.push("KindHeader".to_string());
+    named.sort();
+    named.dedup();
+    assert!(
+        named.len() >= 10,
+        "found only {named:?} in the kind attribute's C types, so the scan is reading the \
+         wrong place"
+    );
+    let missing: Vec<&String> = named.iter().filter(|n| !shipped.contains_key(*n)).collect();
+    assert!(
+        missing.is_empty(),
+        "a kind table names these guatiao types and include/kind_rename.toml does not \
+         rename them: {missing:?}"
+    );
+}
+
 /// The `[export.rename]` table, as `Rust name -> C name`.
 ///
 /// Parsed rather than duplicated here: a second copy of the table would be
 /// a second thing to keep in step, and this test exists precisely because
 /// things kept in step by hand are not.
 fn rename_table(manifest: &std::path::Path) -> HashMap<String, String> {
-    let text = std::fs::read_to_string(manifest.join("cbindgen.toml"))
-        .expect("the generator config is committed");
+    let out = parse_rename(&manifest.join("cbindgen.toml"));
+    assert!(
+        out.len() >= 10,
+        "the rename table parsed as {} entries, so this test is not reading it",
+        out.len()
+    );
+    out
+}
+
+/// A cbindgen configuration's `[export.rename]` table.
+fn parse_rename(path: &std::path::Path) -> HashMap<String, String> {
+    let text = std::fs::read_to_string(path).expect("the generator config is committed");
     let mut out = HashMap::new();
     let mut inside = false;
     for line in text.lines() {
@@ -204,11 +268,6 @@ fn rename_table(manifest: &std::path::Path) -> HashMap<String, String> {
             out.insert(key, value);
         }
     }
-    assert!(
-        out.len() >= 10,
-        "the rename table parsed as {} entries, so this test is not reading it",
-        out.len()
-    );
     out
 }
 

@@ -1111,7 +1111,12 @@ repository (`cargo run -p greeter_host` after a workspace build).
   `parse_deps = false` plus an `[export.rename]` table mapping this
   crate's type names onto `guatiao.h`'s (`KindHeader` →
   `guatiao_kind_header`, `Str` → `guatiao_str`, …), so the tables are
-  declared against the header that already defines those types. Each
+  declared against the header that already defines those types. **That
+  table ships** as `include/kind_rename.toml`, itself a cbindgen
+  configuration: the kind crate's `build.rs` reads it from
+  `DEP_GUATIAO_INCLUDE` with `cbindgen::Config::from_file` and extends its
+  own `config.export.rename`, so it covers every guatiao type a table can
+  name (a test pins that) without a copy to keep in step. Each
   table carries `<Trait>Vtable::FLOOR_HASH` as a **literal** (computed
   by the attribute at expansion time), which renders as
   `#define <table>_FLOOR_HASH n` — the number a C implementation writes
