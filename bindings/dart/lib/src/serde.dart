@@ -35,7 +35,7 @@ const int readDataUris = GUATIAO_READ_DATA_URIS;
 /// Indents the output for a person to read. JSON only; ignored elsewhere.
 const int prettyFlag = GUATIAO_PRETTY;
 
-String _parseSymbol(Format format) => 'guatiao_${format.name}_parse';
+String _parseSymbol(Format format) => 'guatiao_${format.name}_parse_ex';
 
 String _emitSymbol(Format format) => 'guatiao_${format.name}_emit';
 
@@ -51,7 +51,42 @@ native.NativeLib _resolved(String symbol, String? feature) {
   return lib;
 }
 
+/// A document that does not parse, and where it stopped.
+///
+/// It is a [BadValue] (what a malformed document threw before) and a
+/// [FormatException], so either catch finds it. [format] is the format
+/// that refused the document; [line] and [column] count from 1 (the
+/// column in characters) and are 0 when the parser did not say where,
+/// and for text that is not UTF-8 they name its first bad byte.
+/// [message] says what the parser expected and never quotes the
+/// document, so [source] and [offset] are `null`.
+class ParseError extends BadValue implements FormatException {
+  ParseError(
+    String message, {
+    required this.format,
+    required this.line,
+    required this.column,
+  }) : super(Status.badValue.code, message);
+
+  final Format format;
+  final int line;
+  final int column;
+
+  @override
+  dynamic get source => null;
+
+  @override
+  int? get offset => null;
+
+  @override
+  String toString() => line == 0
+      ? 'ParseError (${format.name}): $message'
+      : 'ParseError (${format.name}): $message at line $line, column $column';
+}
+
 /// Parses `text` as `format` into a new [Value].
+///
+/// A document that does not parse throws [ParseError].
 Value loads(
   String text, {
   Format format = Format.json,
@@ -62,26 +97,49 @@ Value loads(
   final lib = _resolved(symbol, format.feature);
   final allocator = alloc ?? lib.alloc;
   final out = calloc<guatiao_value>();
+  final error = calloc<guatiao_parse_error>();
   try {
     using((arena) {
       final view = strOf(arena, text).ref;
       final status = switch (format) {
         Format.json =>
-          lib.bindings.guatiao_json_parse(view, how, allocator, out),
+          lib.bindings.guatiao_json_parse_ex(view, how, allocator, out, error),
         Format.toml =>
-          lib.bindings.guatiao_toml_parse(view, how, allocator, out),
+          lib.bindings.guatiao_toml_parse_ex(view, how, allocator, out, error),
         Format.yaml =>
-          lib.bindings.guatiao_yaml_parse(view, how, allocator, out),
+          lib.bindings.guatiao_yaml_parse_ex(view, how, allocator, out, error),
       };
+      if (status == Status.badValue.code) {
+        throw ParseError(
+          _takeMessage(error),
+          format: Format.values[error.ref.format],
+          line: error.ref.line,
+          column: error.ref.column,
+        );
+      }
       checkStatus(status);
     });
   } catch (_) {
     native.core().bindings.guatiao_value_free(out);
     calloc.free(out);
     rethrow;
+  } finally {
+    _releaseMessage(error);
+    calloc.free(error);
   }
   return Value.adopt(out, alloc: allocator);
 }
+
+/// `guatiao_parse_error.message`: three `uint32_t` and four bytes of
+/// padding precede the value. Pinned by `test/abi_test.dart`.
+Pointer<guatiao_value> _messageOf(Pointer<guatiao_parse_error> error) =>
+    (error.cast<Uint8>() + 16).cast<guatiao_value>();
+
+String _takeMessage(Pointer<guatiao_parse_error> error) =>
+    Ref.borrowed(_messageOf(error)).stringOr('');
+
+void _releaseMessage(Pointer<guatiao_parse_error> error) =>
+    native.core().bindings.guatiao_value_free(_messageOf(error));
 
 /// Writes `value` as `format`. A TOML document must be a map.
 String dumps(

@@ -194,3 +194,140 @@ Value? formFor(
     }
   }
 }
+
+/// The schema field governing the flat [key], or `null`.
+///
+/// Follows one level of projection, so `auth.password` answers the field
+/// of that name inside the arm rather than `auth`. Everything a front end
+/// shows about a field -- `title`, `required`, `x-widget`, a secret mark
+/// -- is read off the node returned. It **borrows** from [schema], is
+/// read-only, and must not outlive it.
+Ref? resolve(Ref schema, String key) {
+  final lib = native.formLib();
+  return using((arena) {
+    final found = lib.bindings.guatiao_intake_resolve(
+      schema.requireNode(),
+      strOf(arena, key).ref,
+    );
+    return found == nullptr ? null : Ref.borrowed(found);
+  });
+}
+
+/// Calls a flat-projection export that fills one value, and returns that
+/// value read as plain Dart. What the call wrote is freed on every path.
+Object? _flat(int Function(Arena arena, Pointer<guatiao_value> out) call) {
+  final out = calloc<guatiao_value>();
+  var filled = false;
+  try {
+    checkStatus(using((arena) => call(arena, out)));
+    filled = true;
+    return takeValue(out);
+  } finally {
+    if (!filled) {
+      native.core().bindings.guatiao_value_free(out);
+      calloc.free(out);
+    }
+  }
+}
+
+/// The flat keys the field [key] projects onto: its own, then one per
+/// field of every arm. A member that is itself a container stores its
+/// leaves below its key, and those are not listed. Throws [WrongKind]
+/// when [key] names no field.
+List<String> flatKeys(
+  Ref schema,
+  String key, {
+  Pointer<guatiao_alloc>? alloc,
+}) {
+  final lib = native.formLib();
+  final allocator = alloc ?? lib.alloc;
+  final keys = _flat(
+    (arena, out) => lib.bindings.guatiao_intake_flat_keys(
+      schema.requireNode(),
+      strOf(arena, key).ref,
+      allocator,
+      out,
+    ),
+  );
+  return <String>[for (final item in keys! as List) item! as String];
+}
+
+/// [value] as the flat store of `key -> text` the field [key] keeps: one
+/// entry per scalar leaf (a tagged field's discriminant under its own key
+/// and its payload under `key.member`, a list indexed as `agent[0].name`,
+/// an open map bracketed as `env[PATH]`). An empty container stores
+/// nothing. Throws [WrongKind] when [key] names no field or the value's
+/// shape contradicts it.
+Map<String, String> flatten(
+  Ref schema,
+  String key,
+  Ref value, {
+  Pointer<guatiao_alloc>? alloc,
+}) {
+  final lib = native.formLib();
+  final allocator = alloc ?? lib.alloc;
+  final store = _flat(
+    (arena, out) => lib.bindings.guatiao_intake_flatten(
+      schema.requireNode(),
+      strOf(arena, key).ref,
+      value.requireNode(),
+      allocator,
+      out,
+    ),
+  );
+  return <String, String>{
+    for (final entry in (store! as Map).entries)
+      entry.key as String: entry.value! as String,
+  };
+}
+
+/// The value the flat store [flat] holds for the field [key], the reverse
+/// of [flatten]; the caller owns what comes back and closes it.
+///
+/// [flat] is a map of `String` to `String`, or a [Ref] onto one. `null`
+/// when [key] names no field, nothing is stored under it, or the stored
+/// shape cannot be its kind (a tagged field whose discriminant is missing
+/// or names no arm). An entry the schema does not declare is dropped.
+Value? unflatten(
+  Ref schema,
+  String key,
+  Object flat, {
+  Pointer<guatiao_alloc>? alloc,
+}) {
+  final lib = native.formLib();
+  final allocator = alloc ?? lib.alloc;
+  Value? owned;
+  final Ref store;
+  if (flat is Ref) {
+    store = flat;
+  } else if (flat is Map &&
+      flat.entries.every((e) => e.key is String && e.value is String)) {
+    store = owned = Value.fromDart(flat, alloc: allocator);
+  } else {
+    throw ArgumentError.value(
+        flat, 'flat', 'a flat store maps String to String');
+  }
+  final out = calloc<guatiao_value>();
+  var filled = false;
+  try {
+    final status = using(
+      (arena) => lib.bindings.guatiao_intake_unflatten(
+        schema.requireNode(),
+        strOf(arena, key).ref,
+        store.requireNode(),
+        allocator,
+        out,
+      ),
+    );
+    if (status == Status.wrongKind.code) return null;
+    checkStatus(status);
+    filled = true;
+    return Value.adopt(out, alloc: allocator);
+  } finally {
+    if (!filled) {
+      native.core().bindings.guatiao_value_free(out);
+      calloc.free(out);
+    }
+    owned?.close();
+  }
+}
