@@ -93,12 +93,13 @@ Segment::{Field(&str), Index(usize), Key(Cow<str>)}
 
 // projecting a value onto flat `key -> text` storage
 flatten(field, &value, &mut BTreeMap<String, String>) -> bool
-                       // false: the shape contradicts the kind, or the value
-                       // nests past MAX_DEPTH (what lies past it is not written)
+                       // false: the shape contradicts the kind, or the value has
+                       // MAX_DEPTH (128) or more containers nested (not written)
 unflatten(alloc, field, &store) -> Option<Value>
 resolve(schema, key) -> Option<FieldRef>         // for the schema alone
 resolve_in(schema, key, selected) -> Result<FieldRef, ValidationError>
-keys(field) -> Vec<String>                       // every key flatten can write for it
+keys(field) -> Vec<String>                       // its own key and its arms' members'; a container
+                                                 // member's leaves are below these, not listed
 split(key) -> Option<(&str, Cow<str>)>           // (owner key, last segment's name)
 is_sensitive(schema, key) -> bool
 clear_under(&mut store, path)                    // everything AT or UNDER it
@@ -126,8 +127,9 @@ a `usize` is a key too.
 **The store spells a key the way `named` does**: `owner.member`, or
 `owner[a.b]` when the member's name holds a `.`, a bracket or nothing; a
 top-level field called `a.b` is stored under `[a.b]`, so it never shares a
-key with the member `b` of a field `a`. `keys` lists exactly what
-`flatten` writes and `split` reads the key with the path grammar. A
+key with the member `b` of a field `a`. `keys` spells its keys as
+`flatten` does (a member that is a container writes below its key, which
+`keys` does not list) and `split` reads the key with the path grammar. A
 store key off the grammar (`agent.[0]`) is not found by `unflatten` and
 `validate_texts` refuses it as undeclared.
 

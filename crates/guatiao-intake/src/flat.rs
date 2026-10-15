@@ -53,8 +53,9 @@ pub const SEPARATOR: char = '.';
 /// a discriminant naming no arm — and the store is left cleared but
 /// otherwise untouched. **Deeper mismatches are skipped, not refused**:
 /// a member that cannot be spelled as text is not written, the way it
-/// never was. A value nested deeper than [`MAX_DEPTH`] also answers
-/// `false`, and what lies past the bound is not written.
+/// never was. A value with [`MAX_DEPTH`] or more containers nested one
+/// inside the next also answers `false`, and what lies at or past the
+/// bound is not written.
 ///
 /// # An empty container stores nothing
 ///
@@ -438,11 +439,16 @@ fn first_step(rest: &str) -> Option<(Step, usize)> {
     Some((step, read))
 }
 
-/// Every flat key this field can occupy: its own, plus one per field of
-/// every arm.
+/// The flat keys a field and its arms' members are stored under: its own,
+/// plus one per field of every arm, spelled as [`flatten`] spells them.
 ///
-/// For a caller that has to decide whether a key it is holding belongs to
-/// this field at all — a config reader partitioning a flat record, say.
+/// **Not every key [`flatten`] can write.** A member that is itself a
+/// container stores its leaves below its key (`auth.inner.plain`,
+/// `agent[0]`, `env[PATH]`), and those are open-ended, so they are not
+/// listed; everything this field writes is at or under one of these, and
+/// all of it under the first. For a caller deciding whether a key it holds
+/// belongs to this field — a config reader partitioning a flat record —
+/// that is the question to ask of each, as [`clear_under`] asks it.
 pub fn keys(field: FieldRef<'_>) -> Vec<String> {
     let own = root_path(field.key());
     let mut out = vec![own.clone()];
