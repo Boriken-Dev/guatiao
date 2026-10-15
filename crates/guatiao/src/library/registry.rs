@@ -382,7 +382,7 @@ impl Provider {
     pub fn instantiate<K: ?Sized + Kind>(
         &self,
         config: &crate::value::types::Value,
-    ) -> Result<super::kind::Instance<K>, super::kind::ProviderError> {
+    ) -> Result<super::kind::Instance<K>, super::kind::InstantiateError> {
         super::kind::Instance::build(&self.view, config)
     }
 

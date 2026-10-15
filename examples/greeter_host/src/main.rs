@@ -141,9 +141,13 @@ fn main() -> ExitCode {
         );
     }
 
-    // 2. A provider that is its one instance answers as it is.
-    for offer in offers.iter().filter(|o| !o.builds_instances()) {
-        match offer.greet("ana") {
+    // 2. A provider with a default instance answers as it is; one built
+    // only from a configuration has none, and waits for step 3.
+    for (offer, greeter) in offers
+        .iter()
+        .filter_map(|o| o.default_instance().map(|g| (o, g)))
+    {
+        match greeter.greet("ana") {
             Ok(answer) => println!(
                 "\n{} greets: {}",
                 offer.id(),
@@ -154,11 +158,12 @@ fn main() -> ExitCode {
             ),
             Err(e) => println!("\n{} refused: {e}", offer.id()),
         }
-        println!("{} shouts: {}", offer.id(), offer.shout("ana"));
+        println!("{} shouts: {}", offer.id(), greeter.shout("ana"));
         // The same provider through its other kind, if it serves one.
         if let Some(Ok(counter)) = offer
             .key()
             .and_then(|key| registry.offer::<dyn Counter>(key))
+            && let Some(counter) = counter.default_instance()
         {
             println!("{} has been asked {} time(s)", offer.id(), counter.count());
         }
@@ -224,13 +229,16 @@ fn main() -> ExitCode {
     // and both objects are destroyed on the side that holds them last.
     let heard = Arc::new(Mutex::new(Vec::new()));
     let listener_dropped = Arc::new(AtomicBool::new(false));
-    for offer in offers.iter().filter(|o| !o.builds_instances()) {
+    for (offer, greeter) in offers
+        .iter()
+        .filter_map(|o| o.default_instance().map(|g| (o, g)))
+    {
         let listener = Echo {
             heard: Arc::clone(&heard),
             dropped: Arc::clone(&listener_dropped),
         }
         .into_object();
-        match offer.start(listener) {
+        match greeter.start(listener) {
             Ok(mut chat) => {
                 for line in ["good morning", "how are you"] {
                     if let Err(e) = chat.say(line) {

@@ -20,7 +20,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use greeter_kind::{Counter, Greeter, GreeterVtable, Listener};
-use guatiao::library::{Kind, KindMismatch, Offer, Registry, Remote};
+use guatiao::library::{InstantiateError, Kind, KindMismatch, Offer, Registry, Remote};
 use guatiao::{Map, Status, Value};
 
 /// Where cargo put a dev-dependency cdylib: beside this binary, or one up.
@@ -84,7 +84,10 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
         "inherited from the library"
     );
     assert_eq!(offer.available(), Ok(()));
-    let answer = offer.greet("ana").expect("the derived greeter answers");
+    let greeter = offer
+        .default_instance()
+        .expect("the default greeter is its own instance");
+    let answer = greeter.greet("ana").expect("the derived greeter answers");
     assert_eq!(
         answer.get("greeting").and_then(TryAsRef::<str>::try_as_ref),
         Some("hello, ana")
@@ -95,15 +98,18 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
         .offer::<dyn Counter>("derived_greeter_hello")
         .expect("filed under its id")
         .expect("a valid table");
+    let counter = counter
+        .default_instance()
+        .expect("the same default instance");
     let first = counter.count();
     assert_eq!(counter.count(), first + 1, "one instance, counting");
 
     // 3. A panic inside the implementation is a status; the process lives.
-    let e = offer.greet("panic").unwrap_err();
+    let e = greeter.greet("panic").unwrap_err();
     assert_eq!(e.status, Status::GUATIAO_ERR_INTERNAL);
 
     // 4. A ProviderError crosses with its message.
-    let e = offer.greet("").unwrap_err();
+    let e = greeter.greet("").unwrap_err();
     assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
     assert_eq!(e.message(), "nobody to greet");
 
@@ -193,22 +199,23 @@ fn a_derived_library_is_offered_as_the_trait_and_the_hand_written_one_is_not() {
     );
     drop(loud);
     let e = shouter.instantiate(&Value::from(Map::new())).unwrap_err();
-    assert_eq!(
-        e.status,
-        Status::GUATIAO_ERR_BAD_VALUE,
-        "the schema's refusal: {e}"
+    assert!(
+        matches!(e, InstantiateError::Invalid(_)),
+        "the schema's refusal, before the provider is asked: {e}"
     );
+    assert_eq!(e.status(), Status::GUATIAO_ERR_BAD_VALUE);
     let mut wrong = Map::new();
     wrong.set("prefix", 7).unwrap();
     let e = shouter.instantiate(&Value::from(wrong)).unwrap_err();
     assert_eq!(
-        e.status,
+        e.status(),
         Status::GUATIAO_ERR_BAD_VALUE,
-        "the decode's refusal, since the type is its own configuration: {e}"
+        "refused by the schema, or by the decode where the schema is lenient: {e}"
     );
     let e = offer.instantiate(&config).unwrap_err();
+    assert!(matches!(e, InstantiateError::Refused(_)), "{e}");
     assert_eq!(
-        e.status,
+        e.status(),
         Status::GUATIAO_ERR_NULL,
         "no instances from a provider that is its one"
     );
@@ -250,6 +257,8 @@ fn objects_cross_both_ways_and_are_destroyed_by_whoever_holds_them_last() {
     }
     .into_object();
     let mut chat = offer
+        .default_instance()
+        .expect("the default greeter is its own instance")
         .start(listener)
         .expect("the derived greeter holds conversations");
     assert_eq!(chat.turns(), 0);
@@ -337,7 +346,7 @@ fn objects_cross_both_ways_and_are_destroyed_by_whoever_holds_them_last() {
         dropped: Arc::clone(&dropped),
     }
     .into_object();
-    let e = shouter.start(listener).unwrap_err();
+    let e = shouter.remote().start(listener).unwrap_err();
     assert_eq!(e.status, Status::GUATIAO_ERR_NULL, "{e}");
     assert!(
         dropped.load(Ordering::SeqCst),

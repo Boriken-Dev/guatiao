@@ -9,7 +9,7 @@
 extern crate alloc;
 
 use guatiao::library::kind::{ProviderDecl, ProviderParts};
-use guatiao::library::{Host, ProviderError, Registry};
+use guatiao::library::{Host, InstantiateError, ProviderError, Registry};
 use guatiao::{Alloc, FromValue, Map, Provider, Schema};
 
 #[guatiao::kind]
@@ -214,7 +214,10 @@ fn a_provider_builds_instances_from_a_configuration() {
         unsafe { parts.info().instantiate::<dyn Greeter>(&Value::from(bad)) }
     }
     .unwrap_err();
-    assert_eq!(e.message(), "a shout needs at least one bang");
+    let InstantiateError::Refused(refused) = e else {
+        panic!("the schema accepts it and the type refuses it: {e}");
+    };
+    assert_eq!(refused.message(), "a shout needs at least one bang");
     let e = {
         // SAFETY: a derived provider's descriptor, leaked above.
         unsafe {
@@ -224,7 +227,8 @@ fn a_provider_builds_instances_from_a_configuration() {
         }
     }
     .unwrap_err();
-    assert_eq!(e.status, guatiao::Status::GUATIAO_ERR_BAD_VALUE, "{e}");
+    assert!(matches!(e, InstantiateError::Invalid(_)), "{e}");
+    assert_eq!(e.status(), guatiao::Status::GUATIAO_ERR_BAD_VALUE, "{e}");
 
     // A provider that is its one instance builds none.
     let hello: &'static ProviderParts = Box::leak(Box::new(
@@ -235,7 +239,7 @@ fn a_provider_builds_instances_from_a_configuration() {
         unsafe { hello.info().instantiate::<dyn Greeter>(&config) }
     }
     .unwrap_err();
-    assert_eq!(e.status, guatiao::Status::GUATIAO_ERR_NULL);
+    assert_eq!(e.status(), guatiao::Status::GUATIAO_ERR_NULL);
 }
 
 #[test]

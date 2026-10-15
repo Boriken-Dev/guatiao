@@ -100,6 +100,13 @@ pub fn catch(body: impl FnOnce() -> Status) -> Status {
     crate::exports::guard(body)
 }
 
+/// Runs a shim body that answers nothing, such as a `destroy` slot, so a
+/// panic stops at the boundary rather than unwinding into the caller.
+#[doc(hidden)]
+pub fn catch_unit(body: impl FnOnce()) {
+    crate::exports::guard_with((), body)
+}
+
 /// A configuration argument, decoded as `C`, or the error a `create` shim
 /// answers.
 ///

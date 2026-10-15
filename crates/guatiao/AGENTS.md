@@ -984,7 +984,10 @@ guatiao::local_providers!(Hello);        // the same, for a library the HOST LIN
                                          // no entry symbol, no declaration -- see register_local
 
 // Consuming, from a host or from a library through its Host:
-for offer in registry.offers::<dyn Greeter>() { offer.id(); offer.available(); offer.greet("x")?; }
+for offer in registry.offers::<dyn Greeter>() {
+    offer.id(); offer.available();
+    if let Some(g) = offer.default_instance() { g.greet("x")?; }   // None: built only from a config
+}
 registry.offer::<dyn Greeter>("acme_hello")    // Option<Result<Offer, KindMismatch>>
 registry.mismatches::<dyn Greeter>()           // (&Provider, KindMismatch): tables that failed
 provider.as_kind::<dyn Greeter>()              // Result<Remote<dyn Greeter>, KindMismatch>
@@ -994,8 +997,8 @@ unsafe { Remote::<dyn Greeter>::from_raw(table, size, ctx) }   // a table from a
 // Building a configured provider, from the host's own type:
 #[derive(ToValue, Schema)] struct Settings { prefix: String }
 let config = Settings { prefix: "hey".into() }.to_value(Alloc::rust())?;
-validate_map(SchemaRef::new(offer.config_schema()?)?, &config)?;   // the provider's schema
-let instance = offer.instantiate(&config)?;   // derefs to dyn Greeter; drop runs `destroy`
+let instance = offer.instantiate(&config)?;   // checked against config_schema() first;
+                                              // derefs to dyn Greeter; drop runs `destroy`
 ```
 
 The whole host side, as a program that scans a search path and does the
@@ -1018,7 +1021,9 @@ repository (`cargo run -p greeter_host` after a workspace build).
   callee destroys an argument it was handed, even when it refuses the
   call, and the caller owns a return. `Kind::OBJECT` says which a kind
   is; an object table's hash covers `object;` so it never passes for a
-  provider table.
+  provider table. A registry or host never serves one
+  (`KindMismatch::ObjectKind`), and `#[provider(..)]` naming one is a
+  compile error on the kind's span.
 
 - **A kind is a C ABI, and its table renders to C.** cbindgen cannot see
   a macro-generated struct unless it expands macros, so a kind crate
@@ -1069,17 +1074,29 @@ drop(s);                                                             // the libr
 - **Only a per-kind table** (`ProviderInfo::tables`) is validated as a
   kind. A hand-written `vtable` is neither an offer nor a mismatch; it
   keeps working through `provider.table_for(kind)` / `vtable_as`.
-- **`Offer<K>`** derefs to `K` and carries `id`, `display_name`,
-  `version`, `library`, `key`, `priority`, `meta`, `config_schema`,
-  `available()` (asked live), `remote()`, `boxed()`, `shared()`.
-  Unavailable providers ARE offered; the consumer chooses. `Remote<K>` is
-  `Copy + Send + Sync + 'static`; `Box<dyn K>: From<Remote<dyn K>>`.
+- **`Offer<K>`** carries `id`, `display_name`, `version`, `library`,
+  `key`, `priority`, `meta`, `config_schema`, `available()` (asked live),
+  `builds_instances()`, `instantiate(&config)` and `remote()` (the
+  validated proxy over its `ctx`, unchecked). **It does not deref**: a
+  provider built only from a configuration has a null `ctx` and nothing
+  to call, so the default instance is `default_instance() -> Option<&K>`,
+  `boxed() -> Option<Box<K>>`, `shared() -> Option<Arc<K>>`, `None` for
+  one with `create` and a null `ctx`. Unavailable providers ARE offered;
+  the consumer chooses. `Remote<K>` is `Copy + Send + Sync + 'static`;
+  `Box<dyn K>: From<Remote<dyn K>>`.
 - **Every handle may be held across an `.await`.** `Remote`, `Offer` and
   `Instance` are `Send + Sync` and `Object` is `Send`, with no bound on
   `K`, so a future holding one stays `Send` and can be spawned.
-- **`KindMismatch`**: `NoTable`, `BelowFloor { size, floor }`,
-  `HashMismatch { expected, found }`, `NullRequiredSlot(name)`. A
-  `floor_hash` of `0` passes only through `from_raw`.
+- **`KindMismatch`** (`#[non_exhaustive]`): `NoTable`, `BelowFloor {
+  size, floor }`, `HashMismatch { expected, found }`,
+  `NullRequiredSlot(name)`, `ObjectKind`. A `floor_hash` of `0` passes
+  only through `from_raw`.
+- **`InstantiateError`** (`#[non_exhaustive]`): `Invalid(ValidationError)`,
+  the configuration does not fit `config_schema()` and the provider was
+  never asked (a schema this build cannot read is not checked);
+  `Refused(ProviderError)`, the provider's own answer, a table that does
+  not fit, or a provider that builds no instances. `status()` is what C
+  would see.
 - **`ProviderError { status, message: Text }`** is the one error type
   both sides share: `From<Status>`, `From<ValueError>`, `message()`.
 - **An infallible method is a promise, and breaking it panics the host.**
@@ -1142,7 +1159,8 @@ drop(s);                                                             // the libr
   type **its own configuration**: derive `Schema` and `FromValue` on it
   and there is no second type and no `TryFrom`. The host reads the
   schema (`offer.config_schema()`), fills it in, and calls
-  `offer.instantiate(&config) -> Result<Instance<dyn K>, ProviderError>`;
+  `offer.instantiate(&config) -> Result<Instance<dyn K>, InstantiateError>`,
+  which checks it against that schema first;
   the `Instance` derefs to the trait, its address is the `ctx` every call
   on it takes (what `&self` is in the impl), and dropping it runs the
   provider's `destroy`. Many instances per provider, each its own
@@ -1153,7 +1171,8 @@ drop(s);                                                             // the libr
   `K::shared(instance.remote())`: that `Arc` outlives the instance. With `config` and no `new`/`new_with_host` there is no
   default instance (`ctx` null) and `available` is refused. A provider
   without `config` is its one instance and `instantiate` answers
-  `GUATIAO_ERR_NULL`; `offer.builds_instances()` says which. The envelope
+  `GUATIAO_ERR_NULL`; `offer.builds_instances()` says which. A panic in an
+  instance's `Drop` stops at the derived `destroy` slot. The envelope
   slots are `ProviderInfo::create` / `destroy`; from C,
   `guatiao_registry_provider_create(reg, key, config, &instance, &err)`
   and `_destroy(reg, key, instance)`, the instance being the `ctx` for

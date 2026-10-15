@@ -98,8 +98,8 @@ pub use desc::{
 };
 pub use key::{KeyError, KeyFields, KeyTemplate, Subject};
 pub use kind::{
-    BytesMut, Instance, Kind, KindHeader, KindMismatch, Object, ObjectRaw, Offer, ProviderError,
-    Remote,
+    BytesMut, Instance, InstantiateError, Kind, KindHeader, KindMismatch, Object, ObjectRaw, Offer,
+    ProviderError, Remote,
 };
 pub use notices::{Notice, declare_notice, notices};
 pub use raw::{

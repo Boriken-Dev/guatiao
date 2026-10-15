@@ -56,7 +56,9 @@ fn a_provider_kept_past_its_registry_still_answers() {
             .offers::<dyn Greeter>()
             .find(|o| o.id() == "derived_greeter_hello")
             .expect("the default greeter is offered");
-        offer.boxed()
+        offer
+            .boxed()
+            .expect("the default greeter is its own instance")
     };
     let answer = greeter.greet("kept").expect("the greeter answers");
     assert!(answer.get("greeting").is_some(), "a greeting came back");

@@ -44,7 +44,8 @@
 #![forbid(unsafe_code)]
 
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, quote_spanned};
+use syn::spanned::Spanned;
 use syn::{DeriveInput, Ident, Path, Type};
 
 use crate::kind::snake_case;
@@ -219,9 +220,18 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
     let live_kinds = decl.kinds.iter();
     let checks = decl.kinds.iter().enumerate().map(|(i, kind)| {
         let check = format_ident!("__guatiao_implements_{}", i);
+        // An object kind's shims read `ctx` as a cell one caller owns, and
+        // a provider's `ctx` is shared: refused here, on the kind's span.
+        let not_object = quote_spanned! {kind.span()=>
+            const _: () = ::core::assert!(
+                !<dyn #kind as ::guatiao::library::Kind>::OBJECT,
+                "an object kind cannot be named in `#[provider(..)]`: a provider is shared, and an object is owned by one caller; return it from a provider kind's method instead"
+            );
+        };
         quote! {
             fn #check<__T: #kind>() {}
             let _ = #check::<#ty> as fn();
+            #not_object
         }
     });
     let tables = decl.kinds.iter().enumerate().map(|(i, kind)| {
@@ -326,8 +336,12 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
                     if !instance.is_null() {
                         __GUATIAO_LIVE.fetch_sub(1, ::core::sync::atomic::Ordering::Relaxed);
                     }
-                    // SAFETY: the caller's contract.
-                    unsafe { ::guatiao::library::kind::destroy_instance::<#ty>(instance) }
+                    // A panicking `Drop` stops here: this is an `extern "C"`
+                    // function, and a panic out of it aborts the host.
+                    ::guatiao::library::kind::catch_unit(|| {
+                        // SAFETY: the caller's contract.
+                        unsafe { ::guatiao::library::kind::destroy_instance::<#ty>(instance) }
+                    });
                 }
             },
             quote! { ::core::option::Option::Some(__guatiao_create) },
@@ -455,6 +469,13 @@ mod tests {
             out.contains("__GUATIAO_INSTANCE . get_or_init"),
             "a default instance"
         );
+        assert!(
+            out.contains("! < dyn Greeter as :: guatiao :: library :: Kind > :: OBJECT")
+                && out.contains(
+                    "! < dyn counter :: Counter as :: guatiao :: library :: Kind > :: OBJECT"
+                ),
+            "every named kind is asserted not to be an object kind: {out}"
+        );
     }
 
     #[test]
@@ -468,6 +489,10 @@ mod tests {
         assert!(
             out.contains(":: core :: ptr :: null_mut ()") && !out.contains("get_or_init"),
             "no default instance without `new`: {out}"
+        );
+        assert!(
+            out.contains(":: guatiao :: library :: kind :: catch_unit"),
+            "a panicking `Drop` stops at the destroy slot: {out}"
         );
         let out = expand_str("#[provider(Greeter, config = HiConfig, new = Hi::make)] struct Hi;")
             .unwrap();

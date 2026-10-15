@@ -109,11 +109,12 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     assert_eq!(offer.display_name(), "Greeter, in C");
     assert_eq!(offer.version(), "1.0");
     assert_eq!(offer.remote().size(), core::mem::size_of::<GreeterVtable>());
+    let greeter = offer.default_instance().expect("its ctx is its instance");
 
     // 2. A call crosses into C and back: the answer is a map C built
     // through its own allocator, read here and freed here -- through
     // that allocator, which the value carries.
-    let answer = offer.greet("ana").expect("the C greeter answers");
+    let answer = greeter.greet("ana").expect("the C greeter answers");
     assert_eq!(
         answer.get("greeting").and_then(TryAsRef::<str>::try_as_ref),
         Some("hello from C, ana")
@@ -121,15 +122,15 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     drop(answer);
 
     // 3. A ProviderError crosses out of C with its message.
-    let e = offer.greet("").unwrap_err();
+    let e = greeter.greet("").unwrap_err();
     assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
     assert_eq!(e.message(), "nobody to greet, says C");
 
     // 4. The slots C left null are appended ones: the proxy runs the
     // trait's default bodies -- `shout` through C's own `greet`, `start`
     // refusing as a greeter that holds no conversations.
-    assert_eq!(offer.shout("bo"), "HELLO FROM C, BO");
-    let e = offer
+    assert_eq!(greeter.shout("bo"), "HELLO FROM C, BO");
+    let e = greeter
         .start(NoListener.into_object())
         .expect_err("the default body refuses");
     assert_eq!(e.status, Status::GUATIAO_ERR_NULL);

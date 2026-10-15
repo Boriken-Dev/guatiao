@@ -62,7 +62,7 @@ async fn with_instance() {
 async fn with_offer() {
     let tuner = offer().await;
     tick().await;
-    let _ = tuner.tune();
+    let _ = tuner.default_instance().map(|t| t.tune());
 }
 
 fn assert_send<T: Send>(_: T) {}

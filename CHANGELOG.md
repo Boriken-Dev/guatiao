@@ -71,6 +71,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   claimed bytes it never wrote. `Host::mismatches` pairs a view with its
   mismatch. Migration: drop the `.view()` call; `view.raw()` is the
   descriptor's address.
+- **Breaking: an `Offer` no longer derefs to its kind.** A provider built
+  only from a configuration has no default instance, so calling it
+  through its offer could only fail, and an infallible method panicked
+  the host. `Offer::default_instance()` is `Option<&K>`, and `boxed()`
+  and `shared()` answer `Option`, `None` for such a provider;
+  `From<Offer<K>> for Remote<K>` is gone. Migration: `offer.greet(..)` is
+  `offer.default_instance().expect(..).greet(..)`, or skip the offers
+  answering `None` and `instantiate` them; `Remote::from(offer)` is
+  `offer.remote()`.
+- **Breaking: `instantiate` checks the configuration against the
+  provider's schema first**, and answers `InstantiateError`:
+  `Invalid(ValidationError)` names a misspelled or ill-typed setting
+  before the provider is asked, `Refused(ProviderError)` is the
+  provider's own answer. Applies to `Offer`, `Provider` and
+  `ProviderInfo::instantiate`. Migration: match the two variants, or
+  call `.status()` where `.status` was read; a separate `validate_map`
+  before `instantiate` is no longer needed.
+- **An object kind is never served by a provider.** A registry or host
+  answers the new `KindMismatch::ObjectKind` for one, and
+  `#[provider(..)]` naming one is a compile error on the kind: its shims
+  read `ctx` as an object one caller owns, and a provider's is shared.
 - **A `std::` path now marks something that needs the operating system.**
   Everything `core` or `alloc` also holds is spelled that way, enforced by
   the `std_instead_of_core`, `std_instead_of_alloc` and
@@ -89,6 +110,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `guatiao_registry_free` and a Python `Registry.close()` go through the
   same drop. A file passed over by its library key, or refused as a
   duplicate, after its entry point ran keeps its mapping too.
+- **A panic in a configured instance's `Drop` no longer aborts the host.**
+  The `destroy` slot `#[derive(Provider)]` writes runs under the same
+  catch as every other shim.
 - **The host block a registry leaks is written through one raw pointer**,
   so the services' `ctx` it holds stays valid under Stacked Borrows.
 - **A handle held across an `.await` no longer makes the future `!Send`.**

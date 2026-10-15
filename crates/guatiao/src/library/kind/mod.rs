@@ -48,6 +48,7 @@ use core::mem::size_of;
 
 use super::desc::{KindTable, KindTables, LibraryInfo, ProviderInfo};
 use super::raw::{Host, ProviderView};
+use crate::schema::ValidationError;
 use crate::value::ValueError;
 use crate::value::alloc::Alloc;
 use crate::value::status::Status;
@@ -73,6 +74,24 @@ pub trait Kind: 'static {
     /// Whether this is an **object kind** (`#[guatiao::kind(object)]`): a
     /// handle one caller owns, with a `destroy` slot first and `&mut self`
     /// methods, never offered by a registry. See [`Object`].
+    ///
+    /// A registry or host door answers [`KindMismatch::ObjectKind`] for
+    /// one, and `#[derive(Provider)]` refuses to name one at compile time:
+    ///
+    /// ```compile_fail
+    /// use greeter_kind::Conversation;
+    /// use guatiao::library::ProviderError;
+    ///
+    /// #[derive(Default, guatiao::Provider)]
+    /// #[provider(Conversation)]
+    /// struct Talk;
+    ///
+    /// impl Conversation for Talk {
+    ///     fn say(&mut self, _: &str) -> Result<(), ProviderError> { Ok(()) }
+    ///     fn read(&mut self, _: &mut [u8]) -> i64 { 0 }
+    ///     fn turns(&self) -> i64 { 0 }
+    /// }
+    /// ```
     const OBJECT: bool = false;
 
     /// How many objects of this kind, and of the kinds its methods hand
@@ -210,6 +229,10 @@ pub enum KindMismatch {
     },
     /// A required slot is null, named.
     NullRequiredSlot(&'static str),
+    /// The kind is an object kind, which a provider never serves: its
+    /// shims read `ctx` as an object cell one caller owns, and a provider's
+    /// `ctx` is shared.
+    ObjectKind,
 }
 
 impl core::fmt::Display for KindMismatch {
@@ -226,11 +249,65 @@ impl core::fmt::Display for KindMismatch {
             KindMismatch::NullRequiredSlot(name) => {
                 write!(f, "the required slot `{name}` is null")
             }
+            KindMismatch::ObjectKind => f.write_str("an object kind is never served by a provider"),
         }
     }
 }
 
 impl core::error::Error for KindMismatch {}
+
+/// Why an instance could not be built from a configuration.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum InstantiateError {
+    /// The configuration does not fit the provider's schema, so the
+    /// provider was never asked. Names the field, never its value.
+    Invalid(ValidationError),
+    /// The provider was asked and refused, or cannot build instances, or
+    /// its table does not fit the kind: its own words and status.
+    Refused(ProviderError),
+}
+
+impl InstantiateError {
+    /// The status a C caller would see: `GUATIAO_ERR_BAD_VALUE` for a
+    /// configuration that does not fit, the provider's own otherwise.
+    pub fn status(&self) -> Status {
+        match self {
+            InstantiateError::Invalid(_) => Status::GUATIAO_ERR_BAD_VALUE,
+            InstantiateError::Refused(e) => e.status,
+        }
+    }
+}
+
+impl core::fmt::Display for InstantiateError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            InstantiateError::Invalid(e) => write!(f, "the configuration does not fit: {e}"),
+            InstantiateError::Refused(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl core::error::Error for InstantiateError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            InstantiateError::Invalid(e) => Some(e),
+            InstantiateError::Refused(e) => Some(e),
+        }
+    }
+}
+
+impl From<ValidationError> for InstantiateError {
+    fn from(e: ValidationError) -> InstantiateError {
+        InstantiateError::Invalid(e)
+    }
+}
+
+impl From<ProviderError> for InstantiateError {
+    fn from(e: ProviderError) -> InstantiateError {
+        InstantiateError::Refused(e)
+    }
+}
 
 mod object;
 mod parts;

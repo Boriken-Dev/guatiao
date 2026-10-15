@@ -418,7 +418,8 @@ fn a_registry_offers_every_valid_provider_and_reports_the_rest() {
     );
     assert_eq!(offers[0].available(), Ok(()));
     assert_eq!(offers[1].available(), Err("not today"));
-    assert_eq!(offers[0].greet("ana").unwrap(), "hello, ana");
+    let default = offers[0].default_instance().expect("a default instance");
+    assert_eq!(default.greet("ana").unwrap(), "hello, ana");
     assert_eq!(offers[0].library(), Some("kinds"));
     assert_eq!(offers[0].key(), Some("kinds_ok"));
 
@@ -441,8 +442,14 @@ fn a_registry_offers_every_valid_provider_and_reports_the_rest() {
         .offer::<dyn Greeter>("kinds_ok")
         .expect("filed under that key")
         .expect("valid");
-    assert_eq!(one.greet("bo").unwrap(), "hello, bo");
+    assert_eq!(
+        one.default_instance()
+            .expect("a default instance")
+            .greet("bo")
+            .unwrap(),
+        "hello, bo"
+    );
     assert!(registry.offer::<dyn Greeter>("nobody").is_none());
-    let kept: Box<dyn Greeter> = one.boxed();
+    let kept: Box<dyn Greeter> = one.boxed().expect("a default instance");
     assert_eq!(kept.shout(), 11);
 }

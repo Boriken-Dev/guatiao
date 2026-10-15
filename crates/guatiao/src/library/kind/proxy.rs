@@ -6,6 +6,8 @@
 //! an offer a chooser picks from, and an instance the host owns.
 
 use super::*;
+use crate::schema::read::SchemaRef;
+use crate::schema::validate::validate_map;
 
 /// A kind's table, validated, ready to call through.
 ///
@@ -69,8 +71,12 @@ impl<K: ?Sized + Kind> Remote<K> {
     }
 
     /// A provider's per-kind table for `K`, validated. `NoTable` when the
-    /// provider declares none for this kind.
+    /// provider declares none for this kind; `ObjectKind` for an object
+    /// kind, which no provider serves whatever its descriptor claims.
     pub(crate) fn from_view(view: &ProviderView) -> Result<Remote<K>, KindMismatch> {
+        if K::OBJECT {
+            return Err(KindMismatch::ObjectKind);
+        }
         let (table, size) = view
             .tables
             .iter()
@@ -205,6 +211,12 @@ impl<K: ?Sized + Kind> Remote<K> {
 /// **Every provider claiming the kind with a valid table is an offer,
 /// unavailable ones included.** Ask [`available`](Offer::available) and
 /// choose; nothing here picks.
+///
+/// **An offer is not always callable.** A provider built only from a
+/// configuration has no default instance, so its `ctx` is null and its
+/// methods could only fail; [`default_instance`](Offer::default_instance)
+/// is `None` for it, and [`instantiate`](Offer::instantiate) is how it is
+/// used.
 pub struct Offer<K: ?Sized> {
     remote: Remote<K>,
     view: ProviderView,
@@ -290,7 +302,28 @@ impl<K: ?Sized + Kind> Offer<K> {
         self.view.available()
     }
 
-    /// The validated proxy, to keep.
+    /// Whether this offer can be called as it stands: `false` for a
+    /// provider that builds instances and keeps no default one (`create`
+    /// present, `ctx` null). A provider with no `create` is called with
+    /// whatever `ctx` it declared, null included, as a stateless C table
+    /// expects.
+    fn callable(&self) -> bool {
+        !(self.view.ctx.is_null() && self.view.create.is_some())
+    }
+
+    /// The provider's default instance, as the trait, or `None` for a
+    /// provider built only from a configuration: call
+    /// [`instantiate`](Offer::instantiate) for one of those.
+    pub fn default_instance(&self) -> Option<&K> {
+        self.callable().then(|| K::as_dyn(&self.remote))
+    }
+
+    /// The validated proxy over the provider's own `ctx`, for a caller
+    /// that speaks C or keeps the table: unchecked, like
+    /// [`Provider::as_kind`](crate::library::Provider::as_kind), so for a
+    /// provider built only from a configuration its `ctx` is null and
+    /// every call through it fails.
+    /// [`default_instance`](Offer::default_instance) is the checked door.
     pub fn remote(&self) -> Remote<K> {
         self.remote
     }
@@ -300,34 +333,32 @@ impl<K: ?Sized + Kind> Offer<K> {
         &self.view
     }
 
-    /// The trait, boxed, to store like any implementation.
-    pub fn boxed(self) -> Box<K> {
-        K::boxed(self.remote)
+    /// The default instance, boxed, to store like any implementation;
+    /// `None` as for [`default_instance`](Offer::default_instance).
+    pub fn boxed(self) -> Option<Box<K>> {
+        self.callable().then(|| K::boxed(self.remote))
     }
 
-    /// The trait, shared.
-    pub fn shared(self) -> Arc<K> {
-        K::shared(self.remote)
-    }
-}
-
-impl<K: ?Sized + Kind> core::ops::Deref for Offer<K> {
-    type Target = K;
-
-    fn deref(&self) -> &K {
-        K::as_dyn(&self.remote)
+    /// The default instance, shared; `None` as for
+    /// [`default_instance`](Offer::default_instance).
+    pub fn shared(self) -> Option<Arc<K>> {
+        self.callable().then(|| K::shared(self.remote))
     }
 }
 
 impl<K: ?Sized + Kind> Offer<K> {
     /// An instance of this provider built from `config`, as `K`.
     ///
-    /// The configuration is a value fitting [`config_schema`](Offer::config_schema);
-    /// the provider decodes it and builds an instance whose address is
-    /// the context every call on the returned [`Instance`] passes. A
-    /// provider that builds no instances (`create` null) answers
-    /// `GUATIAO_ERR_NULL` with a message saying so.
-    pub fn instantiate(&self, config: &Value) -> Result<Instance<K>, ProviderError> {
+    /// `config` is checked against [`config_schema`](Offer::config_schema)
+    /// first, so a misspelled or ill-typed setting is
+    /// [`InstantiateError::Invalid`] and the provider is never asked; a
+    /// schema this build cannot read is not checked. The provider then
+    /// decodes it and builds an instance whose address is the context
+    /// every call on the returned [`Instance`] passes. A provider that
+    /// builds no instances (`create` null) is
+    /// [`InstantiateError::Refused`] with `GUATIAO_ERR_NULL` and a message
+    /// saying so.
+    pub fn instantiate(&self, config: &Value) -> Result<Instance<K>, InstantiateError> {
         Instance::build(&self.view, config)
     }
 
@@ -365,19 +396,26 @@ unsafe impl<K: ?Sized> Send for Instance<K> {}
 unsafe impl<K: ?Sized> Sync for Instance<K> {}
 
 impl<K: ?Sized + Kind> Instance<K> {
-    /// Builds through a provider's `create` slot and validates its table
-    /// for `K`, or says why not.
-    pub(crate) fn build(view: &ProviderView, config: &Value) -> Result<Instance<K>, ProviderError> {
+    /// Builds through a provider's `create` slot, after validating its
+    /// table for `K` and `config` against its schema, or says why not.
+    pub(crate) fn build(
+        view: &ProviderView,
+        config: &Value,
+    ) -> Result<Instance<K>, InstantiateError> {
         let Some(create) = view.create else {
             return Err(ProviderError::new(
                 Status::GUATIAO_ERR_NULL,
                 "this provider builds no instances; it is its one instance",
-            ));
+            )
+            .into());
         };
         // The table is validated first, so a provider whose table does not
         // fit `K` never builds an instance it would then have to destroy.
         let remote = Remote::<K>::from_view(view)
             .map_err(|why| ProviderError::new(Status::GUATIAO_ERR_WRONG_KIND, &why.to_string()))?;
+        if let Some(schema) = view.config.as_ref().and_then(SchemaRef::new) {
+            validate_map(schema, config)?;
+        }
         let mut instance: *mut c_void = core::ptr::null_mut();
         let mut err = ProviderError::none();
         // SAFETY: the slot is the descriptor's own, read under its guard;
@@ -385,13 +423,14 @@ impl<K: ?Sized + Kind> Instance<K> {
         // locals; the library is mapped for the call.
         let status = unsafe { create(view.ctx, config, &mut instance, &mut err) };
         if status != Status::GUATIAO_OK {
-            return Err(take_err(err, status));
+            return Err(take_err(err, status).into());
         }
         if instance.is_null() {
             return Err(ProviderError::new(
                 Status::GUATIAO_ERR_NULL,
                 "the provider answered OK and built nothing",
-            ));
+            )
+            .into());
         }
         Ok(Instance {
             remote: Remote {
@@ -431,12 +470,6 @@ impl<K: ?Sized> Drop for Instance<K> {
             // is released exactly once, here.
             unsafe { destroy(self.lib_ctx, self.remote.ctx) };
         }
-    }
-}
-
-impl<K: ?Sized + Kind> From<Offer<K>> for Remote<K> {
-    fn from(offer: Offer<K>) -> Remote<K> {
-        offer.remote
     }
 }
 
@@ -484,7 +517,7 @@ impl ProviderInfo<'static> {
     pub unsafe fn instantiate<K: ?Sized + Kind>(
         &'static self,
         config: &Value,
-    ) -> Result<Instance<K>, ProviderError> {
+    ) -> Result<Instance<K>, InstantiateError> {
         // SAFETY: forwarded.
         let view = unsafe { self.view() }.ok_or_else(|| {
             ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, "an unreadable descriptor")
