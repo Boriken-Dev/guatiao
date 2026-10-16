@@ -382,7 +382,7 @@ pub fn text_ret(out: Text) -> Result<Text, ProviderError> {
 // carrier: an empty container recording the allocator it wants the answer
 // in, which allocates nothing. The shim reads it with `return_alloc` and
 // builds there; whatever it writes replaces the carrier, which owns
-// nothing. A library that ignores it is copied as before, and a caller
+// nothing. A tree built anywhere else is copied on arrival, and a caller
 // that writes none leaves the shim building in its own allocator.
 
 /// What a tree return crosses in: [`Value`], [`Map`] or [`List`].
@@ -594,8 +594,8 @@ mod carrier_tests {
         }
     }
 
-    /// An older host passes ABSENT, a zeroed container or nothing: the
-    /// shim builds in its own allocator, as it did before carriers.
+    /// A caller that passes ABSENT, a zeroed container or nothing has
+    /// the shim build in its own allocator.
     #[test]
     fn no_carrier_falls_back_to_this_sides_allocator() {
         let ours = Alloc::rust();
