@@ -37,7 +37,6 @@ fn a_crates_own_env_macro_does_not_change_the_default_id() {
     let parts: &'static ProviderParts = Box::leak(Box::new(
         Plain::provider(registry.host(), Alloc::rust()).expect("builds"),
     ));
-    // SAFETY: a derived provider's descriptor, leaked above.
-    let view = unsafe { parts.info().view() }.expect("a well-formed descriptor");
+    let view = parts.info().view().expect("a well-formed descriptor");
     assert_eq!(view.id(), "guatiao_plain");
 }

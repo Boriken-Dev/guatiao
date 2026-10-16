@@ -55,7 +55,7 @@ use std::path::Path;
 use super::{guard, guard_with, out};
 use crate::library::ProviderError;
 use crate::library::{
-    EntryPoint, HostInfo, LibraryInfo, LoadReport, Loading, Order, Provider, Registry, ScanRules,
+    EntryFn, HostInfo, LibraryInfo, LoadReport, Loading, Order, Provider, Registry, ScanRules,
     SearchPath, Skipped, UnloadError, WhyNot, scan_dir_rules, scan_path,
 };
 use crate::schema::read::SchemaRef;
@@ -143,7 +143,7 @@ impl HostRegistry {
 
     /// [`load`](HostRegistry::load) for a library the host links: its
     /// entry point, called with this registry's host block.
-    fn register(&mut self, name: &str, entry: EntryPoint, alloc: Alloc) -> Result<Value, Status> {
+    fn register(&mut self, name: &str, entry: EntryFn, alloc: Alloc) -> Result<Value, Status> {
         let mut map = Map::new_in(alloc);
         match self.inner.register_entry(name, entry) {
             Ok(Loading::Loaded(one)) => {
@@ -776,8 +776,6 @@ pub unsafe extern "C" fn guatiao_registry_register_entry(
         let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
             return Status::GUATIAO_ERR_ALLOC;
         };
-        // SAFETY: the caller's contract on `entry`.
-        let entry = unsafe { EntryPoint::new(entry) };
         match registry.register(name, entry, alloc) {
             // SAFETY: `out` is null or the caller's slot, written ABSENT on
             // entry; `alloc` is the caller's own allocator.

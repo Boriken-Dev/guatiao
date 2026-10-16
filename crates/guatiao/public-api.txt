@@ -158,6 +158,8 @@ impl guatiao::library::desc::LibraryInfo<'_>
 pub const fn guatiao::library::desc::LibraryInfo<'_>::floor() -> usize
 pub const fn guatiao::library::desc::LibraryInfo<'_>::meta_end() -> usize
 pub const fn guatiao::library::desc::LibraryInfo<'_>::unload_end() -> usize
+impl core::convert::From<&'static guatiao::library::desc::LibraryInfo<'static>> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::desc::LibraryInfo<'static>) -> guatiao::library::raw::LocalLibrary
 impl<'a> core::clone::Clone for guatiao::library::desc::LibraryInfo<'a>
 pub fn guatiao::library::desc::LibraryInfo<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::library::desc::LibraryInfo<'a>
@@ -187,11 +189,11 @@ pub const fn guatiao::library::desc::ProviderInfo<'_>::meta_end() -> usize
 pub const fn guatiao::library::desc::ProviderInfo<'_>::tables_end() -> usize
 pub const fn guatiao::library::desc::ProviderInfo<'_>::version_end() -> usize
 impl guatiao::library::desc::ProviderInfo<'static>
-pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::as_kind<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<core::option::Option<guatiao::library::kind::Remote<K>>, guatiao::library::kind::KindMismatch>
-pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::instantiate<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self, &guatiao::value::value::Value) -> core::result::Result<guatiao::library::kind::Instance<K>, guatiao::library::kind::InstantiateError>
-pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::offer<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<guatiao::library::kind::Offer<K>, guatiao::library::kind::KindMismatch>
+pub fn guatiao::library::desc::ProviderInfo<'static>::as_kind<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<core::option::Option<guatiao::library::kind::Remote<K>>, guatiao::library::kind::KindMismatch>
+pub fn guatiao::library::desc::ProviderInfo<'static>::instantiate<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self, &guatiao::value::value::Value) -> core::result::Result<guatiao::library::kind::Instance<K>, guatiao::library::kind::InstantiateError>
+pub fn guatiao::library::desc::ProviderInfo<'static>::offer<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<guatiao::library::kind::Offer<K>, guatiao::library::kind::KindMismatch>
 impl guatiao::library::desc::ProviderInfo<'static>
-pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::view(&'static self) -> core::option::Option<guatiao::library::raw::ProviderView>
+pub fn guatiao::library::desc::ProviderInfo<'static>::view(&'static self) -> core::option::Option<guatiao::library::raw::ProviderView>
 impl<'a> core::clone::Clone for guatiao::library::desc::ProviderInfo<'a>
 pub fn guatiao::library::desc::ProviderInfo<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::library::desc::ProviderInfo<'a>
@@ -462,7 +464,7 @@ impl core::marker::Sync for guatiao::library::kind::ProviderParts
 pub struct guatiao::library::kind::ProviderPartsBuilder
 impl guatiao::library::kind::ProviderPartsBuilder
 pub fn guatiao::library::kind::ProviderPartsBuilder::available(self, fn(*mut core::ffi::c_void, *mut guatiao::value::types::text::Str<'_>) -> bool) -> Self
-pub unsafe fn guatiao::library::kind::ProviderPartsBuilder::build(self) -> guatiao::library::kind::ProviderParts
+pub fn guatiao::library::kind::ProviderPartsBuilder::build(self) -> guatiao::library::kind::ProviderParts
 pub fn guatiao::library::kind::ProviderPartsBuilder::config(self, guatiao::value::value::Value) -> Self
 pub fn guatiao::library::kind::ProviderPartsBuilder::create(self, guatiao::library::raw::CreateFn) -> Self
 pub fn guatiao::library::kind::ProviderPartsBuilder::ctx(self, *mut core::ffi::c_void) -> Self
@@ -529,15 +531,6 @@ pub const guatiao::library::notices::TEXT_KEY: &str
 pub fn guatiao::library::notices::declare_notice(&mut guatiao::value::types::map::Map, guatiao::library::notices::Notice<'_>) -> core::result::Result<(), guatiao::value::error::ValueError>
 pub fn guatiao::library::notices::notices(core::option::Option<&guatiao::value::types::map::Map>) -> alloc::vec::Vec<guatiao::library::notices::Notice<'_>>
 pub mod guatiao::library::raw
-pub struct guatiao::library::raw::EntryPoint(_)
-impl guatiao::library::raw::EntryPoint
-pub const fn guatiao::library::raw::EntryPoint::function(&self) -> guatiao::library::raw::EntryFn
-pub unsafe const fn guatiao::library::raw::EntryPoint::new(guatiao::library::raw::EntryFn) -> guatiao::library::raw::EntryPoint
-impl core::clone::Clone for guatiao::library::raw::EntryPoint
-pub fn guatiao::library::raw::EntryPoint::clone(&self) -> Self
-impl core::fmt::Debug for guatiao::library::raw::EntryPoint
-pub fn guatiao::library::raw::EntryPoint::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl core::marker::Copy for guatiao::library::raw::EntryPoint
 pub struct guatiao::library::raw::Host
 impl guatiao::library::raw::Host
 pub fn guatiao::library::raw::Host::abi_version(&self) -> u32
@@ -574,9 +567,10 @@ pub fn guatiao::library::raw::LibraryView::fmt(&self, &mut core::fmt::Formatter<
 pub struct guatiao::library::raw::LocalLibrary(_)
 impl guatiao::library::raw::LocalLibrary
 pub const fn guatiao::library::raw::LocalLibrary::info(&self) -> &'static guatiao::library::desc::LibraryInfo<'static>
-pub unsafe const fn guatiao::library::raw::LocalLibrary::new(&'static guatiao::library::desc::LibraryInfo<'static>) -> guatiao::library::raw::LocalLibrary
 impl core::clone::Clone for guatiao::library::raw::LocalLibrary
 pub fn guatiao::library::raw::LocalLibrary::clone(&self) -> Self
+impl core::convert::From<&'static guatiao::library::desc::LibraryInfo<'static>> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::desc::LibraryInfo<'static>) -> guatiao::library::raw::LocalLibrary
 impl core::convert::From<&'static guatiao::library::kind::LibraryParts> for guatiao::library::raw::LocalLibrary
 pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::kind::LibraryParts) -> guatiao::library::raw::LocalLibrary
 impl core::fmt::Debug for guatiao::library::raw::LocalLibrary
@@ -745,8 +739,8 @@ pub fn guatiao::library::registry::Registry::priority(&self, &str) -> i32
 pub fn guatiao::library::registry::Registry::provider(&self, &str) -> core::option::Option<&guatiao::library::registry::Provider>
 pub fn guatiao::library::registry::Registry::providers(&self, &str) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::library::registry::Provider>
 pub fn guatiao::library::registry::Registry::providers_of(&self, &str) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::library::registry::Provider>
-pub fn guatiao::library::registry::Registry::register_entry(&mut self, &str, guatiao::library::raw::EntryPoint) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
-pub fn guatiao::library::registry::Registry::register_local(&mut self, &str, fn(guatiao::library::raw::Host) -> core::option::Option<guatiao::library::raw::LocalLibrary>) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
+pub fn guatiao::library::registry::Registry::register_entry(&mut self, &str, guatiao::library::raw::EntryFn) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
+pub fn guatiao::library::registry::Registry::register_local<L: core::convert::Into<guatiao::library::raw::LocalLibrary>>(&mut self, &str, impl core::ops::function::FnOnce(guatiao::library::raw::Host) -> core::option::Option<L>) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
 pub fn guatiao::library::registry::Registry::retire(&mut self, &str) -> core::result::Result<guatiao::library::registry::Retired, guatiao::library::registry::UnloadError>
 pub fn guatiao::library::registry::Registry::set_priority(&mut self, &str, i32)
 pub fn guatiao::library::registry::Registry::why_not(&self, &str) -> core::option::Option<guatiao::library::registry::WhyNot<'_>>
@@ -1084,15 +1078,6 @@ pub fn guatiao::library::scan::Declared::default() -> Self
 impl core::fmt::Debug for guatiao::library::scan::Declared
 pub fn guatiao::library::scan::Declared::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao::library::scan::Declared
-pub struct guatiao::library::EntryPoint(_)
-impl guatiao::library::raw::EntryPoint
-pub const fn guatiao::library::raw::EntryPoint::function(&self) -> guatiao::library::raw::EntryFn
-pub unsafe const fn guatiao::library::raw::EntryPoint::new(guatiao::library::raw::EntryFn) -> guatiao::library::raw::EntryPoint
-impl core::clone::Clone for guatiao::library::raw::EntryPoint
-pub fn guatiao::library::raw::EntryPoint::clone(&self) -> Self
-impl core::fmt::Debug for guatiao::library::raw::EntryPoint
-pub fn guatiao::library::raw::EntryPoint::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl core::marker::Copy for guatiao::library::raw::EntryPoint
 pub struct guatiao::library::Host
 impl guatiao::library::raw::Host
 pub fn guatiao::library::raw::Host::abi_version(&self) -> u32
@@ -1254,6 +1239,8 @@ impl guatiao::library::desc::LibraryInfo<'_>
 pub const fn guatiao::library::desc::LibraryInfo<'_>::floor() -> usize
 pub const fn guatiao::library::desc::LibraryInfo<'_>::meta_end() -> usize
 pub const fn guatiao::library::desc::LibraryInfo<'_>::unload_end() -> usize
+impl core::convert::From<&'static guatiao::library::desc::LibraryInfo<'static>> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::desc::LibraryInfo<'static>) -> guatiao::library::raw::LocalLibrary
 impl<'a> core::clone::Clone for guatiao::library::desc::LibraryInfo<'a>
 pub fn guatiao::library::desc::LibraryInfo<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::library::desc::LibraryInfo<'a>
@@ -1294,9 +1281,10 @@ pub fn guatiao::library::registry::Loaded::fmt(&self, &mut core::fmt::Formatter<
 pub struct guatiao::library::LocalLibrary(_)
 impl guatiao::library::raw::LocalLibrary
 pub const fn guatiao::library::raw::LocalLibrary::info(&self) -> &'static guatiao::library::desc::LibraryInfo<'static>
-pub unsafe const fn guatiao::library::raw::LocalLibrary::new(&'static guatiao::library::desc::LibraryInfo<'static>) -> guatiao::library::raw::LocalLibrary
 impl core::clone::Clone for guatiao::library::raw::LocalLibrary
 pub fn guatiao::library::raw::LocalLibrary::clone(&self) -> Self
+impl core::convert::From<&'static guatiao::library::desc::LibraryInfo<'static>> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::desc::LibraryInfo<'static>) -> guatiao::library::raw::LocalLibrary
 impl core::convert::From<&'static guatiao::library::kind::LibraryParts> for guatiao::library::raw::LocalLibrary
 pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::kind::LibraryParts) -> guatiao::library::raw::LocalLibrary
 impl core::fmt::Debug for guatiao::library::raw::LocalLibrary
@@ -1452,11 +1440,11 @@ pub const fn guatiao::library::desc::ProviderInfo<'_>::meta_end() -> usize
 pub const fn guatiao::library::desc::ProviderInfo<'_>::tables_end() -> usize
 pub const fn guatiao::library::desc::ProviderInfo<'_>::version_end() -> usize
 impl guatiao::library::desc::ProviderInfo<'static>
-pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::as_kind<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<core::option::Option<guatiao::library::kind::Remote<K>>, guatiao::library::kind::KindMismatch>
-pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::instantiate<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self, &guatiao::value::value::Value) -> core::result::Result<guatiao::library::kind::Instance<K>, guatiao::library::kind::InstantiateError>
-pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::offer<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<guatiao::library::kind::Offer<K>, guatiao::library::kind::KindMismatch>
+pub fn guatiao::library::desc::ProviderInfo<'static>::as_kind<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<core::option::Option<guatiao::library::kind::Remote<K>>, guatiao::library::kind::KindMismatch>
+pub fn guatiao::library::desc::ProviderInfo<'static>::instantiate<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self, &guatiao::value::value::Value) -> core::result::Result<guatiao::library::kind::Instance<K>, guatiao::library::kind::InstantiateError>
+pub fn guatiao::library::desc::ProviderInfo<'static>::offer<K: ?core::marker::Sized + guatiao::library::kind::Kind>(&'static self) -> core::result::Result<guatiao::library::kind::Offer<K>, guatiao::library::kind::KindMismatch>
 impl guatiao::library::desc::ProviderInfo<'static>
-pub unsafe fn guatiao::library::desc::ProviderInfo<'static>::view(&'static self) -> core::option::Option<guatiao::library::raw::ProviderView>
+pub fn guatiao::library::desc::ProviderInfo<'static>::view(&'static self) -> core::option::Option<guatiao::library::raw::ProviderView>
 impl<'a> core::clone::Clone for guatiao::library::desc::ProviderInfo<'a>
 pub fn guatiao::library::desc::ProviderInfo<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::library::desc::ProviderInfo<'a>
@@ -1525,8 +1513,8 @@ pub fn guatiao::library::registry::Registry::priority(&self, &str) -> i32
 pub fn guatiao::library::registry::Registry::provider(&self, &str) -> core::option::Option<&guatiao::library::registry::Provider>
 pub fn guatiao::library::registry::Registry::providers(&self, &str) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::library::registry::Provider>
 pub fn guatiao::library::registry::Registry::providers_of(&self, &str) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::library::registry::Provider>
-pub fn guatiao::library::registry::Registry::register_entry(&mut self, &str, guatiao::library::raw::EntryPoint) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
-pub fn guatiao::library::registry::Registry::register_local(&mut self, &str, fn(guatiao::library::raw::Host) -> core::option::Option<guatiao::library::raw::LocalLibrary>) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
+pub fn guatiao::library::registry::Registry::register_entry(&mut self, &str, guatiao::library::raw::EntryFn) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
+pub fn guatiao::library::registry::Registry::register_local<L: core::convert::Into<guatiao::library::raw::LocalLibrary>>(&mut self, &str, impl core::ops::function::FnOnce(guatiao::library::raw::Host) -> core::option::Option<L>) -> core::result::Result<guatiao::library::registry::Loading<'_>, guatiao::library::registry::LoadError>
 pub fn guatiao::library::registry::Registry::retire(&mut self, &str) -> core::result::Result<guatiao::library::registry::Retired, guatiao::library::registry::UnloadError>
 pub fn guatiao::library::registry::Registry::set_priority(&mut self, &str, i32)
 pub fn guatiao::library::registry::Registry::why_not(&self, &str) -> core::option::Option<guatiao::library::registry::WhyNot<'_>>

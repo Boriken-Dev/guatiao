@@ -357,17 +357,12 @@ impl ProviderInfo<'static> {
     /// `None` when it is below the floor or names text that is not UTF-8.
     /// A host's services answer with views already read
     /// ([`Host::get`], [`Host::list`]); this is for a descriptor a library
-    /// built itself.
-    ///
-    /// # Safety
-    ///
-    /// `self` is a descriptor as a library hands one to its host: every
-    /// pointer in it addresses what its field says (text, a well-formed
-    /// configuration value and `meta` map, its kind names and tables), its
-    /// slots and tables expect its `ctx`, and all of it stays valid for as
-    /// long as the view, and anything taken from it, is used.
-    pub unsafe fn view(&'static self) -> Option<ProviderView> {
-        // SAFETY: the caller's contract; the declared size is the limit.
+    /// built itself. Its fields are its producer's contract, as every
+    /// descriptor's are.
+    pub fn view(&'static self) -> Option<ProviderView> {
+        // SAFETY: a descriptor's memory shape is its producer's contract,
+        // and `'static` keeps it for every view taken from it; the
+        // declared size is the limit.
         unsafe { read_provider(self, self.struct_size as usize) }
     }
 }
@@ -681,8 +676,9 @@ pub(crate) fn open_local(described: Option<LocalLibrary>) -> Opened {
     let Some(info) = described else {
         return Opened::Declined;
     };
-    // SAFETY: a `LocalLibrary` is a descriptor its maker vouched for, in
-    // `LocalLibrary::new` or by building it from `LibraryParts`.
+    // SAFETY: registering a descriptor is the host's trust in its
+    // producer, as naming a file is; its memory shape is that producer's
+    // contract, and `read_library` checks what can be checked.
     match unsafe { read_library(info.info()) } {
         Ok(view) => Opened::Loaded(view, Origin::Linked),
         Err(why) => Opened::Rejected(why),
@@ -692,11 +688,11 @@ pub(crate) fn open_local(described: Option<LocalLibrary>) -> Opened {
 /// What a library the host LINKS and that speaks C came to: its entry
 /// point's answer, read exactly as a loaded library's is.
 #[cfg(feature = "load")]
-pub(crate) fn open_entry(entry: EntryPoint, host: Host) -> Opened {
-    // SAFETY: an `EntryPoint` is a function its maker vouched for in
-    // `EntryPoint::new`; its answer is null or a descriptor read under
-    // `read_library`'s own guards.
-    let desc = unsafe { (entry.function())(host.as_raw()) };
+pub(crate) fn open_entry(entry: EntryFn, host: Host) -> Opened {
+    // SAFETY: handing over an entry point is choosing to run it, as naming
+    // a file is; its answer is null or a descriptor read under
+    // `read_library`'s own checks.
+    let desc = unsafe { entry(host.as_raw()) };
     if desc.is_null() {
         return Opened::Declined;
     }
@@ -870,9 +866,6 @@ mod tests {
             core::ptr::null()
         }
 
-        // SAFETY: both answer null or a leaked, well-formed descriptor.
-        let (describing, declining) =
-            unsafe { (EntryPoint::new(describing), EntryPoint::new(declining)) };
         let mut r = Registry::new("test-host", "1.0");
         let loaded = r.register_entry("cli", describing).unwrap();
         assert_eq!(

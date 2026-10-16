@@ -13,7 +13,7 @@
 #![cfg(feature = "load")]
 
 use guatiao::library::{
-    EntryPoint, HostInfo, KindTables, Kinds, LibraryInfo, ProviderInfo, Providers, Registry,
+    HostInfo, KindTables, Kinds, LibraryInfo, ProviderInfo, Providers, Registry,
 };
 use guatiao::value::types::{MaybeNull, Str};
 
@@ -79,11 +79,8 @@ unsafe extern "C" fn older_entry(_host: *const HostInfo<'static>) -> *const Libr
 
 fn registry_with_an_older_library() -> Registry {
     let mut registry = Registry::new("lookups", "1.0");
-    // SAFETY: `older_entry` answers a leaked descriptor, well-formed for
-    // the size each part of it declares.
-    let entry = unsafe { EntryPoint::new(older_entry) };
     registry
-        .register_entry("old", entry)
+        .register_entry("old", older_entry)
         .expect("an older library registers")
         .loaded()
         .expect("it accepts this host");
@@ -135,15 +132,11 @@ fn a_host_lists_what_it_gets() {
 /// A library the host LINKS, built by hand: what `register_local` takes.
 fn linked_library(_host: guatiao::library::Host) -> Option<guatiao::library::LocalLibrary> {
     use guatiao::library::kind::{LibraryParts, ProviderParts};
-    // SAFETY: no table, no ctx and no slot: there is nothing to vouch for
-    // but the text, which the builder owns.
-    let provider = unsafe {
-        ProviderParts::builder("linked_provider")
-            .name("Linked")
-            .version("2.0.0")
-            .kinds(&["linked"])
-            .build()
-    };
+    let provider = ProviderParts::builder("linked_provider")
+        .name("Linked")
+        .version("2.0.0")
+        .kinds(&["linked"])
+        .build();
     let parts: &'static LibraryParts = Box::leak(Box::new(LibraryParts::new(
         "linked",
         "1.0.0",

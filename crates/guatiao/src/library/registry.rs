@@ -34,7 +34,7 @@ use std::path::{Path, PathBuf};
 use super::key::{KeyError, KeyFields, KeyTemplate};
 use super::kind::{Kind, KindMismatch, Offer, Remote};
 use super::raw::{
-    EntryPoint, Host, HostBlock, LibraryView, LocalLibrary, Opened, Origin, ProviderView, Rejected,
+    EntryFn, Host, HostBlock, LibraryView, LocalLibrary, Opened, Origin, ProviderView, Rejected,
     Shared, Snapshot, SnapshotEntry,
 };
 use crate::value::alloc::Alloc;
@@ -886,15 +886,18 @@ impl Registry {
     ///
     /// `describe` is what `guatiao::local_providers!` writes as
     /// `library`, or a hand-written library's own `describe`; it sees
-    /// this registry's [`Host`] exactly as a loaded library's entry would.
-    /// A `None` is the library declining this host. A hand-written one
-    /// vouches for its descriptor with the `unsafe`
-    /// [`LocalLibrary::new`], since the registry reads every pointer in
-    /// it.
-    pub fn register_local(
+    /// this registry's [`Host`] exactly as a loaded library's entry would,
+    /// and answers anything that converts to a [`LocalLibrary`]. A `None`
+    /// is the library declining this host.
+    ///
+    /// **Registering a descriptor is trusting its producer**, as loading
+    /// a file is: it is read under the same checks, and what they cannot
+    /// see — that a table is one for the kind it names, that a slot
+    /// expects its `ctx` — is the producer's contract.
+    pub fn register_local<L: Into<LocalLibrary>>(
         &mut self,
         name: &str,
-        describe: fn(Host) -> Option<LocalLibrary>,
+        describe: impl FnOnce(Host) -> Option<L>,
     ) -> Result<Loading<'_>, LoadError> {
         let path = PathBuf::from(format!("<{name}>"));
         if let Some(already) = self.loaded_from_path(&path) {
@@ -902,7 +905,7 @@ impl Registry {
             return Ok(Loading::Skipped(Skipped::AlreadyLoaded { from }));
         }
         let host = self.host();
-        let opened = super::raw::open_local(describe(host));
+        let opened = super::raw::open_local(describe(host).map(Into::into));
         self.absorb(&path, opened)
     }
 
@@ -917,13 +920,8 @@ impl Registry {
     /// with this registry's host block and answers null or a descriptor
     /// well-formed for its own `struct_size` that lives for the process --
     /// exactly what a loaded library's entry point promises, and read under
-    /// the same guards. [`EntryPoint::new`] is where that is promised, and
-    /// it is `unsafe`.
-    pub fn register_entry(
-        &mut self,
-        name: &str,
-        entry: EntryPoint,
-    ) -> Result<Loading<'_>, LoadError> {
+    /// the same checks.
+    pub fn register_entry(&mut self, name: &str, entry: EntryFn) -> Result<Loading<'_>, LoadError> {
         let path = PathBuf::from(format!("<{name}>"));
         if let Some(already) = self.loaded_from_path(&path) {
             let from = already.path.clone();
