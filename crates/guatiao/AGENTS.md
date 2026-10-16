@@ -974,15 +974,23 @@ providers, 256 kind names and 256 per-kind tables per provider, strides
 ≤ 4096 bytes, text ≤ 64 KiB, tables ≤ 64 KiB; text UTF-8; each per-kind
 table's words after its 8-byte header null or a plausible function
 pointer (a per-kind table is a header followed by function pointers).
-**For a library mapped from a file** the loader also reads the file's
-layout (its segments and executable sections, placed by where its entry
-symbol landed) and refuses a data pointer that starts inside the image and
-runs past it, and any function pointer — `available`, `create`,
-`destroy`, `unload`, every per-kind table slot — outside the image's
-executable sections; a pointer outside the image (the library's heap) is
-accepted. A file whose layout cannot be read or does not place at the
-mapping is read without the image checks. None of this proves a table is
-the kind it names or that a slot expects its `ctx`.
+**For a library mapped from a file** the loader also places its image —
+from the platform loader's own record of the mapping, read without
+opening the file: the PE headers at the module's base on Windows (its span
+and its `IMAGE_SCN_MEM_EXECUTE` sections), the program headers
+`dl_iterate_phdr` reports on Linux, Android and the BSDs (the loadable
+segments, and those mapped executable), the Mach-O header `dladdr` finds
+on Apple platforms (the segments, and those mapped executable); elsewhere,
+or where that record does not hold the entry symbol, from the file's own
+layout placed by where its entry symbol landed — and refuses a data
+pointer that starts inside the image and runs past it, and any function
+pointer — `available`, `create`, `destroy`, `unload`, every per-kind
+table slot — outside the image's executable ranges; a pointer outside the
+image (the library's heap) is accepted. On ELF and Mach-O the executable
+ranges are whole segments, so read-only data a linker maps beside the code
+counts as code. An image neither source places is read without the image
+checks. None of this proves a table is the kind it names or that a slot
+expects its `ctx`.
 
 **Everything a registry reports is OWNED.** `ProviderView` and
 `LibraryView` copy every string (`String`) and every value (`Value`,

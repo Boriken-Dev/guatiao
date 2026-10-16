@@ -526,8 +526,10 @@ include = [
   "BytesMut",
   "MergeOverride",
 ]
-# `Entry` is defined in the trailer instead; see `after_includes`.
-exclude = ["Entry"]
+# `Entry` is defined in the trailer instead; see `after_includes`. The
+# other two are the platform loader's own functions, which the loader
+# reads a mapped image through and this header must not redeclare.
+exclude = ["Entry", "dl_iterate_phdr", "dladdr"]
 
 # A public C header shares one flat namespace with everything a consumer
 # already includes, so every name it introduces carries this crate's
