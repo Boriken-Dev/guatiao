@@ -1090,9 +1090,17 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   the host offers one: `providers!`/`local_providers!` take
   `host.alloc()` and fall back to their own. So the configuration schema
   a library declares outlives that library's mapping wherever the host
-  passed `guatiao_registry_new` an allocator. What a provider CALL
-  returns is still built by whatever allocator that provider used, which
-  is what `unload`'s contract covers.
+  passed `guatiao_registry_new` an allocator.
+- **What a call returns lives in the host's allocator.** The generated
+  proxy moves every returned `Value`, `Map` and `List` (and a
+  `ProviderError`'s message) whose containers record any allocator but
+  this side's `Alloc::rust()` into it, freeing the original through the
+  allocator that made it while the call's lease still holds the library;
+  a tree already wholly in it passes untouched. A `String` is a Rust copy
+  already, scalars carry nothing, and a type converted through
+  `FromValue` is whatever its impl builds. So nothing the host keeps from
+  a call needs the library's allocator once the library is gone. A C
+  caller calling a table itself gets what the library wrote.
 - **`LibraryInfo::unload`** is the library's say, an appended slot:
   `Option<unsafe extern "C" fn() -> Status>`, `GUATIAO_OK` to agree.
   Null, or a descriptor from before the slot, means the library does not

@@ -52,7 +52,7 @@ use crate::schema::ValidationError;
 use crate::value::ValueError;
 use crate::value::alloc::Alloc;
 use crate::value::status::Status;
-use crate::value::types::{Map, Str, Text, Value};
+use crate::value::types::{List, Map, Str, Text, Value};
 
 /// What a kind declares about its table. Implemented for `dyn Trait` by
 /// `#[guatiao::kind]`; the host and the library share the impl.
