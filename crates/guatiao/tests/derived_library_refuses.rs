@@ -2,16 +2,17 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! A derived library refuses to be unloaded while anything it handed out
-//! is alive, and agrees once it is not. Its own binary: it unmaps
-//! `derived_greeter`, which no other test may be holding.
+//! A derived library is not unloaded while a handle into it is held, nor
+//! while anything it handed out is alive, and is once neither is. Its own
+//! binary: it unmaps `derived_greeter`, which no other test may be
+//! holding.
 
 #![cfg(all(feature = "provider", feature = "load"))]
 
 use std::path::PathBuf;
 
-use greeter_kind::{Greeter, Listener};
-use guatiao::library::{Registry, UnloadError};
+use greeter_kind::{Conversation, Greeter, Listener};
+use guatiao::library::{Object, Registry, UnloadError};
 use guatiao::{Map, Status, Value};
 
 fn library_path(name: &str) -> PathBuf {
@@ -38,12 +39,12 @@ impl Listener for Deaf {
     fn heard(&mut self, _what: &str) {}
 }
 
-fn busy(why: &UnloadError) -> bool {
+fn refused_busy(why: &UnloadError) -> bool {
     matches!(why, UnloadError::Refused { status, .. } if *status == Status::GUATIAO_ERR_BUSY)
 }
 
 #[test]
-fn it_refuses_while_an_instance_or_an_object_is_alive() {
+fn it_refuses_while_a_handle_an_instance_or_an_object_is_alive() {
     let mut registry = Registry::new("refusal-tests", "1.0");
     registry
         .load_file(&library_path("derived_greeter"))
@@ -51,7 +52,28 @@ fn it_refuses_while_an_instance_or_an_object_is_alive() {
         .loaded()
         .expect("is a library for this host");
 
-    // An instance built from a configuration.
+    // A handle holds the library's lease: the registry counts it and
+    // refuses before the library is asked.
+    let remote = registry
+        .offer::<dyn Greeter>("derived_greeter_hello")
+        .unwrap()
+        .unwrap()
+        .remote()
+        .expect("the default greeter is its own instance");
+    let why = registry
+        .unload("derived_greeter")
+        .expect_err("a Remote is held");
+    assert!(
+        matches!(why, UnloadError::Busy { ref key, leases: 1 } if key == "derived_greeter"),
+        "{why:?}"
+    );
+    assert_eq!(registry.loaded().len(), 1, "a refusal changes nothing");
+    assert!(
+        registry.provider("derived_greeter_hello").is_some(),
+        "and its providers are answered again"
+    );
+
+    // An instance built from a configuration holds it too.
     let mut config = Map::new();
     config.set("prefix", "hey");
     let instance = registry
@@ -60,27 +82,40 @@ fn it_refuses_while_an_instance_or_an_object_is_alive() {
         .unwrap()
         .instantiate(&Value::from(config))
         .expect("a fitting configuration builds");
-    // SAFETY: deliberately false; the library's own count is what refuses.
-    let why = unsafe { registry.unload("derived_greeter") }.expect_err("an instance is alive");
-    assert!(busy(&why), "{why:?}");
+    let why = registry
+        .unload("derived_greeter")
+        .expect_err("a Remote and an instance are held");
+    assert!(
+        matches!(why, UnloadError::Busy { leases: 2, .. }),
+        "{why:?}"
+    );
     drop(instance);
 
-    // An object one of its kinds handed back.
-    let chat = registry
-        .offer::<dyn Greeter>("derived_greeter_hello")
-        .unwrap()
-        .unwrap()
-        .remote()
-        .expect("the default greeter is its own instance")
+    // An object handed across raw holds no lease; the library's own count
+    // of what it made is what refuses then.
+    let chat = remote
         .start(Deaf.into_object())
         .expect("the derived greeter holds conversations");
-    // SAFETY: as above.
-    let why = unsafe { registry.unload("derived_greeter") }.expect_err("an object is alive");
-    assert!(busy(&why), "{why:?}");
+    drop(remote);
+    let raw = chat.into_raw();
+    let why = registry
+        .unload("derived_greeter")
+        .expect_err("an object is alive");
+    assert!(refused_busy(&why), "{why:?}");
     assert_eq!(registry.loaded().len(), 1, "a refusal changes nothing");
-    drop(chat);
+    // SAFETY: the conversation the library handed back, given up just
+    // above and taken back once.
+    drop(unsafe { Object::<dyn Conversation>::from_raw(raw) }.expect("it validates"));
 
-    // SAFETY: nothing taken from the library is held any more.
-    unsafe { registry.unload("derived_greeter") }.expect("nothing is alive now");
+    registry
+        .unload("derived_greeter")
+        .expect("nothing is alive now");
     assert!(registry.loaded().is_empty());
+    assert!(
+        matches!(
+            registry.unload("derived_greeter"),
+            Err(UnloadError::NotFound { .. })
+        ),
+        "it left with the unload"
+    );
 }

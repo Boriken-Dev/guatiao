@@ -936,7 +936,9 @@ reg.providers_of("acme_net_pve")           // every loaded version of one id (>1
 reg.all() / reg.all_ranked()               // everything, load order / best first
 reg.retire(library_key)                    // Result<Retired, UnloadError>: out of the registry,
                                            // still mapped
-unsafe { reg.unload(library_key) }?        // asks the library, then closes it
+reg.unload(library_key)?                   // safe: Busy while a handle holds it, then asks the library,
+                                           // then closes it
+reg.collect()                              // Vec<String>: retired libraries closed once unused
 provider.kinds() -> &[String] / provider.supports(kind)   // what it serves
 provider.config_schema()                   // Option<&Value>, the registry's copy
 provider.vtable() -> (*const c_void, usize)
@@ -959,7 +961,7 @@ required slots); what cannot — that a table is one for the kind it names,
 that a slot expects its `ctx` — is the contract. `unsafe` stays on the
 doors that take a bare pointer from anywhere (`Remote::from_raw`,
 `Object::from_raw`, `Borrowed*::from_raw`, `Host::from_raw`) and on
-`unload`. `ProviderView`'s fields are private, so its safe `available()`
+`unload_unchecked`; `unload` itself is safe. `ProviderView`'s fields are private, so its safe `available()`
 can only call a slot with the `ctx` it was read with.
 
 **What a reader checks** where a descriptor enters, for every origin
@@ -1060,32 +1062,44 @@ lease keeps mapped. No handle keeps the descriptor itself.
   `Host` and allocator of the registry that loaded it first; that host's
   lookups answer `GUATIAO_ERR_GONE` once the first registry drops. A host
   rebuilding its registry on a reload carries the library's state over.
-- **And unloaded, when the library agrees.** `unsafe
-  Registry::unload(key)` asks the library's `unload` slot first, then
-  retires it, then closes the mapping. The slot is the library's promise
-  that what it can account for is released. `UnloadError`:
-  `NotSupported { key }` when it has no slot and so promises nothing;
-  `Refused { key, status }` when it says no (`GUATIAO_ERR_BUSY` from a
-  derived library with anything alive); `Linked { key }` for a library
-  the host LINKS; `NotFound`; and `Close { key, reason }` when the loader
-  could not close, in which case it is retired. Every refusal leaves the
-  library registered and mapped.
+- **And unloaded, when nothing uses it and the library agrees.**
+  `Registry::unload(key)` is **safe**. It first takes the library's
+  providers out of what the host's services answer, so nothing can pin
+  one meanwhile, then refuses with `Busy { key, leases }` while any
+  handle holds the library's lease (a `Remote`, `Offer`, `Instance`,
+  `Object` or `ProviderView` taken from it, or an answer another library
+  pinned through the services), then asks the library's `unload` slot,
+  its promise that what it can account for is released, then closes the
+  mapping. `UnloadError`: `Busy`; `NotSupported { key }` when it has no
+  slot and so promises nothing; `Refused { key, status }` when it says no
+  (`GUATIAO_ERR_BUSY` from a derived library with an instance or object
+  alive that no handle holds, one handed across with `into_raw` say);
+  `Linked { key }` for a library the host LINKS; `NotFound`; and
+  `Close { key, reason }` when the loader could not close, in which case
+  it is retired. Every refusal leaves the library registered, answered by
+  the services again, and mapped.
+- **A retired library closes when nothing uses it.**
+  `Registry::collect() -> Vec<String>` closes every retired library whose
+  lease no handle holds and whose `unload` slot agrees, and answers their
+  keys, oldest first; one that refuses is asked again next time, one with
+  no slot stays mapped. The registry's next `load_file`, `register_local`,
+  `register_entry`, `retire` or `unload` collects as well. Dropping a
+  handle never closes anything: it may drop while the library's own code
+  is on the stack. A library the host links has nothing to close and is
+  let go at the retire. Dropping the registry still never unmaps.
 - **Whether the image really leaves the address space is the loader's
   call.** The library is out of the registry on every platform. Measured:
   Windows and Linux unmap, macOS keeps the image mapped and its statics
   alive, so a host that unloads to reclaim memory, or to pick up a new
   build of the same file, gets neither there.
-- **`unsafe Registry::unload_unchecked(key)` is the host insisting** on a
-  library with no slot. A library that HAS a slot is still asked, and its
-  refusal still stands.
-- **Both are `unsafe` for what no library can count**: a `Remote` or
-  `Offer` copied out of it, a `ProviderView` of one of its providers
-  (`Provider::view`, `Offer::view`, `Host::get`/`list`: its `available()`
-  calls into the image), a raw vtable, `ctx` or descriptor pointer, a
-  value it built through its own allocator that its slot does not track,
-  and a descriptor another library fetched from it through the services.
-  None is used again. A registry made with `with_alloc` takes the
-  library's descriptor out of that list: it is built in the host's arena.
+- **`unsafe Registry::unload_unchecked(key)` is the host insisting**: it
+  skips the lease count and a missing slot. A library that HAS a slot is
+  still asked, and its refusal still stands. Its contract is that nothing
+  the library handed out is used again.
+- **What stays the caller's word**, under the safe `unload` too: a raw
+  pointer taken on purpose and kept past the handle it came from
+  (`vtable()`, `table()`, `table_for`, `ctx()`, `ObjectRaw`), and
+  anything a C caller of the registry holds (see the C surface below).
 - **A derived library counts what it hands out.** `#[derive(Provider)]`
   counts instances built through `create`, `#[guatiao::kind(object)]`
   counts object cells, and `providers!` writes an `unload` slot that
@@ -1623,10 +1637,12 @@ than invented per host.
 - **Read on display, never cached.** A library that loads an optional
   component on demand owes its attribution only while it is in use.
 
-**A loaded library stays mapped until the host unloads it.** The registry
-copies out every string and value it reads, but a vtable, a `ctx` and a
-descriptor pointer address the mapping itself — which is why `retire`
-(which keeps the mapping) is safe and `unload` is the host's word.
+**A loaded library stays mapped until the registry closes it**, through
+`unload` or `collect`, and a Rust handle into it holds a lease that stops
+both. A C caller holds raw pointers instead, which no lease counts: a
+vtable, a `ctx` or a descriptor taken from a library is the caller's to
+have let go before it asks `guatiao_registry_unload`, as the library's own
+slot cannot see them.
 
 ### A host in C, or Python, or anything with an FFI
 

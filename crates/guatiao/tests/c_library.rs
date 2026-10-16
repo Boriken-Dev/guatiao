@@ -223,13 +223,16 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     // is refused until it insists.
     drop(offer);
     // SAFETY: nothing taken from the library is held any more.
-    let why = unsafe { registry.unload("c_greeter_library") }.expect_err("it has no slot");
+    let why = registry
+        .unload("c_greeter_library")
+        .expect_err("it has no slot");
     assert!(
         matches!(why, guatiao::library::UnloadError::NotSupported { .. }),
         "{why:?}"
     );
     assert_eq!(registry.loaded().len(), 1, "a refusal changes nothing");
-    // SAFETY: as above, and the library handed out nothing that is alive.
+    // SAFETY: nothing taken from the library is held, and it handed out
+    // nothing that is alive.
     unsafe { registry.unload_unchecked("c_greeter_library") }.expect("the host insisted");
     assert!(registry.loaded().is_empty());
 }

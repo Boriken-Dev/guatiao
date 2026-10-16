@@ -89,7 +89,9 @@ fn an_unloaded_library_is_really_unmapped() {
 
     // SAFETY: nothing was taken from the library: no tree it allocated,
     // no table, no instance, and the counter handle above is closed.
-    unsafe { registry.unload("hello_library") }.expect("nothing is outstanding");
+    registry
+        .unload("hello_library")
+        .expect("nothing is outstanding");
 
     registry
         .load_file(&path)
