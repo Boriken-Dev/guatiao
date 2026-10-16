@@ -300,19 +300,34 @@ class Registry:
 
         `key` is the LIBRARY key -- `libraries_keyed_by`'s template,
         `%id` by default -- not a provider key. Its providers leave, and
-        the key may be loaded again. Anything already taken from it (a
-        table from `provider_table`, an `Instance`) keeps working;
-        `provider_config` for one of its providers does not, because the
-        copy belonged to the registry. `guatiao.errors.NotFound` when
-        nothing answers to `key`."""
+        the key may be loaded again. `provider_config` for one of its
+        providers goes with it, because the copy belonged to the registry.
+        `guatiao.errors.NotFound` when nothing answers to `key`.
+
+        The library is closed once nothing uses it: by `collect`, or by
+        this registry's next load, retire or unload, once no live
+        `Instance` or object of its own remains and its own `unload`
+        function agrees. A table from `provider_table` is valid until
+        then and not after."""
         self._key_call(_lib.core().guatiao_registry_retire, key)
+
+    def collect(self) -> list:
+        """Closes every retired library nothing uses any more, and returns
+        their library keys, oldest first.
+
+        One whose own `unload` function refuses stays retired and mapped,
+        and is asked again next time; one with no such function stays
+        mapped. No table taken from a retired library is used again."""
+        return self._call(_lib.core().guatiao_registry_collect)
 
     def unload(self, key: str, *, unchecked: bool = False) -> None:
         """Unmaps a library, when the library agrees.
 
-        The library's own `unload` function is asked first: it promises
-        that what it can account for is released. `guatiao.Busy` while an
-        instance or object it handed out is alive; `guatiao.Unsupported`
+        `guatiao.Busy` while a handle into it is held (an answer another
+        library pinned through the host's services); then the library's
+        own `unload` function is asked, its promise that what it can
+        account for is released: `guatiao.Busy` again while an instance or
+        object it handed out is alive; `guatiao.Unsupported`
         when it has no such function and so promises nothing;
         `guatiao.WrongKind` when it is linked into the host rather than
         mapped; `guatiao.NotFound` for an unknown key. A refusal leaves it

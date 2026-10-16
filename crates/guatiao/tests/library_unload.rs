@@ -374,6 +374,68 @@ fn the_c_surface_unloads() {
     unsafe { guatiao::exports::library::guatiao_registry_free(reg) };
 }
 
+/// Collecting through the C surface: a retired library nothing uses is
+/// closed and named in a list of keys; a second collect names nothing.
+#[test]
+fn the_c_surface_collects() {
+    use guatiao::value::convert::TryAsRef;
+    use guatiao::value::types::{List, Str, Value};
+
+    let _one = one_at_a_time();
+    let path = library_path();
+    let path = path.to_string_lossy().into_owned();
+    let alloc = guatiao::Alloc::rust().as_raw();
+    // SAFETY: the names are readable for the call and the allocator is
+    // this crate's own.
+    let reg = unsafe {
+        guatiao::exports::library::guatiao_registry_new(
+            Str::new("c-collect"),
+            Str::new("1.0"),
+            alloc,
+        )
+    };
+    assert!(!reg.is_null());
+    let mut answer = Value::absent();
+    // SAFETY: `reg` is live, the path is readable, `answer` is writable.
+    let status = unsafe {
+        guatiao::exports::library::guatiao_registry_load_file(
+            reg,
+            Str::new(&path),
+            alloc,
+            &mut answer,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_OK);
+    drop(answer);
+    // SAFETY: `reg` is live and the key is readable.
+    let status = unsafe {
+        guatiao::exports::library::guatiao_registry_retire(reg, Str::new("hello_library"))
+    };
+    assert_eq!(status, Status::GUATIAO_OK);
+
+    let collect = |out: &mut Value| {
+        // SAFETY: `reg` is live, the allocator is ours, `out` is writable.
+        unsafe { guatiao::exports::library::guatiao_registry_collect(reg, alloc, out) }
+    };
+    let mut keys = Value::absent();
+    assert_eq!(collect(&mut keys), Status::GUATIAO_OK);
+    let keys: &List = TryAsRef::try_as_ref(&keys).expect("a list");
+    let keys: Vec<&str> = keys
+        .iter()
+        .filter_map(TryAsRef::<str>::try_as_ref)
+        .collect();
+    assert_eq!(keys, ["hello_library"]);
+    let mut again = Value::absent();
+    assert_eq!(collect(&mut again), Status::GUATIAO_OK);
+    assert_eq!(
+        TryAsRef::<List>::try_as_ref(&again).map(|l| l.len()),
+        Some(0),
+        "closed once"
+    );
+    // SAFETY: the handle is live and used nowhere else.
+    unsafe { guatiao::exports::library::guatiao_registry_free(reg) };
+}
+
 /// `{"greeting": ...}` from the example library's greeter, built through
 /// the library's own allocator.
 ///

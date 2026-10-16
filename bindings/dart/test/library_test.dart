@@ -40,6 +40,7 @@ void main() {
       'guatiao_registry_retire',
       'guatiao_registry_unload',
       'guatiao_registry_unload_unchecked',
+      'guatiao_registry_collect',
     ]) {
       expect(lib.provides(name), isTrue, reason: name);
     }

@@ -105,16 +105,24 @@ it claims the kind); `provider_table(key)` answers its single table only.
 A null table and size 0 mean there is none.
 
 `Registry.retire(library_key)` takes a library out of the registry and
-leaves it mapped. `Registry.unload(library_key)` unmaps it **when the
-library agrees**: its own `unload` function is asked first, and is its
-promise that what it can account for is released. `Busy` while an
+leaves it mapped until nothing uses it: `Registry.collect()` closes every
+retired library whose own `unload` function agrees and answers their
+keys, as does the registry's next load, retire or unload; one that
+refuses is asked again next time, one with no such function stays
+mapped. An `Instance` must be closed before its library is retired:
+afterwards `close()` no longer finds the provider to destroy it with.
+`Registry.unload(library_key)` unmaps it **when the
+library agrees**: `Busy` while another library holds a pinned answer
+from it, then its own `unload` function is asked, its promise that
+what it can account for is released: `Busy` while an
 instance or object it handed out is alive; `Unsupported` when it has no
 such function; `WrongKind` when it is linked into the host rather than
 mapped; `NotFound` for an unknown key. A refusal leaves it loaded.
 `unload(key, unchecked=True)` is the caller insisting on a library with no
 `unload` function. **Both take the LIBRARY key** -- `libraries_keyed_by`'s
 template, `%id` by default -- not a provider key. Either way no table,
-`ctx` or borrowed schema taken from the library is used again.
+`ctx` or borrowed schema taken from the library is used again, after an
+unload or a collect that closed it.
 
 `guatiao.kinds.table(table_ptr, size, struct_type, floor_hash=...)`
 turns a `provider_table()` answer into the `ctypes.Structure` a kind's

@@ -60,6 +60,8 @@ files:
         name: guatiao_registry_available
       c:@F@guatiao_registry_best:
         name: guatiao_registry_best
+      c:@F@guatiao_registry_collect:
+        name: guatiao_registry_collect
       c:@F@guatiao_registry_free:
         name: guatiao_registry_free
       c:@F@guatiao_registry_host:

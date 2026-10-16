@@ -1642,7 +1642,10 @@ than invented per host.
 both. A C caller holds raw pointers instead, which no lease counts: a
 vtable, a `ctx` or a descriptor taken from a library is the caller's to
 have let go before it asks `guatiao_registry_unload`, as the library's own
-slot cannot see them.
+slot cannot see them; one taken from a retired library is valid until
+`guatiao_registry_collect`, or the registry's next load, registration,
+retire or unload, closes it. `guatiao_registry_unload` answers
+`GUATIAO_ERR_BUSY` while another library holds a pinned answer from it.
 
 ### A host in C, or Python, or anything with an FFI
 
@@ -1662,8 +1665,9 @@ guatiao_registry_scan_dir_rules(reg, dir, false,
 guatiao_registry_providers(reg, guatiao_cstr("greeter"), &alloc, &answer);
 guatiao_registry_provider(reg, key, &alloc, &answer);
 guatiao_registry_retire(reg, guatiao_cstr("hello_library"));   // out of the registry, still mapped
-guatiao_registry_unload(reg, guatiao_cstr("hello_library"));   // asks the library, then closes it
-guatiao_registry_unload_unchecked(reg, key);                   // a library with no unload slot: the host insists
+guatiao_registry_unload(reg, guatiao_cstr("hello_library"));   // BUSY while held, asks the library, then closes it
+guatiao_registry_unload_unchecked(reg, key);                   // past a hold or a missing slot: the host insists
+guatiao_registry_collect(reg, &alloc, &answer);                // closes retired libraries nothing uses: a list of keys
 guatiao_registry_keyed_by(reg, guatiao_cstr("%id@%version"));
 guatiao_registry_libraries_keyed_by(reg, tmpl);
 guatiao_registry_libraries(reg, &alloc, &answer);

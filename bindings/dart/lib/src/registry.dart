@@ -105,7 +105,8 @@ class Registry implements Finalizable {
 
   /// Frees the registry. Idempotent.
   ///
-  /// Every library it holds stays mapped; [unload] is what unmaps one.
+  /// Every library it holds stays mapped; [unload] and [collect] are what
+  /// unmap one.
   void close() {
     if (_closed) return;
     _closed = true;
@@ -463,18 +464,41 @@ class Registry implements Finalizable {
   ///
   /// `key` is the LIBRARY key -- [librariesKeyedBy]'s template, `%id` by
   /// default -- not a provider key. Its providers leave and the key is
-  /// free to load again. A table or an [Instance] already taken from it
-  /// keeps working; a [providerConfig] of one of its providers does not,
-  /// because that copy belonged to the registry.
+  /// free to load again. A [providerConfig] of one of its providers goes
+  /// with it, because that copy belonged to the registry.
+  ///
+  /// The library is closed once nothing uses it: by [collect], or by this
+  /// registry's next load, retire or unload, once no live [Instance] or
+  /// object of its own remains and its own `unload` function agrees. A
+  /// [ProviderTable] taken from it is valid until then and not after.
   void retire(String key) => _keyCall('guatiao_registry_retire', key);
+
+  /// Closes every retired library nothing uses any more, and returns their
+  /// library keys, oldest first.
+  ///
+  /// One whose `unload` function refuses stays retired and mapped, and is
+  /// asked again next time; one with no such function stays mapped. No
+  /// [ProviderTable] taken from a retired library is used again.
+  List<String> collect() {
+    native.core().require('guatiao_registry_collect', feature: 'load');
+    return <String>[
+      for (final key in _answer(
+        (reg, alloc, out) =>
+            native.core().bindings.guatiao_registry_collect(reg, alloc, out),
+      )! as List)
+        key! as String,
+    ];
+  }
 
   /// Unmaps a library, when the library agrees.
   ///
-  /// Its own `unload` function is asked first, and is its promise that
-  /// what it can account for is released. [Busy] while an instance or
-  /// object it handed out is alive, [Unsupported] when it has no such
-  /// function, [WrongKind] when it is linked into the host rather than
-  /// mapped, [NotFound] for an unknown key. A refusal leaves it loaded.
+  /// [Busy] while a handle into it is held -- an answer another library
+  /// pinned through the host's services -- or, from its own `unload`
+  /// function, asked next and its promise that what it can account for is
+  /// released, while an instance or object it handed out is alive.
+  /// [Unsupported] when it has no such function, [WrongKind] when it is
+  /// linked into the host rather than mapped, [NotFound] for an unknown
+  /// key. A refusal leaves it loaded.
   ///
   /// `unchecked: true` is the caller insisting on a library with no
   /// `unload` function. Either way, no table, `ctx` or borrowed schema

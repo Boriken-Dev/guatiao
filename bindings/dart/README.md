@@ -141,7 +141,8 @@ try {
   instance.close();
 
   reg.retire('acme');                              // out of the registry, still mapped
-  reg.unload('acme');                              // and unmapped, on your word
+  reg.collect();                                   // ['acme']: closed, once nothing of it is alive
+  reg.unload('acme2');                             // out and unmapped at once, when it agrees
 } finally {
   reg.close();
 }
@@ -262,10 +263,11 @@ words when it gave any.
 - A `Value` and a `Registry` are used from the isolate that made them.
   Nothing here crosses an isolate boundary, and a provider cannot call
   back into Dart.
-- `Registry.unload` unmaps a library, and nothing can check that you have
-  released what you took from it first — every value it built through its
-  own allocator, every table, `ctx` and `Instance`. `retire` has no such
-  condition and leaves the library mapped.
+- `Registry.unload` unmaps a library once its own `unload` function
+  agrees, and `collect` a retired one; neither can see a `ProviderTable`
+  you took. Let it go first: it is valid until the library is closed,
+  by `unload`, or once retired by `collect` or the registry's next load,
+  retire or unload.
 - 64-bit platforms only, and not in a browser (see Platforms above).
 
 ## API overview
