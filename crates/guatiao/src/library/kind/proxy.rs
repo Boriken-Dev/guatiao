@@ -491,41 +491,24 @@ impl ProviderInfo<'static> {
     ///
     /// For a descriptor a library built itself; a host's services answer
     /// with views, and [`Host::offers`] is the door there.
-    ///
-    /// # Safety
-    ///
-    /// As [`ProviderInfo::view`].
-    pub unsafe fn as_kind<K: ?Sized + Kind>(
-        &'static self,
-    ) -> Result<Option<Remote<K>>, KindMismatch> {
-        // SAFETY: forwarded.
-        let view = unsafe { self.view() }.ok_or(KindMismatch::NoTable)?;
+    pub fn as_kind<K: ?Sized + Kind>(&'static self) -> Result<Option<Remote<K>>, KindMismatch> {
+        let view = self.view().ok_or(KindMismatch::NoTable)?;
         let remote = Remote::from_view(&view)?;
         Ok(view.has_default_instance().then_some(remote))
     }
 
     /// The same, as an offer carrying what a chooser needs.
-    ///
-    /// # Safety
-    ///
-    /// As [`ProviderInfo::view`].
-    pub unsafe fn offer<K: ?Sized + Kind>(&'static self) -> Result<Offer<K>, KindMismatch> {
-        // SAFETY: forwarded.
-        let view = unsafe { self.view() }.ok_or(KindMismatch::NoTable)?;
+    pub fn offer<K: ?Sized + Kind>(&'static self) -> Result<Offer<K>, KindMismatch> {
+        let view = self.view().ok_or(KindMismatch::NoTable)?;
         Offer::from_view(view)
     }
 
     /// An instance built from `config`, as `K`. See [`Offer::instantiate`].
-    ///
-    /// # Safety
-    ///
-    /// As [`ProviderInfo::view`].
-    pub unsafe fn instantiate<K: ?Sized + Kind>(
+    pub fn instantiate<K: ?Sized + Kind>(
         &'static self,
         config: &Value,
     ) -> Result<Instance<K>, InstantiateError> {
-        // SAFETY: forwarded.
-        let view = unsafe { self.view() }.ok_or_else(|| {
+        let view = self.view().ok_or_else(|| {
             ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, "an unreadable descriptor")
         })?;
         Instance::build(&view, config)

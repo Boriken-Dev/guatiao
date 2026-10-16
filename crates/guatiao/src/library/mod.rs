@@ -104,8 +104,8 @@ pub use kind::{
 };
 pub use notices::{Notice, declare_notice, notices};
 pub use raw::{
-    DECLARES_SYMBOL, ENTRY_SYMBOL, EntryFn, EntryPoint, Host, LibraryView, LocalLibrary,
-    ProviderView, answer, read_host,
+    DECLARES_SYMBOL, ENTRY_SYMBOL, EntryFn, Host, LibraryView, LocalLibrary, ProviderView, answer,
+    read_host,
 };
 #[doc(hidden)]
 pub use raw::{declaration, declaration_len};

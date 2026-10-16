@@ -449,11 +449,7 @@ fn emit(ty: &Ident, decl: &Decl, has_default_instance: bool) -> TokenStream {
                         #destroy_slot;
                     #config
                     #form
-                    // SAFETY: each table is `of::<Self>()` for the kind it
-                    // names, `instance` is the leaked default instance or
-                    // null, and every slot is this expansion's own shim.
-                    let parts = unsafe { builder.build() };
-                    ::core::result::Result::Ok(parts)
+                    ::core::result::Result::Ok(builder.build())
                 }
             }
         };

@@ -91,8 +91,15 @@ impl ProviderParts {
 }
 
 /// One provider's descriptor, assembled field by field. See
-/// [`ProviderParts::builder`]; [`build`](ProviderPartsBuilder::build) is
-/// where the pointers it carries are vouched for.
+/// [`ProviderParts::builder`].
+///
+/// What it is given is the builder's contract, as a descriptor's fields
+/// are its producer's: each table is one for the kind it names, built for
+/// what `ctx` points at; `available`, `create` and `destroy` expect that
+/// `ctx`; an instance `create` writes is what each table expects as its
+/// `ctx`; and `ctx` and every table live for the process, as a `static`
+/// or a leaked instance does. A registry checks what can be checked where
+/// the descriptor enters.
 #[derive(Debug)]
 #[must_use = "a builder does nothing until it is built"]
 pub struct ProviderPartsBuilder {
@@ -180,16 +187,7 @@ impl ProviderPartsBuilder {
     }
 
     /// Owns the parts and builds the descriptor over them.
-    ///
-    /// # Safety
-    ///
-    /// A registry reads this descriptor and calls through it from safe
-    /// code, so: each table is one for the kind it names, built for what
-    /// `ctx` points at; `available`, `create` and `destroy` expect that
-    /// `ctx`; an instance `create` writes is what each table expects as
-    /// its `ctx`; and `ctx` and every table live for the process, as a
-    /// `static` or a leaked instance does.
-    pub unsafe fn build(self) -> ProviderParts {
+    pub fn build(self) -> ProviderParts {
         let ProviderPartsBuilder {
             id,
             name,

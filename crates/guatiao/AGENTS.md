@@ -882,19 +882,17 @@ builder owns the strings and the schema the descriptor points into.
 ```rust
 static TABLE: GreeterVtable = GreeterVtable::of::<Hello>();     // a kind's table, or a C one
 let ctx: *mut c_void = Box::into_raw(Box::new(Hello)).cast();    // lives for the process
-let provider = unsafe {                  // vouches: each table fits its kind and its ctx
-    ProviderParts::builder("acme_hello")  // id; then any of:
-        .name("Hello")                   // .version(..)  empty = the library's
-        .kinds(&["greeter"])
-        .table(KindTable::new("greeter", &TABLE as *const _ as *const c_void,
-                              size_of::<GreeterVtable>()))
-        .ctx(ctx)                        // .config(schema) .meta(map) .available(f) .create(f) .destroy(f)
-        .build()
-};
+let provider = ProviderParts::builder("acme_hello")   // id; then any of:
+    .name("Hello")                       // .version(..)  empty = the library's
+    .kinds(&["greeter"])
+    .table(KindTable::new("greeter", &TABLE as *const _ as *const c_void,
+                          size_of::<GreeterVtable>()))
+    .ctx(ctx)                            // .config(schema) .meta(map) .available(f) .create(f) .destroy(f)
+    .build();                            // safe: what it was given is the builder's contract
 let library = LibraryParts::new("acme", "1.0.0", vec![provider]);   // .unloading(slot)
 // keep it for the process (a OnceLock of the library's own), then:
 //   loaded: guatiao_library!(describe), describe answering Some(library.info())
-//   linked: register_local(name, describe), describe answering Some(LocalLibrary::from(library))
+//   linked: register_local(name, describe), describe answering Some(&library) or Some(library.info())
 ```
 
 `meta` is a `MaybeNull<Map>` on all three — an open-ended map for
@@ -921,9 +919,9 @@ reg.load_file(&path)?;                     // Result<Loading, LoadError>
 reg.register_local("engine", crate::library)?;   // a library the host LINKS: the same absorb, keys,
                                                  // dedup and `Loaded` record, from `<engine>` instead
                                                  // of a file; `library` is what `local_providers!`
-                                                 // writes: a fn(Host) -> Option<LocalLibrary>
-reg.register_entry("engine", unsafe { EntryPoint::new(entry) })?;   // the same from a C entry point
-                                                 // (`EntryFn`); C hosts: guatiao_registry_register_entry
+                                                 // writes; any FnOnce(Host) -> Option<L>, L: Into<LocalLibrary>
+reg.register_entry("engine", entry)?;            // the same from a C entry point (`EntryFn`);
+                                                 // C hosts: guatiao_registry_register_entry
 reg.providers("greeter")                   // by kind, BEST FIRST
 reg.available("greeter")                   // the same, that can run here
 reg.best("greeter")                        // the head of that
@@ -944,17 +942,20 @@ provider.meta()                            // Option<&Map>, the registry's copy
 loaded.meta                                // Option<Map>, the registry's copy
 ```
 
-**A safe door never trusts a pointer safe code could have written.** The
-registry reads every pointer in a descriptor and calls through its slots
-from safe code, so whoever hands one over vouches for it once, in an
-`unsafe` constructor: `LocalLibrary::new(&'static LibraryInfo)` for a
-hand-written describe (`local_providers!` builds one from its
-`LibraryParts` with no `unsafe`), `EntryPoint::new(EntryFn)` for
-`register_entry`, `ProviderPartsBuilder::build` for a hand-built
-provider, and
-`ProviderInfo::{view, as_kind, offer, instantiate}` are `unsafe fn` for a
-descriptor read by reference. `ProviderView`'s fields are private, so its
-safe `available()` can only call a slot with the `ctx` it was read with.
+**Loading or registering a library is the trust decision.** A
+descriptor's fields are its producer's contract — a loaded library, the
+derives and macros, a `ProviderParts`/`LibraryParts` builder — so every
+door that reads one is safe: `load_file`, `register_local`,
+`register_entry`, `ProviderPartsBuilder::build` and
+`ProviderInfo::{view, as_kind, offer, instantiate}`. What can be checked
+is checked where the descriptor enters (null, `ABI_VERSION`, the
+`struct_size` floors, strides, lengths, UTF-8, a table's size, hash and
+required slots); what cannot — that a table is one for the kind it names,
+that a slot expects its `ctx` — is the contract. `unsafe` stays on the
+doors that take a bare pointer from anywhere (`Remote::from_raw`,
+`Object::from_raw`, `Borrowed*::from_raw`, `Host::from_raw`) and on
+`unload`. `ProviderView`'s fields are private, so its safe `available()`
+can only call a slot with the `ctx` it was read with.
 
 **Everything a registry reports is OWNED.** `ProviderView` and
 `LibraryView` copy every string (`String`) and every value (`Value`,

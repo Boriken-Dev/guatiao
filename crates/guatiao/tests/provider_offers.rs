@@ -200,21 +200,19 @@ impl Conversation for Talk {
 fn object_library(_host: Host) -> Option<LocalLibrary> {
     let table: &'static ConversationVtable = Box::leak(Box::new(ConversationVtable::of::<Talk>()));
     let ctx: *mut c_void = Box::into_raw(Box::new(Talk { turns: 41 })).cast();
-    // SAFETY: the table is `Conversation`'s, built for `Talk`, and `ctx` is
-    // a leaked `Talk`; both live for the process. That the registry still
+    // The table is `Conversation`'s, built for `Talk`, and `ctx` is a
+    // leaked `Talk`; both live for the process. That the registry still
     // refuses to serve it is the property under test.
-    let provider = unsafe {
-        ProviderParts::builder("talker")
-            .name("Talker")
-            .kinds(&["conversation"])
-            .table(KindTable::new(
-                "conversation",
-                (table as *const ConversationVtable).cast(),
-                size_of::<ConversationVtable>(),
-            ))
-            .ctx(ctx)
-            .build()
-    };
+    let provider = ProviderParts::builder("talker")
+        .name("Talker")
+        .kinds(&["conversation"])
+        .table(KindTable::new(
+            "conversation",
+            (table as *const ConversationVtable).cast(),
+            size_of::<ConversationVtable>(),
+        ))
+        .ctx(ctx)
+        .build();
     let parts: &'static LibraryParts = Box::leak(Box::new(LibraryParts::new(
         "objects",
         "1.0.0",
