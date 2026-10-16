@@ -13,9 +13,7 @@ use core::ffi::c_void;
 
 use greeter_kind::{Conversation, ConversationVtable, Counter};
 use guatiao::library::kind::{LibraryParts, ProviderParts};
-use guatiao::library::{
-    Host, InstantiateError, KindMismatch, KindTable, LocalLibrary, ProviderError, Registry,
-};
+use guatiao::library::{Host, InstantiateError, KindMismatch, KindTable, ProviderError, Registry};
 use guatiao::schema::ValidationError;
 use guatiao::{Map, Value};
 
@@ -197,7 +195,7 @@ impl Conversation for Talk {
 
 /// A hand-built library whose one provider claims an object kind, with a
 /// real table for it: what a C library could declare.
-fn object_library(_host: Host) -> Option<LocalLibrary> {
+fn object_library(_host: Host) -> Option<LibraryParts> {
     let table: &'static ConversationVtable = Box::leak(Box::new(ConversationVtable::of::<Talk>()));
     let ctx: *mut c_void = Box::into_raw(Box::new(Talk { turns: 41 })).cast();
     // The table is `Conversation`'s, built for `Talk`, and `ctx` is a
@@ -213,12 +211,7 @@ fn object_library(_host: Host) -> Option<LocalLibrary> {
         ))
         .ctx(ctx)
         .build();
-    let parts: &'static LibraryParts = Box::leak(Box::new(LibraryParts::new(
-        "objects",
-        "1.0.0",
-        vec![provider],
-    )));
-    Some(LocalLibrary::from(parts))
+    Some(LibraryParts::new("objects", "1.0.0", vec![provider]))
 }
 
 #[test]
