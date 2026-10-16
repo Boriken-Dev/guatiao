@@ -157,6 +157,10 @@ const METRICS: &[Metric] = &[
         setup: call_map,
     },
     Metric {
+        name: "call_map_copied",
+        setup: call_map_copied,
+    },
+    Metric {
         name: "call_string",
         setup: call_string,
     },
@@ -265,6 +269,26 @@ fn call_map(libs: &Libraries) -> Run {
         let greeter = offer.default_instance().expect("its own instance");
         batch(iters, || {
             let answer: Map = greeter.greet("ana").expect("greets");
+            black_box(answer);
+        })
+    })
+}
+
+/// `call_map` through a greeter that builds its map in its own allocator,
+/// which the caller then copies: what an implementation that does not
+/// build where it is asked costs.
+fn call_map_copied(libs: &Libraries) -> Run {
+    let registry = registry(&[&libs.derived]);
+    let shouter = greeter_offer(&registry, "derived_greeter_shouter");
+    let mut config = Map::new();
+    config.set("prefix", "hey");
+    let instance = shouter
+        .instantiate(&Value::from(config))
+        .expect("a fitting configuration");
+    Box::new(move |iters| {
+        let _keep = &registry;
+        batch(iters, || {
+            let answer: Map = instance.greet("ana").expect("greets");
             black_box(answer);
         })
     })
