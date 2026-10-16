@@ -59,24 +59,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `x.to_value(Alloc::rust())` is `x.to_value()` and `T::schema(Alloc::rust())`
   is `T::schema()`; a call naming another allocator is `to_value_in(alloc)`
   or `schema_in(alloc)`.
-- **Breaking: no safe function reads a descriptor safe code could have
-  forged.** The registry reads every pointer in a descriptor and calls its
-  slots from safe code, so the promise that they are real is now made in
-  an `unsafe` constructor, once:
-  - `Registry::register_local` takes `fn(Host) -> Option<LocalLibrary>`.
-    Migration: `local_providers!` writes the new signature, so a host
-    using it changes nothing; a hand-written describe returns
-    `Some(unsafe { LocalLibrary::new(info) })`.
-  - `Registry::register_entry` takes an `EntryPoint`. Migration:
-    `register_entry(name, unsafe { EntryPoint::new(entry) })`. The C
-    `guatiao_registry_register_entry` is unchanged.
-  - `ProviderInfo::{view, as_kind, offer, instantiate}` are `unsafe fn`.
-    Migration: wrap the call in `unsafe` with the descriptor's contract;
-    inside a library, `Host::get`/`list`/`offers` are the safe door.
-  - A hand-built provider's descriptor comes from the `unsafe fn`
-    `ProviderPartsBuilder::build` (see `ProviderParts::builder` below),
-    and `Object::from_cell` is `unsafe fn` too (the derives write the
-    `unsafe`). Migration: a hand-built provider wraps the call.
+- **Breaking: a descriptor is checked where it enters, and refused with
+  a sentence.** Loading or registering a library is the trust decision, so
+  every door that reads a descriptor stays safe (`load_file`,
+  `register_local`, `register_entry`, `ProviderInfo::{view, as_kind, offer,
+  instantiate}`, `ProviderPartsBuilder::build`) and its fields are its
+  producer's contract. What can be checked now is, before anything is read
+  through it: every non-null pointer aligned for what it points at, outside
+  the low 64 KiB and canonical for the architecture; every length × stride
+  addressable and capped (4096 providers; 256 kind names and 256 per-kind
+  tables per provider; strides of at most 4096 bytes; text and tables of at
+  most 64 KiB); each per-kind table's slots null or a plausible function
+  pointer. For a library mapped from a file the loader reads the file's
+  layout, placed where its entry symbol landed, and also refuses a data
+  pointer that starts inside the image and runs past it, and a function
+  pointer (`available`, `create`, `destroy`, `unload`, a table slot)
+  outside the image's executable sections. `LoadError::Malformed` gains
+  `reason`, naming the part and the fault; `KindMismatch` gains
+  `Misaligned` (the table's address, checked by every `Remote`) and
+  `Unreadable(reason)` (`ProviderInfo::{as_kind, offer}` over a refused
+  descriptor). *Migration:* a `LoadError::Malformed { path }` pattern adds
+  `..`; a library a check now refuses fixes what `reason` names.
+- **Breaking: `Registry::register_local` takes any `FnOnce(Host) ->
+  Option<L>` with `L: Into<LocalLibrary>`, and the registry owns a host's
+  own library.** `LocalLibrary` is `Owned(Box<LibraryParts>)` or
+  `Static(&'static LibraryInfo<'static>)`, from `LibraryParts`,
+  `Box<LibraryParts>`, `&'static LibraryInfo` or `&'static LibraryParts`.
+  Owned parts are kept with the library's record and freed when it is
+  retired or the registry is dropped; what their tables, `ctx` and slots
+  address stays the builder's for the process, so a `Remote`, `Offer` or
+  `Instance` taken from them outlives the retire. `local_providers!`
+  writes `library(Host) -> Option<LibraryParts>`, built on each call and
+  kept nowhere. *Migration:* a describe answering `Option<&'static
+  LibraryInfo<'static>>`, and `register_local(name, library)`, compile
+  unchanged; a describe that leaked its parts into a `OnceLock` can return
+  them by value; a caller of `library(host)` itself gets `LibraryParts`
+  (`.info()` for the descriptor).
+- **Breaking: `Object::from_cell` takes a cell whose table is paired with
+  its value by type.** It is `from_cell(Box<ObjectCell<K::Vtable, T>>)`
+  where `K::Vtable: TableFor<T, Kind = K>`; `ObjectCell`'s fields are
+  private and `ObjectCell::new(value)` fills the table through the hidden
+  `TableFor` the kind attribute implements, so a table built for another
+  type or kind does not compile. `into_object` is unchanged. *Migration:*
+  `ObjectCell { table: V::of::<T>(), value }` is `ObjectCell::new(value)`.
 - **Breaking: `ProviderView`'s fields are private**, so a view can only
   come from reading a descriptor and its safe `available()` cannot be
   pointed at another `ctx`. Migration: `view.id` is `view.id()`, and so
@@ -123,13 +148,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking: `ProviderParts::builder(id)` replaces `ProviderParts::new`**
   and its ten positional arguments: `.name`, `.version`, `.kinds`,
   `.table`, `.config`, `.ctx`, `.available`, `.create`, `.destroy`, then
-  the `unsafe` `.build()`. Every slot defaults to absent, so a provider
+  `.build()`. Every slot defaults to absent, so a provider
   written without the derive keeps compiling when the envelope appends
   one. Migration: `ProviderParts::new(id, name, version, kinds, tables,
   config, ctx, available, create, destroy)` is
   `ProviderParts::builder(id).name(name).version(version).kinds(kinds)`,
   a `.table(..)` per table, `.ctx(ctx)`, a call per slot that is not
-  `None`, then `unsafe { .build() }`.
+  `None`, then `.build()`.
 - **An object kind is never served by a provider.** A registry or host
   answers the new `KindMismatch::ObjectKind` for one, and
   `#[provider(..)]` naming one is a compile error on the kind: its shims

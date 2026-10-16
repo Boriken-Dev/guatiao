@@ -129,20 +129,16 @@ fn a_host_lists_what_it_gets() {
     );
 }
 
-/// A library the host LINKS, built by hand: what `register_local` takes.
-fn linked_library(_host: guatiao::library::Host) -> Option<guatiao::library::LocalLibrary> {
+/// A library the host LINKS, built by hand and handed over: what
+/// `register_local` takes, and owns from then on.
+fn linked_library(_host: guatiao::library::Host) -> Option<guatiao::library::kind::LibraryParts> {
     use guatiao::library::kind::{LibraryParts, ProviderParts};
     let provider = ProviderParts::builder("linked_provider")
         .name("Linked")
         .version("2.0.0")
         .kinds(&["linked"])
         .build();
-    let parts: &'static LibraryParts = Box::leak(Box::new(LibraryParts::new(
-        "linked",
-        "1.0.0",
-        vec![provider],
-    )));
-    Some(guatiao::library::LocalLibrary::from(parts))
+    Some(LibraryParts::new("linked", "1.0.0", vec![provider]))
 }
 
 /// A linked library's descriptor answers through the host as a loaded
