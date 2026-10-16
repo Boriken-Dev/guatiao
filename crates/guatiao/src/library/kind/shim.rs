@@ -207,7 +207,8 @@ pub unsafe fn object_ref<'a, V: 'a, T: 'a>(ctx: *const c_void) -> Option<&'a T> 
 ///
 /// # Safety
 ///
-/// `ctx` is null or came from `from_cell::<V, T>` and is not used again.
+/// `ctx` is null or came from `from_cell` over an `ObjectCell<V, T>` and
+/// is not used again.
 #[doc(hidden)]
 pub unsafe fn destroy_object<V, T>(ctx: *mut c_void) {
     if ctx.is_null() {

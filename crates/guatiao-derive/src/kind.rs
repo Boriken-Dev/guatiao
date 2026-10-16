@@ -1037,6 +1037,22 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         }
     }
 
+    // What pairs an object cell's table with its value by type: the table
+    // for `__T` is `of::<__T>()`, and only for a `__T` of this kind.
+    let table_for = object.then(|| {
+        quote! {
+            // SAFETY: `of::<__T>()` is this kind's table for `__T`: its
+            // slots read `ctx` as an `ObjectCell<Self, __T>` and its
+            // `destroy` frees one.
+            unsafe impl<__T: #trait_ident> ::guatiao::library::kind::TableFor<__T> for #table {
+                type Kind = dyn #trait_ident;
+                fn table() -> Self {
+                    Self::of::<__T>()
+                }
+            }
+        }
+    });
+
     // The trait, with `into_object` appended for an object kind: the way
     // an implementation becomes a handle. `where Self: Sized` keeps it off
     // the trait object, so it is not a slot.
@@ -1050,13 +1066,9 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
                 Self: Sized + Send + 'static,
             {
                 let cell = ::guatiao::__private::alloc::boxed::Box::new(
-                    ::guatiao::library::kind::ObjectCell {
-                        table: #table::of::<Self>(),
-                        value: self,
-                    },
+                    ::guatiao::library::kind::ObjectCell::<#table, Self>::new(self),
                 );
-                // SAFETY: the table is `of::<Self>()` and the value is `self`.
-                let object = unsafe { ::guatiao::library::Object::from_cell(cell) }
+                let object = ::guatiao::library::Object::<dyn #trait_ident>::from_cell(cell)
                     .expect("a table the kind attribute built fits its own kind");
                 #live.fetch_add(1, ::core::sync::atomic::Ordering::Relaxed);
                 object
@@ -1152,6 +1164,8 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         unsafe impl ::guatiao::library::kind::Lend for dyn #trait_ident {
             #lent_consts
         }
+
+        #table_for
 
         #[allow(clippy::needless_question_mark)]
         impl #trait_ident for ::guatiao::library::Remote<dyn #trait_ident> {

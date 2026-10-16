@@ -258,7 +258,8 @@ a `&mut [u8]` argument crosses as a `BytesMut` out-buffer (the one
 | --- | --- |
 | `<Trait>Vtable` | `header`, then **`destroy: Option<unsafe extern "C" fn(ctx)>`**, then the slots; `destroy_end()`; `destroy` is the first entry of `REQUIRED` |
 | `Kind::OBJECT` | `true`; the hash is over `object;` + the required signatures, so an object table never passes for a provider table with the same methods |
-| the trait | gains `fn into_object(self) -> Object<dyn Trait> where Self: Sized + Send + 'static`: boxes the value beside a table `of::<Self>()` (an `ObjectCell`) and hands back the handle |
+| the trait | gains `fn into_object(self) -> Object<dyn Trait> where Self: Sized + Send + 'static`: boxes the value beside a table `of::<Self>()` (`ObjectCell::new`) and hands back the handle |
+| `TableFor` | a hidden `unsafe impl<T: Trait> guatiao::library::kind::TableFor<T> for <Trait>Vtable` (`Kind = dyn Trait`, `table() = of::<T>()`): what `ObjectCell::new` and the safe `Object::from_cell` require, so a cell's table is the one built for its value's type and kind |
 | the shims | address the value through that cell: `&mut` for a `&mut self` method (`object_mut`), `&` for a `&self` one (`object_ref`), so an object of a `Sync` kind is shared between threads; `__guatiao_destroy::<T>` frees the cell |
 | `lent_mut()`, `lent()` | the lent tables: slots `__guatiao_lentmut__<m>`/`__guatiao_lent__<m>` reach the lender's `*mut dyn Trait`/`*const dyn Trait` behind `ctx`, exclusively for a `&mut self` method and shared for a `&self` one; `destroy` is `__guatiao_lent_destroy` (does nothing); `lent()` exists only when a method takes `&self`, and its `&mut self` slots refuse. The hidden `unsafe impl guatiao::library::kind::Lend` names them (every kind gets one; a provider kind's names none) |
 
