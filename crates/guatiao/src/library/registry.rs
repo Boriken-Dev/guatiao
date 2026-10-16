@@ -401,13 +401,17 @@ impl Provider {
 
     /// The same, as an offer carrying what a chooser needs to show.
     pub fn offer<K: ?Sized + Kind>(&self) -> Result<Offer<K>, KindMismatch> {
-        Offer::new(
+        // Validated before anything is copied: most providers a kind is
+        // asked of serve another.
+        let remote = Remote::unheld(&self.view)?;
+        Ok(Offer::new(
+            remote,
             self.view.clone(),
             Some(self.key().to_string()),
             Some(self.library.clone()),
             self.version.clone(),
             self.priority,
-        )
+        ))
     }
 
     /// The whole descriptor this provider was read from.

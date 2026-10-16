@@ -95,7 +95,7 @@ impl<K: ?Sized + Kind> Remote<K> {
 
     /// [`from_view`](Remote::from_view) holding nothing: for a handle that
     /// keeps `view` beside it, whose lease covers both.
-    pub(super) fn unheld(view: &ProviderView) -> Result<Remote<K>, KindMismatch> {
+    pub(crate) fn unheld(view: &ProviderView) -> Result<Remote<K>, KindMismatch> {
         if K::OBJECT {
             return Err(KindMismatch::ObjectKind);
         }
@@ -266,22 +266,24 @@ impl<K: ?Sized + Kind> core::fmt::Debug for Offer<K> {
 }
 
 impl<K: ?Sized + Kind> Offer<K> {
-    /// An offer over `view`'s table for `K`, validated, or why not.
+    /// An offer over `view`, whose table for `K` is `remote`, validated
+    /// and holding nothing ([`Remote::unheld`]).
     pub(crate) fn new(
+        remote: Remote<K>,
         view: ProviderView,
         key: Option<String>,
         library: Option<String>,
         version: String,
         priority: i32,
-    ) -> Result<Offer<K>, KindMismatch> {
-        Ok(Offer {
-            remote: Remote::unheld(&view)?,
+    ) -> Offer<K> {
+        Offer {
+            remote,
             view,
             key,
             library,
             version,
             priority,
-        })
+        }
     }
 
     /// The proxy, holding the view's lease: what leaves the offer.
@@ -515,8 +517,9 @@ impl<K: ?Sized + Kind> Offer<K> {
     /// An offer from a view alone, as a host's services hand one over:
     /// no registry key, no library id, no rank.
     pub(crate) fn from_view(view: ProviderView) -> Result<Offer<K>, KindMismatch> {
+        let remote = Remote::unheld(&view)?;
         let version = view.version.clone().unwrap_or_default();
-        Offer::new(view, None, None, version, 0)
+        Ok(Offer::new(remote, view, None, None, version, 0))
     }
 }
 
