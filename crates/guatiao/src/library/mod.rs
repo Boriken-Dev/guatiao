@@ -29,17 +29,18 @@
 //! symptom is a lookup answering "not found" for something that was
 //! definitely registered.
 //!
-//! # A library lives until it is retired
+//! # A library lives while anything uses it
 //!
-//! The registry copies out every string and value a descriptor names, so
+//! The registry copies out every string, value and table a descriptor
+//! names, and every handle into a library holds a lease on it: the code
+//! and `ctx` its tables name stay mapped while one is held. So
 //! [`Registry::retire`] — which takes a library's providers out and
-//! leaves the mapping in place — is safe and dangles nothing. A vtable,
-//! a `ctx` and a descriptor pointer address the mapping itself, so
-//! unmapping is [`Registry::unload`], and it is `unsafe`: what must be
-//! released first is the host's word. Either way the mapping stays until
-//! the host says otherwise, which is the same rule
-//! [`crate::value::Alloc`] states — an allocator outlives everything
-//! built through it.
+//! leaves the mapping in place — is safe and dangles nothing, and so is
+//! [`Registry::unload`], which refuses while a lease is held and asks the
+//! library before it unmaps; a retired library is closed by
+//! [`Registry::collect`] once nothing holds it. What returns from a call
+//! is moved into the host's allocator, the rule [`crate::value::Alloc`]
+//! states — an allocator outlives everything built through it.
 //!
 //! # Writing a library
 //!
@@ -62,9 +63,11 @@
 //! The [`Host`] a library is handed is valid for the life of the process:
 //! a block the host leaks, carrying its name, its allocator and a
 //! [`HostServices`] table. Through it a library asks `get(key)` and
-//! `list(kind)` and gets **other libraries' own descriptors**, read under
-//! the size each declares, in the host's order, unavailable ones included
-//! — the caller asks each and chooses. Nothing borrowed from the registry escapes, so the
+//! `list(kind)` and gets **descriptors the registry built** for other
+//! libraries' providers, read under the size each declares, in the host's
+//! order, unavailable ones included — the caller asks each and chooses.
+//! Each answer is pinned, so the provider's library stays loaded while
+//! the view lives. Nothing borrowed from the registry escapes, so the
 //! registry may change or be dropped while a library holds an answer;
 //! after a drop every lookup answers `GUATIAO_ERR_GONE`. A lookup from an
 //! entry point sees the libraries registered before it.

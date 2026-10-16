@@ -356,25 +356,29 @@ pub(crate) struct Snapshot {
     pub(crate) entries: Vec<SnapshotEntry>,
     /// Rendered key to an index into `entries`.
     pub(crate) by_key: alloc::collections::BTreeMap<String, usize>,
+    /// One hold per library the entries name, which keeps every
+    /// descriptor they hand out alive while the snapshot lists it.
+    pub(crate) leases: Vec<alloc::sync::Arc<Lease>>,
 }
 
-/// One provider as the services see it: the kinds it serves, and the
-/// descriptor its library's lease built for it, which the entry keeps.
+/// One provider as the services see it: the kinds it serves, and which
+/// descriptor of which of the snapshot's leases is its own.
 #[cfg(feature = "load")]
 #[derive(Debug)]
 pub(crate) struct SnapshotEntry {
     pub(crate) kinds: Vec<String>,
-    pub(crate) lease: alloc::sync::Arc<Lease>,
-    /// Which of the lease's descriptors.
+    /// An index into [`Snapshot::leases`].
+    pub(crate) lease: usize,
+    /// Which of that lease's descriptors.
     pub(crate) at: usize,
 }
 
 #[cfg(feature = "load")]
-impl SnapshotEntry {
-    /// The descriptor handed to a library that asks, valid while this
-    /// entry, or a pin, holds the lease.
-    fn desc(&self) -> *const ProviderInfo<'static> {
-        self.lease.desc(self.at)
+impl Snapshot {
+    /// The descriptor handed to a library that asks for `entry`, valid
+    /// while this snapshot, or a pin, holds its lease.
+    fn desc(&self, entry: &SnapshotEntry) -> *const ProviderInfo<'static> {
+        self.leases[entry.lease].desc(entry.at)
     }
 }
 
@@ -561,7 +565,7 @@ unsafe fn get_one(
         let snapshot = shared.read();
         match snapshot.by_key.get(key) {
             Some(&i) => {
-                let desc = snapshot.entries[i].desc();
+                let desc = snapshot.desc(&snapshot.entries[i]);
                 if pinned {
                     // SAFETY: the snapshot holds this descriptor's lease
                     // while it is read.
@@ -646,7 +650,7 @@ unsafe fn list_all(
             .filter(|e| kind.is_empty() || e.kinds.iter().any(|k| k == kind))
         {
             if n < cap {
-                let desc = entry.desc();
+                let desc = snapshot.desc(entry);
                 if pinned {
                     // SAFETY: the snapshot holds this descriptor's lease
                     // while it is read.
