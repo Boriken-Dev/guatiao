@@ -52,13 +52,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   them. *Migration:* a raw table or `ctx` taken from a library is valid
   until it is closed, which after a retire may be the registry's next
   call: let it go first.
-- **What a call through a kind returns lives in the host's allocator.**
-  The generated proxy moves a returned `Value`, `Map` or `List`, and a
-  `ProviderError`'s message, whose containers record any allocator but
-  this side's `Alloc::rust()` into it, freeing the original through the
-  allocator that made it while the call holds the library's lease; a tree
-  already wholly in it is handed over as it is. So nothing a host keeps
-  from a call needs the library's allocator once the library is gone.
+- **What a call through a kind returns lives in the host's allocator, and
+  is built there when the provider can.** Before a call answering a
+  `Value`, `Map` or `List`, or a type crossing through `ToValue`, the
+  proxy writes into the out slot a carrier: an empty container recording
+  the allocator the answer is wanted in, which allocates nothing (for a
+  `Value`, ABSENT whose map arm records it). `#[guatiao::kind]` adds
+  `<method>_in(.., alloc: Alloc)` to the trait beside every method
+  answering a tree; the shim calls it with the carrier's allocator, and its
+  default answers `<method>(..)`. A provider that implements `<method>_in`
+  with the `_in` forms hands its tree over as it is, and a host can call
+  `<method>_in` itself to have the answer built in an arena of its own.
+  Any other tree, and a `ProviderError`'s message, is moved by the proxy
+  into the carried allocator, the original freed through the allocator
+  that made it while the call holds the library's lease. So nothing a host
+  keeps from a call needs the library's allocator once the library is
+  gone. A C provider builds into the carrier by reading its `alloc`
+  (documented beside `guatiao_kind_header` and on each kind's table); a C
+  caller of a table passes an initialised out slot, a carrier or zeroes,
+  which a shim falls back from to its own allocator. *Migration:* a kind
+  method named `<m>_in` beside a method `<m>` answering a tree is refused;
+  rename it.
 - **Breaking: a host's services answer descriptors the registry built,
   and can pin them.** `get` and `list` answer a descriptor per provider
   that the library's lease built over the registry's copies (its own
@@ -140,11 +154,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   addressable and capped (4096 providers; 256 kind names and 256 per-kind
   tables per provider; strides of at most 4096 bytes; text and tables of at
   most 64 KiB); each per-kind table's slots null or a plausible function
-  pointer. For a library mapped from a file the loader reads the file's
-  layout, placed where its entry symbol landed, and also refuses a data
-  pointer that starts inside the image and runs past it, and a function
-  pointer (`available`, `create`, `destroy`, `unload`, a table slot)
-  outside the image's executable sections. `LoadError::Malformed` gains
+  pointer. For a library mapped from a file the loader places its image
+  from the platform loader's own record of the mapping, without reading
+  the file again (the PE headers at the module's base on Windows, the
+  program headers `dl_iterate_phdr` reports on ELF platforms, the Mach-O
+  header `dladdr` finds on Apple platforms; elsewhere the file's layout,
+  placed where its entry symbol landed), and also refuses a data pointer
+  that starts inside the image and runs past it, and a function pointer
+  (`available`, `create`, `destroy`, `unload`, a table slot) outside the
+  image's executable ranges: sections on Windows, segments on ELF and
+  Mach-O. `LoadError::Malformed` gains
   `reason`, naming the part and the fault; `KindMismatch` gains
   `Misaligned` (the table's address, checked by every `Remote`) and
   `Unreadable(reason)` (`ProviderInfo::{as_kind, offer}` over a refused
