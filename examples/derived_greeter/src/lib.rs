@@ -11,7 +11,7 @@ use core::sync::atomic::{AtomicI64, Ordering};
 
 use greeter_kind::{Conversation, Counter, Greeter, Listener};
 use guatiao::library::{Object, ProviderError};
-use guatiao::{Map, Provider, Status};
+use guatiao::{Alloc, Map, Provider, Status, Text};
 
 /// One provider serving two kinds.
 #[derive(Default, Provider)]
@@ -22,6 +22,12 @@ pub struct Hello {
 
 impl Greeter for Hello {
     fn greet(&self, name: &str) -> Result<Map, ProviderError> {
+        self.greet_in(name, Alloc::rust())
+    }
+
+    /// What a call through the table runs: the map is built in the
+    /// allocator the caller named, so it crosses without a copy.
+    fn greet_in(&self, name: &str, alloc: Alloc) -> Result<Map, ProviderError> {
         if name == "panic" {
             panic!("a provider bug, on request");
         }
@@ -31,8 +37,9 @@ impl Greeter for Hello {
                 "nobody to greet",
             ));
         }
-        let mut map = Map::new();
-        map.set("greeting", format!("hello, {name}"));
+        let mut map = Map::new_in(alloc);
+        let greeting = Text::new_in(alloc, &format!("hello, {name}"))?;
+        map.set_in("greeting", greeting, alloc)?;
         Ok(map)
     }
 
@@ -104,6 +111,8 @@ pub struct Shouter {
     prefix: String,
 }
 
+/// Builds its map with the short forms, in this library's own allocator:
+/// the caller copies it on arrival.
 impl Greeter for Shouter {
     fn greet(&self, name: &str) -> Result<Map, ProviderError> {
         let mut map = Map::new();
