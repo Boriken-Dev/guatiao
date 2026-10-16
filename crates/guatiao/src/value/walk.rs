@@ -185,6 +185,15 @@ pub(crate) fn list_recorded_by(list: &List, alloc: *const crate::value::alloc::A
     list_homed(list, alloc, &mut stack) && drain(stack, alloc)
 }
 
+/// Whether a container recorded `alloc` itself: the addresses compared,
+/// so nothing is read through either; `alloc` is a checked allocator's.
+fn is_recorded(
+    recorded: *const crate::value::alloc::Allocator,
+    alloc: *const crate::value::alloc::Allocator,
+) -> bool {
+    !recorded.is_null() && core::ptr::eq(recorded, alloc)
+}
+
 fn records(found: Result<Alloc, ValueError>, alloc: *const crate::value::alloc::Allocator) -> bool {
     found.is_ok_and(|a| a.as_raw() == alloc)
 }
@@ -194,14 +203,13 @@ fn map_homed<'a>(
     alloc: *const crate::value::alloc::Allocator,
     stack: &mut Vec<&'a Value>,
 ) -> bool {
-    if !records(map.alloc(), alloc) {
+    if !is_recorded(map.alloc, alloc) {
         return false;
     }
     for entry in map.iter() {
-        if !records(entry.key.alloc(), alloc) {
+        if !is_recorded(entry.key.alloc, alloc) || !child_homed(&entry.value, alloc, stack) {
             return false;
         }
-        stack.push(&entry.value);
     }
     true
 }
@@ -211,11 +219,27 @@ fn list_homed<'a>(
     alloc: *const crate::value::alloc::Allocator,
     stack: &mut Vec<&'a Value>,
 ) -> bool {
-    if !records(list.alloc(), alloc) {
+    if !is_recorded(list.alloc, alloc) {
         return false;
     }
-    stack.extend(list.iter());
-    true
+    list.iter().all(|item| child_homed(item, alloc, stack))
+}
+
+/// A child judged on the spot when it is a leaf, or left on `stack` when
+/// it is a container: a tree with no nested container is judged without
+/// the stack allocating.
+fn child_homed<'a>(
+    node: &'a Value,
+    alloc: *const crate::value::alloc::Allocator,
+    stack: &mut Vec<&'a Value>,
+) -> bool {
+    match node.tag() {
+        Ok(Tag::GUATIAO_MAP | Tag::GUATIAO_LIST) => {
+            stack.push(node);
+            true
+        }
+        _ => homed(node, alloc, stack),
+    }
 }
 
 /// One node judged, its children left on `stack` for [`drain`].
@@ -227,9 +251,9 @@ fn homed<'a>(
     match node.tag() {
         Ok(Tag::GUATIAO_MAP) => text::<Map>(node).is_ok_and(|map| map_homed(map, alloc, stack)),
         Ok(Tag::GUATIAO_LIST) => arm::<List>(node).is_ok_and(|list| list_homed(list, alloc, stack)),
-        Ok(Tag::GUATIAO_STRING) => text::<Text>(node).is_ok_and(|t| records(t.alloc(), alloc)),
+        Ok(Tag::GUATIAO_STRING) => text::<Text>(node).is_ok_and(|t| is_recorded(t.alloc, alloc)),
         Ok(Tag::GUATIAO_NUMBER) => arm::<Number>(node).is_ok_and(|n| records(n.alloc(), alloc)),
-        Ok(Tag::GUATIAO_BYTES) => arm::<Buffer>(node).is_ok_and(|b| records(b.alloc(), alloc)),
+        Ok(Tag::GUATIAO_BYTES) => arm::<Buffer>(node).is_ok_and(|b| is_recorded(b.alloc, alloc)),
         Ok(Tag::GUATIAO_ABSENT | Tag::GUATIAO_NULL | Tag::GUATIAO_BOOL) => true,
         Err(_) => false,
     }
