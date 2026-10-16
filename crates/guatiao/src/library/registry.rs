@@ -34,8 +34,8 @@ use std::path::{Path, PathBuf};
 use super::key::{KeyError, KeyFields, KeyTemplate};
 use super::kind::{Kind, KindMismatch, Offer, Remote};
 use super::raw::{
-    EntryFn, Host, HostBlock, LibraryView, LocalLibrary, Opened, Origin, ProviderView, Rejected,
-    Shared, Snapshot, SnapshotEntry,
+    EntryFn, Host, HostBlock, Lease, LibraryView, LocalLibrary, Opened, Origin, ProviderView,
+    Rejected, Shared, Snapshot, SnapshotEntry,
 };
 use crate::value::alloc::Alloc;
 use crate::value::types::Text;
@@ -464,6 +464,10 @@ pub struct Loaded {
     /// The mapping, when this registry made one. Dropping it leaves the
     /// library mapped; only `unload` closes it.
     origin: Origin,
+    /// What every handle into this library holds: its tables, copied,
+    /// and the parts of a library the host built.
+    #[allow(dead_code)]
+    lease: Arc<Lease>,
     /// Its say in being unmapped, or `None` for a library that declares
     /// none. See [`LibraryInfo::unload`](super::desc::LibraryInfo::unload).
     unload: Option<unsafe extern "C" fn() -> crate::value::status::Status>,
@@ -682,6 +686,7 @@ impl Registry {
             snapshot.entries.push(SnapshotEntry {
                 kinds: provider.view.kinds.clone(),
                 raw: provider.view.raw,
+                hold: provider.view.hold.clone(),
             });
         }
         // A poisoned lock means a reader panicked while holding it; the
@@ -941,7 +946,7 @@ impl Registry {
     /// Records what opening `path` came to. Everything after the `dlopen`,
     /// so it is testable without one.
     pub(crate) fn absorb(&mut self, path: &Path, opened: Opened) -> Result<Loading<'_>, LoadError> {
-        let (lib, origin) = match opened {
+        let (lib, mut origin) = match opened {
             Opened::NoEntrySymbol => return Ok(Loading::Skipped(Skipped::NoEntrySymbol)),
             Opened::Declined => return Ok(Loading::Skipped(Skipped::DeclinedThisHost)),
             Opened::Rejected(Rejected::UnsupportedAbi { declared }) => {
@@ -1032,7 +1037,16 @@ impl Registry {
         }
 
         let count = taken.len();
+        // Every handle into the library holds this: the registry's copies
+        // of its tables, and the parts of one the host built.
+        let mut views: Vec<ProviderView> = Vec::with_capacity(count);
+        let mut named: Vec<(String, String)> = Vec::with_capacity(count);
         for (view, at, key) in taken {
+            views.push(view);
+            named.push((at, key));
+        }
+        let lease = Lease::adopt(&mut views, origin.take_parts());
+        for (view, (at, key)) in views.into_iter().zip(named) {
             // What this host already said about that id, if anything —
             // read BEFORE the view moves into the provider.
             let priority = self.priorities.get(&view.id).copied().unwrap_or(0);
@@ -1056,6 +1070,7 @@ impl Registry {
             meta,
             canonical: Registry::canonical(path),
             origin,
+            lease,
             unload,
         });
         self.publish();
@@ -1095,12 +1110,11 @@ impl Registry {
     /// `unsafe`; it is written in `raw/image.rs`, where `unsafe` is
     /// allowed.
     ///
-    /// A library registered from owned
-    /// [`LibraryParts`](super::kind::LibraryParts) has them freed here,
-    /// after the host's services stop answering for it. Its descriptor
-    /// addresses ([`ProviderView::raw`]) go with them; a [`Remote`], an
-    /// [`Offer`] or an instance does not, since what its tables, `ctx` and
-    /// slots address is the builder's to keep for the process.
+    /// Every handle holds a lease on its library, which keeps the
+    /// registry's copies of the library's tables and, for one registered
+    /// from owned [`LibraryParts`](super::kind::LibraryParts), the parts:
+    /// they are freed once the library is retired and the last handle is
+    /// dropped.
     pub fn retire(&mut self, key: &str) -> Result<Retired, UnloadError> {
         let (retired, origin) = self.take_library(key)?;
         origin.keep();
@@ -1283,6 +1297,7 @@ impl Registry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::library::raw::Hold;
     use core::ffi::c_void;
 
     fn provider(id: &str, version: Option<&str>) -> ProviderView {
@@ -1301,6 +1316,7 @@ mod tests {
             tables: Vec::new(),
             create: None,
             destroy: None,
+            hold: Hold::None,
         }
     }
 

@@ -216,8 +216,10 @@ unsafe fn read_answer(raw: *const ProviderInfo<'static>) -> Option<ProviderView>
     let declared = unsafe { core::ptr::addr_of!((*raw).struct_size).read() } as usize;
     // SAFETY: the caller's contract; `declared` is the descriptor's own
     // limit, which the registry already checked against its array's
-    // stride when it read the library.
-    unsafe { super::image::read_provider(raw, declared, bounds) }.ok()
+    // stride when it read the library; the tables it names passed the
+    // read's checks.
+    let view = unsafe { super::image::read_provider(raw, declared, bounds) }.ok()?;
+    Some(Lease::alone(view))
 }
 
 /// Whether `raw` could address a `T` at all: aligned, and an address.
@@ -267,6 +269,9 @@ pub(crate) struct Snapshot {
 pub(crate) struct SnapshotEntry {
     pub(crate) kinds: Vec<String>,
     pub(crate) raw: *const ProviderInfo<'static>,
+    /// Keeps what `raw` addresses alive while the snapshot lists it.
+    #[allow(dead_code)]
+    pub(crate) hold: Hold,
 }
 
 // SAFETY: `raw` addresses a descriptor inside a library image the

@@ -47,7 +47,7 @@ use core::marker::PhantomData;
 use core::mem::size_of;
 
 use super::desc::{KindTable, KindTables, LibraryInfo, ProviderInfo};
-use super::raw::{Host, ProviderView};
+use super::raw::{Hold, Host, ProviderView};
 use crate::schema::ValidationError;
 use crate::value::ValueError;
 use crate::value::alloc::Alloc;

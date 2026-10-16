@@ -1019,15 +1019,14 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   providers out of the registry and out of the snapshot other libraries
   read, drops its `Loaded` record, and frees the key — a retired library
   is not `AlreadyLoaded` and may be loaded again. **The mapping stays**,
-  so every vtable pointer, `ctx` and descriptor already handed out keeps
-  working; the registry's own copies (`config_schema`, `meta`) go with
-  it. Safe, because it dangles nothing a handle reaches. A linked library
-  registered from owned `LibraryParts` has them freed here, after the
-  host's services stop answering for it: its descriptor addresses
-  (`ProviderView::raw`) go with them, its tables, `ctx` and slots (the
-  builder's, for the process) do not. `Retired { key, id, version,
-  providers }` says what left; `UnloadError::NotFound { key }` is the
-  only refusal.
+  so every handle already taken keeps working. Safe, because it dangles
+  nothing a handle reaches. **Every handle holds a lease on its library**
+  (`Remote`, `Offer`, `Instance`, `Object`, `ProviderView`): the
+  registry's copies of the library's tables, which the handle's table
+  pointer addresses, and the `LibraryParts` of a library the host built,
+  which are freed when the library is retired and the last handle is
+  dropped. `Retired { key, id, version, providers }` says what left;
+  `UnloadError::NotFound { key }` is the only refusal.
 - **`LocalLibrary`** is `Owned(Box<LibraryParts>)` or
   `Static(&'static LibraryInfo<'static>)`, from `LibraryParts`,
   `Box<LibraryParts>`, `&'static LibraryInfo` or `&'static LibraryParts`;
@@ -1037,12 +1036,13 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   unload` closes. A host's own library is the one place the registry can
   own the descriptor instead, so `local_providers!` writes `pub fn
   library(Host) -> Option<LibraryParts>`, built on each call with nothing
-  kept but each provider's default instance and tables. The handles'
-  `'static` (`Remote`, `Offer`, `Object`, `Instance`) is unchanged: they
-  are `Copy`/`Send` so a host stores them and holds them across `.await`.
+  kept but each provider's default instance and tables. The handles
+  (`Remote`, `Offer`, `Object`, `Instance`) are `'static` and `Send`,
+  because each holds an `Arc` lease rather than a borrow, so a host
+  stores them and holds them across `.await`.
 - **Dropping a registry leaves every library mapped**, as retiring does:
-  a `Remote`, `Offer`, boxed trait or `Instance` taken from it is
-  `'static` and keeps working (`guatiao_registry_free` the same). A file
+  a `Remote`, `Offer`, boxed trait or `Instance` taken from it holds its
+  lease and keeps working (`guatiao_registry_free` the same). A file
   passed over by its library key, or refused as `Duplicate`, after its
   entry point ran keeps its mapping as well — unless the loader answered
   it with an image the registry already holds (a hard link to a loaded
@@ -1308,8 +1308,13 @@ drop(s);                                                             // the libr
   and the proxy over its `ctx` `remote() -> Option<Remote<K>>`, each
   `None` for one with `create` and a null `ctx`; `Provider::as_kind` and
   `ProviderInfo::as_kind` answer `Ok(None)` for it by the same rule. Unavailable providers ARE offered;
-  the consumer chooses. `Remote<K>` is `Copy + Send + Sync + 'static`;
-  `Box<dyn K>: From<Remote<dyn K>>`.
+  the consumer chooses. `Remote<K>` is `Clone + Send + Sync + 'static`,
+  **not `Copy`**: each clone holds the lease on its library, and
+  `table()` is the registry's copy of the library's table, valid while
+  the `Remote` lives. `Box<dyn K>: From<Remote<dyn K>>`. An `Object` a
+  method returns holds the lease of the `Remote` it was called through;
+  `into_raw` lets it go, the library's own object count answering from
+  then on.
 - **Every handle may be held across an `.await`.** `Remote`, `Offer` and
   `Instance` are `Send + Sync` and `Object` is `Send`, with no bound on
   `K`, so a future holding one stays `Send` and can be spawned. (`Object`
@@ -1399,8 +1404,10 @@ drop(s);                                                             // the libr
   configuration. **An `Instance<dyn K>` is also a `K`**: store one as
   `let shared: Arc<dyn K> = Arc::new(instance);` or `Box<dyn K>::from(instance)`,
   beside `offer.shared()` / `offer.boxed()` for a provider that is its
-  one instance, and `destroy` runs when the last owner goes. Never
-  `K::shared(instance.remote())`: that `Arc` outlives the instance. With `config` and no `new`/`new_with_host` there is no
+  one instance, and `destroy` runs when the last owner goes.
+  `instance.remote()` is `&Remote<K>`, borrowed from the instance; never
+  clone it into an `Arc` (`K::shared(instance.remote().clone())`), which
+  outlives the instance. With `config` and no `new`/`new_with_host` there is no
   default instance (`ctx` null) and `available` is refused. A provider
   without `config` is its one instance and `instantiate` answers
   `GUATIAO_ERR_NULL`; `offer.builds_instances()` says which. A panic in an

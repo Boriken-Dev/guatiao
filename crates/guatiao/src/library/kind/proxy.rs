@@ -12,23 +12,30 @@ use crate::schema::validate::validate_map;
 /// A kind's table, validated, ready to call through.
 ///
 /// Implements the kind's trait (the macro writes that impl), so a
-/// consumer holds it as `dyn Trait`. `Copy`, `Send`, `Sync` and
-/// `'static`: the table lives in a library's mapping, and unloading that
-/// library is the host's word that nothing like this is still held.
+/// consumer holds it as `dyn Trait`. `Clone`, `Send`, `Sync` and
+/// `'static`: one taken from a registry holds a lease on its library, so
+/// the table it calls is the registry's own copy and the library stays
+/// registered or mapped, unloading refusing with `Busy`, until every
+/// clone is dropped.
 pub struct Remote<K: ?Sized> {
     pub(super) table: *const c_void,
     pub(super) size: usize,
     pub(super) ctx: *mut c_void,
+    pub(super) hold: Hold,
     kind: PhantomData<fn() -> K>,
 }
 
 impl<K: ?Sized> Clone for Remote<K> {
     fn clone(&self) -> Remote<K> {
-        *self
+        Remote {
+            table: self.table,
+            size: self.size,
+            ctx: self.ctx,
+            hold: self.hold.clone(),
+            kind: PhantomData,
+        }
     }
 }
-
-impl<K: ?Sized> Copy for Remote<K> {}
 
 impl<K: ?Sized + Kind> core::fmt::Debug for Remote<K> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -39,11 +46,12 @@ impl<K: ?Sized + Kind> core::fmt::Debug for Remote<K> {
     }
 }
 
-// SAFETY: the table and `ctx` address a mapping the registry holds, and
-// the kind's trait names `Send + Sync`, which the shims uphold by calling
-// a `&self` method. Unbounded in `K` so the impl holds for `dyn Trait +
-// 'a` at every `'a`, which a future needs; every constructor requires
-// `K: Kind`, so no value exists for any other `K`.
+// SAFETY: the table is the lease's copy, never written, and `ctx` and the
+// code the table names stay mapped while the lease is held; the kind's
+// trait names `Send + Sync`, which the shims uphold by calling a `&self`
+// method. Unbounded in `K` so the impl holds for `dyn Trait + 'a` at
+// every `'a`, which a future needs; every constructor requires `K:
+// Kind`, so no value exists for any other `K`.
 unsafe impl<K: ?Sized> Send for Remote<K> {}
 // SAFETY: as above.
 unsafe impl<K: ?Sized> Sync for Remote<K> {}
@@ -61,7 +69,7 @@ impl<K: ?Sized + Kind> Remote<K> {
     /// table for the kind named [`K::NAME`](Kind::NAME), laid out as its
     /// `Vtable`, that stay valid for the life of the process; `ctx` is
     /// what the table's slots expect. For an object kind, the caller also
-    /// keeps the borrow rules a `Remote` cannot, being `Copy` and `Sync`:
+    /// keeps the borrow rules a `Remote` cannot, being `Clone` and `Sync`:
     /// no method runs through one copy while a `&mut self` method runs
     /// through another, and `&self` methods run on two threads at once
     /// only for a kind whose trait names `Sync`.
@@ -88,9 +96,13 @@ impl<K: ?Sized + Kind> Remote<K> {
             .map(|&(_, table, size)| (table, size))
             .ok_or(KindMismatch::NoTable)?;
         // SAFETY: the view was read from a descriptor under its guards,
-        // and the library declared this table as K::NAME's; the mapping
-        // is the registry's until the host unloads it.
-        unsafe { Remote::validate(table, size, view.ctx, false) }
+        // the library declared this table as K::NAME's, and the view's
+        // lease, which the proxy takes a share of, keeps the copy.
+        let remote = unsafe { Remote::validate(table, size, view.ctx, false) }?;
+        Ok(Remote {
+            hold: view.hold.clone(),
+            ..remote
+        })
     }
 
     /// The one validation every door runs.
@@ -163,6 +175,7 @@ impl<K: ?Sized + Kind> Remote<K> {
             table,
             size,
             ctx,
+            hold: Hold::None,
             kind: PhantomData,
         })
     }
@@ -172,7 +185,8 @@ impl<K: ?Sized + Kind> Remote<K> {
         self.ctx
     }
 
-    /// The table, for a caller that speaks C.
+    /// The table, for a caller that speaks C: the registry's copy for one
+    /// taken from a registry, valid while this proxy or a clone lives.
     pub fn table(&self) -> *const c_void {
         self.table
     }
@@ -329,7 +343,7 @@ impl<K: ?Sized + Kind> Offer<K> {
     /// [`default_instance`](Offer::default_instance) is, since a proxy
     /// over no instance could only fail.
     pub fn remote(&self) -> Option<Remote<K>> {
-        self.callable().then_some(self.remote)
+        self.callable().then(|| self.remote.clone())
     }
 
     /// The descriptor as read.
@@ -438,19 +452,18 @@ impl<K: ?Sized + Kind> Instance<K> {
         }
         Ok(Instance {
             remote: Remote {
-                table: remote.table,
-                size: remote.size,
                 ctx: instance,
-                kind: PhantomData,
+                ..remote
             },
             lib_ctx: view.ctx,
             destroy: view.destroy,
         })
     }
 
-    /// The proxy over this instance, valid while `self` lives.
-    pub fn remote(&self) -> Remote<K> {
-        self.remote
+    /// The proxy over this instance. Borrowed: the instance is released
+    /// when `self` is dropped, so a proxy over it cannot outlive it.
+    pub fn remote(&self) -> &Remote<K> {
+        &self.remote
     }
 
     /// The instance pointer, for a caller that speaks C.
@@ -471,7 +484,8 @@ impl<K: ?Sized> Drop for Instance<K> {
     fn drop(&mut self) {
         if let Some(destroy) = self.destroy {
             // SAFETY: the instance came from this provider's `create` and
-            // is released exactly once, here.
+            // is released exactly once, here, while the proxy's lease, a
+            // field dropped after this, keeps the library.
             unsafe { destroy(self.lib_ctx, self.remote.ctx) };
         }
     }

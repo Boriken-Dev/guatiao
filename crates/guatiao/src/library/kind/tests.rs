@@ -225,7 +225,7 @@ fn a_call_round_trips_through_a_remote() {
     assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
     assert_eq!(e.message(), "nobody to greet", "the message crosses intact");
 
-    let kept: Box<dyn Greeter> = <dyn Greeter as Kind>::boxed(r);
+    let kept: Box<dyn Greeter> = <dyn Greeter as Kind>::boxed(r.clone());
     assert_eq!(kept.greet("bo").unwrap(), "hello, bo");
     let shared: Arc<dyn Greeter> = <dyn Greeter as Kind>::shared(r);
     assert_eq!(shared.shout(), 11);
@@ -369,6 +369,7 @@ fn a_zero_hash_is_accepted_only_at_the_raw_door() {
         raw: core::ptr::null(),
         create: None,
         destroy: None,
+        hold: Hold::None,
         tables: vec![(
             "greeter".to_string(),
             headerless as *const GreeterVtable as *const c_void,
@@ -431,6 +432,7 @@ fn a_registry_offers_every_valid_provider_and_reports_the_rest() {
         raw: core::ptr::null(),
         create: None,
         destroy: None,
+        hold: Hold::None,
         tables: vec![("greeter".to_string(), table, size)],
     };
 

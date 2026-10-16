@@ -349,7 +349,7 @@ pub fn guatiao::library::kind::BytesMut<'a>::fmt(&self, &mut core::fmt::Formatte
 pub struct guatiao::library::kind::Instance<K: ?core::marker::Sized>
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> guatiao::library::kind::Instance<K>
 pub fn guatiao::library::kind::Instance<K>::ctx(&self) -> *mut core::ffi::c_void
-pub fn guatiao::library::kind::Instance<K>::remote(&self) -> guatiao::library::kind::Remote<K>
+pub fn guatiao::library::kind::Instance<K>::remote(&self) -> &guatiao::library::kind::Remote<K>
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::fmt::Debug for guatiao::library::kind::Instance<K>
 pub fn guatiao::library::kind::Instance<K>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::ops::deref::Deref for guatiao::library::kind::Instance<K>
@@ -493,7 +493,6 @@ impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::fmt::Debug fo
 pub fn guatiao::library::kind::Remote<K>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<K: ?core::marker::Sized> core::clone::Clone for guatiao::library::kind::Remote<K>
 pub fn guatiao::library::kind::Remote<K>::clone(&self) -> guatiao::library::kind::Remote<K>
-impl<K: ?core::marker::Sized> core::marker::Copy for guatiao::library::kind::Remote<K>
 impl<K: ?core::marker::Sized> core::marker::Send for guatiao::library::kind::Remote<K>
 impl<K: ?core::marker::Sized> core::marker::Sync for guatiao::library::kind::Remote<K>
 pub trait guatiao::library::kind::Kind: 'static
@@ -1163,7 +1162,7 @@ impl core::marker::Copy for guatiao::library::desc::HostServices
 pub struct guatiao::library::Instance<K: ?core::marker::Sized>
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> guatiao::library::kind::Instance<K>
 pub fn guatiao::library::kind::Instance<K>::ctx(&self) -> *mut core::ffi::c_void
-pub fn guatiao::library::kind::Instance<K>::remote(&self) -> guatiao::library::kind::Remote<K>
+pub fn guatiao::library::kind::Instance<K>::remote(&self) -> &guatiao::library::kind::Remote<K>
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::fmt::Debug for guatiao::library::kind::Instance<K>
 pub fn guatiao::library::kind::Instance<K>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::ops::deref::Deref for guatiao::library::kind::Instance<K>
@@ -1553,7 +1552,6 @@ impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> core::fmt::Debug fo
 pub fn guatiao::library::kind::Remote<K>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<K: ?core::marker::Sized> core::clone::Clone for guatiao::library::kind::Remote<K>
 pub fn guatiao::library::kind::Remote<K>::clone(&self) -> guatiao::library::kind::Remote<K>
-impl<K: ?core::marker::Sized> core::marker::Copy for guatiao::library::kind::Remote<K>
 impl<K: ?core::marker::Sized> core::marker::Send for guatiao::library::kind::Remote<K>
 impl<K: ?core::marker::Sized> core::marker::Sync for guatiao::library::kind::Remote<K>
 pub struct guatiao::library::Retired

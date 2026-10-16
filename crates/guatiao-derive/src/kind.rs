@@ -1797,11 +1797,18 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
             }
         }
         RetKind::Object(inner) => {
+            // The object holds what this proxy holds on the library that
+            // made it, through a shared borrow of the receiver.
+            let from = if m.mutable {
+                quote!(&*self)
+            } else {
+                quote!(self)
+            };
             // Always fallible: the plan requires `Result` for an object.
             quote! {
                 // SAFETY: the shim wrote an object it handed across, or left
                 // the slot null.
-                match unsafe { ::guatiao::library::kind::object_ret::<#inner>(__out) } {
+                match unsafe { ::guatiao::library::kind::object_ret::<#inner, _>(__out, #from) } {
                     ::core::result::Result::Ok(__v) => __v,
                     ::core::result::Result::Err(__e) => { return ::core::result::Result::Err(__e); }
                 }
@@ -2037,8 +2044,22 @@ mod tests {
         assert!(out.contains("out : * mut :: guatiao :: library :: ObjectRaw"));
         assert!(out.contains("object_arg :: < dyn Listener >"));
         assert!(out.contains("object_out :: < dyn Conversation >"));
-        assert!(out.contains("object_ret :: < dyn Conversation >"));
+        assert!(
+            out.contains("object_ret :: < dyn Conversation , _ > (__out , self)"),
+            "the returned object holds what the proxy holds: {out}"
+        );
         assert!(out.contains("let __arg_listener = listener . into_raw ()"));
+
+        // From a `&mut self` method, through a shared reborrow.
+        let out = expand_str(
+            "object",
+            "pub trait Session: Send { fn fork(&mut self) -> Result<Object<dyn Session>, ProviderError>; }",
+        )
+        .expect("expands");
+        assert!(
+            out.contains("object_ret :: < dyn Session , _ > (__out , & * self)"),
+            "{out}"
+        );
     }
 
     #[test]

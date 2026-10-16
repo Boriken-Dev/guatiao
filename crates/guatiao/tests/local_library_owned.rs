@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! A library the host links can be handed to the registry as owned parts:
-//! kept while it is registered, freed when it is retired. Counted through
-//! an allocator the parts' schema and meta are built in.
+//! kept while it is registered or a handle into it lives, freed after.
+//! Counted through an allocator the parts' schema and meta are built in.
 
 #![cfg(all(feature = "provider", feature = "load"))]
 
@@ -143,7 +143,7 @@ impl Counter for Configured {
 }
 
 /// Its own one instance, which a `Remote` taken from it keeps calling
-/// after the retire: the instance and the tables are the derive's.
+/// after the retire: its lease keeps the library's parts and tables.
 #[derive(Default, guatiao::Provider)]
 #[provider(Counter)]
 pub struct Plain;
@@ -160,8 +160,8 @@ guatiao::local_providers!(
     providers = [Configured, Plain]
 );
 
-/// `local_providers!` hands its parts over: retiring frees the schema it
-/// built in the host's arena, and a second registration builds afresh.
+/// `local_providers!` hands its parts over: they go with the last handle
+/// once the library is retired, and a second registration builds afresh.
 #[test]
 fn local_providers_hands_its_parts_to_the_registry() {
     let before = DERIVED_COUNT.0.load(Ordering::SeqCst);
@@ -183,12 +183,17 @@ fn local_providers_hands_its_parts_to_the_registry() {
         .expect("its own instance");
 
     registry.retire("derived_owned").expect("it is registered");
+    assert!(
+        DERIVED_COUNT.0.load(Ordering::SeqCst) > before,
+        "the handle holds the lease, and the lease the parts"
+    );
+    assert_eq!(plain.as_dyn().count(), 1, "a handle outlives the retire");
+    drop(plain);
     assert_eq!(
         DERIVED_COUNT.0.load(Ordering::SeqCst),
         before,
-        "the parts went with the retire"
+        "the parts went with the last handle"
     );
-    assert_eq!(plain.as_dyn().count(), 1, "a handle outlives the retire");
 
     registry
         .register_local("derived", library)
