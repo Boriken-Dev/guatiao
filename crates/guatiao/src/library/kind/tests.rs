@@ -207,7 +207,7 @@ fn what_a_shim_writes_itself_is_checked() {
     assert_eq!(taken.message(), "", "the unreadable words go");
 
     let map: Map = [("k", 1)].into_iter().collect();
-    assert!(map_ret(map).is_ok());
+    assert!(map_ret(map, Alloc::rust()).is_ok());
 }
 
 /// The crate's allocator under another address: the same functions,
@@ -238,7 +238,7 @@ fn a_returned_tree_moves_into_this_sides_allocator() {
         .unwrap();
     let mut map = Map::new_in(home);
     map.set_in("list", inner, home).unwrap();
-    let moved = map_ret(map).expect("copies");
+    let moved = map_ret(map, home).expect("copies");
     let list: &List = moved
         .get("list")
         .and_then(crate::value::convert::TryAsRef::try_as_ref)
@@ -247,16 +247,16 @@ fn a_returned_tree_moves_into_this_sides_allocator() {
 
     let mut keyed = Map::new_in(away);
     keyed.set_in("k", Value::from(1i64), away).unwrap();
-    let moved = value_ret(Value::from(keyed)).unwrap();
+    let moved = value_ret(Value::from(keyed), home).unwrap();
     assert!(records_home(moved.alloc()));
     let moved: &Map = crate::value::convert::TryAsRef::try_as_ref(&moved).unwrap();
     assert!(records_home(moved.iter().next().unwrap().key.alloc()));
 
     let mut list = List::new_in(away);
     list.push_in(Value::from(true), away).unwrap();
-    assert!(records_home(list_ret(list).unwrap().alloc()));
+    assert!(records_home(list_ret(list, home).unwrap().alloc()));
 
-    let scalar = value_ret(Value::from(7i64)).unwrap();
+    let scalar = value_ret(Value::from(7i64), home).unwrap();
     assert_eq!(scalar, Value::from(7i64));
 
     let err = take_err(
