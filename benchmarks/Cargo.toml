@@ -1,0 +1,24 @@
+[package]
+name = "guatiao-bench"
+description = "The loader and kind hot paths, timed: a plain runner whose results are committed per version"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "guatiao-bench"
+path = "src/main.rs"
+
+[dependencies]
+guatiao = { path = "../crates/guatiao", features = ["load", "provider"] }
+greeter_kind = { path = "../examples/greeter_kind" }
+# Never linked: named so cargo builds their cdylibs beside the runner,
+# which loads them the way a host would.
+hello_library = { path = "../examples/hello_library" }
+derived_greeter = { path = "../examples/derived_greeter" }
+
+[lints]
+workspace = true
