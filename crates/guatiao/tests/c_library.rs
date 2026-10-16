@@ -157,7 +157,12 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     // SAFETY: the signature `greeter_in_c.c` declares.
     let last_built: libloading::Symbol<unsafe extern "C" fn() -> *const c_void> =
         unsafe { image.get(b"c_greeter_last_built\0") }.expect("exported");
-    let answer = greeter.greet("ana").expect("the C greeter answers");
+    let (answer, allocated) = allocations(|| greeter.greet("ana"));
+    let answer = answer.expect("the C greeter answers");
+    assert_eq!(
+        allocated, 3,
+        "C's three blocks (entries, key, text) and nothing on arrival: no copy, no walk stack"
+    );
     assert_eq!(
         answer.get("greeting").and_then(TryAsRef::<str>::try_as_ref),
         Some("hello from C, ana")
