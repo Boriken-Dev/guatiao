@@ -950,67 +950,76 @@ pub(crate) fn open_entry(entry: EntryFn, host: Host) -> Opened {
     }
 }
 
-/// `unload` lives here, and not beside `retire`, because
-/// `library/registry.rs` carries `#![forbid(unsafe_code)]` and this is
-/// the file allowed to say it.
+/// Asks a library's `unload` slot whether it may be closed. A panic
+/// crossing back is caught here, as at every other boundary.
+///
+/// Safe because the slot is the library's own, read under its
+/// `struct_size` guard, and the registry asking holds the mapping.
+#[cfg(feature = "load")]
+pub(crate) fn ask_unload(slot: unsafe extern "C" fn() -> Status) -> Status {
+    // SAFETY: as above; the slot takes nothing.
+    crate::exports::guard_with(Status::GUATIAO_ERR_INTERNAL, || unsafe { slot() })
+}
+
+/// `unload_unchecked` lives here, and not beside `retire`, because
+/// `library/registry.rs` carries `#![forbid(unsafe_code)]` and this is the
+/// file allowed to say it; `unload` stays beside it.
 #[cfg(feature = "load")]
 impl crate::library::registry::Registry {
-    /// Takes one library out of this registry **and unmaps it**, when the
-    /// library agrees.
+    /// Takes one library out of this registry **and unmaps it**, when
+    /// nothing uses it and the library agrees.
     ///
-    /// The library's `unload` slot is asked first. It is the library's
-    /// promise that everything it can account for is released: a derived
+    /// Refused with [`Busy`](crate::library::registry::UnloadError::Busy)
+    /// while any handle holds the library's lease — a
+    /// [`Remote`](crate::library::kind::Remote), an
+    /// [`Offer`](crate::library::kind::Offer), an
+    /// [`Instance`](crate::library::kind::Instance), an
+    /// [`Object`](crate::library::kind::Object) or a [`ProviderView`]
+    /// taken from it, or an answer another library pinned through this
+    /// host's services. Then the library's `unload` slot is asked: its
+    /// promise that everything it can account for is released. A derived
     /// library counts its instances and objects and answers
     /// `GUATIAO_ERR_BUSY` while any is alive
-    /// ([`Refused`](crate::library::registry::UnloadError::Refused), and it is left
-    /// exactly as it was). A library with no slot promises nothing and
-    /// answers [`NotSupported`](crate::library::registry::UnloadError::NotSupported);
+    /// ([`Refused`](crate::library::registry::UnloadError::Refused)). A
+    /// library with no slot promises nothing and answers
+    /// [`NotSupported`](crate::library::registry::UnloadError::NotSupported);
     /// [`unload_unchecked`](Self::unload_unchecked) is the host insisting.
     /// A library the host LINKS answers
-    /// [`Linked`](crate::library::registry::UnloadError::Linked); retiring it works.
+    /// [`Linked`](crate::library::registry::UnloadError::Linked); retiring
+    /// it works. Every refusal leaves the library registered and mapped.
     ///
-    /// # Safety
-    ///
-    /// What no library can count is still the caller's word: every
-    /// [`Remote`](crate::library::kind::Remote) and
-    /// [`Offer`](crate::library::kind::Offer) copied out of it, every
-    /// [`ProviderView`] of one of its providers (from
-    /// [`Provider::view`](crate::library::Provider::view),
-    /// [`Offer::view`](crate::library::kind::Offer::view) or a
-    /// [`Host`]'s `get` and `list`, whose `available()` calls into the
-    /// image), every raw vtable, `ctx` or descriptor pointer, every value
-    /// it built through its own allocator that its slot does not track,
-    /// and every descriptor pointer another library fetched from it
-    /// through the host's services, is not used again.
-    pub unsafe fn unload(
-        &mut self,
-        key: &str,
-    ) -> Result<(), crate::library::registry::UnloadError> {
-        // SAFETY: forwarded.
-        unsafe { self.unload_with(key, false) }
+    /// **Safe**, because what could still reach the image holds the lease
+    /// it counts, and what a call returned was moved into this side's
+    /// allocator. What stays the caller's word is what it took raw, on
+    /// purpose: a `vtable()`, `table()` or `ctx` pointer kept past the
+    /// handle it came from, and anything a C caller of the registry holds.
+    pub fn unload(&mut self, key: &str) -> Result<(), crate::library::registry::UnloadError> {
+        self.collect();
+        self.unload_with(key, false)
     }
 
-    /// [`unload`](Self::unload) for a library with no `unload` slot: the
-    /// host's word alone. A library that HAS a slot is still asked, and
-    /// its refusal still stands.
+    /// [`unload`](Self::unload) without the two refusals only the host can
+    /// overrule: a lease still held, and a library with no `unload` slot.
+    /// A library that HAS a slot is still asked, and its refusal still
+    /// stands.
     ///
     /// # Safety
     ///
-    /// As [`unload`](Self::unload), and nothing the library handed out is
-    /// alive at all: no instance, no object, no value from its allocator,
-    /// and no thread of its own still running.
+    /// Nothing the library handed out is used again: no handle holding its
+    /// lease, no instance, no object, no value from its allocator, no
+    /// pinned answer another library holds, and no thread of its own still
+    /// running.
     pub unsafe fn unload_unchecked(
         &mut self,
         key: &str,
     ) -> Result<(), crate::library::registry::UnloadError> {
-        // SAFETY: forwarded.
-        unsafe { self.unload_with(key, true) }
+        self.collect();
+        self.unload_with(key, true)
     }
 
-    /// # Safety
-    ///
-    /// As whichever of the two public forms called it.
-    unsafe fn unload_with(
+    /// `insist` skips the lease count and a missing slot; only
+    /// `unload_unchecked` passes it, on its caller's word.
+    fn unload_with(
         &mut self,
         key: &str,
         insist: bool,
@@ -1025,30 +1034,40 @@ impl crate::library::registry::Registry {
                 key: key.to_string(),
             });
         }
-        // Asked FIRST, so a refusal leaves the registry untouched. A panic
-        // crossing back is caught here, as at every other boundary.
-        match one.unload_slot() {
-            Some(ask) => {
-                // SAFETY: the slot is the library's own, read under its
-                // `struct_size` guard, and the library is still mapped.
-                let status =
-                    crate::exports::guard_with(Status::GUATIAO_ERR_INTERNAL, || unsafe { ask() });
-                if status != Status::GUATIAO_OK {
-                    return Err(UnloadError::Refused {
+        // Out of what the services answer first, so no library can pin one
+        // of its providers while the holds are counted; a refusal puts the
+        // providers back.
+        self.publish_without(Some(one.lease()));
+        let refusal = {
+            let leases = self.holds_besides_own(one, false);
+            if leases > 0 && !insist {
+                Some(UnloadError::Busy {
+                    key: key.to_string(),
+                    leases,
+                })
+            } else {
+                match one.unload_slot() {
+                    Some(ask) => {
+                        let status = ask_unload(ask);
+                        (status != Status::GUATIAO_OK).then(|| UnloadError::Refused {
+                            key: key.to_string(),
+                            status,
+                        })
+                    }
+                    None if insist => None,
+                    None => Some(UnloadError::NotSupported {
                         key: key.to_string(),
-                        status,
-                    });
+                    }),
                 }
             }
-            None if insist => {}
-            None => {
-                return Err(UnloadError::NotSupported {
-                    key: key.to_string(),
-                });
-            }
+        };
+        if let Some(why) = refusal {
+            self.publish_without(None);
+            return Err(why);
         }
-        let (_, origin) = self.take_library(key)?;
-        origin.close().map_err(|e| UnloadError::Close {
+        let taken = self.take_library(key)?;
+        drop(taken.lease);
+        taken.origin.close().map_err(|e| UnloadError::Close {
             key: key.to_string(),
             reason: e.to_string(),
         })

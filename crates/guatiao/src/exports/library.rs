@@ -306,6 +306,7 @@ fn unload_status(why: &UnloadError) -> Status {
         UnloadError::NotFound { .. } => Status::GUATIAO_ERR_NOT_FOUND,
         UnloadError::Linked { .. } => Status::GUATIAO_ERR_WRONG_KIND,
         UnloadError::NotSupported { .. } => Status::GUATIAO_ERR_UNSUPPORTED,
+        UnloadError::Busy { .. } => Status::GUATIAO_ERR_BUSY,
         // The library's own answer, as it gave it.
         UnloadError::Refused { status, .. } => *status,
         UnloadError::Close { .. } => Status::GUATIAO_ERR_INTERNAL,
@@ -571,8 +572,7 @@ pub unsafe extern "C" fn guatiao_registry_unload(reg: *mut HostRegistry, key: St
             Ok(t) => t,
             Err(e) => return e.into(),
         };
-        // SAFETY: forwarded -- the caller stated the contract above.
-        match unsafe { registry.inner.unload(key) } {
+        match registry.inner.unload(key) {
             Ok(()) => Status::GUATIAO_OK,
             Err(why) => unload_status(&why),
         }

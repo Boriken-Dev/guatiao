@@ -177,7 +177,9 @@ fn a_hard_link_passed_over_does_not_pin_the_image() {
     ));
     // SAFETY: nothing was taken from the library: no tree, no table, no
     // instance, and no handle of this test's own is open.
-    unsafe { registry.unload("hello_library") }.expect("nothing is outstanding");
+    registry
+        .unload("hello_library")
+        .expect("nothing is outstanding");
 
     assert!(matches!(
         registry.load_file(&first).expect("it loads again"),

@@ -358,7 +358,6 @@ pub(crate) enum Hold {
 
 impl Hold {
     /// Whether this holds `lease`.
-    #[allow(dead_code)]
     pub(crate) fn holds(&self, lease: &Arc<Lease>) -> bool {
         matches!(self, Hold::Lease(held) if Arc::ptr_eq(held, lease))
     }

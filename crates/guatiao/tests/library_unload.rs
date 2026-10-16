@@ -263,9 +263,10 @@ fn a_library_with_values_outstanding_refuses_and_then_agrees() {
     // it is alive the library refuses to be unmapped -- freeing it would
     // call an allocator that is no longer there.
     let answer = greet(&registry, "ada");
-    // SAFETY: the host states the contract; here it is deliberately
-    // false, which is what the library's own slot is for.
-    let why = unsafe { registry.unload("hello_library") }.expect_err("a value is still out");
+    // No handle holds the library, so only its own slot can see the tree.
+    let why = registry
+        .unload("hello_library")
+        .expect_err("a value is still out");
     assert!(
         matches!(
             why,
@@ -280,9 +281,10 @@ fn a_library_with_values_outstanding_refuses_and_then_agrees() {
     );
 
     drop(answer);
-    // SAFETY: the tree is gone, nothing else was taken from the library,
-    // and this test holds the only registry that loaded it.
-    unsafe { registry.unload("hello_library") }.expect("nothing is outstanding now");
+    // The tree is gone, and nothing else was taken from the library.
+    registry
+        .unload("hello_library")
+        .expect("nothing is outstanding now");
     assert!(registry.loaded().is_empty());
 }
 
@@ -298,8 +300,8 @@ fn a_linked_library_cannot_be_unloaded() {
         .loaded()
         .expect("it accepts this host");
 
-    // SAFETY: there is nothing mapped to unmap, which is the answer.
-    let why = unsafe { registry.unload("linked_library") }.expect_err("it is linked");
+    // There is nothing mapped to unmap, which is the answer.
+    let why = registry.unload("linked_library").expect_err("it is linked");
     assert!(matches!(why, UnloadError::Linked { key } if key == "linked_library"));
     assert!(
         registry.provider("linked_greeter").is_some(),
@@ -315,8 +317,8 @@ fn a_linked_library_cannot_be_unloaded() {
 fn unloading_an_unknown_key_is_not_found() {
     let _one = one_at_a_time();
     let mut registry = Registry::new("unload-tests", "1.0");
-    // SAFETY: nothing is unmapped, since nothing answers to the key.
-    let why = unsafe { registry.unload("nonesuch") }.expect_err("nothing answers");
+    // Nothing answers to the key, so nothing is asked.
+    let why = registry.unload("nonesuch").expect_err("nothing answers");
     assert!(matches!(why, UnloadError::NotFound { key } if key == "nonesuch"));
 }
 

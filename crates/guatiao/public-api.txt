@@ -672,6 +672,9 @@ impl core::fmt::Display for guatiao::library::registry::Skipped
 pub fn guatiao::library::registry::Skipped::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao::library::registry::Skipped
 #[non_exhaustive] pub enum guatiao::library::registry::UnloadError
+pub guatiao::library::registry::UnloadError::Busy
+pub guatiao::library::registry::UnloadError::Busy::key: alloc::string::String
+pub guatiao::library::registry::UnloadError::Busy::leases: usize
 pub guatiao::library::registry::UnloadError::Close
 pub guatiao::library::registry::UnloadError::Close::key: alloc::string::String
 pub guatiao::library::registry::UnloadError::Close::reason: alloc::string::String
@@ -735,6 +738,7 @@ pub fn guatiao::library::registry::Registry::all(&self) -> &[guatiao::library::r
 pub fn guatiao::library::registry::Registry::all_ranked(&self) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::library::registry::Provider>
 pub fn guatiao::library::registry::Registry::available(&self, &str) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::library::registry::Provider>
 pub fn guatiao::library::registry::Registry::best(&self, &str) -> core::option::Option<&guatiao::library::registry::Provider>
+pub fn guatiao::library::registry::Registry::collect(&mut self) -> alloc::vec::Vec<alloc::string::String>
 pub fn guatiao::library::registry::Registry::host(&mut self) -> guatiao::library::raw::Host
 pub fn guatiao::library::registry::Registry::host_id(&self) -> &str
 pub fn guatiao::library::registry::Registry::host_version(&self) -> &str
@@ -759,7 +763,7 @@ pub fn guatiao::library::registry::Registry::set_priority(&mut self, &str, i32)
 pub fn guatiao::library::registry::Registry::why_not(&self, &str) -> core::option::Option<guatiao::library::registry::WhyNot<'_>>
 pub fn guatiao::library::registry::Registry::with_alloc(&str, &str, core::option::Option<guatiao::value::alloc::Alloc>) -> guatiao::library::registry::Registry
 impl guatiao::library::registry::Registry
-pub unsafe fn guatiao::library::registry::Registry::unload(&mut self, &str) -> core::result::Result<(), guatiao::library::registry::UnloadError>
+pub fn guatiao::library::registry::Registry::unload(&mut self, &str) -> core::result::Result<(), guatiao::library::registry::UnloadError>
 pub unsafe fn guatiao::library::registry::Registry::unload_unchecked(&mut self, &str) -> core::result::Result<(), guatiao::library::registry::UnloadError>
 impl core::fmt::Debug for guatiao::library::registry::Registry
 pub fn guatiao::library::registry::Registry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -1038,6 +1042,9 @@ pub fn guatiao::library::key::Subject::fmt(&self, &mut core::fmt::Formatter<'_>)
 impl core::marker::Copy for guatiao::library::key::Subject
 impl core::marker::StructuralPartialEq for guatiao::library::key::Subject
 #[non_exhaustive] pub enum guatiao::library::UnloadError
+pub guatiao::library::UnloadError::Busy
+pub guatiao::library::UnloadError::Busy::key: alloc::string::String
+pub guatiao::library::UnloadError::Busy::leases: usize
 pub guatiao::library::UnloadError::Close
 pub guatiao::library::UnloadError::Close::key: alloc::string::String
 pub guatiao::library::UnloadError::Close::reason: alloc::string::String
@@ -1519,6 +1526,7 @@ pub fn guatiao::library::registry::Registry::all(&self) -> &[guatiao::library::r
 pub fn guatiao::library::registry::Registry::all_ranked(&self) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::library::registry::Provider>
 pub fn guatiao::library::registry::Registry::available(&self, &str) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::library::registry::Provider>
 pub fn guatiao::library::registry::Registry::best(&self, &str) -> core::option::Option<&guatiao::library::registry::Provider>
+pub fn guatiao::library::registry::Registry::collect(&mut self) -> alloc::vec::Vec<alloc::string::String>
 pub fn guatiao::library::registry::Registry::host(&mut self) -> guatiao::library::raw::Host
 pub fn guatiao::library::registry::Registry::host_id(&self) -> &str
 pub fn guatiao::library::registry::Registry::host_version(&self) -> &str
@@ -1543,7 +1551,7 @@ pub fn guatiao::library::registry::Registry::set_priority(&mut self, &str, i32)
 pub fn guatiao::library::registry::Registry::why_not(&self, &str) -> core::option::Option<guatiao::library::registry::WhyNot<'_>>
 pub fn guatiao::library::registry::Registry::with_alloc(&str, &str, core::option::Option<guatiao::value::alloc::Alloc>) -> guatiao::library::registry::Registry
 impl guatiao::library::registry::Registry
-pub unsafe fn guatiao::library::registry::Registry::unload(&mut self, &str) -> core::result::Result<(), guatiao::library::registry::UnloadError>
+pub fn guatiao::library::registry::Registry::unload(&mut self, &str) -> core::result::Result<(), guatiao::library::registry::UnloadError>
 pub unsafe fn guatiao::library::registry::Registry::unload_unchecked(&mut self, &str) -> core::result::Result<(), guatiao::library::registry::UnloadError>
 impl core::fmt::Debug for guatiao::library::registry::Registry
 pub fn guatiao::library::registry::Registry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result

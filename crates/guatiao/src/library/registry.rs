@@ -38,6 +38,7 @@ use super::raw::{
     Rejected, Shared, Snapshot, SnapshotEntry,
 };
 use crate::value::alloc::Alloc;
+use crate::value::status::Status;
 use crate::value::types::Text;
 
 /// Why a file could not be loaded.
@@ -468,7 +469,6 @@ pub struct Loaded {
     origin: Origin,
     /// What every handle into this library holds: its tables, copied,
     /// and the parts of a library the host built.
-    #[allow(dead_code)]
     lease: Arc<Lease>,
     /// Its say in being unmapped, or `None` for a library that declares
     /// none. See [`LibraryInfo::unload`](super::desc::LibraryInfo::unload).
@@ -488,6 +488,30 @@ impl Loaded {
     ) -> Option<unsafe extern "C" fn() -> crate::value::status::Status> {
         self.unload
     }
+
+    /// The lease every handle into it holds.
+    pub(crate) fn lease(&self) -> &Arc<Lease> {
+        &self.lease
+    }
+}
+
+/// A library this registry mapped, retired and has not closed yet: kept
+/// until no handle holds its lease and its slot agrees.
+#[derive(Debug)]
+struct Leaving {
+    key: String,
+    lease: Arc<Lease>,
+    origin: Origin,
+    unload: Option<unsafe extern "C" fn() -> crate::value::status::Status>,
+}
+
+/// One library leaving the registry: its record, and what `retire` or
+/// `unload` decides the fate of.
+pub(crate) struct Taken {
+    pub(crate) retired: Retired,
+    pub(crate) origin: Origin,
+    pub(crate) lease: Arc<Lease>,
+    pub(crate) unload: Option<unsafe extern "C" fn() -> crate::value::status::Status>,
 }
 
 /// What one library taking its leave came to.
@@ -527,6 +551,18 @@ pub enum UnloadError {
         /// The library key.
         key: String,
     },
+    /// A handle still holds the library's lease — a `Remote`, an
+    /// `Offer`, an `Instance`, an `Object` or a `ProviderView` taken from
+    /// it, or an answer another library pinned through the host's services
+    /// — and the library is left exactly as it was. Drop them, or retire
+    /// it and let [`collect`](Registry::collect) close it once they are
+    /// gone.
+    Busy {
+        /// The library key.
+        key: String,
+        /// How many holds there were besides the registry's own.
+        leases: usize,
+    },
     /// The library's own `unload` slot refused, and the library is left
     /// exactly as it was: registered and mapped.
     Refused {
@@ -557,6 +593,9 @@ impl core::fmt::Display for UnloadError {
                 f,
                 "`{key}` has no unload slot, so it does not support being unloaded"
             ),
+            UnloadError::Busy { key, leases } => {
+                write!(f, "`{key}` is still in use: {leases} handle(s) hold it")
+            }
             UnloadError::Refused { key, status } => {
                 write!(f, "`{key}` refused to be unloaded ({status:?})")
             }
@@ -586,10 +625,11 @@ impl core::error::Error for UnloadError {}
 ///
 /// # Dropping it leaves every library mapped
 ///
-/// A [`Remote`], an [`Offer`] or a boxed trait taken from it is
-/// `'static` and may outlive it, so a drop forgets each mapping rather
-/// than closing it, as [`retire`](Registry::retire) does.
-/// [`unload`](Registry::unload) is the only way a library is unmapped.
+/// A [`Remote`], an [`Offer`] or a boxed trait taken from it holds its
+/// library's lease and may outlive it, so a drop forgets each mapping
+/// rather than closing it, as [`retire`](Registry::retire) does.
+/// [`unload`](Registry::unload) and [`collect`](Registry::collect) are the
+/// only ways a library is unmapped.
 ///
 /// # A registry does not isolate an image
 ///
@@ -625,6 +665,8 @@ pub struct Registry {
     shared: Arc<Shared>,
     /// The block libraries keep, leaked on first use.
     block: Option<&'static HostBlock>,
+    /// Libraries retired and not yet closed, oldest first.
+    leaving: Vec<Leaving>,
 }
 
 // `Send` and `Sync` for this type are declared in `raw/host.rs`, where
@@ -652,6 +694,7 @@ impl Registry {
             priorities: BTreeMap::new(),
             shared: Arc::new(Shared::default()),
             block: None,
+            leaving: Vec::new(),
         }
     }
 
@@ -679,6 +722,13 @@ impl Registry {
 
     /// Republishes what the services read. Called after every change.
     fn publish(&self) {
+        self.publish_without(None);
+    }
+
+    /// Republishes what the services read, leaving out the providers of
+    /// the library `without` holds: the first step of an `unload`, so no
+    /// library can pin one of them while the registry counts its holds.
+    pub(crate) fn publish_without(&self, without: Option<&Arc<Lease>>) {
         let ranked = self.ranked(self.providers.iter());
         let mut snapshot = Snapshot::default();
         for provider in ranked {
@@ -687,6 +737,9 @@ impl Registry {
             let Some(lease) = provider.view.hold.lease() else {
                 continue;
             };
+            if without.is_some_and(|w| Arc::ptr_eq(w, lease)) {
+                continue;
+            }
             snapshot
                 .by_key
                 .insert(provider.key().to_string(), snapshot.entries.len());
@@ -871,6 +924,7 @@ impl Registry {
     /// provider that needs a peer offered by a library loaded later looks
     /// it up from a vtable call, not from `describe`.
     pub fn load_file(&mut self, path: &Path) -> Result<Loading<'_>, LoadError> {
+        self.collect();
         // By path first: the only dedup that can happen without loading.
         if let Some(already) = self.loaded_from_path(path) {
             let from = already.path.clone();
@@ -917,6 +971,7 @@ impl Registry {
         name: &str,
         describe: impl FnOnce(Host) -> Option<L>,
     ) -> Result<Loading<'_>, LoadError> {
+        self.collect();
         let path = PathBuf::from(format!("<{name}>"));
         if let Some(already) = self.loaded_from_path(&path) {
             let from = already.path.clone();
@@ -940,6 +995,7 @@ impl Registry {
     /// exactly what a loaded library's entry point promises, and read under
     /// the same checks.
     pub fn register_entry(&mut self, name: &str, entry: EntryFn) -> Result<Loading<'_>, LoadError> {
+        self.collect();
         let path = PathBuf::from(format!("<{name}>"));
         if let Some(already) = self.loaded_from_path(&path) {
             let from = already.path.clone();
@@ -1109,37 +1165,100 @@ impl Registry {
     /// library reads, its [`Loaded`] record goes, and the key may be
     /// loaded again — a retired library is not
     /// [`Skipped::AlreadyLoaded`]. Nothing new can be obtained from it;
-    /// what a host already took — a [`Remote`], an [`Offer`], a vtable
-    /// pointer, a descriptor another library fetched through this host's
-    /// services — keeps working, because the mapping stays.
+    /// what a host already took — a [`Remote`], an [`Offer`], an
+    /// instance, an object, an answer another library pinned through the
+    /// host's services — keeps working, because each holds the library's
+    /// lease and the mapping stays.
     ///
-    /// Safe for that reason: retiring dangles nothing a handle reaches.
-    /// [`unload`](Registry::unload) is the one that unmaps, and it is
-    /// `unsafe`; it is written in `raw/image.rs`, where `unsafe` is
-    /// allowed.
-    ///
-    /// Every handle holds a lease on its library, which keeps the
-    /// registry's copies of the library's tables and, for one registered
-    /// from owned [`LibraryParts`](super::kind::LibraryParts), the parts:
-    /// they are freed once the library is retired and the last handle is
-    /// dropped.
+    /// **A retired library is closed when nothing uses it**: once no
+    /// handle holds its lease and, for one mapped from a file, its
+    /// `unload` slot agrees, [`collect`](Registry::collect) closes it, as
+    /// does this registry's next `load_file`, `register_local`,
+    /// `register_entry`, `retire` or `unload`. A library with no slot
+    /// stays mapped. A library the host links has nothing to close, and is
+    /// let go here. The lease, with its copies of the library's tables
+    /// and the parts of one the host built, is freed when the last handle
+    /// is dropped and the registry has let it go.
     pub fn retire(&mut self, key: &str) -> Result<Retired, UnloadError> {
-        let (retired, origin) = self.take_library(key)?;
-        origin.keep();
-        Ok(retired)
+        self.collect();
+        let taken = self.take_library(key)?;
+        if taken.origin.is_mapped() {
+            self.leaving.push(Leaving {
+                key: taken.retired.key.clone(),
+                lease: taken.lease,
+                origin: taken.origin,
+                unload: taken.unload,
+            });
+        } else {
+            taken.origin.keep();
+        }
+        Ok(taken.retired)
+    }
+
+    /// Closes every retired library nothing uses any more, and answers
+    /// their keys, oldest first.
+    ///
+    /// A library qualifies once no handle holds its lease. It is then
+    /// asked through its `unload` slot, and closed when it agrees; one
+    /// that refuses stays retired and mapped and is asked again next time,
+    /// and one with no slot promises nothing and stays mapped. Dropping a
+    /// handle never closes anything: the handle may be dropped while the
+    /// library's own code is on the stack.
+    pub fn collect(&mut self) -> Vec<String> {
+        let mut closed = Vec::new();
+        let mut kept = Vec::new();
+        for leaving in core::mem::take(&mut self.leaving) {
+            // The registry's own entry is the only hold left.
+            if Arc::strong_count(&leaving.lease) > 1 {
+                kept.push(leaving);
+                continue;
+            }
+            let agrees = leaving
+                .unload
+                .is_some_and(|ask| super::raw::ask_unload(ask) == Status::GUATIAO_OK);
+            if !agrees {
+                kept.push(leaving);
+                continue;
+            }
+            let Leaving {
+                key, lease, origin, ..
+            } = leaving;
+            drop(lease);
+            // A failed close leaves the handle given up, as `libloading`
+            // does; the library is gone from the registry either way.
+            let _ = origin.close();
+            closed.push(key);
+        }
+        self.leaving = kept;
+        closed
+    }
+
+    /// How many holds `loaded`'s lease has besides this registry's own:
+    /// its record, and the views of its providers it keeps. The snapshot's
+    /// are counted too unless they have been unpublished.
+    pub(crate) fn holds_besides_own(&self, loaded: &Loaded, published: bool) -> usize {
+        let lease = &loaded.lease;
+        let mine = self
+            .providers
+            .iter()
+            .filter(|p| p.view.hold.holds(lease))
+            .count();
+        let own = 1 + if published { 2 * mine } else { mine };
+        Arc::strong_count(lease).saturating_sub(own)
     }
 
     /// The record one library key answers to.
     ///
-    /// For `unload`, which lives in `raw/image.rs` because this module carries
+    /// For `unload`, which lives in `raw/image.rs` because asking a
+    /// library's slot is `unsafe` and this module carries
     /// `#![forbid(unsafe_code)]`.
     pub(crate) fn library(&self, key: &str) -> Option<&Loaded> {
         self.loaded.iter().find(|l| *l.key == *key)
     }
 
-    /// Removes a library and hands back its record and its mapping.
-    /// Whoever calls decides what becomes of the handle.
-    pub(crate) fn take_library(&mut self, key: &str) -> Result<(Retired, Origin), UnloadError> {
+    /// Removes a library and hands back its record, its mapping and its
+    /// lease. Whoever calls decides what becomes of them.
+    pub(crate) fn take_library(&mut self, key: &str) -> Result<Taken, UnloadError> {
         let at = self
             .loaded
             .iter()
@@ -1164,15 +1283,17 @@ impl Registry {
             .collect();
         self.publish();
 
-        Ok((
-            Retired {
+        Ok(Taken {
+            retired: Retired {
                 key: key.to_string(),
                 id: one.id,
                 version: one.version,
                 providers,
             },
-            one.origin,
-        ))
+            origin: one.origin,
+            lease: one.lease,
+            unload: one.unload,
+        })
     }
 
     /// Every provider that speaks one kind, best first: `(priority DESC,
