@@ -86,6 +86,16 @@ impl<K: ?Sized + Kind> Remote<K> {
     /// provider declares none for this kind; `ObjectKind` for an object
     /// kind, which no provider serves whatever its descriptor claims.
     pub(crate) fn from_view(view: &ProviderView) -> Result<Remote<K>, KindMismatch> {
+        let remote = Remote::unheld(view)?;
+        Ok(Remote {
+            hold: view.hold.clone(),
+            ..remote
+        })
+    }
+
+    /// [`from_view`](Remote::from_view) holding nothing: for a handle that
+    /// keeps `view` beside it, whose lease covers both.
+    pub(super) fn unheld(view: &ProviderView) -> Result<Remote<K>, KindMismatch> {
         if K::OBJECT {
             return Err(KindMismatch::ObjectKind);
         }
@@ -97,12 +107,8 @@ impl<K: ?Sized + Kind> Remote<K> {
             .ok_or(KindMismatch::NoTable)?;
         // SAFETY: the view was read from a descriptor under its guards,
         // the library declared this table as K::NAME's, and the view's
-        // lease, which the proxy takes a share of, keeps the copy.
-        let remote = unsafe { Remote::validate(table, size, view.ctx, false) }?;
-        Ok(Remote {
-            hold: view.hold.clone(),
-            ..remote
-        })
+        // lease, which the caller keeps or shares, keeps the copy.
+        unsafe { Remote::validate(table, size, view.ctx, false) }
     }
 
     /// The one validation every door runs.
@@ -239,6 +245,8 @@ impl<K: ?Sized + Kind> Remote<K> {
 /// is `None` for it, and [`instantiate`](Offer::instantiate) is how it is
 /// used.
 pub struct Offer<K: ?Sized> {
+    /// Holding nothing: `view` holds the lease for both, and a proxy
+    /// handed out takes its share from there.
     remote: Remote<K>,
     view: ProviderView,
     key: Option<String>,
@@ -258,22 +266,27 @@ impl<K: ?Sized + Kind> core::fmt::Debug for Offer<K> {
 }
 
 impl<K: ?Sized + Kind> Offer<K> {
+    /// An offer over `view`'s table for `K`, validated, or why not.
     pub(crate) fn new(
-        remote: Remote<K>,
         view: ProviderView,
         key: Option<String>,
         library: Option<String>,
         version: String,
         priority: i32,
-    ) -> Offer<K> {
-        Offer {
-            remote,
+    ) -> Result<Offer<K>, KindMismatch> {
+        Ok(Offer {
+            remote: Remote::unheld(&view)?,
             view,
             key,
             library,
             version,
             priority,
-        }
+        })
+    }
+
+    /// The proxy, holding the view's lease: what leaves the offer.
+    fn held(remote: Remote<K>, hold: Hold) -> Remote<K> {
+        Remote { hold, ..remote }
     }
 
     /// The provider's identifier.
@@ -343,7 +356,8 @@ impl<K: ?Sized + Kind> Offer<K> {
     /// [`default_instance`](Offer::default_instance) is, since a proxy
     /// over no instance could only fail.
     pub fn remote(&self) -> Option<Remote<K>> {
-        self.callable().then(|| self.remote.clone())
+        self.callable()
+            .then(|| Offer::held(self.remote.clone(), self.view.hold.clone()))
     }
 
     /// The descriptor as read.
@@ -354,13 +368,19 @@ impl<K: ?Sized + Kind> Offer<K> {
     /// The default instance, boxed, to store like any implementation;
     /// `None` as for [`default_instance`](Offer::default_instance).
     pub fn boxed(self) -> Option<Box<K>> {
-        self.callable().then(|| K::boxed(self.remote))
+        if !self.callable() {
+            return None;
+        }
+        Some(K::boxed(Offer::held(self.remote, self.view.hold)))
     }
 
     /// The default instance, shared; `None` as for
     /// [`default_instance`](Offer::default_instance).
     pub fn shared(self) -> Option<Arc<K>> {
-        self.callable().then(|| K::shared(self.remote))
+        if !self.callable() {
+            return None;
+        }
+        Some(K::shared(Offer::held(self.remote, self.view.hold)))
     }
 }
 
@@ -495,9 +515,8 @@ impl<K: ?Sized + Kind> Offer<K> {
     /// An offer from a view alone, as a host's services hand one over:
     /// no registry key, no library id, no rank.
     pub(crate) fn from_view(view: ProviderView) -> Result<Offer<K>, KindMismatch> {
-        let remote = Remote::from_view(&view)?;
         let version = view.version.clone().unwrap_or_default();
-        Ok(Offer::new(remote, view, None, None, version, 0))
+        Offer::new(view, None, None, version, 0)
     }
 }
 

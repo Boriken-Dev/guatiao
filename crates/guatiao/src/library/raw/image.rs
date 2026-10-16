@@ -1039,7 +1039,7 @@ impl crate::library::registry::Registry {
         // providers back.
         self.publish_without(Some(one.lease()));
         let refusal = {
-            let leases = self.holds_besides_own(one, false);
+            let leases = self.holds_besides_own(one);
             if leases > 0 && !insist {
                 Some(UnloadError::Busy {
                     key: key.to_string(),

@@ -165,61 +165,84 @@ pub(crate) fn copy_map(map: &Map, alloc: Alloc) -> Result<Map, ValueError> {
 /// Whether every container in the tree, every map key included, records
 /// `alloc`: nothing in it needs another allocator to grow or be freed. A
 /// container recording none, or a tag this build does not know, answers
-/// `false`.
+/// `false`. Each container is judged before its children are visited, so
+/// a tree that is not homed is told at its first container, with nothing
+/// allocated.
 pub(crate) fn recorded_by(node: &Value, alloc: *const crate::value::alloc::Allocator) -> bool {
-    all_recorded(vec![node], alloc)
+    let mut stack = Vec::new();
+    homed(node, alloc, &mut stack) && drain(stack, alloc)
 }
 
 /// [`recorded_by`] for a map.
 pub(crate) fn map_recorded_by(map: &Map, alloc: *const crate::value::alloc::Allocator) -> bool {
-    map.alloc().is_ok_and(|a| a.as_raw() == alloc)
-        && map
-            .iter()
-            .all(|entry| entry.key.alloc().is_ok_and(|a| a.as_raw() == alloc))
-        && all_recorded(map.iter().map(|entry| &entry.value).collect(), alloc)
+    let mut stack = Vec::new();
+    map_homed(map, alloc, &mut stack) && drain(stack, alloc)
 }
 
 /// [`recorded_by`] for a list.
 pub(crate) fn list_recorded_by(list: &List, alloc: *const crate::value::alloc::Allocator) -> bool {
-    list.alloc().is_ok_and(|a| a.as_raw() == alloc) && all_recorded(list.iter().collect(), alloc)
+    let mut stack = Vec::new();
+    list_homed(list, alloc, &mut stack) && drain(stack, alloc)
 }
 
-fn all_recorded(mut stack: Vec<&Value>, alloc: *const crate::value::alloc::Allocator) -> bool {
-    let is = |found: Result<Alloc, ValueError>| found.is_ok_and(|a| a.as_raw() == alloc);
+fn records(found: Result<Alloc, ValueError>, alloc: *const crate::value::alloc::Allocator) -> bool {
+    found.is_ok_and(|a| a.as_raw() == alloc)
+}
+
+fn map_homed<'a>(
+    map: &'a Map,
+    alloc: *const crate::value::alloc::Allocator,
+    stack: &mut Vec<&'a Value>,
+) -> bool {
+    if !records(map.alloc(), alloc) {
+        return false;
+    }
+    for entry in map.iter() {
+        if !records(entry.key.alloc(), alloc) {
+            return false;
+        }
+        stack.push(&entry.value);
+    }
+    true
+}
+
+fn list_homed<'a>(
+    list: &'a List,
+    alloc: *const crate::value::alloc::Allocator,
+    stack: &mut Vec<&'a Value>,
+) -> bool {
+    if !records(list.alloc(), alloc) {
+        return false;
+    }
+    stack.extend(list.iter());
+    true
+}
+
+/// One node judged, its children left on `stack` for [`drain`].
+fn homed<'a>(
+    node: &'a Value,
+    alloc: *const crate::value::alloc::Allocator,
+    stack: &mut Vec<&'a Value>,
+) -> bool {
+    match node.tag() {
+        Ok(Tag::GUATIAO_MAP) => text::<Map>(node).is_ok_and(|map| map_homed(map, alloc, stack)),
+        Ok(Tag::GUATIAO_LIST) => arm::<List>(node).is_ok_and(|list| list_homed(list, alloc, stack)),
+        Ok(Tag::GUATIAO_STRING) => text::<Text>(node).is_ok_and(|t| records(t.alloc(), alloc)),
+        Ok(Tag::GUATIAO_NUMBER) => arm::<Number>(node).is_ok_and(|n| records(n.alloc(), alloc)),
+        Ok(Tag::GUATIAO_BYTES) => arm::<Buffer>(node).is_ok_and(|b| records(b.alloc(), alloc)),
+        Ok(Tag::GUATIAO_ABSENT | Tag::GUATIAO_NULL | Tag::GUATIAO_BOOL) => true,
+        Err(_) => false,
+    }
+}
+
+fn drain(mut stack: Vec<&Value>, alloc: *const crate::value::alloc::Allocator) -> bool {
     while let Some(node) = stack.pop() {
-        let homed = match node.tag() {
-            Ok(Tag::GUATIAO_MAP) => match text::<Map>(node) {
-                Ok(map) => {
-                    for entry in map.iter() {
-                        if !is(entry.key.alloc()) {
-                            return false;
-                        }
-                        stack.push(&entry.value);
-                    }
-                    is(map.alloc())
-                }
-                Err(_) => false,
-            },
-            Ok(Tag::GUATIAO_LIST) => match arm::<List>(node) {
-                Ok(list) => {
-                    stack.extend(list.iter());
-                    is(list.alloc())
-                }
-                Err(_) => false,
-            },
-            Ok(Tag::GUATIAO_STRING) => text::<Text>(node).is_ok_and(|t| is(t.alloc())),
-            Ok(Tag::GUATIAO_NUMBER) => arm::<Number>(node).is_ok_and(|n| is(n.alloc())),
-            Ok(Tag::GUATIAO_BYTES) => arm::<Buffer>(node).is_ok_and(|b| is(b.alloc())),
-            Ok(Tag::GUATIAO_ABSENT | Tag::GUATIAO_NULL | Tag::GUATIAO_BOOL) => true,
-            Err(_) => false,
-        };
-        if !homed {
+        if !homed(node, alloc, &mut stack) {
             return false;
         }
     }
     true
 }
-
 // --- equality -----------------------------------------------------------
 
 /// Two things to compare, of whatever kind the walk has reached.

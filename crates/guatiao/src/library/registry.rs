@@ -401,15 +401,13 @@ impl Provider {
 
     /// The same, as an offer carrying what a chooser needs to show.
     pub fn offer<K: ?Sized + Kind>(&self) -> Result<Offer<K>, KindMismatch> {
-        let remote = Remote::from_view(&self.view)?;
-        Ok(Offer::new(
-            remote,
+        Offer::new(
             self.view.clone(),
             Some(self.key().to_string()),
             Some(self.library.clone()),
             self.version.clone(),
             self.priority,
-        ))
+        )
     }
 
     /// The whole descriptor this provider was read from.
@@ -740,12 +738,20 @@ impl Registry {
             if without.is_some_and(|w| Arc::ptr_eq(w, lease)) {
                 continue;
             }
+            // One hold per library, however many providers it offers.
+            let held = match snapshot.leases.iter().position(|l| Arc::ptr_eq(l, lease)) {
+                Some(at) => at,
+                None => {
+                    snapshot.leases.push(Arc::clone(lease));
+                    snapshot.leases.len() - 1
+                }
+            };
             snapshot
                 .by_key
                 .insert(provider.key().to_string(), snapshot.entries.len());
             snapshot.entries.push(SnapshotEntry {
                 kinds: provider.view.kinds.clone(),
-                lease: Arc::clone(lease),
+                lease: held,
                 at: provider.at,
             });
         }
@@ -1234,17 +1240,16 @@ impl Registry {
     }
 
     /// How many holds `loaded`'s lease has besides this registry's own:
-    /// its record, and the views of its providers it keeps. The snapshot's
-    /// are counted too unless they have been unpublished.
-    pub(crate) fn holds_besides_own(&self, loaded: &Loaded, published: bool) -> usize {
+    /// its record, and the views of its providers it keeps. Asked once its
+    /// providers are unpublished, so the snapshot holds it no more.
+    pub(crate) fn holds_besides_own(&self, loaded: &Loaded) -> usize {
         let lease = &loaded.lease;
         let mine = self
             .providers
             .iter()
             .filter(|p| p.view.hold.holds(lease))
             .count();
-        let own = 1 + if published { 2 * mine } else { mine };
-        Arc::strong_count(lease).saturating_sub(own)
+        Arc::strong_count(lease).saturating_sub(1 + mine)
     }
 
     /// The record one library key answers to.
