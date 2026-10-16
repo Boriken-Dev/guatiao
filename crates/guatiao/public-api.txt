@@ -380,6 +380,10 @@ pub fn guatiao::library::kind::LibraryParts::new(&str, &str, alloc::vec::Vec<gua
 pub fn guatiao::library::kind::LibraryParts::unloading(self, core::option::Option<fn() -> guatiao::value::status::Status>) -> guatiao::library::kind::LibraryParts
 impl core::convert::From<&'static guatiao::library::kind::LibraryParts> for guatiao::library::raw::LocalLibrary
 pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::kind::LibraryParts) -> guatiao::library::raw::LocalLibrary
+impl core::convert::From<alloc::boxed::Box<guatiao::library::kind::LibraryParts>> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(alloc::boxed::Box<guatiao::library::kind::LibraryParts>) -> guatiao::library::raw::LocalLibrary
+impl core::convert::From<guatiao::library::kind::LibraryParts> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(guatiao::library::kind::LibraryParts) -> guatiao::library::raw::LocalLibrary
 impl core::fmt::Debug for guatiao::library::kind::LibraryParts
 pub fn guatiao::library::kind::LibraryParts::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Send for guatiao::library::kind::LibraryParts
@@ -533,6 +537,21 @@ pub const guatiao::library::notices::TEXT_KEY: &str
 pub fn guatiao::library::notices::declare_notice(&mut guatiao::value::types::map::Map, guatiao::library::notices::Notice<'_>) -> core::result::Result<(), guatiao::value::error::ValueError>
 pub fn guatiao::library::notices::notices(core::option::Option<&guatiao::value::types::map::Map>) -> alloc::vec::Vec<guatiao::library::notices::Notice<'_>>
 pub mod guatiao::library::raw
+pub enum guatiao::library::raw::LocalLibrary
+pub guatiao::library::raw::LocalLibrary::Owned(alloc::boxed::Box<guatiao::library::kind::LibraryParts>)
+pub guatiao::library::raw::LocalLibrary::Static(&'static guatiao::library::desc::LibraryInfo<'static>)
+impl guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::info(&self) -> &guatiao::library::desc::LibraryInfo<'_>
+impl core::convert::From<&'static guatiao::library::desc::LibraryInfo<'static>> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::desc::LibraryInfo<'static>) -> guatiao::library::raw::LocalLibrary
+impl core::convert::From<&'static guatiao::library::kind::LibraryParts> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::kind::LibraryParts) -> guatiao::library::raw::LocalLibrary
+impl core::convert::From<alloc::boxed::Box<guatiao::library::kind::LibraryParts>> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(alloc::boxed::Box<guatiao::library::kind::LibraryParts>) -> guatiao::library::raw::LocalLibrary
+impl core::convert::From<guatiao::library::kind::LibraryParts> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(guatiao::library::kind::LibraryParts) -> guatiao::library::raw::LocalLibrary
+impl core::fmt::Debug for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::library::raw::Host
 impl guatiao::library::raw::Host
 pub fn guatiao::library::raw::Host::abi_version(&self) -> u32
@@ -566,18 +585,6 @@ impl core::clone::Clone for guatiao::library::raw::LibraryView
 pub fn guatiao::library::raw::LibraryView::clone(&self) -> Self
 impl core::fmt::Debug for guatiao::library::raw::LibraryView
 pub fn guatiao::library::raw::LibraryView::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct guatiao::library::raw::LocalLibrary(_)
-impl guatiao::library::raw::LocalLibrary
-pub const fn guatiao::library::raw::LocalLibrary::info(&self) -> &'static guatiao::library::desc::LibraryInfo<'static>
-impl core::clone::Clone for guatiao::library::raw::LocalLibrary
-pub fn guatiao::library::raw::LocalLibrary::clone(&self) -> Self
-impl core::convert::From<&'static guatiao::library::desc::LibraryInfo<'static>> for guatiao::library::raw::LocalLibrary
-pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::desc::LibraryInfo<'static>) -> guatiao::library::raw::LocalLibrary
-impl core::convert::From<&'static guatiao::library::kind::LibraryParts> for guatiao::library::raw::LocalLibrary
-pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::kind::LibraryParts) -> guatiao::library::raw::LocalLibrary
-impl core::fmt::Debug for guatiao::library::raw::LocalLibrary
-pub fn guatiao::library::raw::LocalLibrary::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl core::marker::Copy for guatiao::library::raw::LocalLibrary
 pub struct guatiao::library::raw::ProviderView
 impl guatiao::library::raw::ProviderView
 pub fn guatiao::library::raw::ProviderView::available(&self) -> core::result::Result<(), &'static str>
@@ -963,6 +970,21 @@ pub fn guatiao::library::registry::Loading<'a>::loaded(self) -> core::option::Op
 pub fn guatiao::library::registry::Loading<'a>::skipped(&self) -> core::option::Option<&guatiao::library::registry::Skipped>
 impl<'a> core::fmt::Debug for guatiao::library::registry::Loading<'a>
 pub fn guatiao::library::registry::Loading<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum guatiao::library::LocalLibrary
+pub guatiao::library::LocalLibrary::Owned(alloc::boxed::Box<guatiao::library::kind::LibraryParts>)
+pub guatiao::library::LocalLibrary::Static(&'static guatiao::library::desc::LibraryInfo<'static>)
+impl guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::info(&self) -> &guatiao::library::desc::LibraryInfo<'_>
+impl core::convert::From<&'static guatiao::library::desc::LibraryInfo<'static>> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::desc::LibraryInfo<'static>) -> guatiao::library::raw::LocalLibrary
+impl core::convert::From<&'static guatiao::library::kind::LibraryParts> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::kind::LibraryParts) -> guatiao::library::raw::LocalLibrary
+impl core::convert::From<alloc::boxed::Box<guatiao::library::kind::LibraryParts>> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(alloc::boxed::Box<guatiao::library::kind::LibraryParts>) -> guatiao::library::raw::LocalLibrary
+impl core::convert::From<guatiao::library::kind::LibraryParts> for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::from(guatiao::library::kind::LibraryParts) -> guatiao::library::raw::LocalLibrary
+impl core::fmt::Debug for guatiao::library::raw::LocalLibrary
+pub fn guatiao::library::raw::LocalLibrary::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum guatiao::library::Order
 pub guatiao::library::Order::Ascending
 pub guatiao::library::Order::Descending
@@ -1284,18 +1306,6 @@ pub guatiao::library::Loaded::skipped: alloc::vec::Vec<guatiao::library::registr
 pub guatiao::library::Loaded::version: alloc::string::String
 impl core::fmt::Debug for guatiao::library::registry::Loaded
 pub fn guatiao::library::registry::Loaded::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct guatiao::library::LocalLibrary(_)
-impl guatiao::library::raw::LocalLibrary
-pub const fn guatiao::library::raw::LocalLibrary::info(&self) -> &'static guatiao::library::desc::LibraryInfo<'static>
-impl core::clone::Clone for guatiao::library::raw::LocalLibrary
-pub fn guatiao::library::raw::LocalLibrary::clone(&self) -> Self
-impl core::convert::From<&'static guatiao::library::desc::LibraryInfo<'static>> for guatiao::library::raw::LocalLibrary
-pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::desc::LibraryInfo<'static>) -> guatiao::library::raw::LocalLibrary
-impl core::convert::From<&'static guatiao::library::kind::LibraryParts> for guatiao::library::raw::LocalLibrary
-pub fn guatiao::library::raw::LocalLibrary::from(&'static guatiao::library::kind::LibraryParts) -> guatiao::library::raw::LocalLibrary
-impl core::fmt::Debug for guatiao::library::raw::LocalLibrary
-pub fn guatiao::library::raw::LocalLibrary::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl core::marker::Copy for guatiao::library::raw::LocalLibrary
 pub struct guatiao::library::Notice<'a>
 pub guatiao::library::Notice::component: &'a str
 pub guatiao::library::Notice::format: &'a str

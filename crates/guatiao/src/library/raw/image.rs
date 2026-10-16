@@ -743,7 +743,9 @@ unsafe fn check_table(table: *const c_void, size: usize, bounds: Bounds) -> Resu
 /// holds the handle to, or the host's own binary.
 ///
 /// The handle is what `Registry::unload` closes; `Linked` is what it
-/// refuses, because there is nothing to unmap.
+/// refuses, because there is nothing to unmap. A linked library built as
+/// owned parts keeps them here, so they are freed with the record: when
+/// the library is retired, or the registry dropped.
 ///
 /// **Dropping one never unmaps.** The handle is held in `ManuallyDrop`, so
 /// a registry going out of scope, or a file skipped after its entry point
@@ -760,8 +762,9 @@ pub(crate) enum Origin {
         library: core::mem::ManuallyDrop<libloading::Library>,
         image: usize,
     },
-    /// Code in the host's own binary: `register_local`, `register_entry`.
-    Linked,
+    /// Code in the host's own binary: `register_local`, `register_entry`,
+    /// and the descriptor's parts when the registry owns them.
+    Linked(#[allow(dead_code)] Option<Box<crate::library::kind::LibraryParts>>),
 }
 
 #[cfg(feature = "load")]
@@ -791,8 +794,9 @@ impl Origin {
     }
 
     /// Gives up the handle and leaves the mapping in place, so every
-    /// image address the library already handed out stays valid. What
-    /// dropping it does too; spelled out where that is the point.
+    /// image address the library already handed out stays valid; frees a
+    /// linked library's owned parts. What dropping it does too; spelled
+    /// out where that is the point.
     pub(crate) fn keep(self) {}
 
     /// Closes the mapping. A close error leaves the handle given up, as
@@ -800,7 +804,7 @@ impl Origin {
     pub(crate) fn close(self) -> Result<(), libloading::Error> {
         match self {
             Origin::Mapped { library, .. } => core::mem::ManuallyDrop::into_inner(library).close(),
-            Origin::Linked => Ok(()),
+            Origin::Linked(_) => Ok(()),
         }
     }
 }
@@ -894,14 +898,23 @@ pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, 
 /// read the way a loaded library's entry answer is read.
 #[cfg(feature = "load")]
 pub(crate) fn open_local(described: Option<LocalLibrary>) -> Opened {
-    let Some(info) = described else {
+    let Some(described) = described else {
         return Opened::Declined;
     };
     // SAFETY: registering a descriptor is the host's trust in its
     // producer, as naming a file is; its memory shape is that producer's
-    // contract, and `read_library` checks what can be checked.
-    match unsafe { read_library(info.info(), Bounds::ANY) } {
-        Ok(view) => Opened::Loaded(view, Origin::Linked),
+    // contract, and `read_library` checks what can be checked. Owned parts
+    // are read before they move: the views copy what they name, and the
+    // descriptor pointers they keep address the parts' heap storage,
+    // which the move does not touch.
+    let raw: *const LibraryInfo<'static> = (described.info() as *const LibraryInfo<'_>).cast();
+    let read = unsafe { read_library(raw, Bounds::ANY) };
+    let parts = match described {
+        LocalLibrary::Owned(parts) => Some(parts),
+        LocalLibrary::Static(_) => None,
+    };
+    match read {
+        Ok(view) => Opened::Loaded(view, Origin::Linked(parts)),
         Err(why) => Opened::Rejected(why),
     }
 }
@@ -919,7 +932,7 @@ pub(crate) fn open_entry(entry: EntryFn, host: Host) -> Opened {
     }
     // SAFETY: non-null, from an entry point that keeps it for the process.
     match unsafe { read_library(desc, Bounds::ANY) } {
-        Ok(view) => Opened::Loaded(view, Origin::Linked),
+        Ok(view) => Opened::Loaded(view, Origin::Linked(None)),
         Err(why) => Opened::Rejected(why),
     }
 }

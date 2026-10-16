@@ -450,7 +450,7 @@ fn a_registry_offers_every_valid_provider_and_reports_the_rest() {
                         provider("kinds_ok", size_of::<GreeterVtable>(), None),
                     ],
                 },
-                super::super::raw::Origin::Linked,
+                super::super::raw::Origin::Linked(None),
             ),
         )
         .unwrap();
