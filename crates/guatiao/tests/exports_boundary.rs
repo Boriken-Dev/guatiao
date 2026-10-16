@@ -943,6 +943,12 @@ fn registry_cases() -> Vec<(&'static str, fn())> {
                 guatiao_registry_best(reg(), Str::new(""), a(), out)
             });
         }),
+        ("guatiao_registry_collect", || {
+            // SAFETY: as above.
+            leaves_absent("collect", NULL, |out| unsafe {
+                guatiao_registry_collect(reg(), a(), out)
+            });
+        }),
     ]
 }
 
