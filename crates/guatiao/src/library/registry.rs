@@ -890,8 +890,11 @@ impl Registry {
     /// `describe` is what `guatiao::local_providers!` writes as
     /// `library`, or a hand-written library's own `describe`; it sees
     /// this registry's [`Host`] exactly as a loaded library's entry would,
-    /// and answers anything that converts to a [`LocalLibrary`]. A `None`
-    /// is the library declining this host.
+    /// and answers anything that converts to a [`LocalLibrary`]: owned
+    /// [`LibraryParts`](super::kind::LibraryParts), which this registry
+    /// keeps while the library is registered and frees when it is
+    /// retired, or a `'static` descriptor. A `None` is the library
+    /// declining this host.
     ///
     /// **Registering a descriptor is trusting its producer**, as loading
     /// a file is: it is read under the same checks, and what they cannot
@@ -1087,10 +1090,17 @@ impl Registry {
     /// pointer, a descriptor another library fetched through this host's
     /// services — keeps working, because the mapping stays.
     ///
-    /// Safe for that reason: retiring dangles nothing.
+    /// Safe for that reason: retiring dangles nothing a handle reaches.
     /// [`unload`](Registry::unload) is the one that unmaps, and it is
     /// `unsafe`; it is written in `raw/image.rs`, where `unsafe` is
     /// allowed.
+    ///
+    /// A library registered from owned
+    /// [`LibraryParts`](super::kind::LibraryParts) has them freed here,
+    /// after the host's services stop answering for it. Its descriptor
+    /// addresses ([`ProviderView::raw`]) go with them; a [`Remote`], an
+    /// [`Offer`] or an instance does not, since what its tables, `ctx` and
+    /// slots address is the builder's to keep for the process.
     pub fn retire(&mut self, key: &str) -> Result<Retired, UnloadError> {
         let (retired, origin) = self.take_library(key)?;
         origin.keep();
@@ -1303,7 +1313,7 @@ mod tests {
                 unload: None,
                 providers,
             },
-            Origin::Linked,
+            Origin::Linked(None),
         )
     }
 

@@ -267,8 +267,9 @@ fn main() -> ExitCode {
 }
 
 /// A greeter this program carries itself. `local_providers!` writes the
-/// `library` function `register_local` takes and nothing else: no entry
-/// symbol, no declaration, so this executable never looks like a plugin.
+/// `library` function `register_local` takes, which hands the registry
+/// parts it owns, and nothing else: no entry symbol, no declaration, so
+/// this executable never looks like a plugin.
 #[derive(Default, Provider)]
 #[provider(Greeter, id = "builtin", name = "Built-in greeter")]
 struct Builtin;

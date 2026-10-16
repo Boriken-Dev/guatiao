@@ -111,25 +111,54 @@ pub type EntryFn = unsafe extern "C" fn(*const HostInfo<'static>) -> *const Libr
 /// Registering it is the host's trust in it, as loading a file is: the
 /// registry reads it under the checks every descriptor gets, and its
 /// fields are its producer's contract (see [`LibraryInfo`]).
-#[derive(Debug, Clone, Copy)]
-pub struct LocalLibrary(&'static LibraryInfo<'static>);
+///
+/// **A host's own library can be owned by the registry.** A loaded
+/// library's descriptor must outlive its mapping, so it is `'static`; one
+/// the host builds as [`LibraryParts`](crate::library::kind::LibraryParts)
+/// is handed over instead, kept while the library is registered, and
+/// freed when it is retired or the registry is dropped. What its
+/// providers' tables, `ctx` and slots address is still the builder's to
+/// keep for the process, because a `Remote`, `Offer` or `Instance` taken
+/// from it is `'static` and outlives the retire.
+#[derive(Debug)]
+pub enum LocalLibrary {
+    /// Parts the registry owns from here on.
+    Owned(Box<crate::library::kind::LibraryParts>),
+    /// A descriptor that lives for the process.
+    Static(&'static LibraryInfo<'static>),
+}
 
 impl LocalLibrary {
     /// The descriptor.
-    pub const fn info(&self) -> &'static LibraryInfo<'static> {
-        self.0
+    pub fn info(&self) -> &LibraryInfo<'_> {
+        match self {
+            LocalLibrary::Owned(parts) => parts.info(),
+            LocalLibrary::Static(info) => info,
+        }
+    }
+}
+
+impl From<crate::library::kind::LibraryParts> for LocalLibrary {
+    fn from(parts: crate::library::kind::LibraryParts) -> LocalLibrary {
+        LocalLibrary::Owned(Box::new(parts))
+    }
+}
+
+impl From<Box<crate::library::kind::LibraryParts>> for LocalLibrary {
+    fn from(parts: Box<crate::library::kind::LibraryParts>) -> LocalLibrary {
+        LocalLibrary::Owned(parts)
     }
 }
 
 impl From<&'static LibraryInfo<'static>> for LocalLibrary {
     fn from(info: &'static LibraryInfo<'static>) -> LocalLibrary {
-        LocalLibrary(info)
+        LocalLibrary::Static(info)
     }
 }
 
 impl From<&'static crate::library::kind::LibraryParts> for LocalLibrary {
     fn from(parts: &'static crate::library::kind::LibraryParts) -> LocalLibrary {
-        LocalLibrary(parts.info())
+        LocalLibrary::Static(parts.info())
     }
 }
 
@@ -406,8 +435,11 @@ macro_rules! __guatiao_unload {
 /// registry.register_local("engine", crate::library)?;      // beside what it loads
 /// ```
 ///
-/// The providers are built once, on the first call, and kept for the
-/// process, as a loaded library's are.
+/// `library` builds the descriptor on each call and hands it over as
+/// [`LibraryParts`](crate::library::kind::LibraryParts), which the
+/// registry owns and frees when the library is retired: nothing is kept
+/// for the process but each provider's default instance and tables,
+/// which are the derive's and live in `static`s of their own.
 #[macro_export]
 macro_rules! local_providers {
     ($($provider:ty),+ $(,)?) => {
@@ -422,19 +454,29 @@ macro_rules! local_providers {
         version = $version:expr,
         providers = [$($provider:ty),+ $(,)?] $(,)?
     ) => {
-        $crate::__guatiao_describe!(
-            /// What this crate offers as a library the host links: hand
-            /// it to `Registry::register_local`.
-            pub fn library -> $crate::library::LocalLibrary = $crate::library::LocalLibrary::from;
-            id = $id, version = $version, providers = [$($provider),+],
-            unload = ::core::option::Option::None
-        );
+        /// What this crate offers as a library the host links: hand it to
+        /// `Registry::register_local`, which owns what it builds.
+        pub fn library(
+            host: $crate::library::Host,
+        ) -> ::core::option::Option<$crate::library::kind::LibraryParts> {
+            // The host's arena when it offers one, as a loaded library's.
+            let alloc = host.alloc().unwrap_or_else($crate::Alloc::rust);
+            let mut providers = $crate::__private::alloc::vec::Vec::new();
+            $(
+                providers.push(
+                    <$provider as $crate::library::kind::ProviderDecl>::provider(host, alloc).ok()?,
+                );
+            )+
+            ::core::option::Option::Some(
+                $crate::library::kind::LibraryParts::new($id, $version, providers),
+            )
+        }
     };
 }
 
-/// The describe function behind [`providers!`](crate::providers) and
-/// [`local_providers!`](crate::local_providers): builds the descriptor
-/// once and answers it through `$answer`.
+/// The describe function behind [`providers!`](crate::providers): builds
+/// the descriptor once, for as long as the library is mapped, and answers
+/// it through `$answer`.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __guatiao_describe {

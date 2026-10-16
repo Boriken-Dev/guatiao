@@ -892,7 +892,8 @@ let provider = ProviderParts::builder("acme_hello")   // id; then any of:
 let library = LibraryParts::new("acme", "1.0.0", vec![provider]);   // .unloading(slot)
 // keep it for the process (a OnceLock of the library's own), then:
 //   loaded: guatiao_library!(describe), describe answering Some(library.info())
-//   linked: register_local(name, describe), describe answering Some(&library) or Some(library.info())
+//   linked: register_local(name, describe), describe answering Some(library) -- the registry
+//           owns it and frees it at retire -- or a &'static (Some(&LIBRARY), Some(LIBRARY.info()))
 ```
 
 `meta` is a `MaybeNull<Map>` on all three — an open-ended map for
@@ -919,7 +920,8 @@ reg.load_file(&path)?;                     // Result<Loading, LoadError>
 reg.register_local("engine", crate::library)?;   // a library the host LINKS: the same absorb, keys,
                                                  // dedup and `Loaded` record, from `<engine>` instead
                                                  // of a file; `library` is what `local_providers!`
-                                                 // writes; any FnOnce(Host) -> Option<L>, L: Into<LocalLibrary>
+                                                 // writes, answering owned LibraryParts; any
+                                                 // FnOnce(Host) -> Option<L>, L: Into<LocalLibrary>
 reg.register_entry("engine", entry)?;            // the same from a C entry point (`EntryFn`);
                                                  // C hosts: guatiao_registry_register_entry
 reg.providers("greeter")                   // by kind, BEST FIRST
@@ -1019,9 +1021,25 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   is not `AlreadyLoaded` and may be loaded again. **The mapping stays**,
   so every vtable pointer, `ctx` and descriptor already handed out keeps
   working; the registry's own copies (`config_schema`, `meta`) go with
-  it. Safe, because it dangles nothing. `Retired { key, id, version,
+  it. Safe, because it dangles nothing a handle reaches. A linked library
+  registered from owned `LibraryParts` has them freed here, after the
+  host's services stop answering for it: its descriptor addresses
+  (`ProviderView::raw`) go with them, its tables, `ctx` and slots (the
+  builder's, for the process) do not. `Retired { key, id, version,
   providers }` says what left; `UnloadError::NotFound { key }` is the
   only refusal.
+- **`LocalLibrary`** is `Owned(Box<LibraryParts>)` or
+  `Static(&'static LibraryInfo<'static>)`, from `LibraryParts`,
+  `Box<LibraryParts>`, `&'static LibraryInfo` or `&'static LibraryParts`;
+  `info()`. **Why a loaded library's descriptor is `'static`**: the
+  registry keeps its code pointers, `ctx` and tables for as long as the
+  library is registered and they address its mapping, which only `unsafe
+  unload` closes. A host's own library is the one place the registry can
+  own the descriptor instead, so `local_providers!` writes `pub fn
+  library(Host) -> Option<LibraryParts>`, built on each call with nothing
+  kept but each provider's default instance and tables. The handles'
+  `'static` (`Remote`, `Offer`, `Object`, `Instance`) is unchanged: they
+  are `Copy`/`Send` so a host stores them and holds them across `.await`.
 - **Dropping a registry leaves every library mapped**, as retiring does:
   a `Remote`, `Offer`, boxed trait or `Instance` taken from it is
   `'static` and keeps working (`guatiao_registry_free` the same). A file
@@ -1153,7 +1171,8 @@ pub trait Greeter: Send + Sync {
 struct Hello;
 impl Greeter for Hello { .. }
 guatiao::providers!(Hello);              // id and version from Cargo; the whole library
-guatiao::local_providers!(Hello);        // the same, for a library the HOST LINKS: writes `library`,
+guatiao::local_providers!(Hello);        // the same, for a library the HOST LINKS: writes `library`
+                                         // (Host -> Option<LibraryParts>, owned by the registry),
                                          // no entry symbol, no declaration -- see register_local
 
 // Consuming, from a host or from a library through its Host:
