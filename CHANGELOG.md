@@ -11,6 +11,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking: every handle holds a lease on its library, and `Remote` is
+  `Clone`, not `Copy`.** A registered library has a lease, an `Arc`
+  holding the registry's own copies of its tables (each per-kind table
+  and the shared `vtable`, copied under the size its descriptor declares)
+  and, for a library the host built, its `LibraryParts`. `Remote`,
+  `Offer`, `Instance`, `Object` and `ProviderView` hold a share, and
+  their table pointers address the copies; the code those tables name
+  and `ctx` are kept mapped by the lease. `Remote` stays `Send + Sync +
+  'static`; an `Object` a method returns holds the lease of the `Remote`
+  it came through, and `into_raw` lets it go. `Instance::remote()`
+  answers `&Remote<K>`, borrowed from the instance it calls. *Migration:*
+  a `Remote` used after a move is `.clone()`d; `let r = instance.remote()`
+  that needs an owned proxy is `instance.remote().clone()`, valid while
+  the instance lives.
+- **Breaking: `Registry::unload` is safe, and refuses while a handle
+  holds the library.** It answers the new `UnloadError::Busy { key,
+  leases }` while any `Remote`, `Offer`, `Instance`, `Object` or
+  `ProviderView` taken from the library, or an answer another library
+  pinned through the host's services, is alive; then the library's own
+  `unload` slot is asked (`Refused`, `NotSupported`), then the mapping is
+  closed, and every refusal leaves the library registered. The unsafe
+  `unload_unchecked` skips the lease count and a missing slot; a slot's
+  refusal still stands. `guatiao_registry_unload` answers
+  `GUATIAO_ERR_BUSY` for a held lease too, and Python and Dart raise
+  `Busy`. What stays the caller's word is a raw pointer taken on purpose
+  (`vtable()`, `table()`, `ctx()`) and kept past the handle it came
+  from. *Migration:* drop the `unsafe { }` around
+  `unload`; a match on `UnloadError` gains `Busy`; drop what you took
+  from a library, or retire it and `collect`, before unloading.
+- **A retired library is closed once nothing uses it.** The new
+  `Registry::collect() -> Vec<String>` closes every retired library whose
+  lease no handle holds and whose `unload` slot agrees, and answers their
+  keys; the registry's next `load_file`, `register_local`,
+  `register_entry`, `retire` or `unload` collects as well. One that
+  refuses stays retired and mapped and is asked again; one with no slot
+  stays mapped. Dropping a handle never closes anything, and dropping the
+  registry never unmaps. C: `guatiao_registry_collect(reg, alloc, out)`
+  writes the keys as a list; Python and Dart `Registry.collect()` return
+  them. *Migration:* a raw table or `ctx` taken from a library is valid
+  until it is closed, which after a retire may be the registry's next
+  call: let it go first.
+- **What a call through a kind returns lives in the host's allocator.**
+  The generated proxy moves a returned `Value`, `Map` or `List`, and a
+  `ProviderError`'s message, whose containers record any allocator but
+  this side's `Alloc::rust()` into it, freeing the original through the
+  allocator that made it while the call holds the library's lease; a tree
+  already wholly in it is handed over as it is. So nothing a host keeps
+  from a call needs the library's allocator once the library is gone.
+- **Breaking: a host's services answer descriptors the registry built,
+  and can pin them.** `get` and `list` answer a descriptor per provider
+  that the library's lease built over the registry's copies (its own
+  text, values and tables, the library's code and `ctx`), valid until the
+  library is retired, rather than the library's own. `HostServices` gains
+  four appended slots: `get_pinned` and `list_pinned` answer the same with
+  a hold on the library taken for the caller, `pin` takes another and
+  `unpin` gives one back. `Host::get` and `Host::list` use them, so a view
+  a library reads, and every `Offer` and `Remote` taken from it, keeps the
+  provider's library loaded while it lives; from a host without them a
+  view copies the tables. This also ends a library inside `get` or `list`
+  reading a descriptor another thread had just retired and freed.
+  `ProviderView::raw` is gone. *Migration:* a library that kept a
+  descriptor pointer from a C `get`/`list` past a call, or that may race
+  a retire, uses `get_pinned`/`list_pinned` and `unpin`.
+- **Breaking: the descriptor doors take ordinary borrows.**
+  `ProviderInfo::{view, as_kind, offer, instantiate}` take `&self` on any
+  `ProviderInfo<'_>`, since nothing is kept of the descriptor but code,
+  `ctx` and copied tables. `available()` on `ProviderView`, `Provider`
+  and `Offer` answers `Result<(), &str>`, the reason borrowed while the
+  handle holds its library. *Migration:* a caller that stored the reason
+  as `&'static str` stores `reason.to_string()`.
 - **Breaking: `Status` is a `u32`, not an enum.** A library or host may
   return a code of its own, as `guatiao.h` allows, and reading one into a
   `repr(u32)` enum was undefined behaviour in the host. `Status` is now
@@ -81,20 +151,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   descriptor). *Migration:* a `LoadError::Malformed { path }` pattern adds
   `..`; a library a check now refuses fixes what `reason` names.
 - **Breaking: `Registry::register_local` takes any `FnOnce(Host) ->
-  Option<L>` with `L: Into<LocalLibrary>`, and the registry owns a host's
-  own library.** `LocalLibrary` is `Owned(Box<LibraryParts>)` or
-  `Static(&'static LibraryInfo<'static>)`, from `LibraryParts`,
-  `Box<LibraryParts>`, `&'static LibraryInfo` or `&'static LibraryParts`.
-  Owned parts are kept with the library's record and freed when it is
-  retired or the registry is dropped; what their tables, `ctx` and slots
-  address stays the builder's for the process, so a `Remote`, `Offer` or
-  `Instance` taken from them outlives the retire. `local_providers!`
-  writes `library(Host) -> Option<LibraryParts>`, built on each call and
-  kept nowhere. *Migration:* a describe answering `Option<&'static
+  Option<L>` with `L: Into<LocalLibrary<'a>>`, borrows a descriptor for
+  the registration only, and owns a host's own library.** `LocalLibrary<'a>`
+  is `Owned(Box<LibraryParts>)` or `Borrowed(&'a LibraryInfo<'a>)`, from
+  `LibraryParts`, `Box<LibraryParts>`, `&'a LibraryInfo` or
+  `&'a LibraryParts`. The registry copies what a descriptor says (text,
+  values, tables) at the registration and keeps only its providers' code
+  and `ctx`; owned parts belong to the library's lease and are freed once
+  it is retired and its last handle dropped. `local_providers!` writes
+  `library(Host) -> Option<LibraryParts>`, built on each call and kept
+  nowhere. *Migration:* a describe answering `Option<&'static
   LibraryInfo<'static>>`, and `register_local(name, library)`, compile
   unchanged; a describe that leaked its parts into a `OnceLock` can return
-  them by value; a caller of `library(host)` itself gets `LibraryParts`
-  (`.info()` for the descriptor).
+  them by value or by a borrow; a caller of `library(host)` itself gets
+  `LibraryParts` (`.info()` for the descriptor).
 - **Breaking: `Object::from_cell` takes a cell whose table is paired with
   its value by type.** It is `from_cell(Box<ObjectCell<K::Vtable, T>>)`
   where `K::Vtable: TableFor<T, Kind = K>`; `ObjectCell`'s fields are
@@ -106,15 +176,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   come from reading a descriptor and its safe `available()` cannot be
   pointed at another `ctx`. Migration: `view.id` is `view.id()`, and so
   on for `kinds`, `display_name`, `config`, `meta`, `version`, `vtable`,
-  `vtable_size`, `ctx`, `tables`, `raw`, `create` and `destroy`
+  `vtable_size`, `ctx`, `tables`, `create` and `destroy`
   (`version()` is `Option<&str>`, `config()`/`meta()` are
   `Option<&_>`).
 - **Breaking: `Host::get` and `Host::list` answer `ProviderView`s**, read
   under the size each descriptor declares, rather than `&'static
   ProviderInfo`: a reference to an older library's shorter descriptor
   claimed bytes it never wrote. `Host::mismatches` pairs a view with its
-  mismatch. Migration: drop the `.view()` call; `view.raw()` is the
-  descriptor's address.
+  mismatch. Migration: drop the `.view()` call.
 - **Breaking: an `Offer` no longer derefs to its kind.** A provider built
   only from a configuration has no default instance, so calling it
   through its offer could only fail, and an infallible method panicked
@@ -528,7 +597,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   every library it had loaded, while a `Remote`, an `Offer`, a boxed
   trait or an `Instance` taken from it is `'static` and could still be
   called, which jumped into unmapped memory from safe code. A library is
-  unmapped only by `unload`, as the documentation already said;
+  unmapped only by `unload` or `collect`;
   `guatiao_registry_free` and a Python `Registry.close()` go through the
   same drop. A file passed over by its library key, or refused as a
   duplicate, after its entry point ran keeps its mapping too.
