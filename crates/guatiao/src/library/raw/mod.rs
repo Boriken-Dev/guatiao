@@ -9,7 +9,8 @@
 //! point, in one place — so the module around it stays provably safe and
 //! an auditor's scope is this directory: `entry.rs` is what a library
 //! writes, `host.rs` the block a host hands over, `image.rs` reading what a
-//! library's descriptors say, `lease.rs` the copies every handle holds.
+//! library's descriptors say, `mapped.rs` where the platform's loader put
+//! a library's image, `lease.rs` the copies every handle holds.
 //!
 //! # The mapping is the registry's, and stays until the host says
 //!
@@ -48,6 +49,8 @@ mod entry;
 mod host;
 mod image;
 mod lease;
+#[cfg(feature = "load")]
+mod mapped;
 
 pub use self::entry::*;
 pub use self::host::*;
@@ -86,6 +89,27 @@ mod test_support {
         }
         let ptr = buf.as_ptr().cast::<T>();
         (buf, ptr)
+    }
+
+    /// Where the test binary finds `hello_library`'s artifact: beside it in
+    /// `deps/`, where a dev-dependency's cdylib lands.
+    #[cfg(feature = "load")]
+    pub(super) fn hello_library() -> std::path::PathBuf {
+        let exe = std::env::current_exe().expect("a test binary knows its path");
+        let deps = exe.parent().expect("it is in a directory");
+        let name = format!(
+            "{}hello_library{}",
+            std::env::consts::DLL_PREFIX,
+            std::env::consts::DLL_SUFFIX
+        );
+        [
+            deps.to_path_buf(),
+            deps.parent().map(Into::into).unwrap_or_default(),
+        ]
+        .into_iter()
+        .map(|d| d.join(&name))
+        .find(|p| p.exists())
+        .expect("hello_library is built as a dev-dependency")
     }
 
     pub(super) fn a_host(size: usize) -> HostInfo<'static> {

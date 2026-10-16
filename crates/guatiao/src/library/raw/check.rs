@@ -127,6 +127,24 @@ impl Image {
                 .all(|r| r.start >= image.span.start && r.end <= image.span.end);
         inside.then_some(image)
     }
+
+    /// Whether `addr` lies in one of the executable ranges.
+    #[cfg(test)]
+    pub(crate) fn contains_code(&self, addr: usize) -> bool {
+        self.code.iter().any(|r| r.contains(&addr))
+    }
+
+    /// The executable ranges.
+    #[cfg(test)]
+    pub(crate) fn code_ranges(&self) -> &[Range<usize>] {
+        &self.code
+    }
+
+    /// The whole span.
+    #[cfg(test)]
+    pub(crate) fn span_range(&self) -> Range<usize> {
+        self.span.clone()
+    }
 }
 
 /// Where a descriptor's pointers may point. Every descriptor gets the

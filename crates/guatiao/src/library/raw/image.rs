@@ -879,12 +879,12 @@ pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, 
         core::mem::forget(library);
         return Ok(Opened::NoEntrySymbol);
     };
-    // Where the image's code and data lie in this process, measured from
-    // where its entry symbol landed. A file that cannot be described is
-    // read under the checks that need no image.
+    // Where the image's code and data lie in this process: the platform
+    // loader's record of the mapping, or the file's parse where there is
+    // none. An image neither places is read under the checks that need
+    // no image.
     let entry_at = *entry as usize;
-    let image = crate::library::scan::layout(path)
-        .and_then(|l| super::check::Image::place(l.entry, l.span, &l.code, entry_at));
+    let image = super::mapped::place(path, entry_at, crate::library::scan::layout);
 
     // SAFETY: the library's side of the contract is that its entry point
     // reads a host descriptor and returns a descriptor or null. The
@@ -1647,27 +1647,6 @@ mod tests {
                 .expect_err("a wild pointer is refused");
             assert_eq!(why.what, "a provider's configuration schema", "{addr:#x}");
         }
-    }
-
-    /// Where the test binary finds `hello_library`'s artifact: beside it in
-    /// `deps/`, where a dev-dependency's cdylib lands.
-    #[cfg(feature = "load")]
-    fn hello_library() -> std::path::PathBuf {
-        let exe = std::env::current_exe().expect("a test binary knows its path");
-        let deps = exe.parent().expect("it is in a directory");
-        let name = format!(
-            "{}hello_library{}",
-            std::env::consts::DLL_PREFIX,
-            std::env::consts::DLL_SUFFIX
-        );
-        [
-            deps.to_path_buf(),
-            deps.parent().map(Into::into).unwrap_or_default(),
-        ]
-        .into_iter()
-        .map(|d| d.join(&name))
-        .find(|p| p.exists())
-        .expect("hello_library is built as a dev-dependency")
     }
 
     /// A real mapped image: its own layout places it, a code pointer into

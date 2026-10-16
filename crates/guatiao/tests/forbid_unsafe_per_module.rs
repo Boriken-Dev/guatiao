@@ -68,7 +68,9 @@ const UNSAFE_PATHS: &[&str] = &[
     "value/raw.rs",
     "value/types",
     "value/value.rs",
-    // The loader, which maps a library and calls a symbol out of it.
+    // The loader, which maps a library and calls a symbol out of it, and
+    // `library/raw/mapped.rs`, which reads where the platform's loader put
+    // its image: the directory, every file of which is boundary code.
     "library/raw",
     // The kind runtime: every `unsafe` a generated shim or proxy needs,
     // written once. File by file: `kind/mod.rs` holds the trait and the
