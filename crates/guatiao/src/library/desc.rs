@@ -31,6 +31,34 @@
 //! memory corruption in every already-compiled consumer. Adding a second
 //! slot beside the first, with null meaning "use the old one", is the
 //! only change that is safe.
+//!
+//! # A descriptor's fields are its producer's contract
+//!
+//! Loading a library, or registering one a host links, is the decision to
+//! trust what it wrote. A reader then checks what can be checked where
+//! the descriptor enters, and refuses it with a sentence
+//! (`LoadError::Malformed`, `KindMismatch`) rather than reading through a
+//! fault:
+//!
+//! - `struct_size` against each floor, `abi_version`, each element's size
+//!   against its array's stride;
+//! - every non-null pointer aligned for what it points at, outside the
+//!   low 64 KiB, and canonical for the architecture;
+//! - every length × stride addressable, and capped: 4096 providers, 256
+//!   kind names and 256 per-kind tables per provider, strides of at most
+//!   4096 bytes, text of at most 64 KiB, tables of at most 64 KiB;
+//! - text is UTF-8; a per-kind table's slots after its header are each
+//!   null or a plausible function pointer, and its size, hash and
+//!   required slots are checked when a kind asks for it;
+//! - for a library mapped from a file, a data pointer starting inside its
+//!   image ends inside it (one outside it, on the library's heap, is
+//!   accepted), and every function pointer — `available`, `create`,
+//!   `destroy`, `unload`, each per-kind table's slots — lies inside the
+//!   image's executable sections.
+//!
+//! These catch a wild or stale pointer and a corrupt length. They do not
+//! prove that a table is one for the kind it names or that a slot
+//! expects its `ctx`; that is the producer's contract.
 
 #![forbid(unsafe_code)]
 #![allow(non_camel_case_types)]
@@ -287,6 +315,10 @@ impl<'a> Providers<'a> {
 }
 
 /// What a library says about itself, on the way out.
+///
+/// Its fields, and those of every provider it lists, are its producer's
+/// contract: a host checks their sizes, pointers and lengths where the
+/// descriptor enters, and refuses one that fails.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct LibraryInfo<'a> {
@@ -375,6 +407,10 @@ impl LibraryInfo<'_> {
 /// the kind can check the size the same way it checks an allocator's, and
 /// a host that does not know the kind can list the provider without ever
 /// looking at the pointer.
+///
+/// Its fields are its producer's contract: a host checks their sizes,
+/// pointers and lengths where the descriptor enters, and refuses one that
+/// fails.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ProviderInfo<'a> {
@@ -536,6 +572,9 @@ pub struct ProviderInfo<'a> {
 
 /// One kind's function table, on a provider that serves several kinds
 /// with a table each.
+///
+/// The table `vtable` points at is a kind's header followed by function
+/// pointers, each null or one a reader accepts as code.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct KindTable<'a> {

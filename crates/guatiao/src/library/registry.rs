@@ -54,11 +54,14 @@ pub enum LoadError {
         reason: String,
     },
     /// It mapped and exported the entry symbol, but what came back was
-    /// not a descriptor this build can read: too small, or holding text
-    /// that is not UTF-8.
+    /// refused by a check where it entered: too small, text that is not
+    /// UTF-8, a pointer that is misaligned or no address at all, an array
+    /// past its cap, a code pointer outside the library's code.
     Malformed {
         /// The file.
         path: PathBuf,
+        /// Which part of the descriptor, and what was wrong with it.
+        reason: String,
     },
     /// Two **different** providers land on one key. Names both paths,
     /// because "duplicate provider" without the second one is a message
@@ -85,9 +88,9 @@ impl core::fmt::Display for LoadError {
             LoadError::Open { path, reason } => {
                 write!(f, "{} could not be loaded: {reason}", path.display())
             }
-            LoadError::Malformed { path } => write!(
+            LoadError::Malformed { path, reason } => write!(
                 f,
-                "{} answered the entry symbol with a descriptor this build cannot read",
+                "{} answered with a descriptor this build refuses: {reason}",
                 path.display()
             ),
             LoadError::Duplicate { key, first, second } => write!(
@@ -941,9 +944,10 @@ impl Registry {
             Opened::Rejected(Rejected::UnsupportedAbi { declared }) => {
                 return Ok(Loading::Skipped(Skipped::UnsupportedAbi { declared }));
             }
-            Opened::Rejected(Rejected::Malformed) => {
+            Opened::Rejected(Rejected::Malformed(why)) => {
                 return Err(LoadError::Malformed {
                     path: path.to_path_buf(),
+                    reason: why.to_string(),
                 });
             }
             Opened::Loaded(view, origin) => (view, origin),
@@ -1371,7 +1375,12 @@ mod tests {
             Some(&Skipped::UnsupportedAbi { declared: 7 })
         );
         assert!(matches!(
-            r.absorb(p, Opened::Rejected(Rejected::Malformed)),
+            r.absorb(
+                p,
+                Opened::Rejected(Rejected::Malformed(
+                    crate::library::raw::check::Refusal::new("the library descriptor", "is null")
+                ))
+            ),
             Err(LoadError::Malformed { .. })
         ));
         assert!(r.loaded().is_empty(), "nothing was recorded");

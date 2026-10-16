@@ -107,6 +107,9 @@ impl<K: ?Sized + Kind> Remote<K> {
         if table.is_null() {
             return Err(KindMismatch::NoTable);
         }
+        if !(table as usize).is_multiple_of(align_of::<K::Vtable>()) {
+            return Err(KindMismatch::Misaligned);
+        }
         if size < size_of::<KindHeader>() {
             return Err(KindMismatch::BelowFloor {
                 size,
@@ -492,14 +495,18 @@ impl ProviderInfo<'static> {
     /// For a descriptor a library built itself; a host's services answer
     /// with views, and [`Host::offers`] is the door there.
     pub fn as_kind<K: ?Sized + Kind>(&'static self) -> Result<Option<Remote<K>>, KindMismatch> {
-        let view = self.view().ok_or(KindMismatch::NoTable)?;
+        let view = self
+            .read()
+            .map_err(|why| KindMismatch::Unreadable(why.to_string()))?;
         let remote = Remote::from_view(&view)?;
         Ok(view.has_default_instance().then_some(remote))
     }
 
     /// The same, as an offer carrying what a chooser needs.
     pub fn offer<K: ?Sized + Kind>(&'static self) -> Result<Offer<K>, KindMismatch> {
-        let view = self.view().ok_or(KindMismatch::NoTable)?;
+        let view = self
+            .read()
+            .map_err(|why| KindMismatch::Unreadable(why.to_string()))?;
         Offer::from_view(view)
     }
 
@@ -508,8 +515,11 @@ impl ProviderInfo<'static> {
         &'static self,
         config: &Value,
     ) -> Result<Instance<K>, InstantiateError> {
-        let view = self.view().ok_or_else(|| {
-            ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, "an unreadable descriptor")
+        let view = self.read().map_err(|why| {
+            ProviderError::new(
+                Status::GUATIAO_ERR_BAD_VALUE,
+                &format!("the provider's descriptor is refused: {why}"),
+            )
         })?;
         Instance::build(&view, config)
     }
