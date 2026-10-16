@@ -7,6 +7,7 @@
 //! Counted through an allocator the parts' schema and meta are built in.
 
 #![cfg(all(feature = "provider", feature = "load"))]
+extern crate alloc;
 
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicIsize, Ordering};
@@ -126,6 +127,120 @@ fn an_owned_librarys_parts_are_freed_when_it_is_retired() {
         "every block the parts held is freed at the retire"
     );
     assert!(matches!(host.get("owned_provider"), Ok(None)));
+}
+
+static PINNED_COUNT: Count = Count(AtomicIsize::new(0));
+static PINNED: Counting = Counting(Allocator {
+    struct_size: size_of::<Allocator>() as u32,
+    ctx: &PINNED_COUNT as *const Count as *mut c_void,
+    alloc: Some(counted_alloc),
+    free: Some(counted_free),
+    release: None,
+});
+
+/// A host's own library whose schema and meta are built in `alloc`.
+fn parts_in(alloc: Alloc, id: &str, kind: &'static str) -> LibraryParts {
+    let mut schema = Map::new_in(alloc);
+    schema.try_set("type", "object").expect("allocates");
+    let mut meta = Map::new_in(alloc);
+    meta.try_set("vendor", "acme").expect("allocates");
+    let provider = ProviderParts::builder(&format!("{id}_provider"))
+        .kinds(&[kind])
+        .config(Value::from(schema))
+        .meta(meta)
+        .build();
+    LibraryParts::new(id, "1.0.0", vec![provider])
+}
+
+/// A library that asks its host for a provider holds a pin on it: retiring
+/// the provider's library frees nothing while the answer lives.
+#[test]
+fn a_host_answer_holds_its_library_across_a_retire() {
+    let before = PINNED_COUNT.0.load(Ordering::SeqCst);
+    let mut registry = Registry::new("owned-tests", "1.0");
+    registry
+        .register_local("pinned", |_host| {
+            Some(parts_in(alloc_of(&PINNED), "pinned", "pinned"))
+        })
+        .expect("it registers")
+        .loaded()
+        .expect("it accepts this host");
+    let host = registry.host();
+    let answer = host
+        .get("pinned_provider")
+        .expect("the host offers services")
+        .expect("the provider is found");
+
+    registry.retire("pinned").expect("it is registered");
+    assert!(
+        matches!(host.get("pinned_provider"), Ok(None)),
+        "retired, it is no longer answered"
+    );
+    assert!(
+        PINNED_COUNT.0.load(Ordering::SeqCst) > before,
+        "the answer's pin holds the lease, and the lease the parts"
+    );
+    assert_eq!(answer.id(), "pinned_provider");
+    assert!(answer.config().is_some() && answer.meta().is_some());
+    let again = answer.clone();
+    drop(answer);
+    assert!(
+        PINNED_COUNT.0.load(Ordering::SeqCst) > before,
+        "a clone pins too"
+    );
+    drop(again);
+    assert_eq!(
+        PINNED_COUNT.0.load(Ordering::SeqCst),
+        before,
+        "the last pin let go of the parts"
+    );
+}
+
+/// A library asking its host from another thread, while the host retires
+/// and registers its provider's library over and over, reads only
+/// descriptors that are alive: each answer is pinned before the services
+/// let go of the snapshot it came from.
+#[test]
+fn a_lookup_racing_a_retire_reads_nothing_freed() {
+    use alloc::sync::Arc;
+    use core::sync::atomic::AtomicBool;
+
+    let rounds = if cfg!(miri) { 8 } else { 2000 };
+    let mut registry = Registry::new("owned-tests", "1.0");
+    let host = registry.host();
+    let stop = Arc::new(AtomicBool::new(false));
+    let reader = {
+        let stop = Arc::clone(&stop);
+        std::thread::spawn(move || {
+            let mut seen = 0usize;
+            while !stop.load(Ordering::SeqCst) {
+                if let Ok(Some(answer)) = host.get("racing_provider") {
+                    assert_eq!(answer.id(), "racing_provider");
+                    assert!(answer.config().is_some());
+                    seen += 1;
+                }
+                for answer in host.list("racing").unwrap_or_default() {
+                    assert_eq!(answer.kinds(), ["racing"]);
+                }
+                std::thread::yield_now();
+            }
+            seen
+        })
+    };
+    for _ in 0..rounds {
+        registry
+            .register_local("racing", |_host| {
+                Some(parts_in(Alloc::rust(), "racing", "racing"))
+            })
+            .expect("it registers")
+            .loaded()
+            .expect("it accepts this host");
+        std::thread::yield_now();
+        registry.retire("racing").expect("it is registered");
+    }
+    stop.store(true, Ordering::SeqCst);
+    let seen = reader.join().expect("the reader read nothing freed");
+    println!("the reader saw the provider {seen} times");
 }
 
 /// Built only from a configuration, whose schema the derive builds in the

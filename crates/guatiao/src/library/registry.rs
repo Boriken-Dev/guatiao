@@ -256,6 +256,8 @@ pub struct Provider {
     /// What this host ranked it, resolved when it loaded and again
     /// whenever the ranking changes. Absent means 0.
     priority: i32,
+    /// Which of its library's lease's descriptors is its own.
+    at: usize,
 }
 
 // `Send` and `Sync` for this type are declared in `raw/host.rs`; see there.
@@ -293,7 +295,7 @@ impl Provider {
     ///
     /// What "available" means is between this host and that library. All
     /// this does is carry the answer, and the reason when there is one.
-    pub fn available(&self) -> Result<(), &'static str> {
+    pub fn available(&self) -> Result<(), &str> {
         self.view.available()
     }
 
@@ -680,13 +682,18 @@ impl Registry {
         let ranked = self.ranked(self.providers.iter());
         let mut snapshot = Snapshot::default();
         for provider in ranked {
+            // Every provider the registry holds has a lease of its
+            // library's, which built a descriptor for it.
+            let Some(lease) = provider.view.hold.lease() else {
+                continue;
+            };
             snapshot
                 .by_key
                 .insert(provider.key().to_string(), snapshot.entries.len());
             snapshot.entries.push(SnapshotEntry {
                 kinds: provider.view.kinds.clone(),
-                raw: provider.view.raw,
-                hold: provider.view.hold.clone(),
+                lease: Arc::clone(lease),
+                at: provider.at,
             });
         }
         // A poisoned lock means a reader panicked while holding it; the
@@ -896,16 +903,16 @@ impl Registry {
     /// `library`, or a hand-written library's own `describe`; it sees
     /// this registry's [`Host`] exactly as a loaded library's entry would,
     /// and answers anything that converts to a [`LocalLibrary`]: owned
-    /// [`LibraryParts`](super::kind::LibraryParts), which this registry
-    /// keeps while the library is registered and frees when it is
-    /// retired, or a `'static` descriptor. A `None` is the library
-    /// declining this host.
+    /// [`LibraryParts`](super::kind::LibraryParts), which the library's
+    /// lease keeps until it is retired and its last handle dropped, or a
+    /// borrowed descriptor, read and copied here and not kept. A `None`
+    /// is the library declining this host.
     ///
     /// **Registering a descriptor is trusting its producer**, as loading
     /// a file is: it is read under the same checks, and what they cannot
     /// see — that a table is one for the kind it names, that a slot
     /// expects its `ctx` — is the producer's contract.
-    pub fn register_local<L: Into<LocalLibrary>>(
+    pub fn register_local<'a, L: Into<LocalLibrary<'a>>>(
         &mut self,
         name: &str,
         describe: impl FnOnce(Host) -> Option<L>,
@@ -1046,7 +1053,7 @@ impl Registry {
             named.push((at, key));
         }
         let lease = Lease::adopt(&mut views, origin.take_parts());
-        for (view, (at, key)) in views.into_iter().zip(named) {
+        for (built, (view, (at, key))) in views.into_iter().zip(named).enumerate() {
             // What this host already said about that id, if anything —
             // read BEFORE the view moves into the provider.
             let priority = self.priorities.get(&view.id).copied().unwrap_or(0);
@@ -1058,6 +1065,7 @@ impl Registry {
                 version: at,
                 key: Text::new(&key),
                 priority,
+                at: built,
             });
         }
         self.loaded.push(Loaded {
@@ -1312,7 +1320,6 @@ mod tests {
             meta: None,
             version: version.map(str::to_string),
             available: None,
-            raw: core::ptr::null(),
             tables: Vec::new(),
             create: None,
             destroy: None,

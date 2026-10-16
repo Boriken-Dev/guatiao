@@ -52,7 +52,7 @@ mod lease;
 pub use self::entry::*;
 pub use self::host::*;
 pub use self::image::*;
-pub(crate) use self::lease::{Hold, Lease};
+pub(crate) use self::lease::{Hold, Lease, Pin};
 
 /// What the tests of every file here build descriptors with.
 #[cfg(test)]

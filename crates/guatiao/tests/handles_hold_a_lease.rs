@@ -85,6 +85,40 @@ fn a_handle_calls_the_registrys_copy_of_the_table() {
     );
 }
 
+/// A host's own descriptor is borrowed for the registration alone: the
+/// registry copies what it says, so the descriptor may go right after.
+#[test]
+fn a_borrowed_descriptor_is_read_once_and_not_kept() {
+    let mut registry = Registry::new("lease-tests", "1.0");
+    let built = parts();
+    registry
+        .register_local("borrowed", |_host| Some(&built))
+        .expect("it registers")
+        .loaded()
+        .expect("it accepts this host");
+    drop(built);
+    let provider = registry
+        .provider("leased_seven")
+        .expect("filed under its id");
+    assert_eq!(provider.kinds(), ["counter"]);
+    let remote = provider
+        .as_kind::<dyn Counter>()
+        .expect("a valid table")
+        .expect("its own instance");
+    assert_eq!(remote.as_dyn().count(), 7, "its copy of the table calls");
+
+    // The same for a descriptor read with no registry: the view keeps
+    // nothing of it.
+    let built = parts();
+    let view = built.info().providers.ptr;
+    // SAFETY: the parts own one provider descriptor at `ptr`.
+    let view = unsafe { &*view }.view().expect("it reads");
+    drop(built);
+    assert_eq!(view.id(), "leased_seven");
+    let (table, _) = view.table_for("counter").expect("it serves the kind");
+    assert_ne!(table, (&TABLE as *const CounterVtable).cast::<c_void>());
+}
+
 /// `Remote` is `Clone`, not `Copy`: each clone holds the lease, and every
 /// one keeps working after the library is retired.
 #[test]

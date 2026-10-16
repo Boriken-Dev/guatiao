@@ -167,7 +167,8 @@ checked. Null is an empty view. A
 null pointer views nothing. `BytesMut` is neither `Clone` nor `Copy`,
 since it converts to a `&mut [u8]`. Descriptors carry the lifetime of
 their views (`LibraryInfo<'a>`, `ProviderInfo<'a>`, …); one a library
-exports, or a host's services hand over, is `'static`.
+exports is `'static`; one a host registers itself is borrowed for the
+registration, which copies what it says.
 
 **Collecting into a container** is the standard trait, as for `Vec` and
 `HashMap`: `["a", "b"].into_iter().collect::<List>()`, and
@@ -866,7 +867,8 @@ guatiao::guatiao_library!(describe);   // emits `guatiao_library_entry`
 vtable, ctx, meta, version, available, tables, create, destroy }`;
 `HostInfo { struct_size,
 abi_version, host_id, host_version, alloc, meta, services }`;
-`HostServices { struct_size, ctx, get, list, alloc }`. `ABI_VERSION` is 1.
+`HostServices { struct_size, ctx, get, list, alloc, get_pinned, list_pinned,
+pin, unpin }` (the last four appended together). `ABI_VERSION` is 1.
 
 `Providers { ptr, len, stride }` and `Kinds { ptr, len }` — the provider
 array states its stride and the kind array does not, because a `Str`
@@ -892,8 +894,9 @@ let provider = ProviderParts::builder("acme_hello")   // id; then any of:
 let library = LibraryParts::new("acme", "1.0.0", vec![provider]);   // .unloading(slot)
 // keep it for the process (a OnceLock of the library's own), then:
 //   loaded: guatiao_library!(describe), describe answering Some(library.info())
-//   linked: register_local(name, describe), describe answering Some(library) -- the registry
-//           owns it and frees it at retire -- or a &'static (Some(&LIBRARY), Some(LIBRARY.info()))
+//   linked: register_local(name, describe), describe answering Some(library) -- the library's
+//           lease owns it until retired and unused -- or a borrow (Some(&library),
+//           Some(library.info())), read and copied at the registration and not kept
 ```
 
 `meta` is a `MaybeNull<Map>` on all three — an open-ended map for
@@ -921,7 +924,7 @@ reg.register_local("engine", crate::library)?;   // a library the host LINKS: th
                                                  // dedup and `Loaded` record, from `<engine>` instead
                                                  // of a file; `library` is what `local_providers!`
                                                  // writes, answering owned LibraryParts; any
-                                                 // FnOnce(Host) -> Option<L>, L: Into<LocalLibrary>
+                                                 // FnOnce(Host) -> Option<L>, L: Into<LocalLibrary<'a>>
 reg.register_entry("engine", entry)?;            // the same from a C entry point (`EntryFn`);
                                                  // C hosts: guatiao_registry_register_entry
 reg.providers("greeter")                   // by kind, BEST FIRST
@@ -939,7 +942,7 @@ provider.config_schema()                   // Option<&Value>, the registry's cop
 provider.vtable() -> (*const c_void, usize)
 provider.view().vtable_as::<T>()           // unsafe; checks vtable_size >= size_of::<T>()
 provider.view()                            // &ProviderView: getters id(), kinds(), config(), ctx(),
-                                           // tables(), raw(), create(), destroy(); no public fields
+                                           // tables(), create(), destroy(); no public fields
 provider.meta()                            // Option<&Map>, the registry's copy
 loaded.meta                                // Option<Map>, the registry's copy
 ```
@@ -981,9 +984,11 @@ the kind it names or that a slot expects its `ctx`.
 
 **Everything a registry reports is OWNED.** `ProviderView` and
 `LibraryView` copy every string (`String`) and every value (`Value`,
-`Map`) out of the library's descriptor at the read, so nothing a host
-holds points into the image but the code pointers — `vtable`, `ctx`,
-`available`, `create`, `destroy`, and `ProviderView::raw`.
+`Map`) out of the library's descriptor at the read, and the library's
+lease copies every table (`vtable` and each per-kind table), so nothing
+a host holds points into the image but the code those tables and the
+slots name (`available`, `create`, `destroy`) and `ctx`, which the
+lease keeps mapped. No handle keeps the descriptor itself.
 
 ### A library is a collection; a provider is a thing in it
 
@@ -1027,16 +1032,18 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   which are freed when the library is retired and the last handle is
   dropped. `Retired { key, id, version, providers }` says what left;
   `UnloadError::NotFound { key }` is the only refusal.
-- **`LocalLibrary`** is `Owned(Box<LibraryParts>)` or
-  `Static(&'static LibraryInfo<'static>)`, from `LibraryParts`,
-  `Box<LibraryParts>`, `&'static LibraryInfo` or `&'static LibraryParts`;
-  `info()`. **Why a loaded library's descriptor is `'static`**: the
-  registry keeps its code pointers, `ctx` and tables for as long as the
-  library is registered and they address its mapping, which only `unsafe
-  unload` closes. A host's own library is the one place the registry can
-  own the descriptor instead, so `local_providers!` writes `pub fn
-  library(Host) -> Option<LibraryParts>`, built on each call with nothing
-  kept but each provider's default instance and tables. The handles
+- **`LocalLibrary<'a>`** is `Owned(Box<LibraryParts>)` or
+  `Borrowed(&'a LibraryInfo<'a>)`, from `LibraryParts`,
+  `Box<LibraryParts>`, `&'a LibraryInfo` or `&'a LibraryParts`;
+  `info()`. **A borrowed descriptor is read once**: the registry copies
+  its text, values and tables at the registration and keeps only its
+  providers' code and `ctx`, the producer's to keep while the library is
+  registered or a handle into it lives. A loaded library's descriptor is
+  still `'static`, because a derived library builds it once for its
+  mapping. Owned parts belong to the library's lease;
+  `local_providers!` writes `pub fn library(Host) ->
+  Option<LibraryParts>`, built on each call with nothing kept but each
+  provider's default instance and tables. The handles
   (`Remote`, `Offer`, `Object`, `Instance`) are `'static` and `Send`,
   because each holds an `Arc` lease rather than a borrow, so a host
   stores them and holds them across `.await`.
@@ -1134,17 +1141,25 @@ fn describe(host: Host) -> Option<&'static LibraryInfo<'static>> { .. }
 host.id() / host.version() / host.abi_version()
 host.alloc() -> Option<Alloc>                // the host's, or None
 host.meta() -> Option<&'static Map>
-host.get(key) -> Result<Option<ProviderView>, Status>   // read under the size it declares
-host.list(kind) -> Result<Vec<ProviderView>, Status>    // "" lists all
-view.id() / .ctx() / .raw()                   // raw(): the descriptor's address, for C
+host.get(key) -> Result<Option<ProviderView>, Status>   // read under the size it declares, pinned
+host.list(kind) -> Result<Vec<ProviderView>, Status>    // "" lists all; each pinned
+view.id() / .ctx() / .table_for(kind)
 host.offers::<dyn K>() / host.offer::<dyn K>(key) / host.mismatches::<dyn K>()
 host.snapshot() -> HostInfo                   // a copy, absent fields nulled
 ```
 
-- **Answers are other libraries' own descriptors, read** under the
-  `struct_size` each declares, so an older library's shorter descriptor
-  reads its newer fields as absent and nothing forms a reference past it.
-  Nothing borrowed from the registry escapes.
+- **Answers are descriptors the host built, read** under the
+  `struct_size` each declares, so an older host's shorter one reads its
+  newer fields as absent and nothing forms a reference past it. Text and
+  values are copied into the view; its tables are the host's copies.
+- **A view holds a pin**: `get`/`list` go through the host's
+  `get_pinned`/`list_pinned`, the view (and every `Offer` and `Remote`
+  taken from it) keeps the provider's library loaded while it lives, a
+  clone pins again (`pin`), dropping unpins (`unpin`), and the host's
+  `unload` of that library answers busy until then. So a host retiring or
+  unloading the provider's library on another thread cannot pull the
+  descriptor or the code from under a read or a call. From a host that
+  does not pin, a view copies the tables and holds nothing.
 - `list` returns **every** provider claiming the kind, unavailable ones
   included, in the host's order. **There is no best-pick**: ask each
   (`view.available()`) and choose.
@@ -1159,7 +1174,11 @@ host.snapshot() -> HostInfo                   // a copy, absent fields nulled
   `host->services->list(ctx, kind, out, cap, &total)` (call with `cap = 0`
   to size), `->get(ctx, key, &out)` and `->alloc(ctx)`, guarded by
   `host->struct_size >= offsetof(services) + sizeof` and
-  `services->struct_size`.
+  `services->struct_size`. An answer from `get`/`list` is valid until its
+  library is retired; `get_pinned`/`list_pinned` answer one valid until
+  the library passes it to `unpin` (`pin` holds it again), and the host
+  does not unload its library meanwhile. A library that keeps an answer
+  past a call, or may race a retire, pins it.
 
 ### A kind is a trait (feature `provider`)
 
@@ -1466,7 +1485,7 @@ yes** — a library that does not implement it is available, which is the
 common case and the right default.
 
 ```rust
-provider.available()            // Result<(), &'static str>
+provider.available()            // Result<(), &str>, the reason borrowed while the provider lives
 reg.providers("codec")          // who CLAIMS the kind
 reg.available("codec")          // who can serve it now
 reg.why_not("codec")            // Option<WhyNot>: NothingClaimsIt | NoneAvailable

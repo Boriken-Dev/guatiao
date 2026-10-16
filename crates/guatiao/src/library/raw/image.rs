@@ -33,7 +33,6 @@ pub struct ProviderView {
     pub(crate) meta: Option<Map>,
     pub(crate) version: Option<String>,
     pub(crate) available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
-    pub(crate) raw: *const ProviderInfo<'static>,
     pub(crate) tables: Vec<(String, *const c_void, usize)>,
     pub(crate) create: Option<CreateFn>,
     pub(crate) destroy: Option<DestroyFn>,
@@ -85,7 +84,8 @@ impl ProviderView {
         self.version.as_deref()
     }
 
-    /// The shared function table, whose shape the kind defines.
+    /// The shared function table, whose shape the kind defines: this
+    /// view's lease's copy of the library's, valid while the view lives.
     pub fn vtable(&self) -> *const c_void {
         self.vtable
     }
@@ -106,13 +106,6 @@ impl ProviderView {
     /// `vtable` serves them all. See [`ProviderInfo::tables`].
     pub fn tables(&self) -> &[(String, *const c_void, usize)] {
         &self.tables
-    }
-
-    /// The descriptor this was read from, in the library's image, valid
-    /// until that library is unloaded. What a host's services hand a
-    /// library that asks.
-    pub fn raw(&self) -> *const ProviderInfo<'static> {
-        self.raw
     }
 
     /// Builds an instance from a configuration, or `None`. See
@@ -141,8 +134,9 @@ impl ProviderView {
     }
 }
 
-// SAFETY: the pointers address a loaded library's image, which this side
-// never writes, and a provider's slots are callable from any thread.
+// SAFETY: the tables are the lease's copies, never written; the code and
+// `ctx` stay mapped while the lease is held; a provider's slots are
+// callable from any thread.
 unsafe impl Send for ProviderView {}
 // SAFETY: as above.
 unsafe impl Sync for ProviderView {}
@@ -181,20 +175,22 @@ impl ProviderView {
     /// call: reading the descriptor was the unsafe step and it established
     /// this contract. What "available" MEANS is between a host and a
     /// library; this only carries the answer.
-    pub fn available(&self) -> Result<(), &'static str> {
+    ///
+    /// The reason is borrowed from the library, which this view's lease
+    /// keeps mapped while the borrow lasts.
+    pub fn available(&self) -> Result<(), &str> {
         let Some(ask) = self.available else {
             return Ok(());
         };
         let mut reason = Str::empty();
         // SAFETY: the slot and `ctx` were read together from one
         // descriptor, and no safe code can change either; `reason` is a
-        // writable local; the library stays mapped until the host's
-        // `unsafe` unload, whose contract is that this view is not used.
+        // writable local; this view's lease keeps the library mapped.
         if unsafe { ask(self.ctx, &mut reason) } {
             return Ok(());
         }
-        // SAFETY: the contract on the field is that a written reason
-        // outlives every reader.
+        // SAFETY: the contract on the field is that a written reason lives
+        // as long as the library, which outlives this borrow of the view.
         Err(core::str::from_utf8(reason.into()).ok().unwrap_or(""))
     }
 }
@@ -225,8 +221,8 @@ impl ProviderView {
         }
         // SAFETY: the caller states `T` is this kind's table; the pointer
         // is non-null and the library declared at least `size_of::<T>()`
-        // bytes at it; and the borrow lives as long as the mapping, which
-        // only `unload` closes.
+        // bytes at it; and the borrow lives as long as this view, whose
+        // lease keeps the copy.
         Some(unsafe { &*self.vtable.cast::<T>() })
     }
 }
@@ -442,7 +438,7 @@ pub(crate) unsafe fn read_library(
     })
 }
 
-impl ProviderInfo<'static> {
+impl ProviderInfo<'_> {
     /// Reads this descriptor out, honouring its declared size.
     ///
     /// `None` when a check where it enters refuses it: below the floor,
@@ -451,17 +447,23 @@ impl ProviderInfo<'static> {
     /// ([`Host::get`], [`Host::list`]); this is for a descriptor a library
     /// built itself. Its fields are its producer's contract, as every
     /// descriptor's are.
-    pub fn view(&'static self) -> Option<ProviderView> {
+    ///
+    /// The view keeps nothing of the descriptor: its text and values are
+    /// copied, and its tables copied into a lease of the view's own. What
+    /// it calls, its slots' code and `ctx`, is still the producer's to
+    /// keep.
+    pub fn view(&self) -> Option<ProviderView> {
         self.read().ok()
     }
 
     /// [`view`](ProviderInfo::view), saying why not.
-    pub(crate) fn read(&'static self) -> Result<ProviderView, Refusal> {
+    pub(crate) fn read(&self) -> Result<ProviderView, Refusal> {
+        let raw: *const ProviderInfo<'static> = core::ptr::from_ref(self).cast();
         // SAFETY: a descriptor's memory shape is its producer's contract,
-        // and `'static` keeps it for every view taken from it; the
-        // declared size is the limit, and the tables it names passed the
-        // read's checks.
-        unsafe { read_provider(self, self.struct_size as usize, Bounds::ANY) }.map(Lease::alone)
+        // and the borrow keeps it for the read, which copies all it keeps;
+        // the declared size is the limit, and the tables it names passed
+        // the read's checks.
+        unsafe { read_provider(raw, self.struct_size as usize, Bounds::ANY) }.map(Lease::alone)
     }
 }
 
@@ -592,7 +594,6 @@ pub(super) unsafe fn read_provider(
             } else {
                 None
             },
-            raw,
             tables: if declared >= ProviderInfo::tables_end() {
                 // SAFETY: the guard established the field is present.
                 read_kind_tables(core::ptr::addr_of!((*raw).tables).read(), bounds)?
@@ -908,21 +909,22 @@ pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, 
 /// What a library the host LINKS came to: its describe function's answer,
 /// read the way a loaded library's entry answer is read.
 #[cfg(feature = "load")]
-pub(crate) fn open_local(described: Option<LocalLibrary>) -> Opened {
+pub(crate) fn open_local(described: Option<LocalLibrary<'_>>) -> Opened {
     let Some(described) = described else {
         return Opened::Declined;
     };
     // SAFETY: registering a descriptor is the host's trust in its
     // producer, as naming a file is; its memory shape is that producer's
-    // contract, and `read_library` checks what can be checked. Owned parts
-    // are read before they move: the views copy what they name, and the
-    // descriptor pointers they keep address the parts' heap storage,
-    // which the move does not touch.
+    // contract, and `read_library` checks what can be checked. The views
+    // copy the text and values they name; their table pointers address
+    // what the descriptor points at, which outlives the registration that
+    // copies the tables in turn, and which moving owned parts leaves
+    // where it is.
     let raw: *const LibraryInfo<'static> = (described.info() as *const LibraryInfo<'_>).cast();
     let read = unsafe { read_library(raw, Bounds::ANY) };
     let parts = match described {
         LocalLibrary::Owned(parts) => Some(parts),
-        LocalLibrary::Static(_) => None,
+        LocalLibrary::Borrowed(_) => None,
     };
     match read {
         Ok(view) => Opened::Loaded(view, Origin::Linked(parts)),
