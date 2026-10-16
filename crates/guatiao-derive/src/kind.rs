@@ -1724,14 +1724,19 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
     });
     let arg_names = m.args.iter().map(|a| format_ident!("__arg_{}", a.ident));
 
+    // A tree crosses through a carrier: an empty container recording the
+    // allocator the answer is wanted in, which the shim builds into.
+    let carrier = |ty: TokenStream| {
+        quote! {
+            let mut __out = <#ty as ::guatiao::library::kind::Carrier>::carrier(__alloc);
+        }
+    };
     let out_init = match &m.ret {
         RetKind::Unit => quote!(),
         RetKind::Scalar(ty) => quote! { let mut __out: #ty = ::core::default::Default::default(); },
-        RetKind::Value | RetKind::Owned(_) => {
-            quote! { let mut __out = ::guatiao::Value::absent(); }
-        }
-        RetKind::Map => quote! { let mut __out = ::guatiao::Map::new(); },
-        RetKind::List => quote! { let mut __out = ::guatiao::List::new(); },
+        RetKind::Value | RetKind::Owned(_) => carrier(quote!(::guatiao::Value)),
+        RetKind::Map => carrier(quote!(::guatiao::Map)),
+        RetKind::List => carrier(quote!(::guatiao::List)),
         RetKind::Text => quote! { let mut __out = ::guatiao::Text::new(""); },
         RetKind::Object(_) => quote! { let mut __out = ::guatiao::library::ObjectRaw::null(); },
     };
@@ -1777,7 +1782,7 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
                 _ => quote!(list_ret),
             };
             quote! {
-                match ::guatiao::library::kind::#ret(__out) {
+                match ::guatiao::library::kind::#ret(__out, __alloc) {
                     ::core::result::Result::Ok(__v) => __v,
                     ::core::result::Result::Err(__e) => { #f }
                 }
@@ -1829,8 +1834,14 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
         answer
     };
 
+    let alloc_init = matches!(
+        m.ret,
+        RetKind::Value | RetKind::Owned(_) | RetKind::Map | RetKind::List
+    )
+    .then(|| quote! { let __alloc = ::guatiao::Alloc::rust(); });
     let call = quote! {
         #(#marshals)*
+        #alloc_init
         #out_init
         #err_init
         // SAFETY: the slot's own signature, read under the table's size;

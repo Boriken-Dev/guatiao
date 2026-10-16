@@ -6,6 +6,8 @@
 //! answers and errors, and catching a panic at the boundary.
 
 use super::*;
+use crate::value::alloc::Allocator;
+use crate::value::types::Tag;
 
 // --- what a shim calls ----------------------------------------------------
 //
@@ -374,14 +376,109 @@ pub fn text_ret(out: Text) -> Result<Text, ProviderError> {
     Ok(out)
 }
 
-/// A map a shim wrote through a `*mut Map`, its keys checked as
-/// [`text_ret`] checks a text, and moved into this side's allocator as
-/// [`value_ret`] moves a value.
+// --- the caller's allocator, carried in the out slot ----------------------
+//
+// Before a call that answers a tree, the proxy writes into the out slot a
+// carrier: an empty container recording the allocator it wants the answer
+// in, which allocates nothing. The shim reads it with `return_alloc` and
+// builds there; whatever it writes replaces the carrier, which owns
+// nothing. A library that ignores it is copied as before, and a caller
+// that writes none leaves the shim building in its own allocator.
+
+/// What a tree return crosses in: [`Value`], [`Map`] or [`List`].
 #[doc(hidden)]
-pub fn map_ret(out: Map) -> Result<Map, ProviderError> {
+pub trait Carrier: Sized {
+    /// An empty one recording `alloc`, allocating nothing: what a proxy
+    /// writes into the out slot before the call.
+    fn carrier(alloc: Alloc) -> Self;
+    /// The allocator an empty one records, or null for anything else.
+    fn carried(&self) -> *const Allocator;
+}
+
+/// A map or list: empty, owning no buffer, and recording an allocator.
+fn carried_by(len: usize, cap: usize, alloc: *const Allocator) -> *const Allocator {
+    if len == 0 && cap == 0 {
+        alloc
+    } else {
+        core::ptr::null()
+    }
+}
+
+impl Carrier for Map {
+    fn carrier(alloc: Alloc) -> Map {
+        Map::new_in(alloc)
+    }
+    fn carried(&self) -> *const Allocator {
+        carried_by(self.len, self.cap, self.alloc)
+    }
+}
+
+impl Carrier for List {
+    fn carrier(alloc: Alloc) -> List {
+        List::new_in(alloc)
+    }
+    fn carried(&self) -> *const Allocator {
+        carried_by(self.len, self.cap, self.alloc)
+    }
+}
+
+/// A value carries its allocator as ABSENT whose map arm records it, so a
+/// library that writes nothing still answers ABSENT. An empty map or list
+/// is read as a carrier too.
+impl Carrier for Value {
+    fn carrier(alloc: Alloc) -> Value {
+        let mut value = Value::absent();
+        // SAFETY: ABSENT owns nothing whatever its payload holds; the map
+        // arm is the one `blank` wrote, so this sets a field of a live arm.
+        unsafe { (*value.payload.map).alloc = alloc.as_raw() };
+        value
+    }
+    fn carried(&self) -> *const Allocator {
+        // SAFETY: every arm is the same 32 bytes of plain data, which a
+        // node built here or by a caller initialises whole, and the map
+        // arm's fields are read as numbers and an address, never followed.
+        let map = unsafe { &*self.payload.map };
+        match self.tag {
+            t if t == u32::from(Tag::GUATIAO_ABSENT) => map.alloc,
+            t if t == u32::from(Tag::GUATIAO_MAP) || t == u32::from(Tag::GUATIAO_LIST) => {
+                carried_by(map.len, map.cap, map.alloc)
+            }
+            _ => core::ptr::null(),
+        }
+    }
+}
+
+/// The allocator a shim builds its answer in: the one the caller's
+/// carrier names, or this side's own when `out` is null, holds no
+/// carrier, or names an allocator that does not check out.
+///
+/// # Safety
+///
+/// `out` is null or addresses an initialised `C` — a carrier, or anything
+/// the caller wrote there — and an allocator a carrier names outlives
+/// what is built through it.
+#[doc(hidden)]
+pub unsafe fn return_alloc<C: Carrier>(out: *const C) -> Alloc {
+    // SAFETY: the caller's contract.
+    let Some(out) = (unsafe { out.as_ref() }) else {
+        return Alloc::rust();
+    };
+    let raw = out.carried();
+    if raw.is_null() {
+        return Alloc::rust();
+    }
+    // SAFETY: a carrier's allocator outlives what is built through it, by
+    // the caller's contract; `from_raw` checks the rest.
+    unsafe { Alloc::from_raw(raw) }.unwrap_or_else(|_| Alloc::rust())
+}
+
+/// A map a shim wrote through a `*mut Map`, its keys checked as
+/// [`text_ret`] checks a text, and moved into `home` as [`value_ret`]
+/// moves a value.
+#[doc(hidden)]
+pub fn map_ret(out: Map, home: Alloc) -> Result<Map, ProviderError> {
     // SAFETY: a live local, written by the shim.
     unsafe { Map::from_ptr(&out) }?;
-    let home = Alloc::rust();
     if crate::value::walk::map_recorded_by(&out, home.as_raw()) {
         return Ok(out);
     }
@@ -391,12 +488,12 @@ pub fn map_ret(out: Map) -> Result<Map, ProviderError> {
 }
 
 /// A value a call returned, as the caller gets it: unchanged when every
-/// container in it records this side's allocator, otherwise copied into
-/// that allocator and the original freed through its own. So nothing a
-/// host holds needs a library's allocator, or its image, after the call.
+/// container in it records `home`, the allocator the caller carried in,
+/// otherwise copied into `home` and the original freed through its own.
+/// So nothing a host holds needs a library's allocator, or its image,
+/// after the call.
 #[doc(hidden)]
-pub fn value_ret(out: Value) -> Result<Value, ProviderError> {
-    let home = Alloc::rust();
+pub fn value_ret(out: Value, home: Alloc) -> Result<Value, ProviderError> {
     if crate::value::walk::recorded_by(&out, home.as_raw()) {
         return Ok(out);
     }
@@ -405,8 +502,7 @@ pub fn value_ret(out: Value) -> Result<Value, ProviderError> {
 
 /// [`value_ret`] for a list.
 #[doc(hidden)]
-pub fn list_ret(out: List) -> Result<List, ProviderError> {
-    let home = Alloc::rust();
+pub fn list_ret(out: List, home: Alloc) -> Result<List, ProviderError> {
     if crate::value::walk::list_recorded_by(&out, home.as_raw()) {
         return Ok(out);
     }
@@ -441,5 +537,137 @@ pub unsafe fn available_via<T>(
             }
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod carrier_tests {
+    use super::*;
+    use crate::value::alloc::rust_alloc;
+
+    /// An allocator that is not this side's own: Rust's heap, under
+    /// another address.
+    fn other(vtable: &Allocator) -> Alloc {
+        // SAFETY: a complete vtable on the caller's stack, outliving the test.
+        unsafe { Alloc::from_raw(vtable) }.expect("complete")
+    }
+
+    fn named(found: Alloc, want: Alloc) -> bool {
+        found.as_raw() == want.as_raw()
+    }
+
+    #[test]
+    fn each_carrier_names_its_allocator_and_owns_nothing() {
+        let vtable = rust_alloc();
+        let theirs = other(&vtable);
+        let value = Value::carrier(theirs);
+        assert_eq!(
+            value.tag(),
+            Ok(Tag::GUATIAO_ABSENT),
+            "a value carrier is ABSENT"
+        );
+        let map = Map::carrier(theirs);
+        let list = List::carrier(theirs);
+        // SAFETY: live locals.
+        unsafe {
+            assert!(named(return_alloc(&value), theirs));
+            assert!(named(return_alloc(&map), theirs));
+            assert!(named(return_alloc(&list), theirs));
+        }
+        assert_eq!((map.capacity(), list.capacity()), (0, 0));
+        assert!(
+            value == Value::absent(),
+            "an ABSENT carrier reads as ABSENT"
+        );
+    }
+
+    #[test]
+    fn an_empty_map_or_list_value_carries_too() {
+        let vtable = rust_alloc();
+        let theirs = other(&vtable);
+        let as_map = Value::from(Map::new_in(theirs));
+        let as_list = Value::from(List::new_in(theirs));
+        // SAFETY: live locals.
+        unsafe {
+            assert!(named(return_alloc(&as_map), theirs));
+            assert!(named(return_alloc(&as_list), theirs));
+        }
+    }
+
+    /// An older host passes ABSENT, a zeroed container or nothing: the
+    /// shim builds in its own allocator, as it did before carriers.
+    #[test]
+    fn no_carrier_falls_back_to_this_sides_allocator() {
+        let ours = Alloc::rust();
+        let zeroed_map = Map {
+            ptr: core::ptr::null_mut(),
+            len: 0,
+            cap: 0,
+            alloc: core::ptr::null(),
+        };
+        // SAFETY: null, or live locals.
+        unsafe {
+            assert!(named(return_alloc(core::ptr::null::<Value>()), ours));
+            assert!(named(return_alloc(&Value::absent()), ours));
+            assert!(named(return_alloc(&Value::null()), ours));
+            assert!(named(return_alloc(&Value::from(5i64)), ours));
+            assert!(named(return_alloc(&zeroed_map), ours));
+        }
+        core::mem::forget(zeroed_map);
+    }
+
+    /// A container that holds something is not a carrier, and an
+    /// allocator that does not check out is not used.
+    #[test]
+    fn a_full_container_or_a_broken_allocator_is_not_a_carrier() {
+        let vtable = rust_alloc();
+        let theirs = other(&vtable);
+        let mut full = Map::new_in(theirs);
+        full.set_in("k", 1i64, theirs).expect("stored");
+        let mut broken = rust_alloc();
+        broken.struct_size = 0;
+        let ours = Alloc::rust();
+        let mut carrier = Map::new_in(theirs);
+        carrier.alloc = &broken;
+        // SAFETY: live locals.
+        unsafe {
+            assert!(named(return_alloc(&full), ours));
+            assert!(named(return_alloc(&Value::from(full)), ours));
+            assert!(named(return_alloc(&carrier), ours));
+        }
+    }
+
+    /// A tree already in the carried allocator is handed over as it is;
+    /// one built elsewhere is copied there.
+    #[test]
+    fn a_tree_in_the_carried_allocator_is_not_copied() {
+        let vtable = rust_alloc();
+        let theirs = other(&vtable);
+        let mut map = Map::new_in(theirs);
+        map.set_in("k", Text::new_in(theirs, "v").expect("built"), theirs)
+            .expect("stored");
+        let buffer = map.ptr;
+        let same = map_ret(map, theirs).expect("checked");
+        assert_eq!(same.ptr, buffer, "handed over, not copied");
+
+        let mut built = Map::new();
+        built.set("k", "v");
+        let buffer = built.ptr;
+        let moved = map_ret(built, theirs).expect("copied");
+        assert_ne!(moved.ptr, buffer);
+        assert!(named(moved.alloc().expect("recorded"), theirs));
+
+        let mut list = List::new_in(theirs);
+        list.push_in(true, theirs).expect("pushed");
+        let buffer = list.ptr;
+        assert_eq!(list_ret(list, theirs).expect("kept").ptr, buffer);
+        let value = Value::from(Text::new_in(theirs, "x").expect("built"));
+        assert!(named(
+            value_ret(value, theirs)
+                .expect("kept")
+                .alloc()
+                .expect("text"),
+            theirs
+        ));
     }
 }
