@@ -210,6 +210,66 @@ fn what_a_shim_writes_itself_is_checked() {
     assert!(map_ret(map).is_ok());
 }
 
+/// The crate's allocator under another address: the same functions,
+/// recorded as a different allocator, as a library's own would be.
+fn elsewhere() -> Alloc {
+    struct Wrapped(crate::value::alloc::Allocator);
+    // SAFETY: a constant never written, whose `ctx` is null and whose
+    // functions are Rust's global allocator.
+    unsafe impl Sync for Wrapped {}
+    static OTHER: Wrapped = Wrapped(crate::value::alloc::rust_alloc());
+    // SAFETY: a complete constant that lives for the process.
+    unsafe { Alloc::from_raw(&OTHER.0) }.expect("complete")
+}
+
+fn records_home(found: Result<Alloc, ValueError>) -> bool {
+    found.is_ok_and(|a| a.as_raw() == Alloc::rust().as_raw())
+}
+
+/// A tree a call returned moves into this side's allocator when any
+/// container in it, a map key included, records another; one wholly in
+/// this side's passes as it is.
+#[test]
+fn a_returned_tree_moves_into_this_sides_allocator() {
+    let (home, away) = (Alloc::rust(), elsewhere());
+    let mut inner = List::new_in(home);
+    inner
+        .push_in(Text::new_in(away, "deep").unwrap(), home)
+        .unwrap();
+    let mut map = Map::new_in(home);
+    map.set_in("list", inner, home).unwrap();
+    let moved = map_ret(map).expect("copies");
+    let list: &List = moved
+        .get("list")
+        .and_then(crate::value::convert::TryAsRef::try_as_ref)
+        .unwrap();
+    assert!(records_home(list[0].alloc()), "the deep member moved");
+
+    let mut keyed = Map::new_in(away);
+    keyed.set_in("k", Value::from(1i64), away).unwrap();
+    let moved = value_ret(Value::from(keyed)).unwrap();
+    assert!(records_home(moved.alloc()));
+    let moved: &Map = crate::value::convert::TryAsRef::try_as_ref(&moved).unwrap();
+    assert!(records_home(moved.iter().next().unwrap().key.alloc()));
+
+    let mut list = List::new_in(away);
+    list.push_in(Value::from(true), away).unwrap();
+    assert!(records_home(list_ret(list).unwrap().alloc()));
+
+    let scalar = value_ret(Value::from(7i64)).unwrap();
+    assert_eq!(scalar, Value::from(7i64));
+
+    let err = take_err(
+        ProviderError {
+            status: Status::GUATIAO_ERR_BAD_VALUE,
+            message: Text::new_in(away, "no").unwrap(),
+        },
+        Status::GUATIAO_ERR_BAD_VALUE,
+    );
+    assert!(records_home(err.message.alloc()));
+    assert_eq!(err.message(), "no");
+}
+
 #[test]
 fn a_call_round_trips_through_a_remote() {
     let r = remote_of(

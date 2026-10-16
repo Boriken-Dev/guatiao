@@ -1765,11 +1765,19 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
         // spelling `()` there is what clippy calls an unneeded unit.
         RetKind::Unit if !m.fallible => quote!(),
         RetKind::Unit => quote!(()),
-        RetKind::Scalar(_) | RetKind::Value | RetKind::List => quote!(__out),
-        RetKind::Map => {
+        RetKind::Scalar(_) => quote!(__out),
+        // A tree the library built is moved into this side's allocator
+        // before the caller sees it, so nothing it holds needs the
+        // library's allocator once the library is gone.
+        RetKind::Value | RetKind::Map | RetKind::List => {
             let f = fail(quote!(__e));
+            let ret = match &m.ret {
+                RetKind::Value => quote!(value_ret),
+                RetKind::Map => quote!(map_ret),
+                _ => quote!(list_ret),
+            };
             quote! {
-                match ::guatiao::library::kind::map_ret(__out) {
+                match ::guatiao::library::kind::#ret(__out) {
                     ::core::result::Result::Ok(__v) => __v,
                     ::core::result::Result::Err(__e) => { #f }
                 }

@@ -334,19 +334,34 @@ pub unsafe fn object_ret<K: ?Sized + Kind, R: ?Sized>(
 }
 
 /// The error a proxy hands back: what the shim wrote, or one built from
-/// the status when it wrote nothing (an older library).
+/// the status when it wrote nothing (an older library). Its message is
+/// moved into this side's allocator, as [`value_ret`] moves a value.
 #[doc(hidden)]
 ///
 /// A message that is not UTF-8 is dropped, keeping the status: the shim
 /// wrote the text itself, past the checks a value's doors make.
 pub fn take_err(written: ProviderError, status: Status) -> ProviderError {
     if written.status == Status::GUATIAO_OK {
-        ProviderError::from(status)
+        return ProviderError::from(status);
+    }
     // SAFETY: a live local, written by the shim.
-    } else if unsafe { Text::from_ptr(&written.message) }.is_err() {
-        ProviderError::from(written.status)
-    } else {
-        written
+    if unsafe { Text::from_ptr(&written.message) }.is_err() {
+        return ProviderError::from(written.status);
+    }
+    let home = Alloc::rust();
+    if written
+        .message
+        .alloc()
+        .is_ok_and(|a| a.as_raw() == home.as_raw())
+    {
+        return written;
+    }
+    match written.message.clone_in(home) {
+        Ok(message) => ProviderError {
+            status: written.status,
+            message,
+        },
+        Err(_) => ProviderError::from(written.status),
     }
 }
 
@@ -360,12 +375,42 @@ pub fn text_ret(out: Text) -> Result<Text, ProviderError> {
 }
 
 /// A map a shim wrote through a `*mut Map`, its keys checked as
-/// [`text_ret`] checks a text.
+/// [`text_ret`] checks a text, and moved into this side's allocator as
+/// [`value_ret`] moves a value.
 #[doc(hidden)]
 pub fn map_ret(out: Map) -> Result<Map, ProviderError> {
     // SAFETY: a live local, written by the shim.
     unsafe { Map::from_ptr(&out) }?;
-    Ok(out)
+    let home = Alloc::rust();
+    if crate::value::walk::map_recorded_by(&out, home.as_raw()) {
+        return Ok(out);
+    }
+    // The original is freed here, through the allocator that made it,
+    // while the library that made it is still leased by the caller.
+    Ok(out.clone_in(home)?)
+}
+
+/// A value a call returned, as the caller gets it: unchanged when every
+/// container in it records this side's allocator, otherwise copied into
+/// that allocator and the original freed through its own. So nothing a
+/// host holds needs a library's allocator, or its image, after the call.
+#[doc(hidden)]
+pub fn value_ret(out: Value) -> Result<Value, ProviderError> {
+    let home = Alloc::rust();
+    if crate::value::walk::recorded_by(&out, home.as_raw()) {
+        return Ok(out);
+    }
+    Ok(out.clone_in(home)?)
+}
+
+/// [`value_ret`] for a list.
+#[doc(hidden)]
+pub fn list_ret(out: List) -> Result<List, ProviderError> {
+    let home = Alloc::rust();
+    if crate::value::walk::list_recorded_by(&out, home.as_raw()) {
+        return Ok(out);
+    }
+    Ok(out.clone_in(home)?)
 }
 
 /// The `available` slot over a Rust method: runs `ask` on the instance
