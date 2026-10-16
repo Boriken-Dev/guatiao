@@ -17,10 +17,12 @@
  * - `header.floor_hash` is a macro the header carries. A table built
  *   from a different declaration of the kind hashes differently and is
  *   refused before anything in it runs.
- * - The map `greet` answers with travels WITH THIS FILE'S ALLOCATOR: the
- *   host frees it through the `guatiao_alloc` the value records, so no
- *   `free` here ever meets a block from over there. The allocator is the
- *   header's own malloc wrapper, `static inline`, nothing linked.
+ * - The map `greet` answers is built IN THE ALLOCATOR THE CALLER NAMED:
+ *   the out slot arrives holding an empty map whose `alloc` is the host's,
+ *   so the host keeps the answer as it is, with no copy. A caller that
+ *   names none (an older host, or a zeroed slot) gets one built through
+ *   this file's own allocator, the header's malloc wrapper, which the
+ *   host copies from and frees through the `guatiao_alloc` it records.
  *
  * `greet` and `greet_into` are filled. `shout` and `start` are left null:
  * to the host that is an older table, and its proxy runs the trait's
@@ -49,11 +51,25 @@
 
 static guatiao_alloc ALLOC = GUATIAO_ALLOC_MALLOC;
 
-/* An owned string: `cap > 0`, so the host frees it through ALLOC. */
-static bool owned_string(guatiao_string *out, const char *a, guatiao_str b) {
+/* The allocator to build an answer in: the one the caller's carrier names
+ * -- an empty map whose `alloc` is set -- or this file's own. */
+static const guatiao_alloc *answer_alloc(const guatiao_map *out) {
+  const guatiao_alloc *a = out ? out->alloc : NULL;
+  if (out && out->len == 0 && out->cap == 0 && a &&
+      a->struct_size >= offsetof(guatiao_alloc, free) + sizeof(a->free) &&
+      a->alloc && a->free) {
+    return a;
+  }
+  return &ALLOC;
+}
+
+/* An owned string, `a` then `b`, through `alloc`: `cap > 0`, so the host
+ * frees it through the allocator it records. */
+static bool owned_string(guatiao_string *out, const guatiao_alloc *alloc,
+                         const char *a, guatiao_str b) {
   size_t la = strlen(a);
   size_t cap = la + b.len;
-  uint8_t *buf = cap ? (uint8_t *)ALLOC.alloc(ALLOC.ctx, cap, 1) : NULL;
+  uint8_t *buf = cap ? (uint8_t *)alloc->alloc(alloc->ctx, cap, 1) : NULL;
   if (cap && !buf) {
     return false;
   }
@@ -66,9 +82,21 @@ static bool owned_string(guatiao_string *out, const char *a, guatiao_str b) {
   out->ptr = buf;
   out->len = cap;
   out->cap = cap;
-  out->alloc = &ALLOC;
+  out->alloc = alloc;
   return true;
 }
+
+static void free_string(guatiao_string *s) {
+  if (s->cap) {
+    s->alloc->free(s->alloc->ctx, s->ptr, s->cap, 1);
+  }
+}
+
+/* The entries `greet` built last, so the host can tell its answer is the
+ * very block built here and not a copy. */
+static const guatiao_entry *LAST_BUILT = NULL;
+
+EXPORT const guatiao_entry *c_greeter_last_built(void) { return LAST_BUILT; }
 
 /* ---- the provider ------------------------------------------------------ */
 
@@ -92,24 +120,31 @@ static guatiao_status greet(void *ctx, guatiao_str name, guatiao_map *out,
     return refuse(err, GUATIAO_ERR_BAD_VALUE, "nobody to greet, says C");
   }
 
-  /* One entry, in a block ALLOC owns, holding a string ALLOC owns. */
-  guatiao_entry *entries = (guatiao_entry *)ALLOC.alloc(
-      ALLOC.ctx, sizeof(guatiao_entry), _Alignof(guatiao_entry));
+  /* One entry, its key and its string, all through one allocator. */
+  const guatiao_alloc *alloc = answer_alloc(out);
+  guatiao_entry *entries = (guatiao_entry *)alloc->alloc(
+      alloc->ctx, sizeof(guatiao_entry), _Alignof(guatiao_entry));
   if (!entries) {
     return GUATIAO_ERR_ALLOC;
   }
-  guatiao_string key = GUATIAO_STRING_LIT("greeting");
-  entries[0].key = key;
-  entries[0].value.tag = (uint32_t)GUATIAO_STRING;
-  entries[0].value._pad = 0;
-  if (!owned_string(&entries[0].value.payload.text, "hello from C, ", name)) {
-    ALLOC.free(ALLOC.ctx, entries, sizeof(guatiao_entry), _Alignof(guatiao_entry));
+  guatiao_str none = {NULL, 0};
+  if (!owned_string(&entries[0].key, alloc, "greeting", none)) {
+    alloc->free(alloc->ctx, entries, sizeof(guatiao_entry), _Alignof(guatiao_entry));
     return GUATIAO_ERR_ALLOC;
   }
+  entries[0].value.tag = (uint32_t)GUATIAO_STRING;
+  entries[0].value._pad = 0;
+  if (!owned_string(&entries[0].value.payload.text, alloc, "hello from C, ", name)) {
+    free_string(&entries[0].key);
+    alloc->free(alloc->ctx, entries, sizeof(guatiao_entry), _Alignof(guatiao_entry));
+    return GUATIAO_ERR_ALLOC;
+  }
+  /* Written over the carrier, which owns nothing. */
   out->ptr = entries;
   out->len = 1;
   out->cap = 1;
-  out->alloc = &ALLOC;
+  out->alloc = alloc;
+  LAST_BUILT = entries;
   (*greeted)++;
   return GUATIAO_OK;
 }

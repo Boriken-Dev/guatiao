@@ -1112,16 +1112,36 @@ lease keeps mapped. No handle keeps the descriptor itself.
   `host.alloc()` and fall back to their own. So the configuration schema
   a library declares outlives that library's mapping wherever the host
   passed `guatiao_registry_new` an allocator.
-- **What a call returns lives in the host's allocator.** The generated
-  proxy moves every returned `Value`, `Map` and `List` (and a
-  `ProviderError`'s message) whose containers record any allocator but
-  this side's `Alloc::rust()` into it, freeing the original through the
-  allocator that made it while the call's lease still holds the library;
-  a tree already wholly in it passes untouched. A `String` is a Rust copy
-  already, scalars carry nothing, and a type converted through
-  `FromValue` is whatever its impl builds. So nothing the host keeps from
-  a call needs the library's allocator once the library is gone. A C
-  caller calling a table itself gets what the library wrote.
+- **What a call returns lives in the host's allocator, built there when
+  the provider can.** Before a call answering a `Value`, `Map` or `List`
+  (or a type crossing as a value through `ToValue`), the proxy writes a
+  **carrier** into the out slot: an empty container recording the
+  allocator the answer is wanted in, which allocates nothing (for a
+  `Value`, ABSENT whose map arm records it). The shim reads it
+  (`kind::return_alloc`, falling back to its own allocator for a null or
+  zeroed slot, an older host) and calls `<method>_in(.., alloc)`, which
+  `#[guatiao::kind]` adds to the trait beside every method answering a
+  tree. Its default answers `<method>(..)`. An implementation that
+  overrides `<method>_in` and builds with the `_in` forms hands its tree
+  over as it is; anything else is copied by the proxy into the carried
+  allocator, the original freed through the allocator that made it while
+  the call's lease still holds the library (and a `ProviderError`'s
+  message likewise). A `String` is a Rust copy already and scalars carry
+  nothing. So nothing the host keeps from a call needs the library's
+  allocator once the library is gone. A C caller calling a table itself
+  gets what the library wrote, and a C provider builds into the carrier
+  by reading its `alloc` (`guatiao_kind_header`'s comment in
+  `guatiao.h`).
+
+```rust
+fn greet(&self, name: &str) -> Result<Map, ProviderError> { self.greet_in(name, Alloc::rust()) }
+fn greet_in(&self, name: &str, alloc: Alloc) -> Result<Map, ProviderError> {   // what the shim calls
+    let mut map = Map::new_in(alloc);
+    map.set_in("greeting", Text::new_in(alloc, name)?, alloc)?;                // no copy on arrival
+    Ok(map)
+}
+greeter.greet_in("ana", arena)                // a host asking for the answer in an arena of its own
+```
 - **`LibraryInfo::unload`** is the library's say, an appended slot:
   `Option<unsafe extern "C" fn() -> Status>`, `GUATIAO_OK` to agree.
   Null, or a descriptor from before the slot, means the library does not
@@ -1326,7 +1346,10 @@ drop(s);                                                             // the libr
   type through `FromValue`; each optionally in `Result<_, ProviderError>`.
   A method that converts must return `Result`. Refused by name: generics,
   `async`, `&mut self`/`self`, borrowed returns, `impl Trait`, closures,
-  associated items, a required method after a defaulted one.
+  associated items, a required method after a defaulted one, and a method
+  named `<m>_in` beside a method `<m>` answering a `Value`, `Map` or
+  `List` (the attribute adds that one; its allocator parameter is
+  `alloc`, or `alloc_` when an argument already has the name).
 - **Versioning.** Slots follow declaration order; a defaulted method is an
   appended slot an older table may lack (the proxy runs the default). The
   table header `KindHeader { struct_size, floor_hash }` carries FNV-1a

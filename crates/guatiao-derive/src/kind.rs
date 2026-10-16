@@ -4,7 +4,11 @@
 
 //! `#[guatiao::kind]`: a provider kind declared as a trait.
 //!
-//! The trait is emitted unchanged. Beside it:
+//! The trait is emitted with one provided method added beside each one
+//! answering a `Value`, `Map` or `List`: `<method>_in`, the same call
+//! naming the allocator the caller wants the answer in, which is what a
+//! shim calls (the caller's allocator arrives in the out slot as an empty
+//! container, a carrier). Beside the trait:
 //!
 //! - `<Trait>Vtable`, a `repr(C)` table: a `KindHeader`, then one slot per
 //!   method in declaration order, each a monomorphised shim;
@@ -336,7 +340,44 @@ fn plan_methods(tr: &ItemTrait, object: bool, roots: Roots<'_>) -> syn::Result<V
             "a kind needs at least one method; an empty table serves nothing",
         ));
     }
+    for m in plans.iter().filter(|m| m.answers_tree()) {
+        let added = in_ident(&m.ident).to_string();
+        if let Some(clash) = plans.iter().find(|p| p.ident.unraw() == added) {
+            return Err(syn::Error::new_spanned(
+                &clash.ident,
+                format!(
+                    "the attribute adds `{added}` beside `{}`, which answers a tree, so a method \
+                     cannot have that name; give it another",
+                    m.ident.unraw()
+                ),
+            ));
+        }
+    }
     Ok(plans)
+}
+
+impl MethodPlan {
+    /// Whether the answer is a `Value`, `Map` or `List`: a tree the caller
+    /// wants in its own allocator, which the trait's `<method>_in` builds.
+    fn answers_tree(&self) -> bool {
+        matches!(self.ret, RetKind::Value | RetKind::Map | RetKind::List)
+    }
+
+    /// The name `<method>_in`'s allocator takes: `alloc`, unless an
+    /// argument already has it.
+    fn alloc_param(&self) -> Ident {
+        if self.args.iter().any(|a| a.ident.unraw() == "alloc") {
+            format_ident!("alloc_")
+        } else {
+            format_ident!("alloc")
+        }
+    }
+}
+
+/// `<method>_in`: the method with the caller's allocator, which a shim
+/// calls for a tree answer.
+fn in_ident(method: &Ident) -> Ident {
+    format_ident!("{}_in", method)
 }
 
 fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<MethodPlan> {
@@ -1053,6 +1094,29 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         }
     });
 
+    // What a C provider of a table with a tree answer needs to know.
+    let carrier_doc = methods
+        .iter()
+        .any(|m| {
+            matches!(
+                m.ret,
+                RetKind::Value | RetKind::Map | RetKind::List | RetKind::Owned(_)
+            )
+        })
+        .then(|| {
+            quote! {
+                ///
+                /// A slot answering a value, a map or a list finds its out
+                /// slot holding a carrier, which owns nothing: an empty map
+                /// or list, or an ABSENT value, whose `alloc` (the map
+                /// arm's, for a value) names the allocator the caller wants
+                /// the answer in, or is null. Build the answer through it
+                /// and the caller keeps it as it is; built anywhere else,
+                /// the caller copies it. Either way, write the answer over
+                /// the carrier without freeing it.
+            }
+        });
+
     // The trait, with `into_object` appended for an object kind: the way
     // an implementation becomes a handle. `where Self: Sized` keeps it off
     // the trait object, so it is not a slot.
@@ -1076,12 +1140,50 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         };
         tr.items.push(into_object);
     }
+    // And `<method>_in` beside every method answering a tree: what a shim
+    // calls, naming the caller's allocator. Provided, so an implementation
+    // that does not build there still compiles and is copied.
+    for m in methods.iter().filter(|m| m.answers_tree()) {
+        let method = &m.ident;
+        let in_method = in_ident(method);
+        let alloc = m.alloc_param();
+        let receiver = if m.mutable {
+            quote!(&mut self)
+        } else {
+            quote!(&self)
+        };
+        let params = m.args.iter().map(|a| {
+            let ident = &a.ident;
+            let ty = &a.ty;
+            quote!(#ident: #ty)
+        });
+        let names = m.args.iter().map(|a| &a.ident);
+        let ret_ty = &m.ret_ty;
+        let summary = format!(" `{}`, its answer built through `{alloc}`.", method.unraw());
+        let item: TraitItem = syn::parse_quote! {
+            #[doc = #summary]
+            ///
+            /// What a call through the kind's table runs, naming the
+            /// allocator the caller wants the answer in. Build the answer
+            /// there, with the `_in` forms, and it crosses without a copy.
+            /// The default answers the method itself, which the caller
+            /// then copies into `alloc`.
+            #[allow(unused_variables)]
+            fn #in_method(#receiver #(, #params)*, #alloc: ::guatiao::Alloc) #ret_ty {
+                self.#method(#(#names),*)
+            }
+        };
+        tr.items.push(item);
+    }
 
     quote! {
         #live_static
 
         #tr
 
+        /// The kind's function table: a header, then one slot per method,
+        /// in declaration order.
+        #carrier_doc
         #[repr(C)]
         #[doc(hidden)]
         #[allow(non_snake_case)]
@@ -1167,7 +1269,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
 
         #table_for
 
-        #[allow(clippy::needless_question_mark)]
+        #[allow(clippy::needless_question_mark, clippy::redundant_closure_call)]
         impl #trait_ident for ::guatiao::library::Remote<dyn #trait_ident> {
             #(#proxies)*
         }
@@ -1452,7 +1554,25 @@ fn emit_shim(
             _ => quote!(#ident),
         }
     });
-    let call = quote!(__this.#method(#(#call_args),*));
+    // A tree is built in the allocator the caller's carrier names, through
+    // `<method>_in`; any other answer through the method itself.
+    let call = if m.answers_tree() {
+        let in_method = in_ident(method);
+        quote!(__this.#in_method(#(#call_args,)* __alloc))
+    } else {
+        quote!(__this.#method(#(#call_args),*))
+    };
+    let alloc_read = matches!(
+        m.ret,
+        RetKind::Value | RetKind::Map | RetKind::List | RetKind::Owned(_)
+    )
+    .then(|| {
+        quote! {
+            // SAFETY: the proxy passes an initialised out slot, and the
+            // allocator a carrier names outlives what is built through it.
+            let __alloc = unsafe { ::guatiao::library::kind::return_alloc(__out) };
+        }
+    });
 
     // Who `ctx` is: a provider's `&T`, the cell an object was boxed in, or
     // the address of a lender's pointer.
@@ -1533,7 +1653,7 @@ fn emit_shim(
             unsafe { ::guatiao::library::kind::write_out(__out, ::guatiao::Text::new(&#answer)) }
         },
         RetKind::Owned(ty) => quote! {
-            match <#ty as ::guatiao::ToValue>::to_value_in(&#answer, ::guatiao::Alloc::rust()) {
+            match <#ty as ::guatiao::ToValue>::to_value_in(&#answer, __alloc) {
                 // SAFETY: the proxy passes a writable out slot.
                 ::core::result::Result::Ok(__v) => unsafe { ::guatiao::library::kind::write_out(__out, __v) },
                 // SAFETY: the proxy passes a writable error slot.
@@ -1631,6 +1751,7 @@ fn emit_shim(
                 #(#object_reads)*
                 #this
                 #(#reads)*
+                #alloc_read
                 #body
             })
         }
@@ -1644,11 +1765,15 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
     let end = end_ident(&m.ident);
     let slot_ty = slot_type(m);
     let ret_ty = &m.ret_ty;
-    let params = m.args.iter().map(|a| {
-        let ident = &a.ident;
-        let ty = &a.ty;
-        quote!(#ident: #ty)
-    });
+    let params: Vec<TokenStream> = m
+        .args
+        .iter()
+        .map(|a| {
+            let ident = &a.ident;
+            let ty = &a.ty;
+            quote!(#ident: #ty)
+        })
+        .collect();
 
     // An error on the proxy side: `Err` for a fallible method, a panic
     // for one that cannot fail (the failure is then a broken table or a
@@ -1834,14 +1959,17 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
         answer
     };
 
-    let alloc_init = matches!(
-        m.ret,
-        RetKind::Value | RetKind::Owned(_) | RetKind::Map | RetKind::List
-    )
-    .then(|| quote! { let __alloc = ::guatiao::Alloc::rust(); });
+    // The allocator the answer is wanted in: the one `<method>_in` was
+    // handed for a tree, this side's own for a value decoded on arrival.
+    let alloc_param = m.alloc_param();
+    let alloc_init = if m.answers_tree() {
+        Some(quote! { let __alloc = #alloc_param; })
+    } else {
+        matches!(m.ret, RetKind::Owned(_))
+            .then(|| quote! { let __alloc = ::guatiao::Alloc::rust(); })
+    };
     let call = quote! {
         #(#marshals)*
-        #alloc_init
         #out_init
         #err_init
         // SAFETY: the slot's own signature, read under the table's size;
@@ -1860,14 +1988,41 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
             #call
         },
         // An appended slot: absent from an older table, so the default
-        // body runs, exactly as it would on a type implementing the trait.
-        Some(block) => quote! {
-            // SAFETY: the slot at that offset has this type in `#table`.
-            match unsafe { self.slot::<#slot_ty>(::core::mem::offset_of!(#table, #method), #table::#end()) } {
-                ::core::option::Option::Some(__f) => { #call }
-                ::core::option::Option::None => #block
+        // body runs, exactly as it would on a type implementing the trait,
+        // and a tree it answers is moved into the allocator asked for.
+        Some(block) => {
+            let fallback = if m.answers_tree() {
+                let ret = match &m.ret {
+                    RetKind::Value => quote!(value_ret),
+                    RetKind::Map => quote!(map_ret),
+                    _ => quote!(list_ret),
+                };
+                let rehome = if m.fallible {
+                    quote!(__out.and_then(|__v| ::guatiao::library::kind::#ret(__v, __alloc)))
+                } else {
+                    let f = fail(quote!(__e));
+                    quote! {
+                        match ::guatiao::library::kind::#ret(__out, __alloc) {
+                            ::core::result::Result::Ok(__v) => __v,
+                            ::core::result::Result::Err(__e) => { #f }
+                        }
+                    }
+                };
+                quote! {{
+                    let __out = (|| #ret_ty #block)();
+                    #rehome
+                }}
+            } else {
+                quote!(#block)
+            };
+            quote! {
+                // SAFETY: the slot at that offset has this type in `#table`.
+                match unsafe { self.slot::<#slot_ty>(::core::mem::offset_of!(#table, #method), #table::#end()) } {
+                    ::core::option::Option::Some(__f) => { #call }
+                    ::core::option::Option::None => #fallback
+                }
             }
-        },
+        }
     };
 
     let receiver = if m.mutable {
@@ -1875,9 +2030,26 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
     } else {
         quote!(&self)
     };
+    if !m.answers_tree() {
+        return quote! {
+            fn #method(#receiver #(, #params)*) #ret_ty {
+                #alloc_init
+                #body
+            }
+        };
+    }
+    // A tree: the call with the caller's allocator, and the method itself
+    // asking for this side's.
+    let in_method = in_ident(method);
+    let names = m.args.iter().map(|a| &a.ident);
     quote! {
-        fn #method(#receiver #(, #params)*) #ret_ty {
+        fn #in_method(#receiver #(, #params)*, #alloc_param: ::guatiao::Alloc) #ret_ty {
+            #alloc_init
             #body
+        }
+
+        fn #method(#receiver #(, #params)*) #ret_ty {
+            self.#in_method(#(#names,)* ::guatiao::Alloc::rust())
         }
     }
 }
@@ -1892,11 +2064,27 @@ fn emit_forward(m: &MethodPlan) -> TokenStream {
         let ty = &a.ty;
         quote!(#ident: #ty)
     });
-    let names = m.args.iter().map(|a| &a.ident);
+    let names: Vec<&Ident> = m.args.iter().map(|a| &a.ident).collect();
+    let in_forward = m.answers_tree().then(|| {
+        let in_method = in_ident(method);
+        let alloc = m.alloc_param();
+        let params = m.args.iter().map(|a| {
+            let ident = &a.ident;
+            let ty = &a.ty;
+            quote!(#ident: #ty)
+        });
+        quote! {
+            fn #in_method(&self #(, #params)*, #alloc: ::guatiao::Alloc) #ret_ty {
+                (**self).#in_method(#(#names,)* #alloc)
+            }
+        }
+    });
     quote! {
         fn #method(&self #(, #params)*) #ret_ty {
             (**self).#method(#(#names),*)
         }
+
+        #in_forward
     }
 }
 
@@ -2313,22 +2501,70 @@ mod tests {
         }
     }
 
-    #[test]
-    fn the_expansion_matches_the_snapshot() {
-        let out = expand_str("", GREETER).expect("expands");
+    /// The expansion of `item`, against `src/snapshots/<name>.expected.rs`;
+    /// on a difference, the new one is written beside it as
+    /// `<name>.actual.rs`.
+    fn matches_snapshot(name: &str, item: &str, expected: &str) {
+        let out = expand_str("", item).expect("expands");
         let file: syn::File = syn::parse_str(&out).unwrap();
         let pretty = prettyplease::unparse(&file);
-        let expected = include_str!("snapshots/greeter.expected.rs");
         if pretty != expected {
-            let path = concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/src/snapshots/greeter.actual.rs"
+            let path = format!(
+                "{}/src/snapshots/{name}.actual.rs",
+                env!("CARGO_MANIFEST_DIR")
             );
             std::fs::write(path, &pretty).unwrap();
             panic!(
-                "the expansion changed; compare src/snapshots/greeter.actual.rs with greeter.expected.rs and move it over if the change is intended"
+                "the expansion changed; compare src/snapshots/{name}.actual.rs with {name}.expected.rs and move it over if the change is intended"
             );
         }
+    }
+
+    #[test]
+    fn the_expansion_matches_the_snapshot() {
+        matches_snapshot(
+            "greeter",
+            GREETER,
+            include_str!("snapshots/greeter.expected.rs"),
+        );
+    }
+
+    /// Every tree answer: `<method>_in` on the trait, a shim building in
+    /// the carried allocator, a proxy writing the carrier, and an appended
+    /// slot's default moved into the allocator asked for.
+    #[test]
+    fn a_tree_answer_expands_to_its_snapshot() {
+        const TREES: &str = r#"
+            pub trait Trees: Send + Sync {
+                fn map(&self, name: &str) -> Result<Map, ProviderError>;
+                fn value(&self) -> Value;
+                fn list(&self) -> List { List::new() }
+            }
+        "#;
+        matches_snapshot("trees", TREES, include_str!("snapshots/trees.expected.rs"));
+    }
+
+    #[test]
+    fn a_method_named_like_an_added_one_is_refused() {
+        let why = expand_str(
+            "",
+            "pub trait T: Send + Sync { fn map(&self) -> Map; fn map_in(&self) -> i64; }",
+        )
+        .expect_err("refused");
+        assert!(why.contains("adds `map_in` beside `map`"), "{why}");
+        // Not a tree: nothing is added, so the name is free.
+        expand_str(
+            "",
+            "pub trait T: Send + Sync { fn count(&self) -> i64; fn count_in(&self) -> i64; }",
+        )
+        .expect("expands");
+        // An argument named `alloc` leaves the added parameter `alloc_`.
+        let out = expand_str(
+            "",
+            "pub trait T: Send + Sync { fn map(&self, alloc: i64) -> Map; }",
+        )
+        .expect("expands");
+        assert!(out.contains("alloc_ : :: guatiao :: Alloc"), "{out}");
     }
 
     /// The literal the expansion writes as the table's hash.

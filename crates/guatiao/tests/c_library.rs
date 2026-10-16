@@ -23,7 +23,7 @@ use core::ptr::NonNull;
 
 use greeter_kind::{Greeter, GreeterVtable, Listener};
 use guatiao::library::{Kind, ProviderError, Registry};
-use guatiao::{Map, Status, Str};
+use guatiao::{Alloc, Map, Status, Str};
 
 /// Counts this thread's heap allocations, so a call can be shown to make
 /// none: the other tests run on other threads.
@@ -149,14 +149,56 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     let greeter = offer.default_instance().expect("its ctx is its instance");
 
     // 2. A call crosses into C and back: the answer is a map C built
-    // through its own allocator, read here and freed here -- through
-    // that allocator, which the value carries.
+    // through the allocator the proxy carried in, this side's own, so the
+    // host holds the very block C built: nothing was copied.
+    // SAFETY: the library the registry mapped above; opening it again only
+    // takes another reference to the same image.
+    let image = unsafe { libloading::Library::new(&library) }.expect("the same file");
+    // SAFETY: the signature `greeter_in_c.c` declares.
+    let last_built: libloading::Symbol<unsafe extern "C" fn() -> *const c_void> =
+        unsafe { image.get(b"c_greeter_last_built\0") }.expect("exported");
     let answer = greeter.greet("ana").expect("the C greeter answers");
     assert_eq!(
         answer.get("greeting").and_then(TryAsRef::<str>::try_as_ref),
         Some("hello from C, ana")
     );
-    drop(answer);
+    let (entries, len, cap, alloc) = answer.into_raw_parts();
+    // SAFETY: a getter that takes nothing.
+    assert_eq!(entries.cast::<c_void>().cast_const(), unsafe {
+        last_built()
+    });
+    assert_eq!(
+        alloc,
+        Alloc::rust().as_raw(),
+        "built in the host's allocator"
+    );
+    // SAFETY: the four fields `into_raw_parts` just gave up.
+    drop(unsafe { Map::from_raw_parts(entries, len, cap, alloc) });
+
+    // 2b. A caller that carries no allocator -- an older host, a zeroed
+    // slot -- gets a map built through C's own, and frees it through the
+    // allocator it records.
+    {
+        let remote = offer.remote().expect("its ctx is its instance");
+        // SAFETY: the registry's copy of the table this offer validated.
+        let greet = unsafe { (*remote.table().cast::<GreeterVtable>()).greet }.expect("filled");
+        // SAFETY: an empty map over no storage.
+        let mut out =
+            unsafe { Map::from_raw_parts(core::ptr::null_mut(), 0, 0, core::ptr::null()) };
+        let mut err = ProviderError::none();
+        // SAFETY: the slot's signature, a live name, writable out slots.
+        let status = unsafe { greet(remote.ctx(), Str::new("bo"), &mut out, &mut err) };
+        assert_eq!(status, Status::GUATIAO_OK);
+        assert_ne!(
+            out.alloc().expect("recorded").as_raw(),
+            Alloc::rust().as_raw(),
+            "built in C's own allocator"
+        );
+        assert_eq!(
+            out.get("greeting").and_then(TryAsRef::<str>::try_as_ref),
+            Some("hello from C, bo")
+        );
+    }
 
     // 3. A ProviderError crosses out of C with its message.
     let e = greeter.greet("").unwrap_err();
@@ -190,9 +232,6 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     // `of::<Plain>()` built, the listener C's own, on C's stack. The Rust
     // shim calls it through C's table and never calls its `destroy`.
     {
-        // SAFETY: the library the registry mapped above; opening it again
-        // only takes another reference to the same image.
-        let image = unsafe { libloading::Library::new(&library) }.expect("the same file");
         // SAFETY: the signature `greeter_in_c.c` declares.
         let lend: libloading::Symbol<
             unsafe extern "C" fn(*const GreeterVtable, *mut c_void, Str<'_>, *mut Tape) -> Status,
@@ -218,6 +257,7 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
         );
         assert_eq!(&tape.last[..tape.len], b"dee");
     }
+    drop(image);
 
     // 8. A C library with no `unload` slot promises nothing, so the host
     // is refused until it insists.

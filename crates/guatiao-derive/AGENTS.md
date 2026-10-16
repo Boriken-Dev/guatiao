@@ -168,7 +168,9 @@ parser, which a consumer deriving only `Schema` should not pay for.
 
 **`#[kind]` on a trait** (`#[kind(name = "...")]` names the kind; the
 default is the trait's ident in snake case, `SessionBackend` →
-`"session_backend"`). Emits the trait verbatim, then:
+`"session_backend"`). Emits the trait, with `<method>_in(.., alloc: Alloc)`
+added as a provided method beside every method answering a `Value`, `Map`
+or `List` (its default answers `<method>(..)`), then:
 
 | item | what |
 | --- | --- |
@@ -190,8 +192,9 @@ Accepted method shapes — receiver `&self`, the trait names `Send + Sync`:
 | any other argument type, by value | `*const Value` via `ToValue` (the shim reads it with `FromValue`) |
 | `Object<dyn K>` (`K` an object kind) | an `ObjectRaw` by value; **ownership crosses with the call**, the callee destroys it — taken first in the shim, before anything can fail |
 | `&mut dyn K` / `&dyn K` (`K` an object kind) | **lent for the call**: `*const ObjectRaw` (`const guatiao_object *`) on the caller's stack, `ctx` the address of the caller's `*mut dyn K`, the table `K`'s lent table; the callee gets `BorrowedMut`/`Borrowed` (no `Drop`) and never calls `destroy`; nothing is allocated. `&dyn K` needs a `&self` method on `K`; lent shared, a `&mut self` slot answers `GUATIAO_ERR_UNSUPPORTED`. A provider kind, or `&dyn K` of a kind with no `&self` method, is a compile error with a sentence (a `const` assertion on the hidden `Lend::LENT_MUT`/`LENT`) |
-| return `()`, scalar, `Value`, `Map`, `List`, `String` | an out-pointer (`String` as `Text`) |
-| any other return type | `*mut Value` via `ToValue`, read back with `FromValue` |
+| return `()`, scalar, `String` | an out-pointer (`String` as `Text`) |
+| return `Value`, `Map`, `List` | an out-pointer the proxy fills first with a **carrier**: an empty container recording the allocator the answer is wanted in (ABSENT, its map arm recording it, for a `Value`). The shim reads it (`kind::return_alloc`) and calls `<method>_in` with it; a tree arriving in any other allocator is copied there by the proxy |
+| any other return type | `*mut Value` via `ToValue` into the carrier's allocator, read back with `FromValue` |
 | return `Object<dyn K>` | `out: *mut ObjectRaw`; the caller owns what it receives |
 | `Result<X, ProviderError>` | `X` as above plus `err: *mut ProviderError`; **required** for any method that converts, passes an `Object` or lends one |
 
@@ -206,7 +209,8 @@ lent object with another bound beside the trait (`&mut (dyn K + Send)`),
 a borrowed argument of any other type, a value type by value as an argument, `impl Trait` anywhere,
 a function argument, a borrowed or `impl Trait` return, a `Result` whose
 error is not `ProviderError`, a method named `header` (or `destroy` or
-`into_object` on an object kind), an argument whose name starts with
+`into_object` on an object kind), a method named `<m>_in` beside a method
+`<m>` answering a tree, an argument whose name starts with
 `__`, and an attribute key other than `name`, `object` and `crate`.
 
 **Types are read by path, not by last segment.** guatiao's `Value`,

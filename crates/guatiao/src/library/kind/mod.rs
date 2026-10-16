@@ -120,6 +120,18 @@ pub trait Kind: 'static {
 }
 
 /// The first eight bytes of every kind table.
+///
+/// **A tree answer is built where the caller asks.** A slot whose out
+/// parameter is a `guatiao_value *`, `guatiao_map *` or `guatiao_list *`
+/// finds it holding a carrier, which owns nothing: an empty map or list,
+/// or an ABSENT value, whose `alloc` (`payload.map.alloc`, for a value)
+/// names the allocator the caller wants the answer in, or is null. A slot
+/// that builds every container and string of its answer through that
+/// allocator hands it over as it is; one that builds elsewhere, or a
+/// caller that carried none, has the answer copied into the caller's
+/// allocator on arrival and the original freed through its own. Write the
+/// answer over the carrier without freeing it. A caller passes an
+/// initialised out slot: a carrier, or zeroes.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KindHeader {
