@@ -238,6 +238,11 @@ pub enum KindMismatch {
     /// shims read `ctx` as an object cell one caller owns, and a provider's
     /// `ctx` is shared.
     ObjectKind,
+    /// The table's address is not aligned for the kind's table type.
+    Misaligned,
+    /// The provider's descriptor was refused where it was read, before
+    /// any table: which part, and what was wrong.
+    Unreadable(String),
 }
 
 impl core::fmt::Display for KindMismatch {
@@ -255,6 +260,12 @@ impl core::fmt::Display for KindMismatch {
                 write!(f, "the required slot `{name}` is null")
             }
             KindMismatch::ObjectKind => f.write_str("an object kind is never served by a provider"),
+            KindMismatch::Misaligned => {
+                f.write_str("the table is not aligned for the kind's table type")
+            }
+            KindMismatch::Unreadable(why) => {
+                write!(f, "the provider's descriptor is refused: {why}")
+            }
         }
     }
 }

@@ -29,14 +29,15 @@ unsafe impl Sync for Host {}
 impl Host {
     /// Wraps the pointer a host passed to the entry point.
     ///
-    /// `None` for null, or for a descriptor below the floor.
+    /// `None` for null, for a pointer that is misaligned or no address at
+    /// all, or for a descriptor below the floor.
     ///
     /// # Safety
     ///
     /// `raw` is null, or points at `raw->struct_size` readable, aligned
     /// bytes that stay valid and unchanged for the life of the process.
     pub unsafe fn from_raw(raw: *const HostInfo<'static>) -> Option<Host> {
-        if raw.is_null() {
+        if raw.is_null() || !addressable(raw) {
             return None;
         }
         // SAFETY: the caller guarantees the first four bytes are readable.
@@ -117,7 +118,7 @@ impl Host {
         }
         // SAFETY: the guard established the field is present.
         let table = unsafe { core::ptr::addr_of!((*self.raw).services).read() };
-        if table.is_null() {
+        if table.is_null() || !addressable(table) {
             return None;
         }
         // SAFETY: a non-null table points at one the host keeps for the
@@ -207,12 +208,23 @@ impl Host {
 /// declared, readable for its `struct_size`, valid while that library is
 /// mapped.
 unsafe fn read_answer(raw: *const ProviderInfo<'static>) -> Option<ProviderView> {
+    let bounds = super::check::Bounds::ANY;
+    bounds
+        .data(raw as usize, size_of::<u32>(), align_of::<ProviderInfo>())
+        .ok()?;
     // SAFETY: the caller guarantees the leading word is readable.
     let declared = unsafe { core::ptr::addr_of!((*raw).struct_size).read() } as usize;
     // SAFETY: the caller's contract; `declared` is the descriptor's own
     // limit, which the registry already checked against its array's
     // stride when it read the library.
-    unsafe { super::image::read_provider(raw, declared) }
+    unsafe { super::image::read_provider(raw, declared, bounds) }.ok()
+}
+
+/// Whether `raw` could address a `T` at all: aligned, and an address.
+fn addressable<T>(raw: *const T) -> bool {
+    super::check::Bounds::ANY
+        .data(raw as usize, size_of::<u32>(), align_of::<T>())
+        .is_ok()
 }
 
 // --- what a host keeps for its libraries -------------------------------
@@ -497,7 +509,7 @@ unsafe extern "C" fn services_alloc(ctx: *mut c_void) -> *const crate::value::al
 /// `raw` is null, or points at `raw->struct_size` readable, aligned bytes
 /// that stay valid for the call. Nothing past `struct_size` is read.
 pub unsafe fn read_host(raw: *const HostInfo) -> Option<HostInfo> {
-    if raw.is_null() {
+    if raw.is_null() || !addressable(raw) {
         return None;
     }
     // The leading `u32` only, through the raw pointer. Forming `&*raw`

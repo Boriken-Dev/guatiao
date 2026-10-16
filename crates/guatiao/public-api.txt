@@ -299,9 +299,11 @@ pub guatiao::library::kind::KindMismatch::BelowFloor::size: usize
 pub guatiao::library::kind::KindMismatch::HashMismatch
 pub guatiao::library::kind::KindMismatch::HashMismatch::expected: u32
 pub guatiao::library::kind::KindMismatch::HashMismatch::found: u32
+pub guatiao::library::kind::KindMismatch::Misaligned
 pub guatiao::library::kind::KindMismatch::NoTable
 pub guatiao::library::kind::KindMismatch::NullRequiredSlot(&'static str)
 pub guatiao::library::kind::KindMismatch::ObjectKind
+pub guatiao::library::kind::KindMismatch::Unreadable(alloc::string::String)
 impl core::clone::Clone for guatiao::library::kind::KindMismatch
 pub fn guatiao::library::kind::KindMismatch::clone(&self) -> Self
 impl core::cmp::Eq for guatiao::library::kind::KindMismatch
@@ -619,6 +621,7 @@ pub guatiao::library::registry::LoadError::Duplicate::key: alloc::string::String
 pub guatiao::library::registry::LoadError::Duplicate::second: std::path::PathBuf
 pub guatiao::library::registry::LoadError::Malformed
 pub guatiao::library::registry::LoadError::Malformed::path: std::path::PathBuf
+pub guatiao::library::registry::LoadError::Malformed::reason: alloc::string::String
 pub guatiao::library::registry::LoadError::Open
 pub guatiao::library::registry::LoadError::Open::path: std::path::PathBuf
 pub guatiao::library::registry::LoadError::Open::reason: alloc::string::String
@@ -920,9 +923,11 @@ pub guatiao::library::KindMismatch::BelowFloor::size: usize
 pub guatiao::library::KindMismatch::HashMismatch
 pub guatiao::library::KindMismatch::HashMismatch::expected: u32
 pub guatiao::library::KindMismatch::HashMismatch::found: u32
+pub guatiao::library::KindMismatch::Misaligned
 pub guatiao::library::KindMismatch::NoTable
 pub guatiao::library::KindMismatch::NullRequiredSlot(&'static str)
 pub guatiao::library::KindMismatch::ObjectKind
+pub guatiao::library::KindMismatch::Unreadable(alloc::string::String)
 impl core::clone::Clone for guatiao::library::kind::KindMismatch
 pub fn guatiao::library::kind::KindMismatch::clone(&self) -> Self
 impl core::cmp::Eq for guatiao::library::kind::KindMismatch
@@ -941,6 +946,7 @@ pub guatiao::library::LoadError::Duplicate::key: alloc::string::String
 pub guatiao::library::LoadError::Duplicate::second: std::path::PathBuf
 pub guatiao::library::LoadError::Malformed
 pub guatiao::library::LoadError::Malformed::path: std::path::PathBuf
+pub guatiao::library::LoadError::Malformed::reason: alloc::string::String
 pub guatiao::library::LoadError::Open
 pub guatiao::library::LoadError::Open::path: std::path::PathBuf
 pub guatiao::library::LoadError::Open::reason: alloc::string::String

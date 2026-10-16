@@ -43,6 +43,7 @@ use crate::value::alloc::Alloc;
 use crate::value::status::Status;
 use crate::value::types::{Map, MaybeNull, Str, Value};
 
+pub(crate) mod check;
 mod entry;
 mod host;
 mod image;

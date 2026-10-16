@@ -297,6 +297,52 @@ fn each_check_names_itself() {
             .unwrap_err(),
         KindMismatch::NoTable
     );
+
+    // One byte into a real table: refused before the header is read.
+    let words = [0usize; 8];
+    // SAFETY: refused by its address alone; nothing is read.
+    let misaligned = unsafe { words.as_ptr().cast::<u8>().add(1) }.cast::<c_void>();
+    assert_eq!(
+        // SAFETY: as above.
+        unsafe { Remote::<dyn Greeter>::from_raw(misaligned, 32, core::ptr::null_mut()) }
+            .unwrap_err(),
+        KindMismatch::Misaligned
+    );
+}
+
+/// A descriptor refused where it is read says why, through every door
+/// that reads one by reference.
+#[test]
+fn an_unreadable_descriptor_says_why() {
+    let info: &'static ProviderInfo<'static> = Box::leak(Box::new(ProviderInfo {
+        struct_size: size_of::<ProviderInfo>() as u32,
+        vtable_size: 0,
+        kinds: crate::library::desc::Kinds::empty(),
+        id: Str::new("wild"),
+        display_name: Str::new(""),
+        // In the low 64 KiB: refused before it is read.
+        config: 0x1000 as *const Value,
+        vtable: core::ptr::null(),
+        ctx: core::ptr::null_mut(),
+        meta: crate::value::types::MaybeNull::null(),
+        version: Str::new(""),
+        available: None,
+        tables: KindTables::empty(),
+        create: None,
+        destroy: None,
+    }));
+    assert!(info.view().is_none());
+    let Err(KindMismatch::Unreadable(why)) = info.as_kind::<dyn Greeter>() else {
+        panic!("an unreadable descriptor is refused by name");
+    };
+    assert!(
+        why.starts_with("a provider's configuration schema"),
+        "{why}"
+    );
+    let refused = info
+        .instantiate::<dyn Greeter>(&Value::null())
+        .expect_err("nothing is built from it");
+    assert_eq!(refused.status(), Status::GUATIAO_ERR_BAD_VALUE);
 }
 
 /// A header hash of zero is "unchecked" through `from_raw` alone; a

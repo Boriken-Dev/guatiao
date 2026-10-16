@@ -551,6 +551,9 @@ typedef struct guatiao_kinds {
 /*
  One kind's function table, on a provider that serves several kinds
  with a table each.
+
+ The table `vtable` points at is a kind's header followed by function
+ pointers, each null or one a reader accepts as code.
  */
 typedef struct guatiao_kind_table {
   /*
@@ -602,6 +605,10 @@ typedef struct guatiao_kind_tables {
  the kind can check the size the same way it checks an allocator's, and
  a host that does not know the kind can list the provider without ever
  looking at the pointer.
+
+ Its fields are its producer's contract: a host checks their sizes,
+ pointers and lengths where the descriptor enters, and refuses one that
+ fails.
  */
 typedef struct guatiao_provider_info {
   /*
@@ -950,6 +957,10 @@ typedef struct guatiao_providers {
 
 /*
  What a library says about itself, on the way out.
+
+ Its fields, and those of every provider it lists, are its producer's
+ contract: a host checks their sizes, pointers and lengths where the
+ descriptor enters, and refuses one that fails.
  */
 typedef struct guatiao_library_info {
   /*

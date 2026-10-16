@@ -957,6 +957,26 @@ doors that take a bare pointer from anywhere (`Remote::from_raw`,
 `unload`. `ProviderView`'s fields are private, so its safe `available()`
 can only call a slot with the `ctx` it was read with.
 
+**What a reader checks** where a descriptor enters, for every origin
+(a loaded file, `register_local`, `register_entry`, `ProviderInfo::view`,
+a host's `get`/`list`): each `struct_size` floor, `abi_version`, element
+size against stride; every non-null pointer aligned for its type, outside
+the low 64 KiB and canonical (x86-64: 57-bit; AArch64: 52-bit, top-byte
+tag ignored); every length × stride addressable and capped — 4096
+providers, 256 kind names and 256 per-kind tables per provider, strides
+≤ 4096 bytes, text ≤ 64 KiB, tables ≤ 64 KiB; text UTF-8; each per-kind
+table's words after its 8-byte header null or a plausible function
+pointer (a per-kind table is a header followed by function pointers).
+**For a library mapped from a file** the loader also reads the file's
+layout (its segments and executable sections, placed by where its entry
+symbol landed) and refuses a data pointer that starts inside the image and
+runs past it, and any function pointer — `available`, `create`,
+`destroy`, `unload`, every per-kind table slot — outside the image's
+executable sections; a pointer outside the image (the library's heap) is
+accepted. A file whose layout cannot be read or does not place at the
+mapping is read without the image checks. None of this proves a table is
+the kind it names or that a slot expects its `ctx`.
+
 **Everything a registry reports is OWNED.** `ProviderView` and
 `LibraryView` copy every string (`String`) and every value (`Value`,
 `Map`) out of the library's descriptor at the read, so nothing a host
@@ -987,9 +1007,10 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
   `Skipped::DeclinedThisHost` (its entry point answered null),
   `Skipped::UnsupportedAbi { declared }` (it speaks another envelope
   version; the host's `abi_version` is checked by the library, the
-  library's by the loader), and `LoadError::Malformed` (a descriptor this
-  build cannot read: below the floor, non-UTF-8 text, a stride below the
-  floor, an element overlapping its neighbour). `Skipped` implements
+  library's by the loader), and `LoadError::Malformed { path, reason }`
+  (a check where the descriptor entered refused it; `reason` names the
+  part and the fault, e.g. "the provider array is not aligned for what it
+  points at" — see "What a reader checks" below). `Skipped` implements
   `Display` as one clause to print after the file's name
   (`{path}: already loaded from ..`).
 - **A library can be retired.** `Registry::retire(library_key)` takes its
@@ -1072,7 +1093,7 @@ holds points into the image but the code pointers — `vtable`, `ctx`,
 - **A provider carries its own version**, empty meaning its library's —
   which is the common case, because a provider shipped in its own library
   moves with it.
-- `LoadError` is then only `Open`, `Malformed`, and `Duplicate` for two
+- `LoadError` is then only `Open`, `Malformed { path, reason }`, and `Duplicate` for two
   **different** providers landing on one key, which only a host's own
   template can produce.
 
@@ -1276,8 +1297,10 @@ drop(s);                                                             // the libr
   is `Sync` only for a kind whose trait names `Sync`.)
 - **`KindMismatch`** (`#[non_exhaustive]`): `NoTable`, `BelowFloor {
   size, floor }`, `HashMismatch { expected, found }`,
-  `NullRequiredSlot(name)`, `ObjectKind`. A `floor_hash` of `0` passes
-  only through `from_raw`.
+  `NullRequiredSlot(name)`, `ObjectKind`, `Misaligned` (the table's
+  address is not aligned for the kind's table type), `Unreadable(reason)`
+  (`ProviderInfo::{as_kind, offer}` over a descriptor the checks refuse).
+  A `floor_hash` of `0` passes only through `from_raw`.
 - **`InstantiateError`** (`#[non_exhaustive]`): `Invalid(ValidationError)`,
   the configuration does not fit `config_schema()` and the provider was
   never asked (a schema this build cannot read is not checked);

@@ -472,6 +472,98 @@ fn probe_object<'data, R: object::ReadRef<'data>>(data: R) -> Result<Probe, std:
     })
 }
 
+/// Where a library file's code and data sit, at the addresses it was
+/// linked at: what the loader measures a mapped image's pointers against.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Layout {
+    /// The entry symbol's address.
+    pub(crate) entry: u64,
+    /// From the lowest mapped segment's start to the highest one's end.
+    pub(crate) span: (u64, u64),
+    /// Every executable section, as `(start, end)`.
+    pub(crate) code: Vec<(u64, u64)>,
+}
+
+/// The layout of the library file at `path`, read as [`probe`] reads it
+/// (a universal Mach-O through this architecture's slice), or `None` when
+/// it cannot be read, names no entry symbol, or has no executable section.
+pub(crate) fn layout(path: &Path) -> Option<Layout> {
+    let cache = object::ReadCache::new(std::fs::File::open(path).ok()?);
+    match object::FileKind::parse(&cache) {
+        Ok(object::FileKind::MachOFat32) => {
+            let fat = object::read::macho::MachOFatFile32::parse(&cache).ok()?;
+            layout_slice(&cache, fat.arches())
+        }
+        Ok(object::FileKind::MachOFat64) => {
+            let fat = object::read::macho::MachOFatFile64::parse(&cache).ok()?;
+            layout_slice(&cache, fat.arches())
+        }
+        _ => layout_object(&cache),
+    }
+}
+
+fn layout_slice<R: object::read::ReadCacheOps, A: object::read::macho::FatArch>(
+    cache: &object::ReadCache<R>,
+    arches: &[A],
+) -> Option<Layout> {
+    let want = running_cputype();
+    let arch = arches.iter().find(|a| Some(a.cputype()) == want)?;
+    let (offset, size) = arch.file_range();
+    layout_object(cache.range(offset, size))
+}
+
+fn layout_object<'data, R: object::ReadRef<'data>>(data: R) -> Option<Layout> {
+    use object::{Object, ObjectSection, ObjectSegment, ObjectSymbol, SectionKind};
+
+    let file = object::File::parse(data).ok()?;
+    let macho = file.format() == object::BinaryFormat::MachO;
+    let wanted = &ENTRY_SYMBOL[..ENTRY_SYMBOL.len() - 1];
+    let is_entry = |name: &[u8]| match name.strip_prefix(b"_") {
+        Some(rest) if macho => rest == wanted,
+        _ => name == wanted,
+    };
+    let from_exports = file.exports().ok().and_then(|exports| {
+        exports.into_iter().flatten().find_map(|export| {
+            let name = export.name().into_name()?;
+            match export.target() {
+                object::ExportTarget::Address { address } if is_entry(name) => Some(address),
+                _ => None,
+            }
+        })
+    });
+    let entry = from_exports.or_else(|| {
+        file.dynamic_symbols()
+            .filter(|s| !s.is_undefined() && s.address() != 0)
+            .find(|s| s.name_bytes().is_ok_and(is_entry))
+            .map(|s| s.address())
+    })?;
+
+    let mut span: Option<(u64, u64)> = None;
+    for segment in file.segments() {
+        let (start, size) = (segment.address(), segment.size());
+        let Some(end) = start.checked_add(size).filter(|_| size > 0) else {
+            continue;
+        };
+        span = Some(match span {
+            Some((lo, hi)) => (lo.min(start), hi.max(end)),
+            None => (start, end),
+        });
+    }
+    let code: Vec<(u64, u64)> = file
+        .sections()
+        .filter(|s| s.kind() == SectionKind::Text && s.size() > 0)
+        .filter_map(|s| Some((s.address(), s.address().checked_add(s.size())?)))
+        .collect();
+    if code.is_empty() {
+        return None;
+    }
+    Some(Layout {
+        entry,
+        span: span?,
+        code,
+    })
+}
+
 /// Rules a host applies to what a library declares, before mapping it.
 ///
 /// Each rule is `KEY=VALUE` or `!KEY=VALUE`. A positive rule skips a file
