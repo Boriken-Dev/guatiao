@@ -10,6 +10,7 @@ members = [
     "examples/derived_greeter",
     "examples/greeter_host",
     "examples/wire_over_webtransport/server",
+    "benchmarks",
 ]
 # Builds only for wasm32, as its own workspace.
 exclude = ["examples/wire_over_webtransport/client"]
@@ -28,7 +29,8 @@ exclude = ["examples/wire_over_webtransport/client"]
 # hand, `derived_greeter` from the derives), the kind crate both compile
 # against (`greeter_kind`), and a host program that scans for them and
 # builds one from a configuration (`greeter_host`); an envelope is not
-# something prose can demonstrate.
+# something prose can demonstrate. `benchmarks` times the loader and kind
+# paths over those same libraries, run by hand, never published.
 
 # Every path that needs `std` says so: what `core` or `alloc` also holds is
 # spelled that way, in tests and build scripts too.
