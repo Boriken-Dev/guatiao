@@ -4,6 +4,8 @@ pub trait Greeter: Send + Sync {
         bytes.len() as i64
     }
 }
+/// The kind's function table: a header, then one slot per method,
+/// in declaration order.
 #[repr(C)]
 #[doc(hidden)]
 #[allow(non_snake_case)]
@@ -160,7 +162,7 @@ impl ::guatiao::library::Kind for dyn Greeter {
     }
 }
 unsafe impl ::guatiao::library::kind::Lend for dyn Greeter {}
-#[allow(clippy::needless_question_mark)]
+#[allow(clippy::needless_question_mark, clippy::redundant_closure_call)]
 impl Greeter for ::guatiao::library::Remote<dyn Greeter> {
     fn greet(&self, name: &str) -> Result<String, ProviderError> {
         let __f: unsafe extern "C" fn(

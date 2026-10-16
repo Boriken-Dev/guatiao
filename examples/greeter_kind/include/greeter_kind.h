@@ -15,6 +15,9 @@
  * guatiao_provider_info's `tables`, from a guatiao_library_entry of its
  * own. Every slot takes the provider's `ctx` first; an object kind's
  * table starts with `destroy`, which whoever holds the object last calls.
+ * A slot answering a map (`greet`) finds its out map empty, its `alloc`
+ * naming the allocator the caller wants the answer in: build through it
+ * and the answer crosses without a copy (guatiao.h, guatiao_kind_header).
  */
 
 
@@ -28,6 +31,19 @@
 #include <stdlib.h>
 #include <guatiao.h>
 
+/*
+ The kind's function table: a header, then one slot per method,
+ in declaration order.
+
+ A slot answering a value, a map or a list finds its out
+ slot holding a carrier, which owns nothing: an empty map
+ or list, or an ABSENT value, whose `alloc` (the map
+ arm's, for a value) names the allocator the caller wants
+ the answer in, or is null. Build the answer through it
+ and the caller keeps it as it is; built anywhere else,
+ the caller copies it. Either way, write the answer over
+ the carrier without freeing it.
+ */
 typedef struct greeter_vtable {
   guatiao_kind_header header;
   guatiao_status (*greet)(void *ctx, guatiao_str name, guatiao_map *out, guatiao_provider_error *err);
@@ -48,6 +64,10 @@ typedef struct greeter_vtable {
  */
 #define greeter_vtable_FLOOR_HASH 2695856491
 
+/*
+ The kind's function table: a header, then one slot per method,
+ in declaration order.
+ */
 typedef struct counter_vtable {
   guatiao_kind_header header;
   guatiao_status (*count)(void *ctx, int64_t *out);
@@ -59,6 +79,10 @@ typedef struct counter_vtable {
  */
 #define counter_vtable_FLOOR_HASH 1227528937
 
+/*
+ The kind's function table: a header, then one slot per method,
+ in declaration order.
+ */
 typedef struct conversation_vtable {
   guatiao_kind_header header;
   void (*destroy)(void *ctx);
@@ -73,6 +97,10 @@ typedef struct conversation_vtable {
  */
 #define conversation_vtable_FLOOR_HASH 2769624503
 
+/*
+ The kind's function table: a header, then one slot per method,
+ in declaration order.
+ */
 typedef struct listener_vtable {
   guatiao_kind_header header;
   void (*destroy)(void *ctx);

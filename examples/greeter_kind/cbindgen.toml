@@ -26,6 +26,9 @@ header = """
  * guatiao_provider_info's `tables`, from a guatiao_library_entry of its
  * own. Every slot takes the provider's `ctx` first; an object kind's
  * table starts with `destroy`, which whoever holds the object last calls.
+ * A slot answering a map (`greet`) finds its out map empty, its `alloc`
+ * naming the allocator the caller wants the answer in: build through it
+ * and the answer crosses without a copy (guatiao.h, guatiao_kind_header).
  */
 """
 
