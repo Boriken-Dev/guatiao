@@ -667,6 +667,29 @@ class GuatiaoBindings {
       int Function(ffi.Pointer<guatiao_registry>, guatiao_str,
           ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
 
+  int guatiao_registry_collect(
+    ffi.Pointer<guatiao_registry> reg,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_registry_collect(
+      reg,
+      alloc,
+      out,
+    );
+  }
+
+  late final _guatiao_registry_collectPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_registry>,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_registry_collect');
+  late final _guatiao_registry_collect =
+      _guatiao_registry_collectPtr.asFunction<
+          int Function(ffi.Pointer<guatiao_registry>,
+              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+
   void guatiao_registry_free(
     ffi.Pointer<guatiao_registry> reg,
   ) {
@@ -1998,6 +2021,30 @@ final class guatiao_host_services extends ffi.Struct {
               ffi.Pointer<guatiao_alloc> Function(ffi.Pointer<ffi.Void> ctx)>>
       alloc;
 
+  external ffi.Pointer<
+      ffi.NativeFunction<
+          guatiao_status Function(ffi.Pointer<ffi.Void> ctx, guatiao_str key,
+              ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out)>> get_pinned;
+
+  external ffi.Pointer<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<ffi.Void> ctx,
+              guatiao_str kind,
+              ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
+              ffi.Size cap,
+              ffi.Pointer<ffi.Size> total)>> list_pinned;
+
+  external ffi.Pointer<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<ffi.Void> ctx,
+              ffi.Pointer<guatiao_provider_info> desc)>> pin;
+
+  external ffi.Pointer<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<ffi.Void> ctx,
+              ffi.Pointer<guatiao_provider_info> desc)>> unpin;
+
   static ffi.Pointer<guatiao_host_services> $allocate(
     ffi.Allocator $allocator, {
     required int struct_size,
@@ -2022,13 +2069,43 @@ final class guatiao_host_services extends ffi.Struct {
             ffi.NativeFunction<
                 ffi.Pointer<guatiao_alloc> Function(ffi.Pointer<ffi.Void> ctx)>>
         alloc,
+    required ffi.Pointer<
+            ffi.NativeFunction<
+                guatiao_status Function(
+                    ffi.Pointer<ffi.Void> ctx,
+                    guatiao_str key,
+                    ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out)>>
+        get_pinned,
+    required ffi.Pointer<
+            ffi.NativeFunction<
+                guatiao_status Function(
+                    ffi.Pointer<ffi.Void> ctx,
+                    guatiao_str kind,
+                    ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
+                    ffi.Size cap,
+                    ffi.Pointer<ffi.Size> total)>>
+        list_pinned,
+    required ffi.Pointer<
+            ffi.NativeFunction<
+                ffi.Void Function(ffi.Pointer<ffi.Void> ctx,
+                    ffi.Pointer<guatiao_provider_info> desc)>>
+        pin,
+    required ffi.Pointer<
+            ffi.NativeFunction<
+                ffi.Void Function(ffi.Pointer<ffi.Void> ctx,
+                    ffi.Pointer<guatiao_provider_info> desc)>>
+        unpin,
   }) =>
       $allocator<guatiao_host_services>()
         ..ref.struct_size = struct_size
         ..ref.ctx = ctx
         ..ref.get = get
         ..ref.list = list
-        ..ref.alloc = alloc;
+        ..ref.alloc = alloc
+        ..ref.get_pinned = get_pinned
+        ..ref.list_pinned = list_pinned
+        ..ref.pin = pin
+        ..ref.unpin = unpin;
 }
 
 final class guatiao_kind_header extends ffi.Struct {

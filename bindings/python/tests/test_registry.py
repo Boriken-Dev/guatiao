@@ -147,11 +147,20 @@ def test_a_library_refuses_to_unload_while_an_instance_is_alive():
         assert not any(lib["id"] == "derived_greeter" for lib in reg.libraries())
 
 
+def test_a_retired_library_is_collected_once_nothing_of_it_is_alive():
+    with _scanned() as reg:
+        assert reg.collect() == [], "nothing is retired"
+        reg.retire("derived_greeter")
+        assert reg.collect() == ["derived_greeter"]
+        assert reg.collect() == [], "closed once"
+
+
 def test_both_symbols_are_declared():
     lib = _lib.core()
     assert "guatiao_registry_retire" not in lib.symbols_missing()
     assert "guatiao_registry_unload" not in lib.symbols_missing()
     assert "guatiao_registry_unload_unchecked" not in lib.symbols_missing()
+    assert "guatiao_registry_collect" not in lib.symbols_missing()
 
 
 def test_closed_registry_raises_on_use():

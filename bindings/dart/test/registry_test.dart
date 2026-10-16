@@ -151,6 +151,14 @@ void main() {
     expect(() => reg.unload('derived_greeter'), throwsA(isA<NotFound>()));
   });
 
+  test('a retired library is collected once nothing of it is alive', () {
+    final reg = scanned();
+    addTearDown(reg.close);
+    expect(reg.collect(), isEmpty, reason: 'nothing is retired');
+    reg.retire('derived_greeter');
+    expect(reg.collect(), ['derived_greeter']);
+    expect(reg.collect(), isEmpty, reason: 'closed once');
+  });
   test('a closed registry throws on use, and closes again quietly', () {
     final reg = Registry('dart-tests', '0.1');
     reg.close();

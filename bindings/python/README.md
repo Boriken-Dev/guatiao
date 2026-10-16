@@ -117,7 +117,8 @@ with Registry("my-host", "1.0") as reg:
         ...
 
     reg.retire("acme")                           # out of the registry, still mapped
-    reg.unload("acme")                           # and unmapped, on your word
+    reg.collect()                                # ["acme"]: closed, once nothing of it is alive
+    reg.unload("acme2")                          # out and unmapped at once, when it agrees
 ```
 
 Every answer that is data comes back as a plain `dict` or `list`.
@@ -182,10 +183,11 @@ provider's own words when it gave any.
   interpreter.
 - A `Registry` is used from one thread at a time, and a `Value` is not
   shared between threads without a lock of your own.
-- `Registry.unload` unmaps a library, and nothing can check that you have
-  released what you took from it first -- every value it built through
-  its own allocator, every table, `ctx` and `Instance`. `retire` has no
-  such condition and leaves the library mapped.
+- `Registry.unload` unmaps a library once its own `unload` function
+  agrees, and `collect` a retired one; neither can see a table or `ctx`
+  you took with `provider_table`. Let those go first: they are valid
+  until the library is closed, by `unload`, or once retired by
+  `collect` or the registry's next load, retire or unload.
 
 ## API overview
 

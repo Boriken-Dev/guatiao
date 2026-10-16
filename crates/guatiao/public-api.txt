@@ -11,6 +11,7 @@ impl core::fmt::Debug for guatiao::exports::library::HostRegistry
 pub fn guatiao::exports::library::HostRegistry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_available(*const guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_best(*const guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_collect(*mut guatiao::exports::library::HostRegistry, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_free(*mut guatiao::exports::library::HostRegistry)
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_host(*mut guatiao::exports::library::HostRegistry) -> *const guatiao::library::desc::HostInfo<'static>
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_keyed_by(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>) -> guatiao::value::status::Status

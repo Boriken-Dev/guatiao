@@ -290,6 +290,15 @@ impl HostRegistry {
         self.inner.provider(key).map(Provider::ctx)
     }
 
+    /// Closes the retired libraries nothing uses, as a list of their keys.
+    fn collect(&mut self, alloc: Alloc) -> Result<Value, ValueError> {
+        let mut list = List::new_in(alloc);
+        for key in self.inner.collect() {
+            list.try_push(Text::new_in(alloc, &key).map(Value::from)?)?;
+        }
+        Ok(list.into())
+    }
+
     /// One provider's configuration schema, the copy this registry owns.
     fn config(&self, key: &str) -> Option<&Value> {
         self.inner.provider(key).and_then(Provider::config_schema)
@@ -510,15 +519,19 @@ pub unsafe extern "C" fn guatiao_registry_host(reg: *mut HostRegistry) -> *const
 /// `key` is the library key — the template `guatiao_registry_libraries_keyed_by`
 /// sets, `%id` by default. Its providers leave the registry and the
 /// snapshot other libraries read, and the key may be loaded again.
-/// Everything a caller already took from it — a vtable pointer, a `ctx`,
-/// a descriptor fetched through the host's services — keeps working,
-/// because nothing is unmapped. Its configuration schema, which this
-/// registry owned, does not: `guatiao_registry_provider_config` answers
-/// null for a retired provider.
+/// Its configuration schema, which this registry owned, goes with it:
+/// `guatiao_registry_provider_config` answers null for a retired provider.
+///
+/// **A retired library is closed once nothing uses it**: by
+/// [`guatiao_registry_collect`], or by this registry's next load,
+/// registration, retire or unload, as soon as no Rust handle and no
+/// answer another library pinned through the host's services holds it
+/// and its `unload` slot agrees. A table, vtable or `ctx` pointer this
+/// caller took from it stays valid until then and not after: let it go
+/// before any of those calls. A library the host links is let go here.
 ///
 /// `GUATIAO_ERR_NOT_FOUND` when no library answers to `key`.
-/// `guatiao_registry_unload` is the same, followed by closing the
-/// mapping.
+/// `guatiao_registry_unload` takes it out and closes it at once.
 ///
 /// # Safety
 ///
@@ -541,14 +554,17 @@ pub unsafe extern "C" fn guatiao_registry_retire(reg: *mut HostRegistry, key: St
     })
 }
 
-/// Takes one library out of this registry **and unmaps it**, when the
-/// library agrees.
+/// Takes one library out of this registry **and unmaps it**, when
+/// nothing uses it and the library agrees.
 ///
-/// The library's `unload` slot is asked first: its promise that what it
-/// can account for is released. `GUATIAO_ERR_UNSUPPORTED` when it has no
-/// slot ([`guatiao_registry_unload_unchecked`] is the caller insisting);
-/// the library's own status when it refuses, `GUATIAO_ERR_BUSY` from one
-/// with an instance or object still alive; `GUATIAO_ERR_WRONG_KIND` for a
+/// `GUATIAO_ERR_BUSY` while anything holding a lease on it is alive: a
+/// Rust handle taken from this registry, or an answer another library
+/// pinned through the host's services (`get_pinned`, `list_pinned`).
+/// Then the library's `unload` slot is asked: its promise that what it can
+/// account for is released. `GUATIAO_ERR_UNSUPPORTED` when it has no slot
+/// ([`guatiao_registry_unload_unchecked`] is the caller insisting); the
+/// library's own status when it refuses, `GUATIAO_ERR_BUSY` from one with
+/// an instance or object still alive; `GUATIAO_ERR_WRONG_KIND` for a
 /// library the host LINKS; `GUATIAO_ERR_NOT_FOUND` for an unknown key.
 /// Every one of those leaves it registered and mapped.
 /// `GUATIAO_ERR_INTERNAL` when the loader could not close the mapping, in
@@ -557,10 +573,10 @@ pub unsafe extern "C" fn guatiao_registry_retire(reg: *mut HostRegistry, key: St
 /// # Safety
 ///
 /// `reg` is a live handle and `key` is readable for this call. What no
-/// library can count is the caller's word: no vtable pointer, `ctx` or
-/// descriptor taken from it, no value it built through its own allocator
-/// that its slot does not track, and no descriptor another library
-/// fetched from it through the host's services, is used again.
+/// lease counts is the caller's word: no vtable, table or `ctx` pointer
+/// taken from it, no value it built through its own allocator that its
+/// slot does not track, and no answer another library holds unpinned, is
+/// used again.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_registry_unload(reg: *mut HostRegistry, key: Str) -> Status {
     guard(|| {
@@ -579,15 +595,16 @@ pub unsafe extern "C" fn guatiao_registry_unload(reg: *mut HostRegistry, key: St
     })
 }
 
-/// [`guatiao_registry_unload`] for a library with no `unload` slot: the
-/// caller's word alone. A library that has a slot is still asked, and its
-/// refusal still stands.
+/// [`guatiao_registry_unload`] past the two refusals only the caller can
+/// overrule: a lease still held, and a library with no `unload` slot. A
+/// library that has a slot is still asked, and its refusal still stands.
 ///
 /// # Safety
 ///
 /// As [`guatiao_registry_unload`], and nothing the library handed out is
-/// alive at all: no instance, no object, no value from its allocator, and
-/// no thread of its own still running.
+/// alive at all: no handle or pinned answer holding it, no instance, no
+/// object, no value from its allocator, and no thread of its own still
+/// running.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn guatiao_registry_unload_unchecked(
     reg: *mut HostRegistry,
@@ -610,11 +627,51 @@ pub unsafe extern "C" fn guatiao_registry_unload_unchecked(
     })
 }
 
+/// Closes every retired library nothing uses any more, writing their
+/// library keys to `out` as a list of texts, oldest first.
+///
+/// A retired library qualifies once nothing holding a lease on it is
+/// alive (see [`guatiao_registry_unload`]); it is then asked through its
+/// `unload` slot and closed when it agrees. One that refuses stays retired
+/// and mapped and is asked again next time; one with no slot stays
+/// mapped. `GUATIAO_ERR_ALLOC` for a null or incomplete `alloc`, as the
+/// other answers.
+///
+/// # Safety
+///
+/// `reg` is a live handle, `alloc` is valid, and `out` addresses writable
+/// storage for one value. As for [`guatiao_registry_unload`], no vtable,
+/// table or `ctx` pointer taken from a retired library is used again.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_collect(
+    reg: *mut HostRegistry,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    out!(out);
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        match registry.collect(alloc) {
+            // SAFETY: `out` is null or the caller's slot, written ABSENT on
+            // entry; `alloc` is the caller's own allocator.
+            Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+            Err(e) => e.into(),
+        }
+    })
+}
+
 /// Releases a registry. Null is a no-op.
 ///
 /// **The libraries it loaded stay mapped.** This frees the host's own
-/// table and nothing else; `guatiao_registry_unload` is how a library is
-/// unmapped, one at a time and on the caller's word. The block
+/// table and nothing else; `guatiao_registry_unload` and
+/// `guatiao_registry_collect` are how a library is unmapped. The block
 /// `guatiao_registry_host` handed out stays too, and answers
 /// `GUATIAO_ERR_GONE` from then on.
 ///
@@ -1317,7 +1374,8 @@ pub unsafe extern "C" fn guatiao_registry_best(
 /// table than you expect is an OLDER library, which is the case the size
 /// exists to let you support rather than reject.
 ///
-/// The pointer stays valid until that provider's library is unloaded.
+/// The pointer is this registry's copy of the library's table, valid until
+/// that provider's library is closed: unloaded, or collected once retired.
 ///
 /// # Safety
 ///
@@ -1356,7 +1414,8 @@ pub unsafe extern "C" fn guatiao_registry_provider_vtable(
 /// the size against the fields you read, before calling through it; pass
 /// [`guatiao_registry_provider_ctx`] as every slot's `ctx`.
 ///
-/// The pointer stays valid until that provider's library is unloaded.
+/// The pointer is this registry's copy of the library's table, valid until
+/// that provider's library is closed: unloaded, or collected once retired.
 ///
 /// # Safety
 ///

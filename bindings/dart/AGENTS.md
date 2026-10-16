@@ -113,7 +113,7 @@ reg.close();
 Also `loadFile`, `scanPath`, `libraries()`, `provider(key)`,
 `available(kind)`, `keyedBy` / `librariesKeyedBy`, `setPriority` /
 `priority`, `providerConfig(key)` (a borrowed, read-only `Ref` onto the
-schema — writing through it throws), `retire`, `unload`. Every answer
+schema — writing through it throws), `retire`, `collect`, `unload`. Every answer
 that is data comes back as a plain `Map`/`List`, already freed.
 
 `providerTable(key, kind: 'greeter')` answers the table the provider
@@ -121,16 +121,22 @@ speaks that kind through; `providerTable(key)` answers its single table
 only. `ProviderTable.isEmpty` means there is none.
 
 `retire(libraryKey)` takes a library out of the registry and leaves it
-mapped. `unload(libraryKey)` unmaps it **when the library agrees**: its
-own `unload` function is asked first, and is its promise that what it can
-account for is released. `Busy` while an instance or object it handed out
-is alive; `Unsupported` when it has no such function; `WrongKind` when it
+mapped until nothing uses it: `collect()` closes every retired library
+whose own `unload` function agrees and returns their keys, as does the
+registry's next load, retire or unload; one that refuses is asked again
+next time, one with no such function stays mapped. An `Instance` must be
+closed before its library is retired: afterwards `close()` no longer
+finds the provider to destroy it with. `unload(libraryKey)` unmaps it
+**when the library agrees**: `Busy` while another library holds a
+pinned answer from it, then its own `unload` function is asked, its
+promise that what it can account for is released: `Busy` while an
+instance or object it handed out is alive; `Unsupported` when it has no such function; `WrongKind` when it
 is linked into the host rather than mapped; `NotFound` for an unknown
 key. A refusal leaves it loaded. `unload(key, unchecked: true)` is the
 caller insisting on a library with no `unload` function. **Both take the
 LIBRARY key** — `librariesKeyedBy`'s template, `%id` by default — not a
 provider key. Either way no table, `ctx` or borrowed schema taken from
-the library is used again.
+the library is used again, after an unload or a collect that closed it.
 
 `kindTable<T>(found, floorHash:, floorSize:)` turns a `providerTable`
 answer into the `Struct` a kind's own C header declares (`greeter_vtable`

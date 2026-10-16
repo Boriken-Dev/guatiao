@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- A retired library is closed once nothing uses it: by the new
+  `Registry.collect()`, which returns the keys it closed, or by the
+  registry's next load, retire or unload. A `ProviderTable` taken from
+  it is valid until then. Migration: close an `Instance` before its
+  library is retired, and drop a `ProviderTable` before the next call.
+- `unload` also answers `Busy` while another library holds a pinned
+  answer from the library through the host's services.
 - The generated bindings follow the C header: the status enum's tag is
   `guatiao_status_code`, and `guatiao_status` is the plain integer
   typedef. No name this package exports changes.
