@@ -302,26 +302,25 @@ mod os {
         // SAFETY: the loader's program headers for this object, `phnum`
         // of them, mapped while it is loaded, which the iteration holds.
         let headers = unsafe { core::slice::from_raw_parts(info.phdr, usize::from(info.phnum)) };
-        let mut loads = Vec::new();
-        let mut code = Vec::new();
-        for h in headers.iter().filter(|h| h.kind == PT_LOAD) {
-            let Some(r) = usize::try_from(h.vaddr)
-                .ok()
-                .and_then(|v| info.addr.checked_add(v))
-                .zip(usize::try_from(h.memsz).ok())
-                .and_then(|(start, len)| range(start, len))
-            else {
-                continue;
-            };
-            if h.flags & PF_X != 0 {
-                code.push(r.clone());
-            }
-            loads.push(r);
-        }
-        if !loads.iter().any(|r| r.contains(&search.entry_at)) {
+        // Each loadable segment where the loader put it, and whether it is
+        // mapped executable.
+        let loads = headers
+            .iter()
+            .filter(|h| h.kind == PT_LOAD)
+            .filter_map(|h| {
+                let start = info.addr.checked_add(usize::try_from(h.vaddr).ok()?)?;
+                Some((
+                    range(start, usize::try_from(h.memsz).ok()?)?,
+                    h.flags & PF_X != 0,
+                ))
+            });
+        // Judged before anything is collected: most objects are not it.
+        if !loads.clone().any(|(r, _)| r.contains(&search.entry_at)) {
             return 0;
         }
-        search.found = span_of(&loads).map(|span| (span, code));
+        let spans: Vec<Range<usize>> = loads.clone().map(|(r, _)| r).collect();
+        let code = loads.filter(|&(_, x)| x).map(|(r, _)| r).collect();
+        search.found = span_of(&spans).map(|span| (span, code));
         1
     }
 
@@ -546,7 +545,7 @@ mod tests {
     }
 
     /// Where the platform's record gives nothing, the file's parse places
-    /// the image, as it did before the record was read.
+    /// the image.
     #[cfg_attr(miri, ignore = "Miri cannot map a library")]
     #[test]
     fn the_files_parse_places_it_where_the_platform_gives_nothing() {
