@@ -249,8 +249,8 @@ impl<K: ?Sized + Kind> core::fmt::Debug for Object<K> {
 }
 
 // SAFETY: the object kind's trait names `Send`, and this is the one
-// handle to the value; the table addresses a library that is never
-// unloaded or the cell the handle owns. Unbounded in `K`, as `Remote` is.
+// handle to the value; the table addresses the cell the handle owns, or a
+// library its lease keeps. Unbounded in `K`, as `Remote` is.
 unsafe impl<K: ?Sized> Send for Object<K> {}
 // SAFETY: shared, the handle reaches only the `&self` slots, whose shims
 // take a shared reference to the value; `K: Sync` makes that sound from
@@ -317,15 +317,24 @@ impl<K: ?Sized + Kind> Object<K> {
     }
 
     /// Hands the object across: the caller of this owns nothing
-    /// afterwards, and whoever receives the raw form destroys it.
+    /// afterwards, and whoever receives the raw form destroys it. The
+    /// lease on the library that made it is let go here; that library's
+    /// own count of its live objects is what answers for it from then on.
     pub fn into_raw(self) -> ObjectRaw {
-        let raw = ObjectRaw {
-            table: self.remote.table,
-            size: self.remote.size,
-            ctx: self.remote.ctx,
-        };
-        core::mem::forget(self);
-        raw
+        let mut this = core::mem::ManuallyDrop::new(self);
+        drop(core::mem::take(&mut this.remote.hold));
+        ObjectRaw {
+            table: this.remote.table,
+            size: this.remote.size,
+            ctx: this.remote.ctx,
+        }
+    }
+
+    /// The same object, holding what `from` holds on its library: an
+    /// object a call through `from` returned is that library's to destroy.
+    pub(super) fn held_by<R: ?Sized>(mut self, from: &Remote<R>) -> Object<K> {
+        self.remote.hold = from.hold.clone();
+        self
     }
 
     /// The context every slot receives: the object itself.
@@ -361,7 +370,8 @@ impl<K: ?Sized + Kind> core::ops::DerefMut for Object<K> {
 impl<K: ?Sized> Drop for Object<K> {
     fn drop(&mut self) {
         // SAFETY: the table was validated for an object kind, whose
-        // `destroy` slot follows the header; released exactly once, here.
+        // `destroy` slot follows the header; released exactly once, here,
+        // while the lease, a field dropped after this, keeps the library.
         unsafe {
             destroy_raw(ObjectRaw {
                 table: self.remote.table,

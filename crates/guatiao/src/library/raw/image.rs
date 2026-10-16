@@ -12,9 +12,10 @@ use super::*;
 /// to hold a raw pointer to read a name.
 ///
 /// **Every string and every value here is OWNED**, copied out of the
-/// library's image at the read. That is what lets a library be unmapped
-/// while a host still holds what it said about itself. The code pointers
-/// below are not copied and cannot be: they address the image.
+/// library's image at the read, and its tables are copies its lease owns.
+/// What still addresses the image — the code its slots name and its
+/// `ctx` — is kept mapped by that lease: a view holds one, so the
+/// registry neither unloads nor closes the library while it lives.
 ///
 /// **Built only by reading a descriptor**, so its fields are private: a
 /// safe [`available`](ProviderView::available) calls a slot with `ctx`,
@@ -36,6 +37,7 @@ pub struct ProviderView {
     pub(crate) tables: Vec<(String, *const c_void, usize)>,
     pub(crate) create: Option<CreateFn>,
     pub(crate) destroy: Option<DestroyFn>,
+    pub(crate) hold: Hold,
 }
 
 /// [`ProviderInfo::create`]'s slot.
@@ -457,8 +459,9 @@ impl ProviderInfo<'static> {
     pub(crate) fn read(&'static self) -> Result<ProviderView, Refusal> {
         // SAFETY: a descriptor's memory shape is its producer's contract,
         // and `'static` keeps it for every view taken from it; the
-        // declared size is the limit.
-        unsafe { read_provider(self, self.struct_size as usize, Bounds::ANY) }
+        // declared size is the limit, and the tables it names passed the
+        // read's checks.
+        unsafe { read_provider(self, self.struct_size as usize, Bounds::ANY) }.map(Lease::alone)
     }
 }
 
@@ -618,6 +621,7 @@ pub(super) unsafe fn read_provider(
             } else {
                 None
             },
+            hold: Hold::None,
         })
     }
 }
@@ -744,8 +748,8 @@ unsafe fn check_table(table: *const c_void, size: usize, bounds: Bounds) -> Resu
 ///
 /// The handle is what `Registry::unload` closes; `Linked` is what it
 /// refuses, because there is nothing to unmap. A linked library built as
-/// owned parts keeps them here, so they are freed with the record: when
-/// the library is retired, or the registry dropped.
+/// owned parts carries them here as far as the registry, which hands them
+/// to the library's lease.
 ///
 /// **Dropping one never unmaps.** The handle is held in `ManuallyDrop`, so
 /// a registry going out of scope, or a file skipped after its entry point
@@ -764,7 +768,7 @@ pub(crate) enum Origin {
     },
     /// Code in the host's own binary: `register_local`, `register_entry`,
     /// and the descriptor's parts when the registry owns them.
-    Linked(#[allow(dead_code)] Option<Box<crate::library::kind::LibraryParts>>),
+    Linked(Option<Box<crate::library::kind::LibraryParts>>),
 }
 
 #[cfg(feature = "load")]
@@ -783,6 +787,14 @@ impl Origin {
         matches!(self, Origin::Mapped { .. })
     }
 
+    /// The parts of a library the host built, for its lease to own.
+    pub(crate) fn take_parts(&mut self) -> Option<Box<crate::library::kind::LibraryParts>> {
+        match self {
+            Origin::Linked(parts) => parts.take(),
+            Origin::Mapped { .. } => None,
+        }
+    }
+
     /// Whether both are handles to one image: a second open the loader
     /// counted against a mapping already held, as a hard link to a loaded
     /// file is on Linux.
@@ -794,9 +806,8 @@ impl Origin {
     }
 
     /// Gives up the handle and leaves the mapping in place, so every
-    /// image address the library already handed out stays valid; frees a
-    /// linked library's owned parts. What dropping it does too; spelled
-    /// out where that is the point.
+    /// image address the library already handed out stays valid. What
+    /// dropping it does too; spelled out where that is the point.
     pub(crate) fn keep(self) {}
 
     /// Closes the mapping. A close error leaves the handle given up, as

@@ -317,16 +317,20 @@ pub unsafe fn object_out<K: ?Sized + Kind>(out: *mut ObjectRaw, object: Object<K
     Status::GUATIAO_OK
 }
 
-/// An object that crossed as a return, validated for `K`, or the error a
-/// proxy hands back.
+/// An object that crossed as a return from a call through `from`,
+/// validated for `K` and holding what `from` holds on its library, or the
+/// error a proxy hands back.
 ///
 /// # Safety
 ///
 /// As [`Object::from_raw`].
 #[doc(hidden)]
-pub unsafe fn object_ret<K: ?Sized + Kind>(raw: ObjectRaw) -> Result<Object<K>, ProviderError> {
+pub unsafe fn object_ret<K: ?Sized + Kind, R: ?Sized>(
+    raw: ObjectRaw,
+    from: &Remote<R>,
+) -> Result<Object<K>, ProviderError> {
     // SAFETY: forwarded.
-    unsafe { object_arg::<K>(raw) }
+    unsafe { object_arg::<K>(raw) }.map(|object| object.held_by(from))
 }
 
 /// The error a proxy hands back: what the shim wrote, or one built from

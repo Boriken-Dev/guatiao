@@ -9,7 +9,7 @@
 //! point, in one place — so the module around it stays provably safe and
 //! an auditor's scope is this directory: `entry.rs` is what a library
 //! writes, `host.rs` the block a host hands over, `image.rs` reading what a
-//! library's descriptors say.
+//! library's descriptors say, `lease.rs` the copies every handle holds.
 //!
 //! # The mapping is the registry's, and stays until the host says
 //!
@@ -47,10 +47,12 @@ pub(crate) mod check;
 mod entry;
 mod host;
 mod image;
+mod lease;
 
 pub use self::entry::*;
 pub use self::host::*;
 pub use self::image::*;
+pub(crate) use self::lease::{Hold, Lease};
 
 /// What the tests of every file here build descriptors with.
 #[cfg(test)]
