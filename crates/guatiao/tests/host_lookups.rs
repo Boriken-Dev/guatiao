@@ -118,7 +118,7 @@ fn a_host_lists_what_it_gets() {
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].id(), "old_provider");
     let got = host.get("old_provider").unwrap().unwrap();
-    assert_eq!(got.raw(), listed[0].raw(), "one descriptor, read twice");
+    assert_eq!(got.id(), listed[0].id(), "one provider, read twice");
     assert!(matches!(host.get("nobody"), Ok(None)));
 
     drop(registry);

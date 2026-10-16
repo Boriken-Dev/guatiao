@@ -110,9 +110,9 @@ impl Host {
         unsafe { read_host(self.raw) }.expect("a Host was built from a readable descriptor")
     }
 
-    /// The services table, or `None` for a host that offers none or
-    /// predates the field.
-    fn services(&self) -> Option<&'static HostServices> {
+    /// The services table, read under its declared size, or `None` for a
+    /// host that offers none or predates the field.
+    fn services(&self) -> Option<Services> {
         if self.declared() < HostInfo::services_end() {
             return None;
         }
@@ -124,33 +124,37 @@ impl Host {
         // SAFETY: a non-null table points at one the host keeps for the
         // process, declaring its own size; the leading word is readable.
         let size = unsafe { core::ptr::addr_of!((*table).struct_size).read() } as usize;
-        if size < HostServices::floor() {
-            return None;
-        }
-        // SAFETY: at least the floor is present, which is every field
-        // this build reads.
-        Some(unsafe { &*table })
+        (size >= HostServices::floor()).then_some(Services { table, size })
     }
 
     /// One provider by the key the host files it under, read out of the
-    /// offering library's descriptor under the size that library declared.
+    /// descriptor the host answers with, under the size it declares.
+    ///
+    /// **The view holds the host's pin on that provider's library**, when
+    /// the host pins (this crate's does): the library stays loaded while
+    /// the view, or any `Offer` or `Remote` taken from it, lives, and the
+    /// host's `unload` answers busy until it is dropped. From a host that
+    /// does not pin, the view copies the tables and holds nothing.
     ///
     /// `Ok(None)` when nothing answers to the key, or the descriptor is
     /// not one this build can read. `Err` when the host offers no services
     /// (`GUATIAO_ERR_NULL`) or its registry is gone (`GUATIAO_ERR_GONE`).
-    /// [`ProviderView::raw`] is the descriptor's address, for a caller that
-    /// speaks C.
     pub fn get(&self, key: &str) -> Result<Option<ProviderView>, Status> {
-        let table = self.services().ok_or(Status::GUATIAO_ERR_NULL)?;
-        let get = table.get.ok_or(Status::GUATIAO_ERR_NULL)?;
+        let services = self.services().ok_or(Status::GUATIAO_ERR_NULL)?;
+        let pinned = services.pinned();
+        let get = match pinned {
+            Some(p) => p.get,
+            None => services.get().ok_or(Status::GUATIAO_ERR_NULL)?,
+        };
         let mut out: *const ProviderInfo = core::ptr::null();
         // SAFETY: the slot is the host's own, read under its guard; `out`
         // is a writable local; `key` is readable for the call.
-        match unsafe { get(table.ctx, Str::new(key), &mut out) } {
-            // SAFETY: the host answers with a descriptor the offering
-            // library keeps while it is registered; it is read through the
-            // raw pointer, never as a reference to a whole `ProviderInfo`.
-            Status::GUATIAO_OK if !out.is_null() => Ok(unsafe { read_answer(out) }),
+        match unsafe { get(services.ctx(), Str::new(key), &mut out) } {
+            // SAFETY: the host answers with a descriptor valid while it is
+            // pinned, or while its library is registered; it is read
+            // through the raw pointer, never as a reference to a whole
+            // `ProviderInfo`.
+            Status::GUATIAO_OK if !out.is_null() => Ok(unsafe { answer(out, &services, pinned) }),
             Status::GUATIAO_OK | Status::GUATIAO_ERR_NOT_FOUND => Ok(None),
             other => Err(other),
         }
@@ -158,17 +162,22 @@ impl Host {
 
     /// Every provider serving `kind` — every provider when it is empty —
     /// in the host's own order, unavailable ones included, each read as
-    /// [`get`](Host::get) reads one. The caller asks each and chooses. A
-    /// descriptor this build cannot read is left out.
+    /// [`get`](Host::get) reads one, pins and all. The caller asks each
+    /// and chooses. A descriptor this build cannot read is left out.
     ///
     /// `Err` when the host offers no services or its registry is gone.
     pub fn list(&self, kind: &str) -> Result<Vec<ProviderView>, Status> {
-        let table = self.services().ok_or(Status::GUATIAO_ERR_NULL)?;
-        let list = table.list.ok_or(Status::GUATIAO_ERR_NULL)?;
+        let services = self.services().ok_or(Status::GUATIAO_ERR_NULL)?;
+        let pinned = services.pinned();
+        let list = match pinned {
+            Some(p) => p.list,
+            None => services.list().ok_or(Status::GUATIAO_ERR_NULL)?,
+        };
         let kind = Str::new(kind);
         let mut total = 0usize;
-        // SAFETY: as `get`; a zero capacity asks for the count alone.
-        match unsafe { list(table.ctx, kind, core::ptr::null_mut(), 0, &mut total) } {
+        // SAFETY: as `get`; a zero capacity asks for the count alone and
+        // pins nothing.
+        match unsafe { list(services.ctx(), kind, core::ptr::null_mut(), 0, &mut total) } {
             Status::GUATIAO_OK => {}
             other => return Err(other),
         }
@@ -177,7 +186,7 @@ impl Host {
         // SAFETY: `found` has room for `total` entries.
         match unsafe {
             list(
-                table.ctx,
+                services.ctx(),
                 kind,
                 found.as_mut_ptr(),
                 found.len(),
@@ -188,25 +197,114 @@ impl Host {
             other => return Err(other),
         }
         // The registry may have grown between the two calls; what was
-        // written is what is real.
+        // written is what is real, and each written one is pinned.
         found.truncate(written.min(total));
         Ok(found
             .into_iter()
             .filter(|p| !p.is_null())
             // SAFETY: as `get`.
-            .filter_map(|p| unsafe { read_answer(p) })
+            .filter_map(|p| unsafe { answer(p, &services, pinned) })
             .collect())
     }
 }
 
-/// A descriptor a host's services answered with, read under its own
-/// declared size.
+/// A host's services table, read field by field under the size it
+/// declares: a table from an older host is shorter than this build's.
+struct Services {
+    table: *const HostServices,
+    size: usize,
+}
+
+/// The services' `get` slots.
+type GetFn =
+    unsafe extern "C" fn(ctx: *mut c_void, key: Str, out: *mut *const ProviderInfo) -> Status;
+/// The services' `list` slots.
+type ListFn = unsafe extern "C" fn(
+    ctx: *mut c_void,
+    kind: Str,
+    out: *mut *const ProviderInfo,
+    cap: usize,
+    total: *mut usize,
+) -> Status;
+/// The services' `pin` and `unpin` slots.
+type PinFn = unsafe extern "C" fn(ctx: *mut c_void, desc: *const ProviderInfo);
+
+/// The four pinning slots, present together or not at all.
+#[derive(Clone, Copy)]
+struct Pinning {
+    get: GetFn,
+    list: ListFn,
+    pin: PinFn,
+    unpin: PinFn,
+}
+
+impl Services {
+    fn ctx(&self) -> *mut c_void {
+        // SAFETY: within the floor.
+        unsafe { core::ptr::addr_of!((*self.table).ctx).read() }
+    }
+
+    fn get(&self) -> Option<GetFn> {
+        // SAFETY: within the floor.
+        unsafe { core::ptr::addr_of!((*self.table).get).read() }
+    }
+
+    fn list(&self) -> Option<ListFn> {
+        // SAFETY: within the floor.
+        unsafe { core::ptr::addr_of!((*self.table).list).read() }
+    }
+
+    /// The pinning slots, when the table is long enough to hold them and
+    /// fills all four.
+    fn pinned(&self) -> Option<Pinning> {
+        if self.size < HostServices::pinned_end() {
+            return None;
+        }
+        // SAFETY: the guard established the four fields are present.
+        unsafe {
+            Some(Pinning {
+                get: core::ptr::addr_of!((*self.table).get_pinned).read()?,
+                list: core::ptr::addr_of!((*self.table).list_pinned).read()?,
+                pin: core::ptr::addr_of!((*self.table).pin).read()?,
+                unpin: core::ptr::addr_of!((*self.table).unpin).read()?,
+            })
+        }
+    }
+}
+
+/// A descriptor a host's services answered with, read as a view: holding
+/// the host's pin when it was pinned, over copies of its tables when not.
+/// A pinned one this build cannot read is unpinned at once.
 ///
 /// # Safety
 ///
-/// `raw` is non-null and addresses a provider descriptor a library
-/// declared, readable for its `struct_size`, valid while that library is
-/// mapped.
+/// `raw` is non-null and addresses a provider descriptor the host built,
+/// readable for its `struct_size`, valid while it is pinned or, unpinned,
+/// for the read; `pinned` is `Some` exactly when the host pinned it.
+unsafe fn answer(
+    raw: *const ProviderInfo<'static>,
+    services: &Services,
+    pinned: Option<Pinning>,
+) -> Option<ProviderView> {
+    let hold = pinned.map(|p| Pin::taken(services.ctx(), p.pin, p.unpin, raw));
+    // SAFETY: forwarded.
+    let mut view = unsafe { read_answer(raw) }?;
+    Some(match hold {
+        Some(pin) => {
+            view.hold = Hold::Pin(pin);
+            view
+        }
+        None => Lease::alone(view),
+    })
+}
+
+/// A descriptor a host's services answered with, read under its own
+/// declared size. Its tables are left where the host put them.
+///
+/// # Safety
+///
+/// `raw` is non-null and addresses a provider descriptor, readable for
+/// its `struct_size`, valid for the read.
 unsafe fn read_answer(raw: *const ProviderInfo<'static>) -> Option<ProviderView> {
     let bounds = super::check::Bounds::ANY;
     bounds
@@ -215,11 +313,8 @@ unsafe fn read_answer(raw: *const ProviderInfo<'static>) -> Option<ProviderView>
     // SAFETY: the caller guarantees the leading word is readable.
     let declared = unsafe { core::ptr::addr_of!((*raw).struct_size).read() } as usize;
     // SAFETY: the caller's contract; `declared` is the descriptor's own
-    // limit, which the registry already checked against its array's
-    // stride when it read the library; the tables it names passed the
-    // read's checks.
-    let view = unsafe { super::image::read_provider(raw, declared, bounds) }.ok()?;
-    Some(Lease::alone(view))
+    // limit.
+    unsafe { super::image::read_provider(raw, declared, bounds) }.ok()
 }
 
 /// Whether `raw` could address a `T` at all: aligned, and an address.
@@ -263,35 +358,37 @@ pub(crate) struct Snapshot {
     pub(crate) by_key: alloc::collections::BTreeMap<String, usize>,
 }
 
-/// One provider as the services see it.
+/// One provider as the services see it: the kinds it serves, and the
+/// descriptor its library's lease built for it, which the entry keeps.
 #[cfg(feature = "load")]
 #[derive(Debug)]
 pub(crate) struct SnapshotEntry {
     pub(crate) kinds: Vec<String>,
-    pub(crate) raw: *const ProviderInfo<'static>,
-    /// Keeps what `raw` addresses alive while the snapshot lists it.
-    #[allow(dead_code)]
-    pub(crate) hold: Hold,
+    pub(crate) lease: alloc::sync::Arc<Lease>,
+    /// Which of the lease's descriptors.
+    pub(crate) at: usize,
 }
 
-// SAFETY: `raw` addresses a descriptor inside a library image the
-// registry holds the mapping of until that library is retired, and a
-// snapshot is only ever read after it is published.
 #[cfg(feature = "load")]
-unsafe impl Send for Snapshot {}
+impl SnapshotEntry {
+    /// The descriptor handed to a library that asks, valid while this
+    /// entry, or a pin, holds the lease.
+    fn desc(&self) -> *const ProviderInfo<'static> {
+        self.lease.desc(self.at)
+    }
+}
 
 // SAFETY (all four): every raw pointer a registry or a provider holds
-// addresses a loaded library's image -- its descriptors and their tables --
-// which stays mapped until that library is retired and is never written
-// from this side; the
-// block a registry leaks is already shared across threads by design (a
-// library reads it from any call); and a provider's slots are declared
-// callable from any thread (`ProviderInfo::available`'s contract exists
-// precisely because two threads may ask at once). A host keeping its one
-// registry behind a lock, or reading it from several threads, is the
-// ordinary shape, and without these it could not. Declared here rather
-// than beside the types because this is the file allowed to say
-// `unsafe`.
+// addresses a lease's copies and descriptors, kept while it is held, or a
+// loaded library's code and `ctx`, which stay mapped until the registry
+// closes that library; none is written from this side. The block a
+// registry leaks is already shared across threads by design (a library
+// reads it from any call), and a provider's slots are declared callable
+// from any thread (`ProviderInfo::available`'s contract exists precisely
+// because two threads may ask at once). A host keeping its one registry
+// behind a lock, or reading it from several threads, is the ordinary
+// shape, and without these it could not. Declared here rather than
+// beside the types because this is the file allowed to say `unsafe`.
 #[cfg(feature = "load")]
 unsafe impl Send for crate::library::registry::Registry {}
 #[cfg(feature = "load")]
@@ -300,9 +397,6 @@ unsafe impl Sync for crate::library::registry::Registry {}
 unsafe impl Send for crate::library::registry::Provider {}
 #[cfg(feature = "load")]
 unsafe impl Sync for crate::library::registry::Provider {}
-// SAFETY: as above.
-#[cfg(feature = "load")]
-unsafe impl Sync for Snapshot {}
 
 /// The state a registry shares with the block it leaked. The registry
 /// holds the `Arc`; the block holds a `Weak`, so dropping the registry is
@@ -372,6 +466,10 @@ pub(crate) fn leak_host_block(
             get: Some(services_get),
             list: Some(services_list),
             alloc: Some(services_alloc),
+            get_pinned: Some(services_get_pinned),
+            list_pinned: Some(services_list_pinned),
+            pin: Some(services_pin),
+            unpin: Some(services_unpin),
         },
         id,
         version,
@@ -419,6 +517,35 @@ unsafe extern "C" fn services_get(
     key: Str,
     out: *mut *const ProviderInfo,
 ) -> Status {
+    // SAFETY: forwarded.
+    unsafe { get_one(ctx, key, out, false) }
+}
+
+/// The `get_pinned` slot: `get`, the answer pinned for the caller.
+///
+/// # Safety
+///
+/// As [`services_get`].
+#[cfg(feature = "load")]
+unsafe extern "C" fn services_get_pinned(
+    ctx: *mut c_void,
+    key: Str,
+    out: *mut *const ProviderInfo,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe { get_one(ctx, key, out, true) }
+}
+
+/// # Safety
+///
+/// As [`services_get`].
+#[cfg(feature = "load")]
+unsafe fn get_one(
+    ctx: *mut c_void,
+    key: Str,
+    out: *mut *const ProviderInfo,
+    pinned: bool,
+) -> Status {
     crate::exports::guard(|| {
         // SAFETY: the caller's contract.
         let (Some(block), false) = (unsafe { block_of(ctx) }, out.is_null()) else {
@@ -434,8 +561,14 @@ unsafe extern "C" fn services_get(
         let snapshot = shared.read();
         match snapshot.by_key.get(key) {
             Some(&i) => {
+                let desc = snapshot.entries[i].desc();
+                if pinned {
+                    // SAFETY: the snapshot holds this descriptor's lease
+                    // while it is read.
+                    unsafe { super::lease::pin(desc) };
+                }
                 // SAFETY: `out` is writable by the caller's contract.
-                unsafe { out.write(snapshot.entries[i].raw) };
+                unsafe { out.write(desc) };
                 Status::GUATIAO_OK
             }
             None => Status::GUATIAO_ERR_NOT_FOUND,
@@ -456,6 +589,39 @@ unsafe extern "C" fn services_list(
     out: *mut *const ProviderInfo,
     cap: usize,
     total: *mut usize,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe { list_all(ctx, kind, out, cap, total, false) }
+}
+
+/// The `list_pinned` slot: `list`, each answer written pinned.
+///
+/// # Safety
+///
+/// As [`services_list`].
+#[cfg(feature = "load")]
+unsafe extern "C" fn services_list_pinned(
+    ctx: *mut c_void,
+    kind: Str,
+    out: *mut *const ProviderInfo,
+    cap: usize,
+    total: *mut usize,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe { list_all(ctx, kind, out, cap, total, true) }
+}
+
+/// # Safety
+///
+/// As [`services_list`].
+#[cfg(feature = "load")]
+unsafe fn list_all(
+    ctx: *mut c_void,
+    kind: Str,
+    out: *mut *const ProviderInfo,
+    cap: usize,
+    total: *mut usize,
+    pinned: bool,
 ) -> Status {
     crate::exports::guard(|| {
         // SAFETY: the caller's contract.
@@ -480,8 +646,14 @@ unsafe extern "C" fn services_list(
             .filter(|e| kind.is_empty() || e.kinds.iter().any(|k| k == kind))
         {
             if n < cap {
+                let desc = entry.desc();
+                if pinned {
+                    // SAFETY: the snapshot holds this descriptor's lease
+                    // while it is read.
+                    unsafe { super::lease::pin(desc) };
+                }
                 // SAFETY: `n < cap` and `out` addresses `cap` slots.
-                unsafe { out.add(n).write(entry.raw) };
+                unsafe { out.add(n).write(desc) };
             }
             n += 1;
         }
@@ -489,6 +661,38 @@ unsafe extern "C" fn services_list(
         unsafe { total.write(n) };
         Status::GUATIAO_OK
     })
+}
+
+/// The `pin` slot: another hold on a pinned descriptor, whether or not
+/// the registry is still there: a pin outlives it.
+///
+/// # Safety
+///
+/// `desc` came pinned from this block's `get_pinned` or `list_pinned`,
+/// and the caller holds a pin on it.
+#[cfg(feature = "load")]
+unsafe extern "C" fn services_pin(_ctx: *mut c_void, desc: *const ProviderInfo) {
+    crate::exports::guard_with((), || {
+        if !desc.is_null() {
+            // SAFETY: the caller's contract: its own pin holds the lease.
+            unsafe { super::lease::pin(desc.cast()) };
+        }
+    });
+}
+
+/// The `unpin` slot: gives back one hold.
+///
+/// # Safety
+///
+/// As [`services_pin`]; the hold given back is the caller's.
+#[cfg(feature = "load")]
+unsafe extern "C" fn services_unpin(_ctx: *mut c_void, desc: *const ProviderInfo) {
+    crate::exports::guard_with((), || {
+        if !desc.is_null() {
+            // SAFETY: the caller's contract.
+            unsafe { super::lease::unpin(desc.cast()) };
+        }
+    });
 }
 
 /// The `alloc` slot: the host's allocator, or null.

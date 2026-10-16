@@ -795,13 +795,17 @@ typedef struct guatiao_provider_info {
  What a host answers a library that asks it something: the lookups its
  registry can do, and its allocator, as slots a library calls.
 
- **Every answer is a pointer to the offering library's own descriptor**,
- which lives as long as that library, which is for the life of the
- process. Nothing borrowed from the host's registry escapes, so the
- registry may change or go away while a library holds an answer.
+ **Every answer is a descriptor the host built** from what the offering
+ library declared: its own copies of the text, values and tables, the
+ library's code and `ctx`. `get` and `list` answer one that stays
+ valid until that library is retired. `get_pinned` and `list_pinned`
+ answer one **pinned**: it stays valid, and the host will not unload
+ the library it names, until the caller passes it to `unpin`; `pin`
+ takes another hold on one already pinned. A library that keeps an
+ answer, or calls through one, past a retire it cannot see pins it.
 
  A host that has been dropped answers `GUATIAO_ERR_GONE` from every
- slot and touches nothing it freed.
+ lookup and touches nothing it freed; a pinned answer stays valid.
 
  Slots are spelled out inline rather than through a type alias: cbindgen
  renders an aliased function-pointer field as an opaque struct used by
@@ -840,6 +844,33 @@ typedef struct guatiao_host_services {
    this table. Null for a host that offers none.
    */
   const struct guatiao_alloc *(*alloc)(void *ctx);
+  /*
+   `get`, answering a descriptor pinned for the caller: release it
+   with `unpin`. Appended; read only when `struct_size` covers it.
+   */
+  guatiao_status (*get_pinned)(void *ctx,
+                               struct guatiao_str key,
+                               const struct guatiao_provider_info **out);
+  /*
+   `list`, each of the first `cap` descriptors it writes pinned for
+   the caller: release each with `unpin`. The total counts every
+   provider, as `list`'s does. Appended with `get_pinned`.
+   */
+  guatiao_status (*list_pinned)(void *ctx,
+                                struct guatiao_str kind,
+                                const struct guatiao_provider_info **out,
+                                size_t cap,
+                                size_t *total);
+  /*
+   Another hold on a descriptor the caller already holds pinned.
+   Appended with `get_pinned`.
+   */
+  void (*pin)(void *ctx, const struct guatiao_provider_info *desc);
+  /*
+   Gives back one hold on a pinned descriptor; the caller does not
+   read it again unless it holds another. Appended with `get_pinned`.
+   */
+  void (*unpin)(void *ctx, const struct guatiao_provider_info *desc);
 } guatiao_host_services;
 
 /*

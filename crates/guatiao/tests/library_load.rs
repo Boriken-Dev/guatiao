@@ -717,17 +717,17 @@ fn the_host_a_library_keeps_outlives_the_registry() {
     assert_eq!(host.version(), env!("CARGO_PKG_VERSION"));
     assert!(host.alloc().is_none(), "this registry offers no allocator");
 
-    // Through the services: the same answers the host sees, as pointers
-    // to the library's own descriptors.
+    // Through the services: the same answers the host sees, as the
+    // descriptors the registry built for them.
     let greeters = host.list("greeter").expect("the services answer");
     assert_eq!(greeters.len(), 1);
     assert_eq!(greeters[0].id(), "hello_library_greeter");
     assert_eq!(
         host.get("hello_library_greeter")
             .expect("the services answer")
-            .map(|p| p.raw()),
-        Some(greeters[0].raw()),
-        "get and list read the same descriptor"
+            .map(|p| p.vtable()),
+        Some(greeters[0].vtable()),
+        "get and list read the same descriptor: one copy of its table"
     );
     assert!(matches!(host.get("nobody"), Ok(None)));
 

@@ -318,8 +318,8 @@ impl<K: ?Sized + Kind> Offer<K> {
     }
 
     /// Whether it can run here, and why not when it cannot. Asked live,
-    /// never cached.
-    pub fn available(&self) -> Result<(), &'static str> {
+    /// never cached; the reason is borrowed while the offer lives.
+    pub fn available(&self) -> Result<(), &str> {
         self.view.available()
     }
 
@@ -501,14 +501,14 @@ impl<K: ?Sized + Kind> Offer<K> {
     }
 }
 
-impl ProviderInfo<'static> {
+impl ProviderInfo<'_> {
     /// This provider's table for `K`, validated, over its own `ctx`; `Ok(None)`
     /// for a provider built only from a configuration, as
     /// [`Provider::as_kind`](crate::library::Provider::as_kind).
     ///
     /// For a descriptor a library built itself; a host's services answer
     /// with views, and [`Host::offers`] is the door there.
-    pub fn as_kind<K: ?Sized + Kind>(&'static self) -> Result<Option<Remote<K>>, KindMismatch> {
+    pub fn as_kind<K: ?Sized + Kind>(&self) -> Result<Option<Remote<K>>, KindMismatch> {
         let view = self
             .read()
             .map_err(|why| KindMismatch::Unreadable(why.to_string()))?;
@@ -517,7 +517,7 @@ impl ProviderInfo<'static> {
     }
 
     /// The same, as an offer carrying what a chooser needs.
-    pub fn offer<K: ?Sized + Kind>(&'static self) -> Result<Offer<K>, KindMismatch> {
+    pub fn offer<K: ?Sized + Kind>(&self) -> Result<Offer<K>, KindMismatch> {
         let view = self
             .read()
             .map_err(|why| KindMismatch::Unreadable(why.to_string()))?;
@@ -526,7 +526,7 @@ impl ProviderInfo<'static> {
 
     /// An instance built from `config`, as `K`. See [`Offer::instantiate`].
     pub fn instantiate<K: ?Sized + Kind>(
-        &'static self,
+        &self,
         config: &Value,
     ) -> Result<Instance<K>, InstantiateError> {
         let view = self.read().map_err(|why| {

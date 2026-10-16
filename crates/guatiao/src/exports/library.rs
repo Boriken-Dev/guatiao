@@ -256,7 +256,7 @@ impl HostRegistry {
     }
 
     /// Whether one provider can run here, and why not when it cannot.
-    fn provider_available(&self, key: &str) -> Option<Result<(), &'static str>> {
+    fn provider_available(&self, key: &str) -> Option<Result<(), &str>> {
         self.inner.provider(key).map(Provider::available)
     }
 

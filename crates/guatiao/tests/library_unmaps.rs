@@ -127,16 +127,45 @@ fn a_derived_librarys_descriptor_lives_in_the_hosts_arena() {
         .loaded()
         .expect("it accepts this host");
 
-    let provider = registry
-        .provider("derived_greeter_shouter")
-        .expect("the configured provider is loaded");
+    assert!(
+        registry.provider("derived_greeter_shouter").is_some(),
+        "the configured provider is loaded"
+    );
     // The registry keeps its own copy of the schema; the question here is
-    // where the LIBRARY built the one in its descriptor.
-    let raw = provider.view().raw();
-    // SAFETY: `raw` is the descriptor this provider was read from, in a
-    // mapping this registry still holds; `config` is non-null because
-    // this provider declares a configuration.
-    let alloc = unsafe { (*(*raw).config).alloc() }.expect("a map records its allocator");
+    // where the LIBRARY built the one in its descriptor, which its entry
+    // point hands back again: it is built once, for the mapping.
+    let host = registry.host().as_raw();
+    // SAFETY: the library this registry loaded, mapped again by name; its
+    // entry symbol has this crate's entry type, and answers the
+    // descriptor it built on its first call, which the mapping keeps.
+    let desc = unsafe {
+        let library = libloading::Library::new(&path).expect("it is already mapped");
+        let entry = library
+            .get::<guatiao::library::EntryFn>(guatiao::library::ENTRY_SYMBOL)
+            .expect("an entry symbol");
+        let desc = entry(host);
+        drop(library);
+        desc
+    };
+    assert!(!desc.is_null(), "it answers this host");
+    // SAFETY: a descriptor the derived library built, which declares its
+    // provider array at its own stride, each element readable; the
+    // shouter declares a configuration, so its `config` is non-null.
+    let alloc = unsafe {
+        let providers = (*desc).providers;
+        let shouter = (0..providers.len)
+            .map(|i| {
+                &*providers
+                    .ptr
+                    .cast::<u8>()
+                    .add(i * providers.stride)
+                    .cast::<guatiao::library::ProviderInfo>()
+            })
+            .find(|p| core::str::from_utf8(p.id.into()) == Ok("derived_greeter_shouter"))
+            .expect("the shouter is in its descriptor");
+        (*shouter.config).alloc()
+    }
+    .expect("a map records its allocator");
     assert_eq!(
         alloc.as_raw(),
         &HOST_ALLOC.0 as *const Allocator,

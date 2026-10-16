@@ -168,13 +168,17 @@ impl HostInfo<'_> {
 /// What a host answers a library that asks it something: the lookups its
 /// registry can do, and its allocator, as slots a library calls.
 ///
-/// **Every answer is a pointer to the offering library's own descriptor**,
-/// which lives as long as that library, which is for the life of the
-/// process. Nothing borrowed from the host's registry escapes, so the
-/// registry may change or go away while a library holds an answer.
+/// **Every answer is a descriptor the host built** from what the offering
+/// library declared: its own copies of the text, values and tables, the
+/// library's code and `ctx`. `get` and `list` answer one that stays
+/// valid until that library is retired. `get_pinned` and `list_pinned`
+/// answer one **pinned**: it stays valid, and the host will not unload
+/// the library it names, until the caller passes it to `unpin`; `pin`
+/// takes another hold on one already pinned. A library that keeps an
+/// answer, or calls through one, past a retire it cannot see pins it.
 ///
 /// A host that has been dropped answers `GUATIAO_ERR_GONE` from every
-/// slot and touches nothing it freed.
+/// lookup and touches nothing it freed; a pinned answer stays valid.
 ///
 /// Slots are spelled out inline rather than through a type alias: cbindgen
 /// renders an aliased function-pointer field as an opaque struct used by
@@ -210,6 +214,29 @@ pub struct HostServices {
     /// The same allocator as `HostInfo::alloc`, for code that kept only
     /// this table. Null for a host that offers none.
     pub alloc: Option<unsafe extern "C" fn(ctx: *mut c_void) -> *const Allocator>,
+    /// `get`, answering a descriptor pinned for the caller: release it
+    /// with `unpin`. Appended; read only when `struct_size` covers it.
+    pub get_pinned: Option<
+        unsafe extern "C" fn(ctx: *mut c_void, key: Str, out: *mut *const ProviderInfo) -> Status,
+    >,
+    /// `list`, each of the first `cap` descriptors it writes pinned for
+    /// the caller: release each with `unpin`. The total counts every
+    /// provider, as `list`'s does. Appended with `get_pinned`.
+    pub list_pinned: Option<
+        unsafe extern "C" fn(
+            ctx: *mut c_void,
+            kind: Str,
+            out: *mut *const ProviderInfo,
+            cap: usize,
+            total: *mut usize,
+        ) -> Status,
+    >,
+    /// Another hold on a descriptor the caller already holds pinned.
+    /// Appended with `get_pinned`.
+    pub pin: Option<unsafe extern "C" fn(ctx: *mut c_void, desc: *const ProviderInfo)>,
+    /// Gives back one hold on a pinned descriptor; the caller does not
+    /// read it again unless it holds another. Appended with `get_pinned`.
+    pub unpin: Option<unsafe extern "C" fn(ctx: *mut c_void, desc: *const ProviderInfo)>,
 }
 
 impl HostServices {
@@ -218,6 +245,13 @@ impl HostServices {
     pub const fn floor() -> usize {
         offset_of!(HostServices, alloc)
             + size_of::<Option<unsafe extern "C" fn(ctx: *mut c_void) -> *const Allocator>>()
+    }
+
+    /// Where the pinning slots end, for the guard that reads them: all
+    /// four or none.
+    pub const fn pinned_end() -> usize {
+        offset_of!(HostServices, unpin)
+            + size_of::<Option<unsafe extern "C" fn(ctx: *mut c_void, desc: *const ProviderInfo)>>()
     }
 }
 
@@ -703,7 +737,8 @@ mod tests {
         assert!(ProviderInfo::tables_end() < ProviderInfo::create_end());
         assert!(ProviderInfo::create_end() < ProviderInfo::destroy_end());
         assert_eq!(ProviderInfo::destroy_end(), size_of::<ProviderInfo>());
-        assert_eq!(HostServices::floor(), size_of::<HostServices>());
+        assert!(HostServices::floor() < HostServices::pinned_end());
+        assert_eq!(HostServices::pinned_end(), size_of::<HostServices>());
         assert_eq!(KindTable::floor(), size_of::<KindTable>());
     }
 

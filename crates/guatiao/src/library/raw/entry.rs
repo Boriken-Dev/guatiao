@@ -112,53 +112,51 @@ pub type EntryFn = unsafe extern "C" fn(*const HostInfo<'static>) -> *const Libr
 /// registry reads it under the checks every descriptor gets, and its
 /// fields are its producer's contract (see [`LibraryInfo`]).
 ///
-/// **A host's own library can be owned by the registry.** A loaded
-/// library's descriptor must outlive its mapping, so it is `'static`; one
-/// the host builds as [`LibraryParts`](crate::library::kind::LibraryParts)
-/// is handed over instead, kept while the library is registered, and
-/// freed when it is retired or the registry is dropped. What its
-/// providers' tables, `ctx` and slots address is still the builder's to
-/// keep for the process, because a `Remote`, `Offer` or `Instance` taken
-/// from it is `'static` and outlives the retire.
+/// **Borrowed for the registration only.** The registry copies what the
+/// descriptor says — text, values, every table — into the library's
+/// lease, and keeps of it only its providers' code and `ctx`, which are
+/// the producer's to keep while the library is registered or a handle
+/// into it lives. Parts the host built are handed over instead, owned by
+/// that lease, and freed with it.
 #[derive(Debug)]
-pub enum LocalLibrary {
+pub enum LocalLibrary<'a> {
     /// Parts the registry owns from here on.
     Owned(Box<crate::library::kind::LibraryParts>),
-    /// A descriptor that lives for the process.
-    Static(&'static LibraryInfo<'static>),
+    /// A descriptor read once, at the registration.
+    Borrowed(&'a LibraryInfo<'a>),
 }
 
-impl LocalLibrary {
+impl LocalLibrary<'_> {
     /// The descriptor.
     pub fn info(&self) -> &LibraryInfo<'_> {
         match self {
             LocalLibrary::Owned(parts) => parts.info(),
-            LocalLibrary::Static(info) => info,
+            LocalLibrary::Borrowed(info) => info,
         }
     }
 }
 
-impl From<crate::library::kind::LibraryParts> for LocalLibrary {
-    fn from(parts: crate::library::kind::LibraryParts) -> LocalLibrary {
+impl From<crate::library::kind::LibraryParts> for LocalLibrary<'_> {
+    fn from(parts: crate::library::kind::LibraryParts) -> Self {
         LocalLibrary::Owned(Box::new(parts))
     }
 }
 
-impl From<Box<crate::library::kind::LibraryParts>> for LocalLibrary {
-    fn from(parts: Box<crate::library::kind::LibraryParts>) -> LocalLibrary {
+impl From<Box<crate::library::kind::LibraryParts>> for LocalLibrary<'_> {
+    fn from(parts: Box<crate::library::kind::LibraryParts>) -> Self {
         LocalLibrary::Owned(parts)
     }
 }
 
-impl From<&'static LibraryInfo<'static>> for LocalLibrary {
-    fn from(info: &'static LibraryInfo<'static>) -> LocalLibrary {
-        LocalLibrary::Static(info)
+impl<'a, 'b: 'a> From<&'a LibraryInfo<'b>> for LocalLibrary<'a> {
+    fn from(info: &'a LibraryInfo<'b>) -> LocalLibrary<'a> {
+        LocalLibrary::Borrowed(info)
     }
 }
 
-impl From<&'static crate::library::kind::LibraryParts> for LocalLibrary {
-    fn from(parts: &'static crate::library::kind::LibraryParts) -> LocalLibrary {
-        LocalLibrary::Static(parts.info())
+impl<'a> From<&'a crate::library::kind::LibraryParts> for LocalLibrary<'a> {
+    fn from(parts: &'a crate::library::kind::LibraryParts) -> LocalLibrary<'a> {
+        LocalLibrary::Borrowed(parts.info())
     }
 }
 
