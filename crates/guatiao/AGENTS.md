@@ -1164,7 +1164,10 @@ repository (`cargo run -p greeter_host` after a workspace build).
   whoever holds it last. The table carries `destroy` right after its
   header; `&mut [u8]` crosses as an out-buffer (`BytesMut`, object kinds
   only). A Rust implementation becomes one with `value.into_object()`
-  (the attribute appends that method); the receiver holds
+  (the attribute appends that method; it is the safe
+  `Object::from_cell(Box::new(ObjectCell::new(value)))`, whose bound
+  `K::Vtable: TableFor<T, Kind = K>` makes a table built for another type
+  or kind a compile error); the receiver holds
   `Object<dyn K>` — `Deref`/`DerefMut` to the trait, `destroy` on drop,
   `into_raw()`/`unsafe from_raw(ObjectRaw)` for a C caller
   (`guatiao_object { table, size, ctx }`). Any kind's method may return

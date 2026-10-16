@@ -148,19 +148,69 @@ impl<'a> From<BytesMut<'a>> for &'a mut [u8] {
 ///
 /// `repr(C)` so the table is at offset 0: the `ctx` an object crosses
 /// with addresses this cell, and the shims read the value past the table.
+///
+/// The fields are private and [`new`](ObjectCell::new) is the one way to
+/// fill them, so the table in a cell is always the one built for its
+/// value's type:
+///
+/// ```compile_fail
+/// let cell = guatiao::library::kind::ObjectCell {
+///     table: greeter_kind::ConversationVtable::lent_mut(),
+///     value: 7u8,
+/// };
+/// ```
 #[repr(C)]
 #[doc(hidden)]
 pub struct ObjectCell<V, T> {
-    /// The kind's table, filled by `<Trait>Vtable::of::<T>()`.
-    pub table: V,
+    /// The kind's table, built for `T` by [`TableFor::table`].
+    table: V,
     /// The object.
-    pub value: T,
+    pub(super) value: T,
 }
 
 impl<V, T> core::fmt::Debug for ObjectCell<V, T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("ObjectCell").finish_non_exhaustive()
     }
+}
+
+impl<V: TableFor<T>, T> ObjectCell<V, T> {
+    /// `value` beside the table its kind builds for `T`.
+    pub fn new(value: T) -> ObjectCell<V, T> {
+        ObjectCell {
+            table: V::table(),
+            value,
+        }
+    }
+}
+
+/// The table an object kind's attribute builds for one implementation:
+/// `#[guatiao::kind(object)]` implements it on the kind's `Vtable` for
+/// every `T` implementing the kind's trait.
+///
+/// What ties an [`ObjectCell`]'s table to its value by type, so
+/// [`Object::from_cell`] needs no promise from its caller: a table built
+/// for another type or another kind does not satisfy the bound.
+///
+/// ```compile_fail
+/// use greeter_kind::{Conversation, ConversationVtable};
+/// use guatiao::library::{kind::ObjectCell, Object};
+/// // `u8` does not implement `Conversation`.
+/// let cell = Box::new(ObjectCell::<ConversationVtable, u8>::new(7));
+/// let _ = Object::<dyn Conversation>::from_cell(cell);
+/// ```
+///
+/// # Safety
+///
+/// [`table`](TableFor::table) is [`Self::Kind`](TableFor::Kind)'s table
+/// for `T`: every slot reads its `ctx` as an `ObjectCell<Self, T>` and
+/// reaches the value as a `T`, and `destroy` frees one.
+#[doc(hidden)]
+pub unsafe trait TableFor<T>: Sized + 'static {
+    /// The kind this is the table of.
+    type Kind: ?Sized + Kind<Vtable = Self>;
+    /// The table for `T`.
+    fn table() -> Self;
 }
 
 /// Where an object kind's `destroy` slot ends: right after the header.
@@ -208,25 +258,22 @@ unsafe impl<K: ?Sized> Send for Object<K> {}
 unsafe impl<K: ?Sized + Sync> Sync for Object<K> {}
 
 impl<K: ?Sized + Kind> Object<K> {
-    /// An object from a cell the derive's `into_object` built: the table
-    /// is the cell's own, validated for `K`.
+    /// An object from a cell: the table is the cell's own, built for `T`
+    /// by `K`'s attribute ([`ObjectCell::new`]), and validated for `K`.
     ///
     /// `Err` only for a table that does not fit the kind, which a table
-    /// `of::<T>()` built cannot be; the derive `expect`s it.
-    ///
-    /// # Safety
-    ///
-    /// `cell.table` is the table `#[guatiao::kind]` emits for an object
-    /// kind, built by its `of::<T>()` for this `T`: its shims read the
-    /// value past the table as a `T`, and its `destroy` frees the cell as
-    /// an `ObjectCell<V, T>`. Validation checks the header, not that.
-    pub unsafe fn from_cell<V: 'static, T: 'static>(
-        cell: Box<ObjectCell<V, T>>,
-    ) -> Result<Object<K>, KindMismatch> {
-        let size = size_of::<V>();
+    /// the attribute built cannot be; `into_object` `expect`s it.
+    pub fn from_cell<T: Send + 'static>(
+        cell: Box<ObjectCell<K::Vtable, T>>,
+    ) -> Result<Object<K>, KindMismatch>
+    where
+        K::Vtable: TableFor<T, Kind = K>,
+    {
+        let size = size_of::<K::Vtable>();
         let ctx = Box::into_raw(cell);
-        // SAFETY: the cell's table is `V`, `size` bytes, at offset 0 of a
-        // heap block this handle now owns; `ctx` addresses that block.
+        // SAFETY: the cell's table is a `K::Vtable` for `T` (the bound),
+        // `size` bytes at offset 0 of a heap block this handle now owns;
+        // `ctx` addresses that block, which is what its slots read.
         let validated = unsafe {
             Remote::<K>::validate(ctx.cast::<c_void>(), size, ctx.cast::<c_void>(), false)
         };

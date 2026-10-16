@@ -385,7 +385,7 @@ impl core::marker::Sync for guatiao::library::kind::LibraryParts
 pub struct guatiao::library::kind::Object<K: ?core::marker::Sized>
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> guatiao::library::kind::Object<K>
 pub fn guatiao::library::kind::Object<K>::ctx(&self) -> *mut core::ffi::c_void
-pub unsafe fn guatiao::library::kind::Object<K>::from_cell<V: 'static, T: 'static>(alloc::boxed::Box<ObjectCell<V, T>>) -> core::result::Result<guatiao::library::kind::Object<K>, guatiao::library::kind::KindMismatch>
+pub fn guatiao::library::kind::Object<K>::from_cell<T: core::marker::Send + 'static>(alloc::boxed::Box<ObjectCell<<K as guatiao::library::kind::Kind>::Vtable, T>>) -> core::result::Result<guatiao::library::kind::Object<K>, guatiao::library::kind::KindMismatch> where <K as guatiao::library::kind::Kind>::Vtable: TableFor<T, Kind = K>
 pub unsafe fn guatiao::library::kind::Object<K>::from_raw(guatiao::library::kind::ObjectRaw) -> core::result::Result<guatiao::library::kind::Object<K>, guatiao::library::kind::KindMismatch>
 pub fn guatiao::library::kind::Object<K>::into_raw(self) -> guatiao::library::kind::ObjectRaw
 pub fn guatiao::library::kind::Object<K>::size(&self) -> usize
@@ -1310,7 +1310,7 @@ impl<'a> core::marker::StructuralPartialEq for guatiao::library::notices::Notice
 pub struct guatiao::library::Object<K: ?core::marker::Sized>
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> guatiao::library::kind::Object<K>
 pub fn guatiao::library::kind::Object<K>::ctx(&self) -> *mut core::ffi::c_void
-pub unsafe fn guatiao::library::kind::Object<K>::from_cell<V: 'static, T: 'static>(alloc::boxed::Box<ObjectCell<V, T>>) -> core::result::Result<guatiao::library::kind::Object<K>, guatiao::library::kind::KindMismatch>
+pub fn guatiao::library::kind::Object<K>::from_cell<T: core::marker::Send + 'static>(alloc::boxed::Box<ObjectCell<<K as guatiao::library::kind::Kind>::Vtable, T>>) -> core::result::Result<guatiao::library::kind::Object<K>, guatiao::library::kind::KindMismatch> where <K as guatiao::library::kind::Kind>::Vtable: TableFor<T, Kind = K>
 pub unsafe fn guatiao::library::kind::Object<K>::from_raw(guatiao::library::kind::ObjectRaw) -> core::result::Result<guatiao::library::kind::Object<K>, guatiao::library::kind::KindMismatch>
 pub fn guatiao::library::kind::Object<K>::into_raw(self) -> guatiao::library::kind::ObjectRaw
 pub fn guatiao::library::kind::Object<K>::size(&self) -> usize
