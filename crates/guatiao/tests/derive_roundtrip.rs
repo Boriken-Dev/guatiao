@@ -10,6 +10,7 @@
 //! the macro crate's own tests.
 
 #![cfg(feature = "derive")]
+extern crate alloc;
 
 use core::cell::Cell;
 use core::ffi::c_void;
@@ -417,4 +418,42 @@ fn a_raw_identifier_is_keyed_without_its_prefix() {
     let value = Kebab { r#match_count: 1 }.to_value().unwrap();
     let map: &Map = TryAsRef::<Map>::try_as_ref(&value).unwrap();
     assert_eq!(map.keys().collect::<Vec<_>>(), ["match-count"]);
+}
+
+/// A record carrying values it does not model: the options a user set,
+/// whatever they are, and an optional raw document.
+#[derive(ToValue, FromValue, Debug, PartialEq)]
+struct Record {
+    name: String,
+    options: alloc::collections::BTreeMap<String, Value>,
+    raw: Option<Value>,
+    extra: Vec<Value>,
+}
+
+#[test]
+fn a_field_may_be_a_value_and_reads_back_local() {
+    with_alloc(|alloc| {
+        let mut options = alloc::collections::BTreeMap::new();
+        options.insert("port".to_string(), Value::from(5900i64));
+        let mut nested = Map::new();
+        nested.set("depth", true);
+        options.insert("tls".to_string(), Value::from(nested));
+        let record = Record {
+            name: "office".to_string(),
+            options,
+            raw: Some(Value::from("as typed")),
+            extra: vec![Value::null(), Value::from(List::new())],
+        };
+        let built = record.to_value_in(alloc).unwrap();
+        assert!(!built.is_local(), "written into the allocator named");
+        let back = Record::from_value(&built).unwrap();
+        assert_eq!(back, record);
+        assert!(back.options.values().all(Value::is_local));
+        assert!(back.raw.as_ref().is_some_and(Value::is_local));
+        let mut without: Map = [("name", "x")].into_iter().collect();
+        without.set("options", Map::new());
+        without.set("extra", List::new());
+        let read = Record::from_value(&Value::from(without)).unwrap();
+        assert_eq!(read.raw, None, "an absent value field reads as None");
+    });
 }
