@@ -58,6 +58,32 @@ fn the_readme_example_compiles_and_holds() -> Result<(), Box<dyn core::error::Er
     Ok(())
 }
 
+#[test]
+fn the_readme_passing_example_compiles_and_holds() {
+    // README-PASSING-BEGIN
+    use guatiao::{Map, Value};
+
+    let mut map = Map::new();
+    map.set("host", "10.0.0.1");
+
+    let node = Value::from(map); // a move: nothing copied
+    let owned = node.into_local(); // already this binary's: handed back as it is
+    let copy = owned.clone(); // a copy, into this binary's allocator
+    assert_eq!(copy, owned);
+    // README-PASSING-END
+}
+
+/// The README's "Passing data" block (its third `rust` block) and the
+/// marked body above are the same text.
+#[test]
+fn the_readme_passing_example_is_the_readme_example() {
+    assert_eq!(
+        rust_block(include_str!("../README.md"), 2),
+        marked_body(include_str!("readme_example.rs"), "README-PASSING"),
+        "README.md's passing example and this file's marked body have diverged."
+    );
+}
+
 /// The README's fenced `rust` block and the marked body above are the
 /// same text.
 ///
@@ -70,8 +96,8 @@ fn the_readme_example_compiles_and_holds() -> Result<(), Box<dyn core::error::Er
 /// method, a changed literal, a moved comment — fails here.
 #[test]
 fn the_readme_example_is_the_readme_example() {
-    let from_readme = first_rust_block(include_str!("../README.md"));
-    let from_test = marked_body(include_str!("readme_example.rs"));
+    let from_readme = rust_block(include_str!("../README.md"), 0);
+    let from_test = marked_body(include_str!("readme_example.rs"), "README-EXAMPLE");
 
     assert_eq!(
         from_readme, from_test,
@@ -80,8 +106,8 @@ fn the_readme_example_is_the_readme_example() {
     );
 }
 
-/// The first ```` ```rust ```` fenced block of `md`, minus doctest-hidden
-/// lines.
+/// The `index`-th ```` ```rust ```` fenced block of `md`, minus
+/// doctest-hidden lines.
 ///
 /// A line that is `#` alone or starts with `# ` is hidden: rustdoc strips
 /// it before compiling and never renders it, so a reader copying the
@@ -91,14 +117,16 @@ fn the_readme_example_is_the_readme_example() {
 /// `str::lines` splits on `\n` *and* `\r\n`, so a checkout that has not
 /// been normalised to LF cannot fail this test on line endings alone;
 /// that is not the difference it is looking for.
-fn first_rust_block(md: &str) -> String {
+fn rust_block(md: &str, index: usize) -> String {
     let mut out: Vec<&str> = Vec::new();
     let mut inside = false;
+    let mut found = 0;
 
     for line in md.lines() {
         if !inside {
             if line.trim_end() == "```rust" {
-                inside = true;
+                inside = found == index;
+                found += 1;
             }
             continue;
         }
@@ -112,13 +140,12 @@ fn first_rust_block(md: &str) -> String {
     }
 
     panic!(
-        "README.md has no closed ```rust block. This test compares against \
-         the FIRST one; if the example moved, it moved out from under the \
-         check."
+        "README.md has no closed ```rust block number {index}; if an example \
+         moved, it moved out from under the check."
     );
 }
 
-/// The lines of `src` between the two marker comments, dedented one
+/// The lines of `src` between the `name` marker comments, dedented one
 /// level.
 ///
 /// The four-space strip is the only transformation, and it is exactly the
@@ -127,26 +154,23 @@ fn first_rust_block(md: &str) -> String {
 /// purpose: `trim_start` would also flatten the *relative* indentation of
 /// any nested line, which is a difference the README would show and this
 /// test would then hide.
-fn marked_body(src: &str) -> String {
+fn marked_body(src: &str, name: &str) -> String {
+    let begin = format!("// {name}-BEGIN");
+    let end = format!("// {name}-END");
     let mut out: Vec<&str> = Vec::new();
     let mut inside = false;
 
     for line in src.lines() {
         let trimmed = line.trim_start();
         if !inside {
-            // The marker's own name appears in this function as a string
-            // literal too; the literal's line does not equal the marker
-            // once trimmed, so it cannot be mistaken for one.
-            if trimmed == "// README-EXAMPLE-BEGIN" {
-                inside = true;
-            }
+            inside = trimmed == begin;
             continue;
         }
-        if trimmed == "// README-EXAMPLE-END" {
+        if trimmed == end {
             return out.join("\n");
         }
         out.push(line.strip_prefix("    ").unwrap_or(line));
     }
 
-    panic!("readme_example.rs has lost one of its README-EXAMPLE markers");
+    panic!("readme_example.rs has lost one of its {name} markers");
 }

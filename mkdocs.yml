@@ -28,6 +28,7 @@ theme:
 
 nav:
   - Home: index.md
+  - Passing data: ownership.md
   - API Reference:
       # rustdoc's own output, built by `cargo doc` and copied under
       # `rust/` by the docs workflow. An absolute URL because it is not a

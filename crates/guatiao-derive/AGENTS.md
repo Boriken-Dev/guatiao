@@ -170,7 +170,12 @@ parser, which a consumer deriving only `Schema` should not pay for.
 default is the trait's ident in snake case, `SessionBackend` →
 `"session_backend"`). Emits the trait, with `<method>_in(.., alloc: Alloc)`
 added as a provided method beside every method answering a `Value`, `Map`
-or `List` (its default answers `<method>(..)`), then:
+or `List` (its default answers `<method>(..)`). The shim calls
+`<method>_in` with the allocator the caller carried in: override it with
+the `_in` forms (`Map::new_in`, `set_in`, `Text::new_in`, `clone_in`,
+`to_value_in`) and implement `<method>` as `self.<method>_in(..,
+Alloc::rust())`, and the answer crosses with no copy; leave it and the
+proxy copies the answer once. Then:
 
 | item | what |
 | --- | --- |
