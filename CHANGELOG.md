@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`into_local()`, `into_alloc(alloc)` and `is_local()` on `Value`,
+  `Map`, `List`, `Text` and `Buffer`.** Owning a tree without copying one
+  that is already this binary's: `into_local()` hands back a tree whose
+  every container and key records `Alloc::rust()` unchanged, allocating
+  nothing, and otherwise copies it there and frees the original through
+  its own allocators. `into_alloc(alloc)` is the same for a named
+  allocator, fallible as `clone_in` is. The proxy's return path for a
+  tree is built on them.
+- **`FromValue for Value`**, a copy in this binary's allocator. A
+  `ToValue`/`FromValue` field may be a `Value`, `Option<Value>`,
+  `Vec<Value>` or `BTreeMap<String, Value>`.
+
 ### Changed
 
 - **Breaking: `clone()` copies into this binary's allocator.** `clone()`

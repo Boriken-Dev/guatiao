@@ -350,20 +350,10 @@ pub fn take_err(written: ProviderError, status: Status) -> ProviderError {
     if unsafe { Text::from_ptr(&written.message) }.is_err() {
         return ProviderError::from(written.status);
     }
-    let home = Alloc::rust();
-    if written
-        .message
-        .alloc()
-        .is_ok_and(|a| a.as_raw() == home.as_raw())
-    {
-        return written;
-    }
-    match written.message.clone_in(home) {
-        Ok(message) => ProviderError {
-            status: written.status,
-            message,
-        },
-        Err(_) => ProviderError::from(written.status),
+    let status = written.status;
+    match written.message.into_alloc(Alloc::rust()) {
+        Ok(message) => ProviderError { status, message },
+        Err(_) => ProviderError::from(status),
     }
 }
 
@@ -479,12 +469,9 @@ pub unsafe fn return_alloc<C: Carrier>(out: *const C) -> Alloc {
 pub fn map_ret(out: Map, home: Alloc) -> Result<Map, ProviderError> {
     // SAFETY: a live local, written by the shim.
     unsafe { Map::from_ptr(&out) }?;
-    if crate::value::walk::map_recorded_by(&out, home.as_raw()) {
-        return Ok(out);
-    }
-    // The original is freed here, through the allocator that made it,
+    // A copy frees the original here, through the allocator that made it,
     // while the library that made it is still leased by the caller.
-    Ok(out.clone_in(home)?)
+    Ok(out.into_alloc(home)?)
 }
 
 /// A value a call returned, as the caller gets it: unchanged when every
@@ -494,19 +481,13 @@ pub fn map_ret(out: Map, home: Alloc) -> Result<Map, ProviderError> {
 /// after the call.
 #[doc(hidden)]
 pub fn value_ret(out: Value, home: Alloc) -> Result<Value, ProviderError> {
-    if crate::value::walk::recorded_by(&out, home.as_raw()) {
-        return Ok(out);
-    }
-    Ok(out.clone_in(home)?)
+    Ok(out.into_alloc(home)?)
 }
 
 /// [`value_ret`] for a list.
 #[doc(hidden)]
 pub fn list_ret(out: List, home: Alloc) -> Result<List, ProviderError> {
-    if crate::value::walk::list_recorded_by(&out, home.as_raw()) {
-        return Ok(out);
-    }
-    Ok(out.clone_in(home)?)
+    Ok(out.into_alloc(home)?)
 }
 
 /// The `available` slot over a Rust method: runs `ask` on the instance

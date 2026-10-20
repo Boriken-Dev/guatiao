@@ -411,6 +411,10 @@ impl Clone for Text {
     }
 }
 
+super::where_it_lives!(Text, crate::value::walk::text_recorded_by, |text: &Text| {
+    bytes_layout(text.len)
+});
+
 impl AsRef<[u8]> for Text {
     fn as_ref(&self) -> &[u8] {
         self.as_bytes()

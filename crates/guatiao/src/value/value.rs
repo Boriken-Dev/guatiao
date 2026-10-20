@@ -612,6 +612,10 @@ impl Clone for Value {
     }
 }
 
+super::types::where_it_lives!(Value, crate::value::walk::recorded_by, |_: &Value| {
+    core::alloc::Layout::new::<Value>()
+});
+
 /// Null, so `mem::take` leaves a node that owns nothing.
 impl Default for Value {
     fn default() -> Value {

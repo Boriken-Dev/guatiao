@@ -104,6 +104,61 @@ pub(crate) fn cloned<T>(copy: Result<T, ValueError>, layout: Layout) -> T {
     }
 }
 
+/// `is_local`, `into_local` and `into_alloc` on an owned container or a
+/// node. `$homed(&self, alloc)` answers whether everything it owns
+/// records `alloc`, without allocating; `$layout(&self)` is what an
+/// aborted local copy reports.
+macro_rules! where_it_lives {
+    ($ty:ty, $homed:path, $layout:expr) => {
+        impl $ty {
+            /// Whether everything this owns, map keys included, records
+            /// this binary's allocator ([`Alloc::rust`]): what
+            /// [`into_local`](Self::into_local) hands back unchanged. A
+            /// value that owns nothing is local. Answering allocates
+            /// nothing.
+            pub fn is_local(&self) -> bool {
+                $homed(self, Alloc::rust().as_raw())
+            }
+
+            /// This, owned in this binary's allocator: unchanged, and
+            /// allocating nothing, when it [`is_local`](Self::is_local);
+            /// otherwise copied into [`Alloc::rust`] and the original
+            /// freed through the allocators it recorded. Where `clone`
+            /// would copy a tree you already own, this moves it.
+            ///
+            /// # Panics
+            ///
+            /// As `clone`, on content this build refuses, which only a
+            /// foreign producer can write;
+            /// [`into_alloc`](Self::into_alloc) reports it. An allocation
+            /// failure aborts.
+            pub fn into_local(self) -> $ty {
+                if self.is_local() {
+                    return self;
+                }
+                let layout = $layout(&self);
+                $crate::value::types::cloned(self.clone_in(Alloc::rust()), layout)
+            }
+
+            /// This, owned in `alloc`: unchanged when everything it owns
+            /// already records `alloc`, otherwise copied there and the
+            /// original freed through the allocators it recorded.
+            ///
+            /// # Errors
+            ///
+            /// As `clone_in`: `alloc` refusing, or content this build
+            /// refuses. The original is freed either way.
+            pub fn into_alloc(self, alloc: Alloc) -> Result<$ty, ValueError> {
+                if $homed(&self, alloc.as_raw()) {
+                    return Ok(self);
+                }
+                self.clone_in(alloc)
+            }
+        }
+    };
+}
+pub(crate) use where_it_lives;
+
 /// The layout of `n` bytes, for [`or_abort`]: `Layout::array::<u8>(n)`, and
 /// one byte when `n` exceeds `isize::MAX`, which has no layout.
 pub(crate) fn bytes_layout(n: usize) -> Layout {

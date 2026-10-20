@@ -47,10 +47,10 @@
 //! `Option`, which has no `TryFrom` either: [`Map::required`] is the step
 //! from one to the other, and it names the key.
 //!
-//! [`ToValue`] is implemented for [`Value`], so a subtree in hand can be
-//! written -- it deep-copies into the target allocator. There is no
-//! `FromValue` for one, because reading it back would have to allocate
-//! and [`FromValue`] takes no allocator.
+//! [`ToValue`] and [`FromValue`] are implemented for [`Value`], so a
+//! derived field or a kind argument may be one: writing deep-copies the
+//! subtree into the target allocator, reading copies it into this
+//! binary's own, as `clone` does.
 
 #![forbid(unsafe_code)]
 
@@ -669,6 +669,23 @@ impl<T: FromValue> FromValue for std::collections::HashMap<String, T> {
             out.insert(entry.key().to_string(), read);
         }
         Ok(out)
+    }
+}
+
+/// A copy of the borrowed tree in this binary's allocator, as
+/// [`Value::clone`] makes one: what a derived field of type `Value`, or
+/// `Option<Value>`, `Vec<Value>` and `BTreeMap<String, Value>`, reads.
+/// Content this build refuses is [`MapError::BadValue`]; an allocation
+/// failure aborts, as `clone` does.
+impl FromValue for Value {
+    fn from_value(value: &Value) -> Result<Value, MapError> {
+        match value.clone_in(Alloc::rust()) {
+            Ok(copy) => Ok(copy),
+            Err(ValueError::Alloc(_)) => {
+                alloc::alloc::handle_alloc_error(core::alloc::Layout::new::<Value>())
+            }
+            Err(_) => Err(MapError::bad_value("a value this build can read")),
+        }
     }
 }
 
