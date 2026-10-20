@@ -166,6 +166,14 @@ const METRICS: &[Metric] = &[
         setup: call_map_arg,
     },
     Metric {
+        name: "call_map_mut",
+        setup: call_map_mut,
+    },
+    Metric {
+        name: "call_map_mut_moved",
+        setup: call_map_mut_moved,
+    },
+    Metric {
         name: "call_string",
         setup: call_string,
     },
@@ -324,6 +332,46 @@ fn call_map_arg(libs: &Libraries) -> Run {
             config.set("name", "ana");
             let answer: Map = greeter.greet_from(config).expect("greets");
             black_box(answer);
+        })
+    })
+}
+
+/// `Greeter::check`, lending a one-entry `Map` built for the call, to
+/// which the provider adds an entry built in the map's own allocator: the
+/// walk after the call finds nothing to move.
+fn call_map_mut(libs: &Libraries) -> Run {
+    let registry = registry(&[&libs.derived]);
+    let offer = greeter_offer(&registry, "derived_greeter_hello");
+    Box::new(move |iters| {
+        let _keep = &registry;
+        let greeter = offer.default_instance().expect("its own instance");
+        batch(iters, || {
+            let mut config = Map::new();
+            config.set("name", "ana");
+            assert!(greeter.check(&mut config).expect("checks"));
+            black_box(config);
+        })
+    })
+}
+
+/// `call_map_mut` through a configured instance whose `check` builds the
+/// entry's value in its own allocator, so the proxy moves it into the
+/// map's after the call.
+fn call_map_mut_moved(libs: &Libraries) -> Run {
+    let registry = registry(&[&libs.derived]);
+    let shouter = greeter_offer(&registry, "derived_greeter_shouter");
+    let mut settings = Map::new();
+    settings.set("prefix", "hey");
+    let instance = shouter
+        .instantiate(&Value::from(settings))
+        .expect("a fitting configuration");
+    Box::new(move |iters| {
+        let _keep = &registry;
+        batch(iters, || {
+            let mut config = Map::new();
+            config.set("name", "ana");
+            assert!(instance.check(&mut config).expect("checks"));
+            black_box(config);
         })
     })
 }
