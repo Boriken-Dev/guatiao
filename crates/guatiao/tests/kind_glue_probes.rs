@@ -826,3 +826,334 @@ fn a_tree_handed_to_a_refusing_slot_is_freed_by_it() {
     };
     assert_eq!(status, Status::GUATIAO_ERR_NULL);
 }
+
+// --- trees lent mutably -------------------------------------------------------
+
+/// Edits the caller's trees in place.
+#[guatiao::kind]
+pub trait Editor: Send + Sync {
+    /// Fills in `port` when it is missing and adds `url`, derived from
+    /// `host` and `port`; answers whether there was a host to build it on.
+    fn check(&self, config: &mut Map) -> Result<bool, ProviderError>;
+    /// Sets the value to a map and appends to the list; answers the
+    /// list's length.
+    fn fill(&self, value: &mut Value, list: &mut List) -> i64;
+}
+
+/// Builds what it adds where `library` says: the map's own allocator
+/// when `None`, which is the fast path, or an allocator of its own.
+struct Edits {
+    library: Option<Alloc>,
+}
+
+// SAFETY: an `Alloc` names a vtable that outlives the test and may be
+// called from any thread, which is the contract on `Allocator`.
+unsafe impl Send for Edits {}
+// SAFETY: as above.
+unsafe impl Sync for Edits {}
+
+impl Editor for Edits {
+    fn check(&self, config: &mut Map) -> Result<bool, ProviderError> {
+        // The allocator the caller's tree records: what goes in is built
+        // there, so nothing has to move once the call returns.
+        let alloc = match self.library {
+            Some(theirs) => theirs,
+            None => config.alloc()?,
+        };
+        if !config.contains_key("port") {
+            config.set_in(
+                "port",
+                guatiao::ToValue::to_value_in(&5900i64, alloc)?,
+                alloc,
+            )?;
+        }
+        let port = config
+            .get("port")
+            .and_then(|v| i64::try_from(v).ok())
+            .unwrap_or(5900);
+        let Some(host) = config
+            .get("host")
+            .and_then(guatiao::TryAsRef::<str>::try_as_ref)
+        else {
+            return Ok(false);
+        };
+        let url = Text::new_in(alloc, &format!("vnc://{host}:{port}"))?;
+        config.set_in("url", url, alloc)?;
+        Ok(true)
+    }
+
+    fn fill(&self, value: &mut Value, list: &mut List) -> i64 {
+        let alloc = self.library.unwrap_or_else(Alloc::rust);
+        let mut map = Map::new_in(alloc);
+        map.set_in("k", Text::new_in(alloc, "v").unwrap(), alloc)
+            .unwrap();
+        *value = Value::from(map);
+        list.push_in(Text::new_in(alloc, "more").unwrap(), alloc)
+            .unwrap();
+        list.len() as i64
+    }
+}
+
+static EDITS: EditorVtable = EditorVtable::of::<Edits>();
+
+fn editor(edits: &Edits) -> Remote<dyn Editor> {
+    // SAFETY: the table `of::<Edits>()` built, over a `&Edits` that
+    // outlives every call the test makes.
+    unsafe {
+        Remote::<dyn Editor>::from_raw(
+            (&EDITS as *const EditorVtable).cast(),
+            size_of::<EditorVtable>(),
+            (edits as *const Edits).cast_mut().cast(),
+        )
+    }
+    .expect("the table validates")
+}
+
+/// A counting allocator over a `Count`, for the test's lifetime.
+fn counting(count: &Count) -> Allocator {
+    Allocator {
+        struct_size: size_of::<Allocator>() as u32,
+        ctx: (count as *const Count).cast_mut().cast(),
+        alloc: Some(count_alloc),
+        free: Some(count_free),
+        release: None,
+    }
+}
+
+#[test]
+fn a_lent_map_is_edited_in_place_rust_to_rust() {
+    let edits = Edits { library: None };
+    let remote = editor(&edits);
+    let mut config = Map::new();
+    config.set("host", "10.0.0.1");
+    assert!(remote.check(&mut config).expect("checked"));
+    assert_eq!(config.keys().collect::<Vec<_>>(), ["host", "port", "url"]);
+    assert_eq!(
+        config
+            .get("url")
+            .and_then(guatiao::TryAsRef::<str>::try_as_ref),
+        Some("vnc://10.0.0.1:5900")
+    );
+    // Again: nothing to fill, the derived entry replaced in place.
+    config.set("port", 5901i64);
+    assert!(remote.check(&mut config).expect("checked"));
+    assert_eq!(
+        config
+            .get("url")
+            .and_then(guatiao::TryAsRef::<str>::try_as_ref),
+        Some("vnc://10.0.0.1:5901")
+    );
+    // A value and a list, through an infallible slot.
+    let mut value = Value::null();
+    let mut list = List::new();
+    list.push("first");
+    assert_eq!(remote.fill(&mut value, &mut list), 2);
+    assert!(guatiao::TryAsRef::<Map>::try_as_ref(&value).is_some_and(|m| m.contains_key("k")));
+    assert!(value.is_local() && list.is_local());
+}
+
+/// The fast path: a provider that builds in the tree's own allocator
+/// causes no copy, and the walk after the call allocates nothing.
+#[test]
+fn what_a_provider_builds_in_the_trees_allocator_is_not_copied() {
+    let host = Count {
+        outstanding: AtomicUsize::new(0),
+    };
+    let vtable = counting(&host);
+    // SAFETY: a complete vtable that outlives every block it hands out.
+    let arena = unsafe { Alloc::from_raw(&vtable) }.expect("a complete vtable");
+    let edits = Edits { library: None };
+    let remote = editor(&edits);
+    let mut config = Map::new_in(arena);
+    config
+        .set_in("host", Text::new_in(arena, "h").unwrap(), arena)
+        .unwrap();
+    let before = host.outstanding.load(Ordering::SeqCst);
+    let (answer, heap) = allocations(|| remote.check(&mut config));
+    assert!(answer.expect("checked"));
+    // Two keys, a number and a text, in an array that had room: the
+    // provider's own blocks, all in the arena.
+    let built = host.outstanding.load(Ordering::SeqCst) - before;
+    assert_eq!(built, 4, "the provider's own blocks");
+    // The arena forwards to the heap, so the heap saw those four and two
+    // formatting strings (the URL's, the number's text): no copy, and no
+    // stack for the walk after the call.
+    assert!(
+        heap.is_none_or(|n| n == built + 2),
+        "{heap:?} heap allocations"
+    );
+    assert!(config.make_local_in(arena).is_ok());
+    drop(config);
+    assert_eq!(host.outstanding.load(Ordering::SeqCst), 0);
+}
+
+/// What a provider builds in an allocator of its own is moved into the
+/// tree's once the call returns: none of its blocks is alive after.
+#[test]
+fn what_a_provider_builds_in_its_own_allocator_is_moved_home() {
+    let library = Count {
+        outstanding: AtomicUsize::new(0),
+    };
+    let vtable = counting(&library);
+    // SAFETY: a complete vtable that outlives every block it hands out.
+    let theirs = unsafe { Alloc::from_raw(&vtable) }.expect("a complete vtable");
+    let edits = Edits {
+        library: Some(theirs),
+    };
+    let remote = editor(&edits);
+    let mut config = Map::new();
+    config.set("host", "h");
+    assert!(remote.check(&mut config).expect("checked"));
+    assert_eq!(
+        library.outstanding.load(Ordering::SeqCst),
+        0,
+        "every block the library made was moved and freed"
+    );
+    assert!(config.is_local());
+    assert_eq!(
+        config
+            .get("url")
+            .and_then(guatiao::TryAsRef::<str>::try_as_ref),
+        Some("vnc://h:5900")
+    );
+    let mut value = Value::null();
+    let mut list = List::new();
+    assert_eq!(remote.fill(&mut value, &mut list), 1);
+    assert_eq!(library.outstanding.load(Ordering::SeqCst), 0);
+    assert!(value.is_local() && list.is_local());
+}
+
+/// A refused call still has its tree settled, and its own error wins.
+#[test]
+fn a_refused_call_still_moves_what_was_added() {
+    struct Refuses(Alloc);
+    // SAFETY: as for `Edits`.
+    unsafe impl Send for Refuses {}
+    // SAFETY: as above.
+    unsafe impl Sync for Refuses {}
+    impl Editor for Refuses {
+        fn check(&self, config: &mut Map) -> Result<bool, ProviderError> {
+            config.set_in("half", Text::new_in(self.0, "done")?, self.0)?;
+            Err(ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, "no"))
+        }
+        fn fill(&self, _: &mut Value, _: &mut List) -> i64 {
+            0
+        }
+    }
+    static REFUSES: EditorVtable = EditorVtable::of::<Refuses>();
+    let library = Count {
+        outstanding: AtomicUsize::new(0),
+    };
+    let vtable = counting(&library);
+    // SAFETY: a complete vtable that outlives every block it hands out.
+    let theirs = unsafe { Alloc::from_raw(&vtable) }.expect("a complete vtable");
+    let refuses = Refuses(theirs);
+    // SAFETY: the table `of::<Refuses>()` built, over a `&Refuses`.
+    let remote = unsafe {
+        Remote::<dyn Editor>::from_raw(
+            (&REFUSES as *const EditorVtable).cast(),
+            size_of::<EditorVtable>(),
+            (&refuses as *const Refuses).cast_mut().cast(),
+        )
+    }
+    .expect("the table validates");
+    let mut config = Map::new();
+    let e = remote.check(&mut config).unwrap_err();
+    assert_eq!(e.message(), "no");
+    assert!(config.contains_key("half"), "the change stands");
+    assert!(config.is_local());
+    assert_eq!(library.outstanding.load(Ordering::SeqCst), 0);
+}
+
+/// A slot that is not Rust's may write a key that is not UTF-8: it is
+/// removed and freed, and the call reports it.
+#[test]
+fn a_key_a_foreign_slot_wrote_that_is_not_utf8_is_removed() {
+    unsafe extern "C" fn writes_a_bad_key(
+        _: *mut c_void,
+        config: *mut Map,
+        out: *mut bool,
+        _: *mut ProviderError,
+    ) -> Status {
+        let bad = Buffer::new(b"caf\xe9");
+        let (ptr, len, cap, alloc) = bad.into_raw_parts();
+        // SAFETY: a key whose storage is consistent; its bytes are what is
+        // under test, as only a foreign writer can leave them.
+        let key = unsafe { Text::from_raw_parts(ptr, len, cap, alloc) };
+        let mut entries = core::mem::ManuallyDrop::new(vec![
+            guatiao::Entry::new(Text::new("kept"), Value::from(1i64)),
+            guatiao::Entry::new(key, Value::from("lost")),
+        ]);
+        let block = Alloc::rust()
+            .alloc(
+                2 * size_of::<guatiao::Entry>(),
+                align_of::<guatiao::Entry>(),
+            )
+            .unwrap()
+            .cast::<guatiao::Entry>();
+        // SAFETY: two entries moved into a block of room for two, from the
+        // allocator the map records, as a C writer would build it.
+        unsafe {
+            core::ptr::copy_nonoverlapping(entries.as_ptr(), block, 2);
+            entries.set_len(0);
+            core::mem::ManuallyDrop::drop(&mut entries);
+            *config = Map::from_raw_parts(block, 2, 2, Alloc::rust().as_raw());
+            out.write(true);
+        }
+        Status::GUATIAO_OK
+    }
+    unsafe extern "C" fn fills_nothing(
+        _: *mut c_void,
+        _: *mut Value,
+        _: *mut List,
+        out: *mut i64,
+    ) -> Status {
+        // SAFETY: the proxy's out slot.
+        unsafe { out.write(0) };
+        Status::GUATIAO_OK
+    }
+    static FOREIGN: EditorVtable = EditorVtable {
+        header: guatiao::library::KindHeader::new(
+            size_of::<EditorVtable>(),
+            EditorVtable::FLOOR_HASH,
+        ),
+        check: Some(writes_a_bad_key),
+        fill: Some(fills_nothing),
+    };
+    // SAFETY: a table of this kind, whose slots read nothing from `ctx`.
+    let remote = unsafe {
+        Remote::<dyn Editor>::from_raw(
+            (&FOREIGN as *const EditorVtable).cast(),
+            size_of::<EditorVtable>(),
+            core::ptr::null_mut(),
+        )
+    }
+    .expect("the table validates");
+    let mut config = Map::new();
+    config.set("host", "h");
+    let e = remote.check(&mut config).unwrap_err();
+    assert_eq!(e.status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert_eq!(config.keys().collect::<Vec<_>>(), ["kept"]);
+}
+
+/// The shim refuses a null tree and a map whose keys are not UTF-8
+/// before the method runs.
+#[test]
+fn a_null_or_unreadable_lent_tree_never_reaches_the_method() {
+    let edits = Edits { library: None };
+    let ctx = (&edits as *const Edits).cast_mut().cast();
+    let mut out = false;
+    let mut err = ProviderError::none();
+    // SAFETY: the `&Edits` the table was built for, a null map.
+    let status = unsafe {
+        EditorVtable::__guatiao_shim_check::<Edits>(ctx, core::ptr::null_mut(), &mut out, &mut err)
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_NULL);
+    let mut list = List::new();
+    let mut out = 0i64;
+    // SAFETY: as above, a null value.
+    let status = unsafe {
+        EditorVtable::__guatiao_shim_fill::<Edits>(ctx, core::ptr::null_mut(), &mut list, &mut out)
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_NULL);
+}

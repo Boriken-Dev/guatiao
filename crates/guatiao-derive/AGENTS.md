@@ -195,6 +195,7 @@ Accepted method shapes — receiver `&self`, the trait names `Send + Sync`:
 | `&Value`, `&Map` | non-null pointers |
 | `Option<&Value>` | a pointer that may be null |
 | `Value`, `Map`, `List` by value | **a move**: `*mut Value`/`*mut Map`/`*mut List` (no `const`) to the caller's node, which the proxy then forgets and the callee owns on every path, taken first in the shim; nothing is copied. The tree is in the caller's allocators; `into_local()` re-homes one a callee keeps past them. A map's keys are checked as for `&Map` |
+| `&mut Value`, `&mut Map`, `&mut List` | **lent for the call**: `*mut Value`/`*mut Map`/`*mut List` to the caller's node; the callee may change and grow it, never free it or keep it. The shim refuses null and a map's keys that are not UTF-8 (`kind::{value,map,list}_mut_arg`). The proxy reads the allocator the tree records before the call (`kind::lent_home`) and, after it, answered or refused, moves into it whatever the callee built elsewhere (`kind::lent_settle`, which is `make_local_in`, and removes a key a foreign slot wrote that is not UTF-8). The slot's field carries a doc line, "Lent for the call, not handed over", which a C header renders. Provider and object kinds alike; `Option<&mut T>` is refused |
 | any other argument type, by value | `*const Value` via `ToValue` (the shim reads it with `FromValue`) |
 | `Object<dyn K>` (`K` an object kind) | an `ObjectRaw` by value; **ownership crosses with the call**, the callee destroys it — taken first in the shim, before anything can fail |
 | `&mut dyn K` / `&dyn K` (`K` an object kind) | **lent for the call**: `*const ObjectRaw` (`const guatiao_object *`) on the caller's stack, `ctx` the address of the caller's `*mut dyn K`, the table `K`'s lent table; the callee gets `BorrowedMut`/`Borrowed` (no `Drop`) and never calls `destroy`; nothing is allocated. `&dyn K` needs a `&self` method on `K`; lent shared, a `&mut self` slot answers `GUATIAO_ERR_UNSUPPORTED`. A provider kind, or `&dyn K` of a kind with no `&self` method, is a compile error with a sentence (a `const` assertion on the hidden `Lend::LENT_MUT`/`LENT`) |
@@ -210,7 +211,9 @@ defaulted one is refused. A method that cannot fail propagates a provider
 failure as a panic. Refused by name, on the author's span: a generic or
 `unsafe` trait, a `where` clause, missing `Send + Sync`, an empty trait,
 associated consts/types, `async`, generic or variadic methods, `&mut
-self`/`self`/no receiver, a `&mut` argument other than a lent object, a
+self`/`self`/no receiver, a `&mut` argument other than a lent tree
+(`&mut Value`/`&mut Map`/`&mut List`), a lent object or `&mut [u8]` on
+an object kind, `Option<&mut T>`, a
 lent object with another bound beside the trait (`&mut (dyn K + Send)`),
 a borrowed argument of any other type, a `Text` or `Buffer` by value as an argument, `impl Trait` anywhere,
 a function argument, a borrowed or `impl Trait` return, a `Result` whose

@@ -550,6 +550,32 @@ impl Map {
         true
     }
 
+    /// Removes and frees every entry whose key is not UTF-8, keeping the
+    /// order of the rest, and answers how many. Only a foreign writer can
+    /// leave one.
+    pub(crate) fn drop_keys_not_text(&mut self) -> usize {
+        if self.keys_are_text() {
+            return 0;
+        }
+        // Read out entry by entry: a panic part-way leaks, never frees twice.
+        let len = core::mem::replace(&mut self.len, 0);
+        let mut kept = 0;
+        for i in 0..len {
+            // SAFETY: `i < len`, so the entry is initialised; each is read
+            // once, and `len` is set below to the entries written back.
+            let entry = unsafe { self.ptr.add(i).read() };
+            if core::str::from_utf8(entry.key_bytes()).is_ok() {
+                // SAFETY: `kept <= i`, a slot already read out.
+                unsafe { self.ptr.add(kept).write(entry) };
+                kept += 1;
+            } else {
+                drop(entry);
+            }
+        }
+        self.len = kept;
+        len - kept
+    }
+
     /// A deep copy through `alloc`, at any depth.
     pub fn clone_in(&self, alloc: Alloc) -> Result<Map, ValueError> {
         crate::value::walk::copy_map(self, alloc)
