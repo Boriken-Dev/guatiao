@@ -189,6 +189,7 @@ Accepted method shapes — receiver `&self`, the trait names `Send + Sync`:
 | `&str` / `&[u8]` | `Str` / `Bytes` views |
 | `&Value`, `&Map` | non-null pointers |
 | `Option<&Value>` | a pointer that may be null |
+| `Value`, `Map`, `List` by value | **a move**: `*mut Value`/`*mut Map`/`*mut List` (no `const`) to the caller's node, which the proxy then forgets and the callee owns on every path, taken first in the shim; nothing is copied. The tree is in the caller's allocators; `into_local()` re-homes one a callee keeps past them. A map's keys are checked as for `&Map` |
 | any other argument type, by value | `*const Value` via `ToValue` (the shim reads it with `FromValue`) |
 | `Object<dyn K>` (`K` an object kind) | an `ObjectRaw` by value; **ownership crosses with the call**, the callee destroys it — taken first in the shim, before anything can fail |
 | `&mut dyn K` / `&dyn K` (`K` an object kind) | **lent for the call**: `*const ObjectRaw` (`const guatiao_object *`) on the caller's stack, `ctx` the address of the caller's `*mut dyn K`, the table `K`'s lent table; the callee gets `BorrowedMut`/`Borrowed` (no `Drop`) and never calls `destroy`; nothing is allocated. `&dyn K` needs a `&self` method on `K`; lent shared, a `&mut self` slot answers `GUATIAO_ERR_UNSUPPORTED`. A provider kind, or `&dyn K` of a kind with no `&self` method, is a compile error with a sentence (a `const` assertion on the hidden `Lend::LENT_MUT`/`LENT`) |
@@ -206,7 +207,7 @@ failure as a panic. Refused by name, on the author's span: a generic or
 associated consts/types, `async`, generic or variadic methods, `&mut
 self`/`self`/no receiver, a `&mut` argument other than a lent object, a
 lent object with another bound beside the trait (`&mut (dyn K + Send)`),
-a borrowed argument of any other type, a value type by value as an argument, `impl Trait` anywhere,
+a borrowed argument of any other type, a `Text` or `Buffer` by value as an argument, `impl Trait` anywhere,
 a function argument, a borrowed or `impl Trait` return, a `Result` whose
 error is not `ProviderError`, a method named `header` (or `destroy` or
 `into_object` on an object kind), a method named `<m>_in` beside a method

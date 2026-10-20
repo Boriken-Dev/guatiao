@@ -1373,8 +1373,9 @@ drop(s);                                                             // the libr
 
 - **What may cross.** Receiver `&self`; the trait names `Send + Sync`.
   Arguments: integers, floats, `bool`, `&str`, `&[u8]`, `&Value`,
-  `Option<&Value>`, `&Map`, `Object<dyn K>` (handed over), `&mut dyn K`
-  and `&dyn K` (lent), any other type by value through `ToValue`.
+  `Option<&Value>`, `&Map`, `Value`, `Map` and `List` by value (handed
+  over: a move, nothing copied), `Object<dyn K>` (handed over), `&mut
+  dyn K` and `&dyn K` (lent), any other type by value through `ToValue`.
   Returns: `()`, the scalars, `Value`, `Map`, `List`, `String`, any other
   type through `FromValue`; each optionally in `Result<_, ProviderError>`.
   A method that converts must return `Result`. Refused by name: generics,

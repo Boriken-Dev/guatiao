@@ -24,7 +24,12 @@
  *   this file's own allocator, the header's malloc wrapper, which the
  *   host copies from and frees through the `guatiao_alloc` it records.
  *
- * `greet` and `greet_into` are filled. `shout` and `start` are left null:
+ * `greet_from` takes its configuration HANDED OVER: a `guatiao_map *`
+ * without `const` is a tree this file owns from the call on, built in the
+ * caller's allocator. It keeps the last one, and `c_greeter_take_kept`
+ * hands it back, so the host can see it is the very map it passed.
+ *
+ * `greet`, `greet_into` and `greet_from` are filled. `shout` and `start` are left null:
  * to the host that is an older table, and its proxy runs the trait's
  * default bodies -- `shout` through this file's `greet`.
  *
@@ -176,13 +181,71 @@ static guatiao_status greet_into(void *ctx, guatiao_str name,
   return table->heard(listener->ctx, what);
 }
 
-/* The table: size and hash from the header, two slots filled. */
+/* The configuration `greet_from` was handed last. */
+static guatiao_map KEPT;
+static bool HAS_KEPT = false;
+
+/* Frees a map of text through the allocators it records: what this file
+ * is handed is a flat configuration, so a nested container is not
+ * walked. */
+static void free_flat_map(guatiao_map *m) {
+  for (size_t i = 0; i < m->len; i++) {
+    guatiao_entry *e = &m->ptr[i];
+    free_string(&e->key);
+    if (e->value.tag == (uint32_t)GUATIAO_STRING ||
+        e->value.tag == (uint32_t)GUATIAO_NUMBER) {
+      free_string(&e->value.payload.text);
+    }
+  }
+  if (m->cap) {
+    m->alloc->free(m->alloc->ctx, m->ptr, m->cap * sizeof(guatiao_entry),
+                   _Alignof(guatiao_entry));
+  }
+}
+
+/* The greeting for `{"name": ..}`. The map is this file's from the call
+ * on, on every path: kept, the one kept before it freed. */
+static guatiao_status greet_from(void *ctx, guatiao_map *config, guatiao_map *out,
+                                 guatiao_provider_error *err) {
+  if (!config) {
+    return refuse(err, GUATIAO_ERR_NULL, "no configuration, says C");
+  }
+  guatiao_str name = {NULL, 0};
+  for (size_t i = 0; i < config->len; i++) {
+    const guatiao_entry *e = &config->ptr[i];
+    if (e->key.len == 4 && memcmp(e->key.ptr, "name", 4) == 0 &&
+        e->value.tag == (uint32_t)GUATIAO_STRING) {
+      name.ptr = e->value.payload.text.ptr;
+      name.len = e->value.payload.text.len;
+    }
+  }
+  guatiao_status status = greet(ctx, name, out, err);
+  if (HAS_KEPT) {
+    free_flat_map(&KEPT);
+  }
+  KEPT = *config;
+  HAS_KEPT = true;
+  return status;
+}
+
+/* Hands the kept configuration back to the caller, who owns it again. */
+EXPORT bool c_greeter_take_kept(guatiao_map *out) {
+  if (!HAS_KEPT || !out) {
+    return false;
+  }
+  *out = KEPT;
+  HAS_KEPT = false;
+  return true;
+}
+
+/* The table: size and hash from the header, three slots filled. */
 static const greeter_vtable TABLE = {
     {(uint32_t)sizeof(greeter_vtable), greeter_vtable_FLOOR_HASH},
     greet,
     NULL, /* shout: the host's default body runs, through `greet` */
     NULL, /* start: likewise -- this greeter holds no conversations */
     greet_into,
+    greet_from,
 };
 
 /* ---- C lending an object of its own ------------------------------------ */

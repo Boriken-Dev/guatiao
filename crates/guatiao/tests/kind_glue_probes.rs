@@ -16,7 +16,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use guatiao::library::{BytesMut, Object, ObjectRaw, ProviderError, Remote};
 use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
-use guatiao::{Buffer, Status, Str, Text};
+use guatiao::{Buffer, List, Map, Status, Str, Text, Value};
 
 /// Counts this thread's heap allocations, so a test can say a call made
 /// none: other tests run on other threads and are not counted.
@@ -430,7 +430,7 @@ struct Plain;
 
 impl greeter_kind::Greeter for Plain {
     fn greet(&self, _: &str) -> Result<guatiao::Map, ProviderError> {
-        Ok(guatiao::Map::new())
+        Ok(Map::new())
     }
     fn greet_into(
         &self,
@@ -672,4 +672,154 @@ fn a_sync_object_is_read_from_two_threads_at_once_owned_or_lent() {
     .expect("the table validates");
     let mut lent = Gated { value: 21, gate };
     assert_eq!(reader.twice(&mut lent).expect("the call succeeds"), 42);
+}
+
+// --- trees handed over by value ---------------------------------------------
+
+/// Takes trees by value and keeps the last map it was handed.
+#[guatiao::kind]
+pub trait Keeper: Send + Sync {
+    /// A map handed over: answers how many entries it holds.
+    fn keep(&self, map: Map) -> Result<i64, ProviderError>;
+    /// A value and a list handed over, then a text: the trees are owned
+    /// before the text is read.
+    fn hold(&self, value: Value, list: List, text: &str) -> Result<(), ProviderError>;
+}
+
+/// Keeps what it is handed, so a test can compare it with what was sent.
+struct Kept {
+    map: std::sync::Mutex<Option<Map>>,
+    calls: AtomicUsize,
+}
+
+impl Keeper for Kept {
+    fn keep(&self, map: Map) -> Result<i64, ProviderError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let n = map.len() as i64;
+        *self.map.lock().expect("not poisoned") = Some(map);
+        Ok(n)
+    }
+    fn hold(&self, _: Value, _: List, _: &str) -> Result<(), ProviderError> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+static KEEPER: KeeperVtable = KeeperVtable::of::<Kept>();
+
+fn keeper(kept: &Kept) -> Remote<dyn Keeper> {
+    // SAFETY: the table `of::<Kept>()` built, over a `&Kept` that outlives
+    // every call the test makes.
+    unsafe {
+        Remote::<dyn Keeper>::from_raw(
+            (&KEEPER as *const KeeperVtable).cast(),
+            size_of::<KeeperVtable>(),
+            (kept as *const Kept).cast_mut().cast(),
+        )
+    }
+    .expect("the table validates")
+}
+
+#[test]
+fn a_map_by_value_crosses_as_a_move_with_nothing_copied() {
+    let kept = Kept {
+        map: std::sync::Mutex::new(None),
+        calls: AtomicUsize::new(0),
+    };
+    let remote = keeper(&kept);
+    let mut map = Map::new();
+    map.set("host", "10.0.0.1");
+    map.set("port", 5900);
+    let sent = map.entries().as_ptr();
+    let n = assert_allocates_nothing(|| remote.keep(map));
+    assert_eq!(n.expect("kept"), 2);
+    let held = kept.map.lock().expect("not poisoned").take().expect("kept");
+    assert_eq!(
+        held.entries().as_ptr(),
+        sent,
+        "the very storage, not a copy"
+    );
+    assert!(held.is_local());
+}
+
+#[test]
+fn a_tree_handed_to_a_refusing_slot_is_freed_by_it() {
+    let count = Count {
+        outstanding: AtomicUsize::new(0),
+    };
+    let vtable = Allocator {
+        struct_size: size_of::<Allocator>() as u32,
+        ctx: (&count as *const Count).cast_mut().cast(),
+        alloc: Some(count_alloc),
+        free: Some(count_free),
+        release: None,
+    };
+    // SAFETY: a complete vtable that outlives every block it hands out.
+    let alloc = unsafe { Alloc::from_raw(&vtable) }.expect("a complete vtable");
+    let kept = Kept {
+        map: std::sync::Mutex::new(None),
+        calls: AtomicUsize::new(0),
+    };
+    let tree = |alloc| {
+        let mut map = Map::new_in(alloc);
+        map.set_in("k", Text::new_in(alloc, "v").unwrap(), alloc)
+            .unwrap();
+        map
+    };
+
+    // No provider behind the slot: refused, and the map is still freed.
+    let mut map = core::mem::ManuallyDrop::new(tree(alloc));
+    let mut err = ProviderError::none();
+    let mut out = 0i64;
+    // SAFETY: a null ctx, a map handed over, writable out slots.
+    let status = unsafe {
+        KeeperVtable::__guatiao_shim_keep::<Kept>(
+            core::ptr::null_mut(),
+            &mut *map,
+            &mut out,
+            &mut err,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_NULL);
+    assert_eq!(
+        count.outstanding.load(Ordering::SeqCst),
+        0,
+        "freed by the slot"
+    );
+
+    // A text refused after two trees: both are freed, the method never ran.
+    let mut value = core::mem::ManuallyDrop::new(Value::from(tree(alloc)));
+    let mut list = core::mem::ManuallyDrop::new({
+        let mut list = List::new_in(alloc);
+        list.push_in(tree(alloc), alloc).unwrap();
+        list
+    });
+    let bytes = [0xfe];
+    let mut err = ProviderError::none();
+    // SAFETY: the `&Kept` the table was built for, trees handed over.
+    let status = unsafe {
+        KeeperVtable::__guatiao_shim_hold::<Kept>(
+            (&kept as *const Kept).cast_mut().cast(),
+            &mut *value,
+            &mut *list,
+            not_utf8(&bytes),
+            &mut err,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+    assert_eq!(kept.calls.load(Ordering::SeqCst), 0, "the method never ran");
+    assert_eq!(count.outstanding.load(Ordering::SeqCst), 0, "both freed");
+
+    // A null tree is refused and owns nothing.
+    let mut err = ProviderError::none();
+    // SAFETY: as above, the map pointer null.
+    let status = unsafe {
+        KeeperVtable::__guatiao_shim_keep::<Kept>(
+            (&kept as *const Kept).cast_mut().cast(),
+            core::ptr::null_mut(),
+            &mut out,
+            &mut err,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_NULL);
 }

@@ -63,6 +63,56 @@ pub unsafe fn map_arg<'a>(m: *const Map) -> Result<&'a Map, Status> {
     Ok(unsafe { Map::from_ptr(m) }?)
 }
 
+/// A `Value` argument taken by value: the tree the caller handed over with
+/// the call, owned here from now on. Null owns nothing and is refused.
+///
+/// # Safety
+///
+/// `v` is null or addresses a well-formed value the caller has given up
+/// and will not free.
+#[doc(hidden)]
+pub unsafe fn value_owned(v: *mut Value) -> Result<Value, Status> {
+    if v.is_null() {
+        return Err(Status::GUATIAO_ERR_NULL);
+    }
+    // SAFETY: the caller's contract; the caller forgets its node, so this
+    // read is the tree's one owner.
+    Ok(unsafe { v.read() })
+}
+
+/// A `List` argument taken by value, as [`value_owned`].
+///
+/// # Safety
+///
+/// As [`value_owned`], for a list.
+#[doc(hidden)]
+pub unsafe fn list_owned(l: *mut List) -> Result<List, Status> {
+    if l.is_null() {
+        return Err(Status::GUATIAO_ERR_NULL);
+    }
+    // SAFETY: as in `value_owned`.
+    Ok(unsafe { l.read() })
+}
+
+/// A `Map` argument taken by value, as [`value_owned`], its keys checked
+/// as [`map_arg`] checks them; a map they refuse is freed here.
+///
+/// # Safety
+///
+/// As [`value_owned`], for a map.
+#[doc(hidden)]
+pub unsafe fn map_owned(m: *mut Map) -> Result<Map, Status> {
+    if m.is_null() {
+        return Err(Status::GUATIAO_ERR_NULL);
+    }
+    // SAFETY: as in `value_owned`.
+    let map = unsafe { m.read() };
+    if !map.keys_are_text() {
+        return Err(Status::from(crate::value::error::ValueError::NotUtf8));
+    }
+    Ok(map)
+}
+
 /// Writes a result through an out-pointer, refusing null. The previous
 /// contents are the caller's to have dealt with.
 ///
