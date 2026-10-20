@@ -10,7 +10,8 @@ program actually needs.
 The short version:
 
 - **Return trees by value, and take them by value when you keep them.**
-  Borrow (`&Map`, `&Value`) what you only read.
+  Borrow (`&Map`, `&Value`) what you only read, and lend `&mut Map` to a
+  callee that changes the tree you keep.
 - **Build a tree where it will live.** A kind call carries the caller's
   allocator to the provider; a library outside a call builds in the one
   its host offered.
@@ -205,6 +206,87 @@ let owned = taken.into_local();
   without modelling it. Reading one copies it into this binary's
   allocator, as `clone()` does.
 
+## Letting a library edit your tree
+
+A kind method may take `&mut Map`, `&mut List` or `&mut Value`: the
+caller's own tree, lent for the call, which the callee reads, changes and
+grows in place. Choose it when the callee completes or edits a tree the
+caller keeps using — fills in defaults, adds what follows from the rest,
+removes what it rejects:
+
+- **`&Map`** when the callee only reads it.
+- **`&mut Map`** when it changes the caller's tree and the caller keeps
+  it: only what changes is built, and nothing is handed back.
+- **`Map` by value** when the callee keeps it.
+- **A returned `Map`** when the callee builds an answer of its own.
+
+```rust
+use guatiao::library::ProviderError;
+use guatiao::{Map, Text, TryAsRef};
+
+#[guatiao::kind]
+pub trait Settings: Send + Sync {
+    /// Completes the configuration where it stands: lent, and changed.
+    fn check(&self, config: &mut Map) -> Result<bool, ProviderError>;
+}
+
+struct Files;
+
+impl Settings for Files {
+    fn check(&self, config: &mut Map) -> Result<bool, ProviderError> {
+        // Built in the allocator the caller's map records, so nothing has
+        // to be moved into it once the call returns.
+        let alloc = config.alloc()?;
+        if !config.contains_key("path") {
+            config.set_in("path", Text::new_in(alloc, "/etc/app.toml")?, alloc)?;
+        }
+        let Some(path) = config.get("path").and_then(TryAsRef::<str>::try_as_ref) else {
+            return Ok(false);
+        };
+        let dir = path.rsplit_once('/').map_or("", |(dir, _)| dir);
+        let dir = Text::new_in(alloc, dir)?;
+        config.set_in("dir", dir, alloc)?;
+        Ok(true)
+    }
+}
+```
+
+The caller lends it and goes on with its own map:
+
+```rust
+fn prepare(settings: &dyn Settings) -> Result<Map, ProviderError> {
+    let mut config = Map::new();
+    config.set("mode", "strict");
+    // Lent for the call: filled in where it stands, and still this
+    // side's map afterwards.
+    if !settings.check(&mut config)? {
+        return Err(ProviderError::new(
+            guatiao::Status::GUATIAO_ERR_BAD_VALUE,
+            "no path",
+        ));
+    }
+    Ok(config)
+}
+```
+
+**What goes into the tree is built with the tree's allocator.** A map
+grows through the allocator it records, but a value the callee builds
+with the short forms (`Map::new()`, `Value::from("..")`, `to_value()`)
+lives in the callee's own, and a library's allocator is gone once the
+library is unloaded. So once the call returns, answered or refused, the
+proxy moves every part of the tree another allocator made into the one
+the tree recorded before the call, and frees the original through its
+own: the same walk as `make_local_in(alloc)`, which you can call on any
+tree you hold. A callee that builds with `config.alloc()?` and the `_in`
+forms, as above, leaves that walk nothing to move, and it then allocates
+nothing.
+
+A tree lent this way is never freed or kept by the callee, so a library
+may hold nothing that points into it once it returns. In C it crosses as
+`guatiao_map *` (or `guatiao_list *`, `guatiao_value *`), the same type
+as a tree handed over, and the slot's comment in the header says "Lent
+for the call, not handed over".
+
 ## Every way to a tree you own, and when it copies
 
 | you have | you want | write | copies |
@@ -221,9 +303,11 @@ let owned = taken.into_local();
 | a kind's answer | it, owned | the returned `Map`/`Value`/`List` | never when the provider builds through `<method>_in`, else once at the proxy |
 | a tree for a kind call | to keep it on the other side | pass `Map`/`Value`/`List` by value | never |
 | a tree for a kind call | to have it read | pass `&Map`/`&Value` | never |
+| a tree for a kind call | to have it changed in place | pass `&mut Map`/`&mut List`/`&mut Value` | never; what the callee built in another allocator is moved into the tree's once |
+| a tree you were lent or that was changed | it, in `alloc`, where it stands | `t.make_local_in(alloc)?` | only the parts not in `alloc` |
 
-`Map`, `List`, `Text` and `Buffer` answer `is_local()`, `into_local()`
-and `into_alloc(alloc)` the same way.
+`Map`, `List`, `Text` and `Buffer` answer `is_local()`, `into_local()`,
+`into_alloc(alloc)` and `make_local_in(alloc)` the same way.
 
 ## From C
 
@@ -238,10 +322,16 @@ and `into_alloc(alloc)` the same way.
   provider then builds in its own allocator.
 - **A slot's error message** is the caller's to free, through the
   allocator its `alloc` names, when its `cap` is not 0.
-- **A tree argument without `const` is handed over.** A `guatiao_map *`,
-  `guatiao_value *` or `guatiao_list *` parameter that is not `const` is a
-  move: the slot owns the tree from the call on, on every path, and the
-  caller never frees it. A `const` one is lent for the call.
+- **A tree argument without `const` is handed over**, unless the
+  slot's comment says it is lent. A `guatiao_map *`, `guatiao_value *` or
+  `guatiao_list *` parameter that is not `const` is a move: the slot owns
+  the tree from the call on, on every path, and the caller never frees
+  it. A `const` one is lent for reading.
+- **A slot whose comment says "Lent for the call, not handed over"**
+  receives the caller's tree to change: read it, change it, grow it
+  through the allocator it records, never free it or keep the pointer. A
+  C caller lending one gets back whatever the callee built; a Rust callee
+  following the rule above builds it in the tree's own allocator.
 - **Writing a provider in C**, the same rules from the other side: build
   the answer through the carrier's `alloc` and write it over the carrier
   without freeing it; free or keep what was handed over, through the

@@ -1853,6 +1853,7 @@ pub trait Store: Send + Sync {
     fn check(&self, config: &Map) -> Result<bool, ProviderError>;  // read: borrowed, nothing copied
     fn save(&self, config: Map) -> Result<(), ProviderError>;      // kept: handed over, a move
     fn load(&self) -> Result<Map, ProviderError>;                  // answered: owned by the caller
+    fn complete(&self, config: &mut Map) -> Result<bool, ProviderError>;  // changed in place: lent
 }
 ```
 
@@ -1862,6 +1863,10 @@ pub trait Store: Send + Sync {
   node, the caller forgets it, the callee owns it on every path. The tree
   stays in the caller's allocators; a callee keeping it past them calls
   `into_local()`.
+- `&mut Map`, `&mut List`, `&mut Value`: the caller's tree, lent to be
+  changed in place. Build what goes in with `config.alloc()?` and the
+  `_in` forms; the proxy moves anything built elsewhere into the tree's
+  allocator once the call returns (`make_local_in`).
 - A returned `Map`/`Value`/`List` is the caller's. A borrowed return is
   refused: nothing on the caller's side owns what it would borrow.
 - A type of yours by value crosses through `ToValue`/`FromValue`: built
@@ -1919,13 +1924,18 @@ container in. Read with `TryAsRef`, `<&Map>::try_from` and
 | a kind's answer | it, owned | the returned tree | never through `<method>_in`, else once at the proxy |
 | a tree for a kind call | kept by the callee | pass it by value | never |
 | a tree for a kind call | read by the callee | pass `&Map`/`&Value` | never |
+| a tree for a kind call | changed in place by the callee | pass `&mut Map`/`&mut List`/`&mut Value` | never; parts built in another allocator moved once |
+| a tree reached through `&mut` | it, in `alloc`, where it stands | `t.make_local_in(alloc)?` | only the parts not in `alloc` |
 
 **From C**: initialise a tree out slot as a carrier (`len` and `cap` 0,
 `alloc` yours; or ABSENT with `payload.map.alloc`), or zeroes; free the
 answer with `guatiao_value_free` (a map or list inside a `guatiao_value`
 with its tag). A non-`const` `guatiao_value *`/`guatiao_map *`/
 `guatiao_list *` argument is handed over: the slot owns it and the caller
-never frees it; a `const` one is lent. A provider error's message is the
+never frees it, unless the slot's comment says "Lent for the call, not
+handed over" (a Rust `&mut`): then it is the caller's, to change and grow
+through the allocator it records, never freed or kept. A `const` one is
+lent for reading. A provider error's message is the
 caller's to free through its `alloc` when its `cap` is not 0.
 
 ---

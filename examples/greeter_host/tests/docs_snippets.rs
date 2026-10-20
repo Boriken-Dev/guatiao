@@ -217,6 +217,66 @@ fn the_ownership_guide_moves_instead_of_copying() -> Result<(), Box<dyn core::er
     Ok(())
 }
 
+#[test]
+fn the_ownership_guide_lends_a_tree_to_be_changed() -> Result<(), Box<dyn core::error::Error>> {
+    // OWN-LEND-BEGIN
+    use guatiao::library::ProviderError;
+    use guatiao::{Map, Text, TryAsRef};
+
+    #[guatiao::kind]
+    pub trait Settings: Send + Sync {
+        /// Completes the configuration where it stands: lent, and changed.
+        fn check(&self, config: &mut Map) -> Result<bool, ProviderError>;
+    }
+
+    struct Files;
+
+    impl Settings for Files {
+        fn check(&self, config: &mut Map) -> Result<bool, ProviderError> {
+            // Built in the allocator the caller's map records, so nothing has
+            // to be moved into it once the call returns.
+            let alloc = config.alloc()?;
+            if !config.contains_key("path") {
+                config.set_in("path", Text::new_in(alloc, "/etc/app.toml")?, alloc)?;
+            }
+            let Some(path) = config.get("path").and_then(TryAsRef::<str>::try_as_ref) else {
+                return Ok(false);
+            };
+            let dir = path.rsplit_once('/').map_or("", |(dir, _)| dir);
+            let dir = Text::new_in(alloc, dir)?;
+            config.set_in("dir", dir, alloc)?;
+            Ok(true)
+        }
+    }
+    // OWN-LEND-END
+
+    // OWN-LEND-HOST-BEGIN
+    fn prepare(settings: &dyn Settings) -> Result<Map, ProviderError> {
+        let mut config = Map::new();
+        config.set("mode", "strict");
+        // Lent for the call: filled in where it stands, and still this
+        // side's map afterwards.
+        if !settings.check(&mut config)? {
+            return Err(ProviderError::new(
+                guatiao::Status::GUATIAO_ERR_BAD_VALUE,
+                "no path",
+            ));
+        }
+        Ok(config)
+    }
+    // OWN-LEND-HOST-END
+
+    let config = prepare(&Files)?;
+    assert_eq!(config.keys().collect::<Vec<_>>(), ["mode", "path", "dir"]);
+    let dir: &str = config.required("dir")?.try_into()?;
+    assert_eq!(dir, "/etc");
+    assert!(config.is_local());
+
+    assert_eq!(rust_block(OWNERSHIP, 5), marked("OWN-LEND"));
+    assert_eq!(rust_block(OWNERSHIP, 6), marked("OWN-LEND-HOST"));
+    Ok(())
+}
+
 /// The `index`-th fenced `rust` block of `md`, minus doctest-hidden lines
 /// (`#` alone or `# ` first).
 fn rust_block(md: &str, index: usize) -> String {
