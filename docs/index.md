@@ -87,6 +87,8 @@ let greeter = registry.best("greeter").expect("something serves it");
 
 ## Learn more
 
+- [Passing data](ownership.md): who owns a tree, which allocator it is in,
+  and how to pass one across a call or a library without copying it.
 - [Rust API reference](https://boriken-dev.github.io/guatiao/rust/guatiao/index.html), built by rustdoc
   from the crates in this workspace.
 - [Python API reference](api/python.md), for the ctypes bindings.

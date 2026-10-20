@@ -119,6 +119,30 @@ a value in any serde format, and
 [`guatiao-intake`](https://crates.io/crates/guatiao-intake) describes how a
 schema is shown to a person.
 
+## Passing data
+
+A tree owns itself and records the allocator it lives in. Move it rather
+than copy it, return it by value, and take it by value when you keep it;
+`clone()` is the copy, always into this binary's allocator.
+
+```rust
+use guatiao::{Map, Value};
+
+let mut map = Map::new();
+map.set("host", "10.0.0.1");
+
+let node = Value::from(map); // a move: nothing copied
+let owned = node.into_local(); // already this binary's: handed back as it is
+let copy = owned.clone(); // a copy, into this binary's allocator
+assert_eq!(copy, owned);
+```
+
+How a host passes its allocator to a library so an answer needs no copy,
+how a tree crosses a kind call, and every way to a tree you own and when
+it copies: the
+[ownership guide](https://boriken-dev.github.io/guatiao/ownership/), and
+the "Passing data" section of the `AGENTS.md` shipped with this crate.
+
 ## Development
 
 The four crates, the examples and the Python and Dart bindings share one

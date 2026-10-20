@@ -1807,6 +1807,99 @@ compiled before the last field was appended does not have.
 
 ---
 
+# Passing data: ownership, allocators and copies
+
+Every owned container records the allocator that made it and frees
+through it wherever it ends up. So each crossing has three answers: who
+owns the tree now, which allocator it is in, and whether anything was
+copied. The rules that keep the copies to the necessary ones:
+
+**1. Return trees by value; take them by value when you keep them.** A
+kind method's types say who owns what:
+
+```rust
+#[guatiao::kind]
+pub trait Store: Send + Sync {
+    fn check(&self, config: &Map) -> Result<bool, ProviderError>;  // read: borrowed, nothing copied
+    fn save(&self, config: Map) -> Result<(), ProviderError>;      // kept: handed over, a move
+    fn load(&self) -> Result<Map, ProviderError>;                  // answered: owned by the caller
+}
+```
+
+- Borrowed (`&Map`, `&Value`, `Option<&Value>`, `&str`, `&[u8]`): read in
+  place for the call.
+- `Map`, `Value`, `List` by value: a move. The slot gets the caller's
+  node, the caller forgets it, the callee owns it on every path. The tree
+  stays in the caller's allocators; a callee keeping it past them calls
+  `into_local()`.
+- A returned `Map`/`Value`/`List` is the caller's. A borrowed return is
+  refused: nothing on the caller's side owns what it would borrow.
+- A type of yours by value crosses through `ToValue`/`FromValue`: built
+  once, read once. Take the tree itself when the callee would only turn
+  it back into one.
+
+**2. Build a tree where it will live.** The engine's allocator reaches a
+library three ways:
+
+- **Per call**: the proxy writes a carrier (an empty map or list, or
+  ABSENT for a value, recording the allocator it wants) into the out
+  slot, and the shim calls `<method>_in(.., alloc)` with it. Override it
+  with the `_in` forms and the answer crosses with no copy; its default
+  calls `<method>`, whose answer the proxy copies once. Implement
+  `<method>` as `self.<method>_in(.., Alloc::rust())`. A host wanting an
+  answer in its own arena calls `<method>_in(.., arena)` on the proxy.
+
+```rust
+fn load(&self) -> Result<Map, ProviderError> { self.load_in(Alloc::rust()) }
+fn load_in(&self, alloc: Alloc) -> Result<Map, ProviderError> {
+    let mut map = Map::new_in(alloc);
+    map.set_in("path", Text::new_in(alloc, "/etc/app.toml")?, alloc)?;  // the leaf too
+    Ok(map)
+}
+```
+
+  `set_in` puts the entry and key in `alloc`; a value converted from
+  `&str` by `Into<Value>` is built on Rust's heap, so build leaves with
+  `Text::new_in`/`Buffer::new_in`/`Number::new_in` or `to_value_in(alloc)`.
+- **Outside a call**: `host.alloc() -> Option<Alloc>` in a library's
+  entry point; what a library builds once and the host keeps goes there
+  (`providers!` does this for the descriptor).
+- **For a tree in hand**: `into_alloc(alloc)` (a move, copying only what
+  is elsewhere) or `clone_in(alloc)` (a copy of a borrow).
+
+**3. Move, do not copy.** `Value::from(container)` and
+`Map::try_from(value)` (and `List`, `Text`, `Buffer`) are moves;
+`remove`, `pop`, `core::mem::take` and owned `IntoIterator` take values
+out; `map.extend(other)` moves `other`'s values in; `set`/`push` move a
+container in. Read with `TryAsRef`, `<&Map>::try_from` and
+`required(..)?.try_into()?` instead of converting to an owned copy.
+`value.to_value()` on a `Value` is a deep copy, not a move.
+
+| you have | you want | write | copies |
+| --- | --- | --- | --- |
+| a `Value` you own | it, local | `v.into_local()` | only containers not in `Alloc::rust()` force one |
+| a `Value` you own | it, in `alloc` | `v.into_alloc(alloc)?` | only when something is not in `alloc` |
+| a `&Value` | your own | `v.clone()`, `Value::from_value(v)` | always, into `Alloc::rust()` |
+| a `&Value` | a copy in `alloc` | `v.clone_in(alloc)?` | always |
+| a `&Value` | a copy beside it | `v.clone_in(v.alloc()?)?` | always |
+| a container | a `Value` | `Value::from(c)` | never |
+| a `Value` | a container | `Map::try_from(v)` | never |
+| a value in a container | it, owned | `remove`, `pop`, `mem::take` | never |
+| a type of yours | a tree | `t.to_value()`, `t.to_value_in(alloc)?` | builds one |
+| a kind's answer | it, owned | the returned tree | never through `<method>_in`, else once at the proxy |
+| a tree for a kind call | kept by the callee | pass it by value | never |
+| a tree for a kind call | read by the callee | pass `&Map`/`&Value` | never |
+
+**From C**: initialise a tree out slot as a carrier (`len` and `cap` 0,
+`alloc` yours; or ABSENT with `payload.map.alloc`), or zeroes; free the
+answer with `guatiao_value_free` (a map or list inside a `guatiao_value`
+with its tag). A non-`const` `guatiao_value *`/`guatiao_map *`/
+`guatiao_list *` argument is handed over: the slot owns it and the caller
+never frees it; a `const` one is lent. A provider error's message is the
+caller's to free through its `alloc` when its `cap` is not 0.
+
+---
+
 # The C surface
 
 **The `extern "C"` surface is always compiled.** It is not behind a
@@ -1968,6 +2061,10 @@ An implementer must guarantee, and `struct_size` cannot express:
 
 - **A `Value` is not `Copy`**, and neither are the four containers. They
   have `Drop`.
+- **A tree a library handed over by value is in the library's
+  allocators** (its `Alloc::rust()` is a vtable in its own image). A host
+  keeping one past that library's `unload` calls `into_local()` on it
+  first; a returned tree needs nothing, the proxy re-homes it.
 - **`clone()` panics on a tree a foreign producer wrote wrong**: an
   unknown tag, text that is not UTF-8, a number outside the grammar. A
   tree that crossed from another language is copied with
