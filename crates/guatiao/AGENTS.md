@@ -253,12 +253,15 @@ operation.
 target is touched.
 
 **`Value`, `Map`, `List`, `Text`, `Buffer` and `Number` are `Clone`,
-`PartialEq`, `Eq`, `Send` and `Sync`.** `clone()` is a deep copy through
-the allocator the source recorded (the crate's own for a scalar or a
-literal); it aborts on an allocation failure, as the short forms do, and
-**panics on content this build refuses** (an unknown tag, text that is
-not UTF-8, a number outside the grammar, nesting past `MAX_DEPTH`).
-`clone_in(alloc)` is the fallible form that names one. Both copying and equality are loops
+`PartialEq`, `Eq`, `Send` and `Sync`.** `clone()` (and so `to_owned()`)
+is a deep copy into **this binary's allocator**, `Alloc::rust()`, whatever
+the source recorded: a copy of a tree that lives in an arena, a caller's
+allocator or a library's never needs that allocator. A copy beside its
+source is `v.clone_in(v.alloc()?)`. `clone()` aborts on an allocation
+failure, as the short forms do, and **panics on content this build
+refuses** (an unknown tag, text that is not UTF-8, a number outside the
+grammar, nesting past `MAX_DEPTH`). `clone_in(alloc)` is the fallible
+form that names one. Both copying and equality are loops
 over a heap stack, so they work at **any depth** and a value is always
 equal to itself. `Send` and `Sync` rest on the allocator contract below:
 an `Allocator` may be called from any thread.

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking: `clone()` copies into this binary's allocator.** `clone()`
+  (and `to_owned()`) on `Value`, `Map`, `List`, `Text`, `Buffer` and
+  `Number` builds the copy through `Alloc::rust()`, whatever allocator the
+  source recorded, so a copy of a tree that lives in an arena, a caller's
+  allocator or a library's never depends on it. *Migration:* a copy that
+  must live beside its source is `v.clone_in(v.alloc()?)`.
+
 ## [0.0.0-alpha.1] - 2026-10-19
 
 ### Changed

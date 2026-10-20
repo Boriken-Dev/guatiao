@@ -394,16 +394,18 @@ impl<'a> IntoIterator for &'a List {
 }
 
 impl Clone for List {
-    /// A deep copy through the allocator this container recorded, or the
-    /// crate's own when it has none yet.
+    /// A deep copy into this binary's allocator, as [`Value::clone`]
+    /// makes one; `clone_in(alloc)` names another.
     ///
     /// # Panics
     ///
     /// As [`Value::clone`]: on content this build refuses, which only a
     /// foreign producer can write. [`clone_in`](List::clone_in) reports it.
     fn clone(&self) -> List {
-        let alloc = Alloc::recorded_or_rust(self.alloc);
-        cloned(self.clone_in(alloc), core::alloc::Layout::new::<Value>())
+        cloned(
+            self.clone_in(Alloc::rust()),
+            core::alloc::Layout::new::<Value>(),
+        )
     }
 }
 

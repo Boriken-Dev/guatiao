@@ -404,11 +404,10 @@ impl Default for Text {
 }
 
 impl Clone for Text {
-    /// A copy through the allocator this text recorded, or the crate's
-    /// own. Aborts if it refuses, as [`Value::clone`] does.
+    /// A copy into this binary's allocator, as [`Value::clone`] makes
+    /// one, aborting if it refuses; `clone_in(alloc)` names another.
     fn clone(&self) -> Text {
-        let alloc = Alloc::recorded_or_rust(self.alloc);
-        cloned(self.clone_in(alloc), bytes_layout(self.len))
+        cloned(self.clone_in(Alloc::rust()), bytes_layout(self.len))
     }
 }
 
