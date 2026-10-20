@@ -138,8 +138,9 @@ assert_eq!(copy, owned);
 ```
 
 How a host passes its allocator to a library so an answer needs no copy,
-how a tree crosses a kind call, and every way to a tree you own and when
-it copies: the
+how a tree crosses a kind call (handed over, lent to be read, or lent as
+`&mut Map` to be changed in place), and every way to a tree you own and
+when it copies: the
 [ownership guide](https://boriken-dev.github.io/guatiao/ownership/), and
 the "Passing data" section of the `AGENTS.md` shipped with this crate.
 
