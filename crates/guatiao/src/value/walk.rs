@@ -13,7 +13,7 @@ use super::alloc::Alloc;
 use super::convert::TryAsRef;
 use super::error::ValueError;
 use super::types::{Buffer, Entry, List, Map, Number, Tag, Text, Value};
-use super::value::arm;
+use super::value::{Owned, arm};
 
 // --- copying ------------------------------------------------------------
 
@@ -348,6 +348,121 @@ fn drain(mut stack: Vec<&Value>, alloc: *const crate::value::alloc::Allocator) -
         }
     }
     true
+}
+
+// --- moving a tree's storage, in place ---------------------------------------
+
+/// Moves every block of the tree that `alloc` did not make into one it
+/// did, freeing the old block through its own allocator: a container's
+/// array with its elements moved bitwise, a key's or a leaf's bytes. A
+/// node whose tag this build does not know owns nothing it can see and is
+/// left as it is. One loop over a heap stack, so any depth.
+///
+/// A failure stops the walk with the tree whole: every block is either
+/// moved or where it was.
+pub(crate) fn settle_value(node: &mut Value, alloc: Alloc) -> Result<(), ValueError> {
+    let mut stack = Vec::new();
+    settle_child(node, alloc, &mut stack)?;
+    settle_drain(stack, alloc)
+}
+
+/// [`settle_value`] for a map.
+pub(crate) fn settle_map(map: &mut Map, alloc: Alloc) -> Result<(), ValueError> {
+    let mut stack = Vec::new();
+    settle_map_into(map, alloc, &mut stack)?;
+    settle_drain(stack, alloc)
+}
+
+/// [`settle_value`] for a list.
+pub(crate) fn settle_list(list: &mut List, alloc: Alloc) -> Result<(), ValueError> {
+    let mut stack = Vec::new();
+    settle_list_into(list, alloc, &mut stack)?;
+    settle_drain(stack, alloc)
+}
+
+/// [`settle_value`] for a text.
+pub(crate) fn settle_text(text: &mut Text, alloc: Alloc) -> Result<(), ValueError> {
+    if !is_recorded(text.alloc, alloc.as_raw()) {
+        text.rehome(alloc)?;
+    }
+    Ok(())
+}
+
+/// [`settle_value`] for a buffer.
+pub(crate) fn settle_buffer(buffer: &mut Buffer, alloc: Alloc) -> Result<(), ValueError> {
+    if !is_recorded(buffer.alloc, alloc.as_raw()) {
+        buffer.rehome(alloc)?;
+    }
+    Ok(())
+}
+
+/// A container's array is moved when another allocator made it, or when
+/// it is not owned at all (`cap == 0`): its elements are about to be
+/// written, and a literal's array may be read-only.
+fn settle_array(
+    recorded: *const crate::value::alloc::Allocator,
+    len: usize,
+    cap: usize,
+    alloc: Alloc,
+) -> bool {
+    !is_recorded(recorded, alloc.as_raw()) || (cap == 0 && len > 0)
+}
+
+fn settle_map_into<'a>(
+    map: &'a mut Map,
+    alloc: Alloc,
+    stack: &mut Vec<&'a mut Value>,
+) -> Result<(), ValueError> {
+    if settle_array(map.alloc, map.len, map.cap, alloc) {
+        map.rehome(alloc)?;
+    }
+    for entry in map.entries_mut() {
+        settle_text(&mut entry.key, alloc)?;
+        settle_child(&mut entry.value, alloc, stack)?;
+    }
+    Ok(())
+}
+
+fn settle_list_into<'a>(
+    list: &'a mut List,
+    alloc: Alloc,
+    stack: &mut Vec<&'a mut Value>,
+) -> Result<(), ValueError> {
+    if settle_array(list.alloc, list.len, list.cap, alloc) {
+        list.rehome(alloc)?;
+    }
+    for item in list.iter_mut() {
+        settle_child(item, alloc, stack)?;
+    }
+    Ok(())
+}
+
+/// A leaf settled on the spot, a container left on `stack`.
+fn settle_child<'a>(
+    node: &'a mut Value,
+    alloc: Alloc,
+    stack: &mut Vec<&'a mut Value>,
+) -> Result<(), ValueError> {
+    if matches!(node.owned_mut(), Owned::Map(_) | Owned::List(_)) {
+        stack.push(node);
+        return Ok(());
+    }
+    match node.owned_mut() {
+        Owned::Text(text) => settle_text(text, alloc),
+        Owned::Buffer(buffer) => settle_buffer(buffer, alloc),
+        _ => Ok(()),
+    }
+}
+
+fn settle_drain(mut stack: Vec<&mut Value>, alloc: Alloc) -> Result<(), ValueError> {
+    while let Some(node) = stack.pop() {
+        match node.owned_mut() {
+            Owned::Map(map) => settle_map_into(map, alloc, &mut stack)?,
+            Owned::List(list) => settle_list_into(list, alloc, &mut stack)?,
+            _ => unreachable!("only a container is left on the stack"),
+        }
+    }
+    Ok(())
 }
 // --- equality -----------------------------------------------------------
 

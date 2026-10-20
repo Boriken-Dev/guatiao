@@ -12,7 +12,7 @@ use core::marker::PhantomData;
 
 use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::error::ValueError;
-use crate::value::raw::{dangling, release_buffer, reserve};
+use crate::value::raw::{dangling, move_buffer, release_buffer, reserve};
 
 use super::{Payload, Tag, Value, cloned, only_alloc, or_abort, short_form_alloc};
 
@@ -288,6 +288,12 @@ impl List {
         crate::value::walk::copy_list(self, alloc)
     }
 
+    /// Moves the storage into a block from `alloc`, freeing the old one
+    /// through its own allocator. On failure nothing changed.
+    pub(crate) fn rehome(&mut self, alloc: Alloc) -> Result<(), AllocError> {
+        // SAFETY: this container describes its own storage.
+        unsafe { move_buffer(self, alloc) }
+    }
     /// Moves every element onto `stack` and frees the storage, so a
     /// value's drop takes a tree apart without recursing. Nothing is
     /// written into the elements: a literal's array may be read-only.
@@ -409,9 +415,12 @@ impl Clone for List {
     }
 }
 
-super::where_it_lives!(List, crate::value::walk::list_recorded_by, |_: &List| {
-    core::alloc::Layout::new::<Value>()
-});
+super::where_it_lives!(
+    List,
+    crate::value::walk::list_recorded_by,
+    crate::value::walk::settle_list,
+    |_: &List| { core::alloc::Layout::new::<Value>() }
+);
 
 impl PartialEq for List {
     /// Element by element, each by [`Value`]'s own comparison.

@@ -2832,6 +2832,7 @@ impl guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::buffer::Buffer::into_local(self) -> guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::is_local(&self) -> bool
+pub fn guatiao::value::types::buffer::Buffer::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::borrow::Borrow<[u8]> for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::borrow(&self) -> &[u8]
 impl core::clone::Clone for guatiao::value::types::buffer::Buffer
@@ -2922,6 +2923,7 @@ impl guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::list::List::into_local(self) -> guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::is_local(&self) -> bool
+pub fn guatiao::value::types::list::List::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::clone::Clone for guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::clone(&self) -> guatiao::value::types::list::List
 impl core::cmp::Eq for guatiao::value::types::list::List
@@ -3073,6 +3075,7 @@ impl guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::map::Map::into_local(self) -> guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::is_local(&self) -> bool
+pub fn guatiao::value::types::map::Map::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::clone::Clone for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::clone(&self) -> guatiao::value::types::map::Map
 impl core::cmp::Eq for guatiao::value::types::map::Map
@@ -3248,6 +3251,7 @@ impl guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::text::Text::into_local(self) -> guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::is_local(&self) -> bool
+pub fn guatiao::value::types::text::Text::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::borrow::Borrow<str> for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::borrow(&self) -> &str
 impl core::clone::Clone for guatiao::value::types::text::Text
@@ -3358,6 +3362,7 @@ impl guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::buffer::Buffer::into_local(self) -> guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::is_local(&self) -> bool
+pub fn guatiao::value::types::buffer::Buffer::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::borrow::Borrow<[u8]> for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::borrow(&self) -> &[u8]
 impl core::clone::Clone for guatiao::value::types::buffer::Buffer
@@ -3470,6 +3475,7 @@ impl guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::list::List::into_local(self) -> guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::is_local(&self) -> bool
+pub fn guatiao::value::types::list::List::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::clone::Clone for guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::clone(&self) -> guatiao::value::types::list::List
 impl core::cmp::Eq for guatiao::value::types::list::List
@@ -3554,6 +3560,7 @@ impl guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::map::Map::into_local(self) -> guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::is_local(&self) -> bool
+pub fn guatiao::value::types::map::Map::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::clone::Clone for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::clone(&self) -> guatiao::value::types::map::Map
 impl core::cmp::Eq for guatiao::value::types::map::Map
@@ -3726,6 +3733,7 @@ impl guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::text::Text::into_local(self) -> guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::is_local(&self) -> bool
+pub fn guatiao::value::types::text::Text::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::borrow::Borrow<str> for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::borrow(&self) -> &str
 impl core::clone::Clone for guatiao::value::types::text::Text
@@ -3804,6 +3812,7 @@ impl guatiao::value::value::Value
 pub fn guatiao::value::value::Value::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::value::Value::into_local(self) -> guatiao::value::value::Value
 pub fn guatiao::value::value::Value::is_local(&self) -> bool
+pub fn guatiao::value::value::Value::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::clone::Clone for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::clone(&self) -> guatiao::value::value::Value
 impl core::cmp::Eq for guatiao::value::value::Value
@@ -4032,6 +4041,7 @@ impl guatiao::value::value::Value
 pub fn guatiao::value::value::Value::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::value::Value::into_local(self) -> guatiao::value::value::Value
 pub fn guatiao::value::value::Value::is_local(&self) -> bool
+pub fn guatiao::value::value::Value::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::clone::Clone for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::clone(&self) -> guatiao::value::value::Value
 impl core::cmp::Eq for guatiao::value::value::Value
@@ -4424,6 +4434,7 @@ impl guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::buffer::Buffer::into_local(self) -> guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::is_local(&self) -> bool
+pub fn guatiao::value::types::buffer::Buffer::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::borrow::Borrow<[u8]> for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::borrow(&self) -> &[u8]
 impl core::clone::Clone for guatiao::value::types::buffer::Buffer
@@ -4540,6 +4551,7 @@ impl guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::list::List::into_local(self) -> guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::is_local(&self) -> bool
+pub fn guatiao::value::types::list::List::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::clone::Clone for guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::clone(&self) -> guatiao::value::types::list::List
 impl core::cmp::Eq for guatiao::value::types::list::List
@@ -4624,6 +4636,7 @@ impl guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::map::Map::into_local(self) -> guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::is_local(&self) -> bool
+pub fn guatiao::value::types::map::Map::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::clone::Clone for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::clone(&self) -> guatiao::value::types::map::Map
 impl core::cmp::Eq for guatiao::value::types::map::Map
@@ -4822,6 +4835,7 @@ impl guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::text::Text::into_local(self) -> guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::is_local(&self) -> bool
+pub fn guatiao::value::types::text::Text::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::borrow::Borrow<str> for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::borrow(&self) -> &str
 impl core::clone::Clone for guatiao::value::types::text::Text
@@ -4900,6 +4914,7 @@ impl guatiao::value::value::Value
 pub fn guatiao::value::value::Value::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::value::Value::into_local(self) -> guatiao::value::value::Value
 pub fn guatiao::value::value::Value::is_local(&self) -> bool
+pub fn guatiao::value::value::Value::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::clone::Clone for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::clone(&self) -> guatiao::value::value::Value
 impl core::cmp::Eq for guatiao::value::value::Value
@@ -5433,6 +5448,7 @@ impl guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::buffer::Buffer::into_local(self) -> guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::is_local(&self) -> bool
+pub fn guatiao::value::types::buffer::Buffer::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::borrow::Borrow<[u8]> for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::borrow(&self) -> &[u8]
 impl core::clone::Clone for guatiao::value::types::buffer::Buffer
@@ -5546,6 +5562,7 @@ impl guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::list::List::into_local(self) -> guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::is_local(&self) -> bool
+pub fn guatiao::value::types::list::List::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::clone::Clone for guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::clone(&self) -> guatiao::value::types::list::List
 impl core::cmp::Eq for guatiao::value::types::list::List
@@ -5630,6 +5647,7 @@ impl guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::map::Map::into_local(self) -> guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::is_local(&self) -> bool
+pub fn guatiao::value::types::map::Map::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::clone::Clone for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::clone(&self) -> guatiao::value::types::map::Map
 impl core::cmp::Eq for guatiao::value::types::map::Map
@@ -5875,6 +5893,7 @@ impl guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::text::Text::into_local(self) -> guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::is_local(&self) -> bool
+pub fn guatiao::value::types::text::Text::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::borrow::Borrow<str> for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::borrow(&self) -> &str
 impl core::clone::Clone for guatiao::value::types::text::Text
@@ -5953,6 +5972,7 @@ impl guatiao::value::value::Value
 pub fn guatiao::value::value::Value::into_alloc(self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::value::Value::into_local(self) -> guatiao::value::value::Value
 pub fn guatiao::value::value::Value::is_local(&self) -> bool
+pub fn guatiao::value::value::Value::make_local_in(&mut self, guatiao::value::alloc::Alloc) -> core::result::Result<(), guatiao::value::error::ValueError>
 impl core::clone::Clone for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::clone(&self) -> guatiao::value::value::Value
 impl core::cmp::Eq for guatiao::value::value::Value

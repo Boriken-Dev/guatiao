@@ -3,7 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Owning a tree without copying one that is already this binary's:
-//! `is_local`, `into_local`, `into_alloc` and `FromValue for Value`.
+//! `is_local`, `into_local`, `into_alloc`, `make_local_in` and
+//! `FromValue for Value`.
 //!
 //! Two counts: this thread's heap allocations, which is where a local
 //! tree lives, and a counting arena standing for an allocator that is not
@@ -340,4 +341,167 @@ fn entries_move_between_maps_without_copying_their_values() {
     assert_eq!(moved.as_ptr(), tags_at, "the list itself, not a copy");
     let list = List::try_from(into.remove("tags").unwrap()).unwrap();
     assert_eq!(list.as_ptr(), tags_at);
+}
+
+// --- make_local_in: moving a tree's storage where it stands --------------------
+
+#[test]
+fn a_tree_already_there_is_left_as_it_is_and_nothing_allocated() {
+    let mut map = tree_in(Alloc::rust());
+    let at = first_entry(&map);
+    let (moved, made) = allocations(|| map.make_local_in(Alloc::rust()));
+    moved.expect("nothing to move");
+    assert!(made.is_none_or(|n| n == 0), "{made:?} allocations");
+    assert_eq!(first_entry(&map), at, "the same storage");
+    with_arena(|arena, counter| {
+        let mut map = tree_in(arena);
+        let before = counter.allocs.get();
+        map.make_local_in(arena).expect("nothing to move");
+        assert_eq!(counter.allocs.get(), before, "the arena was not asked");
+    });
+}
+
+#[test]
+fn a_tree_in_another_allocator_moves_home_and_its_blocks_are_freed() {
+    with_arena(|arena, counter| {
+        let mut map = tree_in(arena);
+        let expected = tree_in(Alloc::rust());
+        map.make_local_in(Alloc::rust()).expect("moved");
+        assert_eq!(counter.outstanding.get(), 0, "every arena block was freed");
+        assert!(map.is_local());
+        assert_eq!(map, expected, "the same tree");
+    });
+}
+
+/// What a callee adds to a caller's map: only the added parts move; the
+/// caller's own array and entries stay where they are.
+#[test]
+fn only_the_parts_another_allocator_made_move() {
+    with_arena(|arena, counter| {
+        let mut map = Map::new();
+        map.set("host", "10.0.0.1");
+        map.set("port", 5900);
+        // Room for the next entry, so adding one does not grow the array.
+        map.set("spare", 0);
+        map.remove("spare");
+        let at = first_entry(&map);
+        let host_at = TryAsRef::<str>::try_as_ref(map.get("host").unwrap())
+            .unwrap()
+            .as_ptr();
+        map.set("added", tree_in(arena));
+        assert_eq!(first_entry(&map), at, "the array did not grow");
+        map.make_local_in(Alloc::rust()).expect("moved");
+        assert_eq!(
+            counter.outstanding.get(),
+            0,
+            "the added tree left the arena"
+        );
+        assert_eq!(first_entry(&map), at, "the caller's array stayed");
+        let host = TryAsRef::<str>::try_as_ref(map.get("host").unwrap()).unwrap();
+        assert_eq!(host.as_ptr(), host_at, "and so did its leaves");
+        assert!(map.is_local());
+        assert_eq!(
+            TryAsRef::<Map>::try_as_ref(map.get("added").unwrap()),
+            Some(&tree_in(Alloc::rust()))
+        );
+    });
+}
+
+#[test]
+fn a_value_and_a_list_move_too() {
+    with_arena(|arena, counter| {
+        let mut value = Value::from(tree_in(arena));
+        value.make_local_in(Alloc::rust()).expect("moved");
+        assert!(value.is_local());
+        let mut list = List::new_in(arena);
+        list.push_in(tree_in(arena), arena).unwrap();
+        list.push_in(Text::new_in(arena, "t").unwrap(), arena)
+            .unwrap();
+        list.make_local_in(Alloc::rust()).expect("moved");
+        assert!(list.is_local());
+        assert_eq!(counter.outstanding.get(), 0);
+        let mut text = Text::new_in(arena, "leaf").unwrap();
+        text.make_local_in(Alloc::rust()).expect("moved");
+        let mut buffer = Buffer::new_in(arena, b"leaf").unwrap();
+        buffer.make_local_in(Alloc::rust()).expect("moved");
+        assert!(text.is_local() && buffer.is_local());
+        assert_eq!(counter.outstanding.get(), 0);
+        // A scalar owns nothing, so there is nothing to move.
+        let mut five = Value::from(5i64);
+        five.make_local_in(arena).expect("nothing to move");
+    });
+}
+
+/// Past the depth judged on the thread's stack, the walk still reaches
+/// the leaf.
+#[test]
+fn a_deep_tree_moves_whole() {
+    with_arena(|arena, counter| {
+        let mut deep = (0..40).fold(
+            Value::from(Text::new_in(arena, "there").unwrap()),
+            |inner, _| {
+                let mut list = List::new_in(arena);
+                list.push_in(inner, arena).unwrap();
+                Value::from(list)
+            },
+        );
+        deep.make_local_in(Alloc::rust()).expect("moved");
+        assert!(deep.is_local());
+        assert_eq!(counter.outstanding.get(), 0);
+    });
+}
+
+/// Storage is moved, content is not read: a STRING that is not UTF-8
+/// moves as it is, and its door still refuses it.
+#[test]
+fn content_is_moved_as_it_is() {
+    with_arena(|arena, counter| {
+        let (ptr, len, cap, a) = Buffer::new_in(arena, b"caf\xe9").unwrap().into_raw_parts();
+        // SAFETY: a STRING tag over a text arm whose storage is consistent;
+        // its bytes are what is under test.
+        let mut bad = unsafe {
+            Value::from_raw_parts(
+                u32::from(guatiao::Tag::GUATIAO_STRING),
+                guatiao::Payload::text(Text::from_raw_parts(ptr, len, cap, a)),
+            )
+        };
+        bad.make_local_in(Alloc::rust()).expect("moved");
+        assert_eq!(counter.outstanding.get(), 0);
+        assert!(TryAsRef::<str>::try_as_ref(&bad).is_none(), "still refused");
+    });
+}
+
+/// A home allocator refusing part-way leaves a whole tree, every block
+/// moved or where it was, and all of it freed with the tree.
+#[test]
+fn a_refusal_part_way_leaves_the_tree_whole() {
+    with_arena(|arena, counter| {
+        counter.fail_at.set(counter.allocs.get() + 3);
+        let mut map = tree_in(Alloc::rust());
+        let err = map.make_local_in(arena).unwrap_err();
+        assert_eq!(err, ValueError::Alloc(AllocError::Failed));
+        assert!(counter.outstanding.get() > 0, "some blocks moved first");
+        assert_eq!(map, tree_in(Alloc::rust()), "the same tree");
+        drop(map);
+    });
+}
+
+/// A literal's array (`cap == 0`) is moved before anything is written
+/// into its entries, so read-only storage is never written.
+#[test]
+fn a_literal_array_is_moved_before_its_elements_are() {
+    with_arena(|arena, counter| {
+        let items = [Value::from(Text::new_in(arena, "a").unwrap())];
+        let items = core::mem::ManuallyDrop::new(items);
+        // SAFETY: one initialised element this test never drops itself,
+        // not owned by the list (`cap == 0`), recording Rust's allocator.
+        let mut list = unsafe {
+            List::from_raw_parts(items.as_ptr().cast_mut(), 1, 0, Alloc::rust().as_raw())
+        };
+        list.make_local_in(Alloc::rust()).expect("moved");
+        assert_ne!(list.as_ptr(), items.as_ptr(), "the array was copied out");
+        assert!(list.is_local());
+        drop(list);
+        assert_eq!(counter.outstanding.get(), 0);
+    });
 }

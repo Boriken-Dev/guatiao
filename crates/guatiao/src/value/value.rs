@@ -200,6 +200,17 @@ impl Payload {
     }
 }
 
+/// What a node owns, mutably, as [`Value::owned_mut`] reaches it.
+pub(crate) enum Owned<'a> {
+    Map(&'a mut Map),
+    List(&'a mut List),
+    /// A STRING's or a NUMBER's storage.
+    Text(&'a mut Text),
+    Buffer(&'a mut Buffer),
+    /// A scalar, or a tag this build does not know.
+    Nothing,
+}
+
 /// The live arm as `T`, for a dispatch or a walk that has already read
 /// the tag.
 pub(crate) fn arm<T: ?Sized>(v: &Value) -> Result<&T, ValueError>
@@ -447,6 +458,25 @@ impl Value {
         }
     }
 
+    /// The container this node owns, its content unchecked: what a walk
+    /// moving storage reaches, which reads no content.
+    pub(crate) fn owned_mut(&mut self) -> Owned<'_> {
+        match Tag::try_from(self.tag) {
+            // SAFETY: the tag says which arm is live; a `Number` is a
+            // `Text` in layout, so its arm is the same storage.
+            Ok(Tag::GUATIAO_MAP) => Owned::Map(unsafe { &mut self.payload.map }),
+            // SAFETY: as above.
+            Ok(Tag::GUATIAO_LIST) => Owned::List(unsafe { &mut self.payload.list }),
+            // SAFETY: as above.
+            Ok(Tag::GUATIAO_STRING | Tag::GUATIAO_NUMBER) => {
+                Owned::Text(unsafe { &mut self.payload.text })
+            }
+            // SAFETY: as above.
+            Ok(Tag::GUATIAO_BYTES) => Owned::Buffer(unsafe { &mut self.payload.bytes }),
+            _ => Owned::Nothing,
+        }
+    }
+
     /// The bytes under `tag`, STRING or NUMBER, whatever they are.
     pub(crate) fn text_bytes(&self, tag: Tag) -> Option<&[u8]> {
         if self.tag() != Ok(tag) {
@@ -612,9 +642,12 @@ impl Clone for Value {
     }
 }
 
-super::types::where_it_lives!(Value, crate::value::walk::recorded_by, |_: &Value| {
-    core::alloc::Layout::new::<Value>()
-});
+super::types::where_it_lives!(
+    Value,
+    crate::value::walk::recorded_by,
+    crate::value::walk::settle_value,
+    |_: &Value| { core::alloc::Layout::new::<Value>() }
+);
 
 /// Null, so `mem::take` leaves a node that owns nothing.
 impl Default for Value {

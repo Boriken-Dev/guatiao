@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   its own allocators. `into_alloc(alloc)` is the same for a named
   allocator, fallible as `clone_in` is. The proxy's return path for a
   tree is built on them.
+- **`make_local_in(alloc)` on `Value`, `Map`, `List`, `Text` and
+  `Buffer`**, the in-place counterpart of `into_alloc`: through `&mut`,
+  every block another allocator made is moved into one from `alloc` and
+  the old one freed through its own, elements moved rather than copied,
+  nothing allocated when the tree is already there.
 - **A kind method may take a `Value`, `Map` or `List` by value**, and it
   crosses as a move: the slot receives a pointer to the caller's node
   (`guatiao_value *`, `guatiao_map *`, `guatiao_list *`, without
