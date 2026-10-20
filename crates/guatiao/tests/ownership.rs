@@ -320,3 +320,24 @@ fn reading_a_value_copies_it_into_this_binarys_allocator() {
         assert_eq!(tags.len(), 2);
     });
 }
+
+// --- moving what a container holds ------------------------------------------
+
+/// `extend` with another map moves each value in as it is (only the keys
+/// are written again), and `remove` then `try_from` hands one back owned:
+/// carrying entries from one map to another copies no tree.
+#[test]
+fn entries_move_between_maps_without_copying_their_values() {
+    let mut from = Map::new();
+    from.set("tags", ["a", "b"].into_iter().collect::<List>());
+    let tags_at = TryAsRef::<List>::try_as_ref(from.get("tags").unwrap())
+        .unwrap()
+        .as_ptr();
+    let mut into = Map::new();
+    into.set("name", "x");
+    into.extend(from);
+    let moved: &List = into.get("tags").and_then(TryAsRef::try_as_ref).unwrap();
+    assert_eq!(moved.as_ptr(), tags_at, "the list itself, not a copy");
+    let list = List::try_from(into.remove("tags").unwrap()).unwrap();
+    assert_eq!(list.as_ptr(), tags_at);
+}
