@@ -43,6 +43,12 @@
  and the caller keeps it as it is; built anywhere else,
  the caller copies it. Either way, write the answer over
  the carrier without freeing it.
+
+ A `guatiao_value *`, `guatiao_map *` or `guatiao_list *`
+ argument that is not `const` is a tree the caller hands
+ over with the call: the slot owns it from then on, on
+ every path, and frees or keeps it; the caller never frees
+ it. It lives in the caller's allocators.
  */
 typedef struct greeter_vtable {
   guatiao_kind_header header;
@@ -55,6 +61,10 @@ typedef struct greeter_vtable {
   guatiao_status (*greet_into)(void *ctx,
                                guatiao_str name,
                                const guatiao_object *listener,
+                               guatiao_provider_error *err);
+  guatiao_status (*greet_from)(void *ctx,
+                               guatiao_map *config,
+                               guatiao_map *out,
                                guatiao_provider_error *err);
 } greeter_vtable;
 /*

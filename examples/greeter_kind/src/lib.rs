@@ -60,6 +60,19 @@ pub trait Greeter: Send + Sync {
         );
         Ok(())
     }
+    /// Appended: the greeting for a configuration the caller HANDS OVER
+    /// (`{"name": ".."}`). The greeter owns the map from the call on,
+    /// whatever it answers, and may keep it; nothing is copied to pass
+    /// it. A greeter built before this slot existed greets the name
+    /// through `greet`.
+    fn greet_from(&self, config: Map) -> Result<Map, ProviderError> {
+        self.greet(
+            config
+                .get("name")
+                .and_then(TryAsRef::<str>::try_as_ref)
+                .unwrap_or_default(),
+        )
+    }
 }
 
 /// What a conversation tells whoever is listening. Implemented by the

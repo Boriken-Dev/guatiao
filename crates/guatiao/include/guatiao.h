@@ -1146,6 +1146,12 @@ typedef struct guatiao_entries {
  allocator on arrival and the original freed through its own. Write the
  answer over the carrier without freeing it. A caller passes an
  initialised out slot: a carrier, or zeroes.
+
+ **A tree argument by value is a move.** A slot argument that is a
+ `guatiao_value *`, `guatiao_map *` or `guatiao_list *` without `const`
+ is a tree the caller hands over with the call: the slot owns it from
+ then on, whatever it answers, and the caller never frees it. It lives
+ in the caller's allocators, which outlive what is built through them.
  */
 typedef struct guatiao_kind_header {
   /*

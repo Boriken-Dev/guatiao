@@ -180,6 +180,38 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     // SAFETY: the four fields `into_raw_parts` just gave up.
     drop(unsafe { Map::from_raw_parts(entries, len, cap, alloc) });
 
+    // 2a. A map handed over by value crosses as a move: the slot receives
+    // the host's own node, so passing it allocates nothing, and C keeps
+    // the very map the host built.
+    // SAFETY: the signature `greeter_in_c.c` declares.
+    let take_kept: libloading::Symbol<unsafe extern "C" fn(*mut Map) -> bool> =
+        unsafe { image.get(b"c_greeter_take_kept\0") }.expect("exported");
+    let mut config = Map::new();
+    config.set("name", "cy");
+    let handed = config.entries().as_ptr();
+    let (answer, allocated) = allocations(|| greeter.greet_from(config));
+    assert_eq!(
+        answer
+            .expect("the C greeter answers")
+            .get("greeting")
+            .and_then(TryAsRef::<str>::try_as_ref),
+        Some("hello from C, cy")
+    );
+    assert_eq!(
+        allocated, 3,
+        "the answer's three blocks and nothing to pass the configuration"
+    );
+    // SAFETY: an empty map over no storage, for C to write into.
+    let mut kept = unsafe { Map::from_raw_parts(core::ptr::null_mut(), 0, 0, core::ptr::null()) };
+    // SAFETY: a writable map; what C writes is the map it was handed.
+    assert!(unsafe { take_kept(&mut kept) }, "C kept it");
+    assert_eq!(kept.entries().as_ptr(), handed, "the very map, not a copy");
+    assert_eq!(
+        kept.alloc().expect("recorded").as_raw(),
+        Alloc::rust().as_raw()
+    );
+    drop(kept);
+
     // 2b. A caller that carries no allocator -- an older host, a zeroed
     // slot -- gets a map built through C's own, and frees it through the
     // allocator it records.

@@ -30,8 +30,9 @@
 //!
 //! A method takes `&self` and the trait names `Send + Sync`. Arguments:
 //! integers, floats, `bool`, `&str`, `&[u8]`, `&Value`, `Option<&Value>`,
-//! `&Map`, and any other type by value, which crosses as a value through
-//! `ToValue`. Returns: `()`, the scalars, `Value`, `Map`, `List`, `String`,
+//! `&Map`; `Value`, `Map` and `List` by value, which cross as a move (a
+//! pointer to the caller's node, which the callee then owns); and any
+//! other type by value, which crosses as a value through `ToValue`. Returns: `()`, the scalars, `Value`, `Map`, `List`, `String`,
 //! and any other type through `FromValue` — each optionally inside
 //! `Result<_, ProviderError>`. A method converting through `ToValue` or
 //! `FromValue` must return a `Result`, because the conversion can fail.
@@ -244,6 +245,13 @@ enum ArgKind {
     ValueOpt,
     /// `&Map`, as a pointer that must not be null.
     MapRef,
+    /// `Value` by value: a pointer to the caller's node, which the callee
+    /// owns once called and the caller never frees.
+    ValueOwned,
+    /// `Map` by value, as [`ArgKind::ValueOwned`].
+    MapOwned,
+    /// `List` by value, as [`ArgKind::ValueOwned`].
+    ListOwned,
     /// Any other type by value, built into a value with `ToValue` and
     /// read back with `FromValue`.
     Owned(Type),
@@ -699,16 +707,23 @@ fn arg_kind(ty: &Type, object: bool, roots: Roots<'_>) -> syn::Result<ArgKind> {
             {
                 return Ok(ArgKind::ValueOpt);
             }
-            if matches!(
-                special_by_value(ty, roots),
-                Some("Value" | "Map" | "List" | "Text")
-            ) || last.ident == "Buffer"
-            {
-                return Err(syn::Error::new_spanned(
-                    ty,
-                    "take a value argument by reference (`&Value`, `&Map`); by value it would \
-                     have to be copied across",
-                ));
+            match special_by_value(ty, roots) {
+                Some("Value") => return Ok(ArgKind::ValueOwned),
+                Some("Map") => return Ok(ArgKind::MapOwned),
+                Some("List") => return Ok(ArgKind::ListOwned),
+                Some("Text") => {
+                    return Err(syn::Error::new_spanned(
+                        ty,
+                        "a `Text` cannot cross by value; take `&str`, or a `Value` holding it",
+                    ));
+                }
+                _ if last.ident == "Buffer" => {
+                    return Err(syn::Error::new_spanned(
+                        ty,
+                        "a `Buffer` cannot cross by value; take `&[u8]`, or a `Value` holding it",
+                    ));
+                }
+                _ => {}
             }
             Ok(ArgKind::Owned(ty.clone()))
         }
@@ -1117,6 +1132,28 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             }
         });
 
+    // What a C provider of a table taking a tree by value needs to know.
+    let moved_doc = methods
+        .iter()
+        .any(|m| {
+            m.args.iter().any(|a| {
+                matches!(
+                    a.kind,
+                    ArgKind::ValueOwned | ArgKind::MapOwned | ArgKind::ListOwned
+                )
+            })
+        })
+        .then(|| {
+            quote! {
+                ///
+                /// A `guatiao_value *`, `guatiao_map *` or `guatiao_list *`
+                /// argument that is not `const` is a tree the caller hands
+                /// over with the call: the slot owns it from then on, on
+                /// every path, and frees or keeps it; the caller never frees
+                /// it. It lives in the caller's allocators.
+            }
+        });
+
     // The trait, with `into_object` appended for an object kind: the way
     // an implementation becomes a handle. `where Self: Sized` keeps it off
     // the trait object, so it is not a slot.
@@ -1184,6 +1221,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         /// The kind's function table: a header, then one slot per method,
         /// in declaration order.
         #carrier_doc
+        #moved_doc
         #[repr(C)]
         #[doc(hidden)]
         #[allow(non_snake_case)]
@@ -1327,6 +1365,9 @@ fn arg_c_type(kind: &ArgKind) -> TokenStream {
             quote!(*const ::guatiao::Value)
         }
         ArgKind::MapRef => quote!(*const ::guatiao::Map),
+        ArgKind::ValueOwned => quote!(*mut ::guatiao::Value),
+        ArgKind::MapOwned => quote!(*mut ::guatiao::Map),
+        ArgKind::ListOwned => quote!(*mut ::guatiao::List),
         ArgKind::BytesMut => quote!(::guatiao::library::BytesMut),
         ArgKind::Object(_) => quote!(::guatiao::library::ObjectRaw),
         ArgKind::BorrowMut(_) | ArgKind::Borrow(_) => {
@@ -1455,10 +1496,41 @@ fn emit_shim(
         })
     });
 
+    // A tree by value is owned from the call on, so it is taken before
+    // anything can return early: held in a `Result`, it is freed by any
+    // `return` that follows, and only a null pointer, which owns nothing,
+    // or a map whose keys are refused (freed on the spot) is an `Err`.
+    let tree_takes: Vec<TokenStream> = m
+        .args
+        .iter()
+        .filter_map(|a| {
+            let ident = &a.ident;
+            let take = match &a.kind {
+                ArgKind::ValueOwned => quote!(value_owned),
+                ArgKind::MapOwned => quote!(map_owned),
+                ArgKind::ListOwned => quote!(list_owned),
+                _ => return None,
+            };
+            Some(quote! {
+                // SAFETY: the proxy hands the tree over with the call.
+                let #ident = unsafe { ::guatiao::library::kind::#take(#ident) };
+            })
+        })
+        .collect();
+
     let reads = m.args.iter().map(|a| {
         let ident = &a.ident;
         match &a.kind {
             ArgKind::Scalar(_) | ArgKind::Object(_) => quote!(),
+            ArgKind::ValueOwned | ArgKind::MapOwned | ArgKind::ListOwned => {
+                let f = fail(quote!(__s));
+                quote! {
+                    let #ident = match #ident {
+                        ::core::result::Result::Ok(__v) => __v,
+                        ::core::result::Result::Err(__s) => { #f }
+                    };
+                }
+            }
             ArgKind::Str => {
                 let f = fail(quote!(::guatiao::Status::from(__e)));
                 quote! {
@@ -1715,6 +1787,7 @@ fn emit_shim(
                 #err_param
             ) -> ::guatiao::Status {
                 ::guatiao::library::kind::catch(|| {
+                    #(#tree_takes)*
                     #(#object_reads)*
                     #refuse
                 })
@@ -1748,6 +1821,7 @@ fn emit_shim(
             #err_param
         ) -> ::guatiao::Status {
             ::guatiao::library::kind::catch(|| {
+                #(#tree_takes)*
                 #(#object_reads)*
                 #this
                 #(#reads)*
@@ -1792,7 +1866,18 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
         }
     };
 
-    let marshals = m.args.iter().map(|a| {
+    let handed_over = |a: &&ArgPlan| {
+        matches!(
+            a.kind,
+            ArgKind::ValueOwned | ArgKind::MapOwned | ArgKind::ListOwned
+        )
+    };
+    let in_order = m
+        .args
+        .iter()
+        .filter(|a| !handed_over(a))
+        .chain(m.args.iter().filter(handed_over));
+    let marshals = in_order.map(|a| {
         let ident = &a.ident;
         let name = format_ident!("__arg_{}", ident);
         match &a.kind {
@@ -1803,6 +1888,20 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
             },
             ArgKind::ValueRef => quote! { let #name = #ident as *const ::guatiao::Value; },
             ArgKind::MapRef => quote! { let #name = #ident as *const ::guatiao::Map; },
+            // Handed over with the call: the callee frees it, so this side
+            // forgets it. Marshalled after every argument that can fail.
+            ArgKind::ValueOwned | ArgKind::MapOwned | ArgKind::ListOwned => {
+                let held = format_ident!("__own_{}", ident);
+                let ty = match &a.kind {
+                    ArgKind::ValueOwned => quote!(::guatiao::Value),
+                    ArgKind::MapOwned => quote!(::guatiao::Map),
+                    _ => quote!(::guatiao::List),
+                };
+                quote! {
+                    let mut #held = ::core::mem::ManuallyDrop::new(#ident);
+                    let #name = &mut *#held as *mut #ty;
+                }
+            }
             ArgKind::ValueOpt => quote! {
                 let #name = #ident.map_or(::core::ptr::null(), |__v| __v as *const ::guatiao::Value);
             },
@@ -2478,7 +2577,7 @@ mod tests {
         // Every way an argument and a return can cross.
         const EVERYTHING: &str = "pub trait Greeter: Send + Sync { \
             fn a(&self, s: &str, b: &[u8], v: &Value, o: Option<&Value>, m: &Map, n: i64, \
-                c: Config) -> Result<Map, ProviderError>; \
+                c: Config, t: Value, u: Map, w: List) -> Result<Map, ProviderError>; \
             fn b(&self) -> Result<List, ProviderError>; \
             fn c(&self) -> Result<Value, ProviderError>; \
             fn d(&self) -> Result<Reply, ProviderError>; \
@@ -2542,6 +2641,19 @@ mod tests {
             }
         "#;
         matches_snapshot("trees", TREES, include_str!("snapshots/trees.expected.rs"));
+    }
+
+    /// Trees by value: taken before anything can return in the shim,
+    /// handed over last and forgotten in the proxy.
+    #[test]
+    fn a_tree_argument_expands_to_its_snapshot() {
+        const MOVES: &str = r#"
+            pub trait Moves: Send + Sync {
+                fn keep(&self, v: Value, name: &str, m: Map) -> Result<i64, ProviderError>;
+                fn take(&self, l: List) -> i64;
+            }
+        "#;
+        matches_snapshot("moves", MOVES, include_str!("snapshots/moves.expected.rs"));
     }
 
     #[test]
@@ -2774,8 +2886,13 @@ mod tests {
             ),
             (
                 "",
-                "pub trait G: Send + Sync { fn f(&self, x: Value) -> i64; }",
-                "take a value argument by reference",
+                "pub trait G: Send + Sync { fn f(&self, x: Text) -> i64; }",
+                "a `Text` cannot cross by value",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, x: Buffer) -> i64; }",
+                "a `Buffer` cannot cross by value",
             ),
             (
                 "",

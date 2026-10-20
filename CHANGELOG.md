@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   its own allocators. `into_alloc(alloc)` is the same for a named
   allocator, fallible as `clone_in` is. The proxy's return path for a
   tree is built on them.
+- **A kind method may take a `Value`, `Map` or `List` by value**, and it
+  crosses as a move: the slot receives a pointer to the caller's node
+  (`guatiao_value *`, `guatiao_map *`, `guatiao_list *`, without
+  `const`), the caller forgets it and the callee owns it on every path,
+  so nothing is copied. A `Text` or `Buffer` by value stays refused, with
+  a message naming `&str`/`&[u8]`.
 - **`FromValue for Value`**, a copy in this binary's allocator. A
   `ToValue`/`FromValue` field may be a `Value`, `Option<Value>`,
   `Vec<Value>` or `BTreeMap<String, Value>`.
