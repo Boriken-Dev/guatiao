@@ -590,8 +590,10 @@ arm_borrowed!(Map, Tag::GUATIAO_MAP);
 arm_borrowed!(List, Tag::GUATIAO_LIST);
 
 impl Clone for Value {
-    /// A deep copy through the allocator this tree recorded, so a copy
-    /// lives where its source did. An allocation failure aborts, as the
+    /// A deep copy into this binary's allocator, [`Alloc::rust`], whatever
+    /// the source recorded: a copy never depends on an arena or a library
+    /// it came from. A copy beside the source is
+    /// `v.clone_in(v.alloc()?)`. An allocation failure aborts, as the
     /// short forms do.
     ///
     /// # Panics
@@ -603,8 +605,10 @@ impl Clone for Value {
     /// [`clone_in`](Value::clone_in), which reports them. Equality reads
     /// the same bytes and never fails, so `v == v` holds for such a tree.
     fn clone(&self) -> Value {
-        let alloc = self.alloc().unwrap_or_else(|_| Alloc::rust());
-        super::types::cloned(self.clone_in(alloc), core::alloc::Layout::new::<Value>())
+        super::types::cloned(
+            self.clone_in(Alloc::rust()),
+            core::alloc::Layout::new::<Value>(),
+        )
     }
 }
 

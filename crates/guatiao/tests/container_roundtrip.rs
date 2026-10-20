@@ -643,6 +643,58 @@ fn a_clone_is_deep_and_independent() {
     });
 }
 
+/// `clone()` copies into this binary's allocator, whatever the source
+/// recorded, so a copy of an arena's tree does not need the arena: not one
+/// block of the copy is the arena's.
+#[test]
+fn clone_copies_into_the_local_allocator_not_the_sources() {
+    with_alloc(|alloc, counter| {
+        let mut list = List::new_in(alloc);
+        list.push_in(Text::new_in(alloc, "x").unwrap(), alloc)
+            .unwrap();
+        let mut orig = Map::new_in(alloc);
+        orig.set_in("child", list, alloc).unwrap();
+        orig.set_in("bytes", Buffer::new_in(alloc, b"ab").unwrap(), alloc)
+            .unwrap();
+        let blocks = counter.allocs.get();
+        let local = Alloc::rust().as_raw();
+        let records_local = |found: Result<Alloc, ValueError>| found.unwrap().as_raw() == local;
+
+        let map_copy = orig.clone();
+        let tree = Value::from(orig);
+        let tree_copy = tree.clone();
+        let child: &List = TryAsRef::<Map>::try_as_ref(&tree)
+            .and_then(|m| m.get("child"))
+            .and_then(TryAsRef::try_as_ref)
+            .unwrap();
+        let list_copy = child.clone();
+        let text_copy = TryAsRef::<Text>::try_as_ref(&child[0]).unwrap().clone();
+        let bytes: &Buffer = TryAsRef::<Map>::try_as_ref(&tree)
+            .and_then(|m| m.get("bytes"))
+            .and_then(TryAsRef::try_as_ref)
+            .unwrap();
+        let bytes_copy = bytes.clone();
+
+        assert_eq!(
+            counter.allocs.get(),
+            blocks,
+            "no copy took a block from the arena"
+        );
+        assert!(records_local(map_copy.alloc()));
+        assert!(records_local(tree_copy.alloc()));
+        assert!(records_local(list_copy.alloc()));
+        assert!(records_local(text_copy.alloc()));
+        assert!(records_local(bytes_copy.alloc()));
+        let nested: &List = map_copy
+            .get("child")
+            .and_then(TryAsRef::try_as_ref)
+            .unwrap();
+        assert!(records_local(nested.alloc()), "nested containers too");
+        assert_eq!(tree_copy, tree, "a copy equals its source");
+        assert_eq!(Value::from(map_copy), tree);
+    });
+}
+
 // --- failure leaves nothing behind -------------------------------------
 
 /// The allocator belongs to the caller and can fail. A copy that failed
