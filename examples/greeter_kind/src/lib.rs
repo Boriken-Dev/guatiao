@@ -73,6 +73,17 @@ pub trait Greeter: Send + Sync {
                 .unwrap_or_default(),
         )
     }
+    /// Appended: completes a configuration for `greet_from` that the
+    /// caller LENDS for this call, in the caller's own map: fills in what
+    /// it leaves out and adds what follows from it. Answers whether it can
+    /// be greeted. A greeter built before this slot existed changes
+    /// nothing.
+    fn check(&self, config: &mut Map) -> Result<bool, ProviderError> {
+        Ok(config
+            .get("name")
+            .and_then(TryAsRef::<str>::try_as_ref)
+            .is_some_and(|name| !name.is_empty()))
+    }
 }
 
 /// What a conversation tells whoever is listening. Implemented by the

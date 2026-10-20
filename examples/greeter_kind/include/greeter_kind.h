@@ -45,10 +45,19 @@
  the carrier without freeing it.
 
  A `guatiao_value *`, `guatiao_map *` or `guatiao_list *`
- argument that is not `const` is a tree the caller hands
- over with the call: the slot owns it from then on, on
- every path, and frees or keeps it; the caller never frees
- it. It lives in the caller's allocators.
+ argument that is not `const`, and that its slot's comment
+ does not call lent, is a tree the caller hands over with
+ the call: the slot owns it from then on, on every path,
+ and frees or keeps it; the caller never frees it. It lives
+ in the caller's allocators.
+
+ A `guatiao_value *`, `guatiao_map *` or `guatiao_list *`
+ argument its slot's comment calls lent is the caller's tree,
+ for the call only: read it, change it, grow it, but never free
+ it or keep the pointer. Build what goes into it through the
+ allocator it records (`alloc`, the map arm's for a value); a
+ Rust caller moves anything built elsewhere there once the call
+ returns.
  */
 typedef struct greeter_vtable {
   guatiao_kind_header header;
@@ -66,6 +75,10 @@ typedef struct greeter_vtable {
                                guatiao_map *config,
                                guatiao_map *out,
                                guatiao_provider_error *err);
+  /*
+   Lent for the call, not handed over: `config`.
+   */
+  guatiao_status (*check)(void *ctx, guatiao_map *config, bool *out, guatiao_provider_error *err);
 } greeter_vtable;
 /*
  FNV-1a over the shape and the required signatures, as a
