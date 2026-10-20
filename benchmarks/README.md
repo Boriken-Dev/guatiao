@@ -69,6 +69,8 @@ sample, which is what `--merge` pools.
 | `call_map` | `Greeter::greet`, answering a `Map` the provider builds in the caller's allocator (`greet_in`) |
 | `call_map_copied` | the same through a configured instance whose `greet` builds in its own allocator, so the map is copied on arrival |
 | `call_map_arg` | `Greeter::greet_from`, handing over a one-entry `Map` built for the call (by value: a move), answered as `call_map` is |
+| `call_map_mut` | `Greeter::check`, lending a one-entry `Map` built for the call (`&mut`), to which the provider adds an entry built in the map's own allocator |
+| `call_map_mut_moved` | the same through a configured instance that builds the entry's value in its own allocator, which the proxy moves into the map's after the call |
 | `call_string` | `Greeter::shout`, answering a `String` |
 | `instantiate_drop` | `Offer::instantiate` from a configuration, then drop |
 | `object_ref` | `Conversation::turns`, a `&self` object method |
@@ -211,6 +213,45 @@ Owning a tree that is already local costs a judgment and no copy:
 costs 0.92 µs, and `into_local_foreign`, a copy and a free, costs about
 what `clone()` does. `call_map_arg` is `call_map` plus building the
 one-entry map it hands over; the map itself crosses by pointer.
+
+### Lending a tree to be changed (`mutable-before.json`, `mutable.json`)
+
+Windows, one session: the build before a kind method could take `&mut
+Map` and the build after, alternating, five runs each, pooled.
+Microseconds per call, median.
+
+| metric | before | this change | change |
+| --- | --- | --- | --- |
+| `call_map` | 0.1559 | 0.16 | +2.7% |
+| `call_map_arg` | 0.2677 | 0.2839 | +6.0% |
+| `call_map_copied` | 0.3323 | 0.3336 | +0.4% |
+| `call_map_mut` | — | 0.2581 | new |
+| `call_map_mut_moved` | — | 0.2514 | new |
+| `call_scalar` | 0.002129 | 0.00212 | -0.4% |
+| `call_string` | 0.2204 | 0.2192 | -0.6% |
+| `clone_map` | 0.9453 | 0.9579 | +1.3% |
+| `host_get` | 2.764 | 2.718 | -1.7% |
+| `instantiate_drop` | 0.5843 | 0.5852 | +0.2% |
+| `into_local_foreign` | 0.9693 | 0.9825 | +1.4% |
+| `into_local_local` | 0.0696 | 0.0685 | -1.5% |
+| `lent_call` | 0.1491 | 0.1467 | -1.6% |
+| `load_file_derived` | 72.57 | 71.03 | -2.1% |
+| `load_file_hello` | 73.61 | 73.58 | -0.0% |
+| `object_mut` | 0.003502 | 0.003502 | +0.0% |
+| `object_ref` | 0.001612 | 0.001612 | -0.0% |
+| `offers` | 1.27 | 1.31 | +3.2% |
+| `remote_clone` | 0.003588 | 0.003586 | -0.1% |
+| `retire` | 1.616 | 1.640 | +1.5% |
+| `scan_dir` | 235.8 | 226.4 | -4.0% |
+
+No existing metric moved by more than 10%; none of their paths changed
+(`call_map_arg`'s +6% is a by-value call this change does not touch).
+`call_map_mut` is building a one-entry map, lending it, and the provider
+adding a formatted entry in the map's allocator, after which the walk
+judges the map and moves nothing. `call_map_mut_moved` adds an entry whose
+value the provider built in its own allocator, which the walk then moves
+into the map's: one allocation and one free, about what the first
+provider's own formatting costs, so the two read alike.
 
 ### Every metric more than 10% slower than `pre-checks`, and why
 
