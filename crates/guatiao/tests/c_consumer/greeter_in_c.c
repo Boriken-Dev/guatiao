@@ -29,7 +29,13 @@
  * caller's allocator. It keeps the last one, and `c_greeter_take_kept`
  * hands it back, so the host can see it is the very map it passed.
  *
- * `greet`, `greet_into` and `greet_from` are filled. `shout` and `start` are left null:
+ * `check` takes its configuration LENT: a `guatiao_map *` the slot's
+ * comment calls lent is the caller's map for this call only. It adds an
+ * entry, growing the map through the allocator the map records, and
+ * neither frees it nor keeps it. `c_greeter_check_lending` is the other
+ * direction: C lending a map of its own to any greeter's `check`.
+ *
+ * `greet`, `greet_into`, `greet_from` and `check` are filled. `shout` and `start` are left null:
  * to the host that is an older table, and its proxy runs the trait's
  * default bodies -- `shout` through this file's `greet`.
  *
@@ -238,7 +244,59 @@ EXPORT bool c_greeter_take_kept(guatiao_map *out) {
   return true;
 }
 
-/* The table: size and hash from the header, three slots filled. */
+/* Adds `"checked_by": "C"` to a map the caller lent for this call. The
+ * array grows and the key is built through the allocator the map
+ * records, as any growth of it must be; the value is built through this
+ * file's own, and a Rust caller moves it into the map's once the call
+ * returns. This file links nothing; a C library that links guatiao would
+ * call `guatiao_map_set` on a value wrapping the map instead. */
+static guatiao_status check(void *ctx, guatiao_map *config, bool *out,
+                            guatiao_provider_error *err) {
+  (void)ctx;
+  if (!config) {
+    return refuse(err, GUATIAO_ERR_NULL, "no configuration, says C");
+  }
+  const guatiao_alloc *a = config->alloc;
+  if (!a || a->struct_size < offsetof(guatiao_alloc, free) + sizeof(a->free) ||
+      !a->alloc || !a->free) {
+    return refuse(err, GUATIAO_ERR_ALLOC, "the map records no allocator, says C");
+  }
+  if (config->len >= config->cap) {
+    /* `cap == 0` is storage the map does not own: copied out, never freed. */
+    size_t cap = config->len < 2 ? 4 : config->len * 2;
+    guatiao_entry *grown = (guatiao_entry *)a->alloc(
+        a->ctx, cap * sizeof(guatiao_entry), _Alignof(guatiao_entry));
+    if (!grown) {
+      return GUATIAO_ERR_ALLOC;
+    }
+    if (config->len) {
+      memcpy(grown, config->ptr, config->len * sizeof(guatiao_entry));
+    }
+    if (config->cap) {
+      a->free(a->ctx, config->ptr, config->cap * sizeof(guatiao_entry),
+              _Alignof(guatiao_entry));
+    }
+    config->ptr = grown;
+    config->cap = cap;
+  }
+  guatiao_entry *e = &config->ptr[config->len];
+  guatiao_str none = {NULL, 0};
+  guatiao_str by = {(const uint8_t *)"C", 1};
+  if (!owned_string(&e->key, a, "checked_by", none)) {
+    return GUATIAO_ERR_ALLOC;
+  }
+  e->value.tag = (uint32_t)GUATIAO_STRING;
+  e->value._pad = 0;
+  if (!owned_string(&e->value.payload.text, &ALLOC, "", by)) {
+    free_string(&e->key);
+    return GUATIAO_ERR_ALLOC;
+  }
+  config->len++;
+  *out = true;
+  return GUATIAO_OK;
+}
+
+/* The table: size and hash from the header, four slots filled. */
 static const greeter_vtable TABLE = {
     {(uint32_t)sizeof(greeter_vtable), greeter_vtable_FLOOR_HASH},
     greet,
@@ -246,6 +304,7 @@ static const greeter_vtable TABLE = {
     NULL, /* start: likewise -- this greeter holds no conversations */
     greet_into,
     greet_from,
+    check,
 };
 
 /* ---- C lending an object of its own ------------------------------------ */
@@ -294,6 +353,65 @@ EXPORT guatiao_status c_greeter_lend_tape(const greeter_vtable *greeter,
     err.message.alloc->free(err.message.alloc->ctx, err.message.ptr,
                             err.message.cap, 1);
   }
+  return status;
+}
+
+/* ---- C lending a map of its own ---------------------------------------- */
+
+/* Calls a greeter's `check` -- any greeter's table, Rust's included --
+ * lending `{"name": "cy"}`, a map built through this file's allocator.
+ * Reports how many entries it holds after the call, and whether every
+ * one of them, and the map, still records this file's allocator: what a
+ * Rust callee adds through the allocator the map records. Then frees it. */
+EXPORT guatiao_status c_greeter_check_lending(const greeter_vtable *greeter,
+                                              void *ctx, size_t *len,
+                                              bool *all_mine) {
+  if (!greeter || greeter->header.struct_size < sizeof(greeter_vtable) ||
+      !greeter->check) {
+    return GUATIAO_ERR_NULL;
+  }
+  guatiao_map config = {NULL, 0, 0, &ALLOC};
+  guatiao_entry *entries = (guatiao_entry *)ALLOC.alloc(
+      ALLOC.ctx, sizeof(guatiao_entry), _Alignof(guatiao_entry));
+  if (!entries) {
+    return GUATIAO_ERR_ALLOC;
+  }
+  guatiao_str none = {NULL, 0};
+  guatiao_str cy = {(const uint8_t *)"cy", 2};
+  if (!owned_string(&entries[0].key, &ALLOC, "name", none)) {
+    ALLOC.free(ALLOC.ctx, entries, sizeof(guatiao_entry), _Alignof(guatiao_entry));
+    return GUATIAO_ERR_ALLOC;
+  }
+  entries[0].value.tag = (uint32_t)GUATIAO_STRING;
+  entries[0].value._pad = 0;
+  if (!owned_string(&entries[0].value.payload.text, &ALLOC, "", cy)) {
+    free_string(&entries[0].key);
+    ALLOC.free(ALLOC.ctx, entries, sizeof(guatiao_entry), _Alignof(guatiao_entry));
+    return GUATIAO_ERR_ALLOC;
+  }
+  config.ptr = entries;
+  config.len = 1;
+  config.cap = 1;
+
+  bool usable = false;
+  guatiao_provider_error err;
+  memset(&err, 0, sizeof(err));
+  guatiao_status status = greeter->check(ctx, &config, &usable, &err);
+  if (err.message.cap && err.message.alloc) {
+    err.message.alloc->free(err.message.alloc->ctx, err.message.ptr,
+                            err.message.cap, 1);
+  }
+  bool mine = usable && config.alloc == &ALLOC;
+  for (size_t i = 0; i < config.len; i++) {
+    const guatiao_entry *e = &config.ptr[i];
+    mine = mine && e->key.alloc == &ALLOC;
+    if (e->value.tag == (uint32_t)GUATIAO_STRING) {
+      mine = mine && e->value.payload.text.alloc == &ALLOC;
+    }
+  }
+  *len = config.len;
+  *all_mine = mine;
+  free_flat_map(&config);
   return status;
 }
 

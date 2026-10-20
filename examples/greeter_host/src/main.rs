@@ -19,6 +19,8 @@
 //!    provider whose table fits the trait. A library with a hand-written
 //!    table of the same kind is loaded but is not an offer, and that is
 //!    the difference between "the file is a library" and "I can call it".
+//!    A greeter is also lent a configuration (`&mut Map`) and fills it
+//!    in where it stands, in the host's own map.
 //! 3. **A configured provider** is built from a value the host made
 //!    with its own derived type -- `#[derive(ToValue, Schema)]` on a
 //!    struct the host owns -- checked against the schema the provider
@@ -159,6 +161,32 @@ fn main() -> ExitCode {
             Err(e) => println!("\n{} refused: {e}", offer.id()),
         }
         println!("{} shouts: {}", offer.id(), greeter.shout("ana"));
+        // A configuration LENT for one call: the greeter fills it in where
+        // it stands, in this host's own map, and the host then hands it
+        // over to be greeted.
+        let mut config = Map::new();
+        config.set("mood", "cheerful");
+        match greeter.check(&mut config) {
+            Ok(usable) => {
+                let added: Vec<&str> = config.keys().filter(|k| *k != "mood").collect();
+                println!(
+                    "{} checked a configuration, added [{}], usable: {usable}",
+                    offer.id(),
+                    added.join(", ")
+                );
+                if usable && let Ok(answer) = greeter.greet_from(config) {
+                    println!(
+                        "{} greets from it: {}",
+                        offer.id(),
+                        answer
+                            .get("greeting")
+                            .and_then(TryAsRef::<str>::try_as_ref)
+                            .unwrap_or("?")
+                    );
+                }
+            }
+            Err(e) => println!("{} refused the configuration: {e}", offer.id()),
+        }
         // The same provider through its other kind, if it serves one.
         if let Some(Ok(counter)) = offer
             .key()

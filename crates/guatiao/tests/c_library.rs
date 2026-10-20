@@ -23,7 +23,7 @@ use core::ptr::NonNull;
 
 use greeter_kind::{Greeter, GreeterVtable, Listener};
 use guatiao::library::{Kind, ProviderError, Registry};
-use guatiao::{Alloc, Map, Status, Str};
+use guatiao::{Alloc, Map, Status, Str, Text};
 
 /// Counts this thread's heap allocations, so a call can be shown to make
 /// none: the other tests run on other threads.
@@ -212,7 +212,41 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
     );
     drop(kept);
 
-    // 2b. A caller that carries no allocator -- an older host, a zeroed
+    // 2b. A map LENT to C for one call: C grows the host's map through the
+    // allocator it records and adds an entry whose value it built in its
+    // own, which the proxy moves into the host's once the call returns.
+    // The host's own entries stay where they were.
+    let mut config = Map::new();
+    config.set("name", "cy");
+    let name_at = config
+        .get("name")
+        .and_then(TryAsRef::<str>::try_as_ref)
+        .map(str::as_ptr);
+    let (usable, allocated) = allocations(|| greeter.check(&mut config));
+    assert!(usable.expect("the C greeter answers"));
+    assert_eq!(config.keys().collect::<Vec<_>>(), ["name", "checked_by"]);
+    assert_eq!(
+        config
+            .get("checked_by")
+            .and_then(TryAsRef::<str>::try_as_ref),
+        Some("C")
+    );
+    assert!(config.is_local(), "nothing in it needs C's allocator");
+    assert_eq!(
+        config
+            .get("name")
+            .and_then(TryAsRef::<str>::try_as_ref)
+            .map(str::as_ptr),
+        name_at,
+        "the host's own entry was not moved"
+    );
+    assert_eq!(
+        allocated, 2,
+        "the key C built in the map's allocator, and the value moved home: no other copy"
+    );
+    drop(config);
+
+    // 2c. A caller that carries no allocator -- an older host, a zeroed
     // slot -- gets a map built through C's own, and frees it through the
     // allocator it records.
     {
@@ -294,6 +328,33 @@ fn a_greeter_written_in_c_is_called_as_the_trait() {
         );
         assert_eq!(&tape.last[..tape.len], b"dee");
     }
+    // 7a. And C LENDING a map of its own to a Rust greeter's `check`: the
+    // Rust callee builds what it adds through the allocator the map
+    // records, C's, so the whole map is still C's to free.
+    {
+        // SAFETY: the signature `greeter_in_c.c` declares.
+        let check_lending: libloading::Symbol<
+            unsafe extern "C" fn(
+                *const GreeterVtable,
+                *mut c_void,
+                *mut usize,
+                *mut bool,
+            ) -> Status,
+        > = unsafe { image.get(b"c_greeter_check_lending\0") }.expect("exported");
+        let (mut len, mut mine) = (0usize, false);
+        // SAFETY: a Rust table over a ZST `ctx`, and two writable answers.
+        let status = unsafe {
+            check_lending(
+                &PLAIN,
+                NonNull::<Plain>::dangling().as_ptr().cast(),
+                &mut len,
+                &mut mine,
+            )
+        };
+        assert_eq!(status, Status::GUATIAO_OK);
+        assert_eq!(len, 2, "the Rust greeter added its entry to C's map");
+        assert!(mine, "built through the allocator C's map records");
+    }
     drop(image);
 
     // 8. A C library with no `unload` slot promises nothing, so the host
@@ -358,6 +419,12 @@ impl Greeter for Plain {
     fn greet_into(&self, name: &str, listener: &mut dyn Listener) -> Result<(), ProviderError> {
         listener.heard(name);
         Ok(())
+    }
+    fn check(&self, config: &mut Map) -> Result<bool, ProviderError> {
+        // The lender's allocator: what is added stays the lender's to free.
+        let alloc = config.alloc()?;
+        config.set_in("seen", Text::new_in(alloc, "by rust")?, alloc)?;
+        Ok(true)
     }
 }
 

@@ -78,6 +78,22 @@ fn the_host_scans_offers_and_builds_a_configured_greeter() {
         "{stdout}"
     );
     assert!(stdout.contains("has been asked 1 time(s)"), "{stdout}");
+    // 2a. A configuration lent to the library came back filled in, in the
+    // host's map; a greeter without `check` changes nothing.
+    assert!(
+        stdout.contains(
+            "derived_greeter_hello checked a configuration, added [name, greeting], usable: true"
+        ),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("derived_greeter_hello greets from it: hello, world"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("builtin checked a configuration, added [], usable: false"),
+        "{stdout}"
+    );
     // 3. The configured one was built from the host's own type and
     // answered with it.
     assert!(

@@ -57,6 +57,23 @@ impl Greeter for Hello {
         self.greet_in(name, alloc)
     }
 
+    /// Completes the caller's configuration where it stands: `name` when
+    /// it is missing, then the `greeting` it leads to.
+    fn check(&self, config: &mut Map) -> Result<bool, ProviderError> {
+        // Built in the allocator the caller's map records, so nothing has
+        // to be moved into it after the call.
+        let alloc = config.alloc()?;
+        if !config.contains_key("name") {
+            config.set_in("name", Text::new_in(alloc, "world")?, alloc)?;
+        }
+        let Some(name) = config.get("name").and_then(TryAsRef::<str>::try_as_ref) else {
+            return Ok(false);
+        };
+        let greeting = Text::new_in(alloc, &format!("hello, {name}"))?;
+        config.set_in("greeting", greeting, alloc)?;
+        Ok(true)
+    }
+
     /// A conversation: an object this library builds and hands back,
     /// holding the listener the host handed in.
     fn start(
