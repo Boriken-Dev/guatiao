@@ -11,7 +11,7 @@ use core::sync::atomic::{AtomicI64, Ordering};
 
 use greeter_kind::{Conversation, Counter, Greeter, Listener};
 use guatiao::library::{Object, ProviderError};
-use guatiao::{Alloc, Map, Provider, Status, Text};
+use guatiao::{Alloc, Map, Provider, Status, Text, TryAsRef};
 
 /// One provider serving two kinds.
 #[derive(Default, Provider)]
@@ -41,6 +41,20 @@ impl Greeter for Hello {
         let greeting = Text::new_in(alloc, &format!("hello, {name}"))?;
         map.set_in("greeting", greeting, alloc)?;
         Ok(map)
+    }
+
+    fn greet_from(&self, config: Map) -> Result<Map, ProviderError> {
+        self.greet_from_in(config, Alloc::rust())
+    }
+
+    /// A configuration handed over: read, then dropped here, through the
+    /// caller's allocator it records. The answer is built where asked.
+    fn greet_from_in(&self, config: Map, alloc: Alloc) -> Result<Map, ProviderError> {
+        let name = config
+            .get("name")
+            .and_then(TryAsRef::<str>::try_as_ref)
+            .unwrap_or_default();
+        self.greet_in(name, alloc)
     }
 
     /// A conversation: an object this library builds and hands back,
