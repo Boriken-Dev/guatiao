@@ -153,6 +153,14 @@ impl Greeter for Shouter {
         );
         Ok(map)
     }
+
+    /// Adds its prefix with the short forms too: the value is built in
+    /// this library's allocator, and the caller moves it into the map's
+    /// once the call returns.
+    fn check(&self, config: &mut Map) -> Result<bool, ProviderError> {
+        config.set("prefix", self.prefix.as_str());
+        Ok(true)
+    }
 }
 
 guatiao::providers!(Hello, Shouter);
