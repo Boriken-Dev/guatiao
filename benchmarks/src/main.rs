@@ -22,6 +22,7 @@ use std::time::Instant;
 
 use greeter_kind::{Conversation, Counter, Greeter, Listener};
 use guatiao::library::{Offer, Registry};
+use guatiao::value::alloc::{Alloc, Allocator, rust_alloc};
 use guatiao::{Map, Status, Str, Value};
 
 // --- the libraries under test -------------------------------------------
@@ -161,6 +162,10 @@ const METRICS: &[Metric] = &[
         setup: call_map_copied,
     },
     Metric {
+        name: "call_map_arg",
+        setup: call_map_arg,
+    },
+    Metric {
         name: "call_string",
         setup: call_string,
     },
@@ -191,6 +196,18 @@ const METRICS: &[Metric] = &[
     Metric {
         name: "host_get",
         setup: host_get,
+    },
+    Metric {
+        name: "clone_map",
+        setup: clone_map,
+    },
+    Metric {
+        name: "into_local_local",
+        setup: into_local_local,
+    },
+    Metric {
+        name: "into_local_foreign",
+        setup: into_local_foreign,
     },
 ];
 
@@ -289,6 +306,23 @@ fn call_map_copied(libs: &Libraries) -> Run {
         let _keep = &registry;
         batch(iters, || {
             let answer: Map = instance.greet("ana").expect("greets");
+            black_box(answer);
+        })
+    })
+}
+
+/// `Greeter::greet_from`, handing over a one-entry map built for each
+/// call: the map's building and its move are what this adds to `call_map`.
+fn call_map_arg(libs: &Libraries) -> Run {
+    let registry = registry(&[&libs.derived]);
+    let offer = greeter_offer(&registry, "derived_greeter_hello");
+    Box::new(move |iters| {
+        let _keep = &registry;
+        let greeter = offer.default_instance().expect("its own instance");
+        batch(iters, || {
+            let mut config = Map::new();
+            config.set("name", "ana");
+            let answer: Map = greeter.greet_from(config).expect("greets");
             black_box(answer);
         })
     })
@@ -430,6 +464,71 @@ fn host_get(libs: &Libraries) -> Run {
             let status = unsafe { echo(ctx, Str::new("ana"), &mut out) };
             assert_eq!(status, Status::GUATIAO_OK);
             black_box(out);
+        })
+    })
+}
+
+/// Eight entries: text, numbers, a nested map and a list, all local.
+fn sample_map() -> Map {
+    let mut nested = Map::new();
+    nested.set("depth", 2);
+    let mut map = Map::new();
+    map.set("host", "10.0.0.1");
+    map.set("port", 5900);
+    map.set("tls", true);
+    map.set("user", "ana");
+    map.set("timeout", 30);
+    map.set("nested", nested);
+    map.set(
+        "tags",
+        ["a", "b", "c"].into_iter().collect::<guatiao::List>(),
+    );
+    map.set("note", "kept as it is");
+    map
+}
+
+/// `clone()` of `sample_map`, and dropping the copy.
+fn clone_map(_: &Libraries) -> Run {
+    let map = sample_map();
+    Box::new(move |iters| {
+        batch(iters, || {
+            black_box(black_box(&map).clone());
+        })
+    })
+}
+
+/// `into_local()` of a tree that is already local: judged, handed back.
+fn into_local_local(_: &Libraries) -> Run {
+    let mut held = Some(sample_map());
+    Box::new(move |iters| {
+        batch(iters, || {
+            let map = held.take().expect("put back each time");
+            held = Some(black_box(map.into_local()));
+        })
+    })
+}
+
+/// A tree moved between this binary's allocator and another, alternately:
+/// each call is what `into_local()` costs a tree from elsewhere, one copy
+/// and one free of the original.
+fn into_local_foreign(_: &Libraries) -> Run {
+    // Rust's heap under another address, standing for a library's or a
+    // host's allocator; leaked, as an allocator outlives its trees.
+    let vtable: &'static Allocator = Box::leak(Box::new(rust_alloc()));
+    // SAFETY: a complete vtable that lives for the program.
+    let other = unsafe { Alloc::from_raw(vtable) }.expect("a complete vtable");
+    let mut held = Some(sample_map().into_alloc(other).expect("copied"));
+    let mut home = true;
+    Box::new(move |iters| {
+        batch(iters, || {
+            let map = held.take().expect("put back each time");
+            let moved = if home {
+                map.into_local()
+            } else {
+                map.into_alloc(other).expect("copied")
+            };
+            home = !home;
+            held = Some(black_box(moved));
         })
     })
 }
