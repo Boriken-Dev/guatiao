@@ -85,6 +85,9 @@ map.copy_from(&Map) / copy_from_in(&Map, alloc) -> Result<usize, ValueError>
 map.iter() / map.keys() / map.values()
 map["host"] -> &Value                  // panics when absent, as HashMap does
 map.clone_in(alloc) -> Result<Map, ValueError>
+map.is_local() -> bool                 // every container and key records Alloc::rust()
+map.into_local() -> Map                // unchanged when local, else copied, original freed
+map.into_alloc(alloc) -> Result<Map, ValueError>   // the same, for a named allocator
 for (key, value) in map { .. }         // owned: (Text, Value); &Map: &Entry
 for (key, value) in &mut map { .. }    // (&Text, &mut Value), as map.iter_mut(): a key never changes in place
 
@@ -92,6 +95,7 @@ list.push(impl Into<Value>)            list.push_in(impl Into<Value>, alloc)
 list.try_push(impl Into<Value>) -> Result<(), AllocError>
 list.remove(i) / list.pop()            list.discard(i) -> bool     list.clear()
 list.clone_in(alloc) -> Result<List, ValueError>
+list.is_local() / list.into_local() / list.into_alloc(alloc)   // as on Map; Text and Buffer too
 for value in list { .. }               // owned: Value; &List: &Value; &mut List: &mut Value
 
 Text::new(&str) -> Text                Buffer::new(&[u8]) -> Buffer
@@ -189,6 +193,8 @@ container to live on:
 Value::null()      Value::absent()     Value::default()   // = null
 v.tag() -> Result<Tag, ValueError>     v.alloc() -> Result<Alloc, ValueError>
 v.clone_in(alloc) -> Result<Value, ValueError>
+v.is_local() -> bool                   v.into_local() -> Value
+v.into_alloc(alloc) -> Result<Value, ValueError>
 unsafe Value::from_raw_parts(tag: u32, Payload)   v.into_raw_parts() -> (u32, Payload)
 unsafe { v.free() }                    // the boundary's spelling of drop
 unsafe { v.write_to(out: *mut Value, alloc: *const Allocator) } -> Status
@@ -261,7 +267,17 @@ source is `v.clone_in(v.alloc()?)`. `clone()` aborts on an allocation
 failure, as the short forms do, and **panics on content this build
 refuses** (an unknown tag, text that is not UTF-8, a number outside the
 grammar, nesting past `MAX_DEPTH`). `clone_in(alloc)` is the fallible
-form that names one. Both copying and equality are loops
+form that names one.
+
+**Owning a tree you already hold is `into_local()`, not `clone()`.**
+`is_local()` answers whether every container in it, map keys included,
+records `Alloc::rust()`; it allocates nothing for a tree up to 16
+containers deep. `into_local()` hands such a tree back unchanged, the
+same storage, and otherwise copies it into `Alloc::rust()` and frees the
+original through the allocators it recorded (panicking where `clone`
+would). `into_alloc(alloc)` is the same rule for a named allocator and
+reports a refusal as `clone_in` does, the original freed either way. On
+`Value`, `Map`, `List`, `Text` and `Buffer`. Both copying and equality are loops
 over a heap stack, so they work at **any depth** and a value is always
 equal to itself. `Send` and `Sync` rest on the allocator contract below:
 an `Allocator` may be called from any thread.
@@ -439,6 +455,12 @@ Connection::schema_in(alloc) -> Result<Value, ValueError>
 
 A hand-written `ToValue` implements `to_value_in`; a hand-written
 `Schema` implements `kind(alloc)`, and both short forms are provided.
+
+`Value` implements `ToValue` (a deep copy into the target allocator) and
+`FromValue` (a copy in `Alloc::rust()`, as `clone` makes one; content
+this build refuses is `MapError::BadValue`), so a `ToValue`/`FromValue`
+field may be a `Value`, `Option<Value>`, `Vec<Value>` or
+`BTreeMap<String, Value>`. `Schema` has no impl for `Value`.
 
 `#[map(rename = "...")]`, `#[map(skip)]`, `#[map(default)]` or
 `#[map(default = <expr>)]` (an absent key reads as it, the field is not

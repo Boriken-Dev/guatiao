@@ -409,6 +409,10 @@ impl Clone for List {
     }
 }
 
+super::where_it_lives!(List, crate::value::walk::list_recorded_by, |_: &List| {
+    core::alloc::Layout::new::<Value>()
+});
+
 impl PartialEq for List {
     /// Element by element, each by [`Value`]'s own comparison.
     fn eq(&self, other: &List) -> bool {

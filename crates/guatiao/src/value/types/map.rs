@@ -713,6 +713,10 @@ impl Clone for Map {
     }
 }
 
+super::where_it_lives!(Map, crate::value::walk::map_recorded_by, |_: &Map| {
+    core::alloc::Layout::new::<Entry>()
+});
+
 impl PartialEq for Map {
     /// Pairwise, in order, each value by [`Value`]'s own comparison.
     /// **Order is significant**: two maps with the same pairs in a

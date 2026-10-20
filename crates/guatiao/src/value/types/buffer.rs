@@ -123,6 +123,12 @@ impl Clone for Buffer {
     }
 }
 
+super::where_it_lives!(
+    Buffer,
+    crate::value::walk::buffer_recorded_by,
+    |buffer: &Buffer| bytes_layout(buffer.len)
+);
+
 impl PartialEq for Buffer {
     fn eq(&self, other: &Buffer) -> bool {
         **self == **other

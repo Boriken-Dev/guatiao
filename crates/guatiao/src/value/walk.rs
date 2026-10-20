@@ -166,23 +166,105 @@ pub(crate) fn copy_map(map: &Map, alloc: Alloc) -> Result<Map, ValueError> {
 /// `alloc`: nothing in it needs another allocator to grow or be freed. A
 /// container recording none, or a tag this build does not know, answers
 /// `false`. Each container is judged before its children are visited, so
-/// a tree that is not homed is told at its first container, with nothing
-/// allocated.
+/// a tree that is not homed is told at its first container.
+///
+/// Allocates nothing for a tree up to [`SHALLOW`] containers deep, judged
+/// on the thread's stack; a deeper one is judged again over a heap stack,
+/// so any depth is answered and none can overflow the thread.
 pub(crate) fn recorded_by(node: &Value, alloc: *const crate::value::alloc::Allocator) -> bool {
-    let mut stack = Vec::new();
-    homed(node, alloc, &mut stack) && drain(stack, alloc)
+    shallow(node, alloc, SHALLOW).unwrap_or_else(|| {
+        let mut stack = Vec::new();
+        homed(node, alloc, &mut stack) && drain(stack, alloc)
+    })
 }
 
 /// [`recorded_by`] for a map.
 pub(crate) fn map_recorded_by(map: &Map, alloc: *const crate::value::alloc::Allocator) -> bool {
-    let mut stack = Vec::new();
-    map_homed(map, alloc, &mut stack) && drain(stack, alloc)
+    shallow_map(map, alloc, SHALLOW).unwrap_or_else(|| {
+        let mut stack = Vec::new();
+        map_homed(map, alloc, &mut stack) && drain(stack, alloc)
+    })
 }
 
 /// [`recorded_by`] for a list.
 pub(crate) fn list_recorded_by(list: &List, alloc: *const crate::value::alloc::Allocator) -> bool {
-    let mut stack = Vec::new();
-    list_homed(list, alloc, &mut stack) && drain(stack, alloc)
+    shallow_list(list, alloc, SHALLOW).unwrap_or_else(|| {
+        let mut stack = Vec::new();
+        list_homed(list, alloc, &mut stack) && drain(stack, alloc)
+    })
+}
+
+/// How many containers deep a tree is judged by recursion: deeper than a
+/// configuration nests, and few enough frames to cost nothing.
+const SHALLOW: usize = 16;
+
+/// [`recorded_by`] by recursion no more than `depth` containers deep, or
+/// `None` for a tree deeper than that.
+fn shallow(
+    node: &Value,
+    alloc: *const crate::value::alloc::Allocator,
+    depth: usize,
+) -> Option<bool> {
+    match node.tag() {
+        Ok(Tag::GUATIAO_MAP) => match text::<Map>(node) {
+            Ok(map) => shallow_map(map, alloc, depth),
+            Err(_) => Some(false),
+        },
+        Ok(Tag::GUATIAO_LIST) => match arm::<List>(node) {
+            Ok(list) => shallow_list(list, alloc, depth),
+            Err(_) => Some(false),
+        },
+        // A leaf leaves nothing on the stack, and an empty one allocates
+        // nothing.
+        _ => Some(homed(node, alloc, &mut Vec::new())),
+    }
+}
+
+fn shallow_map(
+    map: &Map,
+    alloc: *const crate::value::alloc::Allocator,
+    depth: usize,
+) -> Option<bool> {
+    if !is_recorded(map.alloc, alloc) {
+        return Some(false);
+    }
+    let below = depth.checked_sub(1)?;
+    for entry in map.iter() {
+        if !is_recorded(entry.key.alloc, alloc) || !shallow(&entry.value, alloc, below)? {
+            return Some(false);
+        }
+    }
+    Some(true)
+}
+
+fn shallow_list(
+    list: &List,
+    alloc: *const crate::value::alloc::Allocator,
+    depth: usize,
+) -> Option<bool> {
+    if !is_recorded(list.alloc, alloc) {
+        return Some(false);
+    }
+    let below = depth.checked_sub(1)?;
+    for item in list.iter() {
+        if !shallow(item, alloc, below)? {
+            return Some(false);
+        }
+    }
+    Some(true)
+}
+
+/// [`recorded_by`] for a text.
+pub(crate) fn text_recorded_by(text: &Text, alloc: *const crate::value::alloc::Allocator) -> bool {
+    is_recorded(text.alloc, alloc)
+}
+
+/// [`recorded_by`] for a buffer.
+pub(crate) fn buffer_recorded_by(
+    buffer: &Buffer,
+    alloc: *const crate::value::alloc::Allocator,
+) -> bool {
+    is_recorded(buffer.alloc, alloc)
 }
 
 /// Whether a container recorded `alloc` itself: the addresses compared,
