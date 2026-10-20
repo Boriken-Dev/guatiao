@@ -1152,6 +1152,12 @@ typedef struct guatiao_entries {
  is a tree the caller hands over with the call: the slot owns it from
  then on, whatever it answers, and the caller never frees it. It lives
  in the caller's allocators, which outlive what is built through them.
+
+ **Unless the slot's comment says it is lent.** Then it is the caller's
+ tree for the call only (a Rust `&mut Map`, `&mut List` or `&mut
+ Value`): read it, change it, grow it, never free it or keep the
+ pointer. Build what goes into it through the allocator it records; a
+ Rust caller moves anything built elsewhere there once the call returns.
  */
 typedef struct guatiao_kind_header {
   /*

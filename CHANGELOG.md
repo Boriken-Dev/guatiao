@@ -28,6 +28,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `const`), the caller forgets it and the callee owns it on every path,
   so nothing is copied. A `Text` or `Buffer` by value stays refused, with
   a message naming `&str`/`&[u8]`.
+- **A kind method may take `&mut Map`, `&mut List` or `&mut Value`**:
+  the caller's tree, lent for the call, which the callee may change and
+  grow in place (`fn check(&self, config: &mut Map) -> Result<bool,
+  ProviderError>`). It crosses as `guatiao_map *` (or `guatiao_list *`,
+  `guatiao_value *`) to the caller's own node, marked in the C header as
+  lent rather than handed over, and hashes apart from `&Map` and `Map`.
+  Once the call returns, answered or refused, the proxy moves whatever
+  the callee built in another allocator into the one the tree records
+  (`make_local_in`), so nothing in the caller's tree needs the library's
+  allocator; a callee that builds with the tree's own allocator causes
+  no copy. `Option<&mut T>` is refused with a message.
 - **`FromValue for Value`**, a copy in this binary's allocator. A
   `ToValue`/`FromValue` field may be a `Value`, `Option<Value>`,
   `Vec<Value>` or `BTreeMap<String, Value>`.

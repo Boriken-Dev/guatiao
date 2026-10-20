@@ -1383,8 +1383,9 @@ drop(s);                                                             // the libr
 - **What may cross.** Receiver `&self`; the trait names `Send + Sync`.
   Arguments: integers, floats, `bool`, `&str`, `&[u8]`, `&Value`,
   `Option<&Value>`, `&Map`, `Value`, `Map` and `List` by value (handed
-  over: a move, nothing copied), `Object<dyn K>` (handed over), `&mut
-  dyn K` and `&dyn K` (lent), any other type by value through `ToValue`.
+  over: a move, nothing copied), `&mut Value`, `&mut Map` and `&mut
+  List` (lent: see below), `Object<dyn K>` (handed over), `&mut dyn K`
+  and `&dyn K` (lent), any other type by value through `ToValue`.
   Returns: `()`, the scalars, `Value`, `Map`, `List`, `String`, any other
   type through `FromValue`; each optionally in `Result<_, ProviderError>`.
   A method that converts must return `Result`. Refused by name: generics,
@@ -1393,6 +1394,26 @@ drop(s);                                                             // the libr
   named `<m>_in` beside a method `<m>` answering a `Value`, `Map` or
   `List` (the attribute adds that one; its allocator parameter is
   `alloc`, or `alloc_` when an argument already has the name).
+- **A tree lent mutably** (`&mut Map`, `&mut List`, `&mut Value`)
+  crosses as `*mut Map`/`*mut List`/`*mut Value` to the caller's own
+  node, for the call only: the callee reads, changes, inserts, removes
+  and grows it, and never frees it or keeps the pointer. The shim refuses
+  a null tree, and a map whose keys are not UTF-8, before the method
+  runs. Before the call the proxy reads the allocator the tree records
+  (`Alloc::rust()` for one that records none); after it, answered or
+  refused, it calls `make_local_in` with it, so nothing in the caller's
+  tree needs the callee's allocator. A key a foreign slot wrote that is
+  not UTF-8 is removed and freed, and the call answers
+  `GUATIAO_ERR_BAD_VALUE` (a panic for an infallible method), its own
+  error winning when it refused. **The fast path**: build what goes in
+  with the tree's allocator (`let alloc = config.alloc()?;` then
+  `set_in`, `Text::new_in`, `to_value_in(alloc)`), and the walk after the
+  call finds nothing to move and allocates nothing. `Option<&mut T>` is
+  refused (lend `&mut Value`, which can hold null). In C the slot's
+  comment says "Lent for the call, not handed over", because a lent and
+  a handed-over tree are the same pointer type. A C caller lending a map
+  gets back whatever the callee built; a Rust callee that follows the
+  fast path builds in the map's allocator.
 - **Versioning.** Slots follow declaration order; a defaulted method is an
   appended slot an older table may lack (the proxy runs the default). The
   table header `KindHeader { struct_size, floor_hash }` carries FNV-1a

@@ -113,6 +113,107 @@ pub unsafe fn map_owned(m: *mut Map) -> Result<Map, Status> {
     Ok(map)
 }
 
+/// A `&mut Value` argument: the caller's node, lent for the call, refusing
+/// null. Its content is checked by its own doors, as a `&Value`'s is.
+///
+/// # Safety
+///
+/// `v` is null or addresses a well-formed value nothing else reaches until
+/// the call returns.
+#[doc(hidden)]
+pub unsafe fn value_mut_arg<'a>(v: *mut Value) -> Result<&'a mut Value, Status> {
+    // SAFETY: the caller's contract.
+    unsafe { v.as_mut() }.ok_or(Status::GUATIAO_ERR_NULL)
+}
+
+/// A `&mut List` argument, as [`value_mut_arg`].
+///
+/// # Safety
+///
+/// As [`value_mut_arg`], for a list.
+#[doc(hidden)]
+pub unsafe fn list_mut_arg<'a>(l: *mut List) -> Result<&'a mut List, Status> {
+    // SAFETY: the caller's contract.
+    unsafe { l.as_mut() }.ok_or(Status::GUATIAO_ERR_NULL)
+}
+
+/// A `&mut Map` argument, as [`value_mut_arg`], its keys checked as
+/// [`map_arg`] checks them.
+///
+/// # Safety
+///
+/// As [`value_mut_arg`], for a map.
+#[doc(hidden)]
+pub unsafe fn map_mut_arg<'a>(m: *mut Map) -> Result<&'a mut Map, Status> {
+    // SAFETY: the caller's contract.
+    let map = unsafe { m.as_mut() }.ok_or(Status::GUATIAO_ERR_NULL)?;
+    if !map.keys_are_text() {
+        return Err(Status::from(crate::value::error::ValueError::NotUtf8));
+    }
+    Ok(map)
+}
+
+/// A tree a kind method takes as `&mut`: [`Value`], [`Map`] or [`List`].
+#[doc(hidden)]
+pub trait LentTree {
+    /// The allocator the tree records, or this side's own for one that
+    /// records none.
+    fn home(&self) -> Alloc;
+    /// Moves every part of the tree another allocator made into `home`.
+    fn settle(&mut self, home: Alloc) -> Result<(), ProviderError>;
+}
+
+impl LentTree for Value {
+    fn home(&self) -> Alloc {
+        self.alloc().unwrap_or_else(|_| Alloc::rust())
+    }
+    fn settle(&mut self, home: Alloc) -> Result<(), ProviderError> {
+        Ok(self.make_local_in(home)?)
+    }
+}
+
+impl LentTree for List {
+    fn home(&self) -> Alloc {
+        self.alloc().unwrap_or_else(|_| Alloc::rust())
+    }
+    fn settle(&mut self, home: Alloc) -> Result<(), ProviderError> {
+        Ok(self.make_local_in(home)?)
+    }
+}
+
+/// A map's keys are read without a door, so a key the callee wrote that is
+/// not UTF-8 is removed, freed, and reported.
+impl LentTree for Map {
+    fn home(&self) -> Alloc {
+        self.alloc().unwrap_or_else(|_| Alloc::rust())
+    }
+    fn settle(&mut self, home: Alloc) -> Result<(), ProviderError> {
+        let moved = self.make_local_in(home);
+        if self.drop_keys_not_text() > 0 {
+            return Err(ProviderError::new(
+                Status::GUATIAO_ERR_BAD_VALUE,
+                "the provider wrote a key that is not UTF-8 into the map it was lent; the entry was removed",
+            ));
+        }
+        Ok(moved?)
+    }
+}
+
+/// What a proxy reads before lending `tree`: where the parts a callee adds
+/// are moved once the call returns.
+#[doc(hidden)]
+pub fn lent_home<T: LentTree + ?Sized>(tree: &T) -> Alloc {
+    tree.home()
+}
+
+/// What a proxy runs on a lent tree once the call returns, answered or
+/// refused: every part another allocator made is moved into `home` and
+/// freed through its own, while the library that made it is still leased.
+#[doc(hidden)]
+pub fn lent_settle<T: LentTree + ?Sized>(tree: &mut T, home: Alloc) -> Result<(), ProviderError> {
+    tree.settle(home)
+}
+
 /// Writes a result through an out-pointer, refusing null. The previous
 /// contents are the caller's to have dealt with.
 ///

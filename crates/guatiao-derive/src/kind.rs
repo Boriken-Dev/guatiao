@@ -31,8 +31,12 @@
 //! A method takes `&self` and the trait names `Send + Sync`. Arguments:
 //! integers, floats, `bool`, `&str`, `&[u8]`, `&Value`, `Option<&Value>`,
 //! `&Map`; `Value`, `Map` and `List` by value, which cross as a move (a
-//! pointer to the caller's node, which the callee then owns); and any
-//! other type by value, which crosses as a value through `ToValue`. Returns: `()`, the scalars, `Value`, `Map`, `List`, `String`,
+//! pointer to the caller's node, which the callee then owns); `&mut
+//! Value`, `&mut Map` and `&mut List`, lent for the call (a pointer to the
+//! caller's node, which the callee may change and grow; once it returns,
+//! the proxy moves whatever the callee built in another allocator into the
+//! one the tree records); and any other type by value, which crosses as a
+//! value through `ToValue`. Returns: `()`, the scalars, `Value`, `Map`, `List`, `String`,
 //! and any other type through `FromValue` — each optionally inside
 //! `Result<_, ProviderError>`. A method converting through `ToValue` or
 //! `FromValue` must return a `Result`, because the conversion can fail.
@@ -252,6 +256,13 @@ enum ArgKind {
     MapOwned,
     /// `List` by value, as [`ArgKind::ValueOwned`].
     ListOwned,
+    /// `&mut Value`: a pointer to the caller's node, lent for the call.
+    /// The callee may change and grow it, never free it or keep it.
+    ValueMut,
+    /// `&mut Map`, as [`ArgKind::ValueMut`].
+    MapMut,
+    /// `&mut List`, as [`ArgKind::ValueMut`].
+    ListMut,
     /// Any other type by value, built into a value with `ToValue` and
     /// read back with `FromValue`.
     Owned(Type),
@@ -362,6 +373,13 @@ fn plan_methods(tr: &ItemTrait, object: bool, roots: Roots<'_>) -> syn::Result<V
         }
     }
     Ok(plans)
+}
+
+impl ArgKind {
+    /// `&mut Value`, `&mut Map` or `&mut List`: the caller's tree, lent.
+    fn is_lent_tree(&self) -> bool {
+        matches!(self, ArgKind::ValueMut | ArgKind::MapMut | ArgKind::ListMut)
+    }
 }
 
 impl MethodPlan {
@@ -668,13 +686,27 @@ fn arg_kind(ty: &Type, object: bool, roots: Roots<'_>) -> syn::Result<ArgKind> {
             Ok(ArgKind::BytesMut)
         }
         Type::Reference(TypeReference {
+            mutability: Some(_),
+            elem,
+            ..
+        }) if matches!(&**elem, Type::Path(_))
+            && matches!(special(elem, roots)?, Some("Value" | "Map" | "List")) =>
+        {
+            Ok(match special(elem, roots)? {
+                Some("Value") => ArgKind::ValueMut,
+                Some("Map") => ArgKind::MapMut,
+                _ => ArgKind::ListMut,
+            })
+        }
+        Type::Reference(TypeReference {
             mutability: Some(m),
             ..
         }) => Err(syn::Error::new_spanned(
             m,
-            "a `&mut` argument cannot cross: the callee would write into memory the caller \
-             still describes; the one exception is `&mut [u8]` on an object kind, which crosses \
-             as an out-buffer",
+            "a `&mut` argument of this type cannot cross: the callee would write into memory the \
+             caller still describes. `&mut Map`, `&mut List` and `&mut Value` are lent for the \
+             call, as trees the callee may change and grow; and `&mut [u8]` crosses as an \
+             out-buffer, on an object kind only",
         )),
         Type::Reference(TypeReference { elem, .. }) => match &**elem {
             Type::Path(_) if last_ident(elem).is_some_and(|i| i == "str") => Ok(ArgKind::Str),
@@ -699,6 +731,17 @@ fn arg_kind(ty: &Type, object: bool, roots: Roots<'_>) -> syn::Result<ArgKind> {
             let last = p.path.segments.last().expect("a path has a segment");
             if is_scalar(&last.ident) && last.arguments.is_none() {
                 return Ok(ArgKind::Scalar(ty.clone()));
+            }
+            if special_by_value(ty, roots) == Some("Option")
+                && let PathArguments::AngleBracketed(a) = &last.arguments
+                && let Some(GenericArgument::Type(Type::Reference(r))) = a.args.first()
+                && r.mutability.is_some()
+            {
+                return Err(syn::Error::new_spanned(
+                    ty,
+                    "an `Option<&mut T>` argument cannot cross: lend `&mut Value`, which can hold \
+                     null, or an empty `&mut Map` or `&mut List`",
+                ));
             }
             if special_by_value(ty, roots) == Some("Option")
                 && let PathArguments::AngleBracketed(a) = &last.arguments
@@ -904,10 +947,25 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
     });
     let destroy_required = object.then(|| quote! { ("destroy", #table::destroy_end()), });
 
+    // A slot lending a tree says which argument, so a C reader can tell it
+    // from one handed over: both are a pointer without `const`.
     let slot_fields = methods.iter().map(|m| {
         let ident = &m.ident;
         let ty = slot_type(m);
-        quote! { pub #ident: ::core::option::Option<#ty>, }
+        let lent: Vec<String> = m
+            .args
+            .iter()
+            .filter(|a| a.kind.is_lent_tree())
+            .map(|a| format!("`{}`", c_param(&a.ident)))
+            .collect();
+        let doc = (!lent.is_empty()).then(|| {
+            let line = format!(" Lent for the call, not handed over: {}.", lent.join(", "));
+            quote! { #[doc = #line] }
+        });
+        quote! {
+            #doc
+            pub #ident: ::core::option::Option<#ty>,
+        }
     });
     let slot_inits = methods.iter().map(|m| {
         let ident = &m.ident;
@@ -1132,7 +1190,11 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             }
         });
 
-    // What a C provider of a table taking a tree by value needs to know.
+    // What a C provider of a table taking a tree by value, or lent, needs
+    // to know.
+    let lends = methods
+        .iter()
+        .any(|m| m.args.iter().any(|a| a.kind.is_lent_tree()));
     let moved_doc = methods
         .iter()
         .any(|m| {
@@ -1144,15 +1206,39 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             })
         })
         .then(|| {
-            quote! {
-                ///
-                /// A `guatiao_value *`, `guatiao_map *` or `guatiao_list *`
-                /// argument that is not `const` is a tree the caller hands
-                /// over with the call: the slot owns it from then on, on
-                /// every path, and frees or keeps it; the caller never frees
-                /// it. It lives in the caller's allocators.
+            if lends {
+                quote! {
+                    ///
+                    /// A `guatiao_value *`, `guatiao_map *` or `guatiao_list *`
+                    /// argument that is not `const`, and that its slot's comment
+                    /// does not call lent, is a tree the caller hands over with
+                    /// the call: the slot owns it from then on, on every path,
+                    /// and frees or keeps it; the caller never frees it. It lives
+                    /// in the caller's allocators.
+                }
+            } else {
+                quote! {
+                    ///
+                    /// A `guatiao_value *`, `guatiao_map *` or `guatiao_list *`
+                    /// argument that is not `const` is a tree the caller hands
+                    /// over with the call: the slot owns it from then on, on
+                    /// every path, and frees or keeps it; the caller never frees
+                    /// it. It lives in the caller's allocators.
+                }
             }
         });
+    let lent_doc = lends.then(|| {
+        quote! {
+            ///
+            /// A `guatiao_value *`, `guatiao_map *` or `guatiao_list *`
+            /// argument its slot's comment calls lent is the caller's tree,
+            /// for the call only: read it, change it, grow it, but never free
+            /// it or keep the pointer. Build what goes into it through the
+            /// allocator it records (`alloc`, the map arm's for a value); a
+            /// Rust caller moves anything built elsewhere there once the call
+            /// returns.
+        }
+    });
 
     // The trait, with `into_object` appended for an object kind: the way
     // an implementation becomes a handle. `where Self: Sized` keeps it off
@@ -1222,6 +1308,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
         /// in declaration order.
         #carrier_doc
         #moved_doc
+        #lent_doc
         #[repr(C)]
         #[doc(hidden)]
         #[allow(non_snake_case)]
@@ -1365,9 +1452,9 @@ fn arg_c_type(kind: &ArgKind) -> TokenStream {
             quote!(*const ::guatiao::Value)
         }
         ArgKind::MapRef => quote!(*const ::guatiao::Map),
-        ArgKind::ValueOwned => quote!(*mut ::guatiao::Value),
-        ArgKind::MapOwned => quote!(*mut ::guatiao::Map),
-        ArgKind::ListOwned => quote!(*mut ::guatiao::List),
+        ArgKind::ValueOwned | ArgKind::ValueMut => quote!(*mut ::guatiao::Value),
+        ArgKind::MapOwned | ArgKind::MapMut => quote!(*mut ::guatiao::Map),
+        ArgKind::ListOwned | ArgKind::ListMut => quote!(*mut ::guatiao::List),
         ArgKind::BytesMut => quote!(::guatiao::library::BytesMut),
         ArgKind::Object(_) => quote!(::guatiao::library::ObjectRaw),
         ArgKind::BorrowMut(_) | ArgKind::Borrow(_) => {
@@ -1565,6 +1652,22 @@ fn emit_shim(
                 quote! {
                     // SAFETY: the proxy passes a well-formed map.
                     let #ident = match unsafe { ::guatiao::library::kind::map_arg(#ident) } {
+                        ::core::result::Result::Ok(__v) => __v,
+                        ::core::result::Result::Err(__s) => { #f }
+                    };
+                }
+            }
+            ArgKind::ValueMut | ArgKind::MapMut | ArgKind::ListMut => {
+                let f = fail(quote!(__s));
+                let read = match &a.kind {
+                    ArgKind::ValueMut => quote!(value_mut_arg),
+                    ArgKind::MapMut => quote!(map_mut_arg),
+                    _ => quote!(list_mut_arg),
+                };
+                quote! {
+                    // SAFETY: the proxy lends a well-formed tree for the call,
+                    // reached through nothing else until it returns.
+                    let #ident = match unsafe { ::guatiao::library::kind::#read(#ident) } {
                         ::core::result::Result::Ok(__v) => __v,
                         ::core::result::Result::Err(__s) => { #f }
                     };
@@ -1902,6 +2005,20 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
                     let #name = &mut *#held as *mut #ty;
                 }
             }
+            // Lent for the call: the allocator it records now is where
+            // whatever the callee adds is moved once it returns.
+            ArgKind::ValueMut | ArgKind::MapMut | ArgKind::ListMut => {
+                let home = format_ident!("__home_{}", ident);
+                let ty = match &a.kind {
+                    ArgKind::ValueMut => quote!(::guatiao::Value),
+                    ArgKind::MapMut => quote!(::guatiao::Map),
+                    _ => quote!(::guatiao::List),
+                };
+                quote! {
+                    let #home = ::guatiao::library::kind::lent_home(&*#ident);
+                    let #name = &mut *#ident as *mut #ty;
+                }
+            }
             ArgKind::ValueOpt => quote! {
                 let #name = #ident.map_or(::core::ptr::null(), |__v| __v as *const ::guatiao::Value);
             },
@@ -2067,6 +2184,29 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
         matches!(m.ret, RetKind::Owned(_))
             .then(|| quote! { let __alloc = ::guatiao::Alloc::rust(); })
     };
+    // A tree lent mutably is settled after the call, OK or not: whatever
+    // the callee put into it is moved into the allocator it recorded, so
+    // nothing in it needs the callee's. A refused call's own error wins.
+    let lent: Vec<&ArgPlan> = m.args.iter().filter(|a| a.kind.is_lent_tree()).collect();
+    let settle = (!lent.is_empty()).then(|| {
+        let settles = lent.iter().map(|a| {
+            let ident = &a.ident;
+            let home = format_ident!("__home_{}", ident);
+            quote! { .and(::guatiao::library::kind::lent_settle(&mut *#ident, #home)) }
+        });
+        quote! {
+            let __settled: ::core::result::Result<(), ::guatiao::library::ProviderError> =
+                ::core::result::Result::Ok(()) #(#settles)*;
+        }
+    });
+    let settled = (!lent.is_empty()).then(|| {
+        let f = fail(quote!(__e));
+        quote! {
+            if let ::core::result::Result::Err(__e) = __settled {
+                #f
+            }
+        }
+    });
     let call = quote! {
         #(#marshals)*
         #out_init
@@ -2074,7 +2214,9 @@ fn emit_proxy(table: &Ident, m: &MethodPlan) -> TokenStream {
         // SAFETY: the slot's own signature, read under the table's size;
         // every pointer is a live local or a borrowed argument.
         let __status = unsafe { __f(self.ctx() #(, #arg_names)* #out_arg #err_arg) };
+        #settle
         #on_status
+        #settled
         #answer
     };
 
@@ -2577,7 +2719,8 @@ mod tests {
         // Every way an argument and a return can cross.
         const EVERYTHING: &str = "pub trait Greeter: Send + Sync { \
             fn a(&self, s: &str, b: &[u8], v: &Value, o: Option<&Value>, m: &Map, n: i64, \
-                c: Config, t: Value, u: Map, w: List) -> Result<Map, ProviderError>; \
+                c: Config, t: Value, u: Map, w: List, x: &mut Map, y: &mut List, \
+                z: &mut Value) -> Result<Map, ProviderError>; \
             fn b(&self) -> Result<List, ProviderError>; \
             fn c(&self) -> Result<Value, ProviderError>; \
             fn d(&self) -> Result<Reply, ProviderError>; \
@@ -2654,6 +2797,68 @@ mod tests {
             }
         "#;
         matches_snapshot("moves", MOVES, include_str!("snapshots/moves.expected.rs"));
+    }
+
+    /// Trees lent mutably: the shim borrows the caller's node, the proxy
+    /// reads where the tree lives before the call and moves whatever the
+    /// callee built elsewhere there after it.
+    #[test]
+    fn a_lent_tree_expands_to_its_snapshot() {
+        const LENDS: &str = r#"
+            pub trait Lends: Send + Sync {
+                fn check(&self, config: &mut Map) -> Result<bool, ProviderError>;
+                fn fill(&self, v: &mut Value, l: &mut List, name: &str) -> i64;
+            }
+        "#;
+        matches_snapshot("lends", LENDS, include_str!("snapshots/lends.expected.rs"));
+    }
+
+    #[test]
+    fn a_lent_tree_crosses_as_a_pointer_without_const_and_hashes_apart() {
+        let out = expand_str(
+            "",
+            "pub trait G: Send + Sync { fn check(&self, config: &mut Map) -> Result<bool, ProviderError>; }",
+        )
+        .expect("expands");
+        assert!(out.contains("config : * mut :: guatiao :: Map"), "{out}");
+        assert!(out.contains("map_mut_arg (config)"), "{out}");
+        assert!(out.contains("lent_home (& * config)"), "{out}");
+        assert!(
+            out.contains("lent_settle (& mut * config , __home_config)"),
+            "{out}"
+        );
+        // The slot says so, for a C reader: a handed-over tree is the
+        // same pointer type.
+        assert!(
+            out.contains("Lent for the call, not handed over: `config`."),
+            "{out}"
+        );
+        let hash = |ty: &str| {
+            floor_hash(
+                "",
+                &format!(
+                    "pub trait G: Send + Sync {{ fn check(&self, config: {ty}) -> Result<bool, ProviderError>; }}"
+                ),
+            )
+        };
+        assert_eq!(
+            hash("&mut Map"),
+            fnv1a("provider;check(&mutMap)->Result<bool,ProviderError>")
+        );
+        assert_eq!(hash("&mut ::guatiao::Map"), hash("&mut Map"));
+        assert_ne!(hash("&mut Map"), hash("&Map"));
+        assert_ne!(hash("&mut Map"), hash("Map"));
+        // On an object kind too: the borrow is of the argument, not of
+        // `self`, and the lent tables carry it.
+        let out = expand_str(
+            "object",
+            "pub trait S: Send { fn fill(&mut self, v: &mut Value) -> i64; }",
+        )
+        .expect("expands");
+        assert!(
+            shim_body(&out, "__guatiao_lentmut__fill").contains("value_mut_arg (v)"),
+            "{out}"
+        );
     }
 
     #[test]
@@ -2876,8 +3081,28 @@ mod tests {
             ),
             (
                 "",
-                "pub trait G: Send + Sync { fn f(&self, x: &mut Value) -> i64; }",
-                "a `&mut` argument cannot cross",
+                "pub trait G: Send + Sync { fn f(&self, x: &mut String) -> i64; }",
+                "a `&mut` argument of this type cannot cross",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, x: &mut Text) -> i64; }",
+                "`&mut Map`, `&mut List` and `&mut Value` are lent for the call",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, x: Option<&mut Map>) -> i64; }",
+                "an `Option<&mut T>` argument cannot cross",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, x: Option<&mut Value>) -> i64; }",
+                "lend `&mut Value`, which can hold null",
+            ),
+            (
+                "",
+                "pub trait G: Send + Sync { fn f(&self, m: &mut foreign::Map) -> i64; }",
+                "this type ends in `Map`",
             ),
             (
                 "",
@@ -2917,7 +3142,7 @@ mod tests {
             (
                 "",
                 "pub trait G: Send + Sync { fn f(&self, dst: &mut [u8]) -> i64; }",
-                "the one exception is `&mut [u8]` on an object kind",
+                "`&mut [u8]` crosses as an out-buffer, on an object kind only",
             ),
             (
                 "",
@@ -2937,7 +3162,7 @@ mod tests {
             (
                 "object",
                 "pub trait G: Send { fn f(&mut self, dst: &mut Vec<u8>) -> i64; }",
-                "a `&mut` argument cannot cross",
+                "a `&mut` argument of this type cannot cross",
             ),
             (
                 "object",
