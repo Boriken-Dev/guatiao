@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`FromValue for Value`**, a copy in this binary's allocator. A
   `ToValue`/`FromValue` field may be a `Value`, `Option<Value>`,
   `Vec<Value>` or `BTreeMap<String, Value>`.
+- **A guide to passing data**: the docs site's "Passing data" page and a
+  section of the crate's shipped `AGENTS.md`, on returning trees by value
+  and taking them by value when kept, building an answer in the
+  allocator a call carries (`<method>_in`), moving rather than copying,
+  every way to a tree you own and when it copies, and the C conventions.
 
 ### Changed
 
