@@ -208,6 +208,35 @@ pub(crate) unsafe fn reserve<C: Container>(
     Ok(())
 }
 
+/// Moves a container's elements into a block from `alloc`, exactly `len`
+/// long, and frees the old block through the allocator that made it. The
+/// elements move bitwise, so whatever they own stays theirs. An empty
+/// container allocates nothing and records `alloc`. **On failure nothing
+/// changed.**
+///
+/// # Safety
+///
+/// As [`reserve`].
+pub(crate) unsafe fn move_buffer<C: Container>(c: &mut C, alloc: Alloc) -> Result<(), AllocError> {
+    let (ptr, len, _cap, _stored) = c.parts();
+    if len == 0 {
+        // SAFETY: the caller's contract; there are no elements to read.
+        unsafe { release_buffer(c) };
+        c.set_parts(dangling::<C::Elem>(), 0, 0, alloc.as_raw());
+        return Ok(());
+    }
+    let size = array_size::<C::Elem>(len)?;
+    let new_ptr = alloc.alloc(size, align_of::<C::Elem>())?.cast::<C::Elem>();
+    // SAFETY: the first `len` elements are initialised, the new block has
+    // room for them and was just allocated, so the two cannot overlap.
+    unsafe { ptr::copy_nonoverlapping(ptr, new_ptr, len) };
+    // SAFETY: the elements now live in `new_ptr`; only the old block is
+    // released, never read again.
+    unsafe { release_buffer(c) };
+    c.set_parts(new_ptr, len, len, alloc.as_raw());
+    Ok(())
+}
+
 /// Releases a container's buffer and leaves it empty. Does **not** touch
 /// the elements: only the caller knows whether they own anything.
 ///

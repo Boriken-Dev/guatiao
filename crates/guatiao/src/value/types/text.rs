@@ -11,7 +11,7 @@ use core::mem::ManuallyDrop;
 
 use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::error::ValueError;
-use crate::value::raw::{overlaps, release_buffer, reserve};
+use crate::value::raw::{move_buffer, overlaps, release_buffer, reserve};
 
 use super::{Payload, Tag, Value, bytes_layout, cloned, only_alloc, or_abort, short_form_alloc};
 
@@ -250,6 +250,12 @@ impl Text {
         })
     }
 
+    /// Moves the storage into a block from `alloc`, freeing the old one
+    /// through its own allocator. On failure nothing changed.
+    pub(crate) fn rehome(&mut self, alloc: Alloc) -> Result<(), AllocError> {
+        // SAFETY: this container describes its own storage.
+        unsafe { move_buffer(self, alloc) }
+    }
     /// Frees the storage and leaves this empty. Idempotent: `cap == 0`
     /// afterwards, which frees nothing.
     pub(crate) fn release(&mut self) {
@@ -411,9 +417,12 @@ impl Clone for Text {
     }
 }
 
-super::where_it_lives!(Text, crate::value::walk::text_recorded_by, |text: &Text| {
-    bytes_layout(text.len)
-});
+super::where_it_lives!(
+    Text,
+    crate::value::walk::text_recorded_by,
+    crate::value::walk::settle_text,
+    |text: &Text| { bytes_layout(text.len) }
+);
 
 impl AsRef<[u8]> for Text {
     fn as_ref(&self) -> &[u8] {

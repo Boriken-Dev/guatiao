@@ -104,12 +104,13 @@ pub(crate) fn cloned<T>(copy: Result<T, ValueError>, layout: Layout) -> T {
     }
 }
 
-/// `is_local`, `into_local` and `into_alloc` on an owned container or a
-/// node. `$homed(&self, alloc)` answers whether everything it owns
-/// records `alloc`, without allocating; `$layout(&self)` is what an
-/// aborted local copy reports.
+/// `is_local`, `into_local`, `into_alloc` and `make_local_in` on an owned
+/// container or a node. `$homed(&self, alloc)` answers whether everything
+/// it owns records `alloc`, without allocating; `$settle(&mut self,
+/// alloc)` moves what does not; `$layout(&self)` is what an aborted local
+/// copy reports.
 macro_rules! where_it_lives {
-    ($ty:ty, $homed:path, $layout:expr) => {
+    ($ty:ty, $homed:path, $settle:path, $layout:expr) => {
         impl $ty {
             /// Whether everything this owns, map keys included, records
             /// this binary's allocator ([`Alloc::rust`]): what
@@ -153,6 +154,29 @@ macro_rules! where_it_lives {
                     return Ok(self);
                 }
                 self.clone_in(alloc)
+            }
+
+            /// Moves this tree into `alloc` where it stands: every block
+            /// another allocator made, a container's array or a key's or
+            /// a leaf's bytes, is moved into one from `alloc` and the old
+            /// one freed through the allocator that made it. Nothing is
+            /// copied twice and nothing is read as content, so a tree a
+            /// foreign producer wrote moves as it is. Allocates nothing
+            /// when everything already records `alloc`.
+            ///
+            /// Where [`into_alloc`](Self::into_alloc) takes the tree, this
+            /// works through `&mut`: on a tree you were lent, or one a
+            /// callee may have grown with parts of its own.
+            ///
+            /// # Errors
+            ///
+            /// `alloc` refusing. The tree is then whole, every block
+            /// either moved or where it was.
+            pub fn make_local_in(&mut self, alloc: Alloc) -> Result<(), ValueError> {
+                if $homed(self, alloc.as_raw()) {
+                    return Ok(());
+                }
+                $settle(self, alloc)
             }
         }
     };

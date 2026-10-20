@@ -88,6 +88,7 @@ map.clone_in(alloc) -> Result<Map, ValueError>
 map.is_local() -> bool                 // every container and key records Alloc::rust()
 map.into_local() -> Map                // unchanged when local, else copied, original freed
 map.into_alloc(alloc) -> Result<Map, ValueError>   // the same, for a named allocator
+map.make_local_in(alloc) -> Result<(), ValueError> // in place, through &mut: moves only what alloc did not make
 for (key, value) in map { .. }         // owned: (Text, Value); &Map: &Entry
 for (key, value) in &mut map { .. }    // (&Text, &mut Value), as map.iter_mut(): a key never changes in place
 
@@ -95,7 +96,7 @@ list.push(impl Into<Value>)            list.push_in(impl Into<Value>, alloc)
 list.try_push(impl Into<Value>) -> Result<(), AllocError>
 list.remove(i) / list.pop()            list.discard(i) -> bool     list.clear()
 list.clone_in(alloc) -> Result<List, ValueError>
-list.is_local() / list.into_local() / list.into_alloc(alloc)   // as on Map; Text and Buffer too
+list.is_local() / list.into_local() / list.into_alloc(alloc) / list.make_local_in(alloc)   // as on Map; Text and Buffer too
 for value in list { .. }               // owned: Value; &List: &Value; &mut List: &mut Value
 
 Text::new(&str) -> Text                Buffer::new(&[u8]) -> Buffer
@@ -195,6 +196,7 @@ v.tag() -> Result<Tag, ValueError>     v.alloc() -> Result<Alloc, ValueError>
 v.clone_in(alloc) -> Result<Value, ValueError>
 v.is_local() -> bool                   v.into_local() -> Value
 v.into_alloc(alloc) -> Result<Value, ValueError>
+v.make_local_in(alloc) -> Result<(), ValueError>
 unsafe Value::from_raw_parts(tag: u32, Payload)   v.into_raw_parts() -> (u32, Payload)
 unsafe { v.free() }                    // the boundary's spelling of drop
 unsafe { v.write_to(out: *mut Value, alloc: *const Allocator) } -> Status
@@ -276,8 +278,15 @@ containers deep. `into_local()` hands such a tree back unchanged, the
 same storage, and otherwise copies it into `Alloc::rust()` and frees the
 original through the allocators it recorded (panicking where `clone`
 would). `into_alloc(alloc)` is the same rule for a named allocator and
-reports a refusal as `clone_in` does, the original freed either way. On
-`Value`, `Map`, `List`, `Text` and `Buffer`. Both copying and equality are loops
+reports a refusal as `clone_in` does, the original freed either way.
+`make_local_in(alloc)` is the in-place form, through `&mut`: every block
+another allocator made (a container's array, a key's or a leaf's bytes)
+is moved into one from `alloc` and the old one freed through its own;
+elements move bitwise, content is not read (a foreign STRING that is not
+UTF-8 moves as it is and its door still refuses it), and nothing is
+allocated when the tree is already there. A refusal stops it with the tree
+whole, every block moved or where it was. On `Value`, `Map`, `List`,
+`Text` and `Buffer`. Both copying and equality are loops
 over a heap stack, so they work at **any depth** and a value is always
 equal to itself. `Send` and `Sync` rest on the allocator contract below:
 an `Allocator` may be called from any thread.

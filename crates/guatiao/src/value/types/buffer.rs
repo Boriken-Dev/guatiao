@@ -10,7 +10,7 @@ use core::marker::PhantomData;
 
 use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::error::ValueError;
-use crate::value::raw::{dangling, overlaps, release_buffer, reserve};
+use crate::value::raw::{dangling, move_buffer, overlaps, release_buffer, reserve};
 
 use super::{Payload, Tag, Value, bytes_layout, cloned, only_alloc, or_abort, short_form_alloc};
 
@@ -126,6 +126,7 @@ impl Clone for Buffer {
 super::where_it_lives!(
     Buffer,
     crate::value::walk::buffer_recorded_by,
+    crate::value::walk::settle_buffer,
     |buffer: &Buffer| bytes_layout(buffer.len)
 );
 
@@ -213,6 +214,12 @@ impl Buffer {
         Ok(b)
     }
 
+    /// Moves the storage into a block from `alloc`, freeing the old one
+    /// through its own allocator. On failure nothing changed.
+    pub(crate) fn rehome(&mut self, alloc: Alloc) -> Result<(), AllocError> {
+        // SAFETY: this container describes its own storage.
+        unsafe { move_buffer(self, alloc) }
+    }
     /// Frees the storage and leaves this empty. Idempotent: `cap == 0`
     /// afterwards, which frees nothing.
     pub(crate) fn release(&mut self) {

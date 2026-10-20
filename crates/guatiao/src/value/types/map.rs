@@ -15,7 +15,7 @@ use core::marker::PhantomData;
 use crate::value::alloc::{Alloc, AllocError, Allocator};
 use crate::value::convert::MapError;
 use crate::value::error::ValueError;
-use crate::value::raw::{dangling, release_buffer, reserve};
+use crate::value::raw::{dangling, move_buffer, release_buffer, reserve};
 
 use super::{List, Payload, Tag, Text, Value, cloned, only_alloc, or_abort, short_form_alloc};
 
@@ -558,7 +558,7 @@ impl Map {
     /// The entries, mutably, for reordering them in place. Private: a
     /// caller changing a key would move a value to a key nobody searched
     /// for.
-    fn entries_mut(&mut self) -> &mut [Entry] {
+    pub(crate) fn entries_mut(&mut self) -> &mut [Entry] {
         if self.len == 0 {
             return &mut [];
         }
@@ -578,6 +578,12 @@ impl Map {
         Some(unsafe { self.ptr.add(self.len).read() })
     }
 
+    /// Moves the storage into a block from `alloc`, freeing the old one
+    /// through its own allocator. On failure nothing changed.
+    pub(crate) fn rehome(&mut self, alloc: Alloc) -> Result<(), AllocError> {
+        // SAFETY: this container describes its own storage.
+        unsafe { move_buffer(self, alloc) }
+    }
     /// Frees every key, moves every value onto `stack` and frees the
     /// storage, writing nothing into the entries: a literal's array may be
     /// read-only. See [`List::dismantle_into`](super::List).
@@ -713,9 +719,12 @@ impl Clone for Map {
     }
 }
 
-super::where_it_lives!(Map, crate::value::walk::map_recorded_by, |_: &Map| {
-    core::alloc::Layout::new::<Entry>()
-});
+super::where_it_lives!(
+    Map,
+    crate::value::walk::map_recorded_by,
+    crate::value::walk::settle_map,
+    |_: &Map| { core::alloc::Layout::new::<Entry>() }
+);
 
 impl PartialEq for Map {
     /// Pairwise, in order, each value by [`Value`]'s own comparison.
