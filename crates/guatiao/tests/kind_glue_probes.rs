@@ -731,6 +731,9 @@ fn a_map_by_value_crosses_as_a_move_with_nothing_copied() {
     map.set("host", "10.0.0.1");
     map.set("port", 5900);
     let sent = map.entries().as_ptr();
+    // `std::sync::Mutex` allocates its lock on first use on some platforms
+    // (macOS), so the provider's mutex is taken once outside the count.
+    drop(kept.map.lock().expect("not poisoned"));
     let n = assert_allocates_nothing(|| remote.keep(map));
     assert_eq!(n.expect("kept"), 2);
     let held = kept.map.lock().expect("not poisoned").take().expect("kept");
