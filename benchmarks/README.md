@@ -68,6 +68,7 @@ sample, which is what `--merge` pools.
 | `call_scalar` | `Counter::count` through a provider's table |
 | `call_map` | `Greeter::greet`, answering a `Map` the provider builds in the caller's allocator (`greet_in`) |
 | `call_map_copied` | the same through a configured instance whose `greet` builds in its own allocator, so the map is copied on arrival |
+| `call_map_arg` | `Greeter::greet_from`, handing over a one-entry `Map` built for the call (by value: a move), answered as `call_map` is |
 | `call_string` | `Greeter::shout`, answering a `String` |
 | `instantiate_drop` | `Offer::instantiate` from a configuration, then drop |
 | `object_ref` | `Conversation::turns`, a `&self` object method |
@@ -76,6 +77,9 @@ sample, which is what `--merge` pools.
 | `remote_clone` | cloning a `Remote` and dropping the clone |
 | `retire` | `Registry::retire` of a library loaded just before |
 | `host_get` | `hello_library`'s echo: a library listing the host's greeters through its services and calling one |
+| `clone_map` | `clone()` of an eight-entry map (text, numbers, a nested map, a list), and dropping the copy |
+| `into_local_local` | `into_local()` of that map when it is already local: judged and handed back |
+| `into_local_foreign` | that map moved between this binary's allocator and another, alternately: one copy and one free per call, what `into_local()` costs a tree from elsewhere |
 
 ## Results
 
@@ -167,6 +171,46 @@ Linux:
 | `load_file_derived` | 5.043 | 20.47 | 5.952 | -70.9% | +18.0% |
 | `load_file_hello` | 5.67 | 28.03 | 6.797 | -75.8% | +19.9% |
 | `object_mut` | 0.00196 | 0.001962 | 0.001956 | -0.3% | -0.2% |
+
+### Owning without copying (`ownership-before.json`, `ownership.json`)
+
+Windows, one session: the `0.0.0-alpha.1` build (the runner copied in,
+without the metrics that need the new API) and the build where `clone()`
+copies locally, `into_local` exists and a tree crosses a kind call by
+value, alternating, five runs each, pooled. Microseconds per call, median.
+
+| metric | 0.0.0-alpha.1 | this change | change |
+| --- | --- | --- | --- |
+| `call_map` | 0.1565 | 0.1548 | -1.1% |
+| `call_map_arg` | — | 0.2628 | new |
+| `call_map_copied` | 0.3277 | 0.3247 | -0.9% |
+| `call_scalar` | 0.002116 | 0.002121 | +0.2% |
+| `call_string` | 0.2147 | 0.2156 | +0.4% |
+| `clone_map` | 0.9638 | 0.9185 | -4.7% |
+| `host_get` | 2.745 | 2.63 | -4.2% |
+| `instantiate_drop` | 0.5846 | 0.5826 | -0.3% |
+| `into_local_foreign` | — | 0.9455 | new |
+| `into_local_local` | — | 0.06915 | new |
+| `lent_call` | 0.1492 | 0.1471 | -1.4% |
+| `load_file_derived` | 64.91 | 64.95 | +0.1% |
+| `load_file_hello` | 66.01 | 66.24 | +0.3% |
+| `object_mut` | 0.003487 | 0.003493 | +0.2% |
+| `object_ref` | 0.001605 | 0.001606 | +0.1% |
+| `offers` | 1.277 | 1.252 | -1.9% |
+| `remote_clone` | 0.003578 | 0.003585 | +0.2% |
+| `retire` | 1.601 | 1.631 | +1.9% |
+| `scan_dir` | 213 | 211.8 | -0.6% |
+
+No metric is more than 2% slower. Against the committed
+`0.0.0-alpha.1.json`, `load_file_*` read +16%: the same `0.0.0-alpha.1`
+build measured 65 µs in this session against 56 µs in that one, so the
+difference is the session, not the code.
+
+Owning a tree that is already local costs a judgment and no copy:
+`into_local_local` is 0.069 µs for the eight-entry map whose `clone()`
+costs 0.92 µs, and `into_local_foreign`, a copy and a free, costs about
+what `clone()` does. `call_map_arg` is `call_map` plus building the
+one-entry map it hands over; the map itself crosses by pointer.
 
 ### Every metric more than 10% slower than `pre-checks`, and why
 
