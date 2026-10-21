@@ -68,8 +68,21 @@
 // The forms are fixed for every language at
 // https://boriken-dev.github.io/guatiao/encodings/.
 //
+// # Hosting, kinds and providers
+//
+// A Registry loads libraries and lists their providers; a kind's
+// descriptor binds a provider's table as a remote. A kind is a Go
+// interface whose glue guatiao-kind (cmd/guatiao-kind) writes from the
+// kind's C header, run by go generate; a provider is any Go type
+// implementing it, named with Single or Configured in a Library, which
+// LibraryOf names by its package and versions from the build. A Library
+// is registered in this process, or built with -buildmode=c-shared and
+// answered from an exported guatiao_library_entry, a file any host loads.
+//
 // # Threads
 //
 // A Value is not safe for concurrent use; reading one from several
-// goroutines at once is.
+// goroutines at once is. A Registry is not either. A slot this package
+// serves runs on the thread that calls it, one Go did not start
+// included.
 package guatiao
