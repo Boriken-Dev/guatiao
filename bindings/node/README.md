@@ -189,8 +189,8 @@ PlainDate.parse('2026-01-31').add(Span.parse('1mo')).toString();   // '2026-02-2
 - Describe kinds (`kind()`) and build libraries (`library()`) at module
   level, not inside a call a library is making: koffi cannot register a
   callback there.
-- On Linux, CPython served through the guatiao-py bridge inside a Node
-  process does not free what a call from Node drops: a Python object such
+- On Linux and macOS, CPython served through the guatiao-py bridge inside
+  a Node process does not free what a call from Node drops: a Python object such
   a call releases is never deallocated.
 - 64-bit platforms only, and not in a browser.
 
