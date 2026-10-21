@@ -249,6 +249,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   allocator or a library's never depends on it. *Migration:* a copy that
   must live beside its source is `v.clone_in(v.alloc()?)`.
 
+### Fixed
+
+- **An instance built through the C surface is released by the provider
+  that built it**, and holds its library open until then.
+  `guatiao_registry_provider_destroy` found the provider by key, so after
+  a retire it released nothing (and the library's own count then refused
+  every unload and collect), and after a refresh loaded a new build under
+  the key it called the new build's `destroy` with the old build's
+  instance. The registry now keeps the building provider per instance:
+  `unload` answers `GUATIAO_ERR_BUSY` while one lives, a retired library
+  closes once the last is released, and Python's and Dart's
+  `Instance.close()` work after a retire.
+
 ## [0.0.0-alpha.1] - 2026-10-19
 
 ### Changed

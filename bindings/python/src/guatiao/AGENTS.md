@@ -14,6 +14,11 @@ lazily, on first use, in this order:
 
 The package is pure Python and carries no native library.
 
+`guatiao.use_library(path)` names the library instead, before the first
+native call (a file whatever it is called, or a directory); it wins over
+`GUATIAO_LIBRARY`, and `RuntimeError` when one is already loaded from
+elsewhere.
+
 Not found raises `guatiao.LibraryNotFound` naming both places it
 looked. `guatiao_serde` and `guatiao_intake` resolve the same way,
 independently, only when `guatiao.serde` / `guatiao.intake` is first used.
@@ -109,8 +114,9 @@ leaves it mapped until nothing uses it: `Registry.collect()` closes every
 retired library whose own `unload` function agrees and answers their
 keys, as does the registry's next load, retire or unload; one that
 refuses is asked again next time, one with no such function stays
-mapped. An `Instance` must be closed before its library is retired:
-afterwards `close()` no longer finds the provider to destroy it with.
+mapped. An `Instance` holds its library open until it is closed, and
+`close()` reaches the provider that built it even after a retire, or a
+refresh that loaded a new build under the same key.
 `Registry.unload(library_key)` unmaps it **when the
 library agrees**: `Busy` while another library holds a pinned answer
 from it, then its own `unload` function is asked, its promise that

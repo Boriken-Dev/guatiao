@@ -49,6 +49,7 @@
 
 #![allow(non_camel_case_types)]
 
+use alloc::collections::BTreeMap;
 use core::ffi::c_void;
 use std::path::Path;
 
@@ -83,6 +84,12 @@ use crate::value::types::{List, Map, Str, Text, Value};
 #[derive(Debug)]
 pub struct HostRegistry {
     inner: Registry,
+    /// Every instance `guatiao_registry_provider_create` built and
+    /// `guatiao_registry_provider_destroy` has not released, by address,
+    /// with the view of the provider that built it: its `destroy` slot,
+    /// and the lease that keeps its library open while the instance lives,
+    /// whatever has been retired or loaded under its key since.
+    instances: std::sync::Mutex<BTreeMap<usize, crate::library::ProviderView>>,
 }
 
 // --- the work, in safe Rust --------------------------------------------
@@ -385,6 +392,7 @@ pub unsafe extern "C" fn guatiao_registry_new(
         };
         Box::into_raw(Box::new(HostRegistry {
             inner: Registry::with_alloc(id, version, alloc),
+            instances: std::sync::Mutex::new(BTreeMap::new()),
         }))
     })
 }
@@ -466,13 +474,31 @@ pub unsafe extern "C" fn guatiao_registry_provider_create(
         }
         // SAFETY: the slot is the descriptor's own; the pointers are the
         // caller's, checked above; the library is mapped for the call.
-        unsafe { create(view.ctx, config, out, err) }
+        let status = unsafe { create(view.ctx, config, out, err) };
+        // SAFETY: non-null, checked above, and written by the slot.
+        let built = unsafe { out.read() };
+        if status == Status::GUATIAO_OK && !built.is_null() {
+            registry
+                .instances
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(built as usize, view.clone());
+        }
+        status
     })
 }
 
 /// Releases an instance [`guatiao_registry_provider_create`] built. Null
 /// is a no-op; an unknown key or a provider that builds no instances does
 /// nothing.
+///
+/// **The provider that built it releases it**, found by the instance
+/// rather than by `key`: after its library was retired, or a new build of
+/// it loaded under the same key by a refresh, the old build's `destroy`
+/// is the one called. An instance keeps its library open until it is
+/// released: `guatiao_registry_unload` answers `GUATIAO_ERR_BUSY`, and a
+/// retired library is not closed. `key` is consulted only for an instance
+/// this registry did not build.
 ///
 /// # Safety
 ///
@@ -490,10 +516,25 @@ pub unsafe extern "C" fn guatiao_registry_provider_destroy(
             return;
         }
         // SAFETY: the caller's contract.
-        let (Some(registry), Ok(key)) = (
-            unsafe { HostRegistry::get(reg) },
-            core::str::from_utf8(key.into()),
-        ) else {
+        let Some(registry) = (unsafe { HostRegistry::get(reg) }) else {
+            return;
+        };
+        let built = registry
+            .instances
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&(instance as usize));
+        if let Some(view) = built {
+            if let Some(destroy) = view.destroy {
+                // SAFETY: the slot of the provider that built the instance,
+                // whose library the view's lease keeps open.
+                unsafe { destroy(view.ctx, instance) };
+            }
+            // The lease goes with the view, after the call.
+            drop(view);
+            return;
+        }
+        let Ok(key) = core::str::from_utf8(key.into()) else {
             return;
         };
         if let Some(provider) = registry.inner.provider(key)
