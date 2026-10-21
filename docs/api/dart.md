@@ -16,9 +16,10 @@ built by `dart doc`.
 
 | Library | Purpose |
 | --- | --- |
-| `package:guatiao/guatiao.dart` | `Value`, `Ref`, `MapRef`, `ListRef`, `absent`, `Registry`, `Instance`, `kindTable`, the error classes |
+| `package:guatiao/guatiao.dart` | `Value`, `Ref`, `MapRef`, `ListRef`, `absent`, `Registry`, `Instance`, `kindTable`, `redact`, the error classes |
 | `package:guatiao/serde.dart` | `loads` / `dumps` for JSON, TOML and YAML |
 | `package:guatiao/intake.dart` | `check`, `layout`, `isVisible` |
+| `package:guatiao/time.dart` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants as `DateTime`, exact lengths as `Duration` |
 
 ## Values
 

@@ -12,6 +12,24 @@ files:
         name: guatiao_alloc_default
       c:@F@guatiao_buffer_push:
         name: guatiao_buffer_push
+      c:@F@guatiao_date_add_span:
+        name: guatiao_date_add_span
+      c:@F@guatiao_date_format:
+        name: guatiao_date_format
+      c:@F@guatiao_date_normalize:
+        name: guatiao_date_normalize
+      c:@F@guatiao_date_parse:
+        name: guatiao_date_parse
+      c:@F@guatiao_datetime_add_span:
+        name: guatiao_datetime_add_span
+      c:@F@guatiao_datetime_format:
+        name: guatiao_datetime_format
+      c:@F@guatiao_datetime_normalize:
+        name: guatiao_datetime_normalize
+      c:@F@guatiao_datetime_parse:
+        name: guatiao_datetime_parse
+      c:@F@guatiao_duration_read:
+        name: guatiao_duration_read
       c:@F@guatiao_intake_check:
         name: guatiao_intake_check
       c:@F@guatiao_intake_flat_keys:
@@ -114,10 +132,30 @@ files:
         name: guatiao_registry_unload_unchecked
       c:@F@guatiao_registry_why_not:
         name: guatiao_registry_why_not
+      c:@F@guatiao_schema_redact:
+        name: guatiao_schema_redact
       c:@F@guatiao_schema_validate:
         name: guatiao_schema_validate
+      c:@F@guatiao_span_format:
+        name: guatiao_span_format
+      c:@F@guatiao_span_normalize:
+        name: guatiao_span_normalize
+      c:@F@guatiao_span_parse:
+        name: guatiao_span_parse
       c:@F@guatiao_string_push:
         name: guatiao_string_push
+      c:@F@guatiao_time_format:
+        name: guatiao_time_format
+      c:@F@guatiao_time_normalize:
+        name: guatiao_time_normalize
+      c:@F@guatiao_time_parse:
+        name: guatiao_time_parse
+      c:@F@guatiao_timestamp_format:
+        name: guatiao_timestamp_format
+      c:@F@guatiao_timestamp_normalize:
+        name: guatiao_timestamp_normalize
+      c:@F@guatiao_timestamp_parse:
+        name: guatiao_timestamp_parse
       c:@F@guatiao_toml_emit:
         name: guatiao_toml_emit
       c:@F@guatiao_toml_parse:
@@ -162,6 +200,10 @@ files:
         name: guatiao_bytes
       c:@S@guatiao_bytes_mut:
         name: guatiao_bytes_mut
+      c:@S@guatiao_date:
+        name: guatiao_date
+      c:@S@guatiao_datetime:
+        name: guatiao_datetime
       c:@S@guatiao_entries:
         name: guatiao_entries
       c:@S@guatiao_entry:
@@ -198,10 +240,18 @@ files:
         name: guatiao_providers
       c:@S@guatiao_registry:
         name: guatiao_registry
+      c:@S@guatiao_span:
+        name: guatiao_span
       c:@S@guatiao_str:
         name: guatiao_str
       c:@S@guatiao_string:
         name: guatiao_string
+      c:@S@guatiao_text_error:
+        name: guatiao_text_error
+      c:@S@guatiao_time:
+        name: guatiao_time
+      c:@S@guatiao_timestamp:
+        name: guatiao_timestamp
       c:@S@guatiao_value:
         name: guatiao_value
       c:@S@guatiao_values:

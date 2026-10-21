@@ -202,6 +202,61 @@ entry under it, or a discriminant that names no arm. A `store` that is not
 text to text -- a `Map`, or a `Ref` onto anything but a map of strings --
 throws `ArgumentError`.
 
+## time: dates, times, instants, spans, exact lengths
+
+The forms are text in a value (an exact length is `[seconds,
+nanoseconds]`), fixed at <https://boriken-dev.github.io/guatiao/encodings/>.
+Every text is read and written by the library's own functions.
+
+```dart
+import 'package:guatiao/time.dart' as time;
+
+time.PlainDate(2026, 10, 21)            // checked; '2026-10-21'
+time.PlainDate.parse('2026-10-21'); time.PlainDate.fromDateTime(dt)
+date.year / month / day; date.add(span) // years+months (clamped), weeks, days
+time.PlainTime(13, 45, 0, 500000000)    // hour, minute, second, [nanosecond]
+time.PlainTime.parse('13:45:00.5'); time.PlainTime.fromDateTime(dt)
+time.PlainDateTime(date, t); time.PlainDateTime.parse('2026-10-21T13:45:00.5')
+at.date / at.time; at.add(span)         // then time units, across midnight
+time.parseTimestamp('2026-10-21T19:15:00+05:30')  // DateTime, isUtc
+time.formatTimestamp(moment)            // '...Z', any DateTime
+time.normalize(time.TextForm.span, '1h 30m')       // 'PT1H30M', every ns kept
+time.toDuration(v)                      // [s, ns], seconds, {secs, nanos}; Ref, Value or data
+time.fromDuration(d)                    // [seconds, nanoseconds]; negative: ArgumentError
+time.Span(days: 1, hours: 2)            // named units, one sign; '-P1D' is Span(days: -1)
+time.Span.parse('P1DT2H'); span.years .. span.nanoseconds; -span
+span.isZero; span.isNegative            // == unit by unit; hashable
+```
+
+- **The `Plain` classes** (named after JavaScript's Temporal) exist
+  because `DateTime` always carries a time and a zone: a local one moves
+  a time a daylight-saving change skips. They keep nanoseconds, are
+  `Comparable`, and `toString()` is the canonical text. A constructor is
+  checked by the library and throws `BadValue` for a day the month does
+  not have, a time off the clock, or a field past its C width.
+- **Text the grammar refuses throws `Unparsed`** (a `BadValue` and a
+  `FormatException`; exported from `guatiao.dart` too) with `form`, `at`
+  (the byte offset in the UTF-8 text) and `expected`; it never quotes the
+  text.
+- **`DateTime` and `Duration` count microseconds**: reading into one
+  drops the nanoseconds below, toward the past. `toDuration` throws
+  `RangeError` past what a `Duration` holds (2^63 - 1 microseconds),
+  `BadValue` for anything that is no exact length.
+- **`add`** throws `BadValue` for a span with time units on a date and a
+  result outside the years 0000 to 9999. `Span(...)` throws `BadValue`
+  for fields of both signs or nanoseconds of a second or more.
+
+## Secrets
+
+```dart
+final shown = redact(schema, value, placeholder: '[redacted]');  // close it
+```
+
+`schema` and `value` are `Ref`s, `Value`s or plain data. Every field a
+schema marks (`x-sensitive` or `writeOnly`) is replaced at any depth, and
+whatever the schema does not describe is hidden too. Local `$ref`s are
+followed. `WrongKind` for a schema that is not a map.
+
 ## Reading memory you do not own
 
 `Ref.borrowed(Pointer<guatiao_value>)` is a read-only view of a tree
