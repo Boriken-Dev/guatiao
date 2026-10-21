@@ -255,8 +255,15 @@ jobs:
         # what exports the registry surface and the serde formats.
         run: cargo build --workspace --all-features
       - uses: actions/setup-python@v5
+        id: python
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Build the guatiao-py bridge against this Python
+        # So `test_bridge` and the example host's bridge leg run rather
+        # than skip: a Python host serving Python libraries through it.
+        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+        env:
+          PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - name: Install
         run: pip install -e "bindings/python[dev]"
       - name: Test
@@ -272,6 +279,87 @@ jobs:
           mypy --strict bindings/python/src/guatiao examples/python_provider/py_greeter examples/python_provider/py_tally examples/greeter_kind/python examples/python_host
         env:
           MYPYPATH: bindings/python/src:examples/greeter_kind/python
+
+  bridge:
+    name: guatiao-py (py${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # The bridge from hosts that are not Python: a Rust host (its tests and
+    # the example host) and a C host, each adding it as a source and
+    # calling greeters written in Python. Its own workspace, so its
+    # format, lint and tests run here and nowhere else. A stated skip
+    # (no bridge, no compiler) fails the job.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.9", "3.14"]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/guatiao-py
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Where a host that is not Python finds libpython
+        # The bridge names libpython by its file name; this Python is not
+        # installed where the loader looks by default.
+        if: runner.os != 'Windows'
+        run: |
+          echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+      - name: Build the workspace
+        # The guatiao library the C host links, and the example host.
+        run: cargo build --workspace --all-features
+      - name: Format check and clippy
+        working-directory: crates/guatiao-py
+        run: cargo fmt --check && cargo clippy --all-targets -- -D warnings
+        env:
+          PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
+      - name: Build the bridge
+        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+        env:
+          PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
+      - name: What the bridge links to reach Python
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   readelf -d crates/guatiao-py/target/debug/libguatiao_py.so | grep NEEDED ;;
+            macOS)   otool -L crates/guatiao-py/target/debug/libguatiao_py.dylib ;;
+            Windows) llvm-readobj --coff-imports crates/guatiao-py/target/debug/guatiao_py.dll | grep 'Name:' ;;
+          esac
+      - name: Test, from a Rust host and a C host
+        run: |
+          cargo test --manifest-path crates/guatiao-py/Cargo.toml -- --nocapture 2>&1 | tee bridge-test.log
+          test "${PIPESTATUS[0]}" -eq 0
+          ! grep -n "skipped:" bridge-test.log
+        env:
+          PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+      - name: The example host serves the Python greeters
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   bridge=crates/guatiao-py/target/debug/libguatiao_py.so ;;
+            macOS)   bridge=crates/guatiao-py/target/debug/libguatiao_py.dylib ;;
+            Windows) bridge=crates/guatiao-py/target/debug/guatiao_py.dll ;;
+          esac
+          GREETER_HOST_SOURCE=$bridge \
+          GREETER_HOST_SOURCE_CONFIG='{"dirs": ["examples/python_provider"],
+            "paths": ["bindings/python/src", "examples/greeter_kind/python"]}' \
+            cargo run -p greeter_host 2>&1 | tee host.log
+          grep -q "served py_greeter as py_greeter" host.log
+          grep -q "py_greeter_hello greets: hello, ana" host.log
+          grep -q "py_greeter_shouter configured with" host.log
 
   dart:
     name: Dart bindings (${{ matrix.os }}, ${{ matrix.sdk }})
