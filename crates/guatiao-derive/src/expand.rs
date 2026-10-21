@@ -20,13 +20,19 @@
 //! if it survives, and nothing else in a build would notice it being
 //! replaced by `syn`'s default.
 //!
-//! # Three shapes
+//! # The shapes
 //!
 //! | declaration | value | schema kind |
 //! | --- | --- | --- |
 //! | struct with named fields | a map, one key per field | an object |
+//! | newtype struct, or `#[map(transparent)]` | the field's value | the field's kind |
+//! | tuple struct | a list by position | `prefixItems` |
+//! | unit struct | null | `type: null` |
 //! | enum of unit variants | the variant's name, as text | a string `enum` |
-//! | enum with `#[map(tag = "k")]` | a map: the name under `k`, then the variant's fields | a tagged variant |
+//! | enum with `#[map(tag = "k")]` | a map: the name under `k`, then the variant's fields, or a `Name(T)` variant's map | a tagged variant |
+//!
+//! The three that are not a map are in `shapes.rs`. A type parameter is
+//! bound by the trait derived, as serde bounds one.
 //!
 //! An enum whose variants carry fields and that names no tag is refused:
 //! the key that tells two variants apart is a wire-format decision, and
@@ -38,8 +44,8 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 use syn::ext::IdentExt;
 use syn::{
-    Attribute, Data, DataEnum, DeriveInput, Field, Fields, FieldsNamed, GenericArgument, Ident,
-    LitStr, PathArguments, Type, Variant,
+    Attribute, Data, DataEnum, DeriveInput, Field, Fields, GenericArgument, Ident, LitStr,
+    PathArguments, Type, Variant,
 };
 
 use crate::rename::RenameRule;
@@ -60,7 +66,7 @@ impl Derive {
     /// How to spell this derive in a diagnostic. Messages name the derive
     /// the user actually wrote, because "one of the derives on this struct
     /// is unhappy" is not an actionable sentence.
-    fn spelled(self) -> &'static str {
+    pub(crate) fn spelled(self) -> &'static str {
         match self {
             Derive::ToValue => "#[derive(ToValue)]",
             Derive::FromValue => "#[derive(FromValue)]",
@@ -86,32 +92,15 @@ fn try_expand(derive: Derive, input: TokenStream) -> syn::Result<TokenStream> {
     let label = derive.spelled();
     match &ast.data {
         Data::Struct(data) => {
-            refuse_generics(derive, &ast)?;
             // The same reader the enum path uses, so a container-level
             // `#[map(...)]` is refused on a struct rather than ignored --
             // ignoring one would change the wire shape silently.
             let container = ContainerAttrs::read(derive, &ast.attrs, false)?;
-            let krate = container.krate;
-            let named = named_fields(derive, &ast.ident, &data.fields)?;
-
-            let mut plan: Vec<FieldPlan> = Vec::new();
-            for field in &named.named {
-                plan.push(FieldPlan::read(derive, field, container.rename_all)?);
-            }
-            reject_duplicate_keys(&plan)?;
-
-            let name = &ast.ident;
-            let tokens = match derive {
-                Derive::ToValue => emit_to(name, &plan),
-                Derive::FromValue => emit_from(name, &plan),
-                Derive::Schema => emit_schema(name, &plan),
-            };
-            Ok(crate::krate::reroot(tokens, krate.as_ref()))
+            let head = impl_head(derive, &ast.ident, &ast.generics);
+            let tokens = expand_struct(derive, &ast.ident, &head, &container, &data.fields)?;
+            Ok(crate::krate::reroot(tokens, container.krate.as_ref()))
         }
-        Data::Enum(data) => {
-            refuse_generics(derive, &ast)?;
-            expand_enum(derive, &ast, data)
-        }
+        Data::Enum(data) => expand_enum(derive, &ast, data),
         Data::Union(data) => Err(syn::Error::new_spanned(
             data.union_token,
             format!(
@@ -123,55 +112,149 @@ fn try_expand(derive: Derive, input: TokenStream) -> syn::Result<TokenStream> {
     }
 }
 
-/// Generic parameters are refused rather than guessed at.
-///
-/// A generated impl would have to invent the bound for each parameter
-/// (`T: ToValue`? `T: Schema`? both?), and inventing it wrong produces an
-/// error inside the expansion -- exactly the class of message this file
-/// exists to avoid. Refusing at the declaration costs the user a
-/// hand-written impl and tells them so at the point they can act.
-fn refuse_generics(derive: Derive, ast: &DeriveInput) -> syn::Result<()> {
-    if ast.generics.params.is_empty() {
-        return Ok(());
+/// `impl<..> <trait> for Name<..> where ..`, every type parameter bound
+/// by the trait being derived, as serde bounds them: a `T` field of a
+/// `Wrapper<T>` converts when `T` does.
+fn impl_head(derive: Derive, name: &Ident, generics: &syn::Generics) -> TokenStream {
+    let bound = match derive {
+        Derive::ToValue => quote!(::guatiao::ToValue),
+        Derive::FromValue => quote!(::guatiao::FromValue),
+        Derive::Schema => quote!(::guatiao::Schema),
+    };
+    let mut generics = generics.clone();
+    let params: Vec<Ident> = generics.type_params().map(|p| p.ident.clone()).collect();
+    let clause = generics.make_where_clause();
+    for param in params {
+        clause.predicates.push(syn::parse_quote!(#param: #bound));
     }
-    Err(syn::Error::new_spanned(
-        &ast.generics,
-        format!(
-            "{} does not support generic parameters. The bound to place on each \
-             parameter cannot be inferred here, and guessing it wrong reports an \
-             error inside the expansion rather than on your declaration. Write the \
-             impl by hand.",
-            derive.spelled()
-        ),
-    ))
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    quote! {
+        #[automatically_derived]
+        impl #impl_generics #bound for #name #ty_generics #where_clause
+    }
 }
 
-/// A struct's named fields, or a message explaining why this particular
-/// shape has no map to be.
-fn named_fields<'a>(
+/// A struct of any shape: named fields are a map, unless the struct is
+/// `#[map(transparent)]`; one unnamed field is that field's value, several
+/// a list; no fields a null.
+fn expand_struct(
     derive: Derive,
-    ident: &Ident,
-    fields: &'a Fields,
-) -> syn::Result<&'a FieldsNamed> {
+    name: &Ident,
+    head: &TokenStream,
+    container: &ContainerAttrs,
+    fields: &Fields,
+) -> syn::Result<TokenStream> {
     let label = derive.spelled();
+    if container.deny_unknown_fields && !matches!(fields, Fields::Named(_)) {
+        return Err(syn::Error::new_spanned(
+            fields,
+            format!(
+                "{label} reads `deny_unknown_fields` only on a struct with named fields: nothing else has keys"
+            ),
+        ));
+    }
     match fields {
-        Fields::Named(named) => Ok(named),
-        Fields::Unnamed(unnamed) => Err(syn::Error::new_spanned(
-            unnamed,
-            format!(
-                "{label} needs named fields: a map is keyed by name, and a tuple \
-                 struct has no names to key it by. Give the fields names, or write \
-                 the impl by hand and choose the keys yourself."
-            ),
-        )),
-        Fields::Unit => Err(syn::Error::new_spanned(
-            ident,
-            format!(
-                "{label} needs named fields, and a unit struct has none. A type \
-                 carrying nothing converts to an empty map, which is \
-                 `Map::new()` -- no derive required."
-            ),
-        )),
+        Fields::Named(named) if container.transparent => {
+            let mut kept = Vec::new();
+            let mut skipped = Vec::new();
+            for field in &named.named {
+                let attrs = FieldAttrs::read(derive, field)?;
+                if attrs.skip {
+                    skipped.push(field.ident.clone().expect("a named field"));
+                } else {
+                    kept.push(field);
+                }
+            }
+            let [field] = kept[..] else {
+                return Err(syn::Error::new_spanned(
+                    named,
+                    format!(
+                        "{label} needs exactly one field that is not `#[map(skip)]` on a \
+                         `#[map(transparent)]` struct: its value is that field's."
+                    ),
+                ));
+            };
+            if let Some(attr) = field.attrs.iter().find(|a| a.path().is_ident("schema")) {
+                return Err(syn::Error::new_spanned(
+                    attr,
+                    format!(
+                        "{label} takes no `#[schema(..)]` on the field of a transparent struct: describe the field's own type instead."
+                    ),
+                ));
+            }
+            let plain = FieldAttrs::read(derive, field)?;
+            if plain.rename.is_some()
+                || plain.default.is_some()
+                || plain.flatten
+                || plain.with.is_some()
+                || plain.skip_if.is_some()
+            {
+                return Err(syn::Error::new_spanned(
+                    &field.ident,
+                    format!(
+                        "{label} takes no `#[map(..)]` but `skip` on a transparent struct's fields: the struct has no key of its own."
+                    ),
+                ));
+            }
+            let shape = crate::shapes::Transparent {
+                member: syn::Member::Named(field.ident.clone().expect("a named field")),
+                ty: &field.ty,
+                skipped,
+            };
+            Ok(crate::shapes::emit_transparent(derive, head, &shape))
+        }
+        Fields::Named(named) => {
+            let mut plan: Vec<FieldPlan> = Vec::new();
+            for field in &named.named {
+                plan.push(FieldPlan::read(derive, field, container.rename_all)?);
+            }
+            reject_duplicate_keys(&plan)?;
+            if container.deny_unknown_fields
+                && let Some(flat) = plan.iter().find(|f| f.flatten)
+            {
+                return Err(syn::Error::new(
+                    flat.ident.span(),
+                    format!(
+                        "{label} cannot read `deny_unknown_fields` beside a `#[map(flatten)]` \
+                         field: which keys the flattened member declares is its type's, \
+                         and not known here."
+                    ),
+                ));
+            }
+            Ok(match derive {
+                Derive::ToValue => emit_to(head, &plan),
+                Derive::FromValue => emit_from(head, name, &plan, container.deny_unknown_fields),
+                Derive::Schema => emit_schema(head, &plan),
+            })
+        }
+        Fields::Unnamed(unnamed) => {
+            crate::shapes::refuse_field_attributes(derive, fields)?;
+            let all: Vec<&Field> = unnamed.unnamed.iter().collect();
+            if let [only] = all[..] {
+                let shape = crate::shapes::Transparent {
+                    member: syn::Member::Unnamed(syn::Index::from(0)),
+                    ty: &only.ty,
+                    skipped: Vec::new(),
+                };
+                return Ok(crate::shapes::emit_transparent(derive, head, &shape));
+            }
+            if container.transparent {
+                return Err(syn::Error::new_spanned(
+                    unnamed,
+                    format!("{label} needs exactly one field on a `#[map(transparent)]` struct."),
+                ));
+            }
+            Ok(crate::shapes::emit_tuple(derive, head, &all))
+        }
+        Fields::Unit => {
+            if container.transparent {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    format!("{label} needs exactly one field on a `#[map(transparent)]` struct."),
+                ));
+            }
+            Ok(crate::shapes::emit_unit(derive, head))
+        }
     }
 }
 
@@ -193,6 +276,15 @@ struct FieldPlan {
     /// What only the schema reads. Carried on every plan so the three
     /// derives share one parse of one declaration.
     schema: SchemaAttrs,
+    /// `#[map(flatten)]`: the field's own map is written beside the
+    /// others, and read from the whole map.
+    flatten: bool,
+    /// `#[map(with = path)]`: a module with `to_value_in`, `from_value`
+    /// and `kind`, converting the field in place of its type's impls.
+    with: Option<syn::Path>,
+    /// `#[map(skip_serializing_if = path)]`: not written when
+    /// `path(&field)` is true.
+    skip_if: Option<syn::Path>,
 }
 
 /// `#[map(default)]` or `#[map(default = <expr>)]`.
@@ -220,6 +312,9 @@ impl FieldPlan {
             skip: attrs.skip,
             default: attrs.default,
             schema: attrs.schema,
+            flatten: attrs.flatten,
+            with: attrs.with,
+            skip_if: attrs.skip_if,
             ty: field.ty.clone(),
             ident,
         })
@@ -251,6 +346,9 @@ struct FieldAttrs {
     rename: Option<String>,
     skip: bool,
     default: Option<MapDefault>,
+    flatten: bool,
+    with: Option<syn::Path>,
+    skip_if: Option<syn::Path>,
     /// Everything only the schema reads. Collected for every derive, so a
     /// misspelled `#[schema(...)]` is reported by whichever one the user
     /// wrote rather than silently ignored by two of the three.
@@ -321,6 +419,15 @@ impl FieldAttrs {
                 } else if meta.path.is_ident("skip") {
                     out.skip = true;
                     Ok(())
+                } else if meta.path.is_ident("flatten") {
+                    out.flatten = true;
+                    Ok(())
+                } else if meta.path.is_ident("with") {
+                    out.with = Some(path_value(&meta)?);
+                    Ok(())
+                } else if meta.path.is_ident("skip_serializing_if") {
+                    out.skip_if = Some(path_value(&meta)?);
+                    Ok(())
                 } else if meta.path.is_ident("default") {
                     if out.default.is_some() {
                         return Err(meta.error("`default` is given twice. Keep one."));
@@ -334,14 +441,53 @@ impl FieldAttrs {
                     Ok(())
                 } else {
                     Err(meta.error(format!(
-                        "unrecognised `#[map(...)]` option. {label} knows three: \
-                         `rename = \"...\"`, `skip`, and `default` or \
-                         `default = <expr>`."
+                        "unrecognised `#[map(...)]` option. {label} knows `rename = \"...\"`, \
+                         `skip`, `default` or `default = <expr>`, `flatten`, `with = path` \
+                         and `skip_serializing_if = path`. Not `alias`: a schema refuses \
+                         every key it does not declare, so an alias would read a value \
+                         its own schema refuses."
                     )))
                 }
             })?;
         }
 
+        if out.flatten
+            && (out.skip
+                || rename_span.is_some()
+                || default_span.is_some()
+                || out.with.is_some()
+                || out.skip_if.is_some())
+        {
+            return Err(syn::Error::new_spanned(
+                &field.ident,
+                "`flatten` stands alone: a flattened field has no key of its own to \
+                 rename, skip, default or convert, since its type's keys are written \
+                 beside this struct's.",
+            ));
+        }
+        if out.flatten && option_inner(&field.ty).is_some() {
+            return Err(syn::Error::new_spanned(
+                &field.ty,
+                "`flatten` takes a type that writes a map, and an `Option` writes a null \
+                 when it is `None`, which has no keys to write beside the others.",
+            ));
+        }
+        if out.with.is_some() && option_inner(&field.ty).is_some() {
+            return Err(syn::Error::new_spanned(
+                &field.ty,
+                "`with` converts a whole field, and an `Option` field omits its key, \
+                 which the module cannot see. Convert an `Option<T>` in the module, on \
+                 a field of that module's own type.",
+            ));
+        }
+        if out.skip_if.is_some() && default_span.is_none() && option_inner(&field.ty).is_none() {
+            return Err(syn::Error::new_spanned(
+                &field.ident,
+                "`skip_serializing_if` leaves the key out, so reading it back needs \
+                 `#[map(default)]` or `#[map(default = <expr>)]` beside it: an absent \
+                 key must read as something.",
+            ));
+        }
         // Contradictory rather than merely redundant, so it is an error
         // and not a warning: whichever one the reader believed, the other
         // silently did not happen.
@@ -457,6 +603,17 @@ impl SchemaAttrs {
     }
 }
 
+/// The path a `#[map(name = ..)]` names: a path, or a string holding one,
+/// as serde spells it.
+fn path_value(meta: &syn::meta::ParseNestedMeta<'_>) -> syn::Result<syn::Path> {
+    let value = meta.value()?;
+    if value.peek(LitStr) {
+        value.parse::<LitStr>()?.parse()
+    } else {
+        value.parse()
+    }
+}
+
 /// A doc comment, as one line of text.
 ///
 /// Doc comments arrive as `#[doc = "..."]` attributes, one per line, each
@@ -494,12 +651,12 @@ fn doc_comment(attrs: &[Attribute]) -> Option<String> {
 /// refused at compile time.
 fn reject_duplicate_keys(plan: &[FieldPlan]) -> syn::Result<()> {
     for (i, field) in plan.iter().enumerate() {
-        if field.skip {
+        if field.skip || field.flatten {
             continue;
         }
         if let Some(earlier) = plan[..i]
             .iter()
-            .find(|other| !other.skip && other.key == field.key)
+            .find(|other| !other.skip && !other.flatten && other.key == field.key)
         {
             return Err(syn::Error::new(
                 field.ident.span(),
@@ -554,7 +711,35 @@ fn option_inner(ty: &Type) -> Option<&Type> {
 
 /// Writes one field into `__map`. `access` borrows the field.
 fn set_field(field: &FieldPlan, access: &TokenStream) -> TokenStream {
+    let ty = &field.ty;
+    if field.flatten {
+        return quote! {
+            ::guatiao::__private::flatten_into(
+                &mut __map,
+                <#ty as ::guatiao::ToValue>::to_value_in(#access, __alloc)?,
+                __alloc,
+            )?;
+        };
+    }
+    let set = set_value(field, access);
+    match &field.skip_if {
+        Some(skip_if) => quote! {
+            if !#skip_if(#access) {
+                #set
+            }
+        },
+        None => set,
+    }
+}
+
+/// The write of one keyed field, `None` omitted.
+fn set_value(field: &FieldPlan, access: &TokenStream) -> TokenStream {
     let key = &field.key;
+    if let Some(with) = &field.with {
+        return quote! {
+            ::guatiao::Map::set_in(&mut __map, #key, #with::to_value_in(#access, __alloc)?, __alloc)?;
+        };
+    }
     // Written as qualified `<Ty as ToValue>::to_value` rather than the
     // inherent-looking `ToValue::to_value`, purely for the DIAGNOSTIC: the
     // qualified form carries the field type's own span, so a field whose
@@ -602,6 +787,14 @@ fn read_field(field: &FieldPlan) -> TokenStream {
         // user's own type rather than the expansion.
         return quote! { #ident: ::core::default::Default::default(), };
     }
+    if field.flatten {
+        // The whole map: a flattened member's keys are this one's.
+        return quote! { #ident: <#ty as ::guatiao::FromValue>::from_value(__value)?, };
+    }
+    let read = match &field.with {
+        Some(with) => quote! { #with::from_value },
+        None => quote! { <#ty as ::guatiao::FromValue>::from_value },
+    };
     // `under` is what turns a leaf error into a dotted path: the value
     // being read does not know its own key, so the reader that knows it
     // adds it here, on the way out.
@@ -609,7 +802,7 @@ fn read_field(field: &FieldPlan) -> TokenStream {
         return quote! {
             #ident: match __map.get(#key) {
                 ::core::option::Option::Some(__field) =>
-                    <#ty as ::guatiao::FromValue>::from_value(__field)
+                    #read(__field)
                         .map_err(|__e| ::guatiao::MapError::under(__e, #key))?,
                 ::core::option::Option::None => #default,
             },
@@ -628,7 +821,7 @@ fn read_field(field: &FieldPlan) -> TokenStream {
         }
     } else {
         quote! {
-            #ident: <#ty as ::guatiao::FromValue>::from_value(
+            #ident: #read(
                 ::guatiao::Map::required(__map, #key)?,
             ).map_err(|__e| ::guatiao::MapError::under(__e, #key))?,
         }
@@ -646,7 +839,10 @@ fn field_builder(field: &FieldPlan) -> TokenStream {
     let a = &field.schema;
     // The shape keywords chain onto the KIND, before it becomes a field.
     // Inherent methods, called by path for the same reason as below.
-    let mut kind = quote! { <#ty as ::guatiao::Schema>::kind(__alloc) };
+    let mut kind = match &field.with {
+        Some(with) => quote! { #with::kind(__alloc) },
+        None => quote! { <#ty as ::guatiao::Schema>::kind(__alloc) },
+    };
     for (method, n) in [
         ("min_length", a.min_length),
         ("max_length", a.max_length),
@@ -790,15 +986,14 @@ fn field_builder(field: &FieldPlan) -> TokenStream {
 
 // --- structs -----------------------------------------------------------
 
-fn emit_to(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
+fn emit_to(head: &TokenStream, plan: &[FieldPlan]) -> TokenStream {
     let sets = plan.iter().filter(|f| !f.skip).map(|field| {
         let ident = &field.ident;
         set_field(field, &quote! { &self.#ident })
     });
 
     quote! {
-        #[automatically_derived]
-        impl ::guatiao::ToValue for #name {
+        #head {
             fn to_value_in(
                 &self,
                 __alloc: ::guatiao::Alloc,
@@ -814,12 +1009,30 @@ fn emit_to(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
     }
 }
 
-fn emit_from(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
+fn emit_from(
+    head: &TokenStream,
+    name: &Ident,
+    plan: &[FieldPlan],
+    deny_unknown: bool,
+) -> TokenStream {
     let reads = plan.iter().map(read_field);
+    // `deny_unknown_fields`: every key is one a field declares.
+    let strict = deny_unknown.then(|| {
+        let keys = plan.iter().filter(|f| !f.skip).map(|f| &f.key);
+        quote! {
+            for __entry in __map {
+                if ![#(#keys),*].contains(&__entry.key()) {
+                    return ::core::result::Result::Err(::guatiao::MapError::under(
+                        ::guatiao::MapError::bad_value("a declared field"),
+                        __entry.key(),
+                    ));
+                }
+            }
+        }
+    });
 
     quote! {
-        #[automatically_derived]
-        impl ::guatiao::FromValue for #name {
+        #head {
             fn from_value(
                 __value: &::guatiao::Value,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
@@ -829,6 +1042,7 @@ fn emit_from(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
                 let __map = <&::guatiao::Map as ::core::convert::TryFrom<
                     &::guatiao::Value,
                 >>::try_from(__value)?;
+                #strict
                 ::core::result::Result::Ok(#name {
                     #(#reads)*
                 })
@@ -838,15 +1052,22 @@ fn emit_from(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
 }
 
 /// The schema, as builder calls.
-fn emit_schema(name: &Ident, plan: &[FieldPlan]) -> TokenStream {
+fn emit_schema(head: &TokenStream, plan: &[FieldPlan]) -> TokenStream {
     let fields = plan.iter().filter(|f| !f.skip).map(|field| {
+        if field.flatten {
+            let ty = &field.ty;
+            return quote! {
+                __fields.extend(::guatiao::__private::fields_of(
+                    <#ty as ::guatiao::Schema>::kind(__alloc),
+                ));
+            };
+        }
         let built = field_builder(field);
         quote! { __fields.push(#built); }
     });
 
     quote! {
-        #[automatically_derived]
-        impl ::guatiao::Schema for #name {
+        #head {
             fn kind(
                 __alloc: ::guatiao::Alloc,
             ) -> ::guatiao::schema::KindBuilder {
@@ -881,6 +1102,11 @@ struct ContainerAttrs {
     /// `#[map(rename_all = "..")]`: the case rule for every field of a
     /// struct, or every variant of an enum.
     rename_all: Option<RenameRule>,
+    /// `#[map(transparent)]`, on a struct: its value is its one field's.
+    transparent: bool,
+    /// `#[map(deny_unknown_fields)]`, on a struct: reading refuses a key
+    /// no field declares, as the schema does.
+    deny_unknown_fields: bool,
 }
 
 impl ContainerAttrs {
@@ -897,6 +1123,12 @@ impl ContainerAttrs {
                     Ok(())
                 } else if meta.path.is_ident("rename_all") {
                     out.rename_all = Some(RenameRule::parse(&meta.value()?.parse::<LitStr>()?)?);
+                    Ok(())
+                } else if meta.path.is_ident("transparent") && !is_enum {
+                    out.transparent = true;
+                    Ok(())
+                } else if meta.path.is_ident("deny_unknown_fields") && !is_enum {
+                    out.deny_unknown_fields = true;
                     Ok(())
                 } else if meta.path.is_ident("tag") && is_enum {
                     out.tag = Some(meta.value()?.parse::<LitStr>()?.value());
@@ -919,9 +1151,9 @@ impl ContainerAttrs {
                 } else {
                     Err(meta.error(format!(
                         "unrecognised `#[map(...)]` option on a struct. {label} takes \
-                         two here, `rename_all = \"...\"` and `crate = <path>`: \
-                         `rename = \"...\"`, `skip` and `default` go on a field, and \
-                         `tag` is an enum's."
+                         `rename_all = \"...\"`, `transparent`, `deny_unknown_fields` and \
+                         `crate = <path>` here: `rename = \"...\"`, `skip` and `default` \
+                         go on a field, and `tag` is an enum's."
                     )))
                 }
             })?;
@@ -948,6 +1180,8 @@ struct VariantPlan {
     /// `#[map(other)]`: the catch-all of a unit enum, holding a name no
     /// other variant is stored as. The type of its one field.
     other: Option<Type>,
+    /// A tagged enum's `Name(T)`: `T`'s map, written beside the tag.
+    newtype: Option<Type>,
 }
 
 impl VariantPlan {
@@ -1070,9 +1304,28 @@ impl VariantPlan {
             (explicit_title.or(doc), None)
         };
 
+        let newtype = match &variant.fields {
+            Fields::Unnamed(unnamed) if tagged && unnamed.unnamed.len() == 1 => {
+                if let Some(attr) = unnamed.unnamed[0]
+                    .attrs
+                    .iter()
+                    .find(|a| a.path().is_ident("map") || a.path().is_ident("schema"))
+                {
+                    return Err(syn::Error::new_spanned(
+                        attr,
+                        format!(
+                            "{label} takes no `#[map(..)]` or `#[schema(..)]` on a newtype \
+                             variant's field: its keys are its type's, written beside the tag."
+                        ),
+                    ));
+                }
+                Some(unnamed.unnamed[0].ty.clone())
+            }
+            _ => None,
+        };
         let fields = match &variant.fields {
             Fields::Unit => Vec::new(),
-            Fields::Unnamed(_) if other.is_some() => Vec::new(),
+            Fields::Unnamed(_) if other.is_some() || newtype.is_some() => Vec::new(),
             Fields::Named(named) => {
                 let mut plan = Vec::new();
                 for field in &named.named {
@@ -1087,7 +1340,8 @@ impl VariantPlan {
                     format!(
                         "{label} needs a variant's fields to have names: they are stored \
                          beside the tag under their own keys, and a tuple variant has no \
-                         names to key them by. Give the fields names."
+                         names to key them by. Give the fields names, or hold one type \
+                         whose map is written beside the tag: `Name(T)`."
                     ),
                 ));
             }
@@ -1104,6 +1358,7 @@ impl VariantPlan {
             title: title_text,
             description: description_text,
             other,
+            newtype,
         })
     }
 }
@@ -1126,7 +1381,9 @@ fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Resul
         tag,
         krate,
         rename_all,
+        ..
     } = ContainerAttrs::read(derive, &ast.attrs, true)?;
+    let head = impl_head(derive, name, &ast.generics);
     let reroot = |tokens| crate::krate::reroot(tokens, krate.as_ref());
 
     // Before reading any variant, so the message is about the decision
@@ -1170,16 +1427,16 @@ fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Resul
 
     let Some(tag) = tag else {
         return Ok(reroot(match derive {
-            Derive::ToValue => emit_choice_to(name, &variants),
-            Derive::FromValue => emit_choice_from(name, &variants),
-            Derive::Schema => emit_choice_schema(name, &variants),
+            Derive::ToValue => emit_choice_to(&head, &variants),
+            Derive::FromValue => emit_choice_from(&head, &variants),
+            Derive::Schema => emit_choice_schema(&head, &variants),
         }));
     };
     reject_fields_on_the_tag(&tag, &variants)?;
     Ok(reroot(match derive {
-        Derive::ToValue => emit_arm_to(name, &tag, &variants),
-        Derive::FromValue => emit_arm_from(name, &tag, &variants),
-        Derive::Schema => emit_arm_schema(name, &tag, &variants),
+        Derive::ToValue => emit_arm_to(&head, &tag, &variants),
+        Derive::FromValue => emit_arm_from(&head, &tag, &variants),
+        Derive::Schema => emit_arm_schema(&head, &tag, &variants),
     }))
 }
 
@@ -1257,7 +1514,7 @@ fn one_of(variants: &[VariantPlan]) -> String {
 
 // --- an enum of unit variants: a choice --------------------------------
 
-fn emit_choice_to(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
+fn emit_choice_to(head: &TokenStream, variants: &[VariantPlan]) -> TokenStream {
     let arms = variants.iter().map(|v| {
         let ident = &v.ident;
         let stored = &v.stored;
@@ -1270,8 +1527,7 @@ fn emit_choice_to(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
         quote! { Self::#ident => #stored, }
     });
     quote! {
-        #[automatically_derived]
-        impl ::guatiao::ToValue for #name {
+        #head {
             fn to_value_in(
                 &self,
                 __alloc: ::guatiao::Alloc,
@@ -1291,7 +1547,7 @@ fn emit_choice_to(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
     }
 }
 
-fn emit_choice_from(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
+fn emit_choice_from(head: &TokenStream, variants: &[VariantPlan]) -> TokenStream {
     let arms = variants.iter().filter(|v| v.other.is_none()).map(|v| {
         let ident = &v.ident;
         let stored = &v.stored;
@@ -1319,8 +1575,7 @@ fn emit_choice_from(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
         }
     };
     quote! {
-        #[automatically_derived]
-        impl ::guatiao::FromValue for #name {
+        #head {
             fn from_value(
                 __value: &::guatiao::Value,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
@@ -1335,7 +1590,7 @@ fn emit_choice_from(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
     }
 }
 
-fn emit_choice_schema(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
+fn emit_choice_schema(head: &TokenStream, variants: &[VariantPlan]) -> TokenStream {
     // With a catch-all the names are offered, not required: any text is
     // a value of the type, so the kind must accept any text.
     let build = if variants.iter().any(|v| v.other.is_some()) {
@@ -1351,8 +1606,7 @@ fn emit_choice_schema(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
         quote! { (#stored, #label), }
     });
     quote! {
-        #[automatically_derived]
-        impl ::guatiao::Schema for #name {
+        #head {
             fn kind(
                 __alloc: ::guatiao::Alloc,
             ) -> ::guatiao::schema::KindBuilder {
@@ -1366,7 +1620,7 @@ fn emit_choice_schema(name: &Ident, variants: &[VariantPlan]) -> TokenStream {
 
 // --- an enum with a tag: a variant --------------------------------------
 
-fn emit_arm_to(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStream {
+fn emit_arm_to(head: &TokenStream, tag: &str, variants: &[VariantPlan]) -> TokenStream {
     let arms = variants.iter().map(|v| {
         let ident = &v.ident;
         let stored = &v.stored;
@@ -1381,6 +1635,23 @@ fn emit_arm_to(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStream
             .enumerate()
             .map(|(i, f)| (f, format_ident!("__f{i}")))
             .collect();
+        if let Some(ty) = &v.newtype {
+            return quote! {
+                Self::#ident(__f0) => {
+                    ::guatiao::Map::set_in(
+                        &mut __map,
+                        #tag,
+                        ::guatiao::Text::new_in(__alloc, #stored)?,
+                        __alloc,
+                    )?;
+                    ::guatiao::__private::flatten_into(
+                        &mut __map,
+                        <#ty as ::guatiao::ToValue>::to_value_in(__f0, __alloc)?,
+                        __alloc,
+                    )?;
+                }
+            };
+        }
         let pattern = if v.unit {
             quote! { Self::#ident }
         } else {
@@ -1406,8 +1677,7 @@ fn emit_arm_to(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStream
         }
     });
     quote! {
-        #[automatically_derived]
-        impl ::guatiao::ToValue for #name {
+        #head {
             fn to_value_in(
                 &self,
                 __alloc: ::guatiao::Alloc,
@@ -1428,11 +1698,17 @@ fn emit_arm_to(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStream
     }
 }
 
-fn emit_arm_from(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStream {
+fn emit_arm_from(head: &TokenStream, tag: &str, variants: &[VariantPlan]) -> TokenStream {
     let arms = variants.iter().map(|v| {
         let ident = &v.ident;
         let stored = &v.stored;
-        if v.unit {
+        if let Some(ty) = &v.newtype {
+            quote! {
+                #stored => ::core::result::Result::Ok(Self::#ident(
+                    <#ty as ::guatiao::FromValue>::from_value(__value)?,
+                )),
+            }
+        } else if v.unit {
             quote! { #stored => ::core::result::Result::Ok(Self::#ident), }
         } else {
             let reads = v.fields.iter().map(read_field);
@@ -1441,8 +1717,7 @@ fn emit_arm_from(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStre
     });
     let expected = one_of(variants);
     quote! {
-        #[automatically_derived]
-        impl ::guatiao::FromValue for #name {
+        #head {
             fn from_value(
                 __value: &::guatiao::Value,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
@@ -1469,7 +1744,20 @@ fn emit_arm_from(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStre
     }
 }
 
-fn emit_arm_schema(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenStream {
+/// An arm with every field `ty`'s kind declares added to it.
+fn flattened_into_arm(arm: &TokenStream, ty: &Type) -> TokenStream {
+    quote! {
+        {
+            let mut __arm = #arm;
+            for __field in ::guatiao::__private::fields_of(<#ty as ::guatiao::Schema>::kind(__alloc)) {
+                __arm = __arm.field(__field);
+            }
+            __arm
+        }
+    }
+}
+
+fn emit_arm_schema(head: &TokenStream, tag: &str, variants: &[VariantPlan]) -> TokenStream {
     let arms = variants.iter().map(|v| {
         let stored = &v.stored;
         let title = v.title.as_deref().unwrap_or("");
@@ -1485,14 +1773,20 @@ fn emit_arm_schema(name: &Ident, tag: &str, variants: &[VariantPlan]) -> TokenSt
         // `#[schema]` on a variant's field mean what they mean on a
         // struct's.
         for field in v.fields.iter().filter(|f| !f.skip) {
+            if field.flatten {
+                built = flattened_into_arm(&built, &field.ty);
+                continue;
+            }
             let field = field_builder(field);
             built = quote! { #built.field(#field) };
+        }
+        if let Some(ty) = &v.newtype {
+            built = flattened_into_arm(&built, ty);
         }
         quote! { __arms.push(#built); }
     });
     quote! {
-        #[automatically_derived]
-        impl ::guatiao::Schema for #name {
+        #head {
             fn kind(
                 __alloc: ::guatiao::Alloc,
             ) -> ::guatiao::schema::KindBuilder {
@@ -1529,15 +1823,10 @@ mod tests {
     /// these being replaced by a default.
     #[test]
     fn unsupported_shapes_are_rejected_by_name() {
-        let tuple = to(quote! { struct S(u8, u8); });
-        assert!(tuple.contains("compile_error"), "{tuple}");
-        assert!(tuple.contains("needs named fields"), "{tuple}");
-        assert!(tuple.contains("tuple struct"), "{tuple}");
-        assert!(tuple.contains("#[derive(ToValue)]"), "{tuple}");
-
-        let unit = to(quote! { struct S; });
-        assert!(unit.contains("unit struct has none"), "{unit}");
-        assert!(unit.contains("Map::new()"), "{unit}");
+        // A position has no key to rename, default or describe.
+        let positional = to(quote! { struct S(#[map(rename = "a")] u8, u8); });
+        assert!(positional.contains("a position has no key"), "{positional}");
+        assert!(positional.contains("#[derive(ToValue)]"), "{positional}");
 
         // A data-carrying enum with no tag. A UNIT enum is accepted, so
         // the refusal is about the one decision this crate will not make.
@@ -1558,15 +1847,10 @@ mod tests {
         let union = to(quote! { union U { a: u8, b: u8 } });
         assert!(union.contains("which arm is live"), "{union}");
 
-        let generic = to(quote! { struct S<T> { a: T } });
-        assert!(generic.contains("does not support generic"), "{generic}");
-        assert!(generic.contains("Write the impl by hand"), "{generic}");
-
-        let lifetime = to(quote! { struct S<'a> { a: &'a str } });
-        assert!(
-            lifetime.contains("does not support generic"),
-            "a lifetime is a generic parameter too: {lifetime}"
-        );
+        let transparent = to(quote! { #[map(transparent)] struct S { a: u8, b: u8 } });
+        assert!(transparent.contains("exactly one field"), "{transparent}");
+        let deny = from(quote! { #[map(deny_unknown_fields)] struct S(u8); });
+        assert!(deny.contains("nothing else has keys"), "{deny}");
 
         // A container attribute on a STRUCT. Ignored, `tag` would say
         // nothing and a typo would change the wire shape, so both are
@@ -1755,7 +2039,26 @@ mod tests {
         // All THREE derives on all three shapes. `Schema` is not optional
         // here: it is the emitter with the most paths in it, and a scan
         // that skipped it would have proved nothing about the builders.
-        let output = to(declaration.clone())
+        let positional = quote! { struct P(u8, ::core::option::Option<u8>); };
+        let newtype = quote! { struct N(u8); };
+        let unit = quote! { struct U; };
+        let flat = quote! {
+            #[map(tag = "t")]
+            enum F { A(Inner), B { #[map(flatten)] x: Inner } }
+        };
+        let output = to(positional.clone())
+            + &from(positional.clone())
+            + &schema(positional)
+            + &to(newtype.clone())
+            + &from(newtype.clone())
+            + &schema(newtype)
+            + &to(unit.clone())
+            + &from(unit.clone())
+            + &schema(unit)
+            + &to(flat.clone())
+            + &from(flat.clone())
+            + &schema(flat)
+            + &to(declaration.clone())
             + &from(declaration.clone())
             + &schema(declaration)
             + &to(choice.clone())
@@ -1874,6 +2177,8 @@ mod tests {
             "FieldBuilder",
             "KindBuilder",
             "Number",
+            // A tuple struct is a list.
+            "List",
             // The door the presentation keys go through. Their names are
             // `guatiao-intake`'s and are emitted as literals, so nothing
             // here names that crate -- which is the point: a crate
@@ -1965,6 +2270,121 @@ mod tests {
             "a value that is not a map is rejected as that, not as every field \
              missing: {from_side}"
         );
+    }
+
+    /// The shapes beside a named struct, each as serde writes it: a
+    /// newtype is its field, a tuple struct a list, a unit struct a null,
+    /// a generic struct bounded by the trait for each type parameter.
+    #[test]
+    fn every_struct_shape_expands() {
+        let newtype = to(quote! { struct Port(u16); });
+        assert!(
+            newtype.contains("< u16 as :: guatiao :: ToValue > :: to_value_in (& self . 0"),
+            "{newtype}"
+        );
+        let transparent =
+            from(quote! { #[map(transparent)] struct P { port: u16, #[map(skip)] cache: u8 } });
+        assert!(
+            transparent
+                .contains("port : < u16 as :: guatiao :: FromValue > :: from_value (__value)"),
+            "{transparent}"
+        );
+        assert!(
+            transparent.contains("cache : :: core :: default :: Default :: default ()"),
+            "{transparent}"
+        );
+        let tuple = schema(quote! { struct Pair(u8, String); });
+        assert!(tuple.contains("tuple_in"), "{tuple}");
+        let read = from(quote! { struct Pair(u8, String); });
+        assert!(read.contains("a list of exactly 2 items"), "{read}");
+        let unit = to(quote! { struct Marker; });
+        assert!(unit.contains(":: guatiao :: Value :: null ()"), "{unit}");
+        let generic = to(quote! { struct W<'a, T, const N: usize> { a: &'a T, b: [u8; N] } });
+        assert!(
+            generic.contains("impl < 'a , T , const N : usize > :: guatiao :: ToValue for W < 'a , T , N > where T : :: guatiao :: ToValue"),
+            "{generic}"
+        );
+        let generic = schema(quote! { #[map(tag = "t")] enum E<T> { A { x: T } } });
+        assert!(
+            generic.contains("where T : :: guatiao :: Schema"),
+            "{generic}"
+        );
+    }
+
+    /// `flatten`, `with`, `skip_serializing_if` and `deny_unknown_fields`
+    /// reach the expansion; the combinations that cannot mean anything are
+    /// refused by name.
+    #[test]
+    fn serde_shaped_field_attributes() {
+        let decl = quote! {
+            #[map(deny_unknown_fields)]
+            struct S {
+                #[map(with = "secs")] a: Duration,
+                #[map(with = minutes)] b: Duration,
+                #[map(default, skip_serializing_if = "Vec::is_empty")] c: Vec<u8>,
+                d: u8,
+            }
+        };
+        let to_side = to(decl.clone());
+        assert!(
+            to_side.contains("secs :: to_value_in (& self . a"),
+            "{to_side}"
+        );
+        assert!(to_side.contains("minutes :: to_value_in"), "{to_side}");
+        assert!(
+            to_side.contains("if ! Vec :: is_empty (& self . c)"),
+            "{to_side}"
+        );
+        let from_side = from(decl.clone());
+        assert!(from_side.contains("secs :: from_value"), "{from_side}");
+        assert!(from_side.contains("\"a declared field\""), "{from_side}");
+        let schema_side = schema(decl);
+        assert!(
+            schema_side.contains("secs :: kind (__alloc)"),
+            "{schema_side}"
+        );
+
+        let flat = quote! { struct S { #[map(flatten)] inner: Inner, b: u8 } };
+        assert!(to(flat.clone()).contains("__private :: flatten_into"));
+        assert!(
+            from(flat.clone())
+                .contains("inner : < Inner as :: guatiao :: FromValue > :: from_value (__value)")
+        );
+        assert!(schema(flat).contains("__private :: fields_of"));
+
+        for (decl, expected) in [
+            (
+                quote! { struct S { #[map(flatten, rename = "x")] a: A } },
+                "`flatten` stands alone",
+            ),
+            (
+                quote! { struct S { #[map(flatten)] a: Option<A> } },
+                "an `Option` writes a null",
+            ),
+            (
+                quote! { struct S { #[map(with = m)] a: Option<A> } },
+                "`with` converts a whole field",
+            ),
+            (
+                quote! { struct S { #[map(skip_serializing_if = "f")] a: u8 } },
+                "needs `#[map(default)]`",
+            ),
+            (
+                quote! { struct S { #[map(alias = "b")] a: u8 } },
+                "Not `alias`",
+            ),
+            (
+                quote! { #[map(deny_unknown_fields)] struct S { #[map(flatten)] a: A } },
+                "beside a `#[map(flatten)]`",
+            ),
+        ] {
+            let out = from(decl);
+            assert!(out.contains(expected), "want {expected}: {out}");
+        }
+        // An `Option` already omits `None`; a predicate may skip more.
+        let optional =
+            to(quote! { struct S { #[map(skip_serializing_if = "is_zero")] a: Option<u8> } });
+        assert!(!optional.contains("compile_error"), "{optional}");
     }
 
     /// A struct with no fields at all is legal and produces an empty map.
@@ -2130,8 +2550,12 @@ mod tests {
         let empty = to(quote! { enum Never {} });
         assert!(empty.contains("at least one variant"), "{empty}");
 
-        let tuple = to(quote! { #[map(tag = "k")] enum E { A(u8) } });
+        // One unnamed field is a newtype arm; two have no keys.
+        let tuple = to(quote! { #[map(tag = "k")] enum E { A(u8, u8) } });
         assert!(tuple.contains("tuple variant"), "{tuple}");
+        assert!(tuple.contains("`Name(T)`"), "{tuple}");
+        let newtype = to(quote! { #[map(tag = "k")] enum E { A(#[map(rename = "x")] u8) } });
+        assert!(newtype.contains("newtype variant"), "{newtype}");
 
         let same = to(quote! { enum E { A, #[map(rename = "A")] B } });
         assert!(same.contains("two variants are stored as"), "{same}");
@@ -2166,7 +2590,10 @@ mod tests {
             "{titled}"
         );
 
-        let generic = to(quote! { enum E<T> { A(T) } });
-        assert!(generic.contains("does not support generic"), "{generic}");
+        let generic = to(quote! { #[map(tag = "t")] enum E<T> { A(T) } });
+        assert!(
+            generic.contains("where T : :: guatiao :: ToValue"),
+            "{generic}"
+        );
     }
 }

@@ -465,11 +465,11 @@ Connection::schema_in(alloc) -> Result<Value, ValueError>
 A hand-written `ToValue` implements `to_value_in`; a hand-written
 `Schema` implements `kind(alloc)`, and both short forms are provided.
 
-`Value` implements `ToValue` (a deep copy into the target allocator) and
-`FromValue` (a copy in `Alloc::rust()`, as `clone` makes one; content
-this build refuses is `MapError::BadValue`), so a `ToValue`/`FromValue`
-field may be a `Value`, `Option<Value>`, `Vec<Value>` or
-`BTreeMap<String, Value>`. `Schema` has no impl for `Value`.
+`Value`, `Map`, `List`, `Text`, `Number` and `Buffer` implement all
+three: written as a deep copy into the target allocator, read as a copy
+in `Alloc::rust()` (as `clone` makes one; content this build refuses is
+`MapError::BadValue`). Every field type and the value and schema it
+crosses as is in the table under "Field types" below.
 
 `#[map(rename = "...")]`, `#[map(skip)]`, `#[map(default)]` or
 `#[map(default = <expr>)]` (an absent key reads as it, the field is not
@@ -480,8 +480,14 @@ max_items)]` on its kind -- named after the keys they write. The derive also
 accepts attributes for presentation keys **it does not own**, which are
 listed in `guatiao-derive`'s own `AGENTS.md` beside the crate that names
 them; they reach the document through `Extras` like any annotation.
-Unions, tuple structs and generics are refused with a message naming the
-derive you wrote.
+Every struct shape is accepted, as serde writes it: a newtype (or
+`#[map(transparent)]`) is its field's value, a tuple struct a list by
+position (`prefixItems`), a unit struct a null; a generic type's
+parameters are each bound by the trait derived. `#[map(flatten)]`,
+`#[map(with = path)]`, `#[map(skip_serializing_if = path)]` and
+`#[map(deny_unknown_fields)]` mean what serde's do; the full list, and
+what is refused (an untagged data enum, `alias`, a union), is in
+`guatiao-derive`'s `AGENTS.md`.
 
 Enums, in two shapes:
 

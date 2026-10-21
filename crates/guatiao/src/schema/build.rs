@@ -1074,6 +1074,47 @@ impl KindBuilder {
         self.state
     }
 
+    /// The fields an object kind declares, each with its requiredness, to
+    /// be declared again on another object: what a flattened member or a
+    /// tagged enum's newtype arm contributes. A kind that is not an object
+    /// declaring `properties` comes back as one field holding
+    /// [`ValueError::WrongKind`], which the owner's `finish` reports.
+    pub(crate) fn into_fields(self) -> Vec<FieldBuilder> {
+        let alloc = self.alloc;
+        let refused = |e: ValueError| {
+            alloc::vec![FieldBuilder {
+                alloc,
+                state: Err(e),
+                key: String::new(),
+                required: false,
+            }]
+        };
+        let kind = match self.state {
+            Ok(kind) => kind,
+            Err(e) => return refused(e),
+        };
+        let Some(properties) = TryAsRef::<Map>::try_as_ref(&kind)
+            .and_then(|m| m.get(vocab::PROPERTIES))
+            .and_then(TryAsRef::<Map>::try_as_ref)
+        else {
+            return refused(ValueError::WrongKind);
+        };
+        let required: Vec<&str> = TryAsRef::<Map>::try_as_ref(&kind)
+            .and_then(|m| m.get(vocab::REQUIRED))
+            .and_then(TryAsRef::<List>::try_as_ref)
+            .map(|l| l.iter().filter_map(TryAsRef::<str>::try_as_ref).collect())
+            .unwrap_or_default();
+        properties
+            .iter()
+            .map(|entry| FieldBuilder {
+                alloc,
+                state: entry.value().clone_in(alloc),
+                key: entry.key().to_string(),
+                required: required.contains(&entry.key()),
+            })
+            .collect()
+    }
+
     /// Sets `key` to `value`, keeping the first error.
     pub(crate) fn keyword(mut self, key: &str, value: Result<Value, ValueError>) -> KindBuilder {
         put(&mut self.state, key, value);

@@ -22,12 +22,17 @@
 //!
 //! For a struct with named fields, `#[derive(ToValue)]` writes an impl
 //! of `ToValue` that builds a map, and `#[derive(FromValue)]` writes the
-//! reader. An enum is accepted in two shapes:
+//! reader. The other shapes are written as serde writes them:
 //!
 //! | declaration | value | schema kind |
 //! |---|---|---|
+//! | newtype struct, or `#[map(transparent)]` | the field's value | the field's kind |
+//! | tuple struct | a list by position | `prefixItems` |
+//! | unit struct | null | `type: null` |
 //! | unit variants only | the variant's name, as text | a string `enum` |
-//! | `#[map(tag = "k")]` on the enum | a map: the name under `k`, then the variant's fields | a tagged variant |
+//! | `#[map(tag = "k")]` on the enum | a map: the name under `k`, then the variant's fields (or a `Name(T)` variant's map) | a tagged variant |
+//!
+//! A generic type's parameters are each bound by the trait derived.
 //!
 //! An enum whose variants carry fields and that names no tag is refused.
 //! The key that tells two variants apart is a wire-format decision, and it
@@ -63,6 +68,11 @@
 //! | `#[map(rename = "...")]` | store under this key instead of the field name |
 //! | `#[map(skip)]` | never store; on read, `Default::default()` |
 //! | `#[map(default)]`, `#[map(default = <expr>)]` | an absent key reads as `Default::default()` or the expression; the schema does not require the field and carries that value as `default` |
+//! | `#[map(flatten)]` | the field's map is written beside the other keys, and read from the whole map |
+//! | `#[map(with = path)]` | `path::{to_value_in, from_value, kind}` convert the field |
+//! | `#[map(skip_serializing_if = path)]` | the key is left out when `path(&field)` is true; needs `default` |
+//!
+//! On a struct, `#[map(transparent)]` and `#[map(deny_unknown_fields)]`.
 //!
 //! On an enum, `#[map(tag = "...")]` names the key a variant's name is
 //! stored under; on a variant, `#[map(rename = "...")]` changes the name
@@ -141,6 +151,7 @@ mod krate;
 #[cfg(feature = "provider")]
 mod provider;
 mod rename;
+mod shapes;
 #[cfg(feature = "provider")]
 mod spelling;
 
@@ -148,12 +159,13 @@ use proc_macro::TokenStream;
 
 use crate::expand::{Derive, expand};
 
-/// Derives `guatiao::ToValue` for a struct with named fields, an enum of
-/// unit variants, or an enum with `#[map(tag = "...")]`.
+/// Derives `guatiao::ToValue` for a struct of any shape, an enum of unit
+/// variants, or an enum with `#[map(tag = "...")]`.
 ///
-/// A struct builds a map keyed by field name; a unit enum, its variant's
-/// name; a tagged enum, a map holding the name under the tag beside the
-/// variant's fields.
+/// A struct with named fields builds a map keyed by field name; a newtype
+/// its field's value, a tuple struct a list, a unit struct a null; a unit
+/// enum, its variant's name; a tagged enum, a map holding the name under
+/// the tag beside the variant's fields.
 ///
 /// See the [crate documentation](crate) for the field attributes and the
 /// `Option<T>` rule.
@@ -166,7 +178,7 @@ pub fn derive_to_value(input: TokenStream) -> TokenStream {
     expand(Derive::ToValue, input.into()).into()
 }
 
-/// Derives `guatiao::Schema` for a struct with named fields or an enum:
+/// Derives `guatiao::Schema` for a struct of any shape or an enum:
 /// the values the type accepts, described as a value a consumer can read.
 ///
 /// A unit enum describes itself as a choice and a tagged enum as a
@@ -206,8 +218,8 @@ pub fn derive_schema(input: TokenStream) -> TokenStream {
     expand(Derive::Schema, input.into()).into()
 }
 
-/// Derives `guatiao::FromValue` for a struct with named fields, an enum of
-/// unit variants, or an enum with `#[map(tag = "...")]`.
+/// Derives `guatiao::FromValue` for a struct of any shape, an enum of unit
+/// variants, or an enum with `#[map(tag = "...")]`.
 ///
 /// A name no variant declares is `MapError::BadValue`, naming the
 /// alternatives and never the value it was given.
