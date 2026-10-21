@@ -153,39 +153,67 @@ for an unsigned width, and for a signed one the width's bounds and
  "maximum": 9223372036854775807, "not": {"const": 0}}
 ```
 
-## A point in time
+## Dates and times
 
-RFC 3339 `date-time` text in UTC, schema
-`{"type": "string", "format": "date-time"}`:
+Four forms, each a string and none of them with a time zone: a calendar
+date, a time of day, the two together (a **civil** date and time, what a
+wall clock shows), and an **instant**. The calendar is the proleptic
+Gregorian one with no leap seconds, and every form covers the years 0000
+to 9999, which is what four digits write; a value outside them is
+refused, written or read.
+
+| form | example | schema |
+| --- | --- | --- |
+| a date | `"2026-10-21"` | `{"type": "string", "format": "date"}` |
+| a time of day | `"13:45:00.5"` | a `pattern`, below |
+| a civil date and time | `"2026-10-21T13:45:00.5"` | a `pattern`, below |
+| an instant | `"2026-10-21T13:45:00.5Z"` | `{"type": "string", "format": "date-time"}` |
+
+The time of day and the civil date and time state a `pattern` rather
+than a `format`, because JSON Schema's `time` and `date-time` formats
+require an offset and these forms have none. The time of day, then the
+civil date and time:
 
 ```json
-"2026-10-21T13:45:00.5Z"
+{"type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?$"}
+{"type": "string",
+ "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])[Tt]([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\\.[0-9]{1,9})?$"}
 ```
 
-**Written** as `YYYY-MM-DDTHH:MM:SS`, then `.` and the fraction of a
-second with trailing zeros removed (none when it is zero), then `Z`. The
-years 0000 to 9999 are writable; a time outside them is refused. The
-calendar is the proleptic Gregorian one, with no leap seconds.
+A pattern cannot know how long a month is; the reader refuses
+`2026-02-30` as well.
 
-**Read** with this grammar, and converted to the instant it names:
+**Written**: a date as `YYYY-MM-DD`; a time as `HH:MM:SS`, then `.` and
+the fraction of a second with trailing zeros removed, none when it is
+zero; a civil date and time as the date, `T` and the time; an instant as
+its UTC date and time followed by `Z`.
+
+**Read** with this grammar, RFC 3339's (section 5.6) with the offset
+left out of the forms that have none:
 
 ```text
-date-time  = year "-" month "-" day ("T" / "t") hour ":" minute ":" second
-             [ "." 1*9DIGIT ] ( "Z" / "z" / offset )
-offset     = ("+" / "-") hh ":" mm          ; hh 00-23, mm 00-59
-year       = 4DIGIT                         ; 0000-9999
-month      = 2DIGIT                         ; 01-12
-day        = 2DIGIT                         ; 01 to the month's last day
-hour       = 2DIGIT                         ; 00-23
-minute     = 2DIGIT                         ; 00-59
-second     = 2DIGIT                         ; 00-59: a leap second is refused
+date       = year "-" month "-" day
+time       = hour ":" minute ":" second [ "." 1*9DIGIT ]
+date-time  = date ("T" / "t") time                    ; a civil date and time
+instant    = date-time ( "Z" / "z" / offset )
+offset     = ("+" / "-") hh ":" mm                    ; hh 00-23, mm 00-59
+year       = 4DIGIT                                   ; 0000-9999
+month      = 2DIGIT                                   ; 01-12
+day        = 2DIGIT                                   ; 01 to the month's last day
+hour       = 2DIGIT                                   ; 00-23
+minute     = 2DIGIT                                   ; 00-59
+second     = 2DIGIT                                   ; 00-59: a leap second is refused
 ```
 
-`2026-10-21T19:15:00.5+05:30` reads as the instant above. A space in
-place of the `T`, a missing offset, more than nine fractional digits and
-anything after the offset are refused, each naming the byte offset it
-stopped at. An implementation keeps the fraction to its clock's
-resolution.
+An instant is read with any offset and converted to the instant it
+names: `2026-10-21T19:15:00.5+05:30` is `2026-10-21T13:45:00.5Z`, and
+`-00:00` (RFC 3339's "offset unknown") reads as UTC. An offset that moves
+the instant outside the years 0000 to 9999
+(`0000-01-01T00:30:00+01:00`) is refused at the offset. A date, a time of
+day and a civil date and time take no offset: a `Z` or a `+05:30` after
+one is refused. A space in place of the `T`, more than nine fractional
+digits and anything after the form are refused too, each naming the byte
+offset it stopped at, and no refusal quotes the text.
 
 ## An exact length of time
 
@@ -280,8 +308,32 @@ A refusal names the byte offset it stopped at and what it expected
 there, and never quotes the text.
 
 A span converts to an exact length only when it has no years or months
-and is not negative; a week is then 7 days and a day 24 hours. Applying a
-span to a date is the date library's job, in the program that has one.
+and is not negative; a week is then 7 days and a day 24 hours.
+
+## Applying a span to a date
+
+A span moves a date, or a civil date and time, in three steps:
+
+1. **Years and months**, together, as a number of months. A day past the
+   end of the month it lands in becomes that month's last day:
+   `2026-01-31` plus `P1M` is `2026-02-28`, and `2024-02-29` plus `P1Y` is
+   `2025-02-28`.
+2. **Weeks and days**, a week being 7 days.
+3. **Hours, minutes, seconds and nanoseconds**, on a civil date and time
+   only, carried across midnight: `2026-10-21T23:30:00` plus `PT1H` is
+   `2026-10-22T00:30:00`. On a date, a span with any of them is refused:
+   a date has no time of day to carry them into.
+
+The steps run in that order whatever order the text wrote the units in,
+and the month-end clamp happens once, after the first step: `2026-01-31`
+plus `P1M1D` is `2026-03-01`. A negative span runs each step backwards:
+`2026-03-31` plus `-P1M1D` is `2026-02-27`. A step that lands outside
+the years 0000 to 9999 is refused.
+
+No time zone takes part, so a day on a civil date and time is always 24
+hours. An instant takes no span; a program that wants "one month after
+this instant" applies the span to the instant's civil date and time in
+the zone it means.
 
 ## Records and variants
 
@@ -295,6 +347,48 @@ then its fields: `{"type": "Square", "side": 2}`, described with
 `oneOf` arms and the tag under `x-variant-tag`. A variant holding one
 record writes that record's fields beside the tag:
 `{"type": "Circle", "a": 1}`.
+
+## In C, Python and Dart
+
+Each text form above has C functions that read it into a plain struct,
+write it back from one, and rewrite text in its canonical spelling, all
+declared in `guatiao.h`; the Python and Dart bindings call the same
+functions, so every grammar has one implementation. A refusal is
+`GUATIAO_ERR_BAD_VALUE` with a `guatiao_text_error` that names the byte
+offset and what was expected there. `guatiao_date_add_span` and
+`guatiao_datetime_add_span` apply a span, and `guatiao_duration_read`
+reads an exact length in any of its three spellings.
+
+| form | C | Python | Dart |
+| --- | --- | --- | --- |
+| a date | `guatiao_date` | `datetime.date` | `PlainDate` |
+| a time of day | `guatiao_time` | `datetime.time`, no `tzinfo` | `PlainTime` |
+| a civil date and time | `guatiao_datetime` | `datetime.datetime`, no `tzinfo` | `PlainDateTime` |
+| an instant | `guatiao_timestamp` | `datetime.datetime` in UTC | `DateTime`, `isUtc` |
+| an exact length | a list of two numbers | `datetime.timedelta` | `Duration` |
+| a span | `guatiao_span` | `guatiao.time.Span` | `Span` |
+
+What a mapping loses, and what happens then:
+
+- **Below a microsecond.** Python's `datetime`, `time` and `timedelta`
+  and Dart's `DateTime` and `Duration` count microseconds. Reading a form
+  into one of them drops the nanoseconds below a microsecond, toward the
+  past; writing one back is exact. `PlainTime`, `PlainDateTime`, both
+  `Span` classes and every C struct keep the nanoseconds.
+- **The year 0000.** Python's `datetime.date` and `datetime.datetime`
+  start at year 1, so reading a date, a civil date and time or an
+  instant in year 0000 into one raises `ValueError`. Dart and C hold it.
+- **Long exact lengths.** `timedelta` stops at 999999999 days and Dart's
+  `Duration` at 2^63 - 1 microseconds (about 292471 years); a longer
+  length raises rather than wraps. An exact length is never negative, so
+  a negative `timedelta` or `Duration` is refused when written.
+- **An offset.** An instant read into any type is in UTC: the offset it
+  was written with is not kept, as the canonical text does not keep it.
+
+Dart has no type for a date or a time of day alone, and its `DateTime` is
+always either UTC or the machine's own zone, which would move a civil
+time that a daylight-saving change skips; hence the three `Plain`
+classes, named after JavaScript's Temporal.
 
 ## In Rust
 
@@ -312,7 +406,8 @@ The `guatiao` crate implements every form above for these types, under
 | a path | `PathBuf`, `Path`, `Box<Path>`, `Arc<Path>`, `Rc<Path>` |
 | addresses | `IpAddr`, `Ipv4Addr`, `Ipv6Addr`, `SocketAddr`, `SocketAddrV4`, `SocketAddrV6` |
 | non-zero integers | every `NonZero*` |
-| a point in time | `std::time::SystemTime` |
+| a date, a time of day, a civil date and time | `guatiao::Date`, `guatiao::Time`, `guatiao::DateTime` |
+| an instant | `guatiao::Timestamp`, `std::time::SystemTime` |
 | an exact length | `std::time::Duration` |
 | a span | `guatiao::Span` |
 | the same as `T` | `Box<T>`, `Arc<T>`, `Rc<T>`, `Cow<'_, T>`, `&T` |

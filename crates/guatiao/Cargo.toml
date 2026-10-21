@@ -93,6 +93,9 @@ cbindgen = { version = "0.29", optional = true }
 # The scan tests look a macro-generated symbol up by name and call it,
 # which needs the loader whether or not the `load` feature is on.
 libloading = "0.8"
+# Reads `tests/vectors/time.json`, the vectors every language's
+# implementation of the date and time forms is checked against.
+serde_json = "1"
 # The kind crate `derived_greeter` and the kind tests share.
 greeter_kind = { path = "../../examples/greeter_kind" }
 

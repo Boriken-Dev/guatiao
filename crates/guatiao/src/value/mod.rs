@@ -22,8 +22,7 @@ mod raw;
 pub mod read;
 pub mod span;
 pub mod status;
-// RFC 3339 arithmetic for SystemTime.
-pub(crate) mod time;
+pub mod time;
 pub mod types;
 pub mod wire;
 // The whole-tree walks besides drop: a deep copy, and equality.
@@ -38,6 +37,7 @@ pub use error::{MAX_DEPTH, ValueError};
 pub use read::{Dump, bool_or, bytes_or, float_or, int_or, str_or};
 pub use span::Span;
 pub use status::Status;
+pub use time::{Date, DateTime, Time, Timestamp};
 // `Str` is here because every C signature in `exports` names it; the
 // other views stay behind `types::`, clear of `convert::Bytes`.
 pub use types::{Buffer, Entry, List, Map, Number, Payload, Str, Tag, Text, Value};

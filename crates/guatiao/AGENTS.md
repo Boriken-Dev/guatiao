@@ -565,7 +565,10 @@ one's grammar exactly; these types are one implementation of them.
 | `IpAddr`, `Ipv4Addr`, `Ipv6Addr` | `Display` text | `string` + `format: ipv4` / `ipv6` (`anyOf` both for `IpAddr`) |
 | `SocketAddr`, `SocketAddrV4`, `SocketAddrV6` | `Display` text | `string` + `pattern` |
 | `NonZeroU*` / `NonZeroI*` | integer, zero refused | `integer`, `minimum: 1` / the width's bounds + `not: {const: 0}` |
-| `SystemTime` | RFC 3339 UTC, `2026-10-21T13:45:00.5Z` | `string` + `format: date-time` |
+| `Date` | `2026-10-21` | `string` + `format: date` |
+| `Time` | `13:45:00.5` | `string` + `pattern` (`format: time` needs an offset) |
+| `DateTime` | `2026-10-21T13:45:00.5`, no offset | `string` + `pattern` |
+| `Timestamp`, `SystemTime` | RFC 3339 UTC, `2026-10-21T13:45:00.5Z` | `string` + `format: date-time` |
 | `Duration` | `[secs, nanos]` | the tuple `[u64, 0..=999999999]` |
 | `Span` | ISO 8601 duration, `P1DT2H` | `string` + `format: duration` |
 
@@ -575,12 +578,10 @@ one's grammar exactly; these types are one implementation of them.
 reproducible from one run to the next; `BTreeMap` and `BTreeSet` write
 sorted.
 
-**`SystemTime`** writes the years 0000 to 9999 (outside them,
-`ValueError::Unrepresentable`), the fraction with trailing zeros removed.
-It reads `T` or `t`, `Z`, `z` or `+HH:MM`/`-HH:MM`, seconds 00 to 59 (a
-leap second is refused), one to nine fractional digits, and a refusal
-names the byte it stopped at. The fraction is kept to the clock's
-resolution, 100 ns on Windows, whose `SystemTime` starts in 1601.
+**`SystemTime`** crosses as a `Timestamp` (below): outside the years
+0000 to 9999 it is `ValueError::Unrepresentable`, and a read keeps the
+fraction to the clock's resolution, 100 ns on Windows, whose
+`SystemTime` starts in 1601.
 
 **`Duration`** reads three spellings: `[secs, nanos]`, a number of
 seconds read exactly from its text (`1.5`, `2e-3`; not negative, no
@@ -596,15 +597,59 @@ pub trait MapKey: Sized {                    // guatiao::value::convert::MapKey
 }
 // String, Box/Arc/Rc<str> (any text); integers (decimal, no leading zero,
 // no sign when unsigned); char; bool ("true"/"false"); the six addresses;
-// PathBuf. Two keys reading as one key are refused.
+// PathBuf; Date, Time, DateTime, Timestamp. Two keys reading as one key
+// are refused.
 ```
+
+### Dates and times (`guatiao::{Date, Time, DateTime, Timestamp}`)
+
+No time zone anywhere. The proleptic Gregorian calendar, no leap
+seconds, the years 0000 to 9999. Each is `Copy`, `Eq`, `Ord` (by time),
+`Hash`, `Send`, `Sync`; `Display` writes the canonical text, `Debug`
+shows it (`Date(2026-10-21)`), `FromStr`/`TryFrom<&str>` read it and
+`String::from(x)` takes it. A `MapKey`.
+
+```rust
+Date::try_new(year: i32, month: u8, day: u8) -> Result<Date, ValueError>
+date.year() -> i32; date.month() -> u8; date.day() -> u8
+date.checked_add(span: Span) -> Option<Date>
+Time::try_new(hour: u8, minute: u8, second: u8, nanosecond: u32) -> Result<Time, ValueError>
+Time::midnight() -> Time
+time.hour() / minute() / second() -> u8; time.nanosecond() -> u32
+DateTime::new(date: Date, time: Time) -> DateTime
+at.date() -> Date; at.time() -> Time
+at.checked_add(span: Span) -> Option<DateTime>
+Timestamp::from_unix(seconds: i64, nanoseconds: u32) -> Result<Timestamp, ValueError>
+t.seconds() -> i64; t.nanoseconds() -> u32      // nanoseconds counted forward
+Timestamp::try_from(SystemTime) / SystemTime::try_from(Timestamp)
+```
+
+- **Text**: `Date` `YYYY-MM-DD`; `Time` `HH:MM:SS[.f]`; `DateTime` the
+  date, `T`, the time; `Timestamp` its UTC date-time and `Z`. A fraction
+  is written with trailing zeros removed and read as 1 to 9 digits. `T`
+  or `t` is read; a space is not. `Time` and `DateTime` refuse an
+  offset; `Timestamp` reads `Z`, `z`, `+HH:MM`, `-HH:MM` (`-00:00` is
+  UTC) and does not keep it. Seconds run 00 to 59.
+- **A refusal is `ValueError::Unparsed { at, expected }`**, never the
+  text; an offset that moves an instant outside the years is refused at
+  the offset. A constructor's refusal (`Date::try_new(2026, 2, 30)`) is
+  `ValueError::Unrepresentable`.
+- **`checked_add` applies a span**: years and months first as one count
+  of months, a day past the month's end clamped to its last day
+  (`2026-01-31` + `P1M` = `2026-02-28`), then weeks and days, then, on a
+  `DateTime` only, hours to nanoseconds carried across midnight (a day is
+  24 hours). `None` for a step outside the years, and on a `Date` for a
+  span with any time unit. A negative span runs each step backwards.
+- **`SystemTime::try_from(t)`** is `Unrepresentable` where the platform
+  clock cannot hold `t` (before 1601 on Windows) and truncates to its
+  resolution.
 
 ### `Span` (`guatiao::Span`)
 
 A length of time in calendar units, equal unit by unit (`P1D` is not
 `PT24H`), with one sign for the whole span. `Copy`, `Eq`, `Hash`,
-`Default` (zero), `Send`, `Sync`; no ordering. The crate holds no
-calendar: a host applies a span to a date with its own date library.
+`Default` (zero), `Send`, `Sync`; no ordering. `Date::checked_add` and
+`DateTime::checked_add` apply one.
 
 ```rust
 Span::new() -> Span                                   // PT0S

@@ -110,6 +110,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   duration`.
 - **`ValueError::Unparsed { at, expected }`**: text refused by a grammar,
   naming the byte offset and what was expected there, never the text.
+- **`guatiao::{Date, Time, DateTime, Timestamp}`**: a calendar date
+  (`2026-10-21`, `format: date`), a time of day (`13:45:00.5`), a civil
+  date and time with no offset (`2026-10-21T13:45:00.5`), both described
+  with a `pattern` because JSON Schema's formats for them require an
+  offset, and an instant (RFC 3339 read with any offset, written in UTC,
+  `format: date-time`). No time zones; the years 0000 to 9999; a refusal
+  names the byte offset. Each is a field type and a `MapKey`, `Copy`,
+  `Ord` and `Hash`. `Date::checked_add` and `DateTime::checked_add` apply
+  a `Span`: years and months first with the day clamped to the month's
+  end (`2026-01-31` + `P1M` = `2026-02-28`), then weeks and days, then
+  the time units, carried across midnight. `SystemTime` reads and writes
+  through `Timestamp`, and an offset that moves an instant outside the
+  years is now refused when read rather than when written again.
 - **The derives take every struct shape, and generics**, as serde writes
   them: a newtype struct (or one marked `#[map(transparent)]`) is its
   field's value and describes its field's kind; a tuple struct is a list

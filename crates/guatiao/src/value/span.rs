@@ -40,8 +40,9 @@ const NANOS_PER_SECOND: u64 = 1_000_000_000;
 /// [`FromStr`] reads that form and a friendlier one, `1y 2mo 3w 4d 5h 6m
 /// 7s 500ms`; the grammar of both is on [`Span::from_str`].
 ///
-/// This crate holds no calendar: a host applies a span to a date with its
-/// own date library. [`Duration`] converts both ways where the units are
+/// [`Date::checked_add`](crate::Date::checked_add) and
+/// [`DateTime::checked_add`](crate::DateTime::checked_add) apply a span
+/// with no time zone. [`Duration`] converts both ways where the units are
 /// exact (`TryFrom<Span>` counts a week as 7 days and a day as 24 hours).
 ///
 /// ```
