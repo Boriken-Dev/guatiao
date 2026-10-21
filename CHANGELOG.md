@@ -42,6 +42,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`FromValue for Value`**, a copy in this binary's allocator. A
   `ToValue`/`FromValue` field may be a `Value`, `Option<Value>`,
   `Vec<Value>` or `BTreeMap<String, Value>`.
+- **`Map`, `List`, `Text`, `Number` and `Buffer` are field types**, under
+  all three derives and `#[derive(Form)]`: each writes as the kind it is,
+  copied into the target allocator, and reads as a copy in this binary's.
+  `Value` describes itself as `{}`, `Map` as an object of any keys and
+  values, `List` as an array of anything, `Text` as a string, `Number` as
+  a number (its exact text kept), `Buffer` as bytes. `KindBuilder::any()`
+  / `any_in` write `{}`.
 - **A guide to passing data**: the docs site's "Passing data" page and a
   section of the crate's shipped `AGENTS.md`, on returning trees by value
   and taking them by value when kept, building an answer in the

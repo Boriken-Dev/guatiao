@@ -99,6 +99,32 @@ fn a_raw_identifier_is_keyed_without_its_prefix() {
     assert_eq!(f.hints("r#type").widget(), "");
 }
 
+/// A configuration carrying raw trees: the containers are field types like
+/// any other, so the form derives over them.
+#[derive(Schema, Form)]
+struct Passthrough {
+    #[form(widget = "json")]
+    settings: Map,
+    extra: Option<Map>,
+    items: guatiao::List,
+    raw: Value,
+    maybe: Option<Value>,
+}
+
+#[test]
+fn a_form_derives_over_maps_lists_and_values() {
+    let schema = Passthrough::schema().expect("the schema builds");
+    let form = Passthrough::form(Alloc::rust()).expect("the form builds");
+    let (s, f) = (
+        SchemaRef::new(&schema).expect("a schema"),
+        FormRef::new(&form).expect("a form"),
+    );
+    check(s, f).expect("the derived pair agrees");
+    assert_eq!(f.hints("settings").widget(), "json");
+    let keys: Vec<&str> = s.fields().map(|f| f.key()).collect();
+    assert_eq!(keys, ["settings", "extra", "items", "raw", "maybe"]);
+}
+
 fn pair() -> (Value, Value) {
     let schema = Connection::schema().expect("the schema builds");
     let form = Connection::form(Alloc::rust()).expect("the form builds");
