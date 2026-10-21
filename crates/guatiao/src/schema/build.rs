@@ -883,6 +883,58 @@ impl KindBuilder {
         k
     }
 
+    /// JSON Schema's `propertyNames`: every key of the object satisfies
+    /// `names`, read as text. For a [`map_of`](KindBuilder::map_of) whose
+    /// keys are written from another type -- an integer, an address.
+    pub fn property_names(mut self, names: KindBuilder) -> KindBuilder {
+        put(&mut self.state, vocab::PROPERTY_NAMES, names.state);
+        self
+    }
+
+    /// JSON Schema's `uniqueItems: true`: no two elements are equal. For a
+    /// list that is a set.
+    pub fn unique_items(mut self) -> KindBuilder {
+        put(&mut self.state, vocab::UNIQUE_ITEMS, Ok(Value::from(true)));
+        self
+    }
+
+    /// Nothing: the only value is null, what `()` describes.
+    /// Built through the crate's own allocator. `null_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn null() -> KindBuilder {
+        KindBuilder::null_in(Alloc::rust())
+    }
+
+    /// The same, through an allocator you name.
+    pub fn null_in(alloc: Alloc) -> KindBuilder {
+        KindBuilder::typed(alloc, vocab::TYPE_NULL)
+    }
+
+    /// A fixed-length array whose element at each position has its own
+    /// kind: `prefixItems` in order, `items: false`, and `minItems` and
+    /// `maxItems` both the number of positions.
+    /// Built through the crate's own allocator. `tuple_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn tuple(positions: Vec<KindBuilder>) -> KindBuilder {
+        KindBuilder::tuple_in(Alloc::rust(), positions)
+    }
+
+    /// The same, through an allocator you name.
+    pub fn tuple_in(alloc: Alloc, positions: Vec<KindBuilder>) -> KindBuilder {
+        let n = positions.len() as u64;
+        let mut k = KindBuilder::typed(alloc, vocab::TYPE_ARRAY);
+        put(
+            &mut k.state,
+            vocab::PREFIX_ITEMS,
+            Ok(List::new_in(alloc).into()),
+        );
+        for position in positions {
+            push(&mut k.state, vocab::PREFIX_ITEMS, position.state);
+        }
+        put(&mut k.state, vocab::ITEMS, Ok(Value::from(false)));
+        k.min_items(n).max_items(n)
+    }
+
     /// Exactly one of a fixed set of alternatives.
     ///
     /// A `string` with an `enum`, and the labels in a **map** keyed by the

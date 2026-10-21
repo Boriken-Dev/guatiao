@@ -32,7 +32,7 @@ use core::cmp::Ordering;
 use crate::value::convert::TryAsRef;
 
 use super::ValidationError;
-use super::read::{FieldRef, Kind, SchemaRef, is_nullable, members, peel};
+use super::read::{FieldRef, Kind, SchemaRef, is_nullable, members, peel, prefix_items};
 use super::vocab;
 use crate::value::error::MAX_DEPTH;
 use crate::value::read::bool_or;
@@ -252,7 +252,7 @@ fn against(schema: &Value, key: &str, value: &str, depth: u32) -> Result<(), Val
         // rule here to check against, and accepting is the honest answer
         // rather than the lenient one. The structural check is in
         // [`validate_value`], which has the value rather than its text.
-        Kind::Bytes | Kind::List { .. } | Kind::Map(_) | Kind::MapOf(_) => Ok(()),
+        Kind::Bytes | Kind::List { .. } | Kind::Tuple(_) | Kind::Map(_) | Kind::MapOf(_) => Ok(()),
         // A kind from a newer producer: this build cannot say whether the
         // value is acceptable, so it does not pretend to. Accepting is the
         // right answer rather than the lenient one — rejecting would make
@@ -593,7 +593,61 @@ fn value_against(
                 ));
             }
             for (i, element) in elements.iter().enumerate() {
-                value_against(items, &format!("{key}[{i}]"), element, depth + 1)?;
+                value_against(items, &at_index(key, i), element, depth + 1)?;
+            }
+            if flag(schema, vocab::UNIQUE_ITEMS)
+                && let Some(i) = first_repeat(elements)
+            {
+                return Err(bad(at_index(key, i), "an element equal to no earlier one"));
+            }
+            return Ok(());
+        }
+        Kind::Tuple(owner) => {
+            let Some(elements) = TryAsRef::<List>::try_as_ref(value).map(|list| &list[..]) else {
+                return Err(bad(key, "a list"));
+            };
+            let positions = prefix_items(owner);
+            let n = elements.len() as u64;
+            let (min, max) = (
+                count(owner, vocab::MIN_ITEMS),
+                count(owner, vocab::MAX_ITEMS),
+            );
+            if min.is_some_and(|m| n < m) || max.is_some_and(|m| n > m) {
+                return Err(bad(
+                    key,
+                    match (min, max) {
+                        (Some(lo), Some(hi)) if lo == hi => format!("a list of exactly {lo} items"),
+                        (Some(lo), Some(hi)) => format!("a list of between {lo} and {hi} items"),
+                        (Some(lo), None) => format!("a list of at least {lo} items"),
+                        (None, Some(hi)) => format!("a list of at most {hi} items"),
+                        (None, None) => "a list".to_string(),
+                    },
+                ));
+            }
+            let rest = TryAsRef::<Map>::try_as_ref(owner).and_then(|m| m.get(vocab::ITEMS));
+            for (i, element) in elements.iter().enumerate() {
+                let at = at_index(key, i);
+                match (positions.get(i), rest) {
+                    (Some(position), _) => value_against(position, &at, element, depth + 1)?,
+                    // `items: false` past the positions: nothing more.
+                    (None, Some(v))
+                        if v.tag() == Ok(Tag::GUATIAO_BOOL) && !bool_or(Some(v), true) =>
+                    {
+                        return Err(bad(
+                            key,
+                            format!("a list of at most {} items", positions.len()),
+                        ));
+                    }
+                    (None, Some(v)) if TryAsRef::<Map>::try_as_ref(v).is_some() => {
+                        value_against(v, &at, element, depth + 1)?
+                    }
+                    (None, _) => {}
+                }
+            }
+            if flag(schema, vocab::UNIQUE_ITEMS)
+                && let Some(i) = first_repeat(elements)
+            {
+                return Err(bad(at_index(key, i), "an element equal to no earlier one"));
             }
             return Ok(());
         }
@@ -607,6 +661,7 @@ fn value_against(
             let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
                 return Err(bad(key, "keys that are text"));
             };
+            names_against(owner, key, map, depth)?;
             let Some(element) = TryAsRef::<Map>::try_as_ref(owner)
                 .and_then(|m| m.get(vocab::ADDITIONAL_PROPERTIES))
             else {
@@ -632,6 +687,7 @@ fn value_against(
             let Some(map) = TryAsRef::<Map>::try_as_ref(value) else {
                 return Err(bad(key, "keys that are text"));
             };
+            names_against(owner, key, map, depth)?;
             // The same two rules a variant arm's payload obeys: a key the
             // object does not declare answers to `additionalProperties`,
             // and a required field that is absent is refused.
@@ -716,6 +772,49 @@ fn value_against(
         }
     }
     Ok(())
+}
+
+/// Every key of `map` against the `propertyNames` of `owner`, as text.
+fn names_against(owner: &Value, key: &str, map: &Map, depth: u32) -> Result<(), ValidationError> {
+    let Some(names) = TryAsRef::<Map>::try_as_ref(owner).and_then(|m| m.get(vocab::PROPERTY_NAMES))
+    else {
+        return Ok(());
+    };
+    for entry in map {
+        let at = format!("{key}[{}]", entry.key());
+        against(names, &at, entry.key(), depth + 1)
+            .map_err(|_| bad(at.clone(), "a key the map's key type can read"))?;
+    }
+    Ok(())
+}
+
+/// A boolean keyword of `schema`, after the wrappers [`peel`] removes:
+/// `true` only when written `true`.
+fn flag(schema: &Value, key: &str) -> bool {
+    bool_or(
+        TryAsRef::<Map>::try_as_ref(peel(schema)).and_then(|m| m.get(key)),
+        false,
+    )
+}
+
+/// A count keyword of `schema`: a non-negative integer, or `None`.
+fn count(schema: &Value, key: &str) -> Option<u64> {
+    TryAsRef::<Map>::try_as_ref(schema)
+        .and_then(|m| m.get(key))
+        .and_then(TryAsRef::<Number>::try_as_ref)
+        .and_then(|n| AsRef::<str>::as_ref(n).parse().ok())
+}
+
+/// The position of the first element equal to an earlier one, as
+/// `uniqueItems` compares them. Quadratic, which a set held in a
+/// configuration does not notice.
+fn first_repeat(elements: &[Value]) -> Option<usize> {
+    (1..elements.len()).find(|&i| elements[..i].iter().any(|e| same_json(e, &elements[i])))
+}
+
+/// `key[i]`, for an element an error reports.
+fn at_index(key: &str, i: usize) -> String {
+    format!("{key}[{i}]")
 }
 
 /// `key.name`, or `name` alone at the root, for the key an error reports.

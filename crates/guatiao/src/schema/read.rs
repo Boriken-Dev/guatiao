@@ -488,6 +488,10 @@ pub enum Kind<'a> {
         /// `maxItems`: most elements.
         max: Option<u64>,
     },
+    /// A fixed-length array whose element at each position has a kind of
+    /// its own: `prefixItems`, what a tuple writes. Carries the array's
+    /// schema; [`positions`](Kind::positions) reads the kinds in order.
+    Tuple(&'a Value),
     /// A nested object, with its own fields. Carries the **object's**
     /// schema, not its `properties`, because `required` sits beside them.
     Map(&'a Value),
@@ -598,6 +602,13 @@ impl<'a> Kind<'a> {
             // An array with no element schema says nothing about what it
             // holds, which is a kind this build cannot use rather than an
             // array of anything.
+            vocab::TYPE_ARRAY
+                if m.get(vocab::PREFIX_ITEMS)
+                    .and_then(TryAsRef::<List>::try_as_ref)
+                    .is_some() =>
+            {
+                Kind::Tuple(k)
+            }
             vocab::TYPE_ARRAY => match m.get(vocab::ITEMS) {
                 Some(items) => Kind::List {
                     items,
@@ -711,6 +722,16 @@ impl<'a> Kind<'a> {
         }
     }
 
+    /// The kinds of a tuple's positions, in order, or nothing for any
+    /// other kind.
+    pub fn positions(self) -> impl Iterator<Item = Kind<'a>> {
+        let list = match self {
+            Kind::Tuple(k) => prefix_items(k),
+            _ => &[],
+        };
+        list.iter().map(|v| Kind::read(Some(v)))
+    }
+
     /// The kind every value of an open object has, or [`Kind::Missing`]
     /// for any other kind.
     ///
@@ -751,13 +772,22 @@ impl<'a> Kind<'a> {
                 _ => vocab::TYPE_STRING,
             },
             Kind::Bytes => vocab::TYPE_BYTES,
-            Kind::List { .. } => vocab::TYPE_ARRAY,
+            Kind::List { .. } | Kind::Tuple(_) => vocab::TYPE_ARRAY,
             Kind::Map(_) | Kind::MapOf(_) | Kind::Variant { .. } => vocab::TYPE_OBJECT,
             Kind::Union(_) => vocab::ANY_OF,
             Kind::Unknown(name) => name,
             Kind::Missing => "",
         }
     }
+}
+
+/// A tuple schema's `prefixItems`, or nothing.
+pub(crate) fn prefix_items(k: &Value) -> &[Value] {
+    TryAsRef::<Map>::try_as_ref(k)
+        .and_then(|m| m.get(vocab::PREFIX_ITEMS))
+        .and_then(TryAsRef::<List>::try_as_ref)
+        .map(|list| &list[..])
+        .unwrap_or(&[])
 }
 
 /// What [`Kind::Unknown`] names for the schema `true`.

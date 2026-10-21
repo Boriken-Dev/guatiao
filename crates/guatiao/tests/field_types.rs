@@ -270,3 +270,202 @@ mod wrappers {
         validate_map(SchemaRef::new(&schema).unwrap(), &value).unwrap();
     }
 }
+
+mod collections {
+    use super::*;
+    use alloc::collections::{BTreeMap, BTreeSet, VecDeque};
+    use std::collections::{HashMap, HashSet};
+
+    fn list(items: &[Value]) -> Value {
+        let mut l = List::new();
+        for item in items {
+            l.push(item.clone());
+        }
+        l.into()
+    }
+
+    #[test]
+    fn a_deque_is_a_list() {
+        let d: VecDeque<u32> = [3, 1, 2].into_iter().collect();
+        assert_eq!(check(d), vec![3u32, 1, 2].to_value().unwrap());
+        assert_eq!(kind_of::<VecDeque<u32>>(), kind_of::<Vec<u32>>());
+    }
+
+    #[test]
+    fn a_set_is_a_list_of_unique_elements() {
+        let s: BTreeSet<String> = ["b", "a"].into_iter().map(String::from).collect();
+        // Sorted, so the same every time.
+        assert_eq!(check(s), vec!["a", "b"].to_value().unwrap());
+        let h: HashSet<u16> = [1, 2, 3].into_iter().collect();
+        check(h);
+        check(BTreeSet::from([true, false]));
+        let kind = kind_of::<BTreeSet<String>>();
+        assert_eq!(get(&kind, "uniqueItems"), Some(&Value::from(true)));
+        assert_eq!(kind_of::<HashSet<String>>(), kind);
+
+        let repeated = list(&["a".to_value().unwrap(), "a".to_value().unwrap()]);
+        let refused = BTreeSet::<String>::from_value(&repeated).unwrap_err();
+        assert!(matches!(refused, MapError::BadValue { .. }));
+        assert_eq!(refused.key(), "[1]");
+        assert!(HashSet::<String>::from_value(&repeated).is_err());
+        assert!(!accepts::<BTreeSet<String>>(&repeated));
+        // Numbers are equal by what they denote.
+        let numbers = list(&[Value::from(1i64), "1.0".parse::<Number>().unwrap().into()]);
+        assert!(!accepts::<BTreeSet<f64>>(&numbers));
+    }
+
+    #[test]
+    fn an_array_is_a_list_of_exactly_its_length() {
+        let v = check([10u8, 0, 0, 1]);
+        assert_eq!(<&List>::try_from(&v).unwrap().len(), 4);
+        check(["a".to_string(), "b".to_string()]);
+        let kind = kind_of::<[u8; 4]>();
+        assert_eq!(get(&kind, "minItems"), Some(&Value::from(4u64)));
+        assert_eq!(get(&kind, "maxItems"), Some(&Value::from(4u64)));
+        let short = vec![1u8, 2, 3].to_value().unwrap();
+        assert!(matches!(
+            <[u8; 4]>::from_value(&short),
+            Err(MapError::BadValue { .. })
+        ));
+        assert!(!accepts::<[u8; 4]>(&short));
+        let bad = vec![1u32, 2, 300, 4].to_value().unwrap();
+        assert_eq!(<[u8; 4]>::from_value(&bad).unwrap_err().key(), "[2]");
+    }
+
+    #[test]
+    fn a_tuple_is_a_list_by_position() {
+        let v = check((7u8, "x".to_string()));
+        assert_eq!(v, list(&[Value::from(7i64), Value::from("x")]));
+        check((1u8,));
+        check(vec![("a".to_string(), 1u8), ("b".to_string(), 2)]);
+        check((
+            1u8,
+            2u16,
+            3u32,
+            4u64,
+            -1i8,
+            -2i16,
+            -3i32,
+            -4i64,
+            0.5f32,
+            1.5f64,
+            true,
+            "twelve".to_string(),
+        ));
+        let kind = kind_of::<(u8, String)>();
+        assert_eq!(text_at(&kind, "type"), Some("array"));
+        assert_eq!(get(&kind, "items"), Some(&Value::from(false)));
+        let prefix = <&List>::try_from(get(&kind, "prefixItems").unwrap()).unwrap();
+        assert_eq!(text_at(&prefix[1], "type"), Some("string"));
+
+        // Each position answers to its own kind, and the length is exact.
+        assert!(!accepts::<(u8, String)>(&list(&[
+            Value::from("x"),
+            Value::from(7i64)
+        ])));
+        assert!(!accepts::<(u8, String)>(&list(&[Value::from(7i64)])));
+        assert!(!accepts::<(u8, String)>(&list(&[
+            Value::from(7i64),
+            Value::from("x"),
+            Value::from("y"),
+        ])));
+        let wrong = list(&[Value::from("x"), Value::from("y")]);
+        assert_eq!(<(u8, String)>::from_value(&wrong).unwrap_err().key(), "[0]");
+        assert!(<(u8, String)>::from_value(&list(&[Value::from(1i64)])).is_err());
+    }
+
+    #[test]
+    fn the_unit_is_null() {
+        assert_eq!(check(()), Value::null());
+        assert_eq!(text_at(&kind_of::<()>(), "type"), Some("null"));
+        assert!(matches!(
+            <()>::from_value(&Value::from(0i64)),
+            Err(MapError::WrongType { .. })
+        ));
+    }
+
+    #[test]
+    fn a_map_keyed_by_an_integer_is_an_object_keyed_by_its_digits() {
+        let m: BTreeMap<u32, String> = [(10, "ten".into()), (2, "two".into())].into();
+        let v = check(m);
+        let keys: Vec<&str> = <&Map>::try_from(&v).unwrap().keys().collect();
+        assert_eq!(keys, ["2", "10"]);
+        let h: HashMap<i64, bool> = [(-5, true)].into();
+        check(h);
+        let kind = kind_of::<BTreeMap<u32, String>>();
+        let names = get(&kind, "propertyNames").unwrap();
+        assert_eq!(text_at(names, "pattern"), Some("^(0|[1-9][0-9]*)$"));
+        assert_eq!(
+            text_at(
+                get(&kind_of::<BTreeMap<i8, u8>>(), "propertyNames").unwrap(),
+                "pattern"
+            ),
+            Some("^-?(0|[1-9][0-9]*)$")
+        );
+
+        let mut odd = Map::new();
+        odd.set("01", "x");
+        let refused = BTreeMap::<u32, String>::from_value(&Value::from(odd)).unwrap_err();
+        assert!(matches!(refused, MapError::BadValue { .. }));
+        assert_eq!(refused.key(), "[01]");
+        let mut wide = Map::new();
+        wide.set("300", "x");
+        assert!(BTreeMap::<u8, String>::from_value(&Value::from(wide)).is_err());
+        let mut word = Map::new();
+        word.set("x", "y");
+        // A pattern is enforced only by a build that has the `regex` feature.
+        assert_eq!(
+            accepts::<BTreeMap<u32, String>>(&word.clone().into()),
+            !guatiao::schema::PATTERNS_ENFORCED
+        );
+        // A string key keeps saying nothing about its keys.
+        assert!(get(&kind_of::<BTreeMap<String, u8>>(), "propertyNames").is_none());
+    }
+
+    #[test]
+    fn char_and_bool_keys_say_what_they_accept() {
+        check(BTreeMap::from([('a', 1u8), ('é', 2)]));
+        check(BTreeMap::from([(true, 1u8), (false, 0)]));
+        let mut two = Map::new();
+        two.set("ab", 1i64);
+        assert!(!accepts::<BTreeMap<char, u8>>(&two.clone().into()));
+        assert!(BTreeMap::<char, u8>::from_value(&two.into()).is_err());
+        let mut yes = Map::new();
+        yes.set("yes", 1i64);
+        assert!(!accepts::<BTreeMap<bool, u8>>(&yes.clone().into()));
+        assert!(BTreeMap::<bool, u8>::from_value(&yes.into()).is_err());
+        check(BTreeMap::from([(Arc::<str>::from("k"), 1u8)]));
+    }
+
+    use alloc::sync::Arc;
+
+    #[derive(Debug, PartialEq, guatiao::ToValue, guatiao::FromValue, guatiao::Schema)]
+    struct Shapes {
+        order: VecDeque<u32>,
+        tags: BTreeSet<String>,
+        octets: [u8; 4],
+        pair: (u8, String),
+        pairs: Vec<(String, u8)>,
+        nothing: (),
+        by_port: BTreeMap<u16, String>,
+        maybe: Option<(u8, u8)>,
+    }
+
+    #[test]
+    fn a_struct_of_them_derives_and_validates() {
+        let s = Shapes {
+            order: [1, 2].into(),
+            tags: ["a".to_string()].into(),
+            octets: [127, 0, 0, 1],
+            pair: (1, "one".into()),
+            pairs: vec![("x".into(), 9)],
+            nothing: (),
+            by_port: [(80, "http".to_string())].into(),
+            maybe: Some((1, 2)),
+        };
+        let value = s.to_value().unwrap();
+        assert_eq!(Shapes::from_value(&value).unwrap(), s);
+        let schema = Shapes::schema().unwrap();
+        validate_map(SchemaRef::new(&schema).unwrap(), &value).unwrap();
+    }
+}

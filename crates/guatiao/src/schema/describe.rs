@@ -58,6 +58,7 @@
 
 #![forbid(unsafe_code)]
 
+mod collections;
 mod own;
 mod wrappers;
 
@@ -182,26 +183,6 @@ impl Schema for Bytes {
 impl<T: Schema> Schema for Vec<T> {
     fn kind(alloc: Alloc) -> KindBuilder {
         KindBuilder::list_in(alloc, T::kind(alloc))
-    }
-}
-
-/// A map keyed by text describes an object whose **keys are data**: any
-/// number of them, every value of one kind.
-///
-/// The schema says what the values are and nothing about the keys,
-/// because there is nothing to say — a struct holding one of these is
-/// exactly that, and a schema describes the struct as it is.
-impl<T: Schema> Schema for alloc::collections::BTreeMap<String, T> {
-    fn kind(alloc: Alloc) -> KindBuilder {
-        KindBuilder::map_of_in(alloc, T::kind(alloc))
-    }
-}
-
-/// The same. A `HashMap`'s iteration order is its own, which shows in the
-/// value it writes and not in what it declares.
-impl<T: Schema> Schema for std::collections::HashMap<String, T> {
-    fn kind(alloc: Alloc) -> KindBuilder {
-        KindBuilder::map_of_in(alloc, T::kind(alloc))
     }
 }
 
