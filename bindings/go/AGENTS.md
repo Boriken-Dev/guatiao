@@ -15,10 +15,11 @@ own: guatiao is loaded at run time.
 
 | import | what |
 | --- | --- |
-| `.../bindings/go` (package `guatiao`) | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `Tag`, `Status`, the errors, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary` |
+| `.../bindings/go` (package `guatiao`) | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `Tag`, `Status`, the errors, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `Library`, `LibraryOf` |
 | `.../bindings/go/serde` | `Parse`, `Emit`: JSON, TOML, YAML |
 | `.../bindings/go/intake` | forms, paths, the flat projection |
 | `.../bindings/go/civil` | `Date`, `Time`, `DateTime`, `Span`, `Length`, instants as `time.Time` |
+| `.../bindings/go/cmd/guatiao-kind` | the command writing a kind package's glue, run by `go generate` |
 
 ## Finding the native library
 
@@ -136,6 +137,237 @@ their bounds; `time.Time` is `date-time`, `time.Duration` and the civil
 types their forms; a `GuatiaoSchema() map[string]any` method states a
 type's own. A recursive type is refused.
 
+`ValueFromRaw(root unsafe.Pointer) *Value` takes over a root node a C
+function answered (a `guatiao_value` in C `malloc` memory); `Ref.Raw()`
+is a node's address now, for a C function taking one.
+
+## Registry
+
+```go
+reg, err := guatiao.NewRegistry("my-host", "1.0")
+defer reg.Close()
+reg.ScanDir("/path/to/plugins", guatiao.Rules("kind=greeter"))
+providers, err := reg.Providers("greeter")   // []map[string]any, best first
+best, err := reg.Best("greeter")             // key, id, version, library, display_name, from, kinds, has_config, vtable_size
+why, err := reg.WhyNot("codec")              // {available: false, why: "nothing-claims-it", ...}
+greeter, err := greeterkind.GreeterKind.Bind(reg, "acme_hello")   // a remote (see Kinds)
+inst, err := reg.Create("acme_shouter", map[string]any{"prefix": "hey"})
+defer inst.Close()
+shouter, err := greeterkind.GreeterKind.BindInstance(inst)
+```
+
+`NewRegistry(id, version, opts...)` (`InAllocator` names the allocator its
+answers are built in and that it offers libraries). Every answer that is
+data is plain Go data, already freed (numbers as `Number`). Also
+`LoadFile(path)`, `RegisterEntry(name, entry unsafe.Pointer)` (a
+`guatiao_library_entry`), `RegisterLibrary(lib)` (see Providers),
+`ScanDir(dir, opts...)` and `ScanPath(spec, opts...)` with `Rules(...)`
+(`[!]KEY=VALUE`, matched against what a library declares) and
+`Descending()`, `Libraries()`, `Provider(key)`, `Available(kind)`,
+`ProviderAvailable(key) (bool, string, error)`, `KeyedBy(template)` /
+`LibrariesKeyedBy`, `SetPriority` / `Priority`, `ProviderTable(key, kind)
+(Table, error)` (`ErrNotFound` for none; `kind` "" for a single table),
+`ProviderConfig(key) (Ref, bool, error)` (a borrowed, read-only view of the
+schema), `Host() unsafe.Pointer` (the `guatiao_host_info *`), `Close()`.
+
+`Create(key, config)` checks the configuration against the provider's
+schema first (`ErrBadValue` with the field), then builds an `*Instance`;
+its `Close()` reaches the provider that built it, even after a retire or a
+refresh that loaded a new build under the key.
+
+`Retire(libraryKey)` takes a library out and leaves it mapped until nothing
+uses it; `Collect()` closes every retired library whose own `unload`
+agrees, and answers their keys, as does the next load, retire or unload.
+`Unload(libraryKey)` unmaps when the library agrees: `ErrBusy` while
+something it handed out lives, `ErrUnsupported` with no `unload` function,
+`ErrWrongKind` for a library linked rather than mapped, `ErrNotFound` for
+none; `UnloadUnchecked` insists. **Both take the LIBRARY key** (`%id` by
+default). No table, ctx or borrowed schema taken from it is used again.
+
+**Sources**: `AddSourceFile(path, config)` maps a file exporting
+`guatiao_source` (a bridge to another language) and adds the source it
+answers, refusing with its words; `WatchDir(dir, rules...)` watches a
+directory; `Refresh()` makes the registry agree with every source,
+answering `{loaded, retired, skipped, refused}`. Nothing refreshes on its
+own.
+
+A Registry is not safe for concurrent use: a host sharing one between
+goroutines guards it, as the C surface asks. An `Instance`'s `Close` is a
+call on its registry.
+
+## Kinds: calling a table, serving one
+
+A kind is a Go interface naming its required slots, marked
+`//guatiao:kind <name> <C table>`; each optional slot is an interface of
+its own, as `io.WriterTo` stands beside `io.Writer`; every method returns
+an `error` last, and an object kind's interface has `Close() error`, its
+`destroy` slot. The command `guatiao-kind` reads the kind's C header
+(slot order, floor hash, which argument is handed over, lent or borrowed,
+which slot can refuse) and the interfaces, and writes the glue:
+`<Interface>Kind` (a `*guatiao.Kind[*<Interface>Remote]`), a remote with
+a method per slot implementing every interface, and the cgo calling and
+serving each slot.
+
+```go
+package greeterkind
+
+//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/cmd/guatiao-kind -header ../include/greeter_kind.h
+
+import guatiao "github.com/Boriken-Dev/guatiao/bindings/go"
+
+type Greeting struct {
+	Greeting string `guatiao:"greeting"`
+}
+
+//guatiao:kind greeter greeter_vtable
+type Greeter interface {
+	Greet(name string) (Greeting, error)
+}
+
+type Shouter interface{ Shout(name string) (string, error) }
+type Checker interface{ Check(config guatiao.MapRef) (bool, error) }
+
+//guatiao:kind listener listener_vtable
+type Listener interface {
+	Heard(what string) error
+	Close() error
+}
+```
+
+The binding must be imported as `guatiao`. A slot's method is its C name
+in CamelCase (`greet_into` is `GreetInto`); `guatiao-kind -check` fails
+when the glue is not what it would write.
+
+| C | a method takes / returns |
+| --- | --- |
+| `guatiao_str` | `string` (`ErrBadValue` served when not UTF-8) |
+| `guatiao_bytes` | `[]byte` (a copy) |
+| `guatiao_bytes_mut` | `[]byte` over the caller's memory, written in place, valid for the call: never keep it |
+| `bool`, `int8_t`..`uint64_t`, `size_t`, `intptr_t`, `uintptr_t`, `float`, `double` | `bool`, `int8`..`uint64`, `uint`, `int`, `uintptr`, `float32`, `float64` |
+| `const guatiao_value *`, `const guatiao_map *`, `const guatiao_list *` | `guatiao.Ref`, `MapRef`, `ListRef`, read-only and valid for the call (a null value is the zero `Ref`), or any Go type it decodes into |
+| the same without `const`, the slot's comment calling it lent | `Ref`, `MapRef`, `ListRef`, writable, valid for the call; what is added is built in the allocator the tree records |
+| the same without `const`, handed over | `*guatiao.Value` the method owns (and closes), or any Go type it decodes into (the tree is freed) |
+| `guatiao_value/map/list *out` | the answer: a `*guatiao.Value` or any Go type, built in the allocator the carrier names; a `*Value` answered is handed over |
+| `guatiao_string *out` | `string` |
+| `T *out` | the Go scalar |
+| `guatiao_object` (handed over) | the object kind's interface; the method owns it and closes it |
+| `const guatiao_object *` (lent) | the object kind's interface, valid for the call; its `Close` does nothing |
+| `guatiao_object *out` | the object kind's interface: a Go value serving it, or a remote this side owns, which the caller then owns |
+
+**A remote** (`*GreeterRemote`) has a method per slot, `Has(slot)` (the
+header's slot name), `Kind()`, `Table()`, `Close()` (destroys an object
+this side owns, once; nothing for a provider's table or a lent object) and
+`Closed()`. A slot past the table's size or null answers `ErrUnsupported`
+(a Rust caller would run the kind's default body, which Go cannot); a
+refusal is the status's `*Error` with the provider's words; a slot that
+cannot fail and fails answers its status. Valid while the library is.
+`Kind.BindTable(table, size, ctx)` makes one over any table, a
+`*FloorMismatch` when the table is smaller than the kind's required slots
+or has another floor hash. An object this side owns and drops unclosed is
+destroyed when the collector finds it.
+
+**A Go value as an object of a kind**: any value implementing the object
+kind's interface. Its table is built once per kind and Go type (a slot for
+each optional interface it implements, null for the rest) and kept for the
+process. What C holds of it is a `cgo.Handle`, shaped like an address, so a
+call naming one released answers `ErrGone`. It is held until its holder
+destroys it (handed over or answered), when its `Close` runs, or until the
+call returns (lent). `guatiao.LiveObjects()` counts what is held.
+
+**A refusal**: a method returns an error; a `*guatiao.Error` (or one an
+`errors.As` finds) crosses as its status and words, anything else as
+`Internal` with its text, a panic as `Internal` with `panic: ...`. A slot
+that cannot fail reports the failure to `guatiao.Warn` (`log.Printf`
+unless set) and its status crosses alone.
+
+## Providers written in Go
+
+```go
+type Hello struct{ asked atomic.Int64 }
+
+var _ greeterkind.Greeter = (*Hello)(nil) // the compiler checks it
+
+func (h *Hello) Greet(name string) (greeterkind.Greeting, error) {
+	if name == "" {
+		return greeterkind.Greeting{}, guatiao.Errorf(guatiao.BadValue, "nobody to greet")
+	}
+	return greeterkind.Greeting{Greeting: "hello, " + name}, nil
+}
+
+type ShouterConfig struct {
+	Prefix string `guatiao:"prefix" schema:"minLength=1"`
+}
+
+func NewShouter(c ShouterConfig) (*Shouter, error) { return &Shouter{prefix: c.Prefix}, nil }
+
+lib, err := guatiao.LibraryOf(
+	guatiao.Single("hello", &Hello{}, greeterkind.GreeterKind, greeterkind.CounterKind,
+		guatiao.DisplayName("Hello, in Go")),
+	guatiao.Configured("shouter", NewShouter, greeterkind.GreeterKind),
+)
+reg.RegisterLibrary(lib)
+```
+
+**A provider** is any Go value implementing the kinds it names:
+`Single(name, instance, opts...)` is its one instance; `Configured(name,
+build func(C) (P, error), opts...)` builds an instance per configuration,
+the host's configuration checked against `SchemaOf[C]()` and decoded into
+a `C`. Options: a kind (`*Kind` is one); `ID` (default `{last element of
+the library id}_{name}`), `DisplayName`, `ProviderVersion` (empty: the
+library's), `ProviderMeta`, `AvailableIf(func() error)` (nil when it can
+run here, else why not; asked every time a host asks), `Default(instance)`
+(offered beside a Configured provider's instances; a `P`), `ConfigSchema`
+(a raw schema in place of `C`'s). A value that does not implement a kind it
+names, an object kind among its kinds, or two providers sharing an id is
+refused when the library is made. An instance (or a Single's instance)
+that implements `io.Closer` is closed when its host destroys it (when
+`Library.Close` runs).
+
+**A library**: `LibraryOf(parts...)` is the providers' Go package: id its
+import path (the build's main package path for package `main`), version
+that of the module holding it, as the build records it, the leading `v`
+dropped. **A build that names no version** (`(devel)`: a checkout, a test
+binary) is refused unless `LibraryVersion` says one. Meta: `module`, and
+`vcs` (`system`, `revision`, `time`, `modified`) as the build recorded
+them for the main module; `Summary`, `License`, `Authors`, `URL(label,
+url)`, `Notice(component, text)` and `LibraryMeta` add the rest;
+`LibraryID` overrides the id. `NewLibrary(id, version, parts...)` is the
+same with both given. A `*Library` has `ID()`, `Version()`, `Providers()`,
+`Kinds()`, `Meta()`, `LiveInstances()`, `Entry() (unsafe.Pointer, error)`
+(its `guatiao_library_entry`), `Answer(host) unsafe.Pointer` and
+`Close()`. Its descriptor is built on first use and kept for the process,
+with its `unload` answering `ErrBusy` while an instance lives; a process
+builds at most 64 libraries and 256 providers. `Registry.RegisterLibrary`
+files it under its id and keeps it: linked, not mapped, so `Unload`
+answers `ErrWrongKind` and `Retire` takes it out.
+
+**A library file**: built with `-buildmode=c-shared`, a package `main`
+exports the entry, and a C file `guatiao_declares` for a scan by kind:
+
+```go
+var library, _ = gogreeter.Library()
+
+//export guatiao_library_entry
+func guatiao_library_entry(host unsafe.Pointer) unsafe.Pointer { return library.Answer(host) }
+
+func main() {}
+```
+
+```c
+__declspec(dllexport) /* or __attribute__((visibility("default"))) */
+const char guatiao_declares[] = "kind=greeter\0";
+```
+
+`Answer` builds the descriptor on first use and answers nil (declining
+the host, with the reason sent to `Warn`) when it cannot, so a library
+whose own guatiao is missing never aborts the process that mapped it. The
+library finds guatiao as any program using this module does
+(`GUATIAO_LIBRARY` or the platform's search). **A c-shared Go library is
+never unmapped**: its `unload` always answers `ErrBusy`, since the Go
+runtime inside it cannot be unloaded. A Go host may load such a file like
+any other; the file then runs a Go runtime of its own beside the host's,
+so a Go host usually links the provider's package instead.
+
 ## serde: JSON, TOML, YAML
 
 ```go
@@ -242,4 +474,10 @@ args...)` builds one. `ErrClosed`, `ErrReadOnly`, `*LibraryNotFound`,
 ## Threads
 
 A Value is not safe for concurrent use; reading one from several
-goroutines at once is.
+goroutines at once is. A Registry is not; a remote may be called from any
+goroutine, as the provider behind it allows.
+
+A slot this module serves (a provider, an object) runs on the thread that
+calls it, a thread Go did not start included: nothing is queued, so a
+library's own threads may call a Go provider at once, and the provider
+guards what it shares as any Go value shared between goroutines does.

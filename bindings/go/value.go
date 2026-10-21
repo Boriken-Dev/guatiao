@@ -885,3 +885,14 @@ func asRef(item any) (Ref, bool) {
 	}
 	return Ref{}, false
 }
+
+// ValueFromRaw takes over the root node at root, a guatiao_value in
+// memory from C's malloc holding a tree, as a Value whose Close frees the
+// tree through the allocators it records and then the node: for a C
+// function that answers through an out parameter. Writes build in the
+// core library's allocator.
+func ValueFromRaw(root unsafe.Pointer) *Value { return adopt(root, nil) }
+
+// Raw is the node's address now, for a C function that takes a
+// guatiao_value: valid until the tree is next written or closed.
+func (r Ref) Raw() (unsafe.Pointer, error) { return r.requireNode() }

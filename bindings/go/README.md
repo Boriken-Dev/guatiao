@@ -23,6 +23,24 @@ application that carries it.
   structs by their tags, maps, slices, `time.Time`, `time.Duration`.
 - **Numbers keep their exact text** — `1.10` stays `1.10`, and an integer
   of any size survives as a `guatiao.Number`.
+- **Be a plugin host** — scan a directory, filter on what a library
+  declares before loading it, list providers best first, build an
+  instance from a configuration, call a provider through its table with
+  Go values in and out.
+- **A kind is a Go interface** — `guatiao-kind`, run by `go generate`,
+  reads the kind's C header and the interfaces and writes the glue: a
+  descriptor, a remote implementing the interfaces, and the cgo calling and
+  serving each slot.
+- **Write a provider in Go** — any type implementing a kind's interface,
+  checked by the compiler, in a library a host calls the way it calls one
+  written in Rust, C or Python; its configuration is a struct whose tags
+  give the schema, and the package is the library, named and versioned by
+  the build.
+- **An ordinary library file** — built with `-buildmode=c-shared`, a Go
+  library is a file any host's scan finds and loads.
+- **Hand a library a Go value** — any value implementing an object kind
+  (a listener, a callback) becomes an object a library calls, or holds
+  until it is done with it, from any of its threads.
 - **A configuration is a struct** — `guatiao.SchemaOf[T]()` writes the
   JSON Schema its fields and tags describe.
 - **Dates, times, spans and exact lengths** — `civil.Date`, `civil.Time`,
@@ -57,7 +75,7 @@ the platform's library search is tried by file name.
 
 | Exports from | Needed for |
 | --- | --- |
-| `guatiao` | values, schemas, time, redaction |
+| `guatiao` | values, the registry, kinds and providers, schemas, time, redaction |
 | `guatiao_serde` | `serde`: JSON, and TOML and YAML when the library has them |
 | `guatiao_intake` | `intake` |
 
@@ -102,6 +120,59 @@ n.NumberText() // "1.10"
 n.FloatOr(0)   // 1.1
 ```
 
+### Hosting plugins
+
+```go
+reg, err := guatiao.NewRegistry("my-host", "1.0")
+defer reg.Close()
+reg.ScanDir("/opt/plugins", guatiao.Rules("kind=greeter"))
+providers, _ := reg.Providers("greeter")
+for _, p := range providers {
+	fmt.Println(p["key"])
+}
+
+greeter, err := greeterkind.GreeterKind.Bind(reg, "acme_hello")
+answer, err := greeter.Greet("ana") // greeterkind.Greeting{Greeting: "hello, ana"}
+```
+
+### A kind, and a provider of it
+
+A kind is an interface, its glue written from its C header:
+
+```go
+//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/cmd/guatiao-kind -header ../include/greeter_kind.h
+
+type Greeting struct {
+	Greeting string `guatiao:"greeting"`
+}
+
+//guatiao:kind greeter greeter_vtable
+type Greeter interface {
+	Greet(name string) (Greeting, error)
+}
+```
+
+A provider is a type implementing it:
+
+```go
+type Hello struct{}
+
+func (Hello) Greet(name string) (greeterkind.Greeting, error) {
+	if name == "" {
+		return greeterkind.Greeting{}, guatiao.Errorf(guatiao.BadValue, "nobody to greet")
+	}
+	return greeterkind.Greeting{Greeting: "hello, " + name}, nil
+}
+
+lib, err := guatiao.LibraryOf(guatiao.Single("hello", Hello{}, greeterkind.GreeterKind))
+reg.RegisterLibrary(lib)
+```
+
+A host in this process, written in any language, calls `Hello` through
+the same table it would call a Rust or C greeter through; built with
+`-buildmode=c-shared` and exporting `guatiao_library_entry`, the library
+is a file any host loads.
+
 ### A configuration's schema
 
 ```go
@@ -138,16 +209,28 @@ later.String() // "2026-02-28"
   appends and removes.
 - `time.Duration` holds about 292 years; `civil.Length` holds every exact
   length.
+- A kind's glue is written by `go generate` from its C header: Go cannot
+  make a C function pointer at run time, so a kind is not described while
+  the program runs, as the Python and Node bindings allow.
+- A remote cannot run a kind's default body for a slot an older table
+  lacks, as a Rust caller does: it answers `ErrUnsupported`.
+- A process builds at most 64 libraries and 256 providers in Go: a
+  library's and a provider's descriptor slots come from fixed pools.
+- A library built with `-buildmode=c-shared` is never unmapped: the Go
+  runtime inside it cannot be unloaded, so its `unload` refuses.
+- A `[]byte` a mutable bytes slot receives is the caller's memory, valid
+  for the call, as `io.Reader`'s `Read` receives one.
 - 64-bit platforms only, and cgo is required.
 
 ## API overview
 
 | Package | Purpose |
 | --- | --- |
-| `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`, the errors |
+| `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`, the errors; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `LibraryOf`, `Library` |
 | `guatiao/serde` | `Parse` / `Emit` for JSON, TOML, YAML |
 | `guatiao/intake` | `Check`, `Layout`, `IsVisible`, `At`, `ForSchema`, `FormFor`, `Resolve`, `FlatKeys`, `Flatten`, `Unflatten` |
 | `guatiao/civil` | `Date`, `Time`, `DateTime`, `Span`, `Length`, instants, `Normalize` |
+| `guatiao/cmd/guatiao-kind` | writes a kind package's glue from its C header, run by `go generate` |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/go/AGENTS.md)
 is the full API reference and ships in the module. The C ABI is described
@@ -163,7 +246,10 @@ go test ./...
 
 The tests need the three libraries in one directory; they point
 `GUATIAO_LIBRARY` at the repository's build output when the variable is
-unset, and the repository's own `AGENTS.md` says how to produce it.
+unset, and the repository's own `AGENTS.md` says how to produce it. The
+examples (`examples/`, a module of their own) hold the greeter kinds, a
+host and a library of providers written in Go, and the tests that call
+greeters written in Rust, C, Python and Go both ways.
 
 ## License
 
