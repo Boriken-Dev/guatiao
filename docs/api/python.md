@@ -17,6 +17,14 @@ library; the first call that needs one resolves it from
 
 ::: guatiao.kinds
 
+## Dates, times and spans
+
+::: guatiao.time
+
+## Secrets
+
+::: guatiao.schema
+
 ## Formats
 
 ::: guatiao.serde

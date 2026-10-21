@@ -23,6 +23,8 @@ c_size_t = ctypes.c_size_t
 c_uint8 = ctypes.c_uint8
 c_bool = ctypes.c_bool
 c_uint32 = ctypes.c_uint32
+c_int32 = ctypes.c_int32
+c_int64 = ctypes.c_int64
 
 
 class Tag(enum.IntEnum):
@@ -189,6 +191,58 @@ class ParseError(ctypes.Structure):
     ]
 
 
+class DateFields(ctypes.Structure):
+    """`guatiao_date`: a day on the calendar, years 0 to 9999."""
+
+    _fields_ = [("year", c_int32), ("month", c_uint8), ("day", c_uint8)]
+
+
+class TimeFields(ctypes.Structure):
+    """`guatiao_time`: a time of day with no offset, to the nanosecond."""
+
+    _fields_ = [
+        ("hour", c_uint8),
+        ("minute", c_uint8),
+        ("second", c_uint8),
+        ("nanosecond", c_uint32),
+    ]
+
+
+class DateTimeFields(ctypes.Structure):
+    """`guatiao_datetime`: a civil date and time, no time zone."""
+
+    _fields_ = [("date", DateFields), ("time", TimeFields)]
+
+
+class TimestampFields(ctypes.Structure):
+    """`guatiao_timestamp`: seconds from the Unix epoch and nanoseconds
+    counted forward from them."""
+
+    _fields_ = [("seconds", c_int64), ("nanoseconds", c_uint32)]
+
+
+class SpanFields(ctypes.Structure):
+    """`guatiao_span`: calendar units, one sign for every non-zero one."""
+
+    _fields_ = [
+        ("years", c_int64),
+        ("months", c_int64),
+        ("weeks", c_int64),
+        ("days", c_int64),
+        ("hours", c_int64),
+        ("minutes", c_int64),
+        ("seconds", c_int64),
+        ("nanoseconds", c_int32),
+    ]
+
+
+class TextError(ctypes.Structure):
+    """`guatiao_text_error`: the byte offset a text was refused at, and
+    what was expected there as an owned string value (or absent)."""
+
+    _fields_ = [("at", c_size_t), ("expected", Value)]
+
+
 #: `GUATIAO_FORMAT_*`: which format a `ParseError` names.
 FORMAT_NAMES = {0: "json", 1: "toml", 2: "yaml"}
 
@@ -235,3 +289,11 @@ assert _offset(Value, "_pad") == 4
 assert _offset(Value, "payload") == 8
 assert _offset(Entry, "key") == 0
 assert _offset(Entry, "value") == 32
+assert ctypes.sizeof(DateFields) == 8
+assert ctypes.sizeof(TimeFields) == 8
+assert _offset(TimeFields, "nanosecond") == 4
+assert ctypes.sizeof(DateTimeFields) == 16
+assert ctypes.sizeof(TimestampFields) == 16
+assert ctypes.sizeof(SpanFields) == 64
+assert _offset(SpanFields, "nanoseconds") == 56
+assert ctypes.sizeof(TextError) == 48

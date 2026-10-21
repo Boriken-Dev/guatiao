@@ -73,6 +73,29 @@ def _parse_error(message: str, format: str, line: int, column: int) -> ParseErro
     return ParseError(message, format=format, line=line, column=column)
 
 
+class Unparsed(BadValue, ValueError):
+    """A date, time, instant or span whose text its grammar refused.
+
+    `form` is `"date"`, `"time"`, `"datetime"`, `"timestamp"` or
+    `"span"`; `at` is the byte offset, in the UTF-8 text, where reading
+    stopped; `expected` says what would have been accepted there. Neither
+    quotes the text.
+    """
+
+    def __init__(self, expected: str, *, form: str, at: int) -> None:
+        super().__init__(int(_abi.Status.ERR_BAD_VALUE), f"{expected} at byte {at}")
+        self.expected = expected
+        self.form = form
+        self.at = at
+
+    def __reduce__(self):
+        return (_unparsed, (self.expected, self.form, self.at))
+
+
+def _unparsed(expected: str, form: str, at: int) -> Unparsed:
+    return Unparsed(expected, form=form, at=at)
+
+
 class Unsupported(GuatiaoError):
     """What was asked is not something the other side offers."""
 

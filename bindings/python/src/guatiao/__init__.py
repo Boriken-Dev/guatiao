@@ -20,11 +20,13 @@ from .errors import (
     Internal,
     NotFound,
     NullArgument,
+    Unparsed,
     Unsupported,
     WrongKind,
 )
 from ._lib import LibraryNotFound, MissingSymbol
 from .registry import Instance, Registry
+from .schema import redact
 from .value import ABSENT, List, Map, Ref, Value
 
 __version__ = "0.0.0a1"
@@ -38,8 +40,10 @@ __all__ = [
     "List",
     "Registry",
     "Instance",
+    "redact",
     "GuatiaoError",
     "BadValue",
+    "Unparsed",
     "AllocFailed",
     "WrongKind",
     "NotFound",

@@ -191,13 +191,80 @@ entry under it, or a discriminant that names no arm. A `store` that is not
 text to text -- a mapping, `Value` or `Ref` holding anything but `str`
 values, or not a map at all -- raises `TypeError`.
 
+## time: dates, times, instants, spans, exact lengths
+
+The forms are text in a value (an exact length is `[seconds,
+nanoseconds]`), fixed at <https://boriken-dev.github.io/guatiao/encodings/>.
+Every text is read and written by the library's own functions.
+
+```python
+from guatiao import time as gt     # the module, not the standard library's
+
+gt.parse_date("2026-10-21")                 # datetime.date
+gt.format_date(date)                        # "2026-10-21"; a datetime is TypeError
+gt.parse_time("13:45:00.5")                 # datetime.time, no tzinfo
+gt.format_time(time)                        # a tzinfo is ValueError
+gt.parse_datetime("2026-10-21T13:45:00.5")  # naive datetime.datetime
+gt.format_datetime(naive)                   # an aware one is ValueError
+gt.parse_timestamp("2026-10-21T19:15:00+05:30")   # aware, UTC: 13:45:00+00:00
+gt.format_timestamp(aware)                  # "...Z"; a naive one is ValueError
+gt.normalize(form, text)                    # canonical text, every nanosecond kept;
+                                            # form: date|time|datetime|timestamp|span
+gt.to_timedelta(v)                          # [s, ns], seconds (int/Decimal/float),
+                                            # {"secs", "nanos"}; a Value, Ref or plain data
+gt.from_timedelta(delta)                    # [seconds, nanoseconds]; negative is ValueError
+
+span = gt.Span(days=1, hours=2)             # keyword units, one sign: Span(days=-1, hours=-2)
+gt.Span.parse("1h 30m"); gt.Span.parse("P1DT2H")
+str(span)                                   # "P1DT2H", canonical ISO 8601
+span.years .. span.nanoseconds              # ints carrying the sign
+span.is_zero(); span.is_negative(); -span   # immutable, hashable, == unit by unit
+span.add_to(date_or_naive_datetime)         # same type back
+```
+
+- **Text the grammar refuses raises `guatiao.Unparsed`** (a `BadValue`
+  and a `ValueError`) with `.form`, `.at` (the byte offset in the UTF-8
+  text) and `.expected`; it never quotes the text.
+- **Below a microsecond is dropped**, toward the past, reading into a
+  `datetime`, `time` or `timedelta`; writing one is exact. `normalize` and
+  `Span` keep nanoseconds.
+- **Year 0000** is valid text but no `datetime` holds it: `parse_date`,
+  `parse_datetime` and `parse_timestamp` raise `ValueError` for it.
+- **`to_timedelta`** raises `BadValue` for anything not an exact length
+  and `OverflowError` past 999999999 days.
+- **`Span(...)`** raises `BadValue` for fields of both signs, a field past
+  a signed 64-bit integer or `nanoseconds` of a second or more, and
+  `TypeError` for a non-`int`. `Span(days=1) != Span(hours=24)`.
+- **`add_to`**: years and months first (a day past the month's end
+  becomes its last day), then weeks and days, then hours to nanoseconds
+  on a `datetime`, carried across midnight. `BadValue` for time units on
+  a `date` or a result outside the years 1 to 9999; `ValueError` for an
+  aware `datetime`.
+
+## Secrets
+
+A secret crosses as the value it holds; its schema marks it with
+`writeOnly: true` and `x-sensitive: true`.
+
+```python
+from guatiao import redact
+
+shown = redact(schema, value, placeholder="[redacted]")   # a new Value; close it
+```
+
+`schema` and `value` are `Value`s, `Ref`s or plain data. Every field a
+schema marks (`x-sensitive` or `writeOnly`) is replaced at any depth, and
+whatever the schema does not describe, an undeclared key say, is hidden
+too. Local `$ref`s are followed. `WrongKind` for a schema that is not a
+map.
+
 ## Errors
 
 Every failing `guatiao_status` raises `guatiao.GuatiaoError` (`.status`
 the raw code, `.message` a provider's own words when there were any), as
 one of its subclasses: `BadValue`, `AllocFailed`, `WrongKind`,
 `NotFound`, `NullArgument`, `Gone`, `Unsupported`, `Busy`, `Internal`.
-They pickle, `ParseError` included. A refusal the library words itself
+They pickle, `ParseError` and `Unparsed` included. A refusal the library words itself
 (a `WrongKind` from `serde.loads`, say) carries those words in `.message`.
 
 ## Not offered
