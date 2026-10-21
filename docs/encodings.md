@@ -348,6 +348,35 @@ then its fields: `{"type": "Square", "side": 2}`, described with
 record writes that record's fields beside the tag:
 `{"type": "Circle", "a": 1}`.
 
+## A secret
+
+A secret is **not a form of its own**. It crosses as the value it holds,
+a string, a number or a map, and its schema marks it: the holder's own
+schema with two keywords added.
+
+```json
+{"type": "string", "writeOnly": true, "x-sensitive": true}
+```
+
+`writeOnly` is JSON Schema's "accepted, never handed back", which any
+JSON Schema tool understands; `x-sensitive` is this project's "never
+print it". A reader takes the value as it would without them.
+
+What honours the marks:
+
+- **Redaction.** `guatiao_schema_redact` in C, and `redact` in Rust,
+  Python and Dart, copy a value with every marked field replaced by a
+  placeholder, at any depth: inside a nested record, in every element of
+  a list, in a variant's arm. Where the schema stops describing the
+  value (a key it does not declare, say), the value is hidden too,
+  since nothing says it is not a secret.
+- **A form.** The form a schema implies shows a marked text field with
+  the `password` widget, masked while it is typed.
+
+What a mark does not do: encrypt the value, compare it in constant time,
+or wipe it from memory. It says who may see it, and the code that shows,
+logs or returns values honours it.
+
 ## In C, Python and Dart
 
 Each text form above has C functions that read it into a plain struct,
@@ -390,6 +419,10 @@ always either UTC or the machine's own zone, which would move a civil
 time that a daylight-saving change skips; hence the three `Plain`
 classes, named after JavaScript's Temporal.
 
+A secret is the value it holds in every language; what each offers is
+redaction, `guatiao_schema_redact`, `guatiao.redact` in Python and
+`redact` in Dart, with a placeholder of the caller's choosing.
+
 ## In Rust
 
 The `guatiao` crate implements every form above for these types, under
@@ -408,6 +441,7 @@ The `guatiao` crate implements every form above for these types, under
 | non-zero integers | every `NonZero*` |
 | a date, a time of day, a civil date and time | `guatiao::Date`, `guatiao::Time`, `guatiao::DateTime` |
 | an instant | `guatiao::Timestamp`, `std::time::SystemTime` |
+| a secret | `guatiao::Secret<T>`, holding any `T` above |
 | an exact length | `std::time::Duration` |
 | a span | `guatiao::Span` |
 | the same as `T` | `Box<T>`, `Arc<T>`, `Rc<T>`, `Cow<'_, T>`, `&T` |

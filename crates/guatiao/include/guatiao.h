@@ -2028,6 +2028,34 @@ guatiao_status guatiao_schema_validate(const struct guatiao_value *schema,
                                        struct guatiao_value *out_error);
 
 /*
+ A copy of `value` with every secret replaced by the string
+ `placeholder`, written to `out` through `alloc`.
+
+ A value is a secret when its field's schema sets `x-sensitive` or
+ `writeOnly`, at any depth: inside a nested object, in every element of
+ a list, in the selected arm of a variant. **Where the schema stops
+ describing the value, the value is hidden**, because nothing says it
+ is not a secret: a key the schema does not declare, a container where
+ it names a scalar, a variant naming no arm. Local `$ref`s are followed
+ first, so a mark on a definition counts.
+
+ `GUATIAO_ERR_WRONG_KIND` for a schema that is not a map,
+ `GUATIAO_ERR_BAD_VALUE` for a placeholder that is not UTF-8 or a tree
+ nested past `GUATIAO_MAX_DEPTH`, `GUATIAO_ERR_ALLOC` for a null or
+ unusable allocator. `out` is written ABSENT first.
+
+ # Safety
+
+ Every non-null pointer addresses what its type says, the view's bytes
+ are readable, and `out` addresses writable storage for one value.
+ */
+guatiao_status guatiao_schema_redact(const struct guatiao_value *schema,
+                                     const struct guatiao_value *value,
+                                     struct guatiao_str placeholder,
+                                     const struct guatiao_alloc *alloc,
+                                     struct guatiao_value *out);
+
+/*
  Reads a span into `out`: an ISO 8601 duration (`P1Y2M3W4DT5H6M7.5S`,
  `-P1D`, designators in either case, a fraction on the seconds only) or
  the friendly form (`1y 2mo 3w 4d 5h 6m 7s 500ms 1us 1ns`, lowercase,

@@ -571,6 +571,7 @@ one's grammar exactly; these types are one implementation of them.
 | `Timestamp`, `SystemTime` | RFC 3339 UTC, `2026-10-21T13:45:00.5Z` | `string` + `format: date-time` |
 | `Duration` | `[secs, nanos]` | the tuple `[u64, 0..=999999999]` |
 | `Span` | ISO 8601 duration, `P1DT2H` | `string` + `format: duration` |
+| `Secret<T>` | as `T` | `T`'s + `writeOnly: true`, `x-sensitive: true` |
 
 `format` is never checked; `pattern` only with the `regex` feature.
 
@@ -981,6 +982,27 @@ undeclared key, a container where a scalar is named, an unknown arm or a
 discriminant that is not text, a union no arm accepts), because a secret
 may be there. **Run `inline_refs` first**: everything under a `$ref` is
 hidden, a scalar included. `redact_in` names the allocator.
+
+From C, `guatiao_schema_redact(schema, value, placeholder, alloc, out)`
+does the same and follows local `$ref`s itself; `GUATIAO_ERR_WRONG_KIND`
+for a schema that is not a map, `GUATIAO_ERR_BAD_VALUE` for a placeholder
+that is not UTF-8.
+
+**`Secret<T>`** (`guatiao::Secret`) holds a value nobody prints. It
+crosses as `T` (same value, same reader); its schema is `T`'s plus
+`writeOnly: true` and `x-sensitive: true`, so `redact`, `is_sensitive`
+and the form a schema implies all treat it as a secret. `Debug` and
+`Display` print `[redacted]` whatever it holds.
+
+```rust
+Secret::new(value: T) -> Secret<T>;  Secret::from(value)
+secret.expose() -> &T;  secret.into_inner() -> T
+// Clone, Copy, Default, PartialEq, Eq, Hash where T has them
+```
+
+`==` is `T`'s own, not constant-time, and nothing is wiped on drop: a
+moved value, a grown `String` and a value tree each hold copies this type
+cannot reach, so it does not pretend to.
 
 `ValidationError` is `UnknownOption { .. }` or `BadValue { .. }`. **An
 error never quotes the value it refused** — a field may be sensitive —

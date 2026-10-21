@@ -181,8 +181,8 @@ pub use schema::Schema;
 // `value::types::Bytes`, since one name cannot be both.
 pub use value::types::Str;
 pub use value::{
-    Alloc, AllocError, Buffer, Date, DateTime, Entry, List, MAX_DEPTH, Map, Number, Payload, Span,
-    Status, Tag, Text, Time, Timestamp, Value, ValueError,
+    Alloc, AllocError, Buffer, Date, DateTime, Entry, List, MAX_DEPTH, Map, Number, Payload,
+    Secret, Span, Status, Tag, Text, Time, Timestamp, Value, ValueError,
 };
 
 /// # What `#[derive(Provider)]` refuses
