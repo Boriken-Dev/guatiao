@@ -31,6 +31,11 @@ CLAUDE*
 Cargo.lock
 !/examples/wire_over_webtransport/client/Cargo.lock
 
+# Node, wherever a package or an example carries some
+node_modules/
+/bindings/node/dist/
+*.tsbuildinfo
+
 # Python, wherever an example or a crate carries some
 __pycache__/
 *.py[cod]
