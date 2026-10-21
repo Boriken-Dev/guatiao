@@ -8,12 +8,12 @@ provider that builds instances from a configuration is given one its
 schema refuses, then one it accepts. It closes everything it opened and
 prints what it did.
 
-The kind is described for Python in
+The kinds are `typing.Protocol` classes in
 [`../greeter_kind/python/greeter_kind.py`](../greeter_kind/python/greeter_kind.py),
 written by hand from the kind's C header
 ([`../greeter_kind/include/greeter_kind.h`](../greeter_kind/include/greeter_kind.h)):
-each method in table order, each `FLOOR_HASH` copied from its `#define`.
-Nothing generates it.
+each method in table order, its shapes as annotations, each
+`FLOOR_HASH` copied from its `#define`. Nothing generates them.
 
 ## Run it
 
@@ -42,6 +42,17 @@ python examples/python_host/host.py target/debug c-greeter
 
 On Windows the output is `c-greeter/c_greeter.dll`, built with
 `clang -shared` and no `-fPIC`; on macOS, `c-greeter/libc_greeter.dylib`.
+
+To add the greeters written in Python, through the `guatiao-py` bridge
+(built as [`../python_provider/README.md`](../python_provider/README.md)
+says), name the bridge and where the manifests are:
+
+```bash
+export PYTHONPATH=bindings/python/src:examples/greeter_kind/python
+python examples/python_host/host.py target/debug \
+  --python-source crates/guatiao-py/target/debug/libguatiao_py.so \
+  --python-dir examples/python_provider
+```
 
 ## What it shows
 
