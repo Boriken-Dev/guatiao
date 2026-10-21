@@ -72,12 +72,49 @@ def setup(paths, bridge):
             pass
 
 
-def open_library(library_id, kinds, entry, paths):
-    """Imports `entry` afresh from `paths` and answers the address of its
-    library descriptor and a handle that `close_library` takes."""
-    module_name, _, attr = entry.partition(":")
-    if not module_name or not attr:
-        raise ValueError(f"the entry `{entry}` is not `module:attribute`")
+def _module_file(module_name, paths):
+    """Where `module_name`'s source is under `paths`, found without
+    importing anything."""
+    from importlib.machinery import PathFinder
+
+    parts = module_name.split(".")
+    search = list(paths)
+    spec = None
+    for at in range(len(parts)):
+        spec = PathFinder.find_spec(".".join(parts[: at + 1]), search)
+        if spec is None:
+            return None
+        search = list(spec.submodule_search_locations or [])
+    return spec.origin if spec is not None else None
+
+
+def literal_version(module_name, paths):
+    """`__version__` as a literal in the module's source, read with `ast`
+    and not imported."""
+    import ast
+
+    origin = _module_file(module_name, paths)
+    if not origin or not origin.endswith(".py"):
+        raise LookupError(f"no source for `{module_name}` under {', '.join(paths)}")
+    with open(origin, "rb") as source:
+        tree = ast.parse(source.read(), origin)
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "__version__" for t in node.targets
+        ):
+            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                return node.value.value
+            break
+    raise ValueError(
+        f"`{module_name}.__version__` is not a literal to read without importing it; "
+        "put `version` in the manifest"
+    )
+
+
+def open_library(module_name, version, kinds, paths):
+    """Imports `module_name` afresh from `paths`, the module being the
+    library, and answers the address of its library descriptor and a
+    handle that `close_library` takes."""
     roots = [_real(p) for p in paths]
     top = module_name.split(".")[0]
     held = sys.modules.get(top)
@@ -86,7 +123,7 @@ def open_library(library_id, kinds, entry, paths):
         if not _under(where, roots):
             raise ImportError(
                 f"`{top}` is already imported from {where or 'the interpreter itself'}, "
-                f"and {library_id} would import it from {', '.join(paths)}"
+                f"and the library would import it from {', '.join(paths)}"
             )
     # A fresh import: what an open library imported keeps its own modules,
     # and a new one gets new ones.
@@ -94,15 +131,13 @@ def open_library(library_id, kinds, entry, paths):
     _use_paths(paths)
     importlib.invalidate_caches()
     try:
-        library = importlib.import_module(module_name)
-        for part in attr.split("."):
-            library = getattr(library, part)
-        from guatiao.provide import Library
+        from guatiao.provide import library_of
 
-        if not isinstance(library, Library):
-            raise TypeError(f"`{entry}` is a {type(library).__name__}, not a guatiao.provide Library")
-        if library.id != library_id:
-            raise ValueError(f"the manifest names `{library_id}`, and `{entry}` is `{library.id}`")
+        library = library_of(importlib.import_module(module_name))
+        if library.version != version:
+            raise ValueError(
+                f"the manifest says version `{version}`, and `{module_name}.__version__` is `{library.version}`"
+            )
         if sorted(set(kinds)) != sorted(set(library.kinds)):
             raise ValueError(
                 f"the manifest's kinds {sorted(set(kinds))} are not the library's {sorted(set(library.kinds))}"

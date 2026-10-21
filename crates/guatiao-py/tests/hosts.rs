@@ -46,7 +46,10 @@ fn text_list(items: &[PathBuf]) -> List {
 
 fn config() -> Map {
     let mut config = Map::new();
-    config.set("dirs", text_list(&[repo().join("examples/python_provider")]));
+    config.set(
+        "dirs",
+        text_list(&[repo().join("examples/python_provider")]),
+    );
     config.set(
         "paths",
         text_list(&[
@@ -113,11 +116,17 @@ fn a_c_host_serves_python_libraries() {
         return;
     };
     let Some(guatiao_dir) = std::env::var_os("GUATIAO_LIBRARY").map(PathBuf::from) else {
-        println!("skipped: GUATIAO_LIBRARY names no guatiao build (with `load`) for the C host to link");
+        println!(
+            "skipped: GUATIAO_LIBRARY names no guatiao build (with `load`) for the C host to link"
+        );
         return;
     };
     let out_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
-    let exe = out_dir.join(if cfg!(windows) { "c_host.exe" } else { "c_host" });
+    let exe = out_dir.join(if cfg!(windows) {
+        "c_host.exe"
+    } else {
+        "c_host"
+    });
     let mut compile = Command::new(&cc);
     compile
         .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
@@ -161,5 +170,8 @@ fn a_c_host_serves_python_libraries() {
         "stdout:\n{stdout}\nstderr:\n{}",
         String::from_utf8_lossy(&ran.stderr)
     );
-    assert!(stdout.contains("py_greeter_hello greets: hello, ana"), "{stdout}");
+    assert!(
+        stdout.contains("py_greeter_hello greets: hello, ana"),
+        "{stdout}"
+    );
 }

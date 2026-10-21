@@ -46,16 +46,28 @@ pub(crate) fn start(paths: &[String], own: Option<&str>) -> Result<(), String> {
     .map_err(|e| format!("Python could not start the bridge: {e}"))
 }
 
+/// The version a manifest leaves to its module: `__version__` read as a
+/// literal from the module's source, which is not imported.
+pub(crate) fn literal_version(manifest: &Manifest) -> Result<String, String> {
+    Python::attach(|py| -> PyResult<String> {
+        bridge(py)?
+            .getattr("literal_version")?
+            .call1((manifest.id.as_str(), manifest.paths.clone()))?
+            .extract()
+    })
+    .map_err(|e| e.to_string())
+}
+
 /// Imports the library `manifest` describes: the address of its
 /// descriptor, and the handle [`close`] takes.
-pub(crate) fn open(manifest: &Manifest) -> Result<(usize, i64), String> {
+pub(crate) fn open(manifest: &Manifest, version: &str) -> Result<(usize, i64), String> {
     Python::attach(|py| -> PyResult<(usize, i64)> {
         bridge(py)?
             .getattr("open_library")?
             .call1((
                 manifest.id.as_str(),
+                version,
                 manifest.kinds.clone(),
-                manifest.entry.as_str(),
                 manifest.paths.clone(),
             ))?
             .extract()
