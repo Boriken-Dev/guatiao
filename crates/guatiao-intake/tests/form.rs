@@ -1274,3 +1274,27 @@ fn form_for_prefers_what_somebody_wrote() {
         "assignment wins: somebody wrote it down"
     );
 }
+
+/// A text field the schema marks a secret is masked in the form it
+/// implies, whichever mark says so; a secret that is not text, and a
+/// text that is not secret, get no widget.
+#[test]
+fn a_created_form_masks_a_secret_typed_as_text() {
+    let alloc = Alloc::rust();
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new("user", KindBuilder::string()))
+        .field(FieldBuilder::new("password", KindBuilder::string()).sensitive())
+        .field(FieldBuilder::new("token", KindBuilder::string()).option("writeOnly", true))
+        .field(FieldBuilder::new("pin", KindBuilder::int()).sensitive())
+        .finish()
+        .expect("it builds");
+    let s = SchemaRef::new(&schema).expect("a schema");
+
+    let form = for_schema(s, alloc).expect("it builds");
+    let f = FormRef::new(&form).expect("a form");
+    assert_eq!(f.hints("password").widget(), vocab::widget::PASSWORD);
+    assert_eq!(f.hints("token").widget(), vocab::widget::PASSWORD);
+    assert_eq!(f.hints("user").widget(), "");
+    assert_eq!(f.hints("pin").widget(), "");
+    check(s, f).expect("what a schema implies fits it");
+}

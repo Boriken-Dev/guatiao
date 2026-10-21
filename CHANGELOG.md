@@ -140,6 +140,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   stated.
 - **`guatiao_schema_redact`**, redaction from C: a copy of a value with
   every secret replaced by a placeholder, local `$ref`s followed first.
+- **`guatiao-intake`: a secret typed as text is masked in a created
+  form.** `for_schema` (and `for_field`, `form_for`) give a text field
+  marked `x-sensitive` or `writeOnly` the `password` widget.
 - **The derives take every struct shape, and generics**, as serde writes
   them: a newtype struct (or one marked `#[map(transparent)]`) is its
   field's value and describes its field's kind; a tuple struct is a list
