@@ -25,6 +25,11 @@ that is `guatiao` itself or an application that carries it.
 - **Be a plugin host** — scan a directory, filter on what a library
   declares before loading it, list providers best first, build an
   instance from a configuration, call a provider through its table.
+- **Dates, times, instants and spans as Python's own types** — `date`,
+  `time`, naive and aware `datetime`, `timedelta`, and a `Span` class for
+  calendar lengths, read and written by the library itself.
+- **Redaction** — a copy of a value with every field its schema marks
+  secret hidden.
 - **JSON, TOML and YAML**, and **form checks against a schema**, through
   the `guatiao-serde` and `guatiao-intake` libraries when they are present.
 - **Importing never fails** — a native library is looked for on first
@@ -164,6 +169,23 @@ A document that does not parse raises `guatiao.errors.ParseError`, a
 parser did not say where). A format the loaded library does not export
 raises `NotImplementedError` naming it.
 
+### Dates, times and secrets
+
+```python
+import datetime as dt
+from guatiao import redact, time as gt
+
+gt.parse_timestamp("2026-10-21T19:15:00+05:30")    # aware datetime in UTC
+gt.format_date(dt.date(2026, 10, 21))              # "2026-10-21"
+gt.Span.parse("P1M").add_to(dt.date(2026, 1, 31))  # date(2026, 2, 28)
+gt.to_timedelta([90, 500_000_000])                 # timedelta(seconds=90.5)
+
+shown = redact(schema, value)                      # secrets replaced by "[redacted]"
+```
+
+Text a form's grammar refuses raises `guatiao.Unparsed`, a `ValueError`
+carrying the byte offset and what was expected there.
+
 ### Errors
 
 A failed native call raises `guatiao.GuatiaoError`, as one of `BadValue`,
@@ -173,6 +195,10 @@ provider's own words when it gave any.
 
 ## Known limits
 
+- `datetime`, `time` and `timedelta` count microseconds and start at
+  year 1: reading a date or time drops what is below a microsecond, and
+  the year 0000 raises `ValueError`. `normalize` and `Span` keep every
+  nanosecond.
 - Reading JSON writes an exponent's sign: `1e400` parses as `1e+400`.
   Everything else about a number's text survives a round trip.
 - `List.insert` and `list[i] = x` rebuild the list, because the C ABI
@@ -193,7 +219,8 @@ provider's own words when it gave any.
 
 | Module | Purpose |
 | --- | --- |
-| `guatiao` | `Value`, `Ref`, `Map`, `List`, `ABSENT`, `Registry`, `Instance`, the error classes |
+| `guatiao` | `Value`, `Ref`, `Map`, `List`, `ABSENT`, `Registry`, `Instance`, `redact`, the error classes |
+| `guatiao.time` | dates, times, instants and exact lengths as `datetime` types; `Span`; `normalize` |
 | `guatiao.registry` | the plugin host: load, scan, list, rank, configure, instantiate |
 | `guatiao.kinds` | check and cast a provider's function table |
 | `guatiao.serde` | `loads` / `dumps` for JSON, TOML, YAML |
