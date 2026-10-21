@@ -9,7 +9,8 @@
 //! the host wants kept in step with what is on disk. The host adds it once
 //! and the registry keeps it for its life; what it serves are ordinary
 //! libraries, opened, retired and closed like any other, each closed once
-//! nothing holds it (D23's leases) and its source then told.
+//! nothing holds it (no handle's lease on it is left) and its source
+//! then told.
 //!
 //! **Nothing here runs on its own.** There is no thread and no file
 //! watcher: the host calls [`Registry::refresh`] when it chooses — on a
