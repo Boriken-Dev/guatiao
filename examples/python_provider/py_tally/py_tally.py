@@ -3,43 +3,35 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 """A second Python library: one counter, starting where its configuration
-says. Its own manifest, its own path, its own entry point."""
+says. Its own manifest, its own path, its own module."""
 
 from __future__ import annotations
 
 import threading
+from typing import TypedDict
 
-from greeter_kind import COUNTER
+from greeter_kind import Counter
 
 from guatiao import provide
 
+__version__ = "0.1.0"
+__all__ = ["Tally"]
 
-class Tally:
+
+class TallyConfig(TypedDict, total=False):
+    """Where counting starts; left out, at zero."""
+
+    start: int
+
+
+class Tally(provide.Provider, Counter):
     """Counts from `start`, one instance per configuration."""
 
-    def __init__(self, config: dict) -> None:
-        self._next = int(config.get("start", 0))
+    def __init__(self, config: TallyConfig) -> None:
+        self._next = config.get("start", 0)
         self._lock = threading.Lock()
 
     def count(self) -> int:
         with self._lock:
             self._next += 1
             return self._next
-
-
-library = provide.library(
-    "py_tally",
-    "0.1.0",
-    providers=[
-        provide.Provider(
-            "tally",
-            Tally,
-            kinds=[COUNTER],
-            config={
-                "type": "object",
-                "properties": {"start": {"type": "integer"}},
-                "additionalProperties": False,
-            },
-        ),
-    ],
-)

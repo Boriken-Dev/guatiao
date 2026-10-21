@@ -64,9 +64,9 @@ class Method:
         """The slot's function-pointer type, for a struct written by hand."""
         return ctypes.CFUNCTYPE(ctypes.c_uint32, *self.prototype())
 
-    def prototype(self) -> list:
+    def prototype(self) -> "list[Any]":
         """The slot's argument types, as the kind's C header declares them."""
-        types: list = [ctypes.c_void_p]
+        types: "list[Any]" = [ctypes.c_void_p]
         types += [shape.c_arg for shape in self.args]
         if self.returns is not None:
             types.append(ctypes.POINTER(self.returns.c_out))
@@ -94,7 +94,7 @@ class Kind:
     def __init__(
         self,
         name: str,
-        struct: "type | None" = None,
+        struct: Any = None,
         *,
         floor_hash: int,
         methods: Sequence[Method],
@@ -104,6 +104,8 @@ class Kind:
         self.floor_hash = int(floor_hash)
         self.methods = tuple(methods)
         self.is_object = bool(is_object)
+        # A kind class's own method bodies: placeholders, never slots.
+        self.stubs: dict[str, Any] = {}
         self._by_name = {m.name: m for m in self.methods}
         for m in self.methods:
             if m.name in RESERVED or m.name.startswith("_"):
@@ -112,12 +114,12 @@ class Kind:
                     f"name it otherwise (`{m.name}_`): a slot is found by position"
                 )
         if struct is None:
-            built: list = [("header", _abi.KindHeader)]
+            built: "list[tuple[str, Any]]" = [("header", _abi.KindHeader)]
             if self.is_object:
                 built.append(("destroy", ctypes.CFUNCTYPE(None, ctypes.c_void_p)))
             built += [(m.name, m.slot_type()) for m in self.methods]
             struct = type(f"{name}_vtable", (ctypes.Structure,), {"_fields_": built})
-        self.struct = struct
+        self.struct: Any = struct
         fields = dict(struct._fields_)
         names = [f[0] for f in struct._fields_]
         if not names or names[0] != "header" or fields["header"] is not _abi.KindHeader:
@@ -145,6 +147,12 @@ class Kind:
 
     def slot_type(self, name: str) -> Any:
         return dict(self.struct._fields_)[name]
+
+    def implemented(self, cls: type, name: str) -> bool:
+        """Whether `cls` implements the slot `name` itself, rather than
+        inheriting the kind class's placeholder."""
+        found = getattr(cls, name, None)
+        return callable(found) and found is not self.stubs.get(name)
 
     def method(self, name: str) -> Method:
         return self._by_name[name]
@@ -183,7 +191,7 @@ class Remote:
         self.size = int(size)
         self.ctx = ctx
         self._table_ptr = table_ptr
-        self._table = ctypes.cast(table_ptr, ctypes.POINTER(kind.struct)).contents
+        self._table: Any = ctypes.cast(table_ptr, ctypes.POINTER(kind.struct)).contents
         self._scope = scope
 
     def _check(self) -> None:
@@ -220,7 +228,7 @@ class Remote:
             )
         scope = Scope()
         try:
-            c_args: list = [None] * len(args)
+            c_args: "list[Any]" = [None] * len(args)
             # Handed-over arguments last: a conversion that fails before
             # them leaves the caller's trees where they were.
             for i, shape in enumerate(method.args):
@@ -229,7 +237,7 @@ class Remote:
             for i, shape in enumerate(method.args):
                 if shape.takes:
                     c_args[i] = shape.pass_(args[i], scope)
-            extra: list = []
+            extra: "list[Any]" = []
             out = None
             if method.returns is not None:
                 out = method.returns.out_slot(scope)

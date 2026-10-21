@@ -25,7 +25,7 @@ import native
 
 sys.path.insert(0, str(native.GREETER_KIND_PY))
 
-from greeter_kind import COUNTER  # noqa: E402
+from greeter_kind import Counter  # noqa: E402
 
 from guatiao import BadValue, NotFound, WrongKind  # noqa: E402
 from guatiao.registry import Registry  # noqa: E402
@@ -53,7 +53,7 @@ def test_a_source_file_serves_libraries_that_come_and_go(shelf):
         first = reg.refresh()
         assert [s["id"] for s in first["loaded"]] == ["shelf_a", "shelf_b"]
         assert first["loaded"][0]["key"] == "shelf_a"
-        counter = reg.bind("shelf_a_counter", COUNTER)
+        counter = reg.bind("shelf_a_counter", Counter)
         assert counter.count() == 1
         assert reg.refresh() == {"loaded": [], "retired": [], "skipped": [], "refused": []}
 

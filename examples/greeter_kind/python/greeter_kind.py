@@ -2,57 +2,72 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""The kinds of `include/greeter_kind.h`, described for Python.
+"""The kinds of `include/greeter_kind.h`, as typed Protocol classes.
 
 Written by hand from the header: each method in the order its table
-declares it, each `FLOOR_HASH` copied from the `#define` beside the
-table. A test compares the literals with the header, so a kind that
-changes shape fails there rather than in a call. These are what a Python
-host calls a greeter through, and what a Python greeter is served as.
+declares it, its shapes in the annotations, each `floor_hash` copied from
+the `#define` beside the table. A test compares the literals with the
+header, so a kind that changes shape fails there rather than in a call.
+A host calls a greeter through `Greeter`; a Python greeter inherits it.
 """
 
 from __future__ import annotations
 
-from guatiao.kinds import BOOL, BYTES_MUT, I64, MAP, STR, TEXT, Kind, Method, lent, taken
+from typing import Protocol
 
-#: `listener_vtable`: what a conversation tells, implemented by the host.
-LISTENER = Kind(
-    "listener",
-    floor_hash=1867921573,
-    is_object=True,
-    methods=[Method("heard", [STR], required=True)],
-)
+from guatiao import Map
+from guatiao.kinds import I64, KindProtocol, Lent, MapAnswer, Taken, fallible, required
 
-#: `conversation_vtable`: one conversation a greeter started.
-CONVERSATION = Kind(
-    "conversation",
-    floor_hash=2769624503,
-    is_object=True,
-    methods=[
-        Method("say", [STR], fallible=True, required=True),
-        Method("read", [BYTES_MUT], I64, required=True),
-        Method("turns", [], I64, required=True),
-    ],
-)
 
-#: `greeter_vtable`: greets by name. `greet` is the one slot every table
-#: has; the rest were appended, and an older table may lack them.
-GREETER = Kind(
-    "greeter",
-    floor_hash=2695856491,
-    methods=[
-        Method("greet", [STR], MAP, fallible=True, required=True),
-        Method("shout", [STR], TEXT),
-        Method("start", [taken(LISTENER)], CONVERSATION, fallible=True),
-        Method("greet_into", [STR, lent(LISTENER)], fallible=True),
-        Method("greet_from", [taken(MAP)], MAP, fallible=True),
-        Method("check", [lent(MAP)], BOOL, fallible=True),
-    ],
-)
+class Listener(KindProtocol, Protocol, kind="listener", floor_hash=1867921573, is_object=True):
+    """`listener_vtable`: what a conversation tells, implemented by the host."""
 
-#: `counter_vtable`: counts how often it was asked.
-COUNTER = Kind(
-    "counter",
-    floor_hash=1227528937,
-    methods=[Method("count", [], I64, required=True)],
-)
+    @required
+    def heard(self, what: str) -> None: ...
+
+
+class Conversation(KindProtocol, Protocol, kind="conversation", floor_hash=2769624503, is_object=True):
+    """`conversation_vtable`: one conversation a greeter started."""
+
+    @required
+    @fallible
+    def say(self, what: str) -> None: ...
+
+    @required
+    def read(self, dst: bytearray) -> I64: ...
+
+    @required
+    def turns(self) -> I64: ...
+
+
+class Greeter(KindProtocol, Protocol, kind="greeter", floor_hash=2695856491):
+    """`greeter_vtable`: greets by name. `greet` is the one slot every table
+    has; the rest were appended, and an older table may lack them."""
+
+    @required
+    @fallible
+    def greet(self, name: str) -> MapAnswer: ...
+
+    def shout(self, name: str) -> str: ...
+
+    @fallible
+    def start(self, listener: Taken[Listener]) -> Conversation: ...
+
+    @fallible
+    def greet_into(self, name: str, listener: Lent[Listener]) -> None: ...
+
+    @fallible
+    def greet_from(self, config: Taken[Map]) -> MapAnswer: ...
+
+    @fallible
+    def check(self, config: Lent[Map]) -> bool: ...
+
+
+class Counter(KindProtocol, Protocol, kind="counter", floor_hash=1227528937):
+    """`counter_vtable`: counts how often it was asked."""
+
+    @required
+    def count(self) -> I64: ...
+
+
+__all__ = ["Listener", "Conversation", "Greeter", "Counter"]

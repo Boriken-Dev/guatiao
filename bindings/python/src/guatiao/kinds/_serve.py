@@ -28,7 +28,7 @@ _log = logging.getLogger("guatiao.kinds")
 
 _lock = threading.Lock()
 _live: "dict[int, tuple[Any, Any]]" = {}
-_tables: "dict[tuple[int, type], tuple[Any, list, Any]]" = {}
+_tables: "dict[tuple[int, type], tuple[Any, list[Any], Any]]" = {}
 
 
 class _Gone(Exception):
@@ -101,7 +101,7 @@ def _refuse(exc: BaseException, err: Any, where: str) -> int:
         _log.error("%s cannot fail and raised", where, exc_info=exc)
     else:
         write_err(err, status, message)
-    return status
+    return int(status)
 
 
 def _shim(kind: Any, method: Any) -> Any:
@@ -111,12 +111,12 @@ def _shim(kind: Any, method: Any) -> Any:
     answer = method.returns
     where = f"`{kind.name}.{method.name}`"
 
-    def shim(ctx, *rest):
+    def shim(ctx: Any, *rest: Any) -> int:
         scope = Scope()
         err = rest[-1] if method.fallible else None
         status = int(_abi.Status.OK)
         try:
-            values: list = [None] * n
+            values: "list[Any]" = [None] * n
             # What was handed over is taken first, so a refusal below
             # still owns it, and frees it, rather than leaking it.
             for i, shape in enumerate(shapes):
@@ -144,7 +144,7 @@ def _shim(kind: Any, method: Any) -> Any:
 def _destroy_shim(kind: Any) -> Any:
     proto = kind.slot_type("destroy")
 
-    def destroy(ctx):
+    def destroy(ctx: Any) -> None:
         try:
             release(ctx)
         except BaseException:  # nothing may cross back into C
@@ -162,7 +162,7 @@ def table_for(kind: Any, cls: type) -> Any:
         found = _tables.get(key)
     if found is not None:
         return found[0]
-    missing = [m.name for m in kind.methods if m.required and not callable(getattr(cls, m.name, None))]
+    missing = [m.name for m in kind.methods if m.required and not kind.implemented(cls, m.name)]
     if missing:
         raise TypeError(
             f"{cls.__name__} does not implement {', '.join(missing)}, which the {kind.name} kind requires"
@@ -177,7 +177,7 @@ def table_for(kind: Any, cls: type) -> Any:
         keep.append(slot)
         table.destroy = slot
     for method in kind.methods:
-        if callable(getattr(cls, method.name, None)):
+        if kind.implemented(cls, method.name):
             slot = _shim(kind, method)
             keep.append(slot)
             setattr(table, method.name, slot)

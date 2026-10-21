@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import ctypes
+from typing import Any
 
 from .. import _abi
 
@@ -16,7 +17,7 @@ class FloorMismatch(RuntimeError):
     `floor_hash` does not match what this binding was built against."""
 
 
-def table(table_ptr, size: int, struct_type: type, *, floor_hash: int):
+def table(table_ptr: Any, size: int, struct_type: Any, *, floor_hash: int) -> Any:
     """Casts `table_ptr` (from `Registry.provider_table`) to
     `POINTER(struct_type).contents`.
 

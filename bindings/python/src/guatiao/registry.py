@@ -8,9 +8,10 @@ they offer, over `guatiao_registry_*`."""
 from __future__ import annotations
 
 import ctypes
-from typing import Any
+import types
+from typing import Any, Callable, Dict, List, Optional, cast
 
-from . import _abi, _lib
+from . import _abi, _lib, kinds
 from .errors import NotFound, check
 from .value import Ref, Value, _make_str
 
@@ -31,7 +32,13 @@ class _Borrowed:
     address. With neither it is a view of memory that outlives it, such
     as a provider's config schema in the library's own image."""
 
-    def __init__(self, raw=None, *, keep=None, find=None) -> None:
+    def __init__(
+        self,
+        raw: Any = None,
+        *,
+        keep: Any = None,
+        find: Optional[Callable[[], Any]] = None,
+    ) -> None:
         self._fixed = raw
         self._keep = keep
         self._find = find
@@ -42,8 +49,8 @@ class _Borrowed:
             node = self._find()
             if node is None:
                 raise LookupError("the borrowed value is gone")
-            return node
-        return self._fixed
+            return cast("_abi.Value", node)
+        return cast("_abi.Value", self._fixed)
 
     def _check_open(self) -> None:
         if self._keep is not None:
@@ -73,6 +80,7 @@ class Instance:
     def bind(self, kind: Any) -> Any:
         """This instance as `kind` (a `guatiao.kinds.Kind`): a `Remote`
         whose calls go to this instance. Valid until it is closed."""
+        kind = kinds.kind_of(kind)
         table, size, _ctx = self._registry.provider_table(self._key, kind=kind.name)
         if not table:
             raise NotFound(
@@ -117,7 +125,7 @@ class Registry:
             )
         self._handle = handle
         self._closed = False
-        self._python_libraries: list = []
+        self._python_libraries: List[Any] = []
 
     def _check_open(self) -> None:
         if self._closed:
@@ -143,7 +151,7 @@ class Registry:
     def __exit__(self, *_exc: object) -> None:
         self.close()
 
-    def _call(self, fn, *args: Any) -> Any:
+    def _call(self, fn: Callable[..., int], *args: Any) -> Any:
         """Calls one of the `(reg, ..., alloc, out) -> status` answers,
         and hands back its plain Python value, freed."""
         self._check_open()
@@ -168,9 +176,14 @@ class Registry:
         return self._call(_lib.core().guatiao_registry_register_entry, view, entry)
 
     def register_library(self, library: Any) -> Any:
-        """Registers a library written in Python (a `guatiao.provide`
-        `Library`) under its id, as `register_entry` does a C one, and
-        keeps it alive as long as this registry."""
+        """Registers a library written in Python under its id, as
+        `register_entry` does a C one, and keeps it alive as long as this
+        registry: a module (`guatiao.provide.library_of` says what it
+        serves) or a `guatiao.provide.Library`."""
+        from . import provide
+
+        if isinstance(library, types.ModuleType):
+            library = provide.library_of(library)
         self._python_libraries.append(library)
         return self.register_entry(library.id, library.entry)
 
@@ -191,28 +204,28 @@ class Registry:
 
     # ---- what is loaded ---------------------------------------------
 
-    def libraries(self) -> list:
-        return self._call(_lib.core().guatiao_registry_libraries)
+    def libraries(self) -> List[Any]:
+        return cast(List[Any], self._call(_lib.core().guatiao_registry_libraries))
 
-    def providers(self, kind: str = "") -> list:
+    def providers(self, kind: str = "") -> List[Any]:
         view, _buf = _make_str(kind.encode("utf-8"))
-        return self._call(_lib.core().guatiao_registry_providers, view)
+        return cast(List[Any], self._call(_lib.core().guatiao_registry_providers, view))
 
-    def available(self, kind: str = "") -> list:
+    def available(self, kind: str = "") -> List[Any]:
         view, _buf = _make_str(kind.encode("utf-8"))
-        return self._call(_lib.core().guatiao_registry_available, view)
+        return cast(List[Any], self._call(_lib.core().guatiao_registry_available, view))
 
-    def why_not(self, kind: str) -> dict:
+    def why_not(self, kind: str) -> Dict[str, Any]:
         view, _buf = _make_str(kind.encode("utf-8"))
-        return self._call(_lib.core().guatiao_registry_why_not, view)
+        return cast(Dict[str, Any], self._call(_lib.core().guatiao_registry_why_not, view))
 
-    def provider(self, key: str) -> dict:
+    def provider(self, key: str) -> Dict[str, Any]:
         view, _buf = _make_str(key.encode("utf-8"))
-        return self._call(_lib.core().guatiao_registry_provider, view)
+        return cast(Dict[str, Any], self._call(_lib.core().guatiao_registry_provider, view))
 
-    def best(self, kind: str) -> dict:
+    def best(self, kind: str) -> Dict[str, Any]:
         view, _buf = _make_str(kind.encode("utf-8"))
-        return self._call(_lib.core().guatiao_registry_best, view)
+        return cast(Dict[str, Any], self._call(_lib.core().guatiao_registry_best, view))
 
     def provider_available(self, key: str) -> "tuple[bool, str | None]":
         self._check_open()
@@ -248,7 +261,7 @@ class Registry:
     def priority(self, id: str) -> int:
         self._check_open()
         view, _buf = _make_str(id.encode("utf-8"))
-        return _lib.core().guatiao_registry_priority(self._handle, view)
+        return int(_lib.core().guatiao_registry_priority(self._handle, view))
 
     # ---- a provider's table and configuration ------------------------
 
@@ -280,6 +293,7 @@ class Registry:
 
         Valid while the library is: until it is unloaded, or, once
         retired, collected."""
+        kind = kinds.kind_of(kind)
         table, size, ctx = self.provider_table(key, kind=kind.name)
         if not table:
             raise NotFound(int(_abi.Status.ERR_NOT_FOUND), f"`{key}` serves no {kind.name} table")
@@ -344,14 +358,14 @@ class Registry:
         then and not after."""
         self._key_call(_lib.core().guatiao_registry_retire, key)
 
-    def collect(self) -> list:
+    def collect(self) -> List[str]:
         """Closes every retired library nothing uses any more, and returns
         their library keys, oldest first.
 
         One whose own `unload` function refuses stays retired and mapped,
         and is asked again next time; one with no such function stays
         mapped. No table taken from a retired library is used again."""
-        return self._call(_lib.core().guatiao_registry_collect)
+        return cast(List[str], self._call(_lib.core().guatiao_registry_collect))
 
     def unload(self, key: str, *, unchecked: bool = False) -> None:
         """Unmaps a library, when the library agrees.
@@ -419,7 +433,7 @@ class Registry:
         rules_view, _rules_buf = _make_str((rules or "").encode("utf-8"))
         check(_lib.core().guatiao_registry_watch_dir(self._handle, dir_view, rules_view))
 
-    def refresh(self) -> dict:
+    def refresh(self) -> Dict[str, Any]:
         """Asks every source and watched directory what it serves now and
         makes this registry agree. Answers what changed:
 
@@ -432,7 +446,7 @@ class Registry:
         vanished one is retired; a library retired by hand stays out until
         its stamp changes. A retired library closes once nothing uses it,
         and its source is told. Refusals are part of the answer."""
-        return self._call(_lib.core().guatiao_registry_refresh)
+        return cast(Dict[str, Any], self._call(_lib.core().guatiao_registry_refresh))
 
     def host(self) -> Any:
         """The raw `const guatiao_host_info *` this registry hands a

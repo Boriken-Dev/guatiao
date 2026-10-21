@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import ctypes
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Callable
 
 from .. import _abi, _lib
 from ..errors import BadValue, NullArgument
@@ -34,20 +34,20 @@ class Scope:
 
     def __init__(self) -> None:
         self.open = True
-        self._keep: list = []
-        self._after: list = []
+        self._keep: "list[Any]" = []
+        self._after: "list[Callable[[], Any]]" = []
         # Trees and objects given up for a call that may not happen: freed
         # by `close()` unless `called()` says the callee took them.
-        self._given: list = []
+        self._given: "list[Callable[[], Any]]" = []
 
     def keep(self, obj: Any) -> Any:
         self._keep.append(obj)
         return obj
 
-    def after(self, fn) -> None:
+    def after(self, fn: Callable[[], Any]) -> None:
         self._after.append(fn)
 
-    def given(self, release) -> None:
+    def given(self, release: Callable[[], Any]) -> None:
         self._given.append(release)
 
     def called(self) -> None:
@@ -81,7 +81,7 @@ class _View:
     """The owner of a `Ref` onto memory a call lends: valid while the
     scope is open, writable only when lent, never freed here."""
 
-    def __init__(self, node, scope: Scope, *, alloc=None) -> None:
+    def __init__(self, node: Any, scope: Scope, *, alloc: Any = None) -> None:
         self._raw = node
         self._scope = scope
         self._alloc = alloc
@@ -94,20 +94,20 @@ class _View:
         if self._alloc is None:
             raise TypeError("a borrowed value is read-only")
 
-    def _ensure_alloc(self):
+    def _ensure_alloc(self) -> Any:
         self._check_writable()
         return self._alloc
 
-    def _clone_alloc(self):
+    def _clone_alloc(self) -> Any:
         return _lib.core().alloc
 
 
-def binding_alloc():
+def binding_alloc() -> Any:
     """The allocator this binding builds in when nobody names one."""
     return _lib.core().alloc
 
 
-def complete(alloc_ptr) -> bool:
+def complete(alloc_ptr: Any) -> bool:
     """Whether a `guatiao_alloc *` names an allocator that can build."""
     if not alloc_ptr:
         return False
@@ -125,10 +125,13 @@ def _move_out(value: Value) -> "_abi.Value":
     return moved
 
 
-def _owned_tree(value: Any, tag: int, alloc) -> "_abi.Value":
+def _owned_tree(value: Any, tag: "int | None", alloc: Any) -> "_abi.Value":
     """A root node holding `value`'s tree, given up by whoever held it: a
-    `Value` is moved, a `Ref` cloned, anything else built in `alloc`."""
-    if type(value) is Value or (isinstance(value, Value) and value.owner is value):
+    `Value`, or a view of a whole `Value`, is moved; another `Ref` cloned;
+    anything else built in `alloc`."""
+    if isinstance(value, Ref) and not value.path and isinstance(value.owner, Value):
+        value = value.owner
+    if isinstance(value, Value):
         if tag is not None and value.tag != tag:
             raise TypeError(f"expected a {_abi.Tag(tag).name.lower()}, got {_abi.Tag(value.tag).name.lower()}")
         return _move_out(value)
@@ -143,7 +146,7 @@ def _free_node(node: "_abi.Value") -> None:
     _lib.core().guatiao_value_free(ctypes.byref(node))
 
 
-def _recorded_alloc(node: "_abi.Value"):
+def _recorded_alloc(node: "_abi.Value") -> Any:
     """The allocator a container node records, else this binding's."""
     arm = {
         _abi.Tag.MAP: "map",
@@ -159,7 +162,7 @@ def _recorded_alloc(node: "_abi.Value"):
     return binding_alloc()
 
 
-def _text_of(view, what: str) -> str:
+def _text_of(view: Any, what: str) -> str:
     if not view.len:
         return ""
     try:
@@ -180,7 +183,7 @@ class Shape:
     takes = False
 
     def __repr__(self) -> str:
-        return f"guatiao.kinds.{self.name}"
+        return f"guatiao.kinds.shapes.{self.name}"
 
     # -- the caller's side ----------------------------------------------
 
@@ -333,7 +336,7 @@ class _Tree(Shape):
         self.tag = tag
         self.mode = mode  # "borrow", "take", "lend", "answer"
         self.takes = mode == "take"
-        struct = {None: _abi.Value, _abi.Tag.MAP: _abi.Map, _abi.Tag.LIST: _abi.List}[tag]
+        struct: Any = _abi.Value if tag is None else (_abi.Map if tag == _abi.Tag.MAP else _abi.List)
         self._struct = struct
         if mode == "answer":
             self.c_out = struct
@@ -342,7 +345,7 @@ class _Tree(Shape):
 
     # -- a container's node and the struct that crosses -------------------
 
-    def _arm(self, node: "_abi.Value"):
+    def _arm(self, node: "_abi.Value") -> Any:
         """The struct that crosses, inside `node`: the node itself for a
         value, its payload arm for a map or list."""
         if self.tag is None:
@@ -351,7 +354,7 @@ class _Tree(Shape):
             raise TypeError(f"expected a {_abi.Tag(self.tag).name.lower()}")
         return node.payload.map if self.tag == _abi.Tag.MAP else node.payload.list
 
-    def _node_over(self, struct) -> "_abi.Value":
+    def _node_over(self, struct: Any) -> "_abi.Value":
         """A fresh node holding a copy of `struct`'s fields."""
         if self.tag is None:
             return _abi.Value.from_buffer_copy(struct)
@@ -413,7 +416,8 @@ class _Tree(Shape):
                 return None
             raise NullArgument(int(_abi.Status.ERR_NULL), f"the {self.name} argument is null")
         if self.mode == "take":
-            return Value(_raw=self._node_over(c_value.contents), alloc=binding_alloc())
+            owned = Value(_raw=self._node_over(c_value.contents), alloc=binding_alloc())
+            return self._wrap(Ref(owned, ())) if self.tag is not None else owned
         if self.tag is None:
             node = c_value.contents
         else:
@@ -458,9 +462,9 @@ class _ObjectShape(Shape):
     def __repr__(self) -> str:
         if self.mode == "answer":
             return f"<object kind {self.kind.name}>"
-        return f"guatiao.kinds.{self.name}"
+        return f"guatiao.kinds.shapes.{self.name}"
 
-    def _raw_for(self, value: Any, scope: "Scope | None", *, lent: bool):
+    def _raw_for(self, value: Any, scope: "Scope | None", *, lent: bool) -> Any:
         from ._spec import Object
         from ._serve import serve
 
