@@ -81,6 +81,15 @@ jobs:
               problems.append(f"Cargo says {cargo} and pubspec says {pubspec}")
           if Version(cargo) != Version(python) or python != init:
               problems.append(f"Cargo says {cargo}, pyproject {python}, __version__ {init}")
+          # guatiao-py is a workspace of its own and is not published: its
+          # version and its pins on the crates still move with them.
+          bridge = tomllib.loads(pathlib.Path("crates/guatiao-py/Cargo.toml").read_text())
+          if bridge["package"]["version"] != cargo:
+              problems.append(f"Cargo says {cargo} and guatiao-py says {bridge['package']['version']}")
+          for table in ("dependencies", "dev-dependencies"):
+              for name, spec in bridge.get(table, {}).items():
+                  if name.startswith("guatiao") and spec.get("version") != f"={cargo}":
+                      problems.append(f"guatiao-py's {table} pin {name} to {spec.get('version')}, not ={cargo}")
           tag = os.environ["TAG"]
           if tag:
               want = tag[1:] if tag.startswith("v") else tag
