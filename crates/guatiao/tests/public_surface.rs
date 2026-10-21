@@ -40,12 +40,10 @@ fn the_error_module_exposes_the_depth_bound_and_the_error() {
 
 // --- what the crate root exposes -----------------------------------------
 
-/// Every name the API header writes at the crate root resolves there.
-///
-/// `Text::new`, `Buffer::new`, `Entry::key()` and `Tag` were documented at
-/// this level while only `Alloc`, `List`, `Map`, `ReadValue`, `Status`,
-/// `Value` and `ValueError` were re-exported, so each of those lines was
-/// an import that did not compile.
+/// Every name the API header writes at the crate root resolves there: the
+/// containers with their constructors and readers (`Text::new`,
+/// `Entry::key()`, `Map::required`, `TryAsRef`), `Tag`, `Status` and the
+/// errors, so an import copied from the header compiles.
 #[test]
 fn the_root_exports_the_names_the_header_names() {
     use guatiao::{

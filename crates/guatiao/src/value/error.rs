@@ -45,8 +45,18 @@ pub enum ValueError {
     /// schema under one name.
     DuplicateKey,
     /// The value has no spelling in the form it is written as: a time
-    /// outside the years 0000 to 9999, which RFC 3339 cannot write.
+    /// outside the years 0000 to 9999, which RFC 3339 cannot write, or a
+    /// [`Span`](crate::Span) with calendar units or a sign, which a
+    /// `Duration` cannot hold.
     Unrepresentable,
+    /// Text was refused by the grammar it was read with, at byte `at`.
+    /// Says what was expected there and never quotes the text.
+    Unparsed {
+        /// The byte offset the reading stopped at.
+        at: usize,
+        /// What would have been accepted there, phrased for a person.
+        expected: &'static str,
+    },
 }
 
 impl From<AllocError> for ValueError {
@@ -68,6 +78,9 @@ impl core::fmt::Display for ValueError {
             ValueError::DuplicateKey => f.write_str("a key was declared twice"),
             ValueError::Unrepresentable => {
                 f.write_str("the value has no spelling in the form it is written as")
+            }
+            ValueError::Unparsed { at, expected } => {
+                write!(f, "refused at byte {at}: expected {expected}")
             }
         }
     }

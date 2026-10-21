@@ -1863,6 +1863,10 @@ impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroUsize
 pub fn core::num::nonzero::NonZeroUsize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn core::num::nonzero::NonZeroUsize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn core::num::nonzero::NonZeroUsize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::time::Duration
+pub fn core::time::Duration::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::time::Duration::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::time::Duration::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for f32
 pub fn f32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn f32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -1875,6 +1879,10 @@ impl guatiao::schema::describe::Schema for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::value::convert::Bytes::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::value::span::Span::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::span::Span::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::value::types::buffer::Buffer::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2578,6 +2586,10 @@ impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroUsize
 pub fn core::num::nonzero::NonZeroUsize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn core::num::nonzero::NonZeroUsize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn core::num::nonzero::NonZeroUsize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::time::Duration
+pub fn core::time::Duration::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::time::Duration::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::time::Duration::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for f32
 pub fn f32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn f32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2590,6 +2602,10 @@ impl guatiao::schema::describe::Schema for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::value::convert::Bytes::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::value::span::Span::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::span::Span::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::value::types::buffer::Buffer::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2968,12 +2984,16 @@ impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU8
 pub fn core::num::nonzero::NonZeroU8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroUsize
 pub fn core::num::nonzero::NonZeroUsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroUsize, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::time::Duration
+pub fn core::time::Duration::from_value(&guatiao::value::value::Value) -> core::result::Result<core::time::Duration, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f32
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
 pub fn f64::from_value(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::list::List
@@ -3241,6 +3261,9 @@ pub fn core::num::nonzero::NonZeroU8::to_value_in(&self, guatiao::value::alloc::
 impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroUsize
 pub fn core::num::nonzero::NonZeroUsize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn core::num::nonzero::NonZeroUsize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::time::Duration
+pub fn core::time::Duration::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::time::Duration::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for f32
 pub fn f32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -3250,6 +3273,9 @@ pub fn f64::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Re
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::span::Span::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::buffer::Buffer::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -3435,6 +3461,9 @@ pub guatiao::value::error::ValueError::NotUtf8
 pub guatiao::value::error::ValueError::OutOfRange
 pub guatiao::value::error::ValueError::TooDeep
 pub guatiao::value::error::ValueError::UnknownTag(u32)
+pub guatiao::value::error::ValueError::Unparsed
+pub guatiao::value::error::ValueError::Unparsed::at: usize
+pub guatiao::value::error::ValueError::Unparsed::expected: &'static str
 pub guatiao::value::error::ValueError::Unrepresentable
 pub guatiao::value::error::ValueError::WrongKind
 impl core::clone::Clone for guatiao::value::error::ValueError
@@ -3574,6 +3603,70 @@ pub fn guatiao::value::read::bytes_or<'a>(core::option::Option<&'a guatiao::valu
 pub fn guatiao::value::read::float_or(core::option::Option<&guatiao::value::value::Value>, f64) -> f64
 pub fn guatiao::value::read::int_or(core::option::Option<&guatiao::value::value::Value>, i64) -> i64
 pub fn guatiao::value::read::str_or<'a>(core::option::Option<&'a guatiao::value::value::Value>, &'a str) -> &'a str
+pub mod guatiao::value::span
+pub struct guatiao::value::span::Span
+impl guatiao::value::span::Span
+pub fn guatiao::value::span::Span::abs(self) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::days(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::get_days(&self) -> i64
+pub fn guatiao::value::span::Span::get_hours(&self) -> i64
+pub fn guatiao::value::span::Span::get_minutes(&self) -> i64
+pub fn guatiao::value::span::Span::get_months(&self) -> i64
+pub fn guatiao::value::span::Span::get_nanoseconds(&self) -> i64
+pub fn guatiao::value::span::Span::get_seconds(&self) -> i64
+pub fn guatiao::value::span::Span::get_weeks(&self) -> i64
+pub fn guatiao::value::span::Span::get_years(&self) -> i64
+pub fn guatiao::value::span::Span::hours(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::is_negative(&self) -> bool
+pub fn guatiao::value::span::Span::is_zero(&self) -> bool
+pub fn guatiao::value::span::Span::minutes(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::months(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::nanoseconds(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::negate(self) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::new() -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::seconds(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::weeks(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::years(self, i64) -> guatiao::value::span::Span
+impl core::clone::Clone for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::value::span::Span
+impl core::cmp::PartialEq for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::eq(&self, &Self) -> bool
+impl core::convert::From<core::time::Duration> for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from(core::time::Duration) -> guatiao::value::span::Span
+impl core::convert::From<guatiao::value::span::Span> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::value::span::Span) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::value::span::Span
+pub type guatiao::value::span::Span::Error = guatiao::value::error::ValueError
+pub fn guatiao::value::span::Span::try_from(&str) -> core::result::Result<guatiao::value::span::Span, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::value::span::Span> for core::time::Duration
+pub type core::time::Duration::Error = guatiao::value::error::ValueError
+pub fn core::time::Duration::try_from(guatiao::value::span::Span) -> core::result::Result<core::time::Duration, guatiao::value::error::ValueError>
+impl core::default::Default for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::default() -> Self
+impl core::fmt::Debug for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::value::span::Span
+impl core::marker::StructuralPartialEq for guatiao::value::span::Span
+impl core::ops::arith::Neg for guatiao::value::span::Span
+pub type guatiao::value::span::Span::Output = guatiao::value::span::Span
+pub fn guatiao::value::span::Span::neg(self) -> guatiao::value::span::Span
+impl core::str::traits::FromStr for guatiao::value::span::Span
+pub type guatiao::value::span::Span::Err = guatiao::value::error::ValueError
+pub fn guatiao::value::span::Span::from_str(&str) -> core::result::Result<guatiao::value::span::Span, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::value::span::Span::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::span::Span::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
+impl guatiao::value::convert::ToValue for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::span::Span::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub mod guatiao::value::status
 #[repr(transparent)] pub struct guatiao::value::status::Status(_)
 impl guatiao::value::status::Status
@@ -5265,6 +5358,9 @@ pub guatiao::value::ValueError::NotUtf8
 pub guatiao::value::ValueError::OutOfRange
 pub guatiao::value::ValueError::TooDeep
 pub guatiao::value::ValueError::UnknownTag(u32)
+pub guatiao::value::ValueError::Unparsed
+pub guatiao::value::ValueError::Unparsed::at: usize
+pub guatiao::value::ValueError::Unparsed::expected: &'static str
 pub guatiao::value::ValueError::Unrepresentable
 pub guatiao::value::ValueError::WrongKind
 impl core::clone::Clone for guatiao::value::error::ValueError
@@ -5700,6 +5796,69 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::number::Number> fo
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::number::Number>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::number::Number> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::number::Number>
+pub struct guatiao::value::Span
+impl guatiao::value::span::Span
+pub fn guatiao::value::span::Span::abs(self) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::days(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::get_days(&self) -> i64
+pub fn guatiao::value::span::Span::get_hours(&self) -> i64
+pub fn guatiao::value::span::Span::get_minutes(&self) -> i64
+pub fn guatiao::value::span::Span::get_months(&self) -> i64
+pub fn guatiao::value::span::Span::get_nanoseconds(&self) -> i64
+pub fn guatiao::value::span::Span::get_seconds(&self) -> i64
+pub fn guatiao::value::span::Span::get_weeks(&self) -> i64
+pub fn guatiao::value::span::Span::get_years(&self) -> i64
+pub fn guatiao::value::span::Span::hours(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::is_negative(&self) -> bool
+pub fn guatiao::value::span::Span::is_zero(&self) -> bool
+pub fn guatiao::value::span::Span::minutes(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::months(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::nanoseconds(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::negate(self) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::new() -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::seconds(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::weeks(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::years(self, i64) -> guatiao::value::span::Span
+impl core::clone::Clone for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::value::span::Span
+impl core::cmp::PartialEq for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::eq(&self, &Self) -> bool
+impl core::convert::From<core::time::Duration> for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from(core::time::Duration) -> guatiao::value::span::Span
+impl core::convert::From<guatiao::value::span::Span> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::value::span::Span) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::value::span::Span
+pub type guatiao::value::span::Span::Error = guatiao::value::error::ValueError
+pub fn guatiao::value::span::Span::try_from(&str) -> core::result::Result<guatiao::value::span::Span, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::value::span::Span> for core::time::Duration
+pub type core::time::Duration::Error = guatiao::value::error::ValueError
+pub fn core::time::Duration::try_from(guatiao::value::span::Span) -> core::result::Result<core::time::Duration, guatiao::value::error::ValueError>
+impl core::default::Default for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::default() -> Self
+impl core::fmt::Debug for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::value::span::Span
+impl core::marker::StructuralPartialEq for guatiao::value::span::Span
+impl core::ops::arith::Neg for guatiao::value::span::Span
+pub type guatiao::value::span::Span::Output = guatiao::value::span::Span
+pub fn guatiao::value::span::Span::neg(self) -> guatiao::value::span::Span
+impl core::str::traits::FromStr for guatiao::value::span::Span
+pub type guatiao::value::span::Span::Err = guatiao::value::error::ValueError
+pub fn guatiao::value::span::Span::from_str(&str) -> core::result::Result<guatiao::value::span::Span, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::value::span::Span::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::span::Span::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
+impl guatiao::value::convert::ToValue for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::span::Span::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 #[repr(transparent)] pub struct guatiao::value::Status(_)
 impl guatiao::value::status::Status
 pub const guatiao::value::status::Status::GUATIAO_ERR_ALLOC: guatiao::value::status::Status
@@ -6092,12 +6251,16 @@ impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU8
 pub fn core::num::nonzero::NonZeroU8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroUsize
 pub fn core::num::nonzero::NonZeroUsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroUsize, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::time::Duration
+pub fn core::time::Duration::from_value(&guatiao::value::value::Value) -> core::result::Result<core::time::Duration, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f32
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
 pub fn f64::from_value(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::list::List
@@ -6261,6 +6424,9 @@ pub fn core::num::nonzero::NonZeroU8::to_value_in(&self, guatiao::value::alloc::
 impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroUsize
 pub fn core::num::nonzero::NonZeroUsize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn core::num::nonzero::NonZeroUsize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::time::Duration
+pub fn core::time::Duration::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::time::Duration::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for f32
 pub fn f32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6270,6 +6436,9 @@ pub fn f64::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Re
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::span::Span::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::buffer::Buffer::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6599,6 +6768,9 @@ pub guatiao::ValueError::NotUtf8
 pub guatiao::ValueError::OutOfRange
 pub guatiao::ValueError::TooDeep
 pub guatiao::ValueError::UnknownTag(u32)
+pub guatiao::ValueError::Unparsed
+pub guatiao::ValueError::Unparsed::at: usize
+pub guatiao::ValueError::Unparsed::expected: &'static str
 pub guatiao::ValueError::Unrepresentable
 pub guatiao::ValueError::WrongKind
 impl core::clone::Clone for guatiao::value::error::ValueError
@@ -7067,6 +7239,69 @@ pub fn guatiao::value::merge::Provenance<'a>::default() -> Self
 impl<'a> core::fmt::Debug for guatiao::value::merge::Provenance<'a>
 pub fn guatiao::value::merge::Provenance<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<'a> core::marker::StructuralPartialEq for guatiao::value::merge::Provenance<'a>
+pub struct guatiao::Span
+impl guatiao::value::span::Span
+pub fn guatiao::value::span::Span::abs(self) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::days(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::get_days(&self) -> i64
+pub fn guatiao::value::span::Span::get_hours(&self) -> i64
+pub fn guatiao::value::span::Span::get_minutes(&self) -> i64
+pub fn guatiao::value::span::Span::get_months(&self) -> i64
+pub fn guatiao::value::span::Span::get_nanoseconds(&self) -> i64
+pub fn guatiao::value::span::Span::get_seconds(&self) -> i64
+pub fn guatiao::value::span::Span::get_weeks(&self) -> i64
+pub fn guatiao::value::span::Span::get_years(&self) -> i64
+pub fn guatiao::value::span::Span::hours(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::is_negative(&self) -> bool
+pub fn guatiao::value::span::Span::is_zero(&self) -> bool
+pub fn guatiao::value::span::Span::minutes(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::months(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::nanoseconds(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::negate(self) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::new() -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::seconds(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::weeks(self, i64) -> guatiao::value::span::Span
+pub fn guatiao::value::span::Span::years(self, i64) -> guatiao::value::span::Span
+impl core::clone::Clone for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::value::span::Span
+impl core::cmp::PartialEq for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::eq(&self, &Self) -> bool
+impl core::convert::From<core::time::Duration> for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from(core::time::Duration) -> guatiao::value::span::Span
+impl core::convert::From<guatiao::value::span::Span> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::value::span::Span) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::value::span::Span
+pub type guatiao::value::span::Span::Error = guatiao::value::error::ValueError
+pub fn guatiao::value::span::Span::try_from(&str) -> core::result::Result<guatiao::value::span::Span, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::value::span::Span> for core::time::Duration
+pub type core::time::Duration::Error = guatiao::value::error::ValueError
+pub fn core::time::Duration::try_from(guatiao::value::span::Span) -> core::result::Result<core::time::Duration, guatiao::value::error::ValueError>
+impl core::default::Default for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::default() -> Self
+impl core::fmt::Debug for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::value::span::Span
+impl core::marker::StructuralPartialEq for guatiao::value::span::Span
+impl core::ops::arith::Neg for guatiao::value::span::Span
+pub type guatiao::value::span::Span::Output = guatiao::value::span::Span
+pub fn guatiao::value::span::Span::neg(self) -> guatiao::value::span::Span
+impl core::str::traits::FromStr for guatiao::value::span::Span
+pub type guatiao::value::span::Span::Err = guatiao::value::error::ValueError
+pub fn guatiao::value::span::Span::from_str(&str) -> core::result::Result<guatiao::value::span::Span, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::value::span::Span::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::span::Span::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
+impl guatiao::value::convert::ToValue for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::span::Span::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 #[repr(transparent)] pub struct guatiao::Status(_)
 impl guatiao::value::status::Status
 pub const guatiao::value::status::Status::GUATIAO_ERR_ALLOC: guatiao::value::status::Status
@@ -7459,12 +7694,16 @@ impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU8
 pub fn core::num::nonzero::NonZeroU8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroUsize
 pub fn core::num::nonzero::NonZeroUsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroUsize, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::time::Duration
+pub fn core::time::Duration::from_value(&guatiao::value::value::Value) -> core::result::Result<core::time::Duration, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f32
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
 pub fn f64::from_value(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::list::List
@@ -7651,6 +7890,10 @@ impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroUsize
 pub fn core::num::nonzero::NonZeroUsize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn core::num::nonzero::NonZeroUsize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn core::num::nonzero::NonZeroUsize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::time::Duration
+pub fn core::time::Duration::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::time::Duration::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::time::Duration::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for f32
 pub fn f32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn f32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -7663,6 +7906,10 @@ impl guatiao::schema::describe::Schema for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::value::convert::Bytes::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::value::span::Span::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::span::Span::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::value::types::buffer::Buffer::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -7924,6 +8171,9 @@ pub fn core::num::nonzero::NonZeroU8::to_value_in(&self, guatiao::value::alloc::
 impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroUsize
 pub fn core::num::nonzero::NonZeroUsize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn core::num::nonzero::NonZeroUsize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::time::Duration
+pub fn core::time::Duration::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::time::Duration::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for f32
 pub fn f32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -7933,6 +8183,9 @@ pub fn f64::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Re
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::span::Span::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::buffer::Buffer::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>

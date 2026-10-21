@@ -20,6 +20,7 @@ pub mod error;
 pub mod merge;
 mod raw;
 pub mod read;
+pub mod span;
 pub mod status;
 // RFC 3339 arithmetic for SystemTime.
 pub(crate) mod time;
@@ -35,6 +36,7 @@ pub use alloc::{Alloc, AllocError, Allocator, rust_alloc};
 pub use convert::{Bytes, FromValue, MapError, ToValue, TryAsMut, TryAsRef};
 pub use error::{MAX_DEPTH, ValueError};
 pub use read::{Dump, bool_or, bytes_or, float_or, int_or, str_or};
+pub use span::Span;
 pub use status::Status;
 // `Str` is here because every C signature in `exports` names it; the
 // other views stay behind `types::`, clear of `convert::Bytes`.

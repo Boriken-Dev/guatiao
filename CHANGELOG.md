@@ -92,6 +92,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`ValueError::Unrepresentable`**: a value with no spelling in the form
   it is written as, such as a time outside the years 0000 to 9999
   (`GUATIAO_ERR_BAD_VALUE` across the C surface).
+- **`std::time::Duration` is a field type**, written as the list
+  `[secs, nanos]` (a `u64`, then nanoseconds below 1 000 000 000, the
+  order of C's `struct timespec`), described as that tuple. A read also
+  takes a number of seconds, exactly from its text (`1.5`, `2e-3`; not
+  negative, no finer than a nanosecond), and the `{"secs", "nanos"}` map
+  serde writes.
+- **`guatiao::Span`**, a length of time in calendar units: years, months,
+  weeks, days, hours, minutes, seconds and nanoseconds, one sign for the
+  whole span, equal unit by unit (`P1D` is not `PT24H`). Its text is an
+  ISO 8601 duration (`P1Y2M3W4DT5H6M7.5S`, `-P1D`, `PT0S`), canonical
+  from `Display`; `FromStr` also reads `1y 2mo 3w 4d 5h 6m 7s 500ms 1us
+  1ns` (spaces optional, `min` for minutes). Builders `years(n)` ..
+  `nanoseconds(n)`, getters `get_years()` .., `is_zero`, `is_negative`,
+  `abs`, `negate`, `Neg`, `From<Duration>`, `TryFrom<Span> for Duration`
+  (exact units only). A field type written as its text, `format:
+  duration`.
+- **`ValueError::Unparsed { at, expected }`**: text refused by a grammar,
+  naming the byte offset and what was expected there, never the text.
 - **A guide to passing data**: the docs site's "Passing data" page and a
   section of the crate's shipped `AGENTS.md`, on returning trees by value
   and taking them by value when kept, building an answer in the

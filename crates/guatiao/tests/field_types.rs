@@ -691,3 +691,116 @@ mod std_types {
         validate_map(SchemaRef::new(&schema).unwrap(), &value).unwrap();
     }
 }
+
+mod durations {
+    use super::*;
+    use core::time::Duration;
+    use guatiao::Span;
+
+    fn number(text: &str) -> Value {
+        Value::from(text.parse::<Number>().unwrap())
+    }
+
+    #[test]
+    fn a_duration_writes_seconds_and_nanoseconds() {
+        let v = check(Duration::new(90, 500));
+        assert_eq!(v, vec![90u64, 500].to_value().unwrap());
+        check(Duration::ZERO);
+        check(Duration::MAX);
+        let kind = kind_of::<Duration>();
+        assert_eq!(text_at(&kind, "type"), Some("array"));
+        assert_eq!(get(&kind, "items"), Some(&Value::from(false)));
+        let prefix = <&List>::try_from(get(&kind, "prefixItems").unwrap()).unwrap();
+        assert_eq!(get(&prefix[0], "minimum"), Some(&Value::from(0i64)));
+        assert_eq!(
+            get(&prefix[1], "maximum"),
+            Some(&Value::from(999_999_999i64))
+        );
+        assert!(!accepts::<Duration>(
+            &vec![1u64, 1_000_000_000].to_value().unwrap()
+        ));
+        assert!(!accepts::<Duration>(&vec![1u64].to_value().unwrap()));
+    }
+
+    #[test]
+    fn a_duration_reads_seconds_as_a_number_exactly() {
+        let read = |text: &str| Duration::from_value(&number(text));
+        assert_eq!(read("1.5"), Ok(Duration::new(1, 500_000_000)));
+        assert_eq!(read("2e-3"), Ok(Duration::from_millis(2)));
+        assert_eq!(read("1.000000001"), Ok(Duration::new(1, 1)));
+        assert_eq!(read("1E3"), Ok(Duration::from_secs(1000)));
+        assert_eq!(read("0"), Ok(Duration::ZERO));
+        assert_eq!(read("-0.0"), Ok(Duration::ZERO));
+        assert_eq!(read("18446744073709551615.999999999"), Ok(Duration::MAX));
+        for refused in ["-1", "0.0000000001", "18446744073709551616", "1e400"] {
+            assert!(
+                matches!(read(refused), Err(MapError::BadValue { .. })),
+                "{refused}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_duration_reads_the_map_serde_writes() {
+        let mut m = Map::new();
+        m.set("secs", 3i64);
+        m.set("nanos", 4i64);
+        assert_eq!(Duration::from_value(&m.into()), Ok(Duration::new(3, 4)));
+        let mut half = Map::new();
+        half.set("secs", 3i64);
+        assert!(matches!(
+            Duration::from_value(&half.into()),
+            Err(MapError::MissingKey { .. })
+        ));
+        let mut over = Map::new();
+        over.set("secs", 3i64);
+        over.set("nanos", 1_000_000_000i64);
+        assert!(Duration::from_value(&over.into()).is_err());
+        assert!(Duration::from_value(&Value::from("PT1S")).is_err());
+        let three = vec![1u64, 2, 3].to_value().unwrap();
+        assert!(Duration::from_value(&three).is_err());
+        let bad = vec![-1i64, 0].to_value().unwrap();
+        assert_eq!(Duration::from_value(&bad).unwrap_err().key(), "[0]");
+    }
+
+    #[test]
+    fn a_span_is_its_iso_text() {
+        let span = Span::new().days(1).hours(2);
+        let v = check(span);
+        assert_eq!(TryAsRef::<str>::try_as_ref(&v), Some("P1DT2H"));
+        check(Span::new());
+        check(Span::new().months(-3));
+        assert_eq!(
+            Span::from_value(&Value::from("1h 30m")),
+            Ok(Span::new().hours(1).minutes(30))
+        );
+        let e = Span::from_value(&Value::from("P1X")).unwrap_err();
+        assert!(e.to_string().contains("at byte 2"), "{e}");
+        assert!(Span::from_value(&Value::from(5i64)).is_err());
+        assert_eq!(text_at(&kind_of::<Span>(), "format"), Some("duration"));
+    }
+
+    #[derive(Debug, PartialEq, guatiao::ToValue, guatiao::FromValue, guatiao::Schema)]
+    struct Timing {
+        timeout: Duration,
+        retry: Option<Duration>,
+        every: Span,
+        grace: Option<Span>,
+        steps: Vec<Span>,
+    }
+
+    #[test]
+    fn a_struct_of_them_derives_and_validates() {
+        let t = Timing {
+            timeout: Duration::from_millis(1500),
+            retry: None,
+            every: Span::new().weeks(1),
+            grace: Some(Span::new().minutes(5)),
+            steps: vec![Span::new().seconds(1), Span::new().seconds(2)],
+        };
+        let value = t.to_value().unwrap();
+        assert_eq!(Timing::from_value(&value).unwrap(), t);
+        let schema = Timing::schema().unwrap();
+        validate_map(SchemaRef::new(&schema).unwrap(), &value).unwrap();
+    }
+}
