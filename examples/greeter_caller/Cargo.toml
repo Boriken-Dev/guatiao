@@ -1,0 +1,21 @@
+[package]
+name = "greeter_caller"
+description = "A Rust caller of any greeter: one C function a host in another language calls to have its greeter called through the kind's Rust proxy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+# Loaded by a host written in another language, which calls its one
+# function; it is not a guatiao library and declares nothing.
+crate-type = ["cdylib"]
+
+[dependencies]
+guatiao = { path = "../../crates/guatiao", features = ["provider"] }
+greeter_kind = { path = "../greeter_kind" }
+
+[lints]
+workspace = true
