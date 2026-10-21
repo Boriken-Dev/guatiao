@@ -24,5 +24,8 @@ export default defineConfig({
     // process, and koffi's callbacks belong to the thread that made them.
     pool: 'forks',
     testTimeout: 30_000,
+    // A suite's setup compiles the C greeter and starts Python through the
+    // bridge: seconds on a CI runner.
+    hookTimeout: 120_000,
   },
 });
