@@ -59,6 +59,7 @@
 #![forbid(unsafe_code)]
 
 mod own;
+mod wrappers;
 
 use super::build::KindBuilder;
 use super::vocab;

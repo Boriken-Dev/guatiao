@@ -55,6 +55,7 @@
 #![forbid(unsafe_code)]
 
 mod own;
+mod wrappers;
 
 use alloc::fmt;
 
@@ -511,7 +512,8 @@ macro_rules! try_from_value {
 }
 
 try_from_value!(
-    bool, f32, f64, String, Bytes, i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize,
+    bool, char, f32, f64, String, Bytes, i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128,
+    usize,
 );
 
 /// Text borrowed from the value rather than copied out of it, which no

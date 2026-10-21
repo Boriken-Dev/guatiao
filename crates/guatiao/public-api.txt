@@ -1777,6 +1777,10 @@ impl guatiao::schema::describe::Schema for bool
 pub fn bool::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn bool::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn bool::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for char
+pub fn char::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn char::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn char::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for f32
 pub fn f32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn f32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -1837,6 +1841,10 @@ impl guatiao::schema::describe::Schema for isize
 pub fn isize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn isize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for str
+pub fn str::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn str::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn str::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for u128
 pub fn u128::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn u128::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -1861,6 +1869,30 @@ impl guatiao::schema::describe::Schema for usize
 pub fn usize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn usize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn usize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + ?core::marker::Sized> guatiao::schema::describe::Schema for &T
+pub fn &T::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn &T::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn &T::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + ?core::marker::Sized> guatiao::schema::describe::Schema for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::boxed::Box<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::boxed::Box<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + ?core::marker::Sized> guatiao::schema::describe::Schema for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::rc::Rc<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::rc::Rc<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + ?core::marker::Sized> guatiao::schema::describe::Schema for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::sync::Arc<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::sync::Arc<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::schema::describe::Schema for alloc::borrow::Cow<'_, T>
+pub fn alloc::borrow::Cow<'_, T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::borrow::Cow<'_, T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::borrow::Cow<'_, T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for [T]
+pub fn [T]::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn [T]::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn [T]::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
 pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2294,6 +2326,10 @@ impl guatiao::schema::describe::Schema for bool
 pub fn bool::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn bool::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn bool::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for char
+pub fn char::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn char::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn char::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for f32
 pub fn f32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn f32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2354,6 +2390,10 @@ impl guatiao::schema::describe::Schema for isize
 pub fn isize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn isize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for str
+pub fn str::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn str::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn str::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for u128
 pub fn u128::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn u128::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2378,6 +2418,30 @@ impl guatiao::schema::describe::Schema for usize
 pub fn usize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn usize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn usize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + ?core::marker::Sized> guatiao::schema::describe::Schema for &T
+pub fn &T::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn &T::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn &T::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + ?core::marker::Sized> guatiao::schema::describe::Schema for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::boxed::Box<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::boxed::Box<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + ?core::marker::Sized> guatiao::schema::describe::Schema for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::rc::Rc<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::rc::Rc<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + ?core::marker::Sized> guatiao::schema::describe::Schema for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::sync::Arc<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::sync::Arc<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::schema::describe::Schema for alloc::borrow::Cow<'_, T>
+pub fn alloc::borrow::Cow<'_, T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::borrow::Cow<'_, T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::borrow::Cow<'_, T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for [T]
+pub fn [T]::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn [T]::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn [T]::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
 pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2524,10 +2588,18 @@ pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<g
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub trait guatiao::value::convert::FromValue: core::marker::Sized
 pub fn guatiao::value::convert::FromValue::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::boxed::Box<str>
+pub fn alloc::boxed::Box<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<str>, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::rc::Rc<str>
+pub fn alloc::rc::Rc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::string::String
 pub fn alloc::string::String::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::sync::Arc<str>
+pub fn alloc::sync::Arc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for bool
 pub fn bool::from_value(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for char
+pub fn char::from_value(&guatiao::value::value::Value) -> core::result::Result<char, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f32
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
@@ -2570,8 +2642,22 @@ impl guatiao::value::convert::FromValue for u8
 pub fn u8::from_value(&guatiao::value::value::Value) -> core::result::Result<u8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for usize
 pub fn usize::from_value(&guatiao::value::value::Value) -> core::result::Result<usize, guatiao::value::convert::MapError>
+impl<T: alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::value::convert::FromValue for alloc::borrow::Cow<'_, T> where <T as alloc::borrow::ToOwned>::Owned: guatiao::value::convert::FromValue
+pub fn alloc::borrow::Cow<'_, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::boxed::Box<[T]>
+pub fn alloc::boxed::Box<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
 pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::rc::Rc<[T]>
+pub fn alloc::rc::Rc<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<[T]>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::sync::Arc<[T]>
+pub fn alloc::sync::Arc<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for core::option::Option<T>
@@ -2587,6 +2673,9 @@ pub fn alloc::string::String::to_value_in(&self, guatiao::value::alloc::Alloc) -
 impl guatiao::value::convert::ToValue for bool
 pub fn bool::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn bool::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for char
+pub fn char::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn char::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for f32
 pub fn f32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2656,6 +2745,18 @@ pub fn usize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::
 impl<T: guatiao::value::convert::ToValue + ?core::marker::Sized> guatiao::value::convert::ToValue for &T
 pub fn &T::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn &T::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue + ?core::marker::Sized> guatiao::value::convert::ToValue for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::boxed::Box<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue + ?core::marker::Sized> guatiao::value::convert::ToValue for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::rc::Rc<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue + ?core::marker::Sized> guatiao::value::convert::ToValue for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::sync::Arc<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue + alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::value::convert::ToValue for alloc::borrow::Cow<'_, T>
+pub fn alloc::borrow::Cow<'_, T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::borrow::Cow<'_, T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for [T]
 pub fn [T]::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn [T]::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -4011,6 +4112,9 @@ pub fn alloc::string::String::try_from(&guatiao::value::value::Value) -> core::r
 impl core::convert::TryFrom<&guatiao::value::value::Value> for bool
 pub type bool::Error = guatiao::value::convert::MapError
 pub fn bool::try_from(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl core::convert::TryFrom<&guatiao::value::value::Value> for char
+pub type char::Error = guatiao::value::convert::MapError
+pub fn char::try_from(&guatiao::value::value::Value) -> core::result::Result<char, guatiao::value::convert::MapError>
 impl core::convert::TryFrom<&guatiao::value::value::Value> for f32
 pub type f32::Error = guatiao::value::convert::MapError
 pub fn f32::try_from(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
@@ -4244,6 +4348,9 @@ pub fn alloc::string::String::try_from(&guatiao::value::value::Value) -> core::r
 impl core::convert::TryFrom<&guatiao::value::value::Value> for bool
 pub type bool::Error = guatiao::value::convert::MapError
 pub fn bool::try_from(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl core::convert::TryFrom<&guatiao::value::value::Value> for char
+pub type char::Error = guatiao::value::convert::MapError
+pub fn char::try_from(&guatiao::value::value::Value) -> core::result::Result<char, guatiao::value::convert::MapError>
 impl core::convert::TryFrom<&guatiao::value::value::Value> for f32
 pub type f32::Error = guatiao::value::convert::MapError
 pub fn f32::try_from(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
@@ -5166,6 +5273,9 @@ pub fn alloc::string::String::try_from(&guatiao::value::value::Value) -> core::r
 impl core::convert::TryFrom<&guatiao::value::value::Value> for bool
 pub type bool::Error = guatiao::value::convert::MapError
 pub fn bool::try_from(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl core::convert::TryFrom<&guatiao::value::value::Value> for char
+pub type char::Error = guatiao::value::convert::MapError
+pub fn char::try_from(&guatiao::value::value::Value) -> core::result::Result<char, guatiao::value::convert::MapError>
 impl core::convert::TryFrom<&guatiao::value::value::Value> for f32
 pub type f32::Error = guatiao::value::convert::MapError
 pub fn f32::try_from(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
@@ -5302,10 +5412,18 @@ pub fn guatiao::value::value::Value::from(core::option::Option<T>) -> guatiao::v
 pub const guatiao::value::MAX_DEPTH: u32
 pub trait guatiao::value::FromValue: core::marker::Sized
 pub fn guatiao::value::FromValue::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::boxed::Box<str>
+pub fn alloc::boxed::Box<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<str>, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::rc::Rc<str>
+pub fn alloc::rc::Rc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::string::String
 pub fn alloc::string::String::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::sync::Arc<str>
+pub fn alloc::sync::Arc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for bool
 pub fn bool::from_value(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for char
+pub fn char::from_value(&guatiao::value::value::Value) -> core::result::Result<char, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f32
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
@@ -5348,8 +5466,22 @@ impl guatiao::value::convert::FromValue for u8
 pub fn u8::from_value(&guatiao::value::value::Value) -> core::result::Result<u8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for usize
 pub fn usize::from_value(&guatiao::value::value::Value) -> core::result::Result<usize, guatiao::value::convert::MapError>
+impl<T: alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::value::convert::FromValue for alloc::borrow::Cow<'_, T> where <T as alloc::borrow::ToOwned>::Owned: guatiao::value::convert::FromValue
+pub fn alloc::borrow::Cow<'_, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::boxed::Box<[T]>
+pub fn alloc::boxed::Box<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
 pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::rc::Rc<[T]>
+pub fn alloc::rc::Rc<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<[T]>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::sync::Arc<[T]>
+pub fn alloc::sync::Arc<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for core::option::Option<T>
@@ -5365,6 +5497,9 @@ pub fn alloc::string::String::to_value_in(&self, guatiao::value::alloc::Alloc) -
 impl guatiao::value::convert::ToValue for bool
 pub fn bool::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn bool::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for char
+pub fn char::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn char::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for f32
 pub fn f32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -5434,6 +5569,18 @@ pub fn usize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::
 impl<T: guatiao::value::convert::ToValue + ?core::marker::Sized> guatiao::value::convert::ToValue for &T
 pub fn &T::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn &T::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue + ?core::marker::Sized> guatiao::value::convert::ToValue for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::boxed::Box<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue + ?core::marker::Sized> guatiao::value::convert::ToValue for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::rc::Rc<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue + ?core::marker::Sized> guatiao::value::convert::ToValue for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::sync::Arc<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue + alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::value::convert::ToValue for alloc::borrow::Cow<'_, T>
+pub fn alloc::borrow::Cow<'_, T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::borrow::Cow<'_, T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for [T]
 pub fn [T]::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn [T]::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6298,6 +6445,9 @@ pub fn alloc::string::String::try_from(&guatiao::value::value::Value) -> core::r
 impl core::convert::TryFrom<&guatiao::value::value::Value> for bool
 pub type bool::Error = guatiao::value::convert::MapError
 pub fn bool::try_from(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl core::convert::TryFrom<&guatiao::value::value::Value> for char
+pub type char::Error = guatiao::value::convert::MapError
+pub fn char::try_from(&guatiao::value::value::Value) -> core::result::Result<char, guatiao::value::convert::MapError>
 impl core::convert::TryFrom<&guatiao::value::value::Value> for f32
 pub type f32::Error = guatiao::value::convert::MapError
 pub fn f32::try_from(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
@@ -6434,10 +6584,18 @@ pub fn guatiao::value::value::Value::from(core::option::Option<T>) -> guatiao::v
 pub const guatiao::MAX_DEPTH: u32
 pub trait guatiao::FromValue: core::marker::Sized
 pub fn guatiao::FromValue::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::boxed::Box<str>
+pub fn alloc::boxed::Box<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<str>, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::rc::Rc<str>
+pub fn alloc::rc::Rc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::string::String
 pub fn alloc::string::String::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::sync::Arc<str>
+pub fn alloc::sync::Arc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for bool
 pub fn bool::from_value(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for char
+pub fn char::from_value(&guatiao::value::value::Value) -> core::result::Result<char, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f32
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
@@ -6480,8 +6638,22 @@ impl guatiao::value::convert::FromValue for u8
 pub fn u8::from_value(&guatiao::value::value::Value) -> core::result::Result<u8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for usize
 pub fn usize::from_value(&guatiao::value::value::Value) -> core::result::Result<usize, guatiao::value::convert::MapError>
+impl<T: alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::value::convert::FromValue for alloc::borrow::Cow<'_, T> where <T as alloc::borrow::ToOwned>::Owned: guatiao::value::convert::FromValue
+pub fn alloc::borrow::Cow<'_, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::boxed::Box<[T]>
+pub fn alloc::boxed::Box<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
 pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::btree::map::BTreeMap<alloc::string::String, T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::rc::Rc<[T]>
+pub fn alloc::rc::Rc<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<[T]>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::sync::Arc<[T]>
+pub fn alloc::sync::Arc<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::vec::Vec<T>
 pub fn alloc::vec::Vec<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for core::option::Option<T>
@@ -6500,6 +6672,10 @@ impl guatiao::schema::describe::Schema for bool
 pub fn bool::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn bool::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn bool::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for char
+pub fn char::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn char::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn char::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for f32
 pub fn f32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn f32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6560,6 +6736,10 @@ impl guatiao::schema::describe::Schema for isize
 pub fn isize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn isize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for str
+pub fn str::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn str::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn str::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for u128
 pub fn u128::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn u128::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6584,6 +6764,30 @@ impl guatiao::schema::describe::Schema for usize
 pub fn usize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn usize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn usize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + ?core::marker::Sized> guatiao::schema::describe::Schema for &T
+pub fn &T::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn &T::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn &T::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + ?core::marker::Sized> guatiao::schema::describe::Schema for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::boxed::Box<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::boxed::Box<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + ?core::marker::Sized> guatiao::schema::describe::Schema for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::rc::Rc<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::rc::Rc<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + ?core::marker::Sized> guatiao::schema::describe::Schema for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::sync::Arc<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::sync::Arc<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema + alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::schema::describe::Schema for alloc::borrow::Cow<'_, T>
+pub fn alloc::borrow::Cow<'_, T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn alloc::borrow::Cow<'_, T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::borrow::Cow<'_, T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for [T]
+pub fn [T]::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn [T]::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn [T]::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for alloc::collections::btree::map::BTreeMap<alloc::string::String, T>
 pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn alloc::collections::btree::map::BTreeMap<alloc::string::String, T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6609,6 +6813,9 @@ pub fn alloc::string::String::to_value_in(&self, guatiao::value::alloc::Alloc) -
 impl guatiao::value::convert::ToValue for bool
 pub fn bool::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn bool::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for char
+pub fn char::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn char::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for f32
 pub fn f32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6678,6 +6885,18 @@ pub fn usize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::
 impl<T: guatiao::value::convert::ToValue + ?core::marker::Sized> guatiao::value::convert::ToValue for &T
 pub fn &T::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn &T::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue + ?core::marker::Sized> guatiao::value::convert::ToValue for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::boxed::Box<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue + ?core::marker::Sized> guatiao::value::convert::ToValue for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::rc::Rc<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue + ?core::marker::Sized> guatiao::value::convert::ToValue for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::sync::Arc<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue + alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::value::convert::ToValue for alloc::borrow::Cow<'_, T>
+pub fn alloc::borrow::Cow<'_, T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn alloc::borrow::Cow<'_, T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for [T]
 pub fn [T]::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn [T]::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
