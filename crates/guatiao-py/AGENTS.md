@@ -87,8 +87,14 @@ pyo3's embedding links one `libpython` at build:
 - **Linux**: the build has `NEEDED libpython3.X.so.1.0`, the minor of the
   Python it was built with (`PYO3_PYTHON`), abi3 or not; build one per
   minor, against the host's own when the host is Python.
-- **macOS**: links that Python's framework or `libpython3.X.dylib`
-  likewise; one build per minor.
+- **macOS**: links that Python's framework
+  (`/Library/Frameworks/Python.framework/Versions/3.X/Python`) or
+  `libpython3.X.dylib` likewise; one build per minor.
+
+A host that is not Python must find that library: a system Python's is
+where the loader looks; another (pyenv, a CI toolchain cache) needs its
+`lib` directory on `LD_LIBRARY_PATH` (Linux) or
+`DYLD_FALLBACK_LIBRARY_PATH` (macOS).
 
 On Linux and macOS a host maps the bridge, and libpython with it,
 `RTLD_LOCAL`, where an extension module (`_ctypes`, any compiled package)
