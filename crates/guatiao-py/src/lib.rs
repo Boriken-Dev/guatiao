@@ -6,8 +6,8 @@
 //!
 //! A host adds this file with `add_source_file` and a configuration naming
 //! where Python libraries are described; each is a manifest
-//! (`*.guatiao-py.toml`) naming a module attribute built with the Python
-//! binding's `guatiao.provide`. A refresh lists the manifests without
+//! (`*.guatiao-py.toml`) naming a module, which is the library as the
+//! Python binding's `guatiao.provide` reads one. A refresh lists the manifests without
 //! importing anything, opens a new or changed one by importing it into the
 //! one interpreter this file keeps for the program, and closes one the
 //! registry let go by dropping its modules, so the next refresh imports the

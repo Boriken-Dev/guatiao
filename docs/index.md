@@ -91,6 +91,8 @@ let greeter = registry.best("greeter").expect("something serves it");
   and how to pass one across a call or a library without copying it.
 - [Rust API reference](https://boriken-dev.github.io/guatiao/rust/guatiao/index.html), built by rustdoc
   from the crates in this workspace.
+- [Python, host and provider](python.md): calling libraries from Python,
+  and writing one in Python that a host in any language loads.
 - [Python API reference](api/python.md), for the ctypes bindings.
 - [Dart API reference](api/dart.md), for the `dart:ffi` bindings -- a plain
   Dart package, so a Flutter app uses the same one.

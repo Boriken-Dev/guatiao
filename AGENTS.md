@@ -14,15 +14,18 @@ public surface); this file is about the repository.
 | `crates/guatiao-derive/` | `#[derive(ToValue, FromValue, Schema)]`, `#[guatiao::kind]`/`#[derive(Provider)]`, `#[derive(Form)]`; reached through `guatiao`'s `derive`/`provider` features and `guatiao-intake`'s `derive`, never named directly |
 | `crates/guatiao-serde/` | serde for values: JSON, TOML and YAML as features, and a C surface with its own `include/guatiao_serde.h` |
 | `crates/guatiao-intake/` | taking a value in from a person: the path grammar (`agent[1].name`), flat `key -> text` storage, checking a store of text, and how a schema is shown (sections, widget hints, conditional visibility, `#[derive(Form)]`); C surface in `include/guatiao_intake.h` |
+| `crates/guatiao-py/` | a source of libraries written in Python: a cdylib exporting `guatiao_source`, built with pyo3 for the stable ABI; a workspace of its own (no other build needs a Python to link), not published |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
 | `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `python/greeter_kind.py` describes its kinds for Python |
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
 | `examples/wire_over_webtransport/` | values over WebTransport: `server/` (the shared channel and framing, `wire-server`, and `wire-probe`, a native client), `client/` (the page's wasm, its own workspace, built for `wasm32-unknown-unknown` only); commands in its `README.md` |
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build; its `tests/docs_snippets.rs` compiles the Rust snippets of `docs/index.md`, `docs/ownership.md` and the root `README.md` and compares them with the text shown |
 | `examples/python_host/` | a host in Python: scans for greeters in any language and calls every slot of the kind; `bindings/python/tests/test_examples.py` runs it |
+| `examples/python_host/` | a host program in Python: scans for greeters in any language, optionally adds `guatiao-py`, calls every slot |
+| `examples/python_provider/` | two libraries written in Python, each a module and a `*.guatiao-py.toml` manifest; commands in its `README.md` |
 | `bindings/python/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md` |
 | `bindings/dart/` | `dart:ffi` bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`; `lib/src/bindings.g.dart` is ffigen output and never hand-edited |
-| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `wasm.md`; built strictly by `docs.yml` |
+| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `python.md` (Python as a host and as a provider), `wasm.md`; built strictly by `docs.yml` |
 | `benchmarks/` | the benchmark runner (`cargo run -p guatiao-bench --release -- --save NAME`), committed results in `benchmarks/results/`, and `README.md` with the protocol; run on demand, numbers are local and provisional |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 
@@ -105,6 +108,19 @@ Python bindings, after `cargo build --workspace --all-features`:
 
 ```bash
 GUATIAO_LIBRARY=target/debug dotagents py -- -m pytest bindings/python/tests -rs
+MYPYPATH=bindings/python/src:examples/greeter_kind/python dotagents py -- -m mypy --strict \
+  bindings/python/src/guatiao examples/greeter_kind/python examples/python_host \
+  examples/python_provider/py_greeter examples/python_provider/py_tally
+```
+
+The `guatiao-py` bridge, against the Python it will run with. Its tests
+and the Python suite's bridge tests find it in its own `target/debug`
+(or `GUATIAO_PY_BRIDGE`); on Windows the directory holding `python3.dll`
+must be on `PATH` for a host that is not Python:
+
+```bash
+PYO3_PYTHON=python3 cargo build --manifest-path crates/guatiao-py/Cargo.toml
+GUATIAO_LIBRARY=target/debug cargo test --manifest-path crates/guatiao-py/Cargo.toml
 ```
 
 Each crate with a C surface commits its header and has a test comparing
@@ -192,7 +208,9 @@ version moves only when a release is cut.
 **Cutting a release.** One version everywhere: `[workspace.package] version`
 in `Cargo.toml`, `bindings/dart/pubspec.yaml`, and the same version the
 PEP 440 way in `bindings/python/pyproject.toml` and its `__version__`
-(`0.0.0-alpha.0` is `0.0.0a0`), the `=x.y.z` pins between the crates, and the
+(`0.0.0-alpha.0` is `0.0.0a0`), the `=x.y.z` pins between the crates,
+`crates/guatiao-py/Cargo.toml`'s own version and pins (a workspace of its
+own, so the workspace version does not reach it), and the
 `guatiao` entry of `examples/wire_over_webtransport/client/Cargo.lock` (a
 `--locked` build refuses a stale one; `cargo build` in that directory
 rewrites it). A `## [x.y.z] - <date>` section in
