@@ -1074,6 +1074,12 @@ impl KindBuilder {
         self.state
     }
 
+    /// Sets `key` to `value`, keeping the first error.
+    pub(crate) fn keyword(mut self, key: &str, value: Result<Value, ValueError>) -> KindBuilder {
+        put(&mut self.state, key, value);
+        self
+    }
+
     /// Sets `key` to the number written as `text`, exactly: a bound past
     /// what an `i64` or an `f64` holds is written as its own digits.
     pub(crate) fn number(mut self, key: &str, text: &str) -> KindBuilder {

@@ -60,6 +60,7 @@
 
 mod collections;
 mod own;
+mod std_types;
 mod wrappers;
 
 use super::build::KindBuilder;

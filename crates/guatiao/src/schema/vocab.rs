@@ -317,6 +317,10 @@ pub const ANY_OF: &str = "anyOf";
 /// Exact here because the arms are told apart by a discriminant, so a value
 /// matching two of them is a contradiction rather than a convenience.
 pub const ONE_OF: &str = "oneOf";
+/// A value this schema accepts is refused: `{"not": {"const": 0}}` beside
+/// an integer's bounds is every integer but zero, what a signed non-zero
+/// type writes.
+pub const NOT: &str = "not";
 /// **Every** one of these schemas must accept. Read as the wrapper a
 /// generator writes around one schema to put a `description` beside a
 /// reference (`{"description": .., "allOf": [{"$ref": ..}]}`), which reads
@@ -446,6 +450,7 @@ pub const KEYWORDS: &[&str] = &[
     ANY_OF,
     ONE_OF,
     ALL_OF,
+    NOT,
     ADDITIONAL_PROPERTIES,
 ];
 

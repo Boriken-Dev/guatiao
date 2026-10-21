@@ -21,6 +21,8 @@ pub mod merge;
 mod raw;
 pub mod read;
 pub mod status;
+// RFC 3339 arithmetic for SystemTime.
+pub(crate) mod time;
 pub mod types;
 pub mod wire;
 // The whole-tree walks besides drop: a deep copy, and equality.

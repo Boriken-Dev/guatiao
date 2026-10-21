@@ -44,6 +44,9 @@ pub enum ValueError {
     /// A key was declared twice where each must be one: two fields of a
     /// schema under one name.
     DuplicateKey,
+    /// The value has no spelling in the form it is written as: a time
+    /// outside the years 0000 to 9999, which RFC 3339 cannot write.
+    Unrepresentable,
 }
 
 impl From<AllocError> for ValueError {
@@ -63,6 +66,9 @@ impl core::fmt::Display for ValueError {
             ValueError::OutOfRange => f.write_str("the index is past the end"),
             ValueError::TooDeep => write!(f, "nested deeper than {MAX_DEPTH}"),
             ValueError::DuplicateKey => f.write_str("a key was declared twice"),
+            ValueError::Unrepresentable => {
+                f.write_str("the value has no spelling in the form it is written as")
+            }
         }
     }
 }
