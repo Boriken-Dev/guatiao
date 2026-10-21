@@ -77,6 +77,8 @@ use crate::value::status::Status;
 pub mod library;
 pub mod merge;
 pub mod schema;
+pub mod span;
+pub mod time;
 pub mod value;
 
 /// [`guard`] for a body that answers something other than a status.

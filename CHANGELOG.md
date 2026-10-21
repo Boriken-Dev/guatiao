@@ -123,6 +123,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the time units, carried across midnight. `SystemTime` reads and writes
   through `Timestamp`, and an offset that moves an instant outside the
   years is now refused when read rather than when written again.
+- **Dates, times and spans from C.** `guatiao_{date,time,datetime,
+  timestamp,span}_{parse,format,normalize}` read text into a plain struct
+  (`guatiao_date`, `guatiao_time`, `guatiao_datetime`, `guatiao_timestamp`,
+  `guatiao_span`), write a struct as canonical text and rewrite text
+  canonically, with the Rust types' own grammar; a refusal is
+  `GUATIAO_ERR_BAD_VALUE` and a `guatiao_text_error` holding the byte
+  offset and what was expected there. `guatiao_date_add_span` and
+  `guatiao_datetime_add_span` apply a span, and `guatiao_duration_read`
+  reads an exact length in any of its three spellings. A C program reads
+  every vector of `tests/vectors/time.json` through them in the suite.
 - **The derives take every struct shape, and generics**, as serde writes
   them: a newtype struct (or one marked `#[map(transparent)]`) is its
   field's value and describes its field's kind; a tuple struct is a list

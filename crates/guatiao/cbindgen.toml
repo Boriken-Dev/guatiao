@@ -533,6 +533,12 @@ include = [
   "ObjectRaw",
   "BytesMut",
   "MergeOverride",
+  "DateFields",
+  "TimeFields",
+  "DateTimeFields",
+  "TimestampFields",
+  "SpanFields",
+  "TextError",
 ]
 # `Entry` is defined in the trailer instead; see `after_includes`. The
 # other two are the platform loader's own functions, which the loader
@@ -596,6 +602,14 @@ exclude = ["Entry", "dl_iterate_phdr", "dladdr"]
 "HostRegistry" = "guatiao_registry"
 "ABI_VERSION" = "GUATIAO_ABI_VERSION"
 "MergeOverride" = "guatiao_merge_override"
+# The date, time and span forms as plain structs; their text is fixed on
+# the encodings page.
+"DateFields" = "guatiao_date"
+"TimeFields" = "guatiao_time"
+"DateTimeFields" = "guatiao_datetime"
+"TimestampFields" = "guatiao_timestamp"
+"SpanFields" = "guatiao_span"
+"TextError" = "guatiao_text_error"
 # cbindgen monomorphises the generic newtype and emits the Rust name.
 # A header shares one flat namespace, so the typedef it introduces has to
 # carry the prefix like every other name here.

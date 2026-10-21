@@ -834,6 +834,7 @@ fn out_parameter_cases() -> Vec<(&'static str, fn())> {
             });
         }),
     ];
+    cases.extend(time_cases());
     #[cfg(feature = "load")]
     cases.extend(registry_cases());
     cases
@@ -1268,4 +1269,199 @@ fn a_value_crosses_the_wire_surface_and_back() {
         Ok(Tag::GUATIAO_ABSENT),
         "a failed call leaves ABSENT"
     );
+}
+
+/// The date, time, span and length exports: each fails after its
+/// prologue, and its out-parameters hold the documented empty value.
+fn time_cases() -> Vec<(&'static str, fn())> {
+    use guatiao::exports::span::*;
+    use guatiao::exports::time::*;
+
+    /// A `_parse` refusing text with no allocator: the struct zeroed, the
+    /// offset written, the message left ABSENT.
+    fn parsed<F: Default + PartialEq + core::fmt::Debug>(
+        name: &str,
+        stale: F,
+        call: unsafe extern "C" fn(
+            *const guatiao::value::alloc::Allocator,
+            Str,
+            *mut F,
+            *mut TextError,
+        ) -> Status,
+    ) {
+        let mut out = stale;
+        let mut error = TextError {
+            at: 99,
+            expected: stale_value(),
+        };
+        // SAFETY: a readable view, writable outs, a null allocator.
+        let status = unsafe { call(core::ptr::null(), Str::new("x"), &mut out, &mut error) };
+        assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE, "{name}");
+        assert_eq!(out, F::default(), "{name} zeroes its struct");
+        assert_eq!(error.at, 0, "{name}");
+        assert!(
+            is_absent(&error.expected),
+            "{name}: no allocator, no message"
+        );
+    }
+
+    /// A `_normalize` refusing text: the value ABSENT.
+    fn normalized(
+        name: &str,
+        call: unsafe extern "C" fn(
+            *const guatiao::value::alloc::Allocator,
+            Str,
+            *mut Value,
+            *mut TextError,
+        ) -> Status,
+    ) {
+        let alloc = Alloc::rust();
+        // SAFETY: a readable view; its content is the failure.
+        leaves_absent(name, Status::GUATIAO_ERR_BAD_VALUE, |out| unsafe {
+            call(alloc.as_raw(), Str::new("x"), out, core::ptr::null_mut())
+        });
+    }
+
+    /// A `_format` with no allocator: the value ABSENT.
+    fn formatted<F>(
+        name: &str,
+        fields: F,
+        call: unsafe extern "C" fn(
+            *const guatiao::value::alloc::Allocator,
+            *const F,
+            *mut Value,
+        ) -> Status,
+    ) {
+        // SAFETY: a readable struct; the null allocator is the failure.
+        leaves_absent(name, Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+            call(core::ptr::null(), &fields, out)
+        });
+    }
+
+    fn stale_value() -> Value {
+        Value::from(true)
+    }
+
+    fn a_date() -> DateFields {
+        DateFields {
+            year: 2026,
+            month: 10,
+            day: 21,
+        }
+    }
+
+    fn a_time() -> TimeFields {
+        TimeFields {
+            hour: 13,
+            minute: 45,
+            second: 0,
+            nanosecond: 5,
+        }
+    }
+
+    vec![
+        ("guatiao_date_parse", || {
+            parsed("date_parse", a_date(), guatiao_date_parse)
+        }),
+        ("guatiao_date_format", || {
+            formatted("date_format", a_date(), guatiao_date_format)
+        }),
+        ("guatiao_date_normalize", || {
+            normalized("date_normalize", guatiao_date_normalize)
+        }),
+        ("guatiao_date_add_span", || {
+            let span = SpanFields {
+                hours: 1,
+                ..SpanFields::default()
+            };
+            let mut out = a_date();
+            // SAFETY: readable inputs, a writable out.
+            let status = unsafe { guatiao_date_add_span(&a_date(), &span, &mut out) };
+            assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+            assert_eq!(out, DateFields::default());
+        }),
+        ("guatiao_time_parse", || {
+            parsed("time_parse", a_time(), guatiao_time_parse)
+        }),
+        ("guatiao_time_format", || {
+            formatted("time_format", a_time(), guatiao_time_format)
+        }),
+        ("guatiao_time_normalize", || {
+            normalized("time_normalize", guatiao_time_normalize)
+        }),
+        ("guatiao_datetime_parse", || {
+            let stale = DateTimeFields {
+                date: a_date(),
+                time: a_time(),
+            };
+            parsed("datetime_parse", stale, guatiao_datetime_parse)
+        }),
+        ("guatiao_datetime_format", || {
+            let at = DateTimeFields {
+                date: a_date(),
+                time: a_time(),
+            };
+            formatted("datetime_format", at, guatiao_datetime_format)
+        }),
+        ("guatiao_datetime_normalize", || {
+            normalized("datetime_normalize", guatiao_datetime_normalize)
+        }),
+        ("guatiao_datetime_add_span", || {
+            let at = DateTimeFields {
+                date: DateFields {
+                    year: 9999,
+                    month: 12,
+                    day: 31,
+                },
+                time: a_time(),
+            };
+            let span = SpanFields {
+                days: 1,
+                ..SpanFields::default()
+            };
+            let mut out = at;
+            // SAFETY: readable inputs, a writable out.
+            let status = unsafe { guatiao_datetime_add_span(&at, &span, &mut out) };
+            assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+            assert_eq!(out, DateTimeFields::default());
+        }),
+        ("guatiao_timestamp_parse", || {
+            let stale = TimestampFields {
+                seconds: 7,
+                nanoseconds: 7,
+            };
+            parsed("timestamp_parse", stale, guatiao_timestamp_parse)
+        }),
+        ("guatiao_timestamp_format", || {
+            let t = TimestampFields {
+                seconds: 0,
+                nanoseconds: 0,
+            };
+            formatted("timestamp_format", t, guatiao_timestamp_format)
+        }),
+        ("guatiao_timestamp_normalize", || {
+            normalized("timestamp_normalize", guatiao_timestamp_normalize)
+        }),
+        ("guatiao_span_parse", || {
+            let stale = SpanFields {
+                days: 3,
+                ..SpanFields::default()
+            };
+            parsed("span_parse", stale, guatiao_span_parse)
+        }),
+        ("guatiao_span_format", || {
+            formatted("span_format", SpanFields::default(), guatiao_span_format)
+        }),
+        ("guatiao_span_normalize", || {
+            normalized("span_normalize", guatiao_span_normalize)
+        }),
+        ("guatiao_duration_read", || {
+            let text = Value::from("90");
+            let (mut secs, mut nanos) = (7u64, 7u32);
+            // SAFETY: a well-formed value and writable outs.
+            let status = unsafe { guatiao_duration_read(&text, &mut secs, &mut nanos) };
+            assert_eq!(status, Status::GUATIAO_ERR_BAD_VALUE);
+            assert_eq!((secs, nanos), (0, 0));
+        }),
+    ]
 }

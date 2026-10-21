@@ -55,6 +55,135 @@ pub const guatiao::exports::merge::GUATIAO_MERGE_SUBSTITUTE: u32
 pub mod guatiao::exports::schema
 #[no_mangle] pub unsafe c fn guatiao::exports::schema::guatiao_schema_validate(*const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub unsafe fn guatiao::exports::schema::schema_export<T: guatiao::schema::describe::Schema>(*const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+pub mod guatiao::exports::span
+#[repr(C)] pub struct guatiao::exports::span::SpanFields
+pub guatiao::exports::span::SpanFields::days: i64
+pub guatiao::exports::span::SpanFields::hours: i64
+pub guatiao::exports::span::SpanFields::minutes: i64
+pub guatiao::exports::span::SpanFields::months: i64
+pub guatiao::exports::span::SpanFields::nanoseconds: i32
+pub guatiao::exports::span::SpanFields::seconds: i64
+pub guatiao::exports::span::SpanFields::weeks: i64
+pub guatiao::exports::span::SpanFields::years: i64
+impl core::clone::Clone for guatiao::exports::span::SpanFields
+pub fn guatiao::exports::span::SpanFields::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::exports::span::SpanFields
+impl core::cmp::PartialEq for guatiao::exports::span::SpanFields
+pub fn guatiao::exports::span::SpanFields::eq(&self, &Self) -> bool
+impl core::convert::From<guatiao::value::span::Span> for guatiao::exports::span::SpanFields
+pub fn guatiao::exports::span::SpanFields::from(guatiao::value::span::Span) -> guatiao::exports::span::SpanFields
+impl core::convert::TryFrom<guatiao::exports::span::SpanFields> for guatiao::value::span::Span
+pub type guatiao::value::span::Span::Error = guatiao::value::error::ValueError
+pub fn guatiao::value::span::Span::try_from(guatiao::exports::span::SpanFields) -> core::result::Result<guatiao::value::span::Span, guatiao::value::error::ValueError>
+impl core::default::Default for guatiao::exports::span::SpanFields
+pub fn guatiao::exports::span::SpanFields::default() -> Self
+impl core::fmt::Debug for guatiao::exports::span::SpanFields
+pub fn guatiao::exports::span::SpanFields::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::exports::span::SpanFields
+impl core::marker::StructuralPartialEq for guatiao::exports::span::SpanFields
+#[no_mangle] pub unsafe c fn guatiao::exports::span::guatiao_duration_read(*const guatiao::value::value::Value, *mut u64, *mut u32) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::span::guatiao_span_format(*const guatiao::value::alloc::Allocator, *const guatiao::exports::span::SpanFields, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::span::guatiao_span_normalize(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::value::value::Value, *mut guatiao::exports::time::TextError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::span::guatiao_span_parse(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::exports::span::SpanFields, *mut guatiao::exports::time::TextError) -> guatiao::value::status::Status
+pub mod guatiao::exports::time
+#[repr(C)] pub struct guatiao::exports::time::DateFields
+pub guatiao::exports::time::DateFields::day: u8
+pub guatiao::exports::time::DateFields::month: u8
+pub guatiao::exports::time::DateFields::year: i32
+impl core::clone::Clone for guatiao::exports::time::DateFields
+pub fn guatiao::exports::time::DateFields::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::exports::time::DateFields
+impl core::cmp::PartialEq for guatiao::exports::time::DateFields
+pub fn guatiao::exports::time::DateFields::eq(&self, &Self) -> bool
+impl core::convert::From<guatiao::Date> for guatiao::exports::time::DateFields
+pub fn guatiao::exports::time::DateFields::from(guatiao::Date) -> guatiao::exports::time::DateFields
+impl core::convert::TryFrom<guatiao::exports::time::DateFields> for guatiao::Date
+pub type guatiao::Date::Error = guatiao::value::error::ValueError
+pub fn guatiao::Date::try_from(guatiao::exports::time::DateFields) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
+impl core::default::Default for guatiao::exports::time::DateFields
+pub fn guatiao::exports::time::DateFields::default() -> Self
+impl core::fmt::Debug for guatiao::exports::time::DateFields
+pub fn guatiao::exports::time::DateFields::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::exports::time::DateFields
+impl core::marker::StructuralPartialEq for guatiao::exports::time::DateFields
+#[repr(C)] pub struct guatiao::exports::time::DateTimeFields
+pub guatiao::exports::time::DateTimeFields::date: guatiao::exports::time::DateFields
+pub guatiao::exports::time::DateTimeFields::time: guatiao::exports::time::TimeFields
+impl core::clone::Clone for guatiao::exports::time::DateTimeFields
+pub fn guatiao::exports::time::DateTimeFields::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::exports::time::DateTimeFields
+impl core::cmp::PartialEq for guatiao::exports::time::DateTimeFields
+pub fn guatiao::exports::time::DateTimeFields::eq(&self, &Self) -> bool
+impl core::convert::From<guatiao::DateTime> for guatiao::exports::time::DateTimeFields
+pub fn guatiao::exports::time::DateTimeFields::from(guatiao::DateTime) -> guatiao::exports::time::DateTimeFields
+impl core::convert::TryFrom<guatiao::exports::time::DateTimeFields> for guatiao::DateTime
+pub type guatiao::DateTime::Error = guatiao::value::error::ValueError
+pub fn guatiao::DateTime::try_from(guatiao::exports::time::DateTimeFields) -> core::result::Result<guatiao::DateTime, guatiao::value::error::ValueError>
+impl core::default::Default for guatiao::exports::time::DateTimeFields
+pub fn guatiao::exports::time::DateTimeFields::default() -> Self
+impl core::fmt::Debug for guatiao::exports::time::DateTimeFields
+pub fn guatiao::exports::time::DateTimeFields::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::exports::time::DateTimeFields
+impl core::marker::StructuralPartialEq for guatiao::exports::time::DateTimeFields
+#[repr(C)] pub struct guatiao::exports::time::TextError
+pub guatiao::exports::time::TextError::at: usize
+pub guatiao::exports::time::TextError::expected: guatiao::value::value::Value
+impl core::fmt::Debug for guatiao::exports::time::TextError
+pub fn guatiao::exports::time::TextError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[repr(C)] pub struct guatiao::exports::time::TimeFields
+pub guatiao::exports::time::TimeFields::hour: u8
+pub guatiao::exports::time::TimeFields::minute: u8
+pub guatiao::exports::time::TimeFields::nanosecond: u32
+pub guatiao::exports::time::TimeFields::second: u8
+impl core::clone::Clone for guatiao::exports::time::TimeFields
+pub fn guatiao::exports::time::TimeFields::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::exports::time::TimeFields
+impl core::cmp::PartialEq for guatiao::exports::time::TimeFields
+pub fn guatiao::exports::time::TimeFields::eq(&self, &Self) -> bool
+impl core::convert::From<guatiao::Time> for guatiao::exports::time::TimeFields
+pub fn guatiao::exports::time::TimeFields::from(guatiao::Time) -> guatiao::exports::time::TimeFields
+impl core::convert::TryFrom<guatiao::exports::time::TimeFields> for guatiao::Time
+pub type guatiao::Time::Error = guatiao::value::error::ValueError
+pub fn guatiao::Time::try_from(guatiao::exports::time::TimeFields) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
+impl core::default::Default for guatiao::exports::time::TimeFields
+pub fn guatiao::exports::time::TimeFields::default() -> Self
+impl core::fmt::Debug for guatiao::exports::time::TimeFields
+pub fn guatiao::exports::time::TimeFields::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::exports::time::TimeFields
+impl core::marker::StructuralPartialEq for guatiao::exports::time::TimeFields
+#[repr(C)] pub struct guatiao::exports::time::TimestampFields
+pub guatiao::exports::time::TimestampFields::nanoseconds: u32
+pub guatiao::exports::time::TimestampFields::seconds: i64
+impl core::clone::Clone for guatiao::exports::time::TimestampFields
+pub fn guatiao::exports::time::TimestampFields::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::exports::time::TimestampFields
+impl core::cmp::PartialEq for guatiao::exports::time::TimestampFields
+pub fn guatiao::exports::time::TimestampFields::eq(&self, &Self) -> bool
+impl core::convert::From<guatiao::Timestamp> for guatiao::exports::time::TimestampFields
+pub fn guatiao::exports::time::TimestampFields::from(guatiao::Timestamp) -> guatiao::exports::time::TimestampFields
+impl core::convert::TryFrom<guatiao::exports::time::TimestampFields> for guatiao::Timestamp
+pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
+pub fn guatiao::Timestamp::try_from(guatiao::exports::time::TimestampFields) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
+impl core::default::Default for guatiao::exports::time::TimestampFields
+pub fn guatiao::exports::time::TimestampFields::default() -> Self
+impl core::fmt::Debug for guatiao::exports::time::TimestampFields
+pub fn guatiao::exports::time::TimestampFields::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::exports::time::TimestampFields
+impl core::marker::StructuralPartialEq for guatiao::exports::time::TimestampFields
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_date_add_span(*const guatiao::exports::time::DateFields, *const guatiao::exports::span::SpanFields, *mut guatiao::exports::time::DateFields) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_date_format(*const guatiao::value::alloc::Allocator, *const guatiao::exports::time::DateFields, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_date_normalize(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::value::value::Value, *mut guatiao::exports::time::TextError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_date_parse(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::exports::time::DateFields, *mut guatiao::exports::time::TextError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_datetime_add_span(*const guatiao::exports::time::DateTimeFields, *const guatiao::exports::span::SpanFields, *mut guatiao::exports::time::DateTimeFields) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_datetime_format(*const guatiao::value::alloc::Allocator, *const guatiao::exports::time::DateTimeFields, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_datetime_normalize(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::value::value::Value, *mut guatiao::exports::time::TextError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_datetime_parse(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::exports::time::DateTimeFields, *mut guatiao::exports::time::TextError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_time_format(*const guatiao::value::alloc::Allocator, *const guatiao::exports::time::TimeFields, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_time_normalize(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::value::value::Value, *mut guatiao::exports::time::TextError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_time_parse(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::exports::time::TimeFields, *mut guatiao::exports::time::TextError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_timestamp_format(*const guatiao::value::alloc::Allocator, *const guatiao::exports::time::TimestampFields, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_timestamp_normalize(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::value::value::Value, *mut guatiao::exports::time::TextError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::time::guatiao_timestamp_parse(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::exports::time::TimestampFields, *mut guatiao::exports::time::TextError) -> guatiao::value::status::Status
 pub mod guatiao::exports::value
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_alloc_default(*mut guatiao::value::alloc::Allocator) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_buffer_push(*const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, guatiao::value::types::buffer::Bytes<'_>) -> guatiao::value::status::Status
@@ -3704,9 +3833,14 @@ impl core::convert::From<core::time::Duration> for guatiao::value::span::Span
 pub fn guatiao::value::span::Span::from(core::time::Duration) -> guatiao::value::span::Span
 impl core::convert::From<guatiao::value::span::Span> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::value::span::Span) -> alloc::string::String
+impl core::convert::From<guatiao::value::span::Span> for guatiao::exports::span::SpanFields
+pub fn guatiao::exports::span::SpanFields::from(guatiao::value::span::Span) -> guatiao::exports::span::SpanFields
 impl core::convert::TryFrom<&str> for guatiao::value::span::Span
 pub type guatiao::value::span::Span::Error = guatiao::value::error::ValueError
 pub fn guatiao::value::span::Span::try_from(&str) -> core::result::Result<guatiao::value::span::Span, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::span::SpanFields> for guatiao::value::span::Span
+pub type guatiao::value::span::Span::Error = guatiao::value::error::ValueError
+pub fn guatiao::value::span::Span::try_from(guatiao::exports::span::SpanFields) -> core::result::Result<guatiao::value::span::Span, guatiao::value::error::ValueError>
 impl core::convert::TryFrom<guatiao::value::span::Span> for core::time::Duration
 pub type core::time::Duration::Error = guatiao::value::error::ValueError
 pub fn core::time::Duration::try_from(guatiao::value::span::Span) -> core::result::Result<core::time::Duration, guatiao::value::error::ValueError>
@@ -3795,9 +3929,14 @@ impl core::cmp::PartialOrd for guatiao::Date
 pub fn guatiao::Date::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::From<guatiao::Date> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::Date) -> alloc::string::String
+impl core::convert::From<guatiao::Date> for guatiao::exports::time::DateFields
+pub fn guatiao::exports::time::DateFields::from(guatiao::Date) -> guatiao::exports::time::DateFields
 impl core::convert::TryFrom<&str> for guatiao::Date
 pub type guatiao::Date::Error = guatiao::value::error::ValueError
 pub fn guatiao::Date::try_from(&str) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::time::DateFields> for guatiao::Date
+pub type guatiao::Date::Error = guatiao::value::error::ValueError
+pub fn guatiao::Date::try_from(guatiao::exports::time::DateFields) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
 impl core::fmt::Debug for guatiao::Date
 pub fn guatiao::Date::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for guatiao::Date
@@ -3839,9 +3978,14 @@ impl core::cmp::PartialOrd for guatiao::DateTime
 pub fn guatiao::DateTime::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::From<guatiao::DateTime> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::DateTime) -> alloc::string::String
+impl core::convert::From<guatiao::DateTime> for guatiao::exports::time::DateTimeFields
+pub fn guatiao::exports::time::DateTimeFields::from(guatiao::DateTime) -> guatiao::exports::time::DateTimeFields
 impl core::convert::TryFrom<&str> for guatiao::DateTime
 pub type guatiao::DateTime::Error = guatiao::value::error::ValueError
 pub fn guatiao::DateTime::try_from(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::time::DateTimeFields> for guatiao::DateTime
+pub type guatiao::DateTime::Error = guatiao::value::error::ValueError
+pub fn guatiao::DateTime::try_from(guatiao::exports::time::DateTimeFields) -> core::result::Result<guatiao::DateTime, guatiao::value::error::ValueError>
 impl core::fmt::Debug for guatiao::DateTime
 pub fn guatiao::DateTime::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for guatiao::DateTime
@@ -3885,9 +4029,14 @@ impl core::cmp::PartialOrd for guatiao::Time
 pub fn guatiao::Time::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::From<guatiao::Time> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::Time) -> alloc::string::String
+impl core::convert::From<guatiao::Time> for guatiao::exports::time::TimeFields
+pub fn guatiao::exports::time::TimeFields::from(guatiao::Time) -> guatiao::exports::time::TimeFields
 impl core::convert::TryFrom<&str> for guatiao::Time
 pub type guatiao::Time::Error = guatiao::value::error::ValueError
 pub fn guatiao::Time::try_from(&str) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::time::TimeFields> for guatiao::Time
+pub type guatiao::Time::Error = guatiao::value::error::ValueError
+pub fn guatiao::Time::try_from(guatiao::exports::time::TimeFields) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
 impl core::fmt::Debug for guatiao::Time
 pub fn guatiao::Time::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for guatiao::Time
@@ -3928,12 +4077,17 @@ impl core::cmp::PartialOrd for guatiao::Timestamp
 pub fn guatiao::Timestamp::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::From<guatiao::Timestamp> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::Timestamp) -> alloc::string::String
+impl core::convert::From<guatiao::Timestamp> for guatiao::exports::time::TimestampFields
+pub fn guatiao::exports::time::TimestampFields::from(guatiao::Timestamp) -> guatiao::exports::time::TimestampFields
 impl core::convert::TryFrom<&str> for guatiao::Timestamp
 pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
 pub fn guatiao::Timestamp::try_from(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
 impl core::convert::TryFrom<guatiao::Timestamp> for std::time::SystemTime
 pub type std::time::SystemTime::Error = guatiao::value::error::ValueError
 pub fn std::time::SystemTime::try_from(guatiao::Timestamp) -> core::result::Result<std::time::SystemTime, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::time::TimestampFields> for guatiao::Timestamp
+pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
+pub fn guatiao::Timestamp::try_from(guatiao::exports::time::TimestampFields) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
 impl core::convert::TryFrom<std::time::SystemTime> for guatiao::Timestamp
 pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
 pub fn guatiao::Timestamp::try_from(std::time::SystemTime) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
@@ -5796,9 +5950,14 @@ impl core::cmp::PartialOrd for guatiao::Date
 pub fn guatiao::Date::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::From<guatiao::Date> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::Date) -> alloc::string::String
+impl core::convert::From<guatiao::Date> for guatiao::exports::time::DateFields
+pub fn guatiao::exports::time::DateFields::from(guatiao::Date) -> guatiao::exports::time::DateFields
 impl core::convert::TryFrom<&str> for guatiao::Date
 pub type guatiao::Date::Error = guatiao::value::error::ValueError
 pub fn guatiao::Date::try_from(&str) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::time::DateFields> for guatiao::Date
+pub type guatiao::Date::Error = guatiao::value::error::ValueError
+pub fn guatiao::Date::try_from(guatiao::exports::time::DateFields) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
 impl core::fmt::Debug for guatiao::Date
 pub fn guatiao::Date::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for guatiao::Date
@@ -5840,9 +5999,14 @@ impl core::cmp::PartialOrd for guatiao::DateTime
 pub fn guatiao::DateTime::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::From<guatiao::DateTime> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::DateTime) -> alloc::string::String
+impl core::convert::From<guatiao::DateTime> for guatiao::exports::time::DateTimeFields
+pub fn guatiao::exports::time::DateTimeFields::from(guatiao::DateTime) -> guatiao::exports::time::DateTimeFields
 impl core::convert::TryFrom<&str> for guatiao::DateTime
 pub type guatiao::DateTime::Error = guatiao::value::error::ValueError
 pub fn guatiao::DateTime::try_from(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::time::DateTimeFields> for guatiao::DateTime
+pub type guatiao::DateTime::Error = guatiao::value::error::ValueError
+pub fn guatiao::DateTime::try_from(guatiao::exports::time::DateTimeFields) -> core::result::Result<guatiao::DateTime, guatiao::value::error::ValueError>
 impl core::fmt::Debug for guatiao::DateTime
 pub fn guatiao::DateTime::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for guatiao::DateTime
@@ -6170,9 +6334,14 @@ impl core::convert::From<core::time::Duration> for guatiao::value::span::Span
 pub fn guatiao::value::span::Span::from(core::time::Duration) -> guatiao::value::span::Span
 impl core::convert::From<guatiao::value::span::Span> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::value::span::Span) -> alloc::string::String
+impl core::convert::From<guatiao::value::span::Span> for guatiao::exports::span::SpanFields
+pub fn guatiao::exports::span::SpanFields::from(guatiao::value::span::Span) -> guatiao::exports::span::SpanFields
 impl core::convert::TryFrom<&str> for guatiao::value::span::Span
 pub type guatiao::value::span::Span::Error = guatiao::value::error::ValueError
 pub fn guatiao::value::span::Span::try_from(&str) -> core::result::Result<guatiao::value::span::Span, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::span::SpanFields> for guatiao::value::span::Span
+pub type guatiao::value::span::Span::Error = guatiao::value::error::ValueError
+pub fn guatiao::value::span::Span::try_from(guatiao::exports::span::SpanFields) -> core::result::Result<guatiao::value::span::Span, guatiao::value::error::ValueError>
 impl core::convert::TryFrom<guatiao::value::span::Span> for core::time::Duration
 pub type core::time::Duration::Error = guatiao::value::error::ValueError
 pub fn core::time::Duration::try_from(guatiao::value::span::Span) -> core::result::Result<core::time::Duration, guatiao::value::error::ValueError>
@@ -6368,9 +6537,14 @@ impl core::cmp::PartialOrd for guatiao::Time
 pub fn guatiao::Time::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::From<guatiao::Time> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::Time) -> alloc::string::String
+impl core::convert::From<guatiao::Time> for guatiao::exports::time::TimeFields
+pub fn guatiao::exports::time::TimeFields::from(guatiao::Time) -> guatiao::exports::time::TimeFields
 impl core::convert::TryFrom<&str> for guatiao::Time
 pub type guatiao::Time::Error = guatiao::value::error::ValueError
 pub fn guatiao::Time::try_from(&str) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::time::TimeFields> for guatiao::Time
+pub type guatiao::Time::Error = guatiao::value::error::ValueError
+pub fn guatiao::Time::try_from(guatiao::exports::time::TimeFields) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
 impl core::fmt::Debug for guatiao::Time
 pub fn guatiao::Time::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for guatiao::Time
@@ -6411,12 +6585,17 @@ impl core::cmp::PartialOrd for guatiao::Timestamp
 pub fn guatiao::Timestamp::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::From<guatiao::Timestamp> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::Timestamp) -> alloc::string::String
+impl core::convert::From<guatiao::Timestamp> for guatiao::exports::time::TimestampFields
+pub fn guatiao::exports::time::TimestampFields::from(guatiao::Timestamp) -> guatiao::exports::time::TimestampFields
 impl core::convert::TryFrom<&str> for guatiao::Timestamp
 pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
 pub fn guatiao::Timestamp::try_from(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
 impl core::convert::TryFrom<guatiao::Timestamp> for std::time::SystemTime
 pub type std::time::SystemTime::Error = guatiao::value::error::ValueError
 pub fn std::time::SystemTime::try_from(guatiao::Timestamp) -> core::result::Result<std::time::SystemTime, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::time::TimestampFields> for guatiao::Timestamp
+pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
+pub fn guatiao::Timestamp::try_from(guatiao::exports::time::TimestampFields) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
 impl core::convert::TryFrom<std::time::SystemTime> for guatiao::Timestamp
 pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
 pub fn guatiao::Timestamp::try_from(std::time::SystemTime) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
@@ -7399,9 +7578,14 @@ impl core::cmp::PartialOrd for guatiao::Date
 pub fn guatiao::Date::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::From<guatiao::Date> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::Date) -> alloc::string::String
+impl core::convert::From<guatiao::Date> for guatiao::exports::time::DateFields
+pub fn guatiao::exports::time::DateFields::from(guatiao::Date) -> guatiao::exports::time::DateFields
 impl core::convert::TryFrom<&str> for guatiao::Date
 pub type guatiao::Date::Error = guatiao::value::error::ValueError
 pub fn guatiao::Date::try_from(&str) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::time::DateFields> for guatiao::Date
+pub type guatiao::Date::Error = guatiao::value::error::ValueError
+pub fn guatiao::Date::try_from(guatiao::exports::time::DateFields) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
 impl core::fmt::Debug for guatiao::Date
 pub fn guatiao::Date::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for guatiao::Date
@@ -7443,9 +7627,14 @@ impl core::cmp::PartialOrd for guatiao::DateTime
 pub fn guatiao::DateTime::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::From<guatiao::DateTime> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::DateTime) -> alloc::string::String
+impl core::convert::From<guatiao::DateTime> for guatiao::exports::time::DateTimeFields
+pub fn guatiao::exports::time::DateTimeFields::from(guatiao::DateTime) -> guatiao::exports::time::DateTimeFields
 impl core::convert::TryFrom<&str> for guatiao::DateTime
 pub type guatiao::DateTime::Error = guatiao::value::error::ValueError
 pub fn guatiao::DateTime::try_from(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::time::DateTimeFields> for guatiao::DateTime
+pub type guatiao::DateTime::Error = guatiao::value::error::ValueError
+pub fn guatiao::DateTime::try_from(guatiao::exports::time::DateTimeFields) -> core::result::Result<guatiao::DateTime, guatiao::value::error::ValueError>
 impl core::fmt::Debug for guatiao::DateTime
 pub fn guatiao::DateTime::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for guatiao::DateTime
@@ -7817,9 +8006,14 @@ impl core::convert::From<core::time::Duration> for guatiao::value::span::Span
 pub fn guatiao::value::span::Span::from(core::time::Duration) -> guatiao::value::span::Span
 impl core::convert::From<guatiao::value::span::Span> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::value::span::Span) -> alloc::string::String
+impl core::convert::From<guatiao::value::span::Span> for guatiao::exports::span::SpanFields
+pub fn guatiao::exports::span::SpanFields::from(guatiao::value::span::Span) -> guatiao::exports::span::SpanFields
 impl core::convert::TryFrom<&str> for guatiao::value::span::Span
 pub type guatiao::value::span::Span::Error = guatiao::value::error::ValueError
 pub fn guatiao::value::span::Span::try_from(&str) -> core::result::Result<guatiao::value::span::Span, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::span::SpanFields> for guatiao::value::span::Span
+pub type guatiao::value::span::Span::Error = guatiao::value::error::ValueError
+pub fn guatiao::value::span::Span::try_from(guatiao::exports::span::SpanFields) -> core::result::Result<guatiao::value::span::Span, guatiao::value::error::ValueError>
 impl core::convert::TryFrom<guatiao::value::span::Span> for core::time::Duration
 pub type core::time::Duration::Error = guatiao::value::error::ValueError
 pub fn core::time::Duration::try_from(guatiao::value::span::Span) -> core::result::Result<core::time::Duration, guatiao::value::error::ValueError>
@@ -8015,9 +8209,14 @@ impl core::cmp::PartialOrd for guatiao::Time
 pub fn guatiao::Time::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::From<guatiao::Time> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::Time) -> alloc::string::String
+impl core::convert::From<guatiao::Time> for guatiao::exports::time::TimeFields
+pub fn guatiao::exports::time::TimeFields::from(guatiao::Time) -> guatiao::exports::time::TimeFields
 impl core::convert::TryFrom<&str> for guatiao::Time
 pub type guatiao::Time::Error = guatiao::value::error::ValueError
 pub fn guatiao::Time::try_from(&str) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::time::TimeFields> for guatiao::Time
+pub type guatiao::Time::Error = guatiao::value::error::ValueError
+pub fn guatiao::Time::try_from(guatiao::exports::time::TimeFields) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
 impl core::fmt::Debug for guatiao::Time
 pub fn guatiao::Time::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for guatiao::Time
@@ -8058,12 +8257,17 @@ impl core::cmp::PartialOrd for guatiao::Timestamp
 pub fn guatiao::Timestamp::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
 impl core::convert::From<guatiao::Timestamp> for alloc::string::String
 pub fn alloc::string::String::from(guatiao::Timestamp) -> alloc::string::String
+impl core::convert::From<guatiao::Timestamp> for guatiao::exports::time::TimestampFields
+pub fn guatiao::exports::time::TimestampFields::from(guatiao::Timestamp) -> guatiao::exports::time::TimestampFields
 impl core::convert::TryFrom<&str> for guatiao::Timestamp
 pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
 pub fn guatiao::Timestamp::try_from(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
 impl core::convert::TryFrom<guatiao::Timestamp> for std::time::SystemTime
 pub type std::time::SystemTime::Error = guatiao::value::error::ValueError
 pub fn std::time::SystemTime::try_from(guatiao::Timestamp) -> core::result::Result<std::time::SystemTime, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::exports::time::TimestampFields> for guatiao::Timestamp
+pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
+pub fn guatiao::Timestamp::try_from(guatiao::exports::time::TimestampFields) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
 impl core::convert::TryFrom<std::time::SystemTime> for guatiao::Timestamp
 pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
 pub fn guatiao::Timestamp::try_from(std::time::SystemTime) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>

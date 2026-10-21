@@ -278,3 +278,164 @@ fn a_c_program_builds_and_frees_a_tree_through_the_exports() {
     );
     println!("{}", stdout.trim());
 }
+
+#[path = "vectors/read.rs"]
+mod vectors;
+
+/// `s` as a C string literal: printable ASCII as itself, everything else
+/// as three-digit octal, which no following character can extend.
+fn c_string(s: &str) -> String {
+    let mut out = String::from("\"");
+    for b in s.bytes() {
+        match b {
+            b'"' | b'\\' => {
+                out.push('\\');
+                out.push(b as char);
+            }
+            0x20..=0x7e => out.push(b as char),
+            _ => out.push_str(&format!("\\{b:03o}")),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// `tests/vectors/time.json` as C arrays, for `time_consumer.c`.
+fn time_vectors_header() -> String {
+    let doc = vectors::file();
+    let mut h = String::from(
+        "/* Generated from tests/vectors/time.json by tests/c_exports.rs. */\n\
+         typedef struct { const char *text; const char *canonical; long long fields[8];\n\
+         \x20                int field_count; long long refused_at; } text_vector;\n\
+         typedef struct { const char *start; const char *span; const char *result; } add_vector;\n",
+    );
+    for (form, name) in [
+        ("date", "DATE"),
+        ("time", "TIME"),
+        ("datetime", "DATETIME"),
+        ("timestamp", "TIMESTAMP"),
+        ("span", "SPAN"),
+    ] {
+        let cases = vectors::texts(&doc, form);
+        h.push_str(&format!("static const text_vector {name}_VECTORS[] = {{\n"));
+        for case in &cases {
+            let line = match &case.expect {
+                Ok((canonical, fields)) => {
+                    let mut f: Vec<String> = fields.iter().map(|n| format!("{n}LL")).collect();
+                    let count = f.len();
+                    f.resize(8, "0".into());
+                    format!(
+                        "  {{{}, {}, {{{}}}, {count}, -1}},\n",
+                        c_string(&case.text),
+                        c_string(canonical),
+                        f.join(", ")
+                    )
+                }
+                Err(at) => format!(
+                    "  {{{}, NULL, {{0}}, 0, {at}}},\n",
+                    c_string(&case.text)
+                ),
+            };
+            h.push_str(&line);
+        }
+        h.push_str(&format!(
+            "}};\nstatic const size_t {name}_COUNT = {};\n",
+            cases.len()
+        ));
+    }
+    for (form, name) in [
+        ("date_add_span", "DATE_ADD"),
+        ("datetime_add_span", "DATETIME_ADD"),
+    ] {
+        let cases = vectors::additions(&doc, form);
+        h.push_str(&format!("static const add_vector {name}_VECTORS[] = {{\n"));
+        for case in &cases {
+            let result = case.result.as_deref().map_or("NULL".into(), c_string);
+            h.push_str(&format!(
+                "  {{{}, {}, {result}}},\n",
+                c_string(&case.start),
+                c_string(&case.span)
+            ));
+        }
+        h.push_str(&format!(
+            "}};\nstatic const size_t {name}_COUNT = {};\n",
+            cases.len()
+        ));
+    }
+    h
+}
+
+/// Every date, time, instant and span vector, read, written and applied
+/// by a C program through the exported functions: the vectors the Rust
+/// types and both bindings read too.
+#[test]
+fn a_c_program_reads_and_writes_every_time_vector() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let source = manifest.join("tests/c_consumer/time_consumer.c");
+    let include = manifest.join("include");
+
+    let Some(cc) = find_compiler() else {
+        println!("skipped: no C compiler found. See the other tests here for why that is a skip.");
+        return;
+    };
+    let Some((dir, dll)) = shared_library() else {
+        println!(
+            "skipped: the guatiao shared library is not beside this test \
+             binary; run `cargo build -p guatiao --all-features` first."
+        );
+        return;
+    };
+
+    // The generated header goes beside the program, which is built into
+    // the library's directory for the reason the other tests give.
+    let generated = dir.join("guatiao_time_vectors");
+    std::fs::create_dir_all(&generated).expect("a directory for the generated header");
+    std::fs::write(generated.join("time_vectors.h"), time_vectors_header())
+        .expect("the generated header is written");
+    let out = dir.join(if cfg!(windows) {
+        "guatiao_time_consumer.exe"
+    } else {
+        "guatiao_time_consumer"
+    });
+
+    let mut compile = Command::new(&cc);
+    compile
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
+        .arg("-I")
+        .arg(&include)
+        .arg("-I")
+        .arg(&generated)
+        .arg("-o")
+        .arg(&out)
+        .arg(&source);
+    if cfg!(windows) {
+        compile.arg(dll.with_extension("dll.lib"));
+    } else {
+        compile
+            .arg(format!("-L{}", dir.display()))
+            .arg("-lguatiao")
+            .arg("-Wl,-rpath,$ORIGIN");
+    }
+    let compiled = compile.output().expect("the compiler runs");
+    assert!(
+        compiled.status.success(),
+        "the C program did not compile or link.\nstderr:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+
+    let run = Command::new(&out)
+        .current_dir(&dir)
+        .output()
+        .expect("the program was just built");
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        run.status.success(),
+        "the C program failed its own checks.\nstdout:\n{stdout}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(
+        stdout.contains("all checks passed"),
+        "the program exited 0 without reporting success.\nstdout:\n{stdout}"
+    );
+    println!("{}", stdout.trim());
+}
