@@ -318,7 +318,9 @@ fn read_fields<'a>(
                 ),
             ));
         }
-        if flatten && (!hints.is_empty() && !(hints.nested && only_nested(&hints))) {
+        // A flattened member takes `nested` and nothing else.
+        let placeable = hints.is_empty() || (hints.nested && only_nested(&hints));
+        if flatten && !placeable {
             return Err(syn::Error::new_spanned(
                 ident,
                 format!(
