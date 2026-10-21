@@ -21,6 +21,8 @@ public surface); this file is about the repository.
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build; its `tests/docs_snippets.rs` compiles the Rust snippets of `docs/index.md`, `docs/ownership.md` and the root `README.md` and compares them with the text shown |
 | `bindings/python/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md` |
 | `bindings/dart/` | `dart:ffi` bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`; `lib/src/bindings.g.dart` is ffigen output and never hand-edited |
+| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `wasm.md`; built strictly by `docs.yml` |
+| `benchmarks/` | the benchmark runner (`cargo run -p guatiao-bench --release -- --save NAME`), committed results in `benchmarks/results/`, and `README.md` with the protocol; run on demand, numbers are local and provisional |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 
 ## Commands
@@ -110,6 +112,33 @@ the suite rather than shipping.
 
 ## Rules
 
+- **guatiao is glue between languages, and every change serves that.** A
+  value encoding (what a tree looks like for a type: a string with a
+  grammar, a two-element list, an object with text keys) is defined at the
+  value and schema level, written in `docs/encodings.md` and the C header's
+  documentation, and readable and writable from C, Python and Dart: what a
+  reader must parse has a C export or a binding mapping, tested against the
+  same vectors as the Rust code. A Rust impl (`ToValue`, `FromValue`,
+  `Schema` for a Rust type) is one implementation of an encoding and never
+  introduces a shape only Rust can read. A convenience only Rust users can
+  see, such as interop with a third-party Rust crate, waits until a
+  consumer asks for it.
+- **Nothing a host holds needs a library's allocator or its image.** A
+  tree a call returns is built in, or moved into, the caller's allocator;
+  every handle holds a lease on its library, so `unload` refuses while one
+  is alive; `clone()` copies into this binary's own allocator. The rules
+  for callers and library authors are in `docs/ownership.md`.
+- **What a trusted producer wrote is checked where it enters, not walled
+  off with `unsafe`.** A library the host chose to load, code the macros
+  generate and the crate's own builders are trusted: descriptors are
+  checked on entry (alignment, sizes, strides, lengths, addresses inside
+  the image) and then read by safe functions. `unsafe` marks a raw pointer
+  from anywhere (`from_raw`) and an operation that can invalidate what
+  safe code holds (`unload_unchecked`).
+- **A fix arrives with the test that would have caught it.** A test that
+  counts allocations warms every fixture before the measured call:
+  `std::sync::Mutex` allocates on its first lock on macOS, and nowhere
+  else CI runs.
 - **A default build pulls in nothing.** Every dependency sits behind a
   default-off feature; a required dependency needs an argument nobody has
   made yet.
@@ -153,6 +182,11 @@ Four workflows:
 - `release.yml` releases a `v*` tag, and rehearses one on `workflow_dispatch`
   (every gate, build and dry run; nothing released, nothing published).
 - `cla.yaml` gates pull requests.
+
+**Versions.** While every release is a pre-release (`0.0.0-alpha.N`), a
+change that breaks the documented API ships as the next alpha, with its
+migration under `[Unreleased]` in `CHANGELOG.md`; work lands there and the
+version moves only when a release is cut.
 
 **Cutting a release.** One version everywhere: `[workspace.package] version`
 in `Cargo.toml`, `bindings/dart/pubspec.yaml`, and the same version the
