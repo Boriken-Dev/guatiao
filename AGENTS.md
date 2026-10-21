@@ -16,7 +16,7 @@ public surface); this file is about the repository.
 | `crates/guatiao-intake/` | taking a value in from a person: the path grammar (`agent[1].name`), flat `key -> text` storage, checking a store of text, and how a schema is shown (sections, widget hints, conditional visibility, `#[derive(Form)]`); C surface in `include/guatiao_intake.h` |
 | `crates/guatiao-py/` | a source of libraries written in Python: a cdylib exporting `guatiao_source`, built with pyo3 for the stable ABI; a workspace of its own (no other build needs a Python to link), not published |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
-| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `python/greeter_kind.py` and `node/greeter_kind.ts` describe its kinds for Python and Node |
+| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `python/greeter_kind.py` and `node/greeter_kind.ts` describe its kinds for Python and Node; `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`) |
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
 | `examples/wire_over_webtransport/` | values over WebTransport: `server/` (the shared channel and framing, `wire-server`, and `wire-probe`, a native client), `client/` (the page's wasm, its own workspace, built for `wasm32-unknown-unknown` only); commands in its `README.md` |
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build; its `tests/docs_snippets.rs` compiles the Rust snippets of `docs/index.md`, `docs/ownership.md` and the root `README.md` and compares them with the text shown |
@@ -26,10 +26,14 @@ public surface); this file is about the repository.
 | `examples/package.json` | the Node examples' one dependency, on `bindings/node`: `npm ci` here, after `npm run build` there |
 | `examples/node_host/` | a host program in TypeScript: scans for greeters in any language, registers Node libraries, optionally adds `guatiao-py`, calls every slot; `bindings/node/test/examples.test.ts` runs it |
 | `examples/node_provider/` | `node_greeter/`, a library written in TypeScript: a package whose module is the library |
+| `examples/go.mod` | the Go examples' module, using `bindings/go` through a `replace`; `examples/internal/` holds what its tests drive in C |
+| `examples/go_host/` | a host program in Go: scans for greeters in any language, registers the Go library, optionally adds `guatiao-py`, calls every slot; its tests call the Rust, C, Python and Go greeters both ways |
+| `examples/go_provider/` | `go_greeter/`, a library written in Go (the package is the library), and `cshared/`, the same as a `-buildmode=c-shared` file the Rust example host scans |
 | `bindings/python/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md` |
 | `bindings/dart/` | `dart:ffi` bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`; `lib/src/bindings.g.dart` is ffigen output and never hand-edited |
 | `bindings/node/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads |
-| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `python.md` and `node.md` (Python and Node as a host and as a provider), `wasm.md`; built strictly by `docs.yml` |
+| `bindings/go/` | Go bindings over the C ABI through cgo, the module `github.com/Boriken-Dev/guatiao/bindings/go` with its own `AGENTS.md`; `internal/native/` holds every line of C and copies of the three headers (a test compares them with the committed ones); `cmd/guatiao-kind` writes a kind package's glue |
+| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `python.md`, `node.md` and `go.md` (Python, Node and Go as a host and as a provider), `wasm.md`; built strictly by `docs.yml` |
 | `benchmarks/` | the benchmark runner (`cargo run -p guatiao-bench --release -- --save NAME`), committed results in `benchmarks/results/`, and `README.md` with the protocol; run on demand, numbers are local and provisional |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 
@@ -130,6 +134,25 @@ GUATIAO_LIBRARY=../../target/debug npm test   # vitest
 npm pack --dry-run                            # what ships
 ```
 
+Go bindings, after `cargo build --workspace --all-features`, with Go
+1.26 or later and cgo (on Windows a MinGW-style compiler: llvm-mingw or
+MinGW-w64 GCC). The examples are a module of their own; after a change to
+a kind's header or interfaces, `go generate ./greeter_kind/go` there:
+
+```bash
+export GUATIAO_LIBRARY=$PWD/target/debug
+(cd bindings/go && go vet ./... && go test ./...)
+(cd examples && go vet ./... && go test ./...)   # GUATIAO_PY_BRIDGE adds the Python greeters
+gofmt -l bindings/go examples                     # prints nothing
+# the Go library as a file, scanned by the Rust example host
+(cd examples && go build -buildmode=c-shared -o ../go-library/libgo_greeter.so ./go_provider/cshared)
+GUATIAO_GO_LIBRARY=go-library cargo test -p greeter_host --all-features --test go_library
+```
+
+`cargo test -p greeter_host` rebuilds the workspace's cdylibs with only
+what that package needs: build the workspace again before the Go, Python,
+Dart or Node suites.
+
 The `guatiao-py` bridge, against the Python it will run with. Its tests
 and the Python suite's bridge tests find it in its own `target/debug`
 (or `GUATIAO_PY_BRIDGE`); on Windows the directory holding `python3.dll`
@@ -212,8 +235,12 @@ Four workflows:
   Its `node` job runs `bindings/node`'s type check and tests on Node 22
   and 24 on the three platforms, with the C greeter built and the
   guatiao-py bridge serving the Python greeters (a stated skip fails it),
-  and checks what `npm pack` ships. `release.yml` calls it as its test
-  gate.
+  and checks what `npm pack` ships. Its `go` job runs `bindings/go` and
+  `examples` (vet, gofmt, tests) on Go 1.26 and 1.27 on the three
+  platforms, with the C greeter, the guatiao-py bridge and a stated skip
+  failing the job, under `-race` and `GOEXPERIMENT=cgocheck2` on one leg,
+  and builds the Go library as a file for the Rust example host's
+  `go_library` test. `release.yml` calls it as its test gate.
 - `docs.yml` owns every Pages deploy: a push to `main` touching a docs
   source, or a dispatch at any ref. `release.yml` calls it with
   `deploy: false` as a strict build gate, and dispatches it at a final tag.
@@ -246,8 +273,9 @@ name.
 **What the tag does**: gates (tests, strict docs build, one version), then
 packages all four (`cargo publish --workspace --dry-run`, `python -m build`
 + `twine check`, `dart pub publish --dry-run`, `npm pack --dry-run` then
-`npm pack`), then the GitHub release
-(marked pre-release for a tag with a `-`), then publishes. Each publish job
+`npm pack`, and the Go module vetted and built), then the GitHub release
+(marked pre-release for a tag with a `-`), then publishes, and tags the
+Go module `bindings/go/vx.y.z` at the same commit. Each publish job
 skips a version its registry already has, so re-running a partly failed
 release finishes it. The four crates go in dependency order: `guatiao-derive`,
 `guatiao`, `guatiao-serde`, `guatiao-intake`, each naming the others with
@@ -261,6 +289,7 @@ release finishes it. The four crates go in dependency order: `guatiao-derive`,
 | PyPI | a *pending* trusted publisher: repository `Boriken-Dev/guatiao`, workflow `release.yml`, environment `pypi` | the same publisher |
 | pub.dev | **by hand**, `dart pub publish` in `bindings/dart`: automated publishing needs a package that exists | automated publishing from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
 | npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |
+| Go module proxy | the tag `bindings/go/vx.y.z`, pushed by `release.yml` with the workflow's own token; the job then asks proxy.golang.org for the version, which lists it | the same; nothing to configure |
 
 **Who owns what.** Neither registry lets a new package start under an
 organisation, so each is published by a person and handed over:

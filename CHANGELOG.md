@@ -309,6 +309,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `examples/node_host/` (a host in TypeScript) and
   `examples/node_provider/` (a library written in TypeScript), with
   the greeter kinds described in `examples/greeter_kind/node/`.
+- **Go bindings**, `bindings/go/` (module
+  `github.com/Boriken-Dev/guatiao/bindings/go`): cgo over the ABI's C
+  header, for Go 1.26 and later, loading the library at run time
+  (`GUATIAO_LIBRARY` or `UseLibrary(path)`) and shipping no native code.
+  `Value`, `Ref`, `MapRef` and `ListRef` over a tree (numbers keep their
+  text as `Number`), `Close` to free; Go data converts both ways as
+  `encoding/json` does, structs by their `guatiao` or `json` tags,
+  `time.Time` as an instant and `time.Duration` as an exact length;
+  `SchemaOf[T]()`, the JSON Schema a configuration struct describes;
+  `serde` (`Parse`, `Emit`, `ParseError`), `intake`, `civil` (`Date`,
+  `Time`, `DateTime`, `Span`, `Length`), `Redact`, and the status errors
+  matched with `errors.Is`.
+- **Go: the registry, kinds and providers.** `Registry` (scan, load,
+  rank, `Create`, `Retire`, `Collect`, `Unload`, `AddSourceFile`,
+  `WatchDir`, `Refresh`) and `Instance`. A kind is a Go interface marked
+  `//guatiao:kind greeter greeter_vtable`, each optional slot an
+  interface of its own; the command `guatiao-kind`, run by `go generate`,
+  writes from the kind's C header the descriptor (`GreeterKind`), a
+  remote implementing every interface (`GreeterRemote`) and the cgo
+  calling and serving each slot. A provider is any Go type implementing
+  the interface, named with `Single` or `Configured` (built from a
+  configuration struct, its schema from the struct's tags) in a library
+  `LibraryOf` names by the providers' package and versions from the build;
+  registered in the process, or built with `-buildmode=c-shared` as a file
+  any host's scan loads, which is never unmapped. A slot runs on the
+  thread that calls it and builds its answer in the allocator the
+  caller's carrier names. The Go examples: `examples/greeter_kind/go/`,
+  `examples/go_host/` and `examples/go_provider/`, a module of their own.
 
 ### Changed
 
