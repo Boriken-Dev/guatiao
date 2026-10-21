@@ -130,6 +130,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   a predicate leaves a key out (with `default` to read it back); and a
   key no field declares is refused on read. `alias` is refused by name: a
   schema refuses every key it does not declare.
+- **An "Encodings" page** on the docs site states every form above for
+  any language: the value, a JSON example, what a reader accepts, the
+  schema, and the exact grammars of the RFC 3339 timestamp and of
+  `Span`'s ISO 8601 and friendly forms. The C header and the crate's
+  shipped `AGENTS.md` point at it; the latter lists every field type
+  with its value and schema.
 - **A guide to passing data**: the docs site's "Passing data" page and a
   section of the crate's shipped `AGENTS.md`, on returning trees by value
   and taking them by value when kept, building an answer in the

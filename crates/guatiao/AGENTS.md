@@ -120,7 +120,8 @@ Every name above is at the **crate root**: `guatiao::Text`,
 `guatiao::Entry`, `guatiao::Tag`, `guatiao::Str`, `guatiao::Number`,
 `guatiao::Payload` (what `from_raw_parts` takes), beside `Alloc`,
 `AllocError` (what the `try_` forms answer), `Buffer`, `List`, `Map`,
-`MAX_DEPTH`, `Status`, `TryAsMut`, `TryAsRef`, `Value` and `ValueError`.
+`MAX_DEPTH`, `Span` (under "Field types"), `Status`, `TryAsMut`,
+`TryAsRef`, `Value` and `ValueError`.
 
 **The short form uses the allocator the container recorded**; the `_in`
 form adopts one and is what a literal with a null `alloc` field needs.
@@ -430,6 +431,8 @@ with `guatiao_alloc_default()`.
 ```rust
 ValueError = Alloc(AllocError) | NotANumber | NotUtf8 | WrongKind
            | UnknownTag(u32) | OutOfRange | TooDeep | DuplicateKey
+           | Unrepresentable                 // no spelling in its text form
+           | Unparsed { at: usize, expected: &'static str }  // a grammar refused text
 MapError   = MissingKey | WrongType | BadValue     // carries the path
 ```
 
@@ -533,6 +536,107 @@ and `f32` the exclusive bounds past which no finite `f32` exists, so the
 schema refuses exactly what `FromValue` refuses at the edges.
 
 Generated code names only `::guatiao::` paths, checked by a test.
+
+## Field types
+
+Every type below implements `ToValue`, `FromValue` and `Schema`, so a
+derived struct may hold it; `T` means any field type. The forms are the
+language-neutral contract at
+<https://boriken-dev.github.io/guatiao/encodings/>, which states each
+one's grammar exactly; these types are one implementation of them.
+
+| Rust type | value | schema |
+| --- | --- | --- |
+| `bool`, integers, `f32`, `f64`, `String`, `Bytes` | boolean, number (exact digits), string, bytes | `boolean`, `integer` with the width's bounds, `number`, `string`, `bytes` |
+| `Value` | itself, deep-copied | `{}` |
+| `Map`, `List` | itself | `{type: object, additionalProperties: {}}`, `{type: array, items: {}}` |
+| `Text`, `Number`, `Buffer` | itself | `string`, `number`, `bytes` |
+| `Option<T>` | `T`, or omitted / null | `T` accepting null |
+| `Box<T>`, `Arc<T>`, `Rc<T>`, `Cow<'_, T>`, `&T` (write only) | as `T` | as `T` |
+| `Box<str>`, `Arc<str>`, `Rc<str>`, `Box<[T]>`, `Arc<[T]>`, `Rc<[T]>` | string, list | as `String`, `Vec<T>` |
+| `char` | text of one code point | `string`, `minLength` = `maxLength` = 1 |
+| `Vec<T>`, `VecDeque<T>`, `[T]` | list | `{type: array, items: T}` |
+| `BTreeSet<T>`, `HashSet<T, S>` | list; a repeated element refused on read | + `uniqueItems: true` |
+| `[T; N]` | list of exactly N | + `minItems` = `maxItems` = N |
+| tuples of 1 to 12 | list by position | `prefixItems`, `items: false`, `minItems` = `maxItems` |
+| `()` | null | `{type: null}` |
+| `BTreeMap<K, V>`, `HashMap<K, V, S>`, `K: MapKey` | object keyed by `K`'s text | `{type: object, additionalProperties: V, propertyNames: K's}` |
+| `PathBuf`, `Path`, `Box`/`Arc`/`Rc<Path>` | its text; not UTF-8 is `ValueError::NotUtf8` on write | `string` |
+| `IpAddr`, `Ipv4Addr`, `Ipv6Addr` | `Display` text | `string` + `format: ipv4` / `ipv6` (`anyOf` both for `IpAddr`) |
+| `SocketAddr`, `SocketAddrV4`, `SocketAddrV6` | `Display` text | `string` + `pattern` |
+| `NonZeroU*` / `NonZeroI*` | integer, zero refused | `integer`, `minimum: 1` / the width's bounds + `not: {const: 0}` |
+| `SystemTime` | RFC 3339 UTC, `2026-10-21T13:45:00.5Z` | `string` + `format: date-time` |
+| `Duration` | `[secs, nanos]` | the tuple `[u64, 0..=999999999]` |
+| `Span` | ISO 8601 duration, `P1DT2H` | `string` + `format: duration` |
+
+`format` is never checked; `pattern` only with the `regex` feature.
+
+**`HashMap` and `HashSet` write in their iteration order**, which is not
+reproducible from one run to the next; `BTreeMap` and `BTreeSet` write
+sorted.
+
+**`SystemTime`** writes the years 0000 to 9999 (outside them,
+`ValueError::Unrepresentable`), the fraction with trailing zeros removed.
+It reads `T` or `t`, `Z`, `z` or `+HH:MM`/`-HH:MM`, seconds 00 to 59 (a
+leap second is refused), one to nine fractional digits, and a refusal
+names the byte it stopped at. The fraction is kept to the clock's
+resolution, 100 ns on Windows, whose `SystemTime` starts in 1601.
+
+**`Duration`** reads three spellings: `[secs, nanos]`, a number of
+seconds read exactly from its text (`1.5`, `2e-3`; not negative, no
+finer than a nanosecond), and the `{"secs", "nanos"}` map serde writes.
+The schema declares only the first. There is no C struct for it: C reads
+the list.
+
+```rust
+pub trait MapKey: Sized {                    // guatiao::value::convert::MapKey
+    fn to_key(&self) -> Result<Cow<'_, str>, ValueError>;
+    fn from_key(key: &str) -> Result<Self, MapError>;
+    fn key_kind(alloc: Alloc) -> Option<KindBuilder> { None }  // propertyNames
+}
+// String, Box/Arc/Rc<str> (any text); integers (decimal, no leading zero,
+// no sign when unsigned); char; bool ("true"/"false"); the six addresses;
+// PathBuf. Two keys reading as one key are refused.
+```
+
+### `Span` (`guatiao::Span`)
+
+A length of time in calendar units, equal unit by unit (`P1D` is not
+`PT24H`), with one sign for the whole span. `Copy`, `Eq`, `Hash`,
+`Default` (zero), `Send`, `Sync`; no ordering. The crate holds no
+calendar: a host applies a span to a date with its own date library.
+
+```rust
+Span::new() -> Span                                   // PT0S
+span.years(n: i64) .months(n) .weeks(n) .days(n) .hours(n) .minutes(n)
+    .seconds(n) .nanoseconds(n) -> Span               // #[must_use] builders
+span.get_years() .. .get_nanoseconds() -> i64         // carrying the sign
+span.is_zero() / is_negative() -> bool
+span.abs() / negate() -> Span;  -span                 // Neg
+span.to_string()                                       // canonical ISO 8601
+"P1Y2M3W4DT5H6M7.5S".parse::<Span>() -> Result<Span, ValueError>
+"1y 2mo 3w 4d 5h 6m 7s 500ms".parse::<Span>()         // the friendly form
+Span::try_from(&str), String::from(span)
+Span::from(Duration)                                  // PT1H1M1.5S for 3661.5 s
+Duration::try_from(span) -> Result<Duration, ValueError>
+```
+
+- **A non-zero builder argument sets the whole span's sign**, as jiff's
+  do: `Span::new().days(2).hours(-3)` is `-P2DT3H`. `i64::MIN` is read
+  as `-i64::MAX`. `nanoseconds(n)` carries whole seconds into the
+  seconds, since the text has no unit below one.
+- **ISO 8601 read**: optional `+`/`-`, `P`, then `nY nM nW nD` in that
+  order, then `T` and `nH nM nS` in that order, at least one unit, only
+  the seconds with a fraction (1 to 9 digits), designators in either
+  case. **Friendly read**: optional `-`, then `n` and a unit (`y`, `mo`,
+  `w`, `d`, `h`, `m` or `min`, `s`, `ms`, `us` or `µs`, `ns`), each unit
+  once, any order, spaces optional, lowercase, a fraction on `s` only.
+  Each number at most `i64::MAX`.
+- **A refusal is `ValueError::Unparsed { at, expected }`**: the byte
+  offset and what was expected there, never the text.
+- **`Duration::try_from(span)`** counts a week as 7 days and a day as 24
+  hours; years, months, a negative span or an overflow are
+  `ValueError::Unrepresentable`.
 
 ---
 
@@ -700,6 +804,9 @@ Kinds, with what each writes:
 | `float`, `float_bounds` | `type: "number"` + `minimum`/`maximum` |
 | `bytes` | `type: "bytes"` (ours) |
 | `list(items)` | `type: "array"` + `items` |
+| `tuple(positions)` | `type: "array"` + `prefixItems` + `items: false` + `minItems` = `maxItems` = the count |
+| `any` | `{}`: any value |
+| `null` | `type: "null"` |
 
 Constraints chain onto a kind, each JSON Schema's own keyword:
 
@@ -710,6 +817,8 @@ Constraints chain onto a kind, each JSON Schema's own keyword:
 | `.format(name)` | `format` | string | **never** — an annotation, as 2020-12 defaults |
 | `.multiple_of(step)` | `multipleOf` | integer, number | yes; exact for a whole step on an integer |
 | `.min_items(n)`, `.max_items(n)` | `minItems`, `maxItems` | list | yes, on the value |
+| `.unique_items()` | `uniqueItems: true` | list | yes: numbers by what they denote, the rest structurally |
+| `.property_names(kind)` | `propertyNames` | object | yes, each key as text against `kind` |
 
 A keyword for another type is carried and ignored, as JSON Schema says.
 A count that is negative or fractional, and a step of zero or less, is
@@ -746,12 +855,18 @@ FieldRef: .key() .kind() .title() .description() .default() .is_sensitive()
 Kind::Str { min_length, max_length, pattern, format }   // all Option
 Kind::Int { min, max, multiple_of }  /  Kind::Float { min, max, multiple_of }
 Kind::List { items, min, max }       // min/max: minItems/maxItems
+Kind::Tuple(schema)                  // prefixItems; .positions() reads each position's kind
 Kind::Enum(schema) / Kind::Null / Kind::Union(anyOf) / Kind::Variant { tag, arms }
-Kind: .choices() .alternatives() .arms() .items() .values() .fields() .name()
+Kind: .choices() .alternatives() .arms() .items() .positions() .values() .fields() .name()
       // Map vs MapOf: a declared object vs one whose KEYS ARE DATA.
       // Told apart by having `properties`; `.values()` answers MapOf's
       // one value kind, as `.items()` answers a list's.
 ```
+
+Validation enforces, beside the kinds: `prefixItems` with `items: false`,
+`uniqueItems`, `propertyNames` (each key, as text) and `not` (a value the
+inner schema accepts is refused), so a schema the derive writes refuses
+what `FromValue` refuses.
 
 **The shapes a serde-based generator writes read as what they mean.**
 `type: [T, "null"]` and `anyOf: [X, null]` are a `T` / `X` that is
