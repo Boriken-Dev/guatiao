@@ -117,6 +117,7 @@ class Registry:
             )
         self._handle = handle
         self._closed = False
+        self._python_libraries: list = []
 
     def _check_open(self) -> None:
         if self._closed:
@@ -165,6 +166,13 @@ class Registry:
         is expected -- typically built with `EntryFn(callback)`."""
         view, _buf = _make_str(name.encode("utf-8"))
         return self._call(_lib.core().guatiao_registry_register_entry, view, entry)
+
+    def register_library(self, library: Any) -> Any:
+        """Registers a library written in Python (a `guatiao.provide`
+        `Library`) under its id, as `register_entry` does a C one, and
+        keeps it alive as long as this registry."""
+        self._python_libraries.append(library)
+        return self.register_entry(library.id, library.entry)
 
     def scan_dir(self, directory: str, *, descending: bool = False, rules: "str | None" = None) -> Any:
         dir_view, _dir_buf = _make_str(str(directory).encode("utf-8"))
