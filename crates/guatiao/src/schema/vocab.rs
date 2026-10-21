@@ -31,10 +31,11 @@
 //! because a subschema is part of the same document and does not get to
 //! change dialect midway.
 //!
-//! 2020-12 rather than draft-07 or 2019-09 because it costs nothing today:
-//! every keyword below is identical in all three. The differences are in
-//! tuple `items`, `definitions` vs `$defs`, `$ref` siblings, `dependencies`
-//! and `format`, and this vocabulary emits none of them.
+//! 2020-12 rather than draft-07 or 2019-09: every keyword below is
+//! identical in all three but one. A tuple is 2020-12's [`PREFIX_ITEMS`]
+//! with `items: false`, which the older drafts spelled as an `items` list
+//! and `additionalItems`; the other differences (`definitions` vs `$defs`,
+//! `$ref` siblings, `dependencies`, `format`) touch nothing emitted here.
 //!
 //! # The shape
 //!
@@ -48,7 +49,13 @@
 //!          | { "type": "string", "enum": [value, …], "x-enum-labels": {…} }
 //!          | { "type": "bytes" }                        (ours)
 //!          | { "type": "array",  "items": schema }
+//!          | { "type": "array",  "items": schema, "uniqueItems": true }  (a set)
+//!          | { "type": "array",  "prefixItems": [schema, …], "items": false,
+//!              "minItems": n, "maxItems": n }            (a tuple)
 //!          | { "type": "object", "properties", "required" }
+//!          | { "type": "object", "additionalProperties": schema,
+//!              "propertyNames": schema }                 (keys are data)
+//!          | {}                                          (any value)
 //!          | { "type": "object", "x-variant-tag": key, "oneOf": [arm, …] }
 //!          | { "anyOf": [schema, …] }
 //!          | { "enum": [value, …] }        (any type; also "const", and
@@ -185,8 +192,24 @@ pub const ADDITIONAL_PROPERTIES: &str = "additionalProperties";
 
 // --- an array ---------------------------------------------------------
 
-/// The schema every element of an array satisfies.
+/// The schema every element of an array satisfies; on a tuple, every
+/// element past [`PREFIX_ITEMS`], and `false` when there may be none.
 pub const ITEMS: &str = "items";
+/// A tuple's elements, position by position: a list of schemas, the first
+/// for the element at 0. Written with `items: false` and [`MIN_ITEMS`] and
+/// [`MAX_ITEMS`] both the list's length, so a tuple is exactly that long.
+pub const PREFIX_ITEMS: &str = "prefixItems";
+/// `true` when no two elements of an array may be equal: a set. Numbers
+/// are equal by what they denote (`1` and `1.0`), everything else
+/// structurally.
+pub const UNIQUE_ITEMS: &str = "uniqueItems";
+
+// --- an object whose keys are data -------------------------------------
+
+/// The schema every key of an object satisfies, as text: what a map keyed
+/// by something other than text writes (`{"type": "string", "pattern":
+/// "^(0|[1-9][0-9]*)$"}` for an unsigned integer).
+pub const PROPERTY_NAMES: &str = "propertyNames";
 
 // --- a number ---------------------------------------------------------
 
@@ -400,6 +423,9 @@ pub const KEYWORDS: &[&str] = &[
     PROPERTIES,
     REQUIRED,
     ITEMS,
+    PREFIX_ITEMS,
+    UNIQUE_ITEMS,
+    PROPERTY_NAMES,
     MINIMUM,
     MAXIMUM,
     EXCLUSIVE_MINIMUM,

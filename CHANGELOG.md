@@ -57,6 +57,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`char` is a field type**: text exactly one character (Unicode code
   point) long, `minLength` and `maxLength` 1 in its schema, read through
   `char::try_from(&value)` as well.
+- **Sequences, sets, arrays, tuples and the unit are field types.**
+  `VecDeque<T>` is a list; `BTreeSet<T>` and `HashSet<T>` a list with no
+  element repeated (`uniqueItems: true`; a repeated element is refused on
+  read); `[T; N]` a list of exactly `N` (`minItems` = `maxItems` = `N`);
+  a tuple of up to 12 a list by position (`prefixItems`, `items: false`);
+  `()` a null.
+- **A map may be keyed by something other than text**: `BTreeMap<K, V>`
+  and `HashMap<K, V, S>` take any `K: MapKey`, a new public trait
+  implemented for the text types, every integer, `char` and `bool`.
+  The object is keyed by the key's text and its schema states the key's
+  shape in `propertyNames` (`^(0|[1-9][0-9]*)$` for an unsigned
+  integer); a key that does not read back, or two that read as one, is
+  refused. `HashMap`/`HashSet` take any hasher.
+- **The schema reader and validator know `prefixItems`, `uniqueItems`
+  and `propertyNames`** (`vocab::PREFIX_ITEMS`, `UNIQUE_ITEMS`,
+  `PROPERTY_NAMES`, `GUATIAO_KEY_*` in the header): `Kind::Tuple`, with
+  `Kind::positions()`, reads a tuple, and validation enforces each
+  position, the length, unique elements and every key's shape.
+  `KindBuilder::tuple`, `null`, `.unique_items()` and
+  `.property_names(..)` write them. `guatiao-intake` flattens a tuple by
+  position (`pair[0]`) and resolves a path into one.
 - **A guide to passing data**: the docs site's "Passing data" page and a
   section of the crate's shipped `AGENTS.md`, on returning trees by value
   and taking them by value when kept, building an answer in the

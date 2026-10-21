@@ -20,7 +20,7 @@
 
 #![forbid(unsafe_code)]
 
-use super::read::{Kind, SchemaRef, peel_once};
+use super::read::{Kind, SchemaRef, peel_once, prefix_items};
 use super::validate::accepts;
 use super::vocab;
 use crate::value::alloc::Alloc;
@@ -165,6 +165,22 @@ impl Redactor<'_> {
                 let mut out = List::new_in(self.alloc);
                 for element in elements.iter() {
                     out.push_in(self.node(items, element, depth + 1)?, self.alloc)?;
+                }
+                Ok(out.into())
+            }
+            Kind::Tuple(owner) => {
+                let Some(elements) = TryAsRef::<List>::try_as_ref(value) else {
+                    return self.fallback(value);
+                };
+                let positions = prefix_items(owner);
+                let mut out = List::new_in(self.alloc);
+                for (i, element) in elements.iter().enumerate() {
+                    // An element past the positions is described by nothing.
+                    let redacted = match positions.get(i) {
+                        Some(position) => self.node(position, element, depth + 1)?,
+                        None => self.fallback(element)?,
+                    };
+                    out.push_in(redacted, self.alloc)?;
                 }
                 Ok(out.into())
             }

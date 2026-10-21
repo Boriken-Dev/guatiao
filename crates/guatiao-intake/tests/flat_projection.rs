@@ -1161,3 +1161,47 @@ fn a_store_in_an_earlier_spelling_reads_back() {
     let dotted = read("a.b", &both).unwrap();
     assert_eq!(TryAsRef::<str>::try_as_ref(&dotted), Some("new"));
 }
+
+/// A tuple stores each position under its index, reads the positions back
+/// in order, and a path into one reaches that position's own schema.
+#[test]
+fn a_tuple_flattens_by_position() {
+    let alloc = Alloc::rust();
+    let schema = SchemaBuilder::new_in(alloc)
+        .field(FieldBuilder::new_in(
+            alloc,
+            "pair",
+            KindBuilder::tuple_in(
+                alloc,
+                vec![KindBuilder::string_in(alloc), KindBuilder::int_in(alloc)],
+            ),
+        ))
+        .finish()
+        .unwrap();
+    let s = SchemaRef::new(&schema).unwrap();
+    let pair = s.find("pair").unwrap();
+    assert!(matches!(pair.kind(), Kind::Tuple(_)));
+
+    let mut list = guatiao::List::new();
+    list.push("a");
+    list.push(7i64);
+    let mut store = BTreeMap::new();
+    assert!(flat::flatten(pair, &list.into(), &mut store));
+    assert_eq!(store_of(&[("pair[0]", "a"), ("pair[1]", "7")]), store);
+
+    let back = flat::unflatten(alloc, pair, &store).unwrap();
+    let back = <&guatiao::List>::try_from(&back).unwrap();
+    assert_eq!(back.len(), 2);
+    assert_eq!(str_or(back.get(1), ""), "7");
+
+    assert!(matches!(
+        flat::resolve(s, "pair[1]").unwrap().kind(),
+        Kind::Int { .. }
+    ));
+    assert!(flat::resolve(s, "pair[2]").is_none());
+    assert!(flat::resolve(s, "pair.x").is_none());
+
+    // A gap ends the tuple: position 1 cannot move up into 0.
+    let gap = store_of(&[("pair[1]", "7")]);
+    assert!(flat::unflatten(alloc, pair, &gap).is_none());
+}

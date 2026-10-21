@@ -174,6 +174,17 @@ fn visit<'a>(
             }
             true
         }
+        // Each position has its own kind; an element past them is
+        // described by nothing and stores nothing.
+        Kind::Tuple(_) => {
+            let Some(list) = TryAsRef::<List>::try_as_ref(value) else {
+                return false;
+            };
+            for ((at, v), position) in list.iter().enumerate().zip(kind.positions()) {
+                stack.push((indexed(&path, at), position, v, below));
+            }
+            true
+        }
         _ => match scalar_text(value) {
             Some(text) => {
                 store.insert(path, text);
@@ -375,6 +386,20 @@ fn rebuild(
                     // list has no hole to leave.
                     list.push_in(v, alloc).ok()?;
                 }
+            }
+            (!list.is_empty()).then(|| list.into())
+        }
+        // Positions in order, up to the first with nothing stored: a
+        // later one cannot move up into a gap, since its kind is its own.
+        Kind::Tuple(_) => {
+            let mut list = List::new_in(alloc);
+            for (index, position) in kind.positions().enumerate() {
+                let at = indexed(path, index);
+                if !holds(store, &at) {
+                    break;
+                }
+                list.push_in(rebuild(alloc, &at, position, store, depth + 1)?, alloc)
+                    .ok()?;
             }
             (!list.is_empty()).then(|| list.into())
         }
@@ -594,8 +619,21 @@ fn into<'a>(field: FieldRef<'a>, segment: &Segment<'_>) -> Option<FieldRef<'a>> 
         // An open map is the other way round: its keys are data, so any
         // segment reaches its one value schema.
         Kind::MapOf(_) => FieldRef::new("", values_of(field)?),
+        // A tuple is indexed too, and each position has its own schema.
+        Kind::Tuple(owner) => match segment {
+            Segment::Index(at) => FieldRef::new("", positions_of(owner)?.get(*at)?),
+            _ => None,
+        },
         _ => None,
     }
+}
+
+/// A tuple's position schemas, as the values they are written as.
+fn positions_of(owner: &Value) -> Option<&[Value]> {
+    TryAsRef::<Map>::try_as_ref(owner)
+        .and_then(|m| m.get(schema_vocab::PREFIX_ITEMS))
+        .and_then(TryAsRef::<List>::try_as_ref)
+        .map(|list| &list[..])
 }
 
 /// The value schema of an open map, as the value it is written as.
