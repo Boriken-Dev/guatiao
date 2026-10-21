@@ -9,6 +9,7 @@ members = [
     "examples/greeter_kind",
     "examples/derived_greeter",
     "examples/greeter_host",
+    "examples/greeter_caller",
     "examples/wire_over_webtransport/server",
     "benchmarks",
 ]
