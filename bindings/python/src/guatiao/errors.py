@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import ctypes
+from typing import Any
 
 from . import _abi, _lib
 
@@ -34,7 +35,7 @@ class GuatiaoError(RuntimeError):
         text = f"{name}: {message}" if message else name
         super().__init__(text)
 
-    def __reduce__(self):
+    def __reduce__(self) -> "tuple[Any, tuple[Any, ...]]":
         return (type(self), (self.status, self.message))
 
 
@@ -75,7 +76,7 @@ class ParseError(BadValue, ValueError):
         self.line = line
         self.column = column
 
-    def __reduce__(self):
+    def __reduce__(self) -> "tuple[Any, tuple[Any, ...]]":
         return (_parse_error, (self.message, self.format, self.line, self.column))
 
 
@@ -98,7 +99,7 @@ class Unparsed(BadValue, ValueError):
         self.form = form
         self.at = at
 
-    def __reduce__(self):
+    def __reduce__(self) -> "tuple[Any, tuple[Any, ...]]":
         return (_unparsed, (self.expected, self.form, self.at))
 
 
@@ -126,7 +127,7 @@ class Internal(GuatiaoError):
     STATUS = int(_abi.Status.ERR_INTERNAL)
 
 
-_BY_STATUS = {
+_BY_STATUS: "dict[int, type[GuatiaoError]]" = {
     _abi.Status.ERR_BAD_VALUE: BadValue,
     _abi.Status.ERR_ALLOC: AllocFailed,
     _abi.Status.ERR_WRONG_KIND: WrongKind,
