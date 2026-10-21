@@ -98,6 +98,7 @@ pub unsafe extern "C" fn guatiao_source(
             let manifests = paths_of(&config, "manifests").map_err(refused)?;
             let paths = paths_of(&config, "paths").map_err(refused)?;
             let own = own_path();
+            os::share_python_symbols();
             crate::bridge::start(&paths, own.as_deref())
                 .map_err(|why| (Status::GUATIAO_ERR_UNSUPPORTED, why))?;
             // Kept for the life of the process, as the table's contract asks.
@@ -315,6 +316,12 @@ fn own_path() -> Option<String> {
     os::own_path((own_path as fn() -> Option<String>) as *const c_void)
 }
 
+/// Where libpython is mapped from: the object holding one of its functions.
+#[cfg(unix)]
+fn python_path() -> Option<String> {
+    os::own_path(pyo3::ffi::Py_IsInitialized as *const c_void)
+}
+
 #[cfg(windows)]
 mod os {
     use core::ffi::c_void;
@@ -327,6 +334,10 @@ mod os {
         fn GetModuleHandleExW(flags: u32, address: *const c_void, module: *mut *mut c_void) -> i32;
         fn GetModuleFileNameW(module: *mut c_void, name: *mut u16, size: u32) -> u32;
     }
+
+    /// Windows resolves an extension module's imports against the
+    /// `python3X.dll` it names, already loaded: nothing to share.
+    pub(super) fn share_python_symbols() {}
 
     pub(super) fn own_path(address: *const c_void) -> Option<String> {
         let mut module = core::ptr::null_mut();
@@ -377,10 +388,35 @@ mod os {
         let path = std::path::PathBuf::from(name.to_string_lossy().into_owned());
         Some(path.canonicalize().unwrap_or(path).display().to_string())
     }
+
+    /// Makes libpython's symbols global. A host maps this file, and with it
+    /// libpython, with `RTLD_LOCAL`; an extension module (`_ctypes`, any
+    /// compiled package) is built to find the interpreter's symbols in the
+    /// global scope, and fails to import without this. Reopening with
+    /// `RTLD_NOLOAD` loads nothing: it only widens the scope of the copy
+    /// already mapped. A Python host's own symbols stay first.
+    pub(super) fn share_python_symbols() {
+        let Some(path) = super::python_path() else {
+            return;
+        };
+        let Ok(path) = std::ffi::CString::new(path) else {
+            return;
+        };
+        // SAFETY: a NUL-terminated path of an object already mapped; the
+        // handle is left open, as libpython stays for the process.
+        let _ = unsafe {
+            libc::dlopen(
+                path.as_ptr(),
+                libc::RTLD_NOW | libc::RTLD_GLOBAL | libc::RTLD_NOLOAD,
+            )
+        };
+    }
 }
 
 #[cfg(not(any(windows, unix)))]
 mod os {
+    pub(super) fn share_python_symbols() {}
+
     pub(super) fn own_path(_: *const core::ffi::c_void) -> Option<String> {
         None
     }

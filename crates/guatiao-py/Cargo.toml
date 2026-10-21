@@ -32,6 +32,11 @@ guatiao-serde = { path = "../guatiao-serde", version = "=0.0.0-alpha.1", default
 # own `libpython3.X`, so it serves that minor.
 pyo3 = { version = "0.30", default-features = false, features = ["abi3-py39"] }
 
+# The loader's own calls, to widen libpython's symbol scope; pyo3 already
+# depends on it.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"] }
 
