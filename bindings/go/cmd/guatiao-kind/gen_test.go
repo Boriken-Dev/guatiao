@@ -134,3 +134,18 @@ func TestRefusesAGoTypeThatCannotCarryTheSlots(t *testing.T) {
 		}
 	}
 }
+
+func TestRenamesAParameterTheGeneratedMethodUsesItself(t *testing.T) {
+	src := strings.Replace(kinds, "Fill(config guatiao.MapRef)", "Fill(out guatiao.MapRef)", 1)
+	src = strings.Replace(src, "Greet(name string)", "Greet(c string)", 1)
+	dir := pkg(t, src, header)
+	if err := run(dir, "probe.h", "guatiao_kinds", false); err != nil {
+		t.Fatal(err)
+	}
+	goSrc, _ := os.ReadFile(filepath.Join(dir, "guatiao_kinds.go"))
+	for _, want := range []string{"Fill(out_ guatiao.MapRef)", "c.Lend(out_, guatiao.MapClass)", "Greet(c_ string)", "c.Str(c_)"} {
+		if !strings.Contains(string(goSrc), want) {
+			t.Errorf("no %q in\n%s", want, goSrc)
+		}
+	}
+}

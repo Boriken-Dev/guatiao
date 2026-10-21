@@ -831,9 +831,29 @@ func (p *pkgInfo) emitKind(b *bytes.Buffer, k *kindPlan) {
 	}
 }
 
+// generatedName reports whether a parameter's name is one the generated
+// method uses for itself, and so must be spelled otherwise there.
+func generatedName(name string) bool {
+	switch name {
+	case "r", "c", "err", "out", "errp", "st", "res", "zero", "rem", "_":
+		return true
+	}
+	if len(name) > 1 && strings.ContainsRune("pntsx", rune(name[0])) {
+		_, err := strconv.Atoi(name[1:])
+		return err == nil
+	}
+	return false
+}
+
 func (p *pkgInfo) emitCall(b *bytes.Buffer, k *kindPlan, s *slotPlan) {
 	gt := "guatiao"
-	m := s.method
+	m := *s.method
+	m.params = append([]goParam(nil), m.params...)
+	for i := range m.params {
+		for generatedName(m.params[i].name) {
+			m.params[i].name += "_"
+		}
+	}
 	var params []string
 	for _, prm := range m.params {
 		params = append(params, prm.name+" "+prm.typ)
