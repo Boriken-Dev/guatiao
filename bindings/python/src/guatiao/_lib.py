@@ -85,10 +85,35 @@ def dll_filename(basename: str) -> str:
     return f"lib{basename}.so"
 
 
+#: A library named by `use_library`, consulted before the environment.
+_chosen: "Path | None" = None
+
+
+def use_library(path: "str | os.PathLike[str]") -> None:
+    """Loads the guatiao library from `path` -- a file exporting the ABI,
+    whatever it is called, or a directory holding `guatiao.dll` /
+    `libguatiao.so` / `libguatiao.dylib` -- instead of looking for one.
+
+    For a program that carries the library under its own name, or already
+    has it mapped: the next native call loads it from there, and
+    `guatiao_serde` and `guatiao_intake` are looked for beside it.
+    `RuntimeError` when a library is already loaded from elsewhere; naming
+    the one already loaded does nothing."""
+    global _chosen
+    chosen = Path(path)
+    with _lock:
+        if _core is not None:
+            same = chosen if chosen.is_file() else chosen / dll_filename("guatiao")
+            if same.resolve() != _core.path.resolve():
+                raise RuntimeError(f"the guatiao library is already loaded from {_core.path}")
+            return
+        _chosen = chosen
+
+
 def resolve(basename: str) -> Path:
     """Where `basename`'s library is, trying each route in order (Q2)."""
     filename = dll_filename(basename)
-    env = os.environ.get("GUATIAO_LIBRARY")
+    env = str(_chosen) if _chosen is not None else os.environ.get("GUATIAO_LIBRARY")
     if env:
         env_path = Path(env)
         if env_path.is_dir():

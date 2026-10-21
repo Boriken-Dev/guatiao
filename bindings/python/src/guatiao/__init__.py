@@ -24,7 +24,7 @@ from .errors import (
     Unsupported,
     WrongKind,
 )
-from ._lib import LibraryNotFound, MissingSymbol
+from ._lib import LibraryNotFound, MissingSymbol, use_library
 from .registry import Instance, Registry
 from .schema import redact
 from .value import ABSENT, List, Map, Ref, Value
@@ -54,4 +54,5 @@ __all__ = [
     "Internal",
     "LibraryNotFound",
     "MissingSymbol",
+    "use_library",
 ]
