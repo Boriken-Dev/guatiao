@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ctypes
 from collections.abc import Mapping
+from typing import Any, Optional, cast
 
 from . import _abi, _lib
 from .errors import check as _check_status
@@ -17,11 +18,11 @@ from .value import Ref, Value, _make_str
 from .registry import _Borrowed
 
 
-def _alloc(given: "_abi.Alloc | None", lib) -> "_abi.Alloc":
+def _alloc(given: "_abi.Alloc | None", lib: Any) -> "_abi.Alloc":
     return given if given is not None else lib.alloc
 
 
-def check(schema: Ref, form: Ref, *, alloc: "_abi.Alloc | None" = None):
+def check(schema: Ref, form: Ref, *, alloc: "_abi.Alloc | None" = None) -> Any:
     """`None` when `form` fits `schema`; otherwise the error map
     (`kind`, `at`, and whichever of `path`/`id`/`field`/`expected`/
     `message` apply) `guatiao_intake_check` writes."""
@@ -45,7 +46,7 @@ def check(schema: Ref, form: Ref, *, alloc: "_abi.Alloc | None" = None):
         value.close()
 
 
-def layout(schema: Ref, form: Ref, *, alloc: "_abi.Alloc | None" = None):
+def layout(schema: Ref, form: Ref, *, alloc: "_abi.Alloc | None" = None) -> Any:
     """The schema's fields grouped into sections and put in order, as
     `[{"section": <map or None>, "fields": [key, ...]}, ...]`."""
     lib = _lib.form()
@@ -84,7 +85,7 @@ def is_visible(schema: Ref, form: Ref, key: str, values: Ref) -> bool:
     return bool(out.value)
 
 
-def at(value: Ref, path: str):
+def at(value: Ref, path: str) -> Optional[Ref]:
     """The value at `path`, or `None`.
 
     `agent[1].name[home].host`: a dot is a member, a bracket is a list
@@ -102,7 +103,7 @@ def at(value: Ref, path: str):
     lib = _lib.form()
     view, _buf = _make_str(path.encode("utf-8"))
 
-    def find():
+    def find() -> Any:
         ptr = lib.guatiao_intake_path_get(value._ptr(), view)
         return ptr.contents if ptr else None
 
@@ -179,7 +180,7 @@ def resolve(schema: Ref, key: str) -> "Ref | None":
     lib = _lib.form()
     view, _buf = _make_str(key.encode("utf-8"))
 
-    def find():
+    def find() -> Any:
         ptr = lib.guatiao_intake_resolve(schema._ptr(), view)
         return ptr.contents if ptr else None
 
@@ -188,7 +189,9 @@ def resolve(schema: Ref, key: str) -> "Ref | None":
     return Ref(_Borrowed(keep=schema.owner, find=find), ())
 
 
-def _flat_call(function, schema: Ref, key: str, middle: tuple, alloc):
+def _flat_call(
+    function: Any, schema: Ref, key: str, middle: "tuple[Any, ...]", alloc: "_abi.Alloc | None"
+) -> "tuple[int, Value]":
     lib = _lib.form()
     alloc_struct = _alloc(alloc, lib)
     view, _buf = _make_str(key.encode("utf-8"))
@@ -213,7 +216,7 @@ def flat_keys(
     status, out = _flat_call(_lib.form().guatiao_intake_flat_keys, schema, key, (), alloc)
     try:
         _check_status(status)
-        return out.to_python()
+        return cast("list[str]", out.to_python())
     finally:
         out.close()
 
@@ -233,7 +236,7 @@ def flatten(
     )
     try:
         _check_status(status)
-        return out.to_python()
+        return cast("dict[str, str]", out.to_python())
     finally:
         out.close()
 

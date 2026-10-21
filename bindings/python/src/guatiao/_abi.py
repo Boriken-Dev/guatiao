@@ -376,7 +376,8 @@ ABI_VERSION = 1
 
 
 def _offset(struct: type, field: str) -> int:
-    return getattr(struct, field).offset
+    offset: int = getattr(struct, field).offset
+    return offset
 
 
 # Sizes and offsets are the ABI: pinned by `value/types/mod.rs` and

@@ -9,6 +9,7 @@ library, only calling `loads`/`dumps` does."""
 from __future__ import annotations
 
 import ctypes
+from typing import Any, Optional, cast
 
 from . import _abi, _lib
 from .errors import ParseError, check, raise_for_status
@@ -34,14 +35,14 @@ _FORMATS = {
 }
 
 
-def _format(format: str) -> tuple:
+def _format(format: str) -> "tuple[str, str, Optional[str], Optional[str]]":
     try:
         return _FORMATS[format]
     except KeyError:
         raise ValueError(f"unknown format: {format!r}") from None
 
 
-def _resolved(name: str, feature: "str | None"):
+def _resolved(name: str, feature: "str | None") -> "tuple[Any, Any]":
     lib = _lib.serde()
     if name in lib.symbols_missing():
         raise NotImplementedError(
@@ -122,6 +123,6 @@ def dumps(
     check(fn(ctypes.byref(value._raw), how, ctypes.byref(alloc_struct), ctypes.byref(out)))
     result = Value(_raw=out, alloc=alloc_struct)
     try:
-        return result.to_python()
+        return cast(str, result.to_python())
     finally:
         result.close()

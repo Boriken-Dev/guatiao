@@ -263,6 +263,15 @@ jobs:
         run: pytest bindings/python/tests -rs
         env:
           GUATIAO_LIBRARY: target/debug
+      - name: Types
+        # One leg is enough: the binding and the Python examples under
+        # mypy --strict, so a provider that misspells a kind's method or
+        # its types fails here rather than in a host.
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
+        run: >-
+          mypy --strict bindings/python/src/guatiao examples/python_provider/py_greeter examples/python_provider/py_tally examples/greeter_kind/python examples/python_host
+        env:
+          MYPYPATH: bindings/python/src:examples/greeter_kind/python
 
   dart:
     name: Dart bindings (${{ matrix.os }}, ${{ matrix.sdk }})

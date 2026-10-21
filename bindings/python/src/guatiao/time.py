@@ -87,7 +87,7 @@ def _finish(status: int, error: "_abi.TextError", form: str) -> None:
     raise_for_status(status, expected)
 
 
-def _parse(form: str, text: str):
+def _parse(form: str, text: str) -> Any:
     """`text` read into `form`'s fields struct."""
     struct = _struct_of(form)
     lib = _lib.core()
@@ -101,7 +101,7 @@ def _parse(form: str, text: str):
     return out
 
 
-def _format(form: str, fields) -> str:
+def _format(form: str, fields: Any) -> str:
     """`fields` written as `form`'s canonical text."""
     lib = _lib.core()
     out = _abi.Value()
@@ -287,6 +287,8 @@ class Span:
     """
 
     __slots__ = ("_fields", "_text")
+    _fields: "tuple[int, ...]"
+    _text: str
 
     def __init__(
         self,
@@ -354,7 +356,7 @@ class Span:
     def _struct(self) -> "_abi.SpanFields":
         return _abi.SpanFields(*self._fields)
 
-    def add_to(self, when: "Union[_dt.date, _dt.datetime]"):
+    def add_to(self, when: "Union[_dt.date, _dt.datetime]") -> "Union[_dt.date, _dt.datetime]":
         """`when` moved by this span, as the library applies one: years and
         months first, a day past the month's end becoming its last day,
         then weeks and days, then (on a `datetime`) the time units carried

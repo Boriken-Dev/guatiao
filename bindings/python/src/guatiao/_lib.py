@@ -25,7 +25,7 @@ import os
 import platform
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from . import _abi
 
@@ -326,29 +326,29 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
 }
 
 # The three text functions of each date, time and span form.
-for _form, _fields in (
+for _text_form, _fields in (
     ("date", _abi.DateFields),
     ("time", _abi.TimeFields),
     ("datetime", _abi.DateTimeFields),
     ("timestamp", _abi.TimestampFields),
     ("span", _abi.SpanFields),
 ):
-    _CORE_EXPORTS[f"guatiao_{_form}_parse"] = (
+    _CORE_EXPORTS[f"guatiao_{_text_form}_parse"] = (
         [_P(Alloc), Str, _P(_fields), _P(TextError)],
         c_uint32,
         None,
     )
-    _CORE_EXPORTS[f"guatiao_{_form}_format"] = (
+    _CORE_EXPORTS[f"guatiao_{_text_form}_format"] = (
         [_P(Alloc), _P(_fields), _P(Value)],
         c_uint32,
         None,
     )
-    _CORE_EXPORTS[f"guatiao_{_form}_normalize"] = (
+    _CORE_EXPORTS[f"guatiao_{_text_form}_normalize"] = (
         [_P(Alloc), Str, _P(Value), _P(TextError)],
         c_uint32,
         None,
     )
-del _form, _fields
+del _text_form, _fields
 
 _SERDE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
     "guatiao_json_parse": ([Str, c_uint32, _P(Alloc), _P(Value)], c_uint32, None),
@@ -475,7 +475,7 @@ class Library:
             self._funcs[name] = fn
         self._alloc: Alloc | None = None
 
-    def _missing_stub(self, name: str, feature: str | None):
+    def _missing_stub(self, name: str, feature: str | None) -> Callable[..., Any]:
         path = self.path
 
         def _stub(*_args: Any, **_kwargs: Any) -> Any:
