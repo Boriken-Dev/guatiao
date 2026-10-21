@@ -124,11 +124,95 @@ template, `%id` by default -- not a provider key. Either way no table,
 `ctx` or borrowed schema taken from the library is used again, after an
 unload or a collect that closed it.
 
+`Registry.bind(key, kind)` answers the provider as a `kinds.Remote`
+calling its table with its own `ctx`; `Instance.bind(kind)` the same for
+an instance. `NotFound` when it serves no table for the kind,
+`kinds.FloorMismatch` when the table is not the one `kind` describes.
+
+## Kinds: calling a table, serving one
+
+```python
+from guatiao import kinds
+from guatiao.kinds import BOOL, MAP, STR, TEXT, Kind, Method, lent, taken
+
+LISTENER = Kind("listener", floor_hash=1867921573, is_object=True,
+                methods=[Method("heard", [STR], required=True)])
+GREETER = Kind("greeter", floor_hash=2695856491, methods=[
+    Method("greet", [STR], MAP, fallible=True, required=True),
+    Method("shout", [STR], TEXT),
+    Method("greet_into", [STR, lent(LISTENER)], fallible=True),
+    Method("check", [lent(MAP)], BOOL, fallible=True),
+])
+greeter = reg.bind("acme_greeter", GREETER)
+greeter.greet("ana").to_python()     # {"greeting": "hello, ana"}
+greeter.has("shout")                 # whether this table carries the slot
+```
+
+`Kind(name, struct=None, *, floor_hash, methods, is_object=False)`:
+`methods` in the order the kind's C header lists its slots; `floor_hash`
+the `<table>_FLOOR_HASH` it defines, as written there (never computed
+here). The `ctypes.Structure` is built from the methods (`header`, then
+`destroy` for an object kind, then a slot per method), or given as
+`struct` and checked field by field: a disagreement is `TypeError` here,
+not a crash in a call. A method may not be named `has`, `close`, `kind`,
+`ctx`, `size` or start with `_`; a slot is found by position, so name it
+otherwise.
+
+`Method(name, args=(), returns=None, *, fallible=False, required=False)`.
+`fallible` adds the `guatiao_provider_error *err` last; `required` marks
+a slot every table fills (the ones the kind was born with), which sets
+the smallest table `bind` accepts.
+
+| shape | C | caller passes / gets | a Python method receives / returns |
+| --- | --- | --- | --- |
+| `BOOL`, `I8`..`I64`, `U8`..`U64`, `USIZE`, `ISIZE`, `F32`, `F64` | the scalar | `bool`/`int`/`float`, range-checked (`OverflowError`) | the same |
+| `STR` | `guatiao_str` | `str` | `str` (`BadValue` if not UTF-8) |
+| `BYTES` | `guatiao_bytes` | bytes-like | `bytes` |
+| `BYTES_MUT` | `guatiao_bytes_mut` | a writable buffer (`bytearray`) | a `bytearray`, copied back when it returns |
+| `VALUE`, `MAP` (argument) | `const guatiao_value *`, `const guatiao_map *` | a `Value`, `Ref` or plain data (`None` is null for `VALUE`) | a read-only `Ref`/`Map`, valid for the call |
+| `taken(VALUE/MAP/LIST)` | `guatiao_value/map/list *`, handed over | a `Value` (moved: left ABSENT), a `Ref` (cloned) or plain data | a `Value` the method owns |
+| `lent(VALUE/MAP/LIST)` | the same pointer, lent | a `Value` or `Ref`, changed where it stands | a writable `Ref`/`Map`/`List`, valid for the call; what it adds is built in the allocator the tree records |
+| `VALUE`, `MAP`, `LIST` (answer) | `guatiao_value/map/list *out`, a carrier | a `Value` the caller closes | a `Value` (moved), a `Ref` or plain data, built in the allocator the carrier names |
+| `TEXT` (answer) | `guatiao_string *out` | `str` | `str` |
+| `taken(K)` | `guatiao_object`, handed over | a Python object implementing `K`, or a `kinds.Object` | a `kinds.Object` the method owns |
+| `lent(K)` | `const guatiao_object *` | a Python object, or a `kinds.Object` | a `kinds.Remote`, valid for the call |
+| `K` (answer) | `guatiao_object *out` | a `kinds.Object`; `close()` calls `destroy` once | a Python object implementing `K`, or a `kinds.Object` |
+
+**A view lent for one call** (a borrowed or lent tree, a lent object)
+raises `ValueError` if used after the call returned.
+
+**A Python object as an object of a kind**: any object with a method per
+slot. The table is built once per kind and class and kept for the
+process; a slot for a method the class lacks is null, so a Rust caller
+runs the kind's default; a missing `required` method is `TypeError`.
+Its `ctx` is held until the holder calls `destroy` (handed over) or the
+call returns (lent); `kinds.live_objects()` counts what is held.
+
+**A refusal**: a Python method raises a `guatiao.GuatiaoError`
+(`BadValue("nobody to greet")` carries `BadValue`'s status), and the
+caller reads that status and message. `NotImplementedError` crosses as
+`GUATIAO_ERR_UNSUPPORTED`; anything else as `GUATIAO_ERR_INTERNAL` with
+`"TypeName: message"`. A slot that cannot fail has no `err`: the
+exception is logged on `logging.getLogger("guatiao.kinds")` and the
+status crosses alone; a Rust caller panics on it, as its proxy does for
+any provider failing a method that cannot fail.
+
+**A `Remote` calling a table**: each method of the kind is a method of
+the `Remote`. A slot past the table's size or null raises
+`guatiao.Unsupported` (the Rust proxy would run the kind's default body,
+which Python cannot); a refusal raises the status's `GuatiaoError` with
+the provider's words; a slot that cannot fail and fails raises its
+status too. Valid while the library is: until unloaded, or, once
+retired, collected.
+
+**Threads**: a C caller may call a table this binding built from any
+thread; ctypes takes the GIL for the call, so calls into Python are
+serialised by it.
+
 `guatiao.kinds.table(table_ptr, size, struct_type, floor_hash=...)`
-turns a `provider_table()` answer into the `ctypes.Structure` a kind's
-own C header declares (`greeter_vtable` and friends): checks `size`
-against `sizeof(struct_type)` and the header's `floor_hash`, then casts.
-Raises `guatiao.kinds.FloorMismatch` on either failure.
+casts a `provider_table()` answer to a hand-written struct after
+checking `size >= sizeof(struct_type)` and the `floor_hash`
+(`kinds.FloorMismatch` otherwise), for calling slots with raw ctypes.
 
 ## serde: JSON, TOML, YAML
 
@@ -264,15 +348,10 @@ Every failing `guatiao_status` raises `guatiao.GuatiaoError` (`.status`
 the raw code, `.message` a provider's own words when there were any), as
 one of its subclasses: `BadValue`, `AllocFailed`, `WrongKind`,
 `NotFound`, `NullArgument`, `Gone`, `Unsupported`, `Busy`, `Internal`.
+Each takes `(status, message)`, or a message alone and its own status
+(`BadValue("why")`).
 They pickle, `ParseError` and `Unparsed` included. A refusal the library words itself
 (a `WrongKind` from `serde.loads`, say) carries those words in `.message`.
-
-## Not offered
-
-A kind's borrowed object arguments (an object lent to a call for its
-duration, `const guatiao_object *` in a kind table) are not wrapped: this
-binding drives a kind's table through the pointer `provider_table` answers
-and builds no object for a callee to borrow.
 
 ## Threading
 

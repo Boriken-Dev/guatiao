@@ -12,9 +12,19 @@ from . import _abi, _lib
 
 
 class GuatiaoError(RuntimeError):
-    """One `guatiao_status` failure. `status` is the raw code."""
+    """One `guatiao_status` failure. `status` is the raw code.
 
-    def __init__(self, status: int, message: str = "") -> None:
+    Raised with a message alone -- `BadValue("nobody to greet")` -- a
+    class carries its own status, which is how a Python provider refuses
+    a call with the status and words its caller reads."""
+
+    #: The status of an error raised with a message alone.
+    STATUS = int(_abi.Status.ERR_INTERNAL)
+
+    def __init__(self, status: "int | str | None" = None, message: str = "") -> None:
+        if status is None or isinstance(status, str):
+            message = status if isinstance(status, str) else message
+            status = type(self).STATUS
         self.status = int(status)
         self.message = message
         try:
@@ -29,23 +39,23 @@ class GuatiaoError(RuntimeError):
 
 
 class BadValue(GuatiaoError):
-    pass
+    STATUS = int(_abi.Status.ERR_BAD_VALUE)
 
 
 class AllocFailed(GuatiaoError):
-    pass
+    STATUS = int(_abi.Status.ERR_ALLOC)
 
 
 class WrongKind(GuatiaoError):
-    pass
+    STATUS = int(_abi.Status.ERR_WRONG_KIND)
 
 
 class NotFound(GuatiaoError):
-    pass
+    STATUS = int(_abi.Status.ERR_NOT_FOUND)
 
 
 class NullArgument(GuatiaoError):
-    pass
+    STATUS = int(_abi.Status.ERR_NULL)
 
 
 class ParseError(BadValue, ValueError):
@@ -99,17 +109,21 @@ def _unparsed(expected: str, form: str, at: int) -> Unparsed:
 class Unsupported(GuatiaoError):
     """What was asked is not something the other side offers."""
 
+    STATUS = int(_abi.Status.ERR_UNSUPPORTED)
+
 
 class Busy(GuatiaoError):
     """Not now: something is still in use."""
 
+    STATUS = int(_abi.Status.ERR_BUSY)
+
 
 class Gone(GuatiaoError):
-    pass
+    STATUS = int(_abi.Status.ERR_GONE)
 
 
 class Internal(GuatiaoError):
-    pass
+    STATUS = int(_abi.Status.ERR_INTERNAL)
 
 
 _BY_STATUS = {
