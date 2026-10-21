@@ -36,6 +36,16 @@ node_modules/
 /bindings/node/dist/
 *.tsbuildinfo
 
+# Go: what `go build` writes beside the examples
+/examples/go_host/go_host
+/examples/go_host/go_host.exe
+/examples/go_provider/cshared/*.dll
+/examples/go_provider/cshared/*.so
+/examples/go_provider/cshared/*.dylib
+/examples/go_provider/cshared/cshared.h
+/examples/go-greeter/
+/examples/c-greeter/
+
 # Python, wherever an example or a crate carries some
 __pycache__/
 *.py[cod]
