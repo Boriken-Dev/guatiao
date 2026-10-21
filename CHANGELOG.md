@@ -209,6 +209,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Python: an error raised with a message alone carries its class's
   status** (`guatiao.BadValue("nobody to greet")`), which is how Python
   code refuses a call.
+- **An example host in Python**, `examples/python_host/`: it scans for
+  greeter libraries in any language and calls every slot of the kind,
+  objects included. The greeter kinds are described for Python beside
+  their C header, `examples/greeter_kind/python/greeter_kind.py`.
 
 ### Changed
 

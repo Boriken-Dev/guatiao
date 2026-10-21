@@ -29,6 +29,10 @@ CLAUDE*
 Cargo.lock
 !/examples/wire_over_webtransport/client/Cargo.lock
 
+# Python, wherever an example or a crate carries some
+__pycache__/
+*.py[cod]
+
 # OS/editor
 .DS_Store
 Thumbs.db
