@@ -142,7 +142,14 @@ impl TreesVtable {
             let __alloc = unsafe { ::guatiao::library::kind::return_alloc(__out) };
             match __this.map_in(name, __alloc) {
                 ::core::result::Result::Ok(__answer) => {
-                    unsafe { ::guatiao::library::kind::write_out(__out, __answer) }
+                    match ::guatiao::library::kind::map_ret(__answer, __alloc) {
+                        ::core::result::Result::Ok(__v) => {
+                            unsafe { ::guatiao::library::kind::write_out(__out, __v) }
+                        }
+                        ::core::result::Result::Err(__e) => {
+                            unsafe { ::guatiao::library::kind::write_err(__err, __e) }
+                        }
+                    }
                 }
                 ::core::result::Result::Err(__e) => {
                     unsafe { ::guatiao::library::kind::write_err(__err, __e) }
@@ -166,8 +173,18 @@ impl TreesVtable {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
             let __alloc = unsafe { ::guatiao::library::kind::return_alloc(__out) };
-            unsafe {
-                ::guatiao::library::kind::write_out(__out, __this.value_in(__alloc))
+            match ::guatiao::library::kind::value_ret(
+                __this.value_in(__alloc),
+                __alloc,
+            ) {
+                ::core::result::Result::Ok(__v) => {
+                    unsafe { ::guatiao::library::kind::write_out(__out, __v) }
+                }
+                ::core::result::Result::Err(__e) => {
+                    unsafe {
+                        ::guatiao::library::kind::write_err(::core::ptr::null_mut(), __e)
+                    }
+                }
             }
         })
     }
@@ -187,8 +204,15 @@ impl TreesVtable {
                 return ::guatiao::Status::GUATIAO_ERR_NULL;
             };
             let __alloc = unsafe { ::guatiao::library::kind::return_alloc(__out) };
-            unsafe {
-                ::guatiao::library::kind::write_out(__out, __this.list_in(__alloc))
+            match ::guatiao::library::kind::list_ret(__this.list_in(__alloc), __alloc) {
+                ::core::result::Result::Ok(__v) => {
+                    unsafe { ::guatiao::library::kind::write_out(__out, __v) }
+                }
+                ::core::result::Result::Err(__e) => {
+                    unsafe {
+                        ::guatiao::library::kind::write_err(::core::ptr::null_mut(), __e)
+                    }
+                }
             }
         })
     }

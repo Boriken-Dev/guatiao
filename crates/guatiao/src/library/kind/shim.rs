@@ -629,7 +629,9 @@ pub fn map_ret(out: Map, home: Alloc) -> Result<Map, ProviderError> {
 /// container in it records `home`, the allocator the caller carried in,
 /// otherwise copied into `home` and the original freed through its own.
 /// So nothing a host holds needs a library's allocator, or its image,
-/// after the call.
+/// after the call. A shim runs it on what it answers, so a caller in any
+/// language gets this; a proxy runs it again on what it receives, for a
+/// table that ignored the carrier.
 #[doc(hidden)]
 pub fn value_ret(out: Value, home: Alloc) -> Result<Value, ProviderError> {
     Ok(out.into_alloc(home)?)

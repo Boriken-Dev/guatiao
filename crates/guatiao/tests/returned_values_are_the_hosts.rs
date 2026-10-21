@@ -429,3 +429,84 @@ fn a_caller_that_carries_nothing_gets_the_providers_allocator() {
     assert_eq!(unsafe { value_slot(ctx, &mut out) }, Status::GUATIAO_OK);
     assert!(is_the_hosts(out.alloc()), "ABSENT carries nothing");
 }
+
+/// A provider that implements only the plain methods, building through an
+/// allocator of its own, called through its raw slots as a C or Python
+/// caller calls them: every tree crosses in the allocator the caller's
+/// carrier named, and the provider's own holds nothing once the call
+/// returns. A host that unloads the library afterwards frees what it was
+/// answered without reaching into the library's image.
+#[test]
+fn a_raw_caller_gets_its_answer_in_its_carrier_from_a_plain_method() {
+    static PLAIN_COUNT: Counter = Counter::new();
+    static PLAIN: Counting = counting(&PLAIN_COUNT);
+    static CALLER_COUNT: Counter = Counter::new();
+    static CALLER: Counting = counting(&CALLER_COUNT);
+
+    struct Plain;
+    impl Trees for Plain {
+        fn value(&self) -> Value {
+            let mut inner = Map::new_in(alloc_of(&PLAIN));
+            inner
+                .set_in(
+                    "name",
+                    Text::new_in(alloc_of(&PLAIN), "ana").unwrap(),
+                    alloc_of(&PLAIN),
+                )
+                .unwrap();
+            Value::from(inner)
+        }
+        fn map(&self) -> Result<Map, ProviderError> {
+            let mut map = Map::new_in(alloc_of(&PLAIN));
+            map.set_in("k", Text::new_in(alloc_of(&PLAIN), "v")?, alloc_of(&PLAIN))?;
+            Ok(map)
+        }
+        fn list(&self) -> List {
+            let mut list = List::new_in(alloc_of(&PLAIN));
+            list.push_in(
+                Text::new_in(alloc_of(&PLAIN), "one").unwrap(),
+                alloc_of(&PLAIN),
+            )
+            .unwrap();
+            list
+        }
+        fn refuses(&self) -> Result<(), ProviderError> {
+            Err(ProviderError::from(Status::GUATIAO_ERR_BAD_VALUE))
+        }
+    }
+    static PLAIN_PROVIDER: Plain = Plain;
+    static PLAIN_TABLE: TreesVtable = TreesVtable::of::<Plain>();
+    let ctx = (&PLAIN_PROVIDER as *const Plain).cast_mut().cast();
+    let caller = alloc_of(&CALLER);
+
+    let mut map = Map::new_in(caller);
+    let mut err = ProviderError::none();
+    let map_slot = PLAIN_TABLE.map.expect("filled");
+    // SAFETY: the slot's own signature, a static `ctx`, writable slots.
+    assert_eq!(
+        unsafe { map_slot(ctx, &mut map, &mut err) },
+        Status::GUATIAO_OK
+    );
+    assert_eq!(map.alloc().expect("recorded").as_raw(), caller.as_raw());
+    assert_eq!(
+        map.get("k").and_then(TryAsRef::<str>::try_as_ref),
+        Some("v")
+    );
+
+    let mut list = List::new_in(caller);
+    let list_slot = PLAIN_TABLE.list.expect("filled");
+    // SAFETY: as above.
+    assert_eq!(unsafe { list_slot(ctx, &mut list) }, Status::GUATIAO_OK);
+    assert_eq!(list.alloc().expect("recorded").as_raw(), caller.as_raw());
+
+    let mut value = Value::from(Map::new_in(caller));
+    let value_slot = PLAIN_TABLE.value.expect("filled");
+    // SAFETY: as above.
+    assert_eq!(unsafe { value_slot(ctx, &mut value) }, Status::GUATIAO_OK);
+    assert_eq!(value.alloc().expect("recorded").as_raw(), caller.as_raw());
+
+    assert!(PLAIN_COUNT.made() > 0, "the provider built through its own");
+    assert_eq!(PLAIN_COUNT.live(), 0, "and freed it once the answer moved");
+    drop((map, list, value));
+    assert_eq!(CALLER_COUNT.live(), 0);
+}
