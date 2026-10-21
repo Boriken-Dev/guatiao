@@ -48,7 +48,11 @@ fn display_then_parse_gives_back_the_span() {
             .minutes(rng.unit())
             .seconds(rng.unit())
             .nanoseconds((rng.next() % 1_000_000_000) as i64 * (rng.next() % 2) as i64);
-        let span = if rng.next().is_multiple_of(2) { span } else { -span };
+        let span = if rng.next().is_multiple_of(2) {
+            span
+        } else {
+            -span
+        };
         let text = span.to_string();
         assert_eq!(parse(&text), Ok(span), "{text}");
         assert_eq!(format!("{span:?}"), format!("Span({text})"));

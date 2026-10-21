@@ -110,16 +110,13 @@ struct FieldDecl {
     key: String,
     ty: Type,
     hints: FieldHints,
+    /// `#[map(flatten)]`: its keys are this type's own, so `nested`
+    /// composes its hints with no prefix of its own.
+    flatten: bool,
 }
 
 fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
     let ast: DeriveInput = syn::parse2(input)?;
-    if let Some(param) = ast.generics.params.iter().next() {
-        return Err(syn::Error::new_spanned(
-            param,
-            format!("{LABEL} refuses a generic type: a screen is declared for one type"),
-        ));
-    }
     let (sections, krate) = read_sections(&ast.attrs)?;
     let fields = match &ast.data {
         Data::Struct(data) => match &data.fields {
@@ -127,7 +124,11 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
             other => {
                 return Err(syn::Error::new_spanned(
                     other,
-                    format!("{LABEL} needs named fields: a form names fields by key"),
+                    format!(
+                        "{LABEL} needs named fields: a form names fields by key, and a \
+                         tuple, newtype or unit struct has none. A newtype is shown as \
+                         the field holding it, by that field's own hints."
+                    ),
                 ));
             }
         },
@@ -151,6 +152,11 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
                         // An enum's `rename_all` names its variants, not
                         // their fields.
                         fields.extend(read_fields(named.named.iter(), None)?);
+                    }
+                    // A newtype arm's fields are its type's, whose own
+                    // `Form` places them.
+                    Fields::Unnamed(unnamed) if unnamed.unnamed.len() == 1 => {
+                        any_fields = true;
                     }
                     Fields::Unnamed(unnamed) => {
                         return Err(syn::Error::new_spanned(
@@ -181,7 +187,7 @@ fn try_expand(input: TokenStream) -> syn::Result<TokenStream> {
     // Every path is rooted at `::guatiao_intake`, guatiao's own through
     // its `__private` re-export, so `crate =` moves them all at once.
     Ok(crate::krate::reroot_crate(
-        emit(&ast.ident, &sections, &fields),
+        emit(&ast.ident, &ast.generics, &sections, &fields),
         "guatiao_intake",
         krate.as_ref(),
     ))
@@ -265,6 +271,7 @@ fn read_fields<'a>(
             key = rule.field(&key);
         }
         let mut skip = false;
+        let mut flatten = false;
         let mut hints = FieldHints::default();
         for attr in &field.attrs {
             if attr.path().is_ident("map") {
@@ -275,6 +282,8 @@ fn read_fields<'a>(
                         key = meta.value()?.parse::<LitStr>()?.value();
                     } else if meta.path.is_ident("skip") {
                         skip = true;
+                    } else if meta.path.is_ident("flatten") {
+                        flatten = true;
                     } else if meta.input.peek(syn::Token![=]) {
                         let _: syn::Expr = meta.value()?.parse()?;
                     }
@@ -309,15 +318,36 @@ fn read_fields<'a>(
                 ),
             ));
         }
+        if flatten && (!hints.is_empty() && !(hints.nested && only_nested(&hints))) {
+            return Err(syn::Error::new_spanned(
+                ident,
+                format!(
+                    "{LABEL} places a `#[map(flatten)]` field's members, not the field: it \
+                     has no key of its own. `#[form(nested)]` composes its type's hints \
+                     beside this type's."
+                ),
+            ));
+        }
         if !skip {
             out.push(FieldDecl {
                 key,
                 ty: field.ty.clone(),
                 hints,
+                flatten,
             });
         }
     }
     Ok(out)
+}
+
+/// Whether `nested` is the only hint given.
+fn only_nested(hints: &FieldHints) -> bool {
+    hints.widget.is_none()
+        && hints.placeholder.is_none()
+        && hints.unit.is_none()
+        && hints.visible_when.is_none()
+        && hints.form.is_none()
+        && !hints.form_own
 }
 
 fn read_hints(attr: &Attribute, hints: &mut FieldHints) -> syn::Result<()> {
@@ -401,7 +431,13 @@ fn read_hints(attr: &Attribute, hints: &mut FieldHints) -> syn::Result<()> {
     })
 }
 
-fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> TokenStream {
+fn emit(
+    name: &syn::Ident,
+    generics: &syn::Generics,
+    sections: &[SectionDecl],
+    fields: &[FieldDecl],
+) -> TokenStream {
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
     let sections = sections.iter().map(|s| {
         let id = &s.id;
         let label = s.label.iter().map(|l| quote! { .label(#l) });
@@ -456,7 +492,11 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
                 quote! {}
             }
         };
-        let nested = if f.hints.nested {
+        let nested = if f.hints.nested && f.flatten {
+            quote! {
+                __form = <#ty as ::guatiao_intake::Screen>::hints(__prefix, __form);
+            }
+        } else if f.hints.nested {
             quote! {
                 __form = <#ty as ::guatiao_intake::Screen>::hints(
                     &::guatiao_intake::__private::guatiao::__private::alloc::format!("{}{}.", __prefix, #key),
@@ -471,7 +511,7 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
 
     quote! {
         #[automatically_derived]
-        impl ::guatiao_intake::Screen for #name {
+        impl #impl_generics ::guatiao_intake::Screen for #name #ty_generics #where_clause {
             fn form(
                 __alloc: ::guatiao_intake::__private::guatiao::Alloc,
             ) -> ::core::result::Result<
@@ -480,7 +520,7 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
             > {
                 let mut __form = ::guatiao_intake::Form::new_in(__alloc);
                 #(#sections)*
-                __form = <#name as ::guatiao_intake::Screen>::hints("", __form);
+                __form = <Self as ::guatiao_intake::Screen>::hints("", __form);
                 __form.finish()
             }
 
@@ -493,7 +533,7 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
         }
 
         #[automatically_derived]
-        impl #name {
+        impl #impl_generics #name #ty_generics #where_clause {
             /// This type's screen, by a name `#[provider(.., form = ..)]`
             /// reaches without naming `guatiao_intake`.
             #[doc(hidden)]
@@ -503,7 +543,7 @@ fn emit(name: &syn::Ident, sections: &[SectionDecl], fields: &[FieldDecl]) -> To
                 ::guatiao_intake::__private::guatiao::Value,
                 ::guatiao_intake::__private::guatiao::ValueError,
             > {
-                <#name as ::guatiao_intake::Screen>::form(__alloc)
+                <Self as ::guatiao_intake::Screen>::form(__alloc)
             }
         }
     }
@@ -605,17 +645,44 @@ mod tests {
         assert!(!out.contains("\"username\""));
     }
 
+    /// A generic type gets a screen like any other, and a flattened
+    /// member's hints compose with no key of its own.
+    #[test]
+    fn generics_flatten_and_newtype_arms() {
+        let out = expand_str(
+            "struct S<T> { #[form(widget = \"x\")] a: T, #[map(flatten)] #[form(nested)] b: B }",
+        )
+        .unwrap();
+        assert!(
+            out.contains("impl < T > :: guatiao_intake :: Screen for S < T >"),
+            "{out}"
+        );
+        assert!(
+            out.contains("< B as :: guatiao_intake :: Screen > :: hints (__prefix , __form)"),
+            "{out}"
+        );
+        let arm = expand_str(
+            "#[map(tag = \"t\")] enum E { A(Inner), B { #[form(widget = \"x\")] b: i64 } }",
+        )
+        .unwrap();
+        assert!(arm.contains("\"b\""), "{arm}");
+    }
+
     #[test]
     fn form_rejects_by_name() {
         let cases: &[(&str, &str)] = &[
-            ("struct S<T>(T);", "refuses a generic type"),
             ("struct S(String);", "needs named fields"),
+            ("struct S;", "needs named fields"),
+            (
+                "struct S { #[map(flatten)] #[form(widget = \"x\")] a: A }",
+                "places a `#[map(flatten)]` field's members",
+            ),
             (
                 "enum E { A, B }",
                 "nothing to place on an enum of unit variants",
             ),
             (
-                "enum E { A(String) }",
+                "enum E { A(String, String) }",
                 "needs a variant's fields to have names",
             ),
             (

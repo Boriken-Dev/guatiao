@@ -36,6 +36,14 @@ cannot describe a value it refuses.
 | `skip` | the field does not cross; `FromValue` fills it from `Default` |
 | `default` | an absent key reads as the field type's `Default`; the field leaves the schema's `required` and the schema's `default` is that value |
 | `default = <expr>` | the same, with an expression of the field's type |
+| `flatten` | the field's own map is written beside the other keys and read from the whole map; its schema's fields join this one's. Stands alone (no `rename`, `skip`, `default`, `with`); not on an `Option` |
+| `with = path` (or `"path"`) | a module with `to_value_in(&T, Alloc) -> Result<Value, ValueError>`, `from_value(&Value) -> Result<T, MapError>` and `kind(Alloc) -> KindBuilder` converts the field in place of `T`'s impls; not on an `Option` |
+| `skip_serializing_if = path` (or `"path"`) | the key is not written when `path(&field)` is true; needs `default` (or an `Option` field) so an absent key reads back |
+
+On a struct, **`#[map(transparent)]`** makes its value its one field's
+(other fields must be `#[map(skip)]`), and **`#[map(deny_unknown_fields)]`**
+makes the reader refuse a key no field declares (`MapError::BadValue`
+under that key), as the schema already does; not beside a `flatten`.
 
 On the struct or enum, **`#[map(rename_all = "...")]`** names every field
 of a struct, or every variant of an enum (its fields are left alone), by
@@ -114,6 +122,7 @@ a consumer of the form derive needs no `guatiao` dependency of its own.
 | unit variants only | the variant's name, as a string | `type: "string"` + `enum` + `x-enum-labels` |
 | unit variants and one `#[map(other)]` | the name, or the text the catch-all holds | `type: "string"` + `examples` + `x-enum-labels`: any text is accepted, the known names are offered |
 | `#[map(tag = "k")]` on the enum | a map: name under `k` first, then the variant's fields | `type: "object"` + `x-variant-tag` + `oneOf` |
+| a tagged variant `Name(T)` | the name under the tag, then `T`'s map beside it (serde's internally tagged newtype) | the arm declares `T`'s fields. A `T` that writes no map is refused when written (`ValueError::WrongKind`) and its schema fails to build, as serde's does at run time |
 
 | on | attribute | effect |
 | --- | --- | --- |
@@ -139,7 +148,8 @@ variant stored as `h264`.
 Refused, each with its own message: `other` on a tagged enum, on a
 variant that is not `Name(T)`, beside `rename` or `label`, or on two
 variants; an enum with no variants; a
-data-carrying enum with no `tag`; a tuple variant; two variants stored
+data-carrying enum with no `tag`; a tuple variant of two or more fields;
+an attribute on a newtype variant's field; two variants stored
 under one name; a field stored under the tag; a misspelled container-level
 `#[map(...)]` key (ignoring it would change the wire shape); `tag` on a
 **struct**, which has no variants to tell apart; `#[map(skip)]` on a
@@ -307,10 +317,24 @@ writes the whole library.
 
 ## Contract
 
-- **Named-field structs, unit enums and tagged enums.** A tuple struct,
-  unit struct, untagged data-carrying enum, union or generic type is
-  refused at compile time, with a message naming the derive you actually
-  wrote rather than "one of the derives on this struct".
+- **Every struct shape, unit enums and tagged enums**, as serde writes
+  them: named fields are a map; a newtype struct (or a
+  `#[map(transparent)]` one) is its field's value and describes its
+  field's kind; a tuple struct is a list by position, described with
+  `prefixItems`; a unit struct is null. A field of a tuple or newtype
+  struct takes no `#[map]` or `#[schema]`: a position has no key.
+- **Generic types**: each type parameter is bound by the trait derived
+  (`T: ToValue`, `T: FromValue`, `T: Schema`), as serde bounds them;
+  lifetimes and const parameters pass through. A borrowed field
+  (`&'a str`) writes and describes itself; `FromValue` refuses it at the
+  field (E0277), since nothing a reader returns can borrow from the value.
+- **Not supported**, each refused with a sentence: an untagged
+  data-carrying enum (the key telling variants apart is a wire-format
+  decision the author makes: `tag`); a tagged variant of two or more
+  unnamed fields (no keys beside the tag); `alias` (a schema refuses
+  every key it does not declare, so an alias would read a value its own
+  schema refuses); a union. `#[derive(Form)]` places named fields only,
+  so a tuple, newtype or unit struct has no form of its own.
 - **Reading is lenient, validating is strict.** A generated reader ignores
   keys it does not declare, for a struct and for a tagged variant's arm
   alike; `schema::validate` is what refuses them.

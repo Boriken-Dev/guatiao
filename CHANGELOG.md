@@ -110,6 +110,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   duration`.
 - **`ValueError::Unparsed { at, expected }`**: text refused by a grammar,
   naming the byte offset and what was expected there, never the text.
+- **The derives take every struct shape, and generics**, as serde writes
+  them: a newtype struct (or one marked `#[map(transparent)]`) is its
+  field's value and describes its field's kind; a tuple struct is a list
+  by position, described with `prefixItems`; a unit struct is a null. A
+  generic type's parameters are each bound by the trait derived;
+  lifetimes and const parameters pass through. `#[derive(Form)]` takes
+  generics too.
+- **A tagged enum's variant may hold one type, `Name(T)`**: the name
+  under the tag, then `T`'s map beside it, the arm declaring `T`'s
+  fields (serde's internally tagged newtype). A `T` that writes no map
+  is refused when written, with `ValueError::WrongKind`.
+- **`#[map(flatten)]`, `#[map(with = path)]`,
+  `#[map(skip_serializing_if = path)]` and
+  `#[map(deny_unknown_fields)]`** mean what serde's do: a flattened
+  member's keys are written beside the others and its fields join the
+  schema's (two on one key refused with `ValueError::DuplicateKey`); a
+  `with` module's `to_value_in`, `from_value` and `kind` convert a field;
+  a predicate leaves a key out (with `default` to read it back); and a
+  key no field declares is refused on read. `alias` is refused by name: a
+  schema refuses every key it does not declare.
 - **A guide to passing data**: the docs site's "Passing data" page and a
   section of the crate's shipped `AGENTS.md`, on returning trees by value
   and taking them by value when kept, building an answer in the

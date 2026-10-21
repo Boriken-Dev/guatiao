@@ -140,6 +140,29 @@ pub mod schema;
 #[doc(hidden)]
 pub mod __private {
     pub extern crate alloc;
+
+    use crate::schema::{FieldBuilder, KindBuilder};
+    use crate::value::{Alloc, Map, Value, ValueError};
+
+    /// Moves every entry of the map `flat` into `map`: a flattened member,
+    /// or a tagged enum's newtype arm beside its tag. Not a map is
+    /// [`ValueError::WrongKind`]; a key `map` already holds is
+    /// [`ValueError::DuplicateKey`].
+    pub fn flatten_into(map: &mut Map, flat: Value, alloc: Alloc) -> Result<(), ValueError> {
+        let flat = Map::try_from(flat).map_err(|_| ValueError::WrongKind)?;
+        for (key, value) in flat {
+            if map.contains_key(&key) {
+                return Err(ValueError::DuplicateKey);
+            }
+            map.set_in(&key, value, alloc)?;
+        }
+        Ok(())
+    }
+
+    /// The fields an object kind declares, to be declared on another.
+    pub fn fields_of(kind: KindBuilder) -> alloc::vec::Vec<FieldBuilder> {
+        kind.into_fields()
+    }
 }
 
 pub use value::convert::{Bytes, FromValue, MapError, ToValue, TryAsMut, TryAsRef};
@@ -304,22 +327,34 @@ pub use guatiao_derive::kind;
 /// pinned by unit tests in `guatiao-derive`; these pin the half a
 /// token-level test cannot show, which is that the compiler agrees.
 ///
-/// A tuple struct has no names to key a map by:
+/// A tuple struct is a list by position, so a position has no key to
+/// rename:
 ///
 /// ```compile_fail
 /// use guatiao::ToValue;
 /// #[derive(ToValue)]
+/// struct Endpoint(#[map(rename = "host")] String, i64);
+/// ```
+///
+/// Without the attribute it is accepted, and so are a newtype (its one
+/// field's value), a unit struct (null) and a generic struct (each type
+/// parameter bound by the trait derived):
+///
+/// ```
+/// use guatiao::{FromValue, ToValue};
+/// #[derive(ToValue, FromValue, Debug, PartialEq)]
 /// struct Endpoint(String, i64);
-/// ```
+/// #[derive(ToValue, FromValue, Debug, PartialEq)]
+/// struct Port(u16);
+/// #[derive(ToValue, FromValue, Debug, PartialEq)]
+/// struct Labelled<T> { label: String, value: T }
 ///
-/// The same declaration with names is accepted, which is what makes the
-/// case above a rejection of the *shape* rather than of something
-/// incidental:
-///
-/// ```
-/// use guatiao::ToValue;
-/// #[derive(ToValue)]
-/// struct Endpoint { host: String, port: i64 }
+/// let v = Endpoint("10.0.0.1".into(), 5900).to_value()?;
+/// assert_eq!(Endpoint::from_value(&v)?, Endpoint("10.0.0.1".into(), 5900));
+/// assert_eq!(Port(5900).to_value()?, 5900u16.to_value()?);
+/// let l = Labelled { label: "x".into(), value: Port(1) };
+/// assert_eq!(Labelled::<Port>::from_value(&l.to_value()?)?, l);
+/// # Ok::<(), Box<dyn core::error::Error>>(())
 /// ```
 ///
 /// An enum whose variants carry fields has no one set of keys, and the key
@@ -355,12 +390,14 @@ pub use guatiao_derive::kind;
 /// # Ok::<(), Box<dyn core::error::Error>>(())
 /// ```
 ///
-/// A generic parameter would need a bound the macro cannot infer:
+/// A tagged variant of two unnamed fields has no keys to store them under
+/// beside the tag (one, `Name(T)`, writes `T`'s map there):
 ///
 /// ```compile_fail
 /// use guatiao::ToValue;
 /// #[derive(ToValue)]
-/// struct Wrapper<T> { inner: T }
+/// #[map(tag = "transport")]
+/// enum Transport { Tcp(String, i64) }
 /// ```
 ///
 /// A field type with no conversion is rejected at the field, not deep

@@ -125,6 +125,61 @@ fn a_form_derives_over_maps_lists_and_values() {
     assert_eq!(keys, ["settings", "extra", "items", "raw", "maybe"]);
 }
 
+#[derive(Schema, Form)]
+struct Member {
+    #[form(widget = "slider")]
+    level: i64,
+}
+
+/// A generic type, with a flattened member whose hints land at the root.
+#[derive(Schema, Form)]
+struct Flattened<T> {
+    #[map(flatten)]
+    #[form(nested)]
+    member: Member,
+    #[form(widget = "json")]
+    value: T,
+}
+
+/// A newtype arm: its fields are its type's.
+#[derive(Schema, Form)]
+#[map(tag = "kind")]
+enum WithArm {
+    Levelled(Member),
+    Plain {
+        #[form(widget = "text")]
+        note: String,
+    },
+}
+
+#[derive(Schema, Form)]
+struct HoldsArm {
+    #[form(nested)]
+    arm: WithArm,
+}
+
+#[test]
+fn a_form_derives_over_generics_flatten_and_newtype_arms() {
+    let schema = Flattened::<Map>::schema().expect("the schema builds");
+    let form = Flattened::<Map>::form(Alloc::rust()).expect("the form builds");
+    let (s, f) = (
+        SchemaRef::new(&schema).unwrap(),
+        FormRef::new(&form).unwrap(),
+    );
+    check(s, f).expect("the derived pair agrees");
+    assert_eq!(f.hints("level").widget(), "slider");
+    assert_eq!(f.hints("value").widget(), "json");
+
+    let schema = HoldsArm::schema().expect("the schema builds");
+    let form = HoldsArm::form(Alloc::rust()).expect("the form builds");
+    let (s, f) = (
+        SchemaRef::new(&schema).unwrap(),
+        FormRef::new(&form).unwrap(),
+    );
+    check(s, f).expect("the derived pair agrees");
+    assert_eq!(f.hints("arm.note").widget(), "text");
+}
+
 fn pair() -> (Value, Value) {
     let schema = Connection::schema().expect("the schema builds");
     let form = Connection::form(Alloc::rust()).expect("the form builds");
