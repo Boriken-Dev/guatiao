@@ -21,6 +21,7 @@ from guatiao import BadValue, provide
 
 #: Changed by the examples to show a reload serving new code.
 GREETING = "hello"
+MARK = ""
 
 
 class Conversation:
@@ -95,7 +96,7 @@ class Shouter:
         self.prefix = config["prefix"]
 
     def greet(self, name: str) -> dict:
-        return {"greeting": f"{self.prefix} {name.upper()}"}
+        return {"greeting": f"{self.prefix} {name.upper()}{MARK}"}
 
 
 library = provide.library(

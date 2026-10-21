@@ -1,0 +1,5 @@
+id = "py_tally"
+version = "0.1.0"
+kinds = ["counter"]
+entry = "py_tally:library"
+paths = ["."]
