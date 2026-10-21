@@ -267,6 +267,22 @@ def test_an_instance_receives_the_dataclass_its_schema_checked() -> None:
         assert library.live_instances() == 0
 
 
+def test_a_create_with_nowhere_to_put_the_instance_builds_nothing() -> None:
+    import ctypes
+
+    from guatiao import _abi
+
+    library = provide.library("py_nowhere", "0.1.0", providers=[Bounded])
+    info = _abi.LibraryInfo.from_address(library.info_address)
+    provider = info.providers.ptr[0]
+    with Value({"low": 1}) as config:
+        err = _abi.ProviderError()
+        status = provider.create(provider.ctx, ctypes.pointer(config._raw), None, ctypes.byref(err))
+    assert status == int(_abi.Status.ERR_NULL)
+    assert library.live_instances() == 0
+    library.close()
+
+
 def test_one_provider_serves_two_kinds() -> None:
     with Registry("py-provide", "0.1") as reg:
         reg.register_library(py_greeter)
