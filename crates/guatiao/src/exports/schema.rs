@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Checking a value against a schema, from C.
+//! Checking a value against a schema, and hiding its secrets, from C.
 //!
 //! # Reading a schema needs nothing from here
 //!
@@ -39,7 +39,7 @@ use crate::schema::ValidationError;
 use crate::schema::read::SchemaRef;
 use crate::value::alloc::{Alloc, Allocator};
 use crate::value::status::Status;
-use crate::value::types::{List, Map, Text, Value};
+use crate::value::types::{List, Map, Str, Text, Value};
 
 /// Whether `config` is a value `schema` accepts.
 ///
@@ -124,6 +124,67 @@ fn describe_validation(error: &ValidationError, alloc: Alloc) -> Option<Value> {
     )
     .ok()?;
     Some(out.into())
+}
+
+// --- hiding secrets ---------------------------------------------------------
+
+/// A copy of `value` with every secret replaced by the string
+/// `placeholder`, written to `out` through `alloc`.
+///
+/// A value is a secret when its field's schema sets `x-sensitive` or
+/// `writeOnly`, at any depth: inside a nested object, in every element of
+/// a list, in the selected arm of a variant. **Where the schema stops
+/// describing the value, the value is hidden**, because nothing says it
+/// is not a secret: a key the schema does not declare, a container where
+/// it names a scalar, a variant naming no arm. Local `$ref`s are followed
+/// first, so a mark on a definition counts.
+///
+/// `GUATIAO_ERR_WRONG_KIND` for a schema that is not a map,
+/// `GUATIAO_ERR_BAD_VALUE` for a placeholder that is not UTF-8 or a tree
+/// nested past `GUATIAO_MAX_DEPTH`, `GUATIAO_ERR_ALLOC` for a null or
+/// unusable allocator. `out` is written ABSENT first.
+///
+/// # Safety
+///
+/// Every non-null pointer addresses what its type says, the view's bytes
+/// are readable, and `out` addresses writable storage for one value.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_schema_redact(
+    schema: *const Value,
+    value: *const Value,
+    placeholder: Str,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    out!(out);
+    entry!(schema, value, out => {
+        // SAFETY: the caller's contract.
+        let (schema, value) = unsafe { (&*schema, &*value) };
+        // SAFETY: the caller's contract on `alloc`.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        let placeholder = match core::str::from_utf8(placeholder.into()) {
+            Ok(text) => text,
+            Err(e) => return e.into(),
+        };
+        if SchemaRef::new(schema).is_none() {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        }
+        let inlined = match crate::schema::inline_refs(schema) {
+            Ok(inlined) => inlined,
+            Err(e) => return e.into(),
+        };
+        let Some(schema) = SchemaRef::new(&inlined) else {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        };
+        match crate::schema::redact_in(schema, value, placeholder, alloc) {
+            // SAFETY: `out` is writable by contract and holds ABSENT; the
+            // tree, built through `alloc`, moves into it.
+            Ok(copy) => { unsafe { ptr::write(out, copy) }; Status::GUATIAO_OK }
+            Err(e) => e.into(),
+        }
+    })
 }
 
 // --- exporting a type's own schema --------------------------------------

@@ -53,6 +53,7 @@ pub const guatiao::exports::merge::GUATIAO_MERGE_SIMPLE: u32
 pub const guatiao::exports::merge::GUATIAO_MERGE_SUBSTITUTE: u32
 #[no_mangle] pub unsafe c fn guatiao::exports::merge::guatiao_merge(u32, *const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, u32, *const guatiao::exports::merge::MergeOverride<'_>, usize, *mut guatiao::value::value::Value, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub mod guatiao::exports::schema
+#[no_mangle] pub unsafe c fn guatiao::exports::schema::guatiao_schema_redact(*const guatiao::value::value::Value, *const guatiao::value::value::Value, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::schema::guatiao_schema_validate(*const guatiao::value::value::Value, *const guatiao::value::value::Value, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub unsafe fn guatiao::exports::schema::schema_export<T: guatiao::schema::describe::Schema>(*const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub mod guatiao::exports::span
@@ -2220,6 +2221,10 @@ impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for
 pub fn core::option::Option<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn core::option::Option<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn core::option::Option<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::value::secret::Secret<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::secret::Secret<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub mod guatiao::schema::merge
 pub struct guatiao::schema::merge::DeclaredMerge
 pub guatiao::schema::merge::DeclaredMerge::mode: guatiao::value::merge::MergeMode
@@ -2959,6 +2964,10 @@ impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for
 pub fn core::option::Option<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn core::option::Option<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn core::option::Option<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::value::secret::Secret<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::secret::Secret<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::schema::inline_refs(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::schema::inline_refs_in(&guatiao::value::value::Value, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::schema::redact(guatiao::schema::read::SchemaRef<'_>, &guatiao::value::value::Value, &str) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -3257,6 +3266,8 @@ impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue f
 pub fn alloc::vec::Vec<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for core::option::Option<T>
 pub fn core::option::Option<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<core::option::Option<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
 pub trait guatiao::value::convert::MapKey: core::marker::Sized
 pub fn guatiao::value::convert::MapKey::from_key(&str) -> core::result::Result<Self, guatiao::value::convert::MapError>
 pub fn guatiao::value::convert::MapKey::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
@@ -3617,6 +3628,9 @@ pub fn alloc::vec::Vec<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> c
 impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for core::option::Option<T>
 pub fn core::option::Option<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn core::option::Option<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::secret::Secret<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub trait guatiao::value::convert::TryAsMut<T: ?core::marker::Sized>
 pub fn guatiao::value::convert::TryAsMut::try_as_mut(&mut self) -> core::option::Option<&mut T>
 impl guatiao::value::convert::TryAsMut<bool> for guatiao::value::value::Value
@@ -3800,6 +3814,38 @@ pub fn guatiao::value::read::bytes_or<'a>(core::option::Option<&'a guatiao::valu
 pub fn guatiao::value::read::float_or(core::option::Option<&guatiao::value::value::Value>, f64) -> f64
 pub fn guatiao::value::read::int_or(core::option::Option<&guatiao::value::value::Value>, i64) -> i64
 pub fn guatiao::value::read::str_or<'a>(core::option::Option<&'a guatiao::value::value::Value>, &'a str) -> &'a str
+pub mod guatiao::value::secret
+pub struct guatiao::value::secret::Secret<T>(_)
+impl<T> guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::expose(&self) -> &T
+pub fn guatiao::value::secret::Secret<T>::into_inner(self) -> T
+pub fn guatiao::value::secret::Secret<T>::new(T) -> guatiao::value::secret::Secret<T>
+impl<T: core::clone::Clone> core::clone::Clone for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::clone(&self) -> Self
+impl<T: core::cmp::Eq> core::cmp::Eq for guatiao::value::secret::Secret<T>
+impl<T: core::cmp::PartialEq> core::cmp::PartialEq for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::eq(&self, &Self) -> bool
+impl<T: core::cmp::PartialEq> core::marker::StructuralPartialEq for guatiao::value::secret::Secret<T>
+impl<T: core::default::Default> core::default::Default for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::default() -> Self
+impl<T: core::hash::Hash> core::hash::Hash for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl<T: core::marker::Copy> core::marker::Copy for guatiao::value::secret::Secret<T>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::value::secret::Secret<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::secret::Secret<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::secret::Secret<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T> core::convert::From<T> for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from(T) -> guatiao::value::secret::Secret<T>
+impl<T> core::fmt::Debug for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T> core::fmt::Display for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod guatiao::value::span
 pub struct guatiao::value::span::Span
 impl guatiao::value::span::Span
@@ -6302,6 +6348,37 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::number::Number> fo
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::number::Number>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::number::Number> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::number::Number>
+pub struct guatiao::value::Secret<T>(_)
+impl<T> guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::expose(&self) -> &T
+pub fn guatiao::value::secret::Secret<T>::into_inner(self) -> T
+pub fn guatiao::value::secret::Secret<T>::new(T) -> guatiao::value::secret::Secret<T>
+impl<T: core::clone::Clone> core::clone::Clone for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::clone(&self) -> Self
+impl<T: core::cmp::Eq> core::cmp::Eq for guatiao::value::secret::Secret<T>
+impl<T: core::cmp::PartialEq> core::cmp::PartialEq for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::eq(&self, &Self) -> bool
+impl<T: core::cmp::PartialEq> core::marker::StructuralPartialEq for guatiao::value::secret::Secret<T>
+impl<T: core::default::Default> core::default::Default for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::default() -> Self
+impl<T: core::hash::Hash> core::hash::Hash for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl<T: core::marker::Copy> core::marker::Copy for guatiao::value::secret::Secret<T>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::value::secret::Secret<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::secret::Secret<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::secret::Secret<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T> core::convert::From<T> for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from(T) -> guatiao::value::secret::Secret<T>
+impl<T> core::fmt::Debug for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T> core::fmt::Display for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::value::Span
 impl guatiao::value::span::Span
 pub fn guatiao::value::span::Span::abs(self) -> guatiao::value::span::Span
@@ -6979,6 +7056,8 @@ impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue f
 pub fn alloc::vec::Vec<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for core::option::Option<T>
 pub fn core::option::Option<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<core::option::Option<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
 pub trait guatiao::value::ToValue
 pub fn guatiao::value::ToValue::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::ToValue::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -7219,6 +7298,9 @@ pub fn alloc::vec::Vec<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> c
 impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for core::option::Option<T>
 pub fn core::option::Option<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn core::option::Option<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::secret::Secret<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub trait guatiao::value::TryAsMut<T: ?core::marker::Sized>
 pub fn guatiao::value::TryAsMut::try_as_mut(&mut self) -> core::option::Option<&mut T>
 impl guatiao::value::convert::TryAsMut<bool> for guatiao::value::value::Value
@@ -7974,6 +8056,37 @@ pub fn guatiao::value::merge::Provenance<'a>::default() -> Self
 impl<'a> core::fmt::Debug for guatiao::value::merge::Provenance<'a>
 pub fn guatiao::value::merge::Provenance<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<'a> core::marker::StructuralPartialEq for guatiao::value::merge::Provenance<'a>
+pub struct guatiao::Secret<T>(_)
+impl<T> guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::expose(&self) -> &T
+pub fn guatiao::value::secret::Secret<T>::into_inner(self) -> T
+pub fn guatiao::value::secret::Secret<T>::new(T) -> guatiao::value::secret::Secret<T>
+impl<T: core::clone::Clone> core::clone::Clone for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::clone(&self) -> Self
+impl<T: core::cmp::Eq> core::cmp::Eq for guatiao::value::secret::Secret<T>
+impl<T: core::cmp::PartialEq> core::cmp::PartialEq for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::eq(&self, &Self) -> bool
+impl<T: core::cmp::PartialEq> core::marker::StructuralPartialEq for guatiao::value::secret::Secret<T>
+impl<T: core::default::Default> core::default::Default for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::default() -> Self
+impl<T: core::hash::Hash> core::hash::Hash for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl<T: core::marker::Copy> core::marker::Copy for guatiao::value::secret::Secret<T>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::value::secret::Secret<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::secret::Secret<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::secret::Secret<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T> core::convert::From<T> for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from(T) -> guatiao::value::secret::Secret<T>
+impl<T> core::fmt::Debug for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T> core::fmt::Display for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct guatiao::Span
 impl guatiao::value::span::Span
 pub fn guatiao::value::span::Span::abs(self) -> guatiao::value::span::Span
@@ -8651,6 +8764,8 @@ impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue f
 pub fn alloc::vec::Vec<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for core::option::Option<T>
 pub fn core::option::Option<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<core::option::Option<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
 pub trait guatiao::Schema
 pub fn guatiao::Schema::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::Schema::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -8971,6 +9086,10 @@ impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for
 pub fn core::option::Option<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn core::option::Option<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn core::option::Option<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::value::secret::Secret<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::secret::Secret<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub trait guatiao::ToValue
 pub fn guatiao::ToValue::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::ToValue::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -9211,6 +9330,9 @@ pub fn alloc::vec::Vec<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> c
 impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for core::option::Option<T>
 pub fn core::option::Option<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn core::option::Option<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::secret::Secret<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub trait guatiao::TryAsMut<T: ?core::marker::Sized>
 pub fn guatiao::TryAsMut::try_as_mut(&mut self) -> core::option::Option<&mut T>
 impl guatiao::value::convert::TryAsMut<bool> for guatiao::value::value::Value

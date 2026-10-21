@@ -2,8 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Smart pointers and `Cow` cross as what they hold, transparently; a
-//! `char` crosses as text one character long.
+//! Smart pointers, `Cow` and [`Secret`] cross as what they hold,
+//! transparently; a `char` crosses as text one character long.
 
 #![forbid(unsafe_code)]
 
@@ -15,6 +15,7 @@ use alloc::sync::Arc;
 use super::{FromValue, MapError, ToValue, TryAsRef};
 use crate::value::alloc::Alloc;
 use crate::value::error::ValueError;
+use crate::value::secret::Secret;
 use crate::value::types::{Tag, Text, Value};
 
 macro_rules! pointer {
@@ -61,6 +62,19 @@ where
 {
     fn from_value(value: &Value) -> Result<Self, MapError> {
         T::Owned::from_value(value).map(Cow::Owned)
+    }
+}
+
+/// The value it holds, as `T` writes it.
+impl<T: ToValue> ToValue for Secret<T> {
+    fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
+        self.expose().to_value_in(alloc)
+    }
+}
+
+impl<T: FromValue> FromValue for Secret<T> {
+    fn from_value(value: &Value) -> Result<Secret<T>, MapError> {
+        T::from_value(value).map(Secret::new)
     }
 }
 

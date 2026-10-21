@@ -4,7 +4,8 @@
 
 //! A pointer, a borrow or a `Cow` describes what it holds; `str` and a
 //! slice describe what `String` and `Vec` do, so a pointer to either
-//! describes the same; a `char` is text one character long.
+//! describes the same; a `char` is text one character long; a
+//! [`Secret`] is what it holds, marked.
 
 #![forbid(unsafe_code)]
 
@@ -15,7 +16,10 @@ use alloc::sync::Arc;
 
 use super::Schema;
 use crate::schema::build::KindBuilder;
+use crate::schema::vocab;
 use crate::value::alloc::Alloc;
+use crate::value::secret::Secret;
+use crate::value::types::Value;
 
 impl Schema for str {
     fn kind(alloc: Alloc) -> KindBuilder {
@@ -50,6 +54,16 @@ impl<T: Schema + ?Sized> Schema for &T {
 impl<T: Schema + ToOwned + ?Sized> Schema for Cow<'_, T> {
     fn kind(alloc: Alloc) -> KindBuilder {
         T::kind(alloc)
+    }
+}
+
+/// `T`'s kind with `writeOnly: true` and `x-sensitive: true`, the two
+/// marks `FieldBuilder::sensitive` writes, which redaction honours.
+impl<T: Schema> Schema for Secret<T> {
+    fn kind(alloc: Alloc) -> KindBuilder {
+        T::kind(alloc)
+            .keyword(vocab::WRITE_ONLY, Ok(Value::from(true)))
+            .keyword(vocab::X_SENSITIVE, Ok(Value::from(true)))
     }
 }
 

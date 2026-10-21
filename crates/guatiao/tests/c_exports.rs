@@ -331,10 +331,7 @@ fn time_vectors_header() -> String {
                         f.join(", ")
                     )
                 }
-                Err(at) => format!(
-                    "  {{{}, NULL, {{0}}, 0, {at}}},\n",
-                    c_string(&case.text)
-                ),
+                Err(at) => format!("  {{{}, NULL, {{0}}, 0, {at}}},\n", c_string(&case.text)),
             };
             h.push_str(&line);
         }

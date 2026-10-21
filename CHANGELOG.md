@@ -133,6 +133,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `guatiao_datetime_add_span` apply a span, and `guatiao_duration_read`
   reads an exact length in any of its three spellings. A C program reads
   every vector of `tests/vectors/time.json` through them in the suite.
+- **`guatiao::Secret<T>`**, a value nobody prints: it crosses as `T`, its
+  schema is `T`'s with `writeOnly: true` and `x-sensitive: true`, and its
+  `Debug` and `Display` print `[redacted]`. `expose()`, `into_inner()`,
+  `From<T>`. No constant-time comparison and no wiping on drop, both
+  stated.
+- **`guatiao_schema_redact`**, redaction from C: a copy of a value with
+  every secret replaced by a placeholder, local `$ref`s followed first.
 - **The derives take every struct shape, and generics**, as serde writes
   them: a newtype struct (or one marked `#[map(transparent)]`) is its
   field's value and describes its field's kind; a tuple struct is a list
