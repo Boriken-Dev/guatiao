@@ -399,7 +399,7 @@ mod os {
         let Some(path) = super::python_path() else {
             return;
         };
-        let Ok(path) = std::ffi::CString::new(path) else {
+        let Ok(path) = alloc::ffi::CString::new(path) else {
             return;
         };
         // SAFETY: a NUL-terminated path of an object already mapped; the
