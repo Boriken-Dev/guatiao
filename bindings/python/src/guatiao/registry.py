@@ -11,7 +11,7 @@ import ctypes
 from typing import Any
 
 from . import _abi, _lib
-from .errors import check
+from .errors import NotFound, check
 from .value import Ref, Value, _make_str
 
 #: A `guatiao_library_entry`-shaped callback for `Registry.register_entry`:
@@ -69,6 +69,16 @@ class Instance:
         self._key = key
         self.ctx = ctx
         self._closed = False
+
+    def bind(self, kind: Any) -> Any:
+        """This instance as `kind` (a `guatiao.kinds.Kind`): a `Remote`
+        whose calls go to this instance. Valid until it is closed."""
+        table, size, _ctx = self._registry.provider_table(self._key, kind=kind.name)
+        if not table:
+            raise NotFound(
+                int(_abi.Status.ERR_NOT_FOUND), f"`{self._key}` serves no {kind.name} table"
+            )
+        return kind.bind(table, size, self.ctx)
 
     def close(self) -> None:
         if self._closed:
@@ -251,6 +261,21 @@ class Registry:
             )
         ctx = lib.guatiao_registry_provider_ctx(self._handle, view)
         return table, size.value, ctx
+
+    def bind(self, key: str, kind: Any) -> Any:
+        """The provider filed under `key`, as `kind` (a
+        `guatiao.kinds.Kind`): a `Remote` calling its table with its own
+        `ctx`, the provider's one instance. `guatiao.NotFound` when it
+        serves no table for the kind; `guatiao.kinds.FloorMismatch` when
+        the table is not the one `kind` describes. A provider that only
+        builds instances is bound through `create(...).bind(kind)`.
+
+        Valid while the library is: until it is unloaded, or, once
+        retired, collected."""
+        table, size, ctx = self.provider_table(key, kind=kind.name)
+        if not table:
+            raise NotFound(int(_abi.Status.ERR_NOT_FOUND), f"`{key}` serves no {kind.name} table")
+        return kind.bind(table, size, ctx)
 
     def provider_config(self, key: str) -> "Ref | None":
         """A read-only, borrowed view of the provider's configuration

@@ -24,7 +24,11 @@ that is `guatiao` itself or an application that carries it.
   reading.
 - **Be a plugin host** — scan a directory, filter on what a library
   declares before loading it, list providers best first, build an
-  instance from a configuration, call a provider through its table.
+  instance from a configuration, call a provider through its table with
+  Python values in and out.
+- **Hand a library a Python object** — a plain class becomes an object of
+  a kind (a listener, a callback) that a library written in any language
+  calls, or holds until it is done with it.
 - **Dates, times, instants and spans as Python's own types** — `date`,
   `time`, naive and aware `datetime`, `timedelta`, and a `Span` class for
   calendar lengths, read and written by the library itself.
@@ -130,19 +134,31 @@ Every answer that is data comes back as a plain `dict` or `list`.
 `rules` is one `[!]KEY=VALUE` per line and filters on what a library
 declares about itself, before it is loaded.
 
-To call a provider, describe its table with the `ctypes.Structure` the
-kind's C header declares and let the package check it:
+To call a provider, describe its kind once, from the kind's C header:
+its methods in table order, what each takes and answers, and the
+`FLOOR_HASH` the header defines. The package checks a table against it
+and converts every argument and answer:
 
 ```python
-from guatiao import kinds
+from guatiao import Value, kinds
+from guatiao.kinds import BOOL, MAP, STR, Kind, Method, lent
 
-table_ptr, size, ctx = reg.provider_table("acme_greeter", kind="greeter")
-greeter = kinds.table(table_ptr, size, GreeterVtable, floor_hash=FLOOR_HASH)
-greeter.greet(ctx, name, out_map, err)
+GREETER = Kind("greeter", floor_hash=2695856491, methods=[
+    Method("greet", [STR], MAP, fallible=True, required=True),
+    Method("check", [lent(MAP)], BOOL, fallible=True),
+])
+
+greeter = reg.bind("acme_greeter", GREETER)
+greeter.greet("ana").to_python()          # {"greeting": "hello, ana"}
+with Value({"name": "bo"}) as config:
+    greeter.check(config)                 # the provider fills it in, in place
 ```
 
-[`tests/test_greeter.py`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/tests/test_greeter.py)
-is a complete worked example.
+An object a slot takes, such as a listener, is any Python object with
+the kind's methods; an object a slot answers closes with `with`.
+[`examples/python_host`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/python_host)
+is a complete host, and its kind descriptions are in
+[`examples/greeter_kind/python`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/greeter_kind/python).
 
 ### JSON, TOML, YAML and forms
 
@@ -208,7 +224,10 @@ provider's own words when it gave any.
   a browser (Pyodide has no way to load the library) or on a 32-bit
   interpreter.
 - A `Registry` is used from one thread at a time, and a `Value` is not
-  shared between threads without a lock of your own.
+  shared between threads without a lock of your own. A library may call a
+  Python object it was handed from any thread; each call takes the GIL.
+- A `Remote` cannot run a kind's default body for a slot an older table
+  lacks, as a Rust caller does: it raises `guatiao.Unsupported`.
 - `Registry.unload` unmaps a library once its own `unload` function
   agrees, and `collect` a retired one; neither can see a table or `ctx`
   you took with `provider_table`. Let those go first: they are valid
@@ -222,7 +241,7 @@ provider's own words when it gave any.
 | `guatiao` | `Value`, `Ref`, `Map`, `List`, `ABSENT`, `Registry`, `Instance`, `redact`, the error classes |
 | `guatiao.time` | dates, times, instants and exact lengths as `datetime` types; `Span`; `normalize` |
 | `guatiao.registry` | the plugin host: load, scan, list, rank, configure, instantiate |
-| `guatiao.kinds` | check and cast a provider's function table |
+| `guatiao.kinds` | describe a kind; call a provider's table; serve a table over a Python object |
 | `guatiao.serde` | `loads` / `dumps` for JSON, TOML, YAML |
 | `guatiao.intake` | `check`, `layout`, `is_visible`, `at`, `for_schema`, `form_for`, `resolve`, `flat_keys`, `flatten`, `unflatten` |
 

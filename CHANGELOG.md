@@ -190,6 +190,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   in place (`&mut Map`) and building what goes into it with its own
   allocator, moving rather than copying, every way to a tree you own and
   when it copies, and the C conventions.
+- **Python: a kind described once, called and served from Python.**
+  `guatiao.kinds.Kind` takes a kind's methods in table order, what each
+  takes and answers (`STR`, `BYTES`, `MAP`, `VALUE`, `TEXT`, the
+  scalars, `taken(MAP)`, `lent(MAP)`, `taken(LISTENER)`,
+  `lent(LISTENER)`, an object kind as an answer) and the
+  `FLOOR_HASH` from its C header, and builds the table's
+  `ctypes.Structure` or checks one written by hand. `Registry.bind(key,
+  kind)` and `Instance.bind(kind)` answer a `Remote` whose methods take
+  and return Python values: a map lent to a slot is changed where it
+  stands, a `Value` handed over is left ABSENT, an answer is built in
+  the binding's allocator, an absent slot raises `Unsupported`. A plain
+  Python object is handed or lent to a slot as an object of an object
+  kind, through a table this binding builds over its class; an object a
+  slot answers is a `kinds.Object` whose `close()` calls its `destroy`.
+  A refusal crosses with its status and words; an exception in a Python
+  method crosses as `GUATIAO_ERR_INTERNAL` naming it.
+- **Python: an error raised with a message alone carries its class's
+  status** (`guatiao.BadValue("nobody to greet")`), which is how Python
+  code refuses a call.
 
 ### Changed
 

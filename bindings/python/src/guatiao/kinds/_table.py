@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import ctypes
 
-from . import _abi
+from .. import _abi
 
 
 class FloorMismatch(RuntimeError):
