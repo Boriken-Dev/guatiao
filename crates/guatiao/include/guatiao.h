@@ -1090,6 +1090,150 @@ typedef struct guatiao_merge_override {
 } guatiao_merge_override;
 
 /*
+ A span: a length of time in calendar units, each counted on its own,
+ with ONE sign for the whole span. Every non-zero field carries that
+ sign: `-P1DT2H` is `{.days = -1, .hours = -2}`, and a struct mixing
+ signs is refused with `GUATIAO_ERR_BAD_VALUE`. Each field is at most
+ INT64_MAX in magnitude (INT64_MIN is refused), and `nanoseconds` is
+ below a second, -999999999 to 999999999. Zeroed, it is `PT0S`.
+ */
+typedef struct guatiao_span {
+  /*
+   Years.
+   */
+  int64_t years;
+  /*
+   Months.
+   */
+  int64_t months;
+  /*
+   Weeks.
+   */
+  int64_t weeks;
+  /*
+   Days.
+   */
+  int64_t days;
+  /*
+   Hours.
+   */
+  int64_t hours;
+  /*
+   Minutes.
+   */
+  int64_t minutes;
+  /*
+   Whole seconds.
+   */
+  int64_t seconds;
+  /*
+   Below a second: -999999999 to 999999999.
+   */
+  int32_t nanoseconds;
+} guatiao_span;
+
+/*
+ Why a text was refused: the byte offset the reading stopped at, and
+ what would have been accepted there.
+
+ Written `{0, ABSENT}` on entry by every function that takes one.
+ After `GUATIAO_ERR_BAD_VALUE`, `at` is the offset and `expected` a
+ string built through the call's allocator, which the caller frees with
+ `guatiao_value_free`; it stays ABSENT when the call had no usable
+ allocator. Neither ever quotes the text. Text that is not UTF-8 is
+ refused at its first bad byte.
+ */
+typedef struct guatiao_text_error {
+  /*
+   The byte offset the reading stopped at.
+   */
+  size_t at;
+  /*
+   What would have been accepted there, as a string; ABSENT when
+   there is no refusal or no allocator to build it with.
+   */
+  struct guatiao_value expected;
+} guatiao_text_error;
+
+/*
+ A day on the calendar, as `guatiao_date_parse` reads it: the year
+ (0 to 9999), the month (1 to 12) and the day of the month (from 1). A
+ function given one refuses a day the month does not have with
+ `GUATIAO_ERR_BAD_VALUE`. Zeroed, it is not a date.
+ */
+typedef struct guatiao_date {
+  /*
+   0 to 9999.
+   */
+  int32_t year;
+  /*
+   1 to 12.
+   */
+  uint8_t month;
+  /*
+   1 to the month's last day.
+   */
+  uint8_t day;
+} guatiao_date;
+
+/*
+ A time of day with no offset: hour 0 to 23, minute and second 0 to
+ 59 (no leap second), and the nanoseconds below the second, 0 to
+ 999999999. Zeroed, it is midnight.
+ */
+typedef struct guatiao_time {
+  /*
+   0 to 23.
+   */
+  uint8_t hour;
+  /*
+   0 to 59.
+   */
+  uint8_t minute;
+  /*
+   0 to 59.
+   */
+  uint8_t second;
+  /*
+   0 to 999999999.
+   */
+  uint32_t nanosecond;
+} guatiao_time;
+
+/*
+ A civil date and time: a date and a time of day as a wall clock
+ shows them, with no time zone.
+ */
+typedef struct guatiao_datetime {
+  /*
+   The day.
+   */
+  struct guatiao_date date;
+  /*
+   The time of day.
+   */
+  struct guatiao_time time;
+} guatiao_datetime;
+
+/*
+ An instant, as C's `struct timespec` counts one: whole seconds from
+ 1970-01-01T00:00:00Z (negative before it), then nanoseconds counted
+ FORWARD, 0 to 999999999, so one nanosecond before the epoch is
+ `{-1, 999999999}`. The instants run from 0000-01-01T00:00:00Z to
+ 9999-12-31T23:59:59.999999999Z, with no leap seconds.
+ */
+typedef struct guatiao_timestamp {
+  /*
+   Whole seconds from the epoch, negative before it.
+   */
+  int64_t seconds;
+  /*
+   0 to 999999999.
+   */
+  uint32_t nanoseconds;
+} guatiao_timestamp;
+
+/*
  Borrowed bytes: any content at all, NULs included.
 
  Same shape and check-the-length rule as `guatiao_str`, and a separate
@@ -1882,6 +2026,273 @@ guatiao_status guatiao_schema_validate(const struct guatiao_value *schema,
                                        const struct guatiao_value *config,
                                        const struct guatiao_alloc *alloc,
                                        struct guatiao_value *out_error);
+
+/*
+ Reads a span into `out`: an ISO 8601 duration (`P1Y2M3W4DT5H6M7.5S`,
+ `-P1D`, designators in either case, a fraction on the seconds only) or
+ the friendly form (`1y 2mo 3w 4d 5h 6m 7s 500ms 1us 1ns`, lowercase,
+ each unit once). The grammars are on the encodings page. Refusals as
+ `guatiao_date_parse`.
+
+ # Safety
+
+ As `guatiao_date_parse`.
+ */
+guatiao_status guatiao_span_parse(const struct guatiao_alloc *alloc,
+                                  struct guatiao_str text,
+                                  struct guatiao_span *out,
+                                  struct guatiao_text_error *out_error);
+
+/*
+ Writes `span` as its canonical ISO 8601 text (`-P1DT2H`, `PT0S` for
+ zero), as `guatiao_date_format` writes a date.
+ `GUATIAO_ERR_BAD_VALUE` for a struct that is not a span: see
+ `guatiao_span`.
+
+ # Safety
+
+ As `guatiao_date_format`.
+ */
+guatiao_status guatiao_span_format(const struct guatiao_alloc *alloc,
+                                   const struct guatiao_span *span,
+                                   struct guatiao_value *out);
+
+/*
+ Reads a span as `guatiao_span_parse` does and writes its canonical
+ ISO 8601 text, as `guatiao_date_normalize` does: `1h 30m` becomes
+ `PT1H30M`.
+
+ # Safety
+
+ As `guatiao_date_parse`.
+ */
+guatiao_status guatiao_span_normalize(const struct guatiao_alloc *alloc,
+                                      struct guatiao_str text,
+                                      struct guatiao_value *out,
+                                      struct guatiao_text_error *out_error);
+
+/*
+ Reads an exact length of time from `value` into whole seconds and the
+ nanoseconds below a second, in any of its three spellings: the list
+ `[seconds, nanoseconds]` it is written as, a number of seconds read
+ exactly from its text (`1.5`, `2e-3`; not negative, no finer than a
+ nanosecond), or the map `{"secs": .., "nanos": ..}`.
+
+ Writing one needs no function: it is a list of two numbers.
+ `GUATIAO_ERR_BAD_VALUE` for anything else; both outputs are zeroed
+ first.
+
+ # Safety
+
+ `value` is null or addresses a well-formed value; the out-pointers are
+ null or writable.
+ */
+guatiao_status guatiao_duration_read(const struct guatiao_value *value,
+                                     uint64_t *out_seconds,
+                                     uint32_t *out_nanoseconds);
+
+/*
+ Reads `YYYY-MM-DD` (RFC 3339 `full-date`) into `out`.
+
+ `GUATIAO_ERR_BAD_VALUE` for text the grammar refuses, with the byte
+ offset and what was expected written through `out_error`, which may be
+ null; `alloc` builds that message and may be null too. `out` is zeroed
+ first, and `GUATIAO_ERR_NULL` when it is null.
+
+ # Safety
+
+ The view's bytes are readable for the call; every non-null pointer
+ addresses what its type says, and the out-pointers writable storage
+ holding nothing the caller still owns.
+ */
+guatiao_status guatiao_date_parse(const struct guatiao_alloc *alloc,
+                                  struct guatiao_str text,
+                                  struct guatiao_date *out,
+                                  struct guatiao_text_error *out_error);
+
+/*
+ Writes `date` as `YYYY-MM-DD`: a string value built through `alloc`,
+ moved into `out`, which is written ABSENT first.
+
+ `GUATIAO_ERR_BAD_VALUE` for a day that is not on the calendar,
+ `GUATIAO_ERR_ALLOC` for a null or unusable allocator.
+
+ # Safety
+
+ Every non-null pointer addresses what its type says; `out` addresses
+ writable storage holding nothing the caller still owns.
+ */
+guatiao_status guatiao_date_format(const struct guatiao_alloc *alloc,
+                                   const struct guatiao_date *date,
+                                   struct guatiao_value *out);
+
+/*
+ Reads a date as `guatiao_date_parse` does and writes its canonical
+ text into `out`, a string value built through `alloc`.
+
+ # Safety
+
+ As `guatiao_date_parse`.
+ */
+guatiao_status guatiao_date_normalize(const struct guatiao_alloc *alloc,
+                                      struct guatiao_str text,
+                                      struct guatiao_value *out,
+                                      struct guatiao_text_error *out_error);
+
+/*
+ The date `span` after `date` (before it for a negative span), into
+ `out`: years and months first, a day past the month's end becoming
+ its last day (2026-01-31 plus P1M is 2026-02-28), then weeks and days.
+
+ `GUATIAO_ERR_BAD_VALUE` for a date or a span that is not one, a span
+ with hours, minutes, seconds or nanoseconds (a date has no time of day
+ to carry them), and a step that lands outside the years 0000 to 9999.
+ `out` is zeroed first; `out` may be `date`.
+
+ # Safety
+
+ Every non-null pointer addresses what its type says.
+ */
+guatiao_status guatiao_date_add_span(const struct guatiao_date *date,
+                                     const struct guatiao_span *span,
+                                     struct guatiao_date *out);
+
+/*
+ Reads `HH:MM:SS[.fraction]` (RFC 3339 `partial-time`: one to nine
+ fractional digits, no offset) into `out`. Refusals as
+ `guatiao_date_parse`.
+
+ # Safety
+
+ As `guatiao_date_parse`.
+ */
+guatiao_status guatiao_time_parse(const struct guatiao_alloc *alloc,
+                                  struct guatiao_str text,
+                                  struct guatiao_time *out,
+                                  struct guatiao_text_error *out_error);
+
+/*
+ Writes `time` as `HH:MM:SS`, then `.` and the fraction with trailing
+ zeros removed when there is one, as `guatiao_date_format` writes a
+ date. `GUATIAO_ERR_BAD_VALUE` for a time that is not on the clock.
+
+ # Safety
+
+ As `guatiao_date_format`.
+ */
+guatiao_status guatiao_time_format(const struct guatiao_alloc *alloc,
+                                   const struct guatiao_time *time,
+                                   struct guatiao_value *out);
+
+/*
+ Reads a time of day as `guatiao_time_parse` does and writes its
+ canonical text, as `guatiao_date_normalize` does.
+
+ # Safety
+
+ As `guatiao_date_parse`.
+ */
+guatiao_status guatiao_time_normalize(const struct guatiao_alloc *alloc,
+                                      struct guatiao_str text,
+                                      struct guatiao_value *out,
+                                      struct guatiao_text_error *out_error);
+
+/*
+ Reads a date, `T` or `t`, and a time of day, with no offset, into
+ `out`. Refusals as `guatiao_date_parse`.
+
+ # Safety
+
+ As `guatiao_date_parse`.
+ */
+guatiao_status guatiao_datetime_parse(const struct guatiao_alloc *alloc,
+                                      struct guatiao_str text,
+                                      struct guatiao_datetime *out,
+                                      struct guatiao_text_error *out_error);
+
+/*
+ Writes `datetime` as the date, `T` and the time, as
+ `guatiao_date_format` writes a date.
+
+ # Safety
+
+ As `guatiao_date_format`.
+ */
+guatiao_status guatiao_datetime_format(const struct guatiao_alloc *alloc,
+                                       const struct guatiao_datetime *datetime,
+                                       struct guatiao_value *out);
+
+/*
+ Reads a civil date and time as `guatiao_datetime_parse` does and
+ writes its canonical text, as `guatiao_date_normalize` does.
+
+ # Safety
+
+ As `guatiao_date_parse`.
+ */
+guatiao_status guatiao_datetime_normalize(const struct guatiao_alloc *alloc,
+                                          struct guatiao_str text,
+                                          struct guatiao_value *out,
+                                          struct guatiao_text_error *out_error);
+
+/*
+ The civil date and time `span` after `datetime`, into `out`: as
+ `guatiao_date_add_span`, then hours, minutes, seconds and nanoseconds
+ carried across midnight (a day is 24 hours: there is no zone).
+
+ `GUATIAO_ERR_BAD_VALUE` for a date-time or a span that is not one,
+ and a step that lands outside the years 0000 to 9999. `out` is zeroed
+ first; `out` may be `datetime`.
+
+ # Safety
+
+ Every non-null pointer addresses what its type says.
+ */
+guatiao_status guatiao_datetime_add_span(const struct guatiao_datetime *datetime,
+                                         const struct guatiao_span *span,
+                                         struct guatiao_datetime *out);
+
+/*
+ Reads an RFC 3339 `date-time` with any offset (`Z`, `z`, `+HH:MM`,
+ `-HH:MM`; `-00:00` is UTC) into `out`, as the instant it names. An
+ offset that moves the instant outside the years 0000 to 9999 is
+ refused at the offset. Refusals as `guatiao_date_parse`.
+
+ # Safety
+
+ As `guatiao_date_parse`.
+ */
+guatiao_status guatiao_timestamp_parse(const struct guatiao_alloc *alloc,
+                                       struct guatiao_str text,
+                                       struct guatiao_timestamp *out,
+                                       struct guatiao_text_error *out_error);
+
+/*
+ Writes `timestamp` in UTC, `YYYY-MM-DDTHH:MM:SS[.fraction]Z`, as
+ `guatiao_date_format` writes a date. `GUATIAO_ERR_BAD_VALUE` for
+ nanoseconds past 999999999 or an instant outside the years.
+
+ # Safety
+
+ As `guatiao_date_format`.
+ */
+guatiao_status guatiao_timestamp_format(const struct guatiao_alloc *alloc,
+                                        const struct guatiao_timestamp *timestamp,
+                                        struct guatiao_value *out);
+
+/*
+ Reads an instant as `guatiao_timestamp_parse` does and writes it in
+ UTC, as `guatiao_date_normalize` does: `2026-10-21T19:15:00+05:30`
+ becomes `2026-10-21T13:45:00Z`.
+
+ # Safety
+
+ As `guatiao_date_parse`.
+ */
+guatiao_status guatiao_timestamp_normalize(const struct guatiao_alloc *alloc,
+                                           struct guatiao_str text,
+                                           struct guatiao_value *out,
+                                           struct guatiao_text_error *out_error);
 
 /*
  Frees everything `v` owns and leaves it null-tagged.

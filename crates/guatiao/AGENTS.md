@@ -587,7 +587,7 @@ fraction to the clock's resolution, 100 ns on Windows, whose
 seconds read exactly from its text (`1.5`, `2e-3`; not negative, no
 finer than a nanosecond), and the `{"secs", "nanos"}` map serde writes.
 The schema declares only the first. There is no C struct for it: C reads
-the list.
+the list, or all three spellings with `guatiao_duration_read`.
 
 ```rust
 pub trait MapKey: Sized {                    // guatiao::value::convert::MapKey
@@ -2152,7 +2152,8 @@ Values: `guatiao_value_{free,clone,null,absent,bool,map,list,string,
 number,bytes}`, `guatiao_map_{set,discard,clear,copy_from}`,
 `guatiao_list_{push,discard,clear}`, `guatiao_string_push`,
 `guatiao_buffer_push`, `guatiao_alloc_default`.
-Also `guatiao_merge` and `guatiao_schema_validate`. The path and flat-key
+Also `guatiao_merge` and `guatiao_schema_validate`. Dates, times and
+spans: see "Dates, times and spans from C" below. The path and flat-key
 functions (`guatiao_intake_{resolve,flat_keys,flatten,unflatten}`) are
 `guatiao-intake`'s, declared in its own `guatiao_intake.h`.
 
@@ -2216,6 +2217,59 @@ Contracts that are not in the signatures:
   node's own buffer**; an overlapping source is copied out first.
 - **The schema vocabulary is in the header** as `GUATIAO_KEY_*` macros,
   so a C consumer compares keys without spelling them.
+
+## Dates, times and spans from C
+
+Five forms, each with three functions, `guatiao_<form>_parse` (text into
+a struct), `_format` (a struct as canonical text, a string value built
+through `alloc`) and `_normalize` (text rewritten canonically), for
+`<form>` = `date`, `time`, `datetime`, `timestamp`, `span`; plus
+`guatiao_date_add_span`, `guatiao_datetime_add_span` and
+`guatiao_duration_read`. In Rust they are `exports::time` and
+`exports::span`, the structs `DateFields`, `TimeFields`,
+`DateTimeFields`, `TimestampFields`, `SpanFields` and `TextError`, each
+`From` the Rust type and `TryFrom` back.
+
+```c
+typedef struct guatiao_date { int32_t year; uint8_t month, day; } guatiao_date;
+typedef struct guatiao_time { uint8_t hour, minute, second; uint32_t nanosecond; } guatiao_time;
+typedef struct guatiao_datetime { guatiao_date date; guatiao_time time; } guatiao_datetime;
+typedef struct guatiao_timestamp { int64_t seconds; uint32_t nanoseconds; } guatiao_timestamp;
+typedef struct guatiao_span { int64_t years, months, weeks, days, hours, minutes, seconds;
+                              int32_t nanoseconds; } guatiao_span;   /* one sign for all */
+typedef struct guatiao_text_error { size_t at; guatiao_value expected; } guatiao_text_error;
+
+guatiao_status guatiao_date_parse(const guatiao_alloc *alloc, guatiao_str text,
+                                  guatiao_date *out, guatiao_text_error *out_error);
+guatiao_status guatiao_date_format(const guatiao_alloc *alloc, const guatiao_date *date,
+                                   guatiao_value *out);
+guatiao_status guatiao_date_normalize(const guatiao_alloc *alloc, guatiao_str text,
+                                      guatiao_value *out, guatiao_text_error *out_error);
+guatiao_status guatiao_date_add_span(const guatiao_date *date, const guatiao_span *span,
+                                     guatiao_date *out);
+guatiao_status guatiao_duration_read(const guatiao_value *value, uint64_t *out_seconds,
+                                     uint32_t *out_nanoseconds);
+```
+
+- **A refusal is `GUATIAO_ERR_BAD_VALUE`** and, through a non-null
+  `out_error`, the byte offset and a string saying what was expected
+  there, built through `alloc` (free it with `guatiao_value_free`); with
+  a null `alloc` the offset is still written and `expected` stays ABSENT.
+  Text that is not UTF-8 is refused at its first bad byte. Nothing quotes
+  the text.
+- **Out-parameters are written first**: a struct zeroed, a value ABSENT,
+  `out_error` `{0, ABSENT}`. A `_parse` needs no allocator when
+  `out_error` is null.
+- **A struct that is not a form is refused when given**: a date off the
+  calendar, a time off the clock, nanoseconds of a second or more, an
+  instant outside the years, a span with fields of both signs or
+  `INT64_MIN`. A span's every non-zero field carries its one sign
+  (`-P1DT2H` is `{.days = -1, .hours = -2}`).
+- **`_add_span` may write over its input** (`out` == `date`), and refuses
+  a span with time units on a date and any step outside the years.
+- **`guatiao_duration_read`** reads `[secs, nanos]`, a number of seconds
+  and `{"secs", "nanos"}`, as `Duration`'s `FromValue` does; writing one
+  is a list of two numbers.
 
 ## The allocator
 
