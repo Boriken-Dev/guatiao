@@ -51,11 +51,15 @@ mod image;
 mod lease;
 #[cfg(feature = "load")]
 mod mapped;
+#[cfg(feature = "load")]
+mod source;
 
 pub use self::entry::*;
 pub use self::host::*;
 pub use self::image::*;
 pub(crate) use self::lease::{Hold, Lease, Pin};
+#[cfg(feature = "load")]
+pub(crate) use self::source::{Opening, SourceCell, SourceFileError, open_source_file};
 
 /// What the tests of every file here build descriptors with.
 #[cfg(test)]

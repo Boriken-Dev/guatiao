@@ -529,6 +529,7 @@ include = [
   "KindTable",
   "KindTables",
   "KindHeader",
+  "SourceInfo",
   "ProviderError",
   "ObjectRaw",
   "BytesMut",
@@ -594,6 +595,7 @@ exclude = ["Entry", "dl_iterate_phdr", "dladdr"]
 "KindTable" = "guatiao_kind_table"
 "KindTables" = "guatiao_kind_tables"
 "KindHeader" = "guatiao_kind_header"
+"SourceInfo" = "guatiao_source_info"
 "ProviderError" = "guatiao_provider_error"
 "ObjectRaw" = "guatiao_object"
 "BytesMut" = "guatiao_bytes_mut"

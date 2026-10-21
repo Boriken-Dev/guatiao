@@ -9,6 +9,8 @@ pub mod guatiao::exports::library
 pub struct guatiao::exports::library::HostRegistry
 impl core::fmt::Debug for guatiao::exports::library::HostRegistry
 pub fn guatiao::exports::library::HostRegistry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_add_source(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::library::desc::SourceInfo, *mut guatiao::library::kind::ProviderError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_add_source_file(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::value::value::Value, *mut guatiao::library::kind::ProviderError) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_available(*const guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_best(*const guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_collect(*mut guatiao::exports::library::HostRegistry, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
@@ -29,6 +31,7 @@ pub fn guatiao::exports::library::HostRegistry::fmt(&self, &mut core::fmt::Forma
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_provider_table(*const guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, guatiao::value::types::text::Str<'_>, *mut usize) -> *const core::ffi::c_void
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_provider_vtable(*const guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *mut usize) -> *const core::ffi::c_void
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_providers(*const guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_refresh(*mut guatiao::exports::library::HostRegistry, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_register_entry(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, core::option::Option<fn(*const guatiao::library::desc::HostInfo<'static>) -> *const guatiao::library::desc::LibraryInfo<'static>>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_retire(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_scan_dir(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, bool, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
@@ -37,6 +40,7 @@ pub fn guatiao::exports::library::HostRegistry::fmt(&self, &mut core::fmt::Forma
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_set_priority(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, i32) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_unload(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_unload_unchecked(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_watch_dir(*mut guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, guatiao::value::types::text::Str<'_>) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::library::guatiao_registry_why_not(*const guatiao::exports::library::HostRegistry, guatiao::value::types::text::Str<'_>, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub mod guatiao::exports::merge
 #[repr(C)] pub struct guatiao::exports::merge::MergeOverride<'a>
@@ -347,6 +351,20 @@ pub fn guatiao::library::desc::Providers<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::library::desc::Providers<'a>
 pub fn guatiao::library::desc::Providers<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<'a> core::marker::Copy for guatiao::library::desc::Providers<'a>
+#[repr(C)] pub struct guatiao::library::desc::SourceInfo
+pub guatiao::library::desc::SourceInfo::abi_version: u32
+pub guatiao::library::desc::SourceInfo::close: core::option::Option<fn(*mut core::ffi::c_void, guatiao::value::types::text::Str<'_>, *const guatiao::library::desc::LibraryInfo<'static>)>
+pub guatiao::library::desc::SourceInfo::ctx: *mut core::ffi::c_void
+pub guatiao::library::desc::SourceInfo::list: core::option::Option<fn(*mut core::ffi::c_void, *const guatiao::library::desc::HostInfo<'static>, *mut guatiao::value::types::list::List) -> guatiao::value::status::Status>
+pub guatiao::library::desc::SourceInfo::open: core::option::Option<fn(*mut core::ffi::c_void, *const guatiao::library::desc::HostInfo<'static>, guatiao::value::types::text::Str<'_>, *mut *const guatiao::library::desc::LibraryInfo<'static>, *mut guatiao::library::kind::ProviderError) -> guatiao::value::status::Status>
+pub guatiao::library::desc::SourceInfo::struct_size: u32
+impl guatiao::library::desc::SourceInfo
+pub const fn guatiao::library::desc::SourceInfo::floor() -> usize
+impl core::clone::Clone for guatiao::library::desc::SourceInfo
+pub fn guatiao::library::desc::SourceInfo::clone(&self) -> Self
+impl core::fmt::Debug for guatiao::library::desc::SourceInfo
+pub fn guatiao::library::desc::SourceInfo::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::library::desc::SourceInfo
 pub const guatiao::library::desc::ABI_VERSION: u32
 pub mod guatiao::library::key
 #[non_exhaustive] pub enum guatiao::library::key::KeyError
@@ -749,11 +767,13 @@ impl core::marker::Send for guatiao::library::raw::ProviderView
 impl core::marker::Sync for guatiao::library::raw::ProviderView
 pub const guatiao::library::raw::DECLARES_SYMBOL: &[u8]
 pub const guatiao::library::raw::ENTRY_SYMBOL: &[u8]
+pub const guatiao::library::raw::SOURCE_SYMBOL: &[u8]
 pub fn guatiao::library::raw::answer(impl core::ops::function::FnOnce() -> core::option::Option<&'static guatiao::library::desc::LibraryInfo<'static>>) -> *const guatiao::library::desc::LibraryInfo<'static>
 pub unsafe fn guatiao::library::raw::read_host(*const guatiao::library::desc::HostInfo<'_>) -> core::option::Option<guatiao::library::desc::HostInfo<'_>>
 pub type guatiao::library::raw::CreateFn = fn(*mut core::ffi::c_void, *const guatiao::value::value::Value, *mut *mut core::ffi::c_void, *mut guatiao::library::kind::ProviderError) -> guatiao::value::status::Status
 pub type guatiao::library::raw::DestroyFn = fn(*mut core::ffi::c_void, *mut core::ffi::c_void)
 pub type guatiao::library::raw::EntryFn = fn(*const guatiao::library::desc::HostInfo<'static>) -> *const guatiao::library::desc::LibraryInfo<'static>
+pub type guatiao::library::raw::SourceFn = fn(*const guatiao::library::desc::HostInfo<'static>, *const guatiao::value::value::Value, *mut *const guatiao::library::desc::SourceInfo, *mut guatiao::library::kind::ProviderError) -> guatiao::value::status::Status
 pub mod guatiao::library::registry
 #[non_exhaustive] pub enum guatiao::library::registry::LoadError
 pub guatiao::library::registry::LoadError::Duplicate
@@ -790,6 +810,8 @@ pub guatiao::library::registry::Skipped::NotExaminable
 pub guatiao::library::registry::Skipped::ProviderAlreadyLoaded
 pub guatiao::library::registry::Skipped::ProviderAlreadyLoaded::from: std::path::PathBuf
 pub guatiao::library::registry::Skipped::ProviderAlreadyLoaded::id: alloc::string::String
+pub guatiao::library::registry::Skipped::Source
+pub guatiao::library::registry::Skipped::Source::serves: alloc::string::String
 pub guatiao::library::registry::Skipped::UnsupportedAbi
 pub guatiao::library::registry::Skipped::UnsupportedAbi::declared: u32
 impl core::clone::Clone for guatiao::library::registry::Skipped
@@ -864,6 +886,13 @@ pub fn guatiao::library::registry::Provider::fmt(&self, &mut core::fmt::Formatte
 impl core::marker::Send for guatiao::library::registry::Provider
 impl core::marker::Sync for guatiao::library::registry::Provider
 pub struct guatiao::library::registry::Registry
+impl guatiao::library::registry::Registry
+pub fn guatiao::library::registry::Registry::add_source(&mut self, &str, impl guatiao::library::source::Source + 'static) -> core::result::Result<(), guatiao::library::source::SourceError>
+pub fn guatiao::library::registry::Registry::add_source_file(&mut self, &std::path::Path, &guatiao::value::types::map::Map) -> core::result::Result<alloc::string::String, guatiao::library::source::SourceError>
+pub fn guatiao::library::registry::Registry::add_source_table(&mut self, &str, &guatiao::library::desc::SourceInfo) -> core::result::Result<(), guatiao::library::source::SourceError>
+pub fn guatiao::library::registry::Registry::refresh(&mut self) -> guatiao::library::source::Refreshed
+pub fn guatiao::library::registry::Registry::sources(&self) -> alloc::vec::Vec<alloc::string::String>
+pub fn guatiao::library::registry::Registry::watch_dir(&mut self, &std::path::Path, guatiao::library::scan::ScanRules) -> core::result::Result<(), guatiao::library::source::SourceError>
 impl guatiao::library::registry::Registry
 pub fn guatiao::library::registry::Registry::all(&self) -> &[guatiao::library::registry::Provider]
 pub fn guatiao::library::registry::Registry::all_ranked(&self) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::library::registry::Provider>
@@ -1027,6 +1056,90 @@ pub fn guatiao::library::scan::scan_dir_rules(&mut guatiao::library::registry::R
 pub fn guatiao::library::scan::scan_dir_with(&mut guatiao::library::registry::Registry, &std::path::Path, guatiao::library::scan::Order, impl core::ops::function::FnMut(&guatiao::library::scan::Declared) -> core::result::Result<(), alloc::string::String>) -> core::result::Result<guatiao::library::scan::LoadReport, core::io::error::Error>
 pub fn guatiao::library::scan::scan_path(&mut guatiao::library::registry::Registry, &guatiao::library::scan::SearchPath, guatiao::library::scan::Order, &guatiao::library::scan::ScanRules) -> guatiao::library::scan::LoadReport
 pub fn guatiao::library::scan::scan_path_with(&mut guatiao::library::registry::Registry, &guatiao::library::scan::SearchPath, guatiao::library::scan::Order, impl core::ops::function::FnMut(&guatiao::library::scan::Declared) -> core::result::Result<(), alloc::string::String>) -> guatiao::library::scan::LoadReport
+pub mod guatiao::library::source
+#[non_exhaustive] pub enum guatiao::library::source::SourceError
+pub guatiao::library::source::SourceError::Duplicate
+pub guatiao::library::source::SourceError::Duplicate::name: alloc::string::String
+pub guatiao::library::source::SourceError::Malformed
+pub guatiao::library::source::SourceError::Malformed::name: alloc::string::String
+pub guatiao::library::source::SourceError::Malformed::reason: alloc::string::String
+pub guatiao::library::source::SourceError::NotASource
+pub guatiao::library::source::SourceError::NotASource::path: std::path::PathBuf
+pub guatiao::library::source::SourceError::Open
+pub guatiao::library::source::SourceError::Open::path: std::path::PathBuf
+pub guatiao::library::source::SourceError::Open::reason: alloc::string::String
+pub guatiao::library::source::SourceError::Refused
+pub guatiao::library::source::SourceError::Refused::message: alloc::string::String
+pub guatiao::library::source::SourceError::Refused::name: alloc::string::String
+pub guatiao::library::source::SourceError::Refused::status: guatiao::value::status::Status
+impl guatiao::library::source::SourceError
+pub fn guatiao::library::source::SourceError::status(&self) -> guatiao::value::status::Status
+impl core::error::Error for guatiao::library::source::SourceError
+impl core::fmt::Debug for guatiao::library::source::SourceError
+pub fn guatiao::library::source::SourceError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::library::source::SourceError
+pub fn guatiao::library::source::SourceError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::library::source::Candidate
+impl guatiao::library::source::Candidate
+pub fn guatiao::library::source::Candidate::id(&self) -> &str
+pub fn guatiao::library::source::Candidate::kinds(&self) -> &[alloc::string::String]
+pub fn guatiao::library::source::Candidate::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> guatiao::library::source::Candidate
+pub fn guatiao::library::source::Candidate::stamp(&self) -> &str
+pub fn guatiao::library::source::Candidate::version(&self) -> &str
+impl core::clone::Clone for guatiao::library::source::Candidate
+pub fn guatiao::library::source::Candidate::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::source::Candidate
+impl core::cmp::PartialEq for guatiao::library::source::Candidate
+pub fn guatiao::library::source::Candidate::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::source::Candidate
+pub fn guatiao::library::source::Candidate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::source::Candidate
+#[non_exhaustive] pub struct guatiao::library::source::Refreshed
+pub guatiao::library::source::Refreshed::loaded: alloc::vec::Vec<guatiao::library::source::Served>
+pub guatiao::library::source::Refreshed::refused: alloc::vec::Vec<guatiao::library::source::Refused>
+pub guatiao::library::source::Refreshed::retired: alloc::vec::Vec<guatiao::library::source::Served>
+pub guatiao::library::source::Refreshed::skipped: alloc::vec::Vec<(alloc::string::String, alloc::string::String, guatiao::library::registry::Skipped)>
+impl guatiao::library::source::Refreshed
+pub fn guatiao::library::source::Refreshed::is_empty(&self) -> bool
+impl core::clone::Clone for guatiao::library::source::Refreshed
+pub fn guatiao::library::source::Refreshed::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::source::Refreshed
+impl core::cmp::PartialEq for guatiao::library::source::Refreshed
+pub fn guatiao::library::source::Refreshed::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao::library::source::Refreshed
+pub fn guatiao::library::source::Refreshed::default() -> Self
+impl core::fmt::Debug for guatiao::library::source::Refreshed
+pub fn guatiao::library::source::Refreshed::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::source::Refreshed
+#[non_exhaustive] pub struct guatiao::library::source::Refused
+pub guatiao::library::source::Refused::id: core::option::Option<alloc::string::String>
+pub guatiao::library::source::Refused::reason: alloc::string::String
+pub guatiao::library::source::Refused::source: alloc::string::String
+impl core::clone::Clone for guatiao::library::source::Refused
+pub fn guatiao::library::source::Refused::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::source::Refused
+impl core::cmp::PartialEq for guatiao::library::source::Refused
+pub fn guatiao::library::source::Refused::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::source::Refused
+pub fn guatiao::library::source::Refused::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::source::Refused
+#[non_exhaustive] pub struct guatiao::library::source::Served
+pub guatiao::library::source::Served::id: alloc::string::String
+pub guatiao::library::source::Served::key: alloc::string::String
+pub guatiao::library::source::Served::source: alloc::string::String
+pub guatiao::library::source::Served::stamp: alloc::string::String
+impl core::clone::Clone for guatiao::library::source::Served
+pub fn guatiao::library::source::Served::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::source::Served
+impl core::cmp::PartialEq for guatiao::library::source::Served
+pub fn guatiao::library::source::Served::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::source::Served
+pub fn guatiao::library::source::Served::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::source::Served
+pub trait guatiao::library::source::Source: core::marker::Send + core::marker::Sync
+pub fn guatiao::library::source::Source::close(&self, &str, &str)
+pub fn guatiao::library::source::Source::list(&self, guatiao::library::raw::Host) -> core::result::Result<alloc::vec::Vec<guatiao::library::source::Candidate>, guatiao::library::kind::ProviderError>
+pub fn guatiao::library::source::Source::open(&self, guatiao::library::raw::Host, &str) -> core::result::Result<guatiao::library::raw::LocalLibrary<'static>, guatiao::library::kind::ProviderError>
 #[non_exhaustive] pub enum guatiao::library::InstantiateError
 pub guatiao::library::InstantiateError::Invalid(guatiao::schema::ValidationError)
 pub guatiao::library::InstantiateError::Refused(guatiao::library::kind::ProviderError)
@@ -1148,6 +1261,8 @@ pub guatiao::library::Skipped::NotExaminable
 pub guatiao::library::Skipped::ProviderAlreadyLoaded
 pub guatiao::library::Skipped::ProviderAlreadyLoaded::from: std::path::PathBuf
 pub guatiao::library::Skipped::ProviderAlreadyLoaded::id: alloc::string::String
+pub guatiao::library::Skipped::Source
+pub guatiao::library::Skipped::Source::serves: alloc::string::String
 pub guatiao::library::Skipped::UnsupportedAbi
 pub guatiao::library::Skipped::UnsupportedAbi::declared: u32
 impl core::clone::Clone for guatiao::library::registry::Skipped
@@ -1160,6 +1275,28 @@ pub fn guatiao::library::registry::Skipped::fmt(&self, &mut core::fmt::Formatter
 impl core::fmt::Display for guatiao::library::registry::Skipped
 pub fn guatiao::library::registry::Skipped::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao::library::registry::Skipped
+#[non_exhaustive] pub enum guatiao::library::SourceError
+pub guatiao::library::SourceError::Duplicate
+pub guatiao::library::SourceError::Duplicate::name: alloc::string::String
+pub guatiao::library::SourceError::Malformed
+pub guatiao::library::SourceError::Malformed::name: alloc::string::String
+pub guatiao::library::SourceError::Malformed::reason: alloc::string::String
+pub guatiao::library::SourceError::NotASource
+pub guatiao::library::SourceError::NotASource::path: std::path::PathBuf
+pub guatiao::library::SourceError::Open
+pub guatiao::library::SourceError::Open::path: std::path::PathBuf
+pub guatiao::library::SourceError::Open::reason: alloc::string::String
+pub guatiao::library::SourceError::Refused
+pub guatiao::library::SourceError::Refused::message: alloc::string::String
+pub guatiao::library::SourceError::Refused::name: alloc::string::String
+pub guatiao::library::SourceError::Refused::status: guatiao::value::status::Status
+impl guatiao::library::source::SourceError
+pub fn guatiao::library::source::SourceError::status(&self) -> guatiao::value::status::Status
+impl core::error::Error for guatiao::library::source::SourceError
+impl core::fmt::Debug for guatiao::library::source::SourceError
+pub fn guatiao::library::source::SourceError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::library::source::SourceError
+pub fn guatiao::library::source::SourceError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub enum guatiao::library::Subject
 pub guatiao::library::Subject::Library
 pub guatiao::library::Subject::Provider
@@ -1229,6 +1366,21 @@ impl<'a> core::convert::From<guatiao::library::kind::BytesMut<'a>> for &'a mut [
 pub fn &'a mut [u8]::from(guatiao::library::kind::BytesMut<'a>) -> &'a mut [u8]
 impl<'a> core::fmt::Debug for guatiao::library::kind::BytesMut<'a>
 pub fn guatiao::library::kind::BytesMut<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::library::Candidate
+impl guatiao::library::source::Candidate
+pub fn guatiao::library::source::Candidate::id(&self) -> &str
+pub fn guatiao::library::source::Candidate::kinds(&self) -> &[alloc::string::String]
+pub fn guatiao::library::source::Candidate::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> guatiao::library::source::Candidate
+pub fn guatiao::library::source::Candidate::stamp(&self) -> &str
+pub fn guatiao::library::source::Candidate::version(&self) -> &str
+impl core::clone::Clone for guatiao::library::source::Candidate
+pub fn guatiao::library::source::Candidate::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::source::Candidate
+impl core::cmp::PartialEq for guatiao::library::source::Candidate
+pub fn guatiao::library::source::Candidate::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::source::Candidate
+pub fn guatiao::library::source::Candidate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::source::Candidate
 pub struct guatiao::library::Declared
 impl guatiao::library::scan::Declared
 pub fn guatiao::library::scan::Declared::has(&self, &str, &str) -> bool
@@ -1651,7 +1803,43 @@ pub fn guatiao::library::desc::Providers<'a>::clone(&self) -> Self
 impl<'a> core::fmt::Debug for guatiao::library::desc::Providers<'a>
 pub fn guatiao::library::desc::Providers<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<'a> core::marker::Copy for guatiao::library::desc::Providers<'a>
+#[non_exhaustive] pub struct guatiao::library::Refreshed
+pub guatiao::library::Refreshed::loaded: alloc::vec::Vec<guatiao::library::source::Served>
+pub guatiao::library::Refreshed::refused: alloc::vec::Vec<guatiao::library::source::Refused>
+pub guatiao::library::Refreshed::retired: alloc::vec::Vec<guatiao::library::source::Served>
+pub guatiao::library::Refreshed::skipped: alloc::vec::Vec<(alloc::string::String, alloc::string::String, guatiao::library::registry::Skipped)>
+impl guatiao::library::source::Refreshed
+pub fn guatiao::library::source::Refreshed::is_empty(&self) -> bool
+impl core::clone::Clone for guatiao::library::source::Refreshed
+pub fn guatiao::library::source::Refreshed::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::source::Refreshed
+impl core::cmp::PartialEq for guatiao::library::source::Refreshed
+pub fn guatiao::library::source::Refreshed::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao::library::source::Refreshed
+pub fn guatiao::library::source::Refreshed::default() -> Self
+impl core::fmt::Debug for guatiao::library::source::Refreshed
+pub fn guatiao::library::source::Refreshed::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::source::Refreshed
+#[non_exhaustive] pub struct guatiao::library::Refused
+pub guatiao::library::Refused::id: core::option::Option<alloc::string::String>
+pub guatiao::library::Refused::reason: alloc::string::String
+pub guatiao::library::Refused::source: alloc::string::String
+impl core::clone::Clone for guatiao::library::source::Refused
+pub fn guatiao::library::source::Refused::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::source::Refused
+impl core::cmp::PartialEq for guatiao::library::source::Refused
+pub fn guatiao::library::source::Refused::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::source::Refused
+pub fn guatiao::library::source::Refused::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::source::Refused
 pub struct guatiao::library::Registry
+impl guatiao::library::registry::Registry
+pub fn guatiao::library::registry::Registry::add_source(&mut self, &str, impl guatiao::library::source::Source + 'static) -> core::result::Result<(), guatiao::library::source::SourceError>
+pub fn guatiao::library::registry::Registry::add_source_file(&mut self, &std::path::Path, &guatiao::value::types::map::Map) -> core::result::Result<alloc::string::String, guatiao::library::source::SourceError>
+pub fn guatiao::library::registry::Registry::add_source_table(&mut self, &str, &guatiao::library::desc::SourceInfo) -> core::result::Result<(), guatiao::library::source::SourceError>
+pub fn guatiao::library::registry::Registry::refresh(&mut self) -> guatiao::library::source::Refreshed
+pub fn guatiao::library::registry::Registry::sources(&self) -> alloc::vec::Vec<alloc::string::String>
+pub fn guatiao::library::registry::Registry::watch_dir(&mut self, &std::path::Path, guatiao::library::scan::ScanRules) -> core::result::Result<(), guatiao::library::source::SourceError>
 impl guatiao::library::registry::Registry
 pub fn guatiao::library::registry::Registry::all(&self) -> &[guatiao::library::registry::Provider]
 pub fn guatiao::library::registry::Registry::all_ranked(&self) -> impl core::iter::traits::iterator::Iterator<Item = &guatiao::library::registry::Provider>
@@ -1761,9 +1949,37 @@ pub fn guatiao::library::scan::SearchPath::default() -> Self
 impl core::fmt::Debug for guatiao::library::scan::SearchPath
 pub fn guatiao::library::scan::SearchPath::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao::library::scan::SearchPath
+#[non_exhaustive] pub struct guatiao::library::Served
+pub guatiao::library::Served::id: alloc::string::String
+pub guatiao::library::Served::key: alloc::string::String
+pub guatiao::library::Served::source: alloc::string::String
+pub guatiao::library::Served::stamp: alloc::string::String
+impl core::clone::Clone for guatiao::library::source::Served
+pub fn guatiao::library::source::Served::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::source::Served
+impl core::cmp::PartialEq for guatiao::library::source::Served
+pub fn guatiao::library::source::Served::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::source::Served
+pub fn guatiao::library::source::Served::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::source::Served
+#[repr(C)] pub struct guatiao::library::SourceInfo
+pub guatiao::library::SourceInfo::abi_version: u32
+pub guatiao::library::SourceInfo::close: core::option::Option<fn(*mut core::ffi::c_void, guatiao::value::types::text::Str<'_>, *const guatiao::library::desc::LibraryInfo<'static>)>
+pub guatiao::library::SourceInfo::ctx: *mut core::ffi::c_void
+pub guatiao::library::SourceInfo::list: core::option::Option<fn(*mut core::ffi::c_void, *const guatiao::library::desc::HostInfo<'static>, *mut guatiao::value::types::list::List) -> guatiao::value::status::Status>
+pub guatiao::library::SourceInfo::open: core::option::Option<fn(*mut core::ffi::c_void, *const guatiao::library::desc::HostInfo<'static>, guatiao::value::types::text::Str<'_>, *mut *const guatiao::library::desc::LibraryInfo<'static>, *mut guatiao::library::kind::ProviderError) -> guatiao::value::status::Status>
+pub guatiao::library::SourceInfo::struct_size: u32
+impl guatiao::library::desc::SourceInfo
+pub const fn guatiao::library::desc::SourceInfo::floor() -> usize
+impl core::clone::Clone for guatiao::library::desc::SourceInfo
+pub fn guatiao::library::desc::SourceInfo::clone(&self) -> Self
+impl core::fmt::Debug for guatiao::library::desc::SourceInfo
+pub fn guatiao::library::desc::SourceInfo::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::library::desc::SourceInfo
 pub const guatiao::library::ABI_VERSION: u32
 pub const guatiao::library::DECLARES_SYMBOL: &[u8]
 pub const guatiao::library::ENTRY_SYMBOL: &[u8]
+pub const guatiao::library::SOURCE_SYMBOL: &[u8]
 pub trait guatiao::library::Kind: 'static
 pub type guatiao::library::Kind::Vtable: 'static
 pub const guatiao::library::Kind::FLOOR: usize
@@ -1775,6 +1991,10 @@ pub fn guatiao::library::Kind::as_dyn(&guatiao::library::kind::Remote<Self>) -> 
 pub fn guatiao::library::Kind::as_dyn_mut(&mut guatiao::library::kind::Remote<Self>) -> &mut Self
 pub fn guatiao::library::Kind::boxed(guatiao::library::kind::Remote<Self>) -> alloc::boxed::Box<Self>
 pub fn guatiao::library::Kind::shared(guatiao::library::kind::Remote<Self>) -> alloc::sync::Arc<Self>
+pub trait guatiao::library::Source: core::marker::Send + core::marker::Sync
+pub fn guatiao::library::Source::close(&self, &str, &str)
+pub fn guatiao::library::Source::list(&self, guatiao::library::raw::Host) -> core::result::Result<alloc::vec::Vec<guatiao::library::source::Candidate>, guatiao::library::kind::ProviderError>
+pub fn guatiao::library::Source::open(&self, guatiao::library::raw::Host, &str) -> core::result::Result<guatiao::library::raw::LocalLibrary<'static>, guatiao::library::kind::ProviderError>
 pub fn guatiao::library::answer(impl core::ops::function::FnOnce() -> core::option::Option<&'static guatiao::library::desc::LibraryInfo<'static>>) -> *const guatiao::library::desc::LibraryInfo<'static>
 pub fn guatiao::library::bundle_binary(&std::path::Path) -> core::option::Option<std::path::PathBuf>
 pub fn guatiao::library::declare_notice(&mut guatiao::value::types::map::Map, guatiao::library::notices::Notice<'_>) -> core::result::Result<(), guatiao::value::error::ValueError>
@@ -1789,6 +2009,7 @@ pub fn guatiao::library::scan_dir_with(&mut guatiao::library::registry::Registry
 pub fn guatiao::library::scan_path(&mut guatiao::library::registry::Registry, &guatiao::library::scan::SearchPath, guatiao::library::scan::Order, &guatiao::library::scan::ScanRules) -> guatiao::library::scan::LoadReport
 pub fn guatiao::library::scan_path_with(&mut guatiao::library::registry::Registry, &guatiao::library::scan::SearchPath, guatiao::library::scan::Order, impl core::ops::function::FnMut(&guatiao::library::scan::Declared) -> core::result::Result<(), alloc::string::String>) -> guatiao::library::scan::LoadReport
 pub type guatiao::library::EntryFn = fn(*const guatiao::library::desc::HostInfo<'static>) -> *const guatiao::library::desc::LibraryInfo<'static>
+pub type guatiao::library::SourceFn = fn(*const guatiao::library::desc::HostInfo<'static>, *const guatiao::value::value::Value, *mut *const guatiao::library::desc::SourceInfo, *mut guatiao::library::kind::ProviderError) -> guatiao::value::status::Status
 pub mod guatiao::schema
 pub mod guatiao::schema::build
 pub struct guatiao::schema::build::ArmBuilder

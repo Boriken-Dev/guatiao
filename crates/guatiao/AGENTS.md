@@ -1886,6 +1886,90 @@ In C: `guatiao_registry_scan_path(reg, spec, descending, rules, alloc,
 &answer)`, whose report gains `"unreadable": [{"path", "error"}…]` only
 when there is one.
 
+### Sources: libraries that come and go while the host runs
+
+```rust
+use guatiao::library::{Candidate, Registry, Refreshed, ScanRules, Source};
+
+reg.add_source("shelf", MySource)?;                          // a Source the host links
+reg.add_source_table("shelf_c", &table)?;                    // a guatiao_source_info the host links
+let name = reg.add_source_file(Path::new("guatiao_py.dll"), &config)?;   // a file exporting guatiao_source
+reg.watch_dir(Path::new("plugins"), ScanRules::default())?; // a directory kept in step with disk
+let changed: Refreshed = reg.refresh();                     // when the host chooses: a timer, its own watcher
+changed.loaded / changed.retired                            // Vec<Served { source, id, stamp, key }>
+changed.skipped                                             // Vec<(source, id, Skipped)>
+changed.refused                                             // Vec<Refused { source, id: Option<String>, reason }>
+```
+
+A **source** serves libraries that are not files a scan can probe — an
+interpreter's modules, a manifest's entries — or keeps a directory in
+step with disk. The registry keeps it for its life; **what it serves are
+ordinary libraries**, retired and closed like any other. Nothing runs on
+its own: no thread, no watcher, no global state. The host calls
+`refresh()`, which re-lists every source and diffs by `(source, id,
+stamp)`:
+
+- a new candidate is opened and loaded, filed under `<source:id>`;
+- a changed stamp opens the new build **first** and only once it loads
+  retires the old: instances of the old keep working on their lease, new
+  lookups find the new; a refused open keeps the old one serving;
+- a vanished candidate is retired;
+- a library the host retired itself stays out until its stamp changes;
+- an open is retried only when its stamp changes; the opened library's
+  id must be the candidate's, or the open is refused (and closed).
+
+Refusals are in `Refreshed::refused`, never a failed refresh. A served
+library closes through `collect`/`unload` once nothing holds it, its own
+`unload` slot asked when it has one (a missing one is no refusal: the
+source's `close` is the promise), and the source is then told. Dropping
+the registry closes nothing.
+
+`trait Source: Send + Sync { fn list(&self, host: Host) ->
+Result<Vec<Candidate>, ProviderError>; fn open(&self, host: Host, id: &str)
+-> Result<LocalLibrary<'static>, ProviderError>; fn close(&self, id: &str,
+stamp: &str) {} }`. `Candidate::new(id, version, kinds, stamp)`. Calls are
+one at a time, from the thread calling the registry, panics caught.
+
+**The C table**, `guatiao_source_info` (`SourceInfo`): `struct_size`,
+`abi_version`, `ctx`, then
+
+- `list(ctx, host, guatiao_list *out)`: one map per candidate, `{"id",
+  "version", "kinds": [..], "stamp"}`, written over a carrier naming the
+  allocator to build in; runs no provider code;
+- `open(ctx, host, guatiao_str id, const guatiao_library_info **out,
+  guatiao_provider_error *err)`: the descriptor, valid until `close`, or
+  a refusal with words;
+- `close(ctx, id, info)`: once per descriptor `open` answered, after the
+  registry closed it (null when nothing needs letting go).
+
+A source **file** exports `guatiao_status guatiao_source(const
+guatiao_host_info *host, const guatiao_value *config, const
+guatiao_source_info **out, guatiao_provider_error *err)` (`SOURCE_SYMBOL`,
+`SourceFn`) and declares `source=<what it serves>` in `guatiao_declares`:
+a scan reports it as `Skipped::Source { serves }` and never loads it.
+`add_source_file` maps it, checks the table's slots lie in its code, and
+**never unmaps it**. `SourceError`: `Open`, `NotASource`, `Refused {
+status, message }`, `Malformed`, `Duplicate`; `.status()` is what it
+crosses C as.
+
+A **watched directory**: each refresh loads a library file that appeared
+(by `rules`, as a scan), retires one that vanished, and retires and loads
+again one whose length or modification time changed. A file replaced
+under the same path may load the image the platform loader still holds;
+replace under a new name to be sure of the new code. Windows refuses to
+delete a mapped image but moves one.
+
+In C: `guatiao_registry_add_source(reg, name, &table, &err)`,
+`guatiao_registry_add_source_file(reg, path, &config, &err)` (`err`
+written empty first; `NOT_FOUND` unmappable, `WRONG_KIND` no
+`guatiao_source` or a config that is not a map, `BAD_VALUE` refused table
+or a name already added, else the source's own status),
+`guatiao_registry_watch_dir(reg, dir, rules)`, and
+`guatiao_registry_refresh(reg, &alloc, &answer)`, answering `{"loaded":
+[{"source", "id", "stamp", "key"}…], "retired": […], "skipped": [{"source",
+"id", "skipped", …}…], "refused": [{"source", "id"?, "why"}…]}`. A scan
+report's `skipped` gains `"source"` with `"serves"`.
+
 ### Notices ride on `meta`
 
 ```rust
@@ -1985,7 +2069,9 @@ message>"}` and returns `GUATIAO_OK` for all three; a non-OK status means
 it could not answer at all. `why` is one of `no-entry-symbol`,
 `declined-this-host`, `unsupported-abi` (with `abi`), `already-loaded`
 (with `from`), `provider-already-loaded` (with `from` and `id`), or in a
-scan report `not-examinable` and `filtered` (with `by`, the rule). A rule
+scan report `not-examinable`, `filtered` (with `by`, the rule) and
+`source` (with `serves`: a source file, which a host adds rather than
+loads). A rule
 that is not `[!]KEY=VALUE` is `GUATIAO_ERR_BAD_VALUE`. `guatiao_registry_providers` with an empty
 kind lists every provider; both listings are best first.
 

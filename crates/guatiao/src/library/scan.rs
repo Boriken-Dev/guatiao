@@ -203,7 +203,7 @@ pub fn bundle_binary(path: &Path) -> Option<PathBuf> {
 /// than a skip — and that one rule rejects a build's byproducts (`.pdb`,
 /// `.lib`, `.exp`, `.d`) and a library somebody disabled by renaming it,
 /// with no list to maintain.
-fn candidate(path: PathBuf) -> Option<PathBuf> {
+pub(crate) fn candidate(path: PathBuf) -> Option<PathBuf> {
     if path.is_file() {
         return has_library_extension(&path).then_some(path);
     }
@@ -744,27 +744,9 @@ fn consider(
     report: &mut LoadReport,
     filter: &mut impl FnMut(&Declared) -> Result<(), String>,
 ) {
-    match probe(&path) {
-        Ok(Probe {
-            entry: true,
-            declared,
-        }) => {
-            if let Err(by) = filter(&declared) {
-                report.skipped.push((path, Skipped::Filtered { by }));
-                return;
-            }
-        }
-        Ok(Probe { entry: false, .. }) => {
-            report.skipped.push((path, Skipped::NoEntrySymbol));
-            return;
-        }
-        Err(_) => {
-            // Unreadable, unparseable, or a malformed declaration.
-            // Reported, because a person looking for a plugin that
-            // did not appear needs to see the file was considered.
-            report.skipped.push((path, Skipped::NotExaminable));
-            return;
-        }
+    if let Err(why) = admit(&path, filter) {
+        report.skipped.push((path, why));
+        return;
     }
 
     match registry.load_file(&path) {
@@ -775,6 +757,31 @@ fn consider(
         Ok(Loading::Skipped(why)) => report.skipped.push((path, why)),
         Err(e) => report.failed.push((path, e)),
     }
+}
+
+/// Whether a file is a library worth mapping, decided from its bytes
+/// alone: a source, a file with no entry symbol, one `filter` refuses and
+/// one that cannot be read are each the skip that says so.
+pub(crate) fn admit(
+    path: &Path,
+    filter: &mut impl FnMut(&Declared) -> Result<(), String>,
+) -> Result<(), Skipped> {
+    let probed = match probe(path) {
+        Ok(probed) => probed,
+        // Unreadable, unparseable, or a malformed declaration. Reported,
+        // because a person looking for a plugin that did not appear needs
+        // to see the file was considered.
+        Err(_) => return Err(Skipped::NotExaminable),
+    };
+    if let Some(serves) = probed.declared.values("source").next() {
+        return Err(Skipped::Source {
+            serves: serves.to_string(),
+        });
+    }
+    if !probed.entry {
+        return Err(Skipped::NoEntrySymbol);
+    }
+    filter(&probed.declared).map_err(|by| Skipped::Filtered { by })
 }
 
 /// Loads every library along a search path, and reports the rest.

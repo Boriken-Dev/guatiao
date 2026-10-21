@@ -65,15 +65,15 @@ cargo +nightly-2026-09-21 miri test -p guatiao --all-features --test wire_roundt
   --skip a_thousand_keys
 ```
 
-The loader and the kind runtime, through descriptors the host links, under
-Stacked Borrows and again with `-Zmiri-tree-borrows` appended. Registering
+The loader, the kind runtime and sources, through descriptors the host
+links, under Stacked Borrows and again with `-Zmiri-tree-borrows` appended. Registering
 resolves a path (isolation off) and a registry leaks its host block by
 design (leak check off); `scan::` holds no `unsafe` and runs natively only:
 
 ```bash
 MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-ignore-leaks" \
   cargo +nightly-2026-09-21 miri test -p guatiao --all-features --lib \
-  -- library::raw:: library::kind:: library::registry::
+  -- library::raw:: library::kind:: library::registry:: library::source::
 MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-ignore-leaks" \
   cargo +nightly-2026-09-21 miri test -p guatiao --all-features \
   --test host_lookups --test provider_offers

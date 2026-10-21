@@ -55,8 +55,9 @@ use std::path::Path;
 use super::{guard, guard_with, out};
 use crate::library::ProviderError;
 use crate::library::{
-    EntryFn, HostInfo, LibraryInfo, LoadReport, Loading, Order, Provider, Registry, ScanRules,
-    SearchPath, Skipped, UnloadError, WhyNot, scan_dir_rules, scan_path,
+    EntryFn, HostInfo, LibraryInfo, LoadReport, Loading, Order, Provider, Refreshed, Registry,
+    ScanRules, SearchPath, Served, Skipped, SourceError, SourceInfo, UnloadError, WhyNot,
+    scan_dir_rules, scan_path,
 };
 use crate::schema::read::SchemaRef;
 use crate::schema::validate::validate_map;
@@ -303,6 +304,22 @@ impl HostRegistry {
     fn config(&self, key: &str) -> Option<&Value> {
         self.inner.provider(key).and_then(Provider::config_schema)
     }
+
+    /// Refreshes every source and describes what changed.
+    fn refresh(&mut self, alloc: Alloc) -> Result<Value, ValueError> {
+        refreshed_value(alloc, &self.inner.refresh())
+    }
+}
+
+/// A refusal to add a source, as its status, its words written to `err`.
+fn source_refusal(err: *mut ProviderError, why: &SourceError) -> Status {
+    let status = why.status();
+    if !err.is_null() {
+        // SAFETY: non-null and writable by the caller's contract, written
+        // empty on entry.
+        unsafe { err.write(ProviderError::new(status, &why.to_string())) };
+    }
+    status
 }
 
 /// What a refusal to retire or unload crosses as.
@@ -838,6 +855,190 @@ pub unsafe extern "C" fn guatiao_registry_register_entry(
             // entry; `alloc` is the caller's own allocator.
             Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
             Err(e) => e,
+        }
+    })
+}
+
+/// Adds a source the host LINKS, under `name`: a table that speaks
+/// `guatiao_source_info`, read and checked now. Its slots and `ctx` must
+/// stay valid for the registry's life; the struct itself is copied and
+/// need not. Nothing is opened until [`guatiao_registry_refresh`].
+///
+/// `err` is written empty first and, on a refusal, carries words to free
+/// like any text: `GUATIAO_ERR_BAD_VALUE` for a table the checks refuse or
+/// a name already added, `GUATIAO_ERR_NULL` for a null table.
+///
+/// # Safety
+///
+/// `reg` is a live handle, `name` is readable for this call, `source` is
+/// null or a well-formed table, `err` is null or writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_add_source(
+    reg: *mut HostRegistry,
+    name: Str,
+    source: *const SourceInfo,
+    err: *mut ProviderError,
+) -> Status {
+    if !err.is_null() {
+        // SAFETY: non-null, and writable by the caller's contract; the
+        // placeholder owns nothing.
+        unsafe { err.write(ProviderError::none()) };
+    }
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        let name = match core::str::from_utf8(name.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        // SAFETY: null or a well-formed table by the caller's contract.
+        let Some(source) = (unsafe { source.as_ref() }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        match registry.inner.add_source_table(name, source) {
+            Ok(()) => Status::GUATIAO_OK,
+            Err(why) => source_refusal(err, &why),
+        }
+    })
+}
+
+/// Maps a source file and adds the source its `guatiao_source` answers
+/// for `config`, under the file's path. The file is never unmapped, and
+/// it is not a library: no key retires it. Nothing is opened until
+/// [`guatiao_registry_refresh`].
+///
+/// `config` is a map the source reads (null is an empty one). `err` is
+/// written empty first and, on a refusal, carries words to free like any
+/// text: `GUATIAO_ERR_NOT_FOUND` when the file cannot be mapped,
+/// `GUATIAO_ERR_WRONG_KIND` when it exports no `guatiao_source` or
+/// `config` is not a map, `GUATIAO_ERR_BAD_VALUE` for a table the checks
+/// refuse or a source already added, and the source's own status when it
+/// refuses the configuration.
+///
+/// **Mapping a file runs its static initialisers**, which may do
+/// anything. Name files you are willing to run.
+///
+/// # Safety
+///
+/// `reg` is a live handle, `path` is readable for this call, `config` is
+/// null or a well-formed value, `err` is null or writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_add_source_file(
+    reg: *mut HostRegistry,
+    path: Str,
+    config: *const Value,
+    err: *mut ProviderError,
+) -> Status {
+    if !err.is_null() {
+        // SAFETY: non-null, and writable by the caller's contract; the
+        // placeholder owns nothing.
+        unsafe { err.write(ProviderError::none()) };
+    }
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        let path = match core::str::from_utf8(path.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        // SAFETY: null or a well-formed value by the caller's contract.
+        let config = match unsafe { config.as_ref() } {
+            None => Map::new(),
+            Some(value) => match crate::value::convert::TryAsRef::<Map>::try_as_ref(value) {
+                Some(map) => Map::clone(map),
+                None => return Status::GUATIAO_ERR_WRONG_KIND,
+            },
+        };
+        match registry.inner.add_source_file(Path::new(path), &config) {
+            Ok(_) => Status::GUATIAO_OK,
+            Err(why) => source_refusal(err, &why),
+        }
+    })
+}
+
+/// Watches a directory: each [`guatiao_registry_refresh`] loads a library
+/// file that appeared there (by `rules`, as
+/// [`guatiao_registry_scan_dir_rules`] takes them: one `[!]KEY=VALUE` per
+/// line), retires one that vanished, and retires and loads again one whose
+/// length or modification time changed. Nothing is read until then.
+///
+/// `GUATIAO_ERR_BAD_VALUE` for text that is not UTF-8, a rule that is not
+/// one, or a directory already watched.
+///
+/// # Safety
+///
+/// `reg` is a live handle; `dir` and `rules` are readable for this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_watch_dir(
+    reg: *mut HostRegistry,
+    dir: Str,
+    rules: Str,
+) -> Status {
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        let (Ok(dir), Ok(rules)) = (
+            core::str::from_utf8(dir.into()),
+            core::str::from_utf8(rules.into()),
+        ) else {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        };
+        let lines: Vec<&str> = rules.lines().collect();
+        let Ok(rules) = ScanRules::parse(&lines) else {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        };
+        match registry.inner.watch_dir(Path::new(dir), rules) {
+            Ok(()) => Status::GUATIAO_OK,
+            Err(why) => why.status(),
+        }
+    })
+}
+
+/// Asks every source and watched directory what it serves now, makes the
+/// registry agree, and writes what changed to `out` as a map:
+///
+/// `{"loaded": [{"source", "id", "stamp", "key"}…], "retired": [the
+/// same…], "skipped": [{"source", "id", "skipped", …}…], "refused":
+/// [{"source", "id"?, "why"}…]}`.
+///
+/// A new candidate loads; a changed one loads and, once it has, its old
+/// build is retired; a vanished one is retired; a library the host retired
+/// stays out until its stamp changes. A retired library closes once
+/// nothing holds it, and its source is then told. **Refusals are part of
+/// the answer, never a failed call.** `GUATIAO_ERR_ALLOC` for a null or
+/// incomplete `alloc`.
+///
+/// # Safety
+///
+/// As [`guatiao_registry_collect`]: no table or `ctx` taken from a library
+/// this retires is used once it is closed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_refresh(
+    reg: *mut HostRegistry,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    out!(out);
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let Some(registry) = (unsafe { HostRegistry::get_mut(reg) }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        match registry.refresh(alloc) {
+            // SAFETY: `out` is null or the caller's slot, written ABSENT on
+            // entry; `alloc` is the caller's own allocator.
+            Ok(answer) => unsafe { answer.write_to(out, alloc.as_raw()) },
+            Err(e) => e.into(),
         }
     })
 }
@@ -1625,6 +1826,46 @@ fn report_value(alloc: Alloc, report: &LoadReport) -> Result<Value, ValueError> 
     Ok(map.into())
 }
 
+/// What a refresh changed, as a map.
+fn refreshed_value(alloc: Alloc, report: &Refreshed) -> Result<Value, ValueError> {
+    let served = |one: &Served| -> Result<Map, ValueError> {
+        let mut map = Map::new_in(alloc);
+        map.try_set("source", Text::new_in(alloc, &one.source).map(Value::from)?)?;
+        map.try_set("id", Text::new_in(alloc, &one.id).map(Value::from)?)?;
+        map.try_set("stamp", Text::new_in(alloc, &one.stamp).map(Value::from)?)?;
+        map.try_set("key", Text::new_in(alloc, &one.key).map(Value::from)?)?;
+        Ok(map)
+    };
+    let mut map = Map::new_in(alloc);
+    for (name, list) in [("loaded", &report.loaded), ("retired", &report.retired)] {
+        let mut out = List::new_in(alloc);
+        for one in list {
+            out.try_push(served(one)?)?;
+        }
+        map.try_set(name, out)?;
+    }
+    let mut skipped = List::new_in(alloc);
+    for (source, id, why) in &report.skipped {
+        let mut one = Map::try_from(skip_value(alloc, why)?).map_err(|_| ValueError::WrongKind)?;
+        one.set_in("source", Text::new_in(alloc, source)?, alloc)?;
+        one.set_in("id", Text::new_in(alloc, id)?, alloc)?;
+        skipped.try_push(one)?;
+    }
+    map.try_set("skipped", skipped)?;
+    let mut refused = List::new_in(alloc);
+    for one in &report.refused {
+        let mut entry = Map::new_in(alloc);
+        entry.try_set("source", Text::new_in(alloc, &one.source).map(Value::from)?)?;
+        if let Some(id) = &one.id {
+            entry.try_set("id", Text::new_in(alloc, id).map(Value::from)?)?;
+        }
+        entry.try_set("why", Text::new_in(alloc, &one.reason).map(Value::from)?)?;
+        refused.try_push(entry)?;
+    }
+    map.try_set("refused", refused)?;
+    Ok(map.into())
+}
+
 /// Why something was passed over, as a map.
 fn skip_value(alloc: Alloc, why: &Skipped) -> Result<Value, ValueError> {
     let mut map = Map::new_in(alloc);
@@ -1644,6 +1885,7 @@ fn skip_value(alloc: Alloc, why: &Skipped) -> Result<Value, ValueError> {
             None,
         ),
         Skipped::Filtered { by } => ("filtered", None, None, None, Some(by.as_str())),
+        Skipped::Source { .. } => ("source", None, None, None, None),
         // No wildcard arm. `Skipped` is `#[non_exhaustive]` for a
         // CONSUMER; in here every variant is known, so appending one is a
         // compile error at this match rather than a reason that silently
@@ -1664,6 +1906,9 @@ fn skip_value(alloc: Alloc, why: &Skipped) -> Result<Value, ValueError> {
     }
     if let Some(by) = by {
         map.try_set("by", Text::new_in(alloc, by).map(Value::from)?)?;
+    }
+    if let Skipped::Source { serves } = why {
+        map.try_set("serves", Text::new_in(alloc, serves).map(Value::from)?)?;
     }
     Ok(map.into())
 }
