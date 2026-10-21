@@ -209,6 +209,65 @@ retired, collected.
 thread; ctypes takes the GIL for the call, so calls into Python are
 serialised by it.
 
+## Providers written in Python
+
+```python
+from guatiao import BadValue, provide
+
+class Hello:
+    def greet(self, name):
+        if not name:
+            raise BadValue("nobody to greet")
+        return {"greeting": f"hello, {name}"}
+
+class Shouter:
+    def __init__(self, config):          # the configuration, as plain data
+        self.prefix = config["prefix"]
+    def greet(self, name):
+        return {"greeting": f"{self.prefix} {name.upper()}"}
+
+library = provide.library("py_greeter", "1.0.0", providers=[
+    provide.Provider("hello", Hello, kinds=[GREETER, COUNTER]),
+    provide.Provider("shouter", Shouter, kinds=[GREETER],
+                     config={"type": "object", "properties": {"prefix": {"type": "string"}},
+                             "required": ["prefix"]}),
+])
+reg.register_library(library)            # files py_greeter_hello, py_greeter_shouter
+```
+
+`provide.library(id, version, *, providers, meta=None) -> Library` builds
+the descriptor any library answers (`guatiao_library_info`, a
+`guatiao_provider_info` per provider, a table per kind built over the
+provider's class) in memory the `Library` keeps alive, so a host in any
+language calls it.
+
+`provide.Provider(name, cls, *, kinds, config=None, default=None, id=None,
+display_name="", version="", available=None, meta=None)`:
+
+- `id` is `{library id}_{name}` unless given; `version` empty inherits
+  the library's.
+- `kinds`: provider kinds (`kinds.Kind`, not object kinds). `cls` must
+  be a class; its methods serve every kind.
+- Without `config`, the provider is its one instance, `cls()`, built
+  with the library. With `config` (a JSON Schema, a mapping or `Value`),
+  `cls(config)` builds an instance per configuration, given as plain
+  data after the host checked it against the schema; `default=True`
+  also offers `cls()` as its one instance.
+- `available`: `() -> None | str`, asked every time a host asks; a
+  string is the reason, kept for the process.
+
+`Library`: `.entry` (a `guatiao_library_entry`; `register_entry(id,
+library.entry)` is what `register_library` does), `.info_address`, `.id`,
+`.version`, `.kinds` (every kind its providers serve), `.live_instances()`
+(built by `create` and not destroyed), `.close()` (lets go of the
+providers' one instances; the entry answers null from then on). Its
+`unload` slot answers `GUATIAO_ERR_BUSY` while an instance is alive;
+objects its methods hand out are not counted.
+
+`Registry.register_library(library)` files it under `<id>`, keeps it
+alive with the registry, and is linked, not mapped: `unload` answers
+`WrongKind`, `retire` takes it out.
+
 `guatiao.kinds.table(table_ptr, size, struct_type, floor_hash=...)`
 casts a `provider_table()` answer to a hand-written struct after
 checking `size >= sizeof(struct_type)` and the `floor_hash`

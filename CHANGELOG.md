@@ -206,6 +206,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   slot answers is a `kinds.Object` whose `close()` calls its `destroy`.
   A refusal crosses with its status and words; an exception in a Python
   method crosses as `GUATIAO_ERR_INTERNAL` naming it.
+- **Python: providers written in Python.** `guatiao.provide.library(id,
+  version, providers=[provide.Provider(name, cls, kinds=[...])])` builds
+  the descriptor any library answers, with a table per kind built over
+  each provider's class, so a host in any language calls it as it calls a
+  Rust or C library. A provider is its one instance, `cls()`, or, given a
+  `config` schema, builds one per configuration the host has checked;
+  `available` answers why not. `Registry.register_library(library)`
+  registers one in a Python host.
 - **Python: an error raised with a message alone carries its class's
   status** (`guatiao.BadValue("nobody to greet")`), which is how Python
   code refuses a call.

@@ -17,6 +17,10 @@ library; the first call that needs one resolves it from
 
 ::: guatiao.kinds
 
+## Providers in Python
+
+::: guatiao.provide
+
 ## Dates, times and spans
 
 ::: guatiao.time

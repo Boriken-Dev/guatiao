@@ -265,6 +265,116 @@ class BytesMut(ctypes.Structure):
     _fields_ = [("ptr", c_void_p), ("len", c_size_t)]
 
 
+# ---- the envelope: what a host and a library say about themselves -------
+#
+# Mirrored for a library written in Python (`guatiao.provide`), which fills
+# them in as a C library would. Every function-pointer field is declared
+# with its prototype, so ctypes checks what is stored in it.
+
+
+class Kinds(ctypes.Structure):
+    """`guatiao_kinds`: a borrowed array of kind names."""
+
+    _fields_ = [("ptr", ctypes.POINTER(Str)), ("len", c_size_t)]
+
+
+class KindTable(ctypes.Structure):
+    """`guatiao_kind_table`: one kind's function table on a provider."""
+
+    _fields_ = [
+        ("struct_size", c_uint32),
+        ("vtable_size", c_uint32),
+        ("kind", Str),
+        ("vtable", c_void_p),
+    ]
+
+
+class KindTables(ctypes.Structure):
+    """`guatiao_kind_tables`: a borrowed array, with its stride."""
+
+    _fields_ = [
+        ("ptr", ctypes.POINTER(KindTable)),
+        ("len", c_size_t),
+        ("stride", c_size_t),
+    ]
+
+
+AvailableFn = ctypes.CFUNCTYPE(c_bool, c_void_p, ctypes.POINTER(Str))
+CreateFn = ctypes.CFUNCTYPE(
+    c_uint32,
+    c_void_p,
+    ctypes.POINTER(Value),
+    ctypes.POINTER(c_void_p),
+    ctypes.POINTER(ProviderError),
+)
+DestroyFn = ctypes.CFUNCTYPE(None, c_void_p, c_void_p)
+UnloadFn = ctypes.CFUNCTYPE(c_uint32)
+
+
+class ProviderInfo(ctypes.Structure):
+    """`guatiao_provider_info`: one thing a library offers."""
+
+    _fields_ = [
+        ("struct_size", c_uint32),
+        ("vtable_size", c_uint32),
+        ("kinds", Kinds),
+        ("id", Str),
+        ("display_name", Str),
+        ("config", ctypes.POINTER(Value)),
+        ("vtable", c_void_p),
+        ("ctx", c_void_p),
+        ("meta", ctypes.POINTER(Map)),
+        ("version", Str),
+        ("available", AvailableFn),
+        ("tables", KindTables),
+        ("create", CreateFn),
+        ("destroy", DestroyFn),
+    ]
+
+
+class Providers(ctypes.Structure):
+    """`guatiao_providers`: a borrowed array of descriptors, with its stride."""
+
+    _fields_ = [
+        ("ptr", ctypes.POINTER(ProviderInfo)),
+        ("len", c_size_t),
+        ("stride", c_size_t),
+    ]
+
+
+class LibraryInfo(ctypes.Structure):
+    """`guatiao_library_info`: what a library says about itself."""
+
+    _fields_ = [
+        ("struct_size", c_uint32),
+        ("abi_version", c_uint32),
+        ("id", Str),
+        ("version", Str),
+        ("providers", Providers),
+        ("meta", ctypes.POINTER(Map)),
+        ("unload", UnloadFn),
+    ]
+
+
+class HostInfo(ctypes.Structure):
+    """`guatiao_host_info`: what a host says about itself. Read here,
+    never written: a host's block outlives every library it loads."""
+
+    _fields_ = [
+        ("struct_size", c_uint32),
+        ("abi_version", c_uint32),
+        ("host_id", Str),
+        ("host_version", Str),
+        ("alloc", ctypes.POINTER(Alloc)),
+        ("meta", ctypes.POINTER(Map)),
+        ("services", c_void_p),
+    ]
+
+
+#: `GUATIAO_ABI_VERSION`: the envelope version this binding speaks.
+ABI_VERSION = 1
+
+
 def _offset(struct: type, field: str) -> int:
     return getattr(struct, field).offset
 
@@ -297,3 +407,13 @@ assert ctypes.sizeof(TimestampFields) == 16
 assert ctypes.sizeof(SpanFields) == 64
 assert _offset(SpanFields, "nanoseconds") == 56
 assert ctypes.sizeof(TextError) == 48
+assert ctypes.sizeof(Kinds) == 16
+assert ctypes.sizeof(KindTable) == 32
+assert ctypes.sizeof(KindTables) == 24
+assert ctypes.sizeof(Providers) == 24
+assert ctypes.sizeof(ProviderInfo) == 152
+assert _offset(ProviderInfo, "tables") == 112
+assert _offset(ProviderInfo, "destroy") == 144
+assert ctypes.sizeof(LibraryInfo) == 80
+assert _offset(LibraryInfo, "unload") == 72
+assert ctypes.sizeof(HostInfo) == 64

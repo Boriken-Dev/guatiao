@@ -29,6 +29,9 @@ that is `guatiao` itself or an application that carries it.
 - **Hand a library a Python object** — a plain class becomes an object of
   a kind (a listener, a callback) that a library written in any language
   calls, or holds until it is done with it.
+- **Write a provider in Python** — classes become providers of a kind, in
+  a library a host in any language calls the way it calls one written in
+  Rust or C.
 - **Dates, times, instants and spans as Python's own types** — `date`,
   `time`, naive and aware `datetime`, `timedelta`, and a `Span` class for
   calendar lengths, read and written by the library itself.
@@ -160,6 +163,29 @@ the kind's methods; an object a slot answers closes with `with`.
 is a complete host, and its kind descriptions are in
 [`examples/greeter_kind/python`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/greeter_kind/python).
 
+### Writing a provider
+
+```python
+from guatiao import BadValue, provide
+
+class Hello:
+    def greet(self, name):
+        if not name:
+            raise BadValue("nobody to greet")   # the caller reads this status and message
+        return {"greeting": f"hello, {name}"}
+
+library = provide.library("py_greeter", "1.0.0", providers=[
+    provide.Provider("hello", Hello, kinds=[GREETER]),
+])
+reg.register_library(library)
+reg.bind("py_greeter_hello", GREETER).greet("ana")
+```
+
+A provider given a `config` schema builds an instance per configuration
+instead, `Hello(config)`, after the host has checked the configuration.
+[`examples/python_provider`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/python_provider)
+holds a complete library.
+
 ### JSON, TOML, YAML and forms
 
 ```python
@@ -242,6 +268,7 @@ provider's own words when it gave any.
 | `guatiao.time` | dates, times, instants and exact lengths as `datetime` types; `Span`; `normalize` |
 | `guatiao.registry` | the plugin host: load, scan, list, rank, configure, instantiate |
 | `guatiao.kinds` | describe a kind; call a provider's table; serve a table over a Python object |
+| `guatiao.provide` | a library of providers written in Python |
 | `guatiao.serde` | `loads` / `dumps` for JSON, TOML, YAML |
 | `guatiao.intake` | `check`, `layout`, `is_visible`, `at`, `for_schema`, `form_for`, `resolve`, `flat_keys`, `flatten`, `unflatten` |
 
