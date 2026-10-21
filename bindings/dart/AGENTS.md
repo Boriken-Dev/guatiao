@@ -124,9 +124,10 @@ only. `ProviderTable.isEmpty` means there is none.
 mapped until nothing uses it: `collect()` closes every retired library
 whose own `unload` function agrees and returns their keys, as does the
 registry's next load, retire or unload; one that refuses is asked again
-next time, one with no such function stays mapped. An `Instance` must be
-closed before its library is retired: afterwards `close()` no longer
-finds the provider to destroy it with. `unload(libraryKey)` unmaps it
+next time, one with no such function stays mapped. An `Instance` holds
+its library open until it is closed, and `close()` reaches the provider
+that built it even after a retire, or a refresh that loaded a new build
+under the same key. `unload(libraryKey)` unmaps it
 **when the library agrees**: `Busy` while another library holds a
 pinned answer from it, then its own `unload` function is asked, its
 promise that what it can account for is released: `Busy` while an

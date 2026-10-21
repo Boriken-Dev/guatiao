@@ -169,3 +169,12 @@ def test_closed_registry_raises_on_use():
     with pytest.raises(ValueError):
         reg.libraries()
     reg.close()  # idempotent
+
+
+def test_an_instance_closes_after_its_library_was_retired():
+    with _scanned() as reg:
+        instance = reg.create("derived_greeter_shouter", {"prefix": "hey"})
+        reg.retire("derived_greeter")
+        assert reg.collect() == [], "the instance holds its library open"
+        instance.close()
+        assert reg.collect() == ["derived_greeter"]

@@ -1518,6 +1518,14 @@ guatiao_status guatiao_registry_provider_create(const struct guatiao_registry *r
  is a no-op; an unknown key or a provider that builds no instances does
  nothing.
 
+ **The provider that built it releases it**, found by the instance
+ rather than by `key`: after its library was retired, or a new build of
+ it loaded under the same key by a refresh, the old build's `destroy`
+ is the one called. An instance keeps its library open until it is
+ released: `guatiao_registry_unload` answers `GUATIAO_ERR_BUSY`, and a
+ retired library is not closed. `key` is consulted only for an instance
+ this registry did not build.
+
  # Safety
 
  `reg` is a live handle, `key` is readable, and `instance` is null or
