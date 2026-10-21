@@ -78,6 +78,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `KindBuilder::tuple`, `null`, `.unique_items()` and
   `.property_names(..)` write them. `guatiao-intake` flattens a tuple by
   position (`pair[0]`) and resolves a path into one.
+- **Paths, addresses, non-zero integers and `SystemTime` are field
+  types.** `PathBuf` (and `Box`/`Arc`/`Rc<Path>`) is its text, a path
+  that is not UTF-8 refused on write with `ValueError::NotUtf8`;
+  `IpAddr`, `Ipv4Addr`, `Ipv6Addr` and the three socket addresses their
+  `Display` text, described with `format: ipv4` / `ipv6` or, for a
+  socket address, a `pattern`; every `NonZero*` an integer, `minimum: 1`
+  unsigned and `not: {const: 0}` signed; `SystemTime` RFC 3339 in UTC
+  (`2026-10-21T13:45:00.5Z`, `format: date-time`), read with any offset
+  and refused naming the byte it stopped at. Each of the addresses and
+  `PathBuf` is a `MapKey`. The validator enforces `not`
+  (`vocab::NOT`, `GUATIAO_KEY_NOT`); `format` stays an annotation.
+- **`ValueError::Unrepresentable`**: a value with no spelling in the form
+  it is written as, such as a time outside the years 0000 to 9999
+  (`GUATIAO_ERR_BAD_VALUE` across the C surface).
 - **A guide to passing data**: the docs site's "Passing data" page and a
   section of the crate's shipped `AGENTS.md`, on returning trees by value
   and taking them by value when kept, building an answer in the

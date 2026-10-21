@@ -469,3 +469,225 @@ mod collections {
         validate_map(SchemaRef::new(&schema).unwrap(), &value).unwrap();
     }
 }
+
+mod std_types {
+    use super::*;
+    use alloc::collections::BTreeMap;
+    use alloc::sync::Arc;
+    use core::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+    use core::num::{NonZeroI64, NonZeroU8, NonZeroU32};
+    use core::time::Duration;
+    use std::collections::HashMap;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn text(v: &Value) -> &str {
+        TryAsRef::<str>::try_as_ref(v).unwrap()
+    }
+
+    #[test]
+    fn a_path_is_its_text() {
+        let v = check(PathBuf::from("/etc/ssl/ca.pem"));
+        assert_eq!(text(&v), "/etc/ssl/ca.pem");
+        check(Box::<Path>::from(Path::new("a/b")));
+        check(Arc::<Path>::from(PathBuf::from("c")));
+        assert_eq!(kind_of::<PathBuf>(), kind_of::<String>());
+        check(BTreeMap::from([(PathBuf::from("x"), 1u8)]));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_path_that_is_not_utf8_is_refused_on_write() {
+        use std::os::windows::ffi::OsStringExt;
+        let lone = PathBuf::from(std::ffi::OsString::from_wide(&[0xD800]));
+        assert_eq!(lone.to_value(), Err(guatiao::ValueError::NotUtf8));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_path_that_is_not_utf8_is_refused_on_write() {
+        use std::os::unix::ffi::OsStrExt;
+        let bad = PathBuf::from(std::ffi::OsStr::from_bytes(&[0xff]));
+        assert_eq!(bad.to_value(), Err(guatiao::ValueError::NotUtf8));
+    }
+
+    #[test]
+    fn an_address_is_its_display_text_with_a_format_or_a_pattern() {
+        let v4: Ipv4Addr = "10.0.0.1".parse().unwrap();
+        assert_eq!(text(&check(v4)), "10.0.0.1");
+        let v6: Ipv6Addr = "::1".parse().unwrap();
+        assert_eq!(text(&check(v6)), "::1");
+        check(IpAddr::V4(v4));
+        check(IpAddr::V6(v6));
+        let s4: SocketAddrV4 = "10.0.0.1:5900".parse().unwrap();
+        assert_eq!(text(&check(s4)), "10.0.0.1:5900");
+        let s6: SocketAddrV6 = "[fe80::1%2]:443".parse().unwrap();
+        assert_eq!(text(&check(s6)), "[fe80::1%2]:443");
+        check(SocketAddr::V4(s4));
+        check(SocketAddr::V6(s6));
+        assert_eq!(text_at(&kind_of::<Ipv4Addr>(), "format"), Some("ipv4"));
+        assert_eq!(text_at(&kind_of::<Ipv6Addr>(), "format"), Some("ipv6"));
+        let either = kind_of::<IpAddr>();
+        assert_eq!(text_at(&either, "type"), Some("string"));
+        assert_eq!(
+            <&List>::try_from(get(&either, "anyOf").unwrap())
+                .unwrap()
+                .len(),
+            2
+        );
+        assert!(text_at(&kind_of::<SocketAddr>(), "pattern").is_some());
+
+        assert!(matches!(
+            Ipv4Addr::from_value(&Value::from("10.0.0")),
+            Err(MapError::BadValue { .. })
+        ));
+        assert!(SocketAddrV4::from_value(&Value::from("10.0.0.1")).is_err());
+        assert!(IpAddr::from_value(&Value::from(1i64)).is_err());
+        if guatiao::schema::PATTERNS_ENFORCED {
+            assert!(!accepts::<SocketAddrV4>(&Value::from("10.0.0.1")));
+            assert!(!accepts::<SocketAddr>(&Value::from("::1:80")));
+        }
+        // `format` is an annotation: never checked.
+        assert!(accepts::<Ipv4Addr>(&Value::from("not an address")));
+
+        let h: HashMap<IpAddr, String> = [(IpAddr::V4(v4), "lan".to_string())].into();
+        check(h);
+        let names = get(&kind_of::<BTreeMap<Ipv4Addr, u8>>(), "propertyNames").cloned();
+        assert_eq!(names, Some(kind_of::<Ipv4Addr>()));
+    }
+
+    #[test]
+    fn a_non_zero_integer_refuses_zero() {
+        check(NonZeroU32::new(7).unwrap());
+        check(NonZeroI64::new(-7).unwrap());
+        check(NonZeroU8::MAX);
+        let zero = Value::from(0i64);
+        assert!(matches!(
+            NonZeroU32::from_value(&zero),
+            Err(MapError::BadValue { .. })
+        ));
+        assert!(NonZeroI64::from_value(&zero).is_err());
+        assert!(!accepts::<NonZeroU32>(&zero));
+        assert!(!accepts::<NonZeroI64>(&zero));
+        assert!(accepts::<NonZeroI64>(&Value::from(i64::MIN)));
+        assert!(!accepts::<NonZeroU8>(&Value::from(256i64)));
+        let unsigned = kind_of::<NonZeroU32>();
+        assert_eq!(get(&unsigned, "minimum"), Some(&Value::from(1i64)));
+        let signed = kind_of::<NonZeroI64>();
+        let not = get(&signed, "not").unwrap();
+        assert_eq!(get(not, "const"), Some(&Value::from(0i64)));
+        check(Some(NonZeroU8::new(3).unwrap()));
+        assert!(accepts::<Option<NonZeroI64>>(&Value::null()));
+
+        // The text form is judged the same way.
+        let field = SchemaBuilder::new()
+            .field(FieldBuilder::new("n", NonZeroI64::kind(Alloc::rust())))
+            .finish()
+            .unwrap();
+        let n = SchemaRef::new(&field).unwrap().find("n").unwrap();
+        assert!(guatiao::schema::validate_text(n, "0").is_err());
+        assert!(guatiao::schema::validate_text(n, "5").is_ok());
+    }
+
+    /// The instant, or `None` where this platform's clock cannot hold it
+    /// (Windows starts at 1601).
+    fn try_at(secs: i64, nanos: u32) -> Option<SystemTime> {
+        let whole = if secs >= 0 {
+            UNIX_EPOCH.checked_add(Duration::from_secs(secs as u64))
+        } else {
+            UNIX_EPOCH.checked_sub(Duration::from_secs(secs.unsigned_abs()))
+        };
+        whole?.checked_add(Duration::from_nanos(nanos.into()))
+    }
+
+    fn at(secs: i64, nanos: u32) -> SystemTime {
+        try_at(secs, nanos).expect("an instant every platform holds")
+    }
+
+    #[test]
+    fn a_system_time_is_rfc_3339_in_utc() {
+        for (secs, nanos, written) in [
+            (0, 0, "1970-01-01T00:00:00Z"),
+            (951_825_600, 0, "2000-02-29T12:00:00Z"),
+            (-1, 0, "1969-12-31T23:59:59Z"),
+            (-1, 500_000_000, "1969-12-31T23:59:59.5Z"),
+            (1_792_590_300, 500_000_000, "2026-10-21T13:45:00.5Z"),
+            // 100 ns: the finest a Windows `SystemTime` holds.
+            (1_792_590_300, 100, "2026-10-21T13:45:00.0000001Z"),
+            (-62_167_219_200, 0, "0000-01-01T00:00:00Z"),
+            (253_402_300_799, 999_999_900, "9999-12-31T23:59:59.9999999Z"),
+        ] {
+            let Some(t) = try_at(secs, nanos) else {
+                continue;
+            };
+            assert_eq!(text(&check(t)), written, "{secs}.{nanos}");
+        }
+        assert_eq!(
+            text_at(&kind_of::<SystemTime>(), "format"),
+            Some("date-time")
+        );
+    }
+
+    #[test]
+    fn a_system_time_reads_any_offset() {
+        let read = |s: &str| SystemTime::from_value(&Value::from(s));
+        let expected = at(1_792_590_300, 500_000_000);
+        assert_eq!(read("2026-10-21T19:15:00.5+05:30").unwrap(), expected);
+        assert_eq!(read("2026-10-21T08:45:00.500-05:00").unwrap(), expected);
+        assert_eq!(read("2026-10-21t13:45:00.5z").unwrap(), expected);
+        assert_eq!(read("1970-01-01T00:00:00-00:00").unwrap(), UNIX_EPOCH);
+        for refused in [
+            "2026-10-21",
+            "2026-10-21 13:45:00Z",
+            "2026-13-01T00:00:00Z",
+            "2026-02-29T00:00:00Z",
+            "2026-10-21T24:00:00Z",
+            "2026-10-21T13:45:60Z",
+            "2026-10-21T13:45:00",
+            "2026-10-21T13:45:00.Z",
+            "2026-10-21T13:45:00.1234567891Z",
+            "2026-10-21T13:45:00+0530",
+            "2026-10-21T13:45:00Zjunk",
+            "+2026-10-21T13:45:00Z",
+        ] {
+            let e = read(refused).unwrap_err();
+            assert!(matches!(e, MapError::BadValue { .. }), "{refused}");
+        }
+        let e = read("2026-13-01T00:00:00Z").unwrap_err().to_string();
+        assert!(e.contains("at byte 5"), "{e}");
+        assert!(
+            !e.contains("2026"),
+            "a refusal does not quote the input: {e}"
+        );
+    }
+
+    #[test]
+    fn a_time_past_year_9999_cannot_be_written() {
+        let far = UNIX_EPOCH + Duration::from_secs(253_402_300_800);
+        assert_eq!(far.to_value(), Err(guatiao::ValueError::Unrepresentable));
+    }
+
+    #[derive(Debug, PartialEq, guatiao::ToValue, guatiao::FromValue, guatiao::Schema)]
+    struct Endpoint {
+        bind: SocketAddr,
+        peer: Option<IpAddr>,
+        cert: PathBuf,
+        workers: NonZeroU8,
+        seen: SystemTime,
+    }
+
+    #[test]
+    fn a_struct_of_them_derives_and_validates() {
+        let e = Endpoint {
+            bind: "0.0.0.0:443".parse().unwrap(),
+            peer: Some("::1".parse().unwrap()),
+            cert: "/etc/cert.pem".into(),
+            workers: NonZeroU8::new(4).unwrap(),
+            seen: at(1_792_590_300, 0),
+        };
+        let value = e.to_value().unwrap();
+        assert_eq!(Endpoint::from_value(&value).unwrap(), e);
+        let schema = Endpoint::schema().unwrap();
+        validate_map(SchemaRef::new(&schema).unwrap(), &value).unwrap();
+    }
+}

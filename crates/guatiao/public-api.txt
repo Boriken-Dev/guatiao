@@ -1791,6 +1791,78 @@ impl guatiao::schema::describe::Schema for char
 pub fn char::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn char::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn char::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::ip_addr::IpAddr::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::IpAddr::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::ip_addr::Ipv4Addr::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::Ipv4Addr::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::ip_addr::Ipv6Addr::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::Ipv6Addr::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::socket_addr::SocketAddr::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddr::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::socket_addr::SocketAddrV4::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddrV4::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::socket_addr::SocketAddrV6::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddrV6::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI128
+pub fn core::num::nonzero::NonZeroI128::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI128::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI128::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI16
+pub fn core::num::nonzero::NonZeroI16::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI16::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI16::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI32
+pub fn core::num::nonzero::NonZeroI32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI32::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI64
+pub fn core::num::nonzero::NonZeroI64::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI64::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI64::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI8
+pub fn core::num::nonzero::NonZeroI8::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI8::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI8::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroIsize
+pub fn core::num::nonzero::NonZeroIsize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroIsize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroIsize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU128
+pub fn core::num::nonzero::NonZeroU128::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU128::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU128::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU16
+pub fn core::num::nonzero::NonZeroU16::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU16::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU16::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU32
+pub fn core::num::nonzero::NonZeroU32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU32::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU64
+pub fn core::num::nonzero::NonZeroU64::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU64::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU64::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU8
+pub fn core::num::nonzero::NonZeroU8::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU8::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU8::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroUsize
+pub fn core::num::nonzero::NonZeroUsize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroUsize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroUsize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for f32
 pub fn f32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn f32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -1851,6 +1923,18 @@ impl guatiao::schema::describe::Schema for isize
 pub fn isize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn isize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for std::path::Path
+pub fn std::path::Path::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn std::path::Path::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::path::Path::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for std::path::PathBuf
+pub fn std::path::PathBuf::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn std::path::PathBuf::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::path::PathBuf::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for std::time::SystemTime
+pub fn std::time::SystemTime::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn std::time::SystemTime::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::time::SystemTime::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for str
 pub fn str::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn str::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2141,6 +2225,7 @@ pub const guatiao::schema::vocab::MINIMUM: &str
 pub const guatiao::schema::vocab::MIN_ITEMS: &str
 pub const guatiao::schema::vocab::MIN_LENGTH: &str
 pub const guatiao::schema::vocab::MULTIPLE_OF: &str
+pub const guatiao::schema::vocab::NOT: &str
 pub const guatiao::schema::vocab::ONE_OF: &str
 pub const guatiao::schema::vocab::PATTERN: &str
 pub const guatiao::schema::vocab::PREFIX_ITEMS: &str
@@ -2421,6 +2506,78 @@ impl guatiao::schema::describe::Schema for char
 pub fn char::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn char::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn char::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::ip_addr::IpAddr::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::IpAddr::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::ip_addr::Ipv4Addr::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::Ipv4Addr::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::ip_addr::Ipv6Addr::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::Ipv6Addr::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::socket_addr::SocketAddr::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddr::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::socket_addr::SocketAddrV4::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddrV4::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::socket_addr::SocketAddrV6::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddrV6::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI128
+pub fn core::num::nonzero::NonZeroI128::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI128::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI128::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI16
+pub fn core::num::nonzero::NonZeroI16::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI16::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI16::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI32
+pub fn core::num::nonzero::NonZeroI32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI32::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI64
+pub fn core::num::nonzero::NonZeroI64::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI64::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI64::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI8
+pub fn core::num::nonzero::NonZeroI8::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI8::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI8::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroIsize
+pub fn core::num::nonzero::NonZeroIsize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroIsize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroIsize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU128
+pub fn core::num::nonzero::NonZeroU128::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU128::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU128::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU16
+pub fn core::num::nonzero::NonZeroU16::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU16::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU16::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU32
+pub fn core::num::nonzero::NonZeroU32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU32::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU64
+pub fn core::num::nonzero::NonZeroU64::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU64::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU64::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU8
+pub fn core::num::nonzero::NonZeroU8::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU8::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU8::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroUsize
+pub fn core::num::nonzero::NonZeroUsize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroUsize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroUsize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for f32
 pub fn f32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn f32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2481,6 +2638,18 @@ impl guatiao::schema::describe::Schema for isize
 pub fn isize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn isize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for std::path::Path
+pub fn std::path::Path::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn std::path::Path::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::path::Path::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for std::path::PathBuf
+pub fn std::path::PathBuf::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn std::path::PathBuf::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::path::PathBuf::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for std::time::SystemTime
+pub fn std::time::SystemTime::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn std::time::SystemTime::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::time::SystemTime::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for str
 pub fn str::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn str::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2745,18 +2914,60 @@ pub trait guatiao::value::convert::FromValue: core::marker::Sized
 pub fn guatiao::value::convert::FromValue::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for ()
 pub fn ()::from_value(&guatiao::value::value::Value) -> core::result::Result<(), guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::boxed::Box<std::path::Path>
+pub fn alloc::boxed::Box<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::boxed::Box<str>
 pub fn alloc::boxed::Box<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<str>, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::rc::Rc<std::path::Path>
+pub fn alloc::rc::Rc<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::rc::Rc<str>
 pub fn alloc::rc::Rc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::string::String
 pub fn alloc::string::String::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::sync::Arc<std::path::Path>
+pub fn alloc::sync::Arc<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::sync::Arc<str>
 pub fn alloc::sync::Arc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for bool
 pub fn bool::from_value(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for char
 pub fn char::from_value(&guatiao::value::value::Value) -> core::result::Result<char, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::IpAddr, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::Ipv4Addr, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::Ipv6Addr, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddr, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddrV4, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddrV6, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI128
+pub fn core::num::nonzero::NonZeroI128::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI128, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI16
+pub fn core::num::nonzero::NonZeroI16::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI16, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI32
+pub fn core::num::nonzero::NonZeroI32::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI32, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI64
+pub fn core::num::nonzero::NonZeroI64::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI64, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI8
+pub fn core::num::nonzero::NonZeroI8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI8, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroIsize
+pub fn core::num::nonzero::NonZeroIsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroIsize, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU128
+pub fn core::num::nonzero::NonZeroU128::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU128, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU16
+pub fn core::num::nonzero::NonZeroU16::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU16, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU32
+pub fn core::num::nonzero::NonZeroU32::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU32, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU64
+pub fn core::num::nonzero::NonZeroU64::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU64, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU8
+pub fn core::num::nonzero::NonZeroU8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU8, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroUsize
+pub fn core::num::nonzero::NonZeroUsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroUsize, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f32
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
@@ -2787,6 +2998,10 @@ impl guatiao::value::convert::FromValue for i8
 pub fn i8::from_value(&guatiao::value::value::Value) -> core::result::Result<i8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for isize
 pub fn isize::from_value(&guatiao::value::value::Value) -> core::result::Result<isize, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for std::path::PathBuf
+pub fn std::path::PathBuf::from_value(&guatiao::value::value::Value) -> core::result::Result<std::path::PathBuf, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for std::time::SystemTime
+pub fn std::time::SystemTime::from_value(&guatiao::value::value::Value) -> core::result::Result<std::time::SystemTime, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u128
 pub fn u128::from_value(&guatiao::value::value::Value) -> core::result::Result<u128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u16
@@ -2881,6 +3096,30 @@ impl guatiao::value::convert::MapKey for char
 pub fn char::from_key(&str) -> core::result::Result<char, guatiao::value::convert::MapError>
 pub fn char::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
 pub fn char::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::MapKey for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::from_key(&str) -> core::result::Result<core::net::ip_addr::IpAddr, guatiao::value::convert::MapError>
+pub fn core::net::ip_addr::IpAddr::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn core::net::ip_addr::IpAddr::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::MapKey for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::from_key(&str) -> core::result::Result<core::net::ip_addr::Ipv4Addr, guatiao::value::convert::MapError>
+pub fn core::net::ip_addr::Ipv4Addr::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn core::net::ip_addr::Ipv4Addr::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::MapKey for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::from_key(&str) -> core::result::Result<core::net::ip_addr::Ipv6Addr, guatiao::value::convert::MapError>
+pub fn core::net::ip_addr::Ipv6Addr::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn core::net::ip_addr::Ipv6Addr::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::MapKey for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::from_key(&str) -> core::result::Result<core::net::socket_addr::SocketAddr, guatiao::value::convert::MapError>
+pub fn core::net::socket_addr::SocketAddr::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn core::net::socket_addr::SocketAddr::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::MapKey for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::from_key(&str) -> core::result::Result<core::net::socket_addr::SocketAddrV4, guatiao::value::convert::MapError>
+pub fn core::net::socket_addr::SocketAddrV4::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn core::net::socket_addr::SocketAddrV4::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::MapKey for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::from_key(&str) -> core::result::Result<core::net::socket_addr::SocketAddrV6, guatiao::value::convert::MapError>
+pub fn core::net::socket_addr::SocketAddrV6::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn core::net::socket_addr::SocketAddrV6::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
 impl guatiao::value::convert::MapKey for i128
 pub fn i128::from_key(&str) -> core::result::Result<i128, guatiao::value::convert::MapError>
 pub fn i128::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
@@ -2905,6 +3144,10 @@ impl guatiao::value::convert::MapKey for isize
 pub fn isize::from_key(&str) -> core::result::Result<isize, guatiao::value::convert::MapError>
 pub fn isize::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
 pub fn isize::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::MapKey for std::path::PathBuf
+pub fn std::path::PathBuf::from_key(&str) -> core::result::Result<std::path::PathBuf, guatiao::value::convert::MapError>
+pub fn std::path::PathBuf::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn std::path::PathBuf::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
 impl guatiao::value::convert::MapKey for u128
 pub fn u128::from_key(&str) -> core::result::Result<u128, guatiao::value::convert::MapError>
 pub fn u128::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
@@ -2944,6 +3187,60 @@ pub fn bool::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::R
 impl guatiao::value::convert::ToValue for char
 pub fn char::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn char::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::IpAddr::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::Ipv4Addr::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::Ipv6Addr::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddr::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddrV4::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddrV6::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI128
+pub fn core::num::nonzero::NonZeroI128::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI128::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI16
+pub fn core::num::nonzero::NonZeroI16::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI16::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI32
+pub fn core::num::nonzero::NonZeroI32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI64
+pub fn core::num::nonzero::NonZeroI64::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI64::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI8
+pub fn core::num::nonzero::NonZeroI8::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI8::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroIsize
+pub fn core::num::nonzero::NonZeroIsize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroIsize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU128
+pub fn core::num::nonzero::NonZeroU128::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU128::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU16
+pub fn core::num::nonzero::NonZeroU16::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU16::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU32
+pub fn core::num::nonzero::NonZeroU32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU64
+pub fn core::num::nonzero::NonZeroU64::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU64::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU8
+pub fn core::num::nonzero::NonZeroU8::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU8::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroUsize
+pub fn core::num::nonzero::NonZeroUsize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroUsize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for f32
 pub fn f32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2989,6 +3286,15 @@ pub fn i8::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Res
 impl guatiao::value::convert::ToValue for isize
 pub fn isize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for std::path::Path
+pub fn std::path::Path::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::path::Path::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for std::path::PathBuf
+pub fn std::path::PathBuf::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::path::PathBuf::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for std::time::SystemTime
+pub fn std::time::SystemTime::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::time::SystemTime::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for str
 pub fn str::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn str::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -3129,6 +3435,7 @@ pub guatiao::value::error::ValueError::NotUtf8
 pub guatiao::value::error::ValueError::OutOfRange
 pub guatiao::value::error::ValueError::TooDeep
 pub guatiao::value::error::ValueError::UnknownTag(u32)
+pub guatiao::value::error::ValueError::Unrepresentable
 pub guatiao::value::error::ValueError::WrongKind
 impl core::clone::Clone for guatiao::value::error::ValueError
 pub fn guatiao::value::error::ValueError::clone(&self) -> Self
@@ -4958,6 +5265,7 @@ pub guatiao::value::ValueError::NotUtf8
 pub guatiao::value::ValueError::OutOfRange
 pub guatiao::value::ValueError::TooDeep
 pub guatiao::value::ValueError::UnknownTag(u32)
+pub guatiao::value::ValueError::Unrepresentable
 pub guatiao::value::ValueError::WrongKind
 impl core::clone::Clone for guatiao::value::error::ValueError
 pub fn guatiao::value::error::ValueError::clone(&self) -> Self
@@ -5730,18 +6038,60 @@ pub trait guatiao::value::FromValue: core::marker::Sized
 pub fn guatiao::value::FromValue::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for ()
 pub fn ()::from_value(&guatiao::value::value::Value) -> core::result::Result<(), guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::boxed::Box<std::path::Path>
+pub fn alloc::boxed::Box<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::boxed::Box<str>
 pub fn alloc::boxed::Box<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<str>, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::rc::Rc<std::path::Path>
+pub fn alloc::rc::Rc<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::rc::Rc<str>
 pub fn alloc::rc::Rc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::string::String
 pub fn alloc::string::String::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::sync::Arc<std::path::Path>
+pub fn alloc::sync::Arc<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::sync::Arc<str>
 pub fn alloc::sync::Arc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for bool
 pub fn bool::from_value(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for char
 pub fn char::from_value(&guatiao::value::value::Value) -> core::result::Result<char, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::IpAddr, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::Ipv4Addr, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::Ipv6Addr, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddr, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddrV4, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddrV6, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI128
+pub fn core::num::nonzero::NonZeroI128::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI128, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI16
+pub fn core::num::nonzero::NonZeroI16::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI16, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI32
+pub fn core::num::nonzero::NonZeroI32::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI32, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI64
+pub fn core::num::nonzero::NonZeroI64::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI64, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI8
+pub fn core::num::nonzero::NonZeroI8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI8, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroIsize
+pub fn core::num::nonzero::NonZeroIsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroIsize, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU128
+pub fn core::num::nonzero::NonZeroU128::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU128, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU16
+pub fn core::num::nonzero::NonZeroU16::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU16, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU32
+pub fn core::num::nonzero::NonZeroU32::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU32, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU64
+pub fn core::num::nonzero::NonZeroU64::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU64, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU8
+pub fn core::num::nonzero::NonZeroU8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU8, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroUsize
+pub fn core::num::nonzero::NonZeroUsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroUsize, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f32
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
@@ -5772,6 +6122,10 @@ impl guatiao::value::convert::FromValue for i8
 pub fn i8::from_value(&guatiao::value::value::Value) -> core::result::Result<i8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for isize
 pub fn isize::from_value(&guatiao::value::value::Value) -> core::result::Result<isize, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for std::path::PathBuf
+pub fn std::path::PathBuf::from_value(&guatiao::value::value::Value) -> core::result::Result<std::path::PathBuf, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for std::time::SystemTime
+pub fn std::time::SystemTime::from_value(&guatiao::value::value::Value) -> core::result::Result<std::time::SystemTime, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u128
 pub fn u128::from_value(&guatiao::value::value::Value) -> core::result::Result<u128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u16
@@ -5853,6 +6207,60 @@ pub fn bool::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::R
 impl guatiao::value::convert::ToValue for char
 pub fn char::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn char::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::IpAddr::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::Ipv4Addr::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::Ipv6Addr::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddr::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddrV4::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddrV6::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI128
+pub fn core::num::nonzero::NonZeroI128::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI128::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI16
+pub fn core::num::nonzero::NonZeroI16::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI16::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI32
+pub fn core::num::nonzero::NonZeroI32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI64
+pub fn core::num::nonzero::NonZeroI64::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI64::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI8
+pub fn core::num::nonzero::NonZeroI8::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI8::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroIsize
+pub fn core::num::nonzero::NonZeroIsize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroIsize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU128
+pub fn core::num::nonzero::NonZeroU128::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU128::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU16
+pub fn core::num::nonzero::NonZeroU16::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU16::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU32
+pub fn core::num::nonzero::NonZeroU32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU64
+pub fn core::num::nonzero::NonZeroU64::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU64::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU8
+pub fn core::num::nonzero::NonZeroU8::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU8::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroUsize
+pub fn core::num::nonzero::NonZeroUsize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroUsize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for f32
 pub fn f32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -5898,6 +6306,15 @@ pub fn i8::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Res
 impl guatiao::value::convert::ToValue for isize
 pub fn isize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for std::path::Path
+pub fn std::path::Path::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::path::Path::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for std::path::PathBuf
+pub fn std::path::PathBuf::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::path::PathBuf::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for std::time::SystemTime
+pub fn std::time::SystemTime::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::time::SystemTime::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for str
 pub fn str::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn str::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6182,6 +6599,7 @@ pub guatiao::ValueError::NotUtf8
 pub guatiao::ValueError::OutOfRange
 pub guatiao::ValueError::TooDeep
 pub guatiao::ValueError::UnknownTag(u32)
+pub guatiao::ValueError::Unrepresentable
 pub guatiao::ValueError::WrongKind
 impl core::clone::Clone for guatiao::value::error::ValueError
 pub fn guatiao::value::error::ValueError::clone(&self) -> Self
@@ -6987,18 +7405,60 @@ pub trait guatiao::FromValue: core::marker::Sized
 pub fn guatiao::FromValue::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for ()
 pub fn ()::from_value(&guatiao::value::value::Value) -> core::result::Result<(), guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::boxed::Box<std::path::Path>
+pub fn alloc::boxed::Box<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::boxed::Box<str>
 pub fn alloc::boxed::Box<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<str>, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::rc::Rc<std::path::Path>
+pub fn alloc::rc::Rc<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::rc::Rc<str>
 pub fn alloc::rc::Rc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::string::String
 pub fn alloc::string::String::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for alloc::sync::Arc<std::path::Path>
+pub fn alloc::sync::Arc<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::sync::Arc<str>
 pub fn alloc::sync::Arc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for bool
 pub fn bool::from_value(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for char
 pub fn char::from_value(&guatiao::value::value::Value) -> core::result::Result<char, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::IpAddr, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::Ipv4Addr, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::Ipv6Addr, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddr, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddrV4, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddrV6, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI128
+pub fn core::num::nonzero::NonZeroI128::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI128, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI16
+pub fn core::num::nonzero::NonZeroI16::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI16, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI32
+pub fn core::num::nonzero::NonZeroI32::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI32, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI64
+pub fn core::num::nonzero::NonZeroI64::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI64, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI8
+pub fn core::num::nonzero::NonZeroI8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI8, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroIsize
+pub fn core::num::nonzero::NonZeroIsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroIsize, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU128
+pub fn core::num::nonzero::NonZeroU128::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU128, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU16
+pub fn core::num::nonzero::NonZeroU16::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU16, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU32
+pub fn core::num::nonzero::NonZeroU32::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU32, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU64
+pub fn core::num::nonzero::NonZeroU64::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU64, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU8
+pub fn core::num::nonzero::NonZeroU8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU8, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroUsize
+pub fn core::num::nonzero::NonZeroUsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroUsize, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f32
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
@@ -7029,6 +7489,10 @@ impl guatiao::value::convert::FromValue for i8
 pub fn i8::from_value(&guatiao::value::value::Value) -> core::result::Result<i8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for isize
 pub fn isize::from_value(&guatiao::value::value::Value) -> core::result::Result<isize, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for std::path::PathBuf
+pub fn std::path::PathBuf::from_value(&guatiao::value::value::Value) -> core::result::Result<std::path::PathBuf, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for std::time::SystemTime
+pub fn std::time::SystemTime::from_value(&guatiao::value::value::Value) -> core::result::Result<std::time::SystemTime, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u128
 pub fn u128::from_value(&guatiao::value::value::Value) -> core::result::Result<u128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u16
@@ -7115,6 +7579,78 @@ impl guatiao::schema::describe::Schema for char
 pub fn char::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn char::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn char::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::ip_addr::IpAddr::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::IpAddr::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::ip_addr::Ipv4Addr::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::Ipv4Addr::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::ip_addr::Ipv6Addr::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::Ipv6Addr::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::socket_addr::SocketAddr::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddr::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::socket_addr::SocketAddrV4::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddrV4::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::net::socket_addr::SocketAddrV6::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddrV6::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI128
+pub fn core::num::nonzero::NonZeroI128::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI128::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI128::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI16
+pub fn core::num::nonzero::NonZeroI16::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI16::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI16::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI32
+pub fn core::num::nonzero::NonZeroI32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI32::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI64
+pub fn core::num::nonzero::NonZeroI64::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI64::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI64::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroI8
+pub fn core::num::nonzero::NonZeroI8::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroI8::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI8::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroIsize
+pub fn core::num::nonzero::NonZeroIsize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroIsize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroIsize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU128
+pub fn core::num::nonzero::NonZeroU128::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU128::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU128::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU16
+pub fn core::num::nonzero::NonZeroU16::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU16::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU16::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU32
+pub fn core::num::nonzero::NonZeroU32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU32::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU64
+pub fn core::num::nonzero::NonZeroU64::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU64::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU64::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroU8
+pub fn core::num::nonzero::NonZeroU8::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroU8::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU8::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for core::num::nonzero::NonZeroUsize
+pub fn core::num::nonzero::NonZeroUsize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn core::num::nonzero::NonZeroUsize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroUsize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for f32
 pub fn f32::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn f32::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -7175,6 +7711,18 @@ impl guatiao::schema::describe::Schema for isize
 pub fn isize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn isize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for std::path::Path
+pub fn std::path::Path::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn std::path::Path::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::path::Path::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for std::path::PathBuf
+pub fn std::path::PathBuf::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn std::path::PathBuf::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::path::PathBuf::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for std::time::SystemTime
+pub fn std::time::SystemTime::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn std::time::SystemTime::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::time::SystemTime::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for str
 pub fn str::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn str::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -7322,6 +7870,60 @@ pub fn bool::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::R
 impl guatiao::value::convert::ToValue for char
 pub fn char::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn char::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::IpAddr::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::Ipv4Addr::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::ip_addr::Ipv6Addr::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddr::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddrV4::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::net::socket_addr::SocketAddrV6::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI128
+pub fn core::num::nonzero::NonZeroI128::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI128::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI16
+pub fn core::num::nonzero::NonZeroI16::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI16::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI32
+pub fn core::num::nonzero::NonZeroI32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI64
+pub fn core::num::nonzero::NonZeroI64::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI64::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroI8
+pub fn core::num::nonzero::NonZeroI8::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroI8::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroIsize
+pub fn core::num::nonzero::NonZeroIsize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroIsize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU128
+pub fn core::num::nonzero::NonZeroU128::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU128::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU16
+pub fn core::num::nonzero::NonZeroU16::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU16::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU32
+pub fn core::num::nonzero::NonZeroU32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU64
+pub fn core::num::nonzero::NonZeroU64::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU64::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroU8
+pub fn core::num::nonzero::NonZeroU8::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroU8::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for core::num::nonzero::NonZeroUsize
+pub fn core::num::nonzero::NonZeroUsize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn core::num::nonzero::NonZeroUsize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for f32
 pub fn f32::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -7367,6 +7969,15 @@ pub fn i8::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Res
 impl guatiao::value::convert::ToValue for isize
 pub fn isize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for std::path::Path
+pub fn std::path::Path::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::path::Path::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for std::path::PathBuf
+pub fn std::path::PathBuf::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::path::PathBuf::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for std::time::SystemTime
+pub fn std::time::SystemTime::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn std::time::SystemTime::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for str
 pub fn str::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn str::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>

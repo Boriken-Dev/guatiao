@@ -2507,6 +2507,7 @@ static inline double guatiao_float_or(const guatiao_value *v, double fallback) {
 #define GUATIAO_KEY_ANY_OF "anyOf"
 #define GUATIAO_KEY_ONE_OF "oneOf"
 #define GUATIAO_KEY_ALL_OF "allOf"
+#define GUATIAO_KEY_NOT "not"
 #define GUATIAO_KEY_X_SENSITIVE "x-sensitive"
 #define GUATIAO_KEY_X_ENUM_LABELS "x-enum-labels"
 #define GUATIAO_KEY_X_VARIANT_TAG "x-variant-tag"

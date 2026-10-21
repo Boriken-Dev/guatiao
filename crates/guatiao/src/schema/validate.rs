@@ -135,6 +135,11 @@ fn against(schema: &Value, key: &str, value: &str, depth: u32) -> Result<(), Val
     if depth >= MAX_DEPTH {
         return Err(too_deep(key));
     }
+    if let Some(excluded) = excluded(schema)
+        && against(excluded, key, value, depth + 1).is_ok()
+    {
+        return Err(bad(key, other_than(excluded)));
+    }
     let kind = Kind::read(Some(schema));
     let own = peel(schema);
     match kind {
@@ -508,6 +513,11 @@ fn value_against(
     if tag == Ok(Tag::GUATIAO_NULL) && is_nullable(schema) {
         return Ok(());
     }
+    if let Some(excluded) = excluded(schema)
+        && value_against(excluded, key, value, depth + 1).is_ok()
+    {
+        return Err(bad(key, other_than(excluded)));
+    }
     match kind {
         Kind::Null => {
             return if tag == Ok(Tag::GUATIAO_NULL) {
@@ -772,6 +782,27 @@ fn value_against(
         }
     }
     Ok(())
+}
+
+/// The schema under `not`, which a value must fail.
+fn excluded(schema: &Value) -> Option<&Value> {
+    TryAsRef::<Map>::try_as_ref(peel(schema)).and_then(|m| m.get(vocab::NOT))
+}
+
+/// What a refusal by `not` says it wanted: `"a value other than 0"` when
+/// the excluded schema lists its values.
+fn other_than(excluded: &Value) -> String {
+    let names: Vec<&str> = members(excluded)
+        .filter_map(|(member, _)| {
+            TryAsRef::<str>::try_as_ref(member)
+                .or_else(|| TryAsRef::<Number>::try_as_ref(member).map(AsRef::<str>::as_ref))
+        })
+        .collect();
+    if names.is_empty() {
+        "a value its `not` schema does not describe".to_string()
+    } else {
+        format!("a value other than {}", names.join(", "))
+    }
 }
 
 /// Every key of `map` against the `propertyNames` of `owner`, as text.
