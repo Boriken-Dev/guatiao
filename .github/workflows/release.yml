@@ -1,9 +1,9 @@
 name: Release
 
 # A `v*` tag releases: the test suite and a strict docs build gate it, every
-# manifest must name the tag's version, the three packages are built and
-# dry-run, a GitHub release is made, and then crates.io, PyPI and pub.dev
-# are published -- each skipping a version it already has, so a re-run
+# manifest must name the tag's version, the four packages are built and
+# dry-run, a GitHub release is made, and then crates.io, PyPI, pub.dev and
+# npm are published -- each skipping a version it already has, so a re-run
 # after a partial release finishes the job instead of failing on it.
 #
 # `workflow_dispatch` is the rehearsal: every gate, build and dry run,
@@ -90,6 +90,19 @@ jobs:
               for name, spec in bridge.get(table, {}).items():
                   if name.startswith("guatiao") and spec.get("version") != f"={cargo}":
                       problems.append(f"guatiao-py's {table} pin {name} to {spec.get('version')}, not ={cargo}")
+          # npm writes the version as Cargo does; the lockfiles name it too.
+          import json
+          node = json.loads(pathlib.Path("bindings/node/package.json").read_text())["version"]
+          node_lock = json.loads(pathlib.Path("bindings/node/package-lock.json").read_text())
+          examples_lock = json.loads(pathlib.Path("examples/package-lock.json").read_text())
+          for where, found in (
+              ("bindings/node/package.json", node),
+              ("bindings/node/package-lock.json", node_lock["version"]),
+              ("bindings/node/package-lock.json's root package", node_lock["packages"][""]["version"]),
+              ("examples/package-lock.json's ../bindings/node", examples_lock["packages"]["../bindings/node"]["version"]),
+          ):
+              if found != cargo:
+                  problems.append(f"Cargo says {cargo} and {where} says {found}")
           tag = os.environ["TAG"]
           if tag:
               want = tag[1:] if tag.startswith("v") else tag
@@ -159,9 +172,35 @@ jobs:
         working-directory: bindings/dart
         run: dart pub get && dart pub publish --dry-run
 
+  build-node:
+    name: Build and pack the Node package
+    needs: [test, version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Build
+        working-directory: bindings/node
+        run: npm ci && npm run build
+      - name: "Dry-run the pack: what npm would publish"
+        working-directory: bindings/node
+        run: npm pack --dry-run
+      - name: Pack
+        working-directory: bindings/node
+        run: mkdir -p ../../npm && npm pack --pack-destination ../../npm
+      - uses: actions/upload-artifact@v4
+        with:
+          name: node
+          path: npm/
+          if-no-files-found: error
+
   github-release:
     name: Create the GitHub release
-    needs: [docs-gate, build-crates, build-python, build-dart]
+    needs: [docs-gate, build-crates, build-python, build-dart, build-node]
     if: ${{ github.ref_type == 'tag' }}
     runs-on: ubuntu-latest
     permissions:
@@ -177,6 +216,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: python
+          path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: node
           path: dist/
       - name: Extract the CHANGELOG.md section for this tag
         shell: python
@@ -338,6 +381,60 @@ jobs:
           else:
               subprocess.run(["dart", "pub", "get"], check=True)
               subprocess.run(["dart", "pub", "publish", "--force"], check=True)
+
+  publish-npm:
+    name: Publish to npm
+    needs: github-release
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://www.npmjs.com/package/guatiao
+    permissions:
+      contents: read
+      id-token: write # provenance, and trusted publishing once it is configured
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: npm/
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing can only be set up for a package that already
+      # exists, so the first release uses the NPM_TOKEN secret. Once the
+      # package trusts this workflow, set the repository variable
+      # NPM_TRUSTED_PUBLISHING to `true` and delete the secret.
+      - name: Publish, unless npm has this version already
+        shell: python
+        env:
+          NODE_AUTH_TOKEN: ${{ vars.NPM_TRUSTED_PUBLISHING != 'true' && secrets.NPM_TOKEN || '' }}
+        run: |
+          import glob
+          import json
+          import subprocess
+          import sys
+          import urllib.error
+          import urllib.request
+
+          (tarball,) = glob.glob("npm/guatiao-*.tgz")
+          version = tarball[len("npm/guatiao-"):-len(".tgz")]
+          try:
+              with urllib.request.urlopen("https://registry.npmjs.org/guatiao") as r:
+                  have = set(json.load(r).get("versions", {}))
+          except urllib.error.HTTPError as e:
+              if e.code != 404:
+                  raise
+              have = set()
+          if version in have:
+              print(f"guatiao {version} is already on npm; skipped")
+              sys.exit(0)
+          # A pre-release goes out under `next`, never as `latest`.
+          tag = "next" if "-" in version else "latest"
+          subprocess.run(
+              ["npm", "publish", tarball, "--provenance", "--access", "public", "--tag", tag],
+              check=True,
+          )
 
   # A GITHUB_TOKEN-made release starts no workflow, so docs.yml is
   # dispatched at this tag instead. A pre-release leaves the published docs
