@@ -59,6 +59,7 @@
 #![forbid(unsafe_code)]
 
 mod collections;
+mod durations;
 mod own;
 mod std_types;
 mod wrappers;

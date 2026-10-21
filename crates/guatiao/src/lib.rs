@@ -158,8 +158,8 @@ pub use schema::Schema;
 // `value::types::Bytes`, since one name cannot be both.
 pub use value::types::Str;
 pub use value::{
-    Alloc, AllocError, Buffer, Entry, List, MAX_DEPTH, Map, Number, Payload, Status, Tag, Text,
-    Value, ValueError,
+    Alloc, AllocError, Buffer, Entry, List, MAX_DEPTH, Map, Number, Payload, Span, Status, Tag,
+    Text, Value, ValueError,
 };
 
 /// # What `#[derive(Provider)]` refuses
@@ -364,13 +364,14 @@ pub use guatiao_derive::kind;
 /// ```
 ///
 /// A field type with no conversion is rejected at the field, not deep
-/// inside the expansion — `std::time::Duration` implements neither
+/// inside the expansion — `std::time::Instant`, a reading of one process's
+/// monotonic clock, means nothing to another and implements neither
 /// [`ToValue`] nor [`FromValue`]:
 ///
 /// ```compile_fail
 /// use guatiao::ToValue;
 /// #[derive(ToValue)]
-/// struct Timeout { after: std::time::Duration }
+/// struct Timeout { started: std::time::Instant }
 /// ```
 ///
 /// And two fields cannot land on one key, because the second would

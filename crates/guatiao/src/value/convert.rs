@@ -55,6 +55,7 @@
 #![forbid(unsafe_code)]
 
 mod collections;
+mod durations;
 mod keyed;
 mod own;
 mod std_types;
