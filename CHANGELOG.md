@@ -208,37 +208,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   file declares `source=<what it serves>`, and a scan reports it as
   `Skipped::Source` without loading it. Python and Dart:
   `add_source_file`/`addSourceFile`, `watch_dir`/`watchDir`, `refresh`.
-- **Python: a kind described once, called and served from Python.**
-  `guatiao.kinds.Kind` takes a kind's methods in table order, what each
-  takes and answers (`STR`, `BYTES`, `MAP`, `VALUE`, `TEXT`, the
-  scalars, `taken(MAP)`, `lent(MAP)`, `taken(LISTENER)`,
-  `lent(LISTENER)`, an object kind as an answer) and the
-  `FLOOR_HASH` from its C header, and builds the table's
-  `ctypes.Structure` or checks one written by hand. `Registry.bind(key,
-  kind)` and `Instance.bind(kind)` answer a `Remote` whose methods take
-  and return Python values: a map lent to a slot is changed where it
-  stands, a `Value` handed over is left ABSENT, an answer is built in
-  the binding's allocator, an absent slot raises `Unsupported`. A plain
-  Python object is handed or lent to a slot as an object of an object
-  kind, through a table this binding builds over its class; an object a
-  slot answers is a `kinds.Object` whose `close()` calls its `destroy`.
-  A refusal crosses with its status and words; an exception in a Python
-  method crosses as `GUATIAO_ERR_INTERNAL` naming it.
-- **Python: providers written in Python.** `guatiao.provide.library(id,
-  version, providers=[provide.Provider(name, cls, kinds=[...])])` builds
-  the descriptor any library answers, with a table per kind built over
-  each provider's class, so a host in any language calls it as it calls a
-  Rust or C library. A provider is its one instance, `cls()`, or, given a
-  `config` schema, builds one per configuration the host has checked;
-  `available` answers why not. `Registry.register_library(library)`
-  registers one in a Python host.
+- **Python: a kind is a typed `Protocol` class, called and served from
+  Python.** `class Greeter(kinds.KindProtocol, Protocol, kind="greeter",
+  floor_hash=...)` lists a kind's methods in table order; the shapes are
+  read from the annotations (`str`, `bytes`, `bool`, `float`, the width
+  aliases `kinds.I8`..`kinds.U64`, `Map`, `Ref`, `kinds.MapAnswer`,
+  `Taken[...]`, `Lent[...]`, an object kind class as an answer), with
+  `@required` and `@fallible` for the slot's place and `err`, and a
+  `TypeError` at class creation names a method no shape fits. It builds
+  the table's `ctypes.Structure` or checks one written by hand; mypy and
+  pyright check code calling or implementing it. `Registry.bind(key,
+  Greeter)` and `Instance.bind(Greeter)` answer a `Remote` whose methods
+  take and return Python values: a map lent to a slot is changed where it
+  stands, a `Value` handed over is left ABSENT, an answer is built in the
+  binding's allocator, an absent slot raises `Unsupported`. A Python
+  object, inheriting the kind class or not, is handed or lent to a slot
+  as an object of an object kind, through a table this binding builds
+  over its class; an object a slot answers is a `kinds.Object` whose
+  `close()` calls its `destroy`. A refusal crosses with its status and
+  words; an exception in a Python method crosses as
+  `GUATIAO_ERR_INTERNAL` naming it. `kinds.Kind` and `kinds.Method`, with
+  the shapes of `kinds.shapes`, describe a kind without a class.
+- **Python: a module of provider classes is a library.** A provider is a
+  class inheriting `guatiao.provide.Provider` and the kind classes it
+  serves (`class Hello(provide.Provider, Greeter)`); a method a kind
+  requires and the class lacks is a `TypeError` when the class is
+  created. Its name defaults to the class name in snake_case; `named`,
+  `display_name`, `version`, `meta`, `default` and `config_schema` are
+  class keywords; `available` is a classmethod. An `__init__` taking
+  nothing makes the provider its one instance; one taking a `config`
+  annotated with a dataclass or a `TypedDict` declares the schema hosts
+  check against and receives the configuration as that type. A module is
+  the library: its `__name__` the id, its `__version__` the version, its
+  providers the provider classes in `__all__` or, without it, those it
+  defines. Its `meta` merges the installed distribution's metadata
+  (summary, licence, authors, project URLs, licence files as `notices`),
+  the module's docstring, `__author__`, `__license__` and
+  `__copyright__`, and a `_meta_` mapping. `provide.library_of(module)`
+  builds it once; `provide.library(id, version, providers=...)` builds
+  one without a module; `Registry.register_library` takes either. A host
+  in any language calls it as it calls a Rust or C library.
+- **Python: `guatiao.use_library(path)`** names the guatiao library to
+  load before the first native call, a file or a directory, ahead of
+  `GUATIAO_LIBRARY`; naming another once one is loaded raises
+  `RuntimeError`. A program that carries the guatiao functions under its
+  own name points the binding at itself.
+- **Python: the package is typed** (`py.typed`) and checked with
+  `mypy --strict`, as are the Python examples; `Map.get(key, default)`
+  answers plain data like a `dict`.
+- **`guatiao-py`, a source of libraries written in Python.** A cdylib
+  exporting `guatiao_source` and declaring `source=python`: a host in any
+  language adds it with `add_source_file` and a configuration naming
+  where Python libraries are described (`dirs`, `manifests`) and what to
+  put on `sys.path` first (`paths`). Each library is a manifest,
+  `*.guatiao-py.toml`, naming its `module`, the `kinds` it serves, the
+  `paths` it imports from, and optionally its `version` (otherwise a
+  literal `__version__`, read without importing). Listing imports
+  nothing; opening imports the module afresh and refuses one whose name,
+  version or kinds differ from the manifest; closing drops the modules it
+  imported, so a refresh serves edited code while instances of the old
+  build still answer. One interpreter serves the program and is never
+  finalised. It builds for CPython's stable ABI from 3.9, is not
+  published, and is built by whoever ships it.
 - **Python: an error raised with a message alone carries its class's
   status** (`guatiao.BadValue("nobody to greet")`), which is how Python
   code refuses a call.
 - **An example host in Python**, `examples/python_host/`: it scans for
-  greeter libraries in any language and calls every slot of the kind,
-  objects included. The greeter kinds are described for Python beside
-  their C header, `examples/greeter_kind/python/greeter_kind.py`.
+  greeter libraries in any language, or adds the `guatiao-py` bridge, and
+  calls every slot of the kind, objects included. The greeter kinds are
+  Python classes beside their C header,
+  `examples/greeter_kind/python/greeter_kind.py`, and
+  `examples/python_provider/` holds two libraries written in Python.
 
 ### Changed
 
