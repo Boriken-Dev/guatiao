@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -56,3 +57,25 @@ def test_the_python_host_calls_every_greeter_it_finds(tmp_path):
     if c_greeter is not None:
         assert "greet: {'greeting': 'hello from C, ana'}" in out
         assert "retired c_greeter_library, still mapped" in out
+
+
+def test_the_python_host_serves_python_greeters_through_the_bridge() -> None:
+    bridge = Path(
+        os.environ.get("GUATIAO_PY_BRIDGE")
+        or native.REPO / "crates" / "guatiao-py" / "target" / "debug" / native.library_name("guatiao_py")
+    )
+    if not bridge.is_file():
+        pytest.skip(f"no guatiao-py build at {bridge}")
+    host = native.REPO / "examples" / "python_host" / "host.py"
+    out = _run(
+        host,
+        _TARGET_DEBUG,
+        "--python-source",
+        bridge,
+        "--python-dir",
+        native.REPO / "examples" / "python_provider",
+    )
+    assert "served py_greeter from Python" in out
+    assert "py_greeter_hello (py_greeter 1.0.0)" in out
+    assert "conversation: 2 turns" in out
+    assert out.rstrip().endswith("python objects a library can still reach: 0")

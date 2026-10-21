@@ -151,11 +151,36 @@ unsafe fn state<'a>(ctx: *mut c_void) -> &'a State {
     unsafe { &*ctx.cast::<State>() }
 }
 
-fn candidate(found: &Found, alloc: Alloc) -> Result<Map, guatiao::ValueError> {
+/// What a manifest says the library's version is, or its module's
+/// literal `__version__`; a refusal reads as a broken manifest.
+fn versioned(found: Found) -> (Found, String) {
+    match found {
+        Found::Library(m) => match &m.version {
+            Some(v) => {
+                let v = v.clone();
+                (Found::Library(m), v)
+            }
+            None => match crate::bridge::literal_version(&m) {
+                Ok(v) => (Found::Library(m), v),
+                Err(why) => (
+                    Found::Broken {
+                        path: PathBuf::from(&m.id),
+                        stamp: m.stamp.clone(),
+                        why: format!("{}: {why}", m.id),
+                    },
+                    String::new(),
+                ),
+            },
+        },
+        broken => (broken, String::new()),
+    }
+}
+
+fn candidate(found: &Found, version: &str, alloc: Alloc) -> Result<Map, guatiao::ValueError> {
     let mut map = Map::new_in(alloc);
-    let (version, kinds, stamp): (&str, &[String], &str) = match found {
-        Found::Library(m) => (&m.version, &m.kinds, &m.stamp),
-        Found::Broken { stamp, .. } => ("", &[], stamp),
+    let (kinds, stamp): (&[String], &str) = match found {
+        Found::Library(m) => (&m.kinds, &m.stamp),
+        Found::Broken { stamp, .. } => (&[], stamp),
     };
     map.set_in("id", Text::new_in(alloc, &found.id())?, alloc)?;
     map.set_in("version", Text::new_in(alloc, version)?, alloc)?;
@@ -180,7 +205,8 @@ unsafe extern "C" fn list(
         let alloc = unsafe { guatiao::library::kind::return_alloc(out) };
         let mut list = List::new_in(alloc);
         for found in manifest::find(&state.dirs, &state.manifests) {
-            list.try_push(candidate(&found, alloc)?)?;
+            let (found, version) = versioned(found);
+            list.try_push(candidate(&found, &version, alloc)?)?;
         }
         Ok(list)
     }));
@@ -226,12 +252,12 @@ unsafe extern "C" fn open(
                     format!("no manifest describes `{id}` now"),
                 )
             })?;
-        let manifest = match found {
-            Found::Library(m) => m,
-            Found::Broken { why, .. } => return Err((Status::GUATIAO_ERR_BAD_VALUE, why)),
+        let (manifest, version) = match versioned(found) {
+            (Found::Library(m), version) => (m, version),
+            (Found::Broken { why, .. }, _) => return Err((Status::GUATIAO_ERR_BAD_VALUE, why)),
         };
-        let (info, handle) =
-            crate::bridge::open(&manifest).map_err(|why| (Status::GUATIAO_ERR_BAD_VALUE, why))?;
+        let (info, handle) = crate::bridge::open(&manifest, &version)
+            .map_err(|why| (Status::GUATIAO_ERR_BAD_VALUE, why))?;
         state
             .open
             .lock()

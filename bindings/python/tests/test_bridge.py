@@ -30,7 +30,7 @@ import native
 
 sys.path.insert(0, str(native.GREETER_KIND_PY))
 
-from greeter_kind import COUNTER, GREETER  # noqa: E402
+from greeter_kind import Counter, Greeter  # noqa: E402
 
 from guatiao import Registry  # noqa: E402
 
@@ -63,8 +63,7 @@ def _copy_greeter(into: Path, module: str) -> Path:
     source = (_EXAMPLES / "py_greeter" / "py_greeter.py").read_text(encoding="utf-8")
     (into / f"{module}.py").write_text(source, encoding="utf-8")
     (into / f"{module}.guatiao-py.toml").write_text(
-        'id = "py_greeter"\nversion = "1.0.0"\nkinds = ["greeter", "counter"]\n'
-        f'entry = "{module}:library"\npaths = ["."]\n',
+        f'module = "{module}"\nkinds = ["greeter", "counter"]\npaths = ["."]\n',
         encoding="utf-8",
     )
     return into / f"{module}.py"
@@ -76,10 +75,10 @@ def test_the_examples_are_served_and_called(reg):
     assert sorted(s["id"] for s in changed["loaded"]) == ["py_greeter", "py_tally"], changed
     assert changed["refused"] == []
     assert all(s["source"] == name for s in changed["loaded"])
-    greeter = reg.bind("py_greeter_hello", GREETER)
+    greeter = reg.bind("py_greeter_hello", Greeter)
     assert greeter.greet("ana").to_python() == {"greeting": "hello, ana"}
     with reg.create("py_tally_tally", {"start": 40}) as tally:
-        counter = tally.bind(COUNTER)
+        counter = tally.bind(Counter)
         assert [counter.count(), counter.count()] == [41, 42]
     assert reg.refresh() == {"loaded": [], "retired": [], "skipped": [], "refused": []}
 
@@ -87,9 +86,9 @@ def test_the_examples_are_served_and_called(reg):
 def test_an_edit_serves_new_code_while_an_instance_of_the_old_answers(reg, tmp_path):
     source = _copy_greeter(tmp_path / "edited", "py_edited")
     reg.add_source_file(_BRIDGE, {"dirs": [str(tmp_path)]})
-    assert [s["id"] for s in reg.refresh()["loaded"]] == ["py_greeter"]
-    old = reg.create("py_greeter_shouter", {"prefix": "hey"})
-    assert old.bind(GREETER).greet("bo").to_python() == {"greeting": "hey BO"}
+    assert [s["id"] for s in reg.refresh()["loaded"]] == ["py_edited"]
+    old = reg.create("py_edited_shouter", {"prefix": "hey"})
+    assert old.bind(Greeter).greet("bo").to_python() == {"greeting": "hey BO"}
     first = sys.modules["py_edited"]
 
     time.sleep(0.05)
@@ -99,17 +98,17 @@ def test_an_edit_serves_new_code_while_an_instance_of_the_old_answers(reg, tmp_p
         encoding="utf-8",
     )
     changed = reg.refresh()
-    assert [s["id"] for s in changed["loaded"]] == ["py_greeter"]
-    assert [s["id"] for s in changed["retired"]] == ["py_greeter"]
-    assert reg.bind("py_greeter_hello", GREETER).greet("ana").to_python() == {"greeting": "howdy, ana"}
-    assert old.bind(GREETER).greet("bo").to_python() == {"greeting": "hey BO"}, "the old code answers"
-    with reg.create("py_greeter_shouter", {"prefix": "hey"}) as new:
-        assert new.bind(GREETER).greet("bo").to_python() == {"greeting": "hey BO!"}
+    assert [s["id"] for s in changed["loaded"]] == ["py_edited"]
+    assert [s["id"] for s in changed["retired"]] == ["py_edited"]
+    assert reg.bind("py_edited_hello", Greeter).greet("ana").to_python() == {"greeting": "howdy, ana"}
+    assert old.bind(Greeter).greet("bo").to_python() == {"greeting": "hey BO"}, "the old code answers"
+    with reg.create("py_edited_shouter", {"prefix": "hey"}) as new:
+        assert new.bind(Greeter).greet("bo").to_python() == {"greeting": "hey BO!"}
     assert sys.modules["py_edited"] is not first, "imported afresh"
 
     assert reg.collect() == [], "the old instance holds its build open"
     old.close()
-    assert reg.collect() == ["py_greeter"]
+    assert reg.collect() == ["py_edited"]
     assert sys.modules["py_edited"] is not first, "closing the old build left the new module"
 
 
@@ -128,20 +127,24 @@ def test_a_deleted_manifest_retires_its_library(reg, tmp_path):
 def test_what_cannot_be_opened_is_refused_in_words(reg, tmp_path):
     clash = tmp_path / "clash"
     clash.mkdir()
-    (clash / "json.py").write_text("library = None\n", encoding="utf-8")
-    (clash / "clash.guatiao-py.toml").write_text(
-        'id = "clash"\nkinds = ["greeter"]\nentry = "json:library"\n', encoding="utf-8"
-    )
-    (tmp_path / "broken.guatiao-py.toml").write_text("id = \n", encoding="utf-8")
+    (clash / "json.py").write_text('__version__ = "1"\n', encoding="utf-8")
+    (clash / "clash.guatiao-py.toml").write_text('module = "json"\nkinds = ["greeter"]\n', encoding="utf-8")
+    (tmp_path / "broken.guatiao-py.toml").write_text("module = \n", encoding="utf-8")
     liar = tmp_path / "liar"
     _copy_greeter(liar, "py_liar")
     (liar / "py_liar.guatiao-py.toml").write_text(
-        'id = "someone_else"\nkinds = ["greeter", "counter"]\nentry = "py_liar:library"\n',
-        encoding="utf-8",
+        'module = "py_liar"\nversion = "9.9.9"\nkinds = ["greeter", "counter"]\n', encoding="utf-8"
+    )
+    computed = tmp_path / "computed"
+    computed.mkdir()
+    (computed / "py_computed.py").write_text('__version__ = ".".join(["1", "0"])\n', encoding="utf-8")
+    (computed / "computed.guatiao-py.toml").write_text(
+        'module = "py_computed"\nkinds = ["counter"]\n', encoding="utf-8"
     )
     reg.add_source_file(_BRIDGE, {"dirs": [str(tmp_path)]})
     refused = {r["id"]: r["why"] for r in reg.refresh()["refused"]}
-    assert "`json` is already imported from" in refused["clash"]
+    assert "`json` is already imported from" in refused["json"]
     assert any("broken.guatiao-py.toml" in why for why in refused.values())
-    assert "the manifest names `someone_else`" in refused["someone_else"]
+    assert "version `9.9.9`" in refused["py_liar"] and "`1.0.0`" in refused["py_liar"]
+    assert "put `version` in the manifest" in refused["py_computed"]
     assert reg.libraries() == []

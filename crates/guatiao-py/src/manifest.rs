@@ -5,10 +5,9 @@
 //! Manifests: what a Python library is, read without importing it.
 //!
 //! ```toml
-//! id = "py_greeter"                    # the library's id, as `provide.library` builds it
-//! version = "1.0.0"
+//! module = "py_greeter"                # the module, which is the library: its id
+//! version = "1.0.0"                    # optional: else its literal `__version__`
 //! kinds = ["greeter", "counter"]       # every kind its providers serve
-//! entry = "py_greeter:library"         # module:attribute, a guatiao.provide Library
 //! paths = ["."]                        # put on sys.path, relative to this file
 //! ```
 
@@ -30,10 +29,11 @@ const DEEPEST: usize = 8;
 /// One library a manifest describes.
 #[derive(Debug, Clone)]
 pub(crate) struct Manifest {
+    /// The module, and so the library's id.
     pub(crate) id: String,
-    pub(crate) version: String,
+    /// `None` when the manifest leaves it to the module's `__version__`.
+    pub(crate) version: Option<String>,
     pub(crate) kinds: Vec<String>,
-    pub(crate) entry: String,
     /// Absolute, resolved against the manifest's directory.
     pub(crate) paths: Vec<String>,
     /// The manifest's content and the newest `.py` file under its paths.
@@ -200,13 +200,15 @@ pub(crate) fn read(path: &Path) -> Found {
     };
     let base = path.parent().unwrap_or(Path::new("."));
     let read = || -> Result<Manifest, String> {
-        let id = text_field("id")?;
-        let entry = text_field("entry")?;
-        let version = map
-            .get("version")
-            .and_then(TryAsRef::<str>::try_as_ref)
-            .unwrap_or_default()
-            .to_string();
+        let id = text_field("module")?;
+        let version = match map.get("version") {
+            None => None,
+            Some(v) => Some(
+                TryAsRef::<str>::try_as_ref(v)
+                    .ok_or_else(|| "`version` is not text".to_string())?
+                    .to_string(),
+            ),
+        };
         let kinds = text_list(map, "kinds")?;
         let mut relative = text_list(map, "paths")?;
         if relative.is_empty() {
@@ -233,7 +235,6 @@ pub(crate) fn read(path: &Path) -> Found {
             id,
             version,
             kinds,
-            entry,
             paths,
             stamp: format!("{file_stamp}:{newest}"),
         })
@@ -261,7 +262,7 @@ mod tests {
         std::fs::create_dir_all(dir.join("lib")).unwrap();
         std::fs::write(
             dir.join("lib").join("one.guatiao-py.toml"),
-            "id = \"one\"\nversion = \"1.0.0\"\nkinds = [\"greeter\"]\nentry = \"one:library\"\n",
+            "module = \"one\"\nversion = \"1.0.0\"\nkinds = [\"greeter\"]\n",
         )
         .unwrap();
         std::fs::write(dir.join("lib").join("one.py"), "x = 1\n").unwrap();
@@ -295,11 +296,7 @@ mod tests {
     fn a_field_of_the_wrong_kind_is_named() {
         let dir = scratch("wrong");
         let path = dir.join("w.guatiao-py.toml");
-        std::fs::write(
-            &path,
-            "id = \"w\"\nentry = \"w:library\"\nkinds = \"greeter\"\n",
-        )
-        .unwrap();
+        std::fs::write(&path, "module = \"w\"\nkinds = \"greeter\"\n").unwrap();
         let Found::Broken { why, .. } = read(&path) else {
             panic!("refused");
         };
