@@ -104,6 +104,10 @@ fn example_library() -> Option<PathBuf> {
 /// ordinary value tree, calls through the provider's table, and frees a
 /// tree the LIBRARY's allocator built.
 #[test]
+#[cfg_attr(
+    not(feature = "load"),
+    ignore = "the registry exports are in the artifact only with `load`"
+)]
 fn a_c_program_is_a_host() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let source = manifest.join("tests/c_consumer/registry_consumer.c");

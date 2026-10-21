@@ -184,6 +184,7 @@ fn the_committed_header_is_what_this_build_rendered() {
 ///
 /// A whole-file diff in an assertion message is unreadable; the line that
 /// first disagrees is what tells you what changed.
+#[cfg(feature = "c-header")]
 fn first_difference(a: &str, b: &str) -> Option<String> {
     for (n, (la, lb)) in a.lines().zip(b.lines()).enumerate() {
         if la != lb {
