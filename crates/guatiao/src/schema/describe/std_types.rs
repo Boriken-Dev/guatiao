@@ -2,9 +2,9 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! What paths, addresses, non-zero integers and `SystemTime` accept: text
-//! with the `format` JSON Schema names for it, or a pattern where it names
-//! none, and an integer that is not zero.
+//! What paths, addresses and non-zero integers accept: text with the
+//! `format` JSON Schema names for it, or a pattern where it names none,
+//! and an integer that is not zero.
 
 #![forbid(unsafe_code)]
 
@@ -14,7 +14,6 @@ use core::num::{
     NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU128, NonZeroUsize,
 };
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
 
 use super::Schema;
 use crate::schema::build::KindBuilder;
@@ -128,10 +127,3 @@ non_zero_signed!(
     NonZeroI8 => i8, NonZeroI16 => i16, NonZeroI32 => i32, NonZeroI64 => i64,
     NonZeroI128 => i128, NonZeroIsize => isize,
 );
-
-/// `format: date-time`, RFC 3339's `date-time`.
-impl Schema for SystemTime {
-    fn kind(alloc: Alloc) -> KindBuilder {
-        KindBuilder::string_in(alloc).format("date-time")
-    }
-}

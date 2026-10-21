@@ -54,6 +54,7 @@
 
 #![forbid(unsafe_code)]
 
+mod calendar;
 mod collections;
 mod durations;
 mod keyed;

@@ -804,3 +804,135 @@ mod durations {
         validate_map(SchemaRef::new(&schema).unwrap(), &value).unwrap();
     }
 }
+
+mod calendar {
+    use super::*;
+    use alloc::collections::BTreeMap;
+    use guatiao::{Date, DateTime, Time, Timestamp};
+
+    fn text(v: &Value) -> &str {
+        TryAsRef::<str>::try_as_ref(v).unwrap()
+    }
+
+    #[test]
+    fn each_form_is_its_text_with_a_format_or_a_pattern() {
+        let date: Date = "2026-10-21".parse().unwrap();
+        assert_eq!(text(&check(date)), "2026-10-21");
+        let time: Time = "13:45:00.5".parse().unwrap();
+        assert_eq!(text(&check(time)), "13:45:00.5");
+        let at = DateTime::new(date, time);
+        assert_eq!(text(&check(at)), "2026-10-21T13:45:00.5");
+        let instant: Timestamp = "2026-10-21T19:15:00.5+05:30".parse().unwrap();
+        assert_eq!(text(&check(instant)), "2026-10-21T13:45:00.5Z");
+
+        assert_eq!(text_at(&kind_of::<Date>(), "format"), Some("date"));
+        assert_eq!(
+            text_at(&kind_of::<Timestamp>(), "format"),
+            Some("date-time")
+        );
+        assert_eq!(text_at(&kind_of::<Time>(), "format"), None);
+        assert!(text_at(&kind_of::<Time>(), "pattern").is_some());
+        assert!(text_at(&kind_of::<DateTime>(), "pattern").is_some());
+        assert_eq!(
+            kind_of::<std::time::SystemTime>(),
+            kind_of::<Timestamp>(),
+            "a SystemTime is described as a timestamp"
+        );
+
+        if guatiao::schema::PATTERNS_ENFORCED {
+            assert!(!accepts::<Time>(&Value::from("13:45:00Z")));
+            assert!(!accepts::<Time>(&Value::from("24:00:00")));
+            assert!(accepts::<Time>(&Value::from("23:59:59.999999999")));
+            assert!(!accepts::<DateTime>(&Value::from("2026-10-21T13:45:00Z")));
+            assert!(!accepts::<DateTime>(&Value::from("2026-10-21 13:45:00")));
+            assert!(accepts::<DateTime>(&Value::from("2026-10-21t13:45:00")));
+        }
+        assert!(Date::from_value(&Value::from(20261021i64)).is_err());
+        let e = Date::from_value(&Value::from("2026-02-30"))
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("at byte 8") && !e.contains("2026"), "{e}");
+    }
+
+    #[test]
+    fn a_map_keyed_by_dates_crosses_as_their_text() {
+        let keyed = BTreeMap::from([
+            ("2026-10-21".parse::<Date>().unwrap(), 1u8),
+            ("2026-01-01".parse::<Date>().unwrap(), 2u8),
+        ]);
+        let v = check(keyed);
+        let map = <&Map>::try_from(&v).unwrap();
+        assert!(map.contains_key("2026-10-21"));
+        let names = get(&kind_of::<BTreeMap<Date, u8>>(), "propertyNames").cloned();
+        assert_eq!(names, Some(kind_of::<Date>()));
+
+        // Two spellings of one instant are one key, and refused.
+        let mut twice = Map::new();
+        twice.set("2026-10-21T13:45:00Z", 1i64);
+        twice.set("2026-10-21T14:45:00+01:00", 2i64);
+        assert!(BTreeMap::<Timestamp, u8>::from_value(&Value::from(twice)).is_err());
+    }
+
+    #[test]
+    fn constructors_refuse_what_is_not_on_the_calendar_or_the_clock() {
+        use guatiao::ValueError::Unrepresentable;
+        assert_eq!(Date::try_new(2026, 2, 29), Err(Unrepresentable));
+        assert_eq!(Date::try_new(10000, 1, 1), Err(Unrepresentable));
+        assert_eq!(Date::try_new(-1, 1, 1), Err(Unrepresentable));
+        assert_eq!(Date::try_new(2026, 13, 1), Err(Unrepresentable));
+        assert_eq!(Date::try_new(2026, 1, 0), Err(Unrepresentable));
+        assert!(Date::try_new(2024, 2, 29).is_ok());
+        assert_eq!(Time::try_new(24, 0, 0, 0), Err(Unrepresentable));
+        assert_eq!(Time::try_new(0, 60, 0, 0), Err(Unrepresentable));
+        assert_eq!(Time::try_new(0, 0, 60, 0), Err(Unrepresentable));
+        assert_eq!(Time::try_new(0, 0, 0, 1_000_000_000), Err(Unrepresentable));
+        assert_eq!(Time::midnight().to_string(), "00:00:00");
+        assert_eq!(Timestamp::from_unix(0, 1_000_000_000), Err(Unrepresentable));
+    }
+
+    #[test]
+    fn they_order_by_time_and_debug_shows_the_text() {
+        let a: Timestamp = "1969-12-31T23:59:59.5Z".parse().unwrap();
+        let b: Timestamp = "1970-01-01T00:00:00Z".parse().unwrap();
+        assert!(a < b);
+        let d1: DateTime = "2026-10-21T23:59:59".parse().unwrap();
+        let d2: DateTime = "2026-10-22T00:00:00".parse().unwrap();
+        assert!(d1 < d2);
+        assert!("2026-09-30".parse::<Date>().unwrap() < "2026-10-01".parse().unwrap());
+        assert_eq!(format!("{b:?}"), "Timestamp(1970-01-01T00:00:00Z)");
+        assert_eq!(format!("{:?}", d1.date()), "Date(2026-10-21)");
+        assert_eq!(format!("{:?}", d1.time()), "Time(23:59:59)");
+        assert_eq!(format!("{d1:?}"), "DateTime(2026-10-21T23:59:59)");
+        fn send_sync<T: Send + Sync>() {}
+        send_sync::<Date>();
+        send_sync::<Time>();
+        send_sync::<DateTime>();
+        send_sync::<Timestamp>();
+    }
+
+    #[derive(Debug, PartialEq, guatiao::ToValue, guatiao::FromValue, guatiao::Schema)]
+    struct Booking {
+        day: Date,
+        opens: Time,
+        starts: DateTime,
+        made: Timestamp,
+        cancelled: Option<Timestamp>,
+        holidays: Vec<Date>,
+    }
+
+    #[test]
+    fn a_struct_of_them_derives_and_validates() {
+        let b = Booking {
+            day: "2026-10-21".parse().unwrap(),
+            opens: "09:00:00".parse().unwrap(),
+            starts: "2026-10-21T09:30:00".parse().unwrap(),
+            made: "2026-10-01T12:00:00Z".parse().unwrap(),
+            cancelled: None,
+            holidays: vec!["2026-12-25".parse().unwrap()],
+        };
+        let value = b.to_value().unwrap();
+        assert_eq!(Booking::from_value(&value).unwrap(), b);
+        let schema = Booking::schema().unwrap();
+        validate_map(SchemaRef::new(&schema).unwrap(), &value).unwrap();
+    }
+}

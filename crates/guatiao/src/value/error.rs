@@ -44,10 +44,11 @@ pub enum ValueError {
     /// A key was declared twice where each must be one: two fields of a
     /// schema under one name.
     DuplicateKey,
-    /// The value has no spelling in the form it is written as: a time
-    /// outside the years 0000 to 9999, which RFC 3339 cannot write, or a
-    /// [`Span`](crate::Span) with calendar units or a sign, which a
-    /// `Duration` cannot hold.
+    /// The value has no spelling in the form it is written as: a date or
+    /// a time that is not on the calendar or the clock (February 30,
+    /// 24:00), one outside the years 0000 to 9999, which RFC 3339 cannot
+    /// write, or a [`Span`](crate::Span) with calendar units or a sign,
+    /// which a `Duration` cannot hold.
     Unrepresentable,
     /// Text was refused by the grammar it was read with, at byte `at`.
     /// Says what was expected there and never quotes the text.

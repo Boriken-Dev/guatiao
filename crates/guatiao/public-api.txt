@@ -1875,6 +1875,22 @@ impl guatiao::schema::describe::Schema for f64
 pub fn f64::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn f64::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f64::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Date
+pub fn guatiao::Date::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Date::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Date::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::DateTime
+pub fn guatiao::DateTime::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::DateTime::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::DateTime::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Time
+pub fn guatiao::Time::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Time::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Time::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Timestamp
+pub fn guatiao::Timestamp::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Timestamp::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::value::convert::Bytes::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2598,6 +2614,22 @@ impl guatiao::schema::describe::Schema for f64
 pub fn f64::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn f64::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f64::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Date
+pub fn guatiao::Date::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Date::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Date::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::DateTime
+pub fn guatiao::DateTime::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::DateTime::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::DateTime::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Time
+pub fn guatiao::Time::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Time::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Time::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Timestamp
+pub fn guatiao::Timestamp::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Timestamp::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::value::convert::Bytes::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2990,6 +3022,14 @@ impl guatiao::value::convert::FromValue for f32
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
 pub fn f64::from_value(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::Date
+pub fn guatiao::Date::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::DateTime
+pub fn guatiao::DateTime::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::Time
+pub fn guatiao::Time::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::span::Span
@@ -3140,6 +3180,22 @@ impl guatiao::value::convert::MapKey for core::net::socket_addr::SocketAddrV6
 pub fn core::net::socket_addr::SocketAddrV6::from_key(&str) -> core::result::Result<core::net::socket_addr::SocketAddrV6, guatiao::value::convert::MapError>
 pub fn core::net::socket_addr::SocketAddrV6::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
 pub fn core::net::socket_addr::SocketAddrV6::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::MapKey for guatiao::Date
+pub fn guatiao::Date::from_key(&str) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+pub fn guatiao::Date::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::Date::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::MapKey for guatiao::DateTime
+pub fn guatiao::DateTime::from_key(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+pub fn guatiao::DateTime::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::DateTime::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::MapKey for guatiao::Time
+pub fn guatiao::Time::from_key(&str) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+pub fn guatiao::Time::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::Time::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::MapKey for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_key(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
+pub fn guatiao::Timestamp::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::Timestamp::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
 impl guatiao::value::convert::MapKey for i128
 pub fn i128::from_key(&str) -> core::result::Result<i128, guatiao::value::convert::MapError>
 pub fn i128::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
@@ -3270,6 +3326,18 @@ pub fn f32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Re
 impl guatiao::value::convert::ToValue for f64
 pub fn f64::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f64::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Date
+pub fn guatiao::Date::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Date::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::DateTime
+pub fn guatiao::DateTime::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::DateTime::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Time
+pub fn guatiao::Time::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Time::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Timestamp
+pub fn guatiao::Timestamp::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -3708,6 +3776,191 @@ impl core::hash::Hash for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::hash<__H: core::hash::Hasher>(&self, &mut __H)
 impl core::marker::Copy for guatiao::value::status::Status
 impl core::marker::StructuralPartialEq for guatiao::value::status::Status
+pub mod guatiao::value::time
+pub struct guatiao::value::time::Date
+impl guatiao::Date
+pub fn guatiao::Date::checked_add(self, guatiao::value::span::Span) -> core::option::Option<guatiao::Date>
+pub fn guatiao::Date::day(&self) -> u8
+pub fn guatiao::Date::month(&self) -> u8
+pub fn guatiao::Date::try_new(i32, u8, u8) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
+pub fn guatiao::Date::year(&self) -> i32
+impl core::clone::Clone for guatiao::Date
+pub fn guatiao::Date::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::Date
+impl core::cmp::Ord for guatiao::Date
+pub fn guatiao::Date::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for guatiao::Date
+pub fn guatiao::Date::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for guatiao::Date
+pub fn guatiao::Date::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<guatiao::Date> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::Date) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::Date
+pub type guatiao::Date::Error = guatiao::value::error::ValueError
+pub fn guatiao::Date::try_from(&str) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
+impl core::fmt::Debug for guatiao::Date
+pub fn guatiao::Date::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::Date
+pub fn guatiao::Date::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::Date
+pub fn guatiao::Date::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::Date
+impl core::marker::StructuralPartialEq for guatiao::Date
+impl core::str::traits::FromStr for guatiao::Date
+pub type guatiao::Date::Err = guatiao::value::error::ValueError
+pub fn guatiao::Date::from_str(&str) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Date
+pub fn guatiao::Date::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Date::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Date::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::Date
+pub fn guatiao::Date::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+impl guatiao::value::convert::MapKey for guatiao::Date
+pub fn guatiao::Date::from_key(&str) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+pub fn guatiao::Date::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::Date::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Date
+pub fn guatiao::Date::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Date::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub struct guatiao::value::time::DateTime
+impl guatiao::DateTime
+pub fn guatiao::DateTime::checked_add(self, guatiao::value::span::Span) -> core::option::Option<guatiao::DateTime>
+pub fn guatiao::DateTime::date(&self) -> guatiao::Date
+pub fn guatiao::DateTime::new(guatiao::Date, guatiao::Time) -> guatiao::DateTime
+pub fn guatiao::DateTime::time(&self) -> guatiao::Time
+impl core::clone::Clone for guatiao::DateTime
+pub fn guatiao::DateTime::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::DateTime
+impl core::cmp::Ord for guatiao::DateTime
+pub fn guatiao::DateTime::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for guatiao::DateTime
+pub fn guatiao::DateTime::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for guatiao::DateTime
+pub fn guatiao::DateTime::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<guatiao::DateTime> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::DateTime) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::DateTime
+pub type guatiao::DateTime::Error = guatiao::value::error::ValueError
+pub fn guatiao::DateTime::try_from(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::error::ValueError>
+impl core::fmt::Debug for guatiao::DateTime
+pub fn guatiao::DateTime::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::DateTime
+pub fn guatiao::DateTime::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::DateTime
+pub fn guatiao::DateTime::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::DateTime
+impl core::marker::StructuralPartialEq for guatiao::DateTime
+impl core::str::traits::FromStr for guatiao::DateTime
+pub type guatiao::DateTime::Err = guatiao::value::error::ValueError
+pub fn guatiao::DateTime::from_str(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::DateTime
+pub fn guatiao::DateTime::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::DateTime::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::DateTime::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::DateTime
+pub fn guatiao::DateTime::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+impl guatiao::value::convert::MapKey for guatiao::DateTime
+pub fn guatiao::DateTime::from_key(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+pub fn guatiao::DateTime::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::DateTime::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::DateTime
+pub fn guatiao::DateTime::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::DateTime::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub struct guatiao::value::time::Time
+impl guatiao::Time
+pub fn guatiao::Time::hour(&self) -> u8
+pub fn guatiao::Time::midnight() -> guatiao::Time
+pub fn guatiao::Time::minute(&self) -> u8
+pub fn guatiao::Time::nanosecond(&self) -> u32
+pub fn guatiao::Time::second(&self) -> u8
+pub fn guatiao::Time::try_new(u8, u8, u8, u32) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
+impl core::clone::Clone for guatiao::Time
+pub fn guatiao::Time::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::Time
+impl core::cmp::Ord for guatiao::Time
+pub fn guatiao::Time::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for guatiao::Time
+pub fn guatiao::Time::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for guatiao::Time
+pub fn guatiao::Time::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<guatiao::Time> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::Time) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::Time
+pub type guatiao::Time::Error = guatiao::value::error::ValueError
+pub fn guatiao::Time::try_from(&str) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
+impl core::fmt::Debug for guatiao::Time
+pub fn guatiao::Time::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::Time
+pub fn guatiao::Time::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::Time
+pub fn guatiao::Time::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::Time
+impl core::marker::StructuralPartialEq for guatiao::Time
+impl core::str::traits::FromStr for guatiao::Time
+pub type guatiao::Time::Err = guatiao::value::error::ValueError
+pub fn guatiao::Time::from_str(&str) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Time
+pub fn guatiao::Time::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Time::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Time::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::Time
+pub fn guatiao::Time::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+impl guatiao::value::convert::MapKey for guatiao::Time
+pub fn guatiao::Time::from_key(&str) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+pub fn guatiao::Time::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::Time::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Time
+pub fn guatiao::Time::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Time::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub struct guatiao::value::time::Timestamp
+impl guatiao::Timestamp
+pub fn guatiao::Timestamp::from_unix(i64, u32) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::nanoseconds(&self) -> u32
+pub fn guatiao::Timestamp::seconds(&self) -> i64
+impl core::clone::Clone for guatiao::Timestamp
+pub fn guatiao::Timestamp::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::Timestamp
+impl core::cmp::Ord for guatiao::Timestamp
+pub fn guatiao::Timestamp::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for guatiao::Timestamp
+pub fn guatiao::Timestamp::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for guatiao::Timestamp
+pub fn guatiao::Timestamp::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<guatiao::Timestamp> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::Timestamp) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::Timestamp
+pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
+pub fn guatiao::Timestamp::try_from(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::Timestamp> for std::time::SystemTime
+pub type std::time::SystemTime::Error = guatiao::value::error::ValueError
+pub fn std::time::SystemTime::try_from(guatiao::Timestamp) -> core::result::Result<std::time::SystemTime, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<std::time::SystemTime> for guatiao::Timestamp
+pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
+pub fn guatiao::Timestamp::try_from(std::time::SystemTime) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
+impl core::fmt::Debug for guatiao::Timestamp
+pub fn guatiao::Timestamp::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::Timestamp
+pub fn guatiao::Timestamp::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::Timestamp
+pub fn guatiao::Timestamp::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::Timestamp
+impl core::marker::StructuralPartialEq for guatiao::Timestamp
+impl core::str::traits::FromStr for guatiao::Timestamp
+pub type guatiao::Timestamp::Err = guatiao::value::error::ValueError
+pub fn guatiao::Timestamp::from_str(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Timestamp
+pub fn guatiao::Timestamp::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Timestamp::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
+impl guatiao::value::convert::MapKey for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_key(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
+pub fn guatiao::Timestamp::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::Timestamp::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Timestamp
+pub fn guatiao::Timestamp::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub mod guatiao::value::types
 pub mod guatiao::value::types::buffer
 #[repr(C)] pub struct guatiao::value::types::buffer::Buffer
@@ -5525,6 +5778,95 @@ pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value)
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub struct guatiao::value::Date
+impl guatiao::Date
+pub fn guatiao::Date::checked_add(self, guatiao::value::span::Span) -> core::option::Option<guatiao::Date>
+pub fn guatiao::Date::day(&self) -> u8
+pub fn guatiao::Date::month(&self) -> u8
+pub fn guatiao::Date::try_new(i32, u8, u8) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
+pub fn guatiao::Date::year(&self) -> i32
+impl core::clone::Clone for guatiao::Date
+pub fn guatiao::Date::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::Date
+impl core::cmp::Ord for guatiao::Date
+pub fn guatiao::Date::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for guatiao::Date
+pub fn guatiao::Date::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for guatiao::Date
+pub fn guatiao::Date::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<guatiao::Date> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::Date) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::Date
+pub type guatiao::Date::Error = guatiao::value::error::ValueError
+pub fn guatiao::Date::try_from(&str) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
+impl core::fmt::Debug for guatiao::Date
+pub fn guatiao::Date::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::Date
+pub fn guatiao::Date::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::Date
+pub fn guatiao::Date::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::Date
+impl core::marker::StructuralPartialEq for guatiao::Date
+impl core::str::traits::FromStr for guatiao::Date
+pub type guatiao::Date::Err = guatiao::value::error::ValueError
+pub fn guatiao::Date::from_str(&str) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Date
+pub fn guatiao::Date::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Date::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Date::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::Date
+pub fn guatiao::Date::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+impl guatiao::value::convert::MapKey for guatiao::Date
+pub fn guatiao::Date::from_key(&str) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+pub fn guatiao::Date::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::Date::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Date
+pub fn guatiao::Date::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Date::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub struct guatiao::value::DateTime
+impl guatiao::DateTime
+pub fn guatiao::DateTime::checked_add(self, guatiao::value::span::Span) -> core::option::Option<guatiao::DateTime>
+pub fn guatiao::DateTime::date(&self) -> guatiao::Date
+pub fn guatiao::DateTime::new(guatiao::Date, guatiao::Time) -> guatiao::DateTime
+pub fn guatiao::DateTime::time(&self) -> guatiao::Time
+impl core::clone::Clone for guatiao::DateTime
+pub fn guatiao::DateTime::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::DateTime
+impl core::cmp::Ord for guatiao::DateTime
+pub fn guatiao::DateTime::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for guatiao::DateTime
+pub fn guatiao::DateTime::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for guatiao::DateTime
+pub fn guatiao::DateTime::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<guatiao::DateTime> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::DateTime) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::DateTime
+pub type guatiao::DateTime::Error = guatiao::value::error::ValueError
+pub fn guatiao::DateTime::try_from(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::error::ValueError>
+impl core::fmt::Debug for guatiao::DateTime
+pub fn guatiao::DateTime::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::DateTime
+pub fn guatiao::DateTime::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::DateTime
+pub fn guatiao::DateTime::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::DateTime
+impl core::marker::StructuralPartialEq for guatiao::DateTime
+impl core::str::traits::FromStr for guatiao::DateTime
+pub type guatiao::DateTime::Err = guatiao::value::error::ValueError
+pub fn guatiao::DateTime::from_str(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::DateTime
+pub fn guatiao::DateTime::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::DateTime::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::DateTime::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::DateTime
+pub fn guatiao::DateTime::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+impl guatiao::value::convert::MapKey for guatiao::DateTime
+pub fn guatiao::DateTime::from_key(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+pub fn guatiao::DateTime::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::DateTime::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::DateTime
+pub fn guatiao::DateTime::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::DateTime::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub struct guatiao::value::Dump<'a>(pub &'a guatiao::value::value::Value)
 impl core::fmt::Debug for guatiao::value::read::Dump<'_>
 pub fn guatiao::value::read::Dump<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -6007,6 +6349,101 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::text::Text> for gu
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::text::Text>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::text::Text> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::text::Text>
+pub struct guatiao::value::Time
+impl guatiao::Time
+pub fn guatiao::Time::hour(&self) -> u8
+pub fn guatiao::Time::midnight() -> guatiao::Time
+pub fn guatiao::Time::minute(&self) -> u8
+pub fn guatiao::Time::nanosecond(&self) -> u32
+pub fn guatiao::Time::second(&self) -> u8
+pub fn guatiao::Time::try_new(u8, u8, u8, u32) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
+impl core::clone::Clone for guatiao::Time
+pub fn guatiao::Time::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::Time
+impl core::cmp::Ord for guatiao::Time
+pub fn guatiao::Time::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for guatiao::Time
+pub fn guatiao::Time::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for guatiao::Time
+pub fn guatiao::Time::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<guatiao::Time> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::Time) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::Time
+pub type guatiao::Time::Error = guatiao::value::error::ValueError
+pub fn guatiao::Time::try_from(&str) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
+impl core::fmt::Debug for guatiao::Time
+pub fn guatiao::Time::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::Time
+pub fn guatiao::Time::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::Time
+pub fn guatiao::Time::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::Time
+impl core::marker::StructuralPartialEq for guatiao::Time
+impl core::str::traits::FromStr for guatiao::Time
+pub type guatiao::Time::Err = guatiao::value::error::ValueError
+pub fn guatiao::Time::from_str(&str) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Time
+pub fn guatiao::Time::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Time::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Time::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::Time
+pub fn guatiao::Time::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+impl guatiao::value::convert::MapKey for guatiao::Time
+pub fn guatiao::Time::from_key(&str) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+pub fn guatiao::Time::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::Time::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Time
+pub fn guatiao::Time::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Time::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub struct guatiao::value::Timestamp
+impl guatiao::Timestamp
+pub fn guatiao::Timestamp::from_unix(i64, u32) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::nanoseconds(&self) -> u32
+pub fn guatiao::Timestamp::seconds(&self) -> i64
+impl core::clone::Clone for guatiao::Timestamp
+pub fn guatiao::Timestamp::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::Timestamp
+impl core::cmp::Ord for guatiao::Timestamp
+pub fn guatiao::Timestamp::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for guatiao::Timestamp
+pub fn guatiao::Timestamp::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for guatiao::Timestamp
+pub fn guatiao::Timestamp::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<guatiao::Timestamp> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::Timestamp) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::Timestamp
+pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
+pub fn guatiao::Timestamp::try_from(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::Timestamp> for std::time::SystemTime
+pub type std::time::SystemTime::Error = guatiao::value::error::ValueError
+pub fn std::time::SystemTime::try_from(guatiao::Timestamp) -> core::result::Result<std::time::SystemTime, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<std::time::SystemTime> for guatiao::Timestamp
+pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
+pub fn guatiao::Timestamp::try_from(std::time::SystemTime) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
+impl core::fmt::Debug for guatiao::Timestamp
+pub fn guatiao::Timestamp::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::Timestamp
+pub fn guatiao::Timestamp::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::Timestamp
+pub fn guatiao::Timestamp::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::Timestamp
+impl core::marker::StructuralPartialEq for guatiao::Timestamp
+impl core::str::traits::FromStr for guatiao::Timestamp
+pub type guatiao::Timestamp::Err = guatiao::value::error::ValueError
+pub fn guatiao::Timestamp::from_str(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Timestamp
+pub fn guatiao::Timestamp::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Timestamp::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
+impl guatiao::value::convert::MapKey for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_key(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
+pub fn guatiao::Timestamp::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::Timestamp::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Timestamp
+pub fn guatiao::Timestamp::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 #[repr(C)] pub struct guatiao::value::Value
 impl guatiao::value::value::Value
 pub fn guatiao::value::value::Value::absent() -> guatiao::value::value::Value
@@ -6257,6 +6694,14 @@ impl guatiao::value::convert::FromValue for f32
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
 pub fn f64::from_value(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::Date
+pub fn guatiao::Date::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::DateTime
+pub fn guatiao::DateTime::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::Time
+pub fn guatiao::Time::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::span::Span
@@ -6433,6 +6878,18 @@ pub fn f32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Re
 impl guatiao::value::convert::ToValue for f64
 pub fn f64::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f64::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Date
+pub fn guatiao::Date::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Date::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::DateTime
+pub fn guatiao::DateTime::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::DateTime::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Time
+pub fn guatiao::Time::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Time::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Timestamp
+pub fn guatiao::Timestamp::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6924,6 +7381,95 @@ pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value)
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub struct guatiao::Date
+impl guatiao::Date
+pub fn guatiao::Date::checked_add(self, guatiao::value::span::Span) -> core::option::Option<guatiao::Date>
+pub fn guatiao::Date::day(&self) -> u8
+pub fn guatiao::Date::month(&self) -> u8
+pub fn guatiao::Date::try_new(i32, u8, u8) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
+pub fn guatiao::Date::year(&self) -> i32
+impl core::clone::Clone for guatiao::Date
+pub fn guatiao::Date::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::Date
+impl core::cmp::Ord for guatiao::Date
+pub fn guatiao::Date::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for guatiao::Date
+pub fn guatiao::Date::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for guatiao::Date
+pub fn guatiao::Date::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<guatiao::Date> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::Date) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::Date
+pub type guatiao::Date::Error = guatiao::value::error::ValueError
+pub fn guatiao::Date::try_from(&str) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
+impl core::fmt::Debug for guatiao::Date
+pub fn guatiao::Date::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::Date
+pub fn guatiao::Date::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::Date
+pub fn guatiao::Date::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::Date
+impl core::marker::StructuralPartialEq for guatiao::Date
+impl core::str::traits::FromStr for guatiao::Date
+pub type guatiao::Date::Err = guatiao::value::error::ValueError
+pub fn guatiao::Date::from_str(&str) -> core::result::Result<guatiao::Date, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Date
+pub fn guatiao::Date::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Date::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Date::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::Date
+pub fn guatiao::Date::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+impl guatiao::value::convert::MapKey for guatiao::Date
+pub fn guatiao::Date::from_key(&str) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+pub fn guatiao::Date::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::Date::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Date
+pub fn guatiao::Date::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Date::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub struct guatiao::DateTime
+impl guatiao::DateTime
+pub fn guatiao::DateTime::checked_add(self, guatiao::value::span::Span) -> core::option::Option<guatiao::DateTime>
+pub fn guatiao::DateTime::date(&self) -> guatiao::Date
+pub fn guatiao::DateTime::new(guatiao::Date, guatiao::Time) -> guatiao::DateTime
+pub fn guatiao::DateTime::time(&self) -> guatiao::Time
+impl core::clone::Clone for guatiao::DateTime
+pub fn guatiao::DateTime::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::DateTime
+impl core::cmp::Ord for guatiao::DateTime
+pub fn guatiao::DateTime::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for guatiao::DateTime
+pub fn guatiao::DateTime::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for guatiao::DateTime
+pub fn guatiao::DateTime::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<guatiao::DateTime> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::DateTime) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::DateTime
+pub type guatiao::DateTime::Error = guatiao::value::error::ValueError
+pub fn guatiao::DateTime::try_from(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::error::ValueError>
+impl core::fmt::Debug for guatiao::DateTime
+pub fn guatiao::DateTime::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::DateTime
+pub fn guatiao::DateTime::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::DateTime
+pub fn guatiao::DateTime::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::DateTime
+impl core::marker::StructuralPartialEq for guatiao::DateTime
+impl core::str::traits::FromStr for guatiao::DateTime
+pub type guatiao::DateTime::Err = guatiao::value::error::ValueError
+pub fn guatiao::DateTime::from_str(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::DateTime
+pub fn guatiao::DateTime::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::DateTime::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::DateTime::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::DateTime
+pub fn guatiao::DateTime::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+impl guatiao::value::convert::MapKey for guatiao::DateTime
+pub fn guatiao::DateTime::from_key(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+pub fn guatiao::DateTime::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::DateTime::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::DateTime
+pub fn guatiao::DateTime::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::DateTime::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 #[repr(C)] pub struct guatiao::Entry
 impl guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::into_parts(self) -> (guatiao::value::types::text::Text, guatiao::value::value::Value)
@@ -7450,6 +7996,101 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::text::Text> for gu
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::text::Text>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::text::Text> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::text::Text>
+pub struct guatiao::Time
+impl guatiao::Time
+pub fn guatiao::Time::hour(&self) -> u8
+pub fn guatiao::Time::midnight() -> guatiao::Time
+pub fn guatiao::Time::minute(&self) -> u8
+pub fn guatiao::Time::nanosecond(&self) -> u32
+pub fn guatiao::Time::second(&self) -> u8
+pub fn guatiao::Time::try_new(u8, u8, u8, u32) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
+impl core::clone::Clone for guatiao::Time
+pub fn guatiao::Time::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::Time
+impl core::cmp::Ord for guatiao::Time
+pub fn guatiao::Time::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for guatiao::Time
+pub fn guatiao::Time::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for guatiao::Time
+pub fn guatiao::Time::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<guatiao::Time> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::Time) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::Time
+pub type guatiao::Time::Error = guatiao::value::error::ValueError
+pub fn guatiao::Time::try_from(&str) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
+impl core::fmt::Debug for guatiao::Time
+pub fn guatiao::Time::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::Time
+pub fn guatiao::Time::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::Time
+pub fn guatiao::Time::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::Time
+impl core::marker::StructuralPartialEq for guatiao::Time
+impl core::str::traits::FromStr for guatiao::Time
+pub type guatiao::Time::Err = guatiao::value::error::ValueError
+pub fn guatiao::Time::from_str(&str) -> core::result::Result<guatiao::Time, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Time
+pub fn guatiao::Time::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Time::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Time::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::Time
+pub fn guatiao::Time::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+impl guatiao::value::convert::MapKey for guatiao::Time
+pub fn guatiao::Time::from_key(&str) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+pub fn guatiao::Time::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::Time::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Time
+pub fn guatiao::Time::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Time::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub struct guatiao::Timestamp
+impl guatiao::Timestamp
+pub fn guatiao::Timestamp::from_unix(i64, u32) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::nanoseconds(&self) -> u32
+pub fn guatiao::Timestamp::seconds(&self) -> i64
+impl core::clone::Clone for guatiao::Timestamp
+pub fn guatiao::Timestamp::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::Timestamp
+impl core::cmp::Ord for guatiao::Timestamp
+pub fn guatiao::Timestamp::cmp(&self, &Self) -> core::cmp::Ordering
+impl core::cmp::PartialEq for guatiao::Timestamp
+pub fn guatiao::Timestamp::eq(&self, &Self) -> bool
+impl core::cmp::PartialOrd for guatiao::Timestamp
+pub fn guatiao::Timestamp::partial_cmp(&self, &Self) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<guatiao::Timestamp> for alloc::string::String
+pub fn alloc::string::String::from(guatiao::Timestamp) -> alloc::string::String
+impl core::convert::TryFrom<&str> for guatiao::Timestamp
+pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
+pub fn guatiao::Timestamp::try_from(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<guatiao::Timestamp> for std::time::SystemTime
+pub type std::time::SystemTime::Error = guatiao::value::error::ValueError
+pub fn std::time::SystemTime::try_from(guatiao::Timestamp) -> core::result::Result<std::time::SystemTime, guatiao::value::error::ValueError>
+impl core::convert::TryFrom<std::time::SystemTime> for guatiao::Timestamp
+pub type guatiao::Timestamp::Error = guatiao::value::error::ValueError
+pub fn guatiao::Timestamp::try_from(std::time::SystemTime) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
+impl core::fmt::Debug for guatiao::Timestamp
+pub fn guatiao::Timestamp::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::Timestamp
+pub fn guatiao::Timestamp::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::Timestamp
+pub fn guatiao::Timestamp::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::Timestamp
+impl core::marker::StructuralPartialEq for guatiao::Timestamp
+impl core::str::traits::FromStr for guatiao::Timestamp
+pub type guatiao::Timestamp::Err = guatiao::value::error::ValueError
+pub fn guatiao::Timestamp::from_str(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Timestamp
+pub fn guatiao::Timestamp::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Timestamp::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::FromValue for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
+impl guatiao::value::convert::MapKey for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_key(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
+pub fn guatiao::Timestamp::key_kind(guatiao::value::alloc::Alloc) -> core::option::Option<guatiao::schema::build::KindBuilder>
+pub fn guatiao::Timestamp::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'_, str>, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Timestamp
+pub fn guatiao::Timestamp::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 #[repr(C)] pub struct guatiao::Value
 impl guatiao::value::value::Value
 pub fn guatiao::value::value::Value::absent() -> guatiao::value::value::Value
@@ -7700,6 +8341,14 @@ impl guatiao::value::convert::FromValue for f32
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
 pub fn f64::from_value(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::Date
+pub fn guatiao::Date::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::DateTime
+pub fn guatiao::DateTime::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::Time
+pub fn guatiao::Time::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::span::Span
@@ -7902,6 +8551,22 @@ impl guatiao::schema::describe::Schema for f64
 pub fn f64::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn f64::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f64::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Date
+pub fn guatiao::Date::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Date::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Date::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::DateTime
+pub fn guatiao::DateTime::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::DateTime::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::DateTime::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Time
+pub fn guatiao::Time::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Time::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Time::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for guatiao::Timestamp
+pub fn guatiao::Timestamp::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::Timestamp::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::value::convert::Bytes::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -8180,6 +8845,18 @@ pub fn f32::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Re
 impl guatiao::value::convert::ToValue for f64
 pub fn f64::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn f64::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Date
+pub fn guatiao::Date::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Date::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::DateTime
+pub fn guatiao::DateTime::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::DateTime::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Time
+pub fn guatiao::Time::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Time::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for guatiao::Timestamp
+pub fn guatiao::Timestamp::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::Timestamp::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
