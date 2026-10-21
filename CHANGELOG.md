@@ -49,6 +49,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   values, `List` as an array of anything, `Text` as a string, `Number` as
   a number (its exact text kept), `Buffer` as bytes. `KindBuilder::any()`
   / `any_in` write `{}`.
+- **`Box<T>`, `Arc<T>`, `Rc<T>` and `Cow<'_, T>` cross as what they
+  hold**, under all three derives; so do `Box<str>`, `Arc<str>`,
+  `Rc<str>` and `Box<[T]>`, `Arc<[T]>`, `Rc<[T]>`, as a string and a
+  list. A `Cow` reads back owned. `Schema` is implemented for `str`,
+  `[T]` and `&T` too.
+- **`char` is a field type**: text exactly one character (Unicode code
+  point) long, `minLength` and `maxLength` 1 in its schema, read through
+  `char::try_from(&value)` as well.
 - **A guide to passing data**: the docs site's "Passing data" page and a
   section of the crate's shipped `AGENTS.md`, on returning trees by value
   and taking them by value when kept, building an answer in the

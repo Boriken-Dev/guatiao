@@ -14,7 +14,9 @@ use guatiao::schema::read::SchemaRef;
 use guatiao::schema::validate::validate_map;
 use guatiao::schema::{FieldBuilder, SchemaBuilder};
 use guatiao::value::convert::TryAsRef;
-use guatiao::{Alloc, Buffer, FromValue, List, Map, MapError, Number, Schema, Text, ToValue, Value};
+use guatiao::{
+    Alloc, Buffer, FromValue, List, Map, MapError, Number, Schema, Text, ToValue, Value,
+};
 
 /// Writes `v`, reads it back, checks the two agree and that `T`'s own
 /// kind accepts the value. Returns the value written.
@@ -174,6 +176,97 @@ mod own_types {
         let value = holder.to_value().unwrap();
         assert_eq!(Holder::from_value(&value).unwrap(), holder);
         let schema = Holder::schema().unwrap();
+        validate_map(SchemaRef::new(&schema).unwrap(), &value).unwrap();
+    }
+}
+
+mod wrappers {
+    use super::*;
+    use alloc::borrow::Cow;
+    use alloc::rc::Rc;
+    use alloc::sync::Arc;
+
+    #[test]
+    fn a_pointer_crosses_as_what_it_holds() {
+        let plain = 5900u32.to_value().unwrap();
+        assert_eq!(check(Box::new(5900u32)), plain);
+        assert_eq!(check(Arc::new(5900u32)), plain);
+        assert_eq!(check(Rc::new(5900u32)), plain);
+        assert_eq!(kind_of::<Box<u32>>(), kind_of::<u32>());
+        check(Box::new(vec![Arc::new("a".to_string())]));
+        check(Box::new(Map::new()));
+    }
+
+    #[test]
+    fn shared_text_and_slices_cross_as_strings_and_lists() {
+        let text = "héllo".to_value().unwrap();
+        assert_eq!(check(Box::<str>::from("héllo")), text);
+        assert_eq!(check(Arc::<str>::from("héllo")), text);
+        assert_eq!(check(Rc::<str>::from("héllo")), text);
+        assert_eq!(kind_of::<Arc<str>>(), kind_of::<String>());
+        let list = vec![1u8, 2].to_value().unwrap();
+        assert_eq!(check(Box::<[u8]>::from(&[1u8, 2][..])), list);
+        assert_eq!(check(Arc::<[u8]>::from(&[1u8, 2][..])), list);
+        assert_eq!(kind_of::<Box<[u8]>>(), kind_of::<Vec<u8>>());
+    }
+
+    #[test]
+    fn a_cow_crosses_as_what_it_holds_and_reads_owned() {
+        let borrowed: Cow<'static, str> = Cow::Borrowed("x");
+        let value = check(borrowed);
+        assert!(matches!(
+            Cow::<str>::from_value(&value).unwrap(),
+            Cow::Owned(_)
+        ));
+        check(Cow::<[u32]>::Owned(vec![1, 2]));
+    }
+
+    #[test]
+    fn a_char_is_one_character_of_text() {
+        assert_eq!(TryAsRef::<str>::try_as_ref(&check('é')), Some("é"));
+        check('🦀');
+        assert!(matches!(
+            char::from_value(&Value::from("ab")),
+            Err(MapError::BadValue { .. })
+        ));
+        assert!(matches!(
+            char::from_value(&Value::from("")),
+            Err(MapError::BadValue { .. })
+        ));
+        assert!(matches!(
+            char::from_value(&Value::from(1i64)),
+            Err(MapError::WrongType { .. })
+        ));
+        assert!(!accepts::<char>(&Value::from("ab")));
+        assert!(!accepts::<char>(&Value::from("")));
+        assert_eq!(char::try_from(&Value::from("z")), Ok('z'));
+    }
+
+    #[derive(Debug, PartialEq, guatiao::ToValue, guatiao::FromValue, guatiao::Schema)]
+    struct Shared {
+        name: Arc<str>,
+        tags: Box<[String]>,
+        inner: Box<Map>,
+        count: Rc<u32>,
+        note: Cow<'static, str>,
+        initial: char,
+        maybe: Option<Box<char>>,
+    }
+
+    #[test]
+    fn a_struct_of_them_derives_and_validates() {
+        let s = Shared {
+            name: Arc::from("n"),
+            tags: Box::from(vec!["a".to_string()]),
+            inner: Box::new(Map::new()),
+            count: Rc::new(3),
+            note: Cow::Borrowed("hi"),
+            initial: 'q',
+            maybe: Some(Box::new('r')),
+        };
+        let value = s.to_value().unwrap();
+        assert_eq!(Shared::from_value(&value).unwrap(), s);
+        let schema = Shared::schema().unwrap();
         validate_map(SchemaRef::new(&schema).unwrap(), &value).unwrap();
     }
 }
