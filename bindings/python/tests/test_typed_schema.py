@@ -73,3 +73,19 @@ def test_a_type_no_schema_describes_is_named() -> None:
     with pytest.raises(TypeError, match="text"):
         schema_for(Dict[int, str])
     assert schema_for(Any) == {}
+
+
+@dataclass(frozen=True)
+class Partly:
+    name: str
+    note: Optional[str]
+    seen: int = field(default=0, init=False)
+
+
+def test_an_optional_field_without_a_default_may_be_left_out() -> None:
+    schema = schema_for(Partly)
+    assert schema["required"] == ["name"]
+    assert "seen" not in schema["properties"], "a field __init__ does not take is not configured"
+    built = build(Partly, {"name": "a"})
+    assert built == Partly(name="a", note=None)
+    assert build(Partly, {"name": "a", "note": "n"}).note == "n"
