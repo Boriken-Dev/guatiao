@@ -37,10 +37,15 @@ kin. An ABI is the same agreement between two sides of a boundary.
 - **Rust ergonomics on top** — `#[derive(ToValue, FromValue, Schema)]`,
   `try_into` for reading, and a generated C header for everyone else.
 - **Every common field type, in a form any language reads** — sets,
-  tuples, maps keyed by integers or addresses, paths, timestamps as
-  RFC 3339, `Duration` as `[secs, nanos]` and `Span`, a calendar length
-  written as an ISO 8601 duration. Each form is fixed in
-  [Encodings](https://boriken-dev.github.io/guatiao/encodings/).
+  tuples, maps keyed by integers or addresses, paths, dates, times of day,
+  civil date-times and instants as RFC 3339, `Duration` as `[secs, nanos]`
+  and `Span`, a calendar length written as an ISO 8601 duration and
+  applied to a date with no time zone. Each form is fixed in
+  [Encodings](https://boriken-dev.github.io/guatiao/encodings/), and its
+  grammar is reachable from C, so Python and Dart read it the same way.
+- **Secrets marked in the schema** — `Secret<T>` crosses as the value it
+  holds, prints as `[redacted]`, and its schema marks it so redaction, in
+  any language, hides it.
 
 ## Installation
 
