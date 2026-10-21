@@ -973,11 +973,12 @@ fn every_export_with_an_out_parameter_writes_it_before_failing() {
     }
 }
 
-/// The cases above against the header: an export that gains an
-/// out-parameter without a case here fails this test.
-#[test]
-#[cfg_attr(miri, ignore = "reads the committed header from disk")]
-fn the_out_parameter_cases_name_every_export_that_has_one() {
+/// Every function `include/guatiao.h` declares, each with whether it takes
+/// an out-parameter.
+///
+/// The header declares the whole surface whatever the features of this
+/// build; which of it this build exports is [`load_only_exports`]' question.
+fn header_functions() -> alloc::collections::BTreeMap<String, bool> {
     let header = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("include/guatiao.h"),
     )
@@ -997,12 +998,17 @@ fn the_out_parameter_cases_name_every_export_that_has_one() {
         .collect::<Vec<_>>()
         .join("\n");
     let flat = code.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut declared = alloc::collections::BTreeSet::new();
+    let mut declared = alloc::collections::BTreeMap::new();
     for statement in flat.split(';') {
         let Some(open) = statement.find('(') else {
             continue;
         };
-        let Some(name) = statement[..open].split(' ').next_back() else {
+        // A function answering a pointer is spelled `T *name(`.
+        let Some(name) = statement[..open]
+            .split(' ')
+            .next_back()
+            .map(|name| name.trim_start_matches('*'))
+        else {
             continue;
         };
         if !name.starts_with("guatiao_") || !statement.ends_with(')') {
@@ -1015,16 +1021,61 @@ fn the_out_parameter_cases_name_every_export_that_has_one() {
                 .next()
                 .is_some_and(|param| param.starts_with("out"))
         });
-        if has_out {
-            declared.insert(name.to_string());
-        }
+        declared.insert(name.to_string(), has_out);
     }
+    declared
+}
+
+/// The exports `src/exports/library.rs` defines: the registry surface,
+/// compiled only with the `load` feature.
+fn load_only_exports() -> alloc::collections::BTreeSet<String> {
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/exports/library.rs"),
+    )
+    .unwrap();
+    source
+        .split("extern \"C\" fn ")
+        .skip(1)
+        .filter_map(|rest| rest.split(['(', '<']).next())
+        .map(|name| name.trim().to_string())
+        .collect()
+}
+
+/// The cases above against the header: an export that gains an
+/// out-parameter without a case here fails this test. A build without
+/// `load` exports no registry function, so those leave the comparison.
+#[test]
+#[cfg_attr(miri, ignore = "reads the committed header from disk")]
+fn the_out_parameter_cases_name_every_export_that_has_one() {
+    let load_only = load_only_exports();
+    let declared: alloc::collections::BTreeSet<String> = header_functions()
+        .into_iter()
+        .filter(|(name, has_out)| *has_out && (cfg!(feature = "load") || !load_only.contains(name)))
+        .map(|(name, _)| name)
+        .collect();
     let covered: alloc::collections::BTreeSet<String> = out_parameter_cases()
         .into_iter()
         .map(|(name, _)| name.to_string())
         .collect();
     assert!(declared.len() > 20, "the header parse found {declared:?}");
     assert_eq!(declared, covered);
+}
+
+/// What the comparison above sets aside without `load` is exactly the
+/// registry surface the header declares: a rename on either side, or a
+/// source read that finds nothing, fails here rather than widening the gap.
+#[test]
+#[cfg_attr(miri, ignore = "reads the header and the source from disk")]
+fn the_exports_set_aside_without_load_are_the_declared_registry() {
+    let load_only = load_only_exports();
+    let declared = header_functions();
+    let registry: alloc::collections::BTreeSet<String> = declared
+        .keys()
+        .filter(|name| name.starts_with("guatiao_registry_"))
+        .cloned()
+        .collect();
+    assert!(load_only.len() > 20, "the source read found {load_only:?}");
+    assert_eq!(load_only, registry);
 }
 
 /// A registry export reports what is wrong with each argument by the
