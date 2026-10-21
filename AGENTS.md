@@ -16,16 +16,20 @@ public surface); this file is about the repository.
 | `crates/guatiao-intake/` | taking a value in from a person: the path grammar (`agent[1].name`), flat `key -> text` storage, checking a store of text, and how a schema is shown (sections, widget hints, conditional visibility, `#[derive(Form)]`); C surface in `include/guatiao_intake.h` |
 | `crates/guatiao-py/` | a source of libraries written in Python: a cdylib exporting `guatiao_source`, built with pyo3 for the stable ABI; a workspace of its own (no other build needs a Python to link), not published |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
-| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `python/greeter_kind.py` describes its kinds for Python |
+| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `python/greeter_kind.py` and `node/greeter_kind.ts` describe its kinds for Python and Node |
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
 | `examples/wire_over_webtransport/` | values over WebTransport: `server/` (the shared channel and framing, `wire-server`, and `wire-probe`, a native client), `client/` (the page's wasm, its own workspace, built for `wasm32-unknown-unknown` only); commands in its `README.md` |
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build; its `tests/docs_snippets.rs` compiles the Rust snippets of `docs/index.md`, `docs/ownership.md` and the root `README.md` and compares them with the text shown |
-| `examples/python_host/` | a host in Python: scans for greeters in any language and calls every slot of the kind; `bindings/python/tests/test_examples.py` runs it |
-| `examples/python_host/` | a host program in Python: scans for greeters in any language, optionally adds `guatiao-py`, calls every slot |
+| `examples/python_host/` | a host program in Python: scans for greeters in any language, optionally adds `guatiao-py`, calls every slot; `bindings/python/tests/test_examples.py` runs it |
 | `examples/python_provider/` | two libraries written in Python, each a module and a `*.guatiao-py.toml` manifest; commands in its `README.md` |
+| `examples/greeter_caller/` | a cdylib with one C function that calls every slot of a greeter through the kind's Rust proxy, for a host in another language to have its greeters called from Rust |
+| `examples/package.json` | the Node examples' one dependency, on `bindings/node`: `npm ci` here, after `npm run build` there |
+| `examples/node_host/` | a host program in TypeScript: scans for greeters in any language, registers Node libraries, optionally adds `guatiao-py`, calls every slot; `bindings/node/test/examples.test.ts` runs it |
+| `examples/node_provider/` | `node_greeter/`, a library written in TypeScript: a package whose module is the library |
 | `bindings/python/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md` |
 | `bindings/dart/` | `dart:ffi` bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`; `lib/src/bindings.g.dart` is ffigen output and never hand-edited |
-| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `python.md` (Python as a host and as a provider), `wasm.md`; built strictly by `docs.yml` |
+| `bindings/node/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads |
+| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `python.md` and `node.md` (Python and Node as a host and as a provider), `wasm.md`; built strictly by `docs.yml` |
 | `benchmarks/` | the benchmark runner (`cargo run -p guatiao-bench --release -- --save NAME`), committed results in `benchmarks/results/`, and `README.md` with the protocol; run on demand, numbers are local and provisional |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 
@@ -113,6 +117,19 @@ MYPYPATH=bindings/python/src:examples/greeter_kind/python dotagents py -- -m myp
   examples/python_provider/py_greeter examples/python_provider/py_tally
 ```
 
+Node bindings, after `cargo build --workspace --all-features`, with
+Node 22 or later (the examples run their TypeScript as it is, which
+needs 22.18):
+
+```bash
+(cd bindings/node && npm ci && npm run build)
+(cd examples && npm ci)                      # the example host's test
+cd bindings/node
+npm run typecheck                             # tsc --strict: sources, tests, examples
+GUATIAO_LIBRARY=../../target/debug npm test   # vitest
+npm pack --dry-run                            # what ships
+```
+
 The `guatiao-py` bridge, against the Python it will run with. Its tests
 and the Python suite's bridge tests find it in its own `target/debug`
 (or `GUATIAO_PY_BRIDGE`); on Windows the directory holding `python3.dll`
@@ -192,7 +209,11 @@ Four workflows:
   named `ci-*` tag, watch the run, then delete the tag. Its `python` job
   builds the workspace in each leg, then runs `bindings/python`'s tests: every
   Python from 3.9 to 3.14 on Linux, 3.9 and 3.14 on Windows and macOS.
-  `release.yml` calls it as its test gate.
+  Its `node` job runs `bindings/node`'s type check and tests on Node 22
+  and 24 on the three platforms, with the C greeter built and the
+  guatiao-py bridge serving the Python greeters (a stated skip fails it),
+  and checks what `npm pack` ships. `release.yml` calls it as its test
+  gate.
 - `docs.yml` owns every Pages deploy: a push to `main` touching a docs
   source, or a dispatch at any ref. `release.yml` calls it with
   `deploy: false` as a strict build gate, and dispatches it at a final tag.
@@ -210,7 +231,9 @@ in `Cargo.toml`, `bindings/dart/pubspec.yaml`, and the same version the
 PEP 440 way in `bindings/python/pyproject.toml` and its `__version__`
 (`0.0.0-alpha.0` is `0.0.0a0`), the `=x.y.z` pins between the crates,
 `crates/guatiao-py/Cargo.toml`'s own version and pins (a workspace of its
-own, so the workspace version does not reach it), and the
+own, so the workspace version does not reach it), `bindings/node/package.json`
+with its `package-lock.json` and the `../bindings/node` entry of
+`examples/package-lock.json` (`npm install` in each rewrites them), and the
 `guatiao` entry of `examples/wire_over_webtransport/client/Cargo.lock` (a
 `--locked` build refuses a stale one; `cargo build` in that directory
 rewrites it). A `## [x.y.z] - <date>` section in
@@ -221,8 +244,9 @@ takes a version back. The `version` job refuses a tag the manifests do not
 name.
 
 **What the tag does**: gates (tests, strict docs build, one version), then
-packages all three (`cargo publish --workspace --dry-run`, `python -m build`
-+ `twine check`, `dart pub publish --dry-run`), then the GitHub release
+packages all four (`cargo publish --workspace --dry-run`, `python -m build`
++ `twine check`, `dart pub publish --dry-run`, `npm pack --dry-run` then
+`npm pack`), then the GitHub release
 (marked pre-release for a tag with a `-`), then publishes. Each publish job
 skips a version its registry already has, so re-running a partly failed
 release finishes it. The four crates go in dependency order: `guatiao-derive`,
@@ -236,6 +260,7 @@ release finishes it. The four crates go in dependency order: `guatiao-derive`,
 | crates.io | `CARGO_REGISTRY_TOKEN` secret: trusted publishing needs a crate that exists | trusted publishing per crate, then repository variable `CRATES_IO_TRUSTED_PUBLISHING=true` and delete the secret |
 | PyPI | a *pending* trusted publisher: repository `Boriken-Dev/guatiao`, workflow `release.yml`, environment `pypi` | the same publisher |
 | pub.dev | **by hand**, `dart pub publish` in `bindings/dart`: automated publishing needs a package that exists | automated publishing from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
+| npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |
 
 **Who owns what.** Neither registry lets a new package start under an
 organisation, so each is published by a person and handed over:

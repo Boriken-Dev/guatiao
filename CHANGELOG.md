@@ -288,6 +288,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `PlainDateTime`, `Span`, instants as `Date`, exact lengths as
   `{ seconds, nanoseconds }`), `redact`, and the status errors. The
   library is found through `GUATIAO_LIBRARY` or `useLibrary(path)`.
+- **Node: the registry, kinds and providers.** `Registry` (scan, load,
+  rank, `create`, `retire`, `collect`, `unload`, `addSourceFile`,
+  `watchDir`, `refresh`) and `Instance`; `guatiao/kinds`: a kind is a
+  typed value, `kind('greeter', { floorHash, methods: { greet: { args:
+  [t.str], answer: t.map, required: true, fallible: true } } })`, whose
+  `Implementation` a provider class implements and whose `Remote` a
+  caller holds, every slot shape both ways, objects of object kinds
+  handed over, lent and answered; `guatiao/provide`: `class Hello extends
+  Provider implements Greeter` with `static kinds`, configurations from
+  `s` schemas, `library(id, version, { providers })`, and
+  `libraryOf(module)`, an ES module of a package as a library named and
+  versioned by its `package.json`. A provider's answer is built in the
+  allocator the caller's carrier names; a call from a thread Node did
+  not start runs on Node's main thread when its event loop turns.
+- **`examples/greeter_caller/`**, a cdylib whose one C function,
+  `greeter_caller_run(host, key, name, out)`, calls every slot of a
+  greeter through the kind's Rust proxy, for a host in another language
+  to have its greeters called from Rust; and the Node examples,
+  `examples/node_host/` (a host in TypeScript) and
+  `examples/node_provider/` (a library written in TypeScript), with
+  the greeter kinds described in `examples/greeter_kind/node/`.
 
 ### Changed
 

@@ -4,7 +4,7 @@
 A value model whose C form is plain structs, a JSON Schema through which a
 provider says what it needs to be initialised, and an envelope through which
 one shared library offers any number of providers. Nothing is opaque: a C,
-C++, Dart, Python or Rust consumer reads a tree, a schema or a descriptor
+C++, Dart, Node, Python or Rust consumer reads a tree, a schema or a descriptor
 without calling into any library.
 
 *Guatiao* is the Taíno pact in which two people exchange names and become
@@ -43,6 +43,14 @@ A Dart consumer adds the package and points it at the same library:
 
 ```bash
 dart pub add guatiao
+export GUATIAO_LIBRARY=/path/to/the/library
+```
+
+A Node consumer, TypeScript or JavaScript, installs the package the same
+way:
+
+```bash
+npm install guatiao
 export GUATIAO_LIBRARY=/path/to/the/library
 ```
 
@@ -93,6 +101,9 @@ let greeter = registry.best("greeter").expect("something serves it");
   from the crates in this workspace.
 - [Python, host and provider](python.md): calling libraries from Python,
   and writing one in Python that a host in any language loads.
+- [Node.js, host and provider](node.md): calling libraries from Node,
+  and writing providers in TypeScript that a host in the same process
+  calls.
 - [Python API reference](api/python.md), for the ctypes bindings.
 - [Dart API reference](api/dart.md), for the `dart:ffi` bindings -- a plain
   Dart package, so a Flutter app uses the same one.

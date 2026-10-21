@@ -365,7 +365,7 @@ print it". A reader takes the value as it would without them.
 What honours the marks:
 
 - **Redaction.** `guatiao_schema_redact` in C, and `redact` in Rust,
-  Python and Dart, copy a value with every marked field replaced by a
+  Python, Dart and Node, copy a value with every marked field replaced by a
   placeholder, at any depth: inside a nested record, in every element of
   a list, in a variant's arm. Where the schema stops describing the
   value (a key it does not declare, say), the value is hidden too,
@@ -377,36 +377,39 @@ What a mark does not do: encrypt the value, compare it in constant time,
 or wipe it from memory. It says who may see it, and the code that shows,
 logs or returns values honours it.
 
-## In C, Python and Dart
+## In C, Python, Dart and Node
 
 Each text form above has C functions that read it into a plain struct,
 write it back from one, and rewrite text in its canonical spelling, all
-declared in `guatiao.h`; the Python and Dart bindings call the same
-functions, so every grammar has one implementation. A refusal is
+declared in `guatiao.h`; the Python, Dart and Node bindings call the
+same functions, so every grammar has one implementation. A refusal is
 `GUATIAO_ERR_BAD_VALUE` with a `guatiao_text_error` that names the byte
 offset and what was expected there. `guatiao_date_add_span` and
 `guatiao_datetime_add_span` apply a span, and `guatiao_duration_read`
 reads an exact length in any of its three spellings.
 
-| form | C | Python | Dart |
-| --- | --- | --- | --- |
-| a date | `guatiao_date` | `datetime.date` | `PlainDate` |
-| a time of day | `guatiao_time` | `datetime.time`, no `tzinfo` | `PlainTime` |
-| a civil date and time | `guatiao_datetime` | `datetime.datetime`, no `tzinfo` | `PlainDateTime` |
-| an instant | `guatiao_timestamp` | `datetime.datetime` in UTC | `DateTime`, `isUtc` |
-| an exact length | a list of two numbers | `datetime.timedelta` | `Duration` |
-| a span | `guatiao_span` | `guatiao.time.Span` | `Span` |
+| form | C | Python | Dart | Node |
+| --- | --- | --- | --- | --- |
+| a date | `guatiao_date` | `datetime.date` | `PlainDate` | `PlainDate` |
+| a time of day | `guatiao_time` | `datetime.time`, no `tzinfo` | `PlainTime` | `PlainTime` |
+| a civil date and time | `guatiao_datetime` | `datetime.datetime`, no `tzinfo` | `PlainDateTime` | `PlainDateTime` |
+| an instant | `guatiao_timestamp` | `datetime.datetime` in UTC | `DateTime`, `isUtc` | `Date` |
+| an exact length | a list of two numbers | `datetime.timedelta` | `Duration` | `{ seconds: bigint, nanoseconds }` |
+| a span | `guatiao_span` | `guatiao.time.Span` | `Span` | `Span` |
 
 What a mapping loses, and what happens then:
 
 - **Below a microsecond.** Python's `datetime`, `time` and `timedelta`
   and Dart's `DateTime` and `Duration` count microseconds. Reading a form
   into one of them drops the nanoseconds below a microsecond, toward the
-  past; writing one back is exact. `PlainTime`, `PlainDateTime`, both
-  `Span` classes and every C struct keep the nanoseconds.
+  past; writing one back is exact. JavaScript's `Date` counts
+  milliseconds, so an instant read into one drops what is below a
+  millisecond the same way. `PlainTime`, `PlainDateTime`, every `Span`
+  class, Node's exact length and every C struct keep the nanoseconds.
 - **The year 0000.** Python's `datetime.date` and `datetime.datetime`
   start at year 1, so reading a date, a civil date and time or an
-  instant in year 0000 into one raises `ValueError`. Dart and C hold it.
+  instant in year 0000 into one raises `ValueError`. Dart, Node and C
+  hold it.
 - **Long exact lengths.** `timedelta` stops at 999999999 days and Dart's
   `Duration` at 2^63 - 1 microseconds (about 292471 years); a longer
   length raises rather than wraps. An exact length is never negative, so
@@ -417,11 +420,14 @@ What a mapping loses, and what happens then:
 Dart has no type for a date or a time of day alone, and its `DateTime` is
 always either UTC or the machine's own zone, which would move a civil
 time that a daylight-saving change skips; hence the three `Plain`
-classes, named after JavaScript's Temporal.
+classes, named after JavaScript's Temporal. Node's own `Date` has the same
+two limits, and Temporal is not in Node 22 or 24, so the Node binding has
+the same three classes. A span's units are `bigint` there, as a signed
+64-bit unit can be larger than a `number` holds exactly.
 
 A secret is the value it holds in every language; what each offers is
 redaction, `guatiao_schema_redact`, `guatiao.redact` in Python and
-`redact` in Dart, with a placeholder of the caller's choosing.
+`redact` in Dart and Node, with a placeholder of the caller's choosing.
 
 ## In Rust
 
