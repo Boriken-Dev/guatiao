@@ -1,10 +1,11 @@
 name: Release
 
 # A `v*` tag releases: the test suite and a strict docs build gate it, every
-# manifest must name the tag's version, the four packages are built and
-# dry-run, a GitHub release is made, and then crates.io, PyPI, pub.dev and
-# npm are published -- each skipping a version it already has, so a re-run
-# after a partial release finishes the job instead of failing on it.
+# manifest must name the tag's version, the packages are built and dry-run
+# and the Go module checked, a GitHub release is made, and then crates.io,
+# PyPI, pub.dev and npm are published and the Go module tagged -- each
+# skipping a version it already has, so a re-run after a partial release
+# finishes the job instead of failing on it.
 #
 # `workflow_dispatch` is the rehearsal: every gate, build and dry run,
 # nothing released and nothing published. A release must never be the
@@ -198,9 +199,41 @@ jobs:
           path: npm/
           if-no-files-found: error
 
+  build-go:
+    name: Check the Go module
+    needs: [test, version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: false
+      # A Go module is published by its tag: what the tag names is the
+      # files under bindings/go, built here as a consumer builds them.
+      - name: Vet and build
+        working-directory: bindings/go
+        run: go vet ./... && go build ./...
+        env:
+          CGO_ENABLED: "1"
+      - name: What the module ships
+        shell: python
+        run: |
+          import subprocess
+
+          files = subprocess.run(["git", "ls-files", "bindings/go"], capture_output=True, text=True,
+                                 check=True).stdout.split()
+          names = {f[len("bindings/go/"):] for f in files}
+          print("\n".join(sorted(names)))
+          for need in ("go.mod", "AGENTS.md", "README.md", "LICENSE", "doc.go"):
+              assert need in names, f"{need} does not ship"
+          assert not any(".local." in f or f.split("/")[-1].startswith(".") for f in names), "a private file ships"
+
   github-release:
     name: Create the GitHub release
-    needs: [docs-gate, build-crates, build-python, build-dart, build-node]
+    needs: [docs-gate, build-crates, build-python, build-dart, build-node, build-go]
     if: ${{ github.ref_type == 'tag' }}
     runs-on: ubuntu-latest
     permissions:
@@ -435,6 +468,49 @@ jobs:
               ["npm", "publish", tarball, "--provenance", "--access", "public", "--tag", tag],
               check=True,
           )
+
+  publish-go:
+    name: Tag the Go module
+    needs: github-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      # A module in a subdirectory is released by a tag carrying its path:
+      # bindings/go/vX.Y.Z, at the commit the release tag names. The proxy
+      # is then asked for it, so it is listed at once; a re-run finds the
+      # tag there and only asks again.
+      - name: Push bindings/go/v<version>, unless it is there already
+        shell: python
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          import os
+          import subprocess
+          import time
+          import tomllib
+          import urllib.error
+          import urllib.request
+
+          version = tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"]
+          tag = f"bindings/go/v{version}"
+          there = subprocess.run(["git", "ls-remote", "--tags", "origin", f"refs/tags/{tag}"],
+                                 capture_output=True, text=True, check=True).stdout.strip()
+          if there:
+              print(f"{tag} is already pushed; skipped")
+          else:
+              subprocess.run(["git", "tag", tag, os.environ["SHA"]], check=True)
+              subprocess.run(["git", "push", "origin", f"refs/tags/{tag}"], check=True)
+          url = f"https://proxy.golang.org/github.com/!boriken-!dev/guatiao/bindings/go/@v/v{version}.info"
+          for attempt in range(5):
+              try:
+                  with urllib.request.urlopen(url) as r:
+                      print("the proxy has it:", r.read().decode())
+                      break
+              except urllib.error.HTTPError as e:
+                  print(f"the proxy answered {e.code}; asking again")
+                  time.sleep(30)
 
   # A GITHUB_TOKEN-made release starts no workflow, so docs.yml is
   # dispatched at this tag instead. A pre-release leaves the published docs
