@@ -22,8 +22,12 @@
 //! is something in it. A nested object whose fields name no section
 //! contributes nothing, and a form full of empty forms is noise.
 //!
-//! It says nothing about widgets or placeholders. A schema does not know
-//! them, and inventing one would be this crate guessing.
+//! It says nothing about widgets or placeholders, with one exception: a
+//! text field the schema marks sensitive (`x-sensitive`, or `writeOnly`)
+//! is given the [`password`](crate::vocab::widget::PASSWORD) widget,
+//! because the schema has said it is a secret and a renderer that shows
+//! it as typed would be showing one. Anything else would be this crate
+//! guessing.
 //!
 //! # Empty is complete
 //!
@@ -33,10 +37,12 @@
 
 #![forbid(unsafe_code)]
 
-use guatiao::schema::read::{FieldRef, SchemaRef};
+use guatiao::schema::read::{FieldRef, Kind, SchemaRef};
 use guatiao::value::alloc::Alloc;
+use guatiao::value::convert::TryAsRef;
 use guatiao::value::error::{MAX_DEPTH, ValueError};
-use guatiao::value::types::Value;
+use guatiao::value::read::bool_or;
+use guatiao::value::types::{Map, Value};
 
 use crate::build::{Form, Hints, Section};
 use crate::judge::member_schema;
@@ -127,8 +133,14 @@ fn build(schema: SchemaRef<'_>, alloc: Alloc, depth: u32) -> Result<Value, Value
         }
     }
 
-    // Then each member that has a form of its own worth carrying.
+    // Then each secret typed as text, masked, and each member that has a
+    // form of its own worth carrying.
     for field in schema.fields() {
+        if is_secret(field) && matches!(field.kind(), Kind::Str { .. }) {
+            let masked = Hints::new_in(alloc).widget(crate::vocab::widget::PASSWORD);
+            form = form.field(field.key(), masked);
+            continue;
+        }
         let Some(members) = member_schema(field).and_then(SchemaRef::new) else {
             continue;
         };
@@ -140,6 +152,15 @@ fn build(schema: SchemaRef<'_>, alloc: Alloc, depth: u32) -> Result<Value, Value
     }
 
     form.finish()
+}
+
+/// Whether the schema marks the field a secret, by either mark redaction
+/// honours.
+fn is_secret(field: FieldRef<'_>) -> bool {
+    field.is_sensitive()
+        || TryAsRef::<Map>::try_as_ref(field.as_value())
+            .and_then(|m| m.get(guatiao::schema::vocab::WRITE_ONLY))
+            .is_some_and(|v| bool_or(Some(v), false))
 }
 
 /// Whether a form would tell a renderer anything it did not know.

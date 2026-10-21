@@ -68,8 +68,10 @@ hints    := { "widget": text, "placeholder": text, "unit": text,
   section per distinct `x-section`, in first-appearance order, ids
   only** — what a section is *called* is a form's business and a schema
   has no opinion — plus each member's own created form where there is
-  something in it. It says nothing about widgets: a schema does not know
-  them, and guessing would be this crate inventing. For a schema that
+  something in it. It says nothing about widgets, with one exception: a
+  text field the schema marks a secret (`x-sensitive` or `writeOnly`)
+  gets `widget: "password"`, since the schema has said it is one; any
+  other widget would be this crate guessing. For a schema that
   groups nothing the answer is `{}`, which is a complete form and
   exactly as informative as the schema was.
 - Anything else is an **annotation**: carried, never interpreted.
