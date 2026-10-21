@@ -490,6 +490,90 @@ class Registry implements Finalizable {
     ];
   }
 
+  // ---- sources: libraries that come and go -----------------------------
+
+  /// Maps a source file -- one exporting `guatiao_source`, such as a
+  /// bridge to another language -- and adds the source it answers for
+  /// `config` (a map, or a [Value] holding one: the source's own settings).
+  /// Answers the source's name, its path.
+  ///
+  /// The file stays mapped for the life of the process and is not a
+  /// library: nothing here retires it. Nothing it serves is loaded until
+  /// [refresh]. A refusal throws with the source's words: [NotFound] when
+  /// the file cannot be mapped, [WrongKind] when it is no source,
+  /// [BadValue] for a table the checks refuse or a path already added, and
+  /// the source's own status when it refuses `config`.
+  String addSourceFile(String path, [Object? config]) {
+    _checkOpen();
+    final lib = native.core();
+    lib.require('guatiao_registry_add_source_file', feature: 'load');
+    final bindings = lib.bindings;
+    final Value? owned;
+    final Value configValue;
+    if (config is Value) {
+      owned = null;
+      configValue = config;
+    } else {
+      owned = Value.fromDart(config ?? const <String, Object?>{},
+          alloc: _allocator);
+      configValue = owned;
+    }
+    final err = calloc<guatiao_provider_error>();
+    try {
+      final status = using(
+        (arena) => bindings.guatiao_registry_add_source_file(
+          _handle,
+          strOf(arena, path).ref,
+          configValue.pointer,
+          err,
+        ),
+      );
+      checkProviderStatus(bindings, status, err);
+      return path;
+    } finally {
+      owned?.close();
+      calloc.free(err);
+    }
+  }
+
+  /// Watches a directory: each [refresh] loads a library file that
+  /// appeared there (filtered by `rules`, one `[!]KEY=VALUE` per line, as
+  /// [scanDir] takes them), retires one that vanished, and retires and
+  /// loads again one whose length or modification time changed.
+  /// [BadValue] for a rule that is not one or a directory already watched.
+  void watchDir(String directory, {String? rules}) {
+    _checkOpen();
+    final lib = native.core();
+    lib.require('guatiao_registry_watch_dir', feature: 'load');
+    using((arena) {
+      checkStatus(
+        lib.bindings.guatiao_registry_watch_dir(
+          _handle,
+          strOf(arena, directory).ref,
+          strOf(arena, rules ?? '').ref,
+        ),
+      );
+    });
+  }
+
+  /// Asks every source and watched directory what it serves now and makes
+  /// this registry agree. Answers what changed: `loaded` and `retired`
+  /// (each `{source, id, stamp, key}`), `skipped` (`{source, id,
+  /// skipped, ...}`) and `refused` (`{source, id?, why}`).
+  ///
+  /// A new candidate loads; a changed one loads and, once it has, its old
+  /// build is retired while an [Instance] of the old keeps working; a
+  /// vanished one is retired; a library retired by hand stays out until
+  /// its stamp changes. A retired library closes once nothing uses it, and
+  /// its source is told. Refusals are part of the answer.
+  Map<String, Object?> refresh() {
+    native.core().require('guatiao_registry_refresh', feature: 'load');
+    return _answerMap(
+      (reg, alloc, out) =>
+          native.core().bindings.guatiao_registry_refresh(reg, alloc, out),
+    );
+  }
+
   /// Unmaps a library, when the library agrees.
   ///
   /// [Busy] while a handle into it is held -- an answer another library

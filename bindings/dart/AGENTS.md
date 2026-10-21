@@ -138,6 +138,20 @@ LIBRARY key** — `librariesKeyedBy`'s template, `%id` by default — not a
 provider key. Either way no table, `ctx` or borrowed schema taken from
 the library is used again, after an unload or a collect that closed it.
 
+**Sources** — libraries that come and go while the host runs:
+`addSourceFile(path, [config]) -> String` maps a file exporting
+`guatiao_source` (a bridge to another language, say) and adds the source
+it answers for `config` (a map or `Value`); the file is never unmapped
+and is not a library. Throws with the source's words: `NotFound` (cannot
+map), `WrongKind` (no source), `BadValue` (refused table, or already
+added), or the source's own status. `watchDir(directory, rules: ...)`:
+each refresh loads a library file that appeared, retires one that
+vanished, reloads one that changed. `refresh() -> Map`: `loaded` and
+`retired` (`{source, id, stamp, key}`), `skipped` (`{source, id,
+skipped, ...}`), `refused` (`{source, id?, why}`). A changed candidate
+loads before its old build is retired, and an `Instance` of the old keeps
+working; refusals are part of the answer. Nothing refreshes on its own.
+
 `kindTable<T>(found, floorHash:, floorSize:)` turns a `providerTable`
 answer into the `Struct` a kind's own C header declares (`greeter_vtable`
 and friends): checks `found.size` against `floorSize` and the header's

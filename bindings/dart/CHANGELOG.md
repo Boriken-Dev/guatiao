@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the byte offset.
 - `redact(schema, value)`: a copy with every field the schema marks
   secret replaced by a placeholder.
+- Sources: `Registry.addSourceFile(path, [config])` adds a source file
+  (one exporting `guatiao_source`, such as a bridge to another
+  language), `watchDir(directory, rules: ...)` keeps a directory in step
+  with disk, and `refresh()` makes the registry agree with what every
+  source serves now, answering what loaded, retired, was skipped or
+  refused.
 
 ## [0.0.0-alpha.1] - 2026-10-19
 

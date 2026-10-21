@@ -374,6 +374,66 @@ class Registry:
         call = lib.guatiao_registry_unload_unchecked if unchecked else lib.guatiao_registry_unload
         self._key_call(call, key)
 
+    # ---- sources: libraries that come and go -----------------------
+
+    def add_source_file(self, path: Any, config: Any = None) -> str:
+        """Maps a source file (one exporting `guatiao_source`, such as a
+        bridge to another language) and adds the source it answers for
+        `config` (a mapping or `Value`, the source's own settings). Answers
+        the source's name, its path.
+
+        The file stays mapped for the life of the process and is not a
+        library: nothing here retires it. Nothing it serves is loaded until
+        `refresh()`. A refusal raises the status's `GuatiaoError` with the
+        source's words: `NotFound` when the file cannot be mapped,
+        `WrongKind` when it is no source, `BadValue` for a table the checks
+        refuse or a path already added, the source's own status when it
+        refuses `config`."""
+        self._check_open()
+        name = str(path)
+        view, _buf = _make_str(name.encode("utf-8"))
+        owned = not isinstance(config, Value)
+        value = config if not owned else Value.from_python(
+            {} if config is None else config, alloc=self._alloc
+        )
+        try:
+            err = _abi.ProviderError()
+            status = _lib.core().guatiao_registry_add_source_file(
+                self._handle, view, ctypes.byref(value._raw), ctypes.byref(err)
+            )
+            check(status, err)
+        finally:
+            if owned:
+                value.close()
+        return name
+
+    def watch_dir(self, directory: Any, *, rules: "str | None" = None) -> None:
+        """Watches a directory: each `refresh()` loads a library file that
+        appeared there (filtered by `rules`, one `[!]KEY=VALUE` per line, as
+        `scan_dir` takes them), retires one that vanished, and retires and
+        loads again one whose length or modification time changed.
+        `BadValue` for a rule that is not one or a directory already
+        watched."""
+        self._check_open()
+        dir_view, _dir_buf = _make_str(str(directory).encode("utf-8"))
+        rules_view, _rules_buf = _make_str((rules or "").encode("utf-8"))
+        check(_lib.core().guatiao_registry_watch_dir(self._handle, dir_view, rules_view))
+
+    def refresh(self) -> dict:
+        """Asks every source and watched directory what it serves now and
+        makes this registry agree. Answers what changed:
+
+        `{"loaded": [{"source", "id", "stamp", "key"}...], "retired": [the
+        same...], "skipped": [{"source", "id", "skipped", ...}...],
+        "refused": [{"source", "id"?, "why"}...]}`.
+
+        A new candidate loads; a changed one loads and, once it has, its old
+        build is retired, while an `Instance` of the old keeps working; a
+        vanished one is retired; a library retired by hand stays out until
+        its stamp changes. A retired library closes once nothing uses it,
+        and its source is told. Refusals are part of the answer."""
+        return self._call(_lib.core().guatiao_registry_refresh)
+
     def host(self) -> Any:
         """The raw `const guatiao_host_info *` this registry hands a
         library. Opaque here: for driving a `guatiao_library_entry`

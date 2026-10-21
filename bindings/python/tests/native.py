@@ -34,14 +34,15 @@ def library_name(base: str) -> str:
     return f"lib{base}.so"
 
 
-def build_c_greeter(into: Path) -> "Path | None":
-    """`greeter_in_c.c` as a shared library in `into`, or `None` without a
-    compiler. A compile error fails loudly: the header changed under it."""
+def _build(source: str, into: Path, name: str) -> "Path | None":
+    """`source` (under the crate's C tests) built into `into` as `name`, or
+    `None` without a compiler. A compile error fails loudly: the header
+    changed under it."""
     cc = compiler()
     if cc is None:
         return None
     into.mkdir(parents=True, exist_ok=True)
-    out = into / library_name("c_greeter")
+    out = into / library_name(name)
     command = [cc, "-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"]
     if platform.system() != "Windows":
         command.append("-fPIC")
@@ -49,9 +50,20 @@ def build_c_greeter(into: Path) -> "Path | None":
         "-I", str(REPO / "crates" / "guatiao" / "include"),
         "-I", str(REPO / "examples" / "greeter_kind" / "include"),
         "-o", str(out),
-        str(REPO / "crates" / "guatiao" / "tests" / "c_consumer" / "greeter_in_c.c"),
+        str(REPO / "crates" / "guatiao" / "tests" / "c_consumer" / source),
     ]
     done = subprocess.run(command, capture_output=True, text=True)
     if done.returncode != 0:
-        raise RuntimeError(f"the C greeter did not compile:\n{done.stderr}")
-    return into
+        raise RuntimeError(f"{source} did not compile:\n{done.stderr}")
+    return out
+
+
+def build_c_greeter(into: Path) -> "Path | None":
+    """The greeter written in C, in a directory of its own."""
+    built = _build("greeter_in_c.c", into, "c_greeter")
+    return None if built is None else into
+
+
+def build_c_source(into: Path, name: str = "c_shelf") -> "Path | None":
+    """The source written in C (a shelf of counters), as a file."""
+    return _build("source_in_c.c", into, name)

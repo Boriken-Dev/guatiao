@@ -148,6 +148,10 @@ try {
   reg.retire('acme');                              // out of the registry, still mapped
   reg.collect();                                   // ['acme']: closed, once nothing of it is alive
   reg.unload('acme2');                             // out and unmapped at once, when it agrees
+
+  reg.addSourceFile('/opt/myapp/guatiao_py.so', {'dirs': ['/opt/myapp/py']});  // a source
+  reg.watchDir('/opt/myapp/plugins', rules: 'kind=greeter');
+  final changed = reg.refresh();                   // loaded, retired, skipped, refused
 } finally {
   reg.close();
 }

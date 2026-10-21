@@ -124,6 +124,28 @@ template, `%id` by default -- not a provider key. Either way no table,
 `ctx` or borrowed schema taken from the library is used again, after an
 unload or a collect that closed it.
 
+**Sources** -- libraries that come and go while the host runs:
+
+```python
+reg.add_source_file("/opt/app/guatiao_py.so", {"dirs": ["/opt/app/py"]})  # answers its name, the path
+reg.watch_dir("/opt/app/plugins", rules="kind=greeter")
+changed = reg.refresh()   # {"loaded": [...], "retired": [...], "skipped": [...], "refused": [...]}
+```
+
+`add_source_file(path, config=None) -> str` maps a file exporting
+`guatiao_source` (a bridge to another language, say) and adds the source
+it answers for `config`; the file is never unmapped and is not a library.
+Raises with the source's words: `NotFound` (cannot map), `WrongKind` (no
+source), `BadValue` (refused table, or already added), or the source's
+own status. `watch_dir(directory, *, rules=None)`: each refresh loads a
+library file that appeared (by `rules`), retires one that vanished, and
+reloads one that changed. `refresh() -> dict`: `loaded` and `retired`
+(`{source, id, stamp, key}`), `skipped` (`{source, id, skipped, ...}`),
+`refused` (`{source, id?, why}`). A changed candidate loads before its
+old build is retired, and an `Instance` of the old keeps working; a
+library retired by hand stays out until its stamp changes; refusals are
+part of the answer, never an exception. Nothing refreshes on its own.
+
 `Registry.bind(key, kind)` answers the provider as a `kinds.Remote`
 calling its table with its own `ctx`; `Instance.bind(kind)` the same for
 an instance. `NotFound` when it serves no table for the kind,

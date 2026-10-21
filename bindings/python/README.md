@@ -133,6 +133,17 @@ with Registry("my-host", "1.0") as reg:
     reg.unload("acme2")                          # out and unmapped at once, when it agrees
 ```
 
+A library can also come from a **source**: a file that serves libraries
+which come and go while the host runs, such as a bridge to another
+language, or a directory the registry keeps in step with disk.
+`refresh()` makes the registry agree with them, whenever you call it:
+
+```python
+reg.add_source_file("/opt/myapp/guatiao_py.so", {"dirs": ["/opt/myapp/py"]})
+reg.watch_dir("/opt/myapp/plugins", rules="kind=greeter")
+changed = reg.refresh()        # what loaded, retired, was skipped or refused
+```
+
 Every answer that is data comes back as a plain `dict` or `list`.
 `rules` is one `[!]KEY=VALUE` per line and filters on what a library
 declares about itself, before it is loaded.
