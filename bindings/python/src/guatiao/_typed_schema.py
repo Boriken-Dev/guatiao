@@ -109,7 +109,7 @@ def schema_for(tp: Any) -> "dict[str, Any]":
         hints = _hints(tp)
         properties: dict[str, Any] = {}
         required: list[str] = []
-        for field in dataclasses.fields(tp):
+        for field in _init_fields(tp):
             ftype = hints[field.name]
             properties[field.name] = schema_for(ftype)
             has_default = (
@@ -145,6 +145,11 @@ def _plain(value: Any) -> bool:
     return value is None or isinstance(value, (bool, int, float, str))
 
 
+def _init_fields(tp: Any) -> "list[dataclasses.Field[Any]]":
+    """The fields a configuration sets: those `__init__` takes."""
+    return [field for field in dataclasses.fields(tp) if field.init]
+
+
 def build(tp: Any, data: Any) -> Any:
     """The configuration of type `tp` that plain `data` describes: a
     dataclass built field by field, nested ones too; anything else as it
@@ -156,11 +161,17 @@ def build(tp: Any, data: Any) -> Any:
     origin = typing.get_origin(tp)
     if dataclasses.is_dataclass(tp) and isinstance(tp, type) and isinstance(data, Mapping):
         hints = _hints(tp)
-        kwargs = {
-            field.name: build(hints[field.name], data[field.name])
-            for field in dataclasses.fields(tp)
-            if field.name in data
-        }
+        kwargs = {}
+        for field in _init_fields(tp):
+            if field.name in data:
+                kwargs[field.name] = build(hints[field.name], data[field.name])
+            elif (
+                field.default is dataclasses.MISSING
+                and field.default_factory is dataclasses.MISSING
+            ):
+                # An `Optional` field with no default is not required, so a
+                # configuration may leave it out: it is then None.
+                kwargs[field.name] = None
         return tp(**kwargs)
     if is_typeddict(tp) and isinstance(data, Mapping):
         hints = _hints(tp)
