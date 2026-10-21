@@ -13,6 +13,7 @@ import logging
 import os
 import re
 import sys
+from typing import Protocol
 
 import pytest
 
@@ -28,10 +29,11 @@ import native
 
 sys.path.insert(0, str(native.GREETER_KIND_PY))
 
-from greeter_kind import COUNTER, CONVERSATION, GREETER, LISTENER  # noqa: E402
+from greeter_kind import Conversation, Counter, Greeter, Listener  # noqa: E402
 
-from guatiao import ABSENT, BadValue, Internal, Unsupported, Value, kinds  # noqa: E402
-from guatiao.kinds import (  # noqa: E402
+from guatiao import ABSENT, BadValue, Internal, List, Unsupported, Value, kinds  # noqa: E402
+from guatiao.kinds import FloorMismatch, Kind, KindProtocol, Lent, Method, kind_of  # noqa: E402
+from guatiao.kinds.shapes import (  # noqa: E402
     BOOL,
     BYTES,
     BYTES_MUT,
@@ -44,9 +46,6 @@ from guatiao.kinds import (  # noqa: E402
     TEXT,
     USIZE,
     VALUE,
-    FloorMismatch,
-    Kind,
-    Method,
     lent,
     taken,
 )
@@ -76,37 +75,37 @@ class Ear:
 def test_the_greeter_kinds_carry_the_headers_literals():
     defines = _defines()
     assert defines == {
-        "greeter_vtable": GREETER.floor_hash,
-        "counter_vtable": COUNTER.floor_hash,
-        "conversation_vtable": CONVERSATION.floor_hash,
-        "listener_vtable": LISTENER.floor_hash,
+        "greeter_vtable": Greeter.kind.floor_hash,
+        "counter_vtable": Counter.kind.floor_hash,
+        "conversation_vtable": Conversation.kind.floor_hash,
+        "listener_vtable": Listener.kind.floor_hash,
     }
 
 
 def test_a_built_struct_is_the_headers_layout():
     word = ctypes.sizeof(ctypes.c_void_p)
-    assert ctypes.sizeof(GREETER.struct) == 8 + 6 * word
-    assert ctypes.sizeof(LISTENER.struct) == 8 + 2 * word
+    assert ctypes.sizeof(Greeter.kind.struct) == 8 + 6 * word
+    assert ctypes.sizeof(Listener.kind.struct) == 8 + 2 * word
     # The hand-written mirror of the first three slots agrees, slot by slot.
     for name, slot in greeter_table.GreeterVtable._fields_[1:]:
-        assert list(slot._argtypes_) == list(GREETER.slot_type(name)._argtypes_)
+        assert list(slot._argtypes_) == list(Greeter.kind.slot_type(name)._argtypes_)
     # A struct written by hand is accepted when it agrees.
     Kind(
         "greeter",
         greeter_table.GreeterVtable,
-        floor_hash=GREETER.floor_hash,
-        methods=GREETER.methods[:3],
+        floor_hash=Greeter.kind.floor_hash,
+        methods=Greeter.kind.methods[:3],
     )
 
 
 def test_a_description_that_disagrees_with_its_struct_is_refused():
     with pytest.raises(TypeError, match="declares"):
-        Kind("greeter", greeter_table.GreeterVtable, floor_hash=1, methods=GREETER.methods[:2])
-    swapped = [Method("greet", [STR], TEXT, fallible=True), *GREETER.methods[1:3]]
+        Kind("greeter", greeter_table.GreeterVtable, floor_hash=1, methods=Greeter.kind.methods[:2])
+    swapped = [Method("greet", [STR], TEXT, fallible=True), *Greeter.kind.methods[1:3]]
     with pytest.raises(TypeError, match="prototype"):
         Kind("greeter", greeter_table.GreeterVtable, floor_hash=1, methods=swapped)
     with pytest.raises(TypeError, match="taken"):
-        Method("start", [LISTENER], CONVERSATION)
+        Method("start", [Listener.kind], Conversation.kind)
     with pytest.raises(TypeError):
         Method("bad", [TEXT])
     with pytest.raises(TypeError, match="hide"):
@@ -124,19 +123,19 @@ def reg():
 
 
 def test_a_rust_greeter_is_called_through_the_description(reg):
-    greeter = reg.bind("derived_greeter_hello", GREETER)
+    greeter = reg.bind("derived_greeter_hello", Greeter.kind)
     with greeter.greet("ana") as answer:
         assert answer.to_python() == {"greeting": "hello, ana"}
     assert greeter.shout("bo") == "HELLO, BO"
     with pytest.raises(BadValue) as refused:
         greeter.greet("")
     assert refused.value.message == "nobody to greet"
-    counter = reg.bind("derived_greeter_hello", COUNTER)
+    counter = reg.bind("derived_greeter_hello", Counter)
     assert [counter.count(), counter.count()] == [1, 2]
 
 
 def test_a_lent_map_is_changed_where_it_stands(reg):
-    greeter = reg.bind("derived_greeter_hello", GREETER)
+    greeter = reg.bind("derived_greeter_hello", Greeter.kind)
     with Value({"outer": {"name": "cy"}}) as config:
         assert greeter.check(config.as_map()["outer"]) is True
         assert config.to_python() == {"outer": {"name": "cy", "greeting": "hello, cy"}}
@@ -145,7 +144,7 @@ def test_a_lent_map_is_changed_where_it_stands(reg):
 
 
 def test_a_map_handed_over_leaves_the_caller_holding_nothing(reg):
-    greeter = reg.bind("derived_greeter_hello", GREETER)
+    greeter = reg.bind("derived_greeter_hello", Greeter.kind)
     config = Value({"name": "dee"})
     with greeter.greet_from(config) as answer:
         assert answer.to_python() == {"greeting": "hello, dee"}
@@ -161,7 +160,7 @@ def test_a_map_handed_over_leaves_the_caller_holding_nothing(reg):
 
 
 def test_objects_cross_both_ways_and_are_let_go(reg):
-    greeter = reg.bind("derived_greeter_hello", GREETER)
+    greeter = reg.bind("derived_greeter_hello", Greeter.kind)
     before = kinds.live_objects()
     ear = Ear()
     with greeter.start(ear) as conversation:
@@ -188,7 +187,7 @@ def test_objects_cross_both_ways_and_are_let_go(reg):
 
 
 def test_a_listener_that_raises_fails_the_call_that_reached_it(reg, caplog):
-    greeter = reg.bind("derived_greeter_hello", GREETER)
+    greeter = reg.bind("derived_greeter_hello", Greeter.kind)
 
     class Deaf:
         def heard(self, what: str) -> None:
@@ -203,9 +202,9 @@ def test_a_listener_that_raises_fails_the_call_that_reached_it(reg, caplog):
 
 def test_a_table_that_is_not_the_kinds_is_refused(reg):
     with pytest.raises(FloorMismatch):
-        reg.bind("hello_library_greeter", GREETER)
+        reg.bind("hello_library_greeter", Greeter.kind)
     with pytest.raises(FloorMismatch):
-        GREETER.bind(None, 0, None)
+        Greeter.kind.bind(None, 0, None)
 
 
 @pytest.fixture(scope="module")
@@ -219,7 +218,7 @@ def c_greeter_dir(tmp_path_factory):
 def test_a_slot_an_older_table_lacks_is_unsupported(c_greeter_dir):
     with Registry("py-kinds", "0.1") as registry:
         registry.scan_dir(str(c_greeter_dir), rules="kind=greeter")
-        greeter = registry.bind("c_greeter", GREETER)
+        greeter = registry.bind("c_greeter", Greeter.kind)
         assert greeter.greet("hal").to_python() == {"greeting": "hello from C, hal"}
         assert not greeter.has("shout")
         with pytest.raises(Unsupported):
@@ -394,3 +393,41 @@ def test_a_released_ctx_answers_gone(probe):
 
     with pytest.raises(Gone):
         remote.keys({})
+
+
+# ---- a kind written as a class ----------------------------------------------
+
+
+def test_a_kind_class_refuses_what_has_no_shape_when_it_is_written() -> None:
+    with pytest.raises(TypeError, match="width"):
+
+        class Wide(KindProtocol, Protocol, kind="wide", floor_hash=1):
+            def count(self) -> int: ...
+
+    with pytest.raises(TypeError, match="no shape"):
+
+        class Odd(KindProtocol, Protocol, kind="odd", floor_hash=1):
+            def take(self, what: set) -> None: ...  # type: ignore[type-arg]
+
+    with pytest.raises(TypeError, match="Taken"):
+
+        class Bare(KindProtocol, Protocol, kind="bare", floor_hash=1):
+            def take(self, listener: Listener) -> None: ...
+
+    with pytest.raises(TypeError, match="never borrowed"):
+
+        class Borrowed(KindProtocol, Protocol, kind="borrowed", floor_hash=1):
+            def take(self, items: List) -> None: ...
+
+    with pytest.raises(TypeError, match="annotation"):
+
+        class Untyped(KindProtocol, Protocol, kind="untyped", floor_hash=1):
+            def take(self, items): ...  # type: ignore[no-untyped-def]
+
+    class Fine(KindProtocol, Protocol, kind="fine", floor_hash=5):
+        def grow(self, items: Lent[List]) -> None: ...
+
+    assert kind_of(Fine) is Fine.kind
+    assert Fine.kind.methods[0].args[0] is not None
+    with pytest.raises(TypeError):
+        kind_of(3)

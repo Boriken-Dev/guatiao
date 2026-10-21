@@ -5,32 +5,39 @@
 """Greeters written in Python: the same kinds the Rust and C greeters
 serve, offered by a library any host can load.
 
-`library` is what a host registers: in a Python host,
-`Registry.register_library(py_greeter.library)`; in any host, through the
-guatiao-py source, which reads `py_greeter.guatiao-py.toml` beside this
-file and imports `library` from here.
+The module is the library: its id is its name, its version `__version__`,
+its providers the `provide.Provider` classes in `__all__`. A Python host
+registers it with `Registry.register_library(py_greeter)`; any host loads
+it through the guatiao-py source, which reads `py_greeter.guatiao-py.toml`
+beside this file and imports it.
 """
 
 from __future__ import annotations
 
 import threading
+from dataclasses import dataclass
+from typing import Dict, List
 
-from greeter_kind import COUNTER, GREETER
+from greeter_kind import Conversation, Counter, Greeter, Listener
 
-from guatiao import BadValue, provide
+from guatiao import BadValue, Map, provide
+
+__version__ = "1.0.0"
+__all__ = ["Hello", "Shouter"]
 
 #: Changed by the examples to show a reload serving new code.
 GREETING = "hello"
 MARK = ""
 
 
-class Conversation:
-    """One conversation `start` hands back: an object of the
-    conversation kind, holding the listener it was handed."""
+class Chat(Conversation):
+    """One conversation `start` hands back, holding the listener it was
+    handed. Inheriting `Conversation` is for the type checker; any object
+    with these methods would serve."""
 
-    def __init__(self, listener) -> None:
+    def __init__(self, listener: Listener) -> None:
         self.listener = listener
-        self.transcript: list = []
+        self.transcript: List[str] = []
 
     def say(self, what: str) -> None:
         if not what:
@@ -48,14 +55,14 @@ class Conversation:
         return len(self.transcript)
 
 
-class Hello:
-    """One provider serving two kinds: a greeter and a counter."""
+class Hello(provide.Provider, Greeter, Counter, display_name="Hello, in Python"):
+    """One provider serving two kinds, its own one instance."""
 
     def __init__(self) -> None:
         self._asked = 0
         self._lock = threading.Lock()
 
-    def greet(self, name: str) -> dict:
+    def greet(self, name: str) -> Dict[str, str]:
         if name == "panic":
             raise RuntimeError("a provider bug, on request")
         if not name:
@@ -65,21 +72,18 @@ class Hello:
     def shout(self, name: str) -> str:
         return self.greet(name)["greeting"].upper()
 
-    def start(self, listener):
-        return Conversation(listener)
+    def start(self, listener: Listener) -> Chat:
+        return Chat(listener)
 
-    def greet_into(self, name: str, listener) -> None:
+    def greet_into(self, name: str, listener: Listener) -> None:
         listener.heard(self.greet(name)["greeting"])
 
-    def greet_from(self, config):
-        name = config.as_map()["name"].str_or("") if "name" in config.as_map() else ""
-        config.close()
-        return self.greet(name)
+    def greet_from(self, config: Map) -> Dict[str, str]:
+        return self.greet(str(config.get("name", "")))
 
-    def check(self, config) -> bool:
-        if "name" not in config:
-            config["name"] = "world"
-        name = config["name"].str_or("")
+    def check(self, config: Map) -> bool:
+        name = str(config.get("name", "world"))
+        config["name"] = name
         config["greeting"] = f"{GREETING}, {name}"
         return bool(name)
 
@@ -89,31 +93,18 @@ class Hello:
             return self._asked
 
 
-class Shouter:
+@dataclass(frozen=True)
+class ShouterConfig:
+    """What a shouter is built from; its schema is read from these fields."""
+
+    prefix: str
+
+
+class Shouter(provide.Provider, Greeter):
     """Built from a configuration: one instance per configuration."""
 
-    def __init__(self, config: dict) -> None:
-        self.prefix = config["prefix"]
+    def __init__(self, config: ShouterConfig) -> None:
+        self.prefix = config.prefix
 
-    def greet(self, name: str) -> dict:
+    def greet(self, name: str) -> Dict[str, str]:
         return {"greeting": f"{self.prefix} {name.upper()}{MARK}"}
-
-
-library = provide.library(
-    "py_greeter",
-    "1.0.0",
-    providers=[
-        provide.Provider("hello", Hello, kinds=[GREETER, COUNTER], display_name="Hello, in Python"),
-        provide.Provider(
-            "shouter",
-            Shouter,
-            kinds=[GREETER],
-            config={
-                "type": "object",
-                "properties": {"prefix": {"type": "string"}},
-                "required": ["prefix"],
-                "additionalProperties": False,
-            },
-        ),
-    ],
-)

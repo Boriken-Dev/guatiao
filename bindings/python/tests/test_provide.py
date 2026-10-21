@@ -3,13 +3,17 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 """`guatiao.provide`: a greeter written in Python passes the behaviour the
-Rust and C greeters pass, called from Python through the same registry."""
+Rust and C greeters pass, called from Python through the same registry;
+and what a provider class and a module library are checked for."""
 
 from __future__ import annotations
 
 import os
 import sys
 import threading
+import types
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 import pytest
 
@@ -26,7 +30,7 @@ sys.path.insert(0, str(native.GREETER_KIND_PY))
 sys.path.insert(0, str(native.REPO / "examples" / "python_provider" / "py_greeter"))
 
 import py_greeter  # noqa: E402
-from greeter_kind import COUNTER, GREETER  # noqa: E402
+from greeter_kind import Conversation, Counter, Greeter, Listener  # noqa: E402
 
 from guatiao import BadValue, Internal, Unsupported, Value, WrongKind, kinds, provide  # noqa: E402
 from guatiao.registry import Registry  # noqa: E402
@@ -36,14 +40,14 @@ _TARGET_DEBUG = os.environ["GUATIAO_LIBRARY"]
 
 class Ear:
     def __init__(self) -> None:
-        self.heard_so_far: list = []
+        self.heard_so_far: List[str] = []
 
     def heard(self, what: str) -> None:
         self.heard_so_far.append(what)
 
 
 @pytest.fixture(scope="module")
-def c_greeter_dir(tmp_path_factory):
+def c_greeter_dir(tmp_path_factory: Any) -> Any:
     return native.build_c_greeter(tmp_path_factory.mktemp("c-greeter"))
 
 
@@ -56,7 +60,7 @@ _GREETERS = {
 
 
 @pytest.fixture(params=sorted(_GREETERS))
-def greeter(request, c_greeter_dir):
+def greeter(request: Any, c_greeter_dir: Any) -> Any:
     which = request.param
     key, greeting = _GREETERS[which]
     with Registry("py-provide", "0.1") as reg:
@@ -67,24 +71,24 @@ def greeter(request, c_greeter_dir):
                 pytest.skip("no C compiler: the greeter written in C is not built")
             reg.scan_dir(str(c_greeter_dir), rules="kind=greeter")
         else:
-            reg.register_library(py_greeter.library)
-        yield which, reg.bind(key, GREETER), greeting
+            reg.register_library(py_greeter)
+        yield which, reg.bind(key, Greeter), greeting
 
 
-def test_it_greets(greeter):
+def test_it_greets(greeter: Any) -> None:
     _, remote, greeting = greeter
     with remote.greet("ana") as answer:
         assert answer.to_python() == {"greeting": greeting}
 
 
-def test_it_refuses_with_its_own_words(greeter):
+def test_it_refuses_with_its_own_words(greeter: Any) -> None:
     _, remote, _ = greeter
     with pytest.raises(BadValue) as refused:
         remote.greet("")
     assert "nobody to greet" in refused.value.message
 
 
-def test_a_failure_inside_the_method_crosses_as_internal(greeter):
+def test_a_failure_inside_the_method_crosses_as_internal(greeter: Any) -> None:
     which, remote, _ = greeter
     if which == "c":
         pytest.skip("the C greeter has no failure to provoke")
@@ -92,7 +96,7 @@ def test_a_failure_inside_the_method_crosses_as_internal(greeter):
         remote.greet("panic")
 
 
-def test_it_fills_a_lent_map_in_place(greeter):
+def test_it_fills_a_lent_map_in_place(greeter: Any) -> None:
     _, remote, _ = greeter
     with Value({"name": "bo"}) as config:
         assert remote.check(config) is True
@@ -101,7 +105,7 @@ def test_it_fills_a_lent_map_in_place(greeter):
     assert len(filled) == 2, f"one entry added: {filled}"
 
 
-def test_it_greets_from_a_map_handed_over(greeter):
+def test_it_greets_from_a_map_handed_over(greeter: Any) -> None:
     _, remote, greeting = greeter
     config = Value({"name": "ana"})
     with remote.greet_from(config) as answer:
@@ -109,14 +113,14 @@ def test_it_greets_from_a_map_handed_over(greeter):
     assert config.is_absent(), "the map went with the call"
 
 
-def test_it_tells_a_lent_listener(greeter):
+def test_it_tells_a_lent_listener(greeter: Any) -> None:
     _, remote, greeting = greeter
     ear = Ear()
     remote.greet_into("ana", ear)
     assert ear.heard_so_far == [greeting]
 
 
-def test_a_conversation_it_starts_tells_the_listener_handed_in(greeter):
+def test_a_conversation_it_starts_tells_the_listener_handed_in(greeter: Any) -> None:
     which, remote, _ = greeter
     before = kinds.live_objects()
     ear = Ear()
@@ -138,38 +142,146 @@ def test_a_conversation_it_starts_tells_the_listener_handed_in(greeter):
     assert kinds.live_objects() == before
 
 
-# ---- what only a Python library does here ---------------------------------
+# ---- a module is a library --------------------------------------------------
 
 
-def test_an_instance_is_built_from_a_configuration_the_registry_checked():
+def test_a_module_is_its_library() -> None:
+    library = provide.library_of(py_greeter)
+    assert library is provide.library_of(py_greeter), "built once per module"
+    assert (library.id, library.version) == ("py_greeter", py_greeter.__version__)
+    assert library.providers == (py_greeter.Hello, py_greeter.Shouter)
+    assert library.kinds == ("greeter", "counter")
+
+
+def _module(name: str, **attrs: Any) -> types.ModuleType:
+    module = types.ModuleType(name)
+    for key, value in attrs.items():
+        setattr(module, key, value)
+    return module
+
+
+class Plain(provide.Provider, Counter):
+    def count(self) -> int:
+        return 1
+
+
+def test_what_a_module_must_say_is_named() -> None:
+    with pytest.raises(TypeError, match="__main__"):
+        provide.library_of(_module("__main__", __version__="1", __all__=["Plain"], Plain=Plain))
+    with pytest.raises(TypeError, match="__version__"):
+        provide.library_of(_module("no_version", __all__=["Plain"], Plain=Plain))
+    with pytest.raises(TypeError, match="exports no"):
+        provide.library_of(_module("nothing", __version__="1", __all__=["x"], x=3))
+    with pytest.raises(TypeError, match="_meta_"):
+        provide.library_of(_module("bad_meta", __version__="1", __all__=["Plain"], Plain=Plain, _meta_={1: object()}))
+    # Without __all__, only what the module itself defines is served.
+    imported_only = _module("imports_only", __version__="1", Plain=Plain)
+    with pytest.raises(TypeError, match="exports no"):
+        provide.library_of(imported_only)
+
+
+def test_a_module_library_says_its_meta() -> None:
+    module = _module(
+        "with_meta",
+        __doc__="A tally of things.\n\nMore words.",
+        __version__="2.0",
+        __author__="Ana",
+        __license__="MPL-2.0",
+        __all__=["Plain"],
+        Plain=Plain,
+        _meta_={"license": "MIT", "build": 7},
+    )
     with Registry("py-provide", "0.1") as reg:
-        reg.register_library(py_greeter.library)
-        with pytest.raises(BadValue) as refused:
-            reg.create("py_greeter_shouter", {"prefx": "hey"})
-        assert "prefx" in refused.value.message
-        assert py_greeter.library.live_instances() == 0, "the class never ran"
-        with reg.create("py_greeter_shouter", {"prefix": "hey"}) as instance:
-            assert py_greeter.library.live_instances() == 1
-            assert instance.bind(GREETER).greet("cy").to_python() == {"greeting": "hey CY"}
-            assert not instance.bind(GREETER).has("shout"), "Shouter has no shout of its own"
-        assert py_greeter.library.live_instances() == 0
+        reg.register_library(module)
+        (library,) = [lib for lib in reg.libraries() if lib["id"] == "with_meta"]
+        assert library["version"] == "2.0"
+    from guatiao._module_meta import meta_of
+
+    assert meta_of(module) == {
+        "description": "A tally of things.",
+        "authors": ["Ana"],
+        "license": "MIT",
+        "build": 7,
+    }
 
 
-def test_one_provider_serves_two_kinds():
+# ---- what a provider class is checked for ------------------------------------
+
+
+def test_a_provider_class_is_checked_when_it_is_written() -> None:
+    with pytest.raises(TypeError, match="requires"):
+
+        class Silent(provide.Provider, Greeter):
+            pass
+
+    with pytest.raises(TypeError, match="no kind"):
+
+        class Kindless(provide.Provider):
+            pass
+
+    with pytest.raises(TypeError, match="object kind"):
+
+        class Ear2(provide.Provider, Listener):
+            def heard(self, what: str) -> None: ...
+
+    with pytest.raises(TypeError, match="dataclass or a TypedDict"):
+
+        class Untyped(provide.Provider, Counter):
+            def __init__(self, config: Dict[str, Any]) -> None: ...
+
+            def count(self) -> int:
+                return 0
+
+    assert Plain.__guatiao_provider__.name == "plain"
+
+
+@dataclass(frozen=True)
+class Limits:
+    low: int
+    high: int = 10
+    label: Optional[str] = None
+
+
+class Bounded(provide.Provider, Counter, named="bounded", display_name="Bounded"):
+    def __init__(self, config: Limits) -> None:
+        self.limits = config
+        self.at = config.low
+
+    def count(self) -> int:
+        self.at += 1
+        return min(self.at, self.limits.high)
+
+
+def test_an_instance_receives_the_dataclass_its_schema_checked() -> None:
+    library = provide.library("py_bounded", "0.1.0", providers=[Bounded])
     with Registry("py-provide", "0.1") as reg:
-        reg.register_library(py_greeter.library)
+        reg.register_library(library)
+        assert reg.provider_config("py_bounded_bounded").to_python()["required"] == ["low"]
+        with pytest.raises(BadValue):
+            reg.create("py_bounded_bounded", {"low": "one"})
+        assert library.live_instances() == 0, "the class never ran"
+        with reg.create("py_bounded_bounded", {"low": 8, "high": 9}) as instance:
+            counter = instance.bind(Counter)
+            assert [counter.count(), counter.count()] == [9, 9]
+            assert library.live_instances() == 1
+        assert library.live_instances() == 0
+
+
+def test_one_provider_serves_two_kinds() -> None:
+    with Registry("py-provide", "0.1") as reg:
+        reg.register_library(py_greeter)
         provider = reg.provider("py_greeter_hello")
         assert provider["kinds"] == ["greeter", "counter"]
         assert provider["display_name"] == "Hello, in Python"
-        counter = reg.bind("py_greeter_hello", COUNTER)
+        counter = reg.bind("py_greeter_hello", Counter)
         first = counter.count()
         assert counter.count() == first + 1
 
 
-def test_calls_from_many_threads_each_take_the_gil():
+def test_calls_from_many_threads_each_take_the_gil() -> None:
     with Registry("py-provide", "0.1") as reg:
-        reg.register_library(py_greeter.library)
-        counter = reg.bind("py_greeter_hello", COUNTER)
+        reg.register_library(py_greeter)
+        counter = reg.bind("py_greeter_hello", Counter)
         start = counter.count()
         threads = [threading.Thread(target=lambda: [counter.count() for _ in range(200)]) for _ in range(4)]
         for t in threads:
@@ -179,13 +291,9 @@ def test_calls_from_many_threads_each_take_the_gil():
         assert counter.count() == start + 801
 
 
-def test_a_linked_python_library_is_retired_not_unloaded():
+def test_a_linked_python_library_is_retired_not_unloaded() -> None:
     before = kinds.live_objects()
-    lib = provide.library(
-        "py_short_lived",
-        "0.1.0",
-        providers=[provide.Provider("hello", py_greeter.Hello, kinds=[GREETER])],
-    )
+    lib = provide.library("py_short_lived", "0.1.0", providers=[py_greeter.Hello])
     with Registry("py-provide", "0.1") as reg:
         reg.register_library(lib)
         assert kinds.live_objects() == before + 1, "its one instance"
@@ -200,35 +308,38 @@ def test_a_linked_python_library_is_retired_not_unloaded():
         assert reg.register_library(lib) == {"skipped": "declined-this-host"}
 
 
-def test_an_unavailable_provider_says_why():
-    reasons = iter([None, "the device is gone"])
-    lib = provide.library(
-        "py_flaky",
-        "0.1.0",
-        providers=[
-            provide.Provider("hello", py_greeter.Hello, kinds=[GREETER], available=lambda: next(reasons))
-        ],
-    )
+class Flaky(provide.Provider, Counter):
+    reasons: List[Optional[str]] = [None, "the device is gone"]
+
+    @classmethod
+    def available(cls) -> Optional[str]:
+        return cls.reasons.pop(0)
+
+    def count(self) -> int:
+        return 0
+
+
+def test_an_unavailable_provider_says_why() -> None:
+    lib = provide.library("py_flaky", "0.1.0", providers=[Flaky])
     with Registry("py-provide", "0.1") as reg:
         reg.register_library(lib)
-        assert reg.provider_available("py_flaky_hello") == (True, None)
-        assert reg.provider_available("py_flaky_hello") == (False, "the device is gone")
+        assert reg.provider_available("py_flaky_flaky") == (True, None)
+        assert reg.provider_available("py_flaky_flaky") == (False, "the device is gone")
     lib.close()
 
 
-def test_a_provider_must_serve_provider_kinds():
-    from greeter_kind import LISTENER
+def test_two_providers_on_one_id_are_refused() -> None:
+    class Again(provide.Provider, Counter, named="plain"):
+        def count(self) -> int:
+            return 2
 
-    with pytest.raises(TypeError):
-        provide.Provider("x", py_greeter.Hello, kinds=[LISTENER])
-    with pytest.raises(TypeError):
-        provide.Provider("x", py_greeter.Hello(), kinds=[GREETER])
     with pytest.raises(ValueError):
-        provide.library(
-            "dup",
-            "1",
-            providers=[
-                provide.Provider("a", py_greeter.Hello, kinds=[GREETER]),
-                provide.Provider("b", py_greeter.Hello, kinds=[GREETER], id="dup_a"),
-            ],
-        )
+        provide.library("dup", "1", providers=[Plain, Again])
+    with pytest.raises(TypeError):
+        provide.library("dup", "1", providers=[Ear])  # type: ignore[list-item]
+
+
+def test_the_conversation_kind_is_served_by_inheritance_or_duck_typing() -> None:
+    assert Conversation.kind.implemented(py_greeter.Chat, "say")
+    assert not Conversation.kind.implemented(Ear, "say")
+    assert Listener.kind.implemented(Ear, "heard")

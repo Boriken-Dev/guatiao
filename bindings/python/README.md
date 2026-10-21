@@ -148,54 +148,88 @@ Every answer that is data comes back as a plain `dict` or `list`.
 `rules` is one `[!]KEY=VALUE` per line and filters on what a library
 declares about itself, before it is loaded.
 
-To call a provider, describe its kind once, from the kind's C header:
-its methods in table order, what each takes and answers, and the
-`FLOOR_HASH` the header defines. The package checks a table against it
-and converts every argument and answer:
+To call a provider, describe its kind once, from the kind's C header,
+as a typed `Protocol` class: its methods in table order, what each takes
+and answers as annotations, and the `FLOOR_HASH` the header defines. The
+package checks a table against it and converts every argument and
+answer; mypy and pyright check the code that uses it:
 
 ```python
-from guatiao import Value, kinds
-from guatiao.kinds import BOOL, MAP, STR, Kind, Method, lent
+from typing import Protocol
 
-GREETER = Kind("greeter", floor_hash=2695856491, methods=[
-    Method("greet", [STR], MAP, fallible=True, required=True),
-    Method("check", [lent(MAP)], BOOL, fallible=True),
-])
+from guatiao import Map, Value
+from guatiao.kinds import KindProtocol, Lent, MapAnswer, fallible, required
 
-greeter = reg.bind("acme_greeter", GREETER)
+class Greeter(KindProtocol, Protocol, kind="greeter", floor_hash=2695856491):
+    @required
+    @fallible
+    def greet(self, name: str) -> MapAnswer: ...
+    @fallible
+    def check(self, config: Lent[Map]) -> bool: ...
+
+greeter = reg.bind("acme_greeter", Greeter)
 greeter.greet("ana").to_python()          # {"greeting": "hello, ana"}
 with Value({"name": "bo"}) as config:
     greeter.check(config)                 # the provider fills it in, in place
 ```
 
-An object a slot takes, such as a listener, is any Python object with
-the kind's methods; an object a slot answers closes with `with`.
+An integer says its width (`kinds.I64`, `kinds.U32`, ...), as the C
+header does. An object a slot takes, such as a listener, is any Python
+object with the kind's methods; an object a slot answers closes with
+`with`.
 [`examples/python_host`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/python_host)
-is a complete host, and its kind descriptions are in
+is a complete host, and its kind classes are in
 [`examples/greeter_kind/python`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/greeter_kind/python).
 
 ### Writing a provider
 
-```python
-from guatiao import BadValue, provide
+A module is a library: its `__name__` is the id, its `__version__` the
+version, and the provider classes it exports (`__all__`, or those it
+defines) its providers. A provider class inherits `provide.Provider` and
+the kinds it serves:
 
-class Hello:
-    def greet(self, name):
+```python
+# greeters.py
+from dataclasses import dataclass
+from typing import Dict
+
+from guatiao import BadValue, provide
+from greeter_kind import Greeter
+
+__version__ = "1.0.0"
+__all__ = ["Hello", "Shouter"]
+
+class Hello(provide.Provider, Greeter):
+    def greet(self, name: str) -> Dict[str, str]:
         if not name:
             raise BadValue("nobody to greet")   # the caller reads this status and message
         return {"greeting": f"hello, {name}"}
 
-library = provide.library("py_greeter", "1.0.0", providers=[
-    provide.Provider("hello", Hello, kinds=[GREETER]),
-])
-reg.register_library(library)
-reg.bind("py_greeter_hello", GREETER).greet("ana")
+@dataclass(frozen=True)
+class ShouterConfig:
+    prefix: str
+
+class Shouter(provide.Provider, Greeter):
+    def __init__(self, config: ShouterConfig) -> None:   # the schema hosts check against
+        self.prefix = config.prefix
+    def greet(self, name: str) -> Dict[str, str]:
+        return {"greeting": f"{self.prefix} {name.upper()}"}
 ```
 
-A provider given a `config` schema builds an instance per configuration
-instead, `Hello(config)`, after the host has checked the configuration.
+```python
+import greeters
+
+reg.register_library(greeters)
+reg.bind("greeters_hello", Greeter).greet("ana")
+```
+
+A method a kind requires and the class lacks is a `TypeError` when the
+class is created. The library's `meta` comes from the installed
+distribution's metadata, then the module's docstring, `__author__`,
+`__license__` and `__copyright__`, then a `_meta_` dict.
 [`examples/python_provider`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/python_provider)
-holds a complete library.
+holds complete libraries, which the `guatiao-py` bridge also serves to
+hosts in any language.
 
 ### JSON, TOML, YAML and forms
 
@@ -278,8 +312,8 @@ provider's own words when it gave any.
 | `guatiao` | `Value`, `Ref`, `Map`, `List`, `ABSENT`, `Registry`, `Instance`, `redact`, the error classes |
 | `guatiao.time` | dates, times, instants and exact lengths as `datetime` types; `Span`; `normalize` |
 | `guatiao.registry` | the plugin host: load, scan, list, rank, configure, instantiate |
-| `guatiao.kinds` | describe a kind; call a provider's table; serve a table over a Python object |
-| `guatiao.provide` | a library of providers written in Python |
+| `guatiao.kinds` | a kind as a typed `Protocol` class; call a provider's table; serve a table over a Python object |
+| `guatiao.provide` | a module of provider classes as a library |
 | `guatiao.serde` | `loads` / `dumps` for JSON, TOML, YAML |
 | `guatiao.intake` | `check`, `layout`, `is_visible`, `at`, `for_schema`, `form_for`, `resolve`, `flat_keys`, `flatten`, `unflatten` |
 

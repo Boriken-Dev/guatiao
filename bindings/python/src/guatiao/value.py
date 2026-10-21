@@ -18,7 +18,7 @@ import ctypes
 import decimal
 import math
 from collections.abc import Mapping
-from typing import Any, Iterator, Union
+from typing import Any, Iterator, Protocol, Union
 
 from . import _abi, _lib
 from .errors import check
@@ -78,7 +78,8 @@ def _list_at(node: "_abi.Value | None", index: int) -> "_abi.Value | None":
         index += lst.len
     if not (0 <= index < lst.len):
         return None
-    return lst.ptr[index]
+    found: _abi.Value = lst.ptr[index]
+    return found
 
 
 def _map_find(node: "_abi.Value | None", key: bytes) -> "_abi.Value | None":
@@ -88,11 +89,12 @@ def _map_find(node: "_abi.Value | None", key: bytes) -> "_abi.Value | None":
     for i in range(m.len):
         entry = m.ptr[i]
         if _string_view(entry.key) == key:
-            return entry.value
+            value: _abi.Value = entry.value
+            return value
     return None
 
 
-def _walk(root: "_abi.Value", path: tuple) -> "_abi.Value":
+def _walk(root: "_abi.Value", path: "tuple[Any, ...]") -> "_abi.Value":
     node = root
     for part in path:
         nxt = (
@@ -183,7 +185,7 @@ def _node_to_python(node: "_abi.Value | None", numbers: str) -> Any:
 # ---- writing, through the loaded library -------------------------------
 
 
-def _make_str(data: bytes):
+def _make_str(data: bytes) -> "tuple[_abi.Str, Any]":
     """A `Str` view over `data`, plus the buffer the caller must keep
     alive until the call using the view returns."""
     if not data:
@@ -192,7 +194,7 @@ def _make_str(data: bytes):
     return _abi.Str(ptr=ctypes.cast(buf, ctypes.c_void_p), len=len(data)), buf
 
 
-def _make_bytes(data: bytes):
+def _make_bytes(data: bytes) -> "tuple[_abi.Bytes, Any]":
     if not data:
         return _abi.Bytes(ptr=None, len=0), None
     buf = (ctypes.c_char * len(data)).from_buffer_copy(data)
@@ -217,7 +219,7 @@ def _free(raw: "_abi.Value") -> None:
     _lib.core().guatiao_value_free(ctypes.byref(raw))
 
 
-def _free_all(values: list) -> None:
+def _free_all(values: "list[_abi.Value]") -> None:
     for raw in values:
         _free(raw)
 
@@ -261,8 +263,8 @@ def _write_node(raw: "_abi.Value", obj: Any, alloc: "_abi.Alloc") -> None:
         check(lib.guatiao_value_string(ctypes.byref(alloc), view, ctypes.byref(raw)))
         return
     if isinstance(obj, (bytes, bytearray)):
-        view, _buf = _make_bytes(bytes(obj))
-        check(lib.guatiao_value_bytes(ctypes.byref(alloc), view, ctypes.byref(raw)))
+        data, _buf = _make_bytes(bytes(obj))
+        check(lib.guatiao_value_bytes(ctypes.byref(alloc), data, ctypes.byref(raw)))
         return
     if isinstance(obj, (list, tuple)):
         check(lib.guatiao_value_list(ctypes.byref(alloc), ctypes.byref(raw)))
@@ -294,13 +296,30 @@ def _write_node(raw: "_abi.Value", obj: Any, alloc: "_abi.Alloc") -> None:
     raise TypeError(f"cannot convert {type(obj)!r} to a guatiao value")
 
 
+class _Owner(Protocol):
+    """What a `Ref` walks from: a root node, and whether and how it may
+    be read and changed. A `Value` is one; so is every view a call or a
+    registry lends."""
+
+    @property
+    def _raw(self) -> "_abi.Value": ...
+
+    def _check_open(self) -> None: ...
+
+    def _check_writable(self) -> None: ...
+
+    def _ensure_alloc(self) -> "_abi.Alloc": ...
+
+    def _clone_alloc(self) -> "_abi.Alloc": ...
+
+
 class Ref:
     """A node inside a `Value`'s tree: the owning `Value` plus a path of
     keys and indices. Every access walks the path again -- nothing here
     caches an address, because a sibling mutation can reallocate the
     array a cached one pointed into."""
 
-    def __init__(self, owner: "Value", path: tuple = ()) -> None:
+    def __init__(self, owner: _Owner, path: "tuple[Any, ...]" = ()) -> None:
         self.owner = owner
         self.path = tuple(path)
 
@@ -317,7 +336,7 @@ class Ref:
             raise LookupError(f"no value at {self.path!r}")
         return node
 
-    def _ptr(self):
+    def _ptr(self) -> Any:
         return ctypes.byref(self._require_node())
 
     def _writable(self) -> None:
@@ -416,14 +435,20 @@ class Map(Ref):
     def __iter__(self) -> Iterator[str]:
         return iter(self.keys())
 
-    def keys(self) -> list:
+    def get(self, key: str, default: Any = None) -> Any:
+        """The plain Python value at `key` (as `to_python()` reads it),
+        or `default` when the map has no such key."""
+        node = _map_find(self._node(), key.encode("utf-8"))
+        return default if node is None else _node_to_python(node, "auto")
+
+    def keys(self) -> "list[str]":
         node = self._require_node()
         if node.tag != _abi.Tag.MAP:
             raise TypeError("value is not a map")
         m = node.payload.map
         return [_string_view(m.ptr[i].key).decode("utf-8") for i in range(m.len)]
 
-    def items(self):
+    def items(self) -> "Iterator[tuple[str, Ref]]":
         for key in self.keys():
             yield key, self[key]
 
@@ -495,14 +520,14 @@ class List(Ref):
         self._writable()
         check(_lib.core().guatiao_list_clear(self._ptr()))
 
-    def _cloned_elements(self) -> list:
+    def _cloned_elements(self) -> "list[_abi.Value]":
         """Clones of every element; none is left allocated when one fails."""
         node = self._require_node()
         if node.tag != _abi.Tag.LIST:
             raise TypeError("value is not a list")
         alloc = self.owner._ensure_alloc()
         lib = _lib.core()
-        out: list = []
+        out: "list[_abi.Value]" = []
         try:
             for i in range(node.payload.list.len):
                 src = node.payload.list.ptr[i]
@@ -518,7 +543,7 @@ class List(Ref):
             raise
         return out
 
-    def _rebuild(self, elements: list) -> None:
+    def _rebuild(self, elements: "list[_abi.Value]") -> None:
         alloc = self.owner._ensure_alloc()
         lib = _lib.core()
         check(lib.guatiao_list_clear(self._ptr()))

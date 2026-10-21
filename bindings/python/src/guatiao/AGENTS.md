@@ -152,69 +152,101 @@ old build is retired, and an `Instance` of the old keeps working; a
 library retired by hand stays out until its stamp changes; refusals are
 part of the answer, never an exception. Nothing refreshes on its own.
 
-`Registry.bind(key, kind)` answers the provider as a `kinds.Remote`
+`Registry.bind(key, kind)` (a kind class or a `kinds.Kind`) answers the provider as a `kinds.Remote`
 calling its table with its own `ctx`; `Instance.bind(kind)` the same for
 an instance. `NotFound` when it serves no table for the kind,
 `kinds.FloorMismatch` when the table is not the one `kind` describes.
 
 ## Kinds: calling a table, serving one
 
-```python
-from guatiao import kinds
-from guatiao.kinds import BOOL, MAP, STR, TEXT, Kind, Method, lent, taken
+A kind is a typed `Protocol` class written from its C header: a method per
+slot, in the header's order, the shapes read from the annotations.
 
-LISTENER = Kind("listener", floor_hash=1867921573, is_object=True,
-                methods=[Method("heard", [STR], required=True)])
-GREETER = Kind("greeter", floor_hash=2695856491, methods=[
-    Method("greet", [STR], MAP, fallible=True, required=True),
-    Method("shout", [STR], TEXT),
-    Method("greet_into", [STR, lent(LISTENER)], fallible=True),
-    Method("check", [lent(MAP)], BOOL, fallible=True),
-])
-greeter = reg.bind("acme_greeter", GREETER)
+```python
+from typing import Protocol
+
+from guatiao import Map
+from guatiao.kinds import I64, KindProtocol, Lent, MapAnswer, Taken, fallible, required
+
+class Listener(KindProtocol, Protocol, kind="listener", floor_hash=1867921573, is_object=True):
+    @required
+    def heard(self, what: str) -> None: ...
+
+class Greeter(KindProtocol, Protocol, kind="greeter", floor_hash=2695856491):
+    @required
+    @fallible
+    def greet(self, name: str) -> MapAnswer: ...
+    def shout(self, name: str) -> str: ...
+    @fallible
+    def greet_into(self, name: str, listener: Lent[Listener]) -> None: ...
+    @fallible
+    def check(self, config: Lent[Map]) -> bool: ...
+
+greeter = reg.bind("acme_greeter", Greeter)    # the class stands for its Kind
 greeter.greet("ana").to_python()     # {"greeting": "hello, ana"}
 greeter.has("shout")                 # whether this table carries the slot
 ```
 
-`Kind(name, struct=None, *, floor_hash, methods, is_object=False)`:
-`methods` in the order the kind's C header lists its slots; `floor_hash`
-the `<table>_FLOOR_HASH` it defines, as written there (never computed
-here). The `ctypes.Structure` is built from the methods (`header`, then
-`destroy` for an object kind, then a slot per method), or given as
-`struct` and checked field by field: a disagreement is `TypeError` here,
-not a crash in a call. A method may not be named `has`, `close`, `kind`,
-`ctx`, `size` or start with `_`; a slot is found by position, so name it
-otherwise.
+`class K(KindProtocol, Protocol, kind="name", floor_hash=N, is_object=False,
+struct=None)`: `floor_hash` is the `<table>_FLOOR_HASH` the header
+defines, as written there (never computed here); `struct` a hand-written
+`ctypes.Structure` to check the methods against field by field. Listing
+`Protocol` makes it a protocol for mypy: a plain object with the methods
+is a `Listener`, and a provider class that inherits `Greeter` is checked
+against its signatures. `kinds.kind_of(K)` (or `K.kind`) is the `Kind`
+built; every API taking a `Kind` takes the class. `@required` marks a slot
+every table fills (the kind's original methods: it sets the smallest
+table accepted); `@fallible` a slot with a `guatiao_provider_error *err`
+last (a Rust method answering `Result`).
 
-`Method(name, args=(), returns=None, *, fallible=False, required=False)`.
-`fallible` adds the `guatiao_provider_error *err` last; `required` marks
-a slot every table fills (the ones the kind was born with), which sets
-the smallest table `bind` accepts.
+**Annotations to shapes**, checked when the class is created (a
+`TypeError` names the method):
 
-| shape | C | caller passes / gets | a Python method receives / returns |
-| --- | --- | --- | --- |
-| `BOOL`, `I8`..`I64`, `U8`..`U64`, `USIZE`, `ISIZE`, `F32`, `F64` | the scalar | `bool`/`int`/`float`, range-checked (`OverflowError`) | the same |
-| `STR` | `guatiao_str` | `str` | `str` (`BadValue` if not UTF-8) |
-| `BYTES` | `guatiao_bytes` | bytes-like | `bytes` |
-| `BYTES_MUT` | `guatiao_bytes_mut` | a writable buffer (`bytearray`) | a `bytearray`, copied back when it returns |
-| `VALUE`, `MAP` (argument) | `const guatiao_value *`, `const guatiao_map *` | a `Value`, `Ref` or plain data (`None` is null for `VALUE`) | a read-only `Ref`/`Map`, valid for the call |
-| `taken(VALUE/MAP/LIST)` | `guatiao_value/map/list *`, handed over | a `Value` (moved: left ABSENT), a `Ref` (cloned) or plain data | a `Value` the method owns |
-| `lent(VALUE/MAP/LIST)` | the same pointer, lent | a `Value` or `Ref`, changed where it stands | a writable `Ref`/`Map`/`List`, valid for the call; what it adds is built in the allocator the tree records |
-| `VALUE`, `MAP`, `LIST` (answer) | `guatiao_value/map/list *out`, a carrier | a `Value` the caller closes | a `Value` (moved), a `Ref` or plain data, built in the allocator the carrier names |
-| `TEXT` (answer) | `guatiao_string *out` | `str` | `str` |
-| `taken(K)` | `guatiao_object`, handed over | a Python object implementing `K`, or a `kinds.Object` | a `kinds.Object` the method owns |
-| `lent(K)` | `const guatiao_object *` | a Python object, or a `kinds.Object` | a `kinds.Remote`, valid for the call |
-| `K` (answer) | `guatiao_object *out` | a `kinds.Object`; `close()` calls `destroy` once | a Python object implementing `K`, or a `kinds.Object` |
+| annotation | as an argument | as an answer |
+| --- | --- | --- |
+| `str` | `guatiao_str` | `guatiao_string *out` (owned text) |
+| `bytes` / `bytearray` | `guatiao_bytes` / `guatiao_bytes_mut` | -- |
+| `bool`, `float` (F64), `kinds.I8`..`I64`, `U8`..`U64`, `USIZE`, `ISIZE`, `F32` | the scalar | the scalar |
+| `int` | refused: say its width | refused |
+| `Map`, `Ref` / `Value` / `Optional[Ref]` | `const guatiao_map *`, `const guatiao_value *` (null for `None`) | -- |
+| `kinds.MapAnswer` (or `Map`), `kinds.ListAnswer` (or `List`), `kinds.ValueAnswer` (or `Value`) | -- | `guatiao_map/list/value *out`, a carrier |
+| `Taken[Map]`, `Taken[List]`, `Taken[Value]` | a tree handed over | -- |
+| `Lent[Map]`, `Lent[List]`, `Lent[Ref]` | a tree lent (`&mut`) | -- |
+| `Taken[K]` / `Lent[K]`, `K` an object kind class | `guatiao_object` / `const guatiao_object *` | -- |
+| `K`, an object kind class | refused bare | `guatiao_object *out` |
+| `None` | -- | no answer |
+
+A kind class's annotations are read in its module: define it at module
+level. A method may not be named `has`, `close`, `kind`, `ctx`, `size` or
+start with `_`; a slot is found by position, so name it otherwise.
+
+What crosses, each way:
+
+| shape | caller passes / gets | a Python method receives / returns |
+| --- | --- | --- |
+| scalars | `bool`/`int`/`float`, range-checked (`OverflowError`) | the same |
+| text in | `str` | `str` (`BadValue` if not UTF-8) |
+| bytes / out-buffer | bytes-like / a writable buffer | `bytes` / a `bytearray`, copied back when it returns |
+| borrowed `Ref`, `Map` | a `Value`, `Ref` or plain data | a read-only `Ref`/`Map`, valid for the call |
+| `Taken[..]` tree | a `Value` (moved: left ABSENT), a `Ref` (cloned) or plain data | a `Map`/`List` over a whole tree it owns, or a `Value` |
+| `Lent[..]` tree | a `Value` or `Ref`, changed where it stands | a writable `Map`/`List`/`Ref`, valid for the call; what it adds is built in the allocator the tree records |
+| tree answer | a `Value` the caller closes | a `Value` or a view of a whole one (moved), another `Ref`, or plain data, built in the allocator the carrier names |
+| text answer | `str` | `str` |
+| `Taken[K]` | a Python object implementing `K`, or a `kinds.Object` | a `kinds.Object` the method owns |
+| `Lent[K]` | a Python object, or a `kinds.Object` | a `kinds.Remote`, valid for the call |
+| `K` answer | a `kinds.Object`; `close()` calls `destroy` once | a Python object implementing `K`, or a `kinds.Object` |
 
 **A view lent for one call** (a borrowed or lent tree, a lent object)
 raises `ValueError` if used after the call returned.
 
 **A Python object as an object of a kind**: any object with a method per
-slot. The table is built once per kind and class and kept for the
-process; a slot for a method the class lacks is null, so a Rust caller
-runs the kind's default; a missing `required` method is `TypeError`.
-Its `ctx` is held until the holder calls `destroy` (handed over) or the
-call returns (lent); `kinds.live_objects()` counts what is held.
+slot, inheriting the kind class or not. The table is built once per kind
+and class and kept for the process; a slot for a method the class does
+not define itself (the kind class's own placeholder does not count) is
+null, so a Rust caller runs the kind's default; a missing `required`
+method is `TypeError`. Its `ctx` is held until the holder calls `destroy`
+(handed over) or the call returns (lent); `kinds.live_objects()` counts
+what is held.
 
 **A refusal**: a Python method raises a `guatiao.GuatiaoError`
 (`BadValue("nobody to greet")` carries `BadValue`'s status), and the
@@ -226,75 +258,107 @@ status crosses alone; a Rust caller panics on it, as its proxy does for
 any provider failing a method that cannot fail.
 
 **A `Remote` calling a table**: each method of the kind is a method of
-the `Remote`. A slot past the table's size or null raises
-`guatiao.Unsupported` (the Rust proxy would run the kind's default body,
-which Python cannot); a refusal raises the status's `GuatiaoError` with
-the provider's words; a slot that cannot fail and fails raises its
-status too. Valid while the library is: until unloaded, or, once
-retired, collected.
+the `Remote` (untyped: `reg.bind` answers a `Remote`). A slot past the
+table's size or null raises `guatiao.Unsupported` (the Rust proxy would
+run the kind's default body, which Python cannot); a refusal raises the
+status's `GuatiaoError` with the provider's words; a slot that cannot
+fail and fails raises its status too. Valid while the library is: until
+unloaded, or, once retired, collected.
 
 **Threads**: a C caller may call a table this binding built from any
 thread; ctypes takes the GIL for the call, so calls into Python are
 serialised by it.
 
+**By hand**: `Kind(name, struct=None, *, floor_hash, methods,
+is_object=False)` with `Method(name, args=(), returns=None, *,
+fallible=False, required=False)` and the shapes of `guatiao.kinds.shapes`
+(`STR`, `MAP`, `taken(MAP)`, `lent(kind)`, ...) is the same description
+without a class; the class builds one.
+
 ## Providers written in Python
 
-```python
-from guatiao import BadValue, provide
+**The module is the library.** Its id is the module's `__name__` (in full:
+`pkg.greeters`), its version `__version__` (required, text), its providers
+the `provide.Provider` subclasses it exports: those in `__all__`, in its
+order (other names are ordinary exports), or without `__all__` those it
+defines itself, in definition order. `__main__` is refused: import it by
+name. Provider ids are `{library id}_{name}`.
 
-class Hello:
-    def greet(self, name):
+```python
+# greeters.py
+from dataclasses import dataclass
+from typing import Dict
+
+from guatiao import BadValue, provide
+from greeter_kind import Counter, Greeter
+
+__version__ = "1.0.0"
+__all__ = ["Hello", "Shouter"]
+
+class Hello(provide.Provider, Greeter, Counter, display_name="Hello, in Python"):
+    def greet(self, name: str) -> Dict[str, str]:
         if not name:
             raise BadValue("nobody to greet")
         return {"greeting": f"hello, {name}"}
+    def count(self) -> int: ...
 
-class Shouter:
-    def __init__(self, config):          # the configuration, as plain data
-        self.prefix = config["prefix"]
-    def greet(self, name):
+@dataclass(frozen=True)
+class ShouterConfig:
+    prefix: str
+
+class Shouter(provide.Provider, Greeter):
+    def __init__(self, config: ShouterConfig) -> None:
+        self.prefix = config.prefix
+    def greet(self, name: str) -> Dict[str, str]:
         return {"greeting": f"{self.prefix} {name.upper()}"}
 
-library = provide.library("py_greeter", "1.0.0", providers=[
-    provide.Provider("hello", Hello, kinds=[GREETER, COUNTER]),
-    provide.Provider("shouter", Shouter, kinds=[GREETER],
-                     config={"type": "object", "properties": {"prefix": {"type": "string"}},
-                             "required": ["prefix"]}),
-])
-reg.register_library(library)            # files py_greeter_hello, py_greeter_shouter
+reg.register_library(greeters)    # files greeters_hello, greeters_shouter
 ```
 
-`provide.library(id, version, *, providers, meta=None) -> Library` builds
-the descriptor any library answers (`guatiao_library_info`, a
-`guatiao_provider_info` per provider, a table per kind built over the
-provider's class) in memory the `Library` keeps alive, so a host in any
-language calls it.
+**`class P(provide.Provider, K1, K2, ...)`** serves every kind class it
+inherits (provider kinds, not object kinds), through the methods it
+defines; a method a kind requires and the class lacks is a `TypeError`
+when the class is created, naming both. Class keywords: `named` (default
+the class name in snake_case), `id`, `display_name`, `version` (empty:
+the library's), `meta`, `default`, `config_schema`.
 
-`provide.Provider(name, cls, *, kinds, config=None, default=None, id=None,
-display_name="", version="", available=None, meta=None)`:
+**Configuration**: an `__init__` taking nothing makes the provider its
+one instance, built with the library. An `__init__` taking one `config`
+builds an instance per configuration the host checked first; its schema
+is read from the annotation, a dataclass or a `TypedDict` whose fields are
+`str`, `int`, `float`, `bool`, `Literal[...]`, `Optional[T]`, `list[T]`,
+`dict[str, T]`, nested dataclasses, with defaults (not required),
+`NotRequired` and `Annotated[T, {"minimum": 0}]` keywords. The instance
+receives the dataclass (or the dict, for a `TypedDict`). `config_schema=`
+says a schema the types cannot, and the instance then receives plain
+data. `default=True` also offers `cls()` when the configuration is
+optional.
 
-- `id` is `{library id}_{name}` unless given; `version` empty inherits
-  the library's.
-- `kinds`: provider kinds (`kinds.Kind`, not object kinds). `cls` must
-  be a class; its methods serve every kind.
-- Without `config`, the provider is its one instance, `cls()`, built
-  with the library. With `config` (a JSON Schema, a mapping or `Value`),
-  `cls(config)` builds an instance per configuration, given as plain
-  data after the host checked it against the schema; `default=True`
-  also offers `cls()` as its one instance.
-- `available`: `() -> None | str`, asked every time a host asks; a
-  string is the reason, kept for the process.
+**`available()`**, a classmethod to override: `None` when the provider
+can run here, else why not; asked every time a host asks, the reason
+kept for the process.
 
-`Library`: `.entry` (a `guatiao_library_entry`; `register_entry(id,
-library.entry)` is what `register_library` does), `.info_address`, `.id`,
-`.version`, `.kinds` (every kind its providers serve), `.live_instances()`
-(built by `create` and not destroyed), `.close()` (lets go of the
-providers' one instances; the entry answers null from then on). Its
-`unload` slot answers `GUATIAO_ERR_BUSY` while an instance is alive;
-objects its methods hand out are not counted.
+**Meta**: the library's `meta` map merges, later winning, the installed
+distribution's metadata (`summary`, `license`, `authors`, `urls`, and each
+licence file as a `notices` entry, the convention every host shows), the
+module's `__doc__` first paragraph (`description`), `__author__`,
+`__license__` and `__copyright__`, and a module-level `_meta_` mapping of
+plain data (anything else is a `TypeError`). A module not installed
+contributes only the last two.
 
-`Registry.register_library(library)` files it under `<id>`, keeps it
-alive with the registry, and is linked, not mapped: `unload` answers
-`WrongKind`, `retire` takes it out.
+`provide.library_of(module) -> Library` builds a module's library, once
+per module object. `provide.library(id, version, *, providers,
+meta=None)` is the same without a module: for a test, a library made at
+run time, or meta of its own. `Library`: `.entry` (a
+`guatiao_library_entry`), `.info_address`, `.id`, `.version`, `.kinds`,
+`.providers`, `.live_instances()` (built by `create` and not destroyed),
+`.close()` (lets go of the providers' one instances; the entry answers
+null from then on). Its `unload` slot answers `GUATIAO_ERR_BUSY` while an
+instance is alive; objects its methods hand out are not counted.
+
+`Registry.register_library(module_or_library)` files it under `<id>`,
+keeps it alive with the registry, and is linked, not mapped: `unload`
+answers `WrongKind`, `retire` takes it out.
 
 `guatiao.kinds.table(table_ptr, size, struct_type, floor_hash=...)`
 casts a `provider_table()` answer to a hand-written struct after
