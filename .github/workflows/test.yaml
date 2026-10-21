@@ -459,6 +459,103 @@ jobs:
           assert not any(".local." in f for f in files), "a .local file ships"
           EOF
 
+  go:
+    name: Go bindings (go${{ matrix.go }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # Go's two newest releases on the three platforms: the library's
+    # filename, how it is found, and the C compiler cgo drives are each per
+    # platform. The examples' greeters are written in Rust, C, Python
+    # (through the guatiao-py bridge) and Go, both ways, and the Go library
+    # built as a file is scanned and called by the Rust example host. A
+    # stated skip fails the job.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        go: ["1.26", "1.27"]
+    defaults:
+      run:
+        shell: bash
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/guatiao-py
+      - name: Build native libraries
+        # The libraries, the Rust greeters, the Rust caller of any greeter
+        # and the Rust example host.
+        run: cargo build --workspace --all-features
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: "3.14"
+      - name: Where a host that is not Python finds libpython
+        if: runner.os != 'Windows'
+        run: |
+          echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+      - name: Build the guatiao-py bridge, for the Python greeters
+        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+        env:
+          PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false
+      - name: The C compiler cgo uses
+        run: go env CC && "$(go env CC)" --version
+      - name: Vet and format
+        working-directory: bindings/go
+        run: |
+          go vet ./...
+          (cd ../../examples && go vet ./...)
+          unformatted=$(gofmt -l . ../../examples/greeter_kind/go ../../examples/go_host ../../examples/go_provider ../../examples/internal)
+          test -z "$unformatted" || { echo "not gofmt'd: $unformatted"; exit 1; }
+      - name: Test the binding and the examples
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   bridge=libguatiao_py.so ;;
+            macOS)   bridge=libguatiao_py.dylib ;;
+            Windows) bridge=guatiao_py.dll ;;
+          esac
+          export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge"
+          (cd bindings/go && go test -count=1 -v ./...) 2>&1 | tee go-test.log
+          test "${PIPESTATUS[0]}" -eq 0
+          (cd examples && go test -count=1 -v ./...) 2>&1 | tee -a go-test.log
+          test "${PIPESTATUS[0]}" -eq 0
+          ! grep -n -- "--- SKIP" go-test.log
+        env:
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+      - name: Under the race detector and the strict pointer checks
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.27'
+        run: |
+          (cd bindings/go && go test -count=1 -race ./... && GOEXPERIMENT=cgocheck2 go test -count=1 ./...)
+          (cd examples && go test -count=1 -race ./... && GOEXPERIMENT=cgocheck2 go test -count=1 ./...)
+        env:
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+      - name: A Rust host loads the Go library as a file
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   name=libgo_greeter.so ;;
+            macOS)   name=libgo_greeter.dylib ;;
+            Windows) name=go_greeter.dll ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/go-library"
+          (cd examples && go build -buildmode=c-shared -o "$RUNNER_TEMP/go-library/$name" ./go_provider/cshared)
+          GUATIAO_GO_LIBRARY="$RUNNER_TEMP/go-library" \
+            cargo test -p greeter_host --all-features --test go_library -- --nocapture 2>&1 | tee go-library.log
+          test "${PIPESTATUS[0]}" -eq 0
+          ! grep -n "skipped:" go-library.log
+        env:
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+
   dart:
     name: Dart bindings (${{ matrix.os }}, ${{ matrix.sdk }})
     runs-on: ${{ matrix.os }}

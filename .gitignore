@@ -45,6 +45,7 @@ node_modules/
 /examples/go_provider/cshared/cshared.h
 /examples/go-greeter/
 /examples/c-greeter/
+/go-library/
 
 # Python, wherever an example or a crate carries some
 __pycache__/
