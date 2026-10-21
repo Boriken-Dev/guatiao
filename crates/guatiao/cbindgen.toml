@@ -35,6 +35,10 @@ header = """
  * the middle of this file and are exported by any shared library built
  * from the guatiao crate.
  *
+ * How a duration, a timestamp, an address, a set or a tuple is written
+ * as these kinds, and what a reader accepts, is fixed for every language
+ * at https://boriken-dev.github.io/guatiao/encodings/
+ *
  * Strings and slices cross as pointer + length, never NUL-terminated, so
  * a key or a value may contain a NUL. Compare keys with
  * guatiao_str_eq(), never strcmp().
