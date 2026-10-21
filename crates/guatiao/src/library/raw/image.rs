@@ -770,6 +770,8 @@ pub(crate) enum Origin {
     /// Code in the host's own binary: `register_local`, `register_entry`,
     /// and the descriptor's parts when the registry owns them.
     Linked(Option<Box<crate::library::kind::LibraryParts>>),
+    /// A library a source opened: closing it tells the source.
+    Served(super::source::Served),
 }
 
 #[cfg(feature = "load")]
@@ -788,10 +790,22 @@ impl Origin {
         matches!(self, Origin::Mapped { .. })
     }
 
+    /// Whether a source served it, and is told when it closes.
+    pub(crate) fn is_served(&self) -> bool {
+        matches!(self, Origin::Served(_))
+    }
+
+    /// Whether the registry closes it once nothing uses it: a mapping, or
+    /// a library a source served. A linked library is let go at its retire.
+    pub(crate) fn closes(&self) -> bool {
+        self.is_mapped() || self.is_served()
+    }
+
     /// The parts of a library the host built, for its lease to own.
     pub(crate) fn take_parts(&mut self) -> Option<Box<crate::library::kind::LibraryParts>> {
         match self {
             Origin::Linked(parts) => parts.take(),
+            Origin::Served(served) => served.parts.take(),
             Origin::Mapped { .. } => None,
         }
     }
@@ -811,12 +825,16 @@ impl Origin {
     /// dropping it does too; spelled out where that is the point.
     pub(crate) fn keep(self) {}
 
-    /// Closes the mapping. A close error leaves the handle given up, as
-    /// `libloading` does.
+    /// Closes the mapping, or tells the source its library is closed. A
+    /// close error leaves the handle given up, as `libloading` does.
     pub(crate) fn close(self) -> Result<(), libloading::Error> {
         match self {
             Origin::Mapped { library, .. } => core::mem::ManuallyDrop::into_inner(library).close(),
             Origin::Linked(_) => Ok(()),
+            Origin::Served(served) => {
+                served.close();
+                Ok(())
+            }
         }
     }
 }
@@ -1029,7 +1047,7 @@ impl crate::library::registry::Registry {
         let one = self.library(key).ok_or_else(|| UnloadError::NotFound {
             key: key.to_string(),
         })?;
-        if !one.is_mapped() {
+        if !one.closes() {
             return Err(UnloadError::Linked {
                 key: key.to_string(),
             });
@@ -1054,7 +1072,8 @@ impl crate::library::registry::Registry {
                             status,
                         })
                     }
-                    None if insist => None,
+                    // A served library's promise is its source's `close`.
+                    None if insist || one.is_served() => None,
                     None => Some(UnloadError::NotSupported {
                         key: key.to_string(),
                     }),

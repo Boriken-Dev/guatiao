@@ -104,6 +104,20 @@ const fn put(out: &mut [u8], at: usize, bytes: &[u8]) -> usize {
 /// by another says so this way, and the loader reports it as skipped.
 pub type EntryFn = unsafe extern "C" fn(*const HostInfo<'static>) -> *const LibraryInfo<'static>;
 
+/// The symbol a source file exports, NUL-terminated for the loader.
+pub const SOURCE_SYMBOL: &[u8] = b"guatiao_source\0";
+
+/// A source file's entry point: answers its table through `out` for the
+/// configuration `config` (a map), or refuses with a status and the
+/// source's words in `err`. Called once per `add_source_file`; the table it
+/// answers, its slots and its `ctx` stay valid for the life of the process.
+pub type SourceFn = unsafe extern "C" fn(
+    host: *const HostInfo<'static>,
+    config: *const Value,
+    out: *mut *const crate::library::desc::SourceInfo,
+    err: *mut crate::library::kind::ProviderError,
+) -> Status;
+
 /// A library descriptor a host links rather than loads: what a describe
 /// function hands
 /// [`Registry::register_local`](crate::library::Registry::register_local).

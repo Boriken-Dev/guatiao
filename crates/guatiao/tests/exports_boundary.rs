@@ -963,7 +963,50 @@ fn registry_cases() -> Vec<(&'static str, fn())> {
                 guatiao_registry_collect(reg(), a(), out)
             });
         }),
+        ("guatiao_registry_refresh", || {
+            // SAFETY: as above.
+            leaves_absent("refresh", NULL, |out| unsafe {
+                guatiao_registry_refresh(reg(), a(), out)
+            });
+        }),
     ]
+}
+
+/// The source exports write their error empty first, so a caller that
+/// frees its message after any failure frees nothing it must not.
+#[cfg(feature = "load")]
+#[test]
+fn the_source_exports_write_their_error_before_failing() {
+    use guatiao::exports::library::*;
+    let stale = || guatiao::library::ProviderError::new(Status::GUATIAO_ERR_BUSY, "");
+    let mut err = stale();
+    // SAFETY: a null handle and a null table are the failures under test.
+    let status = unsafe {
+        guatiao_registry_add_source(
+            core::ptr::null_mut(),
+            Str::new("s"),
+            core::ptr::null(),
+            &mut err,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_NULL);
+    assert_eq!(err.status, Status::GUATIAO_OK);
+    let mut err = stale();
+    // SAFETY: as above.
+    let status = unsafe {
+        guatiao_registry_add_source_file(
+            core::ptr::null_mut(),
+            Str::new("s"),
+            core::ptr::null(),
+            &mut err,
+        )
+    };
+    assert_eq!(status, Status::GUATIAO_ERR_NULL);
+    assert_eq!(err.status, Status::GUATIAO_OK);
+    // SAFETY: as above.
+    let status =
+        unsafe { guatiao_registry_watch_dir(core::ptr::null_mut(), Str::new("d"), Str::new("")) };
+    assert_eq!(status, Status::GUATIAO_ERR_NULL);
 }
 
 #[test]

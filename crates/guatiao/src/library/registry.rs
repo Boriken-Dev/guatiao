@@ -172,6 +172,15 @@ pub enum Skipped {
         /// The rule, as written.
         by: String,
     },
+    /// It declares itself a **source** of libraries (`source=<what it
+    /// serves>`), which is not a library and is never loaded by a scan:
+    /// a host adds one with
+    /// [`add_source_file`](Registry::add_source_file). Read before
+    /// mapping it.
+    Source {
+        /// What it says it serves.
+        serves: String,
+    },
 }
 
 /// One clause, to follow the file's name: `{path}: {skipped}`.
@@ -193,6 +202,12 @@ impl core::fmt::Display for Skipped {
                 super::desc::ABI_VERSION
             ),
             Skipped::Filtered { by } => write!(f, "kept out by `{by}`"),
+            Skipped::Source { serves } => {
+                write!(
+                    f,
+                    "a source of {serves} libraries, which a host adds rather than loads"
+                )
+            }
         }
     }
 }
@@ -478,10 +493,15 @@ pub struct Loaded {
 }
 
 impl Loaded {
-    /// Whether there is a mapping to close at all, or this is code the
-    /// host links.
-    pub(crate) fn is_mapped(&self) -> bool {
-        self.origin.is_mapped()
+    /// Whether the registry closes it once nothing uses it: a mapping, or
+    /// a library a source served.
+    pub(crate) fn closes(&self) -> bool {
+        self.origin.closes()
+    }
+
+    /// Whether a source served it.
+    pub(crate) fn is_served(&self) -> bool {
+        self.origin.is_served()
     }
 
     /// Its say in being unmapped, for `unload` to ask.
@@ -669,6 +689,10 @@ pub struct Registry {
     block: Option<&'static HostBlock>,
     /// Libraries retired and not yet closed, oldest first.
     leaving: Vec<Leaving>,
+    /// The sources the host added, each with what it opened.
+    pub(crate) sources: Vec<super::source::SourceState>,
+    /// The directories the host watches, each with what it saw.
+    pub(crate) watched: Vec<super::source::WatchState>,
 }
 
 // `Send` and `Sync` for this type are declared in `raw/host.rs`, where
@@ -697,6 +721,8 @@ impl Registry {
             shared: Arc::new(Shared::default()),
             block: None,
             leaving: Vec::new(),
+            sources: Vec::new(),
+            watched: Vec::new(),
         }
     }
 
@@ -1159,6 +1185,11 @@ impl Registry {
     /// unable to unmap. Any other image keeps its mapping, since whatever
     /// its entry point started may still address it.
     fn pass_over(&self, origin: Origin) {
+        // Opened and not kept: the source hears of it at once.
+        if origin.is_served() {
+            let _ = origin.close();
+            return;
+        }
         if self.loaded.iter().any(|l| l.origin.same_image(&origin)) {
             // A failed close leaves the handle given up, which is `keep`.
             let _ = origin.close();
@@ -1184,15 +1215,16 @@ impl Registry {
     /// handle holds its lease and, for one mapped from a file, its
     /// `unload` slot agrees, [`collect`](Registry::collect) closes it, as
     /// does this registry's next `load_file`, `register_local`,
-    /// `register_entry`, `retire` or `unload`. A library with no slot
-    /// stays mapped. A library the host links has nothing to close, and is
-    /// let go here. The lease, with its copies of the library's tables
+    /// `register_entry`, `retire`, `unload` or `refresh`. A mapped library
+    /// with no slot stays mapped. A library a source served is closed the
+    /// same way, its own slot asked when it has one, and its source told.
+    /// A library the host links has nothing to close, and is let go here. The lease, with its copies of the library's tables
     /// and the parts of one the host built, is freed when the last handle
     /// is dropped and the registry has let it go.
     pub fn retire(&mut self, key: &str) -> Result<Retired, UnloadError> {
         self.collect();
         let taken = self.take_library(key)?;
-        if taken.origin.is_mapped() {
+        if taken.origin.closes() {
             self.leaving.push(Leaving {
                 key: taken.retired.key.clone(),
                 lease: taken.lease,
@@ -1223,9 +1255,12 @@ impl Registry {
                 kept.push(leaving);
                 continue;
             }
-            let agrees = leaving
-                .unload
-                .is_some_and(|ask| super::raw::ask_unload(ask) == Status::GUATIAO_OK);
+            // A served library with no slot of its own has its source's
+            // `close` as its promise; a mapped one with none promises nothing.
+            let agrees = match leaving.unload {
+                Some(ask) => super::raw::ask_unload(ask) == Status::GUATIAO_OK,
+                None => leaving.origin.is_served(),
+            };
             if !agrees {
                 kept.push(leaving);
                 continue;

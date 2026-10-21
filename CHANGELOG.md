@@ -190,6 +190,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   in place (`&mut Map`) and building what goes into it with its own
   allocator, moving rather than copying, every way to a tree you own and
   when it copies, and the C conventions.
+- **Sources: libraries that come and go while the host runs.** A
+  source is kept for the registry's life and serves ordinary libraries
+  it lists as data, opens and is told it may close: a Rust `Source`
+  trait (`Registry::add_source`), the C table `guatiao_source_info`
+  (`add_source_table`, `guatiao_registry_add_source`), and a file
+  exporting `guatiao_source` (`add_source_file`,
+  `guatiao_registry_add_source_file`), which is never unmapped.
+  `watch_dir` keeps a directory in step with disk. `refresh()` (C
+  `guatiao_registry_refresh`) re-lists every source and diffs by source,
+  id and stamp: new candidates load, a changed one loads before its old
+  build is retired, a vanished one is retired, a library the host
+  retired stays out until it changes, and every refusal is reported in
+  `Refreshed` rather than failing the call. A served library closes
+  through `collect`/`unload` once nothing holds it, and its source is
+  told once. Nothing runs on its own: no thread, no watcher. A source
+  file declares `source=<what it serves>`, and a scan reports it as
+  `Skipped::Source` without loading it.
 - **Python: a kind described once, called and served from Python.**
   `guatiao.kinds.Kind` takes a kind's methods in table order, what each
   takes and answers (`STR`, `BYTES`, `MAP`, `VALUE`, `TEXT`, the

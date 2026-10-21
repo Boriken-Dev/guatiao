@@ -1073,6 +1073,82 @@ typedef struct guatiao_library_info {
 } guatiao_library_info;
 
 /*
+ What a **source** answers: a table a registry keeps for its life, through
+ which it learns which libraries the source can serve now and opens and
+ closes them.
+
+ A source is what serves libraries that are not files a scan can probe:
+ the modules of an interpreter, the entries of a manifest, whatever a
+ bridge to another language holds. The source is added once
+ (`guatiao_registry_add_source`, or a file exporting `guatiao_source`
+ through `guatiao_registry_add_source_file`) and never let go; the
+ libraries it opens are ordinary libraries, retired and closed like any
+ other. A registry calls these slots one at a time per source, from
+ whichever thread calls the registry.
+
+ Its fields are its producer's contract, checked where the table enters
+ as a library descriptor's are.
+
+ A source FILE exports
+ `guatiao_status guatiao_source(const guatiao_host_info *host, const
+ guatiao_value *config, const guatiao_source_info **out,
+ guatiao_provider_error *err)`, which answers a table configured by
+ `config` (the map the host passed, never null) or refuses with a status
+ and words in `err`; the table, its slots and its `ctx` stay valid for
+ the life of the process. It declares `source=<what it serves>` in its
+ `guatiao_declares`, so a scan reports it and never loads it.
+ */
+typedef struct guatiao_source_info {
+  /*
+   `sizeof(guatiao_source_info)` as the source compiled it. Always
+   first.
+   */
+  uint32_t struct_size;
+  /*
+   The envelope version the source speaks. See [`ABI_VERSION`].
+   */
+  uint32_t abi_version;
+  /*
+   Passed back to every slot below. Opaque to the registry.
+   */
+  void *ctx;
+  /*
+   What the source can open now, **without running any provider code**:
+   writes a list into `out`, one map per candidate,
+   `{"id": text, "version": text, "kinds": [text], "stamp": text}`.
+   `stamp` is text the source changes whenever the candidate does (a
+   modification time, a hash); the registry compares it and never
+   reads it.
+
+   `out` arrives holding a carrier, an empty list whose `alloc` names
+   the allocator to build in, as a kind slot's out slot does; write the
+   list over it without freeing it. A non-OK status is the source
+   failing to list at all, reported by the refresh that asked.
+   */
+  guatiao_status (*list)(void *ctx, const struct guatiao_host_info *host, struct guatiao_list *out);
+  /*
+   Opens the candidate listed as `id`: writes its library descriptor
+   through `out`, which stays valid until `close` is called for it.
+   The descriptor's `id` must be `id`. A non-OK status refuses, with
+   the source's words in `err`; the refresh reports it and nothing is
+   loaded.
+   */
+  guatiao_status (*open)(void *ctx,
+                         const struct guatiao_host_info *host,
+                         struct guatiao_str id,
+                         const struct guatiao_library_info **out,
+                         struct guatiao_provider_error *err);
+  /*
+   Called once for every descriptor `open` answered, after the
+   registry closed that library: nothing it offered is held any more
+   and its own `unload` slot, if it has one, agreed. `info` is the
+   descriptor `open` answered, which names this open when two builds of
+   one `id` are open at once. Null for a source with nothing to let go.
+   */
+  void (*close)(void *ctx, struct guatiao_str id, const struct guatiao_library_info *info);
+} guatiao_source_info;
+
+/*
  One per-path mode override: what the *declarer* of an option knows
  that whoever merges two maps does not.
  */
@@ -1651,6 +1727,95 @@ guatiao_status guatiao_registry_register_entry(struct guatiao_registry *reg,
                                                const struct guatiao_library_info *(*entry)(const struct guatiao_host_info*),
                                                const struct guatiao_alloc *alloc,
                                                struct guatiao_value *out);
+
+/*
+ Adds a source the host LINKS, under `name`: a table that speaks
+ `guatiao_source_info`, read and checked now. Its slots and `ctx` must
+ stay valid for the registry's life; the struct itself is copied and
+ need not. Nothing is opened until [`guatiao_registry_refresh`].
+
+ `err` is written empty first and, on a refusal, carries words to free
+ like any text: `GUATIAO_ERR_BAD_VALUE` for a table the checks refuse or
+ a name already added, `GUATIAO_ERR_NULL` for a null table.
+
+ # Safety
+
+ `reg` is a live handle, `name` is readable for this call, `source` is
+ null or a well-formed table, `err` is null or writable.
+ */
+guatiao_status guatiao_registry_add_source(struct guatiao_registry *reg,
+                                           struct guatiao_str name,
+                                           const struct guatiao_source_info *source,
+                                           struct guatiao_provider_error *err);
+
+/*
+ Maps a source file and adds the source its `guatiao_source` answers
+ for `config`, under the file's path. The file is never unmapped, and
+ it is not a library: no key retires it. Nothing is opened until
+ [`guatiao_registry_refresh`].
+
+ `config` is a map the source reads (null is an empty one). `err` is
+ written empty first and, on a refusal, carries words to free like any
+ text: `GUATIAO_ERR_NOT_FOUND` when the file cannot be mapped,
+ `GUATIAO_ERR_WRONG_KIND` when it exports no `guatiao_source` or
+ `config` is not a map, `GUATIAO_ERR_BAD_VALUE` for a table the checks
+ refuse or a source already added, and the source's own status when it
+ refuses the configuration.
+
+ **Mapping a file runs its static initialisers**, which may do
+ anything. Name files you are willing to run.
+
+ # Safety
+
+ `reg` is a live handle, `path` is readable for this call, `config` is
+ null or a well-formed value, `err` is null or writable.
+ */
+guatiao_status guatiao_registry_add_source_file(struct guatiao_registry *reg,
+                                                struct guatiao_str path,
+                                                const struct guatiao_value *config,
+                                                struct guatiao_provider_error *err);
+
+/*
+ Watches a directory: each [`guatiao_registry_refresh`] loads a library
+ file that appeared there (by `rules`, as
+ [`guatiao_registry_scan_dir_rules`] takes them: one `[!]KEY=VALUE` per
+ line), retires one that vanished, and retires and loads again one whose
+ length or modification time changed. Nothing is read until then.
+
+ `GUATIAO_ERR_BAD_VALUE` for text that is not UTF-8, a rule that is not
+ one, or a directory already watched.
+
+ # Safety
+
+ `reg` is a live handle; `dir` and `rules` are readable for this call.
+ */
+guatiao_status guatiao_registry_watch_dir(struct guatiao_registry *reg,
+                                          struct guatiao_str dir,
+                                          struct guatiao_str rules);
+
+/*
+ Asks every source and watched directory what it serves now, makes the
+ registry agree, and writes what changed to `out` as a map:
+
+ `{"loaded": [{"source", "id", "stamp", "key"}…], "retired": [the
+ same…], "skipped": [{"source", "id", "skipped", …}…], "refused":
+ [{"source", "id"?, "why"}…]}`.
+
+ A new candidate loads; a changed one loads and, once it has, its old
+ build is retired; a vanished one is retired; a library the host retired
+ stays out until its stamp changes. A retired library closes once
+ nothing holds it, and its source is then told. **Refusals are part of
+ the answer, never a failed call.** `GUATIAO_ERR_ALLOC` for a null or
+ incomplete `alloc`.
+
+ # Safety
+
+ As [`guatiao_registry_collect`]: no table or `ctx` taken from a library
+ this retires is used once it is closed.
+ */
+guatiao_status guatiao_registry_refresh(struct guatiao_registry *reg,
+                                        const struct guatiao_alloc *alloc,
+                                        struct guatiao_value *out);
 
 /*
  Scans a directory, writing a report to `out` as a map.

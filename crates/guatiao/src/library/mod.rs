@@ -95,10 +95,15 @@ pub mod registry;
 // it feeds. A `//` comment, never a `///`.
 #[cfg(feature = "load")]
 pub mod scan;
+// Libraries that come and go while the host runs: a source the registry
+// keeps, and `refresh`. Behind `load` with the registry. A `//` comment,
+// never a `///`.
+#[cfg(feature = "load")]
+pub mod source;
 
 pub use desc::{
     ABI_VERSION, HostInfo, HostServices, KindTable, KindTables, Kinds, LibraryInfo, ProviderInfo,
-    Providers,
+    Providers, SourceInfo,
 };
 pub use key::{KeyError, KeyFields, KeyTemplate, Subject};
 pub use kind::{
@@ -107,8 +112,8 @@ pub use kind::{
 };
 pub use notices::{Notice, declare_notice, notices};
 pub use raw::{
-    DECLARES_SYMBOL, ENTRY_SYMBOL, EntryFn, Host, LibraryView, LocalLibrary, ProviderView, answer,
-    read_host,
+    DECLARES_SYMBOL, ENTRY_SYMBOL, EntryFn, Host, LibraryView, LocalLibrary, ProviderView,
+    SOURCE_SYMBOL, SourceFn, answer, read_host,
 };
 #[doc(hidden)]
 pub use raw::{declaration, declaration_len};
@@ -122,3 +127,5 @@ pub use scan::{
     declares_entry_symbol, probe, scan_dir, scan_dir_ordered, scan_dir_rules, scan_dir_with,
     scan_path, scan_path_with,
 };
+#[cfg(feature = "load")]
+pub use source::{Candidate, Refreshed, Refused, Served, Source, SourceError};

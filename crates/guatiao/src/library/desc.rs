@@ -69,7 +69,7 @@ use core::mem::{offset_of, size_of};
 use super::kind::ProviderError;
 use crate::value::alloc::Allocator;
 use crate::value::status::Status;
-use crate::value::types::{Map, MaybeNull, Str, Value};
+use crate::value::types::{List, Map, MaybeNull, Str, Value};
 
 /// The envelope's own version, for a library that wants to refuse a host
 /// it does not understand.
@@ -714,6 +714,98 @@ impl ProviderInfo<'_> {
     }
 }
 
+/// What a **source** answers: a table a registry keeps for its life, through
+/// which it learns which libraries the source can serve now and opens and
+/// closes them.
+///
+/// A source is what serves libraries that are not files a scan can probe:
+/// the modules of an interpreter, the entries of a manifest, whatever a
+/// bridge to another language holds. The source is added once
+/// (`guatiao_registry_add_source`, or a file exporting `guatiao_source`
+/// through `guatiao_registry_add_source_file`) and never let go; the
+/// libraries it opens are ordinary libraries, retired and closed like any
+/// other. A registry calls these slots one at a time per source, from
+/// whichever thread calls the registry.
+///
+/// Its fields are its producer's contract, checked where the table enters
+/// as a library descriptor's are.
+///
+/// A source FILE exports
+/// `guatiao_status guatiao_source(const guatiao_host_info *host, const
+/// guatiao_value *config, const guatiao_source_info **out,
+/// guatiao_provider_error *err)`, which answers a table configured by
+/// `config` (the map the host passed, never null) or refuses with a status
+/// and words in `err`; the table, its slots and its `ctx` stay valid for
+/// the life of the process. It declares `source=<what it serves>` in its
+/// `guatiao_declares`, so a scan reports it and never loads it.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct SourceInfo {
+    /// `sizeof(guatiao_source_info)` as the source compiled it. Always
+    /// first.
+    pub struct_size: u32,
+    /// The envelope version the source speaks. See [`ABI_VERSION`].
+    pub abi_version: u32,
+    /// Passed back to every slot below. Opaque to the registry.
+    pub ctx: *mut c_void,
+    /// What the source can open now, **without running any provider code**:
+    /// writes a list into `out`, one map per candidate,
+    /// `{"id": text, "version": text, "kinds": [text], "stamp": text}`.
+    /// `stamp` is text the source changes whenever the candidate does (a
+    /// modification time, a hash); the registry compares it and never
+    /// reads it.
+    ///
+    /// `out` arrives holding a carrier, an empty list whose `alloc` names
+    /// the allocator to build in, as a kind slot's out slot does; write the
+    /// list over it without freeing it. A non-OK status is the source
+    /// failing to list at all, reported by the refresh that asked.
+    pub list: Option<
+        unsafe extern "C" fn(
+            ctx: *mut c_void,
+            host: *const HostInfo<'static>,
+            out: *mut List,
+        ) -> Status,
+    >,
+    /// Opens the candidate listed as `id`: writes its library descriptor
+    /// through `out`, which stays valid until `close` is called for it.
+    /// The descriptor's `id` must be `id`. A non-OK status refuses, with
+    /// the source's words in `err`; the refresh reports it and nothing is
+    /// loaded.
+    pub open: Option<
+        unsafe extern "C" fn(
+            ctx: *mut c_void,
+            host: *const HostInfo<'static>,
+            id: Str,
+            out: *mut *const LibraryInfo<'static>,
+            err: *mut ProviderError,
+        ) -> Status,
+    >,
+    /// Called once for every descriptor `open` answered, after the
+    /// registry closed that library: nothing it offered is held any more
+    /// and its own `unload` slot, if it has one, agreed. `info` is the
+    /// descriptor `open` answered, which names this open when two builds of
+    /// one `id` are open at once. Null for a source with nothing to let go.
+    pub close:
+        Option<unsafe extern "C" fn(ctx: *mut c_void, id: Str, info: *const LibraryInfo<'static>)>,
+}
+
+impl SourceInfo {
+    /// The smallest usable `struct_size`: every field the table was born
+    /// with. **Frozen.**
+    pub const fn floor() -> usize {
+        offset_of!(SourceInfo, close)
+            + size_of::<
+                Option<
+                    unsafe extern "C" fn(
+                        ctx: *mut c_void,
+                        id: Str,
+                        info: *const LibraryInfo<'static>,
+                    ),
+                >,
+            >()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -740,6 +832,7 @@ mod tests {
         assert!(HostServices::floor() < HostServices::pinned_end());
         assert_eq!(HostServices::pinned_end(), size_of::<HostServices>());
         assert_eq!(KindTable::floor(), size_of::<KindTable>());
+        assert_eq!(SourceInfo::floor(), size_of::<SourceInfo>());
     }
 
     /// The leading field is at offset zero in every one of them, because
@@ -751,5 +844,6 @@ mod tests {
         assert_eq!(offset_of!(ProviderInfo, struct_size), 0);
         assert_eq!(offset_of!(HostServices, struct_size), 0);
         assert_eq!(offset_of!(KindTable, struct_size), 0);
+        assert_eq!(offset_of!(SourceInfo, struct_size), 0);
     }
 }
