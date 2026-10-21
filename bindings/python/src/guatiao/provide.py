@@ -365,8 +365,11 @@ class Library:
 
         def create(ctx: Any, config: Any, out: Any, err: Any) -> int:
             try:
-                if out:
-                    out[0] = None
+                # Refused before anything is built: an instance with no
+                # slot to land in would be held for the process.
+                if not out:
+                    raise NullArgument("no slot for the instance")
+                out[0] = None
                 if not config:
                     raise NullArgument("no configuration")
                 scope = Scope()
