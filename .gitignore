@@ -22,6 +22,8 @@ CLAUDE*
 
 # Rust
 /target/
+# The Python bridge is a workspace of its own, with its own build output.
+/crates/guatiao-py/target/
 **/*.rs.bk
 # A library workspace: consumers resolve their own lockfile. The browser
 # example is a program, and its README pins a tool to the version this

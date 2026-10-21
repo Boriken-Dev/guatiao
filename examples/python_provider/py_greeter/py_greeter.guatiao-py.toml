@@ -1,0 +1,10 @@
+# What guatiao-py reads before importing anything: the library's id, its
+# version, the kinds its providers serve, where it is, and the module
+# attribute to import. `paths` are relative to this file and go on
+# sys.path while the library is open; editing a `.py` file under them is
+# what a refresh notices.
+id = "py_greeter"
+version = "1.0.0"
+kinds = ["greeter", "counter"]
+entry = "py_greeter:library"
+paths = ["."]

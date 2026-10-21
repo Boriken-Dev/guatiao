@@ -29,11 +29,18 @@
 //!    object kind) and hands one in; the provider hands a `Conversation`
 //!    back; the host drives it with `&mut` calls, reads into its own
 //!    buffer, and drops it. Each side destroys what it holds last.
+//! 5. **A source**, when `GREETER_HOST_SOURCE` names one: a file serving
+//!    libraries that are not files themselves, such as the guatiao-py
+//!    bridge serving greeters written in Python, configured by the JSON
+//!    in `GREETER_HOST_SOURCE_CONFIG`. One refresh loads what it serves,
+//!    and its greeters are offered beside the rest.
 //!
 //! ```text
 //! cargo build --workspace            # puts derived_greeter beside this binary
 //! cargo run -p greeter_host          # scans target/debug
 //! cargo run -p greeter_host -- /some/dir /some/lib.so
+//! GREETER_HOST_SOURCE=/path/to/libguatiao_py.so \
+//!   GREETER_HOST_SOURCE_CONFIG='{"dirs": ["examples/python_provider"]}' cargo run -p greeter_host
 //! ```
 extern crate alloc;
 
@@ -105,7 +112,8 @@ fn main() -> ExitCode {
     for (place, error) in &report.unreadable {
         println!("unreadable: {}: {error}", place.display());
     }
-    if report.loaded.is_empty() {
+    let served = add_source(&mut registry);
+    if report.loaded.is_empty() && served == 0 {
         eprintln!(
             "\nno greeter library found -- `cargo build --workspace` first, or name a directory"
         );
@@ -332,6 +340,52 @@ impl Drop for Echo {
     fn drop(&mut self) {
         self.dropped.store(true, Ordering::SeqCst);
     }
+}
+
+/// Adds the source `GREETER_HOST_SOURCE` names, configured by the JSON map
+/// in `GREETER_HOST_SOURCE_CONFIG`, refreshes once, and answers how many
+/// libraries it loaded.
+fn add_source(registry: &mut Registry) -> usize {
+    let Ok(path) = std::env::var("GREETER_HOST_SOURCE") else {
+        return 0;
+    };
+    let text = std::env::var("GREETER_HOST_SOURCE_CONFIG").unwrap_or_else(|_| "{}".to_string());
+    let config = match guatiao_serde::text::json::from_str(
+        &text,
+        guatiao::Alloc::rust(),
+        guatiao_serde::Presentation::new(),
+    ) {
+        Ok(value) => match TryAsRef::<Map>::try_as_ref(&value) {
+            Some(map) => map.clone(),
+            None => {
+                println!("\nthe source's configuration is not a map");
+                return 0;
+            }
+        },
+        Err(e) => {
+            println!("\nthe source's configuration does not parse: {e}");
+            return 0;
+        }
+    };
+    match registry.add_source_file(std::path::Path::new(&path), &config) {
+        Ok(name) => println!("\nadded the source {name}"),
+        Err(e) => {
+            println!("\nthe source was refused: {e}");
+            return 0;
+        }
+    }
+    let changed = registry.refresh();
+    for one in &changed.loaded {
+        println!("  served {} as {}", one.id, one.key);
+    }
+    for one in &changed.refused {
+        println!(
+            "  refused {}: {}",
+            one.id.as_deref().unwrap_or("the listing"),
+            one.reason
+        );
+    }
+    changed.loaded.len()
 }
 
 /// The arguments, else `GREETER_HOST_PATH`, else beside this executable.

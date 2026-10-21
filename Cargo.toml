@@ -12,8 +12,9 @@ members = [
     "examples/wire_over_webtransport/server",
     "benchmarks",
 ]
-# Builds only for wasm32, as its own workspace.
-exclude = ["examples/wire_over_webtransport/client"]
+# Each its own workspace: the page builds only for wasm32, and the Python
+# bridge needs a Python to link against, which nothing else here does.
+exclude = ["examples/wire_over_webtransport/client", "crates/guatiao-py"]
 
 # Four crates plus the examples. `guatiao-derive` exists only
 # because a proc-macro crate cannot be anything else, and is reached
