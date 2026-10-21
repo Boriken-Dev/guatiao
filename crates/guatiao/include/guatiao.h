@@ -1363,13 +1363,15 @@ typedef struct guatiao_entries {
  parameter is a `guatiao_value *`, `guatiao_map *` or `guatiao_list *`
  finds it holding a carrier, which owns nothing: an empty map or list,
  or an ABSENT value, whose `alloc` (`payload.map.alloc`, for a value)
- names the allocator the caller wants the answer in, or is null. A slot
- that builds every container and string of its answer through that
- allocator hands it over as it is; one that builds elsewhere, or a
- caller that carried none, has the answer copied into the caller's
- allocator on arrival and the original freed through its own. Write the
- answer over the carrier without freeing it. A caller passes an
- initialised out slot: a carrier, or zeroes.
+ names the allocator the caller wants the answer in, or is null. Build
+ every container and string of the answer through that allocator, or
+ move what was built elsewhere into it before returning, and write the
+ answer over the carrier without freeing it: a caller may hold the
+ answer after the library is unloaded. A slot `#[guatiao::kind]`
+ generates always does; a Rust caller also copies, on arrival, an
+ answer some other slot built elsewhere. A caller passes an initialised
+ out slot: a carrier, or zeroes, which answers in the slot's own
+ allocator, to be freed while the library is loaded.
 
  **A tree argument by value is a move.** A slot argument that is a
  `guatiao_value *`, `guatiao_map *` or `guatiao_list *` without `const`

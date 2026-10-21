@@ -291,6 +291,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A tree a Rust provider answers reaches a caller in any language in
+  the caller's allocator.** A slot `#[guatiao::kind]` generates called
+  `<method>_in` with the carrier's allocator and wrote what it answered
+  as it was, so a provider implementing only `<method>` (whose default
+  `_in` calls it) answered a C, Python or Dart caller a tree in the
+  library's own allocator, which freeing after the library was unloaded
+  read from unmapped memory. The shim now moves the answer into the
+  carrier's allocator first; only a Rust caller's proxy did before.
 - **An instance built through the C surface is released by the provider
   that built it**, and holds its library open until then.
   `guatiao_registry_provider_destroy` found the provider by key, so after

@@ -1816,10 +1816,31 @@ fn emit_shim(
         },
     };
 
+    // A tree is written once it lives in the carrier's allocator: a default
+    // `<method>_in`, or one that ignores `alloc`, built it in this side's.
+    let err_slot = if m.fallible {
+        quote!(__err)
+    } else {
+        quote!(::core::ptr::null_mut())
+    };
+    let tree_out = |moved: TokenStream, answer: TokenStream| {
+        quote! {
+            match ::guatiao::library::kind::#moved(#answer, __alloc) {
+                // SAFETY: the proxy passes a writable out slot.
+                ::core::result::Result::Ok(__v) => unsafe { ::guatiao::library::kind::write_out(__out, __v) },
+                // SAFETY: the proxy passes a writable error slot, or none.
+                ::core::result::Result::Err(__e) => unsafe { ::guatiao::library::kind::write_err(#err_slot, __e) },
+            }
+        }
+    };
+
     // What the implementation answered, as the status the shim returns.
     let write = |answer: TokenStream| match &m.ret {
         RetKind::Unit => quote! { { let _ = #answer; ::guatiao::Status::GUATIAO_OK } },
-        RetKind::Scalar(_) | RetKind::Value | RetKind::Map | RetKind::List => quote! {
+        RetKind::Value => tree_out(quote!(value_ret), answer),
+        RetKind::Map => tree_out(quote!(map_ret), answer),
+        RetKind::List => tree_out(quote!(list_ret), answer),
+        RetKind::Scalar(_) => quote! {
             // SAFETY: the proxy passes a writable out slot.
             unsafe { ::guatiao::library::kind::write_out(__out, #answer) }
         },
