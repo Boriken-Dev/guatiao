@@ -6,7 +6,12 @@
     "outDir": "dist",
     "declaration": true,
     "declarationMap": false,
-    "sourceMap": false
+    "sourceMap": false,
+    "allowImportingTsExtensions": false,
+    "paths": {},
+    "stripInternal": true
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }

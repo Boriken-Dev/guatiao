@@ -656,7 +656,7 @@ const finalizer = new FinalizationRegistry<bigint>((root) => {
  * `Value` or `Ref` is deep-copied. Anything else is a `TypeError`, and a
  * non-finite number a `RangeError`.
  */
-export class Value extends Ref implements Owner, Disposable {
+export class Value extends Ref implements Disposable {
   #root: bigint;
   #alloc: bigint | undefined;
   #closed = false;

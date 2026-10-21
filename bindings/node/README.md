@@ -22,6 +22,20 @@ ABI, whether that is `guatiao` itself or an application that carries it.
   place, or convert it to and from plain objects, arrays and `Map`s.
 - **Numbers keep their exact text** — `1.10` stays `1.10` and an integer
   of any size survives as a `bigint`.
+- **Be a plugin host** — scan a directory, filter on what a library
+  declares before loading it, list providers best first, build an
+  instance from a configuration, call a provider through its table with
+  JavaScript values in and out.
+- **A kind described once, checked by `tsc`** — a kind is a typed value
+  copied from its C header; a provider class `implements` it, and a
+  misspelled method or a wrong type fails the type check.
+- **Write a provider in TypeScript** — classes become providers of a kind,
+  in a library a host calls the way it calls one written in Rust, C or
+  Python; an ES module of a package is a library, named and versioned by
+  its `package.json`.
+- **Hand a library a JavaScript object** — any object with the right
+  methods becomes an object of a kind (a listener, a callback) that a
+  library calls, or holds until it is done with it.
 - **Dates, times, spans and exact lengths** — `PlainDate`, `PlainTime`,
   `PlainDateTime` and `Span` to the nanosecond, instants as `Date`, read
   and written by the library itself.
@@ -53,7 +67,7 @@ only part of the ABI is fine: calling a function it lacks throws
 
 | Exports from | Needed for |
 | --- | --- |
-| `guatiao` | values, time, redaction |
+| `guatiao` | values, the registry, kinds and providers, time, redaction |
 | `guatiao_serde` | `guatiao/serde`: JSON, and TOML and YAML when the library has them |
 | `guatiao_intake` | `guatiao/intake` |
 
@@ -93,6 +107,50 @@ using big = new Value(2n ** 64n);
 big.toJS();                     // 18446744073709551616n
 ```
 
+### Hosting plugins
+
+```ts
+import { Registry } from 'guatiao';
+import { Greeter } from './greeter_kind.js';   // the kind, described from its header
+
+using reg = new Registry('my-host', '1.0');
+reg.scanDir('/opt/plugins', { rules: 'kind=greeter' });
+for (const provider of reg.providers('greeter')) console.log(provider.key);
+
+const greeter = reg.bind('acme_hello', Greeter);
+using answer = greeter.greet('ana');
+answer.toJS();                                // { greeting: 'hello, ana' }
+```
+
+### A kind, and a provider of it
+
+```ts
+import { BadValue } from 'guatiao';
+import { type Implementation, kind, t } from 'guatiao/kinds';
+import { Provider, library } from 'guatiao/provide';
+
+export const Greeter = kind('greeter', {
+  floorHash: 2695856491,                      // greeter_vtable_FLOOR_HASH, from the header
+  methods: {
+    greet: { args: [t.str], answer: t.map, required: true, fallible: true },
+  },
+});
+export type Greeter = Implementation<typeof Greeter>;
+
+export class Hello extends Provider implements Greeter {
+  static override readonly kinds = [Greeter];
+  greet(name: string) {
+    if (!name) throw new BadValue('nobody to greet');
+    return { greeting: `hello, ${name}` };
+  }
+}
+
+reg.registerLibrary(library('hello', '1.0.0', { providers: [Hello] }));
+```
+
+A host in this process, written in any language, calls `Hello` through
+the same table it would call a Rust or C greeter through.
+
 ### JSON, TOML and YAML
 
 ```ts
@@ -120,13 +178,29 @@ PlainDate.parse('2026-01-31').add(Span.parse('1mo')).toString();   // '2026-02-2
   keeps the map's order.
 - `ListRef.set` and `insert` rebuild the list, because the C ABI only
   appends and removes.
+- A library may call a provider or object written here from any thread;
+  the call runs on Node's main thread when its event loop turns, the
+  calling thread waiting. A native call made synchronously from Node's
+  thread that waits for such a thread never returns.
+- A provider answers synchronously: a method returning a promise is
+  refused.
+- A `Remote` cannot run a kind's default body for a slot an older table
+  lacks, as a Rust caller does: it throws `Unsupported`.
+- Describe kinds (`kind()`) and build libraries (`library()`) at module
+  level, not inside a call a library is making: koffi cannot register a
+  callback there.
+- On Linux, CPython served through the guatiao-py bridge inside a Node
+  process does not free what a call from Node drops: a Python object such
+  a call releases is never deallocated.
 - 64-bit platforms only, and not in a browser.
 
 ## API overview
 
 | Module | Purpose |
 | --- | --- |
-| `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `redact`, `useLibrary`, the errors |
+| `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Registry`, `Instance`, `redact`, `useLibrary`, the errors |
+| `guatiao/kinds` | `kind`, `t`: a kind as a typed description; `Remote`, `ObjectHandle`; serving a table over an object |
+| `guatiao/provide` | `Provider`, `library`, `libraryOf`, `s`: providers written in TypeScript, a module as a library |
 | `guatiao/serde` | `loads` / `dumps` for JSON, TOML, YAML |
 | `guatiao/intake` | `check`, `layout`, `isVisible`, `at`, `forSchema`, `formFor`, `resolve`, `flatKeys`, `flatten`, `unflatten` |
 | `guatiao/time` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants, exact lengths, `normalize` |
@@ -148,7 +222,11 @@ npm run build         # dist/
 The tests need the three libraries and the repository's example plugins
 in one directory; `test/setup.ts` points `GUATIAO_LIBRARY` at the
 repository's build output when the variable is unset, and the repository's
-own `AGENTS.md` says how to produce it.
+own `AGENTS.md` says how to produce it. The greeter written in C is built
+with the first C compiler found, the Python greeters are served through
+the guatiao-py bridge (`GUATIAO_PY_BRIDGE`, else its debug build), and the
+example host runs once `examples/` is installed (`npm install` there,
+after `npm run build` here); a test that lacks one skips and says which.
 
 ## License
 
