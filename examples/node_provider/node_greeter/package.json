@@ -1,0 +1,10 @@
+{
+  "name": "node_greeter",
+  "version": "1.0.0",
+  "description": "Greeters written in TypeScript, served to any host in the process",
+  "license": "MPL-2.0",
+  "author": "jose-pr",
+  "private": true,
+  "type": "module",
+  "exports": "./greeters.ts"
+}

@@ -1,10 +1,15 @@
 {
   "compilerOptions": {
     "target": "es2024",
-    "lib": ["es2024", "esnext.disposable"],
+    "lib": [
+      "es2024",
+      "esnext.disposable"
+    ],
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -12,7 +17,23 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "skipLibCheck": false,
-    "noEmit": true
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "guatiao": [
+        "./src/index.ts"
+      ],
+      "guatiao/*": [
+        "./src/*.ts"
+      ]
+    }
   },
-  "include": ["src", "test", "vitest.config.ts", "../../examples/greeter_kind/node", "../../examples/node_host", "../../examples/node_provider"]
+  "include": [
+    "src",
+    "test",
+    "vitest.config.ts",
+    "../../examples/greeter_kind/node",
+    "../../examples/node_host",
+    "../../examples/node_provider"
+  ]
 }

@@ -14,15 +14,18 @@ ships no native code of its own.
 
 | import | what |
 | --- | --- |
-| `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Tag`, `Status`, `redact`, `useLibrary`, the errors |
+| `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Registry`, `Instance`, `Tag`, `Status`, `redact`, `useLibrary`, the errors |
+| `guatiao/kinds` | `kind`, `t`, `Implementation`, `Remote`, `ObjectHandle`, `liveObjects` |
+| `guatiao/provide` | `Provider`, `library`, `libraryOf`, `Library`, `s` (configuration schemas) |
 | `guatiao/serde` | `loads`, `dumps`: JSON, TOML, YAML |
 | `guatiao/intake` | forms, paths, the flat projection |
 | `guatiao/time` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants, exact lengths |
 
 ## Finding the native library
 
-Importing touches nothing native: koffi and the library load on the first
-call that needs them, in this order:
+Importing the package touches nothing native: koffi loads on the first
+call that needs it (or when `kind()` describes a kind), and the library
+on the first call that needs it, found in this order:
 
 1. `useLibrary(pathOrUrl)`, when called before that first call: a file
    exporting the ABI, whatever it is called, or a directory. Naming
@@ -100,6 +103,229 @@ removes, so they clone every element, clear and push back.
 
 A closed value, or a borrowed view whose source is closed or whose call
 has returned, throws `TypeError` on any use.
+
+## Registry
+
+```ts
+import { Registry } from 'guatiao';
+
+using reg = new Registry('my-host', '1.0');
+reg.scanDir('/path/to/plugins', { rules: 'kind=greeter' });   // rules: newline-separated
+reg.providers('greeter');        // plain objects, best first
+reg.best('greeter');             // { key, id, version, library, display_name, from, kinds, has_config, vtable_size }
+reg.whyNot('codec');             // { available: false, why: 'nothing-claims-it', ... }
+const greeter = reg.bind('acme_hello', Greeter);                // a Remote (see Kinds)
+using instance = reg.create('acme_shouter', { prefix: 'hey' }); // an Instance
+instance.bind(Greeter).greet('ana');
+```
+
+Also `loadFile(path)`, `scanPath(spec, { descending, rules })`,
+`registerEntry(name, entry)` (the address of a `guatiao_library_entry`),
+`registerLibrary(library)` (see Providers), `libraries()`,
+`provider(key)`, `available(kind)`, `providerAvailable(key)` (`{
+available, reason? }`), `keyedBy(template)` / `librariesKeyedBy`,
+`setPriority` / `priority`, `providerTable(key, kind?)` (`{ table, size,
+ctx }`, `table` `0n` for none), `providerConfig(key)` (a borrowed,
+read-only `Ref` onto the schema, never closed), `host()` (the
+`guatiao_host_info *`), `close()` / `using`. Every answer that is data is
+a plain object or array, already freed.
+
+`bind(key, kind)` answers the provider's table for that kind as a
+`Remote` over its own instance: `NotFound` when it serves none,
+`FloorMismatch` when the table is not the one the kind describes. An
+`Instance` (`create(key, config)`, the configuration checked against the
+provider's schema first) binds the same way; its `close()` reaches the
+provider that built it, even after a retire or a refresh that loaded a
+new build under the key.
+
+`retire(libraryKey)` takes a library out and leaves it mapped until
+nothing uses it; `collect()` closes every retired library whose own
+`unload` agrees and answers their keys, as does the next load, retire or
+unload. `unload(libraryKey, { unchecked })` unmaps when the library
+agrees: `Busy` while something it handed out lives, `Unsupported` with no
+`unload` function, `WrongKind` for a library linked rather than mapped,
+`NotFound` for none. **Both take the LIBRARY key** (`%id` by default). No
+table, `ctx` or borrowed schema taken from it is used again.
+
+**Sources**: `addSourceFile(path, config)` maps a file exporting
+`guatiao_source` (a bridge to another language) and adds the source it
+answers, refusing with its words; `watchDir(dir, { rules })` watches a
+directory; `refresh()` makes the registry agree with every source,
+answering `{ loaded, retired, skipped, refused }`. Nothing refreshes on
+its own.
+
+## Kinds: calling a table, serving one
+
+A kind is described once, from its C header, as a typed value: a method
+per slot in the header's order (the `methods` object's order), the shapes
+from `t`, and the header's `<table>_FLOOR_HASH`. TypeScript infers what a
+provider implements and what a caller holds.
+
+```ts
+import { type Implementation, kind, t } from 'guatiao/kinds';
+
+export const Listener = kind('listener', {
+  floorHash: 1867921573,
+  object: true,
+  methods: { heard: { args: [t.str], required: true } },
+});
+export const Greeter = kind('greeter', {
+  floorHash: 2695856491,
+  methods: {
+    greet: { args: [t.str], answer: t.map, required: true, fallible: true },
+    shout: { args: [t.str], answer: t.text },
+    greetInto: { args: [t.str, t.lent(Listener)], fallible: true },
+    check: { args: [t.lent(t.map)], answer: t.bool, fallible: true },
+  },
+});
+export type Greeter = Implementation<typeof Greeter>;
+```
+
+`kind(name, { floorHash, object?, methods })`: `required` marks a slot
+every table fills (the kind's original ones), `fallible` one ending in
+`guatiao_provider_error *err`, `object: true` an object kind (`destroy`
+first). A slot is found by position, so a method's name is free; it may
+not be `has`, `close`, `closed`, `kind`, `ctx`, `size`, `table`, `then`
+or a name `Object.prototype` has. A description that is not one throws
+`TypeError` naming the method. `Implementation<typeof K>` is what a
+provider or an object implements (required methods mandatory, the rest
+optional); `Remote<typeof K>` what a caller holds; `ObjectHandle<typeof
+K>` an object of an object kind the caller owns.
+
+| shape | C | a caller passes / gets | a method receives / returns |
+| --- | --- | --- | --- |
+| `t.bool`, `t.i8`..`t.i32`, `t.u8`..`t.u32`, `t.f32`, `t.f64` | the scalar | `boolean` / `number`, range-checked (`RangeError`) | the same |
+| `t.i64`, `t.u64`, `t.usize`, `t.isize` | the scalar | `number` or `bigint` / `bigint` | `bigint` / `number` or `bigint` |
+| `t.str` | `guatiao_str` | `string` | `string` (`BadValue` if not UTF-8) |
+| `t.bytes` | `guatiao_bytes` | a `Uint8Array`, `ArrayBuffer` or typed array | a `Uint8Array` copy |
+| `t.bytesMut` | `guatiao_bytes_mut` | a `Uint8Array`, written in place | a `Uint8Array`, copied back when it returns |
+| `t.text` (answer) | `guatiao_string *out` | `string` | `string` |
+| `t.value` | `const guatiao_value *` (null allowed) | a `Ref`, plain data or `null` | a read-only `Ref` or `null`, valid for the call |
+| `t.map` | `const guatiao_map *` | a `Ref` or plain data | a read-only `MapRef`, valid for the call |
+| `t.taken(t.map)`, `t.taken(t.list)`, `t.taken(t.value)` | a tree handed over | a `Value` (moved: left absent), a `Ref` (copied) or plain data | a `Value` it owns |
+| `t.lent(t.map)`, `t.lent(t.list)`, `t.lent(t.value)` | a tree lent (`&mut`) | a `Value` or `Ref`, changed where it stands | a writable `MapRef` / `ListRef` / `Ref`, valid for the call; what it adds is built in the allocator the tree records |
+| `t.map`, `t.list`, `t.value` (answer) | `guatiao_map/list/value *out`, a carrier | a `Value` to close | a `Value`, a `Ref` or plain data, built in the allocator the carrier names |
+| `t.taken(K)`, `K` an object kind | `guatiao_object` | an object implementing `K`, or an `ObjectHandle` | an `ObjectHandle` it owns |
+| `t.lent(K)` | `const guatiao_object *` | an object implementing `K`, or an `ObjectHandle` | a `Remote`, valid for the call |
+| `K` (answer) | `guatiao_object *out` | an `ObjectHandle`; `close()` destroys it once | an object implementing `K`, or an `ObjectHandle` |
+| no `answer` | -- | `undefined` | anything, ignored |
+
+**A `Remote`**: a method per slot, plus `has(name)` (whether the table
+carries it), `kind`, `table`, `size`, `ctx`. A slot past the table's size
+or null throws `Unsupported` (a Rust caller would run the kind's default
+body, which JavaScript cannot); a refusal throws the status's
+`GuatiaoError` with the provider's words; a slot that cannot fail and
+fails throws its status. Valid while the library is. `kind.bind(table,
+size, ctx)` makes one over any table. **An `ObjectHandle`** is a `Remote`
+whose `close()` (or `using`) calls `destroy` once; one dropped unclosed is
+destroyed when collected; handed to a slot that takes it, it is the
+callee's and `close()` does nothing.
+
+**A JavaScript object as an object of a kind**: any object with the
+required methods. Its table is built once per kind and set of methods it
+has (a missing optional method's slot is null) and kept for the process.
+It is held until its holder destroys it (handed over), when its
+`[Symbol.dispose]()` runs if it has one, or until the call returns
+(lent). `liveObjects()` counts what is held.
+
+**A refusal**: a method throws a `GuatiaoError` (`new
+BadValue('nobody to greet')`) and the caller reads that status and
+message; any other error crosses as `GUATIAO_ERR_INTERNAL` with `"Name:
+message"`. A slot that cannot fail has no `err`: the error is reported as
+a `GuatiaoWarning` (`process.emitWarning`) and the status crosses alone.
+A method answers before it returns: a promise is refused as `Internal`.
+
+**Describe kinds and build libraries at module level.** koffi cannot
+register a callback from inside one, so `kind()` registers every slot's
+callback when it runs and `library()` its descriptor's; both throw when
+called inside a call a library is making into this binding.
+
+## Providers written in TypeScript
+
+```ts
+// greeters.ts, in a package named node_greeter
+import { BadValue } from 'guatiao';
+import { Provider, s } from 'guatiao/provide';
+import { Counter, Greeter } from './greeter_kind.js';
+
+export class Hello extends Provider implements Greeter, Counter {
+  static override readonly kinds = [Greeter, Counter];
+  static override readonly displayName = 'Hello, in Node';
+  #n = 0n;
+  greet(name: string) {
+    if (!name) throw new BadValue('nobody to greet');
+    return { greeting: `hello, ${name}` };
+  }
+  count() {
+    return ++this.#n;
+  }
+}
+
+export const ShouterConfig = s.object({ prefix: s.string() });
+export class Shouter extends Provider implements Greeter {
+  static override readonly kinds = [Greeter];
+  static override readonly config = ShouterConfig;
+  readonly #prefix: string;
+  constructor(config: s.Infer<typeof ShouterConfig>) {
+    super();
+    this.#prefix = config.prefix;
+  }
+  greet(name: string) {
+    return { greeting: `${this.#prefix} ${name.toUpperCase()}` };
+  }
+}
+```
+
+**A provider** extends `Provider`, `implements` its kinds' types (which is
+what makes `tsc --strict` check its methods) and lists them in `static
+kinds`. A method a kind requires and the class lacks is a `TypeError` when
+a library is built from it, as is an object kind among its kinds. Static
+fields: `named` (default: the class name in snake_case), `id` (default
+`{library id}_{named}`), `displayName`, `version` (empty: the library's),
+`meta` (plain data), `config`, `configSchema`, `default`, and `static
+available()` (`undefined` or `null` when it can run here, else why not;
+asked every time a host asks). Methods must be on the prototype: an arrow
+function in a field is not seen.
+
+**Configuration**: with neither `config` nor `configSchema` the provider is
+its one instance, `new cls()`, built with the library. `static config =
+s.object({...})` builds an instance per configuration the host checked
+against the schema `s` wrote, the constructor receiving the built object
+(defaults filled in); `configSchema` (a raw JSON Schema) does the same and
+the constructor receives plain data. `default = true` also offers `new
+cls()`. An instance its host destroys runs its `[Symbol.dispose]()` when
+it has one.
+
+**`s`**: `s.string(kw?)`, `s.integer(kw?)` (a `number`; an integer a
+`number` cannot hold exactly is a `RangeError`), `s.number(kw?)`,
+`s.boolean(kw?)`, `s.literal(...values)`, `s.any(kw?)`, `s.array(item,
+kw?)`, `s.record(value, kw?)`, `s.nullable(inner)`, `s.optional(inner, {
+default? })`, `s.object(fields, kw?)` (refuses keys it does not declare;
+a member not `optional` is required); `kw` are JSON Schema keywords added
+to what the builder writes. `s.Infer<typeof X>` is the built type, `.json`
+the schema, `.build(data)` the configuration.
+
+**A module is a library**: `await libraryOf(urlOrPath)` imports an ES
+module and builds its library once: its id is the nearest `package.json`'s
+`name` (with the module's path in the package appended, extension
+dropped, when it is not the package's entry point), its version that
+file's `version`, its providers the `Provider` subclasses it exports in
+the order a module namespace lists them (export names sorted), its `meta`
+that file's `description` (as `summary`), `license`, `author` and
+`contributors` (as `authors`), `homepage`, `repository` and `bugs` (as
+`urls`), and each licence file (`LICENSE*`, `LICENCE*`, `COPYING*`) as a
+`notices` entry. `TypeError` for a module outside a package, a package
+with no name or version, or a module exporting no provider.
+
+`library(id, version, { providers, meta })` is the same without a module.
+A `Library` has `id`, `version`, `providers`, `kinds`, `meta`, `entry` (a
+`guatiao_library_entry`), `infoAddress`, `liveInstances()` and `close()`
+(lets go of each provider's own instance; the entry answers null from
+then on). Its descriptor and callbacks are kept for the process, and its
+`unload` slot answers `GUATIAO_ERR_BUSY` while an instance lives.
+`Registry.registerLibrary(library)` files it under its id and keeps it:
+it is linked, not mapped, so `unload` answers `WrongKind` and `retire`
+takes it out.
 
 ## serde: JSON, TOML, YAML
 
@@ -207,5 +433,18 @@ one of `BadValue`, `AllocFailed`, `WrongKind`, `NotFound`,
 
 ## Threads
 
-A `Value` is used from the thread that made it: Node's main thread, or one
-worker, never shared.
+Everything here runs on the thread that loaded it, Node's main thread: a
+`Value`, a `Registry` and a `Remote` are used there, never shared.
+
+A library may call a table this binding serves (a provider, a lent or
+handed-over object) from any thread. A call from a thread Node did not
+start is queued and runs on Node's main thread when its event loop next
+turns, the calling thread waiting for the answer, so calls into
+JavaScript are serialised. **A native call made synchronously from Node's
+thread that waits for such a thread never returns**: the queued call
+cannot run until it does.
+
+koffi runs a synchronous native call on a stack of its own. Another
+runtime embedded in the process that judges its stack by address can
+misjudge it: on Linux, CPython served through guatiao-py in a Node process
+does not free an object dropped during such a call.

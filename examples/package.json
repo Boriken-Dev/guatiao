@@ -1,0 +1,13 @@
+{
+  "name": "guatiao-node-examples",
+  "description": "The Node examples: a host, a library of greeters, and the greeter kinds described for Node",
+  "private": true,
+  "license": "MPL-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "dependencies": {
+    "guatiao": "file:../bindings/node"
+  }
+}
