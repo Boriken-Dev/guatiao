@@ -58,6 +58,8 @@
 
 #![forbid(unsafe_code)]
 
+mod own;
+
 use super::build::KindBuilder;
 use super::vocab;
 use crate::value::alloc::Alloc;

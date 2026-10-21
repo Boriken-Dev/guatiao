@@ -663,6 +663,21 @@ impl KindBuilder {
         self.count(vocab::MAX_ITEMS, n)
     }
 
+    /// Any value at all: `{}`, the schema that constrains nothing.
+    /// Built through the crate's own allocator. `any_in` names one,
+    /// which is what a schema built into a host's arena needs.
+    pub fn any() -> KindBuilder {
+        KindBuilder::any_in(Alloc::rust())
+    }
+
+    /// The same, through an allocator you name.
+    pub fn any_in(alloc: Alloc) -> KindBuilder {
+        KindBuilder {
+            alloc,
+            state: Ok(Map::new_in(alloc).into()),
+        }
+    }
+
     /// True or false.
     /// Built through the crate's own allocator. `bool_in` names one,
     /// which is what a schema built into a host's arena needs.
@@ -1032,6 +1047,13 @@ impl KindBuilder {
             return self;
         };
         if let Some(map) = TryAsMut::<Map>::try_as_mut(&mut kind) {
+            // `{}` accepts null already.
+            if map.is_empty() {
+                return KindBuilder {
+                    alloc,
+                    state: Ok(kind),
+                };
+            }
             let constrained = [
                 vocab::ENUM,
                 vocab::CONST,

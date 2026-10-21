@@ -54,6 +54,8 @@
 
 #![forbid(unsafe_code)]
 
+mod own;
+
 use alloc::fmt;
 
 use super::alloc::Alloc;
@@ -679,13 +681,19 @@ impl<T: FromValue> FromValue for std::collections::HashMap<String, T> {
 /// failure aborts, as `clone` does.
 impl FromValue for Value {
     fn from_value(value: &Value) -> Result<Value, MapError> {
-        match value.clone_in(Alloc::rust()) {
-            Ok(copy) => Ok(copy),
-            Err(ValueError::Alloc(_)) => {
-                alloc::alloc::handle_alloc_error(core::alloc::Layout::new::<Value>())
-            }
-            Err(_) => Err(MapError::bad_value("a value this build can read")),
+        copied(value.clone_in(Alloc::rust()))
+    }
+}
+
+/// A copy made for a reader: an allocation failure aborts, as `clone`
+/// does, and content this build refuses is [`MapError::BadValue`].
+pub(crate) fn copied<T>(copy: Result<T, ValueError>) -> Result<T, MapError> {
+    match copy {
+        Ok(copy) => Ok(copy),
+        Err(ValueError::Alloc(_)) => {
+            alloc::alloc::handle_alloc_error(core::alloc::Layout::new::<Value>())
         }
+        Err(_) => Err(MapError::bad_value("a value this build can read")),
     }
 }
 
