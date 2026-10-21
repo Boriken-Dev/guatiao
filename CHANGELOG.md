@@ -151,6 +151,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `datetime` counts microseconds and starts at year 1, and the docs say
   what that loses. A refused text raises `guatiao.Unparsed`, a
   `ValueError` with the byte offset.
+- **Dart: `package:guatiao/time.dart` and `redact`.** `PlainDate`,
+  `PlainTime` and `PlainDateTime` for the civil forms (a `DateTime` would
+  carry a zone), a UTC `DateTime` for an instant, a `Duration` for an
+  exact length, and a `Span` class, all through the C functions and
+  checked against the shared vectors. A refused text throws `Unparsed`, a
+  `FormatException` with the byte offset.
 - **The derives take every struct shape, and generics**, as serde writes
   them: a newtype struct (or one marked `#[map(transparent)]`) is its
   field's value and describes its field's kind; a tuple struct is a list

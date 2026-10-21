@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- `package:guatiao/time.dart`: dates, times of day, civil date-times,
+  instants, spans and exact lengths, each read and written by the
+  library's own functions so every language accepts the same text.
+  `PlainDate`, `PlainTime` and `PlainDateTime` keep a civil date or time
+  to the nanosecond (a `DateTime` would carry a zone); an instant is a
+  UTC `DateTime`, an exact length a `Duration`, both to the microsecond;
+  `Span` is a calendar length, applied with `PlainDate.add` and
+  `PlainDateTime.add`. Text a grammar refuses throws `Unparsed`, with
+  the byte offset.
+- `redact(schema, value)`: a copy with every field the schema marks
+  secret replaced by a placeholder.
+
 ## [0.0.0-alpha.1] - 2026-10-19
 
 ### Changed

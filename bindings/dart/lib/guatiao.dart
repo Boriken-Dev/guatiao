@@ -10,7 +10,8 @@
 /// The two optional halves are their own entry points, imported with a
 /// prefix so their verbs keep a namespace:
 /// `import 'package:guatiao/serde.dart' as serde;` and
-/// `import 'package:guatiao/intake.dart' as intake;`.
+/// `import 'package:guatiao/intake.dart' as intake;`. So are dates, times
+/// and spans: `import 'package:guatiao/time.dart' as time;`.
 library;
 
 export 'src/bindings.g.dart' show guatiao_alloc, guatiao_value;
@@ -38,6 +39,8 @@ export 'src/library.dart'
         surfaces,
         useLibrary;
 export 'src/registry.dart' show Instance, ProviderTable, Registry;
+export 'src/schema.dart' show redact;
 export 'src/serde.dart' show Format, ParseError;
+export 'src/time.dart' show TextForm, Unparsed;
 export 'src/value.dart'
     show Absent, ListRef, MapRef, Numbers, Ref, Tag, Value, ValueOwner, absent;

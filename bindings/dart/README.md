@@ -25,6 +25,11 @@ It works with any shared library that exports the ABI, whether that is
 - **Be a plugin host** — scan a directory, filter on what a library
   declares before loading it, list providers best first, build an
   instance from a configuration, call a provider through its table.
+- **Dates, times, instants and spans** — `PlainDate`, `PlainTime`,
+  `PlainDateTime` and `Span`, a UTC `DateTime` for an instant and a
+  `Duration` for an exact length, read and written by the library itself.
+- **Redaction** — a copy of a value with every field its schema marks
+  secret hidden.
 - **JSON, TOML and YAML**, and **form checks against a schema**, through
   the `guatiao_serde` and `guatiao_intake` libraries when they are present.
 - **Importing never fails** — a native library is looked for on first
@@ -244,6 +249,22 @@ import:
 Its generated bindings then import these types instead of minting their
 own, and a pointer crosses between the two packages freely.
 
+### Dates, times and secrets
+
+```dart
+import 'package:guatiao/guatiao.dart';
+import 'package:guatiao/time.dart' as time;
+
+time.parseTimestamp('2026-10-21T19:15:00+05:30');      // a UTC DateTime
+time.PlainDate.parse('2026-01-31').add(time.Span(months: 1));   // 2026-02-28
+time.toDuration([90, 500000000]);                      // 90.5 seconds
+
+final shown = redact(schema, value);                   // secrets hidden
+```
+
+Text a form's grammar refuses throws `Unparsed`, a `FormatException`
+carrying the byte offset and what was expected there.
+
 ## Errors
 
 A failed native call throws `GuatiaoException`, as one of `BadValue`,
@@ -268,6 +289,9 @@ words when it gave any.
   you took. Let it go first: it is valid until the library is closed,
   by `unload`, or once retired by `collect` or the registry's next load,
   retire or unload.
+- `DateTime` and `Duration` count microseconds: reading an instant or
+  an exact length into one drops what is below. The `Plain` classes and
+  `Span` keep nanoseconds.
 - 64-bit platforms only, and not in a browser (see Platforms above).
 
 ## API overview
@@ -277,6 +301,7 @@ words when it gave any.
 | `package:guatiao/guatiao.dart` | `Value`, `Ref`, `MapRef`, `ListRef`, `absent`, `Registry`, `Instance`, `kindTable`, the error classes |
 | `package:guatiao/serde.dart` | `loads` / `dumps` for JSON, TOML, YAML |
 | `package:guatiao/intake.dart` | `check`, `layout`, `isVisible`, `at`, `forSchema`, `formFor`, `resolve`, `flatKeys`, `flatten`, `unflatten` |
+| `package:guatiao/time.dart` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, `parseTimestamp`, `formatTimestamp`, `toDuration`, `fromDuration`, `normalize` |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/AGENTS.md)
 is the full API reference and ships with the package. The C ABI is

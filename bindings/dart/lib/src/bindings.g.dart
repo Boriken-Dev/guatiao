@@ -66,6 +66,218 @@ class GuatiaoBindings {
       int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
           guatiao_bytes)>();
 
+  int guatiao_date_add_span(
+    ffi.Pointer<guatiao_date> date,
+    ffi.Pointer<guatiao_span> span,
+    ffi.Pointer<guatiao_date> out,
+  ) {
+    return _guatiao_date_add_span(
+      date,
+      span,
+      out,
+    );
+  }
+
+  late final _guatiao_date_add_spanPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_date>,
+              ffi.Pointer<guatiao_span>,
+              ffi.Pointer<guatiao_date>)>>('guatiao_date_add_span');
+  late final _guatiao_date_add_span = _guatiao_date_add_spanPtr.asFunction<
+      int Function(ffi.Pointer<guatiao_date>, ffi.Pointer<guatiao_span>,
+          ffi.Pointer<guatiao_date>)>();
+
+  int guatiao_date_format(
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_date> date,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_date_format(
+      alloc,
+      date,
+      out,
+    );
+  }
+
+  late final _guatiao_date_formatPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_date>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_date_format');
+  late final _guatiao_date_format = _guatiao_date_formatPtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_date>,
+          ffi.Pointer<guatiao_value>)>();
+
+  int guatiao_date_normalize(
+    ffi.Pointer<guatiao_alloc> alloc,
+    guatiao_str text,
+    ffi.Pointer<guatiao_value> out,
+    ffi.Pointer<guatiao_text_error> out_error,
+  ) {
+    return _guatiao_date_normalize(
+      alloc,
+      text,
+      out,
+      out_error,
+    );
+  }
+
+  late final _guatiao_date_normalizePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              guatiao_str,
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_text_error>)>>('guatiao_date_normalize');
+  late final _guatiao_date_normalize = _guatiao_date_normalizePtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
+          ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_text_error>)>();
+
+  int guatiao_date_parse(
+    ffi.Pointer<guatiao_alloc> alloc,
+    guatiao_str text,
+    ffi.Pointer<guatiao_date> out,
+    ffi.Pointer<guatiao_text_error> out_error,
+  ) {
+    return _guatiao_date_parse(
+      alloc,
+      text,
+      out,
+      out_error,
+    );
+  }
+
+  late final _guatiao_date_parsePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              guatiao_str,
+              ffi.Pointer<guatiao_date>,
+              ffi.Pointer<guatiao_text_error>)>>('guatiao_date_parse');
+  late final _guatiao_date_parse = _guatiao_date_parsePtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
+          ffi.Pointer<guatiao_date>, ffi.Pointer<guatiao_text_error>)>();
+
+  int guatiao_datetime_add_span(
+    ffi.Pointer<guatiao_datetime> datetime,
+    ffi.Pointer<guatiao_span> span,
+    ffi.Pointer<guatiao_datetime> out,
+  ) {
+    return _guatiao_datetime_add_span(
+      datetime,
+      span,
+      out,
+    );
+  }
+
+  late final _guatiao_datetime_add_spanPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_datetime>,
+              ffi.Pointer<guatiao_span>,
+              ffi.Pointer<guatiao_datetime>)>>('guatiao_datetime_add_span');
+  late final _guatiao_datetime_add_span =
+      _guatiao_datetime_add_spanPtr.asFunction<
+          int Function(ffi.Pointer<guatiao_datetime>, ffi.Pointer<guatiao_span>,
+              ffi.Pointer<guatiao_datetime>)>();
+
+  int guatiao_datetime_format(
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_datetime> datetime,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_datetime_format(
+      alloc,
+      datetime,
+      out,
+    );
+  }
+
+  late final _guatiao_datetime_formatPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_datetime>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_datetime_format');
+  late final _guatiao_datetime_format = _guatiao_datetime_formatPtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_datetime>,
+          ffi.Pointer<guatiao_value>)>();
+
+  int guatiao_datetime_normalize(
+    ffi.Pointer<guatiao_alloc> alloc,
+    guatiao_str text,
+    ffi.Pointer<guatiao_value> out,
+    ffi.Pointer<guatiao_text_error> out_error,
+  ) {
+    return _guatiao_datetime_normalize(
+      alloc,
+      text,
+      out,
+      out_error,
+    );
+  }
+
+  late final _guatiao_datetime_normalizePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              guatiao_str,
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_text_error>)>>('guatiao_datetime_normalize');
+  late final _guatiao_datetime_normalize =
+      _guatiao_datetime_normalizePtr.asFunction<
+          int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
+              ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_text_error>)>();
+
+  int guatiao_datetime_parse(
+    ffi.Pointer<guatiao_alloc> alloc,
+    guatiao_str text,
+    ffi.Pointer<guatiao_datetime> out,
+    ffi.Pointer<guatiao_text_error> out_error,
+  ) {
+    return _guatiao_datetime_parse(
+      alloc,
+      text,
+      out,
+      out_error,
+    );
+  }
+
+  late final _guatiao_datetime_parsePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              guatiao_str,
+              ffi.Pointer<guatiao_datetime>,
+              ffi.Pointer<guatiao_text_error>)>>('guatiao_datetime_parse');
+  late final _guatiao_datetime_parse = _guatiao_datetime_parsePtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
+          ffi.Pointer<guatiao_datetime>, ffi.Pointer<guatiao_text_error>)>();
+
+  int guatiao_duration_read(
+    ffi.Pointer<guatiao_value> value,
+    ffi.Pointer<ffi.Uint64> out_seconds,
+    ffi.Pointer<ffi.Uint32> out_nanoseconds,
+  ) {
+    return _guatiao_duration_read(
+      value,
+      out_seconds,
+      out_nanoseconds,
+    );
+  }
+
+  late final _guatiao_duration_readPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<ffi.Uint64>,
+              ffi.Pointer<ffi.Uint32>)>>('guatiao_duration_read');
+  late final _guatiao_duration_read = _guatiao_duration_readPtr.asFunction<
+      int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<ffi.Uint64>,
+          ffi.Pointer<ffi.Uint32>)>();
+
   int guatiao_intake_check(
     ffi.Pointer<guatiao_value> schema,
     ffi.Pointer<guatiao_value> form,
@@ -1300,6 +1512,38 @@ class GuatiaoBindings {
           int Function(ffi.Pointer<guatiao_registry>, guatiao_str,
               ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
 
+  int guatiao_schema_redact(
+    ffi.Pointer<guatiao_value> schema,
+    ffi.Pointer<guatiao_value> value,
+    guatiao_str placeholder,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_schema_redact(
+      schema,
+      value,
+      placeholder,
+      alloc,
+      out,
+    );
+  }
+
+  late final _guatiao_schema_redactPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_value>,
+              guatiao_str,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_schema_redact');
+  late final _guatiao_schema_redact = _guatiao_schema_redactPtr.asFunction<
+      int Function(
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>)>();
+
   int guatiao_schema_validate(
     ffi.Pointer<guatiao_value> schema,
     ffi.Pointer<guatiao_value> config,
@@ -1325,6 +1569,78 @@ class GuatiaoBindings {
       int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
 
+  int guatiao_span_format(
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_span> span,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_span_format(
+      alloc,
+      span,
+      out,
+    );
+  }
+
+  late final _guatiao_span_formatPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_span>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_span_format');
+  late final _guatiao_span_format = _guatiao_span_formatPtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_span>,
+          ffi.Pointer<guatiao_value>)>();
+
+  int guatiao_span_normalize(
+    ffi.Pointer<guatiao_alloc> alloc,
+    guatiao_str text,
+    ffi.Pointer<guatiao_value> out,
+    ffi.Pointer<guatiao_text_error> out_error,
+  ) {
+    return _guatiao_span_normalize(
+      alloc,
+      text,
+      out,
+      out_error,
+    );
+  }
+
+  late final _guatiao_span_normalizePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              guatiao_str,
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_text_error>)>>('guatiao_span_normalize');
+  late final _guatiao_span_normalize = _guatiao_span_normalizePtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
+          ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_text_error>)>();
+
+  int guatiao_span_parse(
+    ffi.Pointer<guatiao_alloc> alloc,
+    guatiao_str text,
+    ffi.Pointer<guatiao_span> out,
+    ffi.Pointer<guatiao_text_error> out_error,
+  ) {
+    return _guatiao_span_parse(
+      alloc,
+      text,
+      out,
+      out_error,
+    );
+  }
+
+  late final _guatiao_span_parsePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              guatiao_str,
+              ffi.Pointer<guatiao_span>,
+              ffi.Pointer<guatiao_text_error>)>>('guatiao_span_parse');
+  late final _guatiao_span_parse = _guatiao_span_parsePtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
+          ffi.Pointer<guatiao_span>, ffi.Pointer<guatiao_text_error>)>();
+
   int guatiao_string_push(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> node,
@@ -1344,6 +1660,152 @@ class GuatiaoBindings {
   late final _guatiao_string_push = _guatiao_string_pushPtr.asFunction<
       int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
           guatiao_str)>();
+
+  int guatiao_time_format(
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_time> time,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_time_format(
+      alloc,
+      time,
+      out,
+    );
+  }
+
+  late final _guatiao_time_formatPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_time>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_time_format');
+  late final _guatiao_time_format = _guatiao_time_formatPtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_time>,
+          ffi.Pointer<guatiao_value>)>();
+
+  int guatiao_time_normalize(
+    ffi.Pointer<guatiao_alloc> alloc,
+    guatiao_str text,
+    ffi.Pointer<guatiao_value> out,
+    ffi.Pointer<guatiao_text_error> out_error,
+  ) {
+    return _guatiao_time_normalize(
+      alloc,
+      text,
+      out,
+      out_error,
+    );
+  }
+
+  late final _guatiao_time_normalizePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              guatiao_str,
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_text_error>)>>('guatiao_time_normalize');
+  late final _guatiao_time_normalize = _guatiao_time_normalizePtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
+          ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_text_error>)>();
+
+  int guatiao_time_parse(
+    ffi.Pointer<guatiao_alloc> alloc,
+    guatiao_str text,
+    ffi.Pointer<guatiao_time> out,
+    ffi.Pointer<guatiao_text_error> out_error,
+  ) {
+    return _guatiao_time_parse(
+      alloc,
+      text,
+      out,
+      out_error,
+    );
+  }
+
+  late final _guatiao_time_parsePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              guatiao_str,
+              ffi.Pointer<guatiao_time>,
+              ffi.Pointer<guatiao_text_error>)>>('guatiao_time_parse');
+  late final _guatiao_time_parse = _guatiao_time_parsePtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
+          ffi.Pointer<guatiao_time>, ffi.Pointer<guatiao_text_error>)>();
+
+  int guatiao_timestamp_format(
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_timestamp> timestamp,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_timestamp_format(
+      alloc,
+      timestamp,
+      out,
+    );
+  }
+
+  late final _guatiao_timestamp_formatPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_timestamp>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_timestamp_format');
+  late final _guatiao_timestamp_format =
+      _guatiao_timestamp_formatPtr.asFunction<
+          int Function(ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_timestamp>, ffi.Pointer<guatiao_value>)>();
+
+  int guatiao_timestamp_normalize(
+    ffi.Pointer<guatiao_alloc> alloc,
+    guatiao_str text,
+    ffi.Pointer<guatiao_value> out,
+    ffi.Pointer<guatiao_text_error> out_error,
+  ) {
+    return _guatiao_timestamp_normalize(
+      alloc,
+      text,
+      out,
+      out_error,
+    );
+  }
+
+  late final _guatiao_timestamp_normalizePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              guatiao_str,
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_text_error>)>>('guatiao_timestamp_normalize');
+  late final _guatiao_timestamp_normalize =
+      _guatiao_timestamp_normalizePtr.asFunction<
+          int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
+              ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_text_error>)>();
+
+  int guatiao_timestamp_parse(
+    ffi.Pointer<guatiao_alloc> alloc,
+    guatiao_str text,
+    ffi.Pointer<guatiao_timestamp> out,
+    ffi.Pointer<guatiao_text_error> out_error,
+  ) {
+    return _guatiao_timestamp_parse(
+      alloc,
+      text,
+      out,
+      out_error,
+    );
+  }
+
+  late final _guatiao_timestamp_parsePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              guatiao_str,
+              ffi.Pointer<guatiao_timestamp>,
+              ffi.Pointer<guatiao_text_error>)>>('guatiao_timestamp_parse');
+  late final _guatiao_timestamp_parse = _guatiao_timestamp_parsePtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
+          ffi.Pointer<guatiao_timestamp>, ffi.Pointer<guatiao_text_error>)>();
 
   int guatiao_toml_emit(
     ffi.Pointer<guatiao_value> value,
@@ -1795,11 +2257,17 @@ const String GUATIAO_KEY_MIN_LENGTH = 'minLength';
 
 const String GUATIAO_KEY_MULTIPLE_OF = 'multipleOf';
 
+const String GUATIAO_KEY_NOT = 'not';
+
 const String GUATIAO_KEY_ONE_OF = 'oneOf';
 
 const String GUATIAO_KEY_PATTERN = 'pattern';
 
+const String GUATIAO_KEY_PREFIX_ITEMS = 'prefixItems';
+
 const String GUATIAO_KEY_PROPERTIES = 'properties';
+
+const String GUATIAO_KEY_PROPERTY_NAMES = 'propertyNames';
 
 const String GUATIAO_KEY_READ_ONLY = 'readOnly';
 
@@ -1828,6 +2296,8 @@ const String GUATIAO_KEY_TYPE_NUMBER = 'number';
 const String GUATIAO_KEY_TYPE_OBJECT = 'object';
 
 const String GUATIAO_KEY_TYPE_STRING = 'string';
+
+const String GUATIAO_KEY_UNIQUE_ITEMS = 'uniqueItems';
 
 const String GUATIAO_KEY_WRITE_ONLY = 'writeOnly';
 
@@ -1954,6 +2424,34 @@ final class guatiao_bytes_mut extends ffi.Struct {
       $allocator<guatiao_bytes_mut>()
         ..ref.ptr = ptr
         ..ref.len = len;
+}
+
+final class guatiao_date extends ffi.Struct {
+  @ffi.Int32()
+  external int year;
+
+  @ffi.Uint8()
+  external int month;
+
+  @ffi.Uint8()
+  external int day;
+
+  static ffi.Pointer<guatiao_date> $allocate(
+    ffi.Allocator $allocator, {
+    required int year,
+    required int month,
+    required int day,
+  }) =>
+      $allocator<guatiao_date>()
+        ..ref.year = year
+        ..ref.month = month
+        ..ref.day = day;
+}
+
+final class guatiao_datetime extends ffi.Struct {
+  external guatiao_date date;
+
+  external guatiao_time time;
 }
 
 final class guatiao_entries extends ffi.Struct {
@@ -2377,6 +2875,53 @@ final class guatiao_providers extends ffi.Struct {
 
 final class guatiao_registry extends ffi.Opaque {}
 
+final class guatiao_span extends ffi.Struct {
+  @ffi.Int64()
+  external int years;
+
+  @ffi.Int64()
+  external int months;
+
+  @ffi.Int64()
+  external int weeks;
+
+  @ffi.Int64()
+  external int days;
+
+  @ffi.Int64()
+  external int hours;
+
+  @ffi.Int64()
+  external int minutes;
+
+  @ffi.Int64()
+  external int seconds;
+
+  @ffi.Int32()
+  external int nanoseconds;
+
+  static ffi.Pointer<guatiao_span> $allocate(
+    ffi.Allocator $allocator, {
+    required int years,
+    required int months,
+    required int weeks,
+    required int days,
+    required int hours,
+    required int minutes,
+    required int seconds,
+    required int nanoseconds,
+  }) =>
+      $allocator<guatiao_span>()
+        ..ref.years = years
+        ..ref.months = months
+        ..ref.weeks = weeks
+        ..ref.days = days
+        ..ref.hours = hours
+        ..ref.minutes = minutes
+        ..ref.seconds = seconds
+        ..ref.nanoseconds = nanoseconds;
+}
+
 typedef guatiao_status = ffi.Uint32;
 typedef Dartguatiao_status = int;
 
@@ -2483,6 +3028,57 @@ enum guatiao_tag {
 
 typedef guatiao_tag$1 = ffi.Uint32;
 typedef Dartguatiao_tag = int;
+
+final class guatiao_text_error extends ffi.Struct {
+  @ffi.Size()
+  external int at;
+
+  external guatiao_value expected;
+}
+
+final class guatiao_time extends ffi.Struct {
+  @ffi.Uint8()
+  external int hour;
+
+  @ffi.Uint8()
+  external int minute;
+
+  @ffi.Uint8()
+  external int second;
+
+  @ffi.Uint32()
+  external int nanosecond;
+
+  static ffi.Pointer<guatiao_time> $allocate(
+    ffi.Allocator $allocator, {
+    required int hour,
+    required int minute,
+    required int second,
+    required int nanosecond,
+  }) =>
+      $allocator<guatiao_time>()
+        ..ref.hour = hour
+        ..ref.minute = minute
+        ..ref.second = second
+        ..ref.nanosecond = nanosecond;
+}
+
+final class guatiao_timestamp extends ffi.Struct {
+  @ffi.Int64()
+  external int seconds;
+
+  @ffi.Uint32()
+  external int nanoseconds;
+
+  static ffi.Pointer<guatiao_timestamp> $allocate(
+    ffi.Allocator $allocator, {
+    required int seconds,
+    required int nanoseconds,
+  }) =>
+      $allocator<guatiao_timestamp>()
+        ..ref.seconds = seconds
+        ..ref.nanoseconds = nanoseconds;
+}
 
 final class guatiao_value extends ffi.Struct {
   @ffi.Uint32()
