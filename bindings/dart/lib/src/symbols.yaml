@@ -74,6 +74,10 @@ files:
         name: guatiao_map_set
       c:@F@guatiao_merge:
         name: guatiao_merge
+      c:@F@guatiao_registry_add_source:
+        name: guatiao_registry_add_source
+      c:@F@guatiao_registry_add_source_file:
+        name: guatiao_registry_add_source_file
       c:@F@guatiao_registry_available:
         name: guatiao_registry_available
       c:@F@guatiao_registry_best:
@@ -114,6 +118,8 @@ files:
         name: guatiao_registry_provider_vtable
       c:@F@guatiao_registry_providers:
         name: guatiao_registry_providers
+      c:@F@guatiao_registry_refresh:
+        name: guatiao_registry_refresh
       c:@F@guatiao_registry_register_entry:
         name: guatiao_registry_register_entry
       c:@F@guatiao_registry_retire:
@@ -130,6 +136,8 @@ files:
         name: guatiao_registry_unload
       c:@F@guatiao_registry_unload_unchecked:
         name: guatiao_registry_unload_unchecked
+      c:@F@guatiao_registry_watch_dir:
+        name: guatiao_registry_watch_dir
       c:@F@guatiao_registry_why_not:
         name: guatiao_registry_why_not
       c:@F@guatiao_schema_redact:
@@ -240,6 +248,8 @@ files:
         name: guatiao_providers
       c:@S@guatiao_registry:
         name: guatiao_registry
+      c:@S@guatiao_source_info:
+        name: guatiao_source_info
       c:@S@guatiao_span:
         name: guatiao_span
       c:@S@guatiao_str:

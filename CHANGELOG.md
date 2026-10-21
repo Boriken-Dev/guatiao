@@ -206,7 +206,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   through `collect`/`unload` once nothing holds it, and its source is
   told once. Nothing runs on its own: no thread, no watcher. A source
   file declares `source=<what it serves>`, and a scan reports it as
-  `Skipped::Source` without loading it.
+  `Skipped::Source` without loading it. Python and Dart:
+  `add_source_file`/`addSourceFile`, `watch_dir`/`watchDir`, `refresh`.
 - **Python: a kind described once, called and served from Python.**
   `guatiao.kinds.Kind` takes a kind's methods in table order, what each
   takes and answers (`STR`, `BYTES`, `MAP`, `VALUE`, `TEXT`, the

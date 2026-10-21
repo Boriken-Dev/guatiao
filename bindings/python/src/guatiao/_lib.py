@@ -133,6 +133,18 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
     "guatiao_registry_unload": ([c_void_p, Str], c_uint32, "load"),
     "guatiao_registry_unload_unchecked": ([c_void_p, Str], c_uint32, "load"),
     "guatiao_registry_collect": ([c_void_p, _P(Alloc), _P(Value)], c_uint32, "load"),
+    "guatiao_registry_add_source": (
+        [c_void_p, Str, c_void_p, _P(ProviderError)],
+        c_uint32,
+        "load",
+    ),
+    "guatiao_registry_add_source_file": (
+        [c_void_p, Str, _P(Value), _P(ProviderError)],
+        c_uint32,
+        "load",
+    ),
+    "guatiao_registry_watch_dir": ([c_void_p, Str, Str], c_uint32, "load"),
+    "guatiao_registry_refresh": ([c_void_p, _P(Alloc), _P(Value)], c_uint32, "load"),
     "guatiao_registry_free": ([c_void_p], None, "load"),
     "guatiao_registry_keyed_by": ([c_void_p, Str], c_uint32, "load"),
     "guatiao_registry_libraries_keyed_by": ([c_void_p, Str], c_uint32, "load"),
