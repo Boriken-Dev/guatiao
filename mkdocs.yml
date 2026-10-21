@@ -31,6 +31,7 @@ nav:
   - Passing data: ownership.md
   - Encodings: encodings.md
   - Python, host and provider: python.md
+  - Node.js, host and provider: node.md
   - API Reference:
       # rustdoc's own output, built by `cargo doc` and copied under
       # `rust/` by the docs workflow. An absolute URL because it is not a
