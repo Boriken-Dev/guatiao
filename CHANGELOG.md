@@ -279,6 +279,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Python classes beside their C header,
   `examples/greeter_kind/python/greeter_kind.py`, and
   `examples/python_provider/` holds two libraries written in Python.
+- **Node.js and TypeScript bindings**, `bindings/node/` (npm `guatiao`):
+  typed ESM over koffi, for Node 22 and later, shipping no native code.
+  `Value`, `Ref`, `MapRef` and `ListRef` over a tree (numbers keep their
+  text and read as `number` or `bigint`; absent is `undefined`), `using`
+  or `close()` to free; `guatiao/serde` (`loads`, `dumps`, `ParseError`),
+  `guatiao/intake`, `guatiao/time` (`PlainDate`, `PlainTime`,
+  `PlainDateTime`, `Span`, instants as `Date`, exact lengths as
+  `{ seconds, nanoseconds }`), `redact`, and the status errors. The
+  library is found through `GUATIAO_LIBRARY` or `useLibrary(path)`.
 
 ### Changed
 
