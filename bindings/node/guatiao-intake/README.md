@@ -89,7 +89,7 @@ intake.check(registry.providerConfig('acme_dialer')!, meta.asMap().get(intake.pr
 | `providerFormKey` | where a provider's `meta` carries its form |
 | `useLibrary(path)`, `library()` | naming and loading `guatiao_intake` |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node-intake/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node/guatiao-intake/AGENTS.md)
 is the full API reference and ships in the package. The C ABI is
 described by
 [`guatiao_intake.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-intake/include/guatiao_intake.h).
@@ -97,12 +97,12 @@ described by
 ## Development
 
 ```bash
-cd bindings
+cd bindings/node
 npm ci                # the workspace: guatiao, guatiao-serde and this package
-cd node-intake
+cd guatiao-intake
 npm run typecheck
 npm test              # vitest, against the core's sources beside it
-npm run build         # dist/, after `npm run build` in ../node
+npm run build         # dist/, after `npm run build` in ../guatiao
 ```
 
 `test/setup.ts` points `GUATIAO_LIBRARY` at the repository's build output

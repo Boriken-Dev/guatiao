@@ -1,17 +1,17 @@
 {
-  "name": "guatiao-intake",
+  "name": "guatiao",
   "version": "0.0.0-alpha.1",
-  "description": "Forms over a schema, paths and the flat key-to-text store for guatiao values, over the guatiao_intake C ABI",
+  "description": "Node.js and TypeScript bindings over the guatiao C ABI",
   "license": "MPL-2.0",
   "author": "jose-pr",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Boriken-Dev/guatiao.git",
-    "directory": "bindings/node-intake"
+    "directory": "bindings/node/guatiao"
   },
   "homepage": "https://github.com/Boriken-Dev/guatiao/",
   "bugs": "https://github.com/Boriken-Dev/guatiao/issues",
-  "keywords": ["forms", "json-schema", "values", "c-abi"],
+  "keywords": ["ffi", "plugins", "c-abi", "values", "json-schema"],
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -19,6 +19,22 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./time": {
+      "types": "./dist/time.d.ts",
+      "import": "./dist/time.js"
+    },
+    "./kinds": {
+      "types": "./dist/kinds.d.ts",
+      "import": "./dist/kinds.js"
+    },
+    "./provide": {
+      "types": "./dist/provide.d.ts",
+      "import": "./dist/provide.js"
+    },
+    "./ffi": {
+      "types": "./dist/ffi.d.ts",
+      "import": "./dist/ffi.js"
     }
   },
   "files": [
@@ -37,7 +53,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "guatiao": "0.0.0-alpha.1"
+    "koffi": "^3.3.3"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

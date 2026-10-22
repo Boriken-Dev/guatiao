@@ -414,36 +414,36 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: |
-            bindings/package-lock.json
+            bindings/node/package-lock.json
             examples/package-lock.json
       - name: Install
         # The workspace: guatiao, guatiao-serde and guatiao-intake, the
         # last two resolving the first from the checkout.
-        working-directory: bindings
+        working-directory: bindings/node
         run: npm ci
       - name: Types
         # tsc --strict over the sources, the tests (whose type-check file
         # must meet every expected error) and the examples.
-        working-directory: bindings
+        working-directory: bindings/node
         run: |
-          for p in node node-serde node-intake; do
+          for p in guatiao guatiao-serde guatiao-intake; do
             (cd "$p" && npm run typecheck)
           done
       - name: Build
         # The core first: the others compile against its published types.
-        working-directory: bindings
+        working-directory: bindings/node
         run: |
-          for p in node node-serde node-intake; do
+          for p in guatiao guatiao-serde guatiao-intake; do
             (cd "$p" && npm run build)
           done
       - name: Install the examples, against the build
         working-directory: examples
         run: npm ci
       - name: The examples, as a consumer of the published types
-        working-directory: bindings/node
-        run: npx tsc -p ../../examples/tsconfig.json
+        working-directory: bindings/node/guatiao
+        run: npx tsc -p ../../../examples/tsconfig.json
       - name: Test
-        working-directory: bindings/node
+        working-directory: bindings/node/guatiao
         run: |
           case "$RUNNER_OS" in
             Linux)   bridge=libguatiao_py.so ;;
@@ -454,8 +454,8 @@ jobs:
           npm test 2>&1 | tee node-test.log
           test "${PIPESTATUS[0]}" -eq 0
           if grep -nE "[0-9]+ skipped" node-test.log; then exit 1; fi
-          for p in node-serde node-intake; do
-            (cd "../$p" && npm test 2>&1 | tee "../node/$p-test.log"; test "${PIPESTATUS[0]}" -eq 0)
+          for p in guatiao-serde guatiao-intake; do
+            (cd "../$p" && npm test 2>&1 | tee "../guatiao/$p-test.log"; test "${PIPESTATUS[0]}" -eq 0)
             if grep -nE "[0-9]+ skipped" "$p-test.log"; then exit 1; fi
           done
         env:
@@ -463,14 +463,14 @@ jobs:
           NO_COLOR: "1"
       - name: What the packages ship
         if: matrix.os == 'ubuntu-latest' && matrix.node == '24'
-        working-directory: bindings
+        working-directory: bindings/node
         run: |
-          for p in node node-serde node-intake; do
+          for p in guatiao guatiao-serde guatiao-intake; do
             (cd "$p" && npm pack --dry-run --json > pack.json)
           done
           python3 - <<'EOF'
           import json
-          for p in ("node", "node-serde", "node-intake"):
+          for p in ("guatiao", "guatiao-serde", "guatiao-intake"):
               files = {f["path"] for f in json.load(open(f"{p}/pack.json"))[0]["files"]}
               print(p, sorted(files))
               for need in ("AGENTS.md", "README.md", "LICENSE", "package.json", "dist/index.js", "dist/index.d.ts"):

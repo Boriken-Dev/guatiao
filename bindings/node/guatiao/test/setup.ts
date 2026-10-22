@@ -6,6 +6,6 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+export const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..');
 
 process.env.GUATIAO_LIBRARY ??= path.join(REPO, 'target', 'debug');

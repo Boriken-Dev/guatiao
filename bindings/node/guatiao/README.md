@@ -191,16 +191,16 @@ PlainDate.parse('2026-01-31').add(Span.parse('1mo')).toString();   // '2026-02-2
 | `guatiao/time` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants, exact lengths, `normalize` |
 | `guatiao/ffi` | for a package over another guatiao library: `openSurface`, memory, `adopt`, `borrow`, `withNodes` |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node/guatiao/AGENTS.md)
 is the full API reference and ships in the package. The C ABI is described
 by [`guatiao.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao/include/guatiao.h).
 
 ## Development
 
 ```bash
-cd bindings
+cd bindings/node
 npm ci                # the workspace: this package, guatiao-serde and guatiao-intake
-cd node
+cd guatiao
 npm run typecheck     # tsc --strict over the sources, the tests and the examples
 npm test              # vitest
 npm run build         # dist/

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { defineConfig } from 'vitest/config';
 
-const core = fileURLToPath(new URL('../node/src/', import.meta.url));
+const core = fileURLToPath(new URL('../guatiao/src/', import.meta.url));
 
 export default defineConfig({
   resolve: {

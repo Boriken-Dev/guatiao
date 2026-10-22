@@ -7,7 +7,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Boriken-Dev/guatiao.git",
-    "directory": "bindings/node-serde"
+    "directory": "bindings/node/guatiao-serde"
   },
   "homepage": "https://github.com/Boriken-Dev/guatiao/",
   "bugs": "https://github.com/Boriken-Dev/guatiao/issues",
