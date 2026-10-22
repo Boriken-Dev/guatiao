@@ -11,7 +11,7 @@
 
 #include "gt.h"
 
-int gt_use_library(gt_call *c, guatiao_str path);
+int gt_use_library(gt_call *c, int lib, guatiao_str path);
 const char *gt_opened_path(int lib);
 
 static void set_absent(guatiao_value *v) { memset(v, 0, sizeof *v); }
@@ -71,11 +71,12 @@ static int answer_id(gt_call *c, uint64_t id, guatiao_value *v) {
   return 1;
 }
 
-/* use_library(path) */
+/* use_library(path, lib) */
 int cmd_use_library(gt_call *c) {
   guatiao_str p;
-  if (!gt_arg_text(c, 0, "the path", &p)) return 0;
-  return gt_use_library(c, p);
+  double lib = 0;
+  if (!gt_arg_text(c, 0, "the path", &p) || !gt_arg_double(c, 1, "the library", &lib)) return 0;
+  return gt_use_library(c, (int)lib, p);
 }
 
 /* has_export(lib, name) -> logical */

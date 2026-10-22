@@ -247,6 +247,9 @@ enum { GT_LIB_CORE = 0, GT_LIB_SERDE = 1, GT_LIB_INTAKE = 2 };
  */
 int gt_open(int lib, const char *path, char *err, size_t errlen);
 
+/* 1 when the file at `path` opens and exports `symbol`; it is closed again. */
+int gt_file_carries(const char *path, const char *symbol);
+
 /* Whether `lib` is open. */
 int gt_is_open(int lib);
 

@@ -140,6 +140,15 @@ int gt_open(int lib, const char *path, char *err, size_t errlen) {
   return 0;
 }
 
+int gt_file_carries(const char *path, const char *symbol) {
+  char err[256];
+  void *h = gt_open_file(path, err, sizeof err);
+  if (!h) return 0;
+  int found = gt_symbol(h, symbol) != NULL;
+  gt_close_file(h);
+  return found;
+}
+
 int gt_is_open(int lib) { return lib >= 0 && lib <= 2 && gt_handle_of[lib] != NULL; }
 
 const char *gt_missing_feature(int lib, const char *name) {
