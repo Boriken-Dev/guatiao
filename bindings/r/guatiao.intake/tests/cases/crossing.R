@@ -28,7 +28,7 @@ case("a tree intake built is changed and freed through guatiao", with_library({
 case("the header copies are the committed headers", with_repo({
   for (h in c("guatiao/include/guatiao.h", "guatiao-intake/include/guatiao_intake.h")) {
     committed <- readBin(repo_file("crates", h), "raw", file.size(repo_file("crates", h)))
-    copy <- repo_file("bindings", "r-intake", "src", basename(h))
+    copy <- repo_file("bindings", "r", "guatiao.intake", "src", basename(h))
     expect_true(identical(committed, readBin(copy, "raw", file.size(copy))), paste(basename(h), "matches"))
   }
 }))

@@ -24,7 +24,7 @@ host:
 
 ```bash
 cargo build --workspace --all-features
-R CMD INSTALL bindings/r
+R CMD INSTALL bindings/r/guatiao
 R CMD INSTALL examples/greeter_kind/r/greeterkind
 R CMD INSTALL examples/r_provider/rgreeter
 export GUATIAO_LIBRARY=target/debug
@@ -63,7 +63,7 @@ Rscript examples/r_host/host.R target/debug \
   --python-path bindings/python/guatiao/src --python-path examples/greeter_kind/python
 ```
 
-The binding's tests (`bindings/r`, `R CMD check`) run this host, call
+The binding's tests (`bindings/r/guatiao`, `R CMD check`) run this host, call
 every greeter (Rust, C, Python, Go and R) through every slot, have the
 Rust caller in `greeter_caller` call each of them through the kind's Rust
 proxy, and call the R greeter from threads R did not start, which it

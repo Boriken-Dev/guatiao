@@ -134,16 +134,16 @@ jobs:
               if julia != cargo:
                   problems.append(f"Cargo says {cargo} and {where}/Project.toml says {julia}")
           # R's versions are integers: X.Y.Z-alpha.N is written X.Y.Z.N.
-          described = re.search(r"^Version:\s*(\S+)", pathlib.Path("bindings/r/DESCRIPTION").read_text(), re.M).group(1)
+          described = re.search(r"^Version:\s*(\S+)", pathlib.Path("bindings/r/guatiao/DESCRIPTION").read_text(), re.M).group(1)
           plain = re.fullmatch(r"(\d+\.\d+\.\d+)(?:-alpha\.(\d+))?", cargo)
           if not plain:
               problems.append(f"Cargo says {cargo}, which has no R version: only X.Y.Z and X.Y.Z-alpha.N map")
           else:
               want_r = plain.group(1) + (f".{plain.group(2)}" if plain.group(2) else "")
               if described != want_r:
-                  problems.append(f"Cargo says {cargo}, so bindings/r/DESCRIPTION wants {want_r}, not {described}")
+                  problems.append(f"Cargo says {cargo}, so bindings/r/guatiao/DESCRIPTION wants {want_r}, not {described}")
               for crate in ("serde", "intake"):
-                  where = f"bindings/r-{crate}/DESCRIPTION"
+                  where = f"bindings/r/guatiao.{crate}/DESCRIPTION"
                   text = pathlib.Path(where).read_text()
                   own = re.search(r"^Version:\s*(\S+)", text, re.M).group(1)
                   if own != want_r:
@@ -456,7 +456,7 @@ jobs:
         # it once it is installed.
         run: |
           mkdir -p r
-          R CMD build --no-manual bindings/r
+          R CMD build --no-manual bindings/r/guatiao
           mv guatiao_*.tar.gz r/
           cd r
           R CMD check --no-manual guatiao_*.tar.gz
@@ -464,7 +464,7 @@ jobs:
           rm -rf guatiao.Rcheck
           R CMD INSTALL guatiao_*.tar.gz
           for p in serde intake; do
-            R CMD build --no-manual "../bindings/r-$p"
+            R CMD build --no-manual "../bindings/r/guatiao.$p"
             R CMD check --no-manual guatiao.${p}_*.tar.gz
             if grep -E "^\* checking .*(WARNING|ERROR)" guatiao.$p.Rcheck/00check.log; then exit 1; fi
             rm -rf guatiao.$p.Rcheck

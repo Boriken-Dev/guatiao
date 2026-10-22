@@ -735,7 +735,7 @@ jobs:
           export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge"
           R --version | head -1
           mkdir -p "$RUNNER_TEMP/r-check"
-          R CMD build --no-manual bindings/r
+          R CMD build --no-manual bindings/r/guatiao
           mv guatiao_*.tar.gz "$RUNNER_TEMP/r-check/"
           cd "$RUNNER_TEMP/r-check"
           status=0
@@ -750,7 +750,7 @@ jobs:
           # guatiao.
           R CMD INSTALL guatiao_*.tar.gz
           for p in serde intake; do
-            R CMD build --no-manual "$GITHUB_WORKSPACE/bindings/r-$p"
+            R CMD build --no-manual "$GITHUB_WORKSPACE/bindings/r/guatiao.$p"
             status=0
             R CMD check --no-manual guatiao.${p}_*.tar.gz || status=$?
             cat guatiao.$p.Rcheck/tests/guatiao.$p.Rout* 2>/dev/null | tail -n 10 || true

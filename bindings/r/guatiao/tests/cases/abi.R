@@ -8,7 +8,7 @@
 case("the header copies are the committed headers", with_repo({
   for (h in "guatiao/include/guatiao.h") {
     committed <- readBin(repo_file("crates", h), "raw", file.size(repo_file("crates", h)))
-    copy <- repo_file("bindings", "r", "src", basename(h))
+    copy <- repo_file("bindings", "r", "guatiao", "src", basename(h))
     expect_true(identical(committed, readBin(copy, "raw", file.size(copy))), paste(basename(h), "matches"))
   }
 }))

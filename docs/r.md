@@ -9,7 +9,7 @@ compiled when it installs, opens the guatiao library at run time and calls
 it, for R 4.2 and later, with no dependency outside base R.
 
 ```r
-remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r")
+remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r/guatiao")
 ```
 
 Installing needs R's compiler setup (Rtools on Windows) and libffi

@@ -24,8 +24,8 @@ glue is built on `guatiao`'s C interface.
 
 ```r
 # install.packages("remotes")
-remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r")
-remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r-serde")
+remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r/guatiao")
+remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r/guatiao.serde")
 ```
 
 Installing compiles the package's C glue (Rtools on Windows). Say where
@@ -73,7 +73,7 @@ c(e$format, e$line, e$column)
 | `serde_parse(text, format, read_data_uris, alloc)` | a document as a value |
 | `serde_emit(x, format, pretty, bytes)` | a value, view or R data as text |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r-serde/inst/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r/guatiao.serde/inst/AGENTS.md)
 is the full API reference and ships in the package. The C ABI is
 described by
 [`guatiao_serde.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-serde/include/guatiao_serde.h).
@@ -81,8 +81,8 @@ described by
 ## Development
 
 ```bash
-R CMD build bindings/r && R CMD INSTALL guatiao_*.tar.gz
-R CMD build bindings/r-serde
+R CMD build bindings/r/guatiao && R CMD INSTALL guatiao_*.tar.gz
+R CMD build bindings/r/guatiao.serde
 GUATIAO_LIBRARY=target/debug R CMD check guatiao.serde_*.tar.gz
 ```
 
