@@ -58,7 +58,11 @@ Every failure is an `MException` whose identifier is
 13, `Busy` 14, `Internal` 100 (`guatiao.statuses()` is the table). Details:
 `parse` (a document that does not parse), `unparsed` (text a time grammar
 refuses), `closed` (a closed value, registry, instance or remote),
-`library`, `symbol`. Octave puts `guatiao_mex: ` before the words.
+`library`, `symbol`, `floor` (a table not the kind's), `provider` (the
+status a provider answered). Octave puts `guatiao_mex: ` before the words.
+A provider method answers a status by raising one:
+`error('guatiao:BadValue', 'nobody to greet')`; any other error answers
+`Internal` with its message.
 
 ## Values
 
@@ -236,7 +240,229 @@ a copy when it is MATLAB data. `unflatten`'s store is a `containers.Map`
 or a struct of text; `[]` means nothing stored, or a key that does not
 apply.
 
+## Registry
+
+```matlab
+reg = guatiao.Registry('my-host', '1.0');
+reg.scan_dir('/path/to/plugins', 'kind=greeter');
+reg.providers('greeter')                         % a cell of structs, best first
+g = reg.bind('acme_hello', 'greeterkind.Greeter');   % a remote (see Kinds)
+inst = reg.create('acme_shouter', struct('prefix', 'hey'));
+s = inst.bind('greeterkind.Greeter');
+inst.close(); reg.close();
+```
+
+`guatiao.Registry(id, version, 'Alloc', a)`; every answer that is data is
+plain MATLAB data, already freed. `close()` (the libraries it loaded stay
+mapped; the last reference going closes it too), `is_open()`. Methods:
+`load_file(path)`, `register_entry(name, entry)` (an entry function's
+address, `uint64`), `register_library(lib)` (see Providers), `scan_dir(dir,
+rules, descending)` and `scan_path(spec, rules, descending)` (`rules`: one
+`[!]KEY=VALUE` per line, matched against what a library declares before
+it is mapped), `libraries()`, `providers(kind)`, `available(kind)`,
+`why_not(kind)`, `provider(key)`, `best(kind)`, `provider_available(key)`
+(struct(available, reason)), `keyed_by(template)` /
+`libraries_keyed_by(template)` (`%id` by default; `%name`, `%library`,
+`%version`), `set_priority(id, p)` / `priority(id)`, `provider_table(key,
+kind)` (struct(table, size, ctx), addresses as `uint64`, `table` `[]` for
+none; no `kind` for a single table), `provider_config(key)` (a copy of the
+schema, a `guatiao.Value`, or `[]`), `host()` (the `guatiao_host_info *`).
+
+`create(key, config)` checks the configuration against the provider's
+schema first (`BadValue` naming the field), then answers a
+`guatiao.Instance`: `close()` reaches the provider that built it even
+after a retire or a refresh loaded a new build under the key; `bind(cls)`,
+`is_open()`, `Key`. The last reference going closes it.
+
+`retire(key)` takes a library out and leaves it mapped until nothing uses
+it; `collect()` closes every retired library whose own `unload` agrees and
+answers their keys, as does the next load, retire or unload.
+`unload(key, unchecked)` unmaps when the library agrees: `Busy` while
+something it handed out lives, `Unsupported` with no `unload` function,
+`WrongKind` for a library linked rather than mapped, `NotFound` for none.
+Both take the LIBRARY key (`%id` by default).
+
+**Sources**: `add_source_file(path, config)` maps a file exporting
+`guatiao_source` (a bridge to another language) and adds the source it
+answers; `watch_dir(dir, rules)` watches a folder; `refresh()` makes the
+registry agree with every source: struct(loaded, retired, skipped,
+refused). Nothing refreshes on its own.
+
+## Kinds: calling a table, serving one
+
+A kind is a `classdef` in the kind author's package, declared once from
+its C header:
+
+```matlab
+classdef Greeter < guatiao.Kind
+  properties (Constant, Hidden)
+    GreeterKind = guatiao.Kind.describe('greeter', 2695856491, ...
+      guatiao.slot('greet', {'name', 'string'}, 'Returns', 'map', 'Required', true, 'Fallible', true), ...
+      guatiao.slot('shout', {'name', 'string'}, 'Returns', 'string'), ...
+      guatiao.slot('start', {'listener', guatiao.taken('greeterkind.Listener')}, ...
+                   'Returns', 'greeterkind.Conversation', 'Fallible', true))
+  end
+  methods
+    function out = greet(self, name), out = self.call('greet', name); end
+    function out = shout(self, name), out = self.call('shout', name); end
+    function out = start(self, listener), out = self.call('start', listener); end
+  end
+end
+```
+
+The description is a `Constant` property named `<Class>Kind` (two kinds
+a provider inherits must not share a property name).
+`guatiao.Kind.describe(name, floor_hash, slot, ..., 'Object', tf)`: the C
+name, the floor hash the header defines, a `guatiao.slot` per slot in the
+header's order (required ones first); an object kind's `destroy` is its
+remote's `close()`. `guatiao.slot(name, {argname, shape, ...}, 'Returns',
+shape, 'Required', tf, 'Fallible', tf)`. Each slot has a method calling
+`self.call(slotname, args...)`.
+
+| shape | C | the caller passes | the provider receives / returns |
+| --- | --- | --- | --- |
+| `'string'` | `guatiao_str` | `char` | `char` (UTF-8) |
+| `'bytes'` | `guatiao_bytes` | `uint8` | `uint8` (a copy) |
+| `guatiao.lent('bytes')` | `guatiao_bytes_mut` | a `guatiao.Buffer(n)`, written in place | a `guatiao.Buffer` (`Data`), copied back when the method returns |
+| `'bool'`, `'int8'`..`'uint64'`, `'float'`, `'double'`, `'size'`, `'intptr'` | the C scalar | a number or logical that fits (`int64`/`uint64` exactly) | a double, or `int64`/`uint64` past 2^53; logical for `bool` |
+| `'value'`, `'map'`, `'list'` | `const guatiao_value *` / `map *` / `list *` | a value, a view or MATLAB data | a read-only `guatiao.Value`, valid for the call |
+| `guatiao.lent('value'/'map'/'list')` | the same without `const`, lent | a value or view, changed in place | a writable `guatiao.Value`, valid for the call; what is added is built in the allocator the tree records |
+| `guatiao.taken('value'/'map'/'list')` | the same, handed over | a value (moved: it holds absent afterwards), a view (copied) or MATLAB data | a `guatiao.Value` the method owns |
+| answer `'value'`, `'map'`, `'list'` | `guatiao_value/map/list *out` | a `guatiao.Value` | MATLAB data or a value, built in the allocator the carrier names (`[]`, `{}` and `struct()` the empty container) |
+| answer `'string'` | `guatiao_string *out` | `char` | `char` |
+| answer scalar | `T *out` | a number or logical | a number or logical |
+| no answer | | `[]` | ignored |
+| `guatiao.taken(K)` (object kind class) | `guatiao_object` | an object of class `K` (a subclass implementing it) or a remote of `K` this side owns (handed over) | a remote of `K`, owned: `close()` destroys it |
+| `guatiao.lent(K)` | `const guatiao_object *` | the same, or any remote of `K` | a remote of `K`, valid for the call |
+| answer `K` | `guatiao_object *out` | a remote of `K`, owned | an object of class `K`, or a remote it owns |
+
+**A remote** is an instance of the kind's class bound to a table
+(`Registry.bind`, `Instance.bind`, an object a slot answers): its methods
+call the slots. `has_slot(name)` says whether its table carries a slot (a
+slot appended after a library was built is missing from an older table,
+and calling it raises `Unsupported`); `is_bound()`; `close()`. A refusal
+raises `guatiao:<Status>:provider` with the provider's words. A table
+smaller than the kind's required slots or with another floor hash is
+refused (`guatiao:WrongKind:floor`). A remote from `Registry.bind` is valid
+while the registry is open and the library loaded (`guatiao:Gone:closed`
+once the registry is closed); one from `Instance.bind` until the instance
+is closed. An object remote this side owns is destroyed when closed or
+when its last reference goes. Arguments a call refuses before it reaches
+the table (a wrong shape) leave everything as it was.
+
+**An M object as an object of a kind**: an instance of a class inheriting
+the object kind's class and overriding its methods. Its table is built
+once per kind and class (a slot for each method the class overrides, null
+for the rest) and kept for the session. What C holds of it is a ctx
+shaped like an address (`65536 + 16 * id`, never reused), so a call naming
+one released answers `Gone`. It is held until its holder destroys it, when
+its class's own `close()` runs if it defines one, or until the call
+returns (lent).
+
+`guatiao.serving(fn)` runs `fn` inside a call into guatiao: C code of your
+own (a MEX file, a library called through `calllib`) that calls a slot an
+M object serves needs it (see Threads).
+
+## Providers written in M
+
+```matlab
+classdef Hello < greeterkind.Greeter & greeterkind.Counter
+  properties (Constant, Hidden)
+    Provider = guatiao.provider('DisplayName', 'Hello, in M')
+  end
+  properties
+    asked = 0
+  end
+  methods
+    function out = greet(self, name)
+      if isempty(name), error('guatiao:BadValue', 'nobody to greet'); end
+      out = struct('greeting', ['hello, ' name]);
+    end
+    function n = count(self)
+      self.asked = self.asked + 1; n = self.asked;
+    end
+  end
+end
+
+reg.register_library(guatiao.library_of('mypackage'));
+```
+
+**A provider** is a handle class inheriting the kinds it serves and
+overriding their methods, declared by a `Constant` `Provider` property:
+`guatiao.provider('Serves', classes, 'Name', n, 'Id', id, 'DisplayName',
+d, 'Version', v, 'Meta', struct, 'Config', guatiao.Config, 'ConfigSchema',
+data, 'Make', fn, 'Default', tf, 'Available', fn)`. `Serves` defaults to
+the kinds it inherits; `Name` to its class name in snake case; `Id` to
+`<library id>_<name>`. With `Config`, each configuration the host checked
+against `Config.schema()` builds an instance through the class's
+constructor with `Config.read(config)` (a struct); with `ConfigSchema`,
+with the configuration as plain data; `Make(config)` replaces the
+constructor. With neither, its constructor with no arguments builds its
+one instance (`Default`), when the library's descriptor is built.
+`Available` answers `[]` when the provider can run here and why not
+otherwise, asked every time a host asks. A required slot the class does not
+override (its defining class is still the kind's), an object kind among
+`Serves`, or two providers sharing an id is refused when the library is
+made. A method raising `guatiao:<Status>` answers that status and its
+words; any other error answers `Internal`. An instance (or its one
+instance) whose class defines `close()` is closed when its host destroys
+it.
+
+**A library**: `guatiao.library_of(where, 'Id', id, 'Version', v, 'Meta',
+struct, 'Providers', classes)`, `where` a folder, an installed Octave
+package's name, or a namespace (`+folder`) on the path. Id, version and
+meta from the folder's `DESCRIPTION` (Octave's package format;
+`packinfo/DESCRIPTION` once installed): `Name`, `Version`, `Title` as
+`summary`, `Description`, `Author` as `authors`, `Maintainer`, `License`,
+`Url` as `urls.homepage`; without one, `Contents.m`'s `% Version x.y.z`
+line or an installed MATLAB toolbox's version. `COPYING`, `LICENSE`,
+`LICENCE`, `NOTICE` (and `.md`, `.txt`) become `meta.notices`
+(component, text, format). Providers: the classes in its namespaces
+carrying a `Provider` constant, in name order. Built once per folder and
+session. `guatiao.Library(id, version, providers, 'Meta', m)` is the
+primitive (providers: class names, or `guatiao.provider` specs with
+`Class` set). A library has `Id`, `Version`, `Providers`, `ProviderIds`,
+`Meta`, `entry()`, `live_instances()`, `close()` (lets go of each
+provider's one instance; a host asking for the descriptor afterwards is
+declined). Its descriptor is built on first use and kept for the
+session, its `unload` answering `Busy` while an instance lives.
+`Registry.register_library(lib)` files it under its id: linked, not
+mapped, so `unload` answers `WrongKind` and `retire` takes it out.
+
+A host in this session, written in any language, calls an M provider
+through the same table it calls one written in Rust or C. A library file
+written in M that a foreign process's scan loads would need MATLAB or
+Octave embedded in it; the package offers none.
+
+## Threads
+
+M code runs only on the interpreter's thread, and so does everything in
+this package.
+
+**A slot an M object serves runs only on the interpreter's thread, while a
+call into guatiao is in progress there**: a host's own call (a remote's
+method, a registry call) or a library calling back during one, or code run
+by `guatiao.serving`. The method runs under `mexCallMATLABWithTrap`, so an
+error never unwinds through the C frames between the library and the
+interpreter. Called from any other thread, or with no call into guatiao in
+progress, it touches no interpreter object and answers at once:
+`Unsupported`, with "M code runs only on the interpreter's thread, inside
+a call into guatiao" in the `guatiao_provider_error` when the slot has one;
+a provider's `available` answers false with that reason; `create` answers
+`Unsupported`; a `destroy` is queued and done at the gateway's next call;
+a library's `unload` and entry answer from C alone. Nothing waits, so
+nothing deadlocks.
+
+An interrupt (Ctrl-C) or running out of memory while an M provider serves
+a call reaches the interpreter's own error handling, not the trap: avoid
+interrupting a host while a foreign caller is calling M.
+
 ## Octave and MATLAB
 
+- Octave 11 warns "method delete: conflicting definitions" when an object
+  of a class with two handle superclasses (a provider serving two kinds) is
+  deleted; a `delete` method in that class silences it.
+- Octave's `mexCallMATLABWithTrap` drops an error's message; the package
+  catches errors itself first, so a provider's words cross in both.
 - Typed property declarations (`x char = ''`) are a syntax error in
   Octave: configurations are `guatiao.Config` field lists.
