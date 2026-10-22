@@ -346,7 +346,7 @@ jobs:
       - name: libffi, which the package's glue compiles against
         run: sudo apt-get update && sudo apt-get install -y libffi-dev
       - name: bit64, which the package suggests (R CMD check wants it present)
-        run: Rscript -e 'install.packages("bit64")' -e 'stopifnot(requireNamespace("bit64"))'
+        run: Rscript -e 'r <- getOption("repos"); r[r == "@CRAN@"] <- "https://cloud.r-project.org"' -e 'install.packages("bit64", repos = r)' -e 'stopifnot(requireNamespace("bit64"))'
       # The source package is what R-universe builds from the repository
       # and what the GitHub release carries; checked here as R checks it,
       # with no guatiao library named, so every case that needs one skips.
