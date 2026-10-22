@@ -11,6 +11,10 @@ import 'errors.dart';
 import 'library.dart' as native;
 import 'value.dart';
 
+/// The key of a provider's `meta` holding its form document: read it with
+/// `Registry.providerMeta`, then [check] it against `providerConfig`.
+const String providerFormKey = 'form';
+
 /// `null` when `form` fits `schema`, otherwise the error map
 /// `guatiao_intake_check` writes: `kind` and `at`, plus whichever of
 /// `path`, `id`, `field`, `expected` and `message` apply.

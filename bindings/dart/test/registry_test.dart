@@ -8,6 +8,7 @@ library;
 import 'dart:ffi';
 
 import 'package:guatiao/guatiao.dart';
+import 'package:guatiao/intake.dart' as intake;
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -115,6 +116,39 @@ void main() {
     expect(schema!.tag, Tag.map);
     expect(() => schema.asMap()['x'] = 1, throwsStateError);
     expect(reg.providerConfig('derived_greeter_hello'), isNull);
+  });
+
+  test('a provider carries its form in meta, which fits its schema', () {
+    final reg = scanned();
+    addTearDown(reg.close);
+    final meta = reg.providerMeta('derived_greeter_shouter');
+    expect(meta, isNotNull);
+    addTearDown(meta!.close);
+    final form = meta.asMap()[intake.providerFormKey];
+    final schema = reg.providerConfig('derived_greeter_shouter');
+    expect(form, isNotNull);
+    expect(schema, isNotNull);
+
+    expect(intake.check(schema!, form!), isNull);
+    final sections = form.toDart()! as Map;
+    expect(
+      [for (final s in sections['sections']! as List) (s as Map)['id']],
+      ['words', 'volume'],
+    );
+    final marks = (sections['fields']! as Map)['marks']! as Map;
+    expect(marks['unit'], 'marks');
+    expect(
+      ((sections['fields']! as Map)['prefix']! as Map)['placeholder'],
+      'hey',
+    );
+    for (final exclaim in [false, true]) {
+      final values = Value.fromDart({'exclaim': exclaim});
+      addTearDown(values.close);
+      expect(intake.isVisible(schema, form, 'marks', values), exclaim);
+    }
+
+    expect(reg.providerMeta('derived_greeter_hello'), isNull);
+    expect(() => reg.providerMeta('nobody'), throwsA(isA<NotFound>()));
   });
 
   test('retire frees the key and leaves the other library alone', () {

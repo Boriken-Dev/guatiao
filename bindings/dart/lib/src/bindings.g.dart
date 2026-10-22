@@ -1253,6 +1253,32 @@ class GuatiaoBindings {
           void Function(ffi.Pointer<guatiao_registry>, guatiao_str,
               ffi.Pointer<ffi.Void>)>();
 
+  int guatiao_registry_provider_meta(
+    ffi.Pointer<guatiao_registry> reg,
+    guatiao_str key,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_registry_provider_meta(
+      reg,
+      key,
+      alloc,
+      out,
+    );
+  }
+
+  late final _guatiao_registry_provider_metaPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_registry>,
+              guatiao_str,
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_registry_provider_meta');
+  late final _guatiao_registry_provider_meta =
+      _guatiao_registry_provider_metaPtr.asFunction<
+          int Function(ffi.Pointer<guatiao_registry>, guatiao_str,
+              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+
   ffi.Pointer<ffi.Void> guatiao_registry_provider_table(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str key,
@@ -2315,6 +2341,8 @@ const String GUATIAO_INTAKE_KEY_X_ADVANCED = 'x-advanced';
 const String GUATIAO_INTAKE_KEY_X_ORDER = 'x-order';
 
 const String GUATIAO_INTAKE_KEY_X_SECTION = 'x-section';
+
+const String GUATIAO_INTAKE_PROVIDER_FORM_KEY = 'form';
 
 const String GUATIAO_KEY_ADDITIONAL_PROPERTIES = 'additionalProperties';
 

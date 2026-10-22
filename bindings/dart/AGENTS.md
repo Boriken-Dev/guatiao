@@ -113,8 +113,11 @@ reg.close();
 Also `loadFile`, `scanPath`, `libraries()`, `provider(key)`,
 `available(kind)`, `keyedBy` / `librariesKeyedBy`, `setPriority` /
 `priority`, `providerConfig(key)` (a borrowed, read-only `Ref` onto the
-schema — writing through it throws), `retire`, `collect`, `unload`. Every answer
-that is data comes back as a plain `Map`/`List`, already freed.
+schema — writing through it throws), `providerMeta(key)` (a copy of the
+provider's `meta` as a `Value` to close, `null` when it declares none,
+`NotFound` for an unknown key; its form is under `intake.providerFormKey`),
+`retire`, `collect`, `unload`. Every answer that is data comes back as a
+plain `Map`/`List`, already freed.
 
 `providerTable(key, kind: 'greeter')` answers the table the provider
 speaks that kind through; `providerTable(key)` answers its single table
@@ -216,6 +219,21 @@ declare is dropped by `unflatten`.
 entry under it, or a discriminant that names no arm. A `store` that is not
 text to text -- a `Map`, or a `Ref` onto anything but a map of strings --
 throws `ArgumentError`.
+
+**A provider's form** travels in its `meta`, under `intake.providerFormKey`
+(`'form'`), beside the configuration schema it is shown with:
+
+```dart
+final meta = reg.providerMeta('acme_dialer');    // null when it declares no meta
+try {
+  final form = meta!.asMap()[intake.providerFormKey]!;
+  final schema = reg.providerConfig('acme_dialer')!;
+  intake.check(schema, form);                    // null: it fits
+  intake.layout(schema, form);
+} finally {
+  meta?.close();
+}
+```
 
 ## time: dates, times, instants, spans, exact lengths
 

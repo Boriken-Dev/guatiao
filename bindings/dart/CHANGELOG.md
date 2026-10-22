@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `Registry.providerMeta(key)`: a copy of the provider's `meta` as a
+  `Value` to close, `null` when it declares none, `NotFound` for an unknown
+  key; and `providerFormKey` in `package:guatiao/intake.dart`, the key its
+  form is under, so a host checks a provider's form against
+  `providerConfig` with `intake.check`.
 - `package:guatiao/time.dart`: dates, times of day, civil date-times,
   instants, spans and exact lengths, each read and written by the
   library's own functions so every language accepts the same text.
