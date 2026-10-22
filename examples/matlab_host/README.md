@@ -25,8 +25,8 @@ greeters on the path itself):
 ```bash
 cargo build --workspace --all-features
 export GUATIAO_LIBRARY=$PWD/target/debug
-octave-cli --eval "addpath bindings/matlab/inst; guatiao.build(); addpath examples/matlab_host; host('target/debug')"
-matlab -batch "addpath bindings/matlab/inst; guatiao.build(); addpath examples/matlab_host; host('target/debug')"
+octave-cli --eval "addpath bindings/matlab/guatiao/inst; guatiao.build(); addpath examples/matlab_host; host('target/debug')"
+matlab -batch "addpath bindings/matlab/guatiao/inst; guatiao.build(); addpath examples/matlab_host; host('target/debug')"
 ```
 
 `target/debug` holds the Rust greeters (`derived_greeter`, written with
@@ -40,7 +40,7 @@ name that folder too:
 mkdir -p c-greeter
 cc -shared -fPIC -I crates/guatiao/include -I examples/greeter_kind/include \
    -o c-greeter/libc_greeter.so crates/guatiao/tests/c_consumer/greeter_in_c.c
-octave-cli --eval "addpath bindings/matlab/inst examples/matlab_host; host('target/debug', 'c-greeter')"
+octave-cli --eval "addpath bindings/matlab/guatiao/inst examples/matlab_host; host('target/debug', 'c-greeter')"
 ```
 
 On Windows the output is `c-greeter/c_greeter.dll`; on macOS,

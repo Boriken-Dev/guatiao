@@ -3,9 +3,9 @@
 % file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 function r = repo_root()
-% The checkout's root: GUATIAO_REPO, else three folders up from here.
+% The checkout's root: GUATIAO_REPO, else four folders up from here.
   r = getenv('GUATIAO_REPO');
   if isempty(r)
-    r = fileparts(fileparts(fileparts(fileparts(mfilename('fullpath')))));
+    r = fileparts(fileparts(fileparts(fileparts(fileparts(mfilename('fullpath'))))));
   end
 end

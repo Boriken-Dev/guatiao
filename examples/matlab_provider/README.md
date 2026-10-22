@@ -18,7 +18,7 @@ version and meta from [`mlgreeter/DESCRIPTION`](mlgreeter/DESCRIPTION)
 from the classes in `+mlgreeter` that carry a `Provider` constant.
 
 ```matlab
-addpath bindings/matlab/inst examples/greeter_kind/matlab examples/matlab_provider/mlgreeter
+addpath bindings/matlab/guatiao/inst examples/greeter_kind/matlab examples/matlab_provider/mlgreeter
 reg = guatiao.Registry('my-host', '1.0');
 reg.register_library(guatiao.library_of('mlgreeter'));
 g = reg.bind('mlgreeter_hello', 'greeterkind.Greeter');

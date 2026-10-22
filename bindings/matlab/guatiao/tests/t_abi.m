@@ -20,7 +20,7 @@ function header_copies()
   for i = 1:numel(pairs)
     [~, base, ext] = fileparts(pairs{i});
     committed = bytes_of(fullfile(repo_root(), 'crates', pairs{i}));
-    copy = bytes_of(fullfile(repo_root(), 'bindings', 'matlab', 'src', [base ext]));
+    copy = bytes_of(fullfile(repo_root(), 'bindings', 'matlab', 'guatiao', 'src', [base ext]));
     expect_true(isequal(committed, copy), [base ext ' matches']);
   end
 end

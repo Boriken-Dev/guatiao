@@ -23,7 +23,7 @@ function host(varargin)
   here = fileparts(mfilename('fullpath'));
   repo = fileparts(fileparts(here));
   if exist('guatiao_mex') ~= 3 %#ok<EXIST>
-    addpath(fullfile(repo, 'bindings', 'matlab', 'inst'));
+    addpath(fullfile(repo, 'bindings', 'matlab', 'guatiao', 'inst'));
   end
   addpath(fullfile(repo, 'examples', 'greeter_kind', 'matlab'));
   addpath(fullfile(repo, 'examples', 'matlab_provider', 'mlgreeter'));

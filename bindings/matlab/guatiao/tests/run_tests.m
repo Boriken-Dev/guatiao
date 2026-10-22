@@ -5,7 +5,7 @@
 function ok = run_tests(varargin)
 % Runs every t_*.m in this folder, under MATLAB or Octave:
 %
-%   cd bindings/matlab/tests; run_tests                 % all files
+%   cd bindings/matlab/guatiao/tests; run_tests                 % all files
 %   run_tests('t_values')                               % some
 %   run_tests('Exit', true)                             % exit 1 on failure (CI)
 %
