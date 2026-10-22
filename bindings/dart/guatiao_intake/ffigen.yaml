@@ -5,10 +5,10 @@
 # **Check that the output is not empty.** ffigen does not fail on an entry
 # point it cannot find: it reports `Input Headers: []` and writes a file
 # with no bindings in it, which deletes the whole surface silently.
-name: GuatiaoSerdeBindings
+name: GuatiaoIntakeBindings
 description: >-
-  Raw dart:ffi bindings over the guatiao_serde C ABI, generated from
-  crates/guatiao-serde/include/guatiao_serde.h.
+  Raw dart:ffi bindings over the guatiao_intake C ABI, generated from
+  crates/guatiao-intake/include/guatiao_intake.h.
 # Every type guatiao.h declares comes from package:guatiao, so a
 # `Pointer<guatiao_value>` here is the one its `Value` holds.
 import:
@@ -19,17 +19,12 @@ output:
 
 headers:
   entry-points:
-    - '../../crates/guatiao-serde/include/guatiao_serde.h'
+    - '../../../crates/guatiao-intake/include/guatiao_intake.h'
   include-directives:
-    - '**guatiao_serde.h'
+    - '**guatiao_intake.h'
 
 compiler-opts:
-  - '-I../../crates/guatiao/include'
-  # guatiao_serde.h guards its TOML and YAML entry points behind these;
-  # without them ffigen binds only the JSON half, and `serde.dart` then
-  # has nothing to call for a format the loaded library may well export.
-  - '-DGUATIAO_SERDE_TOML'
-  - '-DGUATIAO_SERDE_YAML'
+  - '-I../../../crates/guatiao/include'
 
 preamble: |
   // This Source Code Form is subject to the terms of the Mozilla Public

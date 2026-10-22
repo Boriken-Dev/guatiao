@@ -39,8 +39,8 @@ public surface); this file is about the repository.
 | `examples/fortran_greeter/` | a library written in Fortran (an fpm package named and versioned as its source states, which its test checks); its `CMakeLists.txt` builds it as a library file a scan finds |
 | `bindings/python/guatiao/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md`; `guatiao.ffi` is what a package over another guatiao library builds on |
 | `bindings/python/guatiao-serde/`, `bindings/python/guatiao-intake/` | the packages `guatiao-serde` and `guatiao-intake` (`import guatiao_serde`, `guatiao_intake`), each over its own library, with its own `AGENTS.md` |
-| `bindings/dart/` | `dart:ffi` bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`; `lib/src/bindings.g.dart` (from `guatiao.h`) and `lib/ffi_symbols.yaml` are ffigen output and never hand-edited; `lib/ffi.dart` is what a package over another guatiao library builds on |
-| `bindings/dart-serde/`, `bindings/dart-intake/` | the pub.dev packages `guatiao_serde` and `guatiao_intake`, each over its own library and its own ffigen output (reusing the core's types through its symbol file); `pubspec_overrides.yaml` takes the core from the checkout and is not published |
+| `bindings/dart/guatiao/` | `dart:ffi` bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`; `lib/src/bindings.g.dart` (from `guatiao.h`) and `lib/ffi_symbols.yaml` are ffigen output and never hand-edited; `lib/ffi.dart` is what a package over another guatiao library builds on |
+| `bindings/dart/guatiao_serde/`, `bindings/dart/guatiao_intake/` | the pub.dev packages `guatiao_serde` and `guatiao_intake`, each over its own library and its own ffigen output (reusing the core's types through its symbol file); `pubspec_overrides.yaml` takes the core from the checkout and is not published |
 | `bindings/node/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads; `src/ffi.ts` (`guatiao/ffi`) is what a package over another guatiao library builds on |
 | `bindings/node-serde/`, `bindings/node-intake/` | the npm packages `guatiao-serde` and `guatiao-intake`, each over its own library and the core's koffi; their tests run against the core's sources |
 | `bindings/package.json` | the npm workspace of the three Node packages, with the one `package-lock.json`: `npm ci` there installs all three and links the core into the others |
@@ -373,7 +373,7 @@ migration under `[Unreleased]` in `CHANGELOG.md`; work lands there and the
 version moves only when a release is cut.
 
 **Cutting a release.** One version everywhere: `[workspace.package] version`
-in `Cargo.toml`; `bindings/dart/pubspec.yaml` and those of `dart-serde` and
+in `Cargo.toml`; `bindings/dart/guatiao/pubspec.yaml` and those of `dart-serde` and
 `dart-intake` (each with its `guatiao: ^x.y.z`); the same version the PEP 440
 way in `bindings/python/guatiao/pyproject.toml` and its `__version__`
 (`0.0.0-alpha.0` is `0.0.0a0`), and in `python-serde` and `python-intake`
@@ -396,7 +396,7 @@ numbers: `0.0.0-alpha.N` is written `0.0.0`), and the
 `--locked` build refuses a stale one; `cargo build` in that directory
 rewrites it). A `## [x.y.z] - <date>` section in
 `CHANGELOG.md` (its body becomes the release notes) and in the
-`CHANGELOG.md` of `bindings/dart`, `dart-serde` and `dart-intake` (pub
+`CHANGELOG.md` of `bindings/dart/guatiao`, `dart-serde` and `dart-intake` (pub
 warns on a changelog that names no section for the version, which only a
 rehearsal lets pass). Rehearse with `gh workflow run release.yml`,
 then push the tag `vx.y.z` -- the tag is the release, and a registry never
@@ -428,7 +428,7 @@ and intake packages after it.
 | --- | --- | --- |
 | crates.io | `CARGO_REGISTRY_TOKEN` secret: trusted publishing needs a crate that exists | trusted publishing per crate, then repository variable `CRATES_IO_TRUSTED_PUBLISHING=true` and delete the secret |
 | PyPI | a *pending* trusted publisher for each of `guatiao`, `guatiao-serde` and `guatiao-intake`: repository `Boriken-Dev/guatiao`, workflow `release.yml`, environment `pypi` (`guatiao` has its publisher; the other two need theirs before their first release) | the same publishers |
-| pub.dev | **by hand**, `dart pub publish` in `bindings/dart`, then in `bindings/dart-serde` and `bindings/dart-intake` once `guatiao` at that version is on pub.dev (their `pubspec_overrides.yaml` is not published): automated publishing needs a package that exists | automated publishing for each package from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
+| pub.dev | **by hand**, `dart pub publish` in `bindings/dart/guatiao`, then in `bindings/dart/guatiao_serde` and `bindings/dart/guatiao_intake` once `guatiao` at that version is on pub.dev (their `pubspec_overrides.yaml` is not published): automated publishing needs a package that exists | automated publishing for each package from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
 | npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists, so the token publishes `guatiao`, `guatiao-serde` and `guatiao-intake` the first time; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher on each of the three for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |
 | Go module proxy | the tag `bindings/go/vx.y.z`, pushed by `release.yml` with the workflow's own token; the job then asks proxy.golang.org for the version, which lists it | the same; nothing to configure |
 | R-universe | nothing in `release.yml`: the owner's universe (`Boriken-Dev/boriken-dev.r-universe.dev`) lists each package in its `packages.json`, `{"package": "guatiao", "url": "https://github.com/Boriken-Dev/guatiao", "subdir": "bindings/r"}`, and the same for `guatiao.serde` (`"subdir": "bindings/r-serde"`) and `guatiao.intake` (`"subdir": "bindings/r-intake"`); R-universe builds binaries for every OS from the repository, the core first as their `Depends` and `LinkingTo` name it; CRAN only if the owner asks | the same |

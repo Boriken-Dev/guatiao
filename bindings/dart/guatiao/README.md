@@ -168,7 +168,7 @@ final greeter = kindTable<GreeterVtable>(
 greeter.ref.greet.asFunction<GreetDart>()(found.ctx, name, outMap, err);
 ```
 
-[`test/greeter_test.dart`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/test/greeter_test.dart)
+[`test/greeter_test.dart`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/guatiao/test/greeter_test.dart)
 is a complete worked example.
 
 ### Reading a value you were handed
@@ -276,7 +276,7 @@ words when it gave any.
 | `package:guatiao/ffi.dart` | for a package over another guatiao library: the generated bindings, `openSurface`, `NativeLib`, `strOf`, `takeValue`, `freeNode`, `checkStatus` |
 | `package:guatiao/time.dart` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, `parseTimestamp`, `formatTimestamp`, `toDuration`, `fromDuration`, `normalize` |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/guatiao/AGENTS.md)
 is the full API reference and ships with the package. The C ABI is
 described by
 [`guatiao.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao/include/guatiao.h).

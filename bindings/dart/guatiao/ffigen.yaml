@@ -25,12 +25,12 @@ output:
 
 headers:
   entry-points:
-    - '../../crates/guatiao/include/guatiao.h'
+    - '../../../crates/guatiao/include/guatiao.h'
   include-directives:
     - '**guatiao.h'
 
 compiler-opts:
-  - '-I../../crates/guatiao/include'
+  - '-I../../../crates/guatiao/include'
 
 preamble: |
   // This Source Code Form is subject to the terms of the Mozilla Public

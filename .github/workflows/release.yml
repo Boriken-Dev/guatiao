@@ -73,7 +73,7 @@ jobs:
 
           cargo = tomllib.loads(pathlib.Path("Cargo.toml").read_text())["workspace"]["package"]["version"]
           python = tomllib.loads(pathlib.Path("bindings/python/guatiao/pyproject.toml").read_text())["project"]["version"]
-          pubspec = re.search(r"^version:\s*(\S+)", pathlib.Path("bindings/dart/pubspec.yaml").read_text(), re.M).group(1)
+          pubspec = re.search(r"^version:\s*(\S+)", pathlib.Path("bindings/dart/guatiao/pubspec.yaml").read_text(), re.M).group(1)
           init = re.search(r'^__version__ = "([^"]+)"', pathlib.Path("bindings/python/guatiao/src/guatiao/__init__.py").read_text(), re.M).group(1)
           print(f"Cargo {cargo}, pubspec {pubspec}, pyproject {python}, __version__ {init}")
 
@@ -94,7 +94,7 @@ jobs:
                   problems.append(f"{where} says {project['version']} (__version__ {own_init}), not {python}")
               if f"guatiao=={python}" not in project["dependencies"]:
                   problems.append(f"{where} does not pin guatiao=={python}")
-              where = f"bindings/dart-{crate}/pubspec.yaml"
+              where = f"bindings/dart/guatiao_{crate}/pubspec.yaml"
               text = pathlib.Path(where).read_text()
               own = re.search(r"^version:\s*(\S+)", text, re.M).group(1)
               if own != cargo:
@@ -262,8 +262,8 @@ jobs:
 
           rehearsal = os.environ["EVENT"] == "workflow_dispatch"
           failed = []
-          for package in ("dart", "dart-serde", "dart-intake"):
-              where = f"bindings/{package}"
+          for package in ("guatiao", "guatiao_serde", "guatiao_intake"):
+              where = f"bindings/dart/{package}"
               subprocess.run(["dart", "pub", "get"], cwd=where, check=True)
               run = subprocess.run(["dart", "pub", "publish", "--dry-run"], cwd=where, capture_output=True, text=True)
               out = run.stdout + run.stderr
@@ -778,8 +778,8 @@ jobs:
           import urllib.error
           import urllib.request
 
-          for package, where in (("guatiao", "bindings/dart"), ("guatiao_serde", "bindings/dart-serde"),
-                                 ("guatiao_intake", "bindings/dart-intake")):
+          for package, where in (("guatiao", "bindings/dart/guatiao"), ("guatiao_serde", "bindings/dart/guatiao_serde"),
+                                 ("guatiao_intake", "bindings/dart/guatiao_intake")):
               version = re.search(r"^version:\s*(\S+)", open(f"{where}/pubspec.yaml").read(), re.M).group(1)
               try:
                   with urllib.request.urlopen(f"https://pub.dev/api/packages/{package}") as r:

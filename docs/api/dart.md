@@ -81,8 +81,8 @@ A format the loaded library does not export throws `UnsupportedError`
 naming it.
 
 The package's own
-[`README`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/README.md)
+[`README`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/guatiao/README.md)
 and
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/guatiao/AGENTS.md)
 carry the rest. The C ABI is described by
 [`guatiao.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao/include/guatiao.h).

@@ -93,7 +93,7 @@ naming the symbol and its feature. A TOML document must be a map.
 | `bytesDataUri`, `bytesBase64`, `bytesArray`, `bytesRefuse`, `readDataUris`, `prettyFlag` | the `how` flags |
 | `library()` | the loaded `guatiao_serde` |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart-serde/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/guatiao_serde/AGENTS.md)
 is the full API reference and ships with the package. The C ABI is
 described by
 [`guatiao_serde.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-serde/include/guatiao_serde.h).

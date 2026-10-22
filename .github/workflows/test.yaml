@@ -1169,8 +1169,8 @@ jobs:
         # guatiao, guatiao_serde and guatiao_intake; the last two take the
         # first from the checkout (pubspec_overrides.yaml).
         run: |
-          for p in dart dart-serde dart-intake; do
-            (cd "bindings/$p" && dart pub get)
+          for p in guatiao guatiao_serde guatiao_intake; do
+            (cd "bindings/dart/$p" && dart pub get)
           done
         shell: bash
         if: matrix.sdk == 'stable'
@@ -1179,31 +1179,31 @@ jobs:
         # only the stable leg uses them; the floor leg builds and tests the
         # packages against what their own `sdk:` constraint admits.
         run: |
-          for p in dart dart-serde dart-intake; do
-            (cd "bindings/$p" && dart pub remove ffigen lints)
+          for p in guatiao guatiao_serde guatiao_intake; do
+            (cd "bindings/dart/$p" && dart pub remove ffigen lints)
           done
         shell: bash
         if: matrix.sdk != 'stable'
       - name: Analyze
         # `--fatal-infos`, because a lint at info level is still a lint.
         run: |
-          for p in dart dart-serde dart-intake; do
-            (cd "bindings/$p" && dart analyze --fatal-infos)
+          for p in guatiao guatiao_serde guatiao_intake; do
+            (cd "bindings/dart/$p" && dart analyze --fatal-infos)
           done
         shell: bash
         if: matrix.sdk == 'stable'
       - name: Format check
         run: |
-          for p in dart dart-serde dart-intake; do
-            (cd "bindings/$p" && dart format --output=none --set-exit-if-changed .)
+          for p in guatiao guatiao_serde guatiao_intake; do
+            (cd "bindings/dart/$p" && dart format --output=none --set-exit-if-changed .)
           done
         shell: bash
         if: matrix.sdk == 'stable'
       - name: Test
         # Each package's suite alone.
         run: |
-          for p in dart dart-serde dart-intake; do
-            (cd "bindings/$p" && dart test)
+          for p in guatiao guatiao_serde guatiao_intake; do
+            (cd "bindings/dart/$p" && dart test)
           done
         shell: bash
         if: matrix.sdk == 'stable'
@@ -1216,8 +1216,8 @@ jobs:
         # SDK newer than the floor, and one file that does not compile there
         # fails the whole run.
         run: |
-          for p in dart dart-serde dart-intake; do
-            (cd "bindings/$p" && dart test test/*_test.dart)
+          for p in guatiao guatiao_serde guatiao_intake; do
+            (cd "bindings/dart/$p" && dart test test/*_test.dart)
           done
         shell: bash
         if: matrix.sdk != 'stable'

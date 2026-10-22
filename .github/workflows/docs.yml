@@ -20,9 +20,9 @@ on:
       - "bindings/python/guatiao/src/**"
       - "bindings/python/guatiao-serde/src/**"
       - "bindings/python/guatiao-intake/src/**"
-      - "bindings/dart/lib/**"
-      - "bindings/dart-serde/lib/**"
-      - "bindings/dart-intake/lib/**"
+      - "bindings/dart/guatiao/lib/**"
+      - "bindings/dart/guatiao_serde/lib/**"
+      - "bindings/dart/guatiao_intake/lib/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
   workflow_call:
@@ -79,8 +79,8 @@ jobs:
         # Into each package's own default output; mkdocs owns `site/`
         # until it has run, so the copy happens after it.
         run: |
-          for p in dart dart-serde dart-intake; do
-            (cd "bindings/$p" && dart pub get && dart doc)
+          for p in guatiao guatiao_serde guatiao_intake; do
+            (cd "bindings/dart/$p" && dart pub get && dart doc)
           done
       - name: Install the Python packages and the docs tooling
         # Editable, because mkdocstrings renders the package by importing
@@ -98,9 +98,9 @@ jobs:
       - name: Add the Dart references under /dart/, /dart-serde/, /dart-intake/
         # `dart doc` writes its own root index, so no redirect is needed.
         run: |
-          for p in dart dart-serde dart-intake; do
-            mkdir -p "site/$p"
-            cp -r "bindings/$p/doc/api/." "site/$p/"
+          for p in dart:guatiao dart-serde:guatiao_serde dart-intake:guatiao_intake; do
+            mkdir -p "site/${p%%:*}"
+            cp -r "bindings/dart/${p#*:}/doc/api/." "site/${p%%:*}/"
           done
       - uses: actions/upload-pages-artifact@v3
         with:
