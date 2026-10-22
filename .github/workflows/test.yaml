@@ -1008,8 +1008,20 @@ jobs:
             sudo apt-get install -y flang-${{ matrix.version }}
           echo "FC=flang-${{ matrix.version }}" >> "$GITHUB_ENV"
       - uses: fortran-lang/setup-fpm@v10
+        if: runner.os != 'macOS'
         with:
           fpm-version: v0.13.0
+      - name: fpm, built from its single-file source
+        # The macOS release binary loads Homebrew's gcc@12 runtime, which
+        # the runner does not have.
+        if: runner.os == 'macOS'
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/fpm.F90" \
+            https://github.com/fortran-lang/fpm/releases/download/v0.13.0/fpm-0.13.0.F90
+          echo "001cff6cf1145f215baa0888ba27acc06cea30a89b79d1a8be97db3fffbc8cd2  $RUNNER_TEMP/fpm.F90" | shasum -a 256 -c
+          mkdir -p "$RUNNER_TEMP/fpm-bin" "$RUNNER_TEMP/fpm-mod"
+          "$FC" -O1 -fopenmp -J "$RUNNER_TEMP/fpm-mod" "$RUNNER_TEMP/fpm.F90" -o "$RUNNER_TEMP/fpm-bin/fpm"
+          echo "$RUNNER_TEMP/fpm-bin" >> "$GITHUB_PATH"
       - name: Ninja, and the C compiler for the C greeter
         run: |
           python -m pip install ninja
