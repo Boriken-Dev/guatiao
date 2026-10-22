@@ -18,7 +18,7 @@ written by `guatiao-kind` from the kind's C header
 ## Run it
 
 From `examples/` (a Go module of its own, using the binding in
-`bindings/go`), with cgo and a C compiler, after building the workspace:
+`bindings/go/guatiao`), with cgo and a C compiler, after building the workspace:
 
 ```bash
 cargo build --workspace --all-features

@@ -11,7 +11,7 @@ import (
 	"reflect"
 	"unsafe"
 
-	guatiao "github.com/Boriken-Dev/guatiao/bindings/go"
+	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 )
 
 var _ unsafe.Pointer

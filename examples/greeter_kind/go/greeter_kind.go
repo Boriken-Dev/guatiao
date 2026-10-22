@@ -12,9 +12,9 @@
 // Greeter, and any of the optional interfaces it wants.
 package greeterkind
 
-//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/cmd/guatiao-kind -header ../include/greeter_kind.h
+//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -header ../include/greeter_kind.h
 
-import guatiao "github.com/Boriken-Dev/guatiao/bindings/go"
+import guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 
 // Greeting is what a greeter answers: the map {"greeting": text}.
 type Greeting struct {

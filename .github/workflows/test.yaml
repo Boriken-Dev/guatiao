@@ -533,7 +533,7 @@ jobs:
       - name: The C compiler cgo uses
         run: go env CC && "$(go env CC)" --version
       - name: Vet and format
-        working-directory: bindings/go
+        working-directory: bindings/go/guatiao
         run: |
           go vet ./...
           (cd ../../examples && go vet ./...)
@@ -547,7 +547,7 @@ jobs:
             Windows) bridge=guatiao_py.dll ;;
           esac
           export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge"
-          (cd bindings/go && go test -count=1 -v ./...) 2>&1 | tee go-test.log
+          (cd bindings/go/guatiao && go test -count=1 -v ./...) 2>&1 | tee go-test.log
           test "${PIPESTATUS[0]}" -eq 0
           (cd examples && go test -count=1 -v ./...) 2>&1 | tee -a go-test.log
           test "${PIPESTATUS[0]}" -eq 0
@@ -557,7 +557,7 @@ jobs:
       - name: Under the race detector and the strict pointer checks
         if: matrix.os == 'ubuntu-latest' && matrix.go == '1.27'
         run: |
-          (cd bindings/go && go test -count=1 -race ./... && GOEXPERIMENT=cgocheck2 go test -count=1 ./...)
+          (cd bindings/go/guatiao && go test -count=1 -race ./... && GOEXPERIMENT=cgocheck2 go test -count=1 ./...)
           (cd examples && go test -count=1 -race ./... && GOEXPERIMENT=cgocheck2 go test -count=1 ./...)
         env:
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
