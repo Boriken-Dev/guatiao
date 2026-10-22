@@ -62,7 +62,7 @@ pkg load guatiao
 ```
 
 MATLAB, from a release's `guatiao.mltbx` (or a checkout's
-`bindings/matlab/inst` on the path), then once:
+`bindings/matlab/guatiao/inst` on the path), then once:
 
 ```matlab
 guatiao.build()
@@ -240,7 +240,7 @@ char(guatiao.time.parse('timestamp', '2026-10-21T19:15:00.5+05:30'))  % '2026-10
 | `guatiao.provider`, `guatiao.Library`, `guatiao.library_of`, `guatiao.serving` | providers and libraries written in M |
 | `guatiao.use_library`, `guatiao.has_export`, `guatiao.statuses`, `guatiao.build` | the library, errors, the MEX file |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/matlab/inst/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/matlab/guatiao/inst/AGENTS.md)
 is the full API reference and ships in the package. The C ABI is
 described by
 [`guatiao.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao/include/guatiao.h).
@@ -248,9 +248,9 @@ described by
 ## Development
 
 ```bash
-cd bindings/matlab/tests
-GUATIAO_LIBRARY=../../../target/debug octave-cli --eval "run_tests('Exit', true)"
-matlab -batch "cd bindings/matlab/tests; assert(run_tests())"
+cd bindings/matlab/guatiao/tests
+GUATIAO_LIBRARY=../../../../target/debug octave-cli --eval "run_tests('Exit', true)"
+matlab -batch "cd bindings/matlab/guatiao/tests; assert(run_tests())"
 ```
 
 `run_tests` builds the MEX file when it is not on the path, then runs

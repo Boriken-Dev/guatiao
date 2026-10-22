@@ -152,9 +152,9 @@ jobs:
                       problems.append(f"{where} does not depend on guatiao (>= {want_r})")
           # The Octave package writes the version as Cargo does; the MATLAB
           # toolbox is versioned from it when it is built.
-          octave = re.search(r"^Version:\s*(\S+)", pathlib.Path("bindings/matlab/DESCRIPTION").read_text(), re.M).group(1)
+          octave = re.search(r"^Version:\s*(\S+)", pathlib.Path("bindings/matlab/guatiao/DESCRIPTION").read_text(), re.M).group(1)
           if octave != cargo:
-              problems.append(f"Cargo says {cargo} and bindings/matlab/DESCRIPTION says {octave}")
+              problems.append(f"Cargo says {cargo} and bindings/matlab/guatiao/DESCRIPTION says {octave}")
           # fpm takes three numbers: X.Y.Z-alpha.N is X.Y.Z, in the package's
           # manifest, the root one an fpm git dependency reads, and CMake's.
           core = re.match(r"\d+\.\d+\.\d+", cargo).group(0)
@@ -512,10 +512,10 @@ jobs:
       # the package. The tests and their fixtures stay in the repository.
       - name: Build the package
         run: |
-          version=$(sed -n 's/^Version: *//p' bindings/matlab/DESCRIPTION)
+          version=$(sed -n 's/^Version: *//p' bindings/matlab/guatiao/DESCRIPTION)
           mkdir -p octave stage/guatiao
-          cp -r bindings/matlab/DESCRIPTION bindings/matlab/COPYING bindings/matlab/README.md \
-            bindings/matlab/inst bindings/matlab/src stage/guatiao/
+          cp -r bindings/matlab/guatiao/DESCRIPTION bindings/matlab/guatiao/COPYING bindings/matlab/guatiao/README.md \
+            bindings/matlab/guatiao/inst bindings/matlab/guatiao/src stage/guatiao/
           tar -czf "octave/guatiao-$version.tar.gz" -C stage guatiao
           echo "OCTAVE_PACKAGE=$PWD/octave/guatiao-$version.tar.gz" >> "$GITHUB_ENV"
       - name: Install it and use it
@@ -556,11 +556,11 @@ jobs:
       # ToolboxOptions takes a semantic version, which the workspace's is.
       - name: Stage the toolbox
         run: |
-          version=$(sed -n 's/^Version: *//p' bindings/matlab/DESCRIPTION)
+          version=$(sed -n 's/^Version: *//p' bindings/matlab/guatiao/DESCRIPTION)
           toolbox="$version"
           mkdir -p matlab toolbox
-          cp -r bindings/matlab/inst/. toolbox/
-          cp -r bindings/matlab/src bindings/matlab/README.md bindings/matlab/COPYING toolbox/
+          cp -r bindings/matlab/guatiao/inst/. toolbox/
+          cp -r bindings/matlab/guatiao/src bindings/matlab/guatiao/README.md bindings/matlab/guatiao/COPYING toolbox/
           echo "TOOLBOX_VERSION=$toolbox" >> "$GITHUB_ENV"
       - uses: matlab-actions/setup-matlab@v3
         with:

@@ -50,7 +50,7 @@ public surface); this file is about the repository.
 | `bindings/r/guatiao/` | R bindings over the C ABI, the source package `guatiao`: `src/` holds a copy of `guatiao.h` (a test compares it with the committed one) and the C glue, compiled when the package installs, which opens the libraries at run time and calls kind slots through libffi; it registers the C table `guatiao_r_api` (`inst/include/guatiao_r_api.h`) the other packages build on; its API header is `inst/AGENTS.md`; `tests/fixtures/` holds the C its tests build |
 | `bindings/r/guatiao.serde/`, `bindings/r/guatiao.intake/` | the source packages `guatiao.serde` and `guatiao.intake`: their own header copies and small C glue over `guatiao_r_api`, depending on `guatiao` and compiled against its installed headers |
 | `bindings/fortran/` | Fortran bindings over the C ABI in pure Fortran (`iso_c_binding`), the fpm package `guatiao` with its own `AGENTS.md` and a `CMakeLists.txt`; `src/guatiao_c.f90`, `guatiao_serde_c.f90` and `guatiao_intake_c.f90` mirror the three headers (a test compares every interface's name and argument count with them); `guatiao_loader.F90` opens the library at run time; the repository's root `fpm.toml` is the same package for an fpm git dependency (a test checks the two agree) |
-| `bindings/matlab/` | MATLAB and GNU Octave bindings over the C ABI: the `+guatiao` package in `inst/` (its API header is `inst/AGENTS.md`), and `src/`, one MEX gateway in C with copies of the three headers (a test compares them with the committed ones), built by `mkoctfile --mex` at `pkg install` or by `guatiao.build()`, which opens the library at run time and calls kind slots through libffi; `tests/` is a plain runner (`run_tests`) both interpreters run, `tests/fixtures/` holds the C its tests build |
+| `bindings/matlab/guatiao/` | MATLAB and GNU Octave bindings over the C ABI: the `+guatiao` package in `inst/` (its API header is `inst/AGENTS.md`), and `src/`, one MEX gateway in C with copies of the three headers (a test compares them with the committed ones), built by `mkoctfile --mex` at `pkg install` or by `guatiao.build()`, which opens the library at run time and calls kind slots through libffi; `tests/` is a plain runner (`run_tests`) both interpreters run, `tests/fixtures/` holds the C its tests build |
 | `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `python.md`, `node.md`, `go.md`, `julia.md`, `r.md`, `matlab.md` and `fortran.md` (Python, Node, Go, Julia, R, MATLAB and Octave, and Fortran as a host and as a provider), `wasm.md`, `migrating.md` (every break since `0.0.0-alpha.0`, with what to write now); built strictly by `docs.yml` |
 | `benchmarks/` | the benchmark runner (`cargo run -p guatiao-bench --release -- --save NAME`), committed results in `benchmarks/results/`, and `README.md` with the protocol; run on demand, numbers are local and provisional |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
@@ -223,9 +223,9 @@ greeters and `GUATIAO_REQUIRE_ALL` as the Julia suite does:
 
 ```bash
 export GUATIAO_LIBRARY=$PWD/target/debug
-cd bindings/matlab/tests && octave-cli --no-gui --eval "run_tests('Exit', true)"
-matlab -batch "cd bindings/matlab/tests; assert(run_tests())"   # MATLAB
-octave-cli --eval "addpath bindings/matlab/inst examples/matlab_host; host('target/debug')"   # the example host
+cd bindings/matlab/guatiao/tests && octave-cli --no-gui --eval "run_tests('Exit', true)"
+matlab -batch "cd bindings/matlab/guatiao/tests; assert(run_tests())"   # MATLAB
+octave-cli --eval "addpath bindings/matlab/guatiao/inst examples/matlab_host; host('target/debug')"   # the example host
 ```
 
 Fortran bindings, after `cargo build --workspace --all-features`, with
@@ -350,7 +350,7 @@ Four workflows:
   the three platforms, with every greeter the `julia` job has, a stated
   skip or a check WARNING failing the job, then installs it and checks
   `guatiao.serde` and `guatiao.intake` against it.
-  Its `octave` job runs `bindings/matlab`'s suite on Ubuntu's Octave and
+  Its `octave` job runs `bindings/matlab/guatiao`'s suite on Ubuntu's Octave and
   MSYS2's on Windows, and its `matlab` job on MATLAB R2024a and the latest
   release (through `setup-matlab`) on the three platforms, each with every
   greeter the `julia` job has and a stated skip failing the job. Its
@@ -387,7 +387,7 @@ its `guatiao` dependency), `bindings/package-lock.json` and the
 and those of `julia-serde` and `julia-intake`; `bindings/r/guatiao/DESCRIPTION` and
 those of `r-serde` and `r-intake` (each with `guatiao (>= x.y.z.N)`; R takes
 no letters in a version: `0.0.0-alpha.N` is written `0.0.0.N`, so the first
-release that is not a pre-release must be above `0.0.0`); `bindings/matlab/DESCRIPTION`
+release that is not a pre-release must be above `0.0.0`); `bindings/matlab/guatiao/DESCRIPTION`
 (the Octave package and the MATLAB toolbox both take the version as
 written), `bindings/fortran/fpm.toml`, the root `fpm.toml` and
 `bindings/fortran/CMakeLists.txt`'s project version (fpm takes three

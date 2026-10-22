@@ -834,7 +834,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           octave-cli --version | head -1
-          cd bindings/matlab/tests
+          cd bindings/matlab/guatiao/tests
           octave-cli --no-gui --eval "run_tests('Exit', true)"
         env:
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
@@ -853,7 +853,7 @@ jobs:
           export GUATIAO_REPO="$(cygpath -m "$GITHUB_WORKSPACE")"
           export GUATIAO_GO_LIBRARY="$(cygpath -m "$RUNNER_TEMP/go-library")"
           export GUATIAO_PY_BRIDGE="$(cygpath -m "$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/guatiao_py.dll")"
-          cd bindings/matlab/tests
+          cd bindings/matlab/guatiao/tests
           octave-cli --no-gui --eval "run_tests('Exit', true)"
         env:
           PYTHON_HOME: ${{ env.pythonLocation }}
@@ -954,7 +954,7 @@ jobs:
       - name: Test
         uses: matlab-actions/run-command@v3
         with:
-          command: cd bindings/matlab/tests; disp(version); ok = run_tests(); assert(ok, 'the suite failed');
+          command: cd bindings/matlab/guatiao/tests; disp(version); ok = run_tests(); assert(ok, 'the suite failed');
         env:
           GUATIAO_REQUIRE_ALL: "1"
           PYTHONDONTWRITEBYTECODE: "1"
