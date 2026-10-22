@@ -98,7 +98,7 @@ meta.close();
 | `providerFormKey` | where a provider's `meta` carries its form |
 | `library()` | the loaded `guatiao_intake` |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart-intake/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/guatiao_intake/AGENTS.md)
 is the full API reference and ships with the package. The C ABI is
 described by
 [`guatiao_intake.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-intake/include/guatiao_intake.h).

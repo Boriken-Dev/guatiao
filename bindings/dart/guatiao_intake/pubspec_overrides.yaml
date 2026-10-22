@@ -2,4 +2,4 @@
 # Not published (.pubignore); a consumer resolves guatiao from pub.dev.
 dependency_overrides:
   guatiao:
-    path: ../dart
+    path: ../guatiao
