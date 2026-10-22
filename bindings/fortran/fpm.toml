@@ -1,0 +1,22 @@
+name = "guatiao"
+# fpm versions are three numbers: a pre-release X.Y.Z-alpha.N is X.Y.Z here,
+# and the tag names the build.
+version = "0.0.0"
+license = "MPL-2.0"
+author = "jose-pr"
+maintainer = "jose-pr@coqui.dev"
+copyright = "jose-pr"
+description = "Fortran bindings over the guatiao C ABI: values, schemas, documents, forms, and plugin libraries a host calls through typed function tables"
+homepage = "https://github.com/Boriken-Dev/guatiao"
+keywords = ["ffi", "plugins", "json-schema", "configuration"]
+
+[build]
+auto-executables = false
+auto-examples = false
+auto-tests = true
+
+[library]
+source-dir = "src"
+
+[install]
+library = true

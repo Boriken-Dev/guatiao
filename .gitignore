@@ -60,6 +60,12 @@ Manifest-v*.toml
 *.Rcheck/
 .Rhistory
 
+# Fortran: what fpm and a CMake build write beside the sources
+/bindings/fortran/build/
+/examples/fortran_*/build/
+*.mod
+*.smod
+
 # Python, wherever an example or a crate carries some
 __pycache__/
 *.py[cod]
