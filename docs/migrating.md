@@ -835,6 +835,14 @@ library through `GUATIAO_SERDE_LIBRARY` or `GUATIAO_INTAKE_LIBRARY`, then
 its functions, else the file beside it), so a setting that worked keeps
 working.
 
+The packages also moved inside the repository, to
+`bindings/<language>/<name>` with each directory named as its registry
+spells the package (`bindings/python/guatiao-serde`,
+`bindings/julia/GuatiaoSerde`, `bindings/r/guatiao.serde`,
+`bindings/fortran/guatiao`, ...). Only what names a repository path
+changes: an install from a subdirectory, a CMake `add_subdirectory`, and
+the Go module path below. An fpm git dependency is unchanged.
+
 ### Python
 
 ```bash

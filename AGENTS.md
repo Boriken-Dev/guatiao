@@ -333,7 +333,7 @@ Four workflows:
   every Python from 3.9 to 3.14 on Linux, 3.9 and 3.14 on Windows and
   macOS. Its `dart` job analyzes and tests the three Dart packages on the
   three platforms and the floor SDK. Its `node` job installs the
-  `bindings/` workspace and runs the three packages' type checks and tests
+  `bindings/node` workspace and runs the three packages' type checks and tests
   on Node 22 and 24 on the three platforms, with the C greeter built and
   the guatiao-py bridge serving the Python greeters (a stated skip fails
   it), and checks what `npm pack` ships for each. Its `go` job runs `bindings/go/guatiao` and
@@ -373,19 +373,21 @@ migration under `[Unreleased]` in `CHANGELOG.md`; work lands there and the
 version moves only when a release is cut.
 
 **Cutting a release.** One version everywhere: `[workspace.package] version`
-in `Cargo.toml`; `bindings/dart/guatiao/pubspec.yaml` and those of `dart-serde` and
-`dart-intake` (each with its `guatiao: ^x.y.z`); the same version the PEP 440
-way in `bindings/python/guatiao/pyproject.toml` and its `__version__`
-(`0.0.0-alpha.0` is `0.0.0a0`), and in `python-serde` and `python-intake`
-(each with its `__version__` and its `guatiao==x.y.z`); the `=x.y.z` pins
-between the crates; `crates/guatiao-py/Cargo.toml`'s own version and pins (a
-workspace of its own, so the workspace version does not reach it);
-`bindings/node/guatiao/package.json`, `node-serde`'s and `node-intake`'s (each with
-its `guatiao` dependency), `bindings/package-lock.json` and the
-`../bindings/node/guatiao` entry of `examples/package-lock.json` (`npm install` in
-`bindings` and in `examples` rewrites them); `bindings/julia/Guatiao/Project.toml`
-and those of `julia-serde` and `julia-intake`; `bindings/r/guatiao/DESCRIPTION` and
-those of `r-serde` and `r-intake` (each with `guatiao (>= x.y.z.N)`; R takes
+in `Cargo.toml`; the `pubspec.yaml` of `bindings/dart/guatiao`,
+`guatiao_serde` and `guatiao_intake` (the last two with `guatiao: ^x.y.z`);
+the same version the PEP 440 way in the `pyproject.toml` of
+`bindings/python/guatiao`, `guatiao-serde` and `guatiao-intake` and each one's
+`__version__` (`0.0.0-alpha.0` is `0.0.0a0`; the last two pin
+`guatiao==x.y.z`); the `=x.y.z` pins between the crates;
+`crates/guatiao-py/Cargo.toml`'s own version and pins (a workspace of its
+own, so the workspace version does not reach it); the `package.json` of
+`bindings/node/guatiao`, `guatiao-serde` and `guatiao-intake` (the last two
+with their `guatiao` dependency), `bindings/node/package-lock.json` and the
+`../bindings/node/guatiao` entry of `examples/package-lock.json` (`npm
+install` in `bindings/node` and in `examples` rewrites them); the
+`Project.toml` of `bindings/julia/Guatiao`, `GuatiaoSerde` and
+`GuatiaoIntake`; the `DESCRIPTION` of `bindings/r/guatiao`, `guatiao.serde`
+and `guatiao.intake` (the last two with `guatiao (>= x.y.z.N)`; R takes
 no letters in a version: `0.0.0-alpha.N` is written `0.0.0.N`, so the first
 release that is not a pre-release must be above `0.0.0`); `bindings/matlab/guatiao/DESCRIPTION`
 (the Octave package and the MATLAB toolbox both take the version as
@@ -396,7 +398,7 @@ numbers: `0.0.0-alpha.N` is written `0.0.0`), and the
 `--locked` build refuses a stale one; `cargo build` in that directory
 rewrites it). A `## [x.y.z] - <date>` section in
 `CHANGELOG.md` (its body becomes the release notes) and in the
-`CHANGELOG.md` of `bindings/dart/guatiao`, `dart-serde` and `dart-intake` (pub
+`CHANGELOG.md` of `bindings/dart/guatiao`, `guatiao_serde` and `guatiao_intake` (pub
 warns on a changelog that names no section for the version, which only a
 rehearsal lets pass). Rehearse with `gh workflow run release.yml`,
 then push the tag `vx.y.z` -- the tag is the release, and a registry never
