@@ -974,6 +974,19 @@ guatiao.serde.use_library(folder);
 guatiao.intake.use_library(folder);
 ```
 
+### Fortran
+
+Nothing to add: `guatiao_serde` and `guatiao_intake` stay modules of the
+package. A program that named its library with `guatiao_use_library`
+and relied on the others being found beside it names them too, or sets
+`GUATIAO_LIBRARY` to their directory:
+
+```fortran
+call guatiao_use_library(dir)
+call guatiao_serde_use_library(dir)
+call guatiao_intake_use_library(dir)
+```
+
 ## Python and Dart
 
 ### `create` checks the configuration first
