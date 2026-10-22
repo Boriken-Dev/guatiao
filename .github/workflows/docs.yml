@@ -21,6 +21,8 @@ on:
       - "bindings/python-serde/src/**"
       - "bindings/python-intake/src/**"
       - "bindings/dart/lib/**"
+      - "bindings/dart-serde/lib/**"
+      - "bindings/dart-intake/lib/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
   workflow_call:
@@ -73,11 +75,13 @@ jobs:
         run: cargo doc --workspace --no-deps --all-features
         env:
           RUSTDOCFLAGS: -D warnings
-      - name: Build the Dart API reference
-        # Into the package's own default output; mkdocs owns `site/`
+      - name: Build the Dart API references
+        # Into each package's own default output; mkdocs owns `site/`
         # until it has run, so the copy happens after it.
-        run: dart pub get && dart doc
-        working-directory: bindings/dart
+        run: |
+          for p in dart dart-serde dart-intake; do
+            (cd "bindings/$p" && dart pub get && dart doc)
+          done
       - name: Install the Python packages and the docs tooling
         # Editable, because mkdocstrings renders the package by importing
         # it -- which needs no native library, by design.
@@ -91,11 +95,13 @@ jobs:
           mkdir -p site/rust
           cp -r target/doc/. site/rust/
           printf '%s' '<!doctype html><meta http-equiv="refresh" content="0; url=guatiao/index.html">' > site/rust/index.html
-      - name: Add the Dart reference under /dart/
+      - name: Add the Dart references under /dart/, /dart-serde/, /dart-intake/
         # `dart doc` writes its own root index, so no redirect is needed.
         run: |
-          mkdir -p site/dart
-          cp -r bindings/dart/doc/api/. site/dart/
+          for p in dart dart-serde dart-intake; do
+            mkdir -p "site/$p"
+            cp -r "bindings/$p/doc/api/." "site/$p/"
+          done
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site/
