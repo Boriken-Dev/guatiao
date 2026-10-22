@@ -617,13 +617,9 @@ end
 
 "An object this side owns: closing it calls its destroy slot, once."
 function owned_object(::Type{K}, g::GObject) where {K}
-    spec = kind(K)
-    try
-        check_table(spec, g.table, g.size)
-    catch
-        # A table that is not the kind's is refused; its slot after the header need not be a destroy.
-        rethrow()
-    end
+    # A table that is not the kind's is refused and the object left alone:
+    # its slot after the header need not be a destroy.
+    check_table(kind(K), g.table, g.size)
     r = remote_type(K)(RemoteState(g.table, Int(g.size), g.ctx, nothing, nothing, true, true))
     finalizer(close_remote, r)
     return r
