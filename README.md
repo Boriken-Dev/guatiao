@@ -84,6 +84,20 @@ Bindings over the same C ABI, for a consumer that is not Rust:
 Each drives a shared library that exports the ABI — `guatiao` itself, or
 an application that carries it — named by `GUATIAO_LIBRARY`.
 
+JSON, TOML and YAML, and forms, are a package of their own beside each
+core one, over the `guatiao_serde` and `guatiao_intake` libraries: PyPI
+`guatiao-serde` and `guatiao-intake`, pub.dev `guatiao_serde` and
+`guatiao_intake`, npm `guatiao-serde` and `guatiao-intake`, the Go packages
+`.../bindings/go/serde` and `.../bindings/go/intake`, the Julia packages
+`GuatiaoSerde` and `GuatiaoIntake` (`bindings/julia-serde`,
+`bindings/julia-intake`), the R packages `guatiao.serde` and
+`guatiao.intake` (`bindings/r-serde`, `bindings/r-intake`), and in MATLAB,
+Octave and Fortran the sub-packages `guatiao.serde` and `guatiao.intake` and
+the modules `guatiao_serde` and `guatiao_intake` of the one package. Each
+finds its library through `GUATIAO_SERDE_LIBRARY` or
+`GUATIAO_INTAKE_LIBRARY`, then `GUATIAO_LIBRARY` (a directory, or a file
+exporting its functions, else the file beside it).
+
 ## Quick start
 
 Build a value, then read it back. Building in Rust names no allocator —

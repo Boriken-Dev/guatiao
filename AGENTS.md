@@ -326,13 +326,17 @@ without tracking down past contributors.
 Four workflows:
 
 - `test.yaml` runs on `workflow_dispatch` or a `ci-*` tag; push a uniquely
-  named `ci-*` tag, watch the run, then delete the tag. Its `python` job
-  builds the workspace in each leg, then runs `bindings/python`'s tests: every
-  Python from 3.9 to 3.14 on Linux, 3.9 and 3.14 on Windows and macOS.
-  Its `node` job runs `bindings/node`'s type check and tests on Node 22
-  and 24 on the three platforms, with the C greeter built and the
-  guatiao-py bridge serving the Python greeters (a stated skip fails it),
-  and checks what `npm pack` ships. Its `go` job runs `bindings/go` and
+  named `ci-*` tag, watch the run, then delete the tag. Every binding's
+  serde and intake packages run beside its core, each suite alone. Its
+  `python` job builds the workspace in each leg, then runs the tests of
+  `bindings/python`, `bindings/python-serde` and `bindings/python-intake`:
+  every Python from 3.9 to 3.14 on Linux, 3.9 and 3.14 on Windows and
+  macOS. Its `dart` job analyzes and tests the three Dart packages on the
+  three platforms and the floor SDK. Its `node` job installs the
+  `bindings/` workspace and runs the three packages' type checks and tests
+  on Node 22 and 24 on the three platforms, with the C greeter built and
+  the guatiao-py bridge serving the Python greeters (a stated skip fails
+  it), and checks what `npm pack` ships for each. Its `go` job runs `bindings/go` and
   `examples` (vet, gofmt, tests) on Go 1.26 and 1.27 on the three
   platforms, with the C greeter, the guatiao-py bridge and a stated skip
   failing the job, under `-race` and `GOEXPERIMENT=cgocheck2` on one leg,
@@ -340,9 +344,12 @@ Four workflows:
   `go_library` test. Its `julia` job runs `bindings/julia`'s tests on
   Julia's LTS and current release on the three platforms, with the C
   greeter, the guatiao-py bridge and the Go library file, a stated skip
-  failing the job. Its `r` job runs `R CMD check` of `bindings/r` on R 4.2
-  and the current release on the three platforms, with every greeter
-  the `julia` job has, a stated skip or a check WARNING failing the job.
+  failing the job, then `GuatiaoSerde`'s and `GuatiaoIntake`'s, each in a
+  temporary environment holding the core from the checkout. Its `r` job
+  runs `R CMD check` of `bindings/r` on R 4.2 and the current release on
+  the three platforms, with every greeter the `julia` job has, a stated
+  skip or a check WARNING failing the job, then installs it and checks
+  `guatiao.serde` and `guatiao.intake` against it.
   Its `octave` job runs `bindings/matlab`'s suite on Ubuntu's Octave and
   MSYS2's on Windows, and its `matlab` job on MATLAB R2024a and the latest
   release (through `setup-matlab`) on the three platforms, each with every
@@ -366,16 +373,21 @@ migration under `[Unreleased]` in `CHANGELOG.md`; work lands there and the
 version moves only when a release is cut.
 
 **Cutting a release.** One version everywhere: `[workspace.package] version`
-in `Cargo.toml`, `bindings/dart/pubspec.yaml`, and the same version the
-PEP 440 way in `bindings/python/pyproject.toml` and its `__version__`
-(`0.0.0-alpha.0` is `0.0.0a0`), the `=x.y.z` pins between the crates,
-`crates/guatiao-py/Cargo.toml`'s own version and pins (a workspace of its
-own, so the workspace version does not reach it), `bindings/node/package.json`
-with its `package-lock.json` and the `../bindings/node` entry of
-`examples/package-lock.json` (`npm install` in each rewrites them),
-`bindings/julia/Project.toml`, `bindings/r/DESCRIPTION` (R takes no letters
-in a version: `0.0.0-alpha.N` is written `0.0.0.N`, so the first release that
-is not a pre-release must be above `0.0.0`), `bindings/matlab/DESCRIPTION`
+in `Cargo.toml`; `bindings/dart/pubspec.yaml` and those of `dart-serde` and
+`dart-intake` (each with its `guatiao: ^x.y.z`); the same version the PEP 440
+way in `bindings/python/pyproject.toml` and its `__version__`
+(`0.0.0-alpha.0` is `0.0.0a0`), and in `python-serde` and `python-intake`
+(each with its `__version__` and its `guatiao==x.y.z`); the `=x.y.z` pins
+between the crates; `crates/guatiao-py/Cargo.toml`'s own version and pins (a
+workspace of its own, so the workspace version does not reach it);
+`bindings/node/package.json`, `node-serde`'s and `node-intake`'s (each with
+its `guatiao` dependency), `bindings/package-lock.json` and the
+`../bindings/node` entry of `examples/package-lock.json` (`npm install` in
+`bindings` and in `examples` rewrites them); `bindings/julia/Project.toml`
+and those of `julia-serde` and `julia-intake`; `bindings/r/DESCRIPTION` and
+those of `r-serde` and `r-intake` (each with `guatiao (>= x.y.z.N)`; R takes
+no letters in a version: `0.0.0-alpha.N` is written `0.0.0.N`, so the first
+release that is not a pre-release must be above `0.0.0`); `bindings/matlab/DESCRIPTION`
 (the Octave package and the MATLAB toolbox both take the version as
 written), `bindings/fortran/fpm.toml`, the root `fpm.toml` and
 `bindings/fortran/CMakeLists.txt`'s project version (fpm takes three
@@ -383,40 +395,45 @@ numbers: `0.0.0-alpha.N` is written `0.0.0`), and the
 `guatiao` entry of `examples/wire_over_webtransport/client/Cargo.lock` (a
 `--locked` build refuses a stale one; `cargo build` in that directory
 rewrites it). A `## [x.y.z] - <date>` section in
-`CHANGELOG.md` (its body becomes the release notes) and in
-`bindings/dart/CHANGELOG.md`. Rehearse with `gh workflow run release.yml`,
+`CHANGELOG.md` (its body becomes the release notes) and in the
+`CHANGELOG.md` of `bindings/dart`, `dart-serde` and `dart-intake` (pub
+warns on a changelog that names no section for the version, which only a
+rehearsal lets pass). Rehearse with `gh workflow run release.yml`,
 then push the tag `vx.y.z` -- the tag is the release, and a registry never
 takes a version back. The `version` job refuses a tag the manifests do not
 name.
 
 **What the tag does**: gates (tests, strict docs build, one version), then
-packages all four (`cargo publish --workspace --dry-run`, `python -m build`
-+ `twine check`, `dart pub publish --dry-run`, `npm pack --dry-run` then
-`npm pack`, the Go module vetted and built, the Fortran package built
-as a dependency and with CMake, the Julia package
-resolved and loaded, the R source package built and checked, the Octave
-package built, installed and used, and the MATLAB toolbox packaged), then
-the GitHub release (carrying the R source package, the Octave package and
-the MATLAB toolbox, which no registry takes)
+packages everything (`cargo publish --workspace --dry-run`; `python -m
+build` + `twine check` of the three Python packages; `dart pub publish
+--dry-run` of the three Dart packages; `npm pack --dry-run` then `npm
+pack` of the three Node packages; the Go module vetted and built; the
+Fortran package built as a dependency and with CMake; the three Julia
+packages resolved and loaded; the three R source packages built and
+checked; the Octave package built, installed and used; and the MATLAB
+toolbox packaged), then the GitHub release (carrying the R source
+packages, the Octave package and the MATLAB toolbox, which no registry
+takes)
 (marked pre-release for a tag with a `-`), then publishes, and tags the
 Go module `bindings/go/vx.y.z` at the same commit. Each publish job
 skips a version its registry already has, so re-running a partly failed
 release finishes it. The four crates go in dependency order: `guatiao-derive`,
 `guatiao`, `guatiao-serde`, `guatiao-intake`, each naming the others with
-`=x.y.z`.
+`=x.y.z`; in every other registry the core package goes first and the serde
+and intake packages after it.
 
 **How each registry is reached**:
 
 | registry | first release | afterwards |
 | --- | --- | --- |
 | crates.io | `CARGO_REGISTRY_TOKEN` secret: trusted publishing needs a crate that exists | trusted publishing per crate, then repository variable `CRATES_IO_TRUSTED_PUBLISHING=true` and delete the secret |
-| PyPI | a *pending* trusted publisher: repository `Boriken-Dev/guatiao`, workflow `release.yml`, environment `pypi` | the same publisher |
-| pub.dev | **by hand**, `dart pub publish` in `bindings/dart`: automated publishing needs a package that exists | automated publishing from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
-| npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |
+| PyPI | a *pending* trusted publisher for each of `guatiao`, `guatiao-serde` and `guatiao-intake`: repository `Boriken-Dev/guatiao`, workflow `release.yml`, environment `pypi` (`guatiao` has its publisher; the other two need theirs before their first release) | the same publishers |
+| pub.dev | **by hand**, `dart pub publish` in `bindings/dart`, then in `bindings/dart-serde` and `bindings/dart-intake` once `guatiao` at that version is on pub.dev (their `pubspec_overrides.yaml` is not published): automated publishing needs a package that exists | automated publishing for each package from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
+| npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists, so the token publishes `guatiao`, `guatiao-serde` and `guatiao-intake` the first time; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher on each of the three for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |
 | Go module proxy | the tag `bindings/go/vx.y.z`, pushed by `release.yml` with the workflow's own token; the job then asks proxy.golang.org for the version, which lists it | the same; nothing to configure |
-| R-universe | nothing in `release.yml`: the owner's universe (`Boriken-Dev/boriken-dev.r-universe.dev`) lists the package in its `packages.json`, `{"package": "guatiao", "url": "https://github.com/Boriken-Dev/guatiao", "subdir": "bindings/r"}`, and R-universe builds binaries for every OS from the repository; CRAN only if the owner asks | the same |
-| fpm registry | nothing in `release.yml`: an fpm consumer depends on the repository by its tag (the root `fpm.toml`); a listing in the fpm registry only on the owner's word | the same |
-| Julia General | the JuliaRegistrator app installed on `Boriken-Dev/guatiao`, and a `JULIA_REGISTRATOR_TOKEN` secret (a token of an account Registrator trusts): `release.yml` comments `@JuliaRegistrator register subdir=bindings/julia` on the release commit. General takes no version with pre-release data and wants a first version of `0.0.1`, `0.1.0` or `1.0.0`, so a pre-release tag registers nothing | the same; a version General lists is skipped |
+| R-universe | nothing in `release.yml`: the owner's universe (`Boriken-Dev/boriken-dev.r-universe.dev`) lists each package in its `packages.json`, `{"package": "guatiao", "url": "https://github.com/Boriken-Dev/guatiao", "subdir": "bindings/r"}`, and the same for `guatiao.serde` (`"subdir": "bindings/r-serde"`) and `guatiao.intake` (`"subdir": "bindings/r-intake"`); R-universe builds binaries for every OS from the repository, the core first as their `Depends` and `LinkingTo` name it; CRAN only if the owner asks | the same |
+| fpm registry | nothing in `release.yml`: an fpm consumer depends on the repository by its tag (the root `fpm.toml`; one package, its serde and intake modules in it); a listing in the fpm registry only on the owner's word | the same |
+| Julia General | the JuliaRegistrator app installed on `Boriken-Dev/guatiao`, and a `JULIA_REGISTRATOR_TOKEN` secret (a token of an account Registrator trusts): `release.yml` comments `@JuliaRegistrator register subdir=bindings/julia`, then `subdir=bindings/julia-serde` and `subdir=bindings/julia-intake`, on the release commit. General takes no version with pre-release data and wants a first version of `0.0.1`, `0.1.0` or `1.0.0`, so a pre-release tag registers nothing; before the first registration of `GuatiaoSerde` and `GuatiaoIntake`, their `Project.toml` gain a `[compat]` entry for `Guatiao` (General requires one) | the same; a version General lists is skipped |
 
 **Who owns what.** Neither registry lets a new package start under an
 organisation, so each is published by a person and handed over:
@@ -426,7 +443,10 @@ organisation, so each is published by a person and handed over:
   `Boriken-Dev` organisation: `cargo owner --add github:Boriken-Dev:boriken-dev
   <crate>` on each, once it exists. A team owner may publish but not change
   owners, so one person stays an owner as well.
-- **pub.dev** calls an organisation a verified publisher. `guatiao` belongs
-  to `boriken.dev`: after the first `dart pub publish`, the package's Admin
-  tab transfers it there, and automated publishing is configured on the same
-  tab.
+- **pub.dev** calls an organisation a verified publisher. `guatiao`,
+  `guatiao_serde` and `guatiao_intake` belong to `boriken.dev`: after each
+  one's first `dart pub publish`, its Admin tab transfers it there, and
+  automated publishing is configured on the same tab.
+- **npm**: the three packages are published by the token's account first;
+  adding the `Boriken-Dev` organisation (or its team) as a maintainer of
+  each is the owner's.
