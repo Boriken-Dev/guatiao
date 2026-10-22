@@ -50,6 +50,48 @@ do. An object kind (`object = TRUE`) is passed `lent()` or `taken()`, and
 its `destroy` slot is `close()`. The declarations of the example kinds
 are `examples/greeter_kind/r/greeterkind`.
 
+## 64-bit integers
+
+An R number is a double, which holds whole numbers exactly only to 2^53,
+and base R has no 64-bit integer. Nothing crossing a 64-bit slot is
+rounded for it:
+
+```r
+Wide <- kind("wide", floor_hash = 3673689684,
+  echo_i64 = method(x = "int64", returns = "int64", required = TRUE, fallible = TRUE),
+  echo_u64 = method(x = "uint64", returns = "uint64", required = TRUE, fallible = TRUE))
+
+w <- reg$bind("derived_greeter_hello", Wide)
+echo_i64(w, "9223372036854775807")           # <number 9223372036854775807>
+echo_i64(w, number("9007199254740993"))      # <number 9007199254740993>
+echo_i64(w, 5)                               # 5L
+echo_u64(w, -1)                              # error: wide.echo_u64(x): out of range for uint64
+call_slot(w, 1L, list(5L), int64 = "number") # <number 5>
+```
+
+An integer argument is an R integer, a whole double, a `number()` or a
+string spelling an integer (or a `bit64::integer64`, below), read exactly
+and checked against the slot's range; anything else is refused before the
+call, naming the slot. A 64-bit answer is what `int64` says, on `kind()`
+for every remote of the kind or on `call_slot()` for one call: `"auto"`
+(the default) an R integer when it fits, a double up to 2^53, else a
+`number` with its exact text; `"number"` always a `number`; `"double"` the
+nearest double. A provider written in R is handed its 64-bit arguments the
+same way, and may answer in any spelling an argument takes.
+
+**bit64.** The package suggests `bit64` and never needs it. An
+`integer64` is taken wherever a 64-bit integer is; `int64 = "integer64"`
+and `value_data(x, numbers = "integer64")` answer one, and asking for one
+without `bit64` installed is an error naming it. `"auto"` never answers an
+`integer64`, so no answer's class depends on what is installed. An
+`integer64` holds neither `INT64_MIN` (its `NA`) nor an unsigned value past
+`INT64_MAX`; those answer a `number`.
+
+The same holds for time: `span()` and `exact_length()` take a unit past
+2^53 in any of those spellings and keep its exact text, and
+`time_parse("span", ...)` and `read_length()` answer one rather than
+refusing it.
+
 ## As a host
 
 ```r
@@ -135,9 +177,9 @@ Rust frames between the library and R; it crosses as a status
 - **Serve another process.** guatiao-py serves Python modules to any
   host; nothing serves R packages to a host that is not running R, which
   would need R embedded in a bridge.
-- **Hold a 64-bit integer.** An R number holds integers exactly to 2^53:
-  a slot's `int64` answer, a span's units and an exact length past that
-  are refused or rounded. Inside a value a number keeps its exact text.
+- **Hold a 64-bit integer as a number.** A 64-bit answer past 2^53 is a
+  `number`, its exact text, or a `bit64::integer64` when asked for, rather
+  than an integer arithmetic works on.
 - **Run on Windows ARM64 as released.** CRAN builds only an experimental
   R-devel for it; the x64 R runs under emulation, against an x64 build of
   the library.

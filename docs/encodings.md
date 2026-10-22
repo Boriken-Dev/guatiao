@@ -423,9 +423,9 @@ What a mapping loses, and what happens then:
   (about 292 years); a longer length raises, or answers an error, rather
   than wraps, and Go's `civil.Length` and Julia's `Guatiao.Length` hold
   every one. An R number holds whole numbers exactly to 2^53, so R's
-  `exact_length` and `span` refuse a length or a unit past that, as do
-  `guatiao.Duration` and `guatiao.Span` in MATLAB and Octave, whose
-  numbers are doubles. Fortran's `guatiao_length` holds every one, its
+  `exact_length` and `span` keep a length or a unit past that as its exact
+  text; `guatiao.Duration` and `guatiao.Span` in MATLAB and Octave, whose
+  numbers are doubles, refuse one. Fortran's `guatiao_length` holds every one, its
   seconds an unsigned count in an int64's bits. An exact length is never negative, so a negative
   `timedelta`, `Duration` or Julia period is refused when written.
 - **An offset.** An instant read into any type is in UTC: the offset it
