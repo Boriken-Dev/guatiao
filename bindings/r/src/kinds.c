@@ -14,7 +14,6 @@
  */
 
 #include <ffi.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -105,14 +104,21 @@ static void prep_slot(gt_slot *s) {
 
 /* A kind's C description, kept for the session: tables built from it are. */
 SEXP C_kind_new(SEXP name, SEXP floor_hash, SEXP object, SEXP args, SEXP rets, SEXP fallible, SEXP required,
-                SEXP arg_kinds) {
+                SEXP arg_kinds, SEXP slot_names, SEXP arg_names, SEXP int64) {
   int obj = Rf_asLogical(object) == 1;
   int user = (int)XLENGTH(rets);
   int n = user + (obj ? 1 : 0);
   if (n > 4096) gt_raise(GUATIAO_ERR_BAD_VALUE, "too many slots");
+  if (TYPEOF(slot_names) != STRSXP || XLENGTH(slot_names) != user || XLENGTH(arg_names) != user)
+    gt_raise(GUATIAO_ERR_BAD_VALUE, "a name per slot and per argument");
+  size_t names_len = 0;
   for (int i = 0; i < user; i++) {
     SEXP a = VECTOR_ELT(args, i);
+    SEXP an = VECTOR_ELT(arg_names, i);
     if (XLENGTH(a) > GT_MAX_ARGS) gt_raise(GUATIAO_ERR_BAD_VALUE, "a slot takes at most %d arguments", GT_MAX_ARGS);
+    if (TYPEOF(an) != STRSXP || XLENGTH(an) != XLENGTH(a)) gt_raise(GUATIAO_ERR_BAD_VALUE, "a name per argument");
+    names_len += strlen(CHAR(STRING_ELT(slot_names, i))) + 1;
+    for (R_xlen_t j = 0; j < XLENGTH(an); j++) names_len += strlen(CHAR(STRING_ELT(an, j))) + 1;
     for (R_xlen_t j = 0; j < XLENGTH(a); j++)
       if (!known_arg(INTEGER(a)[j])) gt_raise(GUATIAO_ERR_BAD_VALUE, "an unknown argument shape");
     if (!known_ret(INTEGER(rets)[i])) gt_raise(GUATIAO_ERR_BAD_VALUE, "an unknown answer shape");
@@ -127,14 +133,18 @@ SEXP C_kind_new(SEXP name, SEXP floor_hash, SEXP object, SEXP args, SEXP rets, S
   gt_slot *slots = (gt_slot *)calloc((size_t)n, sizeof(gt_slot));
   const char *nm = Rf_translateCharUTF8(STRING_ELT(name, 0));
   char *name_copy = (char *)malloc(strlen(nm) + 1);
-  if (!k || !slots || !name_copy) {
+  char *names = (char *)malloc(names_len + 1);
+  if (!k || !slots || !name_copy || !names) {
     free(k);
     free(slots);
     free(name_copy);
+    free(names);
     gt_raise(GUATIAO_ERR_ALLOC, "out of memory");
   }
   strcpy(name_copy, nm);
   k->name = name_copy;
+  k->names = names;
+  k->int64 = Rf_asInteger(int64);
   k->floor_hash = (uint32_t)Rf_asReal(floor_hash);
   k->object = obj;
   k->nslots = n;
@@ -147,14 +157,23 @@ SEXP C_kind_new(SEXP name, SEXP floor_hash, SEXP object, SEXP args, SEXP rets, S
     slots[0].required = 1;
     slots[0].kind = k;
     slots[0].index_r = 0;
+    slots[0].name = "close";
     c = 1;
   }
+  char *at = names;
   for (int i = 0; i < user; i++, c++) {
     gt_slot *s = &slots[c];
     SEXP a = VECTOR_ELT(args, i);
+    SEXP an = VECTOR_ELT(arg_names, i);
     s->nargs = (int)XLENGTH(a);
+    strcpy(at, CHAR(STRING_ELT(slot_names, i)));
+    s->name = at;
+    at += strlen(at) + 1;
     SEXP ak = VECTOR_ELT(arg_kinds, i);
     for (int j = 0; j < s->nargs; j++) {
+      strcpy(at, CHAR(STRING_ELT(an, j)));
+      s->arg_names[j] = at;
+      at += strlen(at) + 1;
       s->args[j] = INTEGER(a)[j];
       SEXP kp = VECTOR_ELT(ak, j);
       s->arg_kind[j] = TYPEOF(kp) == EXTPTRSXP ? (gt_kind *)R_ExternalPtrAddr(kp) : NULL;
@@ -300,47 +319,45 @@ typedef union out_store {
 
 static void set_absent(guatiao_value *v) { memset(v, 0, sizeof *v); }
 
-/* A scalar from R into its C width; 0 or a message on refusal. */
+/* A scalar from R into its C width; 0 or a message on refusal. An integer
+ * shape takes an R integer or logical, a whole double, a `number` or a
+ * string spelling an integer, read exactly and range-checked. */
 static const char *scalar_in(int shape, SEXP x, arg_store *a) {
   if (shape == S_BOOL) {
     if (!Rf_isLogical(x) || XLENGTH(x) != 1 || LOGICAL(x)[0] == NA_LOGICAL) return "want TRUE or FALSE";
     a->u8 = LOGICAL(x)[0] ? 1 : 0;
     return NULL;
   }
-  if (!(Rf_isReal(x) || Rf_isInteger(x) || Rf_isLogical(x)) || XLENGTH(x) != 1) return "want a number";
-  double d = Rf_asReal(x);
-  if (ISNAN(d)) return "want a number, not NA";
-  if (shape == S_F32) {
-    a->f32 = (float)d;
+  if (shape == S_F32 || shape == S_F64) {
+    if (!(Rf_isReal(x) || Rf_isInteger(x) || Rf_isLogical(x)) || XLENGTH(x) != 1) return "want a number";
+    double d = Rf_asReal(x);
+    if (ISNAN(d)) return "want a number, not NA";
+    if (shape == S_F32) a->f32 = (float)d;
+    else a->f64 = d;
     return NULL;
   }
-  if (shape == S_F64) {
-    a->f64 = d;
-    return NULL;
-  }
-  if (d != floor(d)) return "want a whole number";
+  gt_wide w;
+  const char *why = gt_wide_in(x, &w);
+  if (why) return why;
+  int64_t s = 0;
+  uint64_t u = 0;
   switch (shape) {
-  case S_I8: if (d < -128 || d > 127) return "out of range for int8"; a->i8 = (int8_t)d; return NULL;
-  case S_U8: if (d < 0 || d > 255) return "out of range for uint8"; a->u8 = (uint8_t)d; return NULL;
-  case S_I16: if (d < -32768 || d > 32767) return "out of range for int16"; a->i16 = (int16_t)d; return NULL;
-  case S_U16: if (d < 0 || d > 65535) return "out of range for uint16"; a->u16 = (uint16_t)d; return NULL;
-  case S_I32: if (d < -2147483648.0 || d > 2147483647.0) return "out of range for int32"; a->i32 = (int32_t)d; return NULL;
-  case S_U32: if (d < 0 || d > 4294967295.0) return "out of range for uint32"; a->u32 = (uint32_t)d; return NULL;
+  case S_I8: why = gt_wide_signed(w, 8, &s); a->i8 = (int8_t)s; return why;
+  case S_U8: why = gt_wide_unsigned(w, 8, &u); a->u8 = (uint8_t)u; return why;
+  case S_I16: why = gt_wide_signed(w, 16, &s); a->i16 = (int16_t)s; return why;
+  case S_U16: why = gt_wide_unsigned(w, 16, &u); a->u16 = (uint16_t)u; return why;
+  case S_I32: why = gt_wide_signed(w, 32, &s); a->i32 = (int32_t)s; return why;
+  case S_U32: why = gt_wide_unsigned(w, 32, &u); a->u32 = (uint32_t)u; return why;
   case S_I64:
-  case S_INTPTR:
-    if (d < -9223372036854775808.0 || d >= 9223372036854775808.0) return "out of range for int64";
-    a->i64 = (int64_t)d;
-    return NULL;
+  case S_INTPTR: why = gt_wide_signed(w, 64, &s); a->i64 = s; return why;
   case S_U64:
-  case S_SIZE:
-    if (d < 0 || d >= 18446744073709551616.0) return "out of range for uint64";
-    a->u64 = (uint64_t)d;
-    return NULL;
+  case S_SIZE: why = gt_wide_unsigned(w, 64, &u); a->u64 = u; return why;
   default: return "not a scalar";
   }
 }
 
-static SEXP scalar_out(int shape, const void *p) {
+/* A scalar as R holds it; a 64-bit integer as the `int64 =` mode says. */
+static SEXP scalar_out(int shape, const void *p, int mode) {
   switch (shape) {
   case S_BOOL: return Rf_ScalarLogical(*(const uint8_t *)p ? 1 : 0);
   case S_I8: return Rf_ScalarInteger(*(const int8_t *)p);
@@ -350,9 +367,9 @@ static SEXP scalar_out(int shape, const void *p) {
   case S_I32: return Rf_ScalarInteger(*(const int32_t *)p);
   case S_U32: return Rf_ScalarReal((double)*(const uint32_t *)p);
   case S_I64:
-  case S_INTPTR: return Rf_ScalarReal((double)*(const int64_t *)p);
+  case S_INTPTR: return gt_i64_sexp(*(const int64_t *)p, mode);
   case S_U64:
-  case S_SIZE: return Rf_ScalarReal((double)*(const uint64_t *)p);
+  case S_SIZE: return gt_u64_sexp(*(const uint64_t *)p, mode);
   case S_F32: return Rf_ScalarReal((double)*(const float *)p);
   case S_F64: return Rf_ScalarReal(*(const double *)p);
   default: return R_NilValue;
@@ -421,7 +438,7 @@ static void into_binding(guatiao_value *v) {
   }
 }
 
-static SEXP remote_answer(const gt_slot *sl, out_store *outs) {
+static SEXP remote_answer(const gt_slot *sl, out_store *outs, int mode) {
   out_store out = *outs;
   switch (sl->ret) {
   case R_NONE: return R_NilValue;
@@ -455,11 +472,16 @@ static SEXP remote_answer(const gt_slot *sl, out_store *outs) {
     if (!out.o.table) gt_raise(GUATIAO_ERR_NULL, "the slot answered no object");
     return res;
   }
-  default: return scalar_out(sl->ret, &out);
+  default: return scalar_out(sl->ret, &out, mode);
   }
 }
 
-SEXP C_remote_call(SEXP handle, SEXP index, SEXP args) {
+/* Why an argument was refused, naming the kind, the slot and the argument. */
+static void arg_refused(char *msg, size_t n, const gt_slot *sl, int j, const char *why) {
+  snprintf(msg, n, "%s.%s(%s): %s", sl->kind->name, sl->name, sl->arg_names[j], why);
+}
+
+SEXP C_remote_call(SEXP handle, SEXP index, SEXP args, SEXP int64) {
   gt_need(GT_LIB_CORE);
   gt_remote *r = remote_of(handle);
   gt_kind *k = r->kind;
@@ -469,7 +491,8 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args) {
   gt_slot *sl = &k->slots[c];
   void *fn = slot_fn(r, c);
   if (!fn) gt_raise(GUATIAO_ERR_UNSUPPORTED, "the table has no %s slot %d: built before it, or left out", k->name, i);
-  if (XLENGTH(args) != sl->nargs) gt_raise(GUATIAO_ERR_BAD_VALUE, "the slot takes %d arguments", sl->nargs);
+  if (XLENGTH(args) != sl->nargs)
+    gt_raise(GUATIAO_ERR_BAD_VALUE, "%s.%s takes %d arguments", k->name, sl->name, sl->nargs);
 
   arg_store store[GT_MAX_ARGS];
   guatiao_value tmp[GT_MAX_ARGS];
@@ -492,7 +515,7 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args) {
     if (s == S_STRING) {
       if (TYPEOF(x) != STRSXP || XLENGTH(x) != 1 || STRING_ELT(x, 0) == NA_STRING) {
         fail = GUATIAO_ERR_BAD_VALUE;
-        snprintf(msg, sizeof msg, "argument %d: want one string", j + 1);
+        arg_refused(msg, sizeof msg, sl, j, "want one string");
         break;
       }
       const char *p = Rf_translateCharUTF8(STRING_ELT(x, 0));
@@ -500,7 +523,7 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args) {
     } else if (s == S_BYTES) {
       if (TYPEOF(x) != RAWSXP) {
         fail = GUATIAO_ERR_BAD_VALUE;
-        snprintf(msg, sizeof msg, "argument %d: want a raw vector", j + 1);
+        arg_refused(msg, sizeof msg, sl, j, "want a raw vector");
         break;
       }
       store[j].b = guatiao_bytes_from(XLENGTH(x) ? RAW(x) : NULL, (size_t)XLENGTH(x));
@@ -508,7 +531,7 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args) {
       /* The buffer's bytes, copied: the copy is written and handed back. */
       if (TYPEOF(x) != RAWSXP) {
         fail = GUATIAO_ERR_BAD_VALUE;
-        snprintf(msg, sizeof msg, "argument %d: want a byte_buffer()", j + 1);
+        arg_refused(msg, sizeof msg, sl, j, "want a byte_buffer()");
         break;
       }
       SEXP data = Rf_duplicate(x);
@@ -519,14 +542,14 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args) {
       const char *why = scalar_in(s, x, &store[j]);
       if (why) {
         fail = GUATIAO_ERR_BAD_VALUE;
-        snprintf(msg, sizeof msg, "argument %d: %s", j + 1, why);
+        arg_refused(msg, sizeof msg, sl, j, why);
         break;
       }
     } else if (s == S_LENT_OBJECT || s == S_TAKEN_OBJECT) {
       /* list(table, size, ctx, id, handle), made on the R side */
       if (TYPEOF(x) != VECSXP || XLENGTH(x) != 5) {
         fail = GUATIAO_ERR_BAD_VALUE;
-        snprintf(msg, sizeof msg, "argument %d: want an object", j + 1);
+        arg_refused(msg, sizeof msg, sl, j, "want an object");
         break;
       }
       SEXP handle = VECTOR_ELT(x, 4);
@@ -534,18 +557,23 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args) {
         gt_remote *rr = (gt_remote *)R_ExternalPtrAddr(handle);
         if (!rr || !rr->live) {
           fail = GUATIAO_ERR_GONE;
-          snprintf(msg, sizeof msg, "argument %d: the remote is closed", j + 1);
+          arg_refused(msg, sizeof msg, sl, j, "the remote is closed");
           break;
         }
         if (s == S_TAKEN_OBJECT && !rr->owned) {
           fail = GUATIAO_ERR_WRONG_KIND;
-          snprintf(msg, sizeof msg, "argument %d: only a remote this side owns is handed over", j + 1);
+          arg_refused(msg, sizeof msg, sl, j, "only a remote this side owns is handed over");
           break;
         }
       }
     } else if (!Rf_inherits(x, "guatiao_node")) {
-      fail = gt_build(x, &gt_binding_alloc, &tmp[j], msg, sizeof msg);
-      if (!fail) built[j] = 1;
+      char why[512];
+      fail = gt_build(x, &gt_binding_alloc, &tmp[j], why, sizeof why);
+      if (fail) {
+        arg_refused(msg, sizeof msg, sl, j, why);
+        break;
+      }
+      built[j] = 1;
     }
   }
   /* Then the nodes, found after any R code ran. */
@@ -560,12 +588,12 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args) {
       int got = gt_node_try(x, &o, &node);
       if (got) {
         fail = got == 1 ? GUATIAO_ERR_GONE : GUATIAO_ERR_NOT_FOUND;
-        snprintf(msg, sizeof msg, "argument %d: %s", j + 1, got == 1 ? "the value is closed" : "the view no longer addresses a node");
+        arg_refused(msg, sizeof msg, sl, j, got == 1 ? "the value is closed" : "the view no longer addresses a node");
         break;
       }
       if (s >= S_LENT_VALUE && (o->flags & GT_READONLY)) {
         fail = GUATIAO_ERR_UNSUPPORTED;
-        snprintf(msg, sizeof msg, "argument %d: a read-only view is not lent", j + 1);
+        arg_refused(msg, sizeof msg, sl, j, "a read-only view is not lent");
         break;
       }
       if (s >= S_TAKEN_VALUE) {
@@ -575,7 +603,7 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args) {
           guatiao_status st = gt_core.guatiao_value_clone(&gt_binding_alloc, node, &tmp[j]);
           if (st) {
             fail = st;
-            snprintf(msg, sizeof msg, "argument %d: the copy was refused", j + 1);
+            arg_refused(msg, sizeof msg, sl, j, "the copy was refused");
             break;
           }
           built[j] = 1;
@@ -587,7 +615,7 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args) {
     void *p = tree_pointer(s, node, &why);
     if (!p) {
       fail = GUATIAO_ERR_WRONG_KIND;
-      snprintf(msg, sizeof msg, "argument %d: %s", j + 1, why);
+      arg_refused(msg, sizeof msg, sl, j, why);
       break;
     }
     store[j].p = p;
@@ -671,7 +699,7 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args) {
     m.payload.text = err.message;
     gt_free(&m);
   }
-  SEXP result = PROTECT(remote_answer(sl, &out));
+  SEXP result = PROTECT(remote_answer(sl, &out, Rf_asInteger(int64)));
   if (has_buffers) {
     SEXP both = PROTECT(Rf_allocVector(VECSXP, 2));
     SET_VECTOR_ELT(both, 0, result);
@@ -829,7 +857,7 @@ static SEXP served_args(served_job *j) {
       x = gt_call_r(".gt_buffer_of", 1, data, R_NilValue, R_NilValue);
       UNPROTECT(1);
     } else if (s >= S_BOOL && s <= S_INTPTR) {
-      x = scalar_out(s, a);
+      x = scalar_out(s, a, sl->kind->int64);
     } else if ((s >= S_VALUE && s <= S_LIST) || (s >= S_LENT_VALUE && s <= S_LENT_LIST)) {
       void *p = *(void **)a;
       int lent = s >= S_LENT_VALUE;
@@ -970,6 +998,7 @@ static void served_slot(ffi_cif *cif, void *ret, void **args, void *user) {
   j->answer.live = 1;
   j->answer.ret = sl->ret;
   j->answer.out = out_arg(sl, args);
+  j->answer.slot = sl;
   if (!R_ToplevelExec(served_body, j)) {
     j->status = GUATIAO_ERR_INTERNAL;
     snprintf(j->msg, sizeof j->msg, "an R error ended the call");
@@ -1050,10 +1079,10 @@ SEXP C_served_table(SEXP kind, SEXP spec, SEXP has) {
 
 /* ---- answers -------------------------------------------------------------------------- */
 
-static void write_scalar(int shape, SEXP x, void *out) {
+static void write_scalar(const gt_slot *sl, int shape, SEXP x, void *out) {
   arg_store a;
   const char *why = scalar_in(shape, x, &a);
-  if (why) gt_raise(GUATIAO_ERR_BAD_VALUE, "the answer: %s", why);
+  if (why) gt_raise(GUATIAO_ERR_BAD_VALUE, "%s.%s answered: %s", sl->kind->name, sl->name, why);
   switch (shape) {
   case S_BOOL:
   case S_U8: *(uint8_t *)out = a.u8; break;
@@ -1080,7 +1109,7 @@ SEXP C_answer(SEXP answer, SEXP result) {
   void *out = ans->out;
   if (ans->ret == R_NONE || !out) return R_NilValue;
   if (ans->ret >= S_BOOL && ans->ret <= S_INTPTR) {
-    write_scalar(ans->ret, result, out);
+    write_scalar(ans->slot, ans->ret, result, out);
     return R_NilValue;
   }
   if (ans->ret == R_OBJECT) {

@@ -4,8 +4,9 @@ Title: The Greeter Kinds, Declared for R
 Version: 1.0.0
 Authors@R: person("jose-pr", email = "jose-pr@coqui.dev", role = c("aut", "cre"))
 Description: The kinds of the greeter_kind C header (a greeter, a counter,
-    a conversation and its listener), declared for R: a host calls a greeter
-    through them, and a greeter written in R implements them.
+    a conversation and its listener, and one that answers the 64-bit integer
+    it is given), declared for R: a host calls a greeter through them, and a
+    greeter written in R implements them.
 License: MPL-2.0
 Depends: R (>= 4.2)
 Imports: methods, guatiao

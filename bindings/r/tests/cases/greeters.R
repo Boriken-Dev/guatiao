@@ -27,7 +27,7 @@ HOST <- NULL
 case("the kinds copy their floor hashes and sizes from the header", with_examples({
   header <- paste(readLines(repo_file("examples", "greeter_kind", "include", "greeter_kind.h"), warn = FALSE), collapse = "\n")
   for (pair in list(list("greeter_vtable", Greeter), list("counter_vtable", Counter),
-    list("conversation_vtable", Conversation), list("listener_vtable", Listener))) {
+    list("conversation_vtable", Conversation), list("listener_vtable", Listener), list("wide_vtable", Wide))) {
     table <- pair[[1]]
     k <- pair[[2]]
     found <- regmatches(header, regexec(sprintf("#define %s_FLOOR_HASH ([0-9]+)", table), header))[[1]]

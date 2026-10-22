@@ -60,11 +60,7 @@ case("every exact length", with_library(with_repo({
       got <- .Call(gt$C_duration_read, c$value)
       expect_equal(got[[1L]], text_of(c$duration[[1L]]))
       expect_equal(got[[2L]], as.numeric(text_of(c$duration[[2L]])))
-      if (as.numeric(got[[1L]]) <= 2^53) {
-        expect_equal(read_length(c$value), exact_length(as.numeric(got[[1L]]), got[[2L]]))
-      } else {
-        expect_error(read_length(c$value))
-      }
+      expect_equal(read_length(c$value), exact_length(number(got[[1L]]), got[[2L]]))
     }
   }
 })))
@@ -103,7 +99,7 @@ case("a span is its own type, backed by the library", with_library({
   expect_equal(add_span(as.Date("2026-01-31"), span(months = 1, days = 1)), as.Date("2026-03-01"))
   expect_equal(format(add_span(time_parse("datetime", "2026-10-21T23:30:00"), span(hours = 1))), "2026-10-22T00:30:00")
   expect_error(add_span(as.Date("2026-10-21"), span(hours = 1)), "guatiao_error")
-  expect_error(time_parse("span", "P9223372036854775807Y"), "guatiao_error")
+  expect_equal(format(time_parse("span", "P9223372036854775807Y")), "P9223372036854775807Y")
 }))
 
 case("dates and lengths as values", with_library({

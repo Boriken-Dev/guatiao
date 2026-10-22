@@ -31,3 +31,8 @@ Greeter <- kind("greeter", floor_hash = 2695856491,
 # counter_vtable: counts how often it was asked.
 Counter <- kind("counter", floor_hash = 1227528937,
   count = method(returns = "int64", required = TRUE))
+
+# wide_vtable: answers the 64-bit integer it is given.
+Wide <- kind("wide", floor_hash = 3673689684,
+  echo_i64 = method(x = "int64", returns = "int64", required = TRUE, fallible = TRUE),
+  echo_u64 = method(x = "uint64", returns = "uint64", required = TRUE, fallible = TRUE))

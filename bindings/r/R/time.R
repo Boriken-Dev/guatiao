@@ -78,11 +78,17 @@ instant <- function(seconds, nanoseconds = 0) {
   x
 }
 
+.gt_span_units <- c("years", "months", "weeks", "days", "hours", "minutes", "seconds", "nanoseconds")
+
+# Units held as doubles while every one is within 2^53, else as the exact
+# text of each, so two equal spans are identical.
+.gt_span <- function(units) {
+  structure(.Call(C_units, units, .gt_span_units, rep(FALSE, 8L)), names = .gt_span_units, class = "guatiao_span")
+}
+
 span <- function(years = 0, months = 0, weeks = 0, days = 0, hours = 0, minutes = 0, seconds = 0,
                  nanoseconds = 0) {
-  x <- structure(as.numeric(c(years, months, weeks, days, hours, minutes, seconds, nanoseconds)),
-    names = c("years", "months", "weeks", "days", "hours", "minutes", "seconds", "nanoseconds"),
-    class = "guatiao_span")
+  x <- .gt_span(list(years, months, weeks, days, hours, minutes, seconds, nanoseconds))
   .Call(C_time_format, .gt_forms[["span"]], unname(unclass(x)))
   x
 }
@@ -90,32 +96,26 @@ span <- function(years = 0, months = 0, weeks = 0, days = 0, hours = 0, minutes 
 exact_length <- function(seconds, nanoseconds = 0) {
   if (inherits(seconds, "difftime")) {
     t <- as.numeric(seconds, units = "secs")
-    if (t < 0) stop("an exact length is never negative", call. = FALSE)
+    if (length(t) != 1L || !is.finite(t) || t < 0) stop("an exact length is never negative", call. = FALSE)
     s <- floor(t)
     return(exact_length(s, round((t - s) * 1e9)))
   }
-  s <- as.numeric(seconds)
-  ns <- as.numeric(nanoseconds)
-  if (length(s) != 1L || length(ns) != 1L || !is.finite(s) || s < 0 || s != floor(s) || s > 2^53) {
-    stop("seconds is a whole number from 0 to 2^53", call. = FALSE)
-  }
-  if (!is.finite(ns) || ns < 0 || ns > 999999999 || ns != floor(ns)) {
-    stop("nanoseconds is a whole number from 0 to 999999999", call. = FALSE)
-  }
-  structure(c(seconds = s, nanoseconds = ns), class = "guatiao_length")
+  x <- .Call(C_units, list(seconds, nanoseconds), c("seconds", "nanoseconds"), c(TRUE, TRUE))
+  if (as.numeric(x[[2L]]) > 999999999) stop("nanoseconds is a whole number from 0 to 999999999", call. = FALSE)
+  structure(x, names = c("seconds", "nanoseconds"), class = "guatiao_length")
 }
 
 # ---- text in, text out ----------------------------------------------------------
 
 time_parse <- function(form, text) {
   f <- .gt_form(form)
-  fields <- .Call(C_time_parse, f, enc2utf8(text), FALSE)
+  fields <- .Call(C_time_parse, f, enc2utf8(text), form == "span")
   switch(form,
     date = .gt_date_of(fields),
     time = structure(fields, class = "guatiao_civil_time"),
     datetime = structure(fields, class = "guatiao_civil_datetime"),
     timestamp = structure(fields, class = "guatiao_instant"),
-    span = structure(fields, names = names(span()), class = "guatiao_span"))
+    span = .gt_span(as.list(fields)))
 }
 
 time_format <- function(x) {
@@ -133,9 +133,7 @@ time_normalize <- function(form, text) .Call(C_time_normalize, .gt_form(form), e
 
 read_length <- function(x) {
   r <- .Call(C_duration_read, x)
-  s <- as.numeric(r[[1L]])
-  if (s > 2^53) stop(sprintf("%s seconds is past what an R number holds exactly", r[[1L]]), call. = FALSE)
-  exact_length(s, r[[2L]])
+  exact_length(number(r[[1L]]), r[[2L]])
 }
 
 add_span <- function(x, span) {
@@ -165,7 +163,15 @@ Ops.guatiao_span <- function(e1, e2) {
     same <- identical(unname(unclass(e1)), unname(unclass(e2)))
     return(if (.Generic == "==") same else !same)
   }
-  if (.Generic == "-" && missing(e2)) return(structure(-unclass(e1), class = "guatiao_span"))
+  if (.Generic == "-" && missing(e2)) {
+    u <- unclass(e1)
+    if (is.character(u)) {
+      u[] <- ifelse(u == "0", "0", ifelse(startsWith(u, "-"), substring(u, 2L), paste0("-", u)))
+    } else {
+      u <- -u
+    }
+    return(structure(u, class = "guatiao_span"))
+  }
   stop(sprintf("%s is not defined for spans", .Generic), call. = FALSE)
 }
 
@@ -174,8 +180,20 @@ format.guatiao_civil_datetime <- function(x, ...) time_format(x)
 format.guatiao_instant <- function(x, ...) time_format(x)
 format.guatiao_span <- function(x, ...) time_format(x)
 format.guatiao_length <- function(x, ...) {
-  sprintf("%.0f.%09.0fs", unclass(x)[["seconds"]], unclass(x)[["nanoseconds"]])
+  s <- unclass(x)[["seconds"]]
+  sprintf("%s.%09.0fs", if (is.character(s)) s else sprintf("%.0f", s), as.numeric(unclass(x)[["nanoseconds"]]))
 }
+
+# Each unit as `int64 =` answers a 64-bit integer.
+.gt_units_list <- function(x, int64) {
+  mode <- .gt_int64_code(int64)
+  u <- unclass(x)
+  out <- lapply(seq_along(u), function(i) .Call(C_unit_answer, u[[i]], mode))
+  names(out) <- names(u)
+  out
+}
+as.list.guatiao_span <- function(x, int64 = "auto", ...) .gt_units_list(x, int64)
+as.list.guatiao_length <- function(x, int64 = "auto", ...) .gt_units_list(x, int64)
 as.character.guatiao_civil_time <- function(x, ...) time_format(x)
 as.character.guatiao_civil_datetime <- function(x, ...) time_format(x)
 as.character.guatiao_instant <- function(x, ...) time_format(x)
@@ -205,5 +223,6 @@ lower_value.guatiao_civil_datetime <- function(x) time_format(x)
 lower_value.guatiao_instant <- function(x) time_format(x)
 lower_value.guatiao_span <- function(x) time_format(x)
 lower_value.guatiao_length <- function(x) {
-  list(unname(unclass(x)[["seconds"]]), unname(unclass(x)[["nanoseconds"]]))
+  s <- unclass(x)[["seconds"]]
+  list(if (is.character(s)) number(s) else s, as.numeric(unclass(x)[["nanoseconds"]]))
 }

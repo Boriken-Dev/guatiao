@@ -28,7 +28,7 @@ SEXP C_intake_is_visible(SEXP, SEXP, SEXP, SEXP);
 SEXP C_intake_layout(SEXP, SEXP);
 SEXP C_intake_resolve(SEXP, SEXP);
 SEXP C_intake_unflatten(SEXP, SEXP, SEXP);
-SEXP C_kind_new(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+SEXP C_kind_new(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP C_library_close(SEXP);
 SEXP C_library_entry(SEXP);
 SEXP C_library_info(SEXP);
@@ -74,7 +74,7 @@ SEXP C_registry_scan(SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP C_registry_set_priority(SEXP, SEXP, SEXP);
 SEXP C_registry_unload(SEXP, SEXP, SEXP);
 SEXP C_registry_watch_dir(SEXP, SEXP, SEXP);
-SEXP C_remote_call(SEXP, SEXP, SEXP);
+SEXP C_remote_call(SEXP, SEXP, SEXP, SEXP);
 SEXP C_remote_close(SEXP);
 SEXP C_remote_has(SEXP, SEXP);
 SEXP C_remote_live(SEXP);
@@ -87,6 +87,8 @@ SEXP C_table_floor_hash(SEXP);
 SEXP C_time_format(SEXP, SEXP);
 SEXP C_time_normalize(SEXP, SEXP);
 SEXP C_time_parse(SEXP, SEXP, SEXP);
+SEXP C_unit_answer(SEXP, SEXP);
+SEXP C_units(SEXP, SEXP, SEXP);
 SEXP C_value_close(SEXP);
 SEXP C_value_is_open(SEXP);
 SEXP C_value_new(SEXP, SEXP);
@@ -114,7 +116,7 @@ static const R_CallMethodDef calls[] = {
     {"C_intake_layout", (DL_FUNC)(void (*)(void)) & C_intake_layout, 2},
     {"C_intake_resolve", (DL_FUNC)(void (*)(void)) & C_intake_resolve, 2},
     {"C_intake_unflatten", (DL_FUNC)(void (*)(void)) & C_intake_unflatten, 3},
-    {"C_kind_new", (DL_FUNC)(void (*)(void)) & C_kind_new, 8},
+    {"C_kind_new", (DL_FUNC)(void (*)(void)) & C_kind_new, 11},
     {"C_library_close", (DL_FUNC)(void (*)(void)) & C_library_close, 1},
     {"C_library_entry", (DL_FUNC)(void (*)(void)) & C_library_entry, 1},
     {"C_library_info", (DL_FUNC)(void (*)(void)) & C_library_info, 1},
@@ -160,7 +162,7 @@ static const R_CallMethodDef calls[] = {
     {"C_registry_set_priority", (DL_FUNC)(void (*)(void)) & C_registry_set_priority, 3},
     {"C_registry_unload", (DL_FUNC)(void (*)(void)) & C_registry_unload, 3},
     {"C_registry_watch_dir", (DL_FUNC)(void (*)(void)) & C_registry_watch_dir, 3},
-    {"C_remote_call", (DL_FUNC)(void (*)(void)) & C_remote_call, 3},
+    {"C_remote_call", (DL_FUNC)(void (*)(void)) & C_remote_call, 4},
     {"C_remote_close", (DL_FUNC)(void (*)(void)) & C_remote_close, 1},
     {"C_remote_has", (DL_FUNC)(void (*)(void)) & C_remote_has, 2},
     {"C_remote_live", (DL_FUNC)(void (*)(void)) & C_remote_live, 1},
@@ -173,6 +175,8 @@ static const R_CallMethodDef calls[] = {
     {"C_time_format", (DL_FUNC)(void (*)(void)) & C_time_format, 2},
     {"C_time_normalize", (DL_FUNC)(void (*)(void)) & C_time_normalize, 2},
     {"C_time_parse", (DL_FUNC)(void (*)(void)) & C_time_parse, 3},
+    {"C_unit_answer", (DL_FUNC)(void (*)(void)) & C_unit_answer, 2},
+    {"C_units", (DL_FUNC)(void (*)(void)) & C_units, 3},
     {"C_value_close", (DL_FUNC)(void (*)(void)) & C_value_close, 1},
     {"C_value_is_open", (DL_FUNC)(void (*)(void)) & C_value_is_open, 1},
     {"C_value_new", (DL_FUNC)(void (*)(void)) & C_value_new, 2},

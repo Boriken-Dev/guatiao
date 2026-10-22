@@ -138,6 +138,40 @@ const guatiao_value *gt_tree_arg(SEXP x, guatiao_value *tmp);
 void gt_tree_args(SEXP a, guatiao_value *ta, const guatiao_value **pa, SEXP b, guatiao_value *tb,
                   const guatiao_value **pb, SEXP c, guatiao_value *tc, const guatiao_value **pc);
 
+/* ---- 64-bit integers ------------------------------------------------------ */
+
+/* An integer as a sign and a magnitude: every int64 and uint64, and a flag
+ * for a magnitude past 2^64 - 1. Zero is never negative. */
+typedef struct gt_wide {
+  int neg;
+  uint64_t mag;
+  int over;
+} gt_wide;
+
+/* The `int64 =` option's codes: how a 64-bit integer is answered. */
+enum { GT_INT64_AUTO = 0, GT_INT64_NUMBER = 1, GT_INT64_DOUBLE = 2 };
+
+/* The integer one R value names: an integer or logical, a whole double,
+ * a `number` or a string spelling one (`-?[0-9]+`). NULL, or why not. */
+const char *gt_wide_in(SEXP x, gt_wide *w);
+
+/* The integer a text spells: `-?[0-9]+` and nothing else, past 2^64 - 1
+ * setting `over`. NULL, or why not. */
+const char *gt_wide_text(const char *p, gt_wide *w);
+
+/* `w` as an integer of `bits` bits (8, 16, 32 or 64); NULL, or why not. */
+const char *gt_wide_signed(gt_wide w, int bits, int64_t *out);
+const char *gt_wide_unsigned(gt_wide w, int bits, uint64_t *out);
+
+/* A 64-bit integer as `mode` answers it: auto an R integer when it fits,
+ * a double while it is exact, else a `number`; number its exact text;
+ * double the nearest double. */
+SEXP gt_i64_sexp(int64_t v, int mode);
+SEXP gt_u64_sexp(uint64_t v, int mode);
+
+/* A `number` holding `text`, which is the caller's to have checked. */
+SEXP gt_number_sexp(const char *text);
+
 /* The package's namespace. */
 SEXP gt_namespace(void);
 
