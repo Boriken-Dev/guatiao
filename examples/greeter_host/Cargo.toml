@@ -27,6 +27,8 @@ guatiao-serde = { path = "../../crates/guatiao-serde", features = ["json"] }
 # test hands this host a directory holding a real library to scan. The
 # binary itself does not depend on it: a host names no library.
 derived_greeter = { path = "../derived_greeter" }
+# The docs' migration snippets, and reading a provider's form back.
+guatiao-intake = { path = "../../crates/guatiao-intake" }
 
 [lints]
 workspace = true

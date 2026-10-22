@@ -51,6 +51,11 @@ spelled out:
 guatiao = "=0.0.0-alpha.1"
 ```
 
+Moving from `0.0.0-alpha.0`? The
+[migration page](https://boriken-dev.github.io/guatiao/migrating/) lists
+every change since then that asks something of your code, and what to
+write now.
+
 Optional features:
 
 | Flag | Adds | Needed for |
