@@ -13,4 +13,4 @@ auto-examples = false
 [preprocess.cpp]
 
 [dependencies]
-guatiao = { path = "../../../bindings/fortran" }
+guatiao = { path = "../../../bindings/fortran/guatiao" }

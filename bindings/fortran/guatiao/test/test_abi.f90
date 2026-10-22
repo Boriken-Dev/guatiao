@@ -23,10 +23,10 @@ program test_abi
 
   type(decl), allocatable :: header(:), fortran(:)
 
-  call against('crates/guatiao/include/guatiao.h', 'bindings/fortran/src/guatiao_c.f90', gt_core_exports)
-  call against('crates/guatiao-serde/include/guatiao_serde.h', 'bindings/fortran/src/guatiao_serde_c.f90', &
+  call against('crates/guatiao/include/guatiao.h', 'bindings/fortran/guatiao/src/guatiao_c.f90', gt_core_exports)
+  call against('crates/guatiao-serde/include/guatiao_serde.h', 'bindings/fortran/guatiao/src/guatiao_serde_c.f90', &
                gt_serde_exports)
-  call against('crates/guatiao-intake/include/guatiao_intake.h', 'bindings/fortran/src/guatiao_intake_c.f90', &
+  call against('crates/guatiao-intake/include/guatiao_intake.h', 'bindings/fortran/guatiao/src/guatiao_intake_c.f90', &
                gt_intake_exports)
   call constants()
   call sizes()
@@ -370,7 +370,7 @@ contains
     root = new_line('a') // root
     call check_text(toml_value(root, 'name'), toml_value(own, 'name'), 'the root manifest names this package')
     call check_text(toml_value(root, 'version'), toml_value(own, 'version'), 'and versions it the same')
-    call check_text(toml_value(root, 'source-dir'), 'bindings/fortran/src', 'and builds its sources')
+    call check_text(toml_value(root, 'source-dir'), 'bindings/fortran/guatiao/src', 'and builds its sources')
     at = index(cmake, 'project(guatiao_fortran VERSION ')
     call check(at > 0, 'the CMake project names a version')
     if (at > 0) then

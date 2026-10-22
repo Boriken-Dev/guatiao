@@ -61,7 +61,7 @@ With CMake:
 ```cmake
 include(FetchContent)
 FetchContent_Declare(guatiao GIT_REPOSITORY https://github.com/Boriken-Dev/guatiao
-  GIT_TAG <release tag> SOURCE_SUBDIR bindings/fortran)
+  GIT_TAG <release tag> SOURCE_SUBDIR bindings/fortran/guatiao)
 FetchContent_MakeAvailable(guatiao)
 target_link_libraries(app PRIVATE guatiao::fortran)
 ```
@@ -245,14 +245,14 @@ call guatiao_to_text(later, text)   ! "2026-02-28"
 | `guatiao_civil` | dates, times, instants, spans, exact lengths, `guatiao_normalize` |
 | `guatiao_c`, `guatiao_serde_c`, `guatiao_intake_c` | the C headers as `bind(c)` mirrors and procedure pointers |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/fortran/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/fortran/guatiao/AGENTS.md)
 is the full API reference and ships with the package. The C ABI is
 described by [`guatiao.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao/include/guatiao.h).
 
 ## Development
 
 ```bash
-cd bindings/fortran
+cd bindings/fortran/guatiao
 fpm test --compiler gfortran            # or flang, ifx
 cmake -S . -B build && cmake --build build && ctest --test-dir build
 ```

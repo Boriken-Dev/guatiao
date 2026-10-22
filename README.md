@@ -78,7 +78,7 @@ Bindings over the same C ABI, for a consumer that is not Rust:
 | Go | [`bindings/go/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/go/guatiao/README.md) | `go get github.com/Boriken-Dev/guatiao/bindings/go/guatiao` |
 | Julia | [`bindings/julia/Guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia/Guatiao/README.md) | `Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia/Guatiao")` |
 | R | [`bindings/r/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r/guatiao/README.md) | `remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r/guatiao")` |
-| Fortran | [`bindings/fortran/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/fortran/README.md) | fpm: `guatiao = { git = "https://github.com/Boriken-Dev/guatiao", tag = "..." }`; CMake: `FetchContent` with `SOURCE_SUBDIR bindings/fortran` |
+| Fortran | [`bindings/fortran/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/fortran/guatiao/README.md) | fpm: `guatiao = { git = "https://github.com/Boriken-Dev/guatiao", tag = "..." }`; CMake: `FetchContent` with `SOURCE_SUBDIR bindings/fortran/guatiao` |
 | MATLAB, GNU Octave | [`bindings/matlab/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/matlab/guatiao/README.md) | Octave: `pkg install` a release's `guatiao-<version>.tar.gz`; MATLAB: a release's `guatiao.mltbx`, then `guatiao.build()` |
 
 Each drives a shared library that exports the ABI — `guatiao` itself, or

@@ -9,5 +9,5 @@ auto-examples = false
 auto-tests = true
 
 [dependencies]
-guatiao = { path = "../../bindings/fortran" }
+guatiao = { path = "../../bindings/fortran/guatiao" }
 greeter_kind = { path = "../greeter_kind/fortran" }

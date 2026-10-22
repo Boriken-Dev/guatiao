@@ -55,7 +55,7 @@ contains
   function repo_path(rel) result(p)
     character(*), intent(in) :: rel
     character(:), allocatable :: p
-    p = '../../' // rel
+    p = '../../../' // rel
   end function
 
   !> Whether every greeter must be there (GUATIAO_REQUIRE_ALL=1): a skip

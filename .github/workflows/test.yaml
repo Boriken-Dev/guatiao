@@ -1104,14 +1104,14 @@ jobs:
           done
           command -v link
       - name: Test the binding with fpm
-        working-directory: bindings/fortran
+        working-directory: bindings/fortran/guatiao
         run: |
           fpm test --compiler "$FC" 2>&1 | tee fortran-test.log
           test "${PIPESTATUS[0]}" -eq 0
           ! grep -n "  SKIP" fortran-test.log
       - name: Build and test the binding with CMake
         run: |
-          cmake -S bindings/fortran -B "$RUNNER_TEMP/fortran-cmake" -G Ninja -DCMAKE_Fortran_COMPILER="$FC"
+          cmake -S bindings/fortran/guatiao -B "$RUNNER_TEMP/fortran-cmake" -G Ninja -DCMAKE_Fortran_COMPILER="$FC"
           cmake --build "$RUNNER_TEMP/fortran-cmake"
           ctest --test-dir "$RUNNER_TEMP/fortran-cmake" --output-on-failure
       - name: Test the greeter package

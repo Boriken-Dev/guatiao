@@ -4,8 +4,8 @@
 
 # The guatiao Fortran bindings for projects that build with CMake:
 #
-#   add_subdirectory(path/to/bindings/fortran)       # or FetchContent with
-#   target_link_libraries(app PRIVATE guatiao::fortran)  # SOURCE_SUBDIR bindings/fortran
+#   add_subdirectory(path/to/bindings/fortran/guatiao)       # or FetchContent with
+#   target_link_libraries(app PRIVATE guatiao::fortran)  # SOURCE_SUBDIR bindings/fortran/guatiao
 #
 # Nothing of guatiao itself is linked: the library is opened at run time.
 cmake_minimum_required(VERSION 3.20)

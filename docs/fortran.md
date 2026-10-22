@@ -4,19 +4,19 @@ Fortran plays both parts. As a **host** it loads libraries written in any
 language and calls their providers; as a **provider** it writes a library,
 types extending a kind's abstract type, that a host in the same program
 calls, or that it builds as a library file any host's scan finds. Both
-use the package `guatiao` in `bindings/fortran`: pure Fortran 2008 over
+use the package `guatiao` in `bindings/fortran/guatiao`: pure Fortran 2008 over
 `iso_c_binding`, tested with gfortran, LLVM flang and Intel ifx, opening
 the guatiao library at run time and shipping no native code of its own.
 
 With fpm, as a git dependency (fpm reads the repository's root manifest,
-which builds `bindings/fortran/src`):
+which builds `bindings/fortran/guatiao/src`):
 
 ```toml
 [dependencies]
 guatiao = { git = "https://github.com/Boriken-Dev/guatiao", tag = "..." }
 ```
 
-With CMake, `FetchContent` with `SOURCE_SUBDIR bindings/fortran` and
+With CMake, `FetchContent` with `SOURCE_SUBDIR bindings/fortran/guatiao` and
 `target_link_libraries(app PRIVATE guatiao::fortran)`. A program links
 nothing of guatiao: the binding opens it on its first native call, the one
 `guatiao_use_library(path)` named, else `GUATIAO_LIBRARY` (a file or a
