@@ -630,6 +630,98 @@ jobs:
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
           GUATIAO_REQUIRE_ALL: "1"
 
+  r:
+    name: R bindings (R ${{ matrix.r }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # R's floor and its current release on the three platforms. The tests
+    # call greeters written in Rust, C, Python (through the guatiao-py
+    # bridge), Go (built as a library file) and R, both ways, and run the
+    # example host, all inside R CMD check. A stated skip fails the job, and
+    # so does any check WARNING.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        r: ["4.2", "release"]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/guatiao-py
+      - name: Build native libraries
+        # The libraries, the Rust greeters and the Rust caller of any greeter.
+        run: cargo build --workspace --all-features
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: "3.14"
+      - name: Where a host that is not Python finds libpython
+        if: runner.os != 'Windows'
+        run: |
+          echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+      - name: Build the guatiao-py bridge, for the Python greeters
+        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+        env:
+          PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: false
+      - name: Build the Go greeter as a library file
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   name=libgo_greeter.so ;;
+            macOS)   name=libgo_greeter.dylib ;;
+            Windows) name=go_greeter.dll ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/go-library"
+          (cd examples && go build -buildmode=c-shared -o "$RUNNER_TEMP/go-library/$name" ./go_provider/cshared)
+          echo "GUATIAO_GO_LIBRARY=$RUNNER_TEMP/go-library" >> "$GITHUB_ENV"
+        env:
+          CGO_ENABLED: "1"
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.r }}
+          use-public-rspm: true
+      - name: libffi, which the package's glue compiles against
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libffi-dev
+      - name: Build and check the package
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   bridge=libguatiao_py.so ;;
+            macOS)   bridge=libguatiao_py.dylib ;;
+            Windows) bridge=guatiao_py.dll ;;
+          esac
+          export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge"
+          R --version | head -1
+          mkdir -p "$RUNNER_TEMP/r-check"
+          R CMD build --no-manual bindings/r
+          mv guatiao_*.tar.gz "$RUNNER_TEMP/r-check/"
+          cd "$RUNNER_TEMP/r-check"
+          status=0
+          R CMD check --no-manual guatiao_*.tar.gz || status=$?
+          cat guatiao.Rcheck/tests/guatiao.Rout* 2>/dev/null | tail -n 30 || true
+          grep -E "^\* checking .*(WARNING|ERROR)|^Status" guatiao.Rcheck/00check.log || true
+          if [ "$status" -ne 0 ] || grep -qE "^\* checking .*(WARNING|ERROR)" guatiao.Rcheck/00check.log; then
+            cat guatiao.Rcheck/00check.log
+            exit 1
+          fi
+        env:
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+          GUATIAO_REPO: ${{ github.workspace }}
+          GUATIAO_REQUIRE_ALL: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+
   dart:
     name: Dart bindings (${{ matrix.os }}, ${{ matrix.sdk }})
     runs-on: ${{ matrix.os }}
