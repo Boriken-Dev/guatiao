@@ -4,7 +4,7 @@
 A value model whose C form is plain structs, a JSON Schema through which a
 provider says what it needs to be initialised, and an envelope through which
 one shared library offers any number of providers. Nothing is opaque: a C,
-C++, Dart, Go, Julia, Node, Python, R or Rust consumer reads a tree, a schema or a descriptor
+C++, Dart, Go, Julia, MATLAB, Node, Octave, Python, R or Rust consumer reads a tree, a schema or a descriptor
 without calling into any library.
 
 *Guatiao* is the Taíno pact in which two people exchange names and become
@@ -79,6 +79,16 @@ Rscript -e 'remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r"
 export GUATIAO_LIBRARY=/path/to/the/library
 ```
 
+A GNU Octave consumer installs the package from a release (it compiles a
+small MEX file, which needs libffi); a MATLAB consumer installs the
+toolbox and runs `guatiao.build()` once. Both point it at the same
+library:
+
+```matlab
+pkg install guatiao-VERSION.tar.gz; pkg load guatiao   % Octave
+setenv('GUATIAO_LIBRARY', '/path/to/the/library')
+```
+
 A C consumer includes `guatiao.h` and links nothing to read a value.
 
 ## 30-second tour
@@ -136,6 +146,9 @@ let greeter = registry.best("greeter").expect("something serves it");
   writing providers in Julia that a host in the same process calls.
 - [R, host and provider](r.md): calling libraries from R, and writing
   providers in R that a host in the same session calls on R's thread.
+- [MATLAB and Octave, host and provider](matlab.md): calling libraries from
+  MATLAB or GNU Octave, and writing providers as classes that a host in
+  the same session calls on the interpreter's thread.
 - [Python API reference](api/python.md), for the ctypes bindings.
 - [Dart API reference](api/dart.md), for the `dart:ffi` bindings -- a plain
   Dart package, so a Flutter app uses the same one.

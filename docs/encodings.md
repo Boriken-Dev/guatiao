@@ -365,7 +365,8 @@ print it". A reader takes the value as it would without them.
 What honours the marks:
 
 - **Redaction.** `guatiao_schema_redact` in C, and `redact` in Rust,
-  Python, Dart, Node, Julia and R and `Redact` in Go, copy a value with every marked field replaced by a
+  Python, Dart, Node, Julia and R, `Redact` in Go and `guatiao.redact` in
+  MATLAB and Octave, copy a value with every marked field replaced by a
   placeholder, at any depth: inside a nested record, in every element of
   a list, in a variant's arm. Where the schema stops describing the
   value (a key it does not declare, say), the value is hidden too,
@@ -377,25 +378,25 @@ What a mark does not do: encrypt the value, compare it in constant time,
 or wipe it from memory. It says who may see it, and the code that shows,
 logs or returns values honours it.
 
-## In C, Python, Dart, Node, Go, Julia and R
+## In C, Python, Dart, Node, Go, Julia, R, MATLAB and Octave
 
 Each text form above has C functions that read it into a plain struct,
 write it back from one, and rewrite text in its canonical spelling, all
-declared in `guatiao.h`; the Python, Dart, Node, Go, Julia and R bindings call the
-same functions, so every grammar has one implementation. A refusal is
+declared in `guatiao.h`; the Python, Dart, Node, Go, Julia, R and
+MATLAB/Octave bindings call the same functions, so every grammar has one implementation. A refusal is
 `GUATIAO_ERR_BAD_VALUE` with a `guatiao_text_error` that names the byte
 offset and what was expected there. `guatiao_date_add_span` and
 `guatiao_datetime_add_span` apply a span, and `guatiao_duration_read`
 reads an exact length in any of its three spellings.
 
-| form | C | Python | Dart | Node | Go | Julia | R |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| a date | `guatiao_date` | `datetime.date` | `PlainDate` | `PlainDate` | `civil.Date` | `Dates.Date` | `Date` |
-| a time of day | `guatiao_time` | `datetime.time`, no `tzinfo` | `PlainTime` | `PlainTime` | `civil.Time` | `Dates.Time` | `civil_time` |
-| a civil date and time | `guatiao_datetime` | `datetime.datetime`, no `tzinfo` | `PlainDateTime` | `PlainDateTime` | `civil.DateTime` | `Dates.DateTime` | `civil_datetime` |
-| an instant | `guatiao_timestamp` | `datetime.datetime` in UTC | `DateTime`, `isUtc` | `Date` | `time.Time` in UTC | `Guatiao.Timestamp` | `instant`, `POSIXct` |
-| an exact length | a list of two numbers | `datetime.timedelta` | `Duration` | `{ seconds: bigint, nanoseconds }` | `civil.Length`, `time.Duration` | `Guatiao.Length`, a `Dates.FixedPeriod` | `exact_length`, `difftime` |
-| a span | `guatiao_span` | `guatiao.time.Span` | `Span` | `Span` | `civil.Span` | `Guatiao.Span`, `Dates.CompoundPeriod` | `span` |
+| form | C | Python | Dart | Node | Go | Julia | R | MATLAB, Octave |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| a date | `guatiao_date` | `datetime.date` | `PlainDate` | `PlainDate` | `civil.Date` | `Dates.Date` | `Date` | `guatiao.Date` |
+| a time of day | `guatiao_time` | `datetime.time`, no `tzinfo` | `PlainTime` | `PlainTime` | `civil.Time` | `Dates.Time` | `civil_time` | `guatiao.TimeOfDay` |
+| a civil date and time | `guatiao_datetime` | `datetime.datetime`, no `tzinfo` | `PlainDateTime` | `PlainDateTime` | `civil.DateTime` | `Dates.DateTime` | `civil_datetime` | `guatiao.DateTime`; MATLAB's `datetime` with no zone, written |
+| an instant | `guatiao_timestamp` | `datetime.datetime` in UTC | `DateTime`, `isUtc` | `Date` | `time.Time` in UTC | `Guatiao.Timestamp` | `instant`, `POSIXct` | `guatiao.Timestamp`; MATLAB's `datetime` with a zone, written |
+| an exact length | a list of two numbers | `datetime.timedelta` | `Duration` | `{ seconds: bigint, nanoseconds }` | `civil.Length`, `time.Duration` | `Guatiao.Length`, a `Dates.FixedPeriod` | `exact_length`, `difftime` | `guatiao.Duration`; MATLAB's `duration`, written |
+| a span | `guatiao_span` | `guatiao.time.Span` | `Span` | `Span` | `civil.Span` | `Guatiao.Span`, `Dates.CompoundPeriod` | `span` | `guatiao.Span` |
 
 What a mapping loses, and what happens then:
 
@@ -409,18 +410,22 @@ What a mapping loses, and what happens then:
   microsecond. `PlainTime`, `PlainDateTime`, every `Span`
   class, Node's exact length, every Go type, Julia's `Dates.Time`,
   `Timestamp`, `Span` and `Length`, R's `civil_time`, `civil_datetime`,
-  `instant` and `span`, and every C struct keep the nanoseconds.
+  `instant` and `span`, every `guatiao` time class in MATLAB and Octave,
+  and every C struct keep the nanoseconds; MATLAB's own `datetime` and
+  `duration` are written to the nanosecond they hold.
 - **The year 0000.** Python's `datetime.date` and `datetime.datetime`
   start at year 1, so reading a date, a civil date and time or an
   instant in year 0000 into one raises `ValueError`. Dart, Node, Go,
-  Julia, R and C hold it.
+  Julia, R, MATLAB, Octave and C hold it.
 - **Long exact lengths.** `timedelta` stops at 999999999 days and Dart's
   `Duration` at 2^63 - 1 microseconds (about 292471 years), and Go's
   `time.Duration` and Julia's `Dates.Nanosecond` at 2^63 - 1 nanoseconds
   (about 292 years); a longer length raises, or answers an error, rather
   than wraps, and Go's `civil.Length` and Julia's `Guatiao.Length` hold
   every one. An R number holds whole numbers exactly to 2^53, so R's
-  `exact_length` and `span` refuse a length or a unit past that. An exact length is never negative, so a negative
+  `exact_length` and `span` refuse a length or a unit past that, as do
+  `guatiao.Duration` and `guatiao.Span` in MATLAB and Octave, whose
+  numbers are doubles. An exact length is never negative, so a negative
   `timedelta`, `Duration` or Julia period is refused when written.
 - **An offset.** An instant read into any type is in UTC: the offset it
   was written with is not kept, as the canonical text does not keep it.
@@ -440,11 +445,15 @@ and time but no instant apart from them, so the Julia binding writes a
 instant. Base R has a date and an instant (`POSIXct`, a double of
 seconds) and neither a time of day nor a civil date and time, so the R
 binding has `civil_time` and `civil_datetime`, and `instant` for an
-instant to the nanosecond.
+instant to the nanosecond. Octave has no date or time type at all and
+MATLAB's `datetime` is a double of milliseconds, so the MATLAB and Octave
+binding has a class per form, each checked by the C functions; a MATLAB
+`datetime` or `duration` is written in the form it holds.
 
 A secret is the value it holds in every language; what each offers is
-redaction, `guatiao_schema_redact`, `guatiao.redact` in Python,
-`redact` in Dart, Node, Julia and R and `guatiao.Redact` in Go, with a
+redaction, `guatiao_schema_redact`, `guatiao.redact` in Python, MATLAB
+and Octave, `redact` in Dart, Node, Julia and R and `guatiao.Redact` in
+Go, with a
 placeholder of the caller's choosing.
 
 ## In Rust

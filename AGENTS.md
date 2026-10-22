@@ -16,7 +16,7 @@ public surface); this file is about the repository.
 | `crates/guatiao-intake/` | taking a value in from a person: the path grammar (`agent[1].name`), flat `key -> text` storage, checking a store of text, and how a schema is shown (sections, widget hints, conditional visibility, `#[derive(Form)]`); C surface in `include/guatiao_intake.h` |
 | `crates/guatiao-py/` | a source of libraries written in Python: a cdylib exporting `guatiao_source`, built with pyo3 for the stable ABI; a workspace of its own (no other build needs a Python to link), not published |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
-| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `python/greeter_kind.py` and `node/greeter_kind.ts` describe its kinds for Python and Node; `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind`; `r/greeterkind` is the R package declaring them with `kind()` |
+| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `python/greeter_kind.py` and `node/greeter_kind.ts` describe its kinds for Python and Node; `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind`; `r/greeterkind` is the R package declaring them with `kind()`; `matlab/+greeterkind` declares them for MATLAB and Octave as classes inheriting `guatiao.Kind` |
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
 | `examples/wire_over_webtransport/` | values over WebTransport: `server/` (the shared channel and framing, `wire-server`, and `wire-probe`, a native client), `client/` (the page's wasm, its own workspace, built for `wasm32-unknown-unknown` only); commands in its `README.md` |
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build; its `tests/docs_snippets.rs` compiles the Rust snippets of `docs/index.md`, `docs/ownership.md` and the root `README.md` and compares them with the text shown |
@@ -33,13 +33,16 @@ public surface); this file is about the repository.
 | `examples/julia_provider/` | `JlGreeter/`, a library written in Julia (the package is the library) |
 | `examples/r_host/` | a host program in R: scans for greeters in any language, registers the R library, optionally adds `guatiao-py`, calls every slot; the binding's tests run it |
 | `examples/r_provider/` | `rgreeter/`, a library written in R (the package is the library) |
+| `examples/matlab_host/` | a host program in MATLAB or Octave: scans for greeters in any language, registers the M library, optionally adds `guatiao-py`, calls every slot; the binding's tests run it |
+| `examples/matlab_provider/` | `mlgreeter/`, a library written in M (the folder is the library, named by its `DESCRIPTION`) |
 | `bindings/python/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md` |
 | `bindings/dart/` | `dart:ffi` bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`; `lib/src/bindings.g.dart` is ffigen output and never hand-edited |
 | `bindings/node/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads |
 | `bindings/go/` | Go bindings over the C ABI through cgo, the module `github.com/Boriken-Dev/guatiao/bindings/go` with its own `AGENTS.md`; `internal/native/` holds every line of C and copies of the three headers (a test compares them with the committed ones); `cmd/guatiao-kind` writes a kind package's glue |
 | `bindings/julia/` | Julia bindings over the C ABI through `ccall`, the package `Guatiao` with its own `AGENTS.md`; `src/abi.jl` mirrors the header's structs (a test compares each layout with the header's text); `test/fixtures/` holds the C its tests build |
 | `bindings/r/` | R bindings over the C ABI, the source package `guatiao`: `src/` holds copies of the three headers (a test compares them with the committed ones) and the C glue, compiled when the package installs, which opens the library at run time and calls kind slots through libffi; its API header is `inst/AGENTS.md`; `tests/fixtures/` holds the C its tests build |
-| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `python.md`, `node.md`, `go.md`, `julia.md` and `r.md` (Python, Node, Go, Julia and R as a host and as a provider), `wasm.md`; built strictly by `docs.yml` |
+| `bindings/matlab/` | MATLAB and GNU Octave bindings over the C ABI: the `+guatiao` package in `inst/` (its API header is `inst/AGENTS.md`), and `src/`, one MEX gateway in C with copies of the three headers (a test compares them with the committed ones), built by `mkoctfile --mex` at `pkg install` or by `guatiao.build()`, which opens the library at run time and calls kind slots through libffi; `tests/` is a plain runner (`run_tests`) both interpreters run, `tests/fixtures/` holds the C its tests build |
+| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `python.md`, `node.md`, `go.md`, `julia.md`, `r.md` and `matlab.md` (Python, Node, Go, Julia, R, MATLAB and Octave as a host and as a provider), `wasm.md`; built strictly by `docs.yml` |
 | `benchmarks/` | the benchmark runner (`cargo run -p guatiao-bench --release -- --save NAME`), committed results in `benchmarks/results/`, and `README.md` with the protocol; run on demand, numbers are local and provisional |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 
@@ -185,9 +188,24 @@ R CMD INSTALL bindings/r examples/greeter_kind/r/greeterkind examples/r_provider
 Rscript examples/r_host/host.R target/debug   # the example host
 ```
 
+MATLAB and Octave bindings, after `cargo build --workspace --all-features`,
+with MATLAB R2024a or Octave 8.4 or later built for the same architecture
+as the libraries (on Windows ARM64 both are x64: build the libraries for
+`x86_64-pc-windows-msvc`), a C compiler `mex` or `mkoctfile` supports, and
+libffi. `run_tests` builds the gateway when it is not on the path, and the
+C greeter and the `gtfixture` MEX file it needs; it takes the Python and Go
+greeters and `GUATIAO_REQUIRE_ALL` as the Julia suite does:
+
+```bash
+export GUATIAO_LIBRARY=$PWD/target/debug
+cd bindings/matlab/tests && octave-cli --no-gui --eval "run_tests('Exit', true)"
+matlab -batch "cd bindings/matlab/tests; assert(run_tests())"   # MATLAB
+octave-cli --eval "addpath bindings/matlab/inst examples/matlab_host; host('target/debug')"   # the example host
+```
+
 `cargo test -p greeter_host` rebuilds the workspace's cdylibs with only
 what that package needs: build the workspace again before the Go, Julia,
-R, Python, Dart or Node suites.
+R, MATLAB, Octave, Python, Dart or Node suites.
 
 The `guatiao-py` bridge, against the Python it will run with. Its tests
 and the Python suite's bridge tests find it in its own `target/debug`
@@ -282,6 +300,10 @@ Four workflows:
   failing the job. Its `r` job runs `R CMD check` of `bindings/r` on R 4.2
   and the current release on the three platforms, with every greeter
   the `julia` job has, a stated skip or a check WARNING failing the job.
+  Its `octave` job runs `bindings/matlab`'s suite on Ubuntu's Octave and
+  MSYS2's on Windows, and its `matlab` job on MATLAB R2024a and the latest
+  release (through `setup-matlab`) on the three platforms, each with every
+  greeter the `julia` job has and a stated skip failing the job.
   `release.yml` calls it as its test gate.
 - `docs.yml` owns every Pages deploy: a push to `main` touching a docs
   source, or a dispatch at any ref. `release.yml` calls it with
@@ -305,7 +327,9 @@ with its `package-lock.json` and the `../bindings/node` entry of
 `examples/package-lock.json` (`npm install` in each rewrites them),
 `bindings/julia/Project.toml`, `bindings/r/DESCRIPTION` (R takes no letters
 in a version: `0.0.0-alpha.N` is written `0.0.0.N`, so the first release that
-is not a pre-release must be above `0.0.0`), and the
+is not a pre-release must be above `0.0.0`), `bindings/matlab/DESCRIPTION`
+(the Octave package takes the version as written; the MATLAB toolbox,
+numbers only, is versioned `0.0.0.N` from it when it is built), and the
 `guatiao` entry of `examples/wire_over_webtransport/client/Cargo.lock` (a
 `--locked` build refuses a stale one; `cargo build` in that directory
 rewrites it). A `## [x.y.z] - <date>` section in
@@ -319,8 +343,10 @@ name.
 packages all four (`cargo publish --workspace --dry-run`, `python -m build`
 + `twine check`, `dart pub publish --dry-run`, `npm pack --dry-run` then
 `npm pack`, the Go module vetted and built, the Julia package
-resolved and loaded, and the R source package built and checked), then
-the GitHub release (carrying the R source package)
+resolved and loaded, the R source package built and checked, the Octave
+package built, installed and used, and the MATLAB toolbox packaged), then
+the GitHub release (carrying the R source package, the Octave package and
+the MATLAB toolbox, which no registry takes)
 (marked pre-release for a tag with a `-`), then publishes, and tags the
 Go module `bindings/go/vx.y.z` at the same commit. Each publish job
 skips a version its registry already has, so re-running a partly failed
