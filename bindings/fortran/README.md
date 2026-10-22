@@ -53,7 +53,7 @@ With [fpm](https://fpm.fortran-lang.org/), as a git dependency:
 
 ```toml
 [dependencies]
-guatiao = { git = "https://github.com/Boriken-Dev/guatiao", tag = "v0.0.0-alpha.2" }
+guatiao = { git = "https://github.com/Boriken-Dev/guatiao", tag = "..." }
 ```
 
 With CMake:
@@ -61,7 +61,7 @@ With CMake:
 ```cmake
 include(FetchContent)
 FetchContent_Declare(guatiao GIT_REPOSITORY https://github.com/Boriken-Dev/guatiao
-  GIT_TAG v0.0.0-alpha.2 SOURCE_SUBDIR bindings/fortran)
+  GIT_TAG <release tag> SOURCE_SUBDIR bindings/fortran)
 FetchContent_MakeAvailable(guatiao)
 target_link_libraries(app PRIVATE guatiao::fortran)
 ```
