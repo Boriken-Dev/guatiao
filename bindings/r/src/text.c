@@ -77,11 +77,12 @@ static int64_t to_i64(double d, const char *what) {
 }
 
 static int64_t text_i64(SEXP c, const char *what) {
-  const char *p = CHAR(c);
-  char *end = NULL;
-  long long v = strtoll(p, &end, 10);
-  if (c == NA_STRING || end == p || *end) gt_raise(GUATIAO_ERR_BAD_VALUE, "%s is a whole number", what);
-  return (int64_t)v;
+  gt_wide w = {0, 0, 0};
+  int64_t v = 0;
+  const char *why = c == NA_STRING ? "want a number, not NA" : gt_wide_text(CHAR(c), &w);
+  if (!why) why = gt_wide_signed(w, 64, &v);
+  if (why) gt_raise(GUATIAO_ERR_BAD_VALUE, "%s: %s", what, why);
+  return v;
 }
 
 /* A span from eight numbers, or eight exact texts (units past 2^53). */

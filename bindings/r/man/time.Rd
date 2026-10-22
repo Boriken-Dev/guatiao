@@ -9,6 +9,8 @@
 \alias{instant}
 \alias{span}
 \alias{exact_length}
+\alias{as.list.guatiao_span}
+\alias{as.list.guatiao_length}
 \title{Dates, times of day, civil dates and times, instants, spans, exact lengths}
 \usage{
 time_parse(form, text)
@@ -22,13 +24,16 @@ instant(seconds, nanoseconds = 0)
 span(years = 0, months = 0, weeks = 0, days = 0, hours = 0, minutes = 0,
   seconds = 0, nanoseconds = 0)
 exact_length(seconds, nanoseconds = 0)
+\method{as.list}{guatiao_span}(x, int64 = "auto", ...)
+\method{as.list}{guatiao_length}(x, int64 = "auto", ...)
 }
 \arguments{
 \item{form}{\code{"date"}, \code{"time"}, \code{"datetime"}, \code{"timestamp"} or \code{"span"}.}
 \item{text}{The text to read.}
 \item{x}{For \code{time_format}, a \code{Date}, \code{POSIXct}, \code{civil_time},
 \code{civil_datetime}, \code{instant} or \code{span}; for \code{read_length}, a
-value or R data; for \code{add_span}, a \code{Date} or \code{civil_datetime}.}
+value or R data; for \code{add_span}, a \code{Date} or \code{civil_datetime};
+for \code{as.list}, a \code{span} or an \code{exact_length}.}
 \item{span}{A \code{span}.}
 \item{hour, minute, second, nanosecond}{A time of day: 0 to 23, 0 to 59, 0 to 59
 (no leap second), 0 to 999999999.}
@@ -36,15 +41,18 @@ value or R data; for \code{add_span}, a \code{Date} or \code{civil_datetime}.}
 \item{time}{A \code{civil_time}.}
 \item{seconds}{For \code{instant}, whole seconds from 1970-01-01T00:00:00Z, or a
 \code{POSIXct}; for \code{span}, seconds; for \code{exact_length}, whole seconds
-from 0 to 2^53, or a \code{difftime}.}
+from 0 to 2^64 - 1, or a \code{difftime}.}
 \item{nanoseconds}{Below a second, 0 to 999999999 (counted forward for an
 instant; with the span's sign for a span).}
 \item{years, months, weeks, days, hours, minutes}{A span's units, one sign for the whole.}
+\item{int64}{How each unit is answered, as \code{kind()}'s \code{int64}:
+\code{"auto"}, \code{"number"} or \code{"double"}.}
+\item{...}{Not used.}
 }
 \value{\code{time_parse} returns a \code{Date}, \code{civil_time},
 \code{civil_datetime}, \code{instant} or \code{span}; \code{time_format} and
 \code{time_normalize} a string; \code{read_length} an \code{exact_length};
-\code{add_span} what it was given.}
+\code{add_span} what it was given; \code{as.list} each unit, named.}
 \description{
 The forms are text in a value, fixed at
 \url{https://boriken-dev.github.io/guatiao/encodings/}, and every text is read
@@ -61,8 +69,18 @@ calendar units, checked by the library (mixed signs and a second or more of
 nanoseconds refused); \code{==} compares unit by unit (\code{P1D} is not
 \code{PT24H}), \code{-} negates. \code{add_span} applies one to a date (time
 units refused) or a civil date and time. An exact length is never negative;
-\code{read_length} reads any of its three spellings. Units and seconds past
-2^53 are refused: an R number holds whole numbers exactly only that far.
+\code{read_length} reads any of its three spellings.
+
+An R number holds whole numbers exactly only to 2^53. A unit (a span's,
+within plus or minus 2^63 - 1; an exact length's seconds, up to 2^64 - 1) is
+taken as a number, a \code{number} or a string spelling an integer, read
+exactly. While every unit is within 2^53 a span or an exact length holds
+numbers; past that it holds each unit's exact text (\code{unclass(x)} is a
+character vector), so two equal spans are identical however they were made.
+\code{time_parse("span", ...)} and \code{read_length} answer past 2^53 the
+same way, and \code{as.list(x, int64)} answers each unit as a 64-bit slot's
+answer is (\code{"auto"}: an integer, a double while exact, else a
+\code{number}).
 }
 \examples{
 if (nzchar(Sys.getenv("GUATIAO_LIBRARY"))) {

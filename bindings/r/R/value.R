@@ -68,6 +68,17 @@ is_null <- function(x) {
 
 .gt_numbers <- c(auto = 0L, text = 1L, double = 2L)
 
+# How a 64-bit integer is answered: an R integer when it fits, a double
+# while it is exact, else a `number` (auto); always a `number`; always the
+# nearest double.
+.gt_int64_modes <- c(auto = 0L, number = 1L, double = 2L)
+
+.gt_int64_code <- function(int64) {
+  code <- if (is.character(int64) && length(int64) == 1L) .gt_int64_modes[int64] else NA
+  if (is.na(code)) stop("int64 is one of \"auto\", \"number\", \"double\"", call. = FALSE)
+  unname(code)
+}
+
 value_data <- function(x, numbers = c("auto", "text", "double")) {
   numbers <- match.arg(numbers)
   if (!inherits(x, "guatiao_node")) return(x)

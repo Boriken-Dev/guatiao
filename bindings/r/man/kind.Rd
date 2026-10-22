@@ -12,13 +12,13 @@
 \title{Kinds: typed function tables, called and served}
 \usage{
 kind(name, floor_hash, ..., object = FALSE, class = .gt_camel(name),
-  where = topenv(parent.frame()))
+  int64 = "auto", where = topenv(parent.frame()))
 method(..., returns = NULL, required = FALSE, fallible = FALSE)
 lent(shape)
 taken(shape)
 bind_table(kind, table, size, ctx, keep = NULL)
 has_slot(remote, slot)
-call_slot(self, i, args)
+call_slot(self, i, args, int64 = NULL)
 byte_buffer(n = 0L, data = raw(n))
 live_objects()
 }
@@ -31,6 +31,12 @@ named, each a shape.}
 \item{object}{An object kind: its table starts with \code{destroy}, which is
 \code{close()} on a remote.}
 \item{class}{The virtual S4 class the kind defines; the C name in CamelCase.}
+\item{int64}{How a 64-bit integer is answered: \code{"auto"} an R integer
+when it fits, a double while the double holds it exactly, else a
+\code{number}; \code{"number"} always a \code{number}; \code{"double"} the
+nearest double. For \code{kind}, what its remotes answer and what its R
+methods are handed; for \code{call_slot}, this call's answer (\code{NULL}:
+the kind's).}
 \item{where}{Where the classes and generics are defined: a package's namespace
 as it installs, or the global environment for a script.}
 \item{returns}{The answer's shape: \code{NULL} for none, a shape name, or an
@@ -70,8 +76,8 @@ the same arguments.
 
 Shapes: \code{"string"} (\code{guatiao_str}: a string), \code{"bytes"} (a raw
 vector), \code{"bool"}, \code{"int8"} to \code{"uint64"}, \code{"float"},
-\code{"double"}, \code{"size"}, \code{"intptr"} (numbers; integers past 2^53
-are not held exactly), \code{"value"}, \code{"map"}, \code{"list"} (borrowed:
+\code{"double"}, \code{"size"}, \code{"intptr"} (numbers; see below for
+64-bit integers), \code{"value"}, \code{"map"}, \code{"list"} (borrowed:
 the caller passes a value, a view or R data; the provider receives a
 read-only view, valid for the call), \code{lent("map")} and the like (the
 caller's tree, writable for the call; what is added is built in the
@@ -85,6 +91,17 @@ the provider receives a remote, owned or valid for the call). An answer is a
 map, list or value (any R data or a value, built in the allocator the
 caller's carrier names), a string, a number, a logical, or an object of an
 object kind.
+
+An R number holds whole numbers exactly only to 2^53, and base R has no
+64-bit integer. An integer shape takes an R integer or logical, a whole
+double, a \code{number}, or a string spelling an integer
+(\code{"-9223372036854775808"}), read exactly and range-checked; anything
+else is refused before the call with \code{BadValue} naming the kind, the
+slot and the argument (\dQuote{wide.echo_i64(x): out of range for int64}).
+A 64-bit answer (\code{"int64"}, \code{"uint64"}, \code{"size"},
+\code{"intptr"}), and a 64-bit argument an R method is handed, is what
+\code{int64} says. An R method answers in any spelling an argument takes,
+and an answer out of range is refused naming the slot.
 
 A remote's call signals a \code{guatiao_error} with the provider's status
 and words; a slot appended after the table was built is \code{Unsupported}

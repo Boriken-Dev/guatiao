@@ -17,7 +17,7 @@ source(file.path(.tests_dir, "harness.R"))
 source(file.path(.tests_dir, "helpers.R"))
 
 files <- c("abi.R", "values.R", "typed.R", "serde.R", "intake.R", "time.R", "frees.R",
-  "greeters.R", "provide.R", "threads.R", "registry.R", "examples.R")
+  "greeters.R", "provide.R", "wide.R", "threads.R", "registry.R", "examples.R")
 for (f in files) {
   path <- file.path(.tests_dir, f)
   if (file.exists(path)) run_file(path)

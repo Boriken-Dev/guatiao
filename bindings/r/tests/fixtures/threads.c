@@ -6,7 +6,8 @@
  * C a test calls through .Call, as a library with threads of its own
  * would: it calls a greeter's `greet` slot on R's thread, from threads it
  * joins and from one it leaves running; destroys an object from another
- * thread; and runs greeter_caller_run, the Rust caller of any greeter.
+ * thread; and runs greeter_caller_run and greeter_caller_wide, the Rust
+ * callers of any greeter and any wide provider.
  * Exports are found at run time from the files the test names, so this
  * links nothing of guatiao.
  */
@@ -29,6 +30,7 @@
 typedef guatiao_status (*value_free_fn)(guatiao_value *value);
 typedef guatiao_status (*caller_fn)(const guatiao_host_info *host, guatiao_str key, guatiao_str name,
                                     guatiao_value *out);
+typedef guatiao_status (*wide_caller_fn)(const guatiao_host_info *host, guatiao_str key, guatiao_value *out);
 
 static void *open_symbol(SEXP path, const char *name) {
   const char *p = CHAR(STRING_ELT(path, 0));
@@ -247,6 +249,18 @@ SEXP fx_greeter_caller(SEXP caller, SEXP host, SEXP key, SEXP name, SEXP out) {
   const char *n = CHAR(STRING_ELT(name, 0));
   guatiao_status st = run_caller((const guatiao_host_info *)R_ExternalPtrAddr(host), guatiao_str_from(k, strlen(k)),
                                  guatiao_str_from(n, strlen(n)), (guatiao_value *)R_ExternalPtrAddr(out));
+  return Rf_ScalarInteger((int)st);
+}
+
+/* greeter_caller_wide from the library at `caller`, writing into `out`. */
+SEXP fx_wide_caller(SEXP caller, SEXP host, SEXP key, SEXP out) {
+  void *p = open_symbol(caller, "greeter_caller_wide");
+  if (!p) Rf_error("greeter_caller_wide not found");
+  wide_caller_fn run_caller;
+  memcpy(&run_caller, &p, sizeof run_caller);
+  const char *k = CHAR(STRING_ELT(key, 0));
+  guatiao_status st = run_caller((const guatiao_host_info *)R_ExternalPtrAddr(host), guatiao_str_from(k, strlen(k)),
+                                 (guatiao_value *)R_ExternalPtrAddr(out));
   return Rf_ScalarInteger((int)st);
 }
 

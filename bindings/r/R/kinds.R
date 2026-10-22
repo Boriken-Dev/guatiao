@@ -14,6 +14,7 @@
 .gt_lent_shapes <- c(value = 30L, map = 31L, list = 32L, bytes = 33L)
 .gt_taken_shapes <- c(value = 40L, map = 41L, list = 42L)
 .GT_LENT_OBJECT <- 34L
+.GT_INT64_SHAPES <- c(10L, 11L, 14L, 15L)
 .GT_TAKEN_OBJECT <- 44L
 .GT_RET_OBJECT <- 50L
 
@@ -73,7 +74,9 @@ method <- function(..., returns = NULL, required = FALSE, fallible = FALSE) {
 
 .gt_kind_var <- function(class) paste0(".__guatiao_kind_", class)
 
-kind <- function(name, floor_hash, ..., object = FALSE, class = .gt_camel(name), where = topenv(parent.frame())) {
+kind <- function(name, floor_hash, ..., object = FALSE, class = .gt_camel(name), int64 = "auto",
+                 where = topenv(parent.frame())) {
+  .gt_int64_code(int64)
   slots <- list(...)
   if (length(slots) && (is.null(names(slots)) || any(!nzchar(names(slots))))) {
     stop("every slot is named", call. = FALSE)
@@ -85,6 +88,7 @@ kind <- function(name, floor_hash, ..., object = FALSE, class = .gt_camel(name),
   spec$floor_hash <- as.numeric(floor_hash)
   spec$object <- isTRUE(object)
   spec$class <- class
+  spec$int64 <- int64
   spec$remote_class <- paste0(class, "Remote")
   spec$where <- where
   spec$slots <- slots
@@ -150,6 +154,10 @@ print.guatiao_kind <- function(x, ...) {
   get(n, envir = kind$where, mode = "function")
 }
 
+# The int64 option a kind was declared with; a kind installed before the
+# option existed has none.
+.gt_kind_int64 <- function(kind) if (is.null(kind$int64)) "auto" else kind$int64
+
 # The C description of a kind, built once a session.
 .gt_kind_ptr <- function(kind) {
   if (is.null(kind$ptr) || !.Call(C_xptr_live, kind$ptr)) {
@@ -159,7 +167,10 @@ print.guatiao_kind <- function(x, ...) {
       vapply(codes, function(c) c$ret$code, integer(1)),
       vapply(kind$slots, function(s) s$fallible, logical(1)),
       vapply(kind$slots, function(s) s$required, logical(1)),
-      lapply(codes, function(c) lapply(c$args, function(a) if (is.null(a$kind)) NULL else .gt_kind_ptr(a$kind))))
+      lapply(codes, function(c) lapply(c$args, function(a) if (is.null(a$kind)) NULL else .gt_kind_ptr(a$kind))),
+      as.character(names(kind$slots)),
+      lapply(kind$slots, function(s) as.character(names(s$args))),
+      .gt_int64_code(.gt_kind_int64(kind)))
   }
   kind$ptr
 }
@@ -202,10 +213,11 @@ has_slot <- function(remote, slot) {
 
 # Calls slot `i` (from 1, in the kind's order) of a remote with `args`, the
 # slot's arguments in order. The primitive every remote method calls.
-call_slot <- function(self, i, args) {
+call_slot <- function(self, i, args, int64 = NULL) {
   .gt_drain()
   .gt_keep_open(self@keep)
   kind <- .gt_remote_kind(self)
+  mode <- .gt_int64_code(if (is.null(int64)) .gt_kind_int64(kind) else int64)
   codes <- kind$codes[[i]]
   handed <- character()
   lent_ids <- character()
@@ -225,7 +237,7 @@ call_slot <- function(self, i, args) {
     }
   }
   on.exit(for (id in lent_ids) .gt_release(id, close = FALSE), add = TRUE)
-  out <- tryCatch(.Call(C_remote_call, self@handle, i, args), error = function(e) e)
+  out <- tryCatch(.Call(C_remote_call, self@handle, i, args, mode), error = function(e) e)
   if (inherits(out, "error")) {
     # A call that never reached the table leaves what it would have handed over here.
     if (!isTRUE(out$called)) for (id in handed) .gt_release(id, close = FALSE)

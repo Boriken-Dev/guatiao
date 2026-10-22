@@ -58,6 +58,8 @@ typedef struct gt_slot {
   int required;
   int destroy; /* an object kind's first slot: void (*)(void *ctx) */
   int index_r; /* its position in R's kind(), from 1; 0 for destroy */
+  const char *name;                     /* for refusals: the slot's name and its arguments' */
+  const char *arg_names[GT_MAX_ARGS];
   struct gt_kind *kind;
   ffi_cif cif;
   ffi_type *types[GT_MAX_ARGS + 3];
@@ -73,7 +75,9 @@ typedef struct gt_kind {
   int nslots; /* destroy included */
   size_t size;
   gt_slot *slots;
-  SEXP spec; /* the R description, preserved once a table serves it */
+  char *names; /* every slot's and argument's name, NUL-separated */
+  int int64;   /* how a 64-bit integer an R method is handed is answered */
+  SEXP spec;   /* the R description, preserved once a table serves it */
 } gt_kind;
 
 /* A table this side calls: owned objects are destroyed when let go. */
@@ -91,6 +95,7 @@ typedef struct gt_answer {
   int live;
   int ret;
   void *out;
+  const gt_slot *slot;
 } gt_answer;
 
 double gt_id_of_ctx(const void *ctx);

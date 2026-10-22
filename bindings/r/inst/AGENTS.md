@@ -174,10 +174,17 @@ read_length(list(90, 500000000))                    # exact_length
   `add_span(x, span)` for a `Date` (time units refused) or a
   `civil_datetime`.
 - `exact_length(seconds, nanoseconds)` (or `exact_length(difftime)`):
-  never negative; written as `[seconds, nanoseconds]`. `read_length(x)`
-  reads any of its three spellings.
-- Units and seconds past 2^53 are refused: an R number holds whole
-  numbers exactly only that far.
+  never negative, seconds up to 2^64 - 1; written as `[seconds,
+  nanoseconds]`. `read_length(x)` reads any of its three spellings.
+- Past 2^53, where an R number stops holding whole numbers exactly: a
+  span's units (within plus or minus 2^63 - 1) and an exact length's
+  seconds are taken as a number, a `number` or a string spelling an
+  integer, read exactly. While every unit is within 2^53 the object holds
+  numbers; past that it holds each unit's exact text (`unclass(x)` is a
+  character vector), so equal spans are identical however they were made.
+  `time_parse("span", ...)` and `read_length()` answer the same way;
+  `as.list(x, int64 = "auto")` answers each unit as a 64-bit slot's answer
+  is (see Kinds).
 
 ## Secrets
 
@@ -297,8 +304,8 @@ Greeter <- kind("greeter", floor_hash = 2695856491,
   check = method(config = lent("map"), returns = "bool", fallible = TRUE))
 ```
 
-`kind(name, floor_hash, ..., object = FALSE, class, where =
-topenv(parent.frame()))` defines in `where` (a package's namespace as it
+`kind(name, floor_hash, ..., object = FALSE, class, int64 = "auto",
+where = topenv(parent.frame()))` defines in `where` (a package's namespace as it
 installs, or the global environment): `setClass(class,
 representation("VIRTUAL"))` (the C name in CamelCase unless `class`
 says it); a generic per slot, `function(self, <the slot's arguments>)`,
@@ -306,8 +313,8 @@ dispatching on `self` (a name two kinds of one package share must take
 the same arguments; a name such as `start` then masks another package's
 when attached); and `<class>Remote`, extending the kind's class and
 `guatiao_remote`, with a method of each generic that calls the slot
-(`call_slot(self, i, args)`). It answers the kind's description, which
-`bind` takes. `method(..., returns = NULL, required = FALSE, fallible =
+(`call_slot(self, i, args, int64 = NULL)`). It answers the kind's
+description, which `bind` takes. `method(..., returns = NULL, required = FALSE, fallible =
 FALSE)` lists a slot's arguments, named, in order; `required` marks the
 kind's original slots (they come first), `fallible` a slot ending in
 `guatiao_provider_error *err`. An object kind's `destroy` is `close()`
@@ -318,7 +325,8 @@ on its remote.
 | `"string"` | `guatiao_str` | a string | a string (UTF-8) |
 | `"bytes"` | `guatiao_bytes` | a raw vector | a raw vector (a copy) |
 | `lent("bytes")` | `guatiao_bytes_mut` | a `byte_buffer(n)`, written in place | a buffer (`length`, `[`, `[<-`, `as.raw`), copied back when the method returns |
-| `"bool"`, `"int8"`..`"uint64"`, `"float"`, `"double"`, `"size"`, `"intptr"` | the C scalar | a number or logical that fits | a number (an integer for 32 bits and less) or logical |
+| `"bool"`, `"int8"`..`"uint32"`, `"float"`, `"double"` | the C scalar | a number or logical that fits | a number (an integer for 32 bits and less) or logical |
+| `"int64"`, `"uint64"`, `"size"`, `"intptr"` | the C scalar | an R integer, a whole double, a `number` or a string spelling an integer, read exactly | as `int64` says (below) |
 | `"value"`, `"map"`, `"list"` | `const guatiao_value *` / `map *` / `list *` | a value, a view or R data | a read-only view, valid for the call |
 | `lent("value")`, `lent("map")`, `lent("list")` | the same without `const`, "Lent for the call" | a value or a view, changed in place | a writable view, valid for the call; what is added is built in the allocator the tree records |
 | `taken("value")`, `taken("map")`, `taken("list")` | the same, handed over | a value (moved: it holds absent afterwards), a view (copied) or R data | a value the method owns (and closes, or the collector frees) |
@@ -330,7 +338,20 @@ on its remote.
 | `lent(K)` | `const guatiao_object *` | the same, or any remote of `K` | `KRemote`, valid for the call |
 | answer `K` | `guatiao_object *out` | `KRemote`, owned | an object implementing `K`, or a remote it owns |
 
-Integers past 2^53 are not held exactly by an R number.
+**64-bit integers.** An R number holds whole numbers exactly only to
+2^53, and base R has no 64-bit integer. An integer shape takes an R
+integer or logical, a whole double, a `number`, or a string spelling an
+integer (`"-9223372036854775808"`), read exactly and range-checked;
+anything else is refused before the call, `BadValue` naming the kind, the
+slot and the argument (`wide.echo_i64(x): out of range for int64`). A
+64-bit answer, and a 64-bit argument an R method is handed, is what
+`int64` says: `"auto"` an R integer when it fits, a double while the
+double holds it exactly, else a `number` with its exact text; `"number"`
+always a `number`; `"double"` always the nearest double. `kind(...,
+int64)` sets it for the kind's remotes and the R methods serving it,
+`call_slot(..., int64)` for one call. An R method answers a 64-bit slot
+in any spelling an argument takes; an answer out of range is refused
+naming the slot (`wide.echo_u64 answered: out of range for uint64`).
 
 **A remote** (`GreeterRemote`) has a method of each of the kind's
 generics; `has_slot(r, "shout")` says whether its table carries a slot
