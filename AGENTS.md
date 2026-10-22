@@ -16,7 +16,7 @@ public surface); this file is about the repository.
 | `crates/guatiao-intake/` | taking a value in from a person: the path grammar (`agent[1].name`), flat `key -> text` storage, checking a store of text, and how a schema is shown (sections, widget hints, conditional visibility, `#[derive(Form)]`); C surface in `include/guatiao_intake.h` |
 | `crates/guatiao-py/` | a source of libraries written in Python: a cdylib exporting `guatiao_source`, built with pyo3 for the stable ABI; a workspace of its own (no other build needs a Python to link), not published |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
-| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `python/greeter_kind.py` and `node/greeter_kind.ts` describe its kinds for Python and Node; `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind`; `r/greeterkind` is the R package declaring them with `kind()`; `matlab/+greeterkind` declares them for MATLAB and Octave as classes inheriting `guatiao.Kind` |
+| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `python/greeter_kind.py` and `node/greeter_kind.ts` describe its kinds for Python and Node; `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind`; `r/greeterkind` is the R package declaring them with `kind()`; `matlab/+greeterkind` declares them for MATLAB and Octave as classes inheriting `guatiao.Kind`; `fortran/` is the fpm package `greeter_kind`, the kinds as abstract types with their remotes and `bind(c)` glue |
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
 | `examples/wire_over_webtransport/` | values over WebTransport: `server/` (the shared channel and framing, `wire-server`, and `wire-probe`, a native client), `client/` (the page's wasm, its own workspace, built for `wasm32-unknown-unknown` only); commands in its `README.md` |
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build; its `tests/docs_snippets.rs` compiles the Rust snippets of `docs/index.md`, `docs/ownership.md` and the root `README.md` and compares them with the text shown |
@@ -35,14 +35,17 @@ public surface); this file is about the repository.
 | `examples/r_provider/` | `rgreeter/`, a library written in R (the package is the library) |
 | `examples/matlab_host/` | a host program in MATLAB or Octave: scans for greeters in any language, registers the M library, optionally adds `guatiao-py`, calls every slot; the binding's tests run it |
 | `examples/matlab_provider/` | `mlgreeter/`, a library written in M (the folder is the library, named by its `DESCRIPTION`) |
+| `examples/fortran_host/` | a host program in Fortran (an fpm package): scans for greeters in any language, registers the Fortran library, optionally adds `guatiao-py`, calls every slot; its test calls every greeter both ways |
+| `examples/fortran_greeter/` | a library written in Fortran (an fpm package named and versioned as its source states, which its test checks); its `CMakeLists.txt` builds it as a library file a scan finds |
 | `bindings/python/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md` |
 | `bindings/dart/` | `dart:ffi` bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`; `lib/src/bindings.g.dart` is ffigen output and never hand-edited |
 | `bindings/node/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads |
 | `bindings/go/` | Go bindings over the C ABI through cgo, the module `github.com/Boriken-Dev/guatiao/bindings/go` with its own `AGENTS.md`; `internal/native/` holds every line of C and copies of the three headers (a test compares them with the committed ones); `cmd/guatiao-kind` writes a kind package's glue |
 | `bindings/julia/` | Julia bindings over the C ABI through `ccall`, the package `Guatiao` with its own `AGENTS.md`; `src/abi.jl` mirrors the header's structs (a test compares each layout with the header's text); `test/fixtures/` holds the C its tests build |
 | `bindings/r/` | R bindings over the C ABI, the source package `guatiao`: `src/` holds copies of the three headers (a test compares them with the committed ones) and the C glue, compiled when the package installs, which opens the library at run time and calls kind slots through libffi; its API header is `inst/AGENTS.md`; `tests/fixtures/` holds the C its tests build |
+| `bindings/fortran/` | Fortran bindings over the C ABI in pure Fortran (`iso_c_binding`), the fpm package `guatiao` with its own `AGENTS.md` and a `CMakeLists.txt`; `src/guatiao_c.f90`, `guatiao_serde_c.f90` and `guatiao_intake_c.f90` mirror the three headers (a test compares every interface's name and argument count with them); `guatiao_loader.F90` opens the library at run time; the repository's root `fpm.toml` is the same package for an fpm git dependency (a test checks the two agree) |
 | `bindings/matlab/` | MATLAB and GNU Octave bindings over the C ABI: the `+guatiao` package in `inst/` (its API header is `inst/AGENTS.md`), and `src/`, one MEX gateway in C with copies of the three headers (a test compares them with the committed ones), built by `mkoctfile --mex` at `pkg install` or by `guatiao.build()`, which opens the library at run time and calls kind slots through libffi; `tests/` is a plain runner (`run_tests`) both interpreters run, `tests/fixtures/` holds the C its tests build |
-| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `python.md`, `node.md`, `go.md`, `julia.md`, `r.md` and `matlab.md` (Python, Node, Go, Julia, R, MATLAB and Octave as a host and as a provider), `wasm.md`; built strictly by `docs.yml` |
+| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `python.md`, `node.md`, `go.md`, `julia.md`, `r.md`, `matlab.md` and `fortran.md` (Python, Node, Go, Julia, R, MATLAB and Octave, and Fortran as a host and as a provider), `wasm.md`; built strictly by `docs.yml` |
 | `benchmarks/` | the benchmark runner (`cargo run -p guatiao-bench --release -- --save NAME`), committed results in `benchmarks/results/`, and `README.md` with the protocol; run on demand, numbers are local and provisional |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 
@@ -203,9 +206,27 @@ matlab -batch "cd bindings/matlab/tests; assert(run_tests())"   # MATLAB
 octave-cli --eval "addpath bindings/matlab/inst examples/matlab_host; host('target/debug')"   # the example host
 ```
 
+Fortran bindings, after `cargo build --workspace --all-features`, with
+gfortran, LLVM flang or Intel ifx, fpm 0.13 and CMake. The host's test
+builds the C greeter (`CC`, else the first of clang, cc, gcc) and takes
+the Python and Go greeters and `GUATIAO_REQUIRE_ALL` as the Julia suite
+does; `GUATIAO_FORTRAN_LIBRARY` names the Fortran library file's build for
+the Rust and Python hosts' tests. With flang on Windows, fpm needs
+`--archiver llvm-ar` and CMake a Visual Studio environment:
+
+```bash
+export GUATIAO_LIBRARY=$PWD/target/debug
+(cd bindings/fortran && fpm test --compiler gfortran)
+cmake -S bindings/fortran -B build/fortran && cmake --build build/fortran && ctest --test-dir build/fortran
+(cd examples/fortran_greeter && fpm test --compiler gfortran)
+(cd examples/fortran_host && fpm test --compiler gfortran)
+cmake -S examples/fortran_greeter -B build/fortran-library && cmake --build build/fortran-library
+GUATIAO_FORTRAN_LIBRARY=build/fortran-library cargo test -p greeter_host --test fortran_library
+```
+
 `cargo test -p greeter_host` rebuilds the workspace's cdylibs with only
 what that package needs: build the workspace again before the Go, Julia,
-R, MATLAB, Octave, Python, Dart or Node suites.
+R, MATLAB, Octave, Fortran, Python, Dart or Node suites.
 
 The `guatiao-py` bridge, against the Python it will run with. Its tests
 and the Python suite's bridge tests find it in its own `target/debug`
@@ -303,7 +324,12 @@ Four workflows:
   Its `octave` job runs `bindings/matlab`'s suite on Ubuntu's Octave and
   MSYS2's on Windows, and its `matlab` job on MATLAB R2024a and the latest
   release (through `setup-matlab`) on the three platforms, each with every
-  greeter the `julia` job has and a stated skip failing the job.
+  greeter the `julia` job has and a stated skip failing the job. Its
+  `fortran` job runs `bindings/fortran` (fpm and CMake), the greeter
+  package and the host's test with every greeter, and has the Rust and
+  Python example hosts scan the Fortran library file: gfortran 13 and 15,
+  Intel ifx and LLVM flang on Ubuntu, gfortran 15 on macOS, gfortran 15
+  and ifx on Windows, a stated skip failing the job.
   `release.yml` calls it as its test gate.
 - `docs.yml` owns every Pages deploy: a push to `main` touching a docs
   source, or a dispatch at any ref. `release.yml` calls it with
@@ -329,7 +355,9 @@ with its `package-lock.json` and the `../bindings/node` entry of
 in a version: `0.0.0-alpha.N` is written `0.0.0.N`, so the first release that
 is not a pre-release must be above `0.0.0`), `bindings/matlab/DESCRIPTION`
 (the Octave package and the MATLAB toolbox both take the version as
-written), and the
+written), `bindings/fortran/fpm.toml`, the root `fpm.toml` and
+`bindings/fortran/CMakeLists.txt`'s project version (fpm takes three
+numbers: `0.0.0-alpha.N` is written `0.0.0`), and the
 `guatiao` entry of `examples/wire_over_webtransport/client/Cargo.lock` (a
 `--locked` build refuses a stale one; `cargo build` in that directory
 rewrites it). A `## [x.y.z] - <date>` section in
@@ -342,7 +370,8 @@ name.
 **What the tag does**: gates (tests, strict docs build, one version), then
 packages all four (`cargo publish --workspace --dry-run`, `python -m build`
 + `twine check`, `dart pub publish --dry-run`, `npm pack --dry-run` then
-`npm pack`, the Go module vetted and built, the Julia package
+`npm pack`, the Go module vetted and built, the Fortran package built
+as a dependency and with CMake, the Julia package
 resolved and loaded, the R source package built and checked, the Octave
 package built, installed and used, and the MATLAB toolbox packaged), then
 the GitHub release (carrying the R source package, the Octave package and
@@ -364,6 +393,7 @@ release finishes it. The four crates go in dependency order: `guatiao-derive`,
 | npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |
 | Go module proxy | the tag `bindings/go/vx.y.z`, pushed by `release.yml` with the workflow's own token; the job then asks proxy.golang.org for the version, which lists it | the same; nothing to configure |
 | R-universe | nothing in `release.yml`: the owner's universe (`Boriken-Dev/boriken-dev.r-universe.dev`) lists the package in its `packages.json`, `{"package": "guatiao", "url": "https://github.com/Boriken-Dev/guatiao", "subdir": "bindings/r"}`, and R-universe builds binaries for every OS from the repository; CRAN only if the owner asks | the same |
+| fpm registry | nothing in `release.yml`: an fpm consumer depends on the repository by its tag (the root `fpm.toml`); a listing in the fpm registry only on the owner's word | the same |
 | Julia General | the JuliaRegistrator app installed on `Boriken-Dev/guatiao`, and a `JULIA_REGISTRATOR_TOKEN` secret (a token of an account Registrator trusts): `release.yml` comments `@JuliaRegistrator register subdir=bindings/julia` on the release commit. General takes no version with pre-release data and wants a first version of `0.0.1`, `0.1.0` or `1.0.0`, so a pre-release tag registers nothing | the same; a version General lists is skipped |
 
 **Who owns what.** Neither registry lets a new package start under an

@@ -423,6 +423,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   a destroy asked for there waits for the next call. The examples:
   `examples/greeter_kind/matlab/`, `examples/matlab_host/` and
   `examples/matlab_provider/`.
+- **Fortran bindings**, `bindings/fortran/`: the fpm package `guatiao`
+  (a git dependency on the repository, whose root `fpm.toml` builds it)
+  and the CMake target `guatiao::fortran`, pure Fortran 2008 over
+  `iso_c_binding`, tested with gfortran, LLVM flang and Intel ifx. The
+  library is opened at run time (`GUATIAO_LIBRARY` or
+  `guatiao_use_library(path)`), so a program links nothing of it. A
+  `guatiao_value` is a counted handle on a tree: copies share it, the last
+  one going or `close()` frees it, and `set`, `push` and `get` are generic
+  over Fortran's types, numbers keeping their exact text and reals written
+  as their shortest round-trip text. `guatiao_config` is a configuration
+  type that describes its schema field by field and decodes the checked
+  value; `guatiao_validate`, `guatiao_redact`, `guatiao_serde`
+  (`guatiao_parse`/`guatiao_emit`), `guatiao_intake` and `guatiao_civil`
+  (dates, times, instants, spans, exact lengths). Every call takes an
+  optional `stat`/`errmsg` pair.
+- **Fortran: the registry, kinds and providers.** `guatiao_registry`
+  hosts libraries (`scan_dir`, `providers`, `create`, `retire`, `unload`,
+  `add_source_file`, `watch_dir`, `refresh`), every answer a value in its
+  allocator. A kind is an abstract type extending `guatiao_impl` with a
+  deferred procedure per required slot, written once in a kind's module
+  with a remote type and `bind(c)` glue; a slot method reports through an
+  allocatable `guatiao_error`. A provider is a type extending the kind,
+  its optional slots declared where it is registered; a library is
+  `guatiao_new_library(id, version)` with `single` and `configured`
+  providers, registered in process (`guatiao_register_library`) or built
+  as a library file whose entry and `guatiao_declares` are written in
+  Fortran. A served slot runs on the thread that calls it; a Fortran
+  library is never unmapped. The examples: `examples/greeter_kind/fortran/`,
+  `examples/fortran_greeter/` and `examples/fortran_host/`.
 
 ### Changed
 
