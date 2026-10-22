@@ -2,30 +2,39 @@
 ! License, v. 2.0. If a copy of the MPL was not distributed with this
 ! file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-!> Finding and opening guatiao, guatiao_serde and guatiao_intake, the
-!> allocators trees are built in, and the text helpers every call uses.
+!> Finding and opening the libraries (guatiao, guatiao_serde,
+!> guatiao_intake), the allocators trees are built in, and the text
+!> helpers every call uses.
 !>
-!> Nothing native is touched until a call needs it. The library is then
-!> found as guatiao_use_library named it, else through GUATIAO_LIBRARY (a
-!> directory, or a file taken as it is for guatiao), else by the
-!> platform's own search; serde and intake beside it under their own
-!> names. A library stays open for the process.
+!> Nothing native is touched until a call needs it. A library is then
+!> found as gt_use named it for its surface, else through the surface's
+!> own variable (GUATIAO_SERDE_LIBRARY, GUATIAO_INTAKE_LIBRARY), else
+!> through GUATIAO_LIBRARY (a directory; or a file, taken as it is for
+!> guatiao and when it exports another surface's probe, else the file
+!> beside it), else by the platform's own search. This module resolves
+!> guatiao's exports; the serde and intake modules resolve their own once
+!> gt_need opened their library. A library stays open for the process.
 module guatiao_native
   use, intrinsic :: iso_c_binding
   use guatiao_loader
   use guatiao_c
-  use guatiao_serde_c, only: gt_serde_exports, gt_resolve_serde
-  use guatiao_intake_c, only: gt_intake_exports, gt_resolve_intake
   use guatiao_errors
   implicit none
   private
 
   public :: guatiao_use_library, guatiao_library_path, guatiao_allocator, guatiao_default_allocator
   public :: GT_CORE, GT_SERDE, GT_INTAKE, gt_need, gt_need_symbol, gt_alloc_of, gt_default_alloc
+  public :: gt_use, gt_handle
   public :: gt_view, gt_copy_text, gt_text_equal, gt_bytes_view, gt_text_of_owned
 
   integer, parameter :: GT_CORE = 1, GT_SERDE = 2, GT_INTAKE = 3
   character(*), parameter :: STEMS(3) = [character(14) :: 'guatiao', 'guatiao_serde', 'guatiao_intake']
+  ! Each surface's own variable, consulted before GUATIAO_LIBRARY, and a
+  ! symbol only it exports, which a GUATIAO_LIBRARY file is checked for.
+  character(*), parameter :: VARIABLES(3) = [character(22) :: '', 'GUATIAO_SERDE_LIBRARY', &
+                                              'GUATIAO_INTAKE_LIBRARY']
+  character(*), parameter :: PROBES(3) = [character(21) :: 'guatiao_value_free', 'guatiao_json_parse_ex', &
+                                           'guatiao_intake_check']
 
   !> An allocator a tree may be built in: the address of a
   !> `guatiao_alloc` that outlives every tree built through it.
@@ -35,7 +44,7 @@ module guatiao_native
 
   type(c_ptr), save :: handles(3) = c_null_ptr
   character(len=4096), save :: paths(3) = ''
-  character(len=4096), save :: named = ''
+  character(len=4096), save :: named(3) = ''
   type(gt_alloc), target, save :: default_alloc
 
 contains
@@ -43,22 +52,41 @@ contains
   !> Names the guatiao library to use: a file exporting the ABI, whatever
   !> it is called, or a directory holding it. Before the first call that
   !> needs it; naming another file once one is open is GUATIAO_ERR_BUSY.
+  !> guatiao_serde and guatiao_intake are named with their modules' own.
   recursive subroutine guatiao_use_library(path, stat, errmsg)
     character(*), intent(in) :: path
     integer, intent(out), optional :: stat
     character(:), allocatable, intent(inout), optional :: errmsg
-    if (c_associated(handles(GT_CORE))) then
-      if (trim(named) == path) then
+    call gt_use(GT_CORE, path, stat, errmsg)
+  end subroutine
+
+  !> Names the library of surface `which` (GT_CORE, GT_SERDE, GT_INTAKE):
+  !> a file exporting it, whatever it is called, or a directory holding it.
+  recursive subroutine gt_use(which, path, stat, errmsg)
+    integer, intent(in) :: which
+    character(*), intent(in) :: path
+    integer, intent(out), optional :: stat
+    character(:), allocatable, intent(inout), optional :: errmsg
+    if (c_associated(handles(which))) then
+      if (trim(named(which)) == path) then
         call gt_report(GUATIAO_OK, '', stat, errmsg)
       else
-        call gt_report(GUATIAO_ERR_BUSY, 'guatiao is already open from ' // trim(paths(GT_CORE)), &
-                       stat, errmsg)
+        call gt_report(GUATIAO_ERR_BUSY, trim(STEMS(which)) // ' is already open from ' // &
+                       trim(paths(which)), stat, errmsg)
       end if
       return
     end if
-    named = path
+    named(which) = path
     call gt_report(GUATIAO_OK, '', stat, errmsg)
   end subroutine
+
+  !> The handle library `which` was opened as; null before gt_need opened
+  !> it.
+  recursive function gt_handle(which) result(h)
+    integer, intent(in) :: which
+    type(c_ptr) :: h
+    h = handles(which)
+  end function
 
   !> The file guatiao, guatiao_serde or guatiao_intake (GT_CORE, GT_SERDE,
   !> GT_INTAKE) was opened from, or '' before it was.
@@ -127,8 +155,13 @@ contains
     end if
     if (.not. c_associated(h)) then
       stat = GUATIAO_STAT_LIBRARY_NOT_FOUND
-      msg = 'guatiao: ' // trim(STEMS(which)) // ' not found (looked: ' // looked // &
-            '); set GUATIAO_LIBRARY to the directory holding it'
+      if (len_trim(VARIABLES(which)) > 0) then
+        msg = 'guatiao: ' // trim(STEMS(which)) // ' not found (looked: ' // looked // '); set ' // &
+              trim(VARIABLES(which)) // ' or GUATIAO_LIBRARY to the directory holding it'
+      else
+        msg = 'guatiao: ' // trim(STEMS(which)) // ' not found (looked: ' // looked // &
+              '); set GUATIAO_LIBRARY to the directory holding it'
+      end if
       return
     end if
     call check_required(which, h, path, stat, msg)
@@ -141,10 +174,6 @@ contains
         msg = 'guatiao: no default allocator from ' // path
         return
       end if
-    case (GT_SERDE)
-      call gt_resolve_serde(h)
-    case (GT_INTAKE)
-      call gt_resolve_intake(h)
     end select
     handles(which) = h
     paths(which) = path
@@ -168,48 +197,80 @@ contains
   end subroutine
 
   ! The file to open for `which`, or '' to search by name; `looked` says
-  ! where it was looked for.
+  ! where it was looked for: what gt_use named, the surface's own
+  ! variable, then GUATIAO_LIBRARY.
   recursive subroutine locate(which, path, looked)
     integer, intent(in) :: which
     character(:), allocatable, intent(out) :: path, looked
     character(4096) :: env
-    character(:), allocatable :: base, first, second
     integer :: n, st
-    logical :: exists
     path = ''
     looked = ''
-    if (which /= GT_CORE) then
-      base = trim(paths(GT_CORE))
-      call beside(base, which, path)
-      looked = path
+    if (len_trim(named(which)) > 0) then
+      call from(trim(named(which)), .false.)
+      if (len(path) > 0) return
+    end if
+    if (len_trim(VARIABLES(which)) > 0) then
+      call get_environment_variable(trim(VARIABLES(which)), env, n, st)
+      if (st == 0 .and. n > 0) then
+        call from(env(1:n), .false.)
+        if (len(path) > 0) return
+      else
+        looked = looked // trim(VARIABLES(which)) // ' unset, '
+      end if
+    end if
+    call get_environment_variable('GUATIAO_LIBRARY', env, n, st)
+    if (st /= 0 .or. n == 0) then
+      looked = looked // 'GUATIAO_LIBRARY unset, the platform search'
       return
     end if
-    if (len_trim(named) > 0) then
-      base = trim(named)
-    else
-      call get_environment_variable('GUATIAO_LIBRARY', env, n, st)
-      if (st /= 0 .or. n == 0) then
-        looked = 'GUATIAO_LIBRARY unset, the platform search'
+    call from(env(1:n), .true.)
+  contains
+    ! A directory holds the surface's file; a file named for the surface
+    ! is taken as it is; a shared one when it exports the surface's probe,
+    ! else the surface's file beside it.
+    recursive subroutine from(base, shared)
+      character(*), intent(in) :: base
+      logical, intent(in) :: shared
+      character(:), allocatable :: first, second
+      logical :: exists, is_file
+      type(c_ptr) :: h
+      looked = looked // base // ', '
+      call gt_library_file_names(trim(STEMS(which)), first, second)
+      inquire (file=base // '/' // first, exist=exists)
+      if (exists) then
+        path = base // '/' // first
         return
       end if
-      base = env(1:n)
-    end if
-    call gt_library_file_names(trim(STEMS(GT_CORE)), first, second)
-    inquire (file=base // '/' // first, exist=exists)
-    if (exists) then
-      path = base // '/' // first
-    else if (len(second) > 0) then
-      inquire (file=base // '/' // second, exist=exists)
-      if (exists) path = base // '/' // second
-    end if
-    if (len(path) == 0) then
-      inquire (file=base, exist=exists)
-      if (exists) path = base
-    end if
-    looked = base
+      if (len(second) > 0) then
+        inquire (file=base // '/' // second, exist=exists)
+        if (exists) then
+          path = base // '/' // second
+          return
+        end if
+      end if
+      inquire (file=base, exist=is_file)
+      if (.not. is_file) return
+      if (.not. shared .or. which == GT_CORE) then
+        path = base
+        return
+      end if
+      ! Opened to look: a library stays open for the process anyway, and a
+      ! file guatiao is told to use is one it may use.
+      h = gt_dl_open(base)
+      if (c_associated(h)) then
+        if (c_associated(gt_dl_sym(h, trim(PROBES(which))))) then
+          path = base
+          return
+        end if
+      end if
+      call beside(base, which, path)
+      inquire (file=path, exist=exists)
+      if (.not. exists) path = ''
+    end subroutine
   end subroutine
 
-  ! The file `which` has beside the core library at `core`.
+  ! The file `which` has beside the file at `core`.
   recursive subroutine beside(core, which, path)
     character(*), intent(in) :: core
     integer, intent(in) :: which
@@ -268,23 +329,14 @@ contains
           return
         end if
       end do
-    case (GT_SERDE)
-      do i = 1, size(gt_serde_exports)
-        if (len_trim(gt_serde_exports(i)%feature) > 0) cycle
-        if (.not. c_associated(gt_dl_sym(h, trim(gt_serde_exports(i)%name)))) then
-          stat = GUATIAO_STAT_MISSING_SYMBOL
-          msg = 'guatiao: ' // path // ' does not export ' // trim(gt_serde_exports(i)%name)
-          return
-        end if
-      end do
-    case (GT_INTAKE)
-      do i = 1, size(gt_intake_exports)
-        if (.not. c_associated(gt_dl_sym(h, trim(gt_intake_exports(i)%name)))) then
-          stat = GUATIAO_STAT_MISSING_SYMBOL
-          msg = 'guatiao: ' // path // ' does not export ' // trim(gt_intake_exports(i)%name)
-          return
-        end if
-      end do
+    case default
+      ! Another surface's exports are its module's to resolve; its probe
+      ! says the file is a build of it.
+      if (.not. c_associated(gt_dl_sym(h, trim(PROBES(which))))) then
+        stat = GUATIAO_STAT_MISSING_SYMBOL
+        msg = 'guatiao: ' // path // ' does not export ' // trim(PROBES(which))
+        return
+      end if
     end select
   end subroutine
 

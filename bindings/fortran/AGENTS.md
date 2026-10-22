@@ -18,24 +18,33 @@ nothing of it. The sources are pure Fortran (one `.F90` file chooses
 | --- | --- |
 | `guatiao` | `guatiao_value`, `guatiao_text`, the constructors, statuses and tags, `GUATIAO_C_TRUE`/`GUATIAO_C_FALSE` (a C `bool`), `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`; schemas and `guatiao_config`; `guatiao_registry`, `guatiao_instance`; `guatiao_impl`, `guatiao_kind`, `guatiao_serving`, `guatiao_remote`; `guatiao_library` |
 | `guatiao_kinds` | what a kind's own module uses for its glue: served boxes, carriers, lent and handed-over arguments, objects |
-| `guatiao_serde` | `guatiao_parse`, `guatiao_emit`: JSON, TOML, YAML |
-| `guatiao_intake` | forms, paths, the flat store |
+| `guatiao_serde` | over the `guatiao_serde` library: `guatiao_parse`, `guatiao_emit`: JSON, TOML, YAML; `guatiao_serde_use_library` |
+| `guatiao_intake` | over the `guatiao_intake` library: forms, paths, the flat store; `guatiao_intake_use_library` |
 | `guatiao_civil` | dates, times, instants, spans, exact lengths |
 | `guatiao_c`, `guatiao_serde_c`, `guatiao_intake_c` | the headers in Fortran: `bind(c)` mirrors (`gt_value`, `gt_entry`, `gt_provider_info`, ...) and a procedure pointer per export (`gt_value_free`, ...), resolved once the library is open |
 
 ## Finding the native library
 
-Nothing native is touched until a call needs it; the library is then
-found in this order:
+One package, a module per library: `guatiao` (and the core modules)
+over `guatiao`, `guatiao_serde` over `guatiao_serde`, `guatiao_intake`
+over `guatiao_intake`; the core modules do not use the other two.
+Nothing native is touched until a call needs a library; it is then found
+in this order:
 
-1. `call guatiao_use_library(path)` before that first call: a file
-   exporting the ABI, whatever it is called, or a directory. Naming
-   another file once one is open is `GUATIAO_ERR_BUSY`.
-2. `GUATIAO_LIBRARY`: a directory holding `guatiao.dll` /
-   `libguatiao.so` / `libguatiao.dylib`, or a file (taken as it is for
-   guatiao; `guatiao_serde` and `guatiao_intake` are looked for beside it
-   under their own names).
-3. The platform's own library search, by file name.
+1. `call guatiao_use_library(path)` (`guatiao_serde_use_library`,
+   `guatiao_intake_use_library` for theirs) before that first call: a
+   file exporting the library's functions, whatever it is called, or a
+   directory. Naming another file once one is open is
+   `GUATIAO_ERR_BUSY`.
+2. For `guatiao_serde` and `guatiao_intake`, `GUATIAO_SERDE_LIBRARY` /
+   `GUATIAO_INTAKE_LIBRARY`: a file, taken as it is, or a directory
+   holding the library under its platform name.
+3. `GUATIAO_LIBRARY`: a directory holding `guatiao.dll` /
+   `libguatiao.so` / `libguatiao.dylib` (or `guatiao_serde.dll` and so
+   on), or a file: taken as it is for guatiao, and for the others when it
+   exports their functions (an application's own library carrying
+   several surfaces), else their library beside it.
+4. The platform's own library search, by file name.
 
 Not found is `GUATIAO_STAT_LIBRARY_NOT_FOUND` with where it looked. An
 export every build has is checked when a library opens; an optional one
