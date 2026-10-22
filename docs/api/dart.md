@@ -1,25 +1,31 @@
 # Dart API
 
-The `guatiao` package on pub.dev: `dart:ffi` bindings over the C ABI,
-with `package:ffi` as the only dependency and nothing to compile. It is a
-plain Dart package and does **not** depend on Flutter, which is what lets
-it serve a Flutter app and a command-line program alike.
+Three packages on pub.dev, `dart:ffi` bindings over the C ABI with
+nothing to compile, one per library: `guatiao` (the value model, schemas,
+the registry), `guatiao_serde` (JSON, TOML and YAML) and `guatiao_intake`
+(forms and the flat store), the last two built on the first. They are
+plain Dart packages and do **not** depend on Flutter, which is what lets
+them serve a Flutter app and a command-line program alike.
 
-Importing it never loads a native library; the first call that needs one
-resolves it from `GUATIAO_LIBRARY`, then `libraryDirectory`, then the
-platform's own search.
+Importing one never loads a native library; the first call that needs
+one resolves it from its own variable (`GUATIAO_SERDE_LIBRARY`,
+`GUATIAO_INTAKE_LIBRARY`), then `GUATIAO_LIBRARY`, then
+`libraryDirectory`, then the platform's own search.
 
-**[Generated API reference →](https://boriken-dev.github.io/guatiao/dart/index.html)**,
-built by `dart doc`.
+Generated API references, built by `dart doc`:
+**[guatiao →](https://boriken-dev.github.io/guatiao/dart/index.html)**,
+**[guatiao_serde →](https://boriken-dev.github.io/guatiao/dart-serde/index.html)**,
+**[guatiao_intake →](https://boriken-dev.github.io/guatiao/dart-intake/index.html)**.
 
 ## Libraries
 
 | Library | Purpose |
 | --- | --- |
 | `package:guatiao/guatiao.dart` | `Value`, `Ref`, `MapRef`, `ListRef`, `absent`, `Registry`, `Instance`, `kindTable`, `redact`, the error classes |
-| `package:guatiao/serde.dart` | `loads` / `dumps` for JSON, TOML and YAML |
-| `package:guatiao/intake.dart` | `check`, `layout`, `isVisible` |
 | `package:guatiao/time.dart` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants as `DateTime`, exact lengths as `Duration` |
+| `package:guatiao/ffi.dart` | for a package over another guatiao library: the generated bindings, `openSurface`, `NativeLib` |
+| `package:guatiao_serde/guatiao_serde.dart` | `loads` / `dumps` for JSON, TOML and YAML |
+| `package:guatiao_intake/guatiao_intake.dart` | `check`, `layout`, `isVisible`, `at`, `forSchema`, `formFor`, the flat store |
 
 ## Values
 
@@ -63,11 +69,11 @@ size and the floor hash before casting.
 ## JSON, TOML, YAML and forms
 
 ```dart
-import 'package:guatiao/serde.dart' as serde;
-import 'package:guatiao/intake.dart' as form;
+import 'package:guatiao_serde/guatiao_serde.dart' as serde;   // dart pub add guatiao_serde
+import 'package:guatiao_intake/guatiao_intake.dart' as form;  // dart pub add guatiao_intake
 
 final value = serde.loads('{"port": 5900}');
-final text = serde.dumps(value, format: Format.yaml);
+final text = serde.dumps(value, format: serde.Format.yaml);
 final problem = form.check(schema, formDoc);   // null when the form fits
 ```
 

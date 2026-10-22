@@ -180,7 +180,7 @@ with Registry("form-host", "1.0") as reg:
 
 ```dart
 import 'package:guatiao/guatiao.dart';
-import 'package:guatiao/intake.dart' as intake;
+import 'package:guatiao_intake/guatiao_intake.dart' as intake;   // dart pub add guatiao_intake
 
 final reg = Registry('form-host', '1.0')..scanDir(plugins, rules: 'kind=greeter');
 final meta = reg.providerMeta('derived_greeter_shouter');   // null: no meta
