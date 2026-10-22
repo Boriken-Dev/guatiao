@@ -122,6 +122,16 @@ jobs:
           octave = re.search(r"^Version:\s*(\S+)", pathlib.Path("bindings/matlab/DESCRIPTION").read_text(), re.M).group(1)
           if octave != cargo:
               problems.append(f"Cargo says {cargo} and bindings/matlab/DESCRIPTION says {octave}")
+          # fpm takes three numbers: X.Y.Z-alpha.N is X.Y.Z, in the package's
+          # manifest, the root one an fpm git dependency reads, and CMake's.
+          core = re.match(r"\d+\.\d+\.\d+", cargo).group(0)
+          for where in ("bindings/fortran/fpm.toml", "fpm.toml"):
+              found = tomllib.loads(pathlib.Path(where).read_text())["version"]
+              if found != core:
+                  problems.append(f"Cargo says {cargo}, so {where} wants {core}, not {found}")
+          cmake = re.search(r"project\(guatiao_fortran VERSION (\S+)", pathlib.Path("bindings/fortran/CMakeLists.txt").read_text()).group(1)
+          if cmake != core:
+              problems.append(f"Cargo says {cargo}, so bindings/fortran/CMakeLists.txt wants {core}, not {cmake}")
           tag = os.environ["TAG"]
           if tag:
               want = tag[1:] if tag.startswith("v") else tag
@@ -246,6 +256,43 @@ jobs:
           names = {f[len("bindings/go/"):] for f in files}
           print("\n".join(sorted(names)))
           for need in ("go.mod", "AGENTS.md", "README.md", "LICENSE", "doc.go"):
+              assert need in names, f"{need} does not ship"
+          assert not any(".local." in f or f.split("/")[-1].startswith(".") for f in names), "a private file ships"
+
+  build-fortran:
+    name: Check the Fortran package
+    needs: [test, version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: fortran-lang/setup-fortran@v1
+        with:
+          compiler: gcc
+          version: "15"
+      - uses: fortran-lang/setup-fpm@v10
+        with:
+          fpm-version: v0.13.0
+      # An fpm package is published by its tag: what a git dependency builds
+      # is the root manifest over bindings/fortran/src, built here as a
+      # consumer builds it, and the package itself as CMake builds it.
+      - name: Build as a dependency and with CMake
+        run: |
+          fpm build --compiler "$FC"
+          (cd bindings/fortran && fpm build --compiler "$FC")
+          cmake -S bindings/fortran -B "$RUNNER_TEMP/fortran" -DGUATIAO_FORTRAN_TESTS=OFF
+          cmake --build "$RUNNER_TEMP/fortran"
+      - name: What the package ships
+        shell: python
+        run: |
+          import subprocess
+
+          files = subprocess.run(["git", "ls-files", "bindings/fortran"], capture_output=True, text=True,
+                                 check=True).stdout.split()
+          names = {f[len("bindings/fortran/"):] for f in files}
+          print("\n".join(sorted(names)))
+          for need in ("fpm.toml", "CMakeLists.txt", "AGENTS.md", "README.md", "LICENSE", "src/guatiao.f90"):
               assert need in names, f"{need} does not ship"
           assert not any(".local." in f or f.split("/")[-1].startswith(".") for f in names), "a private file ships"
 
@@ -439,7 +486,7 @@ jobs:
 
   github-release:
     name: Create the GitHub release
-    needs: [docs-gate, build-crates, build-python, build-dart, build-node, build-go, build-julia, build-r, build-octave, build-matlab]
+    needs: [docs-gate, build-crates, build-python, build-dart, build-node, build-go, build-fortran, build-julia, build-r, build-octave, build-matlab]
     if: ${{ github.ref_type == 'tag' }}
     runs-on: ubuntu-latest
     permissions:
