@@ -9,9 +9,9 @@ shared with C, Rust, Python, Dart, Node, Go and Julia code; its JSON Schema
 description, its JSON, TOML and YAML text (\code{\link{serde_parse}}), forms
 (\code{\link{intake_check}}), dates and spans (\code{\link{time_parse}}) and
 redaction (\code{\link{redact}}) all go through the library's own functions.
-A registry loads plugin libraries and calls their providers
-through typed function tables declared as kinds; a provider can
-be written in R.
+A \code{\link{registry}} loads plugin libraries and calls their providers
+through typed function tables declared with \code{\link{kind}}; a provider can
+be written in R (\code{\link{provider}}).
 
 The library is not included: it is opened at run time, from
 \code{\link{use_library}} or the path in \env{GUATIAO_LIBRARY} (a directory or

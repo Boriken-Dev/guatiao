@@ -91,4 +91,68 @@ withr_env <- function(vars, code) {
 }
 
 C_CONSUMER <- if (HAVE_REPO) repo_file("crates", "guatiao", "tests", "c_consumer") else ""
-FIXTURES <- normalizePath(file.path(here, "..", "fixtures"), winslash = "/", mustWork = FALSE)
+FIXTURES <- normalizePath(file.path(.tests_dir, "..", "fixtures"), winslash = "/", mustWork = FALSE)
+
+# ---- the example packages, installed for the tests that use them ------------------
+
+.examples <- new.env()
+
+# Installs greeterkind and rgreeter into a library of their own and
+# attaches them; FALSE when there is no checkout to install them from.
+with_examples <- function(code) {
+  if (!HAVE_LIBRARY) return(skip_case("GUATIAO_LIBRARY names no build of guatiao"))
+  if (!HAVE_REPO) return(skip_case("no checkout found: set GUATIAO_REPO"))
+  if (is.null(.examples$lib)) {
+    lib <- scratch("examples-lib")
+    rlibs <- paste(c(lib, .libPaths()), collapse = .Platform$path.sep)
+    for (pkg in c(repo_file("examples", "greeter_kind", "r", "greeterkind"), repo_file("examples", "r_provider", "rgreeter"))) {
+      out <- withr_env(sprintf("R_LIBS=%s", rlibs),
+        suppressWarnings(system2(r_cmd(), c("CMD", "INSTALL", "--no-docs", "--no-multiarch", "-l", shQuote(lib), shQuote(pkg)),
+          stdout = TRUE, stderr = TRUE)))
+      if (!is.null(attr(out, "status")) && attr(out, "status") != 0) {
+        message(paste(out, collapse = "\n"))
+        stop("installing ", basename(pkg), " failed")
+      }
+    }
+    .libPaths(c(lib, .libPaths()))
+    suppressPackageStartupMessages({
+      library(greeterkind)
+      library(rgreeter)
+    })
+    .examples$lib <- lib
+  }
+  force(code)
+}
+
+# An absent greeter is a stated skip, which GUATIAO_REQUIRE_ALL=1 fails.
+absent_greeter <- function(which, why) skip_case(sprintf("the %s greeter: %s", which, why))
+
+# The greeter written in C, built into a directory of its own; NULL without a compiler.
+build_c_greeter <- function() {
+  dir <- scratch("c-greeter")
+  if (is.null(build_c(file.path(C_CONSUMER, "greeter_in_c.c"), dir, "c_greeter"))) NULL else dir
+}
+
+build_c_source <- function(name) build_c(file.path(C_CONSUMER, "source_in_c.c"), scratch("c-shelf"), name)
+
+# The guatiao-py bridge: GUATIAO_PY_BRIDGE, else NULL.
+bridge <- function() {
+  named <- Sys.getenv("GUATIAO_PY_BRIDGE")
+  if (nzchar(named) && file.exists(named)) named else NULL
+}
+
+bridge_config <- function() list(dirs = list(repo_file("examples", "python_provider")),
+  paths = list(repo_file("bindings", "python", "src"), repo_file("examples", "greeter_kind", "python")))
+
+# The test fixtures in C, built once.
+.fixtures <- new.env()
+fixture <- function() {
+  if (is.null(.fixtures$path)) {
+    path <- build_c(file.path(FIXTURES, "threads.c"), scratch("fixture"), "gtfixture")
+    if (is.null(path)) return(NULL)
+    dyn.load(path)
+    .fixtures$path <- path
+  }
+  .fixtures$path
+}
+fx <- function(name, ...) .Call(name, ..., PACKAGE = "gtfixture")

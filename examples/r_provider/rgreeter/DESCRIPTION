@@ -1,0 +1,13 @@
+Package: rgreeter
+Type: Package
+Title: Greeters Written in R
+Version: 1.0.0
+Authors@R: person("jose-pr", email = "jose-pr@coqui.dev", role = c("aut", "cre"))
+Description: Greeters written in R: the same kinds the Rust, C and Python
+    greeters serve, offered by a library any host in this R session calls.
+    The package is the library.
+License: MPL-2.0
+URL: https://github.com/Boriken-Dev/guatiao
+Depends: R (>= 4.2)
+Imports: methods, guatiao, greeterkind
+Encoding: UTF-8

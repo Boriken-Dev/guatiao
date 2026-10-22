@@ -27,8 +27,8 @@ value <- function(x = absent, alloc = NULL) .gt_root(.Call(C_value_new, x, alloc
 
 is_open <- function(x) {
   if (inherits(x, "guatiao_node")) return(.Call(C_value_is_open, .gt_owner(x)))
-  if (is.environment(x) && !is.null(x$.handle)) return(.Call(C_value_is_open, x$.handle))
-  if (methods::is(x, "guatiao_handle")) return(.Call(C_value_is_open, x@handle))
+  if (methods::is(x, "guatiao_remote")) return(.Call(C_remote_live, x@handle))
+  if (methods::is(x, "guatiao_registry") || methods::is(x, "guatiao_instance")) return(x$is_open())
   stop("not a guatiao object", call. = FALSE)
 }
 

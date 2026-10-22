@@ -10,21 +10,21 @@ unwritable <- function() new.env()
 case("a clean build and close leaves nothing", with_library({
   c <- counting()
   v <- value(list(a = list(1L, "two", as.raw(3)), m = list(x = NULL)), alloc = c)
-  check(live(c) > 0)
+  expect_true(live(c) > 0)
   v$b <- "more"
   push(v$a, 4L)
   insert(v$a, 1, "zero")
   v$a[[2]] <- "one"
   close(v)
-  check_equal(live(c), 0)
+  expect_equal(live(c), 0)
 }))
 
 case("a conversion that fails part way frees what it built", with_library({
   c <- counting()
   for (bad in list(list(a = list(1, 2, unwritable())), list(1, list(x = NaN)), list(a = 1, 2),
     list(a = 1, a = 2), list(d = structure(1, class = "gt_unknown")))) {
-    check_error(value(bad, alloc = c))
-    check_equal(live(c), 0)
+    expect_error(value(bad, alloc = c))
+    expect_equal(live(c), 0)
   }
 }))
 
@@ -32,31 +32,31 @@ case("a failed write leaves the tree as it was", with_library({
   c <- counting()
   v <- value(list(a = list(1L)), alloc = c)
   before <- live(c)
-  check_error(v$b <- list(1, unwritable()))
-  check_error(push(v$a, list(x = Inf)))
-  check_error(v$a[[1]] <- list(unwritable()))
-  check_error(insert(v$a, 1, unwritable()))
-  check_equal(live(c), before)
-  check_equal(value_data(v), list(a = list(1L)))
+  expect_error(v$b <- list(1, unwritable()))
+  expect_error(push(v$a, list(x = Inf)))
+  expect_error(v$a[[1]] <- list(unwritable()))
+  expect_error(insert(v$a, 1, unwritable()))
+  expect_equal(live(c), before)
+  expect_equal(value_data(v), list(a = list(1L)))
   close(v)
-  check_equal(live(c), 0)
+  expect_equal(live(c), 0)
 }))
 
 case("answers are built in the allocator named, and freed", with_library({
   c <- counting()
   v <- serde_parse('{"a": [1, 2], "b": "x"}', alloc = c)
-  check(live(c) > 0)
+  expect_true(live(c) > 0)
   close(v)
-  check_error(serde_parse("{", alloc = c), "guatiao_parse_error")
-  check_equal(live(c), 0)
+  expect_error(serde_parse("{", alloc = c), "guatiao_parse_error")
+  expect_equal(live(c), 0)
   r <- redact(list(type = "object"), list(a = 1L), alloc = c)
-  check(live(c) > 0)
+  expect_true(live(c) > 0)
   close(r)
-  check_equal(live(c), 0)
+  expect_equal(live(c), 0)
   w <- value(list(a = list(1L)), alloc = c)
   x <- value(w$a)
   close(w)
-  check_equal(live(c), 0)
+  expect_equal(live(c), 0)
   close(x)
 }))
 
@@ -70,5 +70,5 @@ case("an unclosed value is freed by the collector", with_library({
     invisible(gc())
     if (live(c) == 0) break
   }
-  check_equal(live(c), 0)
+  expect_equal(live(c), 0)
 }))

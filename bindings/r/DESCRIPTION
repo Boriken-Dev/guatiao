@@ -18,3 +18,4 @@ Imports: methods, utils
 SystemRequirements: libffi
 Encoding: UTF-8
 NeedsCompilation: yes
+Collate: native.R value.R time.R typed.R serde.R kinds.R registry.R provide.R

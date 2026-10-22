@@ -1,0 +1,5 @@
+import(methods)
+import(greeterkind)
+importFrom(guatiao, provider, config_class, field, guatiao_error, value_data)
+exportClasses(Hello, Shouter, Chat, ShouterConfig)
+S3method(close, Chat)

@@ -10,7 +10,7 @@ case("the header copies are the committed headers", with_repo({
     "guatiao-intake/include/guatiao_intake.h")) {
     committed <- readBin(repo_file("crates", h), "raw", file.size(repo_file("crates", h)))
     copy <- repo_file("bindings", "r", "src", basename(h))
-    check(identical(committed, readBin(copy, "raw", file.size(copy))), paste(basename(h), "matches"))
+    expect_true(identical(committed, readBin(copy, "raw", file.size(copy))), paste(basename(h), "matches"))
   }
 }))
 
@@ -18,25 +18,25 @@ case("the status names and codes are the header's", with_repo({
   header <- paste(readLines(repo_file("crates", "guatiao", "include", "guatiao.h"), warn = FALSE), collapse = "\n")
   found <- regmatches(header, gregexpr("GUATIAO_(OK|ERR_[A-Z_]+) = [0-9]+", header))[[1L]]
   codes <- as.integer(sub(".* = ", "", found))
-  check_equal(sort(unname(statuses)), sort(codes))
-  check_equal(unname(statuses[["BadValue"]]), codes[grepl("ERR_BAD_VALUE", found)])
-  check_equal(unname(statuses[["Internal"]]), codes[grepl("ERR_INTERNAL", found)])
+  expect_equal(sort(unname(statuses)), sort(codes))
+  expect_equal(unname(statuses[["BadValue"]]), codes[grepl("ERR_BAD_VALUE", found)])
+  expect_equal(unname(statuses[["Internal"]]), codes[grepl("ERR_INTERNAL", found)])
 }))
 
 case("a guatiao error carries its status and words", {
   e <- guatiao_error("Busy", "still in use")
-  check_equal(e$status, "Busy")
-  check_equal(e$code, 14L)
-  check_equal(conditionMessage(e), "Busy: still in use")
-  check_equal(conditionMessage(guatiao_error(7)), "BadValue")
-  check_error(guatiao_error("Nonesuch"))
-  got <- check_error(stop(guatiao_error("NotFound", "x")), "guatiao_error")
-  check_equal(got$status, "NotFound")
+  expect_equal(e$status, "Busy")
+  expect_equal(e$code, 14L)
+  expect_equal(conditionMessage(e), "Busy: still in use")
+  expect_equal(conditionMessage(guatiao_error(7)), "BadValue")
+  expect_error(guatiao_error("Nonesuch"))
+  got <- expect_error(stop(guatiao_error("NotFound", "x")), "guatiao_error")
+  expect_equal(got$status, "NotFound")
 })
 
 case("the library is found through GUATIAO_LIBRARY", with_library({
-  check(has_export("guatiao_value_map"))
-  check(!has_export("guatiao_no_such_export"))
-  check(has_export("guatiao_json_parse_ex", "guatiao_serde"))
-  check_error(has_export("x", "nonesuch"))
+  expect_true(has_export("guatiao_value_map"))
+  expect_true(!has_export("guatiao_no_such_export"))
+  expect_true(has_export("guatiao_json_parse_ex", "guatiao_serde"))
+  expect_error(has_export("x", "nonesuch"))
 }))

@@ -8,14 +8,18 @@
 
 library(guatiao)
 
-here <- if (dir.exists("cases")) "cases" else file.path("tests", "cases")
-source(file.path(here, "harness.R"))
-source(file.path(here, "helpers.R"))
+# R CMD check names a startup file for this process; the R processes the
+# tests start (R CMD SHLIB, R CMD INSTALL, Rscript) must not look for it.
+Sys.setenv(R_TESTS = "")
+
+.tests_dir <- if (dir.exists("cases")) "cases" else file.path("tests", "cases")
+source(file.path(.tests_dir, "harness.R"))
+source(file.path(.tests_dir, "helpers.R"))
 
 files <- c("abi.R", "values.R", "typed.R", "serde.R", "intake.R", "time.R", "frees.R",
   "greeters.R", "provide.R", "threads.R", "registry.R", "examples.R")
 for (f in files) {
-  path <- file.path(here, f)
+  path <- file.path(.tests_dir, f)
   if (file.exists(path)) run_file(path)
 }
 finish()

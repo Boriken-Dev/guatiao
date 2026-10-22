@@ -11,6 +11,20 @@ libffi (`libffi-dev` / `libffi-devel` on Linux, the SDK's on macOS,
 Rtools' own on Windows). Imports only `methods` and `utils`. It carries no
 guatiao library: one is opened at run time.
 
+## Exports
+
+| area | names |
+| --- | --- |
+| library | `use_library`, `has_export` |
+| values | `value`, `absent`, `number`, `is_open`, `tag`, `is_absent`, `is_null`, `value_data`, `node_path`, `push`, `insert`, `delete`, `clear`, `merge_from`, `lower_value` |
+| typed | `schema_of`, `config_class`, `field`, `from_value`, `validate`, `redact` |
+| time | `time_parse`, `time_format`, `time_normalize`, `read_length`, `add_span`, `civil_time`, `civil_datetime`, `instant`, `span`, `exact_length` |
+| serde, intake | `serde_parse`, `serde_emit`, `intake_check`, `intake_layout`, `intake_is_visible`, `intake_at`, `intake_for_schema`, `intake_form_for`, `intake_resolve`, `intake_flat_keys`, `intake_flatten`, `intake_unflatten` |
+| registry | `registry` (its methods with `$`) |
+| kinds | `kind`, `method`, `lent`, `taken`, `bind_table`, `has_slot`, `call_slot`, `byte_buffer`, `live_objects`, the S4 class `guatiao_remote` |
+| providers | `provider`, `guatiao_library`, `library_of`, `live_instances` |
+| errors | `guatiao_error`, `statuses` |
+
 ## Finding the native library
 
 Nothing native is touched until the first call that needs it; the
@@ -206,6 +220,215 @@ copy when it is R data. `intake_unflatten` answers `NULL` for "nothing
 stored" or a key that does not apply; its store is a named character
 vector or a named list of strings.
 
+## Registry
+
+```r
+reg <- registry("my-host", "1.0")
+reg$scan_dir("/path/to/plugins", rules = "kind=greeter")
+reg$providers("greeter")              # list of lists, best first
+reg$best("greeter")                   # key, id, version, library, display_name, from, kinds, has_config, vtable_size
+reg$why_not("codec")                  # list(available = FALSE, why = "nothing-claims-it", ...)
+greeter <- reg$bind("acme_hello", Greeter)       # a remote (see Kinds)
+inst <- reg$create("acme_shouter", list(prefix = "hey"))
+shouter <- inst$bind(Greeter)
+inst$close(); reg$close()
+```
+
+`registry(id, version, alloc = NULL)` answers a Reference Class object:
+its methods are called with `$`. `alloc` names the allocator it offers
+libraries. Every answer that is data is plain R data, already freed.
+`reg$close()` (the libraries it loaded stay mapped), `reg$is_open()`,
+`is_open(reg)`. Methods: `load_file(path)`, `register_entry(name,
+entry)` (an external pointer to a `guatiao_library_entry`),
+`register_library(lib)` (see Providers), `scan_dir(dir, rules = "",
+descending = FALSE)` and `scan_path(spec, rules = "", descending =
+FALSE)` (`rules`: one `[!]KEY=VALUE` per line, matched against what a
+library declares before it is mapped), `libraries()`, `providers(kind =
+"")`, `available(kind = "")`, `why_not(kind)`, `provider(key)`,
+`best(kind)`, `provider_available(key)` (`list(available, reason)`),
+`keyed_by(template)` / `libraries_keyed_by(template)` (`%id` by
+default; `%name`, `%library`, `%version`), `set_priority(id, p)` /
+`priority(id)`, `provider_table(key, kind = NULL)` (`list(table, size,
+ctx)`, `table` NULL for none; no `kind` for a single table),
+`provider_config(key)` (a copy of the schema, a value, or NULL),
+`host()` (the `guatiao_host_info *` as an external pointer).
+
+`create(key, config)` checks the configuration against the provider's
+schema first (`BadValue` naming the field; an empty `list()` is an empty
+map), then answers an instance: `inst$close()` reaches the provider that
+built it, even after a retire or a refresh loaded a new build under the
+key; `inst$bind(kind)`, `inst$is_open()`. An instance never closed is
+closed by the garbage collector.
+
+`retire(key)` takes a library out and leaves it mapped until nothing
+uses it; `collect()` closes every retired library whose own `unload`
+agrees and answers their keys, as does the next load, retire or unload.
+`unload(key, unchecked = FALSE)` unmaps when the library agrees: `Busy`
+while something it handed out lives, `Unsupported` with no `unload`
+function, `WrongKind` for a library linked rather than mapped, `NotFound`
+for none. **Both take the LIBRARY key** (`%id` by default). No table,
+ctx or remote taken from it is used again.
+
+**Sources**: `add_source_file(path, config)` maps a file exporting
+`guatiao_source` (a bridge to another language) and adds the source it
+answers, refusing with its own words; `watch_dir(dir, rules = "")`
+watches a directory; `refresh()` makes the registry agree with every
+source, answering `list(loaded, retired, skipped, refused)`. Nothing
+refreshes on its own.
+
+## Kinds: calling a table, serving one
+
+A kind is declared once with `kind()`, from its C header: a virtual S4
+class, a generic per slot, and a remote class that calls the slots.
+
+```r
+Listener <- kind("listener", floor_hash = 1867921573, object = TRUE,
+  heard = method(what = "string", required = TRUE))
+Conversation <- kind("conversation", floor_hash = 2769624503, object = TRUE,
+  say = method(what = "string", required = TRUE, fallible = TRUE),
+  read = method(dst = lent("bytes"), returns = "int64", required = TRUE),
+  turns = method(returns = "int64", required = TRUE))
+Greeter <- kind("greeter", floor_hash = 2695856491,
+  greet = method(name = "string", returns = "map", required = TRUE, fallible = TRUE),
+  shout = method(name = "string", returns = "string"),
+  start = method(listener = taken(Listener), returns = Conversation, fallible = TRUE),
+  greet_into = method(name = "string", listener = lent(Listener), fallible = TRUE),
+  greet_from = method(config = taken("map"), returns = "map", fallible = TRUE),
+  check = method(config = lent("map"), returns = "bool", fallible = TRUE))
+```
+
+`kind(name, floor_hash, ..., object = FALSE, class, where =
+topenv(parent.frame()))` defines in `where` (a package's namespace as it
+installs, or the global environment): `setClass(class,
+representation("VIRTUAL"))` (the C name in CamelCase unless `class`
+says it); a generic per slot, `function(self, <the slot's arguments>)`,
+dispatching on `self` (a name two kinds of one package share must take
+the same arguments; a name such as `start` then masks another package's
+when attached); and `<class>Remote`, extending the kind's class and
+`guatiao_remote`, with a method of each generic that calls the slot
+(`call_slot(self, i, args)`). It answers the kind's description, which
+`bind` takes. `method(..., returns = NULL, required = FALSE, fallible =
+FALSE)` lists a slot's arguments, named, in order; `required` marks the
+kind's original slots (they come first), `fallible` a slot ending in
+`guatiao_provider_error *err`. An object kind's `destroy` is `close()`
+on its remote.
+
+| shape | C | the caller passes | the provider receives / returns |
+| --- | --- | --- | --- |
+| `"string"` | `guatiao_str` | a string | a string (UTF-8) |
+| `"bytes"` | `guatiao_bytes` | a raw vector | a raw vector (a copy) |
+| `lent("bytes")` | `guatiao_bytes_mut` | a `byte_buffer(n)`, written in place | a buffer (`length`, `[`, `[<-`, `as.raw`), copied back when the method returns |
+| `"bool"`, `"int8"`..`"uint64"`, `"float"`, `"double"`, `"size"`, `"intptr"` | the C scalar | a number or logical that fits | a number (an integer for 32 bits and less) or logical |
+| `"value"`, `"map"`, `"list"` | `const guatiao_value *` / `map *` / `list *` | a value, a view or R data | a read-only view, valid for the call |
+| `lent("value")`, `lent("map")`, `lent("list")` | the same without `const`, "Lent for the call" | a value or a view, changed in place | a writable view, valid for the call; what is added is built in the allocator the tree records |
+| `taken("value")`, `taken("map")`, `taken("list")` | the same, handed over | a value (moved: it holds absent afterwards), a view (copied) or R data | a value the method owns (and closes, or the collector frees) |
+| answer `"value"`, `"map"`, `"list"` | `guatiao_value/map/list *out` | a value | any R data or a value, built in the allocator the carrier names (`list()` is an empty map too) |
+| answer `"string"` | `guatiao_string *out` | a string | a string |
+| answer scalar | `T *out` | a number or logical | a number or logical |
+| answer `NULL` | no answer | `NULL` | ignored |
+| `taken(K)` (object kind) | `guatiao_object` | an S4 or Reference Class object with methods of `K`'s generics, or a remote this side owns (handed over) | `KRemote`, owned: `close()` destroys it |
+| `lent(K)` | `const guatiao_object *` | the same, or any remote of `K` | `KRemote`, valid for the call |
+| answer `K` | `guatiao_object *out` | `KRemote`, owned | an object implementing `K`, or a remote it owns |
+
+Integers past 2^53 are not held exactly by an R number.
+
+**A remote** (`GreeterRemote`) has a method of each of the kind's
+generics; `has_slot(r, "shout")` says whether its table carries a slot
+(a slot appended after the library was built is missing from an older
+table, and calling it is `Unsupported`); a refusal is a `guatiao_error`
+with the provider's status and words. `bind_table(K, table, size, ctx,
+keep = NULL)` makes one over any table; `reg$bind` refuses a table
+smaller than the kind's required slots or with another floor hash
+(`guatiao_floor_mismatch`). A remote from `reg$bind` is valid while the
+registry is open and the library loaded (`guatiao_closed` once the
+registry is closed); one from `inst$bind` until the instance is closed.
+An object remote this side owns and never closes is destroyed by the
+garbage collector. Arguments a call refuses before it reaches the table
+(a wrong shape) leave everything as it was: nothing is handed over.
+
+**An R object as an object of a kind**: an S4 or Reference Class object
+whose class has methods of the object kind's generics. Its table is
+built once per kind and class (a slot for each generic the class has a
+method of, null for the rest) and kept for the session. What C holds of
+it is a ctx shaped like an address (`0x10000 + 16 * id`, never reused),
+so a call naming one released answers `Gone`. It is held until its
+holder destroys it (handed over or answered), when `close()` is called
+on it if its class has a method, or until the call returns (lent).
+`live_objects()` counts what is held.
+
+**A refusal**: a method signals; a `guatiao_error` crosses as its status
+and words, anything else as `Internal` with its message. A slot that
+cannot fail and fails prints the message on stderr and its status
+crosses alone. No R error ever unwinds into C.
+
+## Providers written in R
+
+```r
+Hello <- setRefClass("Hello", contains = c("Greeter", "Counter"), fields = list(asked = "numeric"),
+  methods = list(initialize = function(...) { asked <<- 0; callSuper(...) }))
+setMethod("greet", "Hello", function(self, name) {
+  if (!nzchar(name)) stop(guatiao_error("BadValue", "nobody to greet"))
+  list(greeting = paste0("hello, ", name))
+})
+setMethod("count", "Hello", function(self) { self$asked <- self$asked + 1; self$asked })
+provider(Hello, display_name = "Hello, in R")
+
+ShouterConfig <- config_class("ShouterConfig",
+  prefix = field("character", doc = "What every greeting starts with.", minLength = 1))
+Shouter <- setClass("Shouter", contains = "Greeter", slots = c(prefix = "character"))
+setMethod("greet", "Shouter", function(self, name) list(greeting = paste(self@prefix, toupper(name))))
+provider(Shouter, config = ShouterConfig, make = function(config) Shouter(prefix = config@prefix))
+
+reg$register_library(library_of("mypackage"))   # the package is the library
+```
+
+**A provider** is an S4 or Reference class that contains the kinds it
+serves, with methods of their generics (`setMethod` refuses a method
+whose arguments are not the generic's). `provider(class, serves, name,
+id, display_name, version, meta, config, config_schema, make, default,
+available, where)` declares it where it is written (`where = NULL`
+declares nothing, for `guatiao_library`): `serves` (default the kinds
+the class contains), `name` (default the class's name in snake case),
+`id` (default `{library id}_{name}`), `display_name`, `version` (empty:
+the library's), `meta` (a named list), `config` (a configuration class:
+an instance per configuration, `make(config)` after the host checked it
+against `schema_of(config)`), `config_schema` (R data: `make(plain)` with
+the configuration as plain data), `make` (default `new(class)`, or
+`new(class, config = config)` for a configured provider), `default`
+(also offer `make()`; the default without a configuration), `available`
+(a function answering `NULL` when the provider can run here and why not
+otherwise, asked every time a host asks). With neither `config` nor
+`config_schema`, `make()` is the provider's one instance, built when the
+library's descriptor is. A required slot with no method, an object kind
+among `serves`, or two providers sharing an id is refused when the
+library is made. An instance (or one instance) whose class has a
+`close()` method is closed when its host destroys it (or when the
+library is closed).
+
+**A library**: `library_of(pkg, id = NULL, version = NULL, meta =
+NULL)` is the package: id `Package`, version `Version`, providers its
+`provider()` declarations in order. Meta, lowest first: `Title` as
+`summary`, `Description` as `description`, `Authors@R` (or `Author`) as
+`authors`, `Maintainer`, `License`, `URL` (the first as
+`urls$homepage`) and `BugReports` (`urls$issues`), the installed
+package's `LICENSE`, `LICENCE`, `COPYING` and `NOTICE` files (and their
+`.md`/`.txt` forms) as `notices` (`component`, `text`, `format`), then
+`meta`. An environment that is no package's namespace needs `id` and
+`version`. Built once per package. `guatiao_library(id, version,
+providers, meta = NULL)` is the same with both given (providers as
+`provider()` specs or class names). A library has `$id`, `$version`,
+`$providers`, `live_instances(lib)` and `close(lib)` (lets go of each
+provider's one instance; a host asking for the descriptor afterwards is
+declined). Its descriptor is built on first use and kept for the
+session, with its `unload` answering `Busy` while an instance lives.
+`reg$register_library(lib)` files it under its id and keeps it: linked,
+not mapped, so `unload` answers `WrongKind` and `retire` takes it out.
+
+A host in this session, written in any language, calls an R provider
+through the same table it calls one written in Rust or C. A library
+file written in R that any host's scan loads would need R embedded in
+it; the package offers none.
+
 ## Errors
 
 A failing status signals a `guatiao_error` condition (`status`, the name;
@@ -221,4 +444,21 @@ package's own.
 ## Threads
 
 R code runs only on R's main thread, and so does everything in this
-package.
+package: a value, a registry and a remote are used from R's thread.
+
+**A slot an R object serves runs on R's main thread only.** A host
+calling it on that thread (an R host's own call, or a library calling
+back during one) runs the method there. Called from any other thread —
+a library's own worker, a thread pool — it touches no R object and
+answers at once: `Unsupported`, with "R code runs only on R's main
+thread" in the `guatiao_provider_error` when the slot has one; a
+provider's `available` answers false with that reason; `create` answers
+`Unsupported`; a `destroy` (of an object or an instance) is queued and
+done on R's thread at its next call into the package; a library's
+`unload` and entry answer from C alone. Nothing waits for R's thread, so
+nothing can deadlock, and a library that calls an R provider from its
+own threads gets refusals it must handle.
+
+A method runs inside `R_ToplevelExec`: an error, an interrupt or a
+condition nobody handles ends there, never unwinding through the C (or
+Rust) frames between the library and R.
