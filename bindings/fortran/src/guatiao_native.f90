@@ -43,7 +43,7 @@ contains
   !> Names the guatiao library to use: a file exporting the ABI, whatever
   !> it is called, or a directory holding it. Before the first call that
   !> needs it; naming another file once one is open is GUATIAO_ERR_BUSY.
-  subroutine guatiao_use_library(path, stat, errmsg)
+  recursive subroutine guatiao_use_library(path, stat, errmsg)
     character(*), intent(in) :: path
     integer, intent(out), optional :: stat
     character(:), allocatable, intent(inout), optional :: errmsg
@@ -62,7 +62,7 @@ contains
 
   !> The file guatiao, guatiao_serde or guatiao_intake (GT_CORE, GT_SERDE,
   !> GT_INTAKE) was opened from, or '' before it was.
-  function guatiao_library_path(which) result(path)
+  recursive function guatiao_library_path(which) result(path)
     integer, intent(in) :: which
     character(:), allocatable :: path
     path = trim(paths(which))
@@ -70,7 +70,7 @@ contains
 
   !> The allocator over guatiao's own heap, which every tree this binding
   !> builds uses unless told otherwise. Opens guatiao.
-  function guatiao_default_allocator(stat, errmsg) result(alloc)
+  recursive function guatiao_default_allocator(stat, errmsg) result(alloc)
     integer, intent(out), optional :: stat
     character(:), allocatable, intent(inout), optional :: errmsg
     type(guatiao_allocator) :: alloc
@@ -82,14 +82,14 @@ contains
   end function
 
   !> The default allocator's address; guatiao must be open.
-  function gt_default_alloc() result(p)
+  recursive function gt_default_alloc() result(p)
     type(c_ptr) :: p
     p = c_loc(default_alloc)
   end function
 
   !> The allocator a call builds in: `alloc` when given and set, else the
   !> default.
-  function gt_alloc_of(alloc) result(p)
+  recursive function gt_alloc_of(alloc) result(p)
     type(guatiao_allocator), intent(in), optional :: alloc
     type(c_ptr) :: p
     p = c_loc(default_alloc)
@@ -152,7 +152,7 @@ contains
 
   !> GUATIAO_OK when an optional export resolved, else
   !> GUATIAO_STAT_MISSING_SYMBOL naming it and the feature that has it.
-  subroutine gt_need_symbol(resolved, name, feature, stat, msg)
+  recursive subroutine gt_need_symbol(resolved, name, feature, stat, msg)
     logical, intent(in) :: resolved
     character(*), intent(in) :: name, feature
     integer, intent(out) :: stat
@@ -169,7 +169,7 @@ contains
 
   ! The file to open for `which`, or '' to search by name; `looked` says
   ! where it was looked for.
-  subroutine locate(which, path, looked)
+  recursive subroutine locate(which, path, looked)
     integer, intent(in) :: which
     character(:), allocatable, intent(out) :: path, looked
     character(4096) :: env
@@ -210,7 +210,7 @@ contains
   end subroutine
 
   ! The file `which` has beside the core library at `core`.
-  subroutine beside(core, which, path)
+  recursive subroutine beside(core, which, path)
     character(*), intent(in) :: core
     integer, intent(in) :: which
     character(:), allocatable, intent(out) :: path
@@ -232,7 +232,7 @@ contains
   end subroutine
 
   ! The platform's own search, by file name.
-  subroutine open_by_name(which, h, path, looked)
+  recursive subroutine open_by_name(which, h, path, looked)
     integer, intent(in) :: which
     type(c_ptr), intent(out) :: h
     character(:), allocatable, intent(inout) :: path, looked
@@ -249,7 +249,7 @@ contains
   end subroutine
 
   ! Every export a build always has must be there.
-  subroutine check_required(which, h, path, stat, msg)
+  recursive subroutine check_required(which, h, path, stat, msg)
     integer, intent(in) :: which
     type(c_ptr), intent(in) :: h
     character(*), intent(in) :: path
@@ -291,7 +291,7 @@ contains
   !> A view of Fortran text for one call. `s` must be associated with the
   !> caller's text for as long as the view is used: every caller passes
   !> its own `target` dummy, so the view lasts the call it makes.
-  function gt_view(s) result(v)
+  recursive function gt_view(s) result(v)
     character(kind=c_char, len=*), intent(in), target :: s
     type(gt_str) :: v
     v%len = len(s, kind=c_size_t)
@@ -299,7 +299,7 @@ contains
   end function
 
   !> A view of bytes for one call, as gt_view.
-  function gt_bytes_view(b) result(v)
+  recursive function gt_bytes_view(b) result(v)
     integer(c_int8_t), intent(in), target :: b(:)
     type(gt_str) :: v
     v%len = size(b, kind=c_size_t)
@@ -309,7 +309,7 @@ contains
   !> Copies `n` bytes at `ptr` into `s`. A subroutine rather than a
   !> function: gfortran 14 keeps a function's deferred-length result
   !> length in static storage, which threads would share.
-  subroutine gt_copy_text(ptr, n, s)
+  recursive subroutine gt_copy_text(ptr, n, s)
     type(c_ptr), intent(in) :: ptr
     integer(c_size_t), intent(in) :: n
     character(:), allocatable, intent(out) :: s
@@ -324,14 +324,14 @@ contains
   end subroutine
 
   !> The text an owned string (a key, a STRING or NUMBER arm) holds.
-  subroutine gt_text_of_owned(o, s)
+  recursive subroutine gt_text_of_owned(o, s)
     type(gt_owned), intent(in) :: o
     character(:), allocatable, intent(out) :: s
     call gt_copy_text(o%ptr, o%len, s)
   end subroutine
 
   !> Whether the `n` bytes at `ptr` are exactly `s`.
-  function gt_text_equal(ptr, n, s) result(same)
+  recursive function gt_text_equal(ptr, n, s) result(same)
     type(c_ptr), intent(in) :: ptr
     integer(c_size_t), intent(in) :: n
     character(*), intent(in) :: s

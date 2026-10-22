@@ -107,7 +107,7 @@ module guatiao_kinds
 
 contains
 
-  subroutine impl_close(self)
+  recursive subroutine impl_close(self)
     class(guatiao_impl), intent(inout) :: self
   end subroutine
 
@@ -115,7 +115,7 @@ contains
 
   !> The provider under `key` as `kind`: its table for the kind, checked
   !> against the kind's floor (GUATIAO_STAT_FLOOR_MISMATCH), and its ctx.
-  subroutine guatiao_bind(reg, key, kind, r, stat, errmsg)
+  recursive subroutine guatiao_bind(reg, key, kind, r, stat, errmsg)
     type(guatiao_registry), intent(in) :: reg
     character(*), intent(in) :: key
     type(guatiao_kind), intent(in) :: kind
@@ -139,7 +139,7 @@ contains
 
   !> An instance as `kind`: the table of the provider that built it, and
   !> the instance as its ctx; the remote keeps the instance alive.
-  subroutine guatiao_bind_instance(inst, kind, r, stat, errmsg)
+  recursive subroutine guatiao_bind_instance(inst, kind, r, stat, errmsg)
     type(guatiao_instance), intent(in) :: inst
     type(guatiao_kind), intent(in) :: kind
     type(guatiao_remote), intent(inout) :: r
@@ -171,7 +171,7 @@ contains
 
   !> Any table as `kind`: GUATIAO_STAT_FLOOR_MISMATCH when it is smaller
   !> than the kind's required slots or carries another floor hash.
-  subroutine guatiao_bind_table(table, size, ctx, kind, r, stat, errmsg)
+  recursive subroutine guatiao_bind_table(table, size, ctx, kind, r, stat, errmsg)
     type(c_ptr), intent(in) :: table, ctx
     integer(c_size_t), intent(in) :: size
     type(guatiao_kind), intent(in) :: kind
@@ -201,7 +201,7 @@ contains
 
   !> The `i`th slot after the header (from 1), or null when the table is
   !> too small for it or leaves it empty.
-  function remote_slot(self, i) result(f)
+  recursive function remote_slot(self, i) result(f)
     class(guatiao_remote), intent(in) :: self
     integer, intent(in) :: i
     type(c_funptr) :: f
@@ -216,13 +216,13 @@ contains
     f = slots(i + 1)
   end function
 
-  logical function remote_has(self, i)
+  recursive logical function remote_has(self, i)
     class(guatiao_remote), intent(in) :: self
     integer, intent(in) :: i
     remote_has = c_associated(self%slot(i))
   end function
 
-  logical function remote_is_closed(self)
+  recursive logical function remote_is_closed(self)
     class(guatiao_remote), intent(in) :: self
     remote_is_closed = .not. c_associated(self%table)
     if (associated(self%hold%box)) remote_is_closed = remote_is_closed .or. self%hold%is_closed()
@@ -230,7 +230,7 @@ contains
 
   !> Destroys an object this side owns, once; nothing for a provider's
   !> table or a lent object.
-  subroutine remote_close(self)
+  recursive subroutine remote_close(self)
     class(guatiao_remote), intent(inout) :: self
     if (associated(self%hold%box)) then
       if (self%hold%box%what == GT_HOLD_OBJECT .or. self%hold%box%what == GT_HOLD_LENT) call self%hold%close()
@@ -240,7 +240,7 @@ contains
   !> Hands an object this side owns to another side, as the struct that
   !> crosses: the other side destroys it from now, and this remote reads
   !> closed. GUATIAO_ERR_WRONG_KIND for what this side does not own.
-  subroutine remote_give(self, obj, stat)
+  recursive subroutine remote_give(self, obj, stat)
     class(guatiao_remote), intent(inout) :: self
     type(gt_object), intent(out) :: obj
     integer, intent(out) :: stat
@@ -256,7 +256,7 @@ contains
 
   !> An object another side handed over (by value): this side owns it,
   !> and destroys it when the last copy of the remote goes or on close.
-  subroutine guatiao_take_object(obj, kind, r, stat)
+  recursive subroutine guatiao_take_object(obj, kind, r, stat)
     type(gt_object), intent(in) :: obj
     type(guatiao_kind), intent(in) :: kind
     type(guatiao_remote), intent(inout) :: r
@@ -273,7 +273,7 @@ contains
 
   !> An object another side lent for one call (`const guatiao_object *`):
   !> never destroyed here; guatiao_end_lent_object ends it.
-  subroutine guatiao_lend_object(ptr, kind, r, stat)
+  recursive subroutine guatiao_lend_object(ptr, kind, r, stat)
     type(c_ptr), intent(in) :: ptr
     type(guatiao_kind), intent(in) :: kind
     type(guatiao_remote), intent(inout) :: r
@@ -287,7 +287,7 @@ contains
   end subroutine
 
   !> The call that lent an object returned: every copy reads closed.
-  subroutine guatiao_end_lent_object(r)
+  recursive subroutine guatiao_end_lent_object(r)
     type(guatiao_remote), intent(inout) :: r
     call r%hold%close()
   end subroutine
@@ -295,7 +295,7 @@ contains
   ! ---- served boxes ----------------------------------------------------
 
   !> A box for `servings`, its address the ctx their tables' slots take.
-  function guatiao_new_served(servings) result(ctx)
+  recursive function guatiao_new_served(servings) result(ctx)
     type(guatiao_serving), intent(in) :: servings(:)
     type(c_ptr) :: ctx
     type(gt_served), pointer :: box
@@ -307,7 +307,7 @@ contains
   end function
 
   !> The object serving `kind` behind `ctx`, or null.
-  function guatiao_impl_at(ctx, kind) result(impl)
+  recursive function guatiao_impl_at(ctx, kind) result(impl)
     type(c_ptr), intent(in) :: ctx
     character(*), intent(in) :: kind
     class(guatiao_impl), pointer :: impl
@@ -328,7 +328,7 @@ contains
   !> Releases what `ctx` holds: each owned object closed (unless `close`
   !> says not: a copy served for one lent call) and deallocated, then the
   !> box.
-  subroutine guatiao_destroy_served(ctx, close)
+  recursive subroutine guatiao_destroy_served(ctx, close)
     type(c_ptr), intent(in) :: ctx
     logical, intent(in), optional :: close
     type(gt_served), pointer :: box
@@ -356,7 +356,7 @@ contains
 
   !> Serves `impl` (moved: it is deallocated here) as an object of
   !> `kind`, answering the struct that crosses. Its holder destroys it.
-  subroutine guatiao_serve_object(impl, kind, obj)
+  recursive subroutine guatiao_serve_object(impl, kind, obj)
     class(guatiao_impl), allocatable, intent(inout) :: impl
     type(guatiao_kind), intent(in) :: kind
     type(gt_object), intent(out) :: obj
@@ -378,7 +378,7 @@ contains
   !> Serves `impl` for one call another side is lent it for: nothing is
   !> moved or copied; end it with guatiao_destroy_served(ctx, close=.false.)
   !> once the call returns.
-  subroutine guatiao_lend_impl(impl, kind, obj)
+  recursive subroutine guatiao_lend_impl(impl, kind, obj)
     class(guatiao_impl), intent(in), target :: impl
     type(guatiao_kind), intent(in) :: kind
     type(gt_object), intent(out) :: obj
@@ -395,14 +395,14 @@ contains
   end subroutine
 
   !> Objects this process serves that a holder has not destroyed yet.
-  integer function guatiao_live_objects()
+  recursive integer function guatiao_live_objects()
     guatiao_live_objects = live
   end function
 
   !> An object argument a remote hands to another side: a remote this
   !> side owns is given (its object crosses as it is); any other object
   !> is served (moved into a box the other side destroys).
-  subroutine guatiao_object_arg(impl, remote, kind, obj, stat)
+  recursive subroutine guatiao_object_arg(impl, remote, kind, obj, stat)
     class(guatiao_impl), allocatable, intent(inout) :: impl
     type(guatiao_remote), intent(inout), optional :: remote
     type(guatiao_kind), intent(in) :: kind
@@ -424,14 +424,14 @@ contains
   ! ---- a served slot's arguments and answers ---------------------------
 
   !> The text a `guatiao_str` argument views.
-  subroutine guatiao_text_in(view, text)
+  recursive subroutine guatiao_text_in(view, text)
     type(gt_str), intent(in) :: view
     character(:), allocatable, intent(out) :: text
     call gt_copy_text(view%ptr, view%len, text)
   end subroutine
 
   !> The writable bytes a `guatiao_bytes_mut` views, valid for the call.
-  subroutine guatiao_bytes_in(view, bytes)
+  recursive subroutine guatiao_bytes_in(view, bytes)
     type(gt_bytes_mut), intent(in) :: view
     integer(int8), pointer, intent(out) :: bytes(:)
     if (view%len == 0 .or. .not. c_associated(view%ptr)) then
@@ -442,7 +442,7 @@ contains
   end subroutine
 
   ! The allocator a carrier names, else guatiao's own heap.
-  function carrier_alloc(a) result(p)
+  recursive function carrier_alloc(a) result(p)
     type(c_ptr), intent(in) :: a
     type(c_ptr) :: p
     p = a
@@ -451,7 +451,7 @@ contains
 
   !> An answer to fill, over the carrier a slot's `guatiao_map *out`
   !> holds: an empty map in the allocator the caller named.
-  function guatiao_map_carrier(out) result(answer)
+  recursive function guatiao_map_carrier(out) result(answer)
     type(c_ptr), intent(in) :: out
     type(guatiao_value) :: answer
     type(gt_owned), pointer :: carrier
@@ -468,7 +468,7 @@ contains
   !> instead (GUATIAO_ERR_WRONG_KIND unless it is a map).
   !> When the method refused (`failed`), what it built is freed and the
   !> carrier left as it came.
-  subroutine guatiao_settle_map(carrier, answer, out, stat, failed)
+  recursive subroutine guatiao_settle_map(carrier, answer, out, stat, failed)
     type(guatiao_value), intent(inout) :: carrier
     type(guatiao_value), intent(in) :: answer
     type(c_ptr), intent(in) :: out
@@ -515,7 +515,7 @@ contains
 
   !> An answer to fill for a slot's `guatiao_value *out`: absent, in the
   !> allocator its carrier names.
-  function guatiao_value_carrier(out) result(answer)
+  recursive function guatiao_value_carrier(out) result(answer)
     type(c_ptr), intent(in) :: out
     type(guatiao_value) :: answer
     type(gt_value), pointer :: carrier
@@ -526,7 +526,7 @@ contains
   end function
 
   !> Writes a copy of the answer, in the carrier's allocator, over it.
-  subroutine guatiao_settle_value(answer, out, stat)
+  recursive subroutine guatiao_settle_value(answer, out, stat)
     type(guatiao_value), intent(in) :: answer
     type(c_ptr), intent(in) :: out
     integer, intent(out) :: stat
@@ -547,7 +547,7 @@ contains
   !> A map the caller lent for the call (`guatiao_map *config`, its slot
   !> comment calling it lent): writable, grown through the allocator it
   !> records; guatiao_end_lent_map writes it back.
-  function guatiao_lent_map(ptr) result(v)
+  recursive function guatiao_lent_map(ptr) result(v)
     type(c_ptr), intent(in) :: ptr
     type(guatiao_value) :: v
     type(gt_owned), pointer :: map
@@ -564,7 +564,7 @@ contains
 
   !> The call that lent the map returned: what it holds now goes back to
   !> the caller, and every copy reads closed.
-  subroutine guatiao_end_lent_map(v, ptr)
+  recursive subroutine guatiao_end_lent_map(v, ptr)
     type(guatiao_value), intent(inout) :: v
     type(c_ptr), intent(in) :: ptr
     type(gt_owned), pointer :: map
@@ -579,7 +579,7 @@ contains
 
   !> A map handed over (`guatiao_map *` neither const nor lent): the
   !> method owns it; it is freed when the last handle on it goes.
-  function guatiao_taken_map(ptr) result(v)
+  recursive function guatiao_taken_map(ptr) result(v)
     type(c_ptr), intent(in) :: ptr
     type(guatiao_value) :: v
     type(gt_owned), pointer :: map
@@ -596,7 +596,7 @@ contains
 
   !> A map borrowed for the call (`const guatiao_map *`): read-only;
   !> end it with gt_end_borrow.
-  function guatiao_borrowed_map(ptr) result(v)
+  recursive function guatiao_borrowed_map(ptr) result(v)
     type(c_ptr), intent(in) :: ptr
     type(guatiao_value) :: v
     type(gt_owned), pointer :: map
@@ -612,7 +612,7 @@ contains
   end function
 
   !> A value borrowed for the call (`const guatiao_value *`): read-only.
-  function guatiao_borrowed_value(ptr) result(v)
+  recursive function guatiao_borrowed_value(ptr) result(v)
     type(c_ptr), intent(in) :: ptr
     type(guatiao_value) :: v
     v = gt_borrowed(ptr, .true., gt_default_alloc())
@@ -620,7 +620,7 @@ contains
 
   !> Writes `text` as a slot's `guatiao_string *out`, on guatiao's own
   !> heap (the caller frees it through the allocator it records).
-  subroutine guatiao_string_out(text, out, stat)
+  recursive subroutine guatiao_string_out(text, out, stat)
     character(*), intent(in), target :: text
     type(c_ptr), intent(in) :: out
     integer, intent(out) :: stat
@@ -638,7 +638,7 @@ contains
   !> The status a slot answers for `error`, its words written into the
   !> slot's `guatiao_provider_error *err` (when there is one) in guatiao's
   !> own heap. GUATIAO_OK when `error` is unallocated.
-  function guatiao_failed(error, err) result(status)
+  recursive function guatiao_failed(error, err) result(status)
     type(guatiao_error), allocatable, intent(in) :: error
     type(c_ptr), intent(in) :: err
     integer(c_int32_t) :: status
@@ -663,7 +663,7 @@ contains
 
   !> The status a slot with no `err` answers for `error`, whose words go
   !> to standard error.
-  function guatiao_warn(error, slot) result(status)
+  recursive function guatiao_warn(error, slot) result(status)
     type(guatiao_error), allocatable, intent(in) :: error
     character(*), intent(in) :: slot
     integer(c_int32_t) :: status
@@ -681,7 +681,7 @@ contains
   ! ---- a remote call's arguments and answers ---------------------------
 
   !> A text argument's view, over `text`, which outlives the call.
-  function guatiao_string_in(text) result(v)
+  recursive function guatiao_string_in(text) result(v)
     character(*), intent(in), target :: text
     type(gt_str) :: v
     v = gt_view(text)
@@ -690,7 +690,7 @@ contains
   !> A fresh answer for a remote slot's `guatiao_map *out` and the
   !> address to pass: an empty map naming `alloc` (else guatiao's heap),
   !> the carrier the callee builds its answer in.
-  subroutine guatiao_map_out(answer, out, alloc)
+  recursive subroutine guatiao_map_out(answer, out, alloc)
     type(guatiao_value), intent(inout) :: answer
     type(c_ptr), intent(out) :: out
     type(c_ptr), intent(in) :: alloc
@@ -704,7 +704,7 @@ contains
 
   !> Moves an answer built in another allocator into this tree's: the
   !> callee ignored the carrier. Nothing to do when it did not.
-  subroutine guatiao_settle_home(answer)
+  recursive subroutine guatiao_settle_home(answer)
     type(guatiao_value), intent(inout) :: answer
     type(gt_value), pointer :: root
     type(guatiao_value) :: home
@@ -720,7 +720,7 @@ contains
 
   !> The error a remote slot answered: its status and the callee's words,
   !> whose string is freed through the allocator it records.
-  subroutine guatiao_call_error(status, err, error)
+  recursive subroutine guatiao_call_error(status, err, error)
     integer(c_int32_t), intent(in) :: status
     type(gt_provider_error), intent(inout), target :: err
     type(guatiao_error), allocatable, intent(out) :: error
@@ -740,7 +740,7 @@ contains
 
   !> A tree lent to a remote slot (`guatiao_map *`, lent): the address of
   !> the map arm of the node `v` names, or a status saying why not.
-  subroutine guatiao_lend_tree(v, tag, ptr, stat)
+  recursive subroutine guatiao_lend_tree(v, tag, ptr, stat)
     type(guatiao_value), intent(in) :: v
     integer(c_int32_t), intent(in) :: tag
     type(c_ptr), intent(out) :: ptr
@@ -757,7 +757,7 @@ contains
   !> A tree handed to a remote slot: moved out of `v` (which then reads
   !> closed) when `v` owns its whole tree, else a copy; `node` holds it,
   !> and the map arm of `node` is what crosses.
-  subroutine guatiao_hand_over(v, tag, node, stat)
+  recursive subroutine guatiao_hand_over(v, tag, node, stat)
     type(guatiao_value), intent(inout) :: v
     integer(c_int32_t), intent(in) :: tag
     type(gt_value), intent(inout), target :: node

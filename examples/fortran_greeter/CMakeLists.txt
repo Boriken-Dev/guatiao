@@ -24,7 +24,9 @@ add_library(greeter_kind_fortran STATIC ${CMAKE_CURRENT_SOURCE_DIR}/../greeter_k
 target_link_libraries(greeter_kind_fortran PUBLIC guatiao::fortran)
 set_target_properties(greeter_kind_fortran PROPERTIES
   Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/kind-modules
-  POSITION_INDEPENDENT_CODE ON)
+  POSITION_INDEPENDENT_CODE ON
+  # ifx on Windows preprocesses no file by its extension alone.
+  Fortran_PREPROCESS ON)
 target_include_directories(greeter_kind_fortran PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/kind-modules)
 
 add_library(fortran_greeter SHARED src/fortran_greeter.f90 src/fortran_greeter_entry.f90)

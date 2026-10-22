@@ -37,7 +37,7 @@ module guatiao_errors
 contains
 
   !> Refuses: allocates `error` with `status` and `message`.
-  subroutine guatiao_fail(error, status, message)
+  recursive subroutine guatiao_fail(error, status, message)
     type(guatiao_error), allocatable, intent(inout) :: error
     integer, intent(in) :: status
     character(*), intent(in), optional :: message
@@ -53,7 +53,7 @@ contains
 
   !> The constant's name of a status (`GUATIAO_ERR_BAD_VALUE`), or
   !> `status <n>` for one nobody here defines.
-  function guatiao_status_name(status) result(name)
+  recursive function guatiao_status_name(status) result(name)
     integer, intent(in) :: status
     character(:), allocatable :: name
     character(24) :: buf
@@ -82,7 +82,7 @@ contains
   !> Hands a status to an optional `stat`/`errmsg` pair: `stat` receives
   !> it, `errmsg` the message when it failed; with no `stat` a failure
   !> stops the program with the message.
-  subroutine gt_report(status, message, stat, errmsg)
+  recursive subroutine gt_report(status, message, stat, errmsg)
     integer, intent(in) :: status
     character(*), intent(in) :: message
     integer, intent(out), optional :: stat
@@ -94,7 +94,7 @@ contains
   end subroutine
 
   !> As gt_report, for a slot method's error (unallocated is success).
-  subroutine gt_report_error(error, stat, errmsg)
+  recursive subroutine gt_report_error(error, stat, errmsg)
     type(guatiao_error), allocatable, intent(in) :: error
     integer, intent(out), optional :: stat
     character(:), allocatable, intent(inout), optional :: errmsg
@@ -110,7 +110,7 @@ contains
   end subroutine
 
   !> Stops the program: what an absent `stat` asks for on a failure.
-  subroutine guatiao_raise(status, message)
+  recursive subroutine guatiao_raise(status, message)
     integer, intent(in) :: status
     character(*), intent(in) :: message
     character(:), allocatable :: name

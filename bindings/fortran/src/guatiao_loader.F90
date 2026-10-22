@@ -7,9 +7,10 @@
 ! dlopen/dlsym elsewhere. The one file the preprocessor chooses for.
 
 ! gfortran predefines no platform macro on Windows; only 64-bit Windows
-! is LLP64, so a 4-byte long names it.
+! is LLP64, so a 4-byte long names it. The macro is not named like
+! gt_windows below: Fortran names ignore case, and a preprocessor may too.
 #if defined(_WIN32) || (defined(__GFORTRAN__) && __SIZEOF_LONG__ == 4)
-#define GT_WINDOWS 1
+#define GUATIAO_ON_WINDOWS 1
 #endif
 
 module guatiao_loader
@@ -20,14 +21,14 @@ module guatiao_loader
   public :: gt_dl_open, gt_dl_sym, gt_dl_error, gt_windows, gt_library_file_names
 
   !> True when this build was compiled for Windows.
-#ifdef GT_WINDOWS
+#ifdef GUATIAO_ON_WINDOWS
   logical, parameter :: gt_windows = .true.
 #else
   logical, parameter :: gt_windows = .false.
 #endif
 
   interface
-#ifdef GT_WINDOWS
+#ifdef GUATIAO_ON_WINDOWS
     function MultiByteToWideChar(cp, flags, src, srclen, dst, dstlen) &
         bind(c, name="MultiByteToWideChar") result(n)
       import :: c_int, c_int32_t, c_char, c_ptr
@@ -82,10 +83,10 @@ contains
 
   !> Opens the shared library at `path` (UTF-8); a null handle when it
   !> does not open, the reason then in gt_dl_error().
-  function gt_dl_open(path) result(h)
+  recursive function gt_dl_open(path) result(h)
     character(*), intent(in) :: path
     type(c_ptr) :: h
-#ifdef GT_WINDOWS
+#ifdef GUATIAO_ON_WINDOWS
     integer(c_int16_t), allocatable, target :: wide(:)
     integer(c_int) :: n
     integer(c_int32_t), parameter :: CP_UTF8 = 65001
@@ -104,13 +105,13 @@ contains
   end function
 
   !> The export `name` of an open library, or a null pointer.
-  function gt_dl_sym(h, name) result(f)
+  recursive function gt_dl_sym(h, name) result(f)
     type(c_ptr), intent(in) :: h
     character(*), intent(in) :: name
     type(c_funptr) :: f
     f = c_null_funptr
     if (.not. c_associated(h)) return
-#ifdef GT_WINDOWS
+#ifdef GUATIAO_ON_WINDOWS
     f = GetProcAddress(h, name // c_null_char)
 #else
     f = dlsym(h, name // c_null_char)
@@ -118,9 +119,9 @@ contains
   end function
 
   !> Why the last open failed, in the platform's words.
-  subroutine gt_dl_error(msg)
+  recursive subroutine gt_dl_error(msg)
     character(:), allocatable, intent(out) :: msg
-#ifdef GT_WINDOWS
+#ifdef GUATIAO_ON_WINDOWS
     character(40) :: buf
     write (buf, '(a,i0)') 'Windows error ', GetLastError()
     msg = trim(buf)
@@ -144,10 +145,10 @@ contains
 
   !> The file names a library called `stem` has on this platform, in the
   !> order to try: `guatiao.dll`; `libguatiao.so` then `libguatiao.dylib`.
-  subroutine gt_library_file_names(stem, first, second)
+  recursive subroutine gt_library_file_names(stem, first, second)
     character(*), intent(in) :: stem
     character(:), allocatable, intent(out) :: first, second
-#ifdef GT_WINDOWS
+#ifdef GUATIAO_ON_WINDOWS
     first = stem // '.dll'
     second = ''
 #else

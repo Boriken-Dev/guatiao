@@ -22,7 +22,7 @@ module guatiao_intake
 contains
 
   ! The node each argument names, or a status saying why not.
-  subroutine nodes(st, msg, a, pa, b, pb, c, pc)
+  recursive subroutine nodes(st, msg, a, pa, b, pb, c, pc)
     integer, intent(out) :: st
     character(:), allocatable, intent(out) :: msg
     type(guatiao_value), intent(in) :: a
@@ -35,7 +35,7 @@ contains
     if (present(b)) call one(b, pb)
     if (present(c)) call one(c, pc)
   contains
-    subroutine one(v, p)
+    recursive subroutine one(v, p)
       type(guatiao_value), intent(in) :: v
       type(c_ptr), intent(out) :: p
       p = gt_node(v)
@@ -52,7 +52,7 @@ contains
 
   !> Whether `form` fits `schema`: GUATIAO_OK, or GUATIAO_ERR_BAD_VALUE
   !> with `why` holding the map that says why (`kind`, `at`, `message`, ...).
-  subroutine guatiao_intake_check(schema, form, why, stat, errmsg)
+  recursive subroutine guatiao_intake_check(schema, form, why, stat, errmsg)
     type(guatiao_value), intent(in) :: schema, form
     type(guatiao_value), intent(inout) :: why
     integer, intent(out), optional :: stat
@@ -76,7 +76,7 @@ contains
 
   !> The schema's fields in sections, in order: a list of
   !> `{"section": map or null, "fields": [key, ...]}`.
-  subroutine guatiao_intake_layout(schema, form, layout, stat, errmsg)
+  recursive subroutine guatiao_intake_layout(schema, form, layout, stat, errmsg)
     type(guatiao_value), intent(in) :: schema, form
     type(guatiao_value), intent(inout) :: layout
     integer, intent(out), optional :: stat
@@ -100,22 +100,22 @@ contains
 
   !> Whether the field under `key` is shown, given the `values` entered
   !> so far (GUATIAO_ERR_NOT_FOUND for a key the schema does not declare).
-  subroutine guatiao_intake_is_visible(schema, form, key, values, shown, stat, errmsg)
+  recursive subroutine guatiao_intake_is_visible(schema, form, key, values, shown, stat, errmsg)
     type(guatiao_value), intent(in) :: schema, form, values
     character(*), intent(in), target :: key
     logical, intent(inout) :: shown
     integer, intent(out), optional :: stat
     character(:), allocatable, intent(inout), optional :: errmsg
     type(c_ptr) :: ps, pf, pv
-    logical(c_bool), target :: out
+    integer(c_int8_t), target :: out
     integer :: st
     character(:), allocatable :: msg
     call nodes(st, msg, schema, ps, form, pf, values, pv)
     if (st == GUATIAO_OK) then
-      out = .false.
+      out = GUATIAO_C_FALSE
       st = gt_intake_is_visible(ps, pf, gt_view(key), pv, c_loc(out))
       if (st == GUATIAO_OK) then
-        shown = out
+        shown = out /= GUATIAO_C_FALSE
       else
         msg = 'guatiao: the schema declares no field "' // key // '"'
       end if
@@ -125,7 +125,7 @@ contains
 
   !> The node at `path` (`agent[1].name`) inside what `value` names: a
   !> read-only handle on the same tree, found again on every access.
-  function guatiao_intake_at(value, path, stat, errmsg) result(at)
+  recursive function guatiao_intake_at(value, path, stat, errmsg) result(at)
     type(guatiao_value), intent(in) :: value
     character(*), intent(in) :: path
     integer, intent(out), optional :: stat
@@ -140,7 +140,7 @@ contains
 
   !> The field of `schema` governing the flat key `key`: a read-only
   !> handle on the schema's tree, absent for a key it does not declare.
-  function guatiao_intake_resolve(schema, key, stat, errmsg) result(field)
+  recursive function guatiao_intake_resolve(schema, key, stat, errmsg) result(field)
     type(guatiao_value), intent(in) :: schema
     character(*), intent(in) :: key
     integer, intent(out), optional :: stat
@@ -154,7 +154,7 @@ contains
   end function
 
   !> The form a schema implies, for when nobody wrote one.
-  subroutine guatiao_intake_for_schema(schema, form, stat, errmsg)
+  recursive subroutine guatiao_intake_for_schema(schema, form, stat, errmsg)
     type(guatiao_value), intent(in) :: schema
     type(guatiao_value), intent(inout) :: form
     integer, intent(out), optional :: stat
@@ -178,7 +178,7 @@ contains
 
   !> The form to show the field at `path` with: the one `form` assigns,
   !> or the one its schema implies; absent when there is none.
-  subroutine guatiao_intake_form_for(form, schema, path, sub, stat, errmsg)
+  recursive subroutine guatiao_intake_form_for(form, schema, path, sub, stat, errmsg)
     type(guatiao_value), intent(in) :: form, schema
     character(*), intent(in), target :: path
     type(guatiao_value), intent(inout) :: sub
@@ -202,7 +202,7 @@ contains
   end subroutine
 
   !> The flat keys the field `key` projects onto.
-  subroutine guatiao_intake_flat_keys(schema, key, keys, stat, errmsg)
+  recursive subroutine guatiao_intake_flat_keys(schema, key, keys, stat, errmsg)
     type(guatiao_value), intent(in) :: schema
     character(*), intent(in), target :: key
     type(guatiao_text), allocatable, intent(inout) :: keys(:)
@@ -232,7 +232,7 @@ contains
 
   !> Writes what `value` names into a flat store (a map of text to text),
   !> one entry per scalar leaf of the field `key`.
-  subroutine guatiao_intake_flatten(schema, key, value, store, stat, errmsg)
+  recursive subroutine guatiao_intake_flatten(schema, key, value, store, stat, errmsg)
     type(guatiao_value), intent(in) :: schema, value
     character(*), intent(in), target :: key
     type(guatiao_value), intent(inout) :: store
@@ -258,7 +258,7 @@ contains
   !> Rebuilds the field `key` from a flat store; `value` is absent when
   !> nothing is stored under it. A store that is not text to text is
   !> GUATIAO_ERR_WRONG_KIND.
-  subroutine guatiao_intake_unflatten(schema, key, store, value, stat, errmsg)
+  recursive subroutine guatiao_intake_unflatten(schema, key, store, value, stat, errmsg)
     type(guatiao_value), intent(in) :: schema, store
     character(*), intent(in), target :: key
     type(guatiao_value), intent(inout) :: value

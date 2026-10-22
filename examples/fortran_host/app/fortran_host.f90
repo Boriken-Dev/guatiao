@@ -79,7 +79,7 @@ program fortran_host
 
 contains
 
-  subroutine argument(i, value)
+  recursive subroutine argument(i, value)
     integer, intent(in) :: i
     character(:), allocatable, intent(out) :: value
     integer :: length
@@ -88,7 +88,7 @@ contains
     call get_command_argument(i, value)
   end subroutine
 
-  subroutine exercise_key(key)
+  recursive subroutine exercise_key(key)
     character(*), intent(in) :: key
     type(greeter_remote) :: g
     integer :: st
@@ -100,7 +100,7 @@ contains
     call exercise(g)
   end subroutine
 
-  subroutine configured(key)
+  recursive subroutine configured(key)
     character(*), intent(in) :: key
     type(guatiao_instance) :: inst
     type(greeter_remote) :: g
@@ -125,7 +125,7 @@ contains
   end subroutine
 
   !> Every slot of the greeter kind the table carries.
-  subroutine exercise(g)
+  recursive subroutine exercise(g)
     type(greeter_remote), intent(inout) :: g
     type(guatiao_value) :: answer, config
     type(guatiao_error), allocatable :: error

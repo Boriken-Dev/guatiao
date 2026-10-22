@@ -85,7 +85,7 @@ contains
   ! ---- the C structs ---------------------------------------------------
 
   ! A field of a C `uint8_t`: refused outside 0 to 255.
-  subroutine byte_of(n, b, ok)
+  recursive subroutine byte_of(n, b, ok)
     integer, intent(in) :: n
     integer(c_int8_t), intent(out) :: b
     logical, intent(inout) :: ok
@@ -97,12 +97,12 @@ contains
     end if
   end subroutine
 
-  integer function unbyte(b)
+  recursive integer function unbyte(b)
     integer(c_int8_t), intent(in) :: b
     unbyte = iand(int(b), 255)
   end function
 
-  subroutine to_c_date(d, c, ok)
+  recursive subroutine to_c_date(d, c, ok)
     type(guatiao_date), intent(in) :: d
     type(gt_date), intent(out) :: c
     logical, intent(out) :: ok
@@ -112,7 +112,7 @@ contains
     call byte_of(d%day, c%day, ok)
   end subroutine
 
-  subroutine to_c_time(t, c, ok)
+  recursive subroutine to_c_time(t, c, ok)
     type(guatiao_time), intent(in) :: t
     type(gt_time), intent(out) :: c
     logical, intent(out) :: ok
@@ -124,7 +124,7 @@ contains
     c%nanosecond = int(t%nanosecond, c_int32_t)
   end subroutine
 
-  function of_c_date(c) result(d)
+  recursive function of_c_date(c) result(d)
     type(gt_date), intent(in) :: c
     type(guatiao_date) :: d
     d%year = c%year
@@ -132,7 +132,7 @@ contains
     d%day = unbyte(c%day)
   end function
 
-  function of_c_time(c) result(t)
+  recursive function of_c_time(c) result(t)
     type(gt_time), intent(in) :: c
     type(guatiao_time) :: t
     t%hour = unbyte(c%hour)
@@ -141,7 +141,7 @@ contains
     t%nanosecond = c%nanosecond
   end function
 
-  function to_c_span(s) result(c)
+  recursive function to_c_span(s) result(c)
     type(guatiao_span), intent(in) :: s
     type(gt_span) :: c
     c%years = s%years
@@ -154,7 +154,7 @@ contains
     c%nanoseconds = int(s%nanoseconds, c_int32_t)
   end function
 
-  function of_c_span(c) result(s)
+  recursive function of_c_span(c) result(s)
     type(gt_span), intent(in) :: c
     type(guatiao_span) :: s
     s%years = c%years
@@ -168,7 +168,7 @@ contains
   end function
 
   ! What a text error says, and the expected string freed.
-  subroutine refusal(e, st, msg, unparsed)
+  recursive subroutine refusal(e, st, msg, unparsed)
     type(gt_text_error), intent(inout), target :: e
     integer, intent(in) :: st
     character(:), allocatable, intent(out) :: msg
@@ -191,7 +191,7 @@ contains
   end subroutine
 
   ! The text of a STRING value a format call answered, the value freed.
-  subroutine text_out(out, text)
+  recursive subroutine text_out(out, text)
     type(gt_value), intent(inout), target :: out
     character(:), allocatable, intent(inout) :: text
     integer(c_int32_t) :: ignored
@@ -201,7 +201,7 @@ contains
 
   ! ---- reading text ----------------------------------------------------
 
-  subroutine date_from_text(text, x, stat, errmsg, unparsed)
+  recursive subroutine date_from_text(text, x, stat, errmsg, unparsed)
     character(*), intent(in), target :: text
     type(guatiao_date), intent(inout) :: x
     integer, intent(out), optional :: stat
@@ -220,7 +220,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine time_from_text(text, x, stat, errmsg, unparsed)
+  recursive subroutine time_from_text(text, x, stat, errmsg, unparsed)
     character(*), intent(in), target :: text
     type(guatiao_time), intent(inout) :: x
     integer, intent(out), optional :: stat
@@ -239,7 +239,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine datetime_from_text(text, x, stat, errmsg, unparsed)
+  recursive subroutine datetime_from_text(text, x, stat, errmsg, unparsed)
     character(*), intent(in), target :: text
     type(guatiao_datetime), intent(inout) :: x
     integer, intent(out), optional :: stat
@@ -261,7 +261,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine timestamp_from_text(text, x, stat, errmsg, unparsed)
+  recursive subroutine timestamp_from_text(text, x, stat, errmsg, unparsed)
     character(*), intent(in), target :: text
     type(guatiao_timestamp), intent(inout) :: x
     integer, intent(out), optional :: stat
@@ -283,7 +283,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine span_from_text(text, x, stat, errmsg, unparsed)
+  recursive subroutine span_from_text(text, x, stat, errmsg, unparsed)
     character(*), intent(in), target :: text
     type(guatiao_span), intent(inout) :: x
     integer, intent(out), optional :: stat
@@ -304,7 +304,7 @@ contains
 
   ! ---- writing text ----------------------------------------------------
 
-  subroutine date_to_text(x, text, stat, errmsg)
+  recursive subroutine date_to_text(x, text, stat, errmsg)
     type(guatiao_date), intent(in) :: x
     character(:), allocatable, intent(inout) :: text
     integer, intent(out), optional :: stat
@@ -331,7 +331,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine time_to_text(x, text, stat, errmsg)
+  recursive subroutine time_to_text(x, text, stat, errmsg)
     type(guatiao_time), intent(in) :: x
     character(:), allocatable, intent(inout) :: text
     integer, intent(out), optional :: stat
@@ -358,7 +358,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine datetime_to_text(x, text, stat, errmsg)
+  recursive subroutine datetime_to_text(x, text, stat, errmsg)
     type(guatiao_datetime), intent(in) :: x
     character(:), allocatable, intent(inout) :: text
     integer, intent(out), optional :: stat
@@ -386,7 +386,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine timestamp_to_text(x, text, stat, errmsg)
+  recursive subroutine timestamp_to_text(x, text, stat, errmsg)
     type(guatiao_timestamp), intent(in) :: x
     character(:), allocatable, intent(inout) :: text
     integer, intent(out), optional :: stat
@@ -413,7 +413,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine span_to_text(x, text, stat, errmsg)
+  recursive subroutine span_to_text(x, text, stat, errmsg)
     type(guatiao_span), intent(in) :: x
     character(:), allocatable, intent(inout) :: text
     integer, intent(out), optional :: stat
@@ -436,7 +436,7 @@ contains
   end subroutine
 
   !> The canonical spelling of `text` in `form` (GUATIAO_FORM_*).
-  subroutine guatiao_normalize(form, text, canonical, stat, errmsg, unparsed)
+  recursive subroutine guatiao_normalize(form, text, canonical, stat, errmsg, unparsed)
     integer, intent(in) :: form
     character(*), intent(in), target :: text
     character(:), allocatable, intent(inout) :: canonical
@@ -475,7 +475,7 @@ contains
 
   ! ---- spans applied ---------------------------------------------------
 
-  subroutine date_add_span(start, span, result, stat, errmsg)
+  recursive subroutine date_add_span(start, span, result, stat, errmsg)
     type(guatiao_date), intent(in) :: start
     type(guatiao_span), intent(in) :: span
     type(guatiao_date), intent(inout) :: result
@@ -504,7 +504,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine datetime_add_span(start, span, result, stat, errmsg)
+  recursive subroutine datetime_add_span(start, span, result, stat, errmsg)
     type(guatiao_datetime), intent(in) :: start
     type(guatiao_span), intent(in) :: span
     type(guatiao_datetime), intent(inout) :: result
@@ -539,7 +539,7 @@ contains
 
   !> Reads an exact length in any of its spellings: `[seconds,
   !> nanoseconds]`, a number of seconds, `{secs, nanos}`.
-  subroutine guatiao_read_length(value, length, stat, errmsg)
+  recursive subroutine guatiao_read_length(value, length, stat, errmsg)
     type(guatiao_value), intent(in) :: value
     type(guatiao_length), intent(inout) :: length
     integer, intent(out), optional :: stat
@@ -569,7 +569,7 @@ contains
   end subroutine
 
   !> An exact length as its value, `[seconds, nanoseconds]`.
-  function guatiao_length_value(length, stat, errmsg) result(v)
+  recursive function guatiao_length_value(length, stat, errmsg) result(v)
     type(guatiao_length), intent(in) :: length
     integer, intent(out), optional :: stat
     character(:), allocatable, intent(inout), optional :: errmsg
@@ -590,7 +590,7 @@ contains
   end function
 
   ! The decimal text of an unsigned 64-bit count held in an int64.
-  function unsigned_text(n) result(text)
+  recursive function unsigned_text(n) result(text)
     integer(int64), intent(in) :: n
     character(:), allocatable :: text
     character(24) :: buf

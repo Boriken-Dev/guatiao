@@ -71,7 +71,7 @@ module fortran_greeter
 contains
 
   !> The library this package is.
-  function fortran_greeter_library() result(lib)
+  recursive function fortran_greeter_library() result(lib)
     type(guatiao_library) :: lib
     type(hello), pointer :: h
     type(hello_count), pointer :: c
@@ -89,7 +89,7 @@ contains
 
   ! ---- hello -----------------------------------------------------------
 
-  subroutine hello_greet(self, name, answer, error)
+  recursive subroutine hello_greet(self, name, answer, error)
     class(hello), intent(inout) :: self
     character(*), intent(in) :: name
     type(guatiao_value), intent(inout) :: answer
@@ -107,7 +107,7 @@ contains
     if (st /= GUATIAO_OK) call guatiao_fail(error, st, 'the answer was refused')
   end subroutine
 
-  subroutine hello_shout(self, name, answer, error)
+  recursive subroutine hello_shout(self, name, answer, error)
     class(hello), intent(inout) :: self
     character(*), intent(in) :: name
     character(:), allocatable, intent(out) :: answer
@@ -116,7 +116,7 @@ contains
     call upper(answer)
   end subroutine
 
-  subroutine hello_start(self, listener_in, answer, error)
+  recursive subroutine hello_start(self, listener_in, answer, error)
     class(hello), intent(inout) :: self
     class(listener), allocatable, intent(inout) :: listener_in
     class(conversation), allocatable, intent(out) :: answer
@@ -128,7 +128,7 @@ contains
     call move_alloc(c, answer)
   end subroutine
 
-  subroutine hello_greet_into(self, name, listener_in, error)
+  recursive subroutine hello_greet_into(self, name, listener_in, error)
     class(hello), intent(inout) :: self
     character(*), intent(in) :: name
     class(listener), intent(inout), target :: listener_in
@@ -140,7 +140,7 @@ contains
     call listener_in%heard('hello, ' // name, error)
   end subroutine
 
-  subroutine hello_greet_from(self, config, answer, error)
+  recursive subroutine hello_greet_from(self, config, answer, error)
     class(hello), intent(inout) :: self
     type(guatiao_value), intent(inout) :: config
     type(guatiao_value), intent(inout) :: answer
@@ -154,7 +154,7 @@ contains
     call self%greet(name, answer, error)
   end subroutine
 
-  subroutine hello_check(self, config, answer, error)
+  recursive subroutine hello_check(self, config, answer, error)
     class(hello), intent(inout) :: self
     type(guatiao_value), intent(inout) :: config
     logical, intent(out) :: answer
@@ -173,7 +173,7 @@ contains
     answer = len(name) > 0
   end subroutine
 
-  subroutine hello_count_count(self, answer, error)
+  recursive subroutine hello_count_count(self, answer, error)
     class(hello_count), intent(inout) :: self
     integer(int64), intent(out) :: answer
     type(guatiao_error), allocatable, intent(out) :: error
@@ -183,7 +183,7 @@ contains
 
   ! ---- chat ------------------------------------------------------------
 
-  subroutine chat_say(self, what, error)
+  recursive subroutine chat_say(self, what, error)
     class(chat), intent(inout) :: self
     character(*), intent(in) :: what
     type(guatiao_error), allocatable, intent(out) :: error
@@ -201,7 +201,7 @@ contains
     call self%heard_by%heard(what, error)
   end subroutine
 
-  subroutine chat_read(self, dst, answer, error)
+  recursive subroutine chat_read(self, dst, answer, error)
     class(chat), intent(inout) :: self
     integer(int8), intent(inout) :: dst(:)
     integer(int64), intent(out) :: answer
@@ -220,27 +220,27 @@ contains
     answer = n
   end subroutine
 
-  subroutine chat_turns(self, answer, error)
+  recursive subroutine chat_turns(self, answer, error)
     class(chat), intent(inout) :: self
     integer(int64), intent(out) :: answer
     type(guatiao_error), allocatable, intent(out) :: error
     answer = size(self%transcript)
   end subroutine
 
-  subroutine chat_close(self)
+  recursive subroutine chat_close(self)
     class(chat), intent(inout) :: self
     if (allocated(self%heard_by)) call self%heard_by%close()
   end subroutine
 
   ! ---- shouter ---------------------------------------------------------
 
-  subroutine shouter_describe(self, schema)
+  recursive subroutine shouter_describe(self, schema)
     class(shouter_config), intent(in) :: self
     type(guatiao_schema_builder), intent(inout) :: schema
     call schema%string_field('prefix', description='What every greeting starts with.', min_length=1)
   end subroutine
 
-  subroutine shouter_decode(self, value, error)
+  recursive subroutine shouter_decode(self, value, error)
     class(shouter_config), intent(inout) :: self
     type(guatiao_value), intent(in) :: value
     type(guatiao_error), allocatable, intent(out) :: error
@@ -249,7 +249,7 @@ contains
     if (st /= GUATIAO_OK) call guatiao_fail(error, st, 'a shouter needs a prefix')
   end subroutine
 
-  subroutine build_shouter(config, made, error)
+  recursive subroutine build_shouter(config, made, error)
     class(guatiao_config), intent(in) :: config
     type(guatiao_serving), allocatable, intent(out) :: made(:)
     type(guatiao_error), allocatable, intent(out) :: error
@@ -264,7 +264,7 @@ contains
     end select
   end subroutine
 
-  subroutine shouter_greet(self, name, answer, error)
+  recursive subroutine shouter_greet(self, name, answer, error)
     class(shouter), intent(inout) :: self
     character(*), intent(in) :: name
     type(guatiao_value), intent(inout) :: answer
@@ -277,7 +277,7 @@ contains
     if (st /= GUATIAO_OK) call guatiao_fail(error, st, 'the answer was refused')
   end subroutine
 
-  subroutine upper(s)
+  recursive subroutine upper(s)
     character(*), intent(inout) :: s
     integer :: i
     do i = 1, len(s)

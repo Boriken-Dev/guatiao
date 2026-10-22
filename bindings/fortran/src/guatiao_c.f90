@@ -29,6 +29,11 @@ module guatiao_c
                                    GUATIAO_ERR_INTERNAL = 100
 
   integer(c_int32_t), parameter :: GUATIAO_ABI_VERSION = 1
+
+  !> C's `bool` crosses as `integer(c_int8_t)`, 0 or 1: Intel ifx stores a
+  !> `logical(c_bool)` .true. as -1 unless built with `-fpscomp logicals`,
+  !> which no C or Rust reader accepts.
+  integer(c_int8_t), parameter :: GUATIAO_C_TRUE = 1_c_int8_t, GUATIAO_C_FALSE = 0_c_int8_t
   integer, parameter :: GUATIAO_MAX_DEPTH = 128
 
   !> `guatiao_str` and `guatiao_bytes`: a view, pointer and length.
@@ -325,8 +330,8 @@ module guatiao_c
       integer(c_int32_t) :: r
     end function
     function guatiao_value_bool_i(b, out) bind(c) result(r)
-      import :: c_bool, c_int32_t, c_ptr
-      logical(c_bool), value :: b
+      import :: c_int8_t, c_int32_t, c_ptr
+      integer(c_int8_t), value :: b
       type(c_ptr), value :: out
       integer(c_int32_t) :: r
     end function
@@ -642,30 +647,46 @@ module guatiao_c
       integer(c_int32_t) :: r
     end function
     function guatiao_registry_scan_dir_i(reg, dir, descending, alloc, out) bind(c) result(r)
-      import :: c_bool, c_int32_t, c_ptr, gt_str
+      import :: c_int8_t, c_int32_t, c_ptr, gt_str
       type(c_ptr), value :: reg
       type(gt_str), value :: dir
-      logical(c_bool), value :: descending
+      integer(c_int8_t), value :: descending
       type(c_ptr), value :: alloc
       type(c_ptr), value :: out
       integer(c_int32_t) :: r
     end function
     function guatiao_registry_scan_dir_rules_i(reg, dir, descending, rules, alloc, out) bind(c) result(r)
-      import :: c_bool, c_int32_t, c_ptr, gt_str
+      import :: c_int8_t, c_int32_t, c_ptr, gt_str
       type(c_ptr), value :: reg
       type(gt_str), value :: dir
-      logical(c_bool), value :: descending
+      integer(c_int8_t), value :: descending
       type(gt_str), value :: rules
       type(c_ptr), value :: alloc
       type(c_ptr), value :: out
       integer(c_int32_t) :: r
     end function
     function guatiao_registry_scan_path_i(reg, spec, descending, rules, alloc, out) bind(c) result(r)
-      import :: c_bool, c_int32_t, c_ptr, gt_str
+      import :: c_int8_t, c_int32_t, c_ptr, gt_str
       type(c_ptr), value :: reg
       type(gt_str), value :: spec
-      logical(c_bool), value :: descending
+      integer(c_int8_t), value :: descending
       type(gt_str), value :: rules
+      type(c_ptr), value :: alloc
+      type(c_ptr), value :: out
+      integer(c_int32_t) :: r
+    end function
+    ! scan_dir_rules and scan_path with `rules` passed as its two words,
+    ! which is the same call on every 64-bit ABI but Windows' (where the
+    ! struct goes by address). LLVM flang 22 on x86-64, calling through a
+    ! pointer, passes a struct that lands in the last two integer registers
+    ! on the stack instead.
+    function gt_scan_split(reg, where, descending, rules_ptr, rules_len, alloc, out) bind(c) result(r)
+      import :: c_int8_t, c_int32_t, c_ptr, c_size_t, gt_str
+      type(c_ptr), value :: reg
+      type(gt_str), value :: where
+      integer(c_int8_t), value :: descending
+      type(c_ptr), value :: rules_ptr
+      integer(c_size_t), value :: rules_len
       type(c_ptr), value :: alloc
       type(c_ptr), value :: out
       integer(c_int32_t) :: r
@@ -718,11 +739,11 @@ module guatiao_c
       integer(c_int32_t) :: r
     end function
     function guatiao_registry_provider_available_i(reg, key, reason) bind(c) result(r)
-      import :: c_bool, c_ptr, gt_str
+      import :: c_int8_t, c_ptr, gt_str
       type(c_ptr), value :: reg
       type(gt_str), value :: key
       type(c_ptr), value :: reason
-      logical(c_bool) :: r
+      integer(c_int8_t) :: r
     end function
     function guatiao_registry_set_priority_i(reg, id, priority) bind(c) result(r)
       import :: c_int32_t, c_ptr, gt_str
@@ -859,6 +880,8 @@ module guatiao_c
   procedure(guatiao_registry_scan_dir_i), pointer :: gt_registry_scan_dir => null()
   procedure(guatiao_registry_scan_dir_rules_i), pointer :: gt_registry_scan_dir_rules => null()
   procedure(guatiao_registry_scan_path_i), pointer :: gt_registry_scan_path => null()
+  procedure(gt_scan_split), pointer :: gt_registry_scan_dir_rules_split => null()
+  procedure(gt_scan_split), pointer :: gt_registry_scan_path_split => null()
   procedure(guatiao_registry_libraries_i), pointer :: gt_registry_libraries => null()
   procedure(guatiao_registry_providers_i), pointer :: gt_registry_providers => null()
   procedure(guatiao_registry_provider_i), pointer :: gt_registry_provider => null()
@@ -883,7 +906,7 @@ contains
 
   !> Points every export of this header at library `h`; one it lacks
   !> stays null.
-  subroutine gt_resolve_core(h)
+  recursive subroutine gt_resolve_core(h)
     type(c_ptr), intent(in) :: h
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_alloc_default'), gt_alloc_default)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_value_free'), gt_value_free)
@@ -938,6 +961,8 @@ contains
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_scan_dir'), gt_registry_scan_dir)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_scan_dir_rules'), gt_registry_scan_dir_rules)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_scan_path'), gt_registry_scan_path)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_scan_dir_rules'), gt_registry_scan_dir_rules_split)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_scan_path'), gt_registry_scan_path_split)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_libraries'), gt_registry_libraries)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_providers'), gt_registry_providers)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_provider'), gt_registry_provider)

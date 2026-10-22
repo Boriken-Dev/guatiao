@@ -8,5 +8,9 @@ auto-executables = false
 auto-tests = false
 auto-examples = false
 
+# greeter_kinds.F90 chooses per compiler with the preprocessor.
+[preprocess]
+[preprocess.cpp]
+
 [dependencies]
 guatiao = { path = "../../../bindings/fortran" }

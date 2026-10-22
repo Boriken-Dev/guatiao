@@ -109,7 +109,7 @@ module guatiao_serde_c
 contains
 
   !> Points every export of this header at library `h`.
-  subroutine gt_resolve_serde(h)
+  recursive subroutine gt_resolve_serde(h)
     type(c_ptr), intent(in) :: h
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_json_parse_ex'), gt_json_parse_ex)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_json_emit'), gt_json_emit)

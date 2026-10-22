@@ -36,7 +36,7 @@ contains
   !> `how` holds the GUATIAO_BYTES_* / GUATIAO_READ_DATA_URIS flags. A
   !> document that does not parse is GUATIAO_ERR_BAD_VALUE, and `where`
   !> says where.
-  subroutine guatiao_parse(text, format, value, how, alloc, where, stat, errmsg)
+  recursive subroutine guatiao_parse(text, format, value, how, alloc, where, stat, errmsg)
     character(*), intent(in), target :: text
     integer, intent(in) :: format
     type(guatiao_value), intent(inout) :: value
@@ -92,7 +92,7 @@ contains
   !> `pretty` indents JSON (the other formats are already written for a
   !> reader). A TOML document is a table: anything else is
   !> GUATIAO_ERR_WRONG_KIND.
-  subroutine guatiao_emit(value, format, text, pretty, how, stat, errmsg)
+  recursive subroutine guatiao_emit(value, format, text, pretty, how, stat, errmsg)
     type(guatiao_value), intent(in) :: value
     integer, intent(in) :: format
     character(:), allocatable, intent(inout) :: text
@@ -141,7 +141,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine usable(format, st, msg)
+  recursive subroutine usable(format, st, msg)
     integer, intent(in) :: format
     integer, intent(out) :: st
     character(:), allocatable, intent(out) :: msg
@@ -161,7 +161,7 @@ contains
     end select
   end subroutine
 
-  function itoa(n) result(s)
+  recursive function itoa(n) result(s)
     integer, intent(in) :: n
     character(:), allocatable :: s
     character(16) :: buf
