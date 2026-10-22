@@ -1,0 +1,13 @@
+name = "fortran_greeter"
+version = "1.0.0"
+license = "MPL-2.0"
+description = "Greeters written in Fortran: a library any host calls"
+
+[build]
+auto-executables = false
+auto-examples = false
+auto-tests = true
+
+[dependencies]
+guatiao = { path = "../../bindings/fortran" }
+greeter_kind = { path = "../greeter_kind/fortran" }
