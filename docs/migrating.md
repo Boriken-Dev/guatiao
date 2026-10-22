@@ -955,8 +955,8 @@ own `use_library`.
 ### R
 
 ```r
-remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r-serde")
-remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r-intake")
+remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r/guatiao.serde")
+remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r/guatiao.intake")
 ```
 
 ```r

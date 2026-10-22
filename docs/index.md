@@ -38,7 +38,7 @@ core one, over the `guatiao_serde` and `guatiao_intake` libraries: PyPI
 `.../bindings/go/guatiao/serde` and `.../bindings/go/guatiao/intake`, the Julia packages
 `GuatiaoSerde` and `GuatiaoIntake` (`bindings/julia/GuatiaoSerde`,
 `bindings/julia/GuatiaoIntake`), the R packages `guatiao.serde` and
-`guatiao.intake` (`bindings/r-serde`, `bindings/r-intake`), and in MATLAB,
+`guatiao.intake` (`bindings/r/guatiao.serde`, `bindings/r/guatiao.intake`), and in MATLAB,
 Octave and Fortran the sub-packages `guatiao.serde` and `guatiao.intake` and
 the modules `guatiao_serde` and `guatiao_intake` of the one package. Each
 finds its library through `GUATIAO_SERDE_LIBRARY` or
@@ -89,7 +89,7 @@ repository (it compiles a small C glue, which needs libffi) and points it
 at the same library:
 
 ```bash
-Rscript -e 'remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r")'
+Rscript -e 'remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r/guatiao")'
 export GUATIAO_LIBRARY=/path/to/the/library
 ```
 

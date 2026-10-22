@@ -26,8 +26,8 @@ is built on `guatiao`'s C interface.
 
 ```r
 # install.packages("remotes")
-remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r")
-remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r-intake")
+remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r/guatiao")
+remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r/guatiao.intake")
 ```
 
 Installing compiles the package's C glue (Rtools on Windows). Say where
@@ -74,7 +74,7 @@ intake_flatten(schema, "auth", value)            # named character vector
 | `intake_at` | a path's place in a value |
 | `intake_resolve`, `intake_flat_keys`, `intake_flatten`, `intake_unflatten` | the flat key-to-text store |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r-intake/inst/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r/guatiao.intake/inst/AGENTS.md)
 is the full API reference and ships in the package. The C ABI is
 described by
 [`guatiao_intake.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-intake/include/guatiao_intake.h).
@@ -82,8 +82,8 @@ described by
 ## Development
 
 ```bash
-R CMD build bindings/r && R CMD INSTALL guatiao_*.tar.gz
-R CMD build bindings/r-intake
+R CMD build bindings/r/guatiao && R CMD INSTALL guatiao_*.tar.gz
+R CMD build bindings/r/guatiao.intake
 GUATIAO_LIBRARY=target/debug R CMD check guatiao.intake_*.tar.gz
 ```
 

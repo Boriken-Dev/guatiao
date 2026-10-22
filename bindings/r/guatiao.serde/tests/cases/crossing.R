@@ -43,7 +43,7 @@ case("the library is guatiao_serde's own, found through its own variable", with_
 case("the header copies are the committed headers", with_repo({
   for (h in c("guatiao/include/guatiao.h", "guatiao-serde/include/guatiao_serde.h")) {
     committed <- readBin(repo_file("crates", h), "raw", file.size(repo_file("crates", h)))
-    copy <- repo_file("bindings", "r-serde", "src", basename(h))
+    copy <- repo_file("bindings", "r", "guatiao.serde", "src", basename(h))
     expect_true(identical(committed, readBin(copy, "raw", file.size(copy))), paste(basename(h), "matches"))
   }
 }))

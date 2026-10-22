@@ -77,7 +77,7 @@ Bindings over the same C ABI, for a consumer that is not Rust:
 | Node.js, TypeScript | [`bindings/node/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node/guatiao/README.md) | `npm install guatiao` |
 | Go | [`bindings/go/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/go/guatiao/README.md) | `go get github.com/Boriken-Dev/guatiao/bindings/go/guatiao` |
 | Julia | [`bindings/julia/Guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia/Guatiao/README.md) | `Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia/Guatiao")` |
-| R | [`bindings/r/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r/README.md) | `remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r")` |
+| R | [`bindings/r/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r/guatiao/README.md) | `remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r/guatiao")` |
 | Fortran | [`bindings/fortran/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/fortran/README.md) | fpm: `guatiao = { git = "https://github.com/Boriken-Dev/guatiao", tag = "..." }`; CMake: `FetchContent` with `SOURCE_SUBDIR bindings/fortran` |
 | MATLAB, GNU Octave | [`bindings/matlab/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/matlab/README.md) | Octave: `pkg install` a release's `guatiao-<version>.tar.gz`; MATLAB: a release's `guatiao.mltbx`, then `guatiao.build()` |
 
@@ -91,7 +91,7 @@ core one, over the `guatiao_serde` and `guatiao_intake` libraries: PyPI
 `.../bindings/go/guatiao/serde` and `.../bindings/go/guatiao/intake`, the Julia packages
 `GuatiaoSerde` and `GuatiaoIntake` (`bindings/julia/GuatiaoSerde`,
 `bindings/julia/GuatiaoIntake`), the R packages `guatiao.serde` and
-`guatiao.intake` (`bindings/r-serde`, `bindings/r-intake`), and in MATLAB,
+`guatiao.intake` (`bindings/r/guatiao.serde`, `bindings/r/guatiao.intake`), and in MATLAB,
 Octave and Fortran the sub-packages `guatiao.serde` and `guatiao.intake` and
 the modules `guatiao_serde` and `guatiao_intake` of the one package. Each
 finds its library through `GUATIAO_SERDE_LIBRARY` or

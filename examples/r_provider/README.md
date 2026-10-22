@@ -28,7 +28,7 @@ it, and its providers from the `provider()` declarations, in order.
 From the repository root, after building the workspace:
 
 ```bash
-R CMD INSTALL bindings/r
+R CMD INSTALL bindings/r/guatiao
 R CMD INSTALL examples/greeter_kind/r/greeterkind
 R CMD INSTALL examples/r_provider/rgreeter
 ```

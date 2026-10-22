@@ -57,7 +57,7 @@ that carries it.
 
 ```r
 # install.packages("remotes")
-remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r")
+remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r/guatiao")
 ```
 
 Installing compiles the package's C glue, which needs R's compiler setup
@@ -207,7 +207,7 @@ time_parse("timestamp", "2026-10-21T19:15:00.5+05:30")    # <instant 2026-10-21T
 | `provider`, `guatiao_library`, `library_of`, `live_instances` | providers and libraries written in R |
 | `guatiao_error`, `statuses` | errors |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r/inst/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r/guatiao/inst/AGENTS.md)
 is the full API reference and ships in the package. The C ABI is
 described by
 [`guatiao.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao/include/guatiao.h).
@@ -215,7 +215,7 @@ described by
 ## Development
 
 ```bash
-R CMD build bindings/r
+R CMD build bindings/r/guatiao
 GUATIAO_LIBRARY=target/debug GUATIAO_REPO=. R CMD check guatiao_*.tar.gz
 ```
 

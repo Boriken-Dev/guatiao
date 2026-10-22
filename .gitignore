@@ -54,11 +54,11 @@ Manifest.toml
 Manifest-v*.toml
 
 # R: what installing or checking the package from its source writes
-/bindings/r/src/Makevars
-/bindings/r/src/*.o
-/bindings/r/src/*.so
-/bindings/r/src/*.dll
-/bindings/r/*.tar.gz
+/bindings/r/guatiao/src/Makevars
+/bindings/r/*/src/*.o
+/bindings/r/*/src/*.so
+/bindings/r/*/src/*.dll
+/bindings/r/*/*.tar.gz
 *.Rcheck/
 .Rhistory
 
