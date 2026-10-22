@@ -23,7 +23,7 @@ public surface); this file is about the repository.
 | `examples/python_host/` | a host program in Python: scans for greeters in any language, optionally adds `guatiao-py`, calls every slot; `bindings/python/tests/test_examples.py` runs it |
 | `examples/python_provider/` | two libraries written in Python, each a module and a `*.guatiao-py.toml` manifest; commands in its `README.md` |
 | `examples/greeter_caller/` | a cdylib whose C functions call every slot of a greeter, or of a `wide` provider, through the kind's Rust proxy, for a host in another language to have its providers called from Rust |
-| `examples/package.json` | the Node examples' one dependency, on `bindings/node`: `npm ci` here, after `npm run build` there |
+| `examples/package.json` | the Node examples' one dependency, on `bindings/node`: `npm ci` here, after `npm run build` there (its dependencies live in `bindings/node_modules`) |
 | `examples/node_host/` | a host program in TypeScript: scans for greeters in any language, registers Node libraries, optionally adds `guatiao-py`, calls every slot; `bindings/node/test/examples.test.ts` runs it |
 | `examples/node_provider/` | `node_greeter/`, a library written in TypeScript: a package whose module is the library |
 | `examples/go.mod` | the Go examples' module, using `bindings/go` through a `replace`; `examples/internal/` holds what its tests drive in C |
@@ -41,7 +41,9 @@ public surface); this file is about the repository.
 | `bindings/python-serde/`, `bindings/python-intake/` | the packages `guatiao-serde` and `guatiao-intake` (`import guatiao_serde`, `guatiao_intake`), each over its own library, with its own `AGENTS.md` |
 | `bindings/dart/` | `dart:ffi` bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`; `lib/src/bindings.g.dart` (from `guatiao.h`) and `lib/ffi_symbols.yaml` are ffigen output and never hand-edited; `lib/ffi.dart` is what a package over another guatiao library builds on |
 | `bindings/dart-serde/`, `bindings/dart-intake/` | the pub.dev packages `guatiao_serde` and `guatiao_intake`, each over its own library and its own ffigen output (reusing the core's types through its symbol file); `pubspec_overrides.yaml` takes the core from the checkout and is not published |
-| `bindings/node/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads |
+| `bindings/node/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads; `src/ffi.ts` (`guatiao/ffi`) is what a package over another guatiao library builds on |
+| `bindings/node-serde/`, `bindings/node-intake/` | the npm packages `guatiao-serde` and `guatiao-intake`, each over its own library and the core's koffi; their tests run against the core's sources |
+| `bindings/package.json` | the npm workspace of the three Node packages, with the one `package-lock.json`: `npm ci` there installs all three and links the core into the others |
 | `bindings/go/` | Go bindings over the C ABI through cgo, the module `github.com/Boriken-Dev/guatiao/bindings/go` with its own `AGENTS.md`; `internal/native/` holds every line of C and copies of the three headers (a test compares them with the committed ones); `cmd/guatiao-kind` writes a kind package's glue |
 | `bindings/julia/` | Julia bindings over the C ABI through `ccall`, the package `Guatiao` with its own `AGENTS.md`; `src/abi.jl` mirrors the header's structs (a test compares each layout with the header's text); `test/fixtures/` holds the C its tests build |
 | `bindings/r/` | R bindings over the C ABI, the source package `guatiao`: `src/` holds copies of the three headers (a test compares them with the committed ones) and the C glue, compiled when the package installs, which opens the library at run time and calls kind slots through libffi; its API header is `inst/AGENTS.md`; `tests/fixtures/` holds the C its tests build |
@@ -146,12 +148,14 @@ Node 22 or later (the examples run their TypeScript as it is, which
 needs 22.18):
 
 ```bash
-(cd bindings/node && npm ci && npm run build)
-(cd examples && npm ci)                      # the example host's test
-cd bindings/node
-npm run typecheck                             # tsc --strict: sources, tests, examples
-GUATIAO_LIBRARY=../../target/debug npm test   # vitest
-npm pack --dry-run                            # what ships
+(cd bindings && npm ci)                       # the workspace: the three packages
+(cd bindings/node && npm run build)
+(cd examples && npm ci)                       # the example host's test
+for p in node node-serde node-intake; do      # each suite also runs alone
+  (cd bindings/$p && npm run typecheck && GUATIAO_LIBRARY=../../target/debug npm test)
+done
+(cd bindings/node-serde && npm run build) && (cd bindings/node-intake && npm run build)
+(cd bindings/node && npm pack --dry-run)      # what ships; the same in the other two
 ```
 
 Go bindings, after `cargo build --workspace --all-features`, with Go

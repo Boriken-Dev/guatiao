@@ -199,7 +199,7 @@ try {
 
 ```ts
 import { Registry } from 'guatiao';
-import * as intake from 'guatiao/intake';
+import * as intake from 'guatiao-intake';   // npm install guatiao-intake
 
 using reg = new Registry('form-host', '1.0');
 reg.scanDir(plugins, { rules: 'kind=greeter' });

@@ -525,6 +525,11 @@ write now.
     `package:guatiao_intake/guatiao_intake.dart`. `package:guatiao/ffi.dart`
     is new, and the ffigen symbol file is
     `package:guatiao/ffi_symbols.yaml` (it was `package:guatiao/src/symbols.yaml`).
+  - Node: `npm install guatiao-serde guatiao-intake`; `guatiao/serde` is
+    `guatiao-serde` (`ParseError` with it) and `guatiao/intake` is
+    `guatiao-intake`, each with its own `useLibrary`. `guatiao/ffi` is
+    new: `openSurface`, memory, `adopt`, `borrow`, `nodeOf`, `withNodes`
+    and the one koffi, for a package over another guatiao library.
 - **Breaking: `clone()` copies into this binary's allocator.** `clone()`
   (and `to_owned()`) on `Value`, `Map`, `List`, `Text`, `Buffer` and
   `Number` builds the copy through `Alloc::rust()`, whatever allocator the
