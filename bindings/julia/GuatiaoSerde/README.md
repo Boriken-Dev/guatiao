@@ -26,8 +26,8 @@ Julia over `ccall`, calling the `guatiao_serde` library, and built on the
 
 ```julia
 using Pkg
-Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia")
-Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia-serde")
+Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia/Guatiao")
+Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia/GuatiaoSerde")
 ```
 
 The package drives the `guatiao_serde` shared library. Say where it is:
@@ -79,7 +79,7 @@ end
 | `BYTES_DATA_URI`, `BYTES_BASE64`, `BYTES_ARRAY`, `BYTES_REFUSE`, `READ_DATA_URIS`, `PRETTY` | the `how` flags |
 | `GuatiaoSerde.use_library(path)` | naming `guatiao_serde` |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia-serde/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia/GuatiaoSerde/AGENTS.md)
 is the full API reference and ships in the package. The C ABI is
 described by
 [`guatiao_serde.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-serde/include/guatiao_serde.h).
@@ -88,7 +88,7 @@ described by
 
 ```bash
 julia -e 'using Pkg; Pkg.activate(temp = true);
-          Pkg.develop([PackageSpec(path = "bindings/julia"), PackageSpec(path = "bindings/julia-serde")]);
+          Pkg.develop([PackageSpec(path = "bindings/julia/Guatiao"), PackageSpec(path = "bindings/julia/GuatiaoSerde")]);
           Pkg.test("GuatiaoSerde")'
 ```
 

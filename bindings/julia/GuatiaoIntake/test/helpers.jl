@@ -8,7 +8,7 @@
 
 using Guatiao.FFI: GAlloc, binding_alloc
 
-const REPO = normpath(joinpath(@__DIR__, "..", "..", ".."))
+const REPO = normpath(joinpath(@__DIR__, "..", "..", "..", ".."))
 
 const COUNTS = Threads.Atomic{Int}[]
 

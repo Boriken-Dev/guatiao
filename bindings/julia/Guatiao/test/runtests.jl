@@ -5,7 +5,7 @@
 # The suite drives a real build: GUATIAO_LIBRARY names it, and without it
 # the repository's own `target/debug` is used.
 
-let repo = normpath(joinpath(@__DIR__, "..", "..", ".."))
+let repo = normpath(joinpath(@__DIR__, "..", "..", "..", ".."))
     haskey(ENV, "GUATIAO_LIBRARY") || (ENV["GUATIAO_LIBRARY"] = joinpath(repo, "target", "debug"))
 end
 

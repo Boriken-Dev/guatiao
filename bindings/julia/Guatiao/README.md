@@ -57,7 +57,7 @@ application that carries it.
 
 ```julia
 using Pkg
-Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia")
+Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia/Guatiao")
 ```
 
 The package drives a shared library that exports the guatiao ABI. Say
@@ -207,7 +207,7 @@ Guatiao.fromtext(Timestamp, "2026-10-21T19:15:00.5+05:30")   # Timestamp("2026-1
 | `@provider`, `Guatiao.Provider`, `Guatiao.Library`, `Guatiao.library_of`, `Guatiao.register_library` | providers and libraries written in Julia |
 | `GuatiaoError`, `Unparsed`, `LibraryNotFound`, `MissingSymbol`, `FloorMismatch` | errors |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia/Guatiao/AGENTS.md)
 is the full API reference and ships in the package. The C ABI is
 described by
 [`guatiao.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao/include/guatiao.h).
@@ -215,7 +215,7 @@ described by
 ## Development
 
 ```bash
-cd bindings/julia
+cd bindings/julia/Guatiao
 julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 

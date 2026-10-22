@@ -36,8 +36,8 @@ core one, over the `guatiao_serde` and `guatiao_intake` libraries: PyPI
 `guatiao-serde` and `guatiao-intake`, pub.dev `guatiao_serde` and
 `guatiao_intake`, npm `guatiao-serde` and `guatiao-intake`, the Go packages
 `.../bindings/go/guatiao/serde` and `.../bindings/go/guatiao/intake`, the Julia packages
-`GuatiaoSerde` and `GuatiaoIntake` (`bindings/julia-serde`,
-`bindings/julia-intake`), the R packages `guatiao.serde` and
+`GuatiaoSerde` and `GuatiaoIntake` (`bindings/julia/GuatiaoSerde`,
+`bindings/julia/GuatiaoIntake`), the R packages `guatiao.serde` and
 `guatiao.intake` (`bindings/r-serde`, `bindings/r-intake`), and in MATLAB,
 Octave and Fortran the sub-packages `guatiao.serde` and `guatiao.intake` and
 the modules `guatiao_serde` and `guatiao_intake` of the one package. Each
@@ -80,7 +80,7 @@ A Julia consumer adds the package from its directory of the repository
 and points it at the same library:
 
 ```bash
-julia -e 'using Pkg; Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia")'
+julia -e 'using Pkg; Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia/Guatiao")'
 export GUATIAO_LIBRARY=/path/to/the/library
 ```
 

@@ -27,7 +27,7 @@ export GUATIAO_LIBRARY=target/debug
 julia examples/julia_host/host.jl target/debug
 ```
 
-The script finds the binding (`bindings/julia`) and the example packages
+The script finds the binding (`bindings/julia/Guatiao`) and the example packages
 in this checkout by itself. `target/debug` holds the Rust greeters
 (`derived_greeter`, written with the derive macros) and `hello_library`,
 whose table is not this kind's, which the host reports and passes over.
@@ -60,7 +60,7 @@ julia examples/julia_host/host.jl target/debug \
   --python-path bindings/python/guatiao/src --python-path examples/greeter_kind/python
 ```
 
-The binding's tests (`bindings/julia`, `Pkg.test()`) run this host, call
+The binding's tests (`bindings/julia/Guatiao`, `Pkg.test()`) run this host, call
 every greeter (Rust, C, Python, Go and Julia) through every slot, have the
 Rust caller in `greeter_caller` call each of them through the kind's Rust
 proxy, and call the Julia greeter from threads Julia did not start.
