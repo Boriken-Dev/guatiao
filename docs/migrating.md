@@ -961,6 +961,19 @@ library; the others are named with `use_library(path, library =
 "guatiao_serde")` and `"guatiao_intake"`, or found through
 `GUATIAO_SERDE_LIBRARY`, `GUATIAO_INTAKE_LIBRARY` or `GUATIAO_LIBRARY`.
 
+### MATLAB and Octave
+
+Nothing to install: `guatiao.serde` and `guatiao.intake` stay in the
+package. A session that named its library with `guatiao.use_library`
+and relied on `guatiao_serde` and `guatiao_intake` being found beside it
+names them too, or sets `GUATIAO_LIBRARY` to their folder:
+
+```matlab
+guatiao.use_library(folder);
+guatiao.serde.use_library(folder);
+guatiao.intake.use_library(folder);
+```
+
 ## Python and Dart
 
 ### `create` checks the configuration first
