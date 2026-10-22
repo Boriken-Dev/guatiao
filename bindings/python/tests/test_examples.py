@@ -79,3 +79,22 @@ def test_the_python_host_serves_python_greeters_through_the_bridge() -> None:
     assert "py_greeter_hello (py_greeter 1.0.0)" in out
     assert "conversation: 2 turns" in out
     assert out.rstrip().endswith("python objects a library can still reach: 0")
+
+
+def test_the_python_host_calls_greeters_written_in_fortran() -> None:
+    fortran = os.environ.get("GUATIAO_FORTRAN_LIBRARY")
+    if not fortran:
+        pytest.skip("GUATIAO_FORTRAN_LIBRARY names no directory holding the Fortran greeters")
+    host = native.REPO / "examples" / "python_host" / "host.py"
+    out = _run(host, fortran)
+    assert "fortran_greeter_hello (fortran_greeter 1.0.0)" in out
+    assert "greet: {'greeting': 'hello, ana'}" in out
+    assert "shout: HELLO, ANA" in out
+    assert "check: True, lent map now {'name': 'bo', 'greeting': 'hello, bo'}" in out
+    assert "greet_from: {'greeting': 'hello, cy'}" in out
+    assert "greet_into: the lent listener heard ['hello, dee']" in out
+    assert "conversation: 2 turns, transcript b'hi\\nagain', listener heard ['hi', 'again']" in out
+    assert "greet: {'greeting': 'hey ANA'}" in out
+    # A Fortran library is never unmapped: retired instead.
+    assert "retired fortran_greeter, still mapped" in out
+    assert out.rstrip().endswith("python objects a library can still reach: 0")
