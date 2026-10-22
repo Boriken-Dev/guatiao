@@ -20,12 +20,12 @@
   message(line)
 }
 
-check <- function(ok, what = deparse(substitute(ok))[1L]) {
+expect_true <- function(ok, what = deparse(substitute(ok))[1L]) {
   if (isTRUE(ok)) .h$passed <- .h$passed + 1L else .fail(what)
   invisible(ok)
 }
 
-check_equal <- function(got, want, what = deparse(substitute(got))[1L]) {
+expect_equal <- function(got, want, what = deparse(substitute(got))[1L]) {
   ok <- isTRUE(all.equal(got, want, check.attributes = TRUE))
   if (ok) {
     .h$passed <- .h$passed + 1L
@@ -37,7 +37,7 @@ check_equal <- function(got, want, what = deparse(substitute(got))[1L]) {
 }
 
 # Passes when `expr` signals a condition of class `class`; answers it.
-check_error <- function(expr, class = "error", what = deparse(substitute(expr))[1L]) {
+expect_error <- function(expr, class = "error", what = deparse(substitute(expr))[1L]) {
   got <- tryCatch({
     expr
     NULL

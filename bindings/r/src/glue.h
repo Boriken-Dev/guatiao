@@ -39,6 +39,9 @@ void gt_raise_err(guatiao_status status, guatiao_provider_error *err, const char
 #endif
     ;
 
+/* Frees the words of a guatiao_provider_error, if it holds any. */
+void gt_raise_err_free(guatiao_provider_error *err);
+
 /* Opens `lib` through the R side (use_library, GUATIAO_LIBRARY, the
  * platform's search) when it is not open yet. */
 void gt_need(int lib);

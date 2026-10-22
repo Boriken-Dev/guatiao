@@ -266,3 +266,13 @@ const guatiao_alloc *gt_alloc_arg(SEXP a) {
   if (TYPEOF(a) != EXTPTRSXP || !R_ExternalPtrAddr(a)) gt_raise(GUATIAO_ERR_WRONG_KIND, "alloc is an allocator");
   return (const guatiao_alloc *)R_ExternalPtrAddr(a);
 }
+
+void gt_raise_err_free(guatiao_provider_error *err) {
+  if (!err || !err->message.cap) return;
+  guatiao_value m;
+  memset(&m, 0, sizeof m);
+  m.tag = GUATIAO_STRING;
+  m.payload.text = err->message;
+  gt_free(&m);
+  memset(&err->message, 0, sizeof err->message);
+}
