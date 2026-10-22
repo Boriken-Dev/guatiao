@@ -297,8 +297,8 @@ export class Registry implements Disposable {
 
   /**
    * What the provider filed under `key` declared beyond its schema -- its
-   * legal notices, or its form under `providerFormKey` from
-   * `guatiao/intake` -- as a `Value` the caller closes, or `undefined` when
+   * legal notices, or its form under `'form'` (`providerFormKey` of
+   * `guatiao-intake`) -- as a `Value` the caller closes, or `undefined` when
    * it declares nothing. A copy, unlike `providerConfig`: it outlives the
    * library. `NotFound` when nothing answers to `key`.
    */

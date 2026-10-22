@@ -24,7 +24,6 @@ export {
   MissingSymbol,
   NotFound,
   NullArgument,
-  ParseError,
   Unparsed,
   Unsupported,
   WrongKind,

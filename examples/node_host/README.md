@@ -23,7 +23,7 @@ the examples' one dependency on it:
 
 ```bash
 cargo build --workspace --all-features
-(cd bindings/node && npm ci && npm run build)
+(cd bindings && npm ci) && (cd bindings/node && npm run build)
 (cd examples && npm ci)
 export GUATIAO_LIBRARY=target/debug
 node examples/node_host/host.ts target/debug \

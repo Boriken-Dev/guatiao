@@ -6,8 +6,10 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { BadValue, ParseError, Value, WrongKind } from '../src/index.js';
-import * as serde from '../src/serde.js';
+import { BadValue, Value, WrongKind } from 'guatiao';
+
+import * as serde from '../src/index.js';
+import { ParseError } from '../src/index.js';
 
 describe('serde', () => {
   it('round-trips JSON with key order and integers kept', () => {

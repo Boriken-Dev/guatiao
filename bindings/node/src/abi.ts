@@ -43,9 +43,6 @@ export type Status = (typeof Status)[keyof typeof Status];
 /** `GUATIAO_ABI_VERSION`: the envelope version this binding speaks. */
 export const ABI_VERSION = 1;
 
-/** `GUATIAO_FORMAT_*`: which format a parse error names. */
-export const FORMAT_NAMES: Readonly<Record<number, string>> = { 0: 'json', 1: 'toml', 2: 'yaml' };
-
 /** The width of a pointer and of `size_t`: this binding is 64-bit only. */
 export const WORD = 8;
 
@@ -62,7 +59,6 @@ export const SIZE = {
   entry: 72,
   alloc: 40,
   providerError: 40,
-  parseError: 56,
   textError: 48,
   date: 8,
   time: 8,
@@ -97,9 +93,6 @@ export const ALLOC = { structSize: 0, ctx: 8, alloc: 16, free: 24, release: 32 }
 
 /** `guatiao_provider_error`: a status, then an owned message. */
 export const PROVIDER_ERROR = { status: 0, message: 8 } as const;
-
-/** `guatiao_parse_error`. */
-export const PARSE_ERROR = { format: 0, line: 4, column: 8, message: 16 } as const;
 
 /** `guatiao_text_error`: the byte offset, then an owned string value. */
 export const TEXT_ERROR = { at: 0, expected: 8 } as const;

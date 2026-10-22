@@ -787,8 +787,10 @@ export class Value extends Ref implements Disposable {
 }
 
 /**
- * A `Value` taking over the root node at `root` (from `alloc`ed memory,
- * which it now frees). @internal
+ * A `Value` taking over the root node at `root`, which a call wrote into
+ * memory from `alloc()` (this package's): the `Value` frees the tree and
+ * that memory. `alloc` is the allocator the tree was built in, kept to
+ * grow it with; the core library's default when not given.
  */
 export function adopt(root: bigint, alloc?: bigint): Value {
   const options: Adopting = { [ADOPT]: root };
@@ -834,7 +836,28 @@ export class Borrowed implements Owner {
   }
 }
 
-/** Runs `body` with each argument as a node: a `Ref` as it is, plain data built for the call. @internal */
+/**
+ * The node `ref` names now, to pass to a call while nothing changes its
+ * tree. Throws once its value is closed, and a `RangeError` when its path
+ * names nothing.
+ */
+export function nodeOf(ref: Ref): bigint {
+  return ref.requireNode();
+}
+
+/**
+ * A read-only `Ref` onto the node `find` answers, asked again on every
+ * access, which throws once `source`'s value is closed and refuses every
+ * write. `find` answers `null` (or `0n`) once the node is gone.
+ */
+export function borrow(source: Ref, find: () => bigint | null): Ref {
+  return new Ref(new Borrowed(find, source.owner), []);
+}
+
+/**
+ * Runs `body` with each item as a node: a `Ref` as it is, plain data built
+ * for the call (in the core library's allocator) and freed after it.
+ */
 export function withNodes<T>(items: readonly unknown[], body: (nodes: bigint[]) => T): T {
   const built: Value[] = [];
   try {

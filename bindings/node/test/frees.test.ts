@@ -7,8 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ParseError, Value } from '../src/index.js';
-import * as serde from '../src/serde.js';
+import { Value } from '../src/index.js';
 import { Counting } from './helpers.js';
 
 class Unconvertible {}
@@ -80,16 +79,10 @@ describe('frees', () => {
     expect(counting.live).toBe(0);
   });
 
-  it('leaves nothing after a document that does not parse', () => {
-    expect(() => serde.loads('{"a": [1,, 2]}', { alloc: counting.alloc })).toThrow(ParseError);
-    expect(counting.live).toBe(0);
-  });
-
-  it('leaves nothing after a clone and a parse that succeed', () => {
+  it('leaves nothing after a clone that succeeds', () => {
     const v = new Value({ a: [1, 'two'] }, alloc());
     v.clone().close();
     v.close();
-    serde.loads('{"a": [1, "two"]}', { alloc: counting.alloc }).close();
     expect(counting.live).toBe(0);
   });
 });

@@ -1,0 +1,11 @@
+{
+  "name": "guatiao-node-packages",
+  "description": "The Node packages, developed together: guatiao, guatiao-serde and guatiao-intake",
+  "private": true,
+  "license": "MPL-2.0",
+  "workspaces": [
+    "node",
+    "node-serde",
+    "node-intake"
+  ]
+}

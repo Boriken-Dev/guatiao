@@ -20,14 +20,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./serde": {
-      "types": "./dist/serde.d.ts",
-      "import": "./dist/serde.js"
-    },
-    "./intake": {
-      "types": "./dist/intake.d.ts",
-      "import": "./dist/intake.js"
-    },
     "./time": {
       "types": "./dist/time.d.ts",
       "import": "./dist/time.js"
@@ -39,6 +31,10 @@
     "./provide": {
       "types": "./dist/provide.d.ts",
       "import": "./dist/provide.js"
+    },
+    "./ffi": {
+      "types": "./dist/ffi.d.ts",
+      "import": "./dist/ffi.js"
     }
   },
   "files": [
