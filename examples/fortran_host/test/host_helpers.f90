@@ -115,8 +115,10 @@ contains
     if (failed > 0) error stop 1
   end subroutine
 
+  !> macOS keeps its system libraries in the dyld cache rather than as
+  !> files; this file is on every release.
   logical function on_macos()
-    inquire (file='/usr/lib/libSystem.B.dylib', exist=on_macos)
+    inquire (file='/System/Library/CoreServices/SystemVersion.plist', exist=on_macos)
   end function
 
   !> The file the library `stem` has in `dir` on this platform.
