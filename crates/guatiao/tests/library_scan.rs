@@ -209,7 +209,7 @@ fn a_library_declares_its_kinds_as_data() {
     assert!(greeter.entry);
     assert_eq!(
         greeter.declared.kinds().collect::<Vec<_>>(),
-        ["greeter", "counter"]
+        ["greeter", "counter", "wide"]
     );
 
     // A real shared library that is not one of ours: no entry, nothing

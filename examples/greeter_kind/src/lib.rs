@@ -2,15 +2,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Two provider kinds and two object kinds, declared as traits. This is
+//! Three provider kinds and two object kinds, declared as traits. This is
 //! the whole crate: the host and every library that offers or consumes a
 //! greeter compile against it. The tables, the shims and the proxies are
 //! `#[guatiao::kind]`'s.
 //!
-//! A **provider** kind (`Greeter`, `Counter`) is shared and offered by a
-//! registry. An **object** kind (`Conversation`, `Listener`) is a handle
-//! one caller owns: a provider hands a `Conversation` back, the host
-//! hands a `Listener` in, and each is destroyed by whoever holds it last.
+//! A **provider** kind (`Greeter`, `Counter`, `Wide`) is shared and
+//! offered by a registry. An **object** kind (`Conversation`, `Listener`)
+//! is a handle one caller owns: a provider hands a `Conversation` back,
+//! the host hands a `Listener` in, and each is destroyed by whoever holds
+//! it last.
 extern crate alloc;
 
 use guatiao::Map;
@@ -111,4 +112,15 @@ pub trait Conversation: Send {
 pub trait Counter: Send + Sync {
     /// The count so far, after this call.
     fn count(&self) -> i64;
+}
+
+/// Answers the 64-bit integer it is given, unchanged: what a host in any
+/// language crosses its 64-bit numbers with, both ways and at their
+/// limits.
+#[guatiao::kind]
+pub trait Wide: Send + Sync {
+    /// `x`, as it arrived.
+    fn echo_i64(&self, x: i64) -> Result<i64, ProviderError>;
+    /// `x`, as it arrived.
+    fn echo_u64(&self, x: u64) -> Result<u64, ProviderError>;
 }

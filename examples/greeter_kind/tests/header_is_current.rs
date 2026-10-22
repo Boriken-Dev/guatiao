@@ -10,7 +10,7 @@
 
 use std::path::PathBuf;
 
-use greeter_kind::{ConversationVtable, CounterVtable, GreeterVtable, ListenerVtable};
+use greeter_kind::{ConversationVtable, CounterVtable, GreeterVtable, ListenerVtable, WideVtable};
 
 fn committed() -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("include/greeter_kind.h");
@@ -44,6 +44,7 @@ fn the_header_carries_every_table_and_its_hash() {
         ("counter_vtable", CounterVtable::FLOOR_HASH),
         ("conversation_vtable", ConversationVtable::FLOOR_HASH),
         ("listener_vtable", ListenerVtable::FLOOR_HASH),
+        ("wide_vtable", WideVtable::FLOOR_HASH),
     ] {
         assert!(
             header.contains(&format!("typedef struct {table} {{")),

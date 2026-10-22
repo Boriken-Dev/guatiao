@@ -136,4 +136,20 @@ typedef struct listener_vtable {
  */
 #define listener_vtable_FLOOR_HASH 1867921573
 
+/*
+ The kind's function table: a header, then one slot per method,
+ in declaration order.
+ */
+typedef struct wide_vtable {
+  guatiao_kind_header header;
+  guatiao_status (*echo_i64)(void *ctx, int64_t x, int64_t *out, guatiao_provider_error *err);
+  guatiao_status (*echo_u64)(void *ctx, uint64_t x, uint64_t *out, guatiao_provider_error *err);
+} wide_vtable;
+/*
+ FNV-1a over the shape and the required signatures, as a
+ literal, so a C header generator can render it: what a C
+ implementation writes into the table's header.
+ */
+#define wide_vtable_FLOOR_HASH 3673689684
+
 #endif  /* GREETER_KIND_H */
