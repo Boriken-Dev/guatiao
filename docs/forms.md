@@ -159,7 +159,7 @@ guatiao_value_free(&meta);
 ### Python
 
 ```python
-from guatiao import intake
+import guatiao_intake as intake           # pip install guatiao-intake
 from guatiao.registry import Registry
 from guatiao.value import Value
 

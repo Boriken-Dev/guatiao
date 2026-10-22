@@ -37,7 +37,8 @@ public surface); this file is about the repository.
 | `examples/matlab_provider/` | `mlgreeter/`, a library written in M (the folder is the library, named by its `DESCRIPTION`) |
 | `examples/fortran_host/` | a host program in Fortran (an fpm package): scans for greeters in any language, registers the Fortran library, optionally adds `guatiao-py`, calls every slot; its test calls every greeter both ways |
 | `examples/fortran_greeter/` | a library written in Fortran (an fpm package named and versioned as its source states, which its test checks); its `CMakeLists.txt` builds it as a library file a scan finds |
-| `bindings/python/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md` |
+| `bindings/python/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md`; `guatiao.ffi` is what a package over another guatiao library builds on |
+| `bindings/python-serde/`, `bindings/python-intake/` | the packages `guatiao-serde` and `guatiao-intake` (`import guatiao_serde`, `guatiao_intake`), each over its own library, with its own `AGENTS.md` |
 | `bindings/dart/` | `dart:ffi` bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`; `lib/src/bindings.g.dart` is ffigen output and never hand-edited |
 | `bindings/node/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads |
 | `bindings/go/` | Go bindings over the C ABI through cgo, the module `github.com/Boriken-Dev/guatiao/bindings/go` with its own `AGENTS.md`; `internal/native/` holds every line of C and copies of the three headers (a test compares them with the committed ones); `cmd/guatiao-kind` writes a kind package's glue |
@@ -124,12 +125,18 @@ GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-intake --features c-header
 GUATIAO_WRITE_HEADER=1 cargo build -p greeter_kind --features c-header   # the kind tables, via macro expansion
 ```
 
-Python bindings, after `cargo build --workspace --all-features`:
+Python bindings, after `cargo build --workspace --all-features`, with the
+three packages installed (`pip install -e "bindings/python[dev]" -e
+bindings/python-serde -e bindings/python-intake`); each suite also passes
+alone:
 
 ```bash
-GUATIAO_LIBRARY=target/debug dotagents py -- -m pytest bindings/python/tests -rs
-MYPYPATH=bindings/python/src:examples/greeter_kind/python dotagents py -- -m mypy --strict \
-  bindings/python/src/guatiao examples/greeter_kind/python examples/python_host \
+GUATIAO_LIBRARY=target/debug dotagents py -- -m pytest bindings/python/tests \
+  bindings/python-serde/tests bindings/python-intake/tests -rs
+MYPYPATH=bindings/python/src:bindings/python-serde/src:bindings/python-intake/src:examples/greeter_kind/python \
+  dotagents py -- -m mypy --strict bindings/python/src/guatiao \
+  bindings/python-serde/src/guatiao_serde bindings/python-intake/src/guatiao_intake \
+  examples/greeter_kind/python examples/python_host \
   examples/python_provider/py_greeter examples/python_provider/py_tally
 ```
 
