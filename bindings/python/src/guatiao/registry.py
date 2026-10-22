@@ -310,6 +310,26 @@ class Registry:
             return None
         return Ref(_Borrowed(ptr.contents), ())
 
+    def provider_meta(self, key: str) -> "Value | None":
+        """What the provider filed under `key` declared beyond its schema --
+        its legal notices, or its form under `intake.PROVIDER_FORM_KEY` --
+        as a `Value` the caller owns and closes, or `None` when it declares
+        nothing. A copy, unlike `provider_config`: it outlives the library.
+        Raises `NotFound` when nothing answers to `key`."""
+        self._check_open()
+        view, _buf = _make_str(key.encode("utf-8"))
+        raw = _abi.Value()
+        check(
+            _lib.core().guatiao_registry_provider_meta(
+                self._handle, view, ctypes.byref(self._alloc), ctypes.byref(raw)
+            )
+        )
+        value = Value(_raw=raw, alloc=self._alloc)
+        if value.is_absent():
+            value.close()
+            return None
+        return value
+
     def create(self, key: str, config: Any) -> Instance:
         """Builds an instance of the provider filed under `key` from
         `config` (a `Value`, or anything `Value.from_python` accepts)."""
