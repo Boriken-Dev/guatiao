@@ -106,7 +106,7 @@ GUATIAO_LIBRARY=target/debug cargo test --manifest-path crates/guatiao-py/Cargo.
 
 The crate is a workspace of its own, so no other build in the repository
 needs a Python to link against. Its tests add the bridge from a Rust host
-and a C host; the Python suite (`bindings/python/tests/test_bridge.py`)
+and a C host; the Python suite (`bindings/python/guatiao/tests/test_bridge.py`)
 adds it from Python and edits a library under a refresh.
 
 ## License

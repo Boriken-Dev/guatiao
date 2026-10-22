@@ -77,7 +77,7 @@ contains
     if (.not. exists) then
       call skip('no guatiao-py build: set GUATIAO_PY_BRIDGE')
     else
-      call guatiao_parse('{"dirs": ["../python_provider"], "paths": ["../../bindings/python/src", ' // &
+      call guatiao_parse('{"dirs": ["../python_provider"], "paths": ["../../bindings/python/guatiao/src", ' // &
                          '"../greeter_kind/python"]}', GUATIAO_FORMAT_JSON, config)
       call host%add_source_file(bridge, config, st, msg)
       if (st == GUATIAO_OK) then

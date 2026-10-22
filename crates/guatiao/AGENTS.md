@@ -2038,7 +2038,7 @@ guatiao_registry_provider_meta(reg, key, &alloc, &answer);      // a copy; ABSEN
 guatiao_registry_free(reg);
 ```
 
-`bindings/python/` wraps the same calls over ctypes (its own `AGENTS.md`
+`bindings/python/guatiao/` wraps the same calls over ctypes (its own `AGENTS.md`
 is the API reference):
 
 ```python

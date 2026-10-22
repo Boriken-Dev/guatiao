@@ -60,7 +60,7 @@ the bridge, where its manifests are, and what they import:
 Rscript examples/r_host/host.R target/debug \
   --python-source crates/guatiao-py/target/debug/libguatiao_py.so \
   --python-dir examples/python_provider \
-  --python-path bindings/python/src --python-path examples/greeter_kind/python
+  --python-path bindings/python/guatiao/src --python-path examples/greeter_kind/python
 ```
 
 The binding's tests (`bindings/r`, `R CMD check`) run this host, call

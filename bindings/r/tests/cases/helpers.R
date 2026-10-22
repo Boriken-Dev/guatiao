@@ -145,7 +145,7 @@ bridge <- function() {
 }
 
 bridge_config <- function() list(dirs = list(repo_file("examples", "python_provider")),
-  paths = list(repo_file("bindings", "python", "src"), repo_file("examples", "greeter_kind", "python")))
+  paths = list(repo_file("bindings", "python", "guatiao", "src"), repo_file("examples", "greeter_kind", "python")))
 
 # The test fixtures in C, built once.
 .fixtures <- new.env()

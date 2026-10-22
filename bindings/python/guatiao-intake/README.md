@@ -89,15 +89,15 @@ with registry.provider_meta("acme_dialer") as meta:   # a provider's form
 | `PROVIDER_FORM_KEY` | where a provider's `meta` carries its form |
 | `use_library(path)`, `library()` | naming and loading `guatiao_intake` |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python-intake/src/guatiao_intake/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/guatiao-intake/src/guatiao_intake/AGENTS.md)
 is the full API reference and ships inside the wheel. The C ABI is
 described by [`guatiao_intake.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-intake/include/guatiao_intake.h).
 
 ## Development
 
 ```bash
-pip install -e "bindings/python[dev]" -e "bindings/python-intake[dev]"   # from the repository root
-pytest bindings/python-intake/tests -rs
+pip install -e "bindings/python/guatiao[dev]" -e "bindings/python/guatiao-intake[dev]"   # from the repository root
+pytest bindings/python/guatiao-intake/tests -rs
 ```
 
 `conftest.py` points `GUATIAO_LIBRARY` at the repository's build output

@@ -265,13 +265,13 @@ jobs:
         env:
           PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - name: Install
-        run: pip install -e "bindings/python[dev]" -e bindings/python-serde -e bindings/python-intake
+        run: pip install -e "bindings/python/guatiao[dev]" -e bindings/python/guatiao-serde -e bindings/python/guatiao-intake
       - name: Test
         # Each package's suite alone: guatiao, guatiao-serde, guatiao-intake.
         run: |
-          pytest bindings/python/tests -rs
-          pytest bindings/python-serde/tests -rs
-          pytest bindings/python-intake/tests -rs
+          pytest bindings/python/guatiao/tests -rs
+          pytest bindings/python/guatiao-serde/tests -rs
+          pytest bindings/python/guatiao-intake/tests -rs
         shell: bash
         env:
           GUATIAO_LIBRARY: target/debug
@@ -281,9 +281,9 @@ jobs:
         # its types fails here rather than in a host.
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.14'
         run: >-
-          mypy --strict bindings/python/src/guatiao bindings/python-serde/src/guatiao_serde bindings/python-intake/src/guatiao_intake examples/python_provider/py_greeter examples/python_provider/py_tally examples/greeter_kind/python examples/python_host
+          mypy --strict bindings/python/guatiao/src/guatiao bindings/python/guatiao-serde/src/guatiao_serde bindings/python/guatiao-intake/src/guatiao_intake examples/python_provider/py_greeter examples/python_provider/py_tally examples/greeter_kind/python examples/python_host
         env:
-          MYPYPATH: bindings/python/src:bindings/python-serde/src:bindings/python-intake/src:examples/greeter_kind/python
+          MYPYPATH: bindings/python/guatiao/src:bindings/python/guatiao-serde/src:bindings/python/guatiao-intake/src:examples/greeter_kind/python
 
   bridge:
     name: guatiao-py (py${{ matrix.python-version }}, ${{ matrix.os }})
@@ -360,7 +360,7 @@ jobs:
           esac
           GREETER_HOST_SOURCE=$bridge \
           GREETER_HOST_SOURCE_CONFIG='{"dirs": ["examples/python_provider"],
-            "paths": ["bindings/python/src", "examples/greeter_kind/python"]}' \
+            "paths": ["bindings/python/guatiao/src", "examples/greeter_kind/python"]}' \
             cargo run -p greeter_host 2>&1 | tee host.log
           grep -q "served py_greeter as py_greeter" host.log
           grep -q "py_greeter_hello greets: hello, ana" host.log
@@ -1132,8 +1132,8 @@ jobs:
           cargo test -p greeter_host --all-features --test fortran_library -- --nocapture 2>&1 | tee fortran-library.log
           test "${PIPESTATUS[0]}" -eq 0
           ! grep -n "skipped:" fortran-library.log
-          python -m pip install -e "bindings/python[dev]"
-          python -m pytest -p no:cacheprovider bindings/python/tests/test_examples.py -k fortran -rs -q 2>&1 | tee fortran-python.log
+          python -m pip install -e "bindings/python/guatiao[dev]"
+          python -m pytest -p no:cacheprovider bindings/python/guatiao/tests/test_examples.py -k fortran -rs -q 2>&1 | tee fortran-python.log
           test "${PIPESTATUS[0]}" -eq 0
           ! grep -n "skipped" fortran-python.log
 

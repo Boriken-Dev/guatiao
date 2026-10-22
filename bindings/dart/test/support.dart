@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 /// Points the suite at the repository's own build output when nothing
-/// else does, the way `bindings/python/tests/conftest.py` does.
+/// else does, the way `bindings/python/guatiao/tests/conftest.py` does.
 library;
 
 import 'dart:io';

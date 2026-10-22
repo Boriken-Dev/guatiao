@@ -41,7 +41,7 @@
 //! cargo run -p greeter_host -- /some/dir /some/lib.so
 //! GREETER_HOST_SOURCE=/path/to/libguatiao_py.so \
 //!   GREETER_HOST_SOURCE_CONFIG='{"dirs": ["examples/python_provider"],
-//!     "paths": ["bindings/python/src", "examples/greeter_kind/python"]}' \
+//!     "paths": ["bindings/python/guatiao/src", "examples/greeter_kind/python"]}' \
 //!   cargo run -p greeter_host
 //! ```
 extern crate alloc;

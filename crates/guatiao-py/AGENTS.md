@@ -4,7 +4,7 @@ A guatiao source serving libraries written in Python. A `cdylib` and
 nothing else: no Rust API, nothing links it. A host adds the file with
 `add_source_file` and calls `refresh()`; the libraries it serves are
 Python modules written with the Python binding's `guatiao.provide`
-(`bindings/python/src/guatiao/AGENTS.md`, "Providers written in Python").
+(`bindings/python/guatiao/src/guatiao/AGENTS.md`, "Providers written in Python").
 
 Depends on `guatiao`, `guatiao-serde` (`toml`, for manifests) and `pyo3`
 0.30 with `abi3-py39`. Not published (`publish = false`); a workspace of

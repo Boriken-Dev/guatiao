@@ -20,7 +20,7 @@ public surface); this file is about the repository.
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
 | `examples/wire_over_webtransport/` | values over WebTransport: `server/` (the shared channel and framing, `wire-server`, and `wire-probe`, a native client), `client/` (the page's wasm, its own workspace, built for `wasm32-unknown-unknown` only); commands in its `README.md` |
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build; its `tests/docs_snippets.rs` compiles the Rust snippets of `docs/index.md`, `docs/ownership.md`, `docs/migrating.md` and the root `README.md` and compares them with the text shown |
-| `examples/python_host/` | a host program in Python: scans for greeters in any language, optionally adds `guatiao-py`, calls every slot; `bindings/python/tests/test_examples.py` runs it |
+| `examples/python_host/` | a host program in Python: scans for greeters in any language, optionally adds `guatiao-py`, calls every slot; `bindings/python/guatiao/tests/test_examples.py` runs it |
 | `examples/python_provider/` | two libraries written in Python, each a module and a `*.guatiao-py.toml` manifest; commands in its `README.md` |
 | `examples/greeter_caller/` | a cdylib whose C functions call every slot of a greeter, or of a `wide` provider, through the kind's Rust proxy, for a host in another language to have its providers called from Rust |
 | `examples/package.json` | the Node examples' one dependency, on `bindings/node`: `npm ci` here, after `npm run build` there (its dependencies live in `bindings/node_modules`) |
@@ -37,8 +37,8 @@ public surface); this file is about the repository.
 | `examples/matlab_provider/` | `mlgreeter/`, a library written in M (the folder is the library, named by its `DESCRIPTION`) |
 | `examples/fortran_host/` | a host program in Fortran (an fpm package): scans for greeters in any language, registers the Fortran library, optionally adds `guatiao-py`, calls every slot; its test calls every greeter both ways |
 | `examples/fortran_greeter/` | a library written in Fortran (an fpm package named and versioned as its source states, which its test checks); its `CMakeLists.txt` builds it as a library file a scan finds |
-| `bindings/python/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md`; `guatiao.ffi` is what a package over another guatiao library builds on |
-| `bindings/python-serde/`, `bindings/python-intake/` | the packages `guatiao-serde` and `guatiao-intake` (`import guatiao_serde`, `guatiao_intake`), each over its own library, with its own `AGENTS.md` |
+| `bindings/python/guatiao/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md`; `guatiao.ffi` is what a package over another guatiao library builds on |
+| `bindings/python/guatiao-serde/`, `bindings/python/guatiao-intake/` | the packages `guatiao-serde` and `guatiao-intake` (`import guatiao_serde`, `guatiao_intake`), each over its own library, with its own `AGENTS.md` |
 | `bindings/dart/` | `dart:ffi` bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`; `lib/src/bindings.g.dart` (from `guatiao.h`) and `lib/ffi_symbols.yaml` are ffigen output and never hand-edited; `lib/ffi.dart` is what a package over another guatiao library builds on |
 | `bindings/dart-serde/`, `bindings/dart-intake/` | the pub.dev packages `guatiao_serde` and `guatiao_intake`, each over its own library and its own ffigen output (reusing the core's types through its symbol file); `pubspec_overrides.yaml` takes the core from the checkout and is not published |
 | `bindings/node/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads; `src/ffi.ts` (`guatiao/ffi`) is what a package over another guatiao library builds on |
@@ -131,16 +131,16 @@ GUATIAO_WRITE_HEADER=1 cargo build -p greeter_kind --features c-header   # the k
 ```
 
 Python bindings, after `cargo build --workspace --all-features`, with the
-three packages installed (`pip install -e "bindings/python[dev]" -e
-bindings/python-serde -e bindings/python-intake`); each suite also passes
+three packages installed (`pip install -e "bindings/python/guatiao[dev]" -e
+bindings/python/guatiao-serde -e bindings/python/guatiao-intake`); each suite also passes
 alone:
 
 ```bash
-GUATIAO_LIBRARY=target/debug dotagents py -- -m pytest bindings/python/tests \
-  bindings/python-serde/tests bindings/python-intake/tests -rs
-MYPYPATH=bindings/python/src:bindings/python-serde/src:bindings/python-intake/src:examples/greeter_kind/python \
-  dotagents py -- -m mypy --strict bindings/python/src/guatiao \
-  bindings/python-serde/src/guatiao_serde bindings/python-intake/src/guatiao_intake \
+GUATIAO_LIBRARY=target/debug dotagents py -- -m pytest bindings/python/guatiao/tests \
+  bindings/python/guatiao-serde/tests bindings/python/guatiao-intake/tests -rs
+MYPYPATH=bindings/python/guatiao/src:bindings/python/guatiao-serde/src:bindings/python/guatiao-intake/src:examples/greeter_kind/python \
+  dotagents py -- -m mypy --strict bindings/python/guatiao/src/guatiao \
+  bindings/python/guatiao-serde/src/guatiao_serde bindings/python/guatiao-intake/src/guatiao_intake \
   examples/greeter_kind/python examples/python_host \
   examples/python_provider/py_greeter examples/python_provider/py_tally
 ```
@@ -329,7 +329,7 @@ Four workflows:
   named `ci-*` tag, watch the run, then delete the tag. Every binding's
   serde and intake packages run beside its core, each suite alone. Its
   `python` job builds the workspace in each leg, then runs the tests of
-  `bindings/python`, `bindings/python-serde` and `bindings/python-intake`:
+  `bindings/python/guatiao`, `bindings/python/guatiao-serde` and `bindings/python/guatiao-intake`:
   every Python from 3.9 to 3.14 on Linux, 3.9 and 3.14 on Windows and
   macOS. Its `dart` job analyzes and tests the three Dart packages on the
   three platforms and the floor SDK. Its `node` job installs the
@@ -375,7 +375,7 @@ version moves only when a release is cut.
 **Cutting a release.** One version everywhere: `[workspace.package] version`
 in `Cargo.toml`; `bindings/dart/pubspec.yaml` and those of `dart-serde` and
 `dart-intake` (each with its `guatiao: ^x.y.z`); the same version the PEP 440
-way in `bindings/python/pyproject.toml` and its `__version__`
+way in `bindings/python/guatiao/pyproject.toml` and its `__version__`
 (`0.0.0-alpha.0` is `0.0.0a0`), and in `python-serde` and `python-intake`
 (each with its `__version__` and its `guatiao==x.y.z`); the `=x.y.z` pins
 between the crates; `crates/guatiao-py/Cargo.toml`'s own version and pins (a

@@ -52,7 +52,7 @@ says), name the bridge, where its manifests are, and what they import:
 go run ./go_host ../target/debug \
   -python-source ../crates/guatiao-py/target/debug/libguatiao_py.so \
   -python-dir python_provider \
-  -python-path ../bindings/python/src -python-path greeter_kind/python
+  -python-path ../bindings/python/guatiao/src -python-path greeter_kind/python
 ```
 
 `go test ./go_host` runs every greeter (Rust, C, Python when

@@ -53,7 +53,7 @@ needs only the second).
 ```bash
 GREETER_HOST_SOURCE=crates/guatiao-py/target/debug/libguatiao_py.so \
 GREETER_HOST_SOURCE_CONFIG='{"dirs": ["examples/python_provider"],
-  "paths": ["bindings/python/src", "examples/greeter_kind/python"]}' \
+  "paths": ["bindings/python/guatiao/src", "examples/greeter_kind/python"]}' \
   cargo run -p greeter_host
 ```
 
@@ -66,7 +66,7 @@ interpreter:
 
 ```bash
 export GUATIAO_LIBRARY=target/debug
-export PYTHONPATH=bindings/python/src:examples/greeter_kind/python
+export PYTHONPATH=bindings/python/guatiao/src:examples/greeter_kind/python
 python examples/python_host/host.py target/debug \
   --python-source crates/guatiao-py/target/debug/libguatiao_py.so \
   --python-dir examples/python_provider

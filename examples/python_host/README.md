@@ -22,7 +22,7 @@ From the repository root, after building the workspace:
 ```bash
 cargo build --workspace --all-features
 export GUATIAO_LIBRARY=target/debug
-export PYTHONPATH=bindings/python/src        # or: pip install -e bindings/python
+export PYTHONPATH=bindings/python/guatiao/src        # or: pip install -e bindings/python/guatiao
 python examples/python_host/host.py target/debug
 ```
 
@@ -48,7 +48,7 @@ To add the greeters written in Python, through the `guatiao-py` bridge
 says), name the bridge and where the manifests are:
 
 ```bash
-export PYTHONPATH=bindings/python/src:examples/greeter_kind/python
+export PYTHONPATH=bindings/python/guatiao/src:examples/greeter_kind/python
 python examples/python_host/host.py target/debug \
   --python-source crates/guatiao-py/target/debug/libguatiao_py.so \
   --python-dir examples/python_provider

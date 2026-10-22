@@ -17,7 +17,7 @@ from pathlib import Path
 from guatiao import _abi
 
 _HEADER = (
-    Path(__file__).resolve().parents[3]
+    Path(__file__).resolve().parents[4]
     / "crates"
     / "guatiao"
     / "include"

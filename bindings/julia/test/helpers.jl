@@ -105,7 +105,7 @@ end
 
 "What the bridge is told: where the Python greeters are, and what they import."
 bridge_config() = Dict("dirs" => [joinpath(REPO, "examples", "python_provider")],
-    "paths" => [joinpath(REPO, "bindings", "python", "src"), joinpath(REPO, "examples", "greeter_kind", "python")])
+    "paths" => [joinpath(REPO, "bindings", "python", "guatiao", "src"), joinpath(REPO, "examples", "greeter_kind", "python")])
 
 # The Julia kinds and greeters are packages of the examples, found by name.
 for dir in (joinpath(REPO, "examples", "greeter_kind", "julia"), joinpath(REPO, "examples", "julia_provider"))

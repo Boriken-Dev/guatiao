@@ -14,7 +14,7 @@
     py = bridge()
     if py !== nothing && haskey(ENV, "GUATIAO_PY_BRIDGE")
         append!(args, ["--python-source", py, "--python-dir", joinpath(REPO, "examples", "python_provider"),
-            "--python-path", joinpath(REPO, "bindings", "python", "src"),
+            "--python-path", joinpath(REPO, "bindings", "python", "guatiao", "src"),
             "--python-path", joinpath(REPO, "examples", "greeter_kind", "python")])
     end
     out = read(pipeline(`$(Base.julia_cmd()) --startup-file=no $host $args`; stderr = devnull), String)

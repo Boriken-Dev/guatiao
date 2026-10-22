@@ -57,7 +57,7 @@ class Counter(KindProtocol, Protocol, kind="counter", floor_hash=1227528937):
   method; mypy and pyright check the code that calls or implements it.
 
 The binding's
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/src/guatiao/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/guatiao/src/guatiao/AGENTS.md)
 lists every annotation and the C type it stands for.
 
 ## As a host
