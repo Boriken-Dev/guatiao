@@ -4,7 +4,7 @@
 A value model whose C form is plain structs, a JSON Schema through which a
 provider says what it needs to be initialised, and an envelope through which
 one shared library offers any number of providers. Nothing is opaque: a C,
-C++, Dart, Go, Julia, MATLAB, Node, Octave, Python, R or Rust consumer reads a tree, a schema or a descriptor
+C++, Dart, Fortran, Go, Julia, MATLAB, Node, Octave, Python, R or Rust consumer reads a tree, a schema or a descriptor
 without calling into any library.
 
 *Guatiao* is the Taíno pact in which two people exchange names and become
@@ -89,6 +89,15 @@ pkg install guatiao-VERSION.tar.gz; pkg load guatiao   % Octave
 setenv('GUATIAO_LIBRARY', '/path/to/the/library')
 ```
 
+A Fortran consumer adds the package with fpm (a git dependency on the
+repository, whose root manifest builds `bindings/fortran`) or CMake, and
+points it at the same library:
+
+```toml
+[dependencies]
+guatiao = { git = "https://github.com/Boriken-Dev/guatiao", tag = "..." }
+```
+
 A C consumer includes `guatiao.h` and links nothing to read a value.
 
 ## 30-second tour
@@ -149,6 +158,9 @@ let greeter = registry.best("greeter").expect("something serves it");
 - [MATLAB and Octave, host and provider](matlab.md): calling libraries from
   MATLAB or GNU Octave, and writing providers as classes that a host in
   the same session calls on the interpreter's thread.
+- [Fortran, host and provider](fortran.md): calling libraries from
+  Fortran, and writing providers in Fortran, linked into a host or built
+  as a library file any host loads.
 - [Python API reference](api/python.md), for the ctypes bindings.
 - [Dart API reference](api/dart.md), for the `dart:ffi` bindings -- a plain
   Dart package, so a Flutter app uses the same one.
