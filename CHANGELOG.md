@@ -530,6 +530,12 @@ write now.
     `guatiao-intake`, each with its own `useLibrary`. `guatiao/ffi` is
     new: `openSurface`, memory, `adopt`, `borrow`, `nodeOf`, `withNodes`
     and the one koffi, for a package over another guatiao library.
+  - Go: the module already had a package per crate; the import paths stay.
+    `serde` and `intake` each find their own library and have their own
+    `UseLibrary`: `guatiao.UseLibrary` names only the core's now (a file
+    it named was the place the others were looked for beside). The core
+    exports `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow` and
+    `StatusError` for a package over another guatiao library.
 - **Breaking: `clone()` copies into this binary's allocator.** `clone()`
   (and `to_owned()`) on `Value`, `Map`, `List`, `Text`, `Buffer` and
   `Number` builds the copy through `Alloc::rust()`, whatever allocator the
