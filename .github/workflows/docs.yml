@@ -18,6 +18,8 @@ on:
       - "CHANGELOG.md"
       - "crates/**/*.rs"
       - "bindings/python/src/**"
+      - "bindings/python-serde/src/**"
+      - "bindings/python-intake/src/**"
       - "bindings/dart/lib/**"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
@@ -76,10 +78,10 @@ jobs:
         # until it has run, so the copy happens after it.
         run: dart pub get && dart doc
         working-directory: bindings/dart
-      - name: Install the Python package and the docs tooling
+      - name: Install the Python packages and the docs tooling
         # Editable, because mkdocstrings renders the package by importing
         # it -- which needs no native library, by design.
-        run: pip install -e "bindings/python[docs]"
+        run: pip install -e "bindings/python[docs]" -e bindings/python-serde -e bindings/python-intake
       - name: Build the narrative site and the Python reference
         run: mkdocs build --strict
       - name: Add the Rust reference under /rust/
