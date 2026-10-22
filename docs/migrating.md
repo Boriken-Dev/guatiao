@@ -933,8 +933,8 @@ intake.UseLibrary(dir)
 
 ```julia
 using Pkg
-Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia-serde")
-Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia-intake")
+Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia/GuatiaoSerde")
+Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia/GuatiaoIntake")
 ```
 
 ```julia

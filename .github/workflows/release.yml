@@ -129,7 +129,7 @@ jobs:
               if found != cargo:
                   problems.append(f"Cargo says {cargo} and {where} says {found}")
           # Julia writes the version as Cargo does.
-          for where in ("bindings/julia", "bindings/julia-serde", "bindings/julia-intake"):
+          for where in ("bindings/julia/Guatiao", "bindings/julia/GuatiaoSerde", "bindings/julia/GuatiaoIntake"):
               julia = tomllib.loads(pathlib.Path(f"{where}/Project.toml").read_text())["version"]
               if julia != cargo:
                   problems.append(f"Cargo says {cargo} and {where}/Project.toml says {julia}")
@@ -400,14 +400,14 @@ jobs:
         with:
           version: "1"
       # General registers the package from its subdirectory at the release
-      # commit: what it takes is the files under bindings/julia, loaded here
+      # commit: what it takes is the files under bindings/julia/Guatiao, loaded here
       # as a user's Pkg loads them.
       - name: Resolve and load
         run: |
-          julia --startup-file=no --project=bindings/julia -e 'using Pkg; Pkg.instantiate(); using Guatiao; println(pkgversion(Guatiao))'
+          julia --startup-file=no --project=bindings/julia/Guatiao -e 'using Pkg; Pkg.instantiate(); using Guatiao; println(pkgversion(Guatiao))'
           julia --startup-file=no -e 'using Pkg; Pkg.activate(temp = true);
-            Pkg.develop([PackageSpec(path = "bindings/julia"), PackageSpec(path = "bindings/julia-serde"),
-                         PackageSpec(path = "bindings/julia-intake")]);
+            Pkg.develop([PackageSpec(path = "bindings/julia/Guatiao"), PackageSpec(path = "bindings/julia/GuatiaoSerde"),
+                         PackageSpec(path = "bindings/julia/GuatiaoIntake")]);
             using GuatiaoSerde, GuatiaoIntake; println(pkgversion(GuatiaoSerde), " ", pkgversion(GuatiaoIntake))'
       - name: What the packages ship
         shell: python
@@ -415,8 +415,8 @@ jobs:
           import subprocess
           import tomllib
 
-          for where, name in (("bindings/julia", "Guatiao"), ("bindings/julia-serde", "GuatiaoSerde"),
-                              ("bindings/julia-intake", "GuatiaoIntake")):
+          for where, name in (("bindings/julia/Guatiao", "Guatiao"), ("bindings/julia/GuatiaoSerde", "GuatiaoSerde"),
+                              ("bindings/julia/GuatiaoIntake", "GuatiaoIntake")):
               files = subprocess.run(["git", "ls-files", where], capture_output=True, text=True,
                                      check=True).stdout.split()
               names = {f[len(where) + 1:] for f in files}
@@ -933,7 +933,7 @@ jobs:
 
           # Guatiao first: General checks a package's dependencies are
           # registered.
-          for subdir in ("bindings/julia", "bindings/julia-serde", "bindings/julia-intake"):
+          for subdir in ("bindings/julia/Guatiao", "bindings/julia/GuatiaoSerde", "bindings/julia/GuatiaoIntake"):
               project = tomllib.load(open(f"{subdir}/Project.toml", "rb"))
               name, version = project["name"], project["version"]
               versions = f"https://raw.githubusercontent.com/JuliaRegistries/General/master/{name[0]}/{name}/Versions.toml"

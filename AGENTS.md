@@ -45,8 +45,8 @@ public surface); this file is about the repository.
 | `bindings/node/guatiao-serde/`, `bindings/node/guatiao-intake/` | the npm packages `guatiao-serde` and `guatiao-intake`, each over its own library and the core's koffi; their tests run against the core's sources |
 | `bindings/node/package.json` | the npm workspace of the three Node packages, with the one `package-lock.json`: `npm ci` there installs all three and links the core into the others |
 | `bindings/go/guatiao/` | Go bindings over the C ABI through cgo, the module `github.com/Boriken-Dev/guatiao/bindings/go/guatiao` with its own `AGENTS.md`: a package per crate (`guatiao`, `serde`, `intake`), each over its own library, the other two building on what `guatiao` exports for them (`Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError`); `internal/native/` holds every line of C and copies of the three headers (a test compares them with the committed ones); `cmd/guatiao-kind` writes a kind package's glue |
-| `bindings/julia/` | Julia bindings over the C ABI through `ccall`, the package `Guatiao` with its own `AGENTS.md`; `src/abi.jl` mirrors the header's structs (a test compares each layout with the header's text); `src/ffi.jl` (`Guatiao.FFI`) is what a package over another guatiao library builds on; `test/fixtures/` holds the C its tests build |
-| `bindings/julia-serde/`, `bindings/julia-intake/` | the packages `GuatiaoSerde` and `GuatiaoIntake`, each over its own library, depending on `Guatiao` |
+| `bindings/julia/Guatiao/` | Julia bindings over the C ABI through `ccall`, the package `Guatiao` with its own `AGENTS.md`; `src/abi.jl` mirrors the header's structs (a test compares each layout with the header's text); `src/ffi.jl` (`Guatiao.FFI`) is what a package over another guatiao library builds on; `test/fixtures/` holds the C its tests build |
+| `bindings/julia/GuatiaoSerde/`, `bindings/julia/GuatiaoIntake/` | the packages `GuatiaoSerde` and `GuatiaoIntake`, each over its own library, depending on `Guatiao` |
 | `bindings/r/` | R bindings over the C ABI, the source package `guatiao`: `src/` holds a copy of `guatiao.h` (a test compares it with the committed one) and the C glue, compiled when the package installs, which opens the libraries at run time and calls kind slots through libffi; it registers the C table `guatiao_r_api` (`inst/include/guatiao_r_api.h`) the other packages build on; its API header is `inst/AGENTS.md`; `tests/fixtures/` holds the C its tests build |
 | `bindings/r-serde/`, `bindings/r-intake/` | the source packages `guatiao.serde` and `guatiao.intake`: their own header copies and small C glue over `guatiao_r_api`, depending on `guatiao` and compiled against its installed headers |
 | `bindings/fortran/` | Fortran bindings over the C ABI in pure Fortran (`iso_c_binding`), the fpm package `guatiao` with its own `AGENTS.md` and a `CMakeLists.txt`; `src/guatiao_c.f90`, `guatiao_serde_c.f90` and `guatiao_intake_c.f90` mirror the three headers (a test compares every interface's name and argument count with them); `guatiao_loader.F90` opens the library at run time; the repository's root `fpm.toml` is the same package for an fpm git dependency (a test checks the two agree) |
@@ -185,10 +185,10 @@ one a failure:
 
 ```bash
 export GUATIAO_LIBRARY=$PWD/target/debug
-julia --project=bindings/julia -e 'using Pkg; Pkg.test()'
-for p in serde intake; do   # each in a temporary environment holding the core from the checkout
-  julia -e "using Pkg; Pkg.activate(temp=true); Pkg.develop([PackageSpec(path=\"bindings/julia\"),
-    PackageSpec(path=\"bindings/julia-$p\")]); Pkg.test(\"Guatiao${p^}\")"
+julia --project=bindings/julia/Guatiao -e 'using Pkg; Pkg.test()'
+for p in Serde Intake; do   # each in a temporary environment holding the core from the checkout
+  julia -e "using Pkg; Pkg.activate(temp=true); Pkg.develop([PackageSpec(path=\"bindings/julia/Guatiao\"),
+    PackageSpec(path=\"bindings/julia/Guatiao$p\")]); Pkg.test(\"Guatiao$p\")"
 done
 julia examples/julia_host/host.jl target/debug   # the example host
 ```
@@ -341,7 +341,7 @@ Four workflows:
   platforms, with the C greeter, the guatiao-py bridge and a stated skip
   failing the job, under `-race` and `GOEXPERIMENT=cgocheck2` on one leg,
   and builds the Go library as a file for the Rust example host's
-  `go_library` test. Its `julia` job runs `bindings/julia`'s tests on
+  `go_library` test. Its `julia` job runs `bindings/julia/Guatiao`'s tests on
   Julia's LTS and current release on the three platforms, with the C
   greeter, the guatiao-py bridge and the Go library file, a stated skip
   failing the job, then `GuatiaoSerde`'s and `GuatiaoIntake`'s, each in a
@@ -383,7 +383,7 @@ workspace of its own, so the workspace version does not reach it);
 `bindings/node/guatiao/package.json`, `node-serde`'s and `node-intake`'s (each with
 its `guatiao` dependency), `bindings/package-lock.json` and the
 `../bindings/node/guatiao` entry of `examples/package-lock.json` (`npm install` in
-`bindings` and in `examples` rewrites them); `bindings/julia/Project.toml`
+`bindings` and in `examples` rewrites them); `bindings/julia/Guatiao/Project.toml`
 and those of `julia-serde` and `julia-intake`; `bindings/r/DESCRIPTION` and
 those of `r-serde` and `r-intake` (each with `guatiao (>= x.y.z.N)`; R takes
 no letters in a version: `0.0.0-alpha.N` is written `0.0.0.N`, so the first
@@ -433,7 +433,7 @@ and intake packages after it.
 | Go module proxy | the tag `bindings/go/guatiao/vx.y.z`, pushed by `release.yml` with the workflow's own token; the job then asks proxy.golang.org for the version, which lists it | the same; nothing to configure |
 | R-universe | nothing in `release.yml`: the owner's universe (`Boriken-Dev/boriken-dev.r-universe.dev`) lists each package in its `packages.json`, `{"package": "guatiao", "url": "https://github.com/Boriken-Dev/guatiao", "subdir": "bindings/r"}`, and the same for `guatiao.serde` (`"subdir": "bindings/r-serde"`) and `guatiao.intake` (`"subdir": "bindings/r-intake"`); R-universe builds binaries for every OS from the repository, the core first as their `Depends` and `LinkingTo` name it; CRAN only if the owner asks | the same |
 | fpm registry | nothing in `release.yml`: an fpm consumer depends on the repository by its tag (the root `fpm.toml`; one package, its serde and intake modules in it); a listing in the fpm registry only on the owner's word | the same |
-| Julia General | the JuliaRegistrator app installed on `Boriken-Dev/guatiao`, and a `JULIA_REGISTRATOR_TOKEN` secret (a token of an account Registrator trusts): `release.yml` comments `@JuliaRegistrator register subdir=bindings/julia`, then `subdir=bindings/julia-serde` and `subdir=bindings/julia-intake`, on the release commit. General takes no version with pre-release data and wants a first version of `0.0.1`, `0.1.0` or `1.0.0`, so a pre-release tag registers nothing; before the first registration of `GuatiaoSerde` and `GuatiaoIntake`, their `Project.toml` gain a `[compat]` entry for `Guatiao` (General requires one) | the same; a version General lists is skipped |
+| Julia General | the JuliaRegistrator app installed on `Boriken-Dev/guatiao`, and a `JULIA_REGISTRATOR_TOKEN` secret (a token of an account Registrator trusts): `release.yml` comments `@JuliaRegistrator register subdir=bindings/julia/Guatiao`, then `subdir=bindings/julia/GuatiaoSerde` and `subdir=bindings/julia/GuatiaoIntake`, on the release commit. General takes no version with pre-release data and wants a first version of `0.0.1`, `0.1.0` or `1.0.0`, so a pre-release tag registers nothing; before the first registration of `GuatiaoSerde` and `GuatiaoIntake`, their `Project.toml` gain a `[compat]` entry for `Guatiao` (General requires one) | the same; a version General lists is skipped |
 
 **Who owns what.** Neither registry lets a new package start under an
 organisation, so each is published by a person and handed over:

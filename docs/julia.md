@@ -10,7 +10,7 @@ and no native code of its own.
 
 ```julia
 using Pkg
-Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia")
+Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia/Guatiao")
 ```
 
 The package loads the guatiao library on its first native call: the one

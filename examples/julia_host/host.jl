@@ -18,7 +18,7 @@
 
 # The binding and the example packages, found by name from this checkout.
 let examples = dirname(@__DIR__)
-    for dir in (joinpath(examples, "..", "bindings", "julia"), joinpath(examples, "greeter_kind", "julia"),
+    for dir in (joinpath(examples, "..", "bindings", "julia", "Guatiao"), joinpath(examples, "greeter_kind", "julia"),
         joinpath(examples, "julia_provider"))
         push!(LOAD_PATH, normpath(dir))
     end

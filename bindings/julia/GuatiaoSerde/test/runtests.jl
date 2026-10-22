@@ -5,22 +5,21 @@
 # The suite drives a real build: GUATIAO_LIBRARY names it, and without it
 # the repository's own `target/debug` is used.
 
-let repo = normpath(joinpath(@__DIR__, "..", "..", ".."))
+let repo = normpath(joinpath(@__DIR__, "..", "..", "..", ".."))
     haskey(ENV, "GUATIAO_LIBRARY") || (ENV["GUATIAO_LIBRARY"] = joinpath(repo, "target", "debug"))
 end
 
 using Test
 using Guatiao
-using GuatiaoIntake
+using GuatiaoSerde
 
-const Intake = GuatiaoIntake
+const Serde = GuatiaoSerde
 
 include("helpers.jl")
-include("json.jl")
 
-@testset "GuatiaoIntake" begin
-    @testset "intake" begin
-        include("intake.jl")
+@testset "GuatiaoSerde" begin
+    @testset "serde" begin
+        include("serde.jl")
     end
     @testset "crossing" begin
         include("crossing.jl")

@@ -8,7 +8,7 @@
 
 using Guatiao: GAlloc, GValue, binding_alloc
 
-const REPO = normpath(joinpath(@__DIR__, "..", "..", ".."))
+const REPO = normpath(joinpath(@__DIR__, "..", "..", "..", ".."))
 const HEADER = joinpath(REPO, "crates", "guatiao", "include", "guatiao.h")
 const GREETER_KIND_H = joinpath(REPO, "examples", "greeter_kind", "include", "greeter_kind.h")
 const VECTORS = joinpath(REPO, "crates", "guatiao", "tests", "vectors", "time.json")

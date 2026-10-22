@@ -28,8 +28,8 @@ and built on the `Guatiao` package for the value model and its errors.
 
 ```julia
 using Pkg
-Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia")
-Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia-intake")
+Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia/Guatiao")
+Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia/GuatiaoIntake")
 ```
 
 The package drives the `guatiao_intake` shared library. Say where it is:
@@ -76,7 +76,7 @@ GuatiaoIntake.flatten(schema, "auth", value)       # Dict{String,String}
 | `resolve`, `flat_keys`, `flatten`, `unflatten` | the flat `key => text` store |
 | `GuatiaoIntake.use_library(path)` | naming `guatiao_intake` |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia-intake/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia/GuatiaoIntake/AGENTS.md)
 is the full API reference and ships in the package. The C ABI is
 described by
 [`guatiao_intake.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-intake/include/guatiao_intake.h).
@@ -85,7 +85,7 @@ described by
 
 ```bash
 julia -e 'using Pkg; Pkg.activate(temp = true);
-          Pkg.develop([PackageSpec(path = "bindings/julia"), PackageSpec(path = "bindings/julia-intake")]);
+          Pkg.develop([PackageSpec(path = "bindings/julia/Guatiao"), PackageSpec(path = "bindings/julia/GuatiaoIntake")]);
           Pkg.test("GuatiaoIntake")'
 ```
 

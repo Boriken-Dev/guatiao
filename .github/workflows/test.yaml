@@ -646,13 +646,12 @@ jobs:
           esac
           export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge"
           julia --version
-          julia --startup-file=no --project=bindings/julia -e 'using Pkg; Pkg.test()'
+          julia --startup-file=no --project=bindings/julia/Guatiao -e 'using Pkg; Pkg.test()'
           # GuatiaoSerde and GuatiaoIntake, each in a temporary environment
           # holding the core from the checkout.
           for p in Serde Intake; do
-            lower=$(echo "$p" | tr '[:upper:]' '[:lower:]')
             julia --startup-file=no -e "using Pkg; Pkg.activate(temp = true);
-              Pkg.develop([PackageSpec(path = \"bindings/julia\"), PackageSpec(path = \"bindings/julia-$lower\")]);
+              Pkg.develop([PackageSpec(path = \"bindings/julia/Guatiao\"), PackageSpec(path = \"bindings/julia/Guatiao$p\")]);
               Pkg.test(\"Guatiao$p\")"
           done
         env:
