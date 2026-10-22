@@ -553,6 +553,12 @@ write now.
     calling its own library: they gain their own `use_library`, and
     `guatiao.use_library` names only the core's (a file it named was the
     place the others were looked for beside).
+  - Fortran: `guatiao_serde` and `guatiao_intake` stay modules of the one
+    fpm package (a git dependency reads only a repository's root manifest),
+    each over its own library, and the core modules no longer use them:
+    they gain `guatiao_serde_use_library` and
+    `guatiao_intake_use_library`, and `guatiao_use_library` names only the
+    core's.
 - **Breaking: `clone()` copies into this binary's allocator.** `clone()`
   (and `to_owned()`) on `Value`, `Map`, `List`, `Text`, `Buffer` and
   `Number` builds the copy through `Alloc::rust()`, whatever allocator the
