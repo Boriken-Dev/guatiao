@@ -24,10 +24,14 @@ include("time.jl")
 include("redact.jl")
 include("serde.jl")
 include("intake.jl")
+include("kinds.jl")
+include("registry.jl")
+include("provide.jl")
 
 export Value, ValueRef, MapRef, ListRef, NumberText, absent, decode, schema, redact,
     GuatiaoError, ParseError, Unparsed, LibraryNotFound, MissingSymbol, FloorMismatch,
-    Timestamp, Span, Length, Serde, Intake
+    Timestamp, Span, Length, Serde, Intake,
+    Registry, Instance, @kind, @provider, @required, @fallible, Lent, Taken
 
 function __init__()
     reset_native!()

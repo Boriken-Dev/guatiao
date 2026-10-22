@@ -118,8 +118,12 @@ View(node::Ptr{GValue}; find = nothing, keep = nothing, scope = nothing, alloc::
     View(node, find, keep, scope, alloc)
 
 root_node(v::Value) = (r = v.root; r == C_NULL && throw(closed_error()); r)
+"Throws unless what a view keeps (a Value, a view, a registry) is still open."
+check_alive(o::AbstractOwner) = (root_node(o); nothing)
+check_alive(x) = (isopen(x) || throw(closed_error(lowercase(string(nameof(typeof(x)))))); nothing)
+
 function root_node(v::View)
-    v.keep === nothing || root_node(v.keep)
+    v.keep === nothing || check_alive(v.keep)
     v.scope === nothing || check_scope(v.scope)
     node = v.find === nothing ? v.node : v.find()::Ptr{GValue}
     node == C_NULL && throw(InvalidStateException("the borrowed value is gone", :gone))

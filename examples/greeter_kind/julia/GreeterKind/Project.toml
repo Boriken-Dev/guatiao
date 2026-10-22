@@ -1,0 +1,10 @@
+name = "GreeterKind"
+uuid = "9e991860-a3ce-4e7c-afaf-42217d661b0a"
+authors = ["jose-pr <jose-pr@coqui.dev>"]
+version = "0.1.0"
+
+[deps]
+Guatiao = "b1f2b27c-1136-47bf-954e-12ce17b83e3e"
+
+[compat]
+julia = "1.10"

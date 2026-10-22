@@ -1,0 +1,13 @@
+name = "JlGreeter"
+uuid = "fd484b71-b337-4195-bf72-e4326af74462"
+authors = ["jose-pr <jose-pr@coqui.dev>"]
+version = "1.0.0"
+description = "Greeters written in Julia, offered by a library any host in the process calls."
+license = "MPL-2.0"
+
+[deps]
+GreeterKind = "9e991860-a3ce-4e7c-afaf-42217d661b0a"
+Guatiao = "b1f2b27c-1136-47bf-954e-12ce17b83e3e"
+
+[compat]
+julia = "1.10"

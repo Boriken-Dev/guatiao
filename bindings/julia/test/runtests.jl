@@ -36,4 +36,13 @@ include("helpers.jl")
     @testset "frees" begin
         include("frees.jl")
     end
+    @testset "greeters" begin
+        include("greeters.jl")
+    end
+    @testset "provide" begin
+        include("provide.jl")
+    end
+    @testset "registry" begin
+        include("registry.jl")
+    end
 end
