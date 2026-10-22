@@ -825,6 +825,37 @@ library's own. A library that keeps such a descriptor past the call, or
 may race a retire, uses the appended `get_pinned` and `list_pinned`, then
 `unpin` when done.
 
+## Serde and intake are packages of their own
+
+Every binding offers JSON, TOML and YAML, and forms, as packages beside
+the core one, each over its own library and depending on the core
+package. Add the packages you use and change the imports. Each finds its
+library through `GUATIAO_SERDE_LIBRARY` or `GUATIAO_INTAKE_LIBRARY`, then
+`GUATIAO_LIBRARY` as before (a directory holding it, or a file exporting
+its functions, else the file beside it), so a setting that worked keeps
+working.
+
+### Python
+
+```bash
+pip install guatiao-serde guatiao-intake
+```
+
+```python
+# before
+from guatiao import intake, serde
+from guatiao.errors import ParseError
+```
+
+```python
+import guatiao_intake as intake
+import guatiao_serde as serde
+from guatiao_serde import ParseError
+```
+
+`guatiao.use_library` names only the core library now; the others have
+their own `use_library`.
+
 ## Python and Dart
 
 ### `create` checks the configuration first

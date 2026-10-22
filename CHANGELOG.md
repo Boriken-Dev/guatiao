@@ -505,6 +505,19 @@ write now.
 
 ### Changed
 
+- **Breaking: JSON, TOML and YAML, and forms, are packages of their own in
+  every binding**, each over its own library (`guatiao_serde`,
+  `guatiao_intake`) and built on the core package, which offers what they
+  need as documented API. Each finds its library through its own variable
+  (`GUATIAO_SERDE_LIBRARY`, `GUATIAO_INTAKE_LIBRARY`), then
+  `GUATIAO_LIBRARY` (a directory, or a file that exports the surface, else
+  the file beside it), then the platform's search. *Migration:*
+  - Python: `pip install guatiao-serde guatiao-intake`; `from guatiao
+    import serde` is `import guatiao_serde as serde`, `from guatiao import
+    intake` is `import guatiao_intake as intake`, and
+    `guatiao.errors.ParseError` is `guatiao_serde.ParseError`.
+    `guatiao.ffi` is new: the loader, the C structs and a tree crossing as
+    its root node, for a package over another guatiao library.
 - **Breaking: `clone()` copies into this binary's allocator.** `clone()`
   (and `to_owned()`) on `Value`, `Map`, `List`, `Text`, `Buffer` and
   `Number` builds the copy through `Alloc::rust()`, whatever allocator the

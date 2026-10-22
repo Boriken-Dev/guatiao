@@ -1,9 +1,14 @@
 # Python API
 
-The `guatiao` package on PyPI: ctypes bindings over the C ABI, with no
-dependencies and nothing to compile. Importing it never loads a native
-library; the first call that needs one resolves it from
-`GUATIAO_LIBRARY`, then the system's library search.
+Three packages on PyPI, ctypes bindings over the C ABI with nothing to
+compile, one per library: `guatiao` (the value model, schemas, the
+registry, kinds and providers), `guatiao-serde` (`import guatiao_serde`:
+JSON, TOML and YAML) and `guatiao-intake` (`import guatiao_intake`:
+forms and the flat store), the last two built on the first. Importing
+one never loads a native library; the first call that needs one resolves
+it from its own variable (`GUATIAO_SERDE_LIBRARY`,
+`GUATIAO_INTAKE_LIBRARY`), then `GUATIAO_LIBRARY`, then the system's
+library search.
 
 ## Values
 
@@ -29,14 +34,18 @@ library; the first call that needs one resolves it from
 
 ::: guatiao.schema
 
-## Formats
-
-::: guatiao.serde
-
-## Forms
-
-::: guatiao.intake
-
 ## Errors
 
 ::: guatiao.errors
+
+## For a package over another guatiao library
+
+::: guatiao.ffi
+
+## Formats: guatiao-serde
+
+::: guatiao_serde
+
+## Forms: guatiao-intake
+
+::: guatiao_intake
