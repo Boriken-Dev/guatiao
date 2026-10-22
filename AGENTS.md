@@ -16,7 +16,7 @@ public surface); this file is about the repository.
 | `crates/guatiao-intake/` | taking a value in from a person: the path grammar (`agent[1].name`), flat `key -> text` storage, checking a store of text, and how a schema is shown (sections, widget hints, conditional visibility, `#[derive(Form)]`); C surface in `include/guatiao_intake.h` |
 | `crates/guatiao-py/` | a source of libraries written in Python: a cdylib exporting `guatiao_source`, built with pyo3 for the stable ABI; a workspace of its own (no other build needs a Python to link), not published |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
-| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `python/greeter_kind.py` and `node/greeter_kind.ts` describe its kinds for Python and Node; `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`) |
+| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `python/greeter_kind.py` and `node/greeter_kind.ts` describe its kinds for Python and Node; `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind` |
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
 | `examples/wire_over_webtransport/` | values over WebTransport: `server/` (the shared channel and framing, `wire-server`, and `wire-probe`, a native client), `client/` (the page's wasm, its own workspace, built for `wasm32-unknown-unknown` only); commands in its `README.md` |
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build; its `tests/docs_snippets.rs` compiles the Rust snippets of `docs/index.md`, `docs/ownership.md` and the root `README.md` and compares them with the text shown |
@@ -29,11 +29,14 @@ public surface); this file is about the repository.
 | `examples/go.mod` | the Go examples' module, using `bindings/go` through a `replace`; `examples/internal/` holds what its tests drive in C |
 | `examples/go_host/` | a host program in Go: scans for greeters in any language, registers the Go library, optionally adds `guatiao-py`, calls every slot; its tests call the Rust, C, Python and Go greeters both ways |
 | `examples/go_provider/` | `go_greeter/`, a library written in Go (the package is the library), and `cshared/`, the same as a `-buildmode=c-shared` file the Rust example host scans |
+| `examples/julia_host/` | a host program in Julia: scans for greeters in any language, registers the Julia library, optionally adds `guatiao-py`, calls every slot; the binding's tests run it |
+| `examples/julia_provider/` | `JlGreeter/`, a library written in Julia (the package is the library) |
 | `bindings/python/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md` |
 | `bindings/dart/` | `dart:ffi` bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`; `lib/src/bindings.g.dart` is ffigen output and never hand-edited |
 | `bindings/node/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads |
 | `bindings/go/` | Go bindings over the C ABI through cgo, the module `github.com/Boriken-Dev/guatiao/bindings/go` with its own `AGENTS.md`; `internal/native/` holds every line of C and copies of the three headers (a test compares them with the committed ones); `cmd/guatiao-kind` writes a kind package's glue |
-| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `python.md`, `node.md` and `go.md` (Python, Node and Go as a host and as a provider), `wasm.md`; built strictly by `docs.yml` |
+| `bindings/julia/` | Julia bindings over the C ABI through `ccall`, the package `Guatiao` with its own `AGENTS.md`; `src/abi.jl` mirrors the header's structs (a test compares each layout with the header's text); `test/fixtures/` holds the C its tests build |
+| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `python.md`, `node.md`, `go.md` and `julia.md` (Python, Node, Go and Julia as a host and as a provider), `wasm.md`; built strictly by `docs.yml` |
 | `benchmarks/` | the benchmark runner (`cargo run -p guatiao-bench --release -- --save NAME`), committed results in `benchmarks/results/`, and `README.md` with the protocol; run on demand, numbers are local and provisional |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 
@@ -149,9 +152,23 @@ gofmt -l bindings/go examples                     # prints nothing
 GUATIAO_GO_LIBRARY=go-library cargo test -p greeter_host --all-features --test go_library
 ```
 
+Julia bindings, after `cargo build --workspace --all-features`, with
+Julia 1.10 or later built for the same architecture as the libraries. The
+tests find the example packages themselves; the C greeter is built with
+`CC` (else `clang`, `cc` or `gcc`), the Python greeters come from the
+bridge `GUATIAO_PY_BRIDGE` names, the Go greeter from the directory
+`GUATIAO_GO_LIBRARY` names, and `GUATIAO_REQUIRE_ALL=1` makes a missing
+one a failure:
+
+```bash
+export GUATIAO_LIBRARY=$PWD/target/debug
+julia --project=bindings/julia -e 'using Pkg; Pkg.test()'
+julia examples/julia_host/host.jl target/debug   # the example host
+```
+
 `cargo test -p greeter_host` rebuilds the workspace's cdylibs with only
-what that package needs: build the workspace again before the Go, Python,
-Dart or Node suites.
+what that package needs: build the workspace again before the Go, Julia,
+Python, Dart or Node suites.
 
 The `guatiao-py` bridge, against the Python it will run with. Its tests
 and the Python suite's bridge tests find it in its own `target/debug`
@@ -240,7 +257,10 @@ Four workflows:
   platforms, with the C greeter, the guatiao-py bridge and a stated skip
   failing the job, under `-race` and `GOEXPERIMENT=cgocheck2` on one leg,
   and builds the Go library as a file for the Rust example host's
-  `go_library` test. `release.yml` calls it as its test gate.
+  `go_library` test. Its `julia` job runs `bindings/julia`'s tests on
+  Julia's LTS and current release on the three platforms, with the C
+  greeter, the guatiao-py bridge and the Go library file, a stated skip
+  failing the job. `release.yml` calls it as its test gate.
 - `docs.yml` owns every Pages deploy: a push to `main` touching a docs
   source, or a dispatch at any ref. `release.yml` calls it with
   `deploy: false` as a strict build gate, and dispatches it at a final tag.
@@ -260,7 +280,8 @@ PEP 440 way in `bindings/python/pyproject.toml` and its `__version__`
 `crates/guatiao-py/Cargo.toml`'s own version and pins (a workspace of its
 own, so the workspace version does not reach it), `bindings/node/package.json`
 with its `package-lock.json` and the `../bindings/node` entry of
-`examples/package-lock.json` (`npm install` in each rewrites them), and the
+`examples/package-lock.json` (`npm install` in each rewrites them),
+`bindings/julia/Project.toml`, and the
 `guatiao` entry of `examples/wire_over_webtransport/client/Cargo.lock` (a
 `--locked` build refuses a stale one; `cargo build` in that directory
 rewrites it). A `## [x.y.z] - <date>` section in
@@ -273,7 +294,8 @@ name.
 **What the tag does**: gates (tests, strict docs build, one version), then
 packages all four (`cargo publish --workspace --dry-run`, `python -m build`
 + `twine check`, `dart pub publish --dry-run`, `npm pack --dry-run` then
-`npm pack`, and the Go module vetted and built), then the GitHub release
+`npm pack`, the Go module vetted and built, and the Julia package
+resolved and loaded), then the GitHub release
 (marked pre-release for a tag with a `-`), then publishes, and tags the
 Go module `bindings/go/vx.y.z` at the same commit. Each publish job
 skips a version its registry already has, so re-running a partly failed
@@ -290,6 +312,7 @@ release finishes it. The four crates go in dependency order: `guatiao-derive`,
 | pub.dev | **by hand**, `dart pub publish` in `bindings/dart`: automated publishing needs a package that exists | automated publishing from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
 | npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |
 | Go module proxy | the tag `bindings/go/vx.y.z`, pushed by `release.yml` with the workflow's own token; the job then asks proxy.golang.org for the version, which lists it | the same; nothing to configure |
+| Julia General | the JuliaRegistrator app installed on `Boriken-Dev/guatiao`, and a `JULIA_REGISTRATOR_TOKEN` secret (a token of an account Registrator trusts): `release.yml` comments `@JuliaRegistrator register subdir=bindings/julia` on the release commit. General takes no version with pre-release data and wants a first version of `0.0.1`, `0.1.0` or `1.0.0`, so a pre-release tag registers nothing | the same; a version General lists is skipped |
 
 **Who owns what.** Neither registry lets a new package start under an
 organisation, so each is published by a person and handed over:

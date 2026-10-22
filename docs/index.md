@@ -4,7 +4,7 @@
 A value model whose C form is plain structs, a JSON Schema through which a
 provider says what it needs to be initialised, and an envelope through which
 one shared library offers any number of providers. Nothing is opaque: a C,
-C++, Dart, Go, Node, Python or Rust consumer reads a tree, a schema or a descriptor
+C++, Dart, Go, Julia, Node, Python or Rust consumer reads a tree, a schema or a descriptor
 without calling into any library.
 
 *Guatiao* is the Taíno pact in which two people exchange names and become
@@ -62,6 +62,14 @@ go get github.com/Boriken-Dev/guatiao/bindings/go
 export GUATIAO_LIBRARY=/path/to/the/library
 ```
 
+A Julia consumer adds the package from its directory of the repository
+and points it at the same library:
+
+```bash
+julia -e 'using Pkg; Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia")'
+export GUATIAO_LIBRARY=/path/to/the/library
+```
+
 A C consumer includes `guatiao.h` and links nothing to read a value.
 
 ## 30-second tour
@@ -115,6 +123,8 @@ let greeter = registry.best("greeter").expect("something serves it");
 - [Go, host and provider](go.md): calling libraries from Go, and writing
   providers in Go, linked into a host or built as a library file any host
   loads.
+- [Julia, host and provider](julia.md): calling libraries from Julia, and
+  writing providers in Julia that a host in the same process calls.
 - [Python API reference](api/python.md), for the ctypes bindings.
 - [Dart API reference](api/dart.md), for the `dart:ffi` bindings -- a plain
   Dart package, so a Flutter app uses the same one.

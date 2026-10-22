@@ -337,6 +337,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   thread that calls it and builds its answer in the allocator the
   caller's carrier names. The Go examples: `examples/greeter_kind/go/`,
   `examples/go_host/` and `examples/go_provider/`, a module of their own.
+- **Julia bindings**, `bindings/julia/` (package `Guatiao`): `ccall` over
+  the ABI, for Julia 1.10 and later, with nothing to compile and no
+  dependency outside the standard library; the library is found through
+  `GUATIAO_LIBRARY` or `Guatiao.use_library(path)`. `Value`, `ValueRef`,
+  `MapRef` (an `AbstractDict`) and `ListRef` (an `AbstractVector`, from
+  1) over a tree, `close` to free; Julia data converts both ways
+  (`Dict`s, vectors, `NamedTuple`s, structs, enums), `decode(T, n)`
+  reading integers exactly, numbers keeping their text as `NumberText`;
+  `Guatiao.schema(T)`, the JSON Schema of a type, and `Guatiao.@config`,
+  `@kwdef` that also puts defaults and docstrings in it; `Dates.Date`,
+  `Dates.Time`, `Dates.DateTime`, `Timestamp`, `Span` and `Length`;
+  `Serde`, `Intake`, `redact`, and `GuatiaoError` with the status table.
+- **Julia: the registry, kinds and providers.** `Registry` (scan, load,
+  rank, `create`, `retire!`, `collect!`, `unload!`, `add_source_file!`,
+  `watch_dir!`, `refresh!`) and `Instance`. `@kind` declares a kind from
+  its C header: an abstract type, a generic function per slot, and a
+  remote subtype calling the slots. A provider is a struct with methods
+  for its kinds' functions, declared with `@provider` (`serves`,
+  `config`, `available`, ...), in a library `library_of` reads from a
+  package: id from the module, version, authors and licence from its
+  `Project.toml`. A slot runs on the thread that calls it, a thread Julia
+  did not start included, and builds its answer in the allocator the
+  caller's carrier names; every call that can reach a library is made in a
+  GC-safe region. The Julia examples: `examples/greeter_kind/julia/`,
+  `examples/julia_host/` and `examples/julia_provider/`.
 
 ### Changed
 

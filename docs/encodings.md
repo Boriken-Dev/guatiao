@@ -365,7 +365,7 @@ print it". A reader takes the value as it would without them.
 What honours the marks:
 
 - **Redaction.** `guatiao_schema_redact` in C, and `redact` in Rust,
-  Python, Dart and Node and `Redact` in Go, copy a value with every marked field replaced by a
+  Python, Dart, Node and Julia and `Redact` in Go, copy a value with every marked field replaced by a
   placeholder, at any depth: inside a nested record, in every element of
   a list, in a variant's arm. Where the schema stops describing the
   value (a key it does not declare, say), the value is hidden too,
@@ -377,25 +377,25 @@ What a mark does not do: encrypt the value, compare it in constant time,
 or wipe it from memory. It says who may see it, and the code that shows,
 logs or returns values honours it.
 
-## In C, Python, Dart, Node and Go
+## In C, Python, Dart, Node, Go and Julia
 
 Each text form above has C functions that read it into a plain struct,
 write it back from one, and rewrite text in its canonical spelling, all
-declared in `guatiao.h`; the Python, Dart, Node and Go bindings call the
+declared in `guatiao.h`; the Python, Dart, Node, Go and Julia bindings call the
 same functions, so every grammar has one implementation. A refusal is
 `GUATIAO_ERR_BAD_VALUE` with a `guatiao_text_error` that names the byte
 offset and what was expected there. `guatiao_date_add_span` and
 `guatiao_datetime_add_span` apply a span, and `guatiao_duration_read`
 reads an exact length in any of its three spellings.
 
-| form | C | Python | Dart | Node | Go |
-| --- | --- | --- | --- | --- | --- |
-| a date | `guatiao_date` | `datetime.date` | `PlainDate` | `PlainDate` | `civil.Date` |
-| a time of day | `guatiao_time` | `datetime.time`, no `tzinfo` | `PlainTime` | `PlainTime` | `civil.Time` |
-| a civil date and time | `guatiao_datetime` | `datetime.datetime`, no `tzinfo` | `PlainDateTime` | `PlainDateTime` | `civil.DateTime` |
-| an instant | `guatiao_timestamp` | `datetime.datetime` in UTC | `DateTime`, `isUtc` | `Date` | `time.Time` in UTC |
-| an exact length | a list of two numbers | `datetime.timedelta` | `Duration` | `{ seconds: bigint, nanoseconds }` | `civil.Length`, `time.Duration` |
-| a span | `guatiao_span` | `guatiao.time.Span` | `Span` | `Span` | `civil.Span` |
+| form | C | Python | Dart | Node | Go | Julia |
+| --- | --- | --- | --- | --- | --- | --- |
+| a date | `guatiao_date` | `datetime.date` | `PlainDate` | `PlainDate` | `civil.Date` | `Dates.Date` |
+| a time of day | `guatiao_time` | `datetime.time`, no `tzinfo` | `PlainTime` | `PlainTime` | `civil.Time` | `Dates.Time` |
+| a civil date and time | `guatiao_datetime` | `datetime.datetime`, no `tzinfo` | `PlainDateTime` | `PlainDateTime` | `civil.DateTime` | `Dates.DateTime` |
+| an instant | `guatiao_timestamp` | `datetime.datetime` in UTC | `DateTime`, `isUtc` | `Date` | `time.Time` in UTC | `Guatiao.Timestamp` |
+| an exact length | a list of two numbers | `datetime.timedelta` | `Duration` | `{ seconds: bigint, nanoseconds }` | `civil.Length`, `time.Duration` | `Guatiao.Length`, a `Dates.FixedPeriod` |
+| a span | `guatiao_span` | `guatiao.time.Span` | `Span` | `Span` | `civil.Span` | `Guatiao.Span`, `Dates.CompoundPeriod` |
 
 What a mapping loses, and what happens then:
 
@@ -404,19 +404,22 @@ What a mapping loses, and what happens then:
   into one of them drops the nanoseconds below a microsecond, toward the
   past; writing one back is exact. JavaScript's `Date` counts
   milliseconds, so an instant read into one drops what is below a
-  millisecond the same way. `PlainTime`, `PlainDateTime`, every `Span`
-  class, Node's exact length, every Go type and every C struct keep the
+  millisecond the same way, as does a civil date and time read into
+  Julia's `Dates.DateTime`. `PlainTime`, `PlainDateTime`, every `Span`
+  class, Node's exact length, every Go type, Julia's `Dates.Time`,
+  `Timestamp`, `Span` and `Length`, and every C struct keep the
   nanoseconds.
 - **The year 0000.** Python's `datetime.date` and `datetime.datetime`
   start at year 1, so reading a date, a civil date and time or an
-  instant in year 0000 into one raises `ValueError`. Dart, Node, Go and C
-  hold it.
+  instant in year 0000 into one raises `ValueError`. Dart, Node, Go,
+  Julia and C hold it.
 - **Long exact lengths.** `timedelta` stops at 999999999 days and Dart's
   `Duration` at 2^63 - 1 microseconds (about 292471 years), and Go's
-  `time.Duration` at 2^63 - 1 nanoseconds (about 292 years); a longer
-  length raises, or answers an error, rather than wraps, and Go's
-  `civil.Length` holds every one. An exact length is never negative, so a
-  negative `timedelta` or `Duration` is refused when written.
+  `time.Duration` and Julia's `Dates.Nanosecond` at 2^63 - 1 nanoseconds
+  (about 292 years); a longer length raises, or answers an error, rather
+  than wraps, and Go's `civil.Length` and Julia's `Guatiao.Length` hold
+  every one. An exact length is never negative, so a negative
+  `timedelta`, `Duration` or Julia period is refused when written.
 - **An offset.** An instant read into any type is in UTC: the offset it
   was written with is not kept, as the canonical text does not keep it.
 
@@ -429,12 +432,15 @@ the same three classes. A span's units are `bigint` there, as a signed
 64-bit unit can be larger than a `number` holds exactly. Go's `time`
 package has no date or time of day alone either, so the Go binding's
 `civil` package holds them, beside `time.Time` for an instant; each is its
-text in a value.
+text in a value. Julia's `Dates` has a date, a time of day and a civil date
+and time but no instant apart from them, so the Julia binding writes a
+`Dates.DateTime` as a civil date and time and has `Timestamp` for an
+instant.
 
 A secret is the value it holds in every language; what each offers is
 redaction, `guatiao_schema_redact`, `guatiao.redact` in Python,
-`redact` in Dart and Node and `guatiao.Redact` in Go, with a placeholder of
-the caller's choosing.
+`redact` in Dart, Node and Julia and `guatiao.Redact` in Go, with a
+placeholder of the caller's choosing.
 
 ## In Rust
 
