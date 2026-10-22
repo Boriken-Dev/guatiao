@@ -2,9 +2,9 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-# Finding guatiao, guatiao_serde and guatiao_intake, and calling their
-# exports through pointers resolved once. Nothing native is touched until
-# the first call that needs it.
+# Finding a guatiao library (guatiao itself, or another surface such as
+# guatiao_serde), and calling its exports through pointers resolved once.
+# Nothing native is touched until the first call that needs it.
 
 using Libdl
 
@@ -15,10 +15,21 @@ mutable struct NativeLib
 end
 
 const LOAD_LOCK = ReentrantLock()
-const CHOSEN = Ref{Union{Nothing,String}}(nothing)
+const CHOSEN = Dict{String,String}()
 const LOADED = Dict{String,NativeLib}()
-const CACHES = Base.RefValue{Ptr{Cvoid}}[]
+# Bumped by every reset: a resolved pointer is used only while the
+# generation it was resolved in is current, so pointers a package image
+# kept, in this package or another, are resolved again.
+const GENERATION = Ref(0)
 const BINDING_ALLOC = Ref{Ptr{GAlloc}}(C_NULL)
+
+# Each surface's own environment variable (consulted before
+# GUATIAO_LIBRARY) and a symbol only it exports.
+const SURFACES = Dict{String,NamedTuple{(:variable, :probe),Tuple{String,String}}}(
+    "guatiao" => (variable = "", probe = ""),
+    "guatiao_serde" => (variable = "GUATIAO_SERDE_LIBRARY", probe = "guatiao_json_parse_ex"),
+    "guatiao_intake" => (variable = "GUATIAO_INTAKE_LIBRARY", probe = "guatiao_intake_check"),
+)
 
 "The platform's file name for a library of this base name."
 library_filename(base::AbstractString) =
@@ -30,41 +41,75 @@ library_filename(base::AbstractString) =
 Loads guatiao from `path` (a file exporting the ABI, whatever it is
 called, or a directory holding `guatiao.dll` / `libguatiao.so` /
 `libguatiao.dylib`) instead of looking for one. Call it before the first
-call that needs the library; `guatiao_serde` and `guatiao_intake` are
-then looked for beside it. Naming another file once one is loaded is an
-error; naming the same one is not.
+call that needs the library. Only this package's library: GuatiaoSerde
+and GuatiaoIntake have their own `use_library`. Naming another file once
+one is loaded is an error; naming the same one is not.
 """
-function use_library(path::AbstractString)
+use_library(path::AbstractString) = use_library("guatiao", path)
+
+function use_library(basename::AbstractString, path::AbstractString)
     lock(LOAD_LOCK) do
-        core = get(LOADED, "guatiao", nothing)
-        if core !== nothing
-            same = isdir(path) ? joinpath(path, library_filename("guatiao")) : String(path)
-            realpath(same) == realpath(core.path) ||
-                error("the guatiao library is already loaded from $(core.path)")
+        loaded = get(LOADED, basename, nothing)
+        if loaded !== nothing
+            same = isdir(path) ? joinpath(path, library_filename(basename)) : String(path)
+            realpath(same) == realpath(loaded.path) ||
+                error("the $basename library is already loaded from $(loaded.path)")
             return nothing
         end
-        CHOSEN[] = String(path)
+        CHOSEN[String(basename)] = String(path)
         return nothing
     end
 end
 
+function carries(path::String, symbol::String)
+    h = Libdl.dlopen(path; throw_error = false)
+    h === nothing && return false
+    found = Libdl.dlsym_e(h, symbol) != C_NULL
+    Libdl.dlclose(h)
+    return found
+end
+
+# What `use_library` named, the surface's own variable, GUATIAO_LIBRARY,
+# then the platform's search. A directory holds the surface's file under
+# its platform name; a file named for the surface is taken as it is; a
+# GUATIAO_LIBRARY file serves every surface it exports, else the
+# surface's own file beside it does.
 function resolve_path(basename::String)
     filename = library_filename(basename)
     looked = String[]
-    named = CHOSEN[] !== nothing ? CHOSEN[] : get(ENV, "GUATIAO_LIBRARY", "")
-    if !isempty(named)
-        if isdir(named)
-            candidate = joinpath(named, filename)
-            push!(looked, candidate)
-            isfile(candidate) && return candidate
-        elseif isfile(named)
-            basename == "guatiao" && return named
-            candidate = joinpath(dirname(named), filename)
-            push!(looked, candidate)
-            isfile(candidate) && return candidate
-        else
-            push!(looked, named)
+    surface = get(SURFACES, basename, (variable = "", probe = ""))
+    function named(where::String, route::String, shared::Bool)
+        push!(looked, "$route ($where)")
+        if isdir(where)
+            candidate = joinpath(where, filename)
+            return isfile(candidate) ? candidate : nothing
+        elseif isfile(where)
+            (!shared || isempty(surface.probe) || carries(where, surface.probe)) && return where
+            candidate = joinpath(dirname(where), filename)
+            return isfile(candidate) ? candidate : nothing
         end
+        return nothing
+    end
+    chosen = get(CHOSEN, basename, nothing)
+    if chosen !== nothing
+        found = named(chosen, "use_library", false)
+        found === nothing || return found
+    end
+    if !isempty(surface.variable)
+        own = get(ENV, surface.variable, "")
+        if isempty(own)
+            push!(looked, "$(surface.variable) (unset)")
+        else
+            found = named(own, surface.variable, false)
+            found === nothing || return found
+        end
+    end
+    shared = get(ENV, "GUATIAO_LIBRARY", "")
+    if isempty(shared)
+        push!(looked, "GUATIAO_LIBRARY (unset)")
+    else
+        found = named(shared, "GUATIAO_LIBRARY", true)
+        found === nothing || return found
     end
     found = Libdl.find_library(basename)
     push!(looked, "the platform's search for $filename")
@@ -82,11 +127,13 @@ function native_lib(basename::String)
     end
 end
 
-function resolve_symbol!(cache::Base.RefValue{Ptr{Cvoid}}, basename::String, name::String, feature::String)
+function resolve_symbol!(cache::Base.RefValue{Ptr{Cvoid}}, generation::Base.RefValue{Int},
+    basename::String, name::String, feature::String)
     lib = native_lib(basename)
     p = Libdl.dlsym_e(lib.handle, name)
     p == C_NULL && throw(MissingSymbol(lib.path, name, feature))
     cache[] = p
+    generation[] = GENERATION[]
     return p
 end
 
@@ -103,10 +150,17 @@ end
 @inline gc_safe_enter() = ccall(:jl_gc_safe_enter, Int8, ())
 @inline gc_safe_leave(state::Int8) = ccall(:jl_gc_safe_leave, Cvoid, (Int8,), state)
 
-# `@cdef base feature mode name(arg::CType, ...)::CRet` defines `name`,
-# calling the export of that name in the `base` library. `mode` `:safe`
-# makes the call in a GC-safe region: every Julia argument is converted
-# and rooted first, since nothing may allocate inside one.
+"""
+    @cdef base feature mode name(arg::CType, ...)::CRet
+
+Defines `name`, calling the export of that name in the `base` library
+(`"guatiao"`, `"guatiao_serde"`, ...), found and opened on first use;
+`feature` names the build feature it needs (`""` for every build), for
+the `MissingSymbol` a library without it raises. `mode` `:safe` makes
+the call in a GC-safe region: every Julia argument is converted and
+rooted first, since nothing may allocate inside one; `:plain` is an
+ordinary `ccall`. Usable from any module.
+"""
 macro cdef(base, feature, mode, sig)
     call, ret = sig.args
     name = call.args[1]
@@ -117,11 +171,17 @@ macro cdef(base, feature, mode, sig)
         push!(argtypes, a.args[2])
     end
     cache = Symbol("_cptr_", name)
+    gen = Symbol("_cgen_", name)
     sname = string(name)
+    here = @__MODULE__
+    current = GlobalRef(here, :GENERATION)
+    resolve = GlobalRef(here, :resolve_symbol!)
+    enter = GlobalRef(here, :gc_safe_enter)
+    leave = GlobalRef(here, :gc_safe_leave)
     lookup = quote
         f = $cache[]
-        if f == C_NULL
-            f = resolve_symbol!($cache, $base, $sname, $feature)
+        if f == C_NULL || $gen[] != $current[]
+            f = $resolve($cache, $gen, $base, $sname, $feature)
         end
     end
     body = if mode == QuoteNode(:safe)
@@ -134,9 +194,9 @@ macro cdef(base, feature, mode, sig)
             $(converts...)
             GC.@preserve $(cs...) begin
                 $(unsafes...)
-                state = gc_safe_enter()
+                state = $enter()
                 r = ccall(f, $ret, ($(argtypes...),), $(us...))
-                gc_safe_leave(state)
+                $leave(state)
             end
             r
         end
@@ -148,7 +208,7 @@ macro cdef(base, feature, mode, sig)
     end
     return esc(quote
         const $cache = Ref{Ptr{Cvoid}}(C_NULL)
-        push!(CACHES, $cache)
+        const $gen = Ref(-1)
         @inline function $name($(argnames...))
             $body
         end
@@ -230,27 +290,6 @@ end
 @cdef "guatiao" "load" :safe guatiao_registry_provider_ctx(reg::P, key::GStr)::P
 @cdef "guatiao" "load" :safe guatiao_registry_provider_config(reg::P, key::GStr)::PV
 
-# ---- guatiao_serde -------------------------------------------------------------
-@cdef "guatiao_serde" "" :plain guatiao_json_parse_ex(text::GStr, how::UInt32, a::PA, out::PV, err::Ptr{GParseError})::UInt32
-@cdef "guatiao_serde" "" :plain guatiao_json_emit(v::PV, how::UInt32, a::PA, out::PV)::UInt32
-@cdef "guatiao_serde" "" :plain guatiao_json_emit_pretty(v::PV, how::UInt32, a::PA, out::PV)::UInt32
-@cdef "guatiao_serde" "toml" :plain guatiao_toml_parse_ex(text::GStr, how::UInt32, a::PA, out::PV, err::Ptr{GParseError})::UInt32
-@cdef "guatiao_serde" "toml" :plain guatiao_toml_emit(v::PV, how::UInt32, a::PA, out::PV)::UInt32
-@cdef "guatiao_serde" "yaml" :plain guatiao_yaml_parse_ex(text::GStr, how::UInt32, a::PA, out::PV, err::Ptr{GParseError})::UInt32
-@cdef "guatiao_serde" "yaml" :plain guatiao_yaml_emit(v::PV, how::UInt32, a::PA, out::PV)::UInt32
-
-# ---- guatiao_intake --------------------------------------------------------------
-@cdef "guatiao_intake" "" :plain guatiao_intake_check(schema::PV, form::PV, a::PA, out::PV)::UInt32
-@cdef "guatiao_intake" "" :plain guatiao_intake_layout(schema::PV, form::PV, a::PA, out::PV)::UInt32
-@cdef "guatiao_intake" "" :plain guatiao_intake_for_schema(schema::PV, a::PA, out::PV)::UInt32
-@cdef "guatiao_intake" "" :plain guatiao_intake_form_for(form::PV, schema::PV, path::GStr, a::PA, out::PV)::UInt32
-@cdef "guatiao_intake" "" :plain guatiao_intake_is_visible(schema::PV, form::PV, key::GStr, values::PV, out::Ptr{Bool})::UInt32
-@cdef "guatiao_intake" "" :plain guatiao_intake_path_get(v::PV, path::GStr)::PV
-@cdef "guatiao_intake" "" :plain guatiao_intake_resolve(schema::PV, key::GStr)::PV
-@cdef "guatiao_intake" "" :plain guatiao_intake_flat_keys(schema::PV, key::GStr, a::PA, out::PV)::UInt32
-@cdef "guatiao_intake" "" :plain guatiao_intake_flatten(schema::PV, key::GStr, v::PV, a::PA, out::PV)::UInt32
-@cdef "guatiao_intake" "" :plain guatiao_intake_unflatten(schema::PV, key::GStr, flat::PV, a::PA, out::PV)::UInt32
-
 """
 The allocator this binding builds in when nobody names one: the
 `guatiao` library's default, kept for the process.
@@ -270,11 +309,9 @@ function binding_alloc()
 end
 
 function reset_native!()
-    for c in CACHES
-        c[] = C_NULL
-    end
+    GENERATION[] += 1
     empty!(LOADED)
-    CHOSEN[] = nothing
+    empty!(CHOSEN)
     BINDING_ALLOC[] = C_NULL
     return nothing
 end

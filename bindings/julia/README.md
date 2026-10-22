@@ -47,8 +47,9 @@ application that carries it.
   `Timestamp`, `Span` and `Length`, read and written by the library itself.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
-- **JSON, TOML and YAML**, and **form checks against a schema**, through
-  the `guatiao-serde` and `guatiao-intake` libraries when they are present.
+- **JSON, TOML and YAML**, and **forms checked against a schema**, are
+  the packages `GuatiaoSerde` and `GuatiaoIntake` beside this one, each
+  over its own library and built on `Guatiao.FFI`.
 - **Nothing native until it is needed** — the library is looked for on
   first use, and a missing one names every place that was searched.
 
@@ -69,12 +70,6 @@ export GUATIAO_LIBRARY=/opt/myapp/myapp.dll    # or the file itself, whatever it
 
 or call `Guatiao.use_library(path)` before the first call. Without
 either, the platform's library search is tried by file name.
-
-| Exports from | Needed for |
-| --- | --- |
-| `guatiao` | values, the registry, kinds and providers, schemas, time, redaction |
-| `guatiao_serde` | `Serde`: JSON, and TOML and YAML when the library has them |
-| `guatiao_intake` | `Intake` |
 
 Julia 1.10 or later, on a 64-bit platform, and a library built for the
 same architecture as the Julia process.
@@ -165,13 +160,6 @@ schema = Guatiao.schema(Listen)            # a Value: the JSON Schema
 config = decode(Listen, Value((port = 5900,)))
 ```
 
-### JSON, TOML and YAML
-
-```julia
-doc = Serde.parse("""{"name": "ana", "n": 1.10}""")
-Serde.emit(doc; format = :yaml)
-```
-
 ### Dates and spans
 
 ```julia
@@ -213,12 +201,11 @@ Guatiao.fromtext(Timestamp, "2026-10-21T19:15:00.5+05:30")   # Timestamp("2026-1
 | `decode`, `Guatiao.schema`, `Guatiao.@config`, `Guatiao.lower` | Julia types in and out, and their schemas |
 | `Timestamp`, `Span`, `Length`, `Guatiao.fromtext`, `Guatiao.totext`, `Guatiao.normalize` | dates, times, spans, exact lengths |
 | `redact` | secrets hidden |
-| `Serde.parse`, `Serde.emit` | JSON, TOML, YAML |
-| `Intake` | `check`, `layout`, `isvisible`, `at`, `for_schema`, `form_for`, `resolve`, `flat_keys`, `flatten`, `unflatten` |
+| `Guatiao.FFI` | for a package over another guatiao library |
 | `Registry`, `Instance`, `Guatiao.bind`, `Guatiao.create`, `Guatiao.refresh!` | hosting plugins |
 | `@kind`, `Lent`, `Taken`, `@required`, `@fallible` | a kind, declared from its C header |
 | `@provider`, `Guatiao.Provider`, `Guatiao.Library`, `Guatiao.library_of`, `Guatiao.register_library` | providers and libraries written in Julia |
-| `GuatiaoError`, `ParseError`, `Unparsed`, `LibraryNotFound`, `MissingSymbol`, `FloorMismatch` | errors |
+| `GuatiaoError`, `Unparsed`, `LibraryNotFound`, `MissingSymbol`, `FloorMismatch` | errors |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia/AGENTS.md)
 is the full API reference and ships in the package. The C ABI is
@@ -232,7 +219,7 @@ cd bindings/julia
 julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
-The tests need the three libraries in one directory; they point
+The tests need the library in one directory with the example plugins; they point
 `GUATIAO_LIBRARY` at the repository's build output when the variable is
 unset, and the repository's own `AGENTS.md` says how to produce it. The
 examples (`examples/greeter_kind/julia`, `examples/julia_provider`,

@@ -96,14 +96,6 @@ struct GProviderError
     message::GString
 end
 
-"`guatiao_parse_error`: where a document stopped parsing."
-struct GParseError
-    format::UInt32
-    line::UInt32
-    column::UInt32
-    message::GValue
-end
-
 struct GDate
     year::Int32
     month::UInt8
@@ -226,7 +218,7 @@ const ENTRY_VALUE = 32  # offset of the value in a guatiao_entry
 
 for (T, n) in ((GAlloc, 40), (GStr, 16), (GBytes, 16), (GBytesMut, 16), (GString, 32),
     (GBuffer, 32), (GValue, 40), (GList, 32), (GEntry, 72), (GMap, 32),
-    (GProviderError, 40), (GParseError, 56), (GDate, 8), (GTime, 8), (GDateTime, 16),
+    (GProviderError, 40), (GDate, 8), (GTime, 8), (GDateTime, 16),
     (GTimestamp, 16), (GSpan, 64), (GTextError, 48), (GKindHeader, 8), (GObject, 24),
     (GKinds, 16), (GKindTable, 32), (GKindTables, 24), (GProviderInfo, 152),
     (GProviders, 24), (GLibraryInfo, 80), (GHostInfo, 64))

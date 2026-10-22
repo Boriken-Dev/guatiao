@@ -1,0 +1,16 @@
+name = "GuatiaoIntake"
+uuid = "5d23eafe-56d9-476c-99b3-e7fe23b8f84b"
+authors = ["jose-pr <jose-pr@coqui.dev>"]
+version = "0.0.0-alpha.1"
+
+[deps]
+Guatiao = "b1f2b27c-1136-47bf-954e-12ce17b83e3e"
+
+[compat]
+julia = "1.10"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

@@ -3,43 +3,45 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 """
-    Guatiao.Intake
+    GuatiaoIntake
 
-Taking a value in from a person, through the `guatiao_intake` library:
-naming a place inside a value (`at`), checking a form against a schema,
-its layout, field visibility, the form a schema implies, and the flat
-`key => text` projection. Every schema, form and value argument is a
-`Value`, a view, or plain data.
+Taking a guatiao value in from a person, through the `guatiao_intake`
+library: naming a place inside a value (`at`), checking a form against a
+schema, its layout, field visibility, the form a schema implies, and the
+flat `key => text` projection. Every schema, form and value argument is a
+Guatiao `Value`, a view, or plain data. Built on Guatiao.
 """
-module Intake
+module GuatiaoIntake
 
-using ..Guatiao: Guatiao, Value, Node, ValueRef, View, Key, GValue, GuatiaoError, WrongKind, BadValue,
-    TAG_MAP, TAG_STRING, TAG_ABSENT, load_tag, gstr, binding_alloc, new_root, free_root, adopt, require_node,
-    node_ptr, owner_of, plain, map_keys, map_find, guatiao_intake_check, guatiao_intake_layout,
-    guatiao_intake_for_schema, guatiao_intake_form_for, guatiao_intake_is_visible, guatiao_intake_path_get,
-    guatiao_intake_resolve, guatiao_intake_flat_keys, guatiao_intake_flatten, guatiao_intake_unflatten
+using Guatiao: Guatiao, Value, GuatiaoError, WrongKind, BadValue
+using Guatiao.FFI: FFI, @cdef, Node, GValue, GAlloc, GStr, TAG_MAP, TAG_STRING, TAG_ABSENT, load_tag, gstr,
+    binding_alloc, new_root, free_root, adopt, node_ptr, require_node, plain, map_keys, map_find, with_nodes
 
-# Runs `f` with a node pointer for each argument, building plain data
-# into a Value for the call and freeing it afterwards.
-function with_nodes(f, args...)
-    owned = Value[]
-    keep = Any[]   # every owner a pointer below is into, rooted for the call
-    try
-        ptrs = map(args) do a
-            if a isa Node
-                push!(keep, owner_of(a))
-                require_node(a)
-            else
-                v = Value(a)
-                push!(owned, v)
-                require_node(v)
-            end
-        end
-        return GC.@preserve keep owned f(ptrs...)
-    finally
-        foreach(close, owned)
-    end
-end
+const PV = Ptr{GValue}
+const PA = Ptr{GAlloc}
+
+@cdef "guatiao_intake" "" :plain guatiao_intake_check(schema::PV, form::PV, a::PA, out::PV)::UInt32
+@cdef "guatiao_intake" "" :plain guatiao_intake_layout(schema::PV, form::PV, a::PA, out::PV)::UInt32
+@cdef "guatiao_intake" "" :plain guatiao_intake_for_schema(schema::PV, a::PA, out::PV)::UInt32
+@cdef "guatiao_intake" "" :plain guatiao_intake_form_for(form::PV, schema::PV, path::GStr, a::PA, out::PV)::UInt32
+@cdef "guatiao_intake" "" :plain guatiao_intake_is_visible(schema::PV, form::PV, key::GStr, values::PV, out::Ptr{Bool})::UInt32
+@cdef "guatiao_intake" "" :plain guatiao_intake_path_get(v::PV, path::GStr)::PV
+@cdef "guatiao_intake" "" :plain guatiao_intake_resolve(schema::PV, key::GStr)::PV
+@cdef "guatiao_intake" "" :plain guatiao_intake_flat_keys(schema::PV, key::GStr, a::PA, out::PV)::UInt32
+@cdef "guatiao_intake" "" :plain guatiao_intake_flatten(schema::PV, key::GStr, v::PV, a::PA, out::PV)::UInt32
+@cdef "guatiao_intake" "" :plain guatiao_intake_unflatten(schema::PV, key::GStr, flat::PV, a::PA, out::PV)::UInt32
+
+"""
+    use_library(path)
+
+Loads `guatiao_intake` from `path` (a file exporting its functions,
+whatever it is called, or a directory holding it under its platform file
+name) instead of looking for one: before the first call. Without it the
+library is found through `GUATIAO_INTAKE_LIBRARY`, then
+`GUATIAO_LIBRARY` (a directory, or a file exporting it, else the file
+beside it), then the platform's search.
+"""
+use_library(path::AbstractString) = Guatiao.use_library("guatiao_intake", path)
 
 function answer(f)
     out = new_root()
@@ -55,7 +57,7 @@ end
 function plain_answer(f)
     status, out = answer(f)
     try
-        Guatiao.check(status)
+        FFI.check(status)
         return plain(out)
     finally
         free_root(out)
@@ -73,7 +75,7 @@ function check(schema, form)
         status, out = answer(o -> guatiao_intake_check(s, f, binding_alloc(), o))
         try
             status == 0 && return nothing
-            status == UInt32(BadValue) || Guatiao.check(status)
+            status == UInt32(BadValue) || FFI.check(status)
             return plain(out)
         finally
             free_root(out)
@@ -96,7 +98,7 @@ function isvisible(schema, form, key::AbstractString, values)
     k = String(key)
     with_nodes(schema, form, values) do s, f, v
         out = Ref(false)
-        Guatiao.check(GC.@preserve k out guatiao_intake_is_visible(s, f, gstr(k), v, out))
+        FFI.check(GC.@preserve k out guatiao_intake_is_visible(s, f, gstr(k), v, out))
         return out[]
     end
 end
@@ -104,7 +106,7 @@ end
 function borrowed(source::Node, lookup, text::String)
     find = () -> GC.@preserve text lookup(node_ptr(source), gstr(text))
     find() == C_NULL && return nothing
-    return ValueRef(View(Ptr{GValue}(C_NULL); find, keep = owner_of(source)), Key[])
+    return FFI.borrow(source, find)
 end
 
 """
@@ -136,7 +138,7 @@ only, plus each member's own form where there is something in it.
 function for_schema(schema)
     with_nodes(schema) do s
         status, out = answer(o -> guatiao_intake_for_schema(s, binding_alloc(), o))
-        status == 0 || (free_root(out); Guatiao.check(status))
+        status == 0 || (free_root(out); FFI.check(status))
         return adopt(out)
     end
 end
@@ -152,7 +154,7 @@ function form_for(form, schema, path::AbstractString)
     p = String(path)
     with_nodes(form, schema) do f, s
         status, out = answer(o -> GC.@preserve p guatiao_intake_form_for(f, s, gstr(p), binding_alloc(), o))
-        status == 0 || (free_root(out); Guatiao.check(status))
+        status == 0 || (free_root(out); FFI.check(status))
         load_tag(out) == TAG_ABSENT && (free_root(out); return nothing)
         return adopt(out)
     end
@@ -213,10 +215,10 @@ function unflatten(schema, key::AbstractString, flat)
             free_root(out)
             return nothing
         end
-        status == 0 || (free_root(out); Guatiao.check(status))
+        status == 0 || (free_root(out); FFI.check(status))
         load_tag(out) == TAG_ABSENT && (free_root(out); return nothing)
         return adopt(out)
     end
 end
 
-end # module Intake
+end # module GuatiaoIntake

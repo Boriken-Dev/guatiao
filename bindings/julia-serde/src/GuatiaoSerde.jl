@@ -3,18 +3,73 @@
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 """
-    Guatiao.Serde
+    GuatiaoSerde
 
-A value as JSON, TOML or YAML, through the `guatiao_serde` library:
-`Serde.parse(text; format = :json)` and `Serde.emit(x; format = :json,
-pretty = false)`. TOML and YAML need a `guatiao_serde` built with them.
+A guatiao value as JSON, TOML or YAML, through the `guatiao_serde`
+library: `GuatiaoSerde.parse(text; format = :json)` and
+`GuatiaoSerde.emit(x; format = :json, pretty = false)`. TOML and YAML need
+a `guatiao_serde` built with them. Built on Guatiao, whose `Value` it
+answers and takes.
 """
-module Serde
+module GuatiaoSerde
 
-using ..Guatiao: Guatiao, Value, Node, GValue, GParseError, GString, ParseError, GuatiaoError, BadValue,
-    ZERO_VALUE, TAG_STRING, load_tag, payload_ptr, text_of, gstr, binding_alloc, new_root, free_root, adopt,
-    require_node, owner_of, check, guatiao_value_free, guatiao_json_parse_ex, guatiao_json_emit, guatiao_json_emit_pretty,
-    guatiao_toml_parse_ex, guatiao_toml_emit, guatiao_yaml_parse_ex, guatiao_yaml_emit
+using Guatiao: Guatiao, Value, GuatiaoException, BadValue
+using Guatiao.FFI: FFI, @cdef, Node, GValue, GString, GStr, GAlloc, ZERO_VALUE, TAG_STRING, load_tag, payload_ptr,
+    text_of, gstr, binding_alloc, new_root, free_root, adopt, require_node, owner_of, check, guatiao_value_free
+
+export ParseError
+
+"""
+    ParseError
+
+A document that does not parse: `format` (`:json`, `:toml`, `:yaml`),
+`line` and `column` counted from 1 (the column in characters; 0 when the
+parser did not say), and `message`, which never quotes the document. Its
+`Guatiao.status` is `BadValue`.
+"""
+struct ParseError <: GuatiaoException
+    format::Symbol
+    line::Int
+    column::Int
+    message::String
+end
+function Base.showerror(io::IO, e::ParseError)
+    print(io, "ParseError (", e.format, "): ", e.message)
+    e.line > 0 && print(io, " at line ", e.line, ", column ", e.column)
+end
+Guatiao.status(::ParseError) = BadValue
+
+"`guatiao_parse_error`: where a document stopped parsing."
+struct GParseError
+    format::UInt32
+    line::UInt32
+    column::UInt32
+    message::GValue
+end
+sizeof(GParseError) == 56 || error("guatiao_parse_error is $(sizeof(GParseError)) bytes, the header's is 56")
+
+const PV = Ptr{GValue}
+const PA = Ptr{GAlloc}
+
+@cdef "guatiao_serde" "" :plain guatiao_json_parse_ex(text::GStr, how::UInt32, a::PA, out::PV, err::Ptr{GParseError})::UInt32
+@cdef "guatiao_serde" "" :plain guatiao_json_emit(v::PV, how::UInt32, a::PA, out::PV)::UInt32
+@cdef "guatiao_serde" "" :plain guatiao_json_emit_pretty(v::PV, how::UInt32, a::PA, out::PV)::UInt32
+@cdef "guatiao_serde" "toml" :plain guatiao_toml_parse_ex(text::GStr, how::UInt32, a::PA, out::PV, err::Ptr{GParseError})::UInt32
+@cdef "guatiao_serde" "toml" :plain guatiao_toml_emit(v::PV, how::UInt32, a::PA, out::PV)::UInt32
+@cdef "guatiao_serde" "yaml" :plain guatiao_yaml_parse_ex(text::GStr, how::UInt32, a::PA, out::PV, err::Ptr{GParseError})::UInt32
+@cdef "guatiao_serde" "yaml" :plain guatiao_yaml_emit(v::PV, how::UInt32, a::PA, out::PV)::UInt32
+
+"""
+    use_library(path)
+
+Loads `guatiao_serde` from `path` (a file exporting its functions,
+whatever it is called, or a directory holding it under its platform file
+name) instead of looking for one: before the first call. Without it the
+library is found through `GUATIAO_SERDE_LIBRARY`, then `GUATIAO_LIBRARY`
+(a directory, or a file exporting it, else the file beside it), then the
+platform's search.
+"""
+use_library(path::AbstractString) = Guatiao.use_library("guatiao_serde", path)
 
 "How a byte string is spelled where the format has none: the low byte of `how`."
 const BYTES_DATA_URI = UInt32(0)
@@ -40,7 +95,7 @@ end
 
 `text` read as `format` (`:json`, `:toml`, `:yaml`) into a new `Value`.
 Numbers keep their exact text. A document that does not parse is a
-`Guatiao.ParseError` (`format`, `line`, `column`, `message`).
+`ParseError` (`format`, `line`, `column`, `message`).
 """
 function parse(text::AbstractString; format::Symbol = :json, how::Integer = 0, alloc = binding_alloc())
     f = parser(format)
@@ -101,4 +156,4 @@ function emit(x; format::Symbol = :json, pretty::Bool = false, how::Integer = 0,
     end
 end
 
-end # module Serde
+end # module GuatiaoSerde

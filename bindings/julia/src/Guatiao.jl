@@ -22,15 +22,14 @@ include("value.jl")
 include("typed.jl")
 include("time.jl")
 include("redact.jl")
-include("serde.jl")
-include("intake.jl")
 include("kinds.jl")
 include("registry.jl")
 include("provide.jl")
+include("ffi.jl")
 
 export Value, ValueRef, MapRef, ListRef, NumberText, absent, decode, schema, redact,
-    GuatiaoError, ParseError, Unparsed, LibraryNotFound, MissingSymbol, FloorMismatch,
-    Timestamp, Span, Length, Serde, Intake,
+    GuatiaoError, Unparsed, LibraryNotFound, MissingSymbol, FloorMismatch,
+    Timestamp, Span, Length,
     Registry, Instance, @kind, @provider, @required, @fallible, Lent, Taken
 
 function __init__()

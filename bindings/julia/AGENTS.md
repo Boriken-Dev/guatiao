@@ -15,13 +15,15 @@ and called with `ccall`.
 | name | what |
 | --- | --- |
 | `Guatiao` | `Value`, `ValueRef`, `MapRef`, `ListRef`, `NumberText`, `absent`, `decode`, `schema`, `@config`, `lower`, `redact`, `use_library`, the errors; dates and spans (`Timestamp`, `Span`, `Length`, `fromtext`, `totext`, `normalize`, `readlength`); `Registry`, `Instance`; `@kind`, `Lent`, `Taken`, `bind`; `@provider`, `Provider`, `Library`, `library_of`, `register_library` |
-| `Guatiao.Serde` | `parse`, `emit`: JSON, TOML, YAML |
-| `Guatiao.Intake` | forms, paths, the flat projection |
+| `Guatiao.FFI` | for a package over another guatiao library: `@cdef`, `surface!`, `find_library`, trees as root nodes |
+
+JSON, TOML and YAML are the package `GuatiaoSerde`, forms
+`GuatiaoIntake`: each over its own library, built on `Guatiao.FFI`.
 
 Exported: `Value`, `ValueRef`, `MapRef`, `ListRef`, `NumberText`,
-`absent`, `decode`, `schema`, `redact`, `GuatiaoError`, `ParseError`,
+`absent`, `decode`, `schema`, `redact`, `GuatiaoError`,
 `Unparsed`, `LibraryNotFound`, `MissingSymbol`, `FloorMismatch`,
-`Timestamp`, `Span`, `Length`, `Serde`, `Intake`, `Registry`,
+`Timestamp`, `Span`, `Length`, `Registry`,
 `Instance`, `@kind`, `@provider`, `@required`, `@fallible`, `Lent`,
 `Taken`. The rest is reached as `Guatiao.name`.
 
@@ -35,9 +37,7 @@ library is then found in this order:
    another file once one is loaded is an error; naming the same one is
    not.
 2. `GUATIAO_LIBRARY`: a directory holding `guatiao.dll` /
-   `libguatiao.so` / `libguatiao.dylib`, or a file (taken as it is for
-   `guatiao`; `guatiao_serde` and `guatiao_intake` are looked for beside
-   it under their own names).
+   `libguatiao.so` / `libguatiao.dylib`, or a file, taken as it is.
 3. `Libdl.find_library`, by base name.
 
 Not found is a `LibraryNotFound` (`basename`, `looked`). An export the
@@ -430,45 +430,58 @@ through the same table it calls one written in Rust or C. A library file
 written in Julia that any host's scan loads would need Julia embedded in
 it; the package offers none.
 
-## Serde: JSON, TOML, YAML
+## FFI: for a package over another guatiao library
+
+`Guatiao.FFI` is what GuatiaoSerde and GuatiaoIntake build on, and what
+any package binding a C library that takes and answers guatiao values
+may use. Supported API, versioned with this package; nothing in it is
+exported (write `FFI.adopt`).
 
 ```julia
-v = Serde.parse("""{"port": 5900}""")          # format = :json
-text = Serde.emit(v; format = :yaml)
+using Guatiao.FFI: FFI, @cdef, GValue, GAlloc, GStr
+
+FFI.surface!("mylib"; variable = "MYLIB_LIBRARY", probe = "mylib_parse")
+@cdef "mylib" "" :plain mylib_parse(text::GStr, a::Ptr{GAlloc}, out::Ptr{GValue})::UInt32
+
+function parse(text::String)
+    out = FFI.new_root()
+    status = GC.@preserve text mylib_parse(FFI.gstr(text), FFI.binding_alloc(), out)
+    status == 0 || (FFI.free_root(out); FFI.check(status))
+    return FFI.adopt(out)                      # a Value; it frees the tree and `out`
+end
 ```
 
-`Serde.parse(text; format = :json, how = 0, alloc) -> Value`;
-`Serde.emit(x; format = :json, pretty = false, how = 0) -> String` takes a
-Value, a view or plain data. `how`: `Serde.BYTES_DATA_URI`,
-`BYTES_BASE64`, `BYTES_ARRAY`, `BYTES_REFUSE`, or'd with
-`Serde.READ_DATA_URIS`. A document that does not parse is a `ParseError`
-(`format`, `line` and `column` from 1, the column in characters, 0 when
-the parser did not say; `message`, which never quotes the document). A
-TOML document must be a map (`WrongKind`). TOML and YAML need a
-`guatiao_serde` built with them (`MissingSymbol` naming the feature). A
-number keeps its exact text.
+- `@cdef base feature mode name(arg::CType, ...)::CRet`: an export of the
+  library carrying surface `base`, found on first use (`feature` names the
+  build feature it needs, `""` for every build; `mode` `:safe` calls it in
+  a GC-safe region, `:plain` with a plain `ccall`). Usable from any
+  module; its pointer is resolved again after a reset.
+- The order: `Guatiao.use_library(base, path)` (a file, or a directory
+  holding the platform's file name), the surface's own variable, then
+  `GUATIAO_LIBRARY` (a directory; or a file, used when it exports the
+  surface's probe, else the file beside it), then `Libdl.find_library`.
+  `surface!(base; variable, probe)` declares a surface's variable and
+  probe (`guatiao_serde` and `guatiao_intake` are known);
+  `find_library(base)` is where the order lands now (`LibraryNotFound`
+  naming every place tried).
+- Trees cross as their root node, a `Ptr{GValue}`: `new_root()` /
+  `free_root(p)` for a root a call writes; `adopt(root, alloc =
+  binding_alloc())` a `Value` taking it over; `with_nodes(f, args...)`
+  lends `Value`s, views or plain data to a call as nodes;
+  `require_node(x)` / `node_ptr(x)` the node a `Value` or view names now,
+  `owner_of(x)` what to keep under `GC.@preserve` while it is used;
+  `borrow(source, find)` a read-only view of what `find()` answers, asked
+  again on every access, refused once `source` is closed.
+- Reading: `load_tag`, `payload_ptr`, `text_of`, `plain`, `map_keys`,
+  `map_find`, `TAG_*`, `ZERO_VALUE`. Writing: `gstr(s)` (a `GStr` over a
+  `String` kept under `GC.@preserve`), `binding_alloc()` (the core
+  library's default allocator). `check(status, message = "")` throws the
+  status's `GuatiaoError`; `guatiao_value_free(p)` frees what a node owns.
+  The mirrors: `GValue`, `GAlloc`, `GStr`, `GString`, `GBytes`.
 
-## Intake
-
-```julia
-Intake.check(schema, form)                  # nothing, or the error map
-Intake.layout(schema, form)                 # [Dict("section" => ..., "fields" => [...]), ...]
-Intake.isvisible(schema, form, "key", values)
-Intake.at(value, "agent[1].name")           # a borrowed ValueRef, or nothing
-Intake.for_schema(schema)                   # a Value
-Intake.form_for(form, schema, "path")       # a Value, or nothing
-Intake.resolve(schema, "auth.password")     # a borrowed ValueRef, or nothing
-Intake.flat_keys(schema, "auth")            # Vector{String}; WrongKind for an unknown key
-Intake.flatten(schema, "auth", value)       # Dict{String,String}
-Intake.unflatten(schema, "auth", store)     # a Value, or nothing
-```
-
-Every schema, form, value and values argument is a Value, a view or
-plain data. `at` and `resolve` answer a view borrowed from their
-argument: read-only, found again on every access,
-`InvalidStateException` once the source is closed; `copy` it to keep it.
-`unflatten` answers `nothing` for "nothing stored" or a key that does not
-apply; a store that is not text to text is an `ArgumentError`.
+**A tree crosses libraries as its root node**: built by one library, it
+is read and freed by any other, since a value records its own allocator.
+The library that built it stays loaded while the tree lives.
 
 ## Errors
 
@@ -477,9 +490,8 @@ A failing `guatiao_status` is a `GuatiaoError` (`status::Guatiao.Status`,
 the raw number). `Guatiao.Status` is an enum: `OK`, `BadValue`,
 `AllocFailed`, `WrongKind`, `NotFound`, `NullArgument`, `Gone`,
 `Unsupported`, `Busy`, `Internal`, reached as `Guatiao.BadValue` and so
-on. `GuatiaoError(status, message)` builds one. `ParseError` and
-`Unparsed` have `Guatiao.status(e) == BadValue`; all three are
-`Guatiao.GuatiaoException`s. `LibraryNotFound`, `MissingSymbol` and
+on. `GuatiaoError(status, message)` builds one. `Unparsed` has
+`Guatiao.status(e) == BadValue`; both are `Guatiao.GuatiaoException`s. `LibraryNotFound`, `MissingSymbol` and
 `FloorMismatch` are this binding's own.
 
 ## Threads
