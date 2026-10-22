@@ -328,8 +328,8 @@ with its `package-lock.json` and the `../bindings/node` entry of
 `bindings/julia/Project.toml`, `bindings/r/DESCRIPTION` (R takes no letters
 in a version: `0.0.0-alpha.N` is written `0.0.0.N`, so the first release that
 is not a pre-release must be above `0.0.0`), `bindings/matlab/DESCRIPTION`
-(the Octave package takes the version as written; the MATLAB toolbox,
-numbers only, is versioned `0.0.0.N` from it when it is built), and the
+(the Octave package and the MATLAB toolbox both take the version as
+written), and the
 `guatiao` entry of `examples/wire_over_webtransport/client/Cargo.lock` (a
 `--locked` build refuses a stale one; `cargo build` in that directory
 rewrites it). A `## [x.y.z] - <date>` section in
