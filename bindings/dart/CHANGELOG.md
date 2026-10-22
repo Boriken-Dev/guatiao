@@ -7,7 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking: JSON, TOML and YAML, and forms, are packages of their own**:
+  `guatiao_serde` and `guatiao_intake`, each over its own library and
+  built on this one. `package:guatiao/serde.dart` and
+  `package:guatiao/intake.dart` are gone, and `Format` and `ParseError`
+  are exported by `package:guatiao_serde/guatiao_serde.dart`.
+  *Migration:* `dart pub add guatiao_serde guatiao_intake`, then import
+  `package:guatiao_serde/guatiao_serde.dart` and
+  `package:guatiao_intake/guatiao_intake.dart` with the same prefixes.
+- The ffigen symbol file is `package:guatiao/ffi_symbols.yaml`, its types
+  imported from `package:guatiao/ffi.dart`; it was
+  `package:guatiao/src/symbols.yaml`.
+
 ### Added
+
+- `package:guatiao/ffi.dart`: what a package over another guatiao library
+  builds on: the generated bindings, `openSurface` (a surface's library,
+  found through its own variable, then `GUATIAO_LIBRARY`: a directory, or
+  a file exporting the surface, else the file beside it), `NativeLib`,
+  `strOf`, `takeValue`, `freeNode`, `checkStatus`.
 
 - `Registry.providerMeta(key)`: a copy of the provider's `meta` as a
   `Value` to close, `null` when it declares none, `NotFound` for an unknown

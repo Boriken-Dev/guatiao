@@ -30,8 +30,10 @@ It works with any shared library that exports the ABI, whether that is
   `Duration` for an exact length, read and written by the library itself.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
-- **JSON, TOML and YAML**, and **form checks against a schema**, through
-  the `guatiao_serde` and `guatiao_intake` libraries when they are present.
+- **JSON, TOML and YAML**, and **forms checked against a schema**, are
+  the packages [`guatiao_serde`](https://pub.dev/packages/guatiao_serde)
+  and [`guatiao_intake`](https://pub.dev/packages/guatiao_intake), each
+  over its own library and built on this one.
 - **Importing never fails** — a native library is looked for on first
   use, and a missing one says every place that was searched.
 
@@ -72,14 +74,6 @@ call throws `LibraryNotFound` naming every place it looked. A library
 that exports only part of the ABI is fine: reaching for a function it
 lacks throws `MissingSymbol` naming it, and everything else works.
 
-| Exports from | Needed for |
-| --- | --- |
-| `guatiao` | values, the registry, provider tables |
-| `guatiao_serde` | `package:guatiao/serde.dart`: JSON, and TOML and YAML when the library has them |
-| `guatiao_intake` | `package:guatiao/intake.dart` |
-
-The two optional libraries are looked for the same way, in the same
-directory, only when `serde` or `intake` is first used.
 
 ## Quick start
 
@@ -177,34 +171,6 @@ greeter.ref.greet.asFunction<GreetDart>()(found.ctx, name, outMap, err);
 [`test/greeter_test.dart`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/test/greeter_test.dart)
 is a complete worked example.
 
-### JSON, TOML, YAML and forms
-
-```dart
-import 'package:guatiao/guatiao.dart';
-import 'package:guatiao/serde.dart' as serde;
-import 'package:guatiao/intake.dart' as intake;
-
-final value = serde.loads('{"port": 5900}');            // Format.json by default
-final text = serde.dumps(value, format: Format.yaml);
-final pretty = serde.dumps(value, pretty: true);
-
-final problem = intake.check(schema, formDoc);          // null when the form fits
-final sections = intake.layout(schema, formDoc);
-final shown = intake.isVisible(schema, formDoc, 'tls.verify', values);
-
-// A front end that keeps text under flat keys (`agent[0].name`, `env[PATH]`):
-final field = intake.resolve(schema, 'auth.password');  // the schema field, or null
-final keys = intake.flatKeys(schema, 'auth');           // ['auth', 'auth.username', ...]
-final store = intake.flatten(schema, 'auth', authValue);// {'auth': 'userpass', ...}
-final back = intake.unflatten(schema, 'auth', store);   // a Value to close, or null
-```
-
-A document that does not parse throws `ParseError`, which is a
-`BadValue` and a `FormatException` carrying `format`, `line` and
-`column` (from 1; 0 when the parser did not say where). A format the
-loaded library does not export throws `UnsupportedError` naming the
-symbol and the feature it belongs to.
-
 ### Reading a value you were handed
 
 When an engine hands you a value, as in a callback, read it in place
@@ -216,8 +182,7 @@ view.toDart();
 ```
 
 It touches no library and no global state, so it is safe inside an
-`isolateGroupBound` callback that a native thread calls. The
-intake functions take any `Ref`, a borrowed one included.
+`isolateGroupBound` callback that a native thread calls.
 
 ## Embedding it, and sharing its types
 
@@ -247,11 +212,16 @@ packages. This package ships a symbol file that says otherwise:
 # the other package's ffigen.yaml
 import:
   symbol-files:
-    - 'package:guatiao/src/symbols.yaml'
+    - 'package:guatiao/ffi_symbols.yaml'
 ```
 
-Its generated bindings then import these types instead of minting their
-own, and a pointer crosses between the two packages freely.
+Its generated bindings then import these types from
+`package:guatiao/ffi.dart` instead of minting their own, and a pointer
+crosses between the two packages freely. `package:guatiao/ffi.dart` is
+also what such a package builds on: `openSurface` finds and opens its
+library, `Value.adopt` takes over a tree a call wrote, and `strOf`,
+`takeValue`, `freeNode` and `checkStatus` do the rest. `guatiao_serde`
+and `guatiao_intake` are built that way.
 
 ### Dates, times and secrets
 
@@ -303,8 +273,7 @@ words when it gave any.
 | Library | Purpose |
 | --- | --- |
 | `package:guatiao/guatiao.dart` | `Value`, `Ref`, `MapRef`, `ListRef`, `absent`, `Registry`, `Instance`, `kindTable`, the error classes |
-| `package:guatiao/serde.dart` | `loads` / `dumps` for JSON, TOML, YAML |
-| `package:guatiao/intake.dart` | `check`, `layout`, `isVisible`, `at`, `forSchema`, `formFor`, `resolve`, `flatKeys`, `flatten`, `unflatten` |
+| `package:guatiao/ffi.dart` | for a package over another guatiao library: the generated bindings, `openSurface`, `NativeLib`, `strOf`, `takeValue`, `freeNode`, `checkStatus` |
 | `package:guatiao/time.dart` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, `parseTimestamp`, `formatTimestamp`, `toDuration`, `fromDuration`, `normalize` |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/AGENTS.md)
@@ -321,8 +290,8 @@ dart format --output=none --set-exit-if-changed .
 dart test
 ```
 
-The tests need the three libraries and the repository's example plugins
-in one directory. `test/support.dart` points the suite at the
+The tests need the library and the repository's example plugins in one
+directory. `test/support.dart` points the suite at the
 repository's build output when `GUATIAO_LIBRARY` is unset; the
 repository's own `AGENTS.md` says how to produce it. Nothing skips.
 
@@ -336,6 +305,9 @@ dart run ffigen --config ffigen.yaml
 point it cannot find — it reports `Input Headers: []` and writes a file
 with no bindings, deleting the whole surface silently. The file is over
 two thousand lines.
+
+It is generated from `guatiao.h` alone, and also writes
+`lib/ffi_symbols.yaml`, the symbol file other packages import.
 
 ## License
 

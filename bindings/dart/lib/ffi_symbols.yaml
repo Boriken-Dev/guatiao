@@ -1,6 +1,6 @@
 format_version: 1.0.0
 files:
-  package:guatiao/src/bindings.g.dart:
+  package:guatiao/ffi.dart:
     used-config:
       ffi-native: false
     symbols:
@@ -30,34 +30,6 @@ files:
         name: guatiao_datetime_parse
       c:@F@guatiao_duration_read:
         name: guatiao_duration_read
-      c:@F@guatiao_intake_check:
-        name: guatiao_intake_check
-      c:@F@guatiao_intake_flat_keys:
-        name: guatiao_intake_flat_keys
-      c:@F@guatiao_intake_flatten:
-        name: guatiao_intake_flatten
-      c:@F@guatiao_intake_for_schema:
-        name: guatiao_intake_for_schema
-      c:@F@guatiao_intake_form_for:
-        name: guatiao_intake_form_for
-      c:@F@guatiao_intake_is_visible:
-        name: guatiao_intake_is_visible
-      c:@F@guatiao_intake_layout:
-        name: guatiao_intake_layout
-      c:@F@guatiao_intake_path_get:
-        name: guatiao_intake_path_get
-      c:@F@guatiao_intake_resolve:
-        name: guatiao_intake_resolve
-      c:@F@guatiao_intake_unflatten:
-        name: guatiao_intake_unflatten
-      c:@F@guatiao_json_emit:
-        name: guatiao_json_emit
-      c:@F@guatiao_json_emit_pretty:
-        name: guatiao_json_emit_pretty
-      c:@F@guatiao_json_parse:
-        name: guatiao_json_parse
-      c:@F@guatiao_json_parse_ex:
-        name: guatiao_json_parse_ex
       c:@F@guatiao_list_clear:
         name: guatiao_list_clear
       c:@F@guatiao_list_discard:
@@ -166,12 +138,6 @@ files:
         name: guatiao_timestamp_normalize
       c:@F@guatiao_timestamp_parse:
         name: guatiao_timestamp_parse
-      c:@F@guatiao_toml_emit:
-        name: guatiao_toml_emit
-      c:@F@guatiao_toml_parse:
-        name: guatiao_toml_parse
-      c:@F@guatiao_toml_parse_ex:
-        name: guatiao_toml_parse_ex
       c:@F@guatiao_value_absent:
         name: guatiao_value_absent
       c:@F@guatiao_value_bool:
@@ -196,12 +162,6 @@ files:
         name: guatiao_wire_decode
       c:@F@guatiao_wire_encode:
         name: guatiao_wire_encode
-      c:@F@guatiao_yaml_emit:
-        name: guatiao_yaml_emit
-      c:@F@guatiao_yaml_parse:
-        name: guatiao_yaml_parse
-      c:@F@guatiao_yaml_parse_ex:
-        name: guatiao_yaml_parse_ex
       c:@S@guatiao_alloc:
         name: guatiao_alloc
       c:@S@guatiao_buffer:
@@ -240,8 +200,6 @@ files:
         name: guatiao_merge_override
       c:@S@guatiao_object:
         name: guatiao_object
-      c:@S@guatiao_parse_error:
-        name: guatiao_parse_error
       c:@S@guatiao_provider_error:
         name: guatiao_provider_error
       c:@S@guatiao_provider_info:

@@ -8,37 +8,29 @@
 name: GuatiaoBindings
 description: >-
   Raw dart:ffi bindings over the guatiao C ABI, generated from
-  crates/guatiao/include/guatiao.h and the sibling headers for the serde
-  and form libraries.
+  crates/guatiao/include/guatiao.h.
 # `symbol-file` is what lets ANOTHER package's ffigen run reuse these
 # type definitions instead of minting its own. Dart's FFI structs are
 # nominal: without it, a `Pointer<guatiao_value>` generated over there is
 # a different type from one generated here and the two cannot be passed
-# between packages at all. A consumer writes
-# `import: { symbol-files: ['package:guatiao/src/symbols.yaml'] }`.
+# between packages at all. A package over another guatiao library (the
+# serde and intake packages among them) writes
+# `import: { symbol-files: ['package:guatiao/ffi_symbols.yaml'] }`, and its
+# generated code then imports `package:guatiao/ffi.dart`.
 output:
   bindings: 'lib/src/bindings.g.dart'
   symbol-file:
-    output: 'package:guatiao/src/symbols.yaml'
-    import-path: 'package:guatiao/src/bindings.g.dart'
+    output: 'package:guatiao/ffi_symbols.yaml'
+    import-path: 'package:guatiao/ffi.dart'
 
 headers:
   entry-points:
     - '../../crates/guatiao/include/guatiao.h'
-    - '../../crates/guatiao-serde/include/guatiao_serde.h'
-    - '../../crates/guatiao-intake/include/guatiao_intake.h'
   include-directives:
     - '**guatiao.h'
-    - '**guatiao_serde.h'
-    - '**guatiao_intake.h'
 
 compiler-opts:
   - '-I../../crates/guatiao/include'
-  # guatiao_serde.h guards its TOML and YAML entry points behind these;
-  # without them ffigen binds only the JSON half, and `serde.dart` then
-  # has nothing to call for a format the loaded library may well export.
-  - '-DGUATIAO_SERDE_TOML'
-  - '-DGUATIAO_SERDE_YAML'
 
 preamble: |
   // This Source Code Form is subject to the terms of the Mozilla Public

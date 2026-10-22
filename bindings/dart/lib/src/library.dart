@@ -9,9 +9,9 @@ import 'package:ffi/ffi.dart';
 
 import 'bindings.g.dart';
 
-/// No library of this base name was found by either route.
+/// No library of this base name was found by any route.
 class LibraryNotFound implements Exception {
-  LibraryNotFound(this.basename, this.filename, [this.cause]);
+  LibraryNotFound(this.basename, this.filename, [this.cause, this.variable]);
 
   final String basename;
 
@@ -21,12 +21,17 @@ class LibraryNotFound implements Exception {
   /// What the loader said, when it was reached at all.
   final Object? cause;
 
+  /// The surface's own environment variable, consulted before
+  /// `GUATIAO_LIBRARY`; `null` for the core.
+  final String? variable;
+
   @override
   String toString() {
     final tail = cause == null ? '' : ' ($cause)';
+    final own = variable == null ? '' : 'the $variable environment variable, ';
     return 'LibraryNotFound: could not find $filename: checked the '
-        'libraries registered with guatiao.useLibrary, the '
-        'GUATIAO_LIBRARY environment variable, guatiao.libraryDirectory '
+        'libraries registered with guatiao.useLibrary, $own'
+        'the GUATIAO_LIBRARY environment variable, guatiao.libraryDirectory '
         'and the platform library search path$tail';
   }
 }
@@ -84,6 +89,13 @@ const Map<String, String> _probe = <String, String>{
   'guatiao_intake': 'guatiao_intake_check',
 };
 
+/// Each surface's own environment variable, consulted before
+/// `GUATIAO_LIBRARY`.
+const Map<String, String> _variable = <String, String>{
+  'guatiao_serde': 'GUATIAO_SERDE_LIBRARY',
+  'guatiao_intake': 'GUATIAO_INTAKE_LIBRARY',
+};
+
 /// Where to look when `GUATIAO_LIBRARY` is unset.
 ///
 /// A host that ships its own copies points this at their directory before
@@ -98,22 +110,45 @@ String? _inDirectory(String directory, String filename) {
   return File(candidate).existsSync() ? candidate : null;
 }
 
-/// Where [basename]'s library is (Q5).
+bool _carries(String path, String symbol) {
+  try {
+    return DynamicLibrary.open(path).providesSymbol(symbol);
+  } on Object {
+    return false;
+  }
+}
+
+/// Where [basename]'s library is.
 ///
-/// `GUATIAO_LIBRARY` first, naming either a directory holding the
-/// platform's filename or a file; then [libraryDirectory]; otherwise the
-/// bare filename, which hands the search to the platform's own loader.
-String resolveLibraryPath(String basename) {
+/// [variable] first, when given and not `GUATIAO_LIBRARY`: a file it
+/// names is taken as it is, a directory holds the platform's filename.
+/// Then `GUATIAO_LIBRARY`: a directory holding the platform's filename,
+/// or a file, taken when it exports [probe] (or when [probe] is `null`),
+/// else the platform's filename beside it. Then [libraryDirectory];
+/// otherwise the bare filename, which hands the search to the platform's
+/// own loader.
+String resolveLibraryPath(String basename, {String? variable, String? probe}) {
   final filename = dllFilename(basename);
+  final own = variable == null || variable == 'GUATIAO_LIBRARY'
+      ? null
+      : Platform.environment[variable];
+  if (own != null && own.isNotEmpty) {
+    if (Directory(own).existsSync()) {
+      final found = _inDirectory(own, filename);
+      if (found != null) return found;
+    } else if (File(own).existsSync()) {
+      return own;
+    }
+  }
   final env = Platform.environment['GUATIAO_LIBRARY'];
   if (env != null && env.isNotEmpty) {
     final found = _inDirectory(env, filename);
     if (found != null) return found;
     if (!Directory(env).existsSync() && File(env).existsSync()) {
-      // For the core library a file `GUATIAO_LIBRARY` names is taken as
-      // it is, whatever it is called; a sibling is looked for beside it
-      // under its own platform filename.
-      if (basename == 'guatiao') return env;
+      // A file `GUATIAO_LIBRARY` names serves every surface it exports,
+      // whatever it is called; for any other, the surface's own library
+      // is looked for beside it.
+      if (probe == null || _carries(env, probe)) return env;
       final beside = _inDirectory(File(env).parent.path, filename);
       if (beside != null) return beside;
     }
@@ -136,13 +171,14 @@ class NativeLib {
     requireWordSize(sizeOf<IntPtr>());
   }
 
-  /// Opens [basename]'s library, or throws [LibraryNotFound].
-  factory NativeLib.open(String basename) {
-    final path = resolveLibraryPath(basename);
+  /// Opens [basename]'s library, found by [resolveLibraryPath] with
+  /// [variable] and [probe], or throws [LibraryNotFound].
+  factory NativeLib.open(String basename, {String? variable, String? probe}) {
+    final path = resolveLibraryPath(basename, variable: variable, probe: probe);
     try {
       return NativeLib._(path, DynamicLibrary.open(path));
     } on Object catch (error) {
-      throw LibraryNotFound(basename, dllFilename(basename), error);
+      throw LibraryNotFound(basename, dllFilename(basename), error, variable);
     }
   }
 
@@ -150,6 +186,10 @@ class NativeLib {
   final String path;
 
   final DynamicLibrary _dylib;
+
+  /// The loaded library, for a package's own generated bindings over the
+  /// surface it carries.
+  DynamicLibrary get library => _dylib;
 
   /// The generated raw surface over this library.
   final GuatiaoBindings bindings;
@@ -242,14 +282,22 @@ void forgetLibraries() {
   _opened.clear();
 }
 
-NativeLib _libFor(String basename) =>
-    _registered[basename] ?? (_opened[basename] ??= NativeLib.open(basename));
+/// The library carrying the surface [basename] (`'guatiao'`,
+/// `'guatiao_serde'`, `'guatiao_intake'`), opened once on first use: the
+/// one registered with [useLibrary] for it, else the one
+/// [resolveLibraryPath] finds through the surface's own variable
+/// (`GUATIAO_SERDE_LIBRARY`, `GUATIAO_INTAKE_LIBRARY`) and
+/// `GUATIAO_LIBRARY`. Throws [LibraryNotFound].
+///
+/// A surface this package does not know names its own [variable] and
+/// [probe].
+NativeLib openSurface(String basename, {String? variable, String? probe}) =>
+    _registered[basename] ??
+    (_opened[basename] ??= NativeLib.open(
+      basename,
+      variable: variable ?? _variable[basename],
+      probe: probe ?? _probe[basename],
+    ));
 
 /// The `guatiao` library, loaded on first use.
-NativeLib core() => _libFor('guatiao');
-
-/// The `guatiao_serde` library, loaded on first use.
-NativeLib serdeLib() => _libFor('guatiao_serde');
-
-/// The `guatiao_intake` library, loaded on first use.
-NativeLib formLib() => _libFor('guatiao_intake');
+NativeLib core() => openSurface('guatiao');

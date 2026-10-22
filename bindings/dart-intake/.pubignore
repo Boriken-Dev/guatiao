@@ -1,0 +1,6 @@
+# Replaces .gitignore for publishing, so it repeats it, and adds the
+# repository's development override, which a consumer must not get.
+.dart_tool/
+pubspec.lock
+/doc/api/
+pubspec_overrides.yaml

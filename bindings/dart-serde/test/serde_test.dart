@@ -8,12 +8,12 @@ library;
 import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
+import 'package:guatiao/ffi.dart' show openSurface, strOf;
 import 'package:guatiao/guatiao.dart';
-import 'package:guatiao/serde.dart' as serde;
-import 'package:guatiao/src/bindings.g.dart';
-import 'package:guatiao/src/library.dart' as native;
-import 'package:guatiao/src/serde.dart' as inner;
-import 'package:guatiao/src/value.dart' show strOf;
+import 'package:guatiao_serde/guatiao_serde.dart' as serde;
+import 'package:guatiao_serde/guatiao_serde.dart' show Format, ParseError;
+import 'package:guatiao_serde/src/bindings.g.dart' show guatiao_parse_error;
+import 'package:guatiao_serde/src/serde.dart' as inner;
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -125,7 +125,7 @@ void main() {
   test('a refusal that is not a syntax error keeps its message', () {
     final error = calloc<guatiao_parse_error>();
     addTearDown(() => calloc.free(error));
-    final core = native.core();
+    final core = openSurface('guatiao');
     // `message` is the last field of the struct.
     final message = (error.cast<Uint8>() +
             (sizeOf<guatiao_parse_error>() - sizeOf<guatiao_value>()))

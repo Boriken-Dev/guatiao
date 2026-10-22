@@ -5,15 +5,41 @@
 import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
+import 'package:guatiao/ffi.dart';
 
-import 'bindings.g.dart';
-import 'errors.dart';
-import 'library.dart' as native;
-import 'value.dart';
+import 'bindings.g.dart' hide guatiao_alloc, guatiao_str, guatiao_value;
 
 /// The key of a provider's `meta` holding its form document: read it with
-/// `Registry.providerMeta`, then [check] it against `providerConfig`.
-const String providerFormKey = 'form';
+/// `Registry.providerMeta` (package:guatiao), then [check] it against
+/// `providerConfig`.
+const String providerFormKey = GUATIAO_INTAKE_PROVIDER_FORM_KEY;
+
+/// The `guatiao_intake` library, opened on first use: the one registered
+/// for it with `useLibrary` (package:guatiao), else
+/// `GUATIAO_INTAKE_LIBRARY`, else `GUATIAO_LIBRARY` (a directory holding
+/// it, or a file exporting its functions or sitting beside it), else
+/// `libraryDirectory`, else the platform's search. Throws
+/// `LibraryNotFound`.
+NativeLib library() => openSurface('guatiao_intake');
+
+/// The opened library with this package's bindings over it.
+final class _Lib {
+  _Lib(this.native) : bindings = GuatiaoIntakeBindings(native.library);
+
+  final NativeLib native;
+  final GuatiaoIntakeBindings bindings;
+
+  Pointer<guatiao_alloc> get alloc => native.alloc;
+}
+
+_Lib? _cached;
+
+_Lib _open() {
+  final lib = library();
+  final cached = _cached;
+  if (cached != null && identical(cached.native, lib)) return cached;
+  return _cached = _Lib(lib);
+}
 
 /// `null` when `form` fits `schema`, otherwise the error map
 /// `guatiao_intake_check` writes: `kind` and `at`, plus whichever of
@@ -23,7 +49,7 @@ Map<String, Object?>? check(
   Ref form, {
   Pointer<guatiao_alloc>? alloc,
 }) {
-  final lib = native.formLib();
+  final lib = _open();
   final allocator = alloc ?? lib.alloc;
   final out = calloc<guatiao_value>();
   var filled = false;
@@ -42,7 +68,7 @@ Map<String, Object?>? check(
     return (takeValue(out)! as Map).cast<String, Object?>();
   } finally {
     if (!filled) {
-      native.core().bindings.guatiao_value_free(out);
+      freeNode(out);
       calloc.free(out);
     }
   }
@@ -54,7 +80,7 @@ List<Map<String, Object?>> layout(
   Ref form, {
   Pointer<guatiao_alloc>? alloc,
 }) {
-  final lib = native.formLib();
+  final lib = _open();
   final allocator = alloc ?? lib.alloc;
   final out = calloc<guatiao_value>();
   var filled = false;
@@ -74,7 +100,7 @@ List<Map<String, Object?>> layout(
     ];
   } finally {
     if (!filled) {
-      native.core().bindings.guatiao_value_free(out);
+      freeNode(out);
       calloc.free(out);
     }
   }
@@ -83,7 +109,7 @@ List<Map<String, Object?>> layout(
 /// Whether the field under `key` is shown, given the `values` entered so
 /// far.
 bool isVisible(Ref schema, Ref form, String key, Ref values) {
-  final lib = native.formLib();
+  final lib = _open();
   final out = calloc<Bool>();
   try {
     using((arena) {
@@ -116,7 +142,7 @@ bool isVisible(Ref schema, Ref form, String key, Ref values) {
 /// [StateError], and a change to [value] is seen as it is now. A path that
 /// names nothing and a path that is not a path at all both answer `null`.
 Ref? at(Ref value, String path) {
-  final lib = native.formLib();
+  final lib = _open();
   Pointer<guatiao_value> find() => using(
         (arena) => lib.bindings.guatiao_intake_path_get(
           value.requireNode(),
@@ -138,7 +164,7 @@ Ref? at(Ref value, String path) {
 ///
 /// The caller owns what comes back and closes it.
 Value forSchema(Ref schema, {Pointer<guatiao_alloc>? alloc}) {
-  final lib = native.formLib();
+  final lib = _open();
   final allocator = alloc ?? lib.alloc;
   final out = calloc<guatiao_value>();
   var filled = false;
@@ -154,7 +180,7 @@ Value forSchema(Ref schema, {Pointer<guatiao_alloc>? alloc}) {
     return Value.adopt(out, alloc: allocator);
   } finally {
     if (!filled) {
-      native.core().bindings.guatiao_value_free(out);
+      freeNode(out);
       calloc.free(out);
     }
   }
@@ -173,7 +199,7 @@ Value? formFor(
   String path, {
   Pointer<guatiao_alloc>? alloc,
 }) {
-  final lib = native.formLib();
+  final lib = _open();
   final allocator = alloc ?? lib.alloc;
   final out = calloc<guatiao_value>();
   var filled = false;
@@ -196,7 +222,7 @@ Value? formFor(
     return Value.adopt(out, alloc: allocator);
   } finally {
     if (!filled) {
-      native.core().bindings.guatiao_value_free(out);
+      freeNode(out);
       calloc.free(out);
     }
   }
@@ -211,7 +237,7 @@ Value? formFor(
 /// read-only, holds [schema] alive and is found again on every access:
 /// reading it after [schema] is closed throws a [StateError].
 Ref? resolve(Ref schema, String key) {
-  final lib = native.formLib();
+  final lib = _open();
   Pointer<guatiao_value> find() => using(
         (arena) => lib.bindings.guatiao_intake_resolve(
           schema.requireNode(),
@@ -233,7 +259,7 @@ Object? _flat(int Function(Arena arena, Pointer<guatiao_value> out) call) {
     return takeValue(out);
   } finally {
     if (!filled) {
-      native.core().bindings.guatiao_value_free(out);
+      freeNode(out);
       calloc.free(out);
     }
   }
@@ -248,7 +274,7 @@ List<String> flatKeys(
   String key, {
   Pointer<guatiao_alloc>? alloc,
 }) {
-  final lib = native.formLib();
+  final lib = _open();
   final allocator = alloc ?? lib.alloc;
   final keys = _flat(
     (arena, out) => lib.bindings.guatiao_intake_flat_keys(
@@ -273,7 +299,7 @@ Map<String, String> flatten(
   Ref value, {
   Pointer<guatiao_alloc>? alloc,
 }) {
-  final lib = native.formLib();
+  final lib = _open();
   final allocator = alloc ?? lib.alloc;
   final store = _flat(
     (arena, out) => lib.bindings.guatiao_intake_flatten(
@@ -307,7 +333,7 @@ Value? unflatten(
   Object flat, {
   Pointer<guatiao_alloc>? alloc,
 }) {
-  final lib = native.formLib();
+  final lib = _open();
   final allocator = alloc ?? lib.alloc;
   Value? owned;
   final Ref store;
@@ -343,7 +369,7 @@ Value? unflatten(
     return Value.adopt(out, alloc: allocator);
   } finally {
     if (!filled) {
-      native.core().bindings.guatiao_value_free(out);
+      freeNode(out);
       calloc.free(out);
     }
     owned?.close();
