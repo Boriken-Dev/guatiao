@@ -20,6 +20,26 @@ write now.
   handles, `guatiao-serde`, `guatiao-intake`, the C surface, Python and
   Dart), each with the call before and after; the Rust it shows is
   compiled by the test suite.
+- **A provider's `meta` from C, Python, Dart and Node.**
+  `guatiao_registry_provider_meta(reg, key, alloc, out)` writes a copy of
+  the provider's `meta` map in `alloc`, which outlives the library: ABSENT
+  for a provider that declares none, `GUATIAO_ERR_NOT_FOUND` for an
+  unknown key. `Registry.provider_meta` (Python) and `providerMeta` (Dart,
+  Node) answer it as a `Value` to close, or nothing. Its form is under
+  `GUATIAO_INTAKE_PROVIDER_FORM_KEY` in `guatiao_intake.h`,
+  `intake.PROVIDER_FORM_KEY` in Python and `providerFormKey` in Dart and
+  Node, so a host in any of them reads a provider's form and checks it
+  against `provider_config` with `intake.check`, as a Rust host does
+  through `Offer::meta`.
+- **The example configured greeter carries its form**:
+  `derived_greeter_shouter` declares `#[provider(Greeter, config, form =
+  Shouter)]`, two sections, a placeholder, a unit and a field shown only
+  while `exclaim` is `true` (`exclaim` and `marks` default, so a
+  configuration naming only `prefix` still builds it). The greeter host's
+  tests read the form back and check it from Rust and from a C program.
+- **A documentation page, *A provider's form***: how a provider writes its
+  form with `#[provider(.., form = T)]`, and how a host reads it back and
+  checks it from Rust, C, Python, Dart and Node, with the example greeter.
 - **`into_local()`, `into_alloc(alloc)` and `is_local()` on `Value`,
   `Map`, `List`, `Text` and `Buffer`.** Owning a tree without copying one
   that is already this binary's: `into_local()` hands back a tree whose
