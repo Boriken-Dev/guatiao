@@ -7,8 +7,9 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { NotFound, Value, WrongKind } from '../src/index.js';
-import * as intake from '../src/intake.js';
+import { NotFound, Value, WrongKind } from 'guatiao';
+
+import * as intake from '../src/index.js';
 
 const SCHEMA = {
   type: 'object',

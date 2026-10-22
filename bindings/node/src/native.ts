@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 /**
- * Finding and loading `guatiao`, `guatiao_serde` and `guatiao_intake`, the
- * declaration of every export this binding calls, and reading and writing
+ * Finding and loading a guatiao library and `guatiao` itself, the
+ * declaration of every export this package calls, and reading and writing
  * native memory.
  *
  * Nothing native is touched until the first call that needs it: koffi
@@ -172,10 +172,10 @@ let chosen: string | undefined;
 /**
  * Names the guatiao library to load instead of looking for one: a file
  * exporting the ABI, whatever it is called, or a directory holding
- * `guatiao.dll` / `libguatiao.so` / `libguatiao.dylib`. `guatiao_serde` and
- * `guatiao_intake` are then looked for beside it. Call it before the first
- * native call; naming another file once one is loaded throws, naming the
- * same one does nothing.
+ * `guatiao.dll` / `libguatiao.so` / `libguatiao.dylib`. Only this
+ * package's library: `guatiao-serde` and `guatiao-intake` have their own
+ * `useLibrary`. Call it before the first native call; naming another file
+ * once one is loaded throws, naming the same one does nothing.
  */
 export function useLibrary(where: string | URL): void {
   const named = where instanceof URL ? fileURLToPath(where) : where;
@@ -205,27 +205,60 @@ function isDir(p: string): boolean {
   }
 }
 
+/** How {@link openSurface} looks for a surface's library. */
+export interface SurfaceOptions {
+  /** What the package was told in code, first: a file, or a directory. */
+  chosen?: string | undefined;
+  /** The surface's own environment variable, consulted before `GUATIAO_LIBRARY`. */
+  variable?: string | undefined;
+  /**
+   * A symbol only the surface exports: a file `GUATIAO_LIBRARY` names is
+   * used when it exports it, else the surface's file beside it. Without
+   * one, that file is used as it is.
+   */
+  probe?: string | undefined;
+}
+
+function carries(file: string, symbol: string): boolean {
+  try {
+    koffi().load(file).func(`void ${symbol}(void)`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Where `basename`'s library is, by each route in order. */
-function candidates(basename: string): { tries: string[]; looked: string[] } {
+function candidates(basename: string, options: SurfaceOptions): { tries: string[]; looked: string[] } {
   const filename = libraryFilename(basename);
   const tries: string[] = [];
   const looked: string[] = [];
-  const named = chosen ?? process.env.GUATIAO_LIBRARY;
-  const route = chosen !== undefined ? 'useLibrary()' : 'GUATIAO_LIBRARY';
-  if (named) {
-    if (isDir(named)) {
-      const candidate = path.join(named, filename);
+  const named = (where: string, route: string, shared: boolean): void => {
+    looked.push(`${route} (${where})`);
+    if (isDir(where)) {
+      const candidate = path.join(where, filename);
       if (existsSync(candidate)) tries.push(candidate);
-    } else if (isFile(named)) {
-      // The core library is the file as it is named; the others are
-      // looked for beside it, under their own platform names.
-      const candidate = basename === 'guatiao' ? named : path.join(path.dirname(named), filename);
-      if (existsSync(candidate)) tries.push(candidate);
+    } else if (isFile(where)) {
+      // A file named for this surface is taken as it is; a shared one
+      // serves every surface it exports, else the surface's own file
+      // beside it does.
+      if (!shared || options.probe === undefined || carries(where, options.probe)) {
+        tries.push(where);
+      } else {
+        const beside = path.join(path.dirname(where), filename);
+        if (existsSync(beside)) tries.push(beside);
+      }
     }
-    looked.push(`${route} (${named})`);
-  } else {
-    looked.push('GUATIAO_LIBRARY (unset)');
+  };
+  if (options.chosen !== undefined) named(options.chosen, 'useLibrary()', false);
+  if (options.variable !== undefined && options.variable !== 'GUATIAO_LIBRARY') {
+    const own = process.env[options.variable];
+    if (own) named(own, options.variable, false);
+    else looked.push(`${options.variable} (unset)`);
   }
+  const shared = process.env.GUATIAO_LIBRARY;
+  if (shared) named(shared, 'GUATIAO_LIBRARY', true);
+  else looked.push('GUATIAO_LIBRARY (unset)');
   tries.push(filename);
   looked.push(`the platform's search for ${filename}`);
   return { tries, looked };
@@ -233,7 +266,11 @@ function candidates(basename: string): { tries: string[]; looked: string[] } {
 
 // ---- the exports -----------------------------------------------------------
 
-type Declared = readonly [prototype: string, feature?: string];
+/**
+ * One export to declare: its C prototype in koffi's syntax, and the build
+ * feature it needs, when not every build has it.
+ */
+export type Declared = readonly [prototype: string, feature?: string];
 
 const TEXT_FORMS = ['date', 'time', 'datetime', 'timestamp', 'span'] as const;
 
@@ -306,31 +343,6 @@ const CORE: readonly Declared[] = [
   ['uint32_t guatiao_registry_refresh(void *reg, void *alloc, void *out)', 'load'],
 ];
 
-const SERDE: readonly Declared[] = [
-  ['uint32_t guatiao_alloc_default(void *out)'],
-  ['uint32_t guatiao_json_parse_ex(guatiao_str text, uint32_t how, void *alloc, void *out, void *err)'],
-  ['uint32_t guatiao_json_emit(void *value, uint32_t how, void *alloc, void *out)'],
-  ['uint32_t guatiao_json_emit_pretty(void *value, uint32_t how, void *alloc, void *out)'],
-  ['uint32_t guatiao_toml_parse_ex(guatiao_str text, uint32_t how, void *alloc, void *out, void *err)', 'toml'],
-  ['uint32_t guatiao_toml_emit(void *value, uint32_t how, void *alloc, void *out)', 'toml'],
-  ['uint32_t guatiao_yaml_parse_ex(guatiao_str text, uint32_t how, void *alloc, void *out, void *err)', 'yaml'],
-  ['uint32_t guatiao_yaml_emit(void *value, uint32_t how, void *alloc, void *out)', 'yaml'],
-];
-
-const INTAKE: readonly Declared[] = [
-  ['uint32_t guatiao_alloc_default(void *out)'],
-  ['uint32_t guatiao_intake_check(void *schema, void *form, void *alloc, void *out)'],
-  ['uint32_t guatiao_intake_layout(void *schema, void *form, void *alloc, void *out)'],
-  ['uint32_t guatiao_intake_is_visible(void *schema, void *form, guatiao_str key, void *values, void *out)'],
-  ['uint32_t guatiao_intake_for_schema(void *schema, void *alloc, void *out)'],
-  ['uint32_t guatiao_intake_form_for(void *form, void *schema, guatiao_str path, void *alloc, void *out)'],
-  ['void *guatiao_intake_path_get(void *value, guatiao_str path)'],
-  ['void *guatiao_intake_resolve(void *schema, guatiao_str key)'],
-  ['uint32_t guatiao_intake_flat_keys(void *schema, guatiao_str key, void *alloc, void *out)'],
-  ['uint32_t guatiao_intake_flatten(void *schema, guatiao_str key, void *value, void *alloc, void *out)'],
-  ['uint32_t guatiao_intake_unflatten(void *schema, guatiao_str key, void *store, void *alloc, void *out)'],
-];
-
 // koffi's functions take and answer what their prototypes say; the
 // callers here know which.
 type NativeFn = (...args: any[]) => any;
@@ -378,8 +390,17 @@ export class Surface {
   }
 }
 
-function load(basename: string, exports: readonly Declared[]): Surface {
-  const { tries, looked } = candidates(basename);
+/**
+ * Opens the library carrying the surface `basename` (`'guatiao_serde'`,
+ * say) and declares `exports` on it: what `options.chosen` names, else
+ * `options.variable`, else `GUATIAO_LIBRARY` (a directory holding the
+ * platform's file name; or a file, used when it exports `options.probe`,
+ * else the file beside it), else the platform's search. Throws
+ * `LibraryNotFound` naming every place tried. The caller keeps the
+ * `Surface`: nothing here caches it.
+ */
+export function openSurface(basename: string, exports: readonly Declared[], options: SurfaceOptions = {}): Surface {
+  const { tries, looked } = candidates(basename, options);
   for (const file of tries) {
     try {
       return new Surface(file, exports);
@@ -391,22 +412,10 @@ function load(basename: string, exports: readonly Declared[]): Surface {
 }
 
 let cores: Surface | undefined;
-let serdes: Surface | undefined;
-let intakes: Surface | undefined;
 
 /** The `guatiao` library, loaded and declared on first use. */
 export function core(): Surface {
-  return (cores ??= load('guatiao', CORE));
-}
-
-/** The `guatiao_serde` library, loaded on first use. */
-export function serde(): Surface {
-  return (serdes ??= load('guatiao_serde', SERDE));
-}
-
-/** The `guatiao_intake` library, loaded on first use. */
-export function intake(): Surface {
-  return (intakes ??= load('guatiao_intake', INTAKE));
+  return (cores ??= openSurface('guatiao', CORE, { chosen }));
 }
 
 // ---- small things every module needs --------------------------------------

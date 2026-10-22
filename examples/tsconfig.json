@@ -10,7 +10,7 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": false,
     "types": ["node"],
-    "typeRoots": ["../bindings/node/node_modules/@types"]
+    "typeRoots": ["../bindings/node_modules/@types"]
   },
   "files": [
     "greeter_kind/node/greeter_kind.ts",

@@ -10,7 +10,6 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { BadValue, Unparsed, Value, type Ref } from '../src/index.js';
-import * as serde from '../src/serde.js';
 import {
   PlainDate,
   PlainDateTime,
@@ -27,8 +26,18 @@ import {
 } from '../src/time.js';
 import { REPO, readText } from './helpers.js';
 
-// Read with this library's own parser, so a 20-digit number stays exact.
-const vectors = serde.loads(readText(path.join(REPO, 'crates', 'guatiao', 'tests', 'vectors', 'time.json')));
+// An integer past 2^53 is read from its own text, so a 20-digit number
+// stays exact.
+const exactly = (_key: string, value: unknown, context?: { source?: string }): unknown =>
+  typeof value === 'number' && !Number.isSafeInteger(value) && context?.source !== undefined && /^-?\d+$/.test(context.source)
+    ? BigInt(context.source)
+    : value;
+const vectors = new Value(
+  JSON.parse(
+    readText(path.join(REPO, 'crates', 'guatiao', 'tests', 'vectors', 'time.json')),
+    exactly as (key: string, value: unknown) => unknown,
+  ),
+);
 const cases = (name: string): Ref[] => [...vectors.asMap().get(name)!.asList()];
 const field = (c: Ref, key: string): Ref | undefined => c.asMap().get(key);
 const exact = (fields: readonly (number | bigint)[]): bigint[] => fields.map((x) => BigInt(x));

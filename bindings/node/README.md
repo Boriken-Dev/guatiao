@@ -41,8 +41,10 @@ ABI, whether that is `guatiao` itself or an application that carries it.
   and written by the library itself.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
-- **JSON, TOML and YAML**, and **form checks against a schema**, through
-  the `guatiao-serde` and `guatiao-intake` libraries when they are present.
+- **JSON, TOML and YAML**, and **forms checked against a schema**, are
+  the packages [`guatiao-serde`](https://www.npmjs.com/package/guatiao-serde)
+  and [`guatiao-intake`](https://www.npmjs.com/package/guatiao-intake),
+  each over its own library and built on this one.
 - **Importing never fails** — the native library is looked for on first
   use, and a missing one names every place that was searched.
 
@@ -64,12 +66,6 @@ or call `useLibrary(path)` before the first call. Without either, the
 platform's library search is tried by file name. A library that exports
 only part of the ABI is fine: calling a function it lacks throws
 `MissingSymbol` naming it.
-
-| Exports from | Needed for |
-| --- | --- |
-| `guatiao` | values, the registry, kinds and providers, time, redaction |
-| `guatiao_serde` | `guatiao/serde`: JSON, and TOML and YAML when the library has them |
-| `guatiao_intake` | `guatiao/intake` |
 
 Node 22 or later, on a 64-bit platform koffi ships a build for (Linux,
 macOS, Windows, FreeBSD, OpenBSD, Android; x64 and arm64).
@@ -151,15 +147,6 @@ reg.registerLibrary(library('hello', '1.0.0', { providers: [Hello] }));
 A host in this process, written in any language, calls `Hello` through
 the same table it would call a Rust or C greeter through.
 
-### JSON, TOML and YAML
-
-```ts
-import * as serde from 'guatiao/serde';
-
-using doc = serde.loads('{"name": "ana", "n": 1.10}');
-serde.dumps(doc, { format: 'yaml' });
-```
-
 ### Dates and spans
 
 ```ts
@@ -201,9 +188,8 @@ PlainDate.parse('2026-01-31').add(Span.parse('1mo')).toString();   // '2026-02-2
 | `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Registry`, `Instance`, `redact`, `useLibrary`, the errors |
 | `guatiao/kinds` | `kind`, `t`: a kind as a typed description; `Remote`, `ObjectHandle`; serving a table over an object |
 | `guatiao/provide` | `Provider`, `library`, `libraryOf`, `s`: providers written in TypeScript, a module as a library |
-| `guatiao/serde` | `loads` / `dumps` for JSON, TOML, YAML |
-| `guatiao/intake` | `check`, `layout`, `isVisible`, `at`, `forSchema`, `formFor`, `resolve`, `flatKeys`, `flatten`, `unflatten` |
 | `guatiao/time` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants, exact lengths, `normalize` |
+| `guatiao/ffi` | for a package over another guatiao library: `openSurface`, memory, `adopt`, `borrow`, `withNodes` |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node/AGENTS.md)
 is the full API reference and ships in the package. The C ABI is described
@@ -212,15 +198,16 @@ by [`guatiao.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao
 ## Development
 
 ```bash
-cd bindings/node
-npm ci
+cd bindings
+npm ci                # the workspace: this package, guatiao-serde and guatiao-intake
+cd node
 npm run typecheck     # tsc --strict over the sources, the tests and the examples
 npm test              # vitest
 npm run build         # dist/
 ```
 
-The tests need the three libraries and the repository's example plugins
-in one directory; `test/setup.ts` points `GUATIAO_LIBRARY` at the
+The tests need the library and the repository's example plugins in one
+directory; `test/setup.ts` points `GUATIAO_LIBRARY` at the
 repository's build output when the variable is unset, and the repository's
 own `AGENTS.md` says how to produce it. The greeter written in C is built
 with the first C compiler found, the Python greeters are served through

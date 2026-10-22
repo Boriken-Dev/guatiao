@@ -17,9 +17,11 @@ ships no native code of its own.
 | `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Registry`, `Instance`, `Tag`, `Status`, `redact`, `useLibrary`, the errors |
 | `guatiao/kinds` | `kind`, `t`, `Implementation`, `Remote`, `ObjectHandle`, `liveObjects` |
 | `guatiao/provide` | `Provider`, `library`, `libraryOf`, `Library`, `s` (configuration schemas) |
-| `guatiao/serde` | `loads`, `dumps`: JSON, TOML, YAML |
-| `guatiao/intake` | forms, paths, the flat projection |
 | `guatiao/time` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants, exact lengths |
+| `guatiao/ffi` | for a package over another guatiao library: `openSurface`, `Surface`, memory, `adopt`, `borrow`, `nodeOf`, `withNodes` |
+
+JSON, TOML and YAML are the package `guatiao-serde`, forms
+`guatiao-intake`: each over its own library, built on `guatiao/ffi`.
 
 ## Finding the native library
 
@@ -32,15 +34,12 @@ on the first call that needs it, found in this order:
    another file once one is loaded throws; naming the same one does
    nothing.
 2. `GUATIAO_LIBRARY`: a directory holding `guatiao.dll` /
-   `libguatiao.so` / `libguatiao.dylib`, or a file (taken as it is for
-   `guatiao`; `guatiao_serde` and `guatiao_intake` are looked for beside
-   it under their own names).
+   `libguatiao.so` / `libguatiao.dylib`, or a file, taken as it is.
 3. The platform's own library search, by file name.
 
-Not found throws `LibraryNotFound` naming each route. `guatiao_serde` and
-`guatiao_intake` resolve the same way, independently, when `guatiao/serde`
-or `guatiao/intake` is first used. A symbol the loaded build does not
-export throws `MissingSymbol` (`.symbol`, `.feature`) when called.
+Not found throws `LibraryNotFound` naming each route. A symbol the loaded
+build does not export throws `MissingSymbol` (`.symbol`, `.feature`) when
+called.
 
 ## Values
 
@@ -128,8 +127,8 @@ available, reason? }`), `keyedBy(template)` / `librariesKeyedBy`,
 ctx }`, `table` `0n` for none), `providerConfig(key)` (a borrowed,
 read-only `Ref` onto the schema, never closed), `providerMeta(key)` (a
 copy of the provider's `meta` as a `Value` you close, `undefined` when it
-declares none, `NotFound` for an unknown key; its form is under
-`providerFormKey` from `guatiao/intake`), `host()` (the
+declares none, `NotFound` for an unknown key; its form is under `'form'`,
+`providerFormKey` of `guatiao-intake`), `host()` (the
 `guatiao_host_info *`), `close()` / `using`. Every answer that is data is
 a plain object or array, already freed.
 
@@ -330,61 +329,6 @@ then on). Its descriptor and callbacks are kept for the process, and its
 it is linked, not mapped, so `unload` answers `WrongKind` and `retire`
 takes it out.
 
-## serde: JSON, TOML, YAML
-
-```ts
-import * as serde from 'guatiao/serde';
-
-const text = serde.dumps(value, { format: 'json', pretty: true });  // or 'toml', 'yaml'
-using parsed = serde.loads(text, { format: 'json' });
-```
-
-`dumps` takes a `Ref` or plain data. A document that does not parse
-throws `ParseError` (a `BadValue`) with `.format`, `.line` and `.column`
-(from 1, the column in characters; 0 when the parser did not say),
-`.reason`, which never quotes the document. A TOML document must be a map
-(`WrongKind`). `toml`/`yaml` throw `MissingSymbol` naming the feature when
-the loaded `guatiao_serde` lacks it. `how` takes `BYTES_DATA_URI`,
-`BYTES_BASE64`, `BYTES_ARRAY`, `BYTES_REFUSE`, `READ_DATA_URIS`,
-`PRETTY`. A number keeps its exact text, except that an exponent is read
-back with its sign (`1e400` is `1e+400`).
-
-## intake
-
-```ts
-import * as intake from 'guatiao/intake';
-
-intake.check(schema, form);              // null, or the error map
-intake.layout(schema, form);             // [{ section, fields: [...] }, ...]
-intake.isVisible(schema, form, 'key', values);
-intake.at(value, 'agent[1].name');       // a borrowed Ref, or undefined
-intake.forSchema(schema);                // the form a schema implies (a Value to close)
-intake.formFor(form, schema, 'path');    // a Value to close, or undefined
-intake.resolve(schema, 'auth.password'); // borrowed Ref onto the field, or undefined
-intake.flatKeys(schema, 'auth');         // string[]; WrongKind for an unknown key
-intake.flatten(schema, 'auth', value);   // Record<string, string>
-intake.unflatten(schema, 'auth', store); // a Value to close, or undefined
-```
-
-Every `schema`, `form`, `value` and `values` is a `Ref` or plain data.
-What `at` and `resolve` answer borrows from what it came from: read-only
-(every write is a `TypeError`), found again on every access, and a
-`TypeError` once the source is closed; `.clone()` copies it out.
-`unflatten` answers `undefined` only for "nothing stored"; a store that is
-not strings to strings (a plain object, a `Map` or a `Ref` onto a map) is a
-`TypeError`.
-
-**A provider's form** travels in its `meta`, under `intake.providerFormKey`
-(`'form'`), beside the configuration schema it is shown with:
-
-```ts
-using meta = reg.providerMeta('acme_dialer')!;   // undefined when it declares no meta
-const form = meta.asMap().get(intake.providerFormKey)!;
-const schema = reg.providerConfig('acme_dialer')!;
-intake.check(schema, form);                      // null: it fits
-intake.layout(schema, form);
-```
-
 ## time
 
 The forms are text in a value (an exact length is `[seconds,
@@ -435,14 +379,64 @@ Every field a schema marks (`x-sensitive` or `writeOnly`) is replaced at
 any depth, and whatever the schema does not describe is hidden too.
 Local `$ref`s are followed. `WrongKind` for a schema that is not a map.
 
+## ffi: for a package over another guatiao library
+
+`guatiao/ffi` is what `guatiao-serde` and `guatiao-intake` build on, and
+what any package binding a C library that takes and answers guatiao
+values may use. Supported API, versioned with this package. Such a
+package never loads koffi itself: this one's koffi declares every library
+and the by-value structs (`guatiao_str`, `guatiao_bytes`,
+`guatiao_object`).
+
+```ts
+import * as n from 'guatiao/ffi';
+
+const lib = n.openSurface('mylib', [
+  ['uint32_t guatiao_alloc_default(void *out)'],
+  ['uint32_t mylib_parse(guatiao_str text, void *alloc, void *out)'],
+], { variable: 'MYLIB_LIBRARY', probe: 'mylib_parse' });
+const out = n.alloc(n.SIZE.value);
+n.raiseForStatus(lib.fn.mylib_parse!(n.str('a=1'), lib.alloc, out));
+using value = n.adopt(out, lib.alloc);       // a Value; it frees the tree and `out`
+```
+
+- `openSurface(basename, exports, { chosen?, variable?, probe? }) ->
+  Surface`: `chosen` (a file, or a directory holding the platform's file
+  name), then the variable `variable` (the same), then `GUATIAO_LIBRARY`
+  (a directory; or a file, used when it exports `probe` or no `probe` is
+  given, else the file beside it), then the platform's search.
+  `LibraryNotFound` names every place tried. Not cached: keep the
+  `Surface`. `exports` are `[prototype, feature?]` pairs in koffi's C
+  syntax; one the library lacks becomes a function throwing
+  `MissingSymbol` naming `feature`. `libraryFilename(basename)`.
+- `Surface`: `.path`, `.fn[name]`, `.missing` (a set of names), `.alloc`
+  (the address of its `guatiao_alloc_default`, filled once).
+- Memory: `alloc(len)` / `release(ptr)` (zeroed memory koffi keeps),
+  `str(text)` (a `guatiao_str` argument), readers `u8`, `u32`, `i32`,
+  `u64`, `i64`, `ptrAt`, `size`, `bytesAt`, `textAt`, `stringText` (an
+  owned `guatiao_string`), writers `setU8`, `setU32`, `setU64`, `setPtr`;
+  `freeNode(node)` frees what a node owns through the core library. The
+  layout: `SIZE`, `VALUE`, `ENTRY`, `OWNED`, `ALLOC`; `Status`, `Tag`.
+  `koffi()` is the one koffi, for a package's own callbacks.
+- Trees: `adopt(root, alloc?) -> Value` takes over a root a call wrote
+  into memory from `alloc()`; `withNodes(items, body)` lends `Ref`s as
+  they are and plain data built for the call; `nodeOf(ref)` is a `Ref`'s
+  node now; `borrow(source, find) -> Ref` views the node `find()` answers,
+  read-only, refused once `source` closes. `raiseForStatus(status,
+  message?)` throws the status's `GuatiaoError`.
+
+**A tree crosses libraries as its root node**: built by one library, it
+is read and freed by any other, since a value records its own allocator.
+The library that built it stays loaded while the tree lives.
+
 ## Errors
 
 Every failing `guatiao_status` throws a `GuatiaoError` (`.status` the raw
 code, `.message` the other side's own words, empty when it gave none), as
 one of `BadValue`, `AllocFailed`, `WrongKind`, `NotFound`,
 `NullArgument`, `Gone`, `Unsupported`, `Busy`, `Internal`.
-`new BadValue('why')` carries its class's status. `ParseError` and
-`Unparsed` extend `BadValue`. `LibraryNotFound`, `MissingSymbol` and
+`new BadValue('why')` carries its class's status. `Unparsed` extends
+`BadValue`. `LibraryNotFound`, `MissingSymbol` and
 `FloorMismatch` are this binding's own.
 
 ## Threads

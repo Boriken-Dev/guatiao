@@ -1,0 +1,18 @@
+{
+  "extends": "../node/tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "guatiao": [
+        "../node/src/index.ts"
+      ],
+      "guatiao/*": [
+        "../node/src/*.ts"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "test",
+    "vitest.config.ts"
+  ]
+}

@@ -63,27 +63,6 @@ export class Internal extends GuatiaoError {
 }
 
 /**
- * A document that does not parse, and where it stopped. `format` is
- * `'json'`, `'toml'` or `'yaml'`; `line` and `column` count from 1 (the
- * column in characters) and are 0 when the parser did not say where;
- * `reason` says what it expected, without quoting the document.
- */
-export class ParseError extends BadValue {
-  readonly format: string;
-  readonly line: number;
-  readonly column: number;
-  readonly reason: string;
-
-  constructor(reason: string, where: { format: string; line: number; column: number }) {
-    super(Status.ERR_BAD_VALUE, where.line ? `${reason} at line ${where.line}, column ${where.column}` : reason);
-    this.reason = reason;
-    this.format = where.format;
-    this.line = where.line;
-    this.column = where.column;
-  }
-}
-
-/**
  * A date, time, instant or span whose text its grammar refused. `form` is
  * `'date'`, `'time'`, `'datetime'`, `'timestamp'` or `'span'`; `at` is the
  * byte offset, in the UTF-8 text, where reading stopped; `expected` says
