@@ -115,7 +115,7 @@ func bridge() string {
 func bridgeConfig() map[string]any {
 	return map[string]any{
 		"dirs":  []string{filepath.Join(repo, "examples", "python_provider")},
-		"paths": []string{filepath.Join(repo, "bindings", "python", "src"), filepath.Join(repo, "examples", "greeter_kind", "python")},
+		"paths": []string{filepath.Join(repo, "bindings", "python", "guatiao", "src"), filepath.Join(repo, "examples", "greeter_kind", "python")},
 	}
 }
 

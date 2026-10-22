@@ -31,7 +31,7 @@ fn the_host_calls_greeters_written_in_python_through_the_bridge() {
     let config = format!(
         r#"{{"dirs": ["{}"], "paths": ["{}", "{}"]}}"#,
         slash(repo.join("examples/python_provider")),
-        slash(repo.join("bindings/python/src")),
+        slash(repo.join("bindings/python/guatiao/src")),
         slash(repo.join("examples/greeter_kind/python")),
     );
     let exe = std::env::current_exe().expect("a test binary knows its own path");

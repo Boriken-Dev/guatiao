@@ -92,6 +92,6 @@ export function bridge(): string | null {
 export function bridgeConfig(): Record<string, string[]> {
   return {
     dirs: [path.join(REPO, 'examples', 'python_provider')],
-    paths: [path.join(REPO, 'bindings', 'python', 'src'), path.join(REPO, 'examples', 'greeter_kind', 'python')],
+    paths: [path.join(REPO, 'bindings', 'python', 'guatiao', 'src'), path.join(REPO, 'examples', 'greeter_kind', 'python')],
   };
 }

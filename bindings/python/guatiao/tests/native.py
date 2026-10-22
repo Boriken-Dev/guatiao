@@ -12,7 +12,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[3]
+REPO = Path(__file__).resolve().parents[4]
 GREETER_KIND_PY = REPO / "examples" / "greeter_kind" / "python"
 
 

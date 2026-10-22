@@ -17,9 +17,9 @@ on:
       - "mkdocs.yml"
       - "CHANGELOG.md"
       - "crates/**/*.rs"
-      - "bindings/python/src/**"
-      - "bindings/python-serde/src/**"
-      - "bindings/python-intake/src/**"
+      - "bindings/python/guatiao/src/**"
+      - "bindings/python/guatiao-serde/src/**"
+      - "bindings/python/guatiao-intake/src/**"
       - "bindings/dart/lib/**"
       - "bindings/dart-serde/lib/**"
       - "bindings/dart-intake/lib/**"
@@ -85,7 +85,7 @@ jobs:
       - name: Install the Python packages and the docs tooling
         # Editable, because mkdocstrings renders the package by importing
         # it -- which needs no native library, by design.
-        run: pip install -e "bindings/python[docs]" -e bindings/python-serde -e bindings/python-intake
+        run: pip install -e "bindings/python/guatiao[docs]" -e bindings/python/guatiao-serde -e bindings/python/guatiao-intake
       - name: Build the narrative site and the Python reference
         run: mkdocs build --strict
       - name: Add the Rust reference under /rust/

@@ -19,7 +19,7 @@ from guatiao import time as gt
 
 _VECTORS = json.loads(
     (
-        Path(__file__).resolve().parents[3]
+        Path(__file__).resolve().parents[4]
         / "crates"
         / "guatiao"
         / "tests"

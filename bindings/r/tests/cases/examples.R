@@ -14,7 +14,7 @@ case("the R host example runs", with_examples({
   py <- bridge()
   if (!is.null(py)) {
     args <- c(args, "--python-source", py, "--python-dir", repo_file("examples", "python_provider"),
-      "--python-path", repo_file("bindings", "python", "src"),
+      "--python-path", repo_file("bindings", "python", "guatiao", "src"),
       "--python-path", repo_file("examples", "greeter_kind", "python"))
   }
   rscript <- file.path(R.home("bin"), if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript")

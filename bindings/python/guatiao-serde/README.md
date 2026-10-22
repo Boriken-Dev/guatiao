@@ -86,15 +86,15 @@ A format the loaded library was built without raises
 | `BYTES_DATA_URI`, `BYTES_BASE64`, `BYTES_ARRAY`, `BYTES_REFUSE`, `READ_DATA_URIS`, `PRETTY` | the `how` flags |
 | `use_library(path)`, `library()` | naming and loading `guatiao_serde` |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python-serde/src/guatiao_serde/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/guatiao-serde/src/guatiao_serde/AGENTS.md)
 is the full API reference and ships inside the wheel. The C ABI is
 described by [`guatiao_serde.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-serde/include/guatiao_serde.h).
 
 ## Development
 
 ```bash
-pip install -e "bindings/python[dev]" -e "bindings/python-serde[dev]"   # from the repository root
-pytest bindings/python-serde/tests -rs
+pip install -e "bindings/python/guatiao[dev]" -e "bindings/python/guatiao-serde[dev]"   # from the repository root
+pytest bindings/python/guatiao-serde/tests -rs
 ```
 
 `conftest.py` points `GUATIAO_LIBRARY` at the repository's build output

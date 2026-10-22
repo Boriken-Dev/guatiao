@@ -29,7 +29,7 @@ from guatiao.value import Value
 
 _TARGET_DEBUG = os.environ["GUATIAO_LIBRARY"]
 _GREETER_KIND_H = (
-    Path(__file__).resolve().parents[3]
+    Path(__file__).resolve().parents[4]
     / "examples"
     / "greeter_kind"
     / "include"

@@ -285,15 +285,15 @@ provider's own words when it gave any.
 | `guatiao.provide` | a module of provider classes as a library |
 | `guatiao.ffi` | for a package over another guatiao library: the loader, the C structs, a tree crossing as its root node |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/src/guatiao/AGENTS.md) is
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/guatiao/src/guatiao/AGENTS.md) is
 the full API reference and ships inside the wheel. The C ABI is described
 by [`guatiao.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao/include/guatiao.h).
 
 ## Development
 
 ```bash
-pip install -e "bindings/python[dev]"     # from the repository root, in a virtual environment
-pytest bindings/python/tests -rs
+pip install -e "bindings/python/guatiao[dev]"     # from the repository root, in a virtual environment
+pytest bindings/python/guatiao/tests -rs
 ```
 
 The tests need the library and the repository's example plugins in one

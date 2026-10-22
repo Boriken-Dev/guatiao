@@ -53,7 +53,7 @@ fn config() -> Map {
     config.set(
         "paths",
         text_list(&[
-            repo().join("bindings/python/src"),
+            repo().join("bindings/python/guatiao/src"),
             repo().join("examples/greeter_kind/python"),
         ]),
     );
@@ -154,7 +154,7 @@ fn a_c_host_serves_python_libraries() {
     let mut run = Command::new(&exe);
     run.arg(&bridge)
         .arg(repo().join("examples/python_provider"))
-        .arg(repo().join("bindings/python/src"))
+        .arg(repo().join("bindings/python/guatiao/src"))
         .arg(repo().join("examples/greeter_kind/python"));
     if cfg!(windows) {
         // Where Windows finds guatiao.dll for the host it just linked.
