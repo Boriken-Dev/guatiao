@@ -23,7 +23,8 @@ that carries it.
   data.
 - **Numbers keep their exact text** — `1.10` stays `1.10`, and an integer
   of any size survives as `number("18446744073709551615")` where a double
-  would round it.
+  would round it; a kind's 64-bit slots carry every `int64` and `uint64`
+  exactly, both ways.
 - **Be a plugin host** — scan a directory, filter on what a library
   declares before loading it, list providers best first, build an
   instance from a configuration, call a provider through its table with R
@@ -78,7 +79,9 @@ platform's library search is tried by file name.
 | `guatiao_intake` | the `intake_*` functions |
 
 R 4.2 or later, on a 64-bit platform, and a library built for the same
-architecture as the R process.
+architecture as the R process. `bit64` is optional: installed, it lets
+`int64 = "integer64"` and `value_data(numbers = "integer64")` answer its
+`integer64`.
 
 ## Quick start
 
@@ -183,10 +186,13 @@ time_parse("timestamp", "2026-10-21T19:15:00.5+05:30")    # <instant 2026-10-21T
   `Unsupported` at once, the provider never running; a destroy it asks
   for there waits for R's thread. Hosts that call providers from worker
   threads need providers written in another language.
-- R has no 64-bit integer: integers past 2^53 cross as doubles that may
-  round (a slot's `int64` answer, a span's units). Inside a value a
-  number keeps its exact text, which `number()` and
-  `value_data(numbers = "text")` reach.
+- R has no 64-bit integer, and a double holds whole numbers exactly only
+  to 2^53. A 64-bit slot, a span's units and an exact length's seconds
+  take an R integer, a whole double, a `number()` or a string, read
+  exactly; past 2^53 an answer is a `number` with its exact text, or a
+  `bit64::integer64` when `int64 = "integer64"` asks and `bit64` is
+  installed. Inside a value a number keeps its exact text, which
+  `number()` and `value_data(numbers = "text")` reach.
 - A length-one vector is a scalar; wrap it in `I()` for a list of one,
   as with jsonlite. A data frame is refused: give its rows or columns.
 - `v[[i]] <- x` replaces an element in place; there is no slice

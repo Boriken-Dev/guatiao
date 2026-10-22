@@ -302,10 +302,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   versioned by its `package.json`. A provider's answer is built in the
   allocator the caller's carrier names; a call from a thread Node did
   not start runs on Node's main thread when its event loop turns.
-- **`examples/greeter_caller/`**, a cdylib whose one C function,
-  `greeter_caller_run(host, key, name, out)`, calls every slot of a
-  greeter through the kind's Rust proxy, for a host in another language
-  to have its greeters called from Rust; and the Node examples,
+- **`examples/greeter_caller/`**, a cdylib whose C functions,
+  `greeter_caller_run(host, key, name, out)` and
+  `greeter_caller_wide(host, key, out)`, call every slot of a greeter, or
+  of a `wide` provider with 64-bit integers at their limits, through the
+  kind's Rust proxy, for a host in another language to have its providers
+  called from Rust; and the Node examples,
   `examples/node_host/` (a host in TypeScript) and
   `examples/node_provider/` (a library written in TypeScript), with
   the greeter kinds described in `examples/greeter_kind/node/`.
@@ -390,6 +392,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Unsupported` without running, and a destroy asked for there waits for
   R's thread. The R examples: `examples/greeter_kind/r/`,
   `examples/r_host/` and `examples/r_provider/`.
+- **R: 64-bit integers cross exactly.** A kind's integer slots take an R
+  integer, a whole double, a `number()`, a string spelling an integer or a
+  `bit64::integer64`, read exactly and range-checked, a refusal naming the
+  slot (`wide.echo_i64(x): out of range for int64`). A 64-bit answer, and
+  a 64-bit argument a provider written in R is handed, is what `int64`
+  says on `kind()` or `call_slot()`: `"auto"` an R integer when it fits, a
+  double up to 2^53, else a `number` with its exact text; `"number"`;
+  `"double"`; or `"integer64"`. `span()` and `exact_length()` keep a unit
+  past 2^53 as its exact text, and `time_parse("span")` and
+  `read_length()` answer one rather than refusing it. `bit64` is
+  suggested, never needed: `value_data(numbers = "integer64")` and
+  `int64 = "integer64"` answer an `integer64` and name the package when
+  it is not installed, and `"auto"` never answers one.
+- **A `wide` example kind**, `examples/greeter_kind/`: one slot taking and
+  answering an `int64_t`, one a `uint64_t`, served by the derived Rust
+  greeter and the greeter written in C, so a binding can cross 64-bit
+  integers at their limits both ways.
 - **MATLAB and GNU Octave bindings**, `bindings/matlab/`: the `+guatiao`
   package, `classdef` and functions that MATLAB R2024a and later and
   Octave 8.4 and later both run, over one MEX gateway in C built on the
