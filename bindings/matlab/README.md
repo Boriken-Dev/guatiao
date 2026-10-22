@@ -86,8 +86,8 @@ the platform's library search is tried by file name.
 | Exports from | Needed for |
 | --- | --- |
 | `guatiao` | values, the registry, kinds and providers, schemas, time, redaction |
-| `guatiao_serde` | `guatiao.serde.parse`, `guatiao.serde.emit`: JSON, and TOML and YAML when the library has them |
-| `guatiao_intake` | the `guatiao.intake` functions |
+| `guatiao_serde` | `guatiao.serde.parse`, `guatiao.serde.emit`: JSON, and TOML and YAML when the library has them; found through `GUATIAO_SERDE_LIBRARY` first, or named with `guatiao.serde.use_library` |
+| `guatiao_intake` | the `guatiao.intake` functions; found through `GUATIAO_INTAKE_LIBRARY` first, or named with `guatiao.intake.use_library` |
 
 MATLAB R2024a or later, or GNU Octave 8.4 or later, on a 64-bit platform,
 with a library built for the same architecture as the process.

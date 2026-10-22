@@ -32,15 +32,25 @@ vcpkg's `libffi:x64-windows-static-md`. Answers the file written.
 
 ## Finding the native library
 
-Nothing native is touched until the first call that needs it; then:
+The package and its sub-packages each call their own library:
+`guatiao.*` the `guatiao` library, `guatiao.serde.*` `guatiao_serde`,
+`guatiao.intake.*` `guatiao_intake`, through the one gateway. Nothing
+native is touched until the first call that needs a library; then:
 
-1. `guatiao.use_library(path)`, called before that first call: a file
-   exporting the ABI, whatever it is called, or a folder (`guatiao_serde`
-   and `guatiao_intake` are looked for beside it). Naming another file once
-   one is loaded raises `guatiao:Busy`.
-2. `GUATIAO_LIBRARY`: a folder holding `guatiao.dll` / `libguatiao.so` /
-   `libguatiao.dylib`, or a file.
-3. The platform's own search, by file name.
+1. `guatiao.use_library(path)` (`guatiao.serde.use_library`,
+   `guatiao.intake.use_library` for theirs), called before that first
+   call: a file exporting the library's functions, whatever it is called,
+   or a folder. Naming another file once one is loaded raises
+   `guatiao:Busy`.
+2. For `guatiao_serde` and `guatiao_intake`, `GUATIAO_SERDE_LIBRARY` /
+   `GUATIAO_INTAKE_LIBRARY`: a file, taken as it is, or a folder holding
+   the library under its platform name.
+3. `GUATIAO_LIBRARY`: a folder holding `guatiao.dll` / `libguatiao.so` /
+   `libguatiao.dylib` (or `guatiao_serde.dll` and so on), or a file: taken
+   as it is for `guatiao`, and for the others when it exports their
+   functions (an application's own library carrying several surfaces),
+   else their library beside it.
+4. The platform's own search, by file name.
 
 Not found raises `guatiao:NotFound:library`; an export the loaded build
 lacks raises `guatiao:Unsupported:symbol` naming its feature when it is

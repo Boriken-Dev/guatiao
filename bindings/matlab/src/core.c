@@ -268,7 +268,11 @@ mxArray *gt_cstr_mx(const char *s) {
 /* ---- libraries ------------------------------------------------------------------------- */
 
 static const char *const lib_base[3] = {"guatiao", "guatiao_serde", "guatiao_intake"};
-static char chosen[4096];
+/* Each library's own variable, consulted before GUATIAO_LIBRARY, and a
+ * symbol only it exports, which a GUATIAO_LIBRARY file is checked for. */
+static const char *const lib_variable[3] = {"", "GUATIAO_SERDE_LIBRARY", "GUATIAO_INTAKE_LIBRARY"};
+static const char *const lib_probe[3] = {"guatiao_value_free", "guatiao_json_parse_ex", "guatiao_intake_check"};
+static char chosen[3][4096];
 static char opened[3][4096];
 static int locked;
 
@@ -287,8 +291,11 @@ static int is_dir(const char *p) {
   return stat(p, &s) == 0 && (s.st_mode & S_IFMT) == S_IFDIR;
 }
 
-/* The candidate for `lib` given a file or directory `p`. */
-static void candidate_from(int lib, const char *p, char *out, size_t n) {
+/* The candidate for `lib` given a file or directory `p`: a directory holds
+ * it under its platform name; a file named for `lib` is taken as it is; a
+ * shared one (GUATIAO_LIBRARY) when it exports `lib`'s probe, else the file
+ * beside it under `lib`'s own name. */
+static void candidate_from(int lib, const char *p, int shared, char *out, size_t n) {
   char file[64];
   file_name(lib, file, sizeof file);
   if (is_dir(p)) {
@@ -297,7 +304,7 @@ static void candidate_from(int lib, const char *p, char *out, size_t n) {
     snprintf(out, n, "%s%s%s", p, sep ? "" : "/", file);
     return;
   }
-  if (lib == GT_LIB_CORE) {
+  if (!shared || lib == GT_LIB_CORE || gt_file_carries(p, lib_probe[lib])) {
     snprintf(out, n, "%s", p);
     return;
   }
@@ -313,40 +320,68 @@ static void candidate_from(int lib, const char *p, char *out, size_t n) {
   snprintf(out, n, "%.*s/%s", (int)(slash - p), p, file);
 }
 
-int gt_use_library(gt_call *c, guatiao_str path) {
-  if (path.len >= sizeof chosen) return gt_fail(c, GUATIAO_ERR_BAD_VALUE, "the path is too long");
+int gt_use_library(gt_call *c, int lib, guatiao_str path) {
+  if (lib < 0 || lib > 2) return gt_fail(c, GUATIAO_ERR_BAD_VALUE, "no such library");
+  if (path.len >= sizeof chosen[lib]) return gt_fail(c, GUATIAO_ERR_BAD_VALUE, "the path is too long");
   char want[4096];
   memcpy(want, path.ptr, path.len);
   want[path.len] = '\0';
-  if (opened[GT_LIB_CORE][0]) {
-    char as_core[4096];
-    candidate_from(GT_LIB_CORE, want, as_core, sizeof as_core);
-    if (strcmp(as_core, opened[GT_LIB_CORE]) != 0)
-      return gt_fail(c, GUATIAO_ERR_BUSY, "guatiao is already loaded from %s", opened[GT_LIB_CORE]);
+  if (opened[lib][0]) {
+    char as_named[4096];
+    candidate_from(lib, want, 0, as_named, sizeof as_named);
+    if (strcmp(as_named, opened[lib]) != 0)
+      return gt_fail(c, GUATIAO_ERR_BUSY, "%s is already loaded from %s", lib_base[lib], opened[lib]);
   }
-  memcpy(chosen, want, path.len + 1);
+  memcpy(chosen[lib], want, path.len + 1);
   return 1;
 }
 
+/* Appends `s` to the text in `buf` (`n` bytes), cut short when it is full. */
+static void append(char *buf, size_t n, const char *s) {
+  size_t used = strlen(buf), len = strlen(s);
+  if (used + 1 >= n) return;
+  if (len > n - used - 1) len = n - used - 1;
+  memcpy(buf + used, s, len);
+  buf[used + len] = '\0';
+}
+
+/* What use_library named, the library's own variable, GUATIAO_LIBRARY,
+ * then the platform's search, the first that opens; a file that opens but
+ * is not a build of the library stops the search, unless it came from
+ * GUATIAO_LIBRARY. */
 int gt_need(gt_call *c, int lib) {
   if (gt_is_open(lib)) return 1;
-  char path[4096], err[512], env[4096];
-  if (chosen[0]) candidate_from(lib, chosen, path, sizeof path);
-  else if (gt_getenv("GUATIAO_LIBRARY", env, sizeof env) && env[0]) candidate_from(lib, env, path, sizeof path);
-  else file_name(lib, path, sizeof path);
-  int r = gt_open(lib, path, err, sizeof err);
-  if (r == 0) {
-    snprintf(opened[lib], sizeof opened[lib], "%s", path);
-    /* Trees and descriptors may now record code in this image: it stays. */
-    gt_lock_gateway();
-    return 1;
+  char tries[4][4096], err[512], env[4096], looked[1024] = "";
+  int shared[4] = {0, 0, 0, 0}, n = 0;
+  if (chosen[lib][0]) candidate_from(lib, chosen[lib], 0, tries[n++], sizeof tries[0]);
+  if (lib_variable[lib][0] && gt_getenv(lib_variable[lib], env, sizeof env) && env[0])
+    candidate_from(lib, env, 0, tries[n++], sizeof tries[0]);
+  if (gt_getenv("GUATIAO_LIBRARY", env, sizeof env) && env[0]) {
+    shared[n] = lib != GT_LIB_CORE;
+    candidate_from(lib, env, 1, tries[n++], sizeof tries[0]);
   }
-  if (r == 2)
-    return gt_fail_detail(c, GUATIAO_ERR_NOT_FOUND, "library", "%s at %s lacks the export %s: not a build of %s",
-                          lib_base[lib], path, err, lib_base[lib]);
+  file_name(lib, tries[n++], sizeof tries[0]);
+  for (int i = 0; i < n; i++) {
+    int r = gt_open(lib, tries[i], err, sizeof err);
+    if (r == 0) {
+      opened[lib][0] = '\0';
+      append(opened[lib], sizeof opened[lib], tries[i]);
+      /* Trees and descriptors may now record code in this image: it stays. */
+      gt_lock_gateway();
+      return 1;
+    }
+    if (r == 2 && !shared[i])
+      return gt_fail_detail(c, GUATIAO_ERR_NOT_FOUND, "library", "%s at %s lacks the export %s: not a build of %s",
+                            lib_base[lib], tries[i], err, lib_base[lib]);
+    if (looked[0]) append(looked, sizeof looked, ", ");
+    append(looked, sizeof looked, tries[i]);
+    append(looked, sizeof looked, " (");
+    append(looked, sizeof looked, err);
+    append(looked, sizeof looked, ")");
+  }
   return gt_fail_detail(c, GUATIAO_ERR_NOT_FOUND, "library",
-                        "%s not found; looked at %s (%s). Set GUATIAO_LIBRARY or call guatiao.use_library().",
-                        lib_base[lib], path, err);
+                        "%s not found; looked at %s. Set %s%sGUATIAO_LIBRARY or call use_library.", lib_base[lib],
+                        looked, lib_variable[lib], lib_variable[lib][0] ? " or " : "");
 }
 
 int gt_missing(gt_call *c, int lib, const char *name) {
