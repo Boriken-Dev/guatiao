@@ -61,7 +61,7 @@ module guatiao_holds
 contains
 
   !> A hold of kind `what`, with the first count.
-  function gt_new_hold(what, reg, table, size, ctx, key) result(h)
+  recursive function gt_new_hold(what, reg, table, size, ctx, key) result(h)
     integer, intent(in) :: what
     type(c_ptr), intent(in), optional :: reg, table, ctx
     integer(c_size_t), intent(in), optional :: size
@@ -79,7 +79,7 @@ contains
 
   !> Makes `h` keep `parent` alive (an instance its registry) until `h`
   !> is released.
-  subroutine gt_hold_parent(h, parent)
+  recursive subroutine gt_hold_parent(h, parent)
     type(gt_hold), intent(inout) :: h
     type(gt_hold), intent(in) :: parent
     if (.not. associated(h%box) .or. .not. associated(parent%box)) return
@@ -87,7 +87,7 @@ contains
     parent%box%refs = parent%box%refs + 1
   end subroutine
 
-  subroutine assign(lhs, rhs)
+  recursive subroutine assign(lhs, rhs)
     class(gt_hold), intent(inout) :: lhs
     type(gt_hold), intent(in) :: rhs
     type(gt_hold_box), pointer :: keep
@@ -118,7 +118,7 @@ contains
   end subroutine
 
   ! Tells the C side, once.
-  subroutine release(b)
+  recursive subroutine release(b)
     type(gt_hold_box), pointer, intent(in) :: b
     type(object_head), pointer :: head
     procedure(destroy_i), pointer :: destroy
@@ -135,7 +135,7 @@ contains
         call gt_registry_provider_destroy(b%reg, gt_view(key), b%ctx)
       end if
     case (GT_HOLD_OBJECT)
-      if (c_associated(b%table) .and. b%size >= c_sizeof(head)) then
+      if (c_associated(b%table) .and. b%size >= storage_size(head) / 8) then
         call c_f_pointer(b%table, head)
         if (c_associated(head%destroy)) then
           call c_f_procpointer(head%destroy, destroy)
@@ -147,7 +147,7 @@ contains
 
   !> Releases now for every copy (a registry once nothing else holds it):
   !> every call through it then answers GUATIAO_STAT_CLOSED. Safe twice.
-  subroutine hold_close(self)
+  recursive subroutine hold_close(self)
     class(gt_hold), intent(inout) :: self
     if (.not. associated(self%box)) return
     self%box%closed = .true.
@@ -155,7 +155,7 @@ contains
     call release(self%box)
   end subroutine
 
-  logical function hold_is_closed(self)
+  recursive logical function hold_is_closed(self)
     class(gt_hold), intent(in) :: self
     hold_is_closed = .true.
     if (associated(self%box)) hold_is_closed = self%box%closed
@@ -163,7 +163,7 @@ contains
 
   !> Hands the held object to another side, which destroys it from now:
   !> nothing is released here, and every copy reads closed.
-  subroutine hold_give_up(self)
+  recursive subroutine hold_give_up(self)
     class(gt_hold), intent(inout) :: self
     if (.not. associated(self%box)) return
     self%box%released = .true.

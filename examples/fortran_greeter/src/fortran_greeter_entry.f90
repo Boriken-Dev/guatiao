@@ -27,7 +27,7 @@ module fortran_greeter_entry
 contains
 
   !> The library's descriptor for `host`, built on the first call.
-  function guatiao_library_entry(host) bind(c, name='guatiao_library_entry') result(info)
+  recursive function guatiao_library_entry(host) bind(c, name='guatiao_library_entry') result(info)
     type(c_ptr), value :: host
     type(c_ptr) :: info
     if (.not. made) then

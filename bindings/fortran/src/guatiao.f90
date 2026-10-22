@@ -10,7 +10,7 @@
 module guatiao
   use guatiao_c, only: GUATIAO_TAG_ABSENT, GUATIAO_TAG_NULL, GUATIAO_TAG_BOOL, GUATIAO_TAG_NUMBER, &
                        GUATIAO_TAG_STRING, GUATIAO_TAG_BYTES, GUATIAO_TAG_LIST, GUATIAO_TAG_MAP, &
-                       GUATIAO_ABI_VERSION, GUATIAO_MAX_DEPTH
+                       GUATIAO_ABI_VERSION, GUATIAO_MAX_DEPTH, GUATIAO_C_TRUE, GUATIAO_C_FALSE
   use guatiao_errors
   use guatiao_native, only: guatiao_use_library, guatiao_library_path, guatiao_allocator, &
                             guatiao_default_allocator, GUATIAO_LIB_CORE => GT_CORE, &

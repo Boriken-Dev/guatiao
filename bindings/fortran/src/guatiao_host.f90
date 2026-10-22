@@ -12,6 +12,7 @@ module guatiao_host
   use guatiao_errors
   use guatiao_values
   use guatiao_holds
+  use guatiao_loader, only: gt_windows
   implicit none
   private
 
@@ -70,7 +71,7 @@ contains
 
   !> A registry introducing its host as `id`/`version`; its answers, and
   !> the allocator it offers libraries, are `alloc` (else guatiao's heap).
-  function guatiao_open_registry(id, version, alloc, stat, errmsg) result(reg)
+  recursive function guatiao_open_registry(id, version, alloc, stat, errmsg) result(reg)
     character(*), intent(in), target :: id, version
     type(guatiao_allocator), intent(in), optional :: alloc
     integer, intent(out), optional :: stat
@@ -96,7 +97,7 @@ contains
   end function
 
   !> The registry's C pointer, or null once closed.
-  function gt_registry_ptr(reg) result(p)
+  recursive function gt_registry_ptr(reg) result(p)
     type(guatiao_registry), intent(in) :: reg
     type(c_ptr) :: p
     p = c_null_ptr
@@ -104,14 +105,14 @@ contains
     p = reg%hold%box%reg
   end function
 
-  function gt_registry_hold(reg) result(h)
+  recursive function gt_registry_hold(reg) result(h)
     type(guatiao_registry), intent(in) :: reg
     type(gt_hold) :: h
     h = reg%hold
   end function
 
   ! The registry pointer, or a status saying it is closed.
-  subroutine open_reg(self, p, st, msg)
+  recursive subroutine open_reg(self, p, st, msg)
     class(guatiao_registry), intent(in) :: self
     type(c_ptr), intent(out) :: p
     integer, intent(out) :: st
@@ -126,7 +127,7 @@ contains
   end subroutine
 
   ! A fresh answer node in the registry's allocator.
-  subroutine fresh(self, answer, out)
+  recursive subroutine fresh(self, answer, out)
     class(guatiao_registry), intent(in) :: self
     type(guatiao_value), intent(inout) :: answer
     type(c_ptr), intent(out) :: out
@@ -134,7 +135,7 @@ contains
   end subroutine
 
   ! The rules, one per line, as the C surface takes them.
-  subroutine joined(rules, text)
+  recursive subroutine joined(rules, text)
     character(*), intent(in), optional :: rules(:)
     character(:), allocatable, intent(out) :: text
     integer :: i
@@ -146,19 +147,19 @@ contains
     end do
   end subroutine
 
-  subroutine reg_close(self)
+  recursive subroutine reg_close(self)
     class(guatiao_registry), intent(inout) :: self
     call self%hold%close()
   end subroutine
 
-  logical function reg_is_closed(self)
+  recursive logical function reg_is_closed(self)
     class(guatiao_registry), intent(in) :: self
     reg_is_closed = self%hold%is_closed()
   end function
 
   !> The `guatiao_host_info *` this registry introduces itself with, for
   !> a C function taking one.
-  function reg_host(self) result(p)
+  recursive function reg_host(self) result(p)
     class(guatiao_registry), intent(in) :: self
     type(c_ptr) :: p
     type(c_ptr) :: r
@@ -169,7 +170,7 @@ contains
 
   !> Maps one library file and registers its providers; `answer` says
   !> what happened (`{loaded: {...}}` or `{skipped: ...}`).
-  subroutine reg_load_file(self, path, answer, stat, errmsg)
+  recursive subroutine reg_load_file(self, path, answer, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: path
     type(guatiao_value), intent(inout), optional :: answer
@@ -191,7 +192,7 @@ contains
 
   !> Registers the library an entry function (a `guatiao_library_entry`,
   !> as `c_funloc` gives it) answers, under `name`.
-  subroutine reg_register_entry(self, name, entry, answer, stat, errmsg)
+  recursive subroutine reg_register_entry(self, name, entry, answer, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: name
     type(c_funptr), intent(in) :: entry
@@ -215,7 +216,7 @@ contains
   !> Loads every library in `dir` the rules admit (`kind=greeter`,
   !> `!key=value`, matched against what a library declares, before it is
   !> mapped). `answer`: `{loaded, skipped, failed, unreadable}`.
-  subroutine reg_scan_dir(self, dir, rules, descending, answer, stat, errmsg)
+  recursive subroutine reg_scan_dir(self, dir, rules, descending, answer, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: dir
     character(*), intent(in), optional :: rules(:)
@@ -226,16 +227,23 @@ contains
     type(c_ptr) :: p, out
     type(guatiao_value) :: got
     character(:), allocatable, target :: text
-    logical(c_bool) :: down
+    type(gt_str) :: rules_view
+    integer(c_int8_t) :: down
     integer :: st
     character(:), allocatable :: msg
-    down = .false.
-    if (present(descending)) down = descending
+    down = GUATIAO_C_FALSE
+    if (present(descending)) down = merge(GUATIAO_C_TRUE, GUATIAO_C_FALSE, descending)
     call joined(rules, text)
     call open_reg(self, p, st, msg)
     if (st == GUATIAO_OK) then
       call fresh(self, got, out)
-      st = gt_registry_scan_dir_rules(p, gt_view(dir), down, gt_view(text), self%alloc, out)
+      if (gt_windows) then
+        st = gt_registry_scan_dir_rules(p, gt_view(dir), down, gt_view(text), self%alloc, out)
+      else
+        rules_view = gt_view(text)
+        st = gt_registry_scan_dir_rules_split(p, gt_view(dir), down, rules_view%ptr, rules_view%len, &
+                                              self%alloc, out)
+      end if
       if (st /= GUATIAO_OK) msg = 'guatiao: the scan of ' // dir // ' failed: ' // said(got)
       if (present(answer)) answer = got
     end if
@@ -244,7 +252,7 @@ contains
 
   !> As scan_dir over a search path (the platform's separator between
   !> entries; a file entry is loaded as it is).
-  subroutine reg_scan_path(self, spec, rules, descending, answer, stat, errmsg)
+  recursive subroutine reg_scan_path(self, spec, rules, descending, answer, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: spec
     character(*), intent(in), optional :: rules(:)
@@ -255,16 +263,23 @@ contains
     type(c_ptr) :: p, out
     type(guatiao_value) :: got
     character(:), allocatable, target :: text
-    logical(c_bool) :: down
+    type(gt_str) :: rules_view
+    integer(c_int8_t) :: down
     integer :: st
     character(:), allocatable :: msg
-    down = .false.
-    if (present(descending)) down = descending
+    down = GUATIAO_C_FALSE
+    if (present(descending)) down = merge(GUATIAO_C_TRUE, GUATIAO_C_FALSE, descending)
     call joined(rules, text)
     call open_reg(self, p, st, msg)
     if (st == GUATIAO_OK) then
       call fresh(self, got, out)
-      st = gt_registry_scan_path(p, gt_view(spec), down, gt_view(text), self%alloc, out)
+      if (gt_windows) then
+        st = gt_registry_scan_path(p, gt_view(spec), down, gt_view(text), self%alloc, out)
+      else
+        rules_view = gt_view(text)
+        st = gt_registry_scan_path_split(p, gt_view(spec), down, rules_view%ptr, rules_view%len, &
+                                         self%alloc, out)
+      end if
       if (st /= GUATIAO_OK) msg = 'guatiao: the scan failed: ' // said(got)
       if (present(answer)) answer = got
     end if
@@ -274,7 +289,7 @@ contains
   !> Maps a file exporting `guatiao_source` (a bridge to another
   !> language) and adds the source it answers, configured by the map
   !> `config`; refused with the source's own words.
-  subroutine reg_add_source_file(self, path, config, stat, errmsg)
+  recursive subroutine reg_add_source_file(self, path, config, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: path
     type(guatiao_value), intent(in) :: config
@@ -301,7 +316,7 @@ contains
   end subroutine
 
   !> Watches a directory as a source of library files the rules admit.
-  subroutine reg_watch_dir(self, dir, rules, stat, errmsg)
+  recursive subroutine reg_watch_dir(self, dir, rules, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: dir
     character(*), intent(in), optional :: rules(:)
@@ -322,7 +337,7 @@ contains
 
   !> Makes the registry agree with every source: `{loaded, retired,
   !> skipped, refused}`. Nothing refreshes on its own.
-  subroutine reg_refresh(self, answer, stat, errmsg)
+  recursive subroutine reg_refresh(self, answer, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     type(guatiao_value), intent(inout), optional :: answer
     integer, intent(out), optional :: stat
@@ -342,7 +357,7 @@ contains
   end subroutine
 
   !> Every library: a list of maps (`key`, `id`, `version`, `path`, ...).
-  subroutine reg_libraries(self, answer, stat, errmsg)
+  recursive subroutine reg_libraries(self, answer, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     type(guatiao_value), intent(inout) :: answer
     integer, intent(out), optional :: stat
@@ -359,7 +374,7 @@ contains
   end subroutine
 
   ! The calls shaped `(reg, text, alloc, out)`.
-  subroutine by_text(self, which, text, answer, st, msg)
+  recursive subroutine by_text(self, which, text, answer, st, msg)
     class(guatiao_registry), intent(in) :: self
     integer, intent(in) :: which
     character(*), intent(in), target :: text
@@ -389,7 +404,7 @@ contains
   !> Every provider serving `kind` ('' for all), best first: a list of
   !> maps (`key`, `id`, `version`, `library`, `display_name`, `from`,
   !> `kinds`, `has_config`, `vtable_size`).
-  subroutine reg_providers(self, kind, answer, stat, errmsg)
+  recursive subroutine reg_providers(self, kind, answer, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in) :: kind
     type(guatiao_value), intent(inout) :: answer
@@ -402,7 +417,7 @@ contains
   end subroutine
 
   !> The provider filed under `key` (GUATIAO_ERR_NOT_FOUND for none).
-  subroutine reg_provider(self, key, answer, stat, errmsg)
+  recursive subroutine reg_provider(self, key, answer, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in) :: key
     type(guatiao_value), intent(inout) :: answer
@@ -415,7 +430,7 @@ contains
   end subroutine
 
   !> The providers of `kind` that can run here, best first.
-  subroutine reg_available(self, kind, answer, stat, errmsg)
+  recursive subroutine reg_available(self, kind, answer, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in) :: kind
     type(guatiao_value), intent(inout) :: answer
@@ -428,7 +443,7 @@ contains
   end subroutine
 
   !> Why nothing serves `kind` here: `{available, why, ...}`.
-  subroutine reg_why_not(self, kind, answer, stat, errmsg)
+  recursive subroutine reg_why_not(self, kind, answer, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in) :: kind
     type(guatiao_value), intent(inout) :: answer
@@ -441,7 +456,7 @@ contains
   end subroutine
 
   !> The best provider of `kind` that can run here.
-  subroutine reg_best(self, kind, answer, stat, errmsg)
+  recursive subroutine reg_best(self, kind, answer, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in) :: kind
     type(guatiao_value), intent(inout) :: answer
@@ -454,7 +469,7 @@ contains
   end subroutine
 
   !> Whether the provider under `key` can run here, and if not, why.
-  subroutine reg_provider_available(self, key, ok, reason, stat, errmsg)
+  recursive subroutine reg_provider_available(self, key, ok, reason, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: key
     logical, intent(inout) :: ok
@@ -467,7 +482,7 @@ contains
     character(:), allocatable :: msg
     call open_reg(self, p, st, msg)
     if (st == GUATIAO_OK) then
-      ok = gt_registry_provider_available(p, gt_view(key), c_loc(why))
+      ok = gt_registry_provider_available(p, gt_view(key), c_loc(why)) /= GUATIAO_C_FALSE
       if (present(reason)) then
         if (ok) then
           reason = ''
@@ -480,7 +495,7 @@ contains
   end subroutine
 
   !> The template providers are filed under (`%id`, `%id@%version`, ...).
-  subroutine reg_keyed_by(self, template, stat, errmsg)
+  recursive subroutine reg_keyed_by(self, template, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: template
     integer, intent(out), optional :: stat
@@ -497,7 +512,7 @@ contains
   end subroutine
 
   !> The template libraries are filed under.
-  subroutine reg_libraries_keyed_by(self, template, stat, errmsg)
+  recursive subroutine reg_libraries_keyed_by(self, template, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: template
     integer, intent(out), optional :: stat
@@ -514,7 +529,7 @@ contains
   end subroutine
 
   !> Ranks the provider with id `id` (higher first).
-  subroutine reg_set_priority(self, id, priority, stat, errmsg)
+  recursive subroutine reg_set_priority(self, id, priority, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: id
     integer, intent(in) :: priority
@@ -531,7 +546,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  integer function reg_priority(self, id)
+  recursive integer function reg_priority(self, id)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: id
     type(c_ptr) :: p
@@ -542,7 +557,7 @@ contains
 
   !> The table the provider under `key` offers for `kind` ('' for its
   !> single table) and its size; GUATIAO_ERR_NOT_FOUND for none.
-  subroutine reg_provider_table(self, key, kind, table, size, stat, errmsg)
+  recursive subroutine reg_provider_table(self, key, kind, table, size, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: key, kind
     type(c_ptr), intent(out) :: table
@@ -574,7 +589,7 @@ contains
 
   !> The `ctx` the provider under `key` passes its table's slots, null for
   !> one that builds instances only.
-  function reg_provider_ctx(self, key) result(ctx)
+  recursive function reg_provider_ctx(self, key) result(ctx)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: key
     type(c_ptr) :: ctx
@@ -586,7 +601,7 @@ contains
 
   !> The schema of the provider's configuration: a read-only handle,
   !> absent for a provider that takes none.
-  function reg_provider_config(self, key) result(schema)
+  recursive function reg_provider_config(self, key) result(schema)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: key
     type(guatiao_value) :: schema
@@ -603,7 +618,7 @@ contains
 
   !> Builds an instance of the provider under `key` from `config`, which
   !> is checked against the provider's schema first.
-  subroutine reg_create(self, key, config, instance, stat, errmsg)
+  recursive subroutine reg_create(self, key, config, instance, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: key
     type(guatiao_value), intent(in) :: config
@@ -635,7 +650,7 @@ contains
 
   !> Takes the library under `key` out; it stays mapped until nothing
   !> uses it.
-  subroutine reg_retire(self, key, stat, errmsg)
+  recursive subroutine reg_retire(self, key, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: key
     integer, intent(out), optional :: stat
@@ -654,7 +669,7 @@ contains
   !> Unmaps the library under `key` when it agrees: GUATIAO_ERR_BUSY while
   !> something it handed out lives, GUATIAO_ERR_UNSUPPORTED with no say in
   !> it, GUATIAO_ERR_WRONG_KIND for one registered rather than mapped.
-  subroutine reg_unload(self, key, stat, errmsg)
+  recursive subroutine reg_unload(self, key, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: key
     integer, intent(out), optional :: stat
@@ -671,7 +686,7 @@ contains
   end subroutine
 
   !> Unmaps whatever the library says. Nothing taken from it is used again.
-  subroutine reg_unload_unchecked(self, key, stat, errmsg)
+  recursive subroutine reg_unload_unchecked(self, key, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     character(*), intent(in), target :: key
     integer, intent(out), optional :: stat
@@ -689,7 +704,7 @@ contains
 
   !> Closes every retired library whose own unload agrees; `answer` lists
   !> their keys.
-  subroutine reg_collect(self, answer, stat, errmsg)
+  recursive subroutine reg_collect(self, answer, stat, errmsg)
     class(guatiao_registry), intent(in) :: self
     type(guatiao_value), intent(inout), optional :: answer
     integer, intent(out), optional :: stat
@@ -710,17 +725,17 @@ contains
   ! ---- instances -------------------------------------------------------
 
   !> Releases the instance through the provider that built it, now.
-  subroutine inst_close(self)
+  recursive subroutine inst_close(self)
     class(guatiao_instance), intent(inout) :: self
     call self%hold%close()
   end subroutine
 
-  logical function inst_is_closed(self)
+  recursive logical function inst_is_closed(self)
     class(guatiao_instance), intent(in) :: self
     inst_is_closed = self%hold%is_closed()
   end function
 
-  function gt_instance_ctx(inst) result(ctx)
+  recursive function gt_instance_ctx(inst) result(ctx)
     type(guatiao_instance), intent(in) :: inst
     type(c_ptr) :: ctx
     ctx = c_null_ptr
@@ -728,7 +743,7 @@ contains
     ctx = inst%hold%box%ctx
   end function
 
-  function gt_instance_reg(inst) result(reg)
+  recursive function gt_instance_reg(inst) result(reg)
     type(guatiao_instance), intent(in) :: inst
     type(c_ptr) :: reg
     reg = c_null_ptr
@@ -736,7 +751,7 @@ contains
     reg = inst%hold%box%reg
   end function
 
-  function gt_instance_key(inst) result(key)
+  recursive function gt_instance_key(inst) result(key)
     type(guatiao_instance), intent(in) :: inst
     character(:), allocatable :: key
     key = ''
@@ -747,7 +762,7 @@ contains
   ! ---- helpers ---------------------------------------------------------
 
   ! A refusal's words in an answer map (`error`, `reason`, `why`), or ''.
-  function said(v) result(words)
+  recursive function said(v) result(words)
     type(guatiao_value), intent(in) :: v
     character(:), allocatable :: words
     type(guatiao_value) :: w
@@ -757,7 +772,7 @@ contains
   end function
 
   ! Frees a provider error's message through the allocator it records.
-  subroutine free_message(err)
+  recursive subroutine free_message(err)
     type(gt_provider_error), intent(inout), target :: err
     type(gt_value), target :: node
     integer(c_int32_t) :: ignored

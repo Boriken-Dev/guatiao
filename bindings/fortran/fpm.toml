@@ -20,3 +20,9 @@ source-dir = "src"
 
 [install]
 library = true
+
+# The loader chooses its platform with the preprocessor, and a compiler
+# that tells files apart by case alone (ifx on Windows) preprocesses
+# nothing unless asked.
+[preprocess]
+[preprocess.cpp]

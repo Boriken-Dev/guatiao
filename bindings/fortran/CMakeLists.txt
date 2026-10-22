@@ -24,7 +24,9 @@ add_library(guatiao_fortran ${GUATIAO_FORTRAN_SOURCES})
 add_library(guatiao::fortran ALIAS guatiao_fortran)
 set_target_properties(guatiao_fortran PROPERTIES
   Fortran_MODULE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/modules
-  POSITION_INDEPENDENT_CODE ON)
+  POSITION_INDEPENDENT_CODE ON
+  # ifx on Windows preprocesses no file by its extension alone.
+  Fortran_PREPROCESS ON)
 target_include_directories(guatiao_fortran PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/modules>
   $<INSTALL_INTERFACE:include/guatiao_fortran>)

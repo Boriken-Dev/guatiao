@@ -119,7 +119,7 @@ module guatiao_intake_c
 contains
 
   !> Points every export of this header at library `h`.
-  subroutine gt_resolve_intake(h)
+  recursive subroutine gt_resolve_intake(h)
     type(c_ptr), intent(in) :: h
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_intake_check'), gt_intake_check)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_intake_layout'), gt_intake_layout)

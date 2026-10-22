@@ -112,7 +112,7 @@ contains
 
   ! ---- the box ---------------------------------------------------------
 
-  subroutine assign(lhs, rhs)
+  recursive subroutine assign(lhs, rhs)
     class(guatiao_value), intent(inout) :: lhs
     type(guatiao_value), intent(in) :: rhs
     type(gt_box), pointer :: keep
@@ -126,7 +126,7 @@ contains
     if (allocated(path)) call move_alloc(path, lhs%path)
   end subroutine
 
-  subroutine release(v)
+  recursive subroutine release(v)
     class(guatiao_value), intent(inout) :: v
     type(gt_box), pointer :: b
     b => v%box
@@ -144,7 +144,7 @@ contains
     call release(v)
   end subroutine
 
-  subroutine close_box(b)
+  recursive subroutine close_box(b)
     type(gt_box), pointer, intent(in) :: b
     integer(c_int32_t) :: st
     if (b%closed) return
@@ -156,24 +156,24 @@ contains
 
   !> Frees the tree now, for every handle on it; they then read absent.
   !> Safe to call twice.
-  subroutine value_close(self)
+  recursive subroutine value_close(self)
     class(guatiao_value), intent(inout) :: self
     if (associated(self%box)) call close_box(self%box)
   end subroutine
 
   !> Whether the tree was closed (or this handle names none).
-  logical function value_is_closed(self)
+  recursive logical function value_is_closed(self)
     class(guatiao_value), intent(in) :: self
     value_is_closed = .true.
     if (associated(self%box)) value_is_closed = self%box%closed
   end function
 
-  logical function gt_is_closed(v)
+  recursive logical function gt_is_closed(v)
     type(guatiao_value), intent(in) :: v
     gt_is_closed = v%is_closed()
   end function
 
-  logical function gt_read_only(v)
+  recursive logical function gt_read_only(v)
     type(guatiao_value), intent(in) :: v
     gt_read_only = .false.
     if (associated(v%box)) gt_read_only = v%box%read_only
@@ -181,7 +181,7 @@ contains
 
   !> A new tree this binding owns: an ABSENT root node, built in `alloc`.
   !> Answers the root's address for a C call to write the tree into.
-  subroutine gt_new_owned(v, alloc, root)
+  recursive subroutine gt_new_owned(v, alloc, root)
     type(guatiao_value), intent(inout) :: v
     type(c_ptr), intent(in) :: alloc
     type(c_ptr), intent(out) :: root
@@ -200,7 +200,7 @@ contains
   !> A handle on a tree this binding does not own (a borrowed argument, a
   !> lent one, a provider's schema): nothing is freed when it goes, and
   !> gt_end_borrow ends it for every copy.
-  function gt_borrowed(root, read_only, alloc) result(v)
+  recursive function gt_borrowed(root, read_only, alloc) result(v)
     type(c_ptr), intent(in) :: root
     logical, intent(in) :: read_only
     type(c_ptr), intent(in) :: alloc
@@ -219,7 +219,7 @@ contains
 
   !> Ends a borrowed or wrapped handle's tree: every copy reads closed
   !> from now, and nothing of the tree is freed.
-  subroutine gt_end_borrow(v)
+  recursive subroutine gt_end_borrow(v)
     type(guatiao_value), intent(inout) :: v
     if (.not. associated(v%box)) return
     if (associated(v%box%owned)) deallocate(v%box%owned)
@@ -231,7 +231,7 @@ contains
   !> arm another side passed, made a value. `frees` says whether the tree
   !> is this handle's to free (a tree handed over) or not (lent,
   !> borrowed, a carrier until it is settled).
-  function gt_wrap(node, frees, read_only, alloc) result(v)
+  recursive function gt_wrap(node, frees, read_only, alloc) result(v)
     type(gt_value), intent(in) :: node
     logical, intent(in) :: frees, read_only
     type(c_ptr), intent(in) :: alloc
@@ -246,7 +246,7 @@ contains
   end function
 
   !> Whether two handles name the root of one tree.
-  logical function gt_same_tree(a, b)
+  recursive logical function gt_same_tree(a, b)
     type(guatiao_value), intent(in) :: a, b
     gt_same_tree = .false.
     if (.not. associated(a%box) .or. .not. associated(b%box)) return
@@ -256,14 +256,14 @@ contains
   end function
 
   !> Makes the tree this handle's to free, or not.
-  subroutine gt_set_frees(v, frees)
+  recursive subroutine gt_set_frees(v, frees)
     type(guatiao_value), intent(inout) :: v
     logical, intent(in) :: frees
     if (associated(v%box)) v%box%frees = frees
   end subroutine
 
   !> The root of the tree this handle is on, or null.
-  function gt_root(v) result(p)
+  recursive function gt_root(v) result(p)
     type(guatiao_value), intent(in) :: v
     type(c_ptr) :: p
     p = c_null_ptr
@@ -273,7 +273,7 @@ contains
   end function
 
   !> The allocator the tree records for new nodes.
-  function gt_box_alloc(v) result(p)
+  recursive function gt_box_alloc(v) result(p)
     type(guatiao_value), intent(in) :: v
     type(c_ptr) :: p
     p = gt_default_alloc()
@@ -286,7 +286,7 @@ contains
   !> `dst` receives its 40 bytes and every handle then reads closed.
   !> GUATIAO_STAT_READ_ONLY for a borrowed tree, which is not this
   !> handle's to give.
-  subroutine gt_take_tree(v, dst, stat)
+  recursive subroutine gt_take_tree(v, dst, stat)
     type(guatiao_value), intent(inout) :: v
     type(c_ptr), intent(in) :: dst
     integer, intent(out) :: stat
@@ -315,7 +315,7 @@ contains
   !> Takes over the tree at `node` (a `guatiao_value` a C function wrote):
   !> its 40 bytes move into a value this binding owns, and `node` is
   !> written ABSENT, so freeing it afterwards frees nothing.
-  function guatiao_value_from_raw(node, alloc) result(v)
+  recursive function guatiao_value_from_raw(node, alloc) result(v)
     type(c_ptr), intent(in) :: node
     type(guatiao_allocator), intent(in), optional :: alloc
     type(guatiao_value) :: v
@@ -333,7 +333,7 @@ contains
   ! ---- walking ---------------------------------------------------------
 
   !> The address of the node this handle names now, or null.
-  function gt_node(v) result(p)
+  recursive function gt_node(v) result(p)
     type(guatiao_value), intent(in) :: v
     type(c_ptr) :: p
     type(gt_value), pointer :: n
@@ -382,7 +382,7 @@ contains
 
   !> A read-only handle reaching on from `v` through intake's path
   !> grammar (GT_VIA_PATH) or its flat-key resolution (GT_VIA_RESOLVE).
-  function gt_via(v, via, text) result(r)
+  recursive function gt_via(v, via, text) result(r)
     type(guatiao_value), intent(in) :: v
     integer, intent(in) :: via
     character(*), intent(in) :: text
@@ -394,7 +394,7 @@ contains
     r%view_only = .true.
   end function
 
-  function extended(self, step) result(r)
+  recursive function extended(self, step) result(r)
     class(guatiao_value), intent(in) :: self
     type(gt_step), intent(in) :: step
     type(guatiao_value) :: r
@@ -410,7 +410,7 @@ contains
   end function
 
   !> The member `k` of the map this names: a handle, checked on access.
-  function value_key(self, k) result(r)
+  recursive function value_key(self, k) result(r)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in) :: k
     type(guatiao_value) :: r
@@ -422,7 +422,7 @@ contains
 
   !> The element `i` of the list this names, from 1; below 1 counts from
   !> the end (0 the last, -1 the one before).
-  function value_item(self, i) result(r)
+  recursive function value_item(self, i) result(r)
     class(guatiao_value), intent(in) :: self
     integer, intent(in) :: i
     type(guatiao_value) :: r
@@ -433,7 +433,7 @@ contains
 
   !> Several steps at once: each a key (text) or a position (an integer,
   !> as item takes it).
-  function value_at(self, s1, s2, s3, s4, s5, s6, s7, s8) result(r)
+  recursive function value_at(self, s1, s2, s3, s4, s5, s6, s7, s8) result(r)
     class(guatiao_value), intent(in) :: self
     class(*), intent(in) :: s1
     class(*), intent(in), optional :: s2, s3, s4, s5, s6, s7, s8
@@ -448,7 +448,7 @@ contains
     if (present(s7)) call step(r, s7)
     if (present(s8)) call step(r, s8)
   contains
-    subroutine step(v, s)
+    recursive subroutine step(v, s)
       type(guatiao_value), intent(inout) :: v
       class(*), intent(in) :: s
       select type (s)
@@ -468,7 +468,7 @@ contains
 
   !> The node's tag (GUATIAO_TAG_ABSENT when the path names nothing or the
   !> tree is closed).
-  integer function value_tag(self)
+  recursive integer function value_tag(self)
     class(guatiao_value), intent(in) :: self
     type(c_ptr) :: p
     type(gt_value), pointer :: n
@@ -479,19 +479,19 @@ contains
     value_tag = n%tag
   end function
 
-  logical function value_is_absent(self)
+  recursive logical function value_is_absent(self)
     class(guatiao_value), intent(in) :: self
     value_is_absent = self%tag() == GUATIAO_TAG_ABSENT
   end function
 
-  logical function value_is_null(self)
+  recursive logical function value_is_null(self)
     class(guatiao_value), intent(in) :: self
     value_is_null = self%tag() == GUATIAO_TAG_NULL
   end function
 
   !> Entries of a map, elements of a list, bytes of a string, number or
   !> byte string; 0 for anything else.
-  integer function value_length(self)
+  recursive integer function value_length(self)
     class(guatiao_value), intent(in) :: self
     type(c_ptr) :: p
     type(gt_value), pointer :: n
@@ -506,7 +506,7 @@ contains
   end function
 
   !> Whether the map this names has `k`.
-  logical function value_has(self, k)
+  recursive logical function value_has(self, k)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in) :: k
     type(guatiao_value) :: r
@@ -516,7 +516,7 @@ contains
 
   !> The keys of the map this names, in insertion order (none for
   !> anything else).
-  function value_keys(self) result(keys)
+  recursive function value_keys(self) result(keys)
     class(guatiao_value), intent(in) :: self
     type(guatiao_text), allocatable :: keys(:)
     type(c_ptr) :: p
@@ -537,7 +537,7 @@ contains
   end function
 
   !> The path in the intake grammar (`agent[1].name`, positions from 0).
-  function value_path_text(self) result(text)
+  recursive function value_path_text(self) result(text)
     class(guatiao_value), intent(in) :: self
     character(:), allocatable :: text
     character(24) :: buf
@@ -559,7 +559,7 @@ contains
       end if
     end do
   contains
-    logical function plain(k)
+    recursive logical function plain(k)
       character(*), intent(in) :: k
       integer :: c
       plain = len(k) > 0
@@ -571,7 +571,7 @@ contains
         end select
       end do
     end function
-    function quoted(k) result(q)
+    recursive function quoted(k) result(q)
       character(*), intent(in) :: k
       character(:), allocatable :: q
       integer :: c
@@ -584,7 +584,7 @@ contains
     end function
   end function
 
-  logical function value_bool_or(self, fallback)
+  recursive logical function value_bool_or(self, fallback)
     class(guatiao_value), intent(in) :: self
     logical, intent(in) :: fallback
     integer :: st
@@ -594,7 +594,7 @@ contains
 
   !> A number as an int64, or `fallback`: never truncated, never rounded;
   !> a fraction, an exponent, another kind or out of range falls back.
-  integer(int64) function value_int_or(self, fallback)
+  recursive integer(int64) function value_int_or(self, fallback)
     class(guatiao_value), intent(in) :: self
     integer(int64), intent(in) :: fallback
     integer :: st
@@ -604,7 +604,7 @@ contains
 
   !> A number as the nearest real64, or `fallback` when there is no
   !> finite one.
-  real(real64) function value_real_or(self, fallback)
+  recursive real(real64) function value_real_or(self, fallback)
     class(guatiao_value), intent(in) :: self
     real(real64), intent(in) :: fallback
     integer :: st
@@ -613,7 +613,7 @@ contains
   end function
 
   !> A string's text, or `fallback` for anything else (a number included).
-  function value_string_or(self, fallback) result(s)
+  recursive function value_string_or(self, fallback) result(s)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in) :: fallback
     character(:), allocatable :: s
@@ -623,7 +623,7 @@ contains
   end function
 
   !> A number's exact text, or '' for anything else.
-  function value_number_text(self) result(s)
+  recursive function value_number_text(self) result(s)
     class(guatiao_value), intent(in) :: self
     character(:), allocatable :: s
     type(c_ptr) :: p
@@ -637,7 +637,7 @@ contains
 
   ! The node, checked to be `tag`: GUATIAO_ERR_NOT_FOUND when absent,
   ! GUATIAO_STAT_CLOSED after close, GUATIAO_ERR_WRONG_KIND otherwise.
-  subroutine reading(self, tag, n, st, msg)
+  recursive subroutine reading(self, tag, n, st, msg)
     class(guatiao_value), intent(in) :: self
     integer(c_int32_t), intent(in) :: tag
     type(gt_value), pointer, intent(out) :: n
@@ -666,14 +666,14 @@ contains
     st = GUATIAO_OK
   end subroutine
 
-  function where(v) result(w)
+  recursive function where(v) result(w)
     class(guatiao_value), intent(in) :: v
     character(:), allocatable :: w
     w = v%path_text()
     if (len(w) == 0) w = 'the root'
   end function
 
-  function tag_name(tag) result(name)
+  recursive function tag_name(tag) result(name)
     integer(c_int32_t), intent(in) :: tag
     character(:), allocatable :: name
     select case (tag)
@@ -689,7 +689,7 @@ contains
     end select
   end function
 
-  subroutine get_logical(self, x, stat, errmsg)
+  recursive subroutine get_logical(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     logical, intent(inout) :: x
     integer, intent(out), optional :: stat
@@ -702,7 +702,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine get_int64(self, x, stat, errmsg)
+  recursive subroutine get_int64(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     integer(int64), intent(inout) :: x
     integer, intent(out), optional :: stat
@@ -726,7 +726,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine get_int32(self, x, stat, errmsg)
+  recursive subroutine get_int32(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     integer(int32), intent(inout) :: x
     integer, intent(out), optional :: stat
@@ -747,7 +747,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine get_real64(self, x, stat, errmsg)
+  recursive subroutine get_real64(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     real(real64), intent(inout) :: x
     integer, intent(out), optional :: stat
@@ -773,7 +773,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine get_real32(self, x, stat, errmsg)
+  recursive subroutine get_real32(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     real(real32), intent(inout) :: x
     integer, intent(out), optional :: stat
@@ -800,7 +800,7 @@ contains
   end subroutine
 
   !> A string's text (a number is not a string: GUATIAO_ERR_WRONG_KIND).
-  subroutine get_text(self, x, stat, errmsg)
+  recursive subroutine get_text(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(:), allocatable, intent(inout) :: x
     integer, intent(out), optional :: stat
@@ -814,7 +814,7 @@ contains
   end subroutine
 
   !> A byte string, copied.
-  subroutine get_bytes(self, x, stat, errmsg)
+  recursive subroutine get_bytes(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     integer(int8), allocatable, intent(inout) :: x(:)
     integer, intent(out), optional :: stat
@@ -836,7 +836,7 @@ contains
   end subroutine
 
   !> A deep copy of the node into a tree of its own.
-  subroutine get_value(self, x, stat, errmsg)
+  recursive subroutine get_value(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     type(guatiao_value), intent(inout) :: x
     integer, intent(out), optional :: stat
@@ -847,7 +847,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine get_key_logical(self, k, x, stat, errmsg)
+  recursive subroutine get_key_logical(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in) :: k
     logical, intent(inout) :: x
@@ -858,7 +858,7 @@ contains
     call r%get(x, stat, errmsg)
   end subroutine
 
-  subroutine get_key_int32(self, k, x, stat, errmsg)
+  recursive subroutine get_key_int32(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in) :: k
     integer(int32), intent(inout) :: x
@@ -869,7 +869,7 @@ contains
     call r%get(x, stat, errmsg)
   end subroutine
 
-  subroutine get_key_int64(self, k, x, stat, errmsg)
+  recursive subroutine get_key_int64(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in) :: k
     integer(int64), intent(inout) :: x
@@ -880,7 +880,7 @@ contains
     call r%get(x, stat, errmsg)
   end subroutine
 
-  subroutine get_key_real32(self, k, x, stat, errmsg)
+  recursive subroutine get_key_real32(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in) :: k
     real(real32), intent(inout) :: x
@@ -891,7 +891,7 @@ contains
     call r%get(x, stat, errmsg)
   end subroutine
 
-  subroutine get_key_real64(self, k, x, stat, errmsg)
+  recursive subroutine get_key_real64(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in) :: k
     real(real64), intent(inout) :: x
@@ -902,7 +902,7 @@ contains
     call r%get(x, stat, errmsg)
   end subroutine
 
-  subroutine get_key_text(self, k, x, stat, errmsg)
+  recursive subroutine get_key_text(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in) :: k
     character(:), allocatable, intent(inout) :: x
@@ -913,7 +913,7 @@ contains
     call r%get(x, stat, errmsg)
   end subroutine
 
-  subroutine get_key_bytes(self, k, x, stat, errmsg)
+  recursive subroutine get_key_bytes(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in) :: k
     integer(int8), allocatable, intent(inout) :: x(:)
@@ -924,7 +924,7 @@ contains
     call r%get(x, stat, errmsg)
   end subroutine
 
-  subroutine get_key_value(self, k, x, stat, errmsg)
+  recursive subroutine get_key_value(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in) :: k
     type(guatiao_value), intent(inout) :: x
@@ -937,7 +937,7 @@ contains
 
   !> A deep copy into a tree of its own, built in `alloc` (else the
   !> allocator this tree records).
-  function value_clone(self, alloc, stat, errmsg) result(copy)
+  recursive function value_clone(self, alloc, stat, errmsg) result(copy)
     class(guatiao_value), intent(in) :: self
     type(guatiao_allocator), intent(in), optional :: alloc
     integer, intent(out), optional :: stat
@@ -954,7 +954,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end function
 
-  subroutine clone_into(self, alloc, copy, st, msg)
+  recursive subroutine clone_into(self, alloc, copy, st, msg)
     class(guatiao_value), intent(in) :: self
     type(c_ptr), intent(in) :: alloc
     type(guatiao_value), intent(inout) :: copy
@@ -980,7 +980,7 @@ contains
 
   !> The node's address now, for a C function taking one; null when the
   !> path names nothing.
-  function value_raw(self) result(p)
+  recursive function value_raw(self) result(p)
     class(guatiao_value), intent(in) :: self
     type(c_ptr) :: p
     p = gt_node(self)
@@ -989,7 +989,7 @@ contains
   ! ---- building --------------------------------------------------------
 
   !> An empty map, built in `alloc` (else guatiao's own heap).
-  function guatiao_map(alloc, stat, errmsg) result(v)
+  recursive function guatiao_map(alloc, stat, errmsg) result(v)
     type(guatiao_allocator), intent(in), optional :: alloc
     integer, intent(out), optional :: stat
     character(:), allocatable, intent(inout), optional :: errmsg
@@ -1007,7 +1007,7 @@ contains
   end function
 
   !> An empty list, built in `alloc` (else guatiao's own heap).
-  function guatiao_list(alloc, stat, errmsg) result(v)
+  recursive function guatiao_list(alloc, stat, errmsg) result(v)
     type(guatiao_allocator), intent(in), optional :: alloc
     integer, intent(out), optional :: stat
     character(:), allocatable, intent(inout), optional :: errmsg
@@ -1025,7 +1025,7 @@ contains
   end function
 
   !> The stored nothing.
-  function guatiao_null() result(v)
+  recursive function guatiao_null() result(v)
     type(guatiao_value) :: v
     type(c_ptr) :: root
     type(gt_value), pointer :: n
@@ -1035,7 +1035,7 @@ contains
   end function
 
   !> No value: what a lookup that found nothing answers.
-  function guatiao_absent() result(v)
+  recursive function guatiao_absent() result(v)
     type(guatiao_value) :: v
     type(c_ptr) :: root
     call gt_new_owned(v, c_null_ptr, root)
@@ -1043,7 +1043,7 @@ contains
 
   !> A number stored as its exact `text` (JSON's grammar, else
   !> GUATIAO_ERR_BAD_VALUE).
-  function guatiao_number(text, alloc, stat, errmsg) result(v)
+  recursive function guatiao_number(text, alloc, stat, errmsg) result(v)
     character(*), intent(in), target :: text
     type(guatiao_allocator), intent(in), optional :: alloc
     integer, intent(out), optional :: stat
@@ -1063,7 +1063,7 @@ contains
 
   ! The node a write goes to, checked to be `tag`, and the allocator to
   ! grow it through: the one the container records, else the tree's.
-  subroutine gt_writable_node(self, tag, p, alloc, st, msg)
+  recursive subroutine gt_writable_node(self, tag, p, alloc, st, msg)
     class(guatiao_value), intent(in) :: self
     integer(c_int32_t), intent(in) :: tag
     type(c_ptr), intent(out) :: p, alloc
@@ -1085,7 +1085,7 @@ contains
   end subroutine
 
   ! Builds the node `tmp` from a Fortran scalar, through `alloc`.
-  subroutine build_text(alloc, x, tmp, st, msg)
+  recursive subroutine build_text(alloc, x, tmp, st, msg)
     type(c_ptr), intent(in) :: alloc
     character(*), intent(in), target :: x
     type(gt_value), intent(inout), target :: tmp
@@ -1096,7 +1096,7 @@ contains
     if (st /= GUATIAO_OK) msg = 'guatiao: the text is not UTF-8, or the allocator refused'
   end subroutine
 
-  subroutine build_number(alloc, text, tmp, st, msg)
+  recursive subroutine build_number(alloc, text, tmp, st, msg)
     type(c_ptr), intent(in) :: alloc
     character(*), intent(in), target :: text
     type(gt_value), intent(inout), target :: tmp
@@ -1107,7 +1107,7 @@ contains
     if (st /= GUATIAO_OK) msg = 'guatiao: "' // text // '" is not a number'
   end subroutine
 
-  subroutine build_int(alloc, x, tmp, st, msg)
+  recursive subroutine build_int(alloc, x, tmp, st, msg)
     type(c_ptr), intent(in) :: alloc
     integer(int64), intent(in) :: x
     type(gt_value), intent(inout), target :: tmp
@@ -1118,7 +1118,7 @@ contains
     call build_number(alloc, trim(buf), tmp, st, msg)
   end subroutine
 
-  subroutine build_real(alloc, x, single, tmp, st, msg)
+  recursive subroutine build_real(alloc, x, single, tmp, st, msg)
     type(c_ptr), intent(in) :: alloc
     real(real64), intent(in) :: x
     logical, intent(in) :: single
@@ -1136,16 +1136,16 @@ contains
     call build_number(alloc, text, tmp, st, msg)
   end subroutine
 
-  subroutine build_logical(x, tmp, st, msg)
+  recursive subroutine build_logical(x, tmp, st, msg)
     logical, intent(in) :: x
     type(gt_value), intent(inout), target :: tmp
     integer, intent(out) :: st
     character(:), allocatable, intent(out) :: msg
     msg = ''
-    st = gt_value_bool(logical(x, c_bool), c_loc(tmp))
+    st = gt_value_bool(merge(GUATIAO_C_TRUE, GUATIAO_C_FALSE, x), c_loc(tmp))
   end subroutine
 
-  subroutine build_bytes(alloc, x, tmp, st, msg)
+  recursive subroutine build_bytes(alloc, x, tmp, st, msg)
     type(c_ptr), intent(in) :: alloc
     integer(int8), intent(in), target :: x(:)
     type(gt_value), intent(inout), target :: tmp
@@ -1156,7 +1156,7 @@ contains
     if (st /= GUATIAO_OK) msg = 'guatiao: the allocator refused the bytes'
   end subroutine
 
-  subroutine build_copy(alloc, x, tmp, st, msg)
+  recursive subroutine build_copy(alloc, x, tmp, st, msg)
     type(c_ptr), intent(in) :: alloc
     type(guatiao_value), intent(in) :: x
     type(gt_value), intent(inout), target :: tmp
@@ -1180,7 +1180,7 @@ contains
   end subroutine
 
   ! Stores `tmp` under `k` of the map at `p`, freeing it when refused.
-  subroutine store(p, alloc, k, tmp, st, msg)
+  recursive subroutine store(p, alloc, k, tmp, st, msg)
     type(c_ptr), intent(in) :: p, alloc
     character(*), intent(in), target :: k
     type(gt_value), intent(inout), target :: tmp
@@ -1195,7 +1195,7 @@ contains
   end subroutine
 
   ! Appends `tmp` to the list at `p`, freeing it when refused.
-  subroutine append(p, alloc, tmp, st, msg)
+  recursive subroutine append(p, alloc, tmp, st, msg)
     type(c_ptr), intent(in) :: p, alloc
     type(gt_value), intent(inout), target :: tmp
     integer, intent(inout) :: st
@@ -1209,7 +1209,7 @@ contains
   end subroutine
 
   !> Stores `x` under `k` of the map this names, replacing in place.
-  subroutine set_logical(self, k, x, stat, errmsg)
+  recursive subroutine set_logical(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in), target :: k
     logical, intent(in) :: x
@@ -1227,7 +1227,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine set_int32(self, k, x, stat, errmsg)
+  recursive subroutine set_int32(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in), target :: k
     integer(int32), intent(in) :: x
@@ -1236,7 +1236,7 @@ contains
     call set_int64(self, k, int(x, int64), stat, errmsg)
   end subroutine
 
-  subroutine set_int64(self, k, x, stat, errmsg)
+  recursive subroutine set_int64(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in), target :: k
     integer(int64), intent(in) :: x
@@ -1254,7 +1254,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine set_real32(self, k, x, stat, errmsg)
+  recursive subroutine set_real32(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in), target :: k
     real(real32), intent(in) :: x
@@ -1272,7 +1272,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine set_real64(self, k, x, stat, errmsg)
+  recursive subroutine set_real64(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in), target :: k
     real(real64), intent(in) :: x
@@ -1290,7 +1290,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine set_text(self, k, x, stat, errmsg)
+  recursive subroutine set_text(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in), target :: k
     character(*), intent(in) :: x
@@ -1308,7 +1308,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine set_bytes(self, k, x, stat, errmsg)
+  recursive subroutine set_bytes(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in), target :: k
     integer(int8), intent(in) :: x(:)
@@ -1327,7 +1327,7 @@ contains
   end subroutine
 
   !> Stores a deep copy of what `x` names (the source is left as it was).
-  subroutine set_value(self, k, x, stat, errmsg)
+  recursive subroutine set_value(self, k, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in), target :: k
     type(guatiao_value), intent(in) :: x
@@ -1346,7 +1346,7 @@ contains
   end subroutine
 
   !> Appends `x` to the list this names.
-  subroutine push_logical(self, x, stat, errmsg)
+  recursive subroutine push_logical(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     logical, intent(in) :: x
     integer, intent(out), optional :: stat
@@ -1363,7 +1363,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine push_int32(self, x, stat, errmsg)
+  recursive subroutine push_int32(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     integer(int32), intent(in) :: x
     integer, intent(out), optional :: stat
@@ -1371,7 +1371,7 @@ contains
     call push_int64(self, int(x, int64), stat, errmsg)
   end subroutine
 
-  subroutine push_int64(self, x, stat, errmsg)
+  recursive subroutine push_int64(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     integer(int64), intent(in) :: x
     integer, intent(out), optional :: stat
@@ -1388,7 +1388,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine push_real32(self, x, stat, errmsg)
+  recursive subroutine push_real32(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     real(real32), intent(in) :: x
     integer, intent(out), optional :: stat
@@ -1405,7 +1405,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine push_real64(self, x, stat, errmsg)
+  recursive subroutine push_real64(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     real(real64), intent(in) :: x
     integer, intent(out), optional :: stat
@@ -1422,7 +1422,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine push_text(self, x, stat, errmsg)
+  recursive subroutine push_text(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in) :: x
     integer, intent(out), optional :: stat
@@ -1439,7 +1439,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine push_bytes(self, x, stat, errmsg)
+  recursive subroutine push_bytes(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     integer(int8), intent(in) :: x(:)
     integer, intent(out), optional :: stat
@@ -1456,7 +1456,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end subroutine
 
-  subroutine push_value(self, x, stat, errmsg)
+  recursive subroutine push_value(self, x, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     type(guatiao_value), intent(in) :: x
     integer, intent(out), optional :: stat
@@ -1475,7 +1475,7 @@ contains
 
   !> Removes `k` from the map this names (GUATIAO_ERR_NOT_FOUND when
   !> it has none).
-  subroutine value_remove(self, k, stat, errmsg)
+  recursive subroutine value_remove(self, k, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     character(*), intent(in), target :: k
     integer, intent(out), optional :: stat
@@ -1492,7 +1492,7 @@ contains
   end subroutine
 
   !> Removes element `i` (from 1) of the list this names.
-  subroutine value_remove_item(self, i, stat, errmsg)
+  recursive subroutine value_remove_item(self, i, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     integer, intent(in) :: i
     integer, intent(out), optional :: stat
@@ -1513,7 +1513,7 @@ contains
   end subroutine
 
   !> Empties the map or list this names.
-  subroutine value_clear(self, stat, errmsg)
+  recursive subroutine value_clear(self, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     integer, intent(out), optional :: stat
     character(:), allocatable, intent(inout), optional :: errmsg
@@ -1532,7 +1532,7 @@ contains
 
   !> Copies every entry of the map `src` names into the map this names,
   !> replacing collisions.
-  subroutine value_copy_from(self, src, stat, errmsg)
+  recursive subroutine value_copy_from(self, src, stat, errmsg)
     class(guatiao_value), intent(in) :: self
     type(guatiao_value), intent(in) :: src
     integer, intent(out), optional :: stat
@@ -1557,7 +1557,7 @@ contains
   ! ---- scalars to a value of their own ---------------------------------
 
   ! A one-node tree built by `build`, which reports through st/msg.
-  subroutine own_one(v, alloc, st, msg)
+  recursive subroutine own_one(v, alloc, st, msg)
     type(guatiao_value), intent(inout) :: v
     type(guatiao_allocator), intent(in), optional :: alloc
     integer, intent(out) :: st
@@ -1567,7 +1567,7 @@ contains
     if (st == GUATIAO_OK) call gt_new_owned(v, gt_alloc_of(alloc), root)
   end subroutine
 
-  function of_logical(x, alloc, stat, errmsg) result(v)
+  recursive function of_logical(x, alloc, stat, errmsg) result(v)
     logical, intent(in) :: x
     type(guatiao_allocator), intent(in), optional :: alloc
     integer, intent(out), optional :: stat
@@ -1584,7 +1584,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end function
 
-  function of_int32(x, alloc, stat, errmsg) result(v)
+  recursive function of_int32(x, alloc, stat, errmsg) result(v)
     integer(int32), intent(in) :: x
     type(guatiao_allocator), intent(in), optional :: alloc
     integer, intent(out), optional :: stat
@@ -1593,7 +1593,7 @@ contains
     v = of_int64(int(x, int64), alloc, stat, errmsg)
   end function
 
-  function of_int64(x, alloc, stat, errmsg) result(v)
+  recursive function of_int64(x, alloc, stat, errmsg) result(v)
     integer(int64), intent(in) :: x
     type(guatiao_allocator), intent(in), optional :: alloc
     integer, intent(out), optional :: stat
@@ -1610,7 +1610,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end function
 
-  function of_real32(x, alloc, stat, errmsg) result(v)
+  recursive function of_real32(x, alloc, stat, errmsg) result(v)
     real(real32), intent(in) :: x
     type(guatiao_allocator), intent(in), optional :: alloc
     integer, intent(out), optional :: stat
@@ -1627,7 +1627,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end function
 
-  function of_real64(x, alloc, stat, errmsg) result(v)
+  recursive function of_real64(x, alloc, stat, errmsg) result(v)
     real(real64), intent(in) :: x
     type(guatiao_allocator), intent(in), optional :: alloc
     integer, intent(out), optional :: stat
@@ -1644,7 +1644,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end function
 
-  function of_text(x, alloc, stat, errmsg) result(v)
+  recursive function of_text(x, alloc, stat, errmsg) result(v)
     character(*), intent(in) :: x
     type(guatiao_allocator), intent(in), optional :: alloc
     integer, intent(out), optional :: stat
@@ -1661,7 +1661,7 @@ contains
     call gt_report(st, msg, stat, errmsg)
   end function
 
-  function of_bytes(x, alloc, stat, errmsg) result(v)
+  recursive function of_bytes(x, alloc, stat, errmsg) result(v)
     integer(int8), intent(in) :: x(:)
     type(guatiao_allocator), intent(in), optional :: alloc
     integer, intent(out), optional :: stat
@@ -1683,7 +1683,7 @@ contains
   !> Reads `text` (JSON's number grammar) as an int64 the way the header's
   !> guatiao_int_or does: a fraction, an exponent or a value out of range
   !> is not one.
-  subroutine gt_parse_int64(text, n, ok)
+  recursive subroutine gt_parse_int64(text, n, ok)
     character(*), intent(in) :: text
     integer(int64), intent(out) :: n
     logical, intent(out) :: ok
@@ -1713,7 +1713,7 @@ contains
   !> The shortest decimal text that reads back as `x` (as a real32 when
   !> `single`), in JSON's grammar; `ok` false for NaN and the infinities.
   !> Negative zero keeps its sign.
-  subroutine gt_real_text(x, single, text, ok)
+  recursive subroutine gt_real_text(x, single, text, ok)
     real(real64), intent(in) :: x
     logical, intent(in) :: single
     character(:), allocatable, intent(out) :: text
@@ -1726,8 +1726,10 @@ contains
     integer :: d, most, e, epos, ios, i
     ok = ieee_is_finite(x)
     if (.not. ok) return
-    if (x == 0) then
-      if (ieee_is_negative(x)) then
+    ! Compared as bits, here and below: a program built to flush
+    ! subnormals (ifx's default) compares 5e-324 equal to zero.
+    if (iand(transfer(x, 0_int64), huge(0_int64)) == 0) then
+      if (transfer(x, 0_int64) < 0) then
         text = '-0'
       else
         text = '0'
@@ -1741,10 +1743,10 @@ contains
       write (buf, fmt) x
       if (single) then
         read (buf, *, iostat=ios) back32
-        if (ios == 0 .and. back32 == real(x, real32)) exit
+        if (ios == 0 .and. transfer(back32, 0_int32) == transfer(real(x, real32), 0_int32)) exit
       else
         read (buf, *, iostat=ios) back
-        if (ios == 0 .and. back == x) exit
+        if (ios == 0 .and. transfer(back, 0_int64) == transfer(x, 0_int64)) exit
       end if
     end do
     buf = adjustl(buf)
@@ -1771,7 +1773,7 @@ contains
       write (buf, '(i0)') e
       text = text // 'e' // trim(buf)
     end if
-    if (x < 0) text = '-' // text
+    if (transfer(x, 0_int64) < 0) text = '-' // text
   end subroutine
 
 end module guatiao_values

@@ -58,7 +58,7 @@ contains
 
   !> Whether what `value` names fits `schema`: GUATIAO_OK, or
   !> GUATIAO_ERR_BAD_VALUE with `why` holding the map that says why.
-  subroutine guatiao_validate(schema, value, why, stat, errmsg)
+  recursive subroutine guatiao_validate(schema, value, why, stat, errmsg)
     type(guatiao_value), intent(in) :: schema, value
     type(guatiao_value), intent(inout), optional :: why
     integer, intent(out), optional :: stat
@@ -90,7 +90,7 @@ contains
   !> A copy of what `value` names with every field `schema` marks
   !> (`x-sensitive`, `writeOnly`) replaced by `placeholder`, and whatever
   !> it does not describe hidden too.
-  subroutine guatiao_redact(schema, value, placeholder, shown, stat, errmsg)
+  recursive subroutine guatiao_redact(schema, value, placeholder, shown, stat, errmsg)
     type(guatiao_value), intent(in) :: schema, value
     character(*), intent(in), target :: placeholder
     type(guatiao_value), intent(inout) :: shown
@@ -121,7 +121,7 @@ contains
   end subroutine
 
   !> An empty object schema to add fields to.
-  function guatiao_object_schema(title, description) result(s)
+  recursive function guatiao_object_schema(title, description) result(s)
     character(*), intent(in), optional :: title, description
     type(guatiao_schema_builder) :: s
     s%doc = guatiao_map()
@@ -133,7 +133,7 @@ contains
   end function
 
   ! A new property `name` of `json_type`, required unless said otherwise.
-  subroutine property(self, name, json_type, description, required, field)
+  recursive subroutine property(self, name, json_type, description, required, field)
     class(guatiao_schema_builder), intent(inout) :: self
     character(*), intent(in) :: name, json_type
     character(*), intent(in), optional :: description
@@ -148,7 +148,7 @@ contains
     if (required) call require(self, name)
   end subroutine
 
-  subroutine require(self, name)
+  recursive subroutine require(self, name)
     class(guatiao_schema_builder), intent(inout) :: self
     character(*), intent(in) :: name
     type(guatiao_value) :: list
@@ -157,7 +157,7 @@ contains
     call list%push(name)
   end subroutine
 
-  logical function wanted(required, has_default)
+  recursive logical function wanted(required, has_default)
     logical, intent(in), optional :: required
     logical, intent(in) :: has_default
     wanted = .not. has_default
@@ -166,7 +166,7 @@ contains
 
   !> A text field. Required unless `required` says otherwise or it has a
   !> default; `sensitive` marks it a secret (`x-sensitive`).
-  subroutine builder_string(self, name, description, default, min_length, max_length, pattern, format, &
+  recursive subroutine builder_string(self, name, description, default, min_length, max_length, pattern, format, &
                             sensitive, required)
     class(guatiao_schema_builder), intent(inout) :: self
     character(*), intent(in) :: name
@@ -186,7 +186,7 @@ contains
   end subroutine
 
   !> An integer field, with optional bounds.
-  subroutine builder_integer(self, name, description, default, minimum, maximum, required)
+  recursive subroutine builder_integer(self, name, description, default, minimum, maximum, required)
     class(guatiao_schema_builder), intent(inout) :: self
     character(*), intent(in) :: name
     character(*), intent(in), optional :: description
@@ -200,7 +200,7 @@ contains
   end subroutine
 
   !> A number field, with optional bounds.
-  subroutine builder_number(self, name, description, default, minimum, maximum, required)
+  recursive subroutine builder_number(self, name, description, default, minimum, maximum, required)
     class(guatiao_schema_builder), intent(inout) :: self
     character(*), intent(in) :: name
     character(*), intent(in), optional :: description
@@ -214,7 +214,7 @@ contains
   end subroutine
 
   !> A boolean field.
-  subroutine builder_boolean(self, name, description, default, required)
+  recursive subroutine builder_boolean(self, name, description, default, required)
     class(guatiao_schema_builder), intent(inout) :: self
     character(*), intent(in) :: name
     character(*), intent(in), optional :: description
@@ -225,7 +225,7 @@ contains
   end subroutine
 
   !> A field whose schema is written out in full (a copy of `schema`).
-  subroutine builder_field(self, name, schema, required)
+  recursive subroutine builder_field(self, name, schema, required)
     class(guatiao_schema_builder), intent(inout) :: self
     character(*), intent(in) :: name
     type(guatiao_value), intent(in) :: schema
@@ -237,14 +237,14 @@ contains
   end subroutine
 
   !> The schema document built so far.
-  function builder_value(self) result(v)
+  recursive function builder_value(self) result(v)
     class(guatiao_schema_builder), intent(in) :: self
     type(guatiao_value) :: v
     v = self%doc
   end function
 
   !> The schema a configuration type describes.
-  function guatiao_schema_of(config) result(schema)
+  recursive function guatiao_schema_of(config) result(schema)
     class(guatiao_config), intent(in) :: config
     type(guatiao_value) :: schema
     type(guatiao_schema_builder) :: b
@@ -255,7 +255,7 @@ contains
 
   !> Checks `value` against the configuration's schema, then decodes it
   !> into `config`.
-  subroutine guatiao_decode_config(config, value, stat, errmsg)
+  recursive subroutine guatiao_decode_config(config, value, stat, errmsg)
     class(guatiao_config), intent(inout) :: config
     type(guatiao_value), intent(in) :: value
     integer, intent(out), optional :: stat

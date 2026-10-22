@@ -76,7 +76,7 @@ contains
   !> A library named `id`, versioned `version` (semver): write them as
   !> the package's fpm.toml does. `summary`, `license` (SPDX) and
   !> `authors` go in its meta.
-  function guatiao_new_library(id, version, summary, license, authors) result(lib)
+  recursive function guatiao_new_library(id, version, summary, license, authors) result(lib)
     character(*), intent(in) :: id, version
     character(*), intent(in), optional :: summary, license
     character(*), intent(in), optional :: authors(:)
@@ -101,20 +101,20 @@ contains
     end if
   end function
 
-  function lib_id(self) result(id)
+  recursive function lib_id(self) result(id)
     class(guatiao_library), intent(in) :: self
     character(:), allocatable :: id
     id = self%box%id
   end function
 
-  function lib_version(self) result(version)
+  recursive function lib_version(self) result(version)
     class(guatiao_library), intent(in) :: self
     character(:), allocatable :: version
     version = self%box%version
   end function
 
   ! The checks every provider passes, and its spec appended.
-  subroutine add(self, name, id, display_name, version, spec, st, msg)
+  recursive subroutine add(self, name, id, display_name, version, spec, st, msg)
     class(guatiao_library), intent(inout) :: self
     character(*), intent(in) :: name
     character(*), intent(in), optional :: id, display_name, version
@@ -145,7 +145,7 @@ contains
     call append_spec(self%box%specs, spec)
   end subroutine
 
-  subroutine append_spec(specs, spec)
+  recursive subroutine append_spec(specs, spec)
     type(gt_spec), allocatable, intent(inout) :: specs(:)
     type(gt_spec), intent(in) :: spec
     type(gt_spec), allocatable :: grown(:)
@@ -159,7 +159,7 @@ contains
 
   !> A provider that is its one instance: `servings`, an object per kind
   !> it serves (a kind's `<kind>_serving` function makes one).
-  subroutine lib_single(self, name, servings, display_name, id, version, stat, errmsg)
+  recursive subroutine lib_single(self, name, servings, display_name, id, version, stat, errmsg)
     class(guatiao_library), intent(inout) :: self
     character(*), intent(in) :: name
     type(guatiao_serving), intent(in) :: servings(:)
@@ -194,7 +194,7 @@ contains
   !> the configuration type (its schema the provider's), `build` makes an
   !> instance's objects from a decoded copy, `serves` names the kinds (a
   !> kind's `<kind>_serving` with no object).
-  subroutine lib_configured(self, name, prototype, build, serves, display_name, id, version, stat, errmsg)
+  recursive subroutine lib_configured(self, name, prototype, build, serves, display_name, id, version, stat, errmsg)
     class(guatiao_library), intent(inout) :: self
     character(*), intent(in) :: name
     class(guatiao_config), intent(in) :: prototype
@@ -232,7 +232,7 @@ contains
   !> built on first use: what a library file's `guatiao_library_entry`
   !> returns. Null, declining the host, for a host of another ABI or when
   !> guatiao cannot be opened here (the reason on standard error).
-  function lib_answer(self, host) result(info)
+  recursive function lib_answer(self, host) result(info)
     class(guatiao_library), intent(inout) :: self
     type(c_ptr), intent(in) :: host
     type(c_ptr) :: info
@@ -258,7 +258,7 @@ contains
 
   !> Registers `lib` with `reg` in this process (linked, not mapped:
   !> unload answers GUATIAO_ERR_WRONG_KIND, retire takes it out).
-  subroutine guatiao_register_library(reg, lib, answer, stat, errmsg)
+  recursive subroutine guatiao_register_library(reg, lib, answer, stat, errmsg)
     type(guatiao_registry), intent(in) :: reg
     type(guatiao_library), intent(in) :: lib
     type(guatiao_value), intent(inout), optional :: answer
@@ -276,7 +276,7 @@ contains
     call reg%register_entry(lib%box%id, gt_pool_entry_at(n), answer, stat, errmsg)
   end subroutine
 
-  function pool_entry(index, host) result(info)
+  recursive function pool_entry(index, host) result(info)
     integer, intent(in) :: index
     type(c_ptr), intent(in) :: host
     type(c_ptr) :: info
@@ -287,7 +287,7 @@ contains
 
   ! Every pointer the descriptor holds addresses memory kept for the
   ! process: strings and arrays allocated here and never freed.
-  subroutine build_descriptor(box, st, msg)
+  recursive subroutine build_descriptor(box, st, msg)
     type(gt_library_box), pointer, intent(in) :: box
     integer, intent(out) :: st
     character(:), allocatable, intent(out) :: msg
@@ -358,7 +358,7 @@ contains
   end subroutine
 
   ! A view of a copy of `text` that lives for the process.
-  function keep(text) result(v)
+  recursive function keep(text) result(v)
     character(*), intent(in) :: text
     type(gt_str) :: v
     character(:), pointer :: copy
@@ -373,7 +373,7 @@ contains
   ! A provider's `create`, reached through its pool index: the host's
   ! configuration checked against the schema, decoded into a copy of the
   ! prototype, built.
-  function pool_create(index, ctx, config, out, err) result(status)
+  recursive function pool_create(index, ctx, config, out, err) result(status)
     integer, intent(in) :: index
     type(c_ptr), intent(in) :: ctx, config, out, err
     integer(c_int32_t) :: status
@@ -419,14 +419,14 @@ contains
   end function
 
   ! A provider's `destroy`: the instance is the box `create` answered.
-  subroutine destroy_instance(ctx, instance) bind(c)
+  recursive subroutine destroy_instance(ctx, instance) bind(c)
     type(c_ptr), value :: ctx, instance
     call guatiao_destroy_served(instance)
   end subroutine
 
   ! A Fortran library is never unmapped: a Fortran runtime linked into it
   ! registers exit handlers and keeps unit state no host can see.
-  function refuse_unload() bind(c) result(status)
+  recursive function refuse_unload() bind(c) result(status)
     integer(c_int32_t) :: status
     status = GUATIAO_ERR_BUSY
   end function

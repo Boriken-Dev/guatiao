@@ -17,7 +17,7 @@ module host_listener
 
 contains
 
-  subroutine echo_heard(self, what, error)
+  recursive subroutine echo_heard(self, what, error)
     class(echo), intent(inout) :: self
     character(*), intent(in) :: what
     type(guatiao_error), allocatable, intent(out) :: error

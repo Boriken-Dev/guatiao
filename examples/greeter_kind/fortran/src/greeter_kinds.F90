@@ -270,7 +270,7 @@ contains
 
   ! ---- descriptions ----------------------------------------------------
 
-  function listener_kind() result(k)
+  recursive function listener_kind() result(k)
     type(guatiao_kind) :: k
     k%name = 'listener'
     k%floor_hash = LISTENER_FLOOR_HASH
@@ -285,7 +285,7 @@ contains
     k%accepts => is_listener
   end function
 
-  function conversation_kind() result(k)
+  recursive function conversation_kind() result(k)
     type(guatiao_kind) :: k
     k%name = 'conversation'
     k%floor_hash = CONVERSATION_FLOOR_HASH
@@ -302,7 +302,7 @@ contains
     k%accepts => is_conversation
   end function
 
-  function greeter_kind() result(k)
+  recursive function greeter_kind() result(k)
     type(guatiao_kind) :: k
     type(greeter_vtable) :: probe
     k%name = 'greeter'
@@ -312,7 +312,7 @@ contains
     k%accepts => is_greeter
   end function
 
-  function counter_kind() result(k)
+  recursive function counter_kind() result(k)
     type(guatiao_kind) :: k
     k%name = 'counter'
     k%floor_hash = COUNTER_FLOOR_HASH
@@ -321,7 +321,7 @@ contains
     k%accepts => is_counter
   end function
 
-  logical function is_listener(impl)
+  recursive logical function is_listener(impl)
     class(guatiao_impl), intent(in) :: impl
     select type (impl)
     class is (listener)
@@ -331,7 +331,7 @@ contains
     end select
   end function
 
-  logical function is_conversation(impl)
+  recursive logical function is_conversation(impl)
     class(guatiao_impl), intent(in) :: impl
     select type (impl)
     class is (conversation)
@@ -341,7 +341,7 @@ contains
     end select
   end function
 
-  logical function is_greeter(impl)
+  recursive logical function is_greeter(impl)
     class(guatiao_impl), intent(in) :: impl
     select type (impl)
     class is (greeter)
@@ -351,7 +351,7 @@ contains
     end select
   end function
 
-  logical function is_counter(impl)
+  recursive logical function is_counter(impl)
     class(guatiao_impl), intent(in) :: impl
     select type (impl)
     class is (counter)
@@ -364,7 +364,7 @@ contains
   !> `impl` serving the greeter kind through a table with `greet` and
   !> each optional slot it says it overrides; with no `impl`, the table a
   !> configured provider's instances use.
-  function greeter_serving(impl, shout, start, greet_into, greet_from, check) result(s)
+  recursive function greeter_serving(impl, shout, start, greet_into, greet_from, check) result(s)
     class(greeter), intent(in), target, optional :: impl
     logical, intent(in), optional :: shout, start, greet_into, greet_from, check
     type(guatiao_serving) :: s
@@ -377,7 +377,7 @@ contains
     if (on(greet_from)) bits = ior(bits, 8)
     if (on(check)) bits = ior(bits, 16)
     t => greeter_tables(bits)
-    t%header%struct_size = int(c_sizeof(t), c_int32_t)
+    t%header%struct_size = int(storage_size(t) / 8, c_int32_t)
     t%header%floor_hash = GREETER_FLOOR_HASH
     t%greet = c_funloc(greet_slot)
     if (iand(bits, 1) /= 0) t%shout = c_funloc(shout_slot)
@@ -389,14 +389,14 @@ contains
     s%table = c_loc(t)
     if (present(impl)) s%impl => impl
   contains
-    logical function on(flag)
+    recursive logical function on(flag)
       logical, intent(in), optional :: flag
       on = .false.
       if (present(flag)) on = flag
     end function
   end function
 
-  function counter_serving(impl) result(s)
+  recursive function counter_serving(impl) result(s)
     class(counter), intent(in), target, optional :: impl
     type(guatiao_serving) :: s
     counter_table%header%struct_size = int(c_sizeof(counter_table), c_int32_t)
@@ -408,7 +408,7 @@ contains
   end function
 
   !> The provider under `key` as a greeter.
-  subroutine greeter_bind(reg, key, g, stat, errmsg)
+  recursive subroutine greeter_bind(reg, key, g, stat, errmsg)
     type(guatiao_registry), intent(in) :: reg
     character(*), intent(in) :: key
     type(greeter_remote), intent(inout) :: g
@@ -418,7 +418,7 @@ contains
   end subroutine
 
   !> An instance as a greeter.
-  subroutine greeter_bind_instance(inst, g, stat, errmsg)
+  recursive subroutine greeter_bind_instance(inst, g, stat, errmsg)
     type(guatiao_instance), intent(in) :: inst
     type(greeter_remote), intent(inout) :: g
     integer, intent(out), optional :: stat
@@ -426,7 +426,7 @@ contains
     call guatiao_bind_instance(inst, greeter_kind(), g%r, stat, errmsg)
   end subroutine
 
-  subroutine counter_bind(reg, key, c, stat, errmsg)
+  recursive subroutine counter_bind(reg, key, c, stat, errmsg)
     type(guatiao_registry), intent(in) :: reg
     character(*), intent(in) :: key
     type(counter_remote), intent(inout) :: c
@@ -437,7 +437,7 @@ contains
 
   ! ---- optional slots a provider does not override --------------------
 
-  subroutine greeter_shout(self, name, answer, error)
+  recursive subroutine greeter_shout(self, name, answer, error)
     class(greeter), intent(inout) :: self
     character(*), intent(in) :: name
     character(:), allocatable, intent(out) :: answer
@@ -446,7 +446,7 @@ contains
     call guatiao_fail(error, GUATIAO_ERR_UNSUPPORTED, 'no shout here')
   end subroutine
 
-  subroutine greeter_start(self, listener_in, answer, error)
+  recursive subroutine greeter_start(self, listener_in, answer, error)
     class(greeter), intent(inout) :: self
     class(listener), allocatable, intent(inout) :: listener_in
     class(conversation), allocatable, intent(out) :: answer
@@ -454,7 +454,7 @@ contains
     call guatiao_fail(error, GUATIAO_ERR_UNSUPPORTED, 'no conversations here')
   end subroutine
 
-  subroutine greeter_greet_into(self, name, listener_in, error)
+  recursive subroutine greeter_greet_into(self, name, listener_in, error)
     class(greeter), intent(inout) :: self
     character(*), intent(in) :: name
     class(listener), intent(inout), target :: listener_in
@@ -463,7 +463,7 @@ contains
   end subroutine
 
   !> `config` is handed over: the method owns it.
-  subroutine greeter_greet_from(self, config, answer, error)
+  recursive subroutine greeter_greet_from(self, config, answer, error)
     class(greeter), intent(inout) :: self
     type(guatiao_value), intent(inout) :: config
     type(guatiao_value), intent(inout) :: answer
@@ -472,7 +472,7 @@ contains
   end subroutine
 
   !> `config` is lent for the call: change it, never keep it.
-  subroutine greeter_check(self, config, answer, error)
+  recursive subroutine greeter_check(self, config, answer, error)
     class(greeter), intent(inout) :: self
     type(guatiao_value), intent(inout) :: config
     logical, intent(out) :: answer
@@ -648,7 +648,7 @@ contains
     class(guatiao_impl), pointer :: impl
     type(guatiao_value) :: lent
     logical :: usable
-    logical(c_bool), pointer :: answer
+    integer(c_int8_t), pointer :: answer
     type(guatiao_error), allocatable :: error
     impl => guatiao_impl_at(ctx, 'greeter')
     status = GUATIAO_ERR_GONE
@@ -663,7 +663,7 @@ contains
     status = guatiao_failed(error, err)
     if (status == GUATIAO_OK .and. c_associated(out)) then
       call c_f_pointer(out, answer)
-      answer = usable
+      answer = merge(GUATIAO_C_TRUE, GUATIAO_C_FALSE, usable)
     end if
   end function
 
@@ -786,7 +786,7 @@ contains
   ! ---- calling another side's tables -----------------------------------
 
   ! The slot as a procedure, or a refusal when the table lacks it.
-  logical function lacks(r, i, error)
+  recursive logical function lacks(r, i, error)
     type(guatiao_remote), intent(in) :: r
     integer, intent(in) :: i
     type(guatiao_error), allocatable, intent(inout) :: error
@@ -800,7 +800,7 @@ contains
     end if
   end function
 
-  subroutine greeter_remote_greet(self, name, answer, error)
+  recursive subroutine greeter_remote_greet(self, name, answer, error)
     class(greeter_remote), intent(inout) :: self
     character(*), intent(in) :: name
     type(guatiao_value), intent(inout) :: answer
@@ -822,7 +822,7 @@ contains
     answer = got
   end subroutine
 
-  subroutine greeter_remote_shout(self, name, answer, error)
+  recursive subroutine greeter_remote_shout(self, name, answer, error)
     class(greeter_remote), intent(inout) :: self
     character(*), intent(in) :: name
     character(:), allocatable, intent(out) :: answer
@@ -848,7 +848,7 @@ contains
     answer = said%string_or('')
   end subroutine
 
-  subroutine greeter_remote_start(self, listener_in, answer, error)
+  recursive subroutine greeter_remote_start(self, listener_in, answer, error)
     class(greeter_remote), intent(inout) :: self
     class(listener), allocatable, intent(inout) :: listener_in
     class(conversation), allocatable, intent(out) :: answer
@@ -899,7 +899,7 @@ contains
     if (ist /= GUATIAO_OK) call guatiao_fail(error, ist, 'the answer is not a conversation')
   end subroutine
 
-  subroutine greeter_remote_greet_into(self, name, listener_in, error)
+  recursive subroutine greeter_remote_greet_into(self, name, listener_in, error)
     class(greeter_remote), intent(inout) :: self
     character(*), intent(in) :: name
     class(listener), intent(inout), target :: listener_in
@@ -928,7 +928,7 @@ contains
     call guatiao_call_error(st, err, error)
   end subroutine
 
-  subroutine greeter_remote_greet_from(self, config, answer, error)
+  recursive subroutine greeter_remote_greet_from(self, config, answer, error)
     class(greeter_remote), intent(inout) :: self
     type(guatiao_value), intent(inout) :: config
     type(guatiao_value), intent(inout) :: answer
@@ -955,14 +955,14 @@ contains
     answer = got
   end subroutine
 
-  subroutine greeter_remote_check(self, config, answer, error)
+  recursive subroutine greeter_remote_check(self, config, answer, error)
     class(greeter_remote), intent(inout) :: self
     type(guatiao_value), intent(inout) :: config
     logical, intent(out) :: answer
     type(guatiao_error), allocatable, intent(out) :: error
     procedure(map_map_c), pointer :: f
     type(gt_provider_error), target :: err
-    logical(c_bool), target :: out
+    integer(c_int8_t), target :: out
     type(c_ptr) :: lent
     integer(c_int32_t) :: st
     integer :: ist
@@ -974,14 +974,14 @@ contains
       call guatiao_fail(error, ist, 'check takes a writable map')
       return
     end if
-    out = .false.
+    out = GUATIAO_C_FALSE
     st = f(self%r%ctx, lent, c_loc(out), c_loc(err))
     call guatiao_call_error(st, err, error)
-    if (st == GUATIAO_OK) answer = out
+    if (st == GUATIAO_OK) answer = out /= GUATIAO_C_FALSE
   end subroutine
 
   !> Whether the table has the slot named `slot` (`greet`, `shout`, ...).
-  logical function greeter_remote_has(self, slot)
+  recursive logical function greeter_remote_has(self, slot)
     class(greeter_remote), intent(in) :: self
     character(*), intent(in) :: slot
     integer :: i
@@ -997,7 +997,7 @@ contains
     greeter_remote_has = self%r%has(i)
   end function
 
-  subroutine counter_remote_count(self, answer, error)
+  recursive subroutine counter_remote_count(self, answer, error)
     class(counter_remote), intent(inout) :: self
     integer(int64), intent(out) :: answer
     type(guatiao_error), allocatable, intent(out) :: error
@@ -1013,7 +1013,7 @@ contains
     answer = out
   end subroutine
 
-  subroutine listener_remote_heard(self, what, error)
+  recursive subroutine listener_remote_heard(self, what, error)
     class(listener_remote), intent(inout) :: self
     character(*), intent(in) :: what
     type(guatiao_error), allocatable, intent(out) :: error
@@ -1027,12 +1027,12 @@ contains
     if (st /= GUATIAO_OK) call guatiao_fail(error, int(st), 'heard failed')
   end subroutine
 
-  subroutine listener_remote_close(self)
+  recursive subroutine listener_remote_close(self)
     class(listener_remote), intent(inout) :: self
     call self%r%close()
   end subroutine
 
-  subroutine conversation_remote_say(self, what, error)
+  recursive subroutine conversation_remote_say(self, what, error)
     class(conversation_remote), intent(inout) :: self
     character(*), intent(in) :: what
     type(guatiao_error), allocatable, intent(out) :: error
@@ -1047,7 +1047,7 @@ contains
     call guatiao_call_error(st, err, error)
   end subroutine
 
-  subroutine conversation_remote_read(self, dst, answer, error)
+  recursive subroutine conversation_remote_read(self, dst, answer, error)
     class(conversation_remote), intent(inout) :: self
     integer(int8), intent(inout) :: dst(:)
     integer(int64), intent(out) :: answer
@@ -1072,7 +1072,7 @@ contains
     answer = out
   end subroutine
 
-  subroutine conversation_remote_turns(self, answer, error)
+  recursive subroutine conversation_remote_turns(self, answer, error)
     class(conversation_remote), intent(inout) :: self
     integer(int64), intent(out) :: answer
     type(guatiao_error), allocatable, intent(out) :: error
@@ -1089,7 +1089,7 @@ contains
   end subroutine
 
   !> Destroys the conversation, once.
-  subroutine conversation_remote_close(self)
+  recursive subroutine conversation_remote_close(self)
     class(conversation_remote), intent(inout) :: self
     call self%r%close()
   end subroutine

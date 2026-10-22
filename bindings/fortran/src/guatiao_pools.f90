@@ -39,7 +39,7 @@ module guatiao_pools
 contains
 
   !> The create slot of pool index `i`.
-  function gt_pool_create_at(i) result(f)
+  recursive function gt_pool_create_at(i) result(f)
     integer, intent(in) :: i
     type(c_funptr) :: f
     select case (i)
@@ -112,7 +112,7 @@ contains
   end function
 
   !> The entry of pool index `i`.
-  function gt_pool_entry_at(i) result(f)
+  recursive function gt_pool_entry_at(i) result(f)
     integer, intent(in) :: i
     type(c_funptr) :: f
     select case (i)
