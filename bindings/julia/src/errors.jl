@@ -54,25 +54,6 @@ function Base.showerror(io::IO, e::GuatiaoError)
 end
 
 """
-    ParseError
-
-A document that does not parse: `format` (`:json`, `:toml`, `:yaml`),
-`line` and `column` counted from 1 (the column in characters; 0 when the
-parser did not say), and `message`, which never quotes the document. Its
-`status` is `BadValue`.
-"""
-struct ParseError <: GuatiaoException
-    format::Symbol
-    line::Int
-    column::Int
-    message::String
-end
-function Base.showerror(io::IO, e::ParseError)
-    print(io, "ParseError (", e.format, "): ", e.message)
-    e.line > 0 && print(io, " at line ", e.line, ", column ", e.column)
-end
-
-"""
     Unparsed
 
 A date, time, instant or span whose text its grammar refused: `form`
@@ -90,7 +71,6 @@ Base.showerror(io::IO, e::Unparsed) = print(io, "Unparsed ", e.form, ": ", e.exp
 
 "The status an error crosses with."
 status(e::GuatiaoError) = e.status
-status(::ParseError) = BadValue
 status(::Unparsed) = BadValue
 
 """

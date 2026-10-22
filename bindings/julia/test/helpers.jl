@@ -4,13 +4,12 @@
 
 # What several test files share: the repository's paths, an allocator that
 # counts the blocks it handed out and has not taken back, and the shared
-# vectors, read with guatiao's own JSON parser so every number stays exact.
+# vectors, read by `json.jl` so every number stays exact.
 
 using Guatiao: GAlloc, GValue, binding_alloc
 
 const REPO = normpath(joinpath(@__DIR__, "..", "..", ".."))
 const HEADER = joinpath(REPO, "crates", "guatiao", "include", "guatiao.h")
-const SERDE_HEADER = joinpath(REPO, "crates", "guatiao-serde", "include", "guatiao_serde.h")
 const GREETER_KIND_H = joinpath(REPO, "examples", "greeter_kind", "include", "greeter_kind.h")
 const VECTORS = joinpath(REPO, "crates", "guatiao", "tests", "vectors", "time.json")
 
@@ -50,7 +49,7 @@ live(c::Counting) = COUNTS[c.index][]
 
 # ---- the shared vectors ------------------------------------------------------------
 
-vectors() = Serde.parse(read(VECTORS, String))
+vectors() = Value(read_json(read(VECTORS, String)))
 
 # ---- C, built for the tests that call a library written in it ------------------------
 

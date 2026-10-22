@@ -19,7 +19,7 @@ const FLAT_SCHEMA = raw"""{
 }"""
 
 @testset "checking a form and laying it out" begin
-    schema = Serde.parse(NAME_SCHEMA)
+    schema = Value(read_json(NAME_SCHEMA))
     @test Intake.check(schema, Dict()) === nothing
     err = Intake.check(schema, Dict("sections" => [], "fields" => Dict("nope" => Dict())))
     @test err["kind"] == "unknown_field"
@@ -68,7 +68,7 @@ end
 end
 
 @testset "the flat projection" begin
-    schema = Serde.parse(FLAT_SCHEMA)
+    schema = Value(read_json(FLAT_SCHEMA))
     host = Intake.resolve(schema, "host")
     @test host["title"][] == "Host"
     @test Intake.resolve(schema, "auth.password")["x-sensitive"][] === true
@@ -108,7 +108,7 @@ end
       "tls": {"type": "object", "properties": {"ca": {"type": "string"}, "key": {"$ref": "#/$defs/Key"}}},
       "recovery": {"type": "array", "items": {"type": "string", "x-sensitive": true}}},
       "$defs": {"Key": {"type": "string", "x-sensitive": true}}}"""
-    s = Serde.parse(schema)
+    s = Value(read_json(schema))
     login = Dict("user" => "ana", "password" => "hunter2", "tls" => Dict("ca" => "/ca", "key" => "k"),
         "recovery" => ["r1", "r2"], "extra" => "?")
     shown = redact(s, login)

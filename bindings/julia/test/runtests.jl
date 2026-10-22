@@ -13,6 +13,7 @@ using Test
 using Guatiao
 
 include("helpers.jl")
+include("json.jl")
 
 @testset "Guatiao" begin
     @testset "abi" begin
@@ -23,12 +24,6 @@ include("helpers.jl")
     end
     @testset "typed" begin
         include("typed.jl")
-    end
-    @testset "serde" begin
-        include("serde.jl")
-    end
-    @testset "intake" begin
-        include("intake.jl")
     end
     @testset "time" begin
         include("time.jl")

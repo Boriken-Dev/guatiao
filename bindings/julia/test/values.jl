@@ -39,15 +39,15 @@ end
 @testset "numbers keep their exact text" begin
     Value(Dict("a" => NumberText("1.10"), "big" => NumberText("18446744073709551615.5"))) do v
         @test decode(NumberText, v["a"]) == NumberText("1.10")
-        @test Serde.emit(v["big"]) == "18446744073709551615.5"
+        @test decode(NumberText, v["big"]) == NumberText("18446744073709551615.5")
         @test decode(Float64, v["a"]) == 1.1
     end
     @test Value(big(2)^100)[] == big(2)^100
     @test Value(typemax(UInt64))[] == big(typemax(UInt64))
     @test decode(UInt64, Value(typemax(UInt64))) == typemax(UInt64)
-    @test Serde.emit(Value(-0.0)) == "-0.0"
-    @test Serde.emit(Value(0.1f0)) == "0.1"
-    @test Serde.emit(Value(1.0f20)) == "1.0e20"
+    @test decode(NumberText, Value(-0.0)) == NumberText("-0.0")
+    @test decode(NumberText, Value(0.1f0)) == NumberText("0.1")
+    @test decode(NumberText, Value(1.0f20)) == NumberText("1.0e20")
     for bad in (NaN, Inf, -Inf32)
         @test_throws GuatiaoError Value(bad)
     end

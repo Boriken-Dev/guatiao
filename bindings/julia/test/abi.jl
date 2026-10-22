@@ -8,14 +8,14 @@
 # status constants are read out of the header the same way.
 
 using Guatiao: GAlloc, GStr, GBytes, GBytesMut, GString, GBuffer, GValue, GList, GEntry, GMap,
-    GProviderError, GParseError, GDate, GTime, GDateTime, GTimestamp, GSpan, GTextError, GKindHeader,
+    GProviderError, GDate, GTime, GDateTime, GTimestamp, GSpan, GTextError, GKindHeader,
     GObject, GKinds, GKindTable, GKindTables, GProviderInfo, GProviders, GLibraryInfo, GHostInfo
 
 const MIRRORS = Dict(
     "guatiao_alloc" => GAlloc, "guatiao_str" => GStr, "guatiao_bytes" => GBytes,
     "guatiao_bytes_mut" => GBytesMut, "guatiao_string" => GString, "guatiao_buffer" => GBuffer,
     "guatiao_value" => GValue, "guatiao_list" => GList, "guatiao_entry" => GEntry, "guatiao_map" => GMap,
-    "guatiao_provider_error" => GProviderError, "guatiao_parse_error" => GParseError,
+    "guatiao_provider_error" => GProviderError,
     "guatiao_date" => GDate, "guatiao_time" => GTime, "guatiao_datetime" => GDateTime,
     "guatiao_timestamp" => GTimestamp, "guatiao_span" => GSpan, "guatiao_text_error" => GTextError,
     "guatiao_kind_header" => GKindHeader, "guatiao_object" => GObject, "guatiao_kinds" => GKinds,
@@ -87,7 +87,7 @@ function struct_layout(name, defs)
     return (size, align, offsets)
 end
 
-const HEADER_DEFS = header_structs(read(HEADER, String), read(SERDE_HEADER, String))
+const HEADER_DEFS = header_structs(read(HEADER, String))
 
 @testset "struct mirrors match the header" begin
     for (cname, T) in sort(collect(MIRRORS); by = first)

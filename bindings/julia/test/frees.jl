@@ -45,13 +45,6 @@ end
 
 @testset "answers are built in the allocator named, and freed" begin
     c = Counting()
-    v = Serde.parse("""{"a": [1, 2], "b": "x"}"""; alloc = c.alloc)
-    @test live(c) > 0
-    close(v)
-    @test_throws ParseError Serde.parse("{"; alloc = c.alloc)
-    @test live(c) == 0
-    @test Serde.emit(Dict("a" => 1); alloc = c.alloc) == """{"a":1}"""
-    @test live(c) == 0
     r = redact(Dict("type" => "object"), Dict("a" => 1); alloc = c.alloc)
     @test live(c) > 0
     close(r)
