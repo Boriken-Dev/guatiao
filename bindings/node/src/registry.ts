@@ -296,6 +296,38 @@ export class Registry implements Disposable {
   }
 
   /**
+   * What the provider filed under `key` declared beyond its schema -- its
+   * legal notices, or its form under `providerFormKey` from
+   * `guatiao/intake` -- as a `Value` the caller closes, or `undefined` when
+   * it declares nothing. A copy, unlike `providerConfig`: it outlives the
+   * library. `NotFound` when nothing answers to `key`.
+   */
+  providerMeta(key: string): Value | undefined {
+    const handle = this.#open();
+    const out = n.alloc(SIZE.value);
+    let status: number;
+    try {
+      status = n.core().fn.guatiao_registry_provider_meta!(handle, n.str(key), this.#alloc, out) as number;
+    } catch (e) {
+      n.freeNode(out);
+      n.release(out);
+      throw e;
+    }
+    const value = adopt(out, this.#alloc);
+    try {
+      raiseForStatus(status);
+    } catch (e) {
+      value.close();
+      throw e;
+    }
+    if (value.isAbsent()) {
+      value.close();
+      return undefined;
+    }
+    return value;
+  }
+
+  /**
    * An instance of the provider under `key`, built from `config` (a
    * `Value`, a `Ref` or plain data), which the host checks against the
    * provider's schema first. The instance is closed by the caller.
