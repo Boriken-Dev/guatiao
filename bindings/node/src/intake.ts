@@ -18,6 +18,12 @@ import { raiseForStatus } from './errors.js';
 import * as n from './native.js';
 import { Borrowed, Ref, Value, adopt, withNodes } from './value.js';
 
+/**
+ * The key of a provider's `meta` holding its form document: read it with
+ * `Registry.providerMeta`, then `check` it against `providerConfig`.
+ */
+export const providerFormKey = 'form';
+
 function answer(call: (alloc: bigint, out: bigint) => number, read: (status: number, out: Value) => unknown): unknown {
   const alloc = n.intake().alloc;
   const out = n.alloc(SIZE.value);

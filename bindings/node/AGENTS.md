@@ -126,7 +126,10 @@ Also `loadFile(path)`, `scanPath(spec, { descending, rules })`,
 available, reason? }`), `keyedBy(template)` / `librariesKeyedBy`,
 `setPriority` / `priority`, `providerTable(key, kind?)` (`{ table, size,
 ctx }`, `table` `0n` for none), `providerConfig(key)` (a borrowed,
-read-only `Ref` onto the schema, never closed), `host()` (the
+read-only `Ref` onto the schema, never closed), `providerMeta(key)` (a
+copy of the provider's `meta` as a `Value` you close, `undefined` when it
+declares none, `NotFound` for an unknown key; its form is under
+`providerFormKey` from `guatiao/intake`), `host()` (the
 `guatiao_host_info *`), `close()` / `using`. Every answer that is data is
 a plain object or array, already freed.
 
@@ -370,6 +373,17 @@ What `at` and `resolve` answer borrows from what it came from: read-only
 `unflatten` answers `undefined` only for "nothing stored"; a store that is
 not strings to strings (a plain object, a `Map` or a `Ref` onto a map) is a
 `TypeError`.
+
+**A provider's form** travels in its `meta`, under `intake.providerFormKey`
+(`'form'`), beside the configuration schema it is shown with:
+
+```ts
+using meta = reg.providerMeta('acme_dialer')!;   // undefined when it declares no meta
+const form = meta.asMap().get(intake.providerFormKey)!;
+const schema = reg.providerConfig('acme_dialer')!;
+intake.check(schema, form);                      // null: it fits
+intake.layout(schema, form);
+```
 
 ## time
 

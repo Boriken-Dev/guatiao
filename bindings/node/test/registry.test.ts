@@ -11,6 +11,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { BadValue, Busy, NotFound, Registry, Tag, WrongKind } from '../src/index.js';
+import * as intake from '../src/intake.js';
 import * as n from '../src/native.js';
 import { Counter } from '../../../examples/greeter_kind/node/greeter_kind.ts';
 import { libraryName } from './helpers.js';
@@ -67,6 +68,25 @@ describe('Registry', () => {
     expect(instance.ctx).not.toBe(0n);
     instance.close();
     instance.close();
+  });
+
+  it("reads a provider's form from its meta, and it fits the schema", () => {
+    using reg = scanned();
+    using meta = reg.providerMeta('derived_greeter_shouter')!;
+    const form = meta.asMap().get(intake.providerFormKey)!;
+    const schema = reg.providerConfig('derived_greeter_shouter')!;
+    expect(intake.check(schema, form)).toBe(null);
+    const data = form.toJS() as {
+      sections: { id: string }[];
+      fields: Record<string, Record<string, unknown>>;
+    };
+    expect(data.sections.map((s) => s.id)).toEqual(['words', 'volume']);
+    expect(data.fields.prefix!.placeholder).toBe('hey');
+    expect(data.fields.marks!.unit).toBe('marks');
+    expect(intake.isVisible(schema, form, 'marks', { exclaim: false })).toBe(false);
+    expect(intake.isVisible(schema, form, 'marks', { exclaim: true })).toBe(true);
+    expect(reg.providerMeta('derived_greeter_hello')).toBe(undefined);
+    expect(() => reg.providerMeta('nobody')).toThrow(NotFound);
   });
 
   it('keys, ranks and re-keys', () => {
