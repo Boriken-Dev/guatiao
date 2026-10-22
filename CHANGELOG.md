@@ -536,6 +536,11 @@ write now.
     it named was the place the others were looked for beside). The core
     exports `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow` and
     `StatusError` for a package over another guatiao library.
+  - Julia: `Guatiao.Serde` is the package `GuatiaoSerde` and
+    `Guatiao.Intake` is `GuatiaoIntake` (`bindings/julia-serde`,
+    `bindings/julia-intake`); `ParseError` moves to `GuatiaoSerde`.
+    `Guatiao.FFI` is new: `@cdef` usable from any module, `surface!`,
+    `find_library` and trees as root nodes.
 - **Breaking: `clone()` copies into this binary's allocator.** `clone()`
   (and `to_owned()`) on `Value`, `Map`, `List`, `Text`, `Buffer` and
   `Number` builds the copy through `Alloc::rust()`, whatever allocator the

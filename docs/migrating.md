@@ -914,6 +914,29 @@ serde.UseLibrary(dir)
 intake.UseLibrary(dir)
 ```
 
+### Julia
+
+```julia
+using Pkg
+Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia-serde")
+Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia-intake")
+```
+
+```julia
+# before
+using Guatiao
+Serde.parse(text); Intake.check(schema, form)
+```
+
+```julia
+using Guatiao, GuatiaoSerde, GuatiaoIntake
+GuatiaoSerde.parse(text); GuatiaoIntake.check(schema, form)
+```
+
+`ParseError` is `GuatiaoSerde.ParseError` (exported by `GuatiaoSerde`).
+`Guatiao.use_library` names only the core library; the others have their
+own `use_library`.
+
 ## Python and Dart
 
 ### `create` checks the configuration first
