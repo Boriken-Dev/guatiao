@@ -518,6 +518,13 @@ write now.
     `guatiao.errors.ParseError` is `guatiao_serde.ParseError`.
     `guatiao.ffi` is new: the loader, the C structs and a tree crossing as
     its root node, for a package over another guatiao library.
+  - Dart: `dart pub add guatiao_serde guatiao_intake`;
+    `package:guatiao/serde.dart` is
+    `package:guatiao_serde/guatiao_serde.dart` (`Format` and `ParseError`
+    with it), `package:guatiao/intake.dart` is
+    `package:guatiao_intake/guatiao_intake.dart`. `package:guatiao/ffi.dart`
+    is new, and the ffigen symbol file is
+    `package:guatiao/ffi_symbols.yaml` (it was `package:guatiao/src/symbols.yaml`).
 - **Breaking: `clone()` copies into this binary's allocator.** `clone()`
   (and `to_owned()`) on `Value`, `Map`, `List`, `Text`, `Buffer` and
   `Number` builds the copy through `Alloc::rust()`, whatever allocator the

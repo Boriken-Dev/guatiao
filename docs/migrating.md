@@ -856,6 +856,29 @@ from guatiao_serde import ParseError
 `guatiao.use_library` names only the core library now; the others have
 their own `use_library`.
 
+### Dart
+
+```bash
+dart pub add guatiao_serde guatiao_intake
+```
+
+```dart
+// before
+import 'package:guatiao/serde.dart' as serde;
+import 'package:guatiao/intake.dart' as intake;
+```
+
+```dart
+import 'package:guatiao_serde/guatiao_serde.dart' as serde;
+import 'package:guatiao_intake/guatiao_intake.dart' as intake;
+```
+
+`Format` and `ParseError` come from `guatiao_serde` now (`serde.Format`).
+A package generating its own bindings over `guatiao.h` imports the symbol
+file `package:guatiao/ffi_symbols.yaml` (it was
+`package:guatiao/src/symbols.yaml`). `useLibrary` registers a library for
+the serde and intake surfaces as before.
+
 ## Python and Dart
 
 ### `create` checks the configuration first
