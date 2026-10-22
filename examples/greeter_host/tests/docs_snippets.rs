@@ -18,6 +18,8 @@ const LANDING: &str = include_str!("../../../docs/index.md");
 const README: &str = include_str!("../../../README.md");
 const OWNERSHIP: &str = include_str!("../../../docs/ownership.md");
 const MIGRATING: &str = include_str!("../../../docs/migrating.md");
+const FORMS: &str = include_str!("../../../docs/forms.md");
+const DERIVED_GREETER: &str = include_str!("../../derived_greeter/src/lib.rs");
 
 #[test]
 fn the_landing_page_builds_and_reads_a_value() -> Result<(), Box<dyn core::error::Error>> {
@@ -827,6 +829,58 @@ fn migrating_serde_and_intake() -> Result<(), Box<dyn core::error::Error>> {
     Ok(())
 }
 
+// --- a provider's form ----------------------------------------------------
+
+/// The provider the page shows is the example library's own, as compiled.
+#[test]
+fn the_forms_page_shows_the_example_provider() {
+    assert_eq!(
+        rust_block(FORMS, 0),
+        marked_in(DERIVED_GREETER, "FORM-PROVIDER")
+    );
+}
+
+#[test]
+fn the_forms_page_reads_a_provider_s_form() -> Result<(), Box<dyn core::error::Error>> {
+    use greeter_kind::Greeter;
+    use guatiao::library::Registry;
+
+    let mut registry = Registry::new("form-host", "1.0");
+    registry.load_file(&derived_greeter())?;
+
+    // FORM-HOST-BEGIN
+    use guatiao::schema::SchemaRef;
+    use guatiao::{Map, Value};
+    use guatiao_intake::{FormRef, PROVIDER_FORM_KEY, check, is_visible, layout};
+
+    let offer = registry
+        .offer::<dyn Greeter>("derived_greeter_shouter")
+        .ok_or("nothing is filed under that key")??;
+    let schema = offer.config_schema().and_then(SchemaRef::new);
+    let form = offer
+        .meta()
+        .and_then(|meta| meta.get(PROVIDER_FORM_KEY))
+        .and_then(FormRef::new);
+
+    if let (Some(schema), Some(form)) = (schema, form) {
+        // A form is data a library wrote: check it before showing it.
+        check(schema, form)?;
+        for group in layout(schema, form) {
+            let title = group.section.map_or("", |s| s.label());
+            let keys: Vec<&str> = group.fields.iter().map(|p| p.field.key()).collect();
+            println!("{title}: {keys:?}");
+        }
+        let mut values = Map::new();
+        values.set("exclaim", false);
+        let shown = is_visible(schema, form, "marks", &Value::from(values))?;
+        assert!(!shown, "`marks` waits for `exclaim`");
+    }
+    // FORM-HOST-END
+
+    assert_eq!(rust_block(FORMS, 1), marked("FORM-HOST"));
+    Ok(())
+}
+
 /// The `index`-th fenced `rust` block of `md`, minus doctest-hidden lines
 /// (`#` alone or `# ` first).
 fn rust_block(md: &str, index: usize) -> String {
@@ -859,12 +913,17 @@ fn rust_block(md: &str, index: usize) -> String {
 /// dedented by the four spaces they carry for being inside a function; a
 /// snippet nested one function deeper carries eight.
 fn marked(name: &str) -> String {
+    marked_in(include_str!("docs_snippets.rs"), name)
+}
+
+/// [`marked`], in another source file.
+fn marked_in(source: &str, name: &str) -> String {
     let begin = format!("// {name}-BEGIN");
     let end = format!("// {name}-END");
     let mut inside = false;
     let mut lines: Vec<&str> = Vec::new();
 
-    for line in include_str!("docs_snippets.rs").lines() {
+    for line in source.lines() {
         let trimmed = line.trim_start();
         if !inside {
             inside = trimmed == begin;
