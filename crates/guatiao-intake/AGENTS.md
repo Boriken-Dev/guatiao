@@ -282,6 +282,37 @@ vocab::widget::{TEXT, TEXTAREA, PASSWORD, NUMBER, SLIDER,
 including one a condition reads — is the same `UnknownField` `check`
 gives it, rather than `true` for a field that does not exist.
 
+## A provider's form, read back by a host
+
+`#[provider(.., form = T)]` writes `T::form` into the descriptor's `meta`
+under `PROVIDER_FORM_KEY` (`"form"`). A host reads it beside the
+configuration schema and checks the one against the other before showing
+it: a form a library wrote is data like any other.
+
+```rust
+let offer = registry.offer::<dyn Dial>("acme_dialer").expect("filed")?;
+let form = offer.meta().and_then(|m| m.get(PROVIDER_FORM_KEY)).and_then(FormRef::new);
+let schema = offer.config_schema().and_then(SchemaRef::new);
+if let (Some(form), Some(schema)) = (form, schema) {
+    check(schema, form)?;                       // then layout / is_visible
+}
+```
+
+```c
+guatiao_value meta = {0};
+guatiao_registry_provider_meta(reg, guatiao_cstr("acme_dialer"), &alloc, &meta);  /* a copy */
+const guatiao_value *form = guatiao_map_find(&meta, guatiao_cstr(GUATIAO_INTAKE_PROVIDER_FORM_KEY));
+const guatiao_value *schema = guatiao_registry_provider_config(reg, guatiao_cstr("acme_dialer"));
+guatiao_intake_check(schema, form, &alloc, &why);  /* GUATIAO_OK: it fits */
+guatiao_value_free(&meta);
+```
+
+`guatiao_registry_provider_meta` (in `guatiao.h`) leaves `out` ABSENT for
+a provider that declares no `meta`, and `guatiao_map_find` then answers
+NULL. The bindings read it the same way: `Registry.provider_meta` and
+`intake.PROVIDER_FORM_KEY` in Python, `providerMeta` and
+`intake.providerFormKey` in Dart and Node.
+
 ## Which word belongs to which layer
 
 Three vocabularies meet here, and a rename that does not respect the
@@ -349,6 +380,7 @@ guatiao_status guatiao_intake_layout(const guatiao_value *schema, const guatiao_
                                    const guatiao_alloc *alloc, guatiao_value *out);
 guatiao_status guatiao_intake_is_visible(const guatiao_value *schema, const guatiao_value *form,
                                        guatiao_str key, const guatiao_value *values, bool *out);
+#define GUATIAO_INTAKE_PROVIDER_FORM_KEY "form"   /* where a provider's meta carries its form */
 ```
 
 - `_check`: `GUATIAO_ERR_BAD_VALUE` on a misfit; `out_error` (may be null)

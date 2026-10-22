@@ -2137,6 +2137,26 @@ const struct guatiao_value *guatiao_registry_provider_config(const struct guatia
                                                              struct guatiao_str key);
 
 /*
+ One provider's `meta` map, copied into `alloc`: whatever else it
+ declared, such as its legal notices or, under `"form"`, how a person is
+ shown its configuration.
+
+ `out` holds the map, or stays ABSENT when the provider declares no
+ `meta`; both answer `GUATIAO_OK`. `GUATIAO_ERR_NOT_FOUND` when nothing
+ answers to `key`. A copy rather than a borrow, unlike
+ [`guatiao_registry_provider_config`]: the caller frees it with
+ `guatiao_value_free` and may keep it past the library.
+
+ # Safety
+
+ As [`guatiao_registry_provider`].
+ */
+guatiao_status guatiao_registry_provider_meta(const struct guatiao_registry *reg,
+                                              struct guatiao_str key,
+                                              const struct guatiao_alloc *alloc,
+                                              struct guatiao_value *out);
+
+/*
  Merges `later` into `earlier`, later winning, and writes a new tree
  through `out`.
 
