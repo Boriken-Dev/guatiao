@@ -100,7 +100,10 @@ Also: `load_file`, `scan_path`, `register_entry(name, EntryFn(...))`, `libraries
 `provider(key)`, `available(kind)`, `provider_available(key)`,
 `keyed_by`/`libraries_keyed_by`, `set_priority`/`priority`,
 `provider_config(key)` (a borrowed, read-only `Ref` onto the schema --
-writing through it raises `TypeError`, and it is never `.close()`d), `host()` (the raw `host_info` pointer, for driving
+writing through it raises `TypeError`, and it is never `.close()`d),
+`provider_meta(key)` (a copy of the provider's `meta` as a `Value` you
+close, `None` when it declares none, `NotFound` for an unknown key; its
+form is under `intake.PROVIDER_FORM_KEY`), `host()` (the raw `host_info` pointer, for driving
 a `guatiao_library_entry` by hand). Every answer that is data comes back
 as a plain `dict`/`list`, already freed.
 
@@ -425,6 +428,18 @@ does not declare is dropped by `unflatten`.
 entry under it, or a discriminant that names no arm. A `store` that is not
 text to text -- a mapping, `Value` or `Ref` holding anything but `str`
 values, or not a map at all -- raises `TypeError`.
+
+**A provider's form** travels in its `meta`, under
+`intake.PROVIDER_FORM_KEY` (`"form"`), beside the configuration schema it
+is shown with:
+
+```python
+with reg.provider_meta("acme_dialer") as meta:   # None when it declares no meta
+    form = meta.as_map()[intake.PROVIDER_FORM_KEY]
+    schema = reg.provider_config("acme_dialer")
+    assert intake.check(schema, form) is None
+    intake.layout(schema, form)
+```
 
 ## time: dates, times, instants, spans, exact lengths
 

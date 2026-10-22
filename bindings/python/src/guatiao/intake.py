@@ -17,6 +17,9 @@ from .errors import check as _check_status
 from .value import Ref, Value, _make_str
 from .registry import _Borrowed
 
+#: The key of a provider's `meta` holding its form document: read it with
+#: `Registry.provider_meta`, then `check` it against `provider_config`.
+PROVIDER_FORM_KEY = "form"
 
 def _alloc(given: "_abi.Alloc | None", lib: Any) -> "_abi.Alloc":
     return given if given is not None else lib.alloc
