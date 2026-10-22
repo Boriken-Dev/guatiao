@@ -44,11 +44,6 @@ case("a failed write leaves the tree as it was", with_library({
 
 case("answers are built in the allocator named, and freed", with_library({
   c <- counting()
-  v <- serde_parse('{"a": [1, 2], "b": "x"}', alloc = c)
-  expect_true(live(c) > 0)
-  close(v)
-  expect_error(serde_parse("{", alloc = c), "guatiao_parse_error")
-  expect_equal(live(c), 0)
   r <- redact(list(type = "object"), list(a = 1L), alloc = c)
   expect_true(live(c) > 0)
   close(r)

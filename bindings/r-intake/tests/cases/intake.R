@@ -21,7 +21,7 @@ FLAT_SCHEMA <- '{
 empty_map <- structure(list(), names = character())
 
 case("checking a form and laying it out", with_library({
-  schema <- serde_parse(NAME_SCHEMA)
+  schema <- value(read_json(NAME_SCHEMA))
   expect_true(is.null(intake_check(schema, empty_map)))
   err <- intake_check(schema, list(sections = list(), fields = list(nope = empty_map)))
   expect_equal(err$kind, "unknown_field")
@@ -72,7 +72,7 @@ case("a form made out of a schema", with_library({
 }))
 
 case("the flat projection", with_library({
-  schema <- serde_parse(FLAT_SCHEMA)
+  schema <- value(read_json(FLAT_SCHEMA))
   host <- intake_resolve(schema, "host")
   expect_equal(value_data(host$title), "Host")
   expect_true(isTRUE(value_data(intake_resolve(schema, "auth.password")[["x-sensitive"]])))
@@ -100,24 +100,4 @@ case("the flat projection", with_library({
   expect_error(intake_flatten(schema, "auth", list(1)), "guatiao_error")
   close(schema)
   expect_error(value_data(host), "guatiao_closed")
-}))
-
-case("redaction", with_library({
-  schema <- '{"type": "object", "properties": {"user": {"type": "string"},
-    "password": {"type": "string", "writeOnly": true, "x-sensitive": true},
-    "tls": {"type": "object", "properties": {"ca": {"type": "string"}, "key": {"$ref": "#/$defs/Key"}}},
-    "recovery": {"type": "array", "items": {"type": "string", "x-sensitive": true}}},
-    "$defs": {"Key": {"type": "string", "x-sensitive": true}}}'
-  s <- serde_parse(schema)
-  login <- list(user = "ana", password = "hunter2", tls = list(ca = "/ca", key = "k"),
-    recovery = list("r1", "r2"), extra = "?")
-  shown <- redact(s, login)
-  expect_equal(value_data(shown), list(user = "ana", password = "[redacted]", tls = list(ca = "/ca", key = "[redacted]"),
-    recovery = list("[redacted]", "[redacted]"), extra = "[redacted]"))
-  close(shown)
-  doc <- value(list(inner = login))
-  expect_equal(value_data(redact(s, doc$inner, placeholder = "***")$password), "***")
-  close(doc)
-  expect_error(redact(list(1), login), "guatiao_error")
-  close(s)
 }))

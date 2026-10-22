@@ -56,10 +56,6 @@ void gt_missing_symbol(int lib, const char *name)
 /* The pointer to call, after checking it is there. */
 #define GT_CORE_FN(name) \
   (gt_need(GT_LIB_CORE), gt_core.name ? gt_core.name : (gt_missing_symbol(GT_LIB_CORE, #name), gt_core.name))
-#define GT_SERDE_FN(name) \
-  (gt_need(GT_LIB_SERDE), gt_serde.name ? gt_serde.name : (gt_missing_symbol(GT_LIB_SERDE, #name), gt_serde.name))
-#define GT_INTAKE_FN(name) \
-  (gt_need(GT_LIB_INTAKE), gt_intake.name ? gt_intake.name : (gt_missing_symbol(GT_LIB_INTAKE, #name), gt_intake.name))
 
 /* ---- text ---------------------------------------------------------------- */
 

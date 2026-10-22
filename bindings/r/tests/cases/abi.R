@@ -6,8 +6,7 @@
 # committed ones. The status table must be the header's.
 
 case("the header copies are the committed headers", with_repo({
-  for (h in c("guatiao/include/guatiao.h", "guatiao-serde/include/guatiao_serde.h",
-    "guatiao-intake/include/guatiao_intake.h")) {
+  for (h in "guatiao/include/guatiao.h") {
     committed <- readBin(repo_file("crates", h), "raw", file.size(repo_file("crates", h)))
     copy <- repo_file("bindings", "r", "src", basename(h))
     expect_true(identical(committed, readBin(copy, "raw", file.size(copy))), paste(basename(h), "matches"))

@@ -16,8 +16,10 @@
 #include "native.h"
 
 gt_core_fns gt_core;
-gt_serde_fns gt_serde;
-gt_intake_fns gt_intake;
+
+static const char *const gt_probes[3] = {"guatiao_value_free", "guatiao_json_parse_ex", "guatiao_intake_check"};
+
+const char *gt_probe_of(int lib) { return lib >= 0 && lib <= 2 ? gt_probes[lib] : NULL; }
 
 #define GT_MAX_MISSING 64
 
@@ -114,30 +116,32 @@ int gt_open(int lib, const char *path, char *err, size_t errlen) {
 #undef X
 #undef GT_VOID
     break;
-  case GT_LIB_SERDE:
-#define X(ret, name, params, args, feature) GT_RESOLVE(gt_serde, name, feature)
-    GT_SERDE(X)
-#undef X
-    break;
   default:
-#define X(ret, name, params, args, feature) GT_RESOLVE(gt_intake, name, feature)
-    GT_INTAKE(X)
-#undef X
+    /* Another surface's exports are its package's to resolve. */
+    if (!gt_symbol(h, gt_probes[lib])) {
+      snprintf(err, errlen, "%s", gt_probes[lib]);
+      ok = 0;
+    }
     break;
   }
   if (!ok) {
     /* Nothing of a refused file is called: its table is cleared. */
-    switch (lib) {
-    case GT_LIB_CORE: memset(&gt_core, 0, sizeof gt_core); break;
-    case GT_LIB_SERDE: memset(&gt_serde, 0, sizeof gt_serde); break;
-    default: memset(&gt_intake, 0, sizeof gt_intake); break;
-    }
+    if (lib == GT_LIB_CORE) memset(&gt_core, 0, sizeof gt_core);
     missing->len = 0;
     gt_close_file(h);
     return 2;
   }
   gt_handle_of[lib] = h;
   return 0;
+}
+
+int gt_file_carries(const char *path, const char *symbol) {
+  char err[256];
+  void *h = gt_open_file(path, err, sizeof err);
+  if (!h) return 0;
+  int found = gt_symbol(h, symbol) != NULL;
+  gt_close_file(h);
+  return found;
 }
 
 int gt_is_open(int lib) { return lib >= 0 && lib <= 2 && gt_handle_of[lib] != NULL; }

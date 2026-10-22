@@ -20,25 +20,33 @@ library: one is opened at run time.
 | values | `value`, `absent`, `number`, `is_open`, `tag`, `is_absent`, `is_null`, `value_data`, `node_path`, `push`, `insert`, `delete`, `clear`, `merge_from`, `lower_value` |
 | typed | `schema_of`, `config_class`, `field`, `from_value`, `validate`, `redact` |
 | time | `time_parse`, `time_format`, `time_normalize`, `read_length`, `add_span`, `civil_time`, `civil_datetime`, `instant`, `span`, `exact_length` |
-| serde, intake | `serde_parse`, `serde_emit`, `intake_check`, `intake_layout`, `intake_is_visible`, `intake_at`, `intake_for_schema`, `intake_form_for`, `intake_resolve`, `intake_flat_keys`, `intake_flatten`, `intake_unflatten` |
 | registry | `registry` (its methods with `$`) |
 | kinds | `kind`, `method`, `lent`, `taken`, `bind_table`, `has_slot`, `call_slot`, `byte_buffer`, `live_objects`, the S4 class `guatiao_remote` |
 | providers | `provider`, `guatiao_library`, `library_of`, `live_instances` |
 | errors | `guatiao_error`, `statuses` |
+
+JSON, TOML and YAML are the package `guatiao.serde`, forms
+`guatiao.intake`: each over its own library, built on the C interface
+below.
 
 ## Finding the native library
 
 Nothing native is touched until the first call that needs it; the
 library is then found in this order:
 
-1. `use_library(path)`, called before that first call: a file exporting
-   the ABI, whatever it is called, or a directory. Naming another file
-   once one is loaded is an error; naming the same one is not.
-2. `GUATIAO_LIBRARY`: a directory holding `guatiao.dll` /
-   `libguatiao.so` / `libguatiao.dylib`, or a file (taken as it is for
-   `guatiao`; `guatiao_serde` and `guatiao_intake` are looked for beside
-   it under their own names).
-3. The platform's own search, by file name.
+1. `use_library(path, library = "guatiao")`, called before that first
+   call: a file exporting the library's functions, whatever it is called,
+   or a directory. Naming another file once one is loaded is an error;
+   naming the same one is not.
+2. For `guatiao_serde` and `guatiao_intake` (the packages
+   `guatiao.serde` and `guatiao.intake` call them),
+   `GUATIAO_SERDE_LIBRARY` / `GUATIAO_INTAKE_LIBRARY`: a file, taken as
+   it is, or a directory holding the library under its platform name.
+3. `GUATIAO_LIBRARY`: a directory holding `guatiao.dll` /
+   `libguatiao.so` / `libguatiao.dylib` (or `guatiao_serde.dll` and so
+   on), or a file: taken as it is for `guatiao`, and for the others when
+   it exports their functions, else their library beside it.
+4. The platform's own search, by file name.
 
 Not found signals `guatiao_library_not_found` (`basename`, `looked`). An
 export the loaded build lacks signals `guatiao_missing_symbol` (`path`,
@@ -205,38 +213,39 @@ answers a new value with every field the schema marks (`x-sensitive` or
 describe hidden too. Local `$ref`s are followed. `WrongKind` for a
 schema that is not a map.
 
-## Serde: JSON, TOML, YAML
+## The C interface, for a package over another guatiao library
 
-`serde_parse(text, format = "json", read_data_uris = FALSE, alloc =
-NULL)` answers a value; `serde_emit(x, format = "json", pretty = FALSE,
-bytes = c("data_uri", "base64", "array", "refuse"))` a string, from a
-value, a view or R data. A document that does not parse signals
-`guatiao_parse_error` (`format`, `line` and `column` from 1, the column in
-characters, 0 when the parser did not say; `reason`, which never quotes
-the document). TOML writes only a map, and no null. TOML and YAML need a
-`guatiao_serde` built with them. A number keeps its exact text.
+The package registers a C table, `guatiao_r_api`, which `guatiao.serde`
+and `guatiao.intake` build on and any package binding a C library that
+takes and answers guatiao values may use. Its header is
+`include/guatiao_r_api.h` in the installed package: list `LinkingTo:
+guatiao` and import from `guatiao`, include a copy of `guatiao.h` before
+it, and fetch the table in the package's init:
 
-## Intake
-
-```r
-intake_check(schema, form)                  # NULL, or the error as a list
-intake_layout(schema, form)                 # list(list(section, fields), ...)
-intake_is_visible(schema, form, "key", values)
-intake_at(value, "agent[1].name")           # a view, or NULL
-intake_for_schema(schema)                   # a value
-intake_form_for(form, schema, "path")       # a value, or NULL
-intake_resolve(schema, "auth.password")     # a view, or NULL
-intake_flat_keys(schema, "auth")            # character vector
-intake_flatten(schema, "auth", value)       # named character vector
-intake_unflatten(schema, "auth", store)     # a value, or NULL
+```c
+const guatiao_r_api *api =
+  ((const guatiao_r_api *(*)(void))R_GetCCallable("guatiao", "guatiao_r_api"))();
 ```
 
-Every schema, form, value and values argument is a value, a view or R
-data. `intake_at` and `intake_resolve` answer a view of the argument's
-own node when it is a value or view (found again on every access), and a
-copy when it is R data. `intake_unflatten` answers `NULL` for "nothing
-stored" or a key that does not apply; its store is a named character
-vector or a named list of strings.
+- `size` first; fields are appended, never reordered.
+- `export_of(surface, name)`: an export of the library carrying
+  `"guatiao"`, `"guatiao_serde"` or `"guatiao_intake"`, opened on first
+  use by the order above; NULL when the build lacks it. `missing(surface,
+  name, feature)` signals `guatiao_missing_symbol`; `raise(status,
+  message)` the status's `guatiao_error`. Neither returns.
+- `binding_alloc`, this package's allocator; `alloc_arg(alloc)`;
+  `str_arg(s, what)`, a one-string argument as UTF-8; `mkchar(text)`.
+- `tree_arg(x, &tmp)` / `tree_args(...)`: the node a value, view or R data
+  names (R data built into `tmp`; `free(&tmp)` after the call).
+- `value_new(&root, alloc, keep)`: a value taking over a root a call
+  wrote; `read_and_free(&v, 0)`: a tree as R data, freed;
+  `take_text(&v)`: a string node's text, freed; `view_at(arg, root,
+  found, &tmp)`: a view of what a lookup found inside a value or view
+  argument, a copy for R data.
+
+A tree crosses libraries as its root node: built by one library, it is
+read and freed by any other, since a value records its own allocator;
+the library that built it stays loaded for the session.
 
 ## Registry
 
@@ -472,7 +481,8 @@ gave none). `statuses` is the named table: `OK` 0, `BadValue` 7,
 `AllocFailed` 8, `WrongKind` 9, `NotFound` 10, `NullArgument` 11, `Gone`
 12, `Unsupported` 13, `Busy` 14, `Internal` 100. `guatiao_error(status,
 message)` builds one. `guatiao_parse_error` and `guatiao_unparsed` are
-`guatiao_error`s with status `BadValue`. `guatiao_closed`,
+`guatiao_error`s with status `BadValue` (the first is signalled by
+`guatiao.serde`). `guatiao_closed`,
 `guatiao_library_not_found` and `guatiao_missing_symbol` are this
 package's own.
 

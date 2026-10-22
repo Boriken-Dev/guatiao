@@ -49,8 +49,9 @@ that carries it.
   lengths, read and written by the library itself.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
-- **JSON, TOML and YAML**, and **form checks against a schema**, through
-  the `guatiao-serde` and `guatiao-intake` libraries when they are present.
+- **JSON, TOML and YAML**, and **forms checked against a schema**, are
+  the packages `guatiao.serde` and `guatiao.intake`, each over its own
+  library and built on this one's C interface.
 
 ## Installation
 
@@ -71,12 +72,6 @@ export GUATIAO_LIBRARY=/opt/myapp/myapp.dll    # or the file itself, whatever it
 
 or call `use_library(path)` before the first call. Without either, the
 platform's library search is tried by file name.
-
-| Exports from | Needed for |
-| --- | --- |
-| `guatiao` | values, the registry, kinds and providers, schemas, time, redaction |
-| `guatiao_serde` | `serde_parse`, `serde_emit`: JSON, and TOML and YAML when the library has them |
-| `guatiao_intake` | the `intake_*` functions |
 
 R 4.2 or later, on a 64-bit platform, and a library built for the same
 architecture as the R process. `bit64` is optional: installed, it lets
@@ -165,13 +160,6 @@ schema_of("Listen")                              # the JSON Schema, as a list
 from_value(list(port = 5900L), "Listen")@host    # "0.0.0.0"
 ```
 
-### JSON, TOML and YAML
-
-```r
-doc <- serde_parse('{"name": "ana", "n": 1.10}')
-serde_emit(doc, format = "yaml")
-```
-
 ### Dates and spans
 
 ```r
@@ -214,8 +202,6 @@ time_parse("timestamp", "2026-10-21T19:15:00.5+05:30")    # <instant 2026-10-21T
 | `schema_of`, `config_class`, `field`, `from_value`, `validate` | configurations and their schemas |
 | `time_parse`, `time_format`, `time_normalize`, `civil_time`, `civil_datetime`, `instant`, `span`, `exact_length`, `add_span`, `read_length` | dates, times, spans, exact lengths |
 | `redact` | secrets hidden |
-| `serde_parse`, `serde_emit` | JSON, TOML, YAML |
-| `intake_check`, `intake_layout`, `intake_is_visible`, `intake_at`, `intake_for_schema`, `intake_form_for`, `intake_resolve`, `intake_flat_keys`, `intake_flatten`, `intake_unflatten` | forms and the flat projection |
 | `registry` | hosting plugins: `$scan_dir`, `$providers`, `$bind`, `$create`, `$refresh`, ... |
 | `kind`, `method`, `lent`, `taken`, `has_slot`, `byte_buffer`, `bind_table` | a kind, declared from its C header |
 | `provider`, `guatiao_library`, `library_of`, `live_instances` | providers and libraries written in R |
@@ -233,7 +219,7 @@ R CMD build bindings/r
 GUATIAO_LIBRARY=target/debug GUATIAO_REPO=. R CMD check guatiao_*.tar.gz
 ```
 
-The tests need the three libraries in one directory, named by
+The tests need the library and the example plugins in one directory, named by
 `GUATIAO_LIBRARY`, and a checkout (`GUATIAO_REPO`) for the shared vectors
 and the example packages; the repository's own `AGENTS.md` says how to
 produce the build. The examples (`examples/greeter_kind/r/greeterkind`,
