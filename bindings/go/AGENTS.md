@@ -15,26 +15,33 @@ own: guatiao is loaded at run time.
 
 | import | what |
 | --- | --- |
-| `.../bindings/go` (package `guatiao`) | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `Tag`, `Status`, the errors, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `Library`, `LibraryOf` |
-| `.../bindings/go/serde` | `Parse`, `Emit`: JSON, TOML, YAML |
-| `.../bindings/go/intake` | forms, paths, the flat projection |
+| `.../bindings/go` (package `guatiao`) | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `Tag`, `Status`, the errors, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `Library`, `LibraryOf`; `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError` for a package over another guatiao library |
+| `.../bindings/go/serde` | over the `guatiao_serde` library: `Parse`, `Emit`: JSON, TOML, YAML; its own `UseLibrary` |
+| `.../bindings/go/intake` | over the `guatiao_intake` library: forms, paths, the flat projection; its own `UseLibrary` |
 | `.../bindings/go/civil` | `Date`, `Time`, `DateTime`, `Span`, `Length`, instants as `time.Time` |
 | `.../bindings/go/cmd/guatiao-kind` | the command writing a kind package's glue, run by `go generate` |
 
 ## Finding the native library
 
-Nothing native is touched until the first call that needs it; the
-library is then found in this order:
+Each package is over its own library: `guatiao` over `guatiao`, `serde`
+over `guatiao_serde`, `intake` over `guatiao_intake` (`civil` over
+`guatiao`). Nothing native is touched until the first call that needs a
+library; it is then found in this order:
 
-1. `guatiao.UseLibrary(path)`, called before that first call: a file
-   exporting the ABI, whatever it is called, or a directory. Naming
-   another file once one is loaded is an error; naming the same one is
-   not.
-2. `GUATIAO_LIBRARY`: a directory holding `guatiao.dll` /
-   `libguatiao.so` / `libguatiao.dylib`, or a file (taken as it is for
-   `guatiao`; `guatiao_serde` and `guatiao_intake` are looked for beside
-   it under their own names).
-3. The platform's own library search, by file name.
+1. The package's own `UseLibrary(path)` (`guatiao.UseLibrary`,
+   `serde.UseLibrary`, `intake.UseLibrary`), called before that first
+   call: a file exporting it, whatever it is called, or a directory.
+   Naming another file once one is loaded is an error; naming the same
+   one is not.
+2. For serde and intake, `GUATIAO_SERDE_LIBRARY` /
+   `GUATIAO_INTAKE_LIBRARY`: a file, taken as it is, or a directory
+   holding the library under its platform file name.
+3. `GUATIAO_LIBRARY`: a directory holding `guatiao.dll` /
+   `libguatiao.so` / `libguatiao.dylib` (or `guatiao_serde.dll`, ...),
+   or a file: taken as it is for `guatiao`, and for serde and intake
+   when it exports them (an application's own library carrying several
+   surfaces), else their library beside it.
+4. The platform's own library search, by file name.
 
 Not found is a `*guatiao.LibraryNotFound` (`Basename`, `Looked`). An
 export the loaded build lacks is a `*guatiao.MissingSymbol` (`Path`,
@@ -457,6 +464,32 @@ shown, err := guatiao.Redact(schema, value, "[redacted]")
 Every field a schema marks (`x-sensitive` or `writeOnly`) is replaced at
 any depth, and whatever the schema does not describe is hidden too. Local
 `$ref`s are followed. `ErrWrongKind` for a schema that is not a map.
+
+## For a package over another guatiao library
+
+The `guatiao` package exports what `serde` and `intake` build on, and
+what any package binding a C library that takes and answers guatiao
+values may use. A tree crosses as the address of its root
+`guatiao_value`. Built by one library, it is read and freed by any
+other, since a value records its own allocator; the library that built
+it stays loaded while the tree lives.
+
+- `Load() error`: opens the guatiao library now, as the first call needing
+  it would.
+- `Adopt(root, alloc unsafe.Pointer) *Value`: a Value taking over `root`,
+  a `guatiao_value` in memory from C's `calloc` that a call wrote, built
+  in the `guatiao_alloc` at `alloc`; the Value frees the tree and that
+  memory. `Load` must have succeeded.
+- `WithNodes(items []any, body func(nodes []unsafe.Pointer) error) error`:
+  each item as a node for the call: a `Ref` or `*Value` as it is, plain
+  data built for it in the core's allocator and freed after.
+- `NodeOf(item any) (unsafe.Pointer, bool, error)`: the node a `Ref` or
+  `*Value` names now; false for anything else.
+- `Borrow(find func() unsafe.Pointer, keep any) (Ref, error)`: a read-only
+  `Ref` onto what `find` answers, asked again on every access, refused
+  once `keep`'s value is closed.
+- `StatusError(status uint32, message string) error`: nil for OK, else
+  the `*Error` for the status, carrying the library's words.
 
 ## Errors
 

@@ -8,6 +8,8 @@ package civil_test
 // reads, then the mappings to Go's own types and what they lose.
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -19,7 +21,6 @@ import (
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go"
 	"github.com/Boriken-Dev/guatiao/bindings/go/civil"
 	"github.com/Boriken-Dev/guatiao/bindings/go/internal/testenv"
-	"github.com/Boriken-Dev/guatiao/bindings/go/serde"
 )
 
 func TestMain(m *testing.M) {
@@ -27,8 +28,8 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-// vectors are the shared vectors, read with guatiao's own parser so a
-// 20-digit number stays exact.
+// vectors are the shared vectors, every number kept as its text so a
+// 20-digit one stays exact.
 func vectors(t *testing.T) *guatiao.Value {
 	t.Helper()
 	repo := testenv.Repo()
@@ -39,12 +40,35 @@ func vectors(t *testing.T) *guatiao.Value {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v, err := serde.Parse(string(text), serde.JSON)
+	dec := json.NewDecoder(bytes.NewReader(text))
+	dec.UseNumber()
+	var plain any
+	if err := dec.Decode(&plain); err != nil {
+		t.Fatal(err)
+	}
+	v, err := guatiao.NewValue(exact(plain))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { v.Close() })
 	return v
+}
+
+// exact turns each json.Number into a guatiao.Number, which keeps its text.
+func exact(x any) any {
+	switch x := x.(type) {
+	case json.Number:
+		return guatiao.Number(x)
+	case []any:
+		for i := range x {
+			x[i] = exact(x[i])
+		}
+	case map[string]any:
+		for k := range x {
+			x[k] = exact(x[k])
+		}
+	}
+	return x
 }
 
 func cases(t *testing.T, v *guatiao.Value, name string) []guatiao.Ref {

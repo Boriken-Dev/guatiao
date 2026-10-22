@@ -11,21 +11,22 @@ import (
 	"time"
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go"
-	"github.com/Boriken-Dev/guatiao/bindings/go/intake"
-	"github.com/Boriken-Dev/guatiao/bindings/go/serde"
 )
 
 func TestRedactHidesEverySecret(t *testing.T) {
-	schema, err := serde.Parse(`{
+	str := map[string]any{"type": "string"}
+	secret := map[string]any{"type": "string", "x-sensitive": true}
+	schema, err := guatiao.NewValue(map[string]any{
 		"type": "object",
-		"properties": {
-			"user": {"type": "string"},
-			"password": {"type": "string", "writeOnly": true, "x-sensitive": true},
-			"tls": {"type": "object", "properties": {"ca": {"type": "string"}, "key": {"$ref": "#/$defs/Key"}}},
-			"recovery": {"type": "array", "items": {"type": "string", "x-sensitive": true}}
+		"properties": map[string]any{
+			"user":     str,
+			"password": map[string]any{"type": "string", "writeOnly": true, "x-sensitive": true},
+			"tls": map[string]any{"type": "object", "properties": map[string]any{
+				"ca": str, "key": map[string]any{"$ref": "#/$defs/Key"}}},
+			"recovery": map[string]any{"type": "array", "items": secret},
 		},
-		"$defs": {"Key": {"type": "string", "x-sensitive": true}}
-	}`, serde.JSON)
+		"$defs": map[string]any{"Key": secret},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,12 +89,6 @@ func TestSchemaOfAConfigurationStruct(t *testing.T) {
 	enum, _ := s.Key("properties").Key("mode").Key("enum").Any()
 	if !reflect.DeepEqual(enum, []any{"fast", "safe"}) {
 		t.Fatalf("a JSON value in the tag: %#v", enum)
-	}
-
-	// What the schema says is what the library checks.
-	sections, err := intake.Layout(s, map[string]any{})
-	if err != nil || len(sections) != 1 || len(sections[0].Fields) != 6 {
-		t.Fatalf("%v %v", sections, err)
 	}
 }
 

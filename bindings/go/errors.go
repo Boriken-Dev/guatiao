@@ -162,8 +162,8 @@ func core() (*native.Lib, error) {
 
 // UseLibrary names the guatiao library to load instead of looking for
 // one: a file exporting the ABI, whatever it is called, or a directory
-// holding guatiao.dll, libguatiao.so or libguatiao.dylib. guatiao_serde
-// and guatiao_intake are then looked for beside it. Call it before the
-// first call that needs the library; naming another file once one is
-// loaded is an error, naming the same one is not.
-func UseLibrary(where string) error { return native.Use(where) }
+// holding guatiao.dll, libguatiao.so or libguatiao.dylib. Only this
+// package's library: serde and intake have their own UseLibrary. Call it
+// before the first call that needs the library; naming another file once
+// one is loaded is an error, naming the same one is not.
+func UseLibrary(where string) error { return native.Use(native.LibCore, where) }

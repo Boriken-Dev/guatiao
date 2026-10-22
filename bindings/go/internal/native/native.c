@@ -96,6 +96,15 @@ static void gt_close_file(void *h) {
 #endif
 }
 
+int gt_carries(const char *path, const char *symbol) {
+  char err[256];
+  void *h = gt_open_file(path, err, sizeof err);
+  if (!h) return 0;
+  int found = gt_symbol(h, symbol) != NULL;
+  gt_close_file(h);
+  return found;
+}
+
 int gt_open(int lib, const char *path, char *err, size_t errlen) {
   if (lib < 0 || lib > 2) {
     snprintf(err, errlen, "no such library");

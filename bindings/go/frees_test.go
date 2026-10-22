@@ -8,14 +8,12 @@ package guatiao_test
 // allocator that counts the blocks it handed out and has not had back.
 
 import (
-	"errors"
 	"runtime"
 	"testing"
 	"time"
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go"
 	"github.com/Boriken-Dev/guatiao/bindings/go/internal/native"
-	"github.com/Boriken-Dev/guatiao/bindings/go/serde"
 )
 
 func counting(t *testing.T) (*native.Counting, guatiao.Option) {
@@ -121,25 +119,6 @@ func TestFreesTheCopiesOfAFailedListRebuild(t *testing.T) {
 	if err := l.Insert(1, "mid"); err != nil {
 		t.Fatal(err)
 	}
-	v.Close()
-}
-
-func TestFreesAfterADocumentThatDoesNotParse(t *testing.T) {
-	c, _ := counting(t)
-	_, err := serde.Parse(`{"a": [1,, 2]}`, serde.JSON, serde.InAllocator(c.Alloc()))
-	var pe *serde.ParseError
-	if !errors.As(err, &pe) {
-		t.Fatalf("%v", err)
-	}
-	v, err := serde.Parse(`{"a": [1, "two"]}`, serde.JSON, serde.InAllocator(c.Alloc()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	clone, err := v.Clone()
-	if err != nil {
-		t.Fatal(err)
-	}
-	clone.Close()
 	v.Close()
 }
 
