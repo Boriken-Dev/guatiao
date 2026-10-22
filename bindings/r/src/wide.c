@@ -4,9 +4,15 @@
 
 /*
  * 64-bit integers, which an R number holds exactly only to 2^53: read
- * exactly from an R integer, a whole double, a `number` or a string, and
- * answered as an integer, a double while it is exact, or a `number` (its
- * exact text), as `int64 =` says.
+ * exactly from an R integer, a whole double, a bit64 integer64, a
+ * `number` or a string, and answered as an integer, a double up to 2^53
+ * (where a double holds every whole number), a `number` (its exact text)
+ * or an integer64, as `int64 =` says.
+ *
+ * An integer64 is a double vector of class "integer64" whose 8 bytes are
+ * an int64_t; INT64_MIN is its NA. Reading and making one needs nothing
+ * of the bit64 package, which R code checks is installed before asking
+ * for one.
  */
 
 #include <math.h>
@@ -17,6 +23,16 @@
 
 #define TWO53 9007199254740992ULL
 #define TWO64 18446744073709551616.0
+
+int gt_is_integer64(SEXP x) { return TYPEOF(x) == REALSXP && Rf_inherits(x, "integer64"); }
+
+SEXP gt_integer64_sexp(int64_t v) {
+  SEXP x = PROTECT(Rf_allocVector(REALSXP, 1));
+  memcpy(REAL(x), &v, sizeof v);
+  Rf_setAttrib(x, R_ClassSymbol, Rf_mkString("integer64"));
+  UNPROTECT(1);
+  return x;
+}
 
 static void from_i64(int64_t v, gt_wide *w) {
   w->neg = v < 0;
@@ -57,6 +73,13 @@ const char *gt_wide_in(SEXP x, gt_wide *w) {
     return NULL;
   }
   case REALSXP: {
+    if (gt_is_integer64(x)) {
+      int64_t v;
+      memcpy(&v, REAL(x), sizeof v);
+      if (v == INT64_MIN) return "want a number, not NA";
+      from_i64(v, w);
+      return NULL;
+    }
     double d = REAL(x)[0];
     if (ISNAN(d)) return "want a number, not NA";
     if (!R_FINITE(d) || d != floor(d)) return "want a whole number";
@@ -111,7 +134,11 @@ static SEXP wide_sexp(gt_wide w, int mode) {
   snprintf(text, sizeof text, "%s%llu", w.neg ? "-" : "", (unsigned long long)w.mag);
   if (mode == GT_INT64_NUMBER) return gt_number_sexp(text);
   if (mode == GT_INT64_DOUBLE) return Rf_ScalarReal(w.neg ? -(double)w.mag : (double)w.mag);
-  /* auto: an R integer (whose INT_MIN is NA), a double while it is exact, then the text */
+  if (mode == GT_INT64_INTEGER64) {
+    if (w.mag <= (uint64_t)INT64_MAX) return gt_integer64_sexp(w.neg ? -(int64_t)w.mag : (int64_t)w.mag);
+    return gt_number_sexp(text);
+  }
+  /* auto: an R integer (whose INT_MIN is NA), a double up to 2^53, then the text */
   if (w.mag <= (uint64_t)INT32_MAX) return Rf_ScalarInteger(w.neg ? -(int)w.mag : (int)w.mag);
   if (w.mag <= TWO53) return Rf_ScalarReal(w.neg ? -(double)w.mag : (double)w.mag);
   return gt_number_sexp(text);
@@ -176,4 +203,24 @@ SEXP C_unit_answer(SEXP x, SEXP mode) {
   if (why) gt_raise(GUATIAO_ERR_BAD_VALUE, "a unit: %s", why);
   if (w.over) gt_raise(GUATIAO_ERR_BAD_VALUE, "a unit: out of range for uint64");
   return wide_sexp(w, Rf_asInteger(mode));
+}
+
+/* The exact text of each element of an integer64 vector; NA for its NA. */
+SEXP C_integer64_text(SEXP x) {
+  if (!gt_is_integer64(x)) gt_raise(GUATIAO_ERR_WRONG_KIND, "not an integer64");
+  R_xlen_t n = XLENGTH(x);
+  SEXP out = PROTECT(Rf_allocVector(STRSXP, n));
+  char text[24];
+  for (R_xlen_t i = 0; i < n; i++) {
+    int64_t v;
+    memcpy(&v, &REAL(x)[i], sizeof v);
+    if (v == INT64_MIN) {
+      SET_STRING_ELT(out, i, NA_STRING);
+      continue;
+    }
+    snprintf(text, sizeof text, "%lld", (long long)v);
+    SET_STRING_ELT(out, i, Rf_mkChar(text));
+  }
+  UNPROTECT(1);
+  return out;
 }

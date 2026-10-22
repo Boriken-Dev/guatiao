@@ -320,8 +320,9 @@ typedef union out_store {
 static void set_absent(guatiao_value *v) { memset(v, 0, sizeof *v); }
 
 /* A scalar from R into its C width; 0 or a message on refusal. An integer
- * shape takes an R integer or logical, a whole double, a `number` or a
- * string spelling an integer, read exactly and range-checked. */
+ * shape takes an R integer or logical, a whole double, an integer64, a
+ * `number` or a string spelling an integer, read exactly and
+ * range-checked. */
 static const char *scalar_in(int shape, SEXP x, arg_store *a) {
   if (shape == S_BOOL) {
     if (!Rf_isLogical(x) || XLENGTH(x) != 1 || LOGICAL(x)[0] == NA_LOGICAL) return "want TRUE or FALSE";
@@ -331,6 +332,12 @@ static const char *scalar_in(int shape, SEXP x, arg_store *a) {
   if (shape == S_F32 || shape == S_F64) {
     if (!(Rf_isReal(x) || Rf_isInteger(x) || Rf_isLogical(x)) || XLENGTH(x) != 1) return "want a number";
     double d = Rf_asReal(x);
+    if (gt_is_integer64(x)) {
+      gt_wide w;
+      const char *why = gt_wide_in(x, &w);
+      if (why) return why;
+      d = w.neg ? -(double)w.mag : (double)w.mag;
+    }
     if (ISNAN(d)) return "want a number, not NA";
     if (shape == S_F32) a->f32 = (float)d;
     else a->f64 = d;

@@ -46,7 +46,7 @@ from 0 to 2^64 - 1, or a \code{difftime}.}
 instant; with the span's sign for a span).}
 \item{years, months, weeks, days, hours, minutes}{A span's units, one sign for the whole.}
 \item{int64}{How each unit is answered, as \code{kind()}'s \code{int64}:
-\code{"auto"}, \code{"number"} or \code{"double"}.}
+\code{"auto"}, \code{"number"}, \code{"double"} or \code{"integer64"}.}
 \item{...}{Not used.}
 }
 \value{\code{time_parse} returns a \code{Date}, \code{civil_time},
@@ -73,13 +73,13 @@ units refused) or a civil date and time. An exact length is never negative;
 
 An R number holds whole numbers exactly only to 2^53. A unit (a span's,
 within plus or minus 2^63 - 1; an exact length's seconds, up to 2^64 - 1) is
-taken as a number, a \code{number} or a string spelling an integer, read
-exactly. While every unit is within 2^53 a span or an exact length holds
+taken as a number, a bit64 \code{integer64}, a \code{number} or a string
+spelling an integer, read exactly. While every unit is within 2^53 a span or an exact length holds
 numbers; past that it holds each unit's exact text (\code{unclass(x)} is a
 character vector), so two equal spans are identical however they were made.
 \code{time_parse("span", ...)} and \code{read_length} answer past 2^53 the
 same way, and \code{as.list(x, int64)} answers each unit as a 64-bit slot's
-answer is (\code{"auto"}: an integer, a double while exact, else a
+answer is (\code{"auto"}: an integer, a double up to 2^53, else a
 \code{number}).
 }
 \examples{

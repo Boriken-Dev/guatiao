@@ -28,6 +28,7 @@ SEXP C_intake_is_visible(SEXP, SEXP, SEXP, SEXP);
 SEXP C_intake_layout(SEXP, SEXP);
 SEXP C_intake_resolve(SEXP, SEXP);
 SEXP C_intake_unflatten(SEXP, SEXP, SEXP);
+SEXP C_integer64_text(SEXP);
 SEXP C_kind_new(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP C_library_close(SEXP);
 SEXP C_library_entry(SEXP);
@@ -116,6 +117,7 @@ static const R_CallMethodDef calls[] = {
     {"C_intake_layout", (DL_FUNC)(void (*)(void)) & C_intake_layout, 2},
     {"C_intake_resolve", (DL_FUNC)(void (*)(void)) & C_intake_resolve, 2},
     {"C_intake_unflatten", (DL_FUNC)(void (*)(void)) & C_intake_unflatten, 3},
+    {"C_integer64_text", (DL_FUNC)(void (*)(void)) & C_integer64_text, 1},
     {"C_kind_new", (DL_FUNC)(void (*)(void)) & C_kind_new, 11},
     {"C_library_close", (DL_FUNC)(void (*)(void)) & C_library_close, 1},
     {"C_library_entry", (DL_FUNC)(void (*)(void)) & C_library_entry, 1},

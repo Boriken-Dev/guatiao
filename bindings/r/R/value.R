@@ -66,21 +66,33 @@ is_null <- function(x) {
   is.null(x)
 }
 
-.gt_numbers <- c(auto = 0L, text = 1L, double = 2L)
+.gt_numbers <- c(auto = 0L, text = 1L, double = 2L, integer64 = 3L)
 
 # How a 64-bit integer is answered: an R integer when it fits, a double
-# while it is exact, else a `number` (auto); always a `number`; always the
-# nearest double.
-.gt_int64_modes <- c(auto = 0L, number = 1L, double = 2L)
+# up to 2^53, else a `number` (auto); always a `number`; always the
+# nearest double; a bit64 integer64 when one holds it, else a `number`.
+.gt_int64_modes <- c(auto = 0L, number = 1L, double = 2L, integer64 = 3L)
 
 .gt_int64_code <- function(int64) {
   code <- if (is.character(int64) && length(int64) == 1L) .gt_int64_modes[int64] else NA
-  if (is.na(code)) stop("int64 is one of \"auto\", \"number\", \"double\"", call. = FALSE)
+  if (is.na(code)) stop("int64 is one of \"auto\", \"number\", \"double\", \"integer64\"", call. = FALSE)
+  if (code == 3L) .gt_need_bit64("int64 = \"integer64\"")
   unname(code)
 }
 
-value_data <- function(x, numbers = c("auto", "text", "double")) {
+# An integer64 is bit64's class: answering one needs that package to be
+# installed, though nothing here calls it.
+.gt_need_bit64 <- function(what) {
+  if (!requireNamespace("bit64", quietly = TRUE)) {
+    stop(sprintf("%s needs the bit64 package, which is not installed: install.packages(\"bit64\")", what),
+      call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+value_data <- function(x, numbers = c("auto", "text", "double", "integer64")) {
   numbers <- match.arg(numbers)
+  if (numbers == "integer64") .gt_need_bit64("numbers = \"integer64\"")
   if (!inherits(x, "guatiao_node")) return(x)
   .Call(C_node_read, x, .gt_numbers[[numbers]])
 }
@@ -213,6 +225,14 @@ lower_value.default <- function(x) {
     return(out[keep])
   }
   stop(sprintf("cannot write a %s: define lower_value.%s", class(x)[1L], class(x)[1L]), call. = FALSE)
+}
+
+# Each element its exact text: a scalar, or a list (a map when named); NA is null.
+lower_value.integer64 <- function(x) {
+  items <- lapply(.Call(C_integer64_text, x), function(s) if (is.na(s)) NULL else number(s))
+  if (length(items) == 1L && is.null(names(x))) return(items[[1L]])
+  names(items) <- names(x)
+  items
 }
 
 lower_value.factor <- function(x) {
