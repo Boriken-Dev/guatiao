@@ -29,7 +29,7 @@ import native
 
 sys.path.insert(0, str(native.GREETER_KIND_PY))
 
-from greeter_kind import Conversation, Counter, Greeter, Listener  # noqa: E402
+from greeter_kind import Conversation, Counter, Greeter, Listener, Wide  # noqa: E402
 
 from guatiao import ABSENT, BadValue, Internal, List, Unsupported, Value, kinds  # noqa: E402
 from guatiao.kinds import FloorMismatch, Kind, KindProtocol, Lent, Method, kind_of  # noqa: E402
@@ -79,6 +79,7 @@ def test_the_greeter_kinds_carry_the_headers_literals():
         "counter_vtable": Counter.kind.floor_hash,
         "conversation_vtable": Conversation.kind.floor_hash,
         "listener_vtable": Listener.kind.floor_hash,
+        "wide_vtable": Wide.kind.floor_hash,
     }
 
 
@@ -132,6 +133,14 @@ def test_a_rust_greeter_is_called_through_the_description(reg):
     assert refused.value.message == "nobody to greet"
     counter = reg.bind("derived_greeter_hello", Counter)
     assert [counter.count(), counter.count()] == [1, 2]
+
+
+def test_64_bit_integers_cross_a_rust_slot_exactly(reg):
+    wide = reg.bind("derived_greeter_hello", Wide.kind)
+    for x in (2**53 + 1, -(2**63), 2**63 - 1):
+        assert wide.echo_i64(x) == x
+    for x in (2**53 + 1, 2**63, 2**64 - 1):
+        assert wide.echo_u64(x) == x
 
 
 def test_a_lent_map_is_changed_where_it_stands(reg):

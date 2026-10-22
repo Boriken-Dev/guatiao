@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from guatiao import Map
-from guatiao.kinds import I64, KindProtocol, Lent, MapAnswer, Taken, fallible, required
+from guatiao.kinds import I64, U64, KindProtocol, Lent, MapAnswer, Taken, fallible, required
 
 
 class Listener(KindProtocol, Protocol, kind="listener", floor_hash=1867921573, is_object=True):
@@ -70,4 +70,16 @@ class Counter(KindProtocol, Protocol, kind="counter", floor_hash=1227528937):
     def count(self) -> I64: ...
 
 
-__all__ = ["Listener", "Conversation", "Greeter", "Counter"]
+class Wide(KindProtocol, Protocol, kind="wide", floor_hash=3673689684):
+    """`wide_vtable`: answers the 64-bit integer it is given."""
+
+    @required
+    @fallible
+    def echo_i64(self, x: I64) -> I64: ...
+
+    @required
+    @fallible
+    def echo_u64(self, x: U64) -> U64: ...
+
+
+__all__ = ["Listener", "Conversation", "Greeter", "Counter", "Wide"]
