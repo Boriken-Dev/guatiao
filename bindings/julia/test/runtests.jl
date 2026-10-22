@@ -45,4 +45,7 @@ include("helpers.jl")
     @testset "registry" begin
         include("registry.jl")
     end
+    @testset "examples" begin
+        include("examples.jl")
+    end
 end
