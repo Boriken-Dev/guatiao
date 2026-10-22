@@ -722,6 +722,200 @@ jobs:
           GUATIAO_REQUIRE_ALL: "1"
           PYTHONDONTWRITEBYTECODE: "1"
 
+  octave:
+    name: Octave bindings (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # Ubuntu's Octave (the floor here) and MSYS2's on Windows. The tests
+    # call greeters written in Rust, C, Python (through the guatiao-py
+    # bridge), Go (built as a library file) and M, both ways, and run the
+    # example host; a stated skip fails the job.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/guatiao-py
+      - name: Build native libraries
+        run: cargo build --workspace --all-features
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: "3.14"
+      - name: Where a host that is not Python finds libpython
+        if: runner.os != 'Windows'
+        run: echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+      - name: Build the guatiao-py bridge, for the Python greeters
+        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+        env:
+          PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: false
+      - name: Build the Go greeter as a library file
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   name=libgo_greeter.so ;;
+            Windows) name=go_greeter.dll ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/go-library"
+          (cd examples && go build -buildmode=c-shared -o "$RUNNER_TEMP/go-library/$name" ./go_provider/cshared)
+        env:
+          CGO_ENABLED: "1"
+      - name: Octave and libffi (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends octave octave-dev libffi-dev
+      - uses: msys2/setup-msys2@v2
+        if: runner.os == 'Windows'
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            mingw-w64-ucrt-x86_64-octave
+            mingw-w64-ucrt-x86_64-libffi
+            mingw-w64-ucrt-x86_64-gcc
+      - name: Test (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          octave-cli --version | head -1
+          cd bindings/matlab/tests
+          octave-cli --no-gui --eval "run_tests('Exit', true)"
+        env:
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+          GUATIAO_REPO: ${{ github.workspace }}
+          GUATIAO_GO_LIBRARY: ${{ runner.temp }}/go-library
+          GUATIAO_PY_BRIDGE: ${{ github.workspace }}/crates/guatiao-py/target/debug/libguatiao_py.so
+          GUATIAO_REQUIRE_ALL: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+      - name: Test (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          octave-cli --version | head -1
+          export PATH="$(cygpath "$PYTHON_HOME"):$PATH"
+          export GUATIAO_LIBRARY="$(cygpath -m "$GITHUB_WORKSPACE/target/debug")"
+          export GUATIAO_REPO="$(cygpath -m "$GITHUB_WORKSPACE")"
+          export GUATIAO_GO_LIBRARY="$(cygpath -m "$RUNNER_TEMP/go-library")"
+          export GUATIAO_PY_BRIDGE="$(cygpath -m "$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/guatiao_py.dll")"
+          cd bindings/matlab/tests
+          octave-cli --no-gui --eval "run_tests('Exit', true)"
+        env:
+          PYTHON_HOME: ${{ env.pythonLocation }}
+          GUATIAO_REQUIRE_ALL: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+
+  matlab:
+    name: MATLAB bindings (${{ matrix.release }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # MATLAB through setup-matlab, licensed for a public repository. The
+    # floor's Windows leg runs on windows-2022, whose Visual Studio 2022 it
+    # supports; the current release finds the newer one on windows-latest.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, release: R2024a }
+          - { os: ubuntu-latest, release: latest }
+          - { os: macos-latest, release: R2024a }
+          - { os: macos-latest, release: latest }
+          - { os: windows-2022, release: R2024a }
+          - { os: windows-latest, release: latest }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/guatiao-py
+      - name: Build native libraries
+        run: cargo build --workspace --all-features
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: "3.14"
+      - name: Where a host that is not Python finds libpython
+        run: |
+          case "$RUNNER_OS" in
+            Linux) echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV" ;;
+            macOS) echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV" ;;
+            Windows) echo "$pythonLocation" >> "$GITHUB_PATH" ;;
+          esac
+      - name: Build the guatiao-py bridge, for the Python greeters
+        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+        env:
+          PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: false
+      - name: Build the Go and C greeters as library files
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   go=libgo_greeter.so; c=libc_greeter.so; cc=cc; pic=-fPIC ;;
+            macOS)   go=libgo_greeter.dylib; c=libc_greeter.dylib; cc=cc; pic=-fPIC ;;
+            Windows) go=go_greeter.dll; c=c_greeter.dll; cc=gcc; pic= ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/go-library" "$RUNNER_TEMP/c-greeter"
+          (cd examples && go build -buildmode=c-shared -o "$RUNNER_TEMP/go-library/$go" ./go_provider/cshared)
+          $cc -shared $pic -I crates/guatiao/include -I examples/greeter_kind/include \
+            -o "$RUNNER_TEMP/c-greeter/$c" crates/guatiao/tests/c_consumer/greeter_in_c.c
+          echo "GUATIAO_CC=$cc" >> "$GITHUB_ENV"
+        env:
+          CGO_ENABLED: "1"
+      - name: libffi (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libffi-dev
+      - name: libffi (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install libffi:x64-windows-static-md
+          "GUATIAO_FFI_DIR=$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows-static-md" >> $env:GITHUB_ENV
+      - uses: matlab-actions/setup-matlab@v3
+        with:
+          release: ${{ matrix.release }}
+      - name: Where the tests find things
+        run: |
+          w() { if [ "$RUNNER_OS" = Windows ]; then cygpath -m "$1"; else echo "$1"; fi; }
+          case "$RUNNER_OS" in
+            Linux) bridge=libguatiao_py.so ;;
+            macOS) bridge=libguatiao_py.dylib ;;
+            Windows) bridge=guatiao_py.dll ;;
+          esac
+          {
+            echo "GUATIAO_LIBRARY=$(w "$GITHUB_WORKSPACE/target/debug")"
+            echo "GUATIAO_REPO=$(w "$GITHUB_WORKSPACE")"
+            echo "GUATIAO_GO_LIBRARY=$(w "$RUNNER_TEMP/go-library")"
+            echo "GUATIAO_C_GREETER=$(w "$RUNNER_TEMP/c-greeter")"
+            echo "GUATIAO_PY_BRIDGE=$(w "$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge")"
+          } >> "$GITHUB_ENV"
+      - name: Test
+        uses: matlab-actions/run-command@v3
+        with:
+          command: cd bindings/matlab/tests; disp(version); ok = run_tests(); assert(ok, 'the suite failed');
+        env:
+          GUATIAO_REQUIRE_ALL: "1"
+          PYTHONDONTWRITEBYTECODE: "1"
+
   dart:
     name: Dart bindings (${{ matrix.os }}, ${{ matrix.sdk }})
     runs-on: ${{ matrix.os }}
