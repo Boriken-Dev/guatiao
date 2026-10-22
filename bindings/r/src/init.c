@@ -17,17 +17,8 @@ SEXP C_answer(SEXP, SEXP);
 SEXP C_date_add_span(SEXP, SEXP);
 SEXP C_datetime_add_span(SEXP, SEXP);
 SEXP C_duration_read(SEXP);
+SEXP C_file_carries(SEXP, SEXP);
 SEXP C_has_export(SEXP, SEXP);
-SEXP C_intake_at(SEXP, SEXP);
-SEXP C_intake_check(SEXP, SEXP);
-SEXP C_intake_flat_keys(SEXP, SEXP);
-SEXP C_intake_flatten(SEXP, SEXP, SEXP);
-SEXP C_intake_for_schema(SEXP);
-SEXP C_intake_form_for(SEXP, SEXP, SEXP);
-SEXP C_intake_is_visible(SEXP, SEXP, SEXP, SEXP);
-SEXP C_intake_layout(SEXP, SEXP);
-SEXP C_intake_resolve(SEXP, SEXP);
-SEXP C_intake_unflatten(SEXP, SEXP, SEXP);
 SEXP C_integer64_text(SEXP);
 SEXP C_kind_new(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP C_library_close(SEXP);
@@ -81,8 +72,6 @@ SEXP C_remote_has(SEXP, SEXP);
 SEXP C_remote_live(SEXP);
 SEXP C_remote_new(SEXP, SEXP, SEXP, SEXP, SEXP);
 SEXP C_schema_validate(SEXP, SEXP);
-SEXP C_serde_emit(SEXP, SEXP, SEXP, SEXP);
-SEXP C_serde_parse(SEXP, SEXP, SEXP, SEXP);
 SEXP C_served_table(SEXP, SEXP, SEXP);
 SEXP C_table_floor_hash(SEXP);
 SEXP C_time_format(SEXP, SEXP);
@@ -96,6 +85,7 @@ SEXP C_value_new(SEXP, SEXP);
 SEXP C_xptr_live(SEXP);
 
 void gt_kinds_init(void);
+void gt_api_register(void);
 
 static const R_CallMethodDef calls[] = {
     {"C_alloc_address", (DL_FUNC)(void (*)(void)) & C_alloc_address, 1},
@@ -106,17 +96,8 @@ static const R_CallMethodDef calls[] = {
     {"C_date_add_span", (DL_FUNC)(void (*)(void)) & C_date_add_span, 2},
     {"C_datetime_add_span", (DL_FUNC)(void (*)(void)) & C_datetime_add_span, 2},
     {"C_duration_read", (DL_FUNC)(void (*)(void)) & C_duration_read, 1},
+    {"C_file_carries", (DL_FUNC)(void (*)(void)) & C_file_carries, 2},
     {"C_has_export", (DL_FUNC)(void (*)(void)) & C_has_export, 2},
-    {"C_intake_at", (DL_FUNC)(void (*)(void)) & C_intake_at, 2},
-    {"C_intake_check", (DL_FUNC)(void (*)(void)) & C_intake_check, 2},
-    {"C_intake_flat_keys", (DL_FUNC)(void (*)(void)) & C_intake_flat_keys, 2},
-    {"C_intake_flatten", (DL_FUNC)(void (*)(void)) & C_intake_flatten, 3},
-    {"C_intake_for_schema", (DL_FUNC)(void (*)(void)) & C_intake_for_schema, 1},
-    {"C_intake_form_for", (DL_FUNC)(void (*)(void)) & C_intake_form_for, 3},
-    {"C_intake_is_visible", (DL_FUNC)(void (*)(void)) & C_intake_is_visible, 4},
-    {"C_intake_layout", (DL_FUNC)(void (*)(void)) & C_intake_layout, 2},
-    {"C_intake_resolve", (DL_FUNC)(void (*)(void)) & C_intake_resolve, 2},
-    {"C_intake_unflatten", (DL_FUNC)(void (*)(void)) & C_intake_unflatten, 3},
     {"C_integer64_text", (DL_FUNC)(void (*)(void)) & C_integer64_text, 1},
     {"C_kind_new", (DL_FUNC)(void (*)(void)) & C_kind_new, 11},
     {"C_library_close", (DL_FUNC)(void (*)(void)) & C_library_close, 1},
@@ -170,8 +151,6 @@ static const R_CallMethodDef calls[] = {
     {"C_remote_live", (DL_FUNC)(void (*)(void)) & C_remote_live, 1},
     {"C_remote_new", (DL_FUNC)(void (*)(void)) & C_remote_new, 5},
     {"C_schema_validate", (DL_FUNC)(void (*)(void)) & C_schema_validate, 2},
-    {"C_serde_emit", (DL_FUNC)(void (*)(void)) & C_serde_emit, 4},
-    {"C_serde_parse", (DL_FUNC)(void (*)(void)) & C_serde_parse, 4},
     {"C_served_table", (DL_FUNC)(void (*)(void)) & C_served_table, 3},
     {"C_table_floor_hash", (DL_FUNC)(void (*)(void)) & C_table_floor_hash, 1},
     {"C_time_format", (DL_FUNC)(void (*)(void)) & C_time_format, 2},
@@ -188,6 +167,7 @@ static const R_CallMethodDef calls[] = {
 void R_init_guatiao(DllInfo *dll) {
   gt_note_main_thread();
   gt_kinds_init();
+  gt_api_register();
   R_registerRoutines(dll, NULL, calls, NULL, NULL);
   R_useDynamicSymbols(dll, FALSE);
   R_forceSymbols(dll, TRUE);

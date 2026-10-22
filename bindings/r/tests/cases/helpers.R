@@ -41,8 +41,8 @@ with_repo <- function(code) {
 counting <- function() gt$.gt_counting()
 live <- function(a) gt$.gt_live(a)
 
-vectors <- function() value_data(serde_parse(paste(readLines(repo_file("crates", "guatiao", "tests", "vectors", "time.json"),
-  encoding = "UTF-8", warn = FALSE), collapse = "\n")), numbers = "text")
+vectors <- function() read_json(readLines(repo_file("crates", "guatiao", "tests", "vectors", "time.json"),
+  encoding = "UTF-8", warn = FALSE))
 
 text_of <- function(n) if (inherits(n, "guatiao_number")) unclass(n) else n
 

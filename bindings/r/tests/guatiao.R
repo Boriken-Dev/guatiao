@@ -15,8 +15,9 @@ Sys.setenv(R_TESTS = "")
 .tests_dir <- if (dir.exists("cases")) "cases" else file.path("tests", "cases")
 source(file.path(.tests_dir, "harness.R"))
 source(file.path(.tests_dir, "helpers.R"))
+source(file.path(.tests_dir, "json.R"))
 
-files <- c("abi.R", "values.R", "typed.R", "serde.R", "intake.R", "time.R", "frees.R",
+files <- c("abi.R", "values.R", "typed.R", "redact.R", "time.R", "frees.R",
   "greeters.R", "provide.R", "wide.R", "integer64.R", "threads.R", "registry.R", "examples.R")
 for (f in files) {
   path <- file.path(.tests_dir, f)

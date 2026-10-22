@@ -4,8 +4,10 @@
 
 /*
  * The exports this package calls, resolved at run time from the library a
- * session names: one function pointer per export in a table per library,
- * and a `static inline` caller per export.
+ * session names: one function pointer per export in a table, and a
+ * `static inline` caller per export. The other surfaces (guatiao_serde,
+ * guatiao_intake) are opened here too, by slot, for the packages over
+ * them, which resolve their own exports through `gt_symbol_of`.
  *
  * Each list entry is X(return type, name, parameters, arguments, feature):
  * a feature of "" is an export every build has, checked when the library
@@ -21,8 +23,6 @@
 #include <stdint.h>
 
 #include "guatiao.h"
-#include "guatiao_intake.h"
-#include "guatiao_serde.h"
 
 #define GT_TEXT_FORMS(X, form)                                                                  \
   X(guatiao_status, guatiao_##form##_parse,                                                    \
@@ -153,67 +153,6 @@
   X(guatiao_status, guatiao_registry_collect,                                                  \
     (guatiao_registry *reg, const guatiao_alloc *alloc, guatiao_value *out), (reg, alloc, out), "load")
 
-#define GT_SERDE(X)                                                                             \
-  X(guatiao_status, guatiao_json_parse_ex,                                                     \
-    (guatiao_str text, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out,            \
-     guatiao_parse_error *err),                                                                 \
-    (text, how, alloc, out, err), "")                                                           \
-  X(guatiao_status, guatiao_json_emit,                                                         \
-    (const guatiao_value *v, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out),     \
-    (v, how, alloc, out), "")                                                                   \
-  X(guatiao_status, guatiao_json_emit_pretty,                                                  \
-    (const guatiao_value *v, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out),     \
-    (v, how, alloc, out), "")                                                                   \
-  X(guatiao_status, guatiao_toml_parse_ex,                                                     \
-    (guatiao_str text, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out,            \
-     guatiao_parse_error *err),                                                                 \
-    (text, how, alloc, out, err), "toml")                                                       \
-  X(guatiao_status, guatiao_toml_emit,                                                         \
-    (const guatiao_value *v, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out),     \
-    (v, how, alloc, out), "toml")                                                               \
-  X(guatiao_status, guatiao_yaml_parse_ex,                                                     \
-    (guatiao_str text, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out,            \
-     guatiao_parse_error *err),                                                                 \
-    (text, how, alloc, out, err), "yaml")                                                       \
-  X(guatiao_status, guatiao_yaml_emit,                                                         \
-    (const guatiao_value *v, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out),     \
-    (v, how, alloc, out), "yaml")
-
-#define GT_INTAKE(X)                                                                            \
-  X(guatiao_status, guatiao_intake_check,                                                      \
-    (const guatiao_value *schema, const guatiao_value *form, const guatiao_alloc *alloc,        \
-     guatiao_value *out),                                                                       \
-    (schema, form, alloc, out), "")                                                             \
-  X(guatiao_status, guatiao_intake_layout,                                                     \
-    (const guatiao_value *schema, const guatiao_value *form, const guatiao_alloc *alloc,        \
-     guatiao_value *out),                                                                       \
-    (schema, form, alloc, out), "")                                                             \
-  X(guatiao_status, guatiao_intake_for_schema,                                                 \
-    (const guatiao_value *schema, const guatiao_alloc *alloc, guatiao_value *out), (schema, alloc, out), "") \
-  X(guatiao_status, guatiao_intake_form_for,                                                   \
-    (const guatiao_value *form, const guatiao_value *schema, guatiao_str path,                  \
-     const guatiao_alloc *alloc, guatiao_value *out),                                           \
-    (form, schema, path, alloc, out), "")                                                       \
-  X(guatiao_status, guatiao_intake_is_visible,                                                 \
-    (const guatiao_value *schema, const guatiao_value *form, guatiao_str key,                   \
-     const guatiao_value *values, bool *out),                                                   \
-    (schema, form, key, values, out), "")                                                       \
-  X(const guatiao_value *, guatiao_intake_path_get, (const guatiao_value *value, guatiao_str path), \
-    (value, path), "")                                                                          \
-  X(const guatiao_value *, guatiao_intake_resolve, (const guatiao_value *schema, guatiao_str key), \
-    (schema, key), "")                                                                          \
-  X(guatiao_status, guatiao_intake_flat_keys,                                                  \
-    (const guatiao_value *schema, guatiao_str key, const guatiao_alloc *alloc, guatiao_value *out), \
-    (schema, key, alloc, out), "")                                                              \
-  X(guatiao_status, guatiao_intake_flatten,                                                    \
-    (const guatiao_value *schema, guatiao_str key, const guatiao_value *value,                  \
-     const guatiao_alloc *alloc, guatiao_value *out),                                           \
-    (schema, key, value, alloc, out), "")                                                       \
-  X(guatiao_status, guatiao_intake_unflatten,                                                  \
-    (const guatiao_value *schema, guatiao_str key, const guatiao_value *store,                  \
-     const guatiao_alloc *alloc, guatiao_value *out),                                           \
-    (schema, key, store, alloc, out), "")
-
 /* One table of pointers per library, a field per export. */
 #define GT_FIELD(ret, name, params, args, feature) ret(*name) params;
 #define GT_VOID_FIELD(name, params, args, feature) void(*name) params;
@@ -223,29 +162,28 @@
 typedef struct gt_core_fns {
   GT_CORE(X)
 } gt_core_fns;
-typedef struct gt_serde_fns {
-  GT_SERDE(X)
-} gt_serde_fns;
-typedef struct gt_intake_fns {
-  GT_INTAKE(X)
-} gt_intake_fns;
 #undef X
 #undef GT_VOID
 
 extern gt_core_fns gt_core;
-extern gt_serde_fns gt_serde;
-extern gt_intake_fns gt_intake;
 
 enum { GT_LIB_CORE = 0, GT_LIB_SERDE = 1, GT_LIB_INTAKE = 2 };
 
 /*
- * Opens the library at `path` (UTF-8) as `lib` and resolves its exports.
- * Answers 0, or 1 when the file did not open (its reason in `err`), or 2
- * when an export every build has is missing (its name in `err`). A
+ * Opens the library at `path` (UTF-8) as `lib`: the core's exports are
+ * resolved; another surface's file must export its probe symbol. Answers
+ * 0, or 1 when the file did not open (its reason in `err`), or 2 when an
+ * export every build has, or the probe, is missing (its name in `err`). A
  * library opened stays open for the process: trees it built record its
  * allocator, whose code lives in its image.
  */
 int gt_open(int lib, const char *path, char *err, size_t errlen);
+
+/* The symbol only surface `lib` exports, checked when it opens. */
+const char *gt_probe_of(int lib);
+
+/* 1 when the file at `path` opens and exports `symbol`; it is closed again. */
+int gt_file_carries(const char *path, const char *symbol);
 
 /* Whether `lib` is open. */
 int gt_is_open(int lib);

@@ -5,9 +5,10 @@ Version: 0.0.0.1
 Authors@R: person("jose-pr", email = "jose-pr@coqui.dev", role = c("aut", "cre"))
 Description: Bindings over the 'guatiao' C library: values shared with C,
     Rust, Python, Dart, Node, Go and Julia code without copying their shape,
-    their JSON Schema descriptions, JSON, TOML and YAML text, forms, and a
-    registry of plugin libraries whose providers a host calls through typed
-    function tables. A provider can be written in R as an S4 or Reference
+    their JSON Schema descriptions, and a registry of plugin libraries whose
+    providers a host calls through typed function tables. JSON, TOML and
+    YAML are the package 'guatiao.serde', forms 'guatiao.intake', both built
+    on the C interface this package registers. A provider can be written in R as an S4 or Reference
     class. The 'guatiao' library itself is not included: it is opened at run
     time from the path in 'GUATIAO_LIBRARY'.
 License: MPL-2.0
@@ -19,4 +20,4 @@ Suggests: bit64
 SystemRequirements: libffi
 Encoding: UTF-8
 NeedsCompilation: yes
-Collate: native.R value.R time.R typed.R serde.R kinds.R registry.R provide.R
+Collate: native.R value.R time.R typed.R schema.R kinds.R registry.R provide.R

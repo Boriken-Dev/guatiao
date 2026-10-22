@@ -1,0 +1,17 @@
+Package: guatiao.serde
+Type: Package
+Title: JSON, TOML and YAML for 'guatiao' Values
+Version: 0.0.0.1
+Authors@R: person("jose-pr", email = "jose-pr@coqui.dev", role = c("aut", "cre"))
+Description: Reads JSON, TOML and YAML documents into values of the 'guatiao'
+    package and writes them back, through the 'guatiao_serde' C library,
+    every number keeping its exact text. The library itself is not
+    included: it is opened at run time from the path in
+    'GUATIAO_SERDE_LIBRARY' or 'GUATIAO_LIBRARY'.
+License: MPL-2.0
+URL: https://github.com/Boriken-Dev/guatiao, https://boriken-dev.github.io/guatiao/
+BugReports: https://github.com/Boriken-Dev/guatiao/issues
+Depends: R (>= 4.2), guatiao (>= 0.0.0.1)
+LinkingTo: guatiao
+Encoding: UTF-8
+NeedsCompilation: yes

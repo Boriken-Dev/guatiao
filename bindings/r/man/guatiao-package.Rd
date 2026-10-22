@@ -6,9 +6,11 @@
 \description{
 Bindings over the \sQuote{guatiao} C library. A \code{\link{value}} is a tree
 shared with C, Rust, Python, Dart, Node, Go and Julia code; its JSON Schema
-description, its JSON, TOML and YAML text (\code{\link{serde_parse}}), forms
-(\code{\link{intake_check}}), dates and spans (\code{\link{time_parse}}) and
-redaction (\code{\link{redact}}) all go through the library's own functions.
+description, dates and spans (\code{\link{time_parse}}) and redaction
+(\code{\link{redact}}) all go through the library's own functions. JSON, TOML
+and YAML text are the package \pkg{guatiao.serde}, forms \pkg{guatiao.intake},
+each over its own library and built on the C interface this package registers
+(\file{include/guatiao_r_api.h}).
 A \code{\link{registry}} loads plugin libraries and calls their providers
 through typed function tables declared with \code{\link{kind}}; a provider can
 be written in R (\code{\link{provider}}).

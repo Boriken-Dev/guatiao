@@ -16,7 +16,7 @@ serde_emit(x, format = "json", pretty = FALSE,
 \item{pretty}{Indent JSON.}
 \item{bytes}{How bytes are written.}
 }
-\value{\code{serde_parse} returns a \code{\link{value}}; \code{serde_emit} a string.}
+\value{\code{serde_parse} returns a \code{\link[guatiao]{value}}; \code{serde_emit} a string.}
 \description{
 A number keeps its exact text both ways. A document that does not parse
 signals a \code{guatiao_parse_error} (\code{format}, \code{line} and

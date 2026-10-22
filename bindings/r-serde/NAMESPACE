@@ -1,0 +1,5 @@
+useDynLib(guatiao.serde, .registration = TRUE)
+# Loads guatiao's namespace, and the C interface it registers, first.
+importFrom(guatiao, use_library)
+
+export(serde_parse, serde_emit)

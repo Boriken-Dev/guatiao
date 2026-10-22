@@ -5,10 +5,13 @@
 # Finding the native libraries, and the conditions this package signals.
 
 .gt_state <- new.env(parent = emptyenv())
-.gt_state$chosen <- NULL
+.gt_state$chosen <- character(3)
 .gt_state$opened <- character(3)
 
 .gt_bases <- c("guatiao", "guatiao_serde", "guatiao_intake")
+
+# Each surface's own environment variable, consulted before GUATIAO_LIBRARY.
+.gt_variables <- c("", "GUATIAO_SERDE_LIBRARY", "GUATIAO_INTAKE_LIBRARY")
 
 .gt_filename <- function(base) {
   if (.Platform$OS.type == "windows") return(paste0(base, ".dll"))
@@ -16,45 +19,57 @@
   paste0("lib", base, ".so")
 }
 
-# Name the guatiao library this session uses
+# Name the library this session uses for a surface
 #
 # Called before the first call that needs the library: a file exporting
-# the C ABI, whatever it is called, or a directory holding
-# `guatiao.dll` / `libguatiao.so` / `libguatiao.dylib`. It wins over
-# `GUATIAO_LIBRARY`. Naming another file once one is loaded is an error;
-# naming the same one is not.
+# the surface, whatever it is called, or a directory holding
+# `guatiao.dll` / `libguatiao.so` / `libguatiao.dylib` (or the surface's
+# own file name). It wins over the environment. Naming another file once
+# one is loaded is an error; naming the same one is not.
 #
 # @param path A file or a directory.
+# @param library `"guatiao"`, `"guatiao_serde"` or `"guatiao_intake"`.
 # @return `NULL`, invisibly.
 # @export
-use_library <- function(path) {
+use_library <- function(path, library = "guatiao") {
   stopifnot(is.character(path), length(path) == 1L, !is.na(path))
+  lib <- match(library, .gt_bases)
+  if (is.na(lib)) stop("no such library: ", library, call. = FALSE)
   path <- normalizePath(path, winslash = "/", mustWork = TRUE)
-  opened <- .gt_state$opened[1L]
+  opened <- .gt_state$opened[lib]
   if (nzchar(opened)) {
-    want <- if (dir.exists(path)) file.path(path, .gt_filename("guatiao")) else path
+    want <- if (dir.exists(path)) file.path(path, .gt_filename(library)) else path
     if (!identical(normalizePath(want, winslash = "/", mustWork = FALSE), opened)) {
-      stop(sprintf("guatiao is already loaded from %s", opened), call. = FALSE)
+      stop(sprintf("%s is already loaded from %s", library, opened), call. = FALSE)
     }
   }
-  .gt_state$chosen <- path
+  .gt_state$chosen[lib] <- path
   invisible(NULL)
 }
 
-# Where to look for library `lib` (0 core, 1 serde, 2 intake), best first.
+# Where to look for library `lib` (0 core, 1 serde, 2 intake), best first:
+# what use_library named, the surface's own variable, GUATIAO_LIBRARY, then
+# the platform's search. A directory holds the surface's file under its
+# platform name; a file named for the surface is taken as it is; a
+# GUATIAO_LIBRARY file serves every surface it exports, else the surface's
+# own file beside it does.
 .gt_candidates <- function(lib) {
   base <- .gt_bases[lib + 1L]
   file <- .gt_filename(base)
-  from <- function(p) {
+  from <- function(p, shared) {
     if (dir.exists(p)) return(file.path(p, file))
-    if (lib == 0L) return(p)
+    if (!shared || lib == 0L || !file.exists(p)) return(p)
+    if (.Call(C_file_carries, enc2utf8(normalizePath(p, winslash = "/", mustWork = FALSE)), lib)) return(p)
     file.path(dirname(p), file)
   }
-  if (!is.null(.gt_state$chosen)) return(from(.gt_state$chosen))
+  out <- character()
+  if (nzchar(.gt_state$chosen[lib + 1L])) out <- c(out, from(.gt_state$chosen[lib + 1L], FALSE))
+  own <- if (nzchar(.gt_variables[lib + 1L])) Sys.getenv(.gt_variables[lib + 1L]) else ""
+  if (nzchar(own)) out <- c(out, from(own, FALSE))
   env <- Sys.getenv("GUATIAO_LIBRARY")
-  if (nzchar(env)) return(from(env))
+  if (nzchar(env)) out <- c(out, from(env, TRUE))
   # The platform's own search, by file name.
-  file
+  unique(c(out, file))
 }
 
 .gt_ensure <- function(lib) {
@@ -76,9 +91,10 @@ use_library <- function(path) {
     }
     reasons <- c(reasons, sprintf("%s (%s)", path, r[[2L]]))
   }
+  variable <- if (nzchar(.gt_variables[lib + 1L])) paste0(.gt_variables[lib + 1L], " or ") else ""
   stop(structure(class = c("guatiao_library_not_found", "error", "condition"),
-    list(message = sprintf("%s not found; looked at %s. Set GUATIAO_LIBRARY or call use_library().",
-      .gt_bases[lib + 1L], paste(reasons, collapse = ", ")), call = NULL,
+    list(message = sprintf("%s not found; looked at %s. Set %sGUATIAO_LIBRARY or call use_library().",
+      .gt_bases[lib + 1L], paste(reasons, collapse = ", "), variable), call = NULL,
       basename = .gt_bases[lib + 1L], looked = looked)))
 }
 
@@ -159,13 +175,3 @@ conditionMessage.guatiao_error <- function(c) {
       status = "BadValue", code = 7L, form = form, at = as.integer(at), expected = expected)))
 }
 
-.gt_formats <- c("json", "toml", "yaml")
-
-.gt_parse_error <- function(info, message) {
-  format <- .gt_formats[info[[1L]] + 1L]
-  where <- if (info[[2L]] > 0) sprintf(" at line %d, column %d", as.integer(info[[2L]]), as.integer(info[[3L]])) else ""
-  stop(structure(class = c("guatiao_parse_error", "guatiao_error", "error", "condition"),
-    list(message = sprintf("%s does not parse%s: %s", toupper(format), where, message), call = NULL,
-      status = "BadValue", code = 7L, format = format, line = as.integer(info[[2L]]),
-      column = as.integer(info[[3L]]), reason = message)))
-}
