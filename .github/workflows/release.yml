@@ -104,6 +104,10 @@ jobs:
           ):
               if found != cargo:
                   problems.append(f"Cargo says {cargo} and {where} says {found}")
+          # Julia writes the version as Cargo does.
+          julia = tomllib.loads(pathlib.Path("bindings/julia/Project.toml").read_text())["version"]
+          if julia != cargo:
+              problems.append(f"Cargo says {cargo} and bindings/julia/Project.toml says {julia}")
           tag = os.environ["TAG"]
           if tag:
               want = tag[1:] if tag.startswith("v") else tag
@@ -231,9 +235,44 @@ jobs:
               assert need in names, f"{need} does not ship"
           assert not any(".local." in f or f.split("/")[-1].startswith(".") for f in names), "a private file ships"
 
+  build-julia:
+    name: Check the Julia package
+    needs: [test, version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: "1"
+      # General registers the package from its subdirectory at the release
+      # commit: what it takes is the files under bindings/julia, loaded here
+      # as a user's Pkg loads them.
+      - name: Resolve and load
+        run: julia --startup-file=no --project=bindings/julia -e 'using Pkg; Pkg.instantiate(); using Guatiao; println(pkgversion(Guatiao))'
+      - name: What the package ships
+        shell: python
+        run: |
+          import subprocess
+          import tomllib
+
+          files = subprocess.run(["git", "ls-files", "bindings/julia"], capture_output=True, text=True,
+                                 check=True).stdout.split()
+          names = {f[len("bindings/julia/"):] for f in files}
+          print("\n".join(sorted(names)))
+          for need in ("Project.toml", "AGENTS.md", "README.md", "LICENSE", "src/Guatiao.jl"):
+              assert need in names, f"{need} does not ship"
+          assert "Manifest.toml" not in names, "a resolved environment ships"
+          assert not any(".local." in f or f.split("/")[-1].startswith(".") for f in names), "a private file ships"
+          project = tomllib.load(open("bindings/julia/Project.toml", "rb"))
+          assert project["name"] == "Guatiao" and "julia" in project["compat"], "General wants a name and a julia compat"
+          for dep in project.get("deps", {}):
+              assert dep in project.get("compat", {}), f"General wants a compat entry for {dep}"
+
   github-release:
     name: Create the GitHub release
-    needs: [docs-gate, build-crates, build-python, build-dart, build-node, build-go]
+    needs: [docs-gate, build-crates, build-python, build-dart, build-node, build-go, build-julia]
     if: ${{ github.ref_type == 'tag' }}
     runs-on: ubuntu-latest
     permissions:
@@ -511,6 +550,57 @@ jobs:
               except urllib.error.HTTPError as e:
                   print(f"the proxy answered {e.code}; asking again")
                   time.sleep(30)
+
+  register-julia:
+    name: Register the Julia package in General
+    needs: github-release
+    # General refuses a version with pre-release data, so a pre-release tag
+    # registers nothing.
+    if: ${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The JuliaRegistrator app, installed on the repository, opens the
+      # pull request against General when an account it trusts asks it on
+      # the release commit; JULIA_REGISTRATOR_TOKEN is that account's
+      # token. A version General already lists is left alone, so a re-run
+      # finishes a partly failed release.
+      - name: Ask Registrator for this version, unless General has it
+        shell: python
+        env:
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ secrets.JULIA_REGISTRATOR_TOKEN }}
+        run: |
+          import json
+          import os
+          import sys
+          import tomllib
+          import urllib.error
+          import urllib.request
+
+          project = tomllib.load(open("bindings/julia/Project.toml", "rb"))
+          name, version = project["name"], project["version"]
+          versions = f"https://raw.githubusercontent.com/JuliaRegistries/General/master/{name[0]}/{name}/Versions.toml"
+          try:
+              with urllib.request.urlopen(versions) as r:
+                  listed = tomllib.loads(r.read().decode())
+          except urllib.error.HTTPError as e:
+              if e.code != 404:
+                  raise
+              listed = {}
+          if version in listed:
+              print(f"General lists {name} {version}; skipped")
+              sys.exit(0)
+          if not os.environ["TOKEN"]:
+              sys.exit("JULIA_REGISTRATOR_TOKEN is not set: nothing asked Registrator")
+          body = json.dumps({"body": "@JuliaRegistrator register subdir=bindings/julia"}).encode()
+          request = urllib.request.Request(
+              f"https://api.github.com/repos/{os.environ['REPO']}/commits/{os.environ['SHA']}/comments",
+              data=body, method="POST",
+              headers={"Authorization": f"Bearer {os.environ['TOKEN']}", "Accept": "application/vnd.github+json"})
+          with urllib.request.urlopen(request) as r:
+              print("asked Registrator:", json.loads(r.read())["html_url"])
 
   # A GITHUB_TOKEN-made release starts no workflow, so docs.yml is
   # dispatched at this tag instead. A pre-release leaves the published docs
