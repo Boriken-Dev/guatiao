@@ -937,6 +937,30 @@ GuatiaoSerde.parse(text); GuatiaoIntake.check(schema, form)
 `Guatiao.use_library` names only the core library; the others have their
 own `use_library`.
 
+### R
+
+```r
+remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r-serde")
+remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r-intake")
+```
+
+```r
+# before
+library(guatiao)
+serde_parse(text); intake_check(schema, form)
+```
+
+```r
+library(guatiao.serde)     # attaches guatiao too
+library(guatiao.intake)
+serde_parse(text); intake_check(schema, form)
+```
+
+The functions keep their names. `use_library(path)` names only the core
+library; the others are named with `use_library(path, library =
+"guatiao_serde")` and `"guatiao_intake"`, or found through
+`GUATIAO_SERDE_LIBRARY`, `GUATIAO_INTAKE_LIBRARY` or `GUATIAO_LIBRARY`.
+
 ## Python and Dart
 
 ### `create` checks the configuration first

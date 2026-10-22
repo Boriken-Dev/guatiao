@@ -541,6 +541,13 @@ write now.
     `bindings/julia-intake`); `ParseError` moves to `GuatiaoSerde`.
     `Guatiao.FFI` is new: `@cdef` usable from any module, `surface!`,
     `find_library` and trees as root nodes.
+  - R: `serde_parse`/`serde_emit` are the package `guatiao.serde` and the
+    `intake_*` functions `guatiao.intake` (`bindings/r-serde`,
+    `bindings/r-intake`), with the same names; `library(guatiao.serde)`
+    attaches `guatiao` too. `use_library(path, library = "guatiao")` names
+    any of the three libraries. `guatiao` registers the C table
+    `guatiao_r_api` (`include/guatiao_r_api.h`) for a package over another
+    guatiao library.
 - **Breaking: `clone()` copies into this binary's allocator.** `clone()`
   (and `to_owned()`) on `Value`, `Map`, `List`, `Text`, `Buffer` and
   `Number` builds the copy through `Alloc::rust()`, whatever allocator the
