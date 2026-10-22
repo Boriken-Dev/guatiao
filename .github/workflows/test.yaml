@@ -536,8 +536,8 @@ jobs:
         working-directory: bindings/go/guatiao
         run: |
           go vet ./...
-          (cd ../../examples && go vet ./...)
-          unformatted=$(gofmt -l . ../../examples/greeter_kind/go ../../examples/go_host ../../examples/go_provider ../../examples/internal)
+          (cd ../../../examples && go vet ./...)
+          unformatted=$(gofmt -l . ../../../examples/greeter_kind/go ../../../examples/go_host ../../../examples/go_provider ../../../examples/internal)
           test -z "$unformatted" || { echo "not gofmt'd: $unformatted"; exit 1; }
       - name: Test the binding and the examples
         run: |
