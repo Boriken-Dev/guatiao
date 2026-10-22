@@ -6,8 +6,8 @@
 
 Fortran bindings for the [guatiao](https://github.com/Boriken-Dev/guatiao/)
 ABI: **one value model for passing data between languages**, a JSON
-Schema that describes a value, and documents, forms and dates read and
-written by the library itself. Pure Fortran over `iso_c_binding`, opening
+Schema that describes a value, and a registry that loads plugin
+libraries. Pure Fortran over `iso_c_binding`, opening
 the library at run time: a build needs a Fortran compiler and nothing
 else. It works with any shared library that exports the ABI, whether
 that is `guatiao` itself or an application that carries it.
@@ -25,6 +25,16 @@ that is `guatiao` itself or an application that carries it.
   back the same.
 - **Handles that cannot double free** — copies share a counted tree; the
   last one going, or `close()`, frees it.
+- **Be a plugin host** — scan a directory, filter on what a library
+  declares before loading it, list providers best first, build an
+  instance from a configuration, call a provider through its table.
+- **A kind is an abstract type** — a deferred procedure per required
+  slot, so the compiler checks a provider implements them, and a remote
+  type calling another side's table with the same methods.
+- **Write a provider in Fortran** — a type extending a kind, in a library
+  a host calls the way it calls one written in Rust, C, Python or Go; a
+  library file any host's scan finds, its entry and declaration written
+  in Fortran.
 - **A configuration is a derived type** — it describes its schema field
   by field and decodes the checked value into its components.
 - **Dates, times, spans and exact lengths** — `guatiao_date`,
@@ -94,6 +104,50 @@ print *, port%int_or(22_int64)   ! 5900
 call v%close()                   ! or let the last handle go
 ```
 
+### Hosting plugins
+
+```fortran
+use greeter_kinds                      ! a kind's module, written once by its author
+type(guatiao_registry) :: reg
+type(greeter_remote) :: g
+type(guatiao_value) :: answer
+type(guatiao_error), allocatable :: error
+
+reg = guatiao_open_registry('my-host', '1.0')
+call reg%scan_dir('/path/to/plugins', rules=['kind=greeter'])
+call greeter_bind(reg, 'acme_hello', g)
+call g%greet('ana', answer, error)     ! {"greeting": "hello, ana"}
+```
+
+### A kind, and a provider of it
+
+```fortran
+type, extends(greeter) :: hello
+contains
+  procedure :: greet => hello_greet    ! deferred in greeter: the compiler checks it
+end type
+
+subroutine hello_greet(self, name, answer, error)
+  class(hello), intent(inout) :: self
+  character(*), intent(in) :: name
+  type(guatiao_value), intent(inout) :: answer   ! an empty map, in the caller's allocator
+  type(guatiao_error), allocatable, intent(out) :: error
+  if (len(name) == 0) then
+    call guatiao_fail(error, GUATIAO_ERR_BAD_VALUE, 'nobody to greet')
+    return
+  end if
+  call answer%set('greeting', 'hello, ' // name)
+end subroutine
+
+lib = guatiao_new_library('my_greeters', '1.0.0')      ! as its fpm.toml says
+call lib%single('hello', [greeter_serving(h)])
+```
+
+Built as a shared library exporting `guatiao_library_entry` (answering
+`lib%answer(host)`) and `guatiao_declares`, both written in Fortran, it is
+a file any host's scan finds; or `guatiao_register_library(reg, lib)`
+registers it in the host's own process.
+
 ### A configuration's schema
 
 ```fortran
@@ -149,6 +203,22 @@ call guatiao_to_text(later, text)   ! "2026-02-28"
 - gfortran 14 and older keep the length of a function's deferred-length
   character result in static storage: functions such as `string_or` are
   not safe from two threads at once there; the subroutine forms are.
+- Fortran cannot ask whether a type overrides a procedure: a provider
+  declares the optional slots it serves where it is registered
+  (`greeter_serving(h, shout=.true.)`).
+- Single inheritance: a provider serving two kinds is one object per
+  kind, sharing state through a pointer.
+- A remote cannot run a kind's default body for a slot an older table
+  lacks, as a Rust caller does: it answers `GUATIAO_ERR_UNSUPPORTED`.
+- An object handed to another side is moved, never copied; keep state
+  that must be seen from outside behind a pointer component.
+- A process holds at most 64 providers that build instances and
+  registers at most 16 libraries in process: the descriptor slots that
+  carry no `ctx` come from fixed pools.
+- A Fortran library is never unmapped: its `unload` refuses.
+- flang 22 gets a 24-byte struct passed by value wrong in a `bind(c)`
+  procedure on AArch64 and Windows; a kind module takes a
+  `guatiao_object` by address there (its API header says how).
 - fpm versions are three numbers: a pre-release `0.0.0-alpha.N` is
   `0.0.0` in `fpm.toml`, and the tag names the build.
 - 64-bit platforms only.
@@ -157,7 +227,8 @@ call guatiao_to_text(later, text)   ! "2026-02-28"
 
 | Module | Purpose |
 | --- | --- |
-| `guatiao` | `guatiao_value` and its constructors, statuses, `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`, `guatiao_validate`, `guatiao_redact`, `guatiao_schema_builder`, `guatiao_config` |
+| `guatiao` | `guatiao_value` and its constructors, statuses, `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`, `guatiao_validate`, `guatiao_redact`, `guatiao_schema_builder`, `guatiao_config`; `guatiao_registry`, `guatiao_instance`; `guatiao_impl`, `guatiao_kind`, `guatiao_serving`, `guatiao_remote`; `guatiao_library`, `guatiao_register_library` |
+| `guatiao_kinds` | the helpers a kind's module writes its glue with |
 | `guatiao_serde` | `guatiao_parse` / `guatiao_emit` for JSON, TOML, YAML |
 | `guatiao_intake` | `check`, `layout`, `is_visible`, `at`, `for_schema`, `form_for`, `resolve`, `flat_keys`, `flatten`, `unflatten` |
 | `guatiao_civil` | dates, times, instants, spans, exact lengths, `guatiao_normalize` |
@@ -178,7 +249,11 @@ cmake -S . -B build && cmake --build build && ctest --test-dir build
 The tests read the headers and the shared vectors from the repository,
 and need the three libraries in one directory; they point
 `GUATIAO_LIBRARY` at the repository's build output when the variable is
-unset, and the repository's own `AGENTS.md` says how to produce it.
+unset, and the repository's own `AGENTS.md` says how to produce it. The
+examples hold the greeter kinds (`examples/greeter_kind/fortran`), a
+library of greeters written in Fortran (`examples/fortran_greeter`), and
+a host (`examples/fortran_host`) whose test calls the greeters written in
+Rust, C, Python, Go and Fortran both ways.
 
 ## License
 

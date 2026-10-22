@@ -16,7 +16,8 @@ nothing of it. The sources are pure Fortran (one `.F90` file chooses
 
 | `use` | what |
 | --- | --- |
-| `guatiao` | `guatiao_value`, `guatiao_text`, the constructors, statuses and tags, `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`; schemas and `guatiao_config` |
+| `guatiao` | `guatiao_value`, `guatiao_text`, the constructors, statuses and tags, `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`; schemas and `guatiao_config`; `guatiao_registry`, `guatiao_instance`; `guatiao_impl`, `guatiao_kind`, `guatiao_serving`, `guatiao_remote`; `guatiao_library` |
+| `guatiao_kinds` | what a kind's own module uses for its glue: served boxes, carriers, lent and handed-over arguments, objects |
 | `guatiao_serde` | `guatiao_parse`, `guatiao_emit`: JSON, TOML, YAML |
 | `guatiao_intake` | forms, paths, the flat store |
 | `guatiao_civil` | dates, times, instants, spans, exact lengths |
@@ -172,6 +173,256 @@ a copy with every field the schema marks (`x-sensitive`, `writeOnly`)
 replaced, local `$ref`s followed, and whatever it does not describe
 hidden too.
 
+## Registry
+
+```fortran
+type(guatiao_registry) :: reg
+type(guatiao_value) :: providers
+reg = guatiao_open_registry('my-host', '1.0')
+call reg%scan_dir('/path/to/plugins', rules=['kind=greeter'])
+call reg%providers('greeter', providers)      ! a list of maps, best first
+```
+
+`guatiao_open_registry(id, version, alloc, stat, errmsg)`: `alloc` is the
+allocator its answers are built in and that it offers libraries (a
+counting one in a test). Copies share one registry; `close()` frees it
+once nothing else (an instance, a remote) holds it, and every call then
+answers `GUATIAO_STAT_CLOSED`. Not safe from two threads at once: a host
+sharing one guards it.
+
+Every answer that is data is a `guatiao_value` the caller owns, as the C
+surface documents its keys: `scan_dir(dir, rules, descending, answer)` and
+`scan_path(spec, rules, descending, answer)` (`rules` an array of
+`[!]KEY=VALUE`, matched against what a library declares before it is
+mapped; `answer` `{loaded, skipped, failed, unreadable}`),
+`load_file(path, answer)`, `register_entry(name, entry, answer)` (a
+`guatiao_library_entry` as `c_funloc` gives it), `libraries(answer)`,
+`providers(kind, answer)` (`''` for every kind; maps with `key`, `id`,
+`version`, `library`, `display_name`, `from`, `kinds`, `has_config`,
+`vtable_size`), `provider(key, answer)` (`GUATIAO_ERR_NOT_FOUND` for
+none), `available(kind, answer)`, `why_not(kind, answer)`, `best(kind,
+answer)`, `provider_available(key, ok, reason)`, `keyed_by(template)`
+and `libraries_keyed_by(template)` (`%id` by default, `%version`,
+`%name`, `%library`), `set_priority(id, p)`, `priority(id)`,
+`provider_table(key, kind, table, size)` (`kind` `''` for a single
+table), `provider_ctx(key)`, `provider_config(key)` (a read-only handle on
+the schema, absent for none), `host()` (the `guatiao_host_info *`).
+
+`create(key, config, instance)` checks the configuration against the
+provider's schema first (`GUATIAO_ERR_BAD_VALUE` naming the field), then
+builds a `guatiao_instance`; its `close()` (or its last copy going)
+reaches the provider that built it, even after a retire or a refresh
+loaded a new build under the key, and it keeps its registry alive.
+
+`retire(key)` takes a library out and leaves it mapped until nothing
+uses it; `collect(answer)` closes every retired library whose own
+`unload` agrees. `unload(key)` unmaps when the library agrees:
+`GUATIAO_ERR_BUSY` while something it handed out lives,
+`GUATIAO_ERR_UNSUPPORTED` with no `unload`, `GUATIAO_ERR_WRONG_KIND` for a
+library registered rather than mapped, `GUATIAO_ERR_NOT_FOUND` for none;
+`unload_unchecked` insists. Both take the library's key.
+
+**Sources**: `add_source_file(path, config)` maps a file exporting
+`guatiao_source` (a bridge to another language) and adds the source it
+answers, refused with its own words; `watch_dir(dir, rules)` watches a
+directory; `refresh(answer)` makes the registry agree with every source
+(`{loaded, retired, skipped, refused}`). Nothing refreshes on its own.
+
+## Kinds: calling a table
+
+A kind is an abstract type its author writes once, in a module of its
+own (see "Writing a kind module"). Its remote type calls another side's
+table with the same methods a provider implements, so code written
+against `class(greeter)` takes either:
+
+```fortran
+use greeter_kinds
+type(greeter_remote) :: g
+type(guatiao_value) :: answer
+type(guatiao_error), allocatable :: error
+call greeter_bind(reg, 'acme_hello', g)
+call g%greet('ana', answer, error)
+if (allocated(error)) print *, error%status, error%message
+```
+
+Binding: `call guatiao_bind(reg, key, kind, remote%r)` (a kind module wraps
+it as `<kind>_bind`), `guatiao_bind_instance(instance, kind, remote%r)`,
+`guatiao_bind_table(table, size, ctx, kind, remote%r)` for any table:
+`GUATIAO_STAT_FLOOR_MISMATCH` when the table is smaller than the kind's
+required slots or carries another floor hash. A slot past the table's
+size or null answers `GUATIAO_ERR_UNSUPPORTED` (a Rust caller would run
+the kind's default body instead); a closed remote `GUATIAO_ERR_GONE`. A
+tree answer is built in the registry's allocator (the carrier the remote
+passes names it) and moved there when the callee built it elsewhere. A
+remote holding an object another side handed over destroys it once, when
+its last copy goes or on `close()`.
+
+`type(guatiao_remote)` (`table`, `size`, `ctx`, `alloc`): `slot(i)` (the
+`i`th slot after the header, from 1, or null), `has(i)`, `is_closed()`,
+`close()`, `give(obj, stat)` (hands an owned object over as the
+`gt_object` that crosses).
+
+## Kinds: serving one
+
+**A slot method's Fortran types**: `guatiao_str` is `character(*)`;
+`guatiao_bytes_mut` an `integer(int8)` array over the caller's memory,
+valid for the call; scalars their `iso_c_binding`/`int64` kinds, `bool`
+`logical`; a tree answer a `guatiao_value` holding an empty map in the
+carrier's allocator, filled in place (an answer the method replaces is
+copied there); a `guatiao_string` answer `character(:), allocatable`; a
+borrowed tree a read-only `guatiao_value`, a lent one a writable one, both
+closed when the call returns (keep a copy and it reads closed); a tree
+handed over a `guatiao_value` the method owns; an object handed over a
+`class(<kind>), allocatable` the method keeps with `move_alloc` (or leaves,
+and it is released); a lent object `class(<kind>), intent(inout),
+target`; an object answer `class(<kind>), allocatable, intent(out)`.
+Every slot method ends with `type(guatiao_error), allocatable,
+intent(out) :: error`: unallocated is success; `guatiao_fail(error,
+status, message)` refuses, and the status and words cross. A slot with no
+`err` in C reports a failure's words on standard error and its status
+alone.
+
+A served slot runs on the thread that calls it, a thread Fortran did not
+start included; nothing is queued, so a provider guards what it shares.
+A served `ctx` is the address of a box holding the objects; it is valid
+until the destroy that releases it, as a C provider's is.
+
+**An object this side serves** (a listener handed to another side, a
+conversation a method answers) is moved into a box the holder destroys:
+its `close()` runs then, and it is deallocated. A Fortran object lent for
+one call is served in place. An object is never copied: keep state that
+must be seen from outside behind a pointer component.
+`guatiao_live_objects()` counts what is served and not yet destroyed.
+
+## Providers and libraries
+
+```fortran
+type, extends(greeter) :: hello
+contains
+  procedure :: greet => hello_greet          ! deferred in greeter: the compiler checks it
+  procedure :: shout => hello_shout          ! optional: declared below
+end type
+
+function my_library() result(lib)
+  type(guatiao_library) :: lib
+  type(hello), pointer :: h
+  type(shout_config) :: proto
+  allocate(h)
+  lib = guatiao_new_library('my_greeters', '1.0.0', summary='Greeters', license='MPL-2.0')
+  call lib%single('hello', [greeter_serving(h, shout=.true.)], display_name='Hello')
+  call lib%configured('shouter', proto, build_shouter, [greeter_serving()])
+end function
+```
+
+**A provider** is a type extending the kind; what it serves is declared
+where it is registered, through the kind module's `<kind>_serving(impl,
+<optional slot>=.true., ...)`, since Fortran cannot ask whether a type
+overrides a procedure: an optional slot left undeclared is null in the
+table (a Rust caller runs the kind's default body). A provider of several
+kinds is one object per kind (Fortran has single inheritance), sharing
+state through a pointer: the servings list each. `lib%single(name,
+servings, display_name, id, version)` is a provider that is its one
+instance; `lib%configured(name, prototype, build, serves, display_name,
+id, version)` builds an instance per configuration: the host's value is
+checked against `guatiao_schema_of(prototype)`, decoded into a copy of
+`prototype`, and `build(config, made, error)` answers the instance's
+servings (objects allocated through a pointer; they are closed and
+deallocated when the host destroys the instance). The id defaults to
+`<library id>_<name>`; two providers sharing one, an object kind among
+the kinds, or an object not of its kind is refused. A process holds at
+most 64 providers that build instances and registers at most 16
+libraries in process (fixed pools of the descriptor slots that carry no
+`ctx`).
+
+**A library**: `guatiao_new_library(id, version, summary, license,
+authors)`; write the id and version its `fpm.toml` states (fpm can bake
+`{version}` into a preprocessor macro only as a bare token, which
+gfortran's preprocessor cannot turn into text), and check them in the
+package's own test. `lib%answer(host)` is the descriptor, built on first
+use and kept for the process; it is null (declining the host, the reason
+on standard error) for a host of another ABI or when guatiao cannot be
+opened. `guatiao_register_library(reg, lib)` registers it in this
+process: linked, not mapped, so `unload` answers `GUATIAO_ERR_WRONG_KIND`
+and `retire` takes it out. **A Fortran library is never unmapped**: its
+`unload` answers `GUATIAO_ERR_BUSY`, since a Fortran runtime linked into
+it keeps state no host can see.
+
+**A library file**: a shared library holding the binding, the kind
+modules and the providers, exporting the entry and the declaration, both
+written in Fortran:
+
+```fortran
+character(*), parameter :: DECLARES = 'kind=greeter' // c_null_char // c_null_char
+character(kind=c_char), bind(c, name='guatiao_declares') :: guatiao_declares(len(DECLARES)) = &
+  transfer(DECLARES, 'a', len(DECLARES))
+type(guatiao_library), save :: library
+logical, save :: made = .false.
+
+function guatiao_library_entry(host) bind(c, name='guatiao_library_entry') result(info)
+  type(c_ptr), value :: host
+  type(c_ptr) :: info
+  if (.not. made) then
+    library = my_library()
+    made = .true.
+  end if
+  info = library%answer(host)
+end function
+```
+
+On Linux and macOS both are exported as any global symbol is. On Windows
+link a `.def` file naming them (`EXPORTS`, `guatiao_library_entry`,
+`guatiao_declares DATA`), which MinGW's `ld`, `lld-link` and MSVC's
+`link` all take: flang ignores `!DIR$ ATTRIBUTES DLLEXPORT`, and gfortran
+refuses `!GCC$ ATTRIBUTES DLLEXPORT` on an initialised `bind(c)`
+variable. Build the file with CMake (`add_library(... SHARED)`, the `.def`
+among its sources on Windows): fpm builds a shared library per package,
+and the binding's would then be a second file named like guatiao's own.
+The library
+finds guatiao as any program does (`GUATIAO_LIBRARY` or the platform's
+search).
+
+## Writing a kind module
+
+One module per kind header, written once by the kind's author: a
+`bind(c)` mirror of each table; per kind an abstract type extending
+`guatiao_impl` (a deferred procedure per required slot, an ordinary one
+answering `GUATIAO_ERR_UNSUPPORTED` per optional slot), a `guatiao_kind`
+description (`name`, `floor_hash` as the uint32's bits, `floor_size`, the
+table's `size`, `object`, `object_table`, and an `accepts` function doing
+a `select type`), a remote type extending the kind with a `guatiao_remote`
+component and a method per slot calling the slot through
+`c_f_procpointer`, a `<kind>_serving` function filling a table per set of
+optional slots, and a `bind(c)` module procedure per slot: it finds its
+object with `guatiao_impl_at(ctx, kind)`, converts the arguments with the
+`guatiao_kinds` helpers (`guatiao_text_in`, `guatiao_bytes_in`,
+`guatiao_map_carrier` and `guatiao_settle_map`, `guatiao_value_carrier`
+and `guatiao_settle_value`, `guatiao_lent_map` and
+`guatiao_end_lent_map`, `guatiao_taken_map`, `guatiao_borrowed_map`,
+`guatiao_borrowed_value`, `guatiao_take_object`, `guatiao_lend_object`
+and `guatiao_end_lent_object`, `guatiao_serve_object`,
+`guatiao_lend_impl`, `guatiao_string_out`), calls the method in a
+`select type`, and answers `guatiao_failed(error, err)` or
+`guatiao_warn(error, slot)`. Mark each `recursive`, initialise no local
+in its declaration (that implies `save`), and call no function returning
+deferred-length text (see Threads).
+
+**A `guatiao_object` passed by value** (24 bytes) is read wrongly by
+flang 22 in a `bind(c)` procedure and passed wrongly through a procedure
+pointer, on AArch64 and Windows, where the ABI passes the address of the
+caller's copy. Write such an argument as that address under flang there,
+by value elsewhere:
+
+```fortran
+#if defined(__flang__) && (defined(__aarch64__) || defined(_WIN32))
+  type(c_ptr), value :: obj_at        ! c_f_pointer it to a type(gt_object)
+#else
+  type(gt_object), value :: obj
+#endif
+```
+
+`guatiao_str`, `guatiao_bytes` and `guatiao_bytes_mut` (16 bytes) cross
+by value on every compiler.
+
 ## guatiao_serde: JSON, TOML, YAML
 
 ```fortran
@@ -246,7 +497,9 @@ call guatiao_normalize(GUATIAO_FORM_SPAN, '1h 30m', text)  ! "PT1H30M"
 ## Threads
 
 The binding keeps no mutable state a call shares, past opening the
-library. gfortran 14 and older keep the length of a function's
+library and building a library's descriptor (the first entry call). A
+served slot runs on the calling thread; a registry, a value and a remote
+holding an object are not safe from two threads at once. gfortran 14 and older keep the length of a function's
 deferred-length character result in static storage, so two threads
 calling such a function at once (`string_or`, `number_text`,
 `path_text`, `guatiao_status_name`) corrupt the heap there; the

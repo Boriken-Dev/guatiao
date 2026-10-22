@@ -116,7 +116,7 @@ contains
     character(:), allocatable :: name
     name = guatiao_status_name(status)
     if (len(message) > 0) then
-      error stop 'guatiao: ' // message // ' (' // name // ')'
+      error stop message // ' (' // name // ')'
     else
       error stop 'guatiao: ' // name
     end if

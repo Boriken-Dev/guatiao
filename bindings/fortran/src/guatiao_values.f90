@@ -26,8 +26,8 @@ module guatiao_values
   public :: guatiao_map, guatiao_list, guatiao_null, guatiao_absent, guatiao_of, guatiao_number
   public :: guatiao_value_from_raw
   public :: GT_VIA_PATH, GT_VIA_RESOLVE, gt_via
-  public :: gt_new_owned, gt_borrowed, gt_end_borrow, gt_node, gt_root, gt_box_alloc, gt_writable_node, &
-            gt_take_tree, gt_is_closed, gt_read_only, gt_real_text, gt_parse_int64
+  public :: gt_wrap, gt_same_tree, gt_set_frees, gt_new_owned, gt_borrowed, gt_end_borrow, gt_node, gt_root, &
+            gt_box_alloc, gt_writable_node, gt_take_tree, gt_is_closed, gt_read_only, gt_real_text, gt_parse_int64
 
   !> A piece of text, for a list of keys.
   type :: guatiao_text
@@ -217,12 +217,49 @@ contains
     allocate(v%path(0))
   end function
 
-  !> Ends a borrowed handle's tree: every copy reads closed from now.
+  !> Ends a borrowed or wrapped handle's tree: every copy reads closed
+  !> from now, and nothing of the tree is freed.
   subroutine gt_end_borrow(v)
     type(guatiao_value), intent(inout) :: v
     if (.not. associated(v%box)) return
+    if (associated(v%box%owned)) deallocate(v%box%owned)
     v%box%root = c_null_ptr
     v%box%closed = .true.
+  end subroutine
+
+  !> A handle on a root node of its own holding `node`'s 40 bytes: a map
+  !> arm another side passed, made a value. `frees` says whether the tree
+  !> is this handle's to free (a tree handed over) or not (lent,
+  !> borrowed, a carrier until it is settled).
+  function gt_wrap(node, frees, read_only, alloc) result(v)
+    type(gt_value), intent(in) :: node
+    logical, intent(in) :: frees, read_only
+    type(c_ptr), intent(in) :: alloc
+    type(guatiao_value) :: v
+    type(c_ptr) :: root
+    type(gt_value), pointer :: n
+    call gt_new_owned(v, alloc, root)
+    call c_f_pointer(root, n)
+    n = node
+    v%box%frees = frees
+    v%box%read_only = read_only
+  end function
+
+  !> Whether two handles name the root of one tree.
+  logical function gt_same_tree(a, b)
+    type(guatiao_value), intent(in) :: a, b
+    gt_same_tree = .false.
+    if (.not. associated(a%box) .or. .not. associated(b%box)) return
+    if (.not. associated(a%box, b%box)) return
+    if (.not. allocated(a%path) .or. .not. allocated(b%path)) return
+    gt_same_tree = size(a%path) == 0 .and. size(b%path) == 0
+  end function
+
+  !> Makes the tree this handle's to free, or not.
+  subroutine gt_set_frees(v, frees)
+    type(guatiao_value), intent(inout) :: v
+    logical, intent(in) :: frees
+    if (associated(v%box)) v%box%frees = frees
   end subroutine
 
   !> The root of the tree this handle is on, or null.
@@ -263,7 +300,7 @@ contains
       stat = GUATIAO_STAT_CLOSED
       return
     end if
-    if (.not. v%box%frees) then
+    if (.not. v%box%frees .or. v%box%read_only .or. v%view_only .or. size(v%path) > 0) then
       stat = GUATIAO_STAT_READ_ONLY
       return
     end if
