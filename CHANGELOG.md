@@ -362,6 +362,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   caller's carrier names; every call that can reach a library is made in a
   GC-safe region. The Julia examples: `examples/greeter_kind/julia/`,
   `examples/julia_host/` and `examples/julia_provider/`.
+- **R bindings**, `bindings/r/` (package `guatiao`, version `0.0.0.1`
+  for this alpha: R takes no letters in a version, so `0.0.0-alpha.N` is
+  written `0.0.0.N`): a source package for R 4.2 and later whose C glue,
+  compiled when it installs, needs libffi and opens the library found
+  through `GUATIAO_LIBRARY` or `use_library(path)`. `value()` builds a
+  tree from R data (named lists are maps, unnamed lists and vectors are
+  lists) and `$`, `[[`, `names`, `length`, `as.list`, `value_data()` read
+  it, with `push`, `insert`, `delete`, `clear` and `merge_from` to change
+  it; numbers keep their exact text (`number()`) where a double would
+  lose it. `schema_of()` writes the JSON Schema of an S4 class and
+  `from_value()` reads a value back as one; `config_class()` adds
+  defaults and docs. `Date`, `civil_time`, `civil_datetime`, `instant`,
+  `span` and `exact_length`; `serde_parse`/`serde_emit`, the `intake_*`
+  functions, `redact`, and `guatiao_error` with the status table.
+- **R: the registry, kinds and providers.** `registry()` answers an
+  object whose methods (`$scan_dir`, `$providers`, `$bind`, `$create`,
+  `$retire`, `$collect`, `$unload`, `$add_source_file`, `$watch_dir`,
+  `$refresh`) host libraries. `kind()` declares a kind from its C header:
+  a virtual S4 class, a generic per slot (`method()`, with `lent()` and
+  `taken()` shapes) and a remote class calling the slots. A provider is an
+  S4 or Reference class containing its kinds with methods of their
+  generics, declared with `provider()`, in a library `library_of()` reads
+  from a package: id, version, authors and licence from its `DESCRIPTION`,
+  its licence and notice files as notices. A slot an R object serves runs
+  on R's main thread only: called from any other thread it answers
+  `Unsupported` without running, and a destroy asked for there waits for
+  R's thread. The R examples: `examples/greeter_kind/r/`,
+  `examples/r_host/` and `examples/r_provider/`.
 
 ### Changed
 
