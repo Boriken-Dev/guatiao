@@ -695,6 +695,8 @@ jobs:
       - name: libffi, which the package's glue compiles against
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libffi-dev
+      - name: bit64, which the package suggests and its integer64 tests need
+        run: Rscript -e 'install.packages("bit64")' -e 'stopifnot(requireNamespace("bit64"))'
       - name: Build and check the package
         run: |
           case "$RUNNER_OS" in
