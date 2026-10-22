@@ -312,6 +312,12 @@ impl HostRegistry {
         self.inner.provider(key).and_then(Provider::config_schema)
     }
 
+    /// One provider's `meta`: `None` for an unknown key, `Some(None)` for a
+    /// provider that declares none.
+    fn meta(&self, key: &str) -> Option<Option<&Map>> {
+        self.inner.provider(key).map(Provider::meta)
+    }
+
     /// Refreshes every source and describes what changed.
     fn refresh(&mut self, alloc: Alloc) -> Result<Value, ValueError> {
         refreshed_value(alloc, &self.inner.refresh())
@@ -1740,6 +1746,53 @@ pub unsafe extern "C" fn guatiao_registry_provider_config(
         registry
             .config(key)
             .map_or(core::ptr::null(), |v| v as *const Value)
+    })
+}
+
+/// One provider's `meta` map, copied into `alloc`: whatever else it
+/// declared, such as its legal notices or, under `"form"`, how a person is
+/// shown its configuration.
+///
+/// `out` holds the map, or stays ABSENT when the provider declares no
+/// `meta`; both answer `GUATIAO_OK`. `GUATIAO_ERR_NOT_FOUND` when nothing
+/// answers to `key`. A copy rather than a borrow, unlike
+/// [`guatiao_registry_provider_config`]: the caller frees it with
+/// `guatiao_value_free` and may keep it past the library.
+///
+/// # Safety
+///
+/// As [`guatiao_registry_provider`].
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_registry_provider_meta(
+    reg: *const HostRegistry,
+    key: Str,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    out!(out);
+    guard(|| {
+        // SAFETY: the caller's contract.
+        let Some(registry) = (unsafe { HostRegistry::get(reg) }) else {
+            return Status::GUATIAO_ERR_NULL;
+        };
+        let key = match core::str::from_utf8(key.into()) {
+            Ok(t) => t,
+            Err(e) => return e.into(),
+        };
+        // SAFETY: null or valid by the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        match registry.meta(key) {
+            None => Status::GUATIAO_ERR_NOT_FOUND,
+            Some(None) => Status::GUATIAO_OK,
+            Some(Some(meta)) => match meta.clone_in(alloc) {
+                // SAFETY: `out` is null or the caller's slot, written ABSENT
+                // on entry; the copy already records `alloc`.
+                Ok(copy) => unsafe { Value::from(copy).write_to(out, alloc.as_raw()) },
+                Err(e) => e.into(),
+            },
+        }
     })
 }
 

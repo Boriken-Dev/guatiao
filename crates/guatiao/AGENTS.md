@@ -2033,7 +2033,8 @@ guatiao_registry_libraries(reg, &alloc, &answer);
 const void *vt = guatiao_registry_provider_table(reg, key, guatiao_cstr("greeter"), &size);  // by kind
 const void *one = guatiao_registry_provider_vtable(reg, key, &size);                       // its single table
 void *ctx = guatiao_registry_provider_ctx(reg, key);
-const guatiao_value *schema = guatiao_registry_provider_config(reg, key);
+const guatiao_value *schema = guatiao_registry_provider_config(reg, key);   // borrowed
+guatiao_registry_provider_meta(reg, key, &alloc, &answer);      // a copy; ABSENT when it declares none
 guatiao_registry_free(reg);
 ```
 
@@ -2059,7 +2060,11 @@ has_config, vtable_size}`; a library map is `{key, id, version, path,
 providers, skipped}`. Free each answer with `guatiao_value_free`.
 
 **The exceptions are what is not data**: the vtable, its size, the `ctx`,
-and the borrowed config schema have their own accessors. A pointer inside
+and the borrowed config schema have their own accessors. A provider's
+`meta` has one too, so a listing does not copy it per provider:
+`guatiao_registry_provider_meta` writes a copy in `alloc` (ABSENT for a
+provider that declares none, `GUATIAO_ERR_NOT_FOUND` for an unknown key),
+which outlives the library. A pointer inside
 a map would be a number a caller has to cast back, and reading one is the
 moment a caller takes on the kind's contract.
 

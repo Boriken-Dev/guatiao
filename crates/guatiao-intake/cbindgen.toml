@@ -54,6 +54,13 @@ trailer = """
 #define GUATIAO_INTAKE_KEY_X_SECTION "x-section"
 #define GUATIAO_INTAKE_KEY_X_ORDER "x-order"
 #define GUATIAO_INTAKE_KEY_X_ADVANCED "x-advanced"
+
+/* ---- where a provider carries its form ------------------------------- */
+
+/* The key of a provider's `meta` holding its form document: what
+   `#[provider(.., form = ..)]` writes, and what a host reads back with
+   `guatiao_registry_provider_meta` before `guatiao_intake_check`. */
+#define GUATIAO_INTAKE_PROVIDER_FORM_KEY "form"
 """
 
 # Every type in a signature here comes from `guatiao.h`, included above.

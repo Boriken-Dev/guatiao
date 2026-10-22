@@ -124,6 +124,23 @@ fn every_schema_key_this_crate_adds_reaches_the_header_as_a_macro() {
     );
 }
 
+/// **The key a provider's form travels under reaches the header**, so a C
+/// host reading a form out of `meta` does not spell it by hand.
+#[test]
+fn the_provider_form_key_reaches_the_header_as_a_macro() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let header = std::fs::read_to_string(manifest.join("include/guatiao_intake.h"))
+        .expect("the header is committed");
+    let line = format!(
+        "#define GUATIAO_INTAKE_PROVIDER_FORM_KEY \"{}\"",
+        guatiao_intake::PROVIDER_FORM_KEY
+    );
+    assert!(
+        header.lines().any(|l| l.trim() == line),
+        "the header lacks `{line}`: add it to the trailer in cbindgen.toml and regenerate"
+    );
+}
+
 #[cfg(feature = "c-header")]
 fn first_difference(a: &str, b: &str) -> Option<String> {
     for (n, (x, y)) in a.lines().zip(b.lines()).enumerate() {

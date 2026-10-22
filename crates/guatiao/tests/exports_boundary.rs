@@ -939,6 +939,12 @@ fn registry_cases() -> Vec<(&'static str, fn())> {
                 guatiao_registry_provider(reg(), Str::new("k"), a(), out)
             });
         }),
+        ("guatiao_registry_provider_meta", || {
+            // SAFETY: as above.
+            leaves_absent("provider_meta", NULL, |out| unsafe {
+                guatiao_registry_provider_meta(reg(), Str::new("k"), a(), out)
+            });
+        }),
         ("guatiao_registry_available", || {
             // SAFETY: as above.
             leaves_absent("available", NULL, |out| unsafe {
