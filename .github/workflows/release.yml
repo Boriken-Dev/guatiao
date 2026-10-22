@@ -117,6 +117,11 @@ jobs:
               want_r = plain.group(1) + (f".{plain.group(2)}" if plain.group(2) else "")
               if described != want_r:
                   problems.append(f"Cargo says {cargo}, so bindings/r/DESCRIPTION wants {want_r}, not {described}")
+          # The Octave package writes the version as Cargo does; the MATLAB
+          # toolbox is versioned from it when it is built.
+          octave = re.search(r"^Version:\s*(\S+)", pathlib.Path("bindings/matlab/DESCRIPTION").read_text(), re.M).group(1)
+          if octave != cargo:
+              problems.append(f"Cargo says {cargo} and bindings/matlab/DESCRIPTION says {octave}")
           tag = os.environ["TAG"]
           if tag:
               want = tag[1:] if tag.startswith("v") else tag
@@ -324,9 +329,117 @@ jobs:
           path: r/
           if-no-files-found: error
 
+  build-octave:
+    name: Build and check the Octave package
+    needs: [test, version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the libraries the check calls
+        run: cargo build -p guatiao -p guatiao-serde -p guatiao-intake --all-features
+      - name: Octave and libffi
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends octave octave-dev libffi-dev
+      # What `pkg install` takes: DESCRIPTION, COPYING, the M files under
+      # inst/ and the gateway's C sources under src/, in a folder named for
+      # the package. The tests and their fixtures stay in the repository.
+      - name: Build the package
+        run: |
+          version=$(sed -n 's/^Version: *//p' bindings/matlab/DESCRIPTION)
+          mkdir -p octave stage/guatiao
+          cp -r bindings/matlab/DESCRIPTION bindings/matlab/COPYING bindings/matlab/README.md \
+            bindings/matlab/inst bindings/matlab/src stage/guatiao/
+          tar -czf "octave/guatiao-$version.tar.gz" -C stage guatiao
+          echo "OCTAVE_PACKAGE=$PWD/octave/guatiao-$version.tar.gz" >> "$GITHUB_ENV"
+      - name: Install it and use it
+        run: |
+          octave-cli --no-gui --eval "pkg('prefix', '$RUNNER_TEMP/pkg', '$RUNNER_TEMP/pkg'); pkg('local_list', '$RUNNER_TEMP/pkg/list'); pkg('install', getenv('OCTAVE_PACKAGE')); pkg('load', 'guatiao'); v = guatiao.Value(struct('a', {{1, 2}})); assert(strcmp(guatiao.serde.emit(v), '{\"a\":[1,2]}')); assert(exist('guatiao_mex') == 3); disp('installed and working')"
+        env:
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+      - name: What the package ships
+        shell: python
+        run: |
+          import glob
+          import tarfile
+
+          (path,) = glob.glob("octave/guatiao-*.tar.gz")
+          names = {n.split("/", 1)[1] for n in tarfile.open(path).getnames() if "/" in n}
+          print("\n".join(sorted(names)))
+          for need in ("DESCRIPTION", "COPYING", "README.md", "inst/AGENTS.md", "inst/+guatiao/Value.m",
+                       "src/Makefile", "src/guatiao_mex.c", "src/guatiao.h"):
+              assert need in names, f"{need} does not ship"
+          assert not any(".local." in n or n.split("/")[-1].startswith(".") for n in names), "a private file ships"
+          assert not any(n.endswith((".o", ".mex", ".oct", ".so", ".dll")) for n in names), "a build output ships"
+          assert not any(n.startswith("tests") for n in names), "the tests ship"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: octave
+          path: octave/
+          if-no-files-found: error
+
+  build-matlab:
+    name: Build and check the MATLAB toolbox
+    needs: [test, version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      # A toolbox's version is numbers only: X.Y.Z-alpha.N is X.Y.Z.N.
+      - name: Stage the toolbox
+        run: |
+          version=$(sed -n 's/^Version: *//p' bindings/matlab/DESCRIPTION)
+          toolbox=$(echo "$version" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+)-alpha\.([0-9]+)$/\1.\2/')
+          echo "$toolbox" | grep -qE '^[0-9]+(\.[0-9]+){2,3}$' || { echo "no toolbox version for $version"; exit 1; }
+          mkdir -p matlab toolbox
+          cp -r bindings/matlab/inst/. toolbox/
+          cp -r bindings/matlab/src bindings/matlab/README.md bindings/matlab/COPYING toolbox/
+          echo "TOOLBOX_VERSION=$toolbox" >> "$GITHUB_ENV"
+      - uses: matlab-actions/setup-matlab@v3
+        with:
+          release: latest
+      # The identifier names this toolbox across versions; it never changes.
+      - name: Package the toolbox
+        uses: matlab-actions/run-command@v3
+        with:
+          command: >
+            o = matlab.addons.toolbox.ToolboxOptions(fullfile(pwd, 'toolbox'), '1ee54c3a-a864-43ba-88a0-b8d90ba97cc0');
+            o.ToolboxName = 'guatiao';
+            o.ToolboxVersion = getenv('TOOLBOX_VERSION');
+            o.Summary = 'Values, schemas and plugin libraries across languages, over the guatiao C ABI.';
+            o.Description = 'Run guatiao.build() once after installing: it compiles the MEX file (a C compiler and libffi). The guatiao library itself is not included: name it with GUATIAO_LIBRARY.';
+            o.AuthorName = 'jose-pr';
+            o.AuthorEmail = 'jose-pr@coqui.dev';
+            o.MinimumMatlabRelease = 'R2024a';
+            o.ToolboxMatlabPath = {fullfile(pwd, 'toolbox')};
+            o.OutputFile = fullfile(pwd, 'matlab', 'guatiao.mltbx');
+            matlab.addons.toolbox.packageToolbox(o);
+            disp(o.OutputFile);
+      - name: What the toolbox ships
+        shell: python
+        run: |
+          import zipfile
+
+          names = set(zipfile.ZipFile("matlab/guatiao.mltbx").namelist())
+          print("\n".join(sorted(names)))
+          for need in ("AGENTS.md", "+guatiao/Value.m", "+guatiao/build.m", "src/guatiao_mex.c", "src/guatiao.h"):
+              assert any(n.endswith("fsroot/" + need) for n in names), f"{need} does not ship"
+          assert not any(".local." in n for n in names), "a private file ships"
+          assert not any(n.endswith((".o", ".mex", ".mexa64", ".mexw64", ".mexmaca64")) for n in names), "a build output ships"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: matlab
+          path: matlab/
+          if-no-files-found: error
+
   github-release:
     name: Create the GitHub release
-    needs: [docs-gate, build-crates, build-python, build-dart, build-node, build-go, build-julia, build-r]
+    needs: [docs-gate, build-crates, build-python, build-dart, build-node, build-go, build-julia, build-r, build-octave, build-matlab]
     if: ${{ github.ref_type == 'tag' }}
     runs-on: ubuntu-latest
     permissions:
@@ -350,6 +463,14 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: r
+          path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: octave
+          path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: matlab
           path: dist/
       - name: Extract the CHANGELOG.md section for this tag
         shell: python
