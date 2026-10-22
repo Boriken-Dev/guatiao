@@ -338,10 +338,7 @@ int gt_need(gt_call *c, int lib) {
   if (r == 0) {
     snprintf(opened[lib], sizeof opened[lib], "%s", path);
     /* Trees and descriptors may now record code in this image: it stays. */
-    if (!locked) {
-      mexLock();
-      locked = 1;
-    }
+    gt_lock_gateway();
     return 1;
   }
   if (r == 2)
@@ -361,6 +358,13 @@ int gt_missing(gt_call *c, int lib, const char *name) {
 }
 
 int gt_locked(void) { return locked; }
+
+void gt_lock_gateway(void) {
+  if (!locked) {
+    mexLock();
+    locked = 1;
+  }
+}
 
 const char *gt_opened_path(int lib) { return lib >= 0 && lib <= 2 ? opened[lib] : ""; }
 

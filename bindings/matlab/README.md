@@ -7,7 +7,7 @@
 MATLAB and GNU Octave bindings for the
 [guatiao](https://github.com/Boriken-Dev/guatiao/) ABI: **one value model
 for passing data between languages**, a JSON Schema that describes a
-value, its JSON, TOML and YAML text, and forms. A `+guatiao` package of
+value, and a registry that loads plugin libraries. A `+guatiao` package of
 `classdef` and functions that both MATLAB and Octave run, over one small
 MEX file built from C on your machine, which opens the library at run
 time. It works with any shared library that exports the ABI, whether that
@@ -25,6 +25,22 @@ is `guatiao` itself or an application that carries it.
 - **Numbers keep their exact text** — `1.10` stays `1.10`, an integer
   past 2^53 reads back as `int64`/`uint64`, and anything wider survives as
   `guatiao.Number('18446744073709551615.5')`.
+- **Be a plugin host** — scan a folder, filter on what a library declares
+  before loading it, list providers best first, build an instance from a
+  configuration, call a provider through its table with MATLAB values in
+  and out, and keep sources of libraries that come and go
+  (`reg.refresh()`).
+- **A kind is a classdef** — declared once from its C header, with a
+  method per slot; a remote is an instance of that class bound to a table,
+  so code written against the kind takes a local provider or a remote
+  alike.
+- **Write a provider in M** — a handle class inheriting the kinds it
+  serves and overriding their methods, in a library a host calls the way it
+  calls one written in Rust, C, Python, Go, Julia or R; the folder is the
+  library, named and versioned by its `DESCRIPTION`.
+- **Hand a library an M object** — any object of a class implementing an
+  object kind (a listener, a callback) becomes an object a library calls,
+  or holds until it is done with it.
 - **A configuration is a field list** — `guatiao.Config` writes the JSON
   Schema it describes and reads a configuration back as a struct with its
   defaults.
@@ -69,7 +85,7 @@ the platform's library search is tried by file name.
 
 | Exports from | Needed for |
 | --- | --- |
-| `guatiao` | values, schemas, time, redaction |
+| `guatiao` | values, the registry, kinds and providers, schemas, time, redaction |
 | `guatiao_serde` | `guatiao.serde.parse`, `guatiao.serde.emit`: JSON, and TOML and YAML when the library has them |
 | `guatiao_intake` | the `guatiao.intake` functions |
 
@@ -105,6 +121,60 @@ n.data('Numbers', 'text')   % guatiao.Number 1.10
 n.data()                    % 1.1
 ```
 
+### Hosting plugins
+
+```matlab
+reg = guatiao.Registry('my-host', '1.0');
+reg.scan_dir('/opt/plugins', 'kind=greeter');
+providers = reg.providers('greeter');
+
+greeter = reg.bind('acme_hello', 'greeterkind.Greeter');   % the kind's class
+answer = greeter.greet('ana');      % a guatiao.Value: {greeting: "hello, ana"}
+answer.close();
+reg.close();
+```
+
+### A kind, and a provider of it
+
+A kind is a class declared once, from its C header:
+
+```matlab
+classdef Greeter < guatiao.Kind
+  properties (Constant, Hidden)
+    GreeterKind = guatiao.Kind.describe('greeter', 2695856491, ...
+      guatiao.slot('greet', {'name', 'string'}, 'Returns', 'map', 'Required', true, 'Fallible', true), ...
+      guatiao.slot('shout', {'name', 'string'}, 'Returns', 'string'))
+  end
+  methods
+    function out = greet(self, name), out = self.call('greet', name); end
+    function out = shout(self, name), out = self.call('shout', name); end
+  end
+end
+```
+
+A provider is a class inheriting it and overriding its methods:
+
+```matlab
+classdef Hello < greeterkind.Greeter
+  properties (Constant, Hidden)
+    Provider = guatiao.provider('DisplayName', 'Hello, in M')
+  end
+  methods
+    function out = greet(self, name)
+      if isempty(name), error('guatiao:BadValue', 'nobody to greet'); end
+      out = struct('greeting', ['hello, ' name]);
+    end
+  end
+end
+```
+
+```matlab
+reg.register_library(guatiao.library_of('mypackage'))   % the folder declaring it is the library
+```
+
+A host in this session, written in any language, calls `Hello` through
+the same table it would call a Rust or C greeter through.
+
 ### A configuration's schema
 
 ```matlab
@@ -131,6 +201,13 @@ char(guatiao.time.parse('timestamp', '2026-10-21T19:15:00.5+05:30'))  % '2026-10
 
 ## Known limits
 
+- **M code runs only on the interpreter's thread, inside a call into
+  guatiao.** A library that calls a provider written in M from a thread of
+  its own, or with no call into guatiao in progress, is answered
+  `Unsupported` at once, the provider never running; a destroy it asks for
+  there waits for the interpreter's thread. Hosts that call providers from
+  worker threads need providers written in another language. C code of
+  your own that calls M providers runs inside `guatiao.serving`.
 - A 1x1 array is a scalar: wrap it in a cell (`{5}`) for a list of one. A
   matrix is a list of rows; arrays of more than two dimensions are
   refused.
@@ -139,6 +216,12 @@ char(guatiao.time.parse('timestamp', '2026-10-21T19:15:00.5+05:30'))  % '2026-10
 - Octave cannot index the result of a package function call in place:
   `x = guatiao.intake.at(v, 'a'); x.data()`, not
   `guatiao.intake.at(v, 'a').data()`.
+- A remote cannot run a kind's default body for a slot an older table
+  lacks, as a Rust caller does: `has_slot` asks, and the call raises
+  `Unsupported`.
+- An M library is registered in a host in the same session; there is no
+  library file a foreign host's scan loads, since that would need MATLAB
+  or Octave embedded in it.
 - 64-bit platforms only. On Windows ARM64, Octave and MATLAB are x64
   builds and need an x64 build of the library.
 
@@ -152,6 +235,9 @@ char(guatiao.time.parse('timestamp', '2026-10-21T19:15:00.5+05:30'))  % '2026-10
 | `guatiao.redact` | secrets hidden |
 | `guatiao.serde.parse`, `guatiao.serde.emit` | JSON, TOML, YAML |
 | `guatiao.intake.*` | forms and the flat projection |
+| `guatiao.Registry`, `guatiao.Instance` | hosting plugins: `scan_dir`, `providers`, `bind`, `create`, `refresh`, ... |
+| `guatiao.Kind`, `guatiao.slot`, `guatiao.lent`, `guatiao.taken`, `guatiao.Buffer` | a kind, declared from its C header |
+| `guatiao.provider`, `guatiao.Library`, `guatiao.library_of`, `guatiao.serving` | providers and libraries written in M |
 | `guatiao.use_library`, `guatiao.has_export`, `guatiao.statuses`, `guatiao.build` | the library, errors, the MEX file |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/matlab/inst/AGENTS.md)
@@ -169,9 +255,13 @@ matlab -batch "cd bindings/matlab/tests; assert(run_tests())"
 
 `run_tests` builds the MEX file when it is not on the path, then runs
 every `t_*.m`. The tests need the three libraries in one folder, named by
-`GUATIAO_LIBRARY`, and a checkout for the shared vectors; the
-repository's own `AGENTS.md` says how to produce the build.
-`GUATIAO_REQUIRE_ALL=1` makes a skipped case a failure.
+`GUATIAO_LIBRARY`, and a checkout for the shared vectors and the examples;
+the repository's own `AGENTS.md` says how to produce the build.
+`GUATIAO_C_GREETER`, `GUATIAO_GO_LIBRARY` and `GUATIAO_PY_BRIDGE` add the
+greeters written in C, Go and Python; `GUATIAO_REQUIRE_ALL=1` makes a
+skipped case a failure. The examples (`examples/greeter_kind/matlab`,
+`examples/matlab_provider/mlgreeter`, `examples/matlab_host`) hold the
+greeter kinds, a library of providers and a host written in M.
 
 ## License
 

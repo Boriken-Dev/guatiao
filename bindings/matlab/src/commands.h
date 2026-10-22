@@ -53,4 +53,42 @@
   X(intake_flatten)                                                            \
   X(intake_unflatten)                                                          \
   X(redact)                                                                    \
-  X(schema_validate)
+  X(schema_validate)                                                           \
+  X(kind_new)                                                                  \
+  X(table_floor_hash)                                                          \
+  X(remote_new)                                                                \
+  X(remote_has)                                                                \
+  X(remote_close)                                                              \
+  X(remote_live)                                                               \
+  X(remote_call)                                                               \
+  X(pending_destroys)                                                          \
+  X(served_table)                                                              \
+  X(answer)                                                                    \
+  X(library_new)                                                               \
+  X(library_entry)                                                             \
+  X(library_close)                                                             \
+  X(library_live)                                                              \
+  X(library_info)                                                              \
+  X(registry_new)                                                              \
+  X(registry_free)                                                             \
+  X(registry_is_open)                                                          \
+  X(registry_load_file)                                                        \
+  X(registry_register_entry)                                                   \
+  X(registry_scan)                                                             \
+  X(registry_query)                                                            \
+  X(registry_provider_available)                                               \
+  X(registry_keyed_by)                                                         \
+  X(registry_set_priority)                                                     \
+  X(registry_priority)                                                         \
+  X(registry_provider_table)                                                   \
+  X(registry_provider_config)                                                  \
+  X(registry_host)                                                             \
+  X(registry_create)                                                           \
+  X(instance_ctx)                                                              \
+  X(instance_destroy)                                                          \
+  X(registry_retire)                                                           \
+  X(registry_collect)                                                          \
+  X(registry_unload)                                                           \
+  X(registry_add_source_file)                                                  \
+  X(registry_watch_dir)                                                        \
+  X(registry_refresh)

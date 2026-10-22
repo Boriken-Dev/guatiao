@@ -102,6 +102,10 @@ int gt_need(gt_call *c, int lib);
 /* Whether the gateway has locked itself (a library is open). */
 int gt_locked(void);
 
+/* Keeps the gateway loaded for the session: called before anything that
+ * hands out code in its image (a closure, a table of them). */
+void gt_lock_gateway(void);
+
 /* Refuses for an export the loaded build lacks, naming its feature. */
 int gt_missing(gt_call *c, int lib, const char *name);
 

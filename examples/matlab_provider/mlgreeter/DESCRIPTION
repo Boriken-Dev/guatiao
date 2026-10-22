@@ -1,0 +1,13 @@
+Name: mlgreeter
+Version: 1.0.0
+Date: 2026-10-22
+Title: Greeters Written in M
+Author: jose-pr <jose-pr@coqui.dev>
+Maintainer: jose-pr <jose-pr@coqui.dev>
+Description: Greeters written in M: the same kinds the Rust, C and Python
+ greeters serve, offered by a library any host in this MATLAB or Octave
+ session calls. The package is the library.
+Depends: guatiao
+License: MPL-2.0
+Categories: Example
+Url: https://github.com/Boriken-Dev/guatiao
