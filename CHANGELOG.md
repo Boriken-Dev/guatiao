@@ -548,6 +548,11 @@ write now.
     any of the three libraries. `guatiao` registers the C table
     `guatiao_r_api` (`include/guatiao_r_api.h`) for a package over another
     guatiao library.
+  - MATLAB and Octave: `guatiao.serde` and `guatiao.intake` stay
+    sub-packages of the one toolbox and Octave package (one gateway), each
+    calling its own library: they gain their own `use_library`, and
+    `guatiao.use_library` names only the core's (a file it named was the
+    place the others were looked for beside).
 - **Breaking: `clone()` copies into this binary's allocator.** `clone()`
   (and `to_owned()`) on `Value`, `Map`, `List`, `Text`, `Buffer` and
   `Number` builds the copy through `Alloc::rust()`, whatever allocator the
