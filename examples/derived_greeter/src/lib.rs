@@ -9,13 +9,13 @@ extern crate alloc;
 
 use core::sync::atomic::{AtomicI64, Ordering};
 
-use greeter_kind::{Conversation, Counter, Greeter, Listener};
+use greeter_kind::{Conversation, Counter, Greeter, Listener, Wide};
 use guatiao::library::{Object, ProviderError};
 use guatiao::{Alloc, Map, Provider, Status, Text, TryAsRef};
 
-/// One provider serving two kinds.
+/// One provider serving three kinds.
 #[derive(Default, Provider)]
-#[provider(Greeter, Counter)]
+#[provider(Greeter, Counter, Wide)]
 pub struct Hello {
     asked: AtomicI64,
 }
@@ -128,6 +128,16 @@ impl Conversation for Chat {
 impl Counter for Hello {
     fn count(&self) -> i64 {
         self.asked.fetch_add(1, Ordering::Relaxed) + 1
+    }
+}
+
+impl Wide for Hello {
+    fn echo_i64(&self, x: i64) -> Result<i64, ProviderError> {
+        Ok(x)
+    }
+
+    fn echo_u64(&self, x: u64) -> Result<u64, ProviderError> {
+        Ok(x)
     }
 }
 

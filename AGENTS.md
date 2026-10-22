@@ -22,7 +22,7 @@ public surface); this file is about the repository.
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build; its `tests/docs_snippets.rs` compiles the Rust snippets of `docs/index.md`, `docs/ownership.md` and the root `README.md` and compares them with the text shown |
 | `examples/python_host/` | a host program in Python: scans for greeters in any language, optionally adds `guatiao-py`, calls every slot; `bindings/python/tests/test_examples.py` runs it |
 | `examples/python_provider/` | two libraries written in Python, each a module and a `*.guatiao-py.toml` manifest; commands in its `README.md` |
-| `examples/greeter_caller/` | a cdylib with one C function that calls every slot of a greeter through the kind's Rust proxy, for a host in another language to have its greeters called from Rust |
+| `examples/greeter_caller/` | a cdylib whose C functions call every slot of a greeter, or of a `wide` provider, through the kind's Rust proxy, for a host in another language to have its providers called from Rust |
 | `examples/package.json` | the Node examples' one dependency, on `bindings/node`: `npm ci` here, after `npm run build` there |
 | `examples/node_host/` | a host program in TypeScript: scans for greeters in any language, registers Node libraries, optionally adds `guatiao-py`, calls every slot; `bindings/node/test/examples.test.ts` runs it |
 | `examples/node_provider/` | `node_greeter/`, a library written in TypeScript: a package whose module is the library |

@@ -35,7 +35,7 @@ header = """
 # Every table, by name. A kind crate exports no functions, so nothing
 # references its tables and cbindgen would emit an empty header.
 [export]
-include = ["GreeterVtable", "CounterVtable", "ConversationVtable", "ListenerVtable"]
+include = ["GreeterVtable", "CounterVtable", "ConversationVtable", "ListenerVtable", "WideVtable"]
 
 # The tables are named for Rust here and for C in the header. The types
 # they refer to are guatiao's, under the names guatiao.h declares them:
@@ -49,6 +49,7 @@ include = ["GreeterVtable", "CounterVtable", "ConversationVtable", "ListenerVtab
 "CounterVtable" = "counter_vtable"
 "ConversationVtable" = "conversation_vtable"
 "ListenerVtable" = "listener_vtable"
+"WideVtable" = "wide_vtable"
 
 [parse]
 parse_deps = false

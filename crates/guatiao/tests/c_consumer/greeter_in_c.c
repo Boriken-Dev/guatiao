@@ -44,6 +44,9 @@
  * slots through it and neither keeps it nor calls its `destroy`. And
  * `c_greeter_lend_tape` is the other direction: C lending an object of
  * its own to a greeter's `greet_into`, whoever wrote the greeter.
+ *
+ * The same provider serves the `wide` kind too: a second table, whose
+ * slots answer the 64-bit integer they are given.
  */
 
 #include <stdlib.h>
@@ -307,6 +310,30 @@ static const greeter_vtable TABLE = {
     check,
 };
 
+/* ---- the wide kind ----------------------------------------------------- */
+
+static guatiao_status echo_i64(void *ctx, int64_t x, int64_t *out,
+                               guatiao_provider_error *err) {
+  (void)ctx;
+  (void)err;
+  *out = x;
+  return GUATIAO_OK;
+}
+
+static guatiao_status echo_u64(void *ctx, uint64_t x, uint64_t *out,
+                               guatiao_provider_error *err) {
+  (void)ctx;
+  (void)err;
+  *out = x;
+  return GUATIAO_OK;
+}
+
+static const wide_vtable WIDE = {
+    {(uint32_t)sizeof(wide_vtable), wide_vtable_FLOOR_HASH},
+    echo_i64,
+    echo_u64,
+};
+
 /* ---- C lending an object of its own ------------------------------------ */
 
 /* What the test reads back: laid out as the Rust test declares it. */
@@ -415,13 +442,19 @@ EXPORT guatiao_status c_greeter_check_lending(const greeter_vtable *greeter,
   return status;
 }
 
-static const guatiao_str KINDS[] = {{(const uint8_t *)"greeter", 7}};
+static const guatiao_str KINDS[] = {{(const uint8_t *)"greeter", 7},
+                                     {(const uint8_t *)"wide", 4}};
 
 static const guatiao_kind_table TABLES[] = {{
     (uint32_t)sizeof(guatiao_kind_table),
     (uint32_t)sizeof(greeter_vtable),
     {(const uint8_t *)"greeter", 7},
     &TABLE,
+}, {
+    (uint32_t)sizeof(guatiao_kind_table),
+    (uint32_t)sizeof(wide_vtable),
+    {(const uint8_t *)"wide", 4},
+    &WIDE,
 }};
 
 static guatiao_provider_info PROVIDER;
@@ -430,7 +463,7 @@ static guatiao_library_info LIBRARY;
 /* ---- the envelope ------------------------------------------------------ */
 
 /* What a scanner reads before mapping this file. */
-EXPORT const char guatiao_declares[] = "kind=greeter\0";
+EXPORT const char guatiao_declares[] = "kind=greeter\0kind=wide\0";
 
 EXPORT const guatiao_library_info *
 guatiao_library_entry(const guatiao_host_info *host) {
@@ -440,13 +473,13 @@ guatiao_library_entry(const guatiao_host_info *host) {
   memset(&PROVIDER, 0, sizeof(PROVIDER));
   PROVIDER.struct_size = (uint32_t)sizeof(guatiao_provider_info);
   PROVIDER.kinds.ptr = KINDS;
-  PROVIDER.kinds.len = 1;
+  PROVIDER.kinds.len = 2;
   PROVIDER.id = guatiao_cstr("c_greeter");
   PROVIDER.display_name = guatiao_cstr("Greeter, in C");
   PROVIDER.ctx = &GREETED;
   PROVIDER.version = guatiao_cstr("1.0");
   PROVIDER.tables.ptr = TABLES;
-  PROVIDER.tables.len = 1;
+  PROVIDER.tables.len = 2;
   PROVIDER.tables.stride = sizeof(guatiao_kind_table);
 
   memset(&LIBRARY, 0, sizeof(LIBRARY));
