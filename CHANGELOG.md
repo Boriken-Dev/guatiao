@@ -310,7 +310,7 @@ write now.
   Python classes beside their C header,
   `examples/greeter_kind/python/greeter_kind.py`, and
   `examples/python_provider/` holds two libraries written in Python.
-- **Node.js and TypeScript bindings**, `bindings/node/` (npm `guatiao`):
+- **Node.js and TypeScript bindings**, `bindings/node/guatiao/` (npm `guatiao`):
   typed ESM over koffi, for Node 22 and later, shipping no native code.
   `Value`, `Ref`, `MapRef` and `ListRef` over a tree (numbers keep their
   text and read as `number` or `bigint`; absent is `undefined`), `using`
@@ -342,8 +342,8 @@ write now.
   `examples/node_host/` (a host in TypeScript) and
   `examples/node_provider/` (a library written in TypeScript), with
   the greeter kinds described in `examples/greeter_kind/node/`.
-- **Go bindings**, `bindings/go/` (module
-  `github.com/Boriken-Dev/guatiao/bindings/go`): cgo over the ABI's C
+- **Go bindings**, `bindings/go/guatiao/` (module
+  `github.com/Boriken-Dev/guatiao/bindings/go/guatiao`): cgo over the ABI's C
   header, for Go 1.26 and later, loading the library at run time
   (`GUATIAO_LIBRARY` or `UseLibrary(path)`) and shipping no native code.
   `Value`, `Ref`, `MapRef` and `ListRef` over a tree (numbers keep their
@@ -370,7 +370,7 @@ write now.
   thread that calls it and builds its answer in the allocator the
   caller's carrier names. The Go examples: `examples/greeter_kind/go/`,
   `examples/go_host/` and `examples/go_provider/`, a module of their own.
-- **Julia bindings**, `bindings/julia/` (package `Guatiao`): `ccall` over
+- **Julia bindings**, `bindings/julia/Guatiao/` (package `Guatiao`): `ccall` over
   the ABI, for Julia 1.10 and later, with nothing to compile and no
   dependency outside the standard library; the library is found through
   `GUATIAO_LIBRARY` or `Guatiao.use_library(path)`. `Value`, `ValueRef`,
@@ -395,7 +395,7 @@ write now.
   caller's carrier names; every call that can reach a library is made in a
   GC-safe region. The Julia examples: `examples/greeter_kind/julia/`,
   `examples/julia_host/` and `examples/julia_provider/`.
-- **R bindings**, `bindings/r/` (package `guatiao`, version `0.0.0.1`
+- **R bindings**, `bindings/r/guatiao/` (package `guatiao`, version `0.0.0.1`
   for this alpha: R takes no letters in a version, so `0.0.0-alpha.N` is
   written `0.0.0.N`): a source package for R 4.2 and later whose C glue,
   compiled when it installs, needs libffi and opens the library found
@@ -440,7 +440,7 @@ write now.
   answering an `int64_t`, one a `uint64_t`, served by the derived Rust
   greeter and the greeter written in C, so a binding can cross 64-bit
   integers at their limits both ways.
-- **MATLAB and GNU Octave bindings**, `bindings/matlab/`: the `+guatiao`
+- **MATLAB and GNU Octave bindings**, `bindings/matlab/guatiao/`: the `+guatiao`
   package, `classdef` and functions that MATLAB R2024a and later and
   Octave 8.4 and later both run, over one MEX gateway in C built on the
   user's machine (`pkg install` in Octave, `guatiao.build()` in MATLAB)
@@ -473,7 +473,7 @@ write now.
   a destroy asked for there waits for the next call. The examples:
   `examples/greeter_kind/matlab/`, `examples/matlab_host/` and
   `examples/matlab_provider/`.
-- **Fortran bindings**, `bindings/fortran/`: the fpm package `guatiao`
+- **Fortran bindings**, `bindings/fortran/guatiao/`: the fpm package `guatiao`
   (a git dependency on the repository, whose root `fpm.toml` builds it)
   and the CMake target `guatiao::fortran`, pure Fortran 2008 over
   `iso_c_binding`, tested with gfortran, LLVM flang and Intel ifx. The
@@ -505,6 +505,23 @@ write now.
 
 ### Changed
 
+- **Breaking: every binding's packages live in
+  `bindings/<language>/<name>`**, each directory named as its registry
+  spells the package: `bindings/python/guatiao`, `bindings/dart/guatiao_serde`,
+  `bindings/node/guatiao-intake`, `bindings/julia/GuatiaoSerde`,
+  `bindings/r/guatiao.intake`, `bindings/matlab/guatiao`,
+  `bindings/fortran/guatiao` and so on; the Node packages are developed as
+  the workspace `bindings/node`. *Migration:* only what names a path in
+  the repository changes. The Go module is
+  `github.com/Boriken-Dev/guatiao/bindings/go/guatiao` (its packages
+  `.../guatiao`, `.../guatiao/serde`, `.../guatiao/intake`, tagged
+  `bindings/go/guatiao/vX.Y.Z`): change the imports and `go get` the new
+  path. A Julia or R install from the repository names the new
+  subdirectory (`subdir = "bindings/julia/Guatiao"`,
+  `remotes::install_github("Boriken-Dev/guatiao", subdir =
+  "bindings/r/guatiao")`); a CMake `add_subdirectory` or `SOURCE_SUBDIR`
+  names `bindings/fortran/guatiao`. An fpm git dependency is unchanged: the
+  root `fpm.toml` follows the sources.
 - **Breaking: JSON, TOML and YAML, and forms, are packages of their own in
   every binding**, each over its own library (`guatiao_serde`,
   `guatiao_intake`) and built on the core package, which offers what they
@@ -530,20 +547,21 @@ write now.
     `guatiao-intake`, each with its own `useLibrary`. `guatiao/ffi` is
     new: `openSurface`, memory, `adopt`, `borrow`, `nodeOf`, `withNodes`
     and the one koffi, for a package over another guatiao library.
-  - Go: the module already had a package per crate; the import paths stay.
+  - Go: the module already had a package per crate; it moved to
+    `github.com/Boriken-Dev/guatiao/bindings/go/guatiao` (below), and
     `serde` and `intake` each find their own library and have their own
     `UseLibrary`: `guatiao.UseLibrary` names only the core's now (a file
     it named was the place the others were looked for beside). The core
     exports `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow` and
     `StatusError` for a package over another guatiao library.
   - Julia: `Guatiao.Serde` is the package `GuatiaoSerde` and
-    `Guatiao.Intake` is `GuatiaoIntake` (`bindings/julia-serde`,
-    `bindings/julia-intake`); `ParseError` moves to `GuatiaoSerde`.
+    `Guatiao.Intake` is `GuatiaoIntake` (`bindings/julia/GuatiaoSerde`,
+    `bindings/julia/GuatiaoIntake`); `ParseError` moves to `GuatiaoSerde`.
     `Guatiao.FFI` is new: `@cdef` usable from any module, `surface!`,
     `find_library` and trees as root nodes.
   - R: `serde_parse`/`serde_emit` are the package `guatiao.serde` and the
-    `intake_*` functions `guatiao.intake` (`bindings/r-serde`,
-    `bindings/r-intake`), with the same names; `library(guatiao.serde)`
+    `intake_*` functions `guatiao.intake` (`bindings/r/guatiao.serde`,
+    `bindings/r/guatiao.intake`), with the same names; `library(guatiao.serde)`
     attaches `guatiao` too. `use_library(path, library = "guatiao")` names
     any of the three libraries. `guatiao` registers the C table
     `guatiao_r_api` (`include/guatiao_r_api.h`) for a package over another
