@@ -45,7 +45,8 @@ public surface); this file is about the repository.
 | `bindings/node-serde/`, `bindings/node-intake/` | the npm packages `guatiao-serde` and `guatiao-intake`, each over its own library and the core's koffi; their tests run against the core's sources |
 | `bindings/package.json` | the npm workspace of the three Node packages, with the one `package-lock.json`: `npm ci` there installs all three and links the core into the others |
 | `bindings/go/` | Go bindings over the C ABI through cgo, the module `github.com/Boriken-Dev/guatiao/bindings/go` with its own `AGENTS.md`: a package per crate (`guatiao`, `serde`, `intake`), each over its own library, the other two building on what `guatiao` exports for them (`Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError`); `internal/native/` holds every line of C and copies of the three headers (a test compares them with the committed ones); `cmd/guatiao-kind` writes a kind package's glue |
-| `bindings/julia/` | Julia bindings over the C ABI through `ccall`, the package `Guatiao` with its own `AGENTS.md`; `src/abi.jl` mirrors the header's structs (a test compares each layout with the header's text); `test/fixtures/` holds the C its tests build |
+| `bindings/julia/` | Julia bindings over the C ABI through `ccall`, the package `Guatiao` with its own `AGENTS.md`; `src/abi.jl` mirrors the header's structs (a test compares each layout with the header's text); `src/ffi.jl` (`Guatiao.FFI`) is what a package over another guatiao library builds on; `test/fixtures/` holds the C its tests build |
+| `bindings/julia-serde/`, `bindings/julia-intake/` | the packages `GuatiaoSerde` and `GuatiaoIntake`, each over its own library, depending on `Guatiao` |
 | `bindings/r/` | R bindings over the C ABI, the source package `guatiao`: `src/` holds copies of the three headers (a test compares them with the committed ones) and the C glue, compiled when the package installs, which opens the library at run time and calls kind slots through libffi; its API header is `inst/AGENTS.md`; `tests/fixtures/` holds the C its tests build |
 | `bindings/fortran/` | Fortran bindings over the C ABI in pure Fortran (`iso_c_binding`), the fpm package `guatiao` with its own `AGENTS.md` and a `CMakeLists.txt`; `src/guatiao_c.f90`, `guatiao_serde_c.f90` and `guatiao_intake_c.f90` mirror the three headers (a test compares every interface's name and argument count with them); `guatiao_loader.F90` opens the library at run time; the repository's root `fpm.toml` is the same package for an fpm git dependency (a test checks the two agree) |
 | `bindings/matlab/` | MATLAB and GNU Octave bindings over the C ABI: the `+guatiao` package in `inst/` (its API header is `inst/AGENTS.md`), and `src/`, one MEX gateway in C with copies of the three headers (a test compares them with the committed ones), built by `mkoctfile --mex` at `pkg install` or by `guatiao.build()`, which opens the library at run time and calls kind slots through libffi; `tests/` is a plain runner (`run_tests`) both interpreters run, `tests/fixtures/` holds the C its tests build |
@@ -184,6 +185,10 @@ one a failure:
 ```bash
 export GUATIAO_LIBRARY=$PWD/target/debug
 julia --project=bindings/julia -e 'using Pkg; Pkg.test()'
+for p in serde intake; do   # each in a temporary environment holding the core from the checkout
+  julia -e "using Pkg; Pkg.activate(temp=true); Pkg.develop([PackageSpec(path=\"bindings/julia\"),
+    PackageSpec(path=\"bindings/julia-$p\")]); Pkg.test(\"Guatiao${p^}\")"
+done
 julia examples/julia_host/host.jl target/debug   # the example host
 ```
 
