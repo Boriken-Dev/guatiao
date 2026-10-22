@@ -12,6 +12,7 @@ use core::sync::atomic::{AtomicI64, Ordering};
 use greeter_kind::{Conversation, Counter, Greeter, Listener, Wide};
 use guatiao::library::{Object, ProviderError};
 use guatiao::{Alloc, Map, Provider, Status, Text, TryAsRef};
+use guatiao_intake::Form;
 
 /// One provider serving three kinds.
 #[derive(Default, Provider)]
@@ -145,21 +146,48 @@ impl Wide for Hello {
 /// instance per configuration, each its own `self`. It is its own
 /// configuration: a host reads this type's schema, fills it in, and the
 /// value it hands to `instantiate` decodes straight into a `Shouter`.
-#[derive(guatiao::Schema, guatiao::FromValue, Provider)]
-#[provider(Greeter, config)]
+///
+/// It carries its form too: `form = Shouter` builds the screen
+/// `#[derive(Form)]` writes into the descriptor's `meta`, so a host shows
+/// the settings in two sections, with a placeholder, a unit and a field
+/// that appears only when it applies.
+// FORM-PROVIDER-BEGIN
+#[derive(guatiao::Schema, guatiao::FromValue, Form, Provider)]
+#[form(
+    section(id = "words", label = "Words"),
+    section(id = "volume", label = "Volume", help = "How loud a shout is")
+)]
+#[provider(Greeter, config, form = Shouter)]
 pub struct Shouter {
     /// What every shout starts with.
+    #[schema(section = "words")]
+    #[form(placeholder = "hey")]
     prefix: String,
+    /// Whether a shout ends in exclamation marks.
+    #[schema(section = "volume")]
+    #[map(default)]
+    exclaim: bool,
+    /// How many exclamation marks end a shout.
+    #[schema(section = "volume")]
+    #[map(default = 1)]
+    #[form(unit = "marks", visible_when(field = "exclaim", equals = true))]
+    marks: i64,
 }
+// FORM-PROVIDER-END
 
 /// Builds its map with the short forms, in this library's own allocator:
 /// the caller copies it on arrival.
 impl Greeter for Shouter {
     fn greet(&self, name: &str) -> Result<Map, ProviderError> {
+        let marks = if self.exclaim {
+            "!".repeat(usize::try_from(self.marks).unwrap_or(0))
+        } else {
+            String::new()
+        };
         let mut map = Map::new();
         map.set(
             "greeting",
-            format!("{} {}", self.prefix, name.to_uppercase()),
+            format!("{} {}{marks}", self.prefix, name.to_uppercase()),
         );
         Ok(map)
     }
