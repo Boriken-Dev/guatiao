@@ -404,6 +404,39 @@ class Registry implements Finalizable {
     return Ref.borrowed(root);
   }
 
+  /// What the provider filed under `key` declared beyond its schema -- its
+  /// legal notices, or its form under `intake.providerFormKey` -- as a
+  /// [Value] the caller owns and closes, or `null` when it declares
+  /// nothing.
+  ///
+  /// A copy, unlike [providerConfig]: it outlives the library. Throws
+  /// `NotFound` when nothing answers to `key`.
+  Value? providerMeta(String key) {
+    _checkOpen();
+    final out = calloc<guatiao_value>();
+    var filled = false;
+    try {
+      using((arena) {
+        checkStatus(
+          native.core().bindings.guatiao_registry_provider_meta(
+                _handle,
+                strOf(arena, key).ref,
+                _allocator,
+                out,
+              ),
+        );
+      });
+      if (out.ref.tag == Tag.absent.code) return null;
+      filled = true;
+      return Value.adopt(out, alloc: _allocator);
+    } finally {
+      if (!filled) {
+        native.core().bindings.guatiao_value_free(out);
+        calloc.free(out);
+      }
+    }
+  }
+
   /// Builds an instance of the provider filed under `key` from `config`
   /// -- a [Value], or anything [Value.fromDart] accepts.
   Instance create(String key, Object? config) {

@@ -112,6 +112,8 @@ files:
         name: guatiao_registry_provider_ctx
       c:@F@guatiao_registry_provider_destroy:
         name: guatiao_registry_provider_destroy
+      c:@F@guatiao_registry_provider_meta:
+        name: guatiao_registry_provider_meta
       c:@F@guatiao_registry_provider_table:
         name: guatiao_registry_provider_table
       c:@F@guatiao_registry_provider_vtable:
