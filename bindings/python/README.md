@@ -37,8 +37,10 @@ that is `guatiao` itself or an application that carries it.
   calendar lengths, read and written by the library itself.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
-- **JSON, TOML and YAML**, and **form checks against a schema**, through
-  the `guatiao-serde` and `guatiao-intake` libraries when they are present.
+- **JSON, TOML and YAML**, and **forms checked against a schema**, are
+  the packages [`guatiao-serde`](https://pypi.org/project/guatiao-serde/)
+  and [`guatiao-intake`](https://pypi.org/project/guatiao-intake/), each
+  over its own library and built on this one.
 - **Importing never fails** — a native library is looked for on first
   use, and a missing one says every place that was searched.
 
@@ -63,14 +65,8 @@ naming every place it looked. A library that exports only part of the ABI
 is fine: calling a function it lacks raises `guatiao.MissingSymbol`
 naming it, and everything else works.
 
-| Exports from | Needed for |
-| --- | --- |
-| `guatiao` | values, the registry, provider tables |
-| `guatiao_serde` | `guatiao.serde`: JSON, and TOML and YAML when the library has them |
-| `guatiao_intake` | `guatiao.intake` |
-
-`guatiao_serde` and `guatiao_intake` are looked for the same way, in the
-same directory, only when `guatiao.serde` or `guatiao.intake` is first used.
+`guatiao.use_library(path)` names the library from code instead, before
+the first native call.
 
 ## Quick start
 
@@ -231,31 +227,6 @@ distribution's metadata, then the module's docstring, `__author__`,
 holds complete libraries, which the `guatiao-py` bridge also serves to
 hosts in any language.
 
-### JSON, TOML, YAML and forms
-
-```python
-from guatiao import intake, serde
-
-value = serde.loads('{"port": 5900}')                  # format="json" by default
-text = serde.dumps(value, format="yaml")
-pretty = serde.dumps(value, pretty=True)
-
-problem = intake.check(schema, form_doc)               # None when the form fits the schema
-sections = intake.layout(schema, form_doc)
-shown = intake.is_visible(schema, form_doc, "tls.verify", values)
-
-# A front end that keeps text under flat keys (`agent[0].name`, `env[PATH]`):
-field = intake.resolve(schema, "auth.password")        # the schema field, or None
-keys = intake.flat_keys(schema, "auth")                # ["auth", "auth.username", ...]
-store = intake.flatten(schema, "auth", auth_value)     # {"auth": "userpass", ...}
-back = intake.unflatten(schema, "auth", store)         # a Value, or None
-```
-
-A document that does not parse raises `guatiao.errors.ParseError`, a
-`ValueError` carrying `format`, `line` and `column` (from 1; 0 when the
-parser did not say where). A format the loaded library does not export
-raises `NotImplementedError` naming it.
-
 ### Dates, times and secrets
 
 ```python
@@ -286,8 +257,6 @@ provider's own words when it gave any.
   year 1: reading a date or time drops what is below a microsecond, and
   the year 0000 raises `ValueError`. `normalize` and `Span` keep every
   nanosecond.
-- Reading JSON writes an exponent's sign: `1e400` parses as `1e+400`.
-  Everything else about a number's text survives a round trip.
 - `List.insert` and `list[i] = x` rebuild the list, because the C ABI
   only appends and removes. `append` and `del list[i]` are direct.
 - Runs where CPython can load a native library, on 64-bit targets only:
@@ -314,8 +283,7 @@ provider's own words when it gave any.
 | `guatiao.registry` | the plugin host: load, scan, list, rank, configure, instantiate |
 | `guatiao.kinds` | a kind as a typed `Protocol` class; call a provider's table; serve a table over a Python object |
 | `guatiao.provide` | a module of provider classes as a library |
-| `guatiao.serde` | `loads` / `dumps` for JSON, TOML, YAML |
-| `guatiao.intake` | `check`, `layout`, `is_visible`, `at`, `for_schema`, `form_for`, `resolve`, `flat_keys`, `flatten`, `unflatten` |
+| `guatiao.ffi` | for a package over another guatiao library: the loader, the C structs, a tree crossing as its root node |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/src/guatiao/AGENTS.md) is
 the full API reference and ships inside the wheel. The C ABI is described
@@ -328,8 +296,8 @@ pip install -e "bindings/python[dev]"     # from the repository root, in a virtu
 pytest bindings/python/tests -rs
 ```
 
-The tests need the three libraries and the repository's example plugins
-in one directory. `conftest.py` points `GUATIAO_LIBRARY` at the
+The tests need the library and the repository's example plugins in one
+directory. `conftest.py` points `GUATIAO_LIBRARY` at the
 repository's build output when the variable is unset; the repository's
 own `AGENTS.md` says how to produce it. With everything present nothing
 skips; a test that needs a missing library skips and says which. CI runs

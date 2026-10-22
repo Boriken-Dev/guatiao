@@ -8,15 +8,13 @@ from __future__ import annotations
 
 import pytest
 
-from guatiao import _lib
+import guatiao_serde as serde
+from guatiao import LibraryNotFound, Value
 
 try:
-    _lib.serde()
-except _lib.LibraryNotFound:
+    serde.library()
+except LibraryNotFound:
     pytest.skip("no guatiao_serde library built", allow_module_level=True)
-
-from guatiao import serde
-from guatiao.value import Value
 
 
 def test_json_round_trip_preserves_key_order_and_integers():
@@ -65,7 +63,7 @@ def test_yaml_round_trip():
 
 
 def test_toml_document_must_be_a_map():
-    from guatiao.errors import WrongKind
+    from guatiao import WrongKind
 
     with Value.from_python([1, 2]) as doc:
         with pytest.raises(WrongKind):
@@ -78,7 +76,8 @@ def test_unknown_format_raises():
             serde.dumps(doc, format="xml")
 
 def test_a_malformed_document_carries_its_format_and_position():
-    from guatiao.errors import BadValue, ParseError
+    from guatiao import BadValue
+    from guatiao_serde import ParseError
 
     with pytest.raises(ParseError) as caught:
         serde.loads('{"a":\n 1,,}')
@@ -97,10 +96,10 @@ def test_a_malformed_document_carries_its_format_and_position():
 
 
 def test_a_parse_error_leaves_no_block_allocated():
-    from guatiao.errors import ParseError
-    from counting import Counting
+    from guatiao_serde import ParseError
+    from serde_counting import Counting
 
-    counting = Counting()
+    counting = Counting(serde.library().alloc)
     with pytest.raises(ParseError):
         serde.loads('{"a": [1,, 2]}', alloc=counting.alloc)
     assert counting.live == 0

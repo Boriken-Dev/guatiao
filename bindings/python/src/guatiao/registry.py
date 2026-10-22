@@ -312,7 +312,7 @@ class Registry:
 
     def provider_meta(self, key: str) -> "Value | None":
         """What the provider filed under `key` declared beyond its schema --
-        its legal notices, or its form under `intake.PROVIDER_FORM_KEY` --
+        its legal notices, or its form under `guatiao_intake.PROVIDER_FORM_KEY` --
         as a `Value` the caller owns and closes, or `None` when it declares
         nothing. A copy, unlike `provider_config`: it outlives the library.
         Raises `NotFound` when nothing answers to `key`."""

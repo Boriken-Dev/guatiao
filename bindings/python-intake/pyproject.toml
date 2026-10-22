@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "guatiao-intake"
+version = "0.0.0a1"
+authors = [{ name = "jose-pr" }]
+description = "Forms over a schema and the flat key-to-text projection for guatiao values, over the guatiao_intake C ABI"
+readme = "README.md"
+requires-python = ">=3.9"
+# PEP 639: SPDX license expression, and the licence text shipped in both
+# the sdist and the wheel.
+license = "MPL-2.0"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
+# The value model, errors and loader; released together, at one version.
+dependencies = ["guatiao==0.0.0a1"]
+
+[project.optional-dependencies]
+dev = ["build", "mypy", "pytest"]
+
+[project.urls]
+Homepage = "https://github.com/Boriken-Dev/guatiao/"
+Issues = "https://github.com/Boriken-Dev/guatiao/issues"
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/.*", "*.local.*"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/guatiao_intake"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

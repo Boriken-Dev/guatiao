@@ -86,10 +86,3 @@ def test_header_declares_no_tag_or_status_this_binding_is_missing():
         ):
             assert full in tag_names, full
 
-
-def test_parse_error_layout():
-    assert ctypes.sizeof(_abi.ParseError) == 56
-    assert _abi.ParseError.format.offset == 0
-    assert _abi.ParseError.line.offset == 4
-    assert _abi.ParseError.column.offset == 8
-    assert _abi.ParseError.message.offset == 16
