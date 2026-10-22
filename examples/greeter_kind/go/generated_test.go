@@ -13,7 +13,7 @@ import (
 // as they are now: a header that changed shape, or an interface that did,
 // fails here rather than in a call.
 func TestTheGlueIsCurrent(t *testing.T) {
-	out, err := exec.Command("go", "run", "github.com/Boriken-Dev/guatiao/bindings/go/cmd/guatiao-kind",
+	out, err := exec.Command("go", "run", "github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind",
 		"-header", "../include/greeter_kind.h", "-check").CombinedOutput()
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)

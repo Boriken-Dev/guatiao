@@ -49,7 +49,7 @@ import (
 	"fmt"
 	"unsafe"
 
-	guatiao "github.com/Boriken-Dev/guatiao/bindings/go"
+	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 )
 
 // Caller is greeter_caller_run, loaded from a build of greeter_caller.

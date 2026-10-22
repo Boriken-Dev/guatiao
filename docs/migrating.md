@@ -903,7 +903,22 @@ import { ParseError } from 'guatiao-serde';
 
 ### Go
 
-The import paths stay (`.../bindings/go/serde`, `.../bindings/go/intake`).
+The module moved: it is `github.com/Boriken-Dev/guatiao/bindings/go/guatiao`
+now, and its packages are `.../bindings/go/guatiao`,
+`.../bindings/go/guatiao/serde` and `.../bindings/go/guatiao/intake`.
+
+```sh
+go get github.com/Boriken-Dev/guatiao/bindings/go/guatiao
+```
+
+```go
+import (
+    "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
+    "github.com/Boriken-Dev/guatiao/bindings/go/guatiao/intake"
+    "github.com/Boriken-Dev/guatiao/bindings/go/guatiao/serde"
+)
+```
+
 A program that named its library with `guatiao.UseLibrary` and relied on
 `guatiao_serde` and `guatiao_intake` being found beside it names them too,
 or sets `GUATIAO_LIBRARY` to their directory:

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	guatiao "github.com/Boriken-Dev/guatiao/bindings/go"
+	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 	greeterkind "github.com/Boriken-Dev/guatiao/examples/greeter_kind/go"
 )
 

@@ -4,12 +4,12 @@ Go plays both parts. As a **host** it loads libraries written in any
 language and calls their providers; as a **provider** it writes a library,
 Go types implementing a kind's interface, that a host in the same process
 calls, or that it builds as a library file any host loads. Both use the
-module `github.com/Boriken-Dev/guatiao/bindings/go`: cgo over the ABI's C
+module `github.com/Boriken-Dev/guatiao/bindings/go/guatiao`: cgo over the ABI's C
 header, for Go 1.26 and later, loading the guatiao library at run time and
 shipping no native code of its own.
 
 ```bash
-go get github.com/Boriken-Dev/guatiao/bindings/go
+go get github.com/Boriken-Dev/guatiao/bindings/go/guatiao
 ```
 
 cgo needs a C compiler: GCC or clang, and on Windows a MinGW-style one
@@ -30,9 +30,9 @@ table; each slot appended later is an interface of its own, as
 // greeter_kind.go
 package greeterkind
 
-//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/cmd/guatiao-kind -header ../include/greeter_kind.h
+//go:generate go run github.com/Boriken-Dev/guatiao/bindings/go/guatiao/cmd/guatiao-kind -header ../include/greeter_kind.h
 
-import guatiao "github.com/Boriken-Dev/guatiao/bindings/go"
+import guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 
 type Greeting struct {
 	Greeting string `guatiao:"greeting"`
@@ -76,7 +76,7 @@ Nothing is described twice: the header is the source, and
 Every method returns an `error` last. A tree answered may be any Go type:
 the binding converts Go values and trees as `encoding/json` does, structs
 by their `guatiao` (or `json`) tags. The binding's
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/go/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/go/guatiao/AGENTS.md)
 lists every C type and the Go types that carry it.
 
 ## As a host

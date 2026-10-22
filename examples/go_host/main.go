@@ -25,7 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	guatiao "github.com/Boriken-Dev/guatiao/bindings/go"
+	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 	gogreeter "github.com/Boriken-Dev/guatiao/examples/go_provider/go_greeter"
 	greeterkind "github.com/Boriken-Dev/guatiao/examples/greeter_kind/go"
 )

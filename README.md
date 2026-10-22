@@ -75,7 +75,7 @@ Bindings over the same C ABI, for a consumer that is not Rust:
 | Python | [`bindings/python/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/guatiao/README.md) | `pip install guatiao` |
 | Dart | [`bindings/dart/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/guatiao/README.md) | `dart pub add guatiao` |
 | Node.js, TypeScript | [`bindings/node/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node/guatiao/README.md) | `npm install guatiao` |
-| Go | [`bindings/go/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/go/README.md) | `go get github.com/Boriken-Dev/guatiao/bindings/go` |
+| Go | [`bindings/go/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/go/guatiao/README.md) | `go get github.com/Boriken-Dev/guatiao/bindings/go/guatiao` |
 | Julia | [`bindings/julia/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia/README.md) | `Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia")` |
 | R | [`bindings/r/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r/README.md) | `remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r")` |
 | Fortran | [`bindings/fortran/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/fortran/README.md) | fpm: `guatiao = { git = "https://github.com/Boriken-Dev/guatiao", tag = "..." }`; CMake: `FetchContent` with `SOURCE_SUBDIR bindings/fortran` |
@@ -88,7 +88,7 @@ JSON, TOML and YAML, and forms, are a package of their own beside each
 core one, over the `guatiao_serde` and `guatiao_intake` libraries: PyPI
 `guatiao-serde` and `guatiao-intake`, pub.dev `guatiao_serde` and
 `guatiao_intake`, npm `guatiao-serde` and `guatiao-intake`, the Go packages
-`.../bindings/go/serde` and `.../bindings/go/intake`, the Julia packages
+`.../bindings/go/guatiao/serde` and `.../bindings/go/guatiao/intake`, the Julia packages
 `GuatiaoSerde` and `GuatiaoIntake` (`bindings/julia-serde`,
 `bindings/julia-intake`), the R packages `guatiao.serde` and
 `guatiao.intake` (`bindings/r-serde`, `bindings/r-intake`), and in MATLAB,
