@@ -16,11 +16,11 @@
 package serde
 
 import (
+	"errors"
 	"fmt"
 	"unsafe"
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go"
-	"github.com/Boriken-Dev/guatiao/bindings/go/internal/bridge"
 	"github.com/Boriken-Dev/guatiao/bindings/go/internal/native"
 )
 
@@ -103,15 +103,15 @@ func open(format Format, symbol func(spec) string) (*native.Lib, spec, error) {
 	if !ok {
 		return nil, spec{}, fmt.Errorf("guatiao: unknown format %q", format)
 	}
-	if err := bridge.Core(); err != nil {
+	if err := guatiao.Load(); err != nil {
 		return nil, s, err
 	}
 	lib, err := native.Serde()
 	if err != nil {
-		return nil, s, bridge.Lift(err)
+		return nil, s, lift(err)
 	}
 	if err := lib.Need(symbol(s)); err != nil {
-		return nil, s, bridge.Lift(err)
+		return nil, s, lift(err)
 	}
 	return lib, s, nil
 }
@@ -142,9 +142,9 @@ func Parse(text string, format Format, opts ...Option) (*guatiao.Value, error) {
 			}
 			return nil, &ParseError{Format: f, Line: int(failure.Line), Column: int(failure.Column), Reason: failure.Message}
 		}
-		return nil, bridge.Check(st, failure.Message)
+		return nil, guatiao.StatusError(st, failure.Message)
 	}
-	return bridge.Adopt(out, alloc).(*guatiao.Value), nil
+	return guatiao.Adopt(out, alloc), nil
 }
 
 // Emit writes x (a Value, a view, or anything guatiao.NewValue takes) as
@@ -164,13 +164,13 @@ func Emit(x any, format Format, opts ...Option) (string, error) {
 		return "", err
 	}
 	var text string
-	err = bridge.WithNodes([]any{x}, func(nodes []unsafe.Pointer) error {
+	err = guatiao.WithNodes([]any{x}, func(nodes []unsafe.Pointer) error {
 		out := native.Calloc(native.SizeValue)
 		defer func() {
 			native.ValueFree(out)
 			native.Free(out)
 		}()
-		if err := bridge.Check(lib.Emit(s.code, nodes[0], o.how, o.pretty, lib.Alloc(), out), ""); err != nil {
+		if err := guatiao.StatusError(lib.Emit(s.code, nodes[0], o.how, o.pretty, lib.Alloc(), out), ""); err != nil {
 			return err
 		}
 		if native.Tag(out) == native.TagString {
@@ -180,3 +180,28 @@ func Emit(x any, format Format, opts ...Option) (string, error) {
 	})
 	return text, err
 }
+
+// lift turns the native layer's failure to open a library into the
+// guatiao package's error for it.
+func lift(err error) error {
+	var nf *native.NotFound
+	if errors.As(err, &nf) {
+		return &guatiao.LibraryNotFound{Basename: nf.Basename, Looked: nf.Looked}
+	}
+	var ms *native.Missing
+	if errors.As(err, &ms) {
+		return &guatiao.MissingSymbol{Path: ms.Path, Symbol: ms.Symbol, Feature: ms.Feature}
+	}
+	return err
+}
+
+// UseLibrary names the guatiao_serde library to load instead of looking for
+// one: a file exporting its functions, whatever it is called (an
+// application's own library carrying several surfaces, say), or a
+// directory holding it under its platform file name. Without it the
+// library is found through GUATIAO_SERDE_LIBRARY, then GUATIAO_LIBRARY (a
+// directory, or a file exporting it, else the file beside it), then the
+// platform's search. Call it before the first call that needs the
+// library; naming another file once one is loaded is an error, naming the
+// same one is not.
+func UseLibrary(where string) error { return native.Use(native.LibSerde, where) }

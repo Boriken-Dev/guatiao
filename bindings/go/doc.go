@@ -16,10 +16,15 @@
 // that call (a file exporting the ABI, whatever it is called, or a
 // directory); GUATIAO_LIBRARY, a directory holding guatiao.dll,
 // libguatiao.so or libguatiao.dylib, or such a file; the platform's own
-// search by file name. guatiao_serde and guatiao_intake are found the
-// same way, beside it under their own names, when the serde and intake
-// packages are first used. Not found is a *LibraryNotFound naming every
+// search by file name. Not found is a *LibraryNotFound naming every
 // route; an export the loaded build lacks is a *MissingSymbol.
+//
+// The serde and intake packages are over their own libraries,
+// guatiao_serde and guatiao_intake, each found through its own
+// UseLibrary, then GUATIAO_SERDE_LIBRARY or GUATIAO_INTAKE_LIBRARY, then
+// GUATIAO_LIBRARY (a directory, or a file exporting it, else the file
+// beside it). They build on Load, Adopt, WithNodes, NodeOf, Borrow and
+// StatusError, which any package over another guatiao library may use.
 //
 // # Values
 //

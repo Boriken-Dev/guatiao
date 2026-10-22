@@ -24,7 +24,6 @@ import (
 	"unsafe"
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go"
-	"github.com/Boriken-Dev/guatiao/bindings/go/internal/bridge"
 	"github.com/Boriken-Dev/guatiao/bindings/go/internal/native"
 )
 
@@ -58,12 +57,12 @@ func (e *Unparsed) Error() string {
 func (e *Unparsed) Unwrap() error { return guatiao.ErrBadValue }
 
 func coreAlloc() (unsafe.Pointer, error) {
-	if err := bridge.Core(); err != nil {
+	if err := guatiao.Load(); err != nil {
 		return nil, err
 	}
 	lib, err := native.Core()
 	if err != nil {
-		return nil, bridge.Lift(err)
+		return nil, err
 	}
 	return lib.Alloc(), nil
 }
@@ -79,7 +78,7 @@ func refused(form Form, r native.Refusal, st uint32) error {
 		}
 		return &Unparsed{Form: form, At: int(r.At), Expected: expected}
 	}
-	return bridge.Check(st, r.Expected)
+	return guatiao.StatusError(st, r.Expected)
 }
 
 // textOf runs a formatter into a scratch node and answers its text.
@@ -97,7 +96,7 @@ func textOf(form Form, write func(alloc, out unsafe.Pointer) uint32) (string, er
 	if st == native.ErrBadValue {
 		return "", &guatiao.Error{Status: guatiao.BadValue, Message: "the fields are not a " + string(form)}
 	}
-	if err := bridge.Check(st, ""); err != nil {
+	if err := guatiao.StatusError(st, ""); err != nil {
 		return "", err
 	}
 	return native.TextOf(out), nil
@@ -211,7 +210,7 @@ func (d Date) Add(span Span) (Date, error) {
 		return Date{}, err
 	}
 	out, st := native.DateAddSpan(f, span.fields())
-	if err := bridge.Check(st, ""); err != nil {
+	if err := guatiao.StatusError(st, ""); err != nil {
 		return Date{}, err
 	}
 	return dateOf(out), nil
@@ -384,7 +383,7 @@ func (d DateTime) Add(span Span) (DateTime, error) {
 		return DateTime{}, err
 	}
 	out, st := native.DateTimeAddSpan(f, span.fields())
-	if err := bridge.Check(st, ""); err != nil {
+	if err := guatiao.StatusError(st, ""); err != nil {
 		return DateTime{}, err
 	}
 	return DateTime{Date: dateOf(out.Date), Time: timeOf(out.Time)}, nil
@@ -441,14 +440,14 @@ type Length struct {
 // any of its three spellings.
 func ReadLength(x any) (Length, error) {
 	var l Length
-	err := bridge.WithNodes([]any{x}, func(nodes []unsafe.Pointer) error {
+	err := guatiao.WithNodes([]any{x}, func(nodes []unsafe.Pointer) error {
 		secs, nanos, st := native.DurationRead(nodes[0])
 		if st == native.ErrBadValue {
 			return &guatiao.Error{Status: guatiao.BadValue,
 				Message: "not an exact length: [seconds, nanoseconds], a number of seconds, or {secs, nanos}"}
 		}
 		l = Length{Seconds: secs, Nanoseconds: nanos}
-		return bridge.Check(st, "")
+		return guatiao.StatusError(st, "")
 	})
 	return l, err
 }

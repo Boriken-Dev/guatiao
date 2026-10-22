@@ -13,21 +13,21 @@
 package intake
 
 import (
+	"errors"
 	"fmt"
 	"unsafe"
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go"
-	"github.com/Boriken-Dev/guatiao/bindings/go/internal/bridge"
 	"github.com/Boriken-Dev/guatiao/bindings/go/internal/native"
 )
 
 func lib() (*native.Lib, error) {
-	if err := bridge.Core(); err != nil {
+	if err := guatiao.Load(); err != nil {
 		return nil, err
 	}
 	l, err := native.Intake()
 	if err != nil {
-		return nil, bridge.Lift(err)
+		return nil, lift(err)
 	}
 	return l, nil
 }
@@ -41,14 +41,14 @@ func answer(call func(alloc, out unsafe.Pointer) uint32, read func(status uint32
 	}
 	out := native.Calloc(native.SizeValue)
 	st := call(l.Alloc(), out)
-	return read(st, bridge.Adopt(out, l.Alloc()).(*guatiao.Value))
+	return read(st, guatiao.Adopt(out, l.Alloc()))
 }
 
 // plain decodes an answer into dst and frees it.
 func plain(dst any) func(uint32, *guatiao.Value) error {
 	return func(st uint32, out *guatiao.Value) error {
 		defer out.Close()
-		if err := bridge.Check(st, ""); err != nil {
+		if err := guatiao.StatusError(st, ""); err != nil {
 			return err
 		}
 		return out.Decode(dst)
@@ -59,7 +59,7 @@ func plain(dst any) func(uint32, *guatiao.Value) error {
 // Value nil when it is absent.
 func owned(dst **guatiao.Value) func(uint32, *guatiao.Value) error {
 	return func(st uint32, out *guatiao.Value) error {
-		if err := bridge.Check(st, ""); err != nil {
+		if err := guatiao.StatusError(st, ""); err != nil {
 			out.Close()
 			return err
 		}
@@ -78,7 +78,7 @@ func owned(dst **guatiao.Value) func(uint32, *guatiao.Value) error {
 // `id`, `field` and `expected` apply, and a `message`.
 func Check(schema, form any) (map[string]any, error) {
 	var why map[string]any
-	err := bridge.WithNodes([]any{schema, form}, func(n []unsafe.Pointer) error {
+	err := guatiao.WithNodes([]any{schema, form}, func(n []unsafe.Pointer) error {
 		return answer(func(alloc, out unsafe.Pointer) uint32 {
 			return native.IntakeCheck(n[0], n[1], alloc, out)
 		}, func(st uint32, out *guatiao.Value) error {
@@ -87,7 +87,7 @@ func Check(schema, form any) (map[string]any, error) {
 				return nil
 			}
 			if st != native.ErrBadValue {
-				return bridge.Check(st, "")
+				return guatiao.StatusError(st, "")
 			}
 			return out.Decode(&why)
 		})
@@ -105,7 +105,7 @@ type Section struct {
 // Layout is the schema's fields grouped into sections and put in order.
 func Layout(schema, form any) ([]Section, error) {
 	var sections []Section
-	err := bridge.WithNodes([]any{schema, form}, func(n []unsafe.Pointer) error {
+	err := guatiao.WithNodes([]any{schema, form}, func(n []unsafe.Pointer) error {
 		return answer(func(alloc, out unsafe.Pointer) uint32 {
 			return native.IntakeLayout(n[0], n[1], alloc, out)
 		}, plain(&sections))
@@ -118,13 +118,13 @@ func Layout(schema, form any) ([]Section, error) {
 // condition reads, names no field.
 func IsVisible(schema, form any, key string, values any) (bool, error) {
 	var shown bool
-	err := bridge.WithNodes([]any{schema, form, values}, func(n []unsafe.Pointer) error {
+	err := guatiao.WithNodes([]any{schema, form, values}, func(n []unsafe.Pointer) error {
 		if _, err := lib(); err != nil {
 			return err
 		}
 		ok, st := native.IntakeIsVisible(n[0], n[1], key, n[2])
 		shown = ok
-		return bridge.Check(st, "")
+		return guatiao.StatusError(st, "")
 	})
 	return shown, err
 }
@@ -135,7 +135,7 @@ func borrowedAt(source any, find func(node unsafe.Pointer) unsafe.Pointer) (guat
 	if _, err := lib(); err != nil {
 		return guatiao.Ref{}, false, err
 	}
-	node, ok, err := bridge.NodeOf(source)
+	node, ok, err := guatiao.NodeOf(source)
 	if !ok {
 		return guatiao.Ref{}, false, fmt.Errorf("guatiao: %T is not a value; pass a *guatiao.Value or a view", source)
 	}
@@ -146,17 +146,17 @@ func borrowedAt(source any, find func(node unsafe.Pointer) unsafe.Pointer) (guat
 		return guatiao.Ref{}, false, nil
 	}
 	again := func() unsafe.Pointer {
-		node, _, err := bridge.NodeOf(source)
+		node, _, err := guatiao.NodeOf(source)
 		if err != nil || node == nil {
 			return nil
 		}
 		return find(node)
 	}
-	ref, err := bridge.Borrow(again, source)
+	ref, err := guatiao.Borrow(again, source)
 	if err != nil {
 		return guatiao.Ref{}, false, err
 	}
-	return ref.(guatiao.Ref), true, nil
+	return ref, true, nil
 }
 
 // At is the value at path inside value (a *guatiao.Value or a view),
@@ -175,7 +175,7 @@ func Resolve(schema any, key string) (guatiao.Ref, bool, error) {
 // ForSchema is the form a schema implies, a Value to close.
 func ForSchema(schema any) (*guatiao.Value, error) {
 	var form *guatiao.Value
-	err := bridge.WithNodes([]any{schema}, func(n []unsafe.Pointer) error {
+	err := guatiao.WithNodes([]any{schema}, func(n []unsafe.Pointer) error {
 		return answer(func(alloc, out unsafe.Pointer) uint32 {
 			return native.IntakeForSchema(n[0], alloc, out)
 		}, owned(&form))
@@ -187,7 +187,7 @@ func ForSchema(schema any) (*guatiao.Value, error) {
 // or nil when there is none.
 func FormFor(form, schema any, path string) (*guatiao.Value, error) {
 	var found *guatiao.Value
-	err := bridge.WithNodes([]any{form, schema}, func(n []unsafe.Pointer) error {
+	err := guatiao.WithNodes([]any{form, schema}, func(n []unsafe.Pointer) error {
 		return answer(func(alloc, out unsafe.Pointer) uint32 {
 			return native.IntakeFormFor(n[0], n[1], path, alloc, out)
 		}, owned(&found))
@@ -199,7 +199,7 @@ func FormFor(form, schema any, path string) (*guatiao.Value, error) {
 // guatiao.ErrWrongKind for a key that names no field.
 func FlatKeys(schema any, key string) ([]string, error) {
 	var keys []string
-	err := bridge.WithNodes([]any{schema}, func(n []unsafe.Pointer) error {
+	err := guatiao.WithNodes([]any{schema}, func(n []unsafe.Pointer) error {
 		return answer(func(alloc, out unsafe.Pointer) uint32 {
 			return native.IntakeFlatKeys(n[0], key, alloc, out)
 		}, plain(&keys))
@@ -210,7 +210,7 @@ func FlatKeys(schema any, key string) ([]string, error) {
 // Flatten writes value into a flat store, one entry per scalar leaf.
 func Flatten(schema any, key string, value any) (map[string]string, error) {
 	store := map[string]string{}
-	err := bridge.WithNodes([]any{schema, value}, func(n []unsafe.Pointer) error {
+	err := guatiao.WithNodes([]any{schema, value}, func(n []unsafe.Pointer) error {
 		return answer(func(alloc, out unsafe.Pointer) uint32 {
 			return native.IntakeFlatten(n[0], key, n[1], alloc, out)
 		}, plain(&store))
@@ -223,7 +223,7 @@ func Flatten(schema any, key string, value any) (map[string]string, error) {
 // close; nil when nothing is stored under it. A store holding anything
 // but strings is an error.
 func Unflatten(schema any, key string, store any) (*guatiao.Value, error) {
-	if node, ok, err := bridge.NodeOf(store); ok {
+	if node, ok, err := guatiao.NodeOf(store); ok {
 		if err != nil {
 			return nil, err
 		}
@@ -234,7 +234,7 @@ func Unflatten(schema any, key string, store any) (*guatiao.Value, error) {
 		return nil, &guatiao.Error{Status: guatiao.WrongKind, Message: fmt.Sprintf("a flat store maps strings to strings, not a %T", store)}
 	}
 	var rebuilt *guatiao.Value
-	err := bridge.WithNodes([]any{schema, store}, func(n []unsafe.Pointer) error {
+	err := guatiao.WithNodes([]any{schema, store}, func(n []unsafe.Pointer) error {
 		return answer(func(alloc, out unsafe.Pointer) uint32 {
 			return native.IntakeUnflatten(n[0], key, n[1], alloc, out)
 		}, func(st uint32, out *guatiao.Value) error {
@@ -259,3 +259,28 @@ func textStore(node unsafe.Pointer) bool {
 	}
 	return true
 }
+
+// lift turns the native layer's failure to open a library into the
+// guatiao package's error for it.
+func lift(err error) error {
+	var nf *native.NotFound
+	if errors.As(err, &nf) {
+		return &guatiao.LibraryNotFound{Basename: nf.Basename, Looked: nf.Looked}
+	}
+	var ms *native.Missing
+	if errors.As(err, &ms) {
+		return &guatiao.MissingSymbol{Path: ms.Path, Symbol: ms.Symbol, Feature: ms.Feature}
+	}
+	return err
+}
+
+// UseLibrary names the guatiao_intake library to load instead of looking for
+// one: a file exporting its functions, whatever it is called (an
+// application's own library carrying several surfaces, say), or a
+// directory holding it under its platform file name. Without it the
+// library is found through GUATIAO_INTAKE_LIBRARY, then GUATIAO_LIBRARY (a
+// directory, or a file exporting it, else the file beside it), then the
+// platform's search. Call it before the first call that needs the
+// library; naming another file once one is loaded is an error, naming the
+// same one is not.
+func UseLibrary(where string) error { return native.Use(native.LibIntake, where) }

@@ -48,8 +48,9 @@ application that carries it.
   `time.Time`, read and written by the library itself.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
-- **JSON, TOML and YAML**, and **form checks against a schema**, through
-  the `guatiao-serde` and `guatiao-intake` libraries when they are present.
+- **JSON, TOML and YAML**, and **form checks against a schema**: the
+  `serde` and `intake` packages, each over its own library
+  (`guatiao_serde`, `guatiao_intake`).
 - **Nothing native until it is needed** — the library is looked for on
   first use, and a missing one names every place that was searched.
 
@@ -73,11 +74,15 @@ export GUATIAO_LIBRARY=/opt/myapp/myapp.dll    # or the file itself, whatever it
 or call `guatiao.UseLibrary(path)` before the first call. Without either,
 the platform's library search is tried by file name.
 
-| Exports from | Needed for |
-| --- | --- |
-| `guatiao` | values, the registry, kinds and providers, schemas, time, redaction |
-| `guatiao_serde` | `serde`: JSON, and TOML and YAML when the library has them |
-| `guatiao_intake` | `intake` |
+| Package | Library | Its own variable, before `GUATIAO_LIBRARY` |
+| --- | --- | --- |
+| `guatiao`, `civil` | `guatiao` | |
+| `serde` | `guatiao_serde` | `GUATIAO_SERDE_LIBRARY` |
+| `intake` | `guatiao_intake` | `GUATIAO_INTAKE_LIBRARY` |
+
+A file `GUATIAO_LIBRARY` names serves every package whose functions it
+exports (an application's own library carrying several surfaces), and
+the others find theirs beside it. Each package has its own `UseLibrary`.
 
 Go 1.26 or later, on a 64-bit platform.
 

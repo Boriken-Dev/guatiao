@@ -130,12 +130,26 @@ func (l *Lib) Need(symbol string) error {
 
 var (
 	mu      sync.Mutex
-	chosen  string
+	chosen  [3]string
 	libs    [3]*Lib
 	failure [3]error
 )
 
 var basenames = [3]string{"guatiao", "guatiao_serde", "guatiao_intake"}
+
+// Each surface's own environment variable, consulted before
+// GUATIAO_LIBRARY; the core has none of its own.
+var variables = [3]string{"", "GUATIAO_SERDE_LIBRARY", "GUATIAO_INTAKE_LIBRARY"}
+
+// A symbol only each surface exports: what a shared file is checked for.
+var probes = [3]string{"guatiao_value_free", "guatiao_json_parse_ex", "guatiao_intake_check"}
+
+// The surfaces, as the which of Use and open.
+const (
+	LibCore   = 0
+	LibSerde  = 1
+	LibIntake = 2
+)
 
 // Filename is the platform's file name for a library of this base name.
 func Filename(base string) string {
@@ -149,25 +163,26 @@ func Filename(base string) string {
 	}
 }
 
-// Use names the core library to open instead of looking for one: a file
-// exporting the ABI, or a directory holding it. Naming another once one
-// is open is an error; naming the same one is not.
-func Use(where string) error {
+// Use names the library of surface which (LibCore, LibSerde, LibIntake)
+// to open instead of looking for one: a file exporting it, whatever it is
+// called, or a directory holding it. Naming another once one is open is
+// an error; naming the same one is not.
+func Use(which int, where string) error {
 	mu.Lock()
 	defer mu.Unlock()
-	if libs[0] != nil {
+	if libs[which] != nil {
 		same := where
 		if isDir(where) {
-			same = filepath.Join(where, Filename("guatiao"))
+			same = filepath.Join(where, Filename(basenames[which]))
 		}
 		a, _ := filepath.Abs(same)
-		b, _ := filepath.Abs(libs[0].Path)
+		b, _ := filepath.Abs(libs[which].Path)
 		if a != b {
-			return fmt.Errorf("the guatiao library is already loaded from %s", libs[0].Path)
+			return fmt.Errorf("the %s library is already loaded from %s", basenames[which], libs[which].Path)
 		}
 		return nil
 	}
-	chosen = where
+	chosen[which] = where
 	return nil
 }
 
@@ -181,36 +196,82 @@ func isFile(p string) bool {
 	return err == nil && !info.IsDir()
 }
 
-func candidates(base string) (tries, looked []string) {
-	filename := Filename(base)
-	named, route := chosen, "UseLibrary"
-	if named == "" {
-		named, route = os.Getenv("GUATIAO_LIBRARY"), "GUATIAO_LIBRARY"
-	}
-	if named != "" {
+// A file to try. A shared one (a GUATIAO_LIBRARY file, for a surface other
+// than the core) that lacks the surface is passed over, not an error.
+type try struct {
+	path   string
+	shared bool
+}
+
+// candidates are the files to try for surface which: what Use named, its
+// own variable, GUATIAO_LIBRARY, then the platform's search. A directory
+// holds the surface's file under its platform name; a file named for the
+// surface is taken as it is; a GUATIAO_LIBRARY file serves every surface
+// it exports, else the surface's own file beside it does.
+func candidates(which int) (tries []try, looked []string) {
+	filename := Filename(basenames[which])
+	named := func(where, route string, shared bool) {
+		looked = append(looked, fmt.Sprintf("%s (%s)", route, where))
 		switch {
-		case isDir(named):
-			if c := filepath.Join(named, filename); isFile(c) {
-				tries = append(tries, c)
+		case isDir(where):
+			if c := filepath.Join(where, filename); isFile(c) {
+				tries = append(tries, try{path: c})
 			}
-		case isFile(named):
-			// The core library is the file as named; the others are looked
-			// for beside it under their own names.
-			c := named
-			if base != "guatiao" {
-				c = filepath.Join(filepath.Dir(named), filename)
-			}
-			if isFile(c) {
-				tries = append(tries, c)
+		case isFile(where):
+			tries = append(tries, try{path: where, shared: shared})
+			if shared {
+				if c := filepath.Join(filepath.Dir(where), filename); isFile(c) {
+					tries = append(tries, try{path: c})
+				}
 			}
 		}
-		looked = append(looked, fmt.Sprintf("%s (%s)", route, named))
+	}
+	if chosen[which] != "" {
+		named(chosen[which], "UseLibrary", false)
+	}
+	if v := variables[which]; v != "" {
+		if own := os.Getenv(v); own != "" {
+			named(own, v, false)
+		} else {
+			looked = append(looked, v+" (unset)")
+		}
+	}
+	if shared := os.Getenv("GUATIAO_LIBRARY"); shared != "" {
+		named(shared, "GUATIAO_LIBRARY", which != LibCore)
 	} else {
 		looked = append(looked, "GUATIAO_LIBRARY (unset)")
 	}
-	tries = append(tries, filename)
+	tries = append(tries, try{path: filename})
 	looked = append(looked, "the platform's search for "+filename)
 	return tries, looked
+}
+
+// Locate is the file the lookup for surface which settles on now, without
+// opening it for use: the first candidate that is a file (a shared one
+// only when it exports the surface), else the bare file name the
+// platform's search would be given. A *NotFound when no route names
+// anything and the platform's search is all that is left is not an error
+// here: the bare name is answered.
+func Locate(which int) (string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	tries, looked := candidates(which)
+	for _, t := range tries {
+		if !isFile(t.path) {
+			continue
+		}
+		if t.shared {
+			cpath, csym := C.CString(t.path), C.CString(probes[which])
+			found := C.gt_carries(cpath, csym) != 0
+			C.free(unsafe.Pointer(cpath))
+			C.free(unsafe.Pointer(csym))
+			if !found {
+				continue
+			}
+		}
+		return t.path, nil
+	}
+	return "", &NotFound{Basename: basenames[which], Looked: looked}
 }
 
 func open(which int) (*Lib, error) {
@@ -223,14 +284,18 @@ func open(which int) (*Lib, error) {
 		return nil, failure[which]
 	}
 	base := basenames[which]
-	tries, looked := candidates(base)
-	for _, path := range tries {
+	tries, looked := candidates(which)
+	for _, t := range tries {
+		path := t.path
 		cpath := C.CString(path)
 		var buf [512]C.char
 		rc := C.gt_open(C.int(which), cpath, &buf[0], C.size_t(len(buf)))
 		C.free(unsafe.Pointer(cpath))
 		why := C.GoString(&buf[0])
 		if rc == 2 {
+			if t.shared {
+				continue
+			}
 			// A file that opened but is not a build of this library.
 			return nil, &Missing{Path: path, Symbol: why}
 		}

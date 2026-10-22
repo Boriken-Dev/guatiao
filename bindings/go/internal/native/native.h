@@ -267,6 +267,8 @@ enum { GT_LIB_CORE = 0, GT_LIB_SERDE = 1, GT_LIB_INTAKE = 2 };
  * library opened, `gt_missing` names its absent optional exports.
  */
 int gt_open(int lib, const char *path, char *err, size_t errlen);
+/* 1 when the file at path opens and exports symbol, else 0; it is closed again. */
+int gt_carries(const char *path, const char *symbol);
 
 /* The `index`th absent export of `lib` and its feature, or 0 past the last. */
 int gt_missing(int lib, int index, const char **name, const char **feature);
