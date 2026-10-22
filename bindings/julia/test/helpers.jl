@@ -80,3 +80,35 @@ function build_c(source::AbstractString, dir::AbstractString, name::AbstractStri
     run(`$cc $args`)
     return out
 end
+
+const C_CONSUMER = joinpath(REPO, "crates", "guatiao", "tests", "c_consumer")
+
+"A fresh directory under the system's temporary one, left for the system to clean."
+scratch(name) = mktempdir(; prefix = "guatiao-julia-$name-", cleanup = false)
+
+"The greeter written in C, in a directory of its own; `nothing` without a compiler."
+function build_c_greeter()
+    dir = scratch("c-greeter")
+    return build_c(joinpath(C_CONSUMER, "greeter_in_c.c"), dir, "c_greeter") === nothing ? nothing : dir
+end
+
+"The source written in C (a shelf of counters), as a file; `nothing` without a compiler."
+build_c_source(name) = build_c(joinpath(C_CONSUMER, "source_in_c.c"), scratch("c-shelf"), name)
+
+"The workspace build of `base`, beside the guatiao library."
+workspace_library(base) = joinpath(ENV["GUATIAO_LIBRARY"], Guatiao.library_filename(base))
+
+"The guatiao-py bridge: `GUATIAO_PY_BRIDGE`, else its debug build when it is there, else `nothing`."
+function bridge()
+    named = get(ENV, "GUATIAO_PY_BRIDGE", joinpath(REPO, "crates", "guatiao-py", "target", "debug", Guatiao.library_filename("guatiao_py")))
+    return isfile(named) ? named : nothing
+end
+
+"What the bridge is told: where the Python greeters are, and what they import."
+bridge_config() = Dict("dirs" => [joinpath(REPO, "examples", "python_provider")],
+    "paths" => [joinpath(REPO, "bindings", "python", "src"), joinpath(REPO, "examples", "greeter_kind", "python")])
+
+# The Julia kinds and greeters are packages of the examples, found by name.
+for dir in (joinpath(REPO, "examples", "greeter_kind", "julia"), joinpath(REPO, "examples", "julia_provider"))
+    dir in LOAD_PATH || push!(LOAD_PATH, dir)
+end

@@ -23,6 +23,21 @@ application that carries it.
   structs.
 - **Numbers keep their exact text** — `1.10` stays `1.10`, and an
   integer of any size survives (`NumberText`, `BigInt`).
+- **Be a plugin host** — scan a directory, filter on what a library
+  declares before loading it, list providers best first, build an
+  instance from a configuration, call a provider through its table with
+  Julia values in and out, and keep sources of libraries that come and go
+  (`refresh!`).
+- **A kind is an abstract type and its functions** — `@kind` declares
+  one from its C header; its remote is a subtype, so code written against
+  the kind takes a local provider or a remote alike.
+- **Write a provider in Julia** — a struct with methods for the kind's
+  functions, declared with `@provider`, in a library a host calls the way
+  it calls one written in Rust, C, Python or Go; the package is the
+  library, named and versioned by its `Project.toml`.
+- **Hand a library a Julia value** — any value with the right methods
+  becomes an object of a kind (a listener, a callback) that a library
+  calls, or holds until it is done with it, from any of its threads.
 - **A configuration is a struct** — `Guatiao.schema(T)` writes the JSON
   Schema its fields describe, and `decode(T, value)` builds it back;
   `Guatiao.@config` is `@kwdef` that also puts defaults and docstrings in
@@ -94,6 +109,49 @@ decode(NumberText, n)   # NumberText("1.10")
 decode(Float64, n)      # 1.1
 ```
 
+### Hosting plugins
+
+```julia
+using Guatiao, GreeterKind   # the kind, declared with @kind
+
+reg = Registry("my-host", "1.0")
+Guatiao.scan_dir(reg, "/opt/plugins"; rules = "kind=greeter")
+for p in Guatiao.providers(reg, "greeter")
+    println(p["key"])
+end
+
+greeter = Guatiao.bind(reg, "acme_hello", Greeter)
+answer = GreeterKind.greet(greeter, "ana")   # a Value: Dict("greeting" => "hello, ana")
+close(answer)
+close(reg)
+```
+
+### A kind, and a provider of it
+
+A kind is declared once, from its C header:
+
+```julia
+@kind Greeter floor_hash = 2695856491 begin
+    @required @fallible greet(name::String)::MapRef
+    shout(name::String)::String
+end
+```
+
+A provider is a struct with methods for its functions:
+
+```julia
+struct Hello <: Greeter end
+GreeterKind.greet(::Hello, name::String) = isempty(name) ?
+    throw(GuatiaoError(Guatiao.BadValue, "nobody to greet")) :
+    Dict("greeting" => "hello, $name")
+@provider Hello display_name = "Hello, in Julia"
+
+Guatiao.register_library(reg, MyPackage)   # the package declaring it is the library
+```
+
+A host in this process, written in any language, calls `Hello` through
+the same table it would call a Rust or C greeter through.
+
 ### A configuration's schema
 
 ```julia
@@ -133,6 +191,17 @@ Guatiao.fromtext(Timestamp, "2026-10-21T19:15:00.5+05:30")   # Timestamp("2026-1
   `Span` and `Length` keep every nanosecond.
 - A `@kwdef` struct's defaults cannot be read back from it: `@config`
   records them for the schema.
+- A remote cannot run a kind's default body for a slot an older table
+  lacks, as a Rust caller does: `Guatiao.has(r, :slot)` asks, and the
+  call answers `Unsupported`.
+- A process builds at most 64 libraries and 256 providers in Julia: a
+  descriptor's own slots come from fixed pools of C function pointers.
+- A Julia library is registered in a host in the same process; there is
+  no library file a foreign host's scan loads, since that would need
+  Julia embedded in it.
+- A C call that may call back into Julia from another thread must be made
+  in a GC-safe region, as every call of this package is; a `ccall` of
+  your own that does so wraps itself (see `AGENTS.md`, "Threads").
 - 64-bit platforms only. There is no Julia for Windows on ARM64; an x64
   Julia there needs an x64 build of the library.
 
@@ -146,7 +215,10 @@ Guatiao.fromtext(Timestamp, "2026-10-21T19:15:00.5+05:30")   # Timestamp("2026-1
 | `redact` | secrets hidden |
 | `Serde.parse`, `Serde.emit` | JSON, TOML, YAML |
 | `Intake` | `check`, `layout`, `isvisible`, `at`, `for_schema`, `form_for`, `resolve`, `flat_keys`, `flatten`, `unflatten` |
-| `GuatiaoError`, `ParseError`, `Unparsed`, `LibraryNotFound`, `MissingSymbol` | errors |
+| `Registry`, `Instance`, `Guatiao.bind`, `Guatiao.create`, `Guatiao.refresh!` | hosting plugins |
+| `@kind`, `Lent`, `Taken`, `@required`, `@fallible` | a kind, declared from its C header |
+| `@provider`, `Guatiao.Provider`, `Guatiao.Library`, `Guatiao.library_of`, `Guatiao.register_library` | providers and libraries written in Julia |
+| `GuatiaoError`, `ParseError`, `Unparsed`, `LibraryNotFound`, `MissingSymbol`, `FloorMismatch` | errors |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia/AGENTS.md)
 is the full API reference and ships in the package. The C ABI is
@@ -162,7 +234,11 @@ julia --project=. -e 'using Pkg; Pkg.test()'
 
 The tests need the three libraries in one directory; they point
 `GUATIAO_LIBRARY` at the repository's build output when the variable is
-unset, and the repository's own `AGENTS.md` says how to produce it.
+unset, and the repository's own `AGENTS.md` says how to produce it. The
+examples (`examples/greeter_kind/julia`, `examples/julia_provider`,
+`examples/julia_host`) hold the greeter kinds, a library of providers and
+a host written in Julia; the tests call greeters written in Rust, C,
+Python, Go and Julia both ways.
 
 ## License
 
