@@ -45,6 +45,7 @@ nav:
       - Python: api/python.md
       - Dart: api/dart.md
   - In a browser: wasm.md
+  - Migrating from 0.0.0-alpha.0: migrating.md
   - Changelog: changelog.md
 
 plugins:

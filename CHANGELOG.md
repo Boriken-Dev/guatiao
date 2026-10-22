@@ -7,8 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Moving from `0.0.0-alpha.0`: the docs site's
+[migration page](https://boriken-dev.github.io/guatiao/migrating/) gathers
+every change since then that asks something of code using it, with what to
+write now.
+
 ### Added
 
+- **A migration page**, "Migrating from 0.0.0-alpha.0" on the docs site:
+  every break since that release, grouped by what a consumer touches
+  (values, schema and derives, kinds and providers, the loader and its
+  handles, `guatiao-serde`, `guatiao-intake`, the C surface, Python and
+  Dart), each with the call before and after; the Rust it shows is
+  compiled by the test suite.
 - **`into_local()`, `into_alloc(alloc)` and `is_local()` on `Value`,
   `Map`, `List`, `Text` and `Buffer`.** Owning a tree without copying one
   that is already this binary's: `into_local()` hands back a tree whose
