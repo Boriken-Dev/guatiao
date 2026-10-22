@@ -112,19 +112,19 @@ jobs:
                       problems.append(f"guatiao-py's {table} pin {name} to {spec.get('version')}, not ={cargo}")
           # npm writes the version as Cargo does; the lockfiles name it too.
           import json
-          node = json.loads(pathlib.Path("bindings/node/package.json").read_text())["version"]
-          node_lock = json.loads(pathlib.Path("bindings/package-lock.json").read_text())
+          node = json.loads(pathlib.Path("bindings/node/guatiao/package.json").read_text())["version"]
+          node_lock = json.loads(pathlib.Path("bindings/node/package-lock.json").read_text())
           examples_lock = json.loads(pathlib.Path("examples/package-lock.json").read_text())
           found_versions = [
-              ("bindings/node/package.json", node),
-              ("examples/package-lock.json's ../bindings/node", examples_lock["packages"]["../bindings/node"]["version"]),
+              ("bindings/node/guatiao/package.json", node),
+              ("examples/package-lock.json's ../bindings/node/guatiao", examples_lock["packages"]["../bindings/node/guatiao"]["version"]),
           ]
-          for package in ("node", "node-serde", "node-intake"):
-              found_versions.append((f"bindings/package-lock.json's {package}", node_lock["packages"][package]["version"]))
+          for package in ("guatiao", "guatiao-serde", "guatiao-intake"):
+              found_versions.append((f"bindings/node/package-lock.json's {package}", node_lock["packages"][package]["version"]))
           for crate in ("serde", "intake"):
-              manifest = json.loads(pathlib.Path(f"bindings/node-{crate}/package.json").read_text())
-              found_versions.append((f"bindings/node-{crate}/package.json", manifest["version"]))
-              found_versions.append((f"bindings/node-{crate}/package.json's guatiao", manifest["dependencies"]["guatiao"]))
+              manifest = json.loads(pathlib.Path(f"bindings/node/guatiao-{crate}/package.json").read_text())
+              found_versions.append((f"bindings/node/guatiao-{crate}/package.json", manifest["version"]))
+              found_versions.append((f"bindings/node/guatiao-{crate}/package.json's guatiao", manifest["dependencies"]["guatiao"]))
           for where, found in found_versions:
               if found != cargo:
                   problems.append(f"Cargo says {cargo} and {where} says {found}")
@@ -294,24 +294,24 @@ jobs:
           node-version: "24"
       - name: Build
         # The workspace, the core first: the others compile against its types.
-        working-directory: bindings
+        working-directory: bindings/node
         run: |
           npm ci
-          for p in node node-serde node-intake; do
+          for p in guatiao guatiao-serde guatiao-intake; do
             (cd "$p" && npm run build)
           done
       - name: "Dry-run the pack: what npm would publish"
-        working-directory: bindings
+        working-directory: bindings/node
         run: |
-          for p in node node-serde node-intake; do
+          for p in guatiao guatiao-serde guatiao-intake; do
             (cd "$p" && npm pack --dry-run)
           done
       - name: Pack
-        working-directory: bindings
+        working-directory: bindings/node
         run: |
-          mkdir -p ../npm
-          for p in node node-serde node-intake; do
-            (cd "$p" && npm pack --pack-destination ../../npm)
+          mkdir -p ../../npm
+          for p in guatiao guatiao-serde guatiao-intake; do
+            (cd "$p" && npm pack --pack-destination ../../../npm)
           done
       - uses: actions/upload-artifact@v4
         with:

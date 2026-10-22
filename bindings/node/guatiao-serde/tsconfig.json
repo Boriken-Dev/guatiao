@@ -1,12 +1,12 @@
 {
-  "extends": "../node/tsconfig.json",
+  "extends": "../guatiao/tsconfig.json",
   "compilerOptions": {
     "paths": {
       "guatiao": [
-        "../node/src/index.ts"
+        "../guatiao/src/index.ts"
       ],
       "guatiao/*": [
-        "../node/src/*.ts"
+        "../guatiao/src/*.ts"
       ]
     }
   },

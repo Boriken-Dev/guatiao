@@ -17,7 +17,7 @@ import { LIBRARY_INFO, PROVIDER_INFO, SIZE, Status } from '../src/abi.js';
 import { kind, liveObjects, t } from '../src/kinds.js';
 import * as n from '../src/native.js';
 import { Provider, library, libraryOf, s } from '../src/provide.js';
-import { Counter, Greeter, Listener } from '../../../examples/greeter_kind/node/greeter_kind.ts';
+import { Counter, Greeter, Listener } from '../../../../examples/greeter_kind/node/greeter_kind.ts';
 import { REPO } from './helpers.js';
 import { scratch } from './native.js';
 
@@ -81,7 +81,7 @@ describe('a module is its library', () => {
       JSON.stringify({ name: 'tally', version: '2.1.0', type: 'module', main: 'index.js', repository: { url: 'https://example.org/tally' } }),
     );
     writeFileSync(path.join(dir, 'LICENSE'), 'Use it well.\n');
-    const kinds = pathToFileURL(path.join(REPO, 'bindings', 'node', 'src', 'provide.ts')).href;
+    const kinds = pathToFileURL(path.join(REPO, 'bindings', 'node', 'guatiao', 'src', 'provide.ts')).href;
     const counter = pathToFileURL(path.join(REPO, 'examples', 'greeter_kind', 'node', 'greeter_kind.ts')).href;
     writeFileSync(
       path.join(dir, 'lib', 'extra.ts'),

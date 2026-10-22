@@ -9,7 +9,7 @@
 import type { Value } from '../src/index.js';
 import type { Remote } from '../src/kinds.js';
 import { Provider } from '../src/provide.js';
-import { Counter, Greeter } from '../../../examples/greeter_kind/node/greeter_kind.ts';
+import { Counter, Greeter } from '../../../../examples/greeter_kind/node/greeter_kind.ts';
 
 // A provider that misspells a required method does not implement its kind.
 // @ts-expect-error -- `greet` is required, and `greeet` is not it

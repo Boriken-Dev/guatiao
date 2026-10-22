@@ -15,7 +15,7 @@ import * as n from '../src/native.js';
 import { liveObjects, type Remote } from '../src/kinds.js';
 import { libraryOf } from '../src/provide.js';
 import { adopt } from '../src/value.js';
-import { Counter, Greeter } from '../../../examples/greeter_kind/node/greeter_kind.ts';
+import { Counter, Greeter } from '../../../../examples/greeter_kind/node/greeter_kind.ts';
 import { GREETER_KIND_H, REPO, readText } from './helpers.js';
 import { bridge, bridgeConfig, buildCGreeter, workspaceLibrary } from './native.js';
 

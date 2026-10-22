@@ -17,7 +17,7 @@ import { OWNED, PROVIDER_ERROR, SIZE, Status, Tag, VALUE } from '../src/abi.js';
 import { kind, liveObjects, t } from '../src/kinds.js';
 import * as n from '../src/native.js';
 import { Provider, library, libraryOf } from '../src/provide.js';
-import { Greeter } from '../../../examples/greeter_kind/node/greeter_kind.ts';
+import { Greeter } from '../../../../examples/greeter_kind/node/greeter_kind.ts';
 import { Counting, REPO } from './helpers.js';
 import { buildC, scratch } from './native.js';
 
@@ -181,7 +181,7 @@ describe('a caller handing trees over', () => {
 
 describe('a call from a thread Node did not start', () => {
   it('runs on Node thread when the event loop turns, the caller waiting', async (ctx_) => {
-    const built = buildC(path.join(REPO, 'bindings', 'node', 'test', 'fixtures', 'foreign_thread.c'), scratch('foreign'), 'foreign_thread');
+    const built = buildC(path.join(REPO, 'bindings', 'node', 'guatiao', 'test', 'fixtures', 'foreign_thread.c'), scratch('foreign'), 'foreign_thread');
     if (built === null) return ctx_.skip('no C compiler: the fixture is not built');
     const k = n.koffi();
     const lib = k.load(built);

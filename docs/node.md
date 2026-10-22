@@ -62,7 +62,7 @@ export type Counter = Implementation<typeof Counter>;
   position, so the TypeScript name is free (`greetInto` for `greet_into`).
 
 The binding's
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node/guatiao/AGENTS.md)
 lists every shape, both ways.
 
 ## As a host

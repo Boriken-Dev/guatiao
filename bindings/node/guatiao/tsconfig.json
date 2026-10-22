@@ -32,8 +32,8 @@
     "src",
     "test",
     "vitest.config.ts",
-    "../../examples/greeter_kind/node",
-    "../../examples/node_host",
-    "../../examples/node_provider"
+    "../../../examples/greeter_kind/node",
+    "../../../examples/node_host",
+    "../../../examples/node_provider"
   ]
 }

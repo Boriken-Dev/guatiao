@@ -8,6 +8,6 @@
     "node": ">=22.18"
   },
   "dependencies": {
-    "guatiao": "file:../bindings/node"
+    "guatiao": "file:../bindings/node/guatiao"
   }
 }

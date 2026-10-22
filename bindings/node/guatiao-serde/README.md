@@ -85,7 +85,7 @@ naming its feature. A TOML document must be a map.
 | `BYTES_DATA_URI`, `BYTES_BASE64`, `BYTES_ARRAY`, `BYTES_REFUSE`, `READ_DATA_URIS`, `PRETTY` | the `how` flags |
 | `useLibrary(path)`, `library()` | naming and loading `guatiao_serde` |
 
-[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node-serde/AGENTS.md)
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node/guatiao-serde/AGENTS.md)
 is the full API reference and ships in the package. The C ABI is
 described by
 [`guatiao_serde.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-serde/include/guatiao_serde.h).
@@ -93,12 +93,12 @@ described by
 ## Development
 
 ```bash
-cd bindings
+cd bindings/node
 npm ci                # the workspace: guatiao, this package and guatiao-intake
-cd node-serde
+cd guatiao-serde
 npm run typecheck
 npm test              # vitest, against the core's sources beside it
-npm run build         # dist/, after `npm run build` in ../node
+npm run build         # dist/, after `npm run build` in ../guatiao
 ```
 
 `test/setup.ts` points `GUATIAO_LIBRARY` at the repository's build output

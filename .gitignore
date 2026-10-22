@@ -33,9 +33,9 @@ Cargo.lock
 
 # Node, wherever a package or an example carries some
 node_modules/
-/bindings/node/dist/
-/bindings/node-serde/dist/
-/bindings/node-intake/dist/
+/bindings/node/guatiao/dist/
+/bindings/node/guatiao-serde/dist/
+/bindings/node/guatiao-intake/dist/
 *.tsbuildinfo
 
 # Go: what `go build` writes beside the examples

@@ -74,7 +74,7 @@ Bindings over the same C ABI, for a consumer that is not Rust:
 | --- | --- | --- |
 | Python | [`bindings/python/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/python/guatiao/README.md) | `pip install guatiao` |
 | Dart | [`bindings/dart/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/guatiao/README.md) | `dart pub add guatiao` |
-| Node.js, TypeScript | [`bindings/node/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node/README.md) | `npm install guatiao` |
+| Node.js, TypeScript | [`bindings/node/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node/guatiao/README.md) | `npm install guatiao` |
 | Go | [`bindings/go/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/go/README.md) | `go get github.com/Boriken-Dev/guatiao/bindings/go` |
 | Julia | [`bindings/julia/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia/README.md) | `Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia")` |
 | R | [`bindings/r/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r/README.md) | `remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r")` |
