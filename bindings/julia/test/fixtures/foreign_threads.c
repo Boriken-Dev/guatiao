@@ -115,14 +115,22 @@ EXPORT int foreign_greet_joined(const greeter_vtable *table, void *ctx, value_fr
 }
 
 static job detached;
+
+/* `src` into `dst` of `cap` bytes, cut short and always terminated. */
+static void copy_text(char *dst, const char *src, size_t cap) {
+  size_t n = strlen(src);
+  if (n >= cap) n = cap - 1;
+  memcpy(dst, src, n);
+  dst[n] = 0;
+}
 static char detached_name[64];
 static char detached_expect[128];
 
 /* One thread calling greet(name) once; returns at once. */
 EXPORT int foreign_greet_detached(const greeter_vtable *table, void *ctx, value_free_fn free_value, const char *name,
                                   const char *expect) {
-  strncpy(detached_name, name, sizeof detached_name - 1);
-  strncpy(detached_expect, expect, sizeof detached_expect - 1);
+  copy_text(detached_name, name, sizeof detached_name);
+  copy_text(detached_expect, expect, sizeof detached_expect);
   detached = (job){table, ctx, free_value, detached_name, detached_expect, 1, 0, 0};
 #ifdef _WIN32
   HANDLE thread = CreateThread(NULL, 0, run, &detached, 0, NULL);
