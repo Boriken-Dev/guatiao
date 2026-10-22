@@ -1,0 +1,3 @@
+#!/bin/sh
+# Windows builds use src/Makevars.win as it is: Rtools carries libffi.
+exit 0

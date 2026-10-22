@@ -1,0 +1,21 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+# The suite drives a real build: GUATIAO_LIBRARY names it. Without it
+# every case that needs the library is a stated skip, and
+# GUATIAO_REQUIRE_ALL=1 turns any skip into a failure.
+
+library(guatiao)
+
+here <- if (dir.exists("cases")) "cases" else file.path("tests", "cases")
+source(file.path(here, "harness.R"))
+source(file.path(here, "helpers.R"))
+
+files <- c("abi.R", "values.R", "typed.R", "serde.R", "intake.R", "time.R", "frees.R",
+  "greeters.R", "provide.R", "threads.R", "registry.R", "examples.R")
+for (f in files) {
+  path <- file.path(here, f)
+  if (file.exists(path)) run_file(path)
+}
+finish()
