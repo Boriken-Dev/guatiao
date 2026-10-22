@@ -47,6 +47,10 @@ node_modules/
 /examples/c-greeter/
 /go-library/
 
+# Julia: a package's resolved environment is its user's
+Manifest.toml
+Manifest-v*.toml
+
 # Python, wherever an example or a crate carries some
 __pycache__/
 *.py[cod]
