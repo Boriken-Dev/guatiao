@@ -46,15 +46,20 @@ void main() {
     }
   });
 
-  test('serde and form load, with every format built', () {
+  test('another surface opens its own library, with every format built', () {
     for (final name in [
       'guatiao_json_parse',
       'guatiao_toml_parse',
       'guatiao_yaml_parse',
     ]) {
-      expect(native.serdeLib().provides(name), isTrue, reason: name);
+      expect(native.openSurface('guatiao_serde').provides(name), isTrue,
+          reason: name);
     }
-    expect(native.formLib().provides('guatiao_intake_check'), isTrue);
+    expect(
+        native.openSurface('guatiao_intake').provides('guatiao_intake_check'),
+        isTrue);
+    expect(native.openSurface('guatiao_serde').path,
+        endsWith(dllFilename('guatiao_serde')));
   });
 
   test('a missing symbol names the library and the feature', () {
@@ -96,8 +101,8 @@ void main() {
       // The core surface is there; the serde one is a separate library,
       // so it was not claimed on this library's behalf.
       expect(native.core().path, path);
-      expect(() => native.serdeLib().path, returnsNormally);
-      expect(native.serdeLib().path, isNot(path));
+      expect(() => native.openSurface('guatiao_serde').path, returnsNormally);
+      expect(native.openSurface('guatiao_serde').path, isNot(path));
     });
 
     test('takes the caller word when the surfaces are named', () {
@@ -107,7 +112,7 @@ void main() {
         path: path,
         forSurfaces: const ['guatiao_intake'],
       );
-      expect(native.formLib().path, path);
+      expect(native.openSurface('guatiao_intake').path, path);
     });
 
     test('refuses a name that is not a surface', () {

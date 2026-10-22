@@ -65,8 +65,6 @@ void main() {
     expect(sizeOf<guatiao_payload>(), 32);
     expect(sizeOf<guatiao_value>(), 40);
     expect(sizeOf<guatiao_entry>(), 72);
-    // Three uint32_t, padding, then the message value the reader strides to.
-    expect(sizeOf<guatiao_parse_error>(), 56);
   });
 
   test('the offsets the readers do arithmetic with hold', () {

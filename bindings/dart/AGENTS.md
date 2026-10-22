@@ -14,19 +14,21 @@ Android, iOS, Linux, macOS and Windows and no `web`.
 Importing any of this package's libraries touches nothing native. A
 native call is resolved lazily, on first use, in this order:
 
-1. `GUATIAO_LIBRARY` — a directory holding `guatiao.dll` /
-   `libguatiao.so` / `libguatiao.dylib`, or a file (taken as it is for
-   `guatiao` itself; a sibling is looked for beside it for the others).
-2. `libraryDirectory`, a settable top-level in
+1. A library registered with `useLibrary` for the surface.
+2. `GUATIAO_LIBRARY` — a directory holding `guatiao.dll` /
+   `libguatiao.so` / `libguatiao.dylib`, or a file, taken as it is.
+3. `libraryDirectory`, a settable top-level in
    `package:guatiao/guatiao.dart`. A process cannot set its own
    environment, so this is how an app that ships its own copies says
    where they landed.
-3. The platform's own library search, by name.
+4. The platform's own library search, by name.
 
-Not found throws `LibraryNotFound` naming all three. `guatiao_serde` and
-`guatiao_intake` resolve the same way, independently, only when
-`package:guatiao/serde.dart` or `.../intake.dart` is first used. A symbol a
-build does not export throws `MissingSymbol` naming it.
+Not found throws `LibraryNotFound` naming every route. A symbol a build
+does not export throws `MissingSymbol` naming it. JSON, TOML and YAML are
+the package `guatiao_serde`, forms `guatiao_intake`: each opens its own
+library through `openSurface` (below), consulting its own variable
+(`GUATIAO_SERDE_LIBRARY`, `GUATIAO_INTAKE_LIBRARY`) before
+`GUATIAO_LIBRARY`.
 
 ## Values
 
@@ -115,7 +117,8 @@ Also `loadFile`, `scanPath`, `libraries()`, `provider(key)`,
 `priority`, `providerConfig(key)` (a borrowed, read-only `Ref` onto the
 schema — writing through it throws), `providerMeta(key)` (a copy of the
 provider's `meta` as a `Value` to close, `null` when it declares none,
-`NotFound` for an unknown key; its form is under `intake.providerFormKey`),
+`NotFound` for an unknown key; its form is under `'form'`,
+`providerFormKey` of package:guatiao_intake),
 `retire`, `collect`, `unload`. Every answer that is data comes back as a
 plain `Map`/`List`, already freed.
 
@@ -162,78 +165,6 @@ and friends): checks `found.size` against `floorSize` and the header's
 `floor_hash` against `floorHash`, then casts. Throws `FloorMismatch` on
 either. `floorSize` is the caller's `sizeOf<T>()`, because `sizeOf` needs
 a type known where it is written.
-
-## serde: JSON, TOML, YAML
-
-```dart
-import 'package:guatiao/serde.dart' as serde;
-
-final text = serde.dumps(value, format: Format.json, pretty: true);
-final value = serde.loads(text, format: Format.json);
-```
-
-`Format.toml` / `Format.yaml` throw `UnsupportedError` naming the symbol
-and its feature when the loaded `guatiao_serde` was not built with it. A
-TOML document must be a map (`WrongKind` otherwise).
-
-A number keeps its exact text through JSON, with one exception the parser
-owns: an exponent is read back with its sign written (`1e400` parses as
-`1e+400`).
-
-The `how` flag takes `bytesDataUri`, `bytesBase64`, `bytesArray`,
-`bytesRefuse`, `readDataUris` and `prettyFlag`.
-
-## intake
-
-```dart
-import 'package:guatiao/intake.dart' as intake;
-
-intake.check(schema, formDoc);          // null, or the error map
-intake.layout(schema, formDoc);         // [{'section': ..., 'fields': [...]}, ...]
-intake.isVisible(schema, formDoc, 'key', values);   // bool
-intake.at(value, 'agent[1].name');      // a borrowed Ref, or null
-intake.forSchema(schema);               // the form a schema implies (a Value to close)
-intake.formFor(formDoc, schema, 'path');   // a Value to close, or null
-```
-
-The flat projection keeps a value as `key -> text`, one entry per scalar
-leaf (a tagged field's discriminant under its key and its payload under
-`key.member`, a list as `agent[0].name`, an open map as `env[PATH]`):
-
-```dart
-intake.resolve(schema, 'auth.password');  // borrowed Ref onto the field, or null
-intake.flatKeys(schema, 'auth');          // List<String>; WrongKind for an unknown key
-intake.flatten(schema, 'auth', value);    // Map<String, String>; WrongKind when it does not apply
-intake.unflatten(schema, 'auth', store);  // Value to close, or null; store is a
-                                          // Map<String, String> or a Ref onto one
-```
-
-What `resolve` and `at` return is a read-only view: it holds the schema or
-value it came from, is found again from it on every access, and throws
-`StateError` once that is closed. Writing through it throws `StateError`
-(every write, not only one that allocates), and `.clone()` copies it out.
-An empty container flattens to nothing, and an entry the schema does not
-declare is dropped by `unflatten`.
-
-`unflatten` answers `null` only for "nothing stored": no such field, no
-entry under it, or a discriminant that names no arm. A `store` that is not
-text to text -- a `Map`, or a `Ref` onto anything but a map of strings --
-throws `ArgumentError`.
-
-**A provider's form** travels in its `meta`, under `intake.providerFormKey`
-(`'form'`), beside the configuration schema it is shown with:
-
-```dart
-final meta = reg.providerMeta('acme_dialer');    // null when it declares no meta
-try {
-  final form = meta!.asMap()[intake.providerFormKey]!;
-  final schema = reg.providerConfig('acme_dialer')!;
-  intake.check(schema, form);                    // null: it fits
-  intake.layout(schema, form);
-} finally {
-  meta?.close();
-}
-```
 
 ## time: dates, times, instants, spans, exact lengths
 
@@ -298,9 +229,8 @@ registry lends. Writing through it throws and nothing frees it. It does not
 keep that memory alive: that is the caller's (`Ref.borrowedFrom(source,
 find)` is the form that does, for a view inside another `Ref`). Reading
 touches no library and no top-level state, so it works inside an
-`isolateGroupBound` callback that a native thread calls. The intake
-functions take any `Ref`, so a borrowed schema is passed as it is, with
-no copy.
+`isolateGroupBound` callback that a native thread calls. Any function
+taking a `Ref` takes a borrowed one, with no copy.
 
 ## Embedding, and sharing the types
 
@@ -312,11 +242,50 @@ that file once. It is also the way in when the symbols are already in
 the process and there is no file to open. `forgetLibraries()` undoes it.
 `surfaces` lists the three base names.
 
-`package:guatiao/src/symbols.yaml` is an ffigen symbol file. A package
-generating its own bindings over a header that includes `guatiao.h`
-lists it under `import: symbol-files:` and its bindings then reuse these
-types rather than defining their own, which is the only way a pointer
-can cross between the two packages: Dart's FFI structs are nominal.
+## ffi: for a package over another guatiao library
+
+`package:guatiao/ffi.dart` is what `guatiao_serde` and `guatiao_intake`
+build on, and what any package binding a C library that takes and
+answers guatiao values may use. Supported API, versioned with this
+package.
+
+- **The generated bindings** of `guatiao.h`: `GuatiaoBindings`, every
+  struct (`guatiao_value`, `guatiao_alloc`, `guatiao_str`, ...) and
+  constant. `package:guatiao/ffi_symbols.yaml` is an ffigen symbol file: a
+  package generating its own bindings over a header that includes
+  `guatiao.h` lists it under `import: symbol-files:`, and its bindings
+  then import these types from `package:guatiao/ffi.dart` rather than
+  defining their own, which is the only way a pointer crosses between the
+  two packages: Dart's FFI structs are nominal. Its generated file aliases
+  them (`typedef guatiao_value = imp$1.guatiao_value`): import it with
+  `hide guatiao_alloc, guatiao_str, guatiao_value` beside `ffi.dart`.
+- `openSurface(basename, {String? variable, String? probe}) ->
+  NativeLib`: the library carrying a surface, opened once: the one
+  registered with `useLibrary` for it, else `variable` (a file taken as
+  it is, a directory holding the platform filename), else
+  `GUATIAO_LIBRARY` (a directory; or a file, taken when it exports
+  `probe`, else its sibling), else `libraryDirectory`, else the platform
+  search. `'guatiao_serde'` and `'guatiao_intake'` know their own
+  variable and probe. `resolveLibraryPath` is the path half alone.
+- `NativeLib`: `.path`, `.library` (the `DynamicLibrary`, for a
+  package's own generated bindings), `.bindings` (the core's, over the
+  same file), `.alloc` (its `guatiao_alloc_default`, filled once),
+  `.provides(name)`, `.require(name, {feature})`.
+- `strOf(arena, text)`: a `guatiao_str` over a copy of `text`, valid until
+  `arena` is released. `takeValue(node)`: reads a `calloc`ed root a call
+  filled as plain Dart, then frees its tree and the box.
+  `freeNode(node)`: frees what a node owns through the core library.
+  `checkStatus(code, [message])`: throws the status's
+  `GuatiaoException`. `Status`, `Tag`, `Value`, `Ref` as in
+  `guatiao.dart`.
+
+**A tree crosses libraries as its root node**: `Value.adopt(root,
+{alloc})` takes over a `calloc`ed root a call wrote (in `alloc`, default
+the core library's), `value.pointer` / `ref.requireNode()` lend one to a
+call, `Ref.borrowedFrom(source, find)` views a node another call found.
+Built by one library, a tree is read and freed by any other, since a
+value records its own allocator; the library that built it stays loaded
+while the tree lives.
 
 ## Errors
 
@@ -328,7 +297,7 @@ one of `BadValue`, `AllocFailed`, `WrongKind`, `NotFound`,
 
 `LibraryNotFound`, `MissingSymbol` and `FloorMismatch` are this
 binding's own, and are not status failures. A refusal the library words
-itself (a `WrongKind` from `loads`, say) carries those words in `message`.
+itself carries those words in `message`.
 A process whose pointers are not eight bytes wide gets `UnsupportedError`
 when the first library loads.
 
@@ -347,8 +316,8 @@ provider cannot call back into Dart.
 
 ## Generated bindings
 
-`lib/src/bindings.g.dart` is written by ffigen from the three committed C
-headers and is never edited by hand. Regenerate with `dart run ffigen
+`lib/src/bindings.g.dart` (and `lib/ffi_symbols.yaml`) is written by
+ffigen from the committed `guatiao.h` and is never edited by hand. Regenerate with `dart run ffigen
 --config ffigen.yaml`, then **check the file is still over two thousand
 lines**: ffigen does not fail on an entry point it cannot find, it writes
 an empty file. The header's `static inline` helpers have no symbol in any

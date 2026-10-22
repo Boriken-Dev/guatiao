@@ -5,11 +5,10 @@
 import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
+import 'package:guatiao/ffi.dart';
+import 'package:guatiao/guatiao.dart' show BadValue;
 
-import 'bindings.g.dart';
-import 'errors.dart';
-import 'library.dart' as native;
-import 'value.dart';
+import 'bindings.g.dart' hide guatiao_alloc, guatiao_str, guatiao_value;
 
 /// A text format `guatiao_serde` reads and writes.
 enum Format {
@@ -39,8 +38,26 @@ String _parseSymbol(Format format) => 'guatiao_${format.name}_parse_ex';
 
 String _emitSymbol(Format format) => 'guatiao_${format.name}_emit';
 
-native.NativeLib _resolved(String symbol, String? feature) {
-  final lib = native.serdeLib();
+/// The `guatiao_serde` library, opened on first use: the one registered
+/// for it with `useLibrary` (package:guatiao), else
+/// `GUATIAO_SERDE_LIBRARY`, else `GUATIAO_LIBRARY` (a directory holding
+/// it, or a file exporting its functions or sitting beside it), else
+/// `libraryDirectory`, else the platform's search. Throws
+/// `LibraryNotFound`.
+NativeLib library() => openSurface('guatiao_serde');
+
+GuatiaoSerdeBindings? _bindings;
+NativeLib? _bound;
+
+GuatiaoSerdeBindings _bindingsOf(NativeLib lib) {
+  final cached = _bindings;
+  if (cached != null && identical(_bound, lib)) return cached;
+  _bound = lib;
+  return _bindings = GuatiaoSerdeBindings(lib.library);
+}
+
+NativeLib _resolved(String symbol, String? feature) {
+  final lib = library();
   if (!lib.provides(symbol)) {
     throw UnsupportedError(
       feature == null
@@ -95,6 +112,7 @@ Value loads(
 }) {
   final symbol = _parseSymbol(format);
   final lib = _resolved(symbol, format.feature);
+  final serde = _bindingsOf(lib);
   final allocator = alloc ?? lib.alloc;
   final out = calloc<guatiao_value>();
   final error = calloc<guatiao_parse_error>();
@@ -103,16 +121,16 @@ Value loads(
       final view = strOf(arena, text).ref;
       final status = switch (format) {
         Format.json =>
-          lib.bindings.guatiao_json_parse_ex(view, how, allocator, out, error),
+          serde.guatiao_json_parse_ex(view, how, allocator, out, error),
         Format.toml =>
-          lib.bindings.guatiao_toml_parse_ex(view, how, allocator, out, error),
+          serde.guatiao_toml_parse_ex(view, how, allocator, out, error),
         Format.yaml =>
-          lib.bindings.guatiao_yaml_parse_ex(view, how, allocator, out, error),
+          serde.guatiao_yaml_parse_ex(view, how, allocator, out, error),
       };
       finishParse(status, error);
     });
   } catch (_) {
-    native.core().bindings.guatiao_value_free(out);
+    freeNode(out);
     calloc.free(out);
     rethrow;
   } finally {
@@ -150,11 +168,12 @@ String _takeMessage(Pointer<guatiao_parse_error> error) =>
     Ref.borrowed(_messageOf(error)).stringOr('');
 
 void _releaseMessage(Pointer<guatiao_parse_error> error) =>
-    native.core().bindings.guatiao_value_free(_messageOf(error));
+    freeNode(_messageOf(error));
 
-/// Writes `value` as `format`. A TOML document must be a map.
+/// Writes `value` (a [Value] or any [Ref]) as `format`. A TOML document
+/// must be a map.
 String dumps(
-  Value value, {
+  Ref value, {
   Format format = Format.json,
   bool pretty = false,
   int how = 0,
@@ -166,28 +185,26 @@ String dumps(
   final symbol =
       wantsJsonPretty ? 'guatiao_json_emit_pretty' : _emitSymbol(format);
   final lib = _resolved(symbol, format.feature);
+  final serde = _bindingsOf(lib);
   final allocator = alloc ?? lib.alloc;
   final flags = pretty && !wantsJsonPretty ? how | prettyFlag : how;
   final out = calloc<guatiao_value>();
   var filled = false;
   try {
-    final node = value.pointer;
+    final node = value.requireNode();
     final status = wantsJsonPretty
-        ? lib.bindings.guatiao_json_emit_pretty(node, flags, allocator, out)
+        ? serde.guatiao_json_emit_pretty(node, flags, allocator, out)
         : switch (format) {
-            Format.json =>
-              lib.bindings.guatiao_json_emit(node, flags, allocator, out),
-            Format.toml =>
-              lib.bindings.guatiao_toml_emit(node, flags, allocator, out),
-            Format.yaml =>
-              lib.bindings.guatiao_yaml_emit(node, flags, allocator, out),
+            Format.json => serde.guatiao_json_emit(node, flags, allocator, out),
+            Format.toml => serde.guatiao_toml_emit(node, flags, allocator, out),
+            Format.yaml => serde.guatiao_yaml_emit(node, flags, allocator, out),
           };
     checkStatus(status);
     filled = true;
     return takeValue(out)! as String;
   } finally {
     if (!filled) {
-      native.core().bindings.guatiao_value_free(out);
+      freeNode(out);
       calloc.free(out);
     }
   }

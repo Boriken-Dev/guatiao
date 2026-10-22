@@ -1,0 +1,30 @@
+name: guatiao_intake
+description: >-
+  Forms over a schema, paths and the flat key-to-text store for guatiao
+  values, over the guatiao_intake C ABI and package:guatiao.
+version: 0.0.0-alpha.1
+repository: https://github.com/Boriken-Dev/guatiao
+issue_tracker: https://github.com/Boriken-Dev/guatiao/issues
+documentation: https://boriken-dev.github.io/guatiao/
+
+# `dart:ffi` is not available in a browser, so there is no `web`.
+platforms:
+  android:
+  ios:
+  linux:
+  macos:
+  windows:
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  ffi: ^2.1.0
+  # The value model, errors and loader, released together: the minimum is
+  # this package's own version (pub refuses a dependency on one version).
+  guatiao: ^0.0.0-alpha.1
+
+dev_dependencies:
+  ffigen: ^21.0.0
+  lints: ^6.0.0
+  test: ^1.25.0

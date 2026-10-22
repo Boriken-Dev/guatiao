@@ -7,11 +7,10 @@
 /// Importing this library touches no native library: every native call is
 /// resolved lazily, on first use.
 ///
-/// The two optional halves are their own entry points, imported with a
-/// prefix so their verbs keep a namespace:
-/// `import 'package:guatiao/serde.dart' as serde;` and
-/// `import 'package:guatiao/intake.dart' as intake;`. So are dates, times
-/// and spans: `import 'package:guatiao/time.dart' as time;`.
+/// Dates, times and spans are their own entry point, imported with a
+/// prefix: `import 'package:guatiao/time.dart' as time;`. JSON, TOML and
+/// YAML are the package `guatiao_serde`, forms `guatiao_intake`, each over
+/// its own library and built on `package:guatiao/ffi.dart`.
 library;
 
 export 'src/bindings.g.dart' show guatiao_alloc, guatiao_value;
@@ -40,7 +39,6 @@ export 'src/library.dart'
         useLibrary;
 export 'src/registry.dart' show Instance, ProviderTable, Registry;
 export 'src/schema.dart' show redact;
-export 'src/serde.dart' show Format, ParseError;
 export 'src/time.dart' show TextForm, Unparsed;
 export 'src/value.dart'
     show Absent, ListRef, MapRef, Numbers, Ref, Tag, Value, ValueOwner, absent;

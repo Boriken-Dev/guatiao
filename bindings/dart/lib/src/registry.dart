@@ -405,7 +405,8 @@ class Registry implements Finalizable {
   }
 
   /// What the provider filed under `key` declared beyond its schema -- its
-  /// legal notices, or its form under `intake.providerFormKey` -- as a
+  /// legal notices, or its form under `'form'` (`providerFormKey` of
+  /// package:guatiao_intake) -- as a
   /// [Value] the caller owns and closes, or `null` when it declares
   /// nothing.
   ///

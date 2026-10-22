@@ -7,7 +7,7 @@
 library;
 
 import 'package:guatiao/guatiao.dart';
-import 'package:guatiao/intake.dart' as intake;
+import 'package:guatiao_intake/guatiao_intake.dart' as intake;
 import 'package:test/test.dart';
 
 import 'support.dart';
