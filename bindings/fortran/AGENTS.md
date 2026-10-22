@@ -16,7 +16,7 @@ nothing of it. The sources are pure Fortran (one `.F90` file chooses
 
 | `use` | what |
 | --- | --- |
-| `guatiao` | `guatiao_value`, `guatiao_text`, the constructors, statuses and tags, `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`; schemas and `guatiao_config`; `guatiao_registry`, `guatiao_instance`; `guatiao_impl`, `guatiao_kind`, `guatiao_serving`, `guatiao_remote`; `guatiao_library` |
+| `guatiao` | `guatiao_value`, `guatiao_text`, the constructors, statuses and tags, `GUATIAO_C_TRUE`/`GUATIAO_C_FALSE` (a C `bool`), `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`; schemas and `guatiao_config`; `guatiao_registry`, `guatiao_instance`; `guatiao_impl`, `guatiao_kind`, `guatiao_serving`, `guatiao_remote`; `guatiao_library` |
 | `guatiao_kinds` | what a kind's own module uses for its glue: served boxes, carriers, lent and handed-over arguments, objects |
 | `guatiao_serde` | `guatiao_parse`, `guatiao_emit`: JSON, TOML, YAML |
 | `guatiao_intake` | forms, paths, the flat store |
@@ -402,7 +402,9 @@ and `guatiao_settle_value`, `guatiao_lent_map` and
 and `guatiao_end_lent_object`, `guatiao_serve_object`,
 `guatiao_lend_impl`, `guatiao_string_out`), calls the method in a
 `select type`, and answers `guatiao_failed(error, err)` or
-`guatiao_warn(error, slot)`. Mark each `recursive`, initialise no local
+`guatiao_warn(error, slot)`. A C `bool` crosses as `integer(c_int8_t)`,
+written `GUATIAO_C_TRUE` or `GUATIAO_C_FALSE` and read as `/= 0`: ifx
+stores a `logical(c_bool)` .true. as -1. Mark each `recursive`, initialise no local
 in its declaration (that implies `save`), and call no function returning
 deferred-length text (see Threads).
 
@@ -421,7 +423,16 @@ by value elsewhere:
 ```
 
 `guatiao_str`, `guatiao_bytes` and `guatiao_bytes_mut` (16 bytes) cross
-by value on every compiler.
+by value, with one exception: flang 22 on x86-64, calling through a
+procedure pointer, puts such a struct on the stack when it lands in the
+fifth and sixth integer argument registers (counting a pointer or integer
+as one and such a struct as two). A remote slot call where one does
+declares it as its two words off Windows (`type(c_ptr), value` and
+`integer(c_size_t), value`, which every 64-bit ABI but Windows' passes
+the same way) and as the struct on Windows, where it goes by address.
+The binding does this for `guatiao_registry_scan_dir_rules` and
+`guatiao_registry_scan_path`. A `bind(c)` procedure receives such a
+struct correctly.
 
 ## guatiao_serde: JSON, TOML, YAML
 
@@ -504,3 +515,10 @@ deferred-length character result in static storage, so two threads
 calling such a function at once (`string_or`, `number_text`,
 `path_text`, `guatiao_status_name`) corrupt the heap there; the
 subroutine forms (`get`, `get_key`) are safe on every compiler.
+
+Every procedure of the binding and of the example kind is `recursive`:
+Intel ifx keeps the derived-type and pointer locals of a procedure that
+is not in static storage, so one reached again while it runs (a close
+that destroys another served object) or from a second thread overwrites
+them. A provider's own procedures that a slot reaches need the same, or
+build with ifx's `-assume recursion`.

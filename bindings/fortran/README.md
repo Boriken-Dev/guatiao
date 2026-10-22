@@ -218,7 +218,13 @@ call guatiao_to_text(later, text)   ! "2026-02-28"
 - A Fortran library is never unmapped: its `unload` refuses.
 - flang 22 gets a 24-byte struct passed by value wrong in a `bind(c)`
   procedure on AArch64 and Windows; a kind module takes a
-  `guatiao_object` by address there (its API header says how).
+  `guatiao_object` by address there (its API header says how). On
+  x86-64 it passes a 16-byte struct wrongly through a procedure pointer
+  when the struct lands in the last two argument registers; the API
+  header says how a kind avoids it.
+- Intel ifx keeps the derived-type and pointer locals of a procedure
+  that is not `recursive` in static storage: mark a provider's
+  procedures that a slot reaches `recursive` (the binding's all are).
 - fpm versions are three numbers: a pre-release `0.0.0-alpha.N` is
   `0.0.0` in `fpm.toml`, and the tag names the build.
 - 64-bit platforms only.
