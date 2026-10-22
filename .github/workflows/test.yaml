@@ -696,7 +696,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libffi-dev
       - name: bit64, which the package suggests and its integer64 tests need
-        run: Rscript -e 'install.packages("bit64")' -e 'stopifnot(requireNamespace("bit64"))'
+        run: Rscript -e 'r <- getOption("repos"); r[r == "@CRAN@"] <- "https://cloud.r-project.org"' -e 'install.packages("bit64", repos = r)' -e 'stopifnot(requireNamespace("bit64"))'
       - name: Build and check the package
         run: |
           case "$RUNNER_OS" in
