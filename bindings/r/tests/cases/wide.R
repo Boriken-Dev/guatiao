@@ -151,7 +151,7 @@ case("exact lengths past 2^53", with_library({
       expect_equal(as.list(l, int64 = "double")$seconds, as.numeric(t))
     }
   }
-  # A length within 2^53 is held as numbers, as before.
+  # A length within 2^53 is held as numbers.
   expect_true(identical(unclass(exact_length(number("90"), 5e8)), c(seconds = 90, nanoseconds = 5e8)))
   expect_true(identical(exact_length(2^53), exact_length(number("9007199254740992"))))
   expect_equal(as.list(exact_length(90, 5e8)), list(seconds = 90L, nanoseconds = 500000000L))
@@ -181,7 +181,7 @@ case("span units past 2^53", with_library({
   v <- value(list(s = d))
   expect_equal(value_data(v$s), format(d))
   close(v)
-  # Within 2^53 a span is numbers, as before, and equal however it was made.
+  # Within 2^53 a span holds numbers, equal however it was made.
   expect_true(identical(unclass(span(days = number("2"))), unclass(span(days = 2))))
   expect_true(span(days = 2^53) == time_parse("span", "P9007199254740992D"))
   # INT64_MIN is no unit (the library refuses it); a unit's refusal names it.
