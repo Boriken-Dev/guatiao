@@ -118,7 +118,7 @@ guatiao_status gt_build(SEXP x, const guatiao_alloc *a, guatiao_value *out, char
 /* Builds `x` or raises. */
 void gt_build_or_raise(SEXP x, const guatiao_alloc *a, guatiao_value *out);
 
-/* A tree as plain R data. `numbers`: 0 auto, 1 text, 2 double. */
+/* A tree as plain R data. `numbers`: 0 auto, 1 text, 2 double, 3 integer64. */
 SEXP gt_read(const guatiao_value *v, int numbers);
 
 /* gt_read, freeing `v` whether reading finishes or signals. */
@@ -149,10 +149,11 @@ typedef struct gt_wide {
 } gt_wide;
 
 /* The `int64 =` option's codes: how a 64-bit integer is answered. */
-enum { GT_INT64_AUTO = 0, GT_INT64_NUMBER = 1, GT_INT64_DOUBLE = 2 };
+enum { GT_INT64_AUTO = 0, GT_INT64_NUMBER = 1, GT_INT64_DOUBLE = 2, GT_INT64_INTEGER64 = 3 };
 
 /* The integer one R value names: an integer or logical, a whole double,
- * a `number` or a string spelling one (`-?[0-9]+`). NULL, or why not. */
+ * a bit64 integer64, a `number` or a string spelling one (`-?[0-9]+`).
+ * NULL, or why not. */
 const char *gt_wide_in(SEXP x, gt_wide *w);
 
 /* The integer a text spells: `-?[0-9]+` and nothing else, past 2^64 - 1
@@ -164,13 +165,21 @@ const char *gt_wide_signed(gt_wide w, int bits, int64_t *out);
 const char *gt_wide_unsigned(gt_wide w, int bits, uint64_t *out);
 
 /* A 64-bit integer as `mode` answers it: auto an R integer when it fits,
- * a double while it is exact, else a `number`; number its exact text;
- * double the nearest double. */
+ * a double up to 2^53, else a `number`; number its exact text;
+ * double the nearest double; integer64 a bit64 integer64 when one holds
+ * it (not INT64_MIN, which is bit64's NA, nor past INT64_MAX), else a
+ * `number`. */
 SEXP gt_i64_sexp(int64_t v, int mode);
 SEXP gt_u64_sexp(uint64_t v, int mode);
 
 /* A `number` holding `text`, which is the caller's to have checked. */
 SEXP gt_number_sexp(const char *text);
+
+/* Whether `x` is a bit64 integer64: a double vector whose bits are int64s. */
+int gt_is_integer64(SEXP x);
+
+/* An integer64 holding `v`, which is not INT64_MIN. */
+SEXP gt_integer64_sexp(int64_t v);
 
 /* The package's namespace. */
 SEXP gt_namespace(void);

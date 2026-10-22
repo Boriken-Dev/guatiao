@@ -22,7 +22,7 @@ number(text)
 tag(x)
 is_absent(x)
 is_null(x)
-value_data(x, numbers = c("auto", "text", "double"))
+value_data(x, numbers = c("auto", "text", "double", "integer64"))
 node_path(x)
 push(x, ...)
 insert(x, at, value)
@@ -39,7 +39,10 @@ one; \code{is_absent}, \code{is_null} and \code{value_data} also take R data.}
 \item{numbers}{How numbers read back: \code{"auto"} (an integer that fits
 an R integer as one, else a double when it holds the number exactly, else the
 exact text as a \code{number}), \code{"text"} (always the exact text),
-\code{"double"} (always the nearest double).}
+\code{"double"} (always the nearest double), \code{"integer64"} (an integer
+spelling a bit64 \code{integer64} holds as one, the rest as \code{"auto"};
+needs the suggested package \pkg{bit64}, and is an error naming it when it is
+not installed).}
 \item{...}{Elements to append, each R data or a value.}
 \item{at}{A position, from 1, or for a map a key.}
 \item{value}{R data or a value to store.}

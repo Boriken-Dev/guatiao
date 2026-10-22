@@ -32,11 +32,14 @@ named, each a shape.}
 \code{close()} on a remote.}
 \item{class}{The virtual S4 class the kind defines; the C name in CamelCase.}
 \item{int64}{How a 64-bit integer is answered: \code{"auto"} an R integer
-when it fits, a double while the double holds it exactly, else a
-\code{number}; \code{"number"} always a \code{number}; \code{"double"} the
-nearest double. For \code{kind}, what its remotes answer and what its R
-methods are handed; for \code{call_slot}, this call's answer (\code{NULL}:
-the kind's).}
+when it fits, a double up to 2^53 (where a double holds every whole
+number), else a \code{number}; \code{"number"} always a \code{number};
+\code{"double"} the nearest double; \code{"integer64"} a bit64
+\code{integer64} when one holds it (not \code{INT64_MIN}, which is its
+\code{NA}, nor past \code{INT64_MAX}), else a \code{number}, and needs
+\pkg{bit64} installed. \code{"auto"} never answers an \code{integer64}. For
+\code{kind}, what its remotes answer and what its R methods are handed; for
+\code{call_slot}, this call's answer (\code{NULL}: the kind's).}
 \item{where}{Where the classes and generics are defined: a package's namespace
 as it installs, or the global environment for a script.}
 \item{returns}{The answer's shape: \code{NULL} for none, a shape name, or an
@@ -94,7 +97,8 @@ object kind.
 
 An R number holds whole numbers exactly only to 2^53, and base R has no
 64-bit integer. An integer shape takes an R integer or logical, a whole
-double, a \code{number}, or a string spelling an integer
+double, a bit64 \code{integer64}, a \code{number}, or a string spelling an
+integer
 (\code{"-9223372036854775808"}), read exactly and range-checked; anything
 else is refused before the call with \code{BadValue} naming the kind, the
 slot and the argument (\dQuote{wide.echo_i64(x): out of range for int64}).

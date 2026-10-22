@@ -294,12 +294,24 @@ static SEXP absent_sexp(void) {
   return x;
 }
 
+/* `numbers`: 0 auto, 1 text, 2 double, 3 integer64 for an integer
+ * spelling an integer64 holds, auto for the rest. */
 static SEXP number_sexp(guatiao_str t, int numbers) {
   char buf[400];
   int integral = 1;
   for (size_t i = 0; i < t.len; i++) {
     char c = (char)t.ptr[i];
     if (c == '.' || c == 'e' || c == 'E') integral = 0;
+  }
+  if (numbers == 3) {
+    if (integral && t.len > 0 && t.len < sizeof buf) {
+      memcpy(buf, t.ptr, t.len);
+      buf[t.len] = '\0';
+      gt_wide w;
+      int64_t v = 0;
+      if (!gt_wide_text(buf, &w) && !gt_wide_signed(w, 64, &v) && v != INT64_MIN) return gt_integer64_sexp(v);
+    }
+    numbers = 0;
   }
   if (numbers != 1 && t.len > 0 && t.len < sizeof buf) {
     memcpy(buf, t.ptr, t.len);

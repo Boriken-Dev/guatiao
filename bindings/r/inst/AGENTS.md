@@ -8,8 +8,9 @@ repository path.
 Package `guatiao`, R 4.2 or later, 64-bit platforms. A source package:
 its C glue is compiled when it installs (Rtools on Windows) and needs
 libffi (`libffi-dev` / `libffi-devel` on Linux, the SDK's on macOS,
-Rtools' own on Windows). Imports only `methods` and `utils`. It carries no
-guatiao library: one is opened at run time.
+Rtools' own on Windows). Imports only `methods` and `utils`; suggests
+`bit64`, used only when installed and asked for. It carries no guatiao
+library: one is opened at run time.
 
 ## Exports
 
@@ -69,7 +70,7 @@ close(v)
 ```
 
 **Reading** (a value or a view): `value_data(x, numbers = c("auto",
-"text", "double"))` is the node's plain R data; `as.vector`, `as.list`,
+"text", "double", "integer64"))` is the node's plain R data; `as.vector`, `as.list`,
 `as.character` (a number's exact text), `as.numeric`, `as.integer`,
 `as.logical`, `as.raw` go through it. `length` (a map's entries, a list's
 elements, 1 for any other value, 0 for null and absent), `names` (a map's
@@ -99,6 +100,7 @@ the container records. A failed write leaves the tree as it was.
 | unnamed list, atomic vector of another length, `I(x)` | list |
 | named list, named atomic vector (named in full, no name twice) | map, in order |
 | a value or view | a deep copy |
+| bit64's `integer64` | a number, its exact text; `NA` null |
 | factor | its labels |
 | `Date`, `POSIXct`, `difftime`, the time classes below | their text forms; a `difftime` an exact length |
 | an S4 object | a map of its slots |
@@ -110,8 +112,17 @@ unnamed list, a map a named list. A number, with `numbers = "auto"`: an
 integer spelling that fits an R integer is an integer; otherwise a double
 when the double holds it exactly (any fraction or exponent reads as the
 nearest double); otherwise its exact text as a `number`. `"text"` answers
-every number as a `number`, `"double"` as the nearest double. Both
-directions stop past 128 nested containers.
+every number as a `number`, `"double"` as the nearest double,
+`"integer64"` an integer spelling a bit64 `integer64` holds as one (not
+`INT64_MIN`, its `NA`) and the rest as `"auto"` does. Both directions stop
+past 128 nested containers.
+
+**bit64.** `integer64` is the `bit64` package's class, which this package
+suggests and never needs: an `integer64` is taken wherever a 64-bit
+integer is (exactly; its `NA` is no number), and answered only where
+`numbers = "integer64"` or `int64 = "integer64"` asks, so no answer's
+class depends on what happens to be installed. Asking without `bit64`
+installed is an error naming it.
 
 ## Typed reading and configurations
 
@@ -178,8 +189,8 @@ read_length(list(90, 500000000))                    # exact_length
   nanoseconds]`. `read_length(x)` reads any of its three spellings.
 - Past 2^53, where an R number stops holding whole numbers exactly: a
   span's units (within plus or minus 2^63 - 1) and an exact length's
-  seconds are taken as a number, a `number` or a string spelling an
-  integer, read exactly. While every unit is within 2^53 the object holds
+  seconds are taken as a number, an `integer64`, a `number` or a string
+  spelling an integer, read exactly. While every unit is within 2^53 the object holds
   numbers; past that it holds each unit's exact text (`unclass(x)` is a
   character vector), so equal spans are identical however they were made.
   `time_parse("span", ...)` and `read_length()` answer the same way;
@@ -326,7 +337,7 @@ on its remote.
 | `"bytes"` | `guatiao_bytes` | a raw vector | a raw vector (a copy) |
 | `lent("bytes")` | `guatiao_bytes_mut` | a `byte_buffer(n)`, written in place | a buffer (`length`, `[`, `[<-`, `as.raw`), copied back when the method returns |
 | `"bool"`, `"int8"`..`"uint32"`, `"float"`, `"double"` | the C scalar | a number or logical that fits | a number (an integer for 32 bits and less) or logical |
-| `"int64"`, `"uint64"`, `"size"`, `"intptr"` | the C scalar | an R integer, a whole double, a `number` or a string spelling an integer, read exactly | as `int64` says (below) |
+| `"int64"`, `"uint64"`, `"size"`, `"intptr"` | the C scalar | an R integer, a whole double, an `integer64`, a `number` or a string spelling an integer, read exactly | as `int64` says (below) |
 | `"value"`, `"map"`, `"list"` | `const guatiao_value *` / `map *` / `list *` | a value, a view or R data | a read-only view, valid for the call |
 | `lent("value")`, `lent("map")`, `lent("list")` | the same without `const`, "Lent for the call" | a value or a view, changed in place | a writable view, valid for the call; what is added is built in the allocator the tree records |
 | `taken("value")`, `taken("map")`, `taken("list")` | the same, handed over | a value (moved: it holds absent afterwards), a view (copied) or R data | a value the method owns (and closes, or the collector frees) |
@@ -340,15 +351,18 @@ on its remote.
 
 **64-bit integers.** An R number holds whole numbers exactly only to
 2^53, and base R has no 64-bit integer. An integer shape takes an R
-integer or logical, a whole double, a `number`, or a string spelling an
-integer (`"-9223372036854775808"`), read exactly and range-checked;
-anything else is refused before the call, `BadValue` naming the kind, the
-slot and the argument (`wide.echo_i64(x): out of range for int64`). A
-64-bit answer, and a 64-bit argument an R method is handed, is what
-`int64` says: `"auto"` an R integer when it fits, a double while the
-double holds it exactly, else a `number` with its exact text; `"number"`
-always a `number`; `"double"` always the nearest double. `kind(...,
-int64)` sets it for the kind's remotes and the R methods serving it,
+integer or logical, a whole double, a bit64 `integer64`, a `number`, or a
+string spelling an integer (`"-9223372036854775808"`), read exactly and
+range-checked; anything else is refused before the call, `BadValue`
+naming the kind, the slot and the argument (`wide.echo_i64(x): out of
+range for int64`). A 64-bit answer, and a 64-bit argument an R method is
+handed, is what `int64` says: `"auto"` an R integer when it fits, a
+double up to 2^53 (where a double holds every whole number), else a
+`number` with its exact text; `"number"` always a `number`; `"double"`
+always the nearest double; `"integer64"` an `integer64` when one holds it
+(not `INT64_MIN`, its `NA`, nor an unsigned value past `INT64_MAX`), else
+a `number`. `"auto"` never answers an `integer64`. `kind(..., int64)`
+sets it for the kind's remotes and the R methods serving it,
 `call_slot(..., int64)` for one call. An R method answers a 64-bit slot
 in any spelling an argument takes; an answer out of range is refused
 naming the slot (`wide.echo_u64 answered: out of range for uint64`).
