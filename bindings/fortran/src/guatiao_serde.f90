@@ -9,6 +9,7 @@ module guatiao_serde
   use, intrinsic :: iso_c_binding
   use guatiao_c
   use guatiao_serde_c
+  use guatiao_loader, only: gt_dl_sym
   use guatiao_native
   use guatiao_errors
   use guatiao_values
@@ -18,7 +19,7 @@ module guatiao_serde
   public :: GUATIAO_FORMAT_JSON, GUATIAO_FORMAT_TOML, GUATIAO_FORMAT_YAML
   public :: GUATIAO_BYTES_DATA_URI, GUATIAO_BYTES_BASE64, GUATIAO_BYTES_ARRAY, GUATIAO_BYTES_REFUSE, &
             GUATIAO_READ_DATA_URIS, GUATIAO_PRETTY
-  public :: guatiao_parse_error, guatiao_parse, guatiao_emit
+  public :: guatiao_parse_error, guatiao_parse, guatiao_emit, guatiao_serde_use_library
 
   !> Where a document stopped parsing: its format, the line and column
   !> (from 1, the column in characters; 0 when the parser did not say)
@@ -31,6 +32,43 @@ module guatiao_serde
   end type
 
 contains
+
+  !> Names the guatiao_serde library to use, before the first call that needs
+  !> it: a file exporting its functions, whatever it is called (an
+  !> application's own library carrying several surfaces, say), or a
+  !> directory holding it. Without it the library is found through
+  !> GUATIAO_SERDE_LIBRARY, then GUATIAO_LIBRARY (a directory, or a file
+  !> exporting it, else the file beside it), then the platform's search.
+  !> Naming another file once one is open is GUATIAO_ERR_BUSY.
+  recursive subroutine guatiao_serde_use_library(path, stat, errmsg)
+    character(*), intent(in) :: path
+    integer, intent(out), optional :: stat
+    character(:), allocatable, intent(inout), optional :: errmsg
+    call gt_use(GT_SERDE, path, stat, errmsg)
+  end subroutine
+
+  ! Opens guatiao_serde and resolves its exports, once.
+  recursive subroutine serde_need(stat, msg)
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: msg
+    logical, save :: resolved = .false.
+    type(c_ptr) :: h
+    integer :: i
+    call gt_need(GT_SERDE, stat, msg)
+    if (stat /= GUATIAO_OK .or. resolved) return
+    h = gt_handle(GT_SERDE)
+    do i = 1, size(gt_serde_exports)
+      if (len_trim(gt_serde_exports(i)%feature) > 0) cycle
+      if (.not. c_associated(gt_dl_sym(h, trim(gt_serde_exports(i)%name)))) then
+        stat = GUATIAO_STAT_MISSING_SYMBOL
+        msg = 'guatiao: ' // guatiao_library_path(GT_SERDE) // ' does not export ' // &
+              trim(gt_serde_exports(i)%name)
+        return
+      end if
+    end do
+    call gt_resolve_serde(h)
+    resolved = .true.
+  end subroutine
 
   !> Reads `text` as a `format` document into `value`, built in `alloc`.
   !> `how` holds the GUATIAO_BYTES_* / GUATIAO_READ_DATA_URIS flags. A
@@ -53,7 +91,7 @@ contains
     character(:), allocatable :: msg, reason
     flags = 0
     if (present(how)) flags = int(how, c_int32_t)
-    call gt_need(GT_SERDE, st, msg)
+    call serde_need(st, msg)
     if (st == GUATIAO_OK) call usable(format, st, msg)
     if (st == GUATIAO_OK) then
       call gt_new_owned(fresh, gt_alloc_of(alloc), root)
@@ -110,7 +148,7 @@ contains
     if (present(pretty)) then
       if (pretty) flags = ior(flags, GUATIAO_PRETTY)
     end if
-    call gt_need(GT_SERDE, st, msg)
+    call serde_need(st, msg)
     if (st == GUATIAO_OK) call usable(format, st, msg)
     if (st == GUATIAO_OK) then
       node = gt_node(value)

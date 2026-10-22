@@ -18,7 +18,6 @@ module guatiao_values
   use guatiao_c
   use guatiao_native
   use guatiao_errors
-  use guatiao_intake_c, only: gt_intake_path_get, gt_intake_resolve
   implicit none
   private
 
@@ -35,7 +34,7 @@ module guatiao_values
   end type
 
   ! A step through intake's path grammar or its flat-key resolution, read
-  ! again on every walk like a key.
+  ! again on every walk like a key, through the lookup the step carries.
   integer, parameter :: GT_VIA_PATH = 2, GT_VIA_RESOLVE = 3
 
   type :: gt_step
@@ -43,7 +42,19 @@ module guatiao_values
     integer :: via = 0
     character(:), allocatable :: key
     integer(int64) :: index = 0    ! from 0, or below 0 counting from the end
+    type(c_funptr) :: find = c_null_funptr  ! a via step's lookup
   end type
+
+  !> A lookup a via step walks through: the node `text` names inside the
+  !> node at `node`, or null (`guatiao_intake_path_get`, `_resolve`).
+  abstract interface
+    function gt_find_i(node, text) bind(c) result(found)
+      import :: c_ptr, gt_str
+      type(c_ptr), value :: node
+      type(gt_str), value :: text
+      type(c_ptr) :: found
+    end function
+  end interface
 
   type :: gt_box
     type(gt_value), pointer :: owned => null()  ! the root node, when this box made it
@@ -343,17 +354,15 @@ contains
     integer(c_size_t) :: j
     integer(int64) :: at
     character(:), allocatable, target :: text
+    procedure(gt_find_i), pointer :: find
     p = gt_root(v)
     if (.not. c_associated(p)) return
     if (.not. allocated(v%path)) return
     do i = 1, size(v%path)
       if (v%path(i)%via == GT_VIA_PATH .or. v%path(i)%via == GT_VIA_RESOLVE) then
         text = v%path(i)%key
-        if (v%path(i)%via == GT_VIA_PATH) then
-          p = gt_intake_path_get(p, gt_view(text))
-        else
-          p = gt_intake_resolve(p, gt_view(text))
-        end if
+        call c_f_procpointer(v%path(i)%find, find)
+        p = find(p, gt_view(text))
         if (.not. c_associated(p)) return
         cycle
       end if
@@ -381,15 +390,18 @@ contains
   end function
 
   !> A read-only handle reaching on from `v` through intake's path
-  !> grammar (GT_VIA_PATH) or its flat-key resolution (GT_VIA_RESOLVE).
-  recursive function gt_via(v, via, text) result(r)
+  !> grammar (GT_VIA_PATH) or its flat-key resolution (GT_VIA_RESOLVE),
+  !> which `find` (a gt_find_i) looks up on every access.
+  recursive function gt_via(v, via, text, find) result(r)
     type(guatiao_value), intent(in) :: v
     integer, intent(in) :: via
     character(*), intent(in) :: text
+    type(c_funptr), intent(in) :: find
     type(guatiao_value) :: r
     type(gt_step) :: s
     s%via = via
     s%key = text
+    s%find = find
     r = extended(v, s)
     r%view_only = .true.
   end function

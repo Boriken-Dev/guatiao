@@ -9,6 +9,7 @@ module guatiao_intake
   use, intrinsic :: iso_c_binding
   use guatiao_c
   use guatiao_intake_c
+  use guatiao_loader, only: gt_dl_sym
   use guatiao_native
   use guatiao_errors
   use guatiao_values
@@ -17,9 +18,47 @@ module guatiao_intake
 
   public :: guatiao_intake_check, guatiao_intake_layout, guatiao_intake_is_visible, guatiao_intake_at, &
             guatiao_intake_for_schema, guatiao_intake_form_for, guatiao_intake_resolve, &
-            guatiao_intake_flat_keys, guatiao_intake_flatten, guatiao_intake_unflatten
+            guatiao_intake_flat_keys, guatiao_intake_flatten, guatiao_intake_unflatten, &
+            guatiao_intake_use_library
 
 contains
+
+  !> Names the guatiao_intake library to use, before the first call that needs
+  !> it: a file exporting its functions, whatever it is called (an
+  !> application's own library carrying several surfaces, say), or a
+  !> directory holding it. Without it the library is found through
+  !> GUATIAO_INTAKE_LIBRARY, then GUATIAO_LIBRARY (a directory, or a file
+  !> exporting it, else the file beside it), then the platform's search.
+  !> Naming another file once one is open is GUATIAO_ERR_BUSY.
+  recursive subroutine guatiao_intake_use_library(path, stat, errmsg)
+    character(*), intent(in) :: path
+    integer, intent(out), optional :: stat
+    character(:), allocatable, intent(inout), optional :: errmsg
+    call gt_use(GT_INTAKE, path, stat, errmsg)
+  end subroutine
+
+  ! Opens guatiao_intake and resolves its exports, once.
+  recursive subroutine intake_need(stat, msg)
+    integer, intent(out) :: stat
+    character(:), allocatable, intent(out) :: msg
+    logical, save :: resolved = .false.
+    type(c_ptr) :: h
+    integer :: i
+    call gt_need(GT_INTAKE, stat, msg)
+    if (stat /= GUATIAO_OK .or. resolved) return
+    h = gt_handle(GT_INTAKE)
+    do i = 1, size(gt_intake_exports)
+      if (len_trim(gt_intake_exports(i)%feature) > 0) cycle
+      if (.not. c_associated(gt_dl_sym(h, trim(gt_intake_exports(i)%name)))) then
+        stat = GUATIAO_STAT_MISSING_SYMBOL
+        msg = 'guatiao: ' // guatiao_library_path(GT_INTAKE) // ' does not export ' // &
+              trim(gt_intake_exports(i)%name)
+        return
+      end if
+    end do
+    call gt_resolve_intake(h)
+    resolved = .true.
+  end subroutine
 
   ! The node each argument names, or a status saying why not.
   recursive subroutine nodes(st, msg, a, pa, b, pb, c, pc)
@@ -29,7 +68,7 @@ contains
     type(c_ptr), intent(out) :: pa
     type(guatiao_value), intent(in), optional :: b, c
     type(c_ptr), intent(out), optional :: pb, pc
-    call gt_need(GT_INTAKE, st, msg)
+    call intake_need(st, msg)
     if (st /= GUATIAO_OK) return
     call one(a, pa)
     if (present(b)) call one(b, pb)
@@ -133,8 +172,9 @@ contains
     type(guatiao_value) :: at
     integer :: st
     character(:), allocatable :: msg
-    call gt_need(GT_INTAKE, st, msg)
-    if (st == GUATIAO_OK) at = gt_via(value, GT_VIA_PATH, path)
+    call intake_need(st, msg)
+    if (st == GUATIAO_OK) at = gt_via(value, GT_VIA_PATH, path, &
+                                      gt_dl_sym(gt_handle(GT_INTAKE), 'guatiao_intake_path_get'))
     call gt_report(st, msg, stat, errmsg)
   end function
 
@@ -148,8 +188,9 @@ contains
     type(guatiao_value) :: field
     integer :: st
     character(:), allocatable :: msg
-    call gt_need(GT_INTAKE, st, msg)
-    if (st == GUATIAO_OK) field = gt_via(schema, GT_VIA_RESOLVE, key)
+    call intake_need(st, msg)
+    if (st == GUATIAO_OK) field = gt_via(schema, GT_VIA_RESOLVE, key, &
+                                         gt_dl_sym(gt_handle(GT_INTAKE), 'guatiao_intake_resolve'))
     call gt_report(st, msg, stat, errmsg)
   end function
 

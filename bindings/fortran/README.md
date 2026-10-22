@@ -77,11 +77,16 @@ export GUATIAO_LIBRARY=/opt/myapp/myapp.dll    # or the file itself, whatever it
 or `call guatiao_use_library(path)` before the first call. Without
 either, the platform's library search is tried by file name.
 
-| Exports from | Needed for |
-| --- | --- |
-| `guatiao` | values, schemas, configurations, dates and times, redaction |
-| `guatiao_serde` | `guatiao_serde`: JSON, and TOML and YAML when the library has them |
-| `guatiao_intake` | `guatiao_intake` |
+| Library | Module | Its own variable, before `GUATIAO_LIBRARY` |
+| --- | --- | --- |
+| `guatiao` | `guatiao`: values, schemas, configurations, dates and times, redaction | |
+| `guatiao_serde` | `guatiao_serde`: JSON, and TOML and YAML when the library has them | `GUATIAO_SERDE_LIBRARY` |
+| `guatiao_intake` | `guatiao_intake` | `GUATIAO_INTAKE_LIBRARY` |
+
+A file `GUATIAO_LIBRARY` names serves every module whose library's
+functions it exports (an application's own library carrying several
+surfaces), and the others find theirs beside it. Each module has its own
+`use_library`.
 
 ## Quick start
 
