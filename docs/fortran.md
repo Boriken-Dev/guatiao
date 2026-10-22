@@ -180,7 +180,11 @@ shares. A value, a registry and a remote holding an object are not safe
 to use from two threads at once. gfortran 14 and older keep the length of
 a function's deferred-length text result in static storage, so functions
 such as `string_or` are not safe from two threads at once there; the
-subroutine forms (`get`, `get_key`) are.
+subroutine forms (`get`, `get_key`) are. Intel ifx keeps the
+derived-type and pointer locals of a procedure that is not `recursive`
+in static storage: the binding marks every procedure `recursive`, and a
+provider's procedures that a slot reaches need the same (or ifx's
+`-assume recursion`).
 
 ## What Fortran does not do that C does
 
@@ -189,7 +193,13 @@ subroutine forms (`get`, `get_key`) are.
   call through a procedure pointer on AArch64 and Windows. The one such
   argument a kind can have, a `guatiao_object` handed over, crosses there
   as the address of the caller's copy, which is what those ABIs pass; a
-  kind module says so with the preprocessor.
+  kind module says so with the preprocessor. On x86-64, flang 22 calling
+  through a procedure pointer puts a 16-byte struct (a `guatiao_str`) on
+  the stack when it lands in the last two argument registers; such a call
+  passes the struct's two words instead.
+- **Pass a `logical` to C.** Intel ifx stores a `logical(c_bool)`
+  .true. as -1, which no C or Rust reader accepts; a C `bool` crosses as
+  `integer(c_int8_t)`, `GUATIAO_C_TRUE` or `GUATIAO_C_FALSE`.
 - **Make a function pointer at run time.** A served slot is a `bind(c)`
   module procedure written in the kind's module; the descriptor slots that
   name no provider (a configured provider's `create`, the entry of a
