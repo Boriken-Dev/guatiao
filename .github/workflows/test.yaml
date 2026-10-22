@@ -999,6 +999,15 @@ jobs:
         with:
           compiler: ${{ matrix.compiler }}
           version: ${{ matrix.version }}
+      - uses: ilammy/msvc-dev-cmd@v1
+        # ifx links through Visual Studio's link.exe, and the oneAPI setup
+        # finds no Visual Studio on this image.
+        if: runner.os == 'Windows' && matrix.compiler == 'intel'
+      - name: Git's coreutils link out of the way
+        # A bash step puts Git's usr/bin first on PATH, and its `link`
+        # shadows link.exe.
+        if: runner.os == 'Windows' && matrix.compiler == 'intel'
+        run: rm /usr/bin/link.exe
       - name: LLVM flang
         if: matrix.compiler == 'flang'
         run: |
