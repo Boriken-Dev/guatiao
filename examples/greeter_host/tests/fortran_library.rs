@@ -77,7 +77,8 @@ fn a_fortran_library_refuses_to_be_unmapped() {
             path.file_stem()
                 .and_then(|stem| stem.to_str())
                 .is_some_and(|stem| stem.ends_with("fortran_greeter"))
-                && path.extension().and_then(|e| e.to_str()) == Some(std::env::consts::DLL_EXTENSION)
+                && path.extension().and_then(|e| e.to_str())
+                    == Some(std::env::consts::DLL_EXTENSION)
         })
         .expect("a fortran_greeter library in GUATIAO_FORTRAN_LIBRARY");
     let mut registry = guatiao::library::Registry::new("fortran-unload", "0.1");
