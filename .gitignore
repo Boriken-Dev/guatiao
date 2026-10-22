@@ -63,7 +63,7 @@ Manifest-v*.toml
 .Rhistory
 
 # Fortran: what fpm and a CMake build write beside the sources
-/bindings/fortran/build/
+/bindings/fortran/guatiao/build/
 /examples/fortran_*/build/
 *.mod
 *.smod

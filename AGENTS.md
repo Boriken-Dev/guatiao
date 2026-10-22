@@ -49,7 +49,7 @@ public surface); this file is about the repository.
 | `bindings/julia/GuatiaoSerde/`, `bindings/julia/GuatiaoIntake/` | the packages `GuatiaoSerde` and `GuatiaoIntake`, each over its own library, depending on `Guatiao` |
 | `bindings/r/guatiao/` | R bindings over the C ABI, the source package `guatiao`: `src/` holds a copy of `guatiao.h` (a test compares it with the committed one) and the C glue, compiled when the package installs, which opens the libraries at run time and calls kind slots through libffi; it registers the C table `guatiao_r_api` (`inst/include/guatiao_r_api.h`) the other packages build on; its API header is `inst/AGENTS.md`; `tests/fixtures/` holds the C its tests build |
 | `bindings/r/guatiao.serde/`, `bindings/r/guatiao.intake/` | the source packages `guatiao.serde` and `guatiao.intake`: their own header copies and small C glue over `guatiao_r_api`, depending on `guatiao` and compiled against its installed headers |
-| `bindings/fortran/` | Fortran bindings over the C ABI in pure Fortran (`iso_c_binding`), the fpm package `guatiao` with its own `AGENTS.md` and a `CMakeLists.txt`; `src/guatiao_c.f90`, `guatiao_serde_c.f90` and `guatiao_intake_c.f90` mirror the three headers (a test compares every interface's name and argument count with them); `guatiao_loader.F90` opens the library at run time; the repository's root `fpm.toml` is the same package for an fpm git dependency (a test checks the two agree) |
+| `bindings/fortran/guatiao/` | Fortran bindings over the C ABI in pure Fortran (`iso_c_binding`), the fpm package `guatiao` with its own `AGENTS.md` and a `CMakeLists.txt`; `src/guatiao_c.f90`, `guatiao_serde_c.f90` and `guatiao_intake_c.f90` mirror the three headers (a test compares every interface's name and argument count with them); `guatiao_loader.F90` opens the library at run time; the repository's root `fpm.toml` is the same package for an fpm git dependency (a test checks the two agree) |
 | `bindings/matlab/guatiao/` | MATLAB and GNU Octave bindings over the C ABI: the `+guatiao` package in `inst/` (its API header is `inst/AGENTS.md`), and `src/`, one MEX gateway in C with copies of the three headers (a test compares them with the committed ones), built by `mkoctfile --mex` at `pkg install` or by `guatiao.build()`, which opens the library at run time and calls kind slots through libffi; `tests/` is a plain runner (`run_tests`) both interpreters run, `tests/fixtures/` holds the C its tests build |
 | `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, stated for any language), `python.md`, `node.md`, `go.md`, `julia.md`, `r.md`, `matlab.md` and `fortran.md` (Python, Node, Go, Julia, R, MATLAB and Octave, and Fortran as a host and as a provider), `wasm.md`, `migrating.md` (every break since `0.0.0-alpha.0`, with what to write now); built strictly by `docs.yml` |
 | `benchmarks/` | the benchmark runner (`cargo run -p guatiao-bench --release -- --save NAME`), committed results in `benchmarks/results/`, and `README.md` with the protocol; run on demand, numbers are local and provisional |
@@ -238,8 +238,8 @@ the Rust and Python hosts' tests. With flang on Windows, fpm needs
 
 ```bash
 export GUATIAO_LIBRARY=$PWD/target/debug
-(cd bindings/fortran && fpm test --compiler gfortran)
-cmake -S bindings/fortran -B build/fortran && cmake --build build/fortran && ctest --test-dir build/fortran
+(cd bindings/fortran/guatiao && fpm test --compiler gfortran)
+cmake -S bindings/fortran/guatiao -B build/fortran && cmake --build build/fortran && ctest --test-dir build/fortran
 (cd examples/fortran_greeter && fpm test --compiler gfortran)
 (cd examples/fortran_host && fpm test --compiler gfortran)
 cmake -S examples/fortran_greeter -B build/fortran-library && cmake --build build/fortran-library
@@ -354,7 +354,7 @@ Four workflows:
   MSYS2's on Windows, and its `matlab` job on MATLAB R2024a and the latest
   release (through `setup-matlab`) on the three platforms, each with every
   greeter the `julia` job has and a stated skip failing the job. Its
-  `fortran` job runs `bindings/fortran` (fpm and CMake), the greeter
+  `fortran` job runs `bindings/fortran/guatiao` (fpm and CMake), the greeter
   package and the host's test with every greeter, and has the Rust and
   Python example hosts scan the Fortran library file: gfortran 13 and 15,
   Intel ifx and LLVM flang on Ubuntu, gfortran 15 on macOS, gfortran 15
@@ -389,8 +389,8 @@ those of `r-serde` and `r-intake` (each with `guatiao (>= x.y.z.N)`; R takes
 no letters in a version: `0.0.0-alpha.N` is written `0.0.0.N`, so the first
 release that is not a pre-release must be above `0.0.0`); `bindings/matlab/guatiao/DESCRIPTION`
 (the Octave package and the MATLAB toolbox both take the version as
-written), `bindings/fortran/fpm.toml`, the root `fpm.toml` and
-`bindings/fortran/CMakeLists.txt`'s project version (fpm takes three
+written), `bindings/fortran/guatiao/fpm.toml`, the root `fpm.toml` and
+`bindings/fortran/guatiao/CMakeLists.txt`'s project version (fpm takes three
 numbers: `0.0.0-alpha.N` is written `0.0.0`), and the
 `guatiao` entry of `examples/wire_over_webtransport/client/Cargo.lock` (a
 `--locked` build refuses a stale one; `cargo build` in that directory

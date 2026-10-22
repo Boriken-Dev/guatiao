@@ -104,7 +104,7 @@ setenv('GUATIAO_LIBRARY', '/path/to/the/library')
 ```
 
 A Fortran consumer adds the package with fpm (a git dependency on the
-repository, whose root manifest builds `bindings/fortran`) or CMake, and
+repository, whose root manifest builds `bindings/fortran/guatiao`) or CMake, and
 points it at the same library:
 
 ```toml

@@ -18,7 +18,7 @@ if(NOT CMAKE_Fortran_COMPILE_OPTIONS_PIC AND NOT WIN32)
   set(CMAKE_Fortran_COMPILE_OPTIONS_PIC "-fPIC")
 endif()
 
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../bindings/fortran guatiao_fortran)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../bindings/fortran/guatiao guatiao_fortran)
 
 add_library(greeter_kind_fortran STATIC ${CMAKE_CURRENT_SOURCE_DIR}/../greeter_kind/fortran/src/greeter_kinds.F90)
 target_link_libraries(greeter_kind_fortran PUBLIC guatiao::fortran)

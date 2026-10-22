@@ -3,7 +3,7 @@
 #
 #   guatiao = { git = "https://github.com/Boriken-Dev/guatiao", tag = "..." }
 #
-# The package is bindings/fortran; its own fpm.toml is the one to work in.
+# The package is bindings/fortran/guatiao; its own fpm.toml is the one to work in.
 name = "guatiao"
 version = "0.0.0"
 license = "MPL-2.0"
@@ -20,7 +20,7 @@ auto-examples = false
 auto-tests = false
 
 [library]
-source-dir = "bindings/fortran/src"
+source-dir = "bindings/fortran/guatiao/src"
 
 [install]
 library = true
