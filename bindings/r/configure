@@ -7,9 +7,14 @@ if pkg-config --exists libffi 2>/dev/null; then
   FFI_CFLAGS=$(pkg-config --cflags libffi)
   FFI_LIBS=$(pkg-config --libs libffi)
 elif [ "$(uname)" = "Darwin" ]; then
+  # The SDK's own libffi, else Homebrew's.
   SDK=$(xcrun --show-sdk-path 2>/dev/null)
+  BREW=$(brew --prefix libffi 2>/dev/null)
   if [ -n "$SDK" ] && [ -f "$SDK/usr/include/ffi/ffi.h" ]; then
     FFI_CFLAGS="-I$SDK/usr/include/ffi"
+  elif [ -n "$BREW" ] && [ -f "$BREW/include/ffi.h" ]; then
+    FFI_CFLAGS="-I$BREW/include"
+    FFI_LIBS="-L$BREW/lib -lffi"
   fi
 fi
 
