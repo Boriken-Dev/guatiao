@@ -1,0 +1,16 @@
+Name: guatiao
+Version: 0.0.0-alpha.1
+Date: 2026-10-22
+Title: Values and Schemas Across Languages
+Author: jose-pr <jose-pr@coqui.dev>
+Maintainer: jose-pr <jose-pr@coqui.dev>
+Description: Bindings over the guatiao C ABI for GNU Octave and MATLAB:
+ values shared with C, Rust, Python, Dart, Node, Go, Julia and R code
+ without copying their shape, their JSON Schema descriptions, JSON, TOML
+ and YAML text, and forms. The guatiao library itself is not included: it
+ is opened at run time from the path in GUATIAO_LIBRARY. Installing
+ compiles one MEX file, which needs libffi.
+License: MPL-2.0
+Categories: Data, Interop
+Url: https://github.com/Boriken-Dev/guatiao
+SystemRequirements: libffi
