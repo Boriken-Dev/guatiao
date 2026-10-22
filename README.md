@@ -71,6 +71,7 @@ Bindings over the same C ABI, for a consumer that is not Rust:
 | Dart | [`bindings/dart/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/README.md) | `dart pub add guatiao` |
 | Node.js, TypeScript | [`bindings/node/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node/README.md) | `npm install guatiao` |
 | Go | [`bindings/go/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/go/README.md) | `go get github.com/Boriken-Dev/guatiao/bindings/go` |
+| Julia | [`bindings/julia/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia/README.md) | `Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia")` |
 
 Each drives a shared library that exports the ABI — `guatiao` itself, or
 an application that carries it — named by `GUATIAO_LIBRARY`.
