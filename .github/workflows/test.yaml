@@ -1043,8 +1043,8 @@ jobs:
           cmake --version
           type -a link || true
       - name: Every other link out of the way
-        # A bash step puts POSIX tool directories first on PATH, and a
-        # coreutils `link` there shadows Visual Studio's link.exe.
+        # A coreutils `link` that an earlier step leaves on PATH (in the
+        # runner's temp directory) shadows Visual Studio's link.exe.
         if: runner.os == 'Windows' && matrix.compiler == 'intel'
         run: |
           which -a link | while read -r f; do
