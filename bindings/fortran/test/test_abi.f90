@@ -5,7 +5,9 @@
 !> The interfaces against the committed headers: every export this binding
 !> calls is declared there with as many arguments as its abstract
 !> interface takes; every status and tag has the header's number; every
-!> mirror has the header's size on a 64-bit platform.
+!> mirror has the header's size on a 64-bit platform. The repository's
+!> root manifest (what an fpm git dependency reads) and the CMake project
+!> name this package as its own fpm.toml does.
 program test_abi
   use, intrinsic :: iso_c_binding
   use harness
@@ -28,6 +30,7 @@ program test_abi
                gt_intake_exports)
   call constants()
   call sizes()
+  call manifests_agree()
   call finish('abi')
 
 contains
@@ -342,6 +345,39 @@ contains
     integer, intent(in) :: want
     character(*), intent(in) :: what
     call check(got == want, what // ' is the size a C compiler gives it')
+  end subroutine
+
+  ! The value of `key = "..."` in a manifest's text, or ''.
+  function toml_value(text, key) result(value)
+    character(*), intent(in) :: text, key
+    character(:), allocatable :: value
+    integer :: at, a, b
+    value = ''
+    at = index(text, new_line('a') // key // ' = "')
+    if (at == 0) return
+    a = at + len(key) + 5
+    b = index(text(a:), '"') + a - 2
+    value = text(a:b)
+  end function
+
+  subroutine manifests_agree()
+    character(:), allocatable :: own, root, cmake, version
+    integer :: at
+    call read_file('fpm.toml', own)
+    call read_file(repo_path('fpm.toml'), root)
+    call read_file('CMakeLists.txt', cmake)
+    own = new_line('a') // own
+    root = new_line('a') // root
+    call check_text(toml_value(root, 'name'), toml_value(own, 'name'), 'the root manifest names this package')
+    call check_text(toml_value(root, 'version'), toml_value(own, 'version'), 'and versions it the same')
+    call check_text(toml_value(root, 'source-dir'), 'bindings/fortran/src', 'and builds its sources')
+    at = index(cmake, 'project(guatiao_fortran VERSION ')
+    call check(at > 0, 'the CMake project names a version')
+    if (at > 0) then
+      version = cmake(at + 32:)
+      version = version(1:index(version, ' ') - 1)
+      call check_text(version, toml_value(own, 'version'), 'the CMake project is versioned as fpm.toml')
+    end if
   end subroutine
 
 end program test_abi
