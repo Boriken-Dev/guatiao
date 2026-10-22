@@ -154,8 +154,8 @@ print.guatiao_kind <- function(x, ...) {
   get(n, envir = kind$where, mode = "function")
 }
 
-# The int64 option a kind was declared with; a kind installed before the
-# option existed has none.
+# The int64 option a kind was declared with: "auto" when its description
+# carries none.
 .gt_kind_int64 <- function(kind) if (is.null(kind$int64)) "auto" else kind$int64
 
 # The C description of a kind, built once a session.
