@@ -51,6 +51,15 @@ node_modules/
 Manifest.toml
 Manifest-v*.toml
 
+# R: what installing or checking the package from its source writes
+/bindings/r/src/Makevars
+/bindings/r/src/*.o
+/bindings/r/src/*.so
+/bindings/r/src/*.dll
+/bindings/r/*.tar.gz
+*.Rcheck/
+.Rhistory
+
 # Python, wherever an example or a crate carries some
 __pycache__/
 *.py[cod]
