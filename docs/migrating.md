@@ -901,6 +901,19 @@ import { ParseError } from 'guatiao-serde';
 `useLibrary` from `guatiao` names only the core library now;
 `guatiao-serde` and `guatiao-intake` each have their own.
 
+### Go
+
+The import paths stay (`.../bindings/go/serde`, `.../bindings/go/intake`).
+A program that named its library with `guatiao.UseLibrary` and relied on
+`guatiao_serde` and `guatiao_intake` being found beside it names them too,
+or sets `GUATIAO_LIBRARY` to their directory:
+
+```go
+guatiao.UseLibrary(dir)
+serde.UseLibrary(dir)
+intake.UseLibrary(dir)
+```
+
 ## Python and Dart
 
 ### `create` checks the configuration first
