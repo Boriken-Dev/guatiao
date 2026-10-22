@@ -82,6 +82,25 @@ jobs:
               problems.append(f"Cargo says {cargo} and pubspec says {pubspec}")
           if Version(cargo) != Version(python) or python != init:
               problems.append(f"Cargo says {cargo}, pyproject {python}, __version__ {init}")
+          # The serde and intake packages move with the core, and name it at
+          # the same version (pub.dev refuses a single-version pin: a caret
+          # from it).
+          for crate in ("serde", "intake"):
+              where = f"bindings/python-{crate}/pyproject.toml"
+              project = tomllib.loads(pathlib.Path(where).read_text())["project"]
+              own_init = re.search(r'^__version__ = "([^"]+)"', pathlib.Path(
+                  f"bindings/python-{crate}/src/guatiao_{crate}/__init__.py").read_text(), re.M).group(1)
+              if project["version"] != python or own_init != python:
+                  problems.append(f"{where} says {project['version']} (__version__ {own_init}), not {python}")
+              if f"guatiao=={python}" not in project["dependencies"]:
+                  problems.append(f"{where} does not pin guatiao=={python}")
+              where = f"bindings/dart-{crate}/pubspec.yaml"
+              text = pathlib.Path(where).read_text()
+              own = re.search(r"^version:\s*(\S+)", text, re.M).group(1)
+              if own != cargo:
+                  problems.append(f"Cargo says {cargo} and {where} says {own}")
+              if not re.search(rf"^  guatiao: \^{re.escape(cargo)}$", text, re.M):
+                  problems.append(f"{where} does not depend on guatiao ^{cargo}")
           # guatiao-py is a workspace of its own and is not published: its
           # version and its pins on the crates still move with them.
           bridge = tomllib.loads(pathlib.Path("crates/guatiao-py/Cargo.toml").read_text())
@@ -94,20 +113,26 @@ jobs:
           # npm writes the version as Cargo does; the lockfiles name it too.
           import json
           node = json.loads(pathlib.Path("bindings/node/package.json").read_text())["version"]
-          node_lock = json.loads(pathlib.Path("bindings/node/package-lock.json").read_text())
+          node_lock = json.loads(pathlib.Path("bindings/package-lock.json").read_text())
           examples_lock = json.loads(pathlib.Path("examples/package-lock.json").read_text())
-          for where, found in (
+          found_versions = [
               ("bindings/node/package.json", node),
-              ("bindings/node/package-lock.json", node_lock["version"]),
-              ("bindings/node/package-lock.json's root package", node_lock["packages"][""]["version"]),
               ("examples/package-lock.json's ../bindings/node", examples_lock["packages"]["../bindings/node"]["version"]),
-          ):
+          ]
+          for package in ("node", "node-serde", "node-intake"):
+              found_versions.append((f"bindings/package-lock.json's {package}", node_lock["packages"][package]["version"]))
+          for crate in ("serde", "intake"):
+              manifest = json.loads(pathlib.Path(f"bindings/node-{crate}/package.json").read_text())
+              found_versions.append((f"bindings/node-{crate}/package.json", manifest["version"]))
+              found_versions.append((f"bindings/node-{crate}/package.json's guatiao", manifest["dependencies"]["guatiao"]))
+          for where, found in found_versions:
               if found != cargo:
                   problems.append(f"Cargo says {cargo} and {where} says {found}")
           # Julia writes the version as Cargo does.
-          julia = tomllib.loads(pathlib.Path("bindings/julia/Project.toml").read_text())["version"]
-          if julia != cargo:
-              problems.append(f"Cargo says {cargo} and bindings/julia/Project.toml says {julia}")
+          for where in ("bindings/julia", "bindings/julia-serde", "bindings/julia-intake"):
+              julia = tomllib.loads(pathlib.Path(f"{where}/Project.toml").read_text())["version"]
+              if julia != cargo:
+                  problems.append(f"Cargo says {cargo} and {where}/Project.toml says {julia}")
           # R's versions are integers: X.Y.Z-alpha.N is written X.Y.Z.N.
           described = re.search(r"^Version:\s*(\S+)", pathlib.Path("bindings/r/DESCRIPTION").read_text(), re.M).group(1)
           plain = re.fullmatch(r"(\d+\.\d+\.\d+)(?:-alpha\.(\d+))?", cargo)
@@ -117,6 +142,14 @@ jobs:
               want_r = plain.group(1) + (f".{plain.group(2)}" if plain.group(2) else "")
               if described != want_r:
                   problems.append(f"Cargo says {cargo}, so bindings/r/DESCRIPTION wants {want_r}, not {described}")
+              for crate in ("serde", "intake"):
+                  where = f"bindings/r-{crate}/DESCRIPTION"
+                  text = pathlib.Path(where).read_text()
+                  own = re.search(r"^Version:\s*(\S+)", text, re.M).group(1)
+                  if own != want_r:
+                      problems.append(f"Cargo says {cargo}, so {where} wants {want_r}, not {own}")
+                  if f"guatiao (>= {want_r})" not in text:
+                      problems.append(f"{where} does not depend on guatiao (>= {want_r})")
           # The Octave package writes the version as Cargo does; the MATLAB
           # toolbox is versioned from it when it is built.
           octave = re.search(r"^Version:\s*(\S+)", pathlib.Path("bindings/matlab/DESCRIPTION").read_text(), re.M).group(1)
@@ -178,8 +211,24 @@ jobs:
         with:
           python-version: "3.x"
       - run: python -m pip install --upgrade build twine
-      - run: python -m build bindings/python --outdir dist/
+      - name: Build guatiao, guatiao-serde and guatiao-intake
+        run: |
+          for p in python python-serde python-intake; do
+            python -m build "bindings/$p" --outdir dist/
+          done
       - run: python -m twine check dist/*
+      - name: What the wheels ship
+        shell: python
+        run: |
+          import glob
+          import zipfile
+
+          for package in ("guatiao", "guatiao_serde", "guatiao_intake"):
+              (wheel,) = glob.glob(f"dist/{package}-*.whl")
+              names = set(zipfile.ZipFile(wheel).namelist())
+              for need in (f"{package}/__init__.py", f"{package}/AGENTS.md", f"{package}/py.typed"):
+                  assert need in names, f"{wheel}: {need} does not ship"
+              assert not any(".local." in n for n in names), f"{wheel}: a .local file ships"
       - uses: actions/upload-artifact@v4
         with:
           name: python
@@ -197,9 +246,40 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
-      - name: Dry-run the pub.dev publish
-        working-directory: bindings/dart
-        run: dart pub get && dart pub publish --dry-run
+      - name: Dry-run the pub.dev publish of each package
+        # A rehearsal at a version the packages never had (one already
+        # released, before the next is cut) leaves a new package's
+        # changelog naming no section for it: pub's one warning that a
+        # rehearsal lets pass. A tag passes nothing.
+        shell: python
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          import os
+          import re
+          import subprocess
+          import sys
+
+          rehearsal = os.environ["EVENT"] == "workflow_dispatch"
+          failed = []
+          for package in ("dart", "dart-serde", "dart-intake"):
+              where = f"bindings/{package}"
+              subprocess.run(["dart", "pub", "get"], cwd=where, check=True)
+              run = subprocess.run(["dart", "pub", "publish", "--dry-run"], cwd=where, capture_output=True, text=True)
+              out = run.stdout + run.stderr
+              print(out)
+              if run.returncode == 0:
+                  continue
+              count = re.search(r"Package has (\d+) warnings?", out)
+              only_changelog = (count is not None and int(count.group(1)) == 1
+                                and "doesn't mention current version" in out
+                                and "the following error" not in out)
+              if rehearsal and only_changelog:
+                  print(f"::notice::{package}: its changelog names no section for this version yet")
+                  continue
+              failed.append(package)
+          if failed:
+              sys.exit(f"pub would refuse: {', '.join(failed)}")
 
   build-node:
     name: Build and pack the Node package
@@ -213,14 +293,26 @@ jobs:
         with:
           node-version: "24"
       - name: Build
-        working-directory: bindings/node
-        run: npm ci && npm run build
+        # The workspace, the core first: the others compile against its types.
+        working-directory: bindings
+        run: |
+          npm ci
+          for p in node node-serde node-intake; do
+            (cd "$p" && npm run build)
+          done
       - name: "Dry-run the pack: what npm would publish"
-        working-directory: bindings/node
-        run: npm pack --dry-run
+        working-directory: bindings
+        run: |
+          for p in node node-serde node-intake; do
+            (cd "$p" && npm pack --dry-run)
+          done
       - name: Pack
-        working-directory: bindings/node
-        run: mkdir -p ../../npm && npm pack --pack-destination ../../npm
+        working-directory: bindings
+        run: |
+          mkdir -p ../npm
+          for p in node node-serde node-intake; do
+            (cd "$p" && npm pack --pack-destination ../../npm)
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: node
@@ -311,25 +403,34 @@ jobs:
       # commit: what it takes is the files under bindings/julia, loaded here
       # as a user's Pkg loads them.
       - name: Resolve and load
-        run: julia --startup-file=no --project=bindings/julia -e 'using Pkg; Pkg.instantiate(); using Guatiao; println(pkgversion(Guatiao))'
-      - name: What the package ships
+        run: |
+          julia --startup-file=no --project=bindings/julia -e 'using Pkg; Pkg.instantiate(); using Guatiao; println(pkgversion(Guatiao))'
+          julia --startup-file=no -e 'using Pkg; Pkg.activate(temp = true);
+            Pkg.develop([PackageSpec(path = "bindings/julia"), PackageSpec(path = "bindings/julia-serde"),
+                         PackageSpec(path = "bindings/julia-intake")]);
+            using GuatiaoSerde, GuatiaoIntake; println(pkgversion(GuatiaoSerde), " ", pkgversion(GuatiaoIntake))'
+      - name: What the packages ship
         shell: python
         run: |
           import subprocess
           import tomllib
 
-          files = subprocess.run(["git", "ls-files", "bindings/julia"], capture_output=True, text=True,
-                                 check=True).stdout.split()
-          names = {f[len("bindings/julia/"):] for f in files}
-          print("\n".join(sorted(names)))
-          for need in ("Project.toml", "AGENTS.md", "README.md", "LICENSE", "src/Guatiao.jl"):
-              assert need in names, f"{need} does not ship"
-          assert "Manifest.toml" not in names, "a resolved environment ships"
-          assert not any(".local." in f or f.split("/")[-1].startswith(".") for f in names), "a private file ships"
-          project = tomllib.load(open("bindings/julia/Project.toml", "rb"))
-          assert project["name"] == "Guatiao" and "julia" in project["compat"], "General wants a name and a julia compat"
-          for dep in project.get("deps", {}):
-              assert dep in project.get("compat", {}), f"General wants a compat entry for {dep}"
+          for where, name in (("bindings/julia", "Guatiao"), ("bindings/julia-serde", "GuatiaoSerde"),
+                              ("bindings/julia-intake", "GuatiaoIntake")):
+              files = subprocess.run(["git", "ls-files", where], capture_output=True, text=True,
+                                     check=True).stdout.split()
+              names = {f[len(where) + 1:] for f in files}
+              print(where, sorted(names))
+              for need in ("Project.toml", "AGENTS.md", "README.md", "LICENSE", f"src/{name}.jl"):
+                  assert need in names, f"{where}: {need} does not ship"
+              assert "Manifest.toml" not in names, f"{where}: a resolved environment ships"
+              assert not any(".local." in f or f.split("/")[-1].startswith(".") for f in names), f"{where}: a private file ships"
+              project = tomllib.load(open(f"{where}/Project.toml", "rb"))
+              assert project["name"] == name and "julia" in project["compat"], "General wants a name and a julia compat"
+              # Guatiao is the one dependency the others have; its compat
+              # entry is written when the first version registers.
+              for dep in project.get("deps", {}):
+                  assert dep == "Guatiao" or dep in project.get("compat", {}), f"General wants a compat entry for {dep}"
 
   build-r:
     name: Build and check the R package
@@ -350,28 +451,40 @@ jobs:
       # The source package is what R-universe builds from the repository
       # and what the GitHub release carries; checked here as R checks it,
       # with no guatiao library named, so every case that needs one skips.
-      - name: Build and check the source package
+      - name: Build and check the source packages
+        # guatiao first; guatiao.serde and guatiao.intake compile against
+        # it once it is installed.
         run: |
           mkdir -p r
           R CMD build --no-manual bindings/r
           mv guatiao_*.tar.gz r/
           cd r
           R CMD check --no-manual guatiao_*.tar.gz
-          ! grep -qE "^\* checking .*(WARNING|ERROR)" guatiao.Rcheck/00check.log
+          if grep -E "^\* checking .*(WARNING|ERROR)" guatiao.Rcheck/00check.log; then exit 1; fi
           rm -rf guatiao.Rcheck
-      - name: What the package ships
+          R CMD INSTALL guatiao_*.tar.gz
+          for p in serde intake; do
+            R CMD build --no-manual "../bindings/r-$p"
+            R CMD check --no-manual guatiao.${p}_*.tar.gz
+            if grep -E "^\* checking .*(WARNING|ERROR)" guatiao.$p.Rcheck/00check.log; then exit 1; fi
+            rm -rf guatiao.$p.Rcheck
+          done
+      - name: What the packages ship
         shell: python
         run: |
           import glob
           import tarfile
 
-          (path,) = glob.glob("r/guatiao_*.tar.gz")
-          names = {n.split("/", 1)[1] for n in tarfile.open(path).getnames() if "/" in n}
-          print("\n".join(sorted(names)))
-          for need in ("DESCRIPTION", "NAMESPACE", "README.md", "inst/AGENTS.md", "configure", "src/guatiao.h"):
-              assert need in names, f"{need} does not ship"
-          assert not any(".local." in n or n.split("/")[-1].startswith(".") for n in names), "a private file ships"
-          assert not any(n.endswith((".o", ".so", ".dll")) for n in names), "a build output ships"
+          for package, needs in (("guatiao", ("configure", "src/guatiao.h", "inst/include/guatiao_r_api.h")),
+                                 ("guatiao.serde", ("src/guatiao.h", "src/guatiao_serde.h")),
+                                 ("guatiao.intake", ("src/guatiao.h", "src/guatiao_intake.h"))):
+              (path,) = glob.glob(f"r/{package}_*.tar.gz")
+              names = {n.split("/", 1)[1] for n in tarfile.open(path).getnames() if "/" in n}
+              print(package, sorted(names))
+              for need in ("DESCRIPTION", "NAMESPACE", "README.md", "inst/AGENTS.md") + needs:
+                  assert need in names, f"{package}: {need} does not ship"
+              assert not any(".local." in n or n.split("/")[-1].startswith(".") for n in names), f"{package}: a private file ships"
+              assert not any(n.endswith((".o", ".so", ".dll")) for n in names), f"{package}: a build output ships"
       - uses: actions/upload-artifact@v4
         with:
           name: r
@@ -655,8 +768,8 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
-      - name: Publish, unless pub.dev has this version already
-        working-directory: bindings/dart
+      - name: Publish each package, unless pub.dev has this version already
+        # guatiao first: the others depend on it.
         shell: python
         run: |
           import json
@@ -665,22 +778,25 @@ jobs:
           import urllib.error
           import urllib.request
 
-          version = re.search(r"^version:\s*(\S+)", open("pubspec.yaml").read(), re.M).group(1)
-          try:
-              with urllib.request.urlopen("https://pub.dev/api/packages/guatiao") as r:
-                  have = {v["version"] for v in json.load(r)["versions"]}
-          except urllib.error.HTTPError as e:
-              if e.code != 404:
-                  raise
-              # pub.dev automates only a package that already exists: the
-              # first version is published by hand, with `dart pub publish`.
-              raise SystemExit("guatiao is not on pub.dev yet: publish its first "
-                               "version by hand, then enable automated publishing")
-          if version in have:
-              print(f"guatiao {version} is already on pub.dev; skipped")
-          else:
-              subprocess.run(["dart", "pub", "get"], check=True)
-              subprocess.run(["dart", "pub", "publish", "--force"], check=True)
+          for package, where in (("guatiao", "bindings/dart"), ("guatiao_serde", "bindings/dart-serde"),
+                                 ("guatiao_intake", "bindings/dart-intake")):
+              version = re.search(r"^version:\s*(\S+)", open(f"{where}/pubspec.yaml").read(), re.M).group(1)
+              try:
+                  with urllib.request.urlopen(f"https://pub.dev/api/packages/{package}") as r:
+                      have = {v["version"] for v in json.load(r)["versions"]}
+              except urllib.error.HTTPError as e:
+                  if e.code != 404:
+                      raise
+                  # pub.dev automates only a package that already exists:
+                  # the first version is published by hand, with `dart pub
+                  # publish`.
+                  raise SystemExit(f"{package} is not on pub.dev yet: publish its first "
+                                   "version by hand, then enable automated publishing")
+              if version in have:
+                  print(f"{package} {version} is already on pub.dev; skipped")
+                  continue
+              subprocess.run(["dart", "pub", "get"], cwd=where, check=True)
+              subprocess.run(["dart", "pub", "publish", "--force"], cwd=where, check=True)
 
   publish-npm:
     name: Publish to npm
@@ -717,24 +833,32 @@ jobs:
           import urllib.error
           import urllib.request
 
-          (tarball,) = glob.glob("npm/guatiao-*.tgz")
-          version = tarball[len("npm/guatiao-"):-len(".tgz")]
-          try:
-              with urllib.request.urlopen("https://registry.npmjs.org/guatiao") as r:
-                  have = set(json.load(r).get("versions", {}))
-          except urllib.error.HTTPError as e:
-              if e.code != 404:
-                  raise
-              have = set()
-          if version in have:
-              print(f"guatiao {version} is already on npm; skipped")
-              sys.exit(0)
-          # A pre-release goes out under `next`, never as `latest`.
-          tag = "next" if "-" in version else "latest"
-          subprocess.run(
-              ["npm", "publish", tarball, "--provenance", "--access", "public", "--tag", tag],
-              check=True,
-          )
+          import re
+
+          # guatiao first: the others depend on it.
+          packed = {}
+          for tarball in glob.glob("npm/*.tgz"):
+              m = re.fullmatch(r"npm/(guatiao(?:-serde|-intake)?)-(\d.*)\.tgz", tarball)
+              assert m, f"an unexpected tarball: {tarball}"
+              packed[m.group(1)] = (tarball, m.group(2))
+          for name in ("guatiao", "guatiao-serde", "guatiao-intake"):
+              tarball, version = packed[name]
+              try:
+                  with urllib.request.urlopen(f"https://registry.npmjs.org/{name}") as r:
+                      have = set(json.load(r).get("versions", {}))
+              except urllib.error.HTTPError as e:
+                  if e.code != 404:
+                      raise
+                  have = set()
+              if version in have:
+                  print(f"{name} {version} is already on npm; skipped")
+                  continue
+              # A pre-release goes out under `next`, never as `latest`.
+              tag = "next" if "-" in version else "latest"
+              subprocess.run(
+                  ["npm", "publish", tarball, "--provenance", "--access", "public", "--tag", tag],
+                  check=True,
+              )
 
   publish-go:
     name: Tag the Go module
@@ -807,28 +931,31 @@ jobs:
           import urllib.error
           import urllib.request
 
-          project = tomllib.load(open("bindings/julia/Project.toml", "rb"))
-          name, version = project["name"], project["version"]
-          versions = f"https://raw.githubusercontent.com/JuliaRegistries/General/master/{name[0]}/{name}/Versions.toml"
-          try:
-              with urllib.request.urlopen(versions) as r:
-                  listed = tomllib.loads(r.read().decode())
-          except urllib.error.HTTPError as e:
-              if e.code != 404:
-                  raise
-              listed = {}
-          if version in listed:
-              print(f"General lists {name} {version}; skipped")
-              sys.exit(0)
-          if not os.environ["TOKEN"]:
-              sys.exit("JULIA_REGISTRATOR_TOKEN is not set: nothing asked Registrator")
-          body = json.dumps({"body": "@JuliaRegistrator register subdir=bindings/julia"}).encode()
-          request = urllib.request.Request(
-              f"https://api.github.com/repos/{os.environ['REPO']}/commits/{os.environ['SHA']}/comments",
-              data=body, method="POST",
-              headers={"Authorization": f"Bearer {os.environ['TOKEN']}", "Accept": "application/vnd.github+json"})
-          with urllib.request.urlopen(request) as r:
-              print("asked Registrator:", json.loads(r.read())["html_url"])
+          # Guatiao first: General checks a package's dependencies are
+          # registered.
+          for subdir in ("bindings/julia", "bindings/julia-serde", "bindings/julia-intake"):
+              project = tomllib.load(open(f"{subdir}/Project.toml", "rb"))
+              name, version = project["name"], project["version"]
+              versions = f"https://raw.githubusercontent.com/JuliaRegistries/General/master/{name[0]}/{name}/Versions.toml"
+              try:
+                  with urllib.request.urlopen(versions) as r:
+                      listed = tomllib.loads(r.read().decode())
+              except urllib.error.HTTPError as e:
+                  if e.code != 404:
+                      raise
+                  listed = {}
+              if version in listed:
+                  print(f"General lists {name} {version}; skipped")
+                  continue
+              if not os.environ["TOKEN"]:
+                  sys.exit("JULIA_REGISTRATOR_TOKEN is not set: nothing asked Registrator")
+              body = json.dumps({"body": f"@JuliaRegistrator register subdir={subdir}"}).encode()
+              request = urllib.request.Request(
+                  f"https://api.github.com/repos/{os.environ['REPO']}/commits/{os.environ['SHA']}/comments",
+                  data=body, method="POST",
+                  headers={"Authorization": f"Bearer {os.environ['TOKEN']}", "Accept": "application/vnd.github+json"})
+              with urllib.request.urlopen(request) as r:
+                  print(f"asked Registrator for {name}:", json.loads(r.read())["html_url"])
 
   # A GITHUB_TOKEN-made release starts no workflow, so docs.yml is
   # dispatched at this tag instead. A pre-release leaves the published docs
