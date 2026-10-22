@@ -390,6 +390,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Unsupported` without running, and a destroy asked for there waits for
   R's thread. The R examples: `examples/greeter_kind/r/`,
   `examples/r_host/` and `examples/r_provider/`.
+- **MATLAB and GNU Octave bindings**, `bindings/matlab/`: the `+guatiao`
+  package, `classdef` and functions that MATLAB R2024a and later and
+  Octave 8.4 and later both run, over one MEX gateway in C built on the
+  user's machine (`pkg install` in Octave, `guatiao.build()` in MATLAB)
+  that needs libffi and opens the library found through `GUATIAO_LIBRARY`
+  or `guatiao.use_library(path)`. `guatiao.Value` builds a tree from
+  structs, cell arrays, text, numbers, `uint8` and `containers.Map`, with
+  views (`v.at('tags')`) to read and change it in place and `data()` to
+  read it back; an integer past 2^53 reads as `int64`/`uint64` and a wider
+  number as `guatiao.Number`, its text kept. `guatiao.Config` and
+  `guatiao.field` write a configuration's JSON Schema and read one back
+  with its defaults. `guatiao.Date`, `TimeOfDay`, `DateTime`, `Timestamp`,
+  `Span` and `Duration`, with MATLAB's `datetime` and `duration` written;
+  `guatiao.serde.parse`/`emit`, the `guatiao.intake` functions,
+  `guatiao.redact` and `guatiao.validate`. Errors carry identifiers
+  `guatiao:<Status>`. The Octave package and the MATLAB toolbox are built
+  as release assets.
+- **MATLAB and Octave: the registry, kinds and providers.**
+  `guatiao.Registry` hosts libraries (`scan_dir`, `providers`, `bind`,
+  `create`, `retire`, `unload`, `add_source_file`, `watch_dir`,
+  `refresh`). A kind is a class inheriting `guatiao.Kind`, described once
+  with `guatiao.Kind.describe` and `guatiao.slot` (`guatiao.lent`,
+  `guatiao.taken`), with a method per slot; a remote is an instance of it.
+  A provider is a handle class inheriting its kinds and overriding their
+  methods, marked by a `Provider = guatiao.provider(...)` constant, in a
+  library `guatiao.library_of` reads from a folder: id, version, authors
+  and licence from its `DESCRIPTION`, its licence and notice files as
+  notices. A slot M code serves runs on the interpreter's thread while a
+  call into guatiao is in progress (`guatiao.serving` makes one for C code
+  of one's own); otherwise it answers `Unsupported` without running, and
+  a destroy asked for there waits for the next call. The examples:
+  `examples/greeter_kind/matlab/`, `examples/matlab_host/` and
+  `examples/matlab_provider/`.
 
 ### Changed
 

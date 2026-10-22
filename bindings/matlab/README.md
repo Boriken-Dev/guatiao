@@ -57,7 +57,7 @@ is `guatiao` itself or an application that carries it.
 GNU Octave, from a release's `guatiao-<version>.tar.gz`:
 
 ```matlab
-pkg install guatiao-0.0.0-alpha.1.tar.gz   % compiles the MEX file
+pkg install guatiao-VERSION.tar.gz   % the release's file; compiles the MEX file
 pkg load guatiao
 ```
 

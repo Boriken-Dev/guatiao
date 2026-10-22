@@ -73,6 +73,7 @@ Bindings over the same C ABI, for a consumer that is not Rust:
 | Go | [`bindings/go/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/go/README.md) | `go get github.com/Boriken-Dev/guatiao/bindings/go` |
 | Julia | [`bindings/julia/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia/README.md) | `Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia")` |
 | R | [`bindings/r/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r/README.md) | `remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r")` |
+| MATLAB, GNU Octave | [`bindings/matlab/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/matlab/README.md) | Octave: `pkg install` a release's `guatiao-<version>.tar.gz`; MATLAB: a release's `guatiao.mltbx`, then `guatiao.build()` |
 
 Each drives a shared library that exports the ABI — `guatiao` itself, or
 an application that carries it — named by `GUATIAO_LIBRARY`.

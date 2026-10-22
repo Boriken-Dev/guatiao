@@ -35,6 +35,7 @@ nav:
   - Go, host and provider: go.md
   - Julia, host and provider: julia.md
   - R, host and provider: r.md
+  - MATLAB and Octave, host and provider: matlab.md
   - API Reference:
       # rustdoc's own output, built by `cargo doc` and copied under
       # `rust/` by the docs workflow. An absolute URL because it is not a
