@@ -1003,18 +1003,6 @@ jobs:
         # ifx links through Visual Studio's link.exe, and the oneAPI setup
         # finds no Visual Studio on this image.
         if: runner.os == 'Windows' && matrix.compiler == 'intel'
-      - name: Every other link out of the way
-        # A bash step puts POSIX tool directories first on PATH, and a
-        # coreutils `link` there shadows Visual Studio's link.exe.
-        if: runner.os == 'Windows' && matrix.compiler == 'intel'
-        run: |
-          which -a link | while read -r f; do
-            case "$f" in
-              *"Microsoft Visual Studio"*) echo "keeps $f" ;;
-              *) echo "removes $f"; rm -f "$f" "$f.exe" ;;
-            esac
-          done
-          command -v link
       - name: LLVM flang
         if: matrix.compiler == 'flang'
         run: |
@@ -1053,6 +1041,25 @@ jobs:
           "$FC" --version
           fpm --version
           cmake --version
+          type -a link || true
+      - name: Every other link out of the way
+        # A bash step puts POSIX tool directories first on PATH, and a
+        # coreutils `link` there shadows Visual Studio's link.exe.
+        if: runner.os == 'Windows' && matrix.compiler == 'intel'
+        run: |
+          which -a link | while read -r f; do
+            case "$f" in
+              *"Microsoft Visual Studio"*) echo "keeps $f" ;;
+              *) echo "removes $f"; rm -f "$f" "$f.exe" ;;
+            esac
+          done
+          cmd //c "where link" | tr -d '\r' | while read -r f; do
+            case "$f" in
+              *"Microsoft Visual Studio"*) echo "keeps $f" ;;
+              *) echo "removes $f"; rm -f "$(cygpath -u "$f")" ;;
+            esac
+          done
+          command -v link
       - name: Test the binding with fpm
         working-directory: bindings/fortran
         run: |
