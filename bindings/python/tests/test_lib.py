@@ -6,9 +6,12 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import pytest
 
-from guatiao import _lib
+from guatiao import _lib, ffi
 
 
 def test_core_loads_and_declares_every_export():
@@ -26,9 +29,64 @@ def test_default_alloc_is_filled_once_and_cached():
     assert bool(a1.free)
 
 
-def test_serde_and_form_load_with_all_features_built():
-    assert _lib.serde().symbols_missing() == frozenset()
-    assert _lib.form().symbols_missing() == frozenset()
+def _built(basename: str) -> Path:
+    path = Path(os.environ["GUATIAO_LIBRARY"]) / ffi.dll_filename(basename)
+    if not path.is_file():
+        pytest.skip(f"no {path.name} built")
+    return path
+
+
+def test_a_surfaces_own_variable_names_a_file_whatever_it_is_called(monkeypatch):
+    intake = _built("guatiao_intake")
+    monkeypatch.setenv("GUATIAO_SERDE_LIBRARY", str(intake))
+    found = ffi.find_library(
+        "guatiao_serde", variable="GUATIAO_SERDE_LIBRARY", symbol="guatiao_json_parse_ex"
+    )
+    assert found == intake
+
+
+def test_a_surfaces_own_variable_names_a_directory(monkeypatch):
+    serde = _built("guatiao_serde")
+    monkeypatch.setenv("GUATIAO_SERDE_LIBRARY", str(serde.parent))
+    monkeypatch.setenv("GUATIAO_LIBRARY", str(serde.parent / "nowhere"))
+    found = ffi.find_library(
+        "guatiao_serde", variable="GUATIAO_SERDE_LIBRARY", symbol="guatiao_json_parse_ex"
+    )
+    assert found == serde
+
+
+def test_a_shared_file_carrying_the_surface_serves_it(monkeypatch):
+    serde = _built("guatiao_serde")
+    monkeypatch.delenv("GUATIAO_SERDE_LIBRARY", raising=False)
+    monkeypatch.setenv("GUATIAO_LIBRARY", str(serde))
+    found = ffi.find_library(
+        "guatiao_serde", variable="GUATIAO_SERDE_LIBRARY", symbol="guatiao_json_parse_ex"
+    )
+    assert found == serde
+    # The core, which every guatiao library carries, is taken from it too.
+    assert ffi.find_library("guatiao") == serde
+
+
+def test_a_shared_file_without_the_surface_points_at_its_sibling(monkeypatch):
+    core = _built("guatiao")
+    serde = _built("guatiao_serde")
+    monkeypatch.delenv("GUATIAO_SERDE_LIBRARY", raising=False)
+    monkeypatch.setenv("GUATIAO_LIBRARY", str(core))
+    found = ffi.find_library(
+        "guatiao_serde", variable="GUATIAO_SERDE_LIBRARY", symbol="guatiao_json_parse_ex"
+    )
+    assert found == serde
+
+
+def test_not_found_names_every_place_tried(monkeypatch):
+    monkeypatch.setenv("GUATIAO_SERDE_LIBRARY", "/nowhere/at/all")
+    monkeypatch.setenv("GUATIAO_LIBRARY", "/nowhere/either")
+    with pytest.raises(ffi.LibraryNotFound) as excinfo:
+        ffi.find_library("not_a_real_guatiao_library", variable="GUATIAO_SERDE_LIBRARY")
+    message = str(excinfo.value)
+    assert "GUATIAO_SERDE_LIBRARY" in message
+    assert "GUATIAO_LIBRARY" in message
+    assert "find_library" in message
 
 
 def test_unknown_basename_reports_where_it_looked():

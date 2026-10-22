@@ -98,26 +98,13 @@ def test_provider_config_is_a_borrowed_schema():
         assert reg.provider_config("derived_greeter_hello") is None
 
 
-def test_a_providers_form_travels_in_its_meta_and_fits_its_schema():
-    from guatiao import intake
-    from guatiao.value import Value
-
+def test_a_providers_meta_is_a_copy_carrying_its_form():
     with _scanned() as reg:
         meta = reg.provider_meta("derived_greeter_shouter")
         assert meta is not None
         with meta:
-            form = meta.as_map()[intake.PROVIDER_FORM_KEY]
-            schema = reg.provider_config("derived_greeter_shouter")
-            assert schema is not None
-            assert intake.check(schema, form) is None
-
-            data = form.to_python()
-            assert [s["id"] for s in data["sections"]] == ["words", "volume"]
-            assert data["fields"]["prefix"]["placeholder"] == "hey"
-            assert data["fields"]["marks"]["unit"] == "marks"
-            for exclaim in (False, True):
-                with Value.from_python({"exclaim": exclaim}) as values:
-                    assert intake.is_visible(schema, form, "marks", values) is exclaim
+            form = meta.as_map()["form"].to_python()
+            assert [s["id"] for s in form["sections"]] == ["words", "volume"]
 
         assert reg.provider_meta("derived_greeter_hello") is None
         with pytest.raises(errors.NotFound):

@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-"""Finding and loading `guatiao`, `guatiao_serde` and `guatiao_intake`.
+"""Finding and loading a guatiao library, and the `guatiao` one itself.
 
 Every export gets a declared `argtypes`/`restype` up front, from a table,
 so ctypes passes the width the function actually expects rather than
@@ -10,11 +10,8 @@ whatever the platform's default promotion happens to produce. This
 declares every real, linkable export of `guatiao.h` but the two wire
 functions -- not the 22 `static inline` helpers alongside them, which
 have no symbol in any library and are reimplemented in `value.py`
-instead -- plus the 10 of
-`guatiao_serde.h` and the 10 of `guatiao_intake.h`, each of which also
-re-exports `guatiao_alloc_default`: any cdylib linking the `guatiao`
-crate carries its plain value-level functions along, and `Library.alloc`
-(Q5: one allocator per loaded library) needs its own copy of that one.
+instead. `find_library` and `Library` serve the packages over the other
+guatiao libraries too (`guatiao.ffi`).
 """
 
 from __future__ import annotations
@@ -43,21 +40,24 @@ c_int64 = ctypes.c_int64
 c_uint64 = ctypes.c_uint64
 TextError = _abi.TextError
 ProviderError = _abi.ProviderError
-ParseError = _abi.ParseError
 
 _P = ctypes.POINTER
 
 
 class LibraryNotFound(RuntimeError):
-    """No `basename` library was found by either route."""
+    """No `basename` library was found by any route; `looked` names each
+    place tried, in order."""
 
-    def __init__(self, basename: str) -> None:
+    def __init__(self, basename: str, looked: "tuple[str, ...]" = ()) -> None:
+        places = ", ".join(
+            looked or ("the GUATIAO_LIBRARY environment variable (unset)",)
+        )
         super().__init__(
-            f"could not find {dll_filename(basename)}: checked the "
-            "GUATIAO_LIBRARY environment variable and "
+            f"could not find {dll_filename(basename)}: checked {places} and "
             f"ctypes.util.find_library({basename!r})"
         )
         self.basename = basename
+        self.looked = tuple(looked)
 
 
 class MissingSymbol(RuntimeError):
@@ -95,10 +95,10 @@ def use_library(path: "str | os.PathLike[str]") -> None:
     `libguatiao.so` / `libguatiao.dylib` -- instead of looking for one.
 
     For a program that carries the library under its own name, or already
-    has it mapped: the next native call loads it from there, and
-    `guatiao_serde` and `guatiao_intake` are looked for beside it.
-    `RuntimeError` when a library is already loaded from elsewhere; naming
-    the one already loaded does nothing."""
+    has it mapped: the next native call loads it from there. Only this
+    package's library: `guatiao_serde` and `guatiao_intake` are told with
+    their own `use_library`. `RuntimeError` when a library is already
+    loaded from elsewhere; naming the one already loaded does nothing."""
     global _chosen
     chosen = Path(path)
     with _lock:
@@ -110,29 +110,81 @@ def use_library(path: "str | os.PathLike[str]") -> None:
         _chosen = chosen
 
 
-def resolve(basename: str) -> Path:
-    """Where `basename`'s library is, trying each route in order (Q2)."""
+def _exports(path: Path, symbol: str) -> bool:
+    """Whether the library file at `path` exports `symbol`."""
+    try:
+        return hasattr(ctypes.CDLL(str(path)), symbol)
+    except OSError:
+        return False
+
+
+def find_library(
+    basename: str,
+    *,
+    variable: str = "GUATIAO_LIBRARY",
+    symbol: "str | None" = None,
+    chosen: "str | os.PathLike[str] | None" = None,
+) -> Path:
+    """Where the library `basename` (`"guatiao"`, `"guatiao_serde"`,
+    `"guatiao_intake"`) is, trying in order:
+
+    1. `chosen`, what the package was told in code;
+    2. the environment variable `variable` (`GUATIAO_SERDE_LIBRARY`, say),
+       when it is not `GUATIAO_LIBRARY`;
+    3. `GUATIAO_LIBRARY`.
+
+    A file named by 1 or 2 is taken as it is, whatever it is called; a
+    directory holds the library under its platform filename. A file
+    `GUATIAO_LIBRARY` names is taken when it exports `symbol` (or always,
+    when `symbol` is `None`: the core, which every guatiao library
+    carries), else its sibling under the platform filename is. Last,
+    `ctypes.util.find_library(basename)`. `LibraryNotFound` names every
+    place tried."""
     filename = dll_filename(basename)
-    env = str(_chosen) if _chosen is not None else os.environ.get("GUATIAO_LIBRARY")
-    if env:
-        env_path = Path(env)
-        if env_path.is_dir():
-            candidate = env_path / filename
-            if candidate.is_file():
-                return candidate
-        elif env_path.is_file():
-            # For the core library itself, a file GUATIAO_LIBRARY names is
-            # taken as-is, whatever it is called; a sibling is looked for
-            # beside it, under its own platform filename.
-            if basename == "guatiao":
-                return env_path
-            candidate = env_path.parent / filename
-            if candidate.is_file():
-                return candidate
-    found = ctypes.util.find_library(basename)
-    if found:
-        return Path(found)
-    raise LibraryNotFound(basename)
+    looked: list[str] = []
+
+    def named(text: str, where: str, fallback: bool) -> "Path | None":
+        path = Path(text)
+        if path.is_dir():
+            looked.append(f"{where} ({path / filename})")
+            candidate = path / filename
+            return candidate if candidate.is_file() else None
+        looked.append(f"{where} ({path})")
+        if not path.is_file():
+            return None
+        if not fallback or symbol is None or _exports(path, symbol):
+            return path
+        candidate = path.parent / filename
+        return candidate if candidate.is_file() else None
+
+    if chosen is not None:
+        found = named(str(chosen), "use_library", False)
+        if found is not None:
+            return found
+    if variable != "GUATIAO_LIBRARY":
+        own = os.environ.get(variable)
+        if own:
+            found = named(own, variable, False)
+            if found is not None:
+                return found
+        else:
+            looked.append(f"{variable} (unset)")
+    shared = os.environ.get("GUATIAO_LIBRARY")
+    if shared:
+        found = named(shared, "GUATIAO_LIBRARY", True)
+        if found is not None:
+            return found
+    else:
+        looked.append("GUATIAO_LIBRARY (unset)")
+    platform_found = ctypes.util.find_library(basename)
+    if platform_found:
+        return Path(platform_found)
+    raise LibraryNotFound(basename, tuple(looked))
+
+
+def resolve(basename: str) -> Path:
+    """Where `basename`'s library is, `use_library`'s choice first."""
+    return find_library(basename, chosen=_chosen)
 
 
 # name -> (argtypes, restype, feature). `feature` is None for a symbol
@@ -355,111 +407,14 @@ for _text_form, _fields in (
     )
 del _text_form, _fields
 
-_SERDE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
-    "guatiao_json_parse": ([Str, c_uint32, _P(Alloc), _P(Value)], c_uint32, None),
-    "guatiao_json_parse_ex": (
-        [Str, c_uint32, _P(Alloc), _P(Value), _P(ParseError)],
-        c_uint32,
-        None,
-    ),
-    "guatiao_json_emit": (
-        [_P(Value), c_uint32, _P(Alloc), _P(Value)],
-        c_uint32,
-        None,
-    ),
-    "guatiao_json_emit_pretty": (
-        [_P(Value), c_uint32, _P(Alloc), _P(Value)],
-        c_uint32,
-        None,
-    ),
-    "guatiao_toml_parse": (
-        [Str, c_uint32, _P(Alloc), _P(Value)],
-        c_uint32,
-        "toml",
-    ),
-    "guatiao_toml_parse_ex": (
-        [Str, c_uint32, _P(Alloc), _P(Value), _P(ParseError)],
-        c_uint32,
-        "toml",
-    ),
-    "guatiao_toml_emit": (
-        [_P(Value), c_uint32, _P(Alloc), _P(Value)],
-        c_uint32,
-        "toml",
-    ),
-    "guatiao_yaml_parse": (
-        [Str, c_uint32, _P(Alloc), _P(Value)],
-        c_uint32,
-        "yaml",
-    ),
-    "guatiao_yaml_parse_ex": (
-        [Str, c_uint32, _P(Alloc), _P(Value), _P(ParseError)],
-        c_uint32,
-        "yaml",
-    ),
-    "guatiao_yaml_emit": (
-        [_P(Value), c_uint32, _P(Alloc), _P(Value)],
-        c_uint32,
-        "yaml",
-    ),
-    # Every cdylib that links the `guatiao` crate re-exports its plain
-    # value-level functions too, since Rust compiles them into the same
-    # object; `Library.alloc` (Q5: one allocator per loaded library)
-    # needs this one from whichever library it belongs to.
-    "guatiao_alloc_default": ([_P(Alloc)], c_uint32, None),
-}
-
-_FORM_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
-    "guatiao_alloc_default": ([_P(Alloc)], c_uint32, None),
-    "guatiao_intake_check": (
-        [_P(Value), _P(Value), _P(Alloc), _P(Value)],
-        c_uint32,
-        None,
-    ),
-    "guatiao_intake_layout": (
-        [_P(Value), _P(Value), _P(Alloc), _P(Value)],
-        c_uint32,
-        None,
-    ),
-    "guatiao_intake_is_visible": (
-        [_P(Value), _P(Value), Str, _P(Value), _P(c_bool)],
-        c_uint32,
-        None,
-    ),
-    "guatiao_intake_for_schema": (
-        [_P(Value), _P(Alloc), _P(Value)],
-        c_uint32,
-        None,
-    ),
-    "guatiao_intake_form_for": (
-        [_P(Value), _P(Value), Str, _P(Alloc), _P(Value)],
-        c_uint32,
-        None,
-    ),
-    # Naming a place inside a value, and the flat projection: both are
-    # this library's business and not the schema's.
-    "guatiao_intake_path_get": ([_P(Value), Str], _P(Value), None),
-    "guatiao_intake_resolve": ([_P(Value), Str], _P(Value), None),
-    "guatiao_intake_flat_keys": (
-        [_P(Value), Str, _P(Alloc), _P(Value)],
-        c_uint32,
-        None,
-    ),
-    "guatiao_intake_flatten": (
-        [_P(Value), Str, _P(Value), _P(Alloc), _P(Value)],
-        c_uint32,
-        None,
-    ),
-    "guatiao_intake_unflatten": (
-        [_P(Value), Str, _P(Value), _P(Alloc), _P(Value)],
-        c_uint32,
-        None,
-    ),
-}
-
-
 class Library:
-    """One loaded DLL: its exports, declared, and its default allocator."""
+    """One loaded library: its exports, declared, and its default allocator.
+
+    `exports` maps each export's name to `(argtypes, restype, feature)`:
+    `feature` is `None` for a symbol every build carries, else the cargo
+    feature that must be on for it, named by the `MissingSymbol` a call
+    raises when the library lacks it. Declare `guatiao_alloc_default` to
+    use `alloc`."""
 
     def __init__(
         self, path: Path, exports: dict[str, tuple[list[Any], Any, str | None]]
@@ -513,8 +468,6 @@ class Library:
 
 _lock = threading.Lock()
 _core: Library | None = None
-_serde: Library | None = None
-_form: Library | None = None
 
 
 def core() -> Library:
@@ -524,21 +477,3 @@ def core() -> Library:
         if _core is None:
             _core = Library(resolve("guatiao"), _CORE_EXPORTS)
         return _core
-
-
-def serde() -> Library:
-    """The `guatiao_serde` library, loaded and declared on first use."""
-    global _serde
-    with _lock:
-        if _serde is None:
-            _serde = Library(resolve("guatiao_serde"), _SERDE_EXPORTS)
-        return _serde
-
-
-def form() -> Library:
-    """The `guatiao_intake` library, loaded and declared on first use."""
-    global _form
-    with _lock:
-        if _form is None:
-            _form = Library(resolve("guatiao_intake"), _FORM_EXPORTS)
-        return _form

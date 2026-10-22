@@ -9,16 +9,13 @@ from __future__ import annotations
 
 import pytest
 
-from guatiao import _lib
+import guatiao_intake as intake
+from guatiao import LibraryNotFound, Value, WrongKind
 
 try:
-    _lib.form()
-except _lib.LibraryNotFound:
+    intake.library()
+except LibraryNotFound:
     pytest.skip("no guatiao_intake library built", allow_module_level=True)
-
-from guatiao import intake
-from guatiao.errors import WrongKind
-from guatiao.value import Value
 
 _SCHEMA = {
     "type": "object",
@@ -60,7 +57,7 @@ def test_is_visible_with_no_condition():
 
 
 def test_is_visible_unknown_key_is_not_found():
-    from guatiao.errors import NotFound
+    from guatiao import NotFound
 
     with Value.from_python(_SCHEMA) as schema, Value.from_python({}) as blank:
         with Value.from_python({}) as values:

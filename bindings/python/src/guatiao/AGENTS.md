@@ -19,9 +19,10 @@ native call (a file whatever it is called, or a directory); it wins over
 `GUATIAO_LIBRARY`, and `RuntimeError` when one is already loaded from
 elsewhere.
 
-Not found raises `guatiao.LibraryNotFound` naming both places it
-looked. `guatiao_serde` and `guatiao_intake` resolve the same way,
-independently, only when `guatiao.serde` / `guatiao.intake` is first used.
+Not found raises `guatiao.LibraryNotFound` naming every place it
+looked. JSON, TOML and YAML are the package `guatiao-serde` (`import
+guatiao_serde`), forms `guatiao-intake` (`import guatiao_intake`): each
+finds and loads its own library, and builds on `guatiao.ffi`.
 
 ## Values
 
@@ -103,7 +104,7 @@ Also: `load_file`, `scan_path`, `register_entry(name, EntryFn(...))`, `libraries
 writing through it raises `TypeError`, and it is never `.close()`d),
 `provider_meta(key)` (a copy of the provider's `meta` as a `Value` you
 close, `None` when it declares none, `NotFound` for an unknown key; its
-form is under `intake.PROVIDER_FORM_KEY`), `host()` (the raw `host_info` pointer, for driving
+form is under the key `"form"`, `guatiao_intake.PROVIDER_FORM_KEY`), `host()` (the raw `host_info` pointer, for driving
 a `guatiao_library_entry` by hand). Every answer that is data comes back
 as a plain `dict`/`list`, already freed.
 
@@ -368,79 +369,6 @@ casts a `provider_table()` answer to a hand-written struct after
 checking `size >= sizeof(struct_type)` and the `floor_hash`
 (`kinds.FloorMismatch` otherwise), for calling slots with raw ctypes.
 
-## serde: JSON, TOML, YAML
-
-```python
-from guatiao import serde
-
-text = serde.dumps(value, format="json", pretty=True)   # or "toml", "yaml"
-value = serde.loads(text, format="json")
-```
-
-`toml`/`yaml` raise `NotImplementedError` naming the feature when the
-loaded `guatiao_serde` was not built with it. A TOML document must be a
-map (`WrongKind` otherwise).
-
-A document that does not parse raises `guatiao.errors.ParseError`: a
-`BadValue` and a `ValueError` with `.format` (`"json"`, `"toml"` or
-`"yaml"`), `.line` and `.column` (from 1, the column in characters; 0 when
-the parser did not say where; for text that is not UTF-8, its first bad
-byte) and `.message`, which never quotes the document.
-
-A number keeps its exact text through JSON, with one exception the
-parser owns: an exponent is read back with its sign written (`1e400`
-parses as `1e+400`).
-
-## intake
-
-```python
-from guatiao import intake
-
-intake.check(schema, form_doc)             # None, or an error map
-intake.layout(schema, form_doc)            # [{"section": ..., "fields": [...]}, ...]
-intake.is_visible(schema, form_doc, "key", values)   # bool
-intake.at(value, "agent[1].name")          # a borrowed Ref, or None
-intake.for_schema(schema)                  # the form a schema implies (a Value)
-intake.form_for(form_doc, schema, "path")  # a Value, or None
-```
-
-The flat projection keeps a value as `key -> text`, one entry per scalar
-leaf (a tagged field's discriminant under its key and its payload under
-`key.member`, a list as `agent[0].name`, an open map as `env[PATH]`):
-
-```python
-intake.resolve(schema, "auth.password")    # borrowed Ref onto the field, or None
-intake.flat_keys(schema, "auth")           # list[str]; WrongKind for an unknown key
-intake.flatten(schema, "auth", value)      # dict[str, str]; WrongKind when it does not apply
-intake.unflatten(schema, "auth", store)    # Value (close it), or None; store is a
-                                           # Mapping[str, str] or a Value/Ref onto one
-```
-
-Every `schema`, `form`, `value` and `values` argument is a `Value` or a
-`Ref`. What `resolve` and `at` return is a read-only view: it keeps the
-schema or value it came from alive, is found again from it on every
-access, and raises `ValueError` once that is closed. Nothing can be
-changed through it (`TypeError` on any write), and `.clone()` copies it
-out. An empty container flattens to nothing, and an entry the schema
-does not declare is dropped by `unflatten`.
-
-`unflatten` answers `None` only for "nothing stored": no such field, no
-entry under it, or a discriminant that names no arm. A `store` that is not
-text to text -- a mapping, `Value` or `Ref` holding anything but `str`
-values, or not a map at all -- raises `TypeError`.
-
-**A provider's form** travels in its `meta`, under
-`intake.PROVIDER_FORM_KEY` (`"form"`), beside the configuration schema it
-is shown with:
-
-```python
-with reg.provider_meta("acme_dialer") as meta:   # None when it declares no meta
-    form = meta.as_map()[intake.PROVIDER_FORM_KEY]
-    schema = reg.provider_config("acme_dialer")
-    assert intake.check(schema, form) is None
-    intake.layout(schema, form)
-```
-
 ## time: dates, times, instants, spans, exact lengths
 
 The forms are text in a value (an exact length is `[seconds,
@@ -508,6 +436,59 @@ whatever the schema does not describe, an undeclared key say, is hidden
 too. Local `$ref`s are followed. `WrongKind` for a schema that is not a
 map.
 
+## ffi: for a package over another guatiao library
+
+`guatiao.ffi` is what `guatiao-serde` and `guatiao-intake` build on, and
+what any package binding a C library that takes and answers guatiao
+values may use. Supported API, versioned with this package.
+
+```python
+import ctypes
+from guatiao import Value, ffi
+
+lib = ffi.Library(
+    ffi.find_library("mylib", variable="MYLIB_LIBRARY", symbol="mylib_parse"),
+    {"mylib_parse": ([ffi.Str, ctypes.POINTER(ffi.Alloc), ctypes.POINTER(ffi.Node)],
+                     ctypes.c_uint32, None),
+     "guatiao_alloc_default": ([ctypes.POINTER(ffi.Alloc)], ctypes.c_uint32, None)},
+)
+view, keep = ffi.text("a=1")
+out = ffi.Node()
+ffi.check(lib.mylib_parse(view, ctypes.byref(lib.alloc), ctypes.byref(out)))
+value = ffi.adopt(out, lib.alloc)          # a guatiao.Value; it frees the tree
+```
+
+- `find_library(basename, *, variable="GUATIAO_LIBRARY", symbol=None,
+  chosen=None) -> Path`: `chosen` (a file, or a directory holding the
+  platform filename of `basename`), then the variable `variable` (the
+  same), then `GUATIAO_LIBRARY` (a directory; or a file, taken when it
+  exports `symbol` or `symbol` is `None`, else its sibling), then
+  `ctypes.util.find_library(basename)`. `LibraryNotFound` names every
+  place tried (`.looked`).
+- `Library(path, exports)`: loads `path` and declares each export,
+  `name -> (argtypes, restype, feature)`; a name the library lacks becomes
+  a function raising `MissingSymbol(path, name, feature)`. `.path`,
+  `.symbols_missing()`, `.alloc` (its `guatiao_alloc_default`, declared in
+  `exports`, filled once). `dll_filename(basename)` is the platform's file
+  name.
+- The C structs: `Node` (`guatiao_value`, a node, not an owning handle),
+  `Alloc`, `Str`, `Bytes`; the enums `Status`, `Tag`.
+- `text(str | bytes) -> (Str, keep)`: a `guatiao_str` and the buffer to
+  keep referenced until the call returns. `text_of(node) -> str`: a string
+  node's text, `""` for any other kind.
+- `adopt(node, alloc) -> Value`: a `Value` owning the root a call wrote in
+  `alloc`. `free(node)`: frees a node no `Value` adopted (through the
+  `guatiao` library). `node_of(ref) -> Node`: the node a `Value` or `Ref`
+  names now, to pass by `ctypes.byref` while nothing changes its tree.
+  `borrow(keep, find) -> Ref | None`: a read-only view of the node `find()`
+  answers, asked again on every access, keeping `keep` alive.
+- `check(status, message="")`: raises the status's `GuatiaoError`.
+
+**A tree crosses libraries as its root node**: built by one library, it is
+read and freed by any other, since a value records its own allocator. The
+library that built it stays loaded while the tree lives (nothing here
+unloads one).
+
 ## Errors
 
 Every failing `guatiao_status` raises `guatiao.GuatiaoError` (`.status`
@@ -516,8 +497,8 @@ one of its subclasses: `BadValue`, `AllocFailed`, `WrongKind`,
 `NotFound`, `NullArgument`, `Gone`, `Unsupported`, `Busy`, `Internal`.
 Each takes `(status, message)`, or a message alone and its own status
 (`BadValue("why")`).
-They pickle, `ParseError` and `Unparsed` included. A refusal the library words itself
-(a `WrongKind` from `serde.loads`, say) carries those words in `.message`.
+They pickle, `Unparsed` included. A refusal the library words itself
+(a `WrongKind` from a library's own refusal, say) carries those words in `.message`.
 
 ## Threading
 
