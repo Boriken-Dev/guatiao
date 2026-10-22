@@ -18,6 +18,10 @@ module guatiao
   use guatiao_values, only: guatiao_value, guatiao_text, guatiao_map, guatiao_list, guatiao_null, &
                             guatiao_absent, guatiao_of, guatiao_number, guatiao_value_from_raw
   use guatiao_schema
+  use guatiao_host, only: guatiao_registry, guatiao_instance, guatiao_open_registry
+  use guatiao_kinds, only: guatiao_impl, guatiao_kind, guatiao_serving, guatiao_remote, guatiao_bind, &
+                           guatiao_bind_instance, guatiao_bind_table, guatiao_live_objects
+  use guatiao_provide, only: guatiao_library, guatiao_new_library, guatiao_register_library, guatiao_build_i
   implicit none
   public
 end module guatiao

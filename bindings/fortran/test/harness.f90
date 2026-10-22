@@ -119,7 +119,7 @@ contains
     if (failed > 0) error stop 1
   end subroutine
 
-  !> A file's bytes as text: read in blocks, then byte by byte at the
+  !> A file's bytes as text ('' when it does not open): read in blocks, then byte by byte at the
   !> end (flang on Windows answers -1 for a file's size), into a buffer
   !> that doubles, so no long concatenation lands on the stack.
   subroutine read_file(path, text)
@@ -129,7 +129,11 @@ contains
     character(4096) :: block
     character :: one
     integer :: u, ios, at
-    open (newunit=u, file=path, access='stream', form='unformatted', action='read', status='old')
+    open (newunit=u, file=path, access='stream', form='unformatted', action='read', status='old', iostat=ios)
+    if (ios /= 0) then
+      text = ''
+      return
+    end if
     allocate(character(65536) :: buf)
     at = 1
     do

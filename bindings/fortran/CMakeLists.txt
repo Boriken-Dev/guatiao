@@ -11,6 +11,12 @@
 cmake_minimum_required(VERSION 3.20)
 project(guatiao_fortran VERSION 0.0.0 LANGUAGES Fortran)
 
+# CMake knows no position-independent flag for every Fortran compiler
+# (LLVM flang): a shared library built from these objects needs one.
+if(NOT CMAKE_Fortran_COMPILE_OPTIONS_PIC AND NOT WIN32)
+  set(CMAKE_Fortran_COMPILE_OPTIONS_PIC "-fPIC")
+endif()
+
 file(GLOB GUATIAO_FORTRAN_SOURCES CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_SOURCE_DIR}/src/*.f90 ${CMAKE_CURRENT_SOURCE_DIR}/src/*.F90)
 
