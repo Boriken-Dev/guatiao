@@ -916,6 +916,148 @@ jobs:
           GUATIAO_REQUIRE_ALL: "1"
           PYTHONDONTWRITEBYTECODE: "1"
 
+  fortran:
+    name: Fortran bindings (${{ matrix.compiler }} ${{ matrix.version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # gfortran, Intel ifx and LLVM flang, on the three platforms where each
+    # runs (ifx is x64 only and has no macOS build; flang comes from
+    # apt.llvm.org). The binding builds with fpm and with CMake; the host's
+    # tests call greeters written in Rust, C, Python (through the guatiao-py
+    # bridge), Go (built as a library file) and Fortran, both ways; the
+    # Fortran library file is scanned and called by the Rust and Python
+    # example hosts. A stated skip fails the job.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, compiler: gcc, version: "13" }
+          - { os: ubuntu-latest, compiler: gcc, version: "15" }
+          - { os: ubuntu-latest, compiler: intel, version: "2025.2" }
+          - { os: ubuntu-latest, compiler: flang, version: "22" }
+          - { os: macos-latest, compiler: gcc, version: "15" }
+          - { os: windows-latest, compiler: gcc, version: "15" }
+          - { os: windows-latest, compiler: intel, version: "2025.2" }
+    defaults:
+      run:
+        shell: bash
+    env:
+      GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+      GUATIAO_REQUIRE_ALL: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/guatiao-py
+      - name: Build native libraries
+        # The libraries, the Rust greeters, the Rust caller of any greeter
+        # and the Rust example host.
+        run: cargo build --workspace --all-features
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: "3.14"
+      - name: Where a host that is not Python finds libpython
+        if: runner.os != 'Windows'
+        run: |
+          echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+      - name: Build the guatiao-py bridge, for the Python greeters
+        run: |
+          cargo build --manifest-path crates/guatiao-py/Cargo.toml
+          case "$RUNNER_OS" in
+            Linux)   bridge=libguatiao_py.so ;;
+            macOS)   bridge=libguatiao_py.dylib ;;
+            Windows) bridge=guatiao_py.dll ;;
+          esac
+          echo "GUATIAO_PY_BRIDGE=$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge" >> "$GITHUB_ENV"
+        env:
+          PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: false
+      - name: Build the Go greeter as a library file
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   name=libgo_greeter.so ;;
+            macOS)   name=libgo_greeter.dylib ;;
+            Windows) name=go_greeter.dll ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/go-library"
+          (cd examples && go build -buildmode=c-shared -o "$RUNNER_TEMP/go-library/$name" ./go_provider/cshared)
+          echo "GUATIAO_GO_LIBRARY=$RUNNER_TEMP/go-library" >> "$GITHUB_ENV"
+        env:
+          CGO_ENABLED: "1"
+      - uses: fortran-lang/setup-fortran@v1
+        if: matrix.compiler != 'flang'
+        with:
+          compiler: ${{ matrix.compiler }}
+          version: ${{ matrix.version }}
+      - name: LLVM flang
+        if: matrix.compiler == 'flang'
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          sudo bash llvm.sh ${{ matrix.version }}
+          sudo apt-get install -y flang-${{ matrix.version }} libflang-rt-${{ matrix.version }}-dev || \
+            sudo apt-get install -y flang-${{ matrix.version }}
+          echo "FC=flang-${{ matrix.version }}" >> "$GITHUB_ENV"
+      - uses: fortran-lang/setup-fpm@v10
+        with:
+          fpm-version: v0.13.0
+      - name: Ninja, and the C compiler for the C greeter
+        run: |
+          python -m pip install ninja
+          # The greeter written in C is built with gcc-style flags.
+          if [ "$RUNNER_OS" = Windows ]; then
+            echo "CC=clang" >> "$GITHUB_ENV"
+          elif [ "${{ matrix.compiler }}" != gcc ]; then
+            echo "CC=cc" >> "$GITHUB_ENV"
+          fi
+      - name: The compilers
+        run: |
+          echo "FC=$FC CC=${CC:-}"
+          "$FC" --version
+          fpm --version
+          cmake --version
+      - name: Test the binding with fpm
+        working-directory: bindings/fortran
+        run: |
+          fpm test --compiler "$FC" 2>&1 | tee fortran-test.log
+          test "${PIPESTATUS[0]}" -eq 0
+          ! grep -n "  SKIP" fortran-test.log
+      - name: Build and test the binding with CMake
+        run: |
+          cmake -S bindings/fortran -B "$RUNNER_TEMP/fortran-cmake" -G Ninja -DCMAKE_Fortran_COMPILER="$FC"
+          cmake --build "$RUNNER_TEMP/fortran-cmake"
+          ctest --test-dir "$RUNNER_TEMP/fortran-cmake" --output-on-failure
+      - name: Test the greeter package
+        working-directory: examples/fortran_greeter
+        run: fpm test --compiler "$FC"
+      - name: Test the host, calling every greeter
+        working-directory: examples/fortran_host
+        run: |
+          fpm test --compiler "$FC" 2>&1 | tee fortran-host.log
+          test "${PIPESTATUS[0]}" -eq 0
+          ! grep -n "  SKIP" fortran-host.log
+      - name: The Rust and Python hosts scan the Fortran library and call it
+        run: |
+          cmake -S examples/fortran_greeter -B "$RUNNER_TEMP/fortran-library" -G Ninja -DCMAKE_Fortran_COMPILER="$FC"
+          cmake --build "$RUNNER_TEMP/fortran-library"
+          export GUATIAO_FORTRAN_LIBRARY="$RUNNER_TEMP/fortran-library"
+          cargo test -p greeter_host --all-features --test fortran_library -- --nocapture 2>&1 | tee fortran-library.log
+          test "${PIPESTATUS[0]}" -eq 0
+          ! grep -n "skipped:" fortran-library.log
+          python -m pip install -e "bindings/python[dev]"
+          python -m pytest -p no:cacheprovider bindings/python/tests/test_examples.py -k fortran -rs -q 2>&1 | tee fortran-python.log
+          test "${PIPESTATUS[0]}" -eq 0
+          ! grep -n "skipped" fortran-python.log
+
   dart:
     name: Dart bindings (${{ matrix.os }}, ${{ matrix.sdk }})
     runs-on: ${{ matrix.os }}
