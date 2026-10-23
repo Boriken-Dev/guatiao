@@ -33,6 +33,8 @@ __all__ = [
     "dumps",
     "library",
     "loads",
+    "parse",
+    "render",
     "use_library",
 ]
 
@@ -92,16 +94,24 @@ _P = ctypes.POINTER
 _u32 = ctypes.c_uint32
 _PARSE = ([ffi.Str, _u32, _P(ffi.Alloc), _P(ffi.Node), _P(_CParseError)], _u32)
 _EMIT = ([_P(ffi.Node), _u32, _P(ffi.Alloc), _P(ffi.Node)], _u32)
+_TO_WIRE = _PARSE
+_FROM_WIRE = ([ffi.Bytes, _u32, _P(ffi.Alloc), _P(ffi.Node)], _u32)
 
 # name -> (argtypes, restype, the feature the library needs for it).
 _EXPORTS: "dict[str, tuple[list[Any], Any, str | None]]" = {
     "guatiao_json_parse_ex": (*_PARSE, None),
     "guatiao_json_emit": (*_EMIT, None),
     "guatiao_json_emit_pretty": (*_EMIT, None),
+    "guatiao_json_to_wire": (*_TO_WIRE, None),
+    "guatiao_json_from_wire": (*_FROM_WIRE, None),
     "guatiao_toml_parse_ex": (*_PARSE, "toml"),
     "guatiao_toml_emit": (*_EMIT, "toml"),
+    "guatiao_toml_to_wire": (*_TO_WIRE, "toml"),
+    "guatiao_toml_from_wire": (*_FROM_WIRE, "toml"),
     "guatiao_yaml_parse_ex": (*_PARSE, "yaml"),
     "guatiao_yaml_emit": (*_EMIT, "yaml"),
+    "guatiao_yaml_to_wire": (*_TO_WIRE, "yaml"),
+    "guatiao_yaml_from_wire": (*_FROM_WIRE, "yaml"),
     "guatiao_alloc_default": ([_P(ffi.Alloc)], _u32, None),
 }
 
@@ -248,3 +258,44 @@ def dumps(
         return cast(str, result.to_python())
     finally:
         result.close()
+
+
+def parse(text: str, *, format: str = "json", how: int = 0, numbers: str = "auto") -> Any:
+    """Parses `text` as `format` straight into plain Python objects, as
+    `loads(text, format=format, how=how).to_python(numbers)` answers
+    them, with no `Value` built: the document crosses once, as wire
+    bytes, and is read here. Errors as `loads`."""
+    parse_name, _emit, _emit_pretty, feature = _format(format)
+    lib, fn = _resolved(parse_name.replace("_parse_ex", "_to_wire"), feature)
+    view, _buf = ffi.text(text)
+    raw = ffi.Node()
+    error = _CParseError()
+    status = fn(view, how, ctypes.byref(lib.alloc), ctypes.byref(raw), ctypes.byref(error))
+    _finish_parse(status, error, format)
+    try:
+        tape = raw.payload.bytes
+        data = ctypes.string_at(tape.ptr, tape.len) if tape.len else b""
+    finally:
+        ffi.free(raw)
+    return ffi.to_python(data, numbers)
+
+
+def render(obj: Any, *, format: str = "json", pretty: bool = False, how: int = 0) -> str:
+    """Writes the plain Python object `obj` as `format`, as
+    `dumps(Value.from_python(obj), ...)` writes it, with no `Value`
+    built: it is written as wire bytes here and crosses once. The objects
+    `Value.from_python` takes, with its errors; a TOML document must be
+    a mapping."""
+    _parse, emit_name, _emit_pretty, feature = _format(format)
+    lib, fn = _resolved(emit_name.replace("_emit", "_from_wire"), feature)
+    if pretty:
+        how |= PRETTY
+    data = ffi.from_python(obj)
+    # Points into `data`, which outlives the call.
+    view = ffi.Bytes(ptr=ctypes.cast(ctypes.c_char_p(data), ctypes.c_void_p), len=len(data))
+    out = ffi.Node()
+    ffi.check(fn(view, how, ctypes.byref(lib.alloc), ctypes.byref(out)))
+    try:
+        return ffi.text_of(out)
+    finally:
+        ffi.free(out)

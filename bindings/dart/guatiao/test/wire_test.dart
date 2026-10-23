@@ -12,6 +12,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:guatiao/guatiao.dart';
+// The tape is exported by ffi.dart and wasm.dart, one per platform.
+import 'package:guatiao/src/tape.dart' show dartToWire, wireToDart;
 import 'package:guatiao/wire.dart' as wire;
 import 'package:test/test.dart';
 
@@ -140,6 +142,70 @@ void main() {
       expect(built.toWire(), data, reason: c['name'] as String);
       built.close();
     }
+  });
+
+  test('every value read and written as wire bytes in Dart', () {
+    for (final c in _list('values')) {
+      final data = _hex(c['hex'] as String);
+      final name = c['name'] as String;
+      for (final numbers in Numbers.values) {
+        final value = Value.fromWire(data);
+        final expected = value.toDart(numbers: numbers);
+        value.close();
+        final got = wireToDart(data, numbers: numbers);
+        expect(got, expected, reason: name);
+        expect(got.toString(), expected.toString(), reason: name);
+        if (numbers == Numbers.text) continue;
+        final back = Value.fromDart(got);
+        expect(dartToWire(got), back.toWire(), reason: name);
+        back.close();
+      }
+    }
+  });
+
+  test('wire bytes cut short are refused in Dart', () {
+    final value = Value.fromDart({
+      'a': [
+        1,
+        'two',
+        Uint8List.fromList([0]),
+      ],
+    });
+    final data = value.toWire();
+    value.close();
+    for (var end = 0; end < data.length; end++) {
+      expect(
+        () => wireToDart(Uint8List.sublistView(data, 0, end)),
+        throwsA(isA<BadValue>()),
+        reason: '$end',
+      );
+    }
+    expect(
+      () => wireToDart(Uint8List.fromList([...data, 1])),
+      throwsA(isA<BadValue>()),
+    );
+  });
+
+  test('Dart written as wire bytes refuses what fromDart refuses', () {
+    for (final obj in <Object?>[
+      double.nan,
+      {1: 2},
+      Object(),
+    ]) {
+      expect(() => Value.fromDart(obj), throwsArgumentError);
+      expect(() => dartToWire(obj), throwsArgumentError);
+    }
+    final inner = Value.fromDart({
+      'x': [true, null],
+    });
+    final whole = Value.fromDart({
+      'ref': {
+        'x': [true, null],
+      },
+    });
+    expect(dartToWire({'ref': inner}), whole.toWire());
+    inner.close();
+    whole.close();
   });
 
   test('every malformed input is refused', () {

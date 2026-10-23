@@ -3,14 +3,18 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 import 'dart:ffi';
+import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 import 'package:guatiao/ffi.dart';
+import 'package:guatiao/guatiao.dart' show Numbers;
 
-import 'bindings.g.dart' hide guatiao_alloc, guatiao_str, guatiao_value;
+import 'bindings.g.dart'
+    hide guatiao_alloc, guatiao_bytes, guatiao_str, guatiao_value;
 import 'serde_common.dart';
 
-export 'serde_common.dart' hide emitSymbol, parseSymbol;
+export 'serde_common.dart'
+    hide emitSymbol, fromWireSymbol, parseSymbol, toWireSymbol;
 
 /// The `guatiao_serde` library, opened on first use: the one registered
 /// for it with `useLibrary` (package:guatiao), else
@@ -157,6 +161,118 @@ String dumps(
             Format.yaml => serde.guatiao_yaml_emit(node, flags, allocator, out),
           };
     checkStatus(status);
+    filled = true;
+    return takeValue(out)! as String;
+  } finally {
+    if (!filled) {
+      freeNode(out);
+      calloc.free(out);
+    }
+  }
+}
+
+/// Parses [text] as [format] straight into plain Dart, as
+/// `loads(text, format: format, how: how).toDart(numbers: numbers)`
+/// answers it, with no [Value] built: the document crosses once, as wire
+/// bytes, and is read in Dart. Throws as [loads] does.
+Object? parse(
+  String text, {
+  Format format = Format.json,
+  int how = 0,
+  Numbers numbers = Numbers.auto,
+}) {
+  final lib = _resolved(toWireSymbol(format), format.feature);
+  final serde = _bindingsOf(lib);
+  final out = calloc<guatiao_value>();
+  final error = calloc<guatiao_parse_error>();
+  try {
+    using((arena) {
+      final view = strOf(arena, text).ref;
+      final status = switch (format) {
+        Format.json => serde.guatiao_json_to_wire(
+          view,
+          how,
+          lib.alloc,
+          out,
+          error,
+        ),
+        Format.toml => serde.guatiao_toml_to_wire(
+          view,
+          how,
+          lib.alloc,
+          out,
+          error,
+        ),
+        Format.yaml => serde.guatiao_yaml_to_wire(
+          view,
+          how,
+          lib.alloc,
+          out,
+          error,
+        ),
+      };
+      finishParse(status, error);
+    });
+  } catch (_) {
+    freeNode(out);
+    calloc.free(out);
+    rethrow;
+  } finally {
+    _releaseMessage(error);
+    calloc.free(error);
+  }
+  return wireToDart(takeValue(out)! as Uint8List, numbers: numbers);
+}
+
+/// Writes the plain Dart [obj] as [format], as
+/// `dumps(Value.fromDart(obj), ...)` writes it, with no [Value] built: it
+/// is written as wire bytes in Dart and crosses once. Takes what
+/// [Value.fromDart] takes and throws as it does; a TOML document must be
+/// a map.
+String render(
+  Object? obj, {
+  Format format = Format.json,
+  bool pretty = false,
+  int how = 0,
+}) {
+  final lib = _resolved(fromWireSymbol(format), format.feature);
+  final serde = _bindingsOf(lib);
+  final flags = pretty ? how | prettyFlag : how;
+  final data = dartToWire(obj);
+  final out = calloc<guatiao_value>();
+  var filled = false;
+  try {
+    using((arena) {
+      final view = arena<guatiao_bytes>();
+      if (data.isNotEmpty) {
+        final buffer = arena<Uint8>(data.length);
+        buffer.asTypedList(data.length).setAll(0, data);
+        view.ref
+          ..ptr = buffer
+          ..len = data.length;
+      }
+      final status = switch (format) {
+        Format.json => serde.guatiao_json_from_wire(
+          view.ref,
+          flags,
+          lib.alloc,
+          out,
+        ),
+        Format.toml => serde.guatiao_toml_from_wire(
+          view.ref,
+          flags,
+          lib.alloc,
+          out,
+        ),
+        Format.yaml => serde.guatiao_yaml_from_wire(
+          view.ref,
+          flags,
+          lib.alloc,
+          out,
+        ),
+      };
+      checkStatus(status);
+    });
     filled = true;
     return takeValue(out)! as String;
   } finally {

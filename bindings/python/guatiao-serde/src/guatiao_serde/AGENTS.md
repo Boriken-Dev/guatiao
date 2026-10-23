@@ -33,7 +33,22 @@ import guatiao_serde as serde
 
 value = serde.loads(text, format="json")                # or "toml", "yaml"
 text = serde.dumps(value, format="json", pretty=True)
+
+config = serde.parse(text)                              # plain dicts and lists
+text = serde.render({"port": 5900}, format="toml")
 ```
+
+- `parse(text, *, format="json", how=0, numbers="auto") -> Any`: the
+  document as plain Python, what `loads(...).to_python(numbers)` answers,
+  with no `Value` built: the library answers it as wire bytes in one
+  crossing and Python reads them. Raises as `loads`.
+- `render(obj, *, format="json", pretty=False, how=0) -> str`: plain
+  Python written as text, what `dumps(Value.from_python(obj), ...)`
+  writes, with no `Value` built. Takes and refuses what
+  `Value.from_python` does.
+- Prefer these two when the program wants its own objects: two to ten
+  times faster than going through a `Value` on a structured document,
+  and about even on one large string.
 
 - `loads(text, *, format="json", how=0, alloc=None) -> guatiao.Value`: a
   new tree, built in `alloc` (a `guatiao.ffi.Alloc`; default the

@@ -58,7 +58,23 @@ import 'package:guatiao_serde/guatiao_serde.dart' as serde;
 
 final text = serde.dumps(value, format: serde.Format.json, pretty: true);
 final value = serde.loads(text, format: serde.Format.json);
+
+final config = serde.parse(text);            // plain maps and lists
+final toml = serde.render({'port': 5900}, format: serde.Format.toml);
 ```
+
+- `Object? parse(String text, {Format format = Format.json, int how = 0,
+  Numbers numbers = Numbers.auto})`: the document as plain Dart, what
+  `loads(...).toDart(numbers:)` answers, with no `Value` built: the
+  library answers it as wire bytes in one crossing and Dart reads them.
+  Throws as `loads`.
+- `String render(Object? obj, {Format format = Format.json, bool pretty =
+  false, int how = 0})`: plain Dart written as text, what
+  `dumps(Value.fromDart(obj), ...)` writes, with no `Value` built. Takes
+  and refuses what `Value.fromDart` does.
+- Prefer these two when the program wants its own objects: faster than
+  going through a `Value` on a structured document (1.4x to 5x), slower
+  on one string of a megabyte, which they copy once more.
 
 - `Value loads(String text, {Format format = Format.json, int how = 0,
   Pointer<guatiao_alloc>? alloc})`: a new tree in `alloc` (default the

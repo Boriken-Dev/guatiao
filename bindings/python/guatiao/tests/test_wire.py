@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from guatiao import BadValue, NotFound, Value, WrongKind, wire
+from guatiao import BadValue, NotFound, Value, WrongKind, ffi, wire
 from guatiao._abi import Tag
 
 _VECTORS = json.loads(
@@ -186,3 +186,39 @@ def test_the_constants_are_the_headers():
         ("INVALID", wire._INVALID),
     ]:
         assert f"#define GUATIAO_WIRE_{name} {code}\n" in header
+
+
+@pytest.mark.parametrize("case", _VECTORS["values"], ids=lambda c: c["name"])
+@pytest.mark.parametrize("numbers", ["auto", "decimal", "str"])
+def test_wire_bytes_read_and_written_in_python(case, numbers):
+    data = bytes.fromhex(case["hex"])
+    with Value.from_wire(data) as value:
+        expected = value.to_python(numbers=numbers)
+    got = ffi.to_python(data, numbers)
+    assert got == expected and repr(got) == repr(expected)
+    with Value.from_python(got) as back:
+        assert ffi.from_python(got) == back.to_wire()
+
+
+def test_wire_bytes_cut_short_are_refused_in_python():
+    with Value({"a": [1, "two", b"\x00"]}) as value:
+        data = value.to_wire()
+    for end in range(len(data)):
+        with pytest.raises(BadValue):
+            ffi.to_python(data[:end])
+    with pytest.raises(BadValue):
+        ffi.to_python(data + b"\x01")
+
+
+def test_python_written_wire_refuses_what_from_python_refuses():
+    for obj, error in [
+        (float("nan"), ValueError),
+        ({1: 2}, TypeError),
+        (object(), TypeError),
+    ]:
+        with pytest.raises(error):
+            Value.from_python(obj)
+        with pytest.raises(error):
+            ffi.from_python(obj)
+    with Value({"x": [True, None]}) as inner, Value({"ref": {"x": [True, None]}}) as whole:
+        assert ffi.from_python({"ref": inner}) == whole.to_wire()

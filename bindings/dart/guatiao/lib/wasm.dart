@@ -24,6 +24,8 @@
 /// - [Value.adopt] takes over a root a call wrote into a block of one
 ///   value, [Value.pointer] and [Ref.requireNode] lend one, and
 ///   [Ref.borrowedFrom] views a node a call found.
+/// - [wireToDart] and [dartToWire]: plain Dart read from and written as
+///   wire bytes in Dart, for a call that crosses with a whole document.
 ///
 /// A memory view goes stale when a call grows the memory: read through
 /// [WasmModule] after each call, never through a view kept from before.
@@ -35,6 +37,7 @@ import 'src/status.dart';
 import 'src/web/module.dart';
 
 export 'src/status.dart' show GuatiaoException, Status, checkStatus;
+export 'src/tape.dart' show dartToWire, wireToDart;
 export 'src/value_common.dart' show Numbers, Tag;
 export 'src/web/library_web.dart'
     show LibraryNotFound, MissingSymbol, core, openSurface;

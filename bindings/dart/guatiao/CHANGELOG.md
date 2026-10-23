@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- `wireToDart` and `dartToWire` (`package:guatiao/ffi.dart`,
+  `package:guatiao/wasm.dart`): plain Dart read from and written as wire
+  bytes in Dart, answering what `Value.fromWire(...).toDart()` and
+  `Value.fromDart(...).toWire()` do with no tree built, for a package
+  whose library answers a whole document as wire bytes.
 - **A build hook that builds the library from source**: `flutter build`
   (or `dart run`, `dart test`, `dart build`) runs cargo for the target
   being built and bundles the library with the app. One-time setup:

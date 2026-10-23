@@ -15,7 +15,10 @@
 ///   [NativeLib], one opened library with its default allocator;
 /// - [strOf], a `guatiao_str` over a Dart string; [takeValue], an answer
 ///   read and freed; [freeNode], a node freed through the core library;
-///   [checkStatus], a status thrown as its [GuatiaoException].
+///   [checkStatus], a status thrown as its [GuatiaoException];
+/// - [wireToDart] and [dartToWire], plain Dart read from and written as
+///   wire bytes in Dart, for a call that crosses with a whole document
+///   as bytes rather than a tree.
 ///
 /// A tree crosses as its root node: [Value.adopt] takes over a root a call
 /// wrote, [Value.pointer] and [Ref.node] lend one to a call, and
@@ -46,6 +49,7 @@ export 'src/library.dart'
         openSurface,
         resolveLibraryPath,
         useLibrary;
+export 'src/tape.dart' show dartToWire, wireToDart;
 export 'src/value.dart' show Ref, Tag, Value, strOf, takeValue;
 
 /// Frees what [node] owns through the `guatiao` library and leaves it
