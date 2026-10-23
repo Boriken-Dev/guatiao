@@ -14,7 +14,7 @@ import { BadValue, Busy, NotFound, Registry, Tag, WrongKind } from '../src/index
 import * as n from '../src/native.js';
 import { Counter } from '../../../../examples/greeter_kind/node/greeter_kind.ts';
 import { libraryName } from './helpers.js';
-import { buildCSource, scratch, workspaceLibrary } from './native.js';
+import { cLibraries, scratch, workspaceLibrary } from './native.js';
 import { libraryDir } from './setup.js';
 
 const TARGET = libraryDir();
@@ -129,8 +129,8 @@ describe('Registry', () => {
 
 describe('sources', () => {
   it('serves libraries that come and go from a source file', (ctx) => {
-    const shelf = buildCSource('node_shelf_a');
-    if (shelf === null) return ctx.skip('no C compiler: the source written in C is not built');
+    const shelf = cLibraries()?.shelfA;
+    if (shelf === undefined) return ctx.skip('no C compiler: the source written in C is not built');
     const controls = n.koffi().load(shelf);
     const take = controls.func('void shelf_take(int i)');
     const put = controls.func('void shelf_put(int i)');
@@ -154,8 +154,8 @@ describe('sources', () => {
   });
 
   it('refuses with the source own words, and a file that is no source', (ctx) => {
-    const shelf = buildCSource('node_shelf_b');
-    if (shelf === null) return ctx.skip('no C compiler: the source written in C is not built');
+    const shelf = cLibraries()?.shelfB;
+    if (shelf === undefined) return ctx.skip('no C compiler: the source written in C is not built');
     using reg = new Registry('node-sources', '0.1');
     expect(() => reg.addSourceFile(shelf, {})).toThrow(/`ids`/);
     reg.addSourceFile(shelf, { ids: [] });

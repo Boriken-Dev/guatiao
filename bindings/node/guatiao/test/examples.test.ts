@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import { REPO } from './helpers.js';
 import { libraryDir } from './setup.js';
-import { bridge, bridgeConfig, buildCGreeter } from './native.js';
+import { bridge, bridgeConfig, cLibraries } from './native.js';
 
 const EXAMPLES = path.join(REPO, 'examples');
 
@@ -23,8 +23,8 @@ describe('examples/node_host', () => {
       return ctx.skip('the examples are not installed: npm run build here, then npm install in examples/');
     }
     const args = [path.join(EXAMPLES, 'node_host', 'host.ts'), libraryDir()];
-    const cDir = buildCGreeter();
-    if (cDir !== null) args.push(cDir);
+    const cDir = cLibraries()?.greeterDir;
+    if (cDir !== undefined) args.push(cDir);
     args.push('--node-library', path.join(EXAMPLES, 'node_provider', 'node_greeter', 'greeters.ts'));
     const py = bridge();
     if (py !== null) {
@@ -38,7 +38,7 @@ describe('examples/node_host', () => {
     expect(out).toMatch(/node_greeter_hello[\s\S]*conversation: 2 turns, transcript "hi\\nagain"/);
     expect(out).toMatch(/node_greeter_shouter[\s\S]*instance from \{"prefix":"hey"\}/);
     expect(out).toContain('not this greeter kind');
-    if (cDir !== null) expect(out).toMatch(/c_greeter[\s\S]*greet: \{"greeting":"hello from C, ana"\}/);
+    if (cDir !== undefined) expect(out).toMatch(/c_greeter[\s\S]*greet: \{"greeting":"hello from C, ana"\}/);
     if (py !== null) {
       expect(out).toContain('served py_greeter from Python');
       expect(out).toMatch(/py_greeter_hello[\s\S]*greetInto: the lent listener heard \["hello, dee"\]/);
