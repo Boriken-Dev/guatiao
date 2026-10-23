@@ -69,8 +69,12 @@ built), text (`const char *`, `std::string_view`, `std::string`), a
 `bytes_view`, a `view` or `const value&` (a deep copy), or
 `item::number(text)` (exact text, the JSON grammar), `item::bytes(b)`,
 `item::list({...})`, `item::map({{"k", x}, ...})`, `item::list_from(vector)`,
-`item::map_from(vector<pair<string, item>>)`, `item::absent()`. `value()`
-is ABSENT, `value::null()` null. `map(alloc)` and `list(alloc)` are
+`item::map_from(vector<pair<string, item>>)`, `item::absent()`. A
+character or a pointer other than `const char *` is not an `item` (a
+compile error: say `std::string(1, c)`, `int(c)` or `p != nullptr`).
+`value()` is ABSENT, `value::null()` null; a container may hold an
+ABSENT, as the wire encoding may carry one, and a lookup reads it as
+nothing there. `map(alloc)` and `list(alloc)` are
 empty; `map{{"k", 1}}`, `list{1, 2}` and `map::try_of(...)`,
 `list::try_of(...)` build; `map::from(value&&)` checks (WRONG_KIND).
 
@@ -95,8 +99,12 @@ of range is empty — `float`/`double` (nearest), `std::string_view`,
 `at(index)` (an ABSENT `view` when nothing is there; on a non-const
 `value`, `node` or `map`/`list`, a writable `node`, null when nothing is
 there); `contains(key)`; `size()` (entries or elements, else 0);
-`as_map()`, `as_list()` (a view, empty for another kind: safe in a
-range-`for`); `clone(alloc)`. `operator==` is deep: same kinds, text,
+`as_map()`, `as_list()` (a view, empty for another kind; asked of a
+temporary `value`, `map` or `list` it is a compile error, since the view
+would outlive the tree); `clone(alloc)`. Any view of an owner is valid
+while the owner lives and until a write moves the array it reads. The
+iterators answer proxies (`entry {key, value}`, `view`), with `->`: an
+input iterator by the C++17 categories, random access by C++20's. `operator==` is deep: same kinds, text,
 bytes, booleans, maps holding the same pairs in the same order; numbers
 compare as text. Keys compare as bytes; a map keeps insertion order.
 
@@ -109,7 +117,8 @@ the node out, leaving null). `value` has `set`, `erase`, `push`,
 the map's, `list`/`list_ref` the list's. `x` is a `value&&`, moved in and
 left ABSENT (a refusal leaves it as it was), or an `item`, built through
 the allocator the node records. A write the kind does not take is
-WRONG_KIND; text that is not UTF-8 is BAD_VALUE; a null node is NULL.
+WRONG_KIND; text that is not UTF-8 is BAD_VALUE; a null node is NULL. A
+value moved in is never the tree holding the node it moves into.
 
 **Raw**: `value::adopt(guatiao_value)` takes over a root a C call wrote;
 `release()` gives one up; `raw()`/`address()` answer the node's address.
@@ -137,7 +146,8 @@ read and written by the library's own functions.
   exact length).
 - `T::parse(text)` / `T::try_parse`, `.to_string()` / `.try_to_string()`;
   `date::add(span)`, `date_time::add(span)`; `span::negated()`,
-  `is_zero()`; `timestamp::to_time_point<Clock>()`,
+  `is_zero()`; `timestamp::to_time_point<Clock>()` (BAD_VALUE for an
+  instant the clock cannot hold: a 64-bit nanosecond clock ends in 2262),
   `timestamp::from(time_point)`; `length::read(view)` (its three
   spellings), `length::to_item()` (`[s, ns]`), `length::from(duration)`,
   `to_duration()`; `normalize(form, text)` with `form::{date, time,
@@ -169,6 +179,16 @@ placeholder, alloc)`: a copy with every secret (`x-sensitive`,
 `merge(merge_mode::{simple, deep, substitute}, earlier, later,
 merge_options{merge_lists, overrides}, alloc)`: a new tree, later winning;
 a disagreement's detail is the map describing it.
+
+## Building with and without exceptions
+
+Everything is declared in an inline namespace named for the mode
+(`guatiao::cxx_exceptions`, `guatiao::cxx_no_exceptions`), so a program
+whose files mix the two links each to its own definitions; a value does
+not cross between files built in different modes. Doubles cross as text
+through `<charconv>` where it converts floating point, else through
+`snprintf`/`strtod` with the locale's decimal point put back to `.`
+(`GUATIAO_CPP_NO_FLOAT_CHARCONV` chooses that path).
 
 ## Threads
 

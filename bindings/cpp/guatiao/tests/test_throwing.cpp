@@ -62,6 +62,7 @@ void schemas_and_times() {
   CHECK(guatiao::normalize(guatiao::form::span, "1h 30m") == "PT1H30M");
   guatiao::receiver r;
   CHECK(thrown([&] { r.accept(std::vector<std::uint8_t>{0x01, 0x07, 0x00}); }) == guatiao::status::not_found);
+  CHECK((guatiao::timestamp{1, 0}.to_time_point() > std::chrono::system_clock::time_point()));
   auto frame = guatiao::wire_send(3, guatiao::make(nullptr));
   CHECK(frame.size() == 3);
 }

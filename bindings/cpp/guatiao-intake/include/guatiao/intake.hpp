@@ -14,6 +14,7 @@
 #include <guatiao_intake.h>
 
 namespace guatiao {
+inline namespace GUATIAO_ABI {
 namespace intake {
 
 /// What this library writes onto a schema field, and where a provider's
@@ -155,6 +156,7 @@ inline value unflatten(view schema, std::string_view key, view flat, const guati
 #endif
 
 }  // namespace intake
+}  // namespace GUATIAO_ABI
 }  // namespace guatiao
 
 #endif  // GUATIAO_INTAKE_HPP

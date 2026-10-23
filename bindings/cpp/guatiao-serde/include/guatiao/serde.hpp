@@ -18,6 +18,7 @@
 #include <guatiao_serde.h>
 
 namespace guatiao {
+inline namespace GUATIAO_ABI {
 namespace serde {
 
 /// A document format.
@@ -212,6 +213,7 @@ inline std::string from_wire(format f, bytes_view bytes, std::uint32_t how = 0) 
 #endif
 
 }  // namespace serde
+}  // namespace GUATIAO_ABI
 }  // namespace guatiao
 
 #endif  // GUATIAO_SERDE_HPP
