@@ -69,7 +69,9 @@ load = ["dep:libloading", "dep:object"]
 # is read from the description, so `libffi` comes in here and nowhere else:
 # an FFI mechanism, not a data format. libffi builds from C source (MSVC's
 # tools on Windows, `configure` and `make` elsewhere; `libffi/system` links
-# the platform's own). Not on wasm32, which libffi does not support.
+# the platform's own). On a Windows MSVC target a `CC` naming a GNU-style
+# compiler (`clang`) breaks that build: leave `CC` unset for cargo. Not on
+# wasm32, which libffi does not support.
 dynamic-kinds = ["dep:libffi"]
 
 # Enforces a schema's `pattern` in `validate_text` and `validate_value`.

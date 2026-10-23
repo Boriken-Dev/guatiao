@@ -184,3 +184,7 @@ compared byte for byte by a test.
   cloned once per call, even for a `Shared` engine.
 - **A required slot an engine leaves out refuses the whole library** on
   open, in words naming the provider, the slot and the kind.
+- **`dynamic-kinds` builds libffi from C**: MSVC's tools on a Windows
+  MSVC target, where a `CC` naming a GNU-style compiler (`clang`) breaks
+  the build (libffi's build runs it with `cl`'s `/EP`): leave `CC` unset
+  for cargo, or set it to `cl` inside a developer shell.
