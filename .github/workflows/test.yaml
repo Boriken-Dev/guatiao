@@ -197,16 +197,23 @@ jobs:
         with:
           tool: wasm-tools
       - name: The module exports the C surface, the wire encoding included
-        # The value encoding (2), the frames (3) and the receiver (3); and
-        # the memory a page passes arguments in.
+        # Checked against the committed header rather than a count, so a
+        # function added to it is held to the same rule: every export is a
+        # function `guatiao.h` declares, and every `guatiao_wire_*` (the
+        # encoding, its walker, the frames, the receiver) and
+        # `guatiao_memory_*` (the memory a page passes arguments in) one it
+        # declares is exported.
         shell: bash
         run: |
-          printed=$(wasm-tools print target/wasm32-unknown-unknown/release/guatiao.wasm)
-          exports=$(grep -c '(export "guatiao_' <<<"$printed")
-          wire=$(grep -c '(export "guatiao_wire_' <<<"$printed")
-          memory=$(grep -c '(export "guatiao_memory_' <<<"$printed")
-          echo "guatiao_* exports: $exports, wire: $wire, memory: $memory"
-          test "$wire" -eq 8 && test "$memory" -eq 2 && test "$exports" -ge 20
+          exported=$(wasm-tools print target/wasm32-unknown-unknown/release/guatiao.wasm \
+            | grep -oE '\(export "guatiao_[a-z0-9_]+"' | cut -d'"' -f2 | sort -u)
+          declared=$(grep -oE '\bguatiao_[a-z0-9_]+\(' crates/guatiao/include/guatiao.h | tr -d '(' | sort -u)
+          undeclared=$(comm -23 <(echo "$exported") <(echo "$declared"))
+          missing=$(comm -13 <(echo "$exported") <(grep -E '^guatiao_(wire|memory)_' <<<"$declared"))
+          echo "guatiao_* exports: $(wc -l <<<"$exported"), wire and memory: $(grep -cE '^guatiao_(wire|memory)_' <<<"$exported")"
+          echo "exported, not declared: ${undeclared:-none}"
+          echo "declared, not exported: ${missing:-none}"
+          test -z "$undeclared" && test -z "$missing" && test "$(wc -l <<<"$exported")" -ge 20
       - name: The wire encoding
         run: cargo test -p guatiao --test wire_roundtrip --test wire_channel
       - name: The WebTransport example's page
