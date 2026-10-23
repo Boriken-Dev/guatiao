@@ -55,27 +55,33 @@ Map<String, int> _headerConstants() {
 }
 
 void main() {
+  // The crate writes its layout in pointer widths: a view is two words, an
+  // owned container four, a value a tag and a reserved word then a
+  // container's four, an entry a key's four then a value.
+  final word = sizeOf<IntPtr>();
+
   test('view and owned sizes are what the crate pins', () {
-    expect(sizeOf<guatiao_str>(), 16);
-    expect(sizeOf<guatiao_bytes>(), 16);
-    expect(sizeOf<guatiao_values>(), 16);
-    expect(sizeOf<guatiao_entries>(), 16);
-    expect(sizeOf<guatiao_string>(), 32);
-    expect(sizeOf<guatiao_buffer>(), 32);
-    expect(sizeOf<guatiao_list>(), 32);
-    expect(sizeOf<guatiao_map>(), 32);
-    expect(sizeOf<guatiao_payload>(), 32);
-    expect(sizeOf<guatiao_value>(), 40);
-    expect(sizeOf<guatiao_entry>(), 72);
+    expect(word, anyOf(4, 8));
+    expect(sizeOf<guatiao_str>(), 2 * word);
+    expect(sizeOf<guatiao_bytes>(), 2 * word);
+    expect(sizeOf<guatiao_values>(), 2 * word);
+    expect(sizeOf<guatiao_entries>(), 2 * word);
+    expect(sizeOf<guatiao_string>(), 4 * word);
+    expect(sizeOf<guatiao_buffer>(), 4 * word);
+    expect(sizeOf<guatiao_list>(), 4 * word);
+    expect(sizeOf<guatiao_map>(), 4 * word);
+    expect(sizeOf<guatiao_payload>(), 4 * word);
+    expect(sizeOf<guatiao_value>(), 8 + 4 * word);
+    expect(sizeOf<guatiao_entry>(), 8 + 8 * word);
   });
 
   test('the offsets the readers do arithmetic with hold', () {
-    // `guatiao_value.payload` sits at 8 and `guatiao_entry.value` at 32;
-    // neither field's offset is readable from Dart, so each is pinned by
-    // the sizes around it.
+    // `guatiao_value.payload` sits at 8 and `guatiao_entry.value` after the
+    // key's four words; neither field's offset is readable from Dart, so
+    // each is pinned by the sizes around it.
     expect(sizeOf<guatiao_value>() - sizeOf<guatiao_payload>(), 8);
-    expect(sizeOf<guatiao_entry>() - sizeOf<guatiao_value>(), 32);
-    expect(sizeOf<guatiao_string>(), 32);
+    expect(sizeOf<guatiao_entry>() - sizeOf<guatiao_value>(), 4 * word);
+    expect(sizeOf<guatiao_string>(), 4 * word);
   });
 
   test('every tag matches the committed header', () {
@@ -110,7 +116,11 @@ void main() {
   });
 
   test('the event is laid out as the header says', () {
-    expect(sizeOf<guatiao_wire_event>(), 144);
+    // channel (u64), kind, refusal, at (size_t), three values; aligned to
+    // the u64.
+    final word = sizeOf<IntPtr>();
+    expect(sizeOf<guatiao_wire_event>(),
+        (16 + word + 3 * (8 + 4 * word) + 7) & ~7);
     expect(wire.Frame.values.map((f) => f.code), [0, 1, 2]);
     final header = File(repoPath(['crates', 'guatiao', 'include', 'guatiao.h']))
         .readAsStringSync();

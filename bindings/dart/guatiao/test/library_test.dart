@@ -24,17 +24,20 @@ String _coreFile() =>
 void main() {
   setUpAll(libraryDir);
 
-  test('a process with narrow pointers is refused', () {
-    expect(() => native.requireWordSize(4), throwsUnsupportedError);
+  test('a pointer width the layout is not written for is refused', () {
+    expect(() => native.requireWordSize(2), throwsUnsupportedError);
+    expect(() => native.requireWordSize(16), throwsUnsupportedError);
+    native.requireWordSize(4);
     native.requireWordSize(8);
-    expect(sizeOf<IntPtr>(), 8);
+    expect(sizeOf<IntPtr>(), anyOf(4, 8));
   });
 
   test('the core library loads and fills its allocator once', () {
     final lib = native.core();
     final first = lib.alloc;
     expect(identical(first, lib.alloc), isTrue);
-    expect(first.ref.struct_size, 40);
+    // A uint32_t, then four pointers aligned to their width.
+    expect(first.ref.struct_size, 5 * sizeOf<IntPtr>());
     expect(first.ref.alloc, isNot(equals(nullptr)));
     expect(first.ref.free, isNot(equals(nullptr)));
   });

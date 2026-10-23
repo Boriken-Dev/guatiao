@@ -5,8 +5,9 @@ Self-contained — this file ships with the package, so it names no repo path.
 
 A plain Dart package with one dependency, `package:ffi`. It does **not**
 depend on Flutter: a plain Dart package works inside a Flutter app, and
-the reverse is not true. 64-bit native platforms, and the web: there the
-same API runs over the WebAssembly module a page loads (below).
+the reverse is not true. 32- and 64-bit native platforms (`armeabi-v7a`
+included), and the web: there the same API runs over the WebAssembly
+module a page loads (below).
 
 ## Finding the native library
 
@@ -395,8 +396,8 @@ one of `BadValue`, `AllocFailed`, `WrongKind`, `NotFound`,
 `LibraryNotFound`, `MissingSymbol` and `FloorMismatch` are this
 binding's own, and are not status failures. A refusal the library words
 itself carries those words in `message`.
-A process whose pointers are not eight bytes wide gets `UnsupportedError`
-when the first library loads.
+A process whose pointers are not four or eight bytes wide gets
+`UnsupportedError` when the first library loads.
 
 ## Not offered
 

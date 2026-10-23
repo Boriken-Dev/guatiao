@@ -57,13 +57,13 @@ class MissingSymbol implements Exception {
   }
 }
 
-/// Throws [UnsupportedError] unless a pointer is eight bytes wide: the
-/// structs this package reads are laid out for a 64-bit process.
+/// Throws [UnsupportedError] unless a pointer is four or eight bytes
+/// wide: the widths the ABI's layout is written for and tested on.
 void requireWordSize(int bytes) {
-  if (bytes != 8) {
+  if (bytes != 4 && bytes != 8) {
     throw UnsupportedError(
-      'package:guatiao reads structs laid out for a 64-bit process; this '
-      'one has $bytes-byte pointers',
+      'package:guatiao reads structs laid out for 32- and 64-bit processes; '
+      'this one has $bytes-byte pointers',
     );
   }
 }

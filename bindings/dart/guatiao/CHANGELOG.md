@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **32-bit platforms**: `armeabi-v7a` and armhf Linux, whose 4-byte
+  pointers the package refused; the suites run on 32-bit ARM.
 - **The web**: the same API under dart2js and dart2wasm, over the
   WebAssembly module a page loads with `loadModule(url)` or
   `loadModuleBytes(bytes)`; one module per page, every package using it.

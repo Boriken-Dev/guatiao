@@ -32,7 +32,9 @@ void main() {
 
   test('a parse error is laid out as the header says', () {
     // Three uint32_t, padding, then the message value the reader strides to.
-    expect(sizeOf<guatiao_parse_error>(), 56);
+    final word = sizeOf<IntPtr>();
+    expect(sizeOf<guatiao_parse_error>(),
+        ((12 + word - 1) & ~(word - 1)) + 8 + 4 * word);
   });
 
   test('a refusal that is not a syntax error keeps its message', () {

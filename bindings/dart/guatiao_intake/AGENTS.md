@@ -4,8 +4,8 @@ Taking a value in from a person, over the `guatiao_intake` C ABI:
 https://github.com/Boriken-Dev/guatiao/
 Self-contained — this file ships with the package, so it names no repo path.
 Built on package:guatiao (`Value`, `Ref`, its errors,
-`package:guatiao/ffi.dart`), at the same version. 64-bit native platforms,
-and the web over the module the page loaded (below).
+`package:guatiao/ffi.dart`), at the same version. 32- and 64-bit native
+platforms, and the web over the module the page loaded (below).
 
 ## Finding the native library
 
