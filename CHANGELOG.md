@@ -38,6 +38,20 @@ write now.
   `ToValue`/`FromValue` is walked and read through its own tree, so every
   type that derived before still does; enums and a flattened member go
   through the type's tree.
+- **serde formats with no tree in the middle.** `guatiao-serde` joins
+  serde and the visitor four ways: `Walked` writes anything that walks
+  with any serde format; `from_deserializer` reads any `FromWalk` type
+  from any serde deserializer; `deserialize_into` hands a document's
+  events to any sink (a tree, the wire encoder); and `Serde<T, S>` walks
+  and reads through `T`'s own serde impls. Each format gains
+  `to_string_of` and `from_str_as` (`text::json`, `toml`, `yaml`): the
+  same text and value as the tree forms, a refusal the type makes being
+  the new `text::Error::Refused` naming its key. A JSON configuration
+  reads into a derived type about twice as fast, and writes about four
+  times as fast, measured locally. `Serializable`, `ValueSeed` and the
+  `adapt` modules are those bridges now, with the same results.
+  `Number::is_number` checks text against the number grammar with nothing
+  allocated.
 - **A page on configuration files.** Reading a configuration through
   guatiao rather than serde: the TOML text becomes a value, `FromValue`
   makes the type, and the schema and form come from the same derive, so
@@ -635,6 +649,13 @@ write now.
 
 ### Changed
 
+- **`guatiao-serde` writes a value through its walk**, so a value nested
+  deeper than `MAX_DEPTH` containers is refused (`ValueError::TooDeep`
+  in the format's error) where serde's own recursion used to follow it,
+  and a node a foreign producer wrote wrong is refused in the value
+  model's words (`not valid UTF-8`, `not a JSON number`). *Migration:*
+  none for a tree built in Rust or read from a document, which never
+  nests that deep.
 - **Breaking: the Dart packages need Dart 3.10** (Flutter 3.38), the
   first with build hooks; they asked for 3.6. *Migration:* raise the
   application's `sdk:` constraint to `^3.10.0`.

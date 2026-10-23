@@ -93,6 +93,8 @@
 extern crate alloc;
 
 pub mod adapt;
+// serde and the visitor, joined four ways with no tree.
+mod bridge;
 mod de;
 // The `extern "C"` surface. Always compiled, like the core's: this is
 // an FFI library, and a surface that appears only when somebody
@@ -102,6 +104,7 @@ mod ser;
 pub mod text;
 
 pub use adapt::Serde;
+pub use bridge::{BridgeError, Walked, deserialize_into, from_deserializer};
 pub use de::{ValueSeed, from_serde};
 pub use ser::Serializable;
 pub use text::{Error, Position};

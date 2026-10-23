@@ -412,3 +412,34 @@ pub trait MapWalker {
         self.value::<read::Ignored>().map(|_| ())
     }
 }
+
+/// A borrowed list walker walks the same list: a builder may hand one on
+/// and keep reading after.
+impl<L: ListWalker + ?Sized> ListWalker for &mut L {
+    fn len_hint(&self) -> Option<usize> {
+        (**self).len_hint()
+    }
+
+    fn next_seed<S: Seed>(&mut self, seed: S) -> Result<Option<S::Out>, MapError> {
+        (**self).next_seed(seed)
+    }
+}
+
+/// A borrowed map walker walks the same map.
+impl<M: MapWalker + ?Sized> MapWalker for &mut M {
+    fn len_hint(&self) -> Option<usize> {
+        (**self).len_hint()
+    }
+
+    fn next_key<R>(&mut self, read: impl FnOnce(&str) -> R) -> Result<Option<R>, MapError> {
+        (**self).next_key(read)
+    }
+
+    fn value_seed<S: Seed>(&mut self, seed: S) -> Result<S::Out, MapError> {
+        (**self).value_seed(seed)
+    }
+
+    fn skip_value(&mut self) -> Result<(), MapError> {
+        (**self).skip_value()
+    }
+}

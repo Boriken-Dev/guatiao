@@ -118,9 +118,10 @@ impl ParseError {
         let detail = match error {
             Error::Format { detail, .. }
             | Error::Syntax { detail, .. }
-            | Error::Unsupported { detail, .. } => detail,
+            | Error::Unsupported { detail, .. } => alloc::borrow::Cow::Borrowed(detail.as_str()),
+            Error::Refused { error, .. } => alloc::borrow::Cow::Owned(error.to_string()),
         };
-        ParseError::at(format, error.position(), detail, alloc)
+        ParseError::at(format, error.position(), &detail, alloc)
     }
 
     /// A refusal at `position`, its message built through `alloc`.
@@ -205,7 +206,9 @@ type Write = fn(&Value, Presentation) -> Result<String, Error>;
 /// API carries it; a caller that needs it has that.
 fn status_of(e: &Error) -> Status {
     match e {
-        Error::Format { .. } | Error::Syntax { .. } => Status::GUATIAO_ERR_BAD_VALUE,
+        Error::Format { .. } | Error::Syntax { .. } | Error::Refused { .. } => {
+            Status::GUATIAO_ERR_BAD_VALUE
+        }
         Error::Unsupported { .. } => Status::GUATIAO_ERR_WRONG_KIND,
         // No wildcard arm. `Error` is `#[non_exhaustive]` for a CONSUMER;
         // in here every variant is known, so appending one is a compile

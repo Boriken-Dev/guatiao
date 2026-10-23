@@ -509,6 +509,8 @@ trait MapWalker  { fn len_hint; fn next_key<R>(&mut self, impl FnOnce(&str) -> R
                    fn value_seed<S: Seed>(&mut self, S); fn value<T: FromWalk>(&mut self); fn skip_value(&mut self); }
 trait Seed: Sized { type Out; fn read<W: Walker>(self, W) -> Result<Self::Out, MapError>; }  // PhantomData<T: FromWalk> is one
 Replay::{Absent, Null, Bool, Number, I64, U64, F64, String, Bytes, List(L), Map(M)}  // one event handed on; NoWalker fills L/M
+impl ListWalker for &mut L; impl MapWalker for &mut M      // hand one on, keep reading after
+Number::is_number(&str) -> bool                            // the grammar, nothing allocated
 
 // the wire codec on them (value::wire)
 wire::encode_of(&impl Walk, &mut Vec<u8>) -> Result<(), ValueError>   // = encode(&to_value())'s bytes

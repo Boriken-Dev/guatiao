@@ -64,6 +64,14 @@ pub enum Error {
         /// What it cannot carry.
         detail: String,
     },
+    /// The document is fine and the type it was read into refuses it,
+    /// naming the key; the value is not quoted.
+    Refused {
+        /// Which format.
+        format: &'static str,
+        /// The type's refusal.
+        error: guatiao::MapError,
+    },
 }
 
 impl Error {
@@ -72,7 +80,8 @@ impl Error {
         match self {
             Error::Format { format, .. }
             | Error::Syntax { format, .. }
-            | Error::Unsupported { format, .. } => format,
+            | Error::Unsupported { format, .. }
+            | Error::Refused { format, .. } => format,
         }
     }
 
@@ -102,6 +111,12 @@ impl Error {
             detail: detail.to_string(),
         }
     }
+
+    /// A read the type refused.
+    #[cfg(any(feature = "json", feature = "toml", feature = "yaml"))]
+    fn refused(format: &'static str, error: guatiao::MapError) -> Error {
+        Error::Refused { format, error }
+    }
 }
 
 impl fmt::Display for Error {
@@ -121,6 +136,7 @@ impl fmt::Display for Error {
             Error::Unsupported { format, detail } => {
                 write!(f, "{format} cannot carry this: {detail}")
             }
+            Error::Refused { format, error } => write!(f, "{format}: {error}"),
         }
     }
 }
@@ -160,8 +176,12 @@ pub mod json {
     use guatiao::value::alloc::Alloc;
     use guatiao::value::types::Value;
 
+    use guatiao::value::visit::{FromWalk, Walk};
+
     use super::{Error, Position};
-    use crate::{Numbers, Presentation, Serializable, ValueSeed};
+    use crate::{
+        BridgeError, Numbers, Presentation, Serializable, ValueSeed, Walked, from_deserializer,
+    };
 
     /// The format's name, for a diagnostic.
     pub const NAME: &str = "json";
@@ -225,6 +245,32 @@ pub mod json {
         de.end().map_err(|e| refusal(text, &e))?;
         Ok(value)
     }
+
+    /// Anything that walks, as compact JSON, with no tree built.
+    pub fn to_string_of<T: Walk + ?Sized>(value: &T, how: Presentation) -> Result<String, Error> {
+        serde_json::to_string(&Walked::new(value, exact(how))).map_err(|e| Error::writing(NAME, e))
+    }
+
+    /// The same, indented for a person to read.
+    pub fn to_string_pretty_of<T: Walk + ?Sized>(
+        value: &T,
+        how: Presentation,
+    ) -> Result<String, Error> {
+        serde_json::to_string_pretty(&Walked::new(value, exact(how)))
+            .map_err(|e| Error::writing(NAME, e))
+    }
+
+    /// A `T` read from a JSON document, with no tree built. A document the
+    /// type refuses is [`Error::Refused`], naming the key.
+    pub fn from_str_as<T: FromWalk>(text: &str, how: Presentation) -> Result<T, Error> {
+        let mut de = serde_json::Deserializer::from_str(text);
+        let read = from_deserializer::<T, _>(&mut de, how).map_err(|e| match e {
+            BridgeError::Format(e) => refusal(text, &e),
+            BridgeError::Refused(error) => Error::refused(NAME, error),
+        })?;
+        de.end().map_err(|e| refusal(text, &e))?;
+        Ok(read)
+    }
 }
 
 #[cfg(feature = "toml")]
@@ -244,8 +290,10 @@ pub mod toml {
     use guatiao::value::alloc::Alloc;
     use guatiao::value::types::{Tag, Value};
 
+    use guatiao::value::visit::{FromWalk, Walk};
+
     use super::{Error, position_at};
-    use crate::{Presentation, Serializable, ValueSeed};
+    use crate::{BridgeError, Presentation, Serializable, ValueSeed, Walked, from_deserializer};
 
     /// The format's name, for a diagnostic.
     pub const NAME: &str = "toml";
@@ -278,6 +326,21 @@ pub mod toml {
             .deserialize(de)
             .map_err(|e| refusal(text, &e))
     }
+
+    /// Anything that walks, as TOML, with no tree built. Only a map is a
+    /// document; the format refuses anything else.
+    pub fn to_string_of<T: Walk + ?Sized>(value: &T, how: Presentation) -> Result<String, Error> {
+        ::toml::to_string(&Walked::new(value, how)).map_err(|e| Error::writing(NAME, e))
+    }
+
+    /// A `T` read from a TOML document, with no tree built.
+    pub fn from_str_as<T: FromWalk>(text: &str, how: Presentation) -> Result<T, Error> {
+        let de = ::toml::Deserializer::parse(text).map_err(|e| refusal(text, &e))?;
+        from_deserializer::<T, _>(de, how).map_err(|e| match e {
+            BridgeError::Format(e) => refusal(text, &e),
+            BridgeError::Refused(error) => Error::refused(NAME, error),
+        })
+    }
 }
 
 #[cfg(feature = "yaml")]
@@ -303,8 +366,10 @@ pub mod yaml {
 
     use serde_saphyr::{DefaultMessageFormatter, MessageFormatter, Options};
 
+    use guatiao::value::visit::{FromWalk, Walk};
+
     use super::{Error, Position};
-    use crate::{Presentation, Serializable, ValueSeed};
+    use crate::{BridgeError, Presentation, Serializable, ValueSeed, Walked, from_deserializer};
 
     /// The format's name, for a diagnostic.
     pub const NAME: &str = "yaml";
@@ -384,5 +449,33 @@ pub mod yaml {
             ValueSeed::with(alloc, how).deserialize(de)
         })
         .map_err(|e| refusal(&e))
+    }
+
+    /// The options every read takes.
+    fn options() -> Options {
+        let mut options = Options::default();
+        options.with_snippet = false;
+        options.ignore_binary_tag_for_string = true;
+        options
+    }
+
+    /// Anything that walks, as YAML, with no tree built.
+    pub fn to_string_of<T: Walk + ?Sized>(value: &T, how: Presentation) -> Result<String, Error> {
+        serde_saphyr::to_string(&Walked::new(value, how)).map_err(|e| Error::writing(NAME, e))
+    }
+
+    /// A `T` read from a YAML document, with no tree built.
+    pub fn from_str_as<T: FromWalk>(text: &str, how: Presentation) -> Result<T, Error> {
+        // The type's refusal rides out of the closure as a value, since
+        // only the format's error may leave it as one.
+        let read = serde_saphyr::with_deserializer_from_str_with_options(text, options(), |de| {
+            match from_deserializer::<T, _>(de, how) {
+                Ok(value) => Ok(Ok(value)),
+                Err(BridgeError::Format(e)) => Err(e),
+                Err(BridgeError::Refused(error)) => Ok(Err(error)),
+            }
+        })
+        .map_err(|e| refusal(&e))?;
+        read.map_err(|error| Error::refused(NAME, error))
     }
 }
