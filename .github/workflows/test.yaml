@@ -377,6 +377,145 @@ jobs:
           grep -q "py_greeter_hello greets: hello, ana" host.log
           grep -q "py_greeter_shouter configured with" host.log
 
+  lua:
+    name: Lua (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # The guatiao-lua source from a Rust host, a C host and the Python
+    # suite, in each Lua it builds with; and the loadable module required
+    # by a stock interpreter (Lua 5.4, and LuaJIT where packaged), hosting
+    # greeters written in Rust, C, Python and Lua. Each crate is a
+    # workspace of its own. A stated skip fails the job.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/guatiao-py
+            crates/guatiao-lua
+            bindings/lua/guatiao
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: "3.14"
+      - name: Where a host that is not Python finds libpython
+        if: runner.os != 'Windows'
+        run: |
+          echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+      - name: Stock interpreters (Linux, macOS)
+        if: runner.os != 'Windows'
+        run: |
+          case "$RUNNER_OS" in
+            Linux)
+              sudo apt-get update
+              sudo apt-get install -y lua5.4 luajit
+              echo "GUATIAO_LUA=$(command -v lua5.4)" >> "$GITHUB_ENV" ;;
+            macOS)
+              # Lua 5.4 as lua.org ships it: Homebrew's `lua` follows the
+              # newest release.
+              brew install luajit
+              curl -sSfL https://www.lua.org/ftp/lua-5.4.8.tar.gz -o "$RUNNER_TEMP/lua.tar.gz"
+              echo "4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae  $RUNNER_TEMP/lua.tar.gz" | shasum -a 256 -c
+              tar -xzf "$RUNNER_TEMP/lua.tar.gz" -C "$RUNNER_TEMP"
+              make -C "$RUNNER_TEMP/lua-5.4.8" macosx
+              echo "GUATIAO_LUA=$RUNNER_TEMP/lua-5.4.8/src/lua" >> "$GITHUB_ENV" ;;
+          esac
+          echo "GUATIAO_LUAJIT=$(command -v luajit)" >> "$GITHUB_ENV"
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: runner.os == 'Windows'
+      - name: Stock Lua 5.4 from lua.org (Windows)
+        # Built as Lua's own Windows builds are: lua54.dll, and lua.exe
+        # linking it.
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $out = "$env:RUNNER_TEMP\lua54"
+          Invoke-WebRequest https://www.lua.org/ftp/lua-5.4.8.tar.gz -OutFile "$env:RUNNER_TEMP\lua.tar.gz"
+          $sum = (Get-FileHash "$env:RUNNER_TEMP\lua.tar.gz" -Algorithm SHA256).Hash.ToLower()
+          if ($sum -ne '4f18ddae154e793e46eeab727c59ef1c0c0c2b744e7b94219710d76f530629ae') { throw "lua-5.4.8.tar.gz: $sum" }
+          tar -xzf "$env:RUNNER_TEMP\lua.tar.gz" -C $env:RUNNER_TEMP
+          New-Item -ItemType Directory -Force "$out\obj" | Out-Null
+          Set-Location "$env:RUNNER_TEMP\lua-5.4.8\src"
+          $lib = Get-ChildItem *.c | Where-Object { $_.Name -notin 'lua.c', 'luac.c' }
+          foreach ($c in $lib) { cl /nologo /O2 /c /MD /DLUA_BUILD_AS_DLL /DLUA_COMPAT_5_3 "/Fo$out\obj\$($c.BaseName).obj" $c.Name; if ($LASTEXITCODE) { exit 1 } }
+          link /nologo /DLL "/OUT:$out\lua54.dll" "/IMPLIB:$out\lua54.lib" "$out\obj\*.obj"
+          if ($LASTEXITCODE) { exit 1 }
+          cl /nologo /O2 /MD "/Fo$out\obj\lua.obj" "/Fe$out\lua.exe" lua.c "$out\lua54.lib"
+          if ($LASTEXITCODE) { exit 1 }
+          "GUATIAO_LUA=$out\lua.exe" >> $env:GITHUB_ENV
+      - name: Build the workspace, guatiao-py and the source
+        # The Rust greeter and the guatiao library the C hosts link; the
+        # Python greeters; the Lua source, which its tests add as a file.
+        run: |
+          cargo build --workspace --all-features
+          cargo build --manifest-path crates/guatiao-py/Cargo.toml
+          cargo build --manifest-path crates/guatiao-lua/Cargo.toml
+        env:
+          PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
+      - name: Format check and clippy
+        run: |
+          for crate in crates/guatiao-lua bindings/lua/guatiao; do
+            (cd "$crate" && cargo fmt --check && cargo clippy --all-targets -- -D warnings)
+          done
+      - name: Where the tests find what they call
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   py=libguatiao_py.so;    lua=libguatiao_lua.so ;;
+            macOS)   py=libguatiao_py.dylib; lua=libguatiao_lua.dylib ;;
+            Windows) py=guatiao_py.dll;      lua=guatiao_lua.dll ;;
+          esac
+          {
+            echo "GUATIAO_LIBRARY=$GITHUB_WORKSPACE/target/debug"
+            echo "GUATIAO_PY_BRIDGE=$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$py"
+            echo "GUATIAO_LUA_SOURCE=$GITHUB_WORKSPACE/crates/guatiao-lua/target/debug/$lua"
+          } >> "$GITHUB_ENV"
+      - name: The source, Lua 5.4, from a Rust, a C and a Lua host
+        run: |
+          cargo test --manifest-path crates/guatiao-lua/Cargo.toml -- --nocapture 2>&1 | tee lua-test.log
+          test "${PIPESTATUS[0]}" -eq 0
+          if grep -n "skipped:" lua-test.log; then exit 1; fi
+      - name: The source in Lua 5.5 and Luau
+        run: |
+          for flavour in lua55 luau; do
+            cargo test --manifest-path crates/guatiao-lua/Cargo.toml --no-default-features \
+              --features "$flavour,source" --target-dir "target-$flavour"
+          done
+      - name: The source from Python
+        run: |
+          python -m pip install pytest
+          python -m pytest -rs bindings/python/guatiao/tests/test_lua_source.py 2>&1 | tee py-lua.log
+          test "${PIPESTATUS[0]}" -eq 0
+          if grep -n "SKIPPED" py-lua.log; then exit 1; fi
+        env:
+          PYTHONPATH: bindings/python/guatiao/src
+      - name: The module in a stock Lua 5.4
+        run: |
+          cargo build --manifest-path bindings/lua/guatiao/Cargo.toml
+          cargo test --manifest-path bindings/lua/guatiao/Cargo.toml -- --nocapture 2>&1 | tee module-test.log
+          test "${PIPESTATUS[0]}" -eq 0
+          if grep -n "skipped:" module-test.log; then exit 1; fi
+      - name: The module in LuaJIT
+        if: runner.os != 'Windows'
+        run: |
+          cargo build --manifest-path bindings/lua/guatiao/Cargo.toml --no-default-features --features luajit --target-dir target-luajit
+          GUATIAO_LUA="$GUATIAO_LUAJIT" cargo test --manifest-path bindings/lua/guatiao/Cargo.toml \
+            --no-default-features --features luajit --target-dir target-luajit -- --nocapture 2>&1 | tee jit-test.log
+          test "${PIPESTATUS[0]}" -eq 0
+          if grep -n "skipped:" jit-test.log; then exit 1; fi
+
   node:
     name: Node bindings (node${{ matrix.node }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
