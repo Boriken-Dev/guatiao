@@ -1083,6 +1083,34 @@ hooks:
   the schema or value it came from is closed raises (`ValueError`,
   `StateError`) instead of reading freed memory.
 
+## Node.js kinds
+
+### A kind that exists is loaded, not described
+
+A kind described by hand with `kind()` still works, and a description
+copied from a header still has to be kept in step with it by hand. Load
+the kind crate's description instead: write the module once with
+`guatiao-kind` and import the kinds from it.
+
+```ts
+// before: greeter_kind.ts, written by hand
+export const Greeter = kind('greeter', { floorHash: 2695856491, methods: { /* ... */ } });
+export type Greeter = Implementation<typeof Greeter>;
+```
+
+```bash
+npx guatiao-kind greeter_kind.kinds.json --out greeter_kind
+```
+
+```ts
+import { Greeter } from './greeter_kind.js';   // the value, and the interface
+export class Hello extends Provider implements Greeter { /* unchanged */ }
+```
+
+`Remote<typeof Greeter>` is the generated `GreeterRemote`. A slot's name
+is its C name in camelCase (`greet_into` is `greetInto`), as the
+hand-written descriptions in this repository already spelled them.
+
 ## Needs nothing from you
 
 - **Loosened, never tightened**: the `Kind` bound is off `Remote`,

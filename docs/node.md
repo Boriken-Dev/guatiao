@@ -15,15 +15,84 @@ The package loads the guatiao library on its first native call: the one
 `useLibrary(path)` named, else `GUATIAO_LIBRARY` (a file or a directory),
 else the platform's library search.
 
-## A kind, once
+## A kind, never declared twice
 
-A kind is the table its C header declares. TypeScript describes it once,
-as a typed value: its methods in table order, their shapes from `t`, the
-header's `FLOOR_HASH` copied from its `#define`. The types a provider
-implements and a caller holds are inferred from it.
+A kind is the table its C header declares, and its crate commits the
+same kinds as data beside the header: a [description](encodings.md#a-kind-described)
+(`greeter_kind.kinds.json`) naming each slot in table order, what it
+takes and answers, and whether it is required. Node loads that; nothing
+here says again what a slot takes.
+
+`guatiao-kind`, a command the package installs, writes a module from the
+description, which you commit:
+
+```bash
+npx guatiao-kind greeter_kind.kinds.json --out greeter_kind   # greeter_kind.js and greeter_kind.d.ts
+```
+
+In JavaScript each kind is a value, `Greeter`. In TypeScript the same
+name is also an interface: the kind's required slots as methods, its
+appended ones optional, typed from the description, so a provider class
+`implements` the kind it serves:
 
 ```ts
-// greeter_kind.ts
+// greeter_kind.d.ts, as guatiao-kind writes it (abridged)
+export interface Greeter {
+  greet(name: string): k.MapAnswer;
+  shout?(name: string): string;
+  greetInto?(name: string, listener: ListenerRemote): void;
+}
+export interface GreeterRemote extends k.RemoteBase<typeof Greeter> {
+  greet(name: string): g.Value;
+  shout(name: string): string;
+  greetInto(name: string, listener: Listener | k.ObjectHandle<typeof Listener>): void;
+}
+export declare const Greeter: k.DescribedKind<Greeter, GreeterRemote, false>;
+```
+
+`kindsOf(document)` loads the same description at run time, from the
+parsed object or its JSON text, and answers each kind by name:
+
+```js
+import { readFileSync } from 'node:fs';
+import { kindsOf } from 'guatiao/kinds';
+
+const { greeter: Greeter } = kindsOf(readFileSync('greeter_kind.kinds.json', 'utf8'));
+```
+
+### A kind defined in JavaScript
+
+A kind with no header behind it, defined here for other code to serve or
+call, is a class extending `Kind`; its static fields say its name, floor
+hash and slots, which plain JavaScript runs as they are:
+
+```js
+import { Kind, slot, t } from 'guatiao/kinds';
+
+export class Page extends Kind {
+  static kind = 'page';
+  static floorHash = 0x70616765;
+  static object = true;
+  static slots = { write: slot(t.str).required() };
+}
+
+export class Echo extends Kind {
+  static kind = 'echo';
+  static floorHash = 0x6563686f;
+  static slots = {
+    echo: slot(t.str).returns(t.text).required().fallible(),
+    copyOnto: slot(t.str, t.lent(Page)).fallible(),
+  };
+}
+```
+
+### Underneath: `kind()`
+
+Both are built on one primitive, which TypeScript can type by inference:
+its methods in table order, their shapes from `t`, the header's
+`FLOOR_HASH`.
+
+```ts
 import { type Implementation, kind, t } from 'guatiao/kinds';
 
 export const Listener = kind('listener', {
@@ -144,7 +213,15 @@ export class Shouter extends Provider implements Greeter {
 
 - **`tsc --strict` checks it**: `implements Greeter` refuses a class that
   misspells `greet`, takes a number for the name or answers the wrong
-  type. `static kinds` is what serves it, since `implements` is erased.
+  type, and an appended method it does implement with the wrong types.
+  `static kinds` is what serves it, since `implements` is erased. A
+  misspelled appended method is not caught: it is one more method.
+- **Plain JavaScript runs the same class as it is**, with no build step:
+  `static kinds = [Greeter, Counter];` and no types. A class missing a
+  required method is refused when its library is built, with a
+  `TypeError` naming the method and the kind. With `// @ts-check` at the
+  top of the file, `/** @implements {Greeter} */` above the class has an
+  editor check its methods against the generated declarations.
 - **A configuration is a schema value.** `s.object({ prefix: s.string()
   })` writes the JSON Schema the host checks a configuration against, and
   its type is inferred; the constructor receives the built object. With no
@@ -192,9 +269,10 @@ from Node's thread that waits for such a thread never returns.
 - **Register a library synchronously from a module object.** A Python host
   passes a module; an ES module namespace carries no name, so
   `libraryOf` takes the module's location and imports it.
-- **Make kinds anywhere.** `kind()` and `library()` register koffi
-  callbacks, which koffi cannot do inside a call a library is making:
-  describe kinds and build libraries at module level.
+- **Make kinds anywhere.** `kind()`, `kindsOf()` and `library()`
+  register koffi callbacks, as does a kind class when first used, which
+  koffi cannot do inside a call a library is making: describe kinds and
+  build libraries at module level.
 
 ## The examples
 
@@ -202,4 +280,7 @@ from Node's thread that waits for such a thread never returns.
   the TypeScript library, optionally adds the guatiao-py bridge, and calls
   every slot of the kind; its README has the commands.
 - `examples/node_provider/node_greeter/` is the library above.
-- `examples/greeter_kind/node/greeter_kind.ts` describes the greeter kinds.
+- `examples/node_js/` is a library and a host in plain JavaScript, with a
+  kind of its own defined as a class.
+- `examples/greeter_kind/node/` is what `guatiao-kind` wrote from
+  `examples/greeter_kind/include/greeter_kind.kinds.json`.
