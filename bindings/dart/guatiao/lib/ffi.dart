@@ -27,6 +27,10 @@
 /// allocator; the library that built it stays loaded while it lives.
 ///
 /// Supported API, versioned with the package.
+///
+/// {@canonicalFor status.checkStatus}
+/// {@canonicalFor tape.dartToWire}
+/// {@canonicalFor tape.wireToDart}
 library;
 
 import 'dart:ffi';
