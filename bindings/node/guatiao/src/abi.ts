@@ -74,6 +74,7 @@ export const SIZE = {
   providers: 24,
   libraryInfo: 80,
   hostInfo: 64,
+  wireEvent: 144,
 } as const;
 
 /**
@@ -96,6 +97,12 @@ export const PROVIDER_ERROR = { status: 0, message: 8 } as const;
 
 /** `guatiao_text_error`: the byte offset, then an owned string value. */
 export const TEXT_ERROR = { at: 0, expected: 8 } as const;
+
+/**
+ * `guatiao_wire_event`: the channel, the kind and refusal codes, the byte
+ * offset, then three owned values.
+ */
+export const WIRE_EVENT = { channel: 0, kind: 8, refusal: 12, at: 16, value: 24, message: 64, detail: 104 } as const;
 
 /** `guatiao_date`. */
 export const DATE = { year: 0, month: 4, day: 5 } as const;

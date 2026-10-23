@@ -399,6 +399,24 @@ export class Ref {
     return new ListRef(this.owner, this.path);
   }
 
+  /**
+   * This node in the wire encoding: a tag byte per node, LEB128 lengths, a
+   * number as its own text, a map in its order. `Value.fromWire` in any
+   * language reads the same tree back.
+   */
+  toWire(): Uint8Array {
+    const node = this.requireNode();
+    const core = n.core();
+    const out = n.alloc(SIZE.value);
+    try {
+      raiseForStatus(core.fn.guatiao_wire_encode!(core.alloc, node, out));
+      return ownedBytes(out);
+    } finally {
+      n.freeNode(out);
+      n.release(out);
+    }
+  }
+
   /** A deep, independent copy of this node, as a new `Value` to close. */
   clone(): Value {
     const node = this.requireNode();
@@ -753,6 +771,26 @@ export class Value extends Ref implements Disposable {
     const value = new Value(undefined, options);
     try {
       raiseForStatus(n.core().fn.guatiao_value_number!(value.buildAlloc(), n.str(text), value.#root));
+    } catch (e) {
+      value.close();
+      throw e;
+    }
+    return value;
+  }
+
+  /**
+   * The value the wire encoding in `data` holds. `BadValue` for bytes that
+   * are not exactly one value: truncated, an unknown tag, a length not in
+   * its shortest form, text that is not UTF-8, a number outside the
+   * grammar, a repeated key, anything after the value.
+   */
+  static fromWire(data: Uint8Array, options: ValueOptions = {}): Value {
+    const value = new Value(undefined, options);
+    try {
+      raiseForStatus(
+        n.core().fn.guatiao_wire_decode!(value.buildAlloc(), n.bytesArg(data), value.#root),
+        'bytes that are not a value in the wire encoding',
+      );
     } catch (e) {
       value.close();
       throw e;

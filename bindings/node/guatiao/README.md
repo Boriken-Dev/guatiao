@@ -39,6 +39,9 @@ ABI, whether that is `guatiao` itself or an application that carries it.
 - **Dates, times, spans and exact lengths** — `PlainDate`, `PlainTime`,
   `PlainDateTime` and `Span` to the nanosecond, instants as `Date`, read
   and written by the library itself.
+- **Values on the wire** — `value.toWire()` and `Value.fromWire(bytes)`
+  carry a tree exactly as bytes, and `guatiao/wire` announces a schema on
+  a channel before its values, with a `Receiver` that checks each one.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
 - **JSON, TOML and YAML**, and **forms checked against a schema**, are
@@ -189,6 +192,7 @@ PlainDate.parse('2026-01-31').add(Span.parse('1mo')).toString();   // '2026-02-2
 | `guatiao/kinds` | `kind`, `t`: a kind as a typed description; `Remote`, `ObjectHandle`; serving a table over an object |
 | `guatiao/provide` | `Provider`, `library`, `libraryOf`, `s`: providers written in TypeScript, a module as a library |
 | `guatiao/time` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants, exact lengths, `normalize` |
+| `guatiao/wire` | channel frames (`announce`, `send`, `close`) and a `Receiver` checking each value against its channel's schema |
 | `guatiao/ffi` | for a package over another guatiao library: `openSurface`, memory, `adopt`, `borrow`, `withNodes` |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/node/guatiao/AGENTS.md)
