@@ -26,6 +26,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Kinds and providers as classes** (`package:guatiao/kinds.dart`, native
+  platforms). `dart run guatiao:kind DOCUMENT -o FILE` writes, from the
+  description a kind crate commits beside its C header, an abstract
+  interface class per kind (its required slots) and per appended slot, a
+  `<Kind>Remote` a caller holds, and the `Kind` as the interface's static
+  `kind`; `--check` fails on a stale file. `Registry.bind(key, kind)` and
+  `Instance.bind(kind)` answer a remote; a class extending `Provider` and
+  implementing the interfaces is served through `Offer.single` or
+  `Offer.configured` in a `Library`, which `Registry.registerLibrary`
+  files for any host in the process (Rust and C callers included) and
+  `dart run guatiao:kind identity` names from `pubspec.yaml`. Dart objects
+  cross as objects of a kind both ways, lent or handed over. The analyzer
+  refuses a missing or mistyped slot; a missing required slot is also an
+  `ArgumentError` naming it when the library is built. Also
+  `Registry.registerEntry` and `Registry.host`.
 - `wireToDart` and `dartToWire` (`package:guatiao/ffi.dart`,
   `package:guatiao/wasm.dart`): plain Dart read from and written as wire
   bytes in Dart, answering what `Value.fromWire(...).toDart()` and

@@ -26,6 +26,13 @@ application that carries it.
 - **Be a plugin host** — scan a directory, filter on what a library
   declares before loading it, list providers best first, build an
   instance from a configuration, call a provider through its table.
+- **Kinds and providers as classes** — `dart run guatiao:kind` writes,
+  from the description a kind crate commits beside its C header, an
+  interface per kind and per appended slot and a remote class to call a
+  table with; a provider is a class extending `Provider` that implements
+  them, so the analyzer checks every method, and a `Library` serves it to
+  any host in the process, Rust and C callers included. Nothing is
+  declared by hand, and it runs under AOT and in Flutter.
 - **Dates, times, instants and spans** — `PlainDate`, `PlainTime`,
   `PlainDateTime` and `Span`, a UTC `DateTime` for an instant and a
   `Duration` for an exact length, read and written by the library itself.
@@ -225,21 +232,48 @@ Every answer that is data comes back as a plain `Map` or `List`, already
 freed. `rules` is one `[!]KEY=VALUE` per line and filters on what a
 library declares about itself, before it is loaded.
 
-To call a provider, describe its table with the `Struct` the kind's C
-header declares and let the package check it:
+### Kinds and providers as classes
 
-```dart
-final found = reg.providerTable('acme_greeter', kind: 'greeter');
-final greeter = kindTable<GreeterVtable>(
-  found,
-  floorHash: greeterVtableFloorHash,
-  floorSize: sizeOf<GreeterVtable>(),
-);
-greeter.ref.greet.asFunction<GreetDart>()(found.ctx, name, outMap, err);
+A kind crate commits its kinds as data beside its C header
+(`greeter_kind.kinds.json`). Write the Dart for them once, and commit it:
+
+```bash
+dart run guatiao:kind greeter_kind.kinds.json -o lib/greeter_kind.dart
 ```
 
-[`test/greeter_test.dart`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/guatiao/test/greeter_test.dart)
-is a complete worked example.
+Each kind is then an interface of its required slots (`Greeter`), one per
+appended slot (`GreeterShout`), a remote class a caller holds
+(`GreeterRemote`), and the kind itself as the interface's static `kind`:
+
+```dart
+import 'package:guatiao/kinds.dart';
+import 'greeter_kind.dart';
+
+final greeter = reg.bind('acme_hello', Greeter.kind);   // a GreeterRemote
+final answer = greeter.greet('ana');                    // a Value
+if (greeter.has('shout')) print(greeter.shout('ana'));
+
+final class Hello extends Provider implements Greeter, GreeterShout {
+  @override
+  Map<String, Object?> greet(String name) => {'greeting': 'hello, $name'};
+  @override
+  String shout(String name) => 'HELLO, ${name.toUpperCase()}';
+}
+
+final library = Library('my_greeters', '1.0.0', offers: [
+  Offer.single(Hello(), named: 'hello', kinds: [Greeter.kind]),
+]);
+reg.registerLibrary(library);   // my_greeters_hello, for any host in the process
+```
+
+The analyzer refuses a provider that lacks a required method or types
+one wrongly. `dart run guatiao:kind identity` writes the library's id and
+version from `pubspec.yaml`, for `Library.of(packageLibrary, ...)`. In a
+Flutter app, import the generated file with a prefix: Flutter has a
+`Listener` of its own.
+
+Under that, `kindTable<T>(found, floorHash:, floorSize:)` casts a
+`providerTable` answer to a `Struct` a kind's C header declares, checked.
 
 ### Reading a value you were handed
 
@@ -326,8 +360,9 @@ words when it gave any.
 - `ListRef.insert` and `list[i] = x` rebuild the list, because the C ABI
   only appends and removes. `add` and `removeAt` are direct.
 - A `Value` and a `Registry` are used from the isolate that made them.
-  Nothing here crosses an isolate boundary, and a provider cannot call
-  back into Dart.
+  A provider or object written in Dart runs on the thread of the isolate
+  that built it: a library calling one from another thread ends the
+  process, as Dart does for any isolate-local callback.
 - `Registry.unload` unmaps a library once its own `unload` function
   agrees, and `collect` a retired one; neither can see a `ProviderTable`
   you took. Let it go first: it is valid until the library is closed,
@@ -337,13 +372,17 @@ words when it gave any.
   an exact length into one drops what is below. The `Plain` classes and
   `Span` keep nanoseconds.
 - On the web there is no registry: `Registry` and `kindTable` throw
-  `Unsupported`, since a browser maps no libraries.
+  `Unsupported`, since a browser maps no libraries, and
+  `package:guatiao/kinds.dart` is native only.
 
 ## API overview
 
 | Library | Purpose |
 | --- | --- |
 | `package:guatiao/guatiao.dart` | `Value`, `Ref`, `MapRef`, `ListRef`, `absent`, `Registry`, `Instance`, `kindTable`, the error classes |
+| `package:guatiao/kinds.dart` | kinds and providers as classes: `Kind`, `KindRemote`, `Provider`, `Offer`, `Library`, `LibraryIdentity`, `Disposable`, `liveObjects` |
+| `dart run guatiao:kind` | writes a kind description's Dart, and a library identity from `pubspec.yaml` |
+| `package:guatiao/kind_glue.dart` | what the generated code calls: `CallScope`, `ServeScope` |
 | `package:guatiao/ffi.dart` | for a package over another guatiao library: the generated bindings, `openSurface`, `NativeLib`, `strOf`, `takeValue`, `freeNode`, `checkStatus` |
 | `package:guatiao/wasm.dart` | the same on the web: `WasmModule`, `Address`, `withScratch`, `openSurface`, `takeValue`, `freeNode`, `checkStatus` |
 | `package:guatiao/time.dart` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, `parseTimestamp`, `formatTimestamp`, `toDuration`, `fromDuration`, `normalize` |
