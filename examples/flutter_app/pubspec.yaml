@@ -1,0 +1,40 @@
+name: flutter_app
+description: >-
+  guatiao in a Flutter app: the libraries built from source by the
+  packages' build hooks.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  guatiao:
+    path: ../../bindings/dart/guatiao
+  guatiao_intake:
+    path: ../../bindings/dart/guatiao_intake
+  guatiao_serde:
+    path: ../../bindings/dart/guatiao_serde
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+
+# guatiao_serde and guatiao_intake name the core from pub.dev; inside the
+# repository all three come from the checkout. An application outside it
+# names the three versions instead and needs no override.
+dependency_overrides:
+  guatiao:
+    path: ../../bindings/dart/guatiao
+
+flutter:
+  uses-material-design: true
+
+# One file of the application's own carrying every surface, built in place
+# of guatiao's three:
+#
+# hooks:
+#   user_defines:
+#     guatiao:
+#       crate: ../app_library
