@@ -1746,6 +1746,51 @@ class GuatiaoBindings {
       int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
           ffi.Pointer<guatiao_value>)>();
 
+  int guatiao_wire_announce(
+    ffi.Pointer<guatiao_alloc> alloc,
+    int channel,
+    ffi.Pointer<guatiao_value> schema,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_wire_announce(
+      alloc,
+      channel,
+      schema,
+      out,
+    );
+  }
+
+  late final _guatiao_wire_announcePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Uint64,
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_wire_announce');
+  late final _guatiao_wire_announce = _guatiao_wire_announcePtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, int, ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>)>();
+
+  int guatiao_wire_close(
+    ffi.Pointer<guatiao_alloc> alloc,
+    int channel,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_wire_close(
+      alloc,
+      channel,
+      out,
+    );
+  }
+
+  late final _guatiao_wire_closePtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(ffi.Pointer<guatiao_alloc>, ffi.Uint64,
+              ffi.Pointer<guatiao_value>)>>('guatiao_wire_close');
+  late final _guatiao_wire_close = _guatiao_wire_closePtr.asFunction<
+      int Function(
+          ffi.Pointer<guatiao_alloc>, int, ffi.Pointer<guatiao_value>)>();
+
   int guatiao_wire_decode(
     ffi.Pointer<guatiao_alloc> alloc,
     guatiao_bytes bytes,
@@ -1786,6 +1831,85 @@ class GuatiaoBindings {
               ffi.Pointer<guatiao_value>)>>('guatiao_wire_encode');
   late final _guatiao_wire_encode = _guatiao_wire_encodePtr.asFunction<
       int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>)>();
+
+  int guatiao_wire_receiver_accept(
+    ffi.Pointer<guatiao_wire_receiver> recv,
+    guatiao_bytes frame,
+    ffi.Pointer<guatiao_wire_event> out_event,
+  ) {
+    return _guatiao_wire_receiver_accept(
+      recv,
+      frame,
+      out_event,
+    );
+  }
+
+  late final _guatiao_wire_receiver_acceptPtr = _lookup<
+          ffi.NativeFunction<
+              guatiao_status Function(ffi.Pointer<guatiao_wire_receiver>,
+                  guatiao_bytes, ffi.Pointer<guatiao_wire_event>)>>(
+      'guatiao_wire_receiver_accept');
+  late final _guatiao_wire_receiver_accept =
+      _guatiao_wire_receiver_acceptPtr.asFunction<
+          int Function(ffi.Pointer<guatiao_wire_receiver>, guatiao_bytes,
+              ffi.Pointer<guatiao_wire_event>)>();
+
+  void guatiao_wire_receiver_free(
+    ffi.Pointer<guatiao_wire_receiver> recv,
+  ) {
+    return _guatiao_wire_receiver_free(
+      recv,
+    );
+  }
+
+  late final _guatiao_wire_receiver_freePtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Pointer<guatiao_wire_receiver>)>>(
+      'guatiao_wire_receiver_free');
+  late final _guatiao_wire_receiver_free = _guatiao_wire_receiver_freePtr
+      .asFunction<void Function(ffi.Pointer<guatiao_wire_receiver>)>();
+
+  ffi.Pointer<guatiao_wire_receiver> guatiao_wire_receiver_new(
+    ffi.Pointer<guatiao_alloc> alloc,
+  ) {
+    return _guatiao_wire_receiver_new(
+      alloc,
+    );
+  }
+
+  late final _guatiao_wire_receiver_newPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Pointer<guatiao_wire_receiver> Function(
+              ffi.Pointer<guatiao_alloc>)>>('guatiao_wire_receiver_new');
+  late final _guatiao_wire_receiver_new =
+      _guatiao_wire_receiver_newPtr.asFunction<
+          ffi.Pointer<guatiao_wire_receiver> Function(
+              ffi.Pointer<guatiao_alloc>)>();
+
+  int guatiao_wire_send(
+    ffi.Pointer<guatiao_alloc> alloc,
+    int channel,
+    ffi.Pointer<guatiao_value> value,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_wire_send(
+      alloc,
+      channel,
+      value,
+      out,
+    );
+  }
+
+  late final _guatiao_wire_sendPtr = _lookup<
+      ffi.NativeFunction<
+          guatiao_status Function(
+              ffi.Pointer<guatiao_alloc>,
+              ffi.Uint64,
+              ffi.Pointer<guatiao_value>,
+              ffi.Pointer<guatiao_value>)>>('guatiao_wire_send');
+  late final _guatiao_wire_send = _guatiao_wire_sendPtr.asFunction<
+      int Function(ffi.Pointer<guatiao_alloc>, int, ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_value>)>();
 }
 
@@ -1901,6 +2025,16 @@ const int GUATIAO_MERGE_OPT_MERGELISTS = 1;
 const int GUATIAO_MERGE_SIMPLE = 1;
 
 const int GUATIAO_MERGE_SUBSTITUTE = 3;
+
+const int GUATIAO_WIRE_ACCEPTED = 0;
+
+const int GUATIAO_WIRE_INVALID = 4;
+
+const int GUATIAO_WIRE_MALFORMED = 1;
+
+const int GUATIAO_WIRE_NOT_A_SCHEMA = 3;
+
+const int GUATIAO_WIRE_NO_SCHEMA = 2;
 
 final class guatiao_alloc extends ffi.Struct {
   @ffi.Uint32()
@@ -2737,3 +2871,25 @@ final class guatiao_values extends ffi.Struct {
         ..ref.ptr = ptr
         ..ref.len = len;
 }
+
+final class guatiao_wire_event extends ffi.Struct {
+  @ffi.Uint64()
+  external int channel;
+
+  @ffi.Uint32()
+  external int kind;
+
+  @ffi.Uint32()
+  external int refusal;
+
+  @ffi.Size()
+  external int at;
+
+  external guatiao_value value;
+
+  external guatiao_value message;
+
+  external guatiao_value detail;
+}
+
+final class guatiao_wire_receiver extends ffi.Opaque {}

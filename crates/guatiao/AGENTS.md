@@ -421,10 +421,44 @@ transport says where a frame ends. C: `guatiao_wire_encode(alloc, value,
 out)` writes a BYTES value, `guatiao_wire_decode(alloc, bytes, out)`
 answers `GUATIAO_ERR_BAD_VALUE` for bytes that are not a value.
 
+Channels from C (`exports::channel`):
+
+```c
+guatiao_status guatiao_wire_announce(const guatiao_alloc *alloc, uint64_t channel,
+                                     const guatiao_value *schema, guatiao_value *out);
+guatiao_status guatiao_wire_send(const guatiao_alloc *alloc, uint64_t channel,
+                                 const guatiao_value *value, guatiao_value *out);
+guatiao_status guatiao_wire_close(const guatiao_alloc *alloc, uint64_t channel,
+                                  guatiao_value *out);       // each: the frame, a BYTES value
+guatiao_wire_receiver *guatiao_wire_receiver_new(const guatiao_alloc *alloc); // null: bad alloc
+guatiao_status guatiao_wire_receiver_accept(guatiao_wire_receiver *recv, guatiao_bytes frame,
+                                            guatiao_wire_event *out_event);
+void guatiao_wire_receiver_free(guatiao_wire_receiver *recv);
+typedef struct guatiao_wire_event {
+  uint64_t channel; uint32_t kind;      /* GUATIAO_FRAME_SCHEMA 0, _VALUE 1, _CLOSE 2 */
+  uint32_t refusal;                     /* GUATIAO_WIRE_ACCEPTED 0, _MALFORMED 1, _NO_SCHEMA 2,
+                                           _NOT_A_SCHEMA 3, _INVALID 4 */
+  size_t at;                            /* MALFORMED: the byte of the frame */
+  guatiao_value value;                  /* the schema's copy or the checked value */
+  guatiao_value message;                /* a refusal's words, a STRING */
+  guatiao_value detail;                 /* INVALID: guatiao_schema_validate's map */
+} guatiao_wire_event;                   /* 64-bit: offsets 0, 8, 12, 16, 24, 64, 104; size 144 */
+```
+
+A refusal's status: MALFORMED and INVALID `GUATIAO_ERR_BAD_VALUE`,
+NO_SCHEMA `GUATIAO_ERR_NOT_FOUND`, NOT_A_SCHEMA `GUATIAO_ERR_WRONG_KIND`;
+the allocator refusing is `GUATIAO_ERR_ALLOC` with `refusal` 0. A refusal
+changes nothing the receiver keeps and quotes nothing it was given. The
+event is written empty first and its three values are the caller's
+(`guatiao_value_free` each, whatever the status); everything is built in
+the receiver's allocator, which outlives it. One thread at a time per
+receiver. `tests/vectors/wire.json` is the shared vector file (values,
+malformed inputs, frames, and a conversation with every refusal).
+
 **wasm32**: the crate builds for `wasm32-unknown-unknown` (the layout is
 written in pointer widths); `load` there is a compile error. The module
-exports the value, schema and merge C surface; a JavaScript caller builds
-with `guatiao_alloc_default()`.
+exports the value, schema, merge and wire C surface, channels included; a
+JavaScript caller builds with `guatiao_alloc_default()`.
 
 ## Errors
 
@@ -2265,7 +2299,8 @@ Values: `guatiao_value_{free,clone,null,absent,bool,map,list,string,
 number,bytes}`, `guatiao_map_{set,discard,clear,copy_from}`,
 `guatiao_list_{push,discard,clear}`, `guatiao_string_push`,
 `guatiao_buffer_push`, `guatiao_alloc_default`.
-Also `guatiao_merge` and `guatiao_schema_validate`. Dates, times and
+Also `guatiao_merge`, `guatiao_schema_validate`, and the wire encoding
+and channels (`guatiao_wire_*`, above). Dates, times and
 spans: see "Dates, times and spans from C" below. The path and flat-key
 functions (`guatiao_intake_{resolve,flat_keys,flatten,unflatten}`) are
 `guatiao-intake`'s, declared in its own `guatiao_intake.h`.

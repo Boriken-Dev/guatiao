@@ -1,0 +1,605 @@
+{
+ "about": "Shared vectors for the wire encoding and its channel frames (docs/encodings.md, 'Values on the wire'). Every implementation reads this file: the Rust code, the C functions and each binding. The bytes were written from the grammar by an encoder of their own, not by the code under test. A tree is [tag] for absent and null, [tag, x] for a bool, a number (its text), a string, bytes (hex), a list (its items) and a map (its [key, tree] pairs, in order). 'values' decode to their tree and encode to their bytes; 'malformed' are refused with the byte offset; 'frames' are what announce, send and close write; 'conversation' runs through one receiver in order, each frame answering an event (with its channel and, for a schema or a value, its tree) or a refusal (malformed, no_schema, not_a_schema, invalid) with its channel, offset, frame kind or the refused field's key where given.",
+ "statuses": {
+  "malformed": "GUATIAO_ERR_BAD_VALUE",
+  "no_schema": "GUATIAO_ERR_NOT_FOUND",
+  "not_a_schema": "GUATIAO_ERR_WRONG_KIND",
+  "invalid": "GUATIAO_ERR_BAD_VALUE"
+ },
+ "values": [
+  {
+   "name": "absent",
+   "tree": [
+    "absent"
+   ],
+   "hex": "00"
+  },
+  {
+   "name": "null",
+   "tree": [
+    "null"
+   ],
+   "hex": "01"
+  },
+  {
+   "name": "true",
+   "tree": [
+    "bool",
+    true
+   ],
+   "hex": "0201"
+  },
+  {
+   "name": "false",
+   "tree": [
+    "bool",
+    false
+   ],
+   "hex": "0200"
+  },
+  {
+   "name": "a number keeps its text",
+   "tree": [
+    "number",
+    "1.10"
+   ],
+   "hex": "0304312e3130"
+  },
+  {
+   "name": "a negative exponent",
+   "tree": [
+    "number",
+    "-2.5E-3"
+   ],
+   "hex": "03072d322e35452d33"
+  },
+  {
+   "name": "a 40-digit integer",
+   "tree": [
+    "number",
+    "1234567890123456789012345678901234567890"
+   ],
+   "hex": "032831323334353637383930313233343536373839303132333435363738393031323334353637383930"
+  },
+  {
+   "name": "empty text",
+   "tree": [
+    "string",
+    ""
+   ],
+   "hex": "0400"
+  },
+  {
+   "name": "text",
+   "tree": [
+    "string",
+    "hello"
+   ],
+   "hex": "040568656c6c6f"
+  },
+  {
+   "name": "text past ASCII",
+   "tree": [
+    "string",
+    "se\u00f1or \u2603"
+   ],
+   "hex": "040a7365c3b16f7220e29883"
+  },
+  {
+   "name": "text holding a NUL",
+   "tree": [
+    "string",
+    "a\u0000b"
+   ],
+   "hex": "0403610062"
+  },
+  {
+   "name": "bytes",
+   "tree": [
+    "bytes",
+    "00ff10"
+   ],
+   "hex": "050300ff10"
+  },
+  {
+   "name": "empty bytes",
+   "tree": [
+    "bytes",
+    ""
+   ],
+   "hex": "0500"
+  },
+  {
+   "name": "a 200-byte string: a two-byte length",
+   "tree": [
+    "string",
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+   ],
+   "hex": "04c8017878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878"
+  },
+  {
+   "name": "empty list",
+   "tree": [
+    "list",
+    []
+   ],
+   "hex": "0600"
+  },
+  {
+   "name": "empty map",
+   "tree": [
+    "map",
+    []
+   ],
+   "hex": "0700"
+  },
+  {
+   "name": "a list of every scalar",
+   "tree": [
+    "list",
+    [
+     [
+      "absent"
+     ],
+     [
+      "null"
+     ],
+     [
+      "bool",
+      true
+     ],
+     [
+      "number",
+      "0"
+     ],
+     [
+      "string",
+      "s"
+     ],
+     [
+      "bytes",
+      "01"
+     ]
+    ]
+   ],
+   "hex": "060600010201030130040173050101"
+  },
+  {
+   "name": "the documented map",
+   "tree": [
+    "map",
+    [
+     [
+      "n",
+      [
+       "number",
+       "1.5"
+      ]
+     ],
+     [
+      "b",
+      [
+       "bool",
+       true
+      ]
+     ]
+    ]
+   ],
+   "hex": "0702016e0303312e3501620201"
+  },
+  {
+   "name": "a map keeps its order",
+   "tree": [
+    "map",
+    [
+     [
+      "z",
+      [
+       "number",
+       "1"
+      ]
+     ],
+     [
+      "a",
+      [
+       "number",
+       "2"
+      ]
+     ],
+     [
+      "m",
+      [
+       "number",
+       "3"
+      ]
+     ]
+    ]
+   ],
+   "hex": "0703017a0301310161030132016d030133"
+  },
+  {
+   "name": "a key with a NUL",
+   "tree": [
+    "map",
+    [
+     [
+      "a\u0000b",
+      [
+       "number",
+       "1"
+      ]
+     ]
+    ]
+   ],
+   "hex": "070103610062030131"
+  },
+  {
+   "name": "nested",
+   "tree": [
+    "map",
+    [
+     [
+      "list",
+      [
+       "list",
+       [
+        [
+         "map",
+         [
+          [
+           "deep",
+           [
+            "list",
+            [
+             [
+              "null"
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ],
+     [
+      "empty",
+      [
+       "map",
+       []
+      ]
+     ]
+    ]
+   ],
+   "hex": "0702046c69737406010701046465657006010105656d7074790700"
+  }
+ ],
+ "malformed": [
+  {
+   "name": "nothing at all",
+   "hex": "",
+   "at": 0
+  },
+  {
+   "name": "an unknown tag",
+   "hex": "09",
+   "at": 0
+  },
+  {
+   "name": "text shorter than its length",
+   "hex": "040561",
+   "at": 2
+  },
+  {
+   "name": "a length not in its shortest form",
+   "hex": "048000",
+   "at": 1
+  },
+  {
+   "name": "text that is not UTF-8",
+   "hex": "040261ff",
+   "at": 1
+  },
+  {
+   "name": "a number outside the grammar",
+   "hex": "03023031",
+   "at": 1
+  },
+  {
+   "name": "a bool byte other than 0 or 1",
+   "hex": "0207",
+   "at": 1
+  },
+  {
+   "name": "a key that is not UTF-8",
+   "hex": "070101fe01",
+   "at": 2
+  },
+  {
+   "name": "a key repeated",
+   "hex": "0702016b01016b01",
+   "at": 5
+  },
+  {
+   "name": "bytes after the value",
+   "hex": "0101",
+   "at": 1
+  },
+  {
+   "name": "a count past what remains",
+   "hex": "060301",
+   "at": 2
+  },
+  {
+   "name": "a length past 64 bits",
+   "hex": "04ffffffffffffffffff7f",
+   "at": 1
+  }
+ ],
+ "frames": [
+  {
+   "build": "announce",
+   "channel": 7,
+   "tree": [
+    "map",
+    [
+     [
+      "type",
+      [
+       "string",
+       "object"
+      ]
+     ],
+     [
+      "properties",
+      [
+       "map",
+       [
+        [
+         "greeting",
+         [
+          "map",
+          [
+           [
+            "type",
+            [
+             "string",
+             "string"
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ],
+     [
+      "required",
+      [
+       "list",
+       [
+        [
+         "string",
+         "greeting"
+        ]
+       ]
+      ]
+     ],
+     [
+      "additionalProperties",
+      [
+       "bool",
+       false
+      ]
+     ]
+    ]
+   ],
+   "hex": "00070704047479706504066f626a6563740a70726f706572746965730701086772656574696e67070104747970650406737472696e67087265717569726564060104086772656574696e67146164646974696f6e616c50726f706572746965730200"
+  },
+  {
+   "build": "send",
+   "channel": 7,
+   "tree": [
+    "map",
+    [
+     [
+      "greeting",
+      [
+       "string",
+       "hello"
+      ]
+     ]
+    ]
+   ],
+   "hex": "01070701086772656574696e67040568656c6c6f"
+  },
+  {
+   "build": "send",
+   "channel": 300,
+   "tree": [
+    "null"
+   ],
+   "hex": "01ac0201"
+  },
+  {
+   "build": "close",
+   "channel": 7,
+   "hex": "0207"
+  },
+  {
+   "build": "close",
+   "channel": 18446744073709551615,
+   "hex": "02ffffffffffffffffff01"
+  }
+ ],
+ "conversation": [
+  {
+   "frame": "01070701086772656574696e67040568656c6c6f",
+   "refusal": "no_schema",
+   "channel": 7
+  },
+  {
+   "frame": "00070704047479706504066f626a6563740a70726f706572746965730701086772656574696e67070104747970650406737472696e67087265717569726564060104086772656574696e67146164646974696f6e616c50726f706572746965730200",
+   "event": "schema",
+   "channel": 7,
+   "tree": [
+    "map",
+    [
+     [
+      "type",
+      [
+       "string",
+       "object"
+      ]
+     ],
+     [
+      "properties",
+      [
+       "map",
+       [
+        [
+         "greeting",
+         [
+          "map",
+          [
+           [
+            "type",
+            [
+             "string",
+             "string"
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ],
+     [
+      "required",
+      [
+       "list",
+       [
+        [
+         "string",
+         "greeting"
+        ]
+       ]
+      ]
+     ],
+     [
+      "additionalProperties",
+      [
+       "bool",
+       false
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "frame": "01070701086772656574696e67040568656c6c6f",
+   "event": "value",
+   "channel": 7,
+   "tree": [
+    "map",
+    [
+     [
+      "greeting",
+      [
+       "string",
+       "hello"
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "frame": "01070700",
+   "refusal": "invalid",
+   "channel": 7,
+   "key": "greeting"
+  },
+  {
+   "frame": "01070702086772656574696e670402686906736563726574040768756e74657232",
+   "refusal": "invalid",
+   "channel": 7,
+   "key": "secret"
+  },
+  {
+   "frame": "01080701086772656574696e67040568656c6c6f",
+   "refusal": "no_schema",
+   "channel": 8
+  },
+  {
+   "frame": "0009030135",
+   "refusal": "not_a_schema",
+   "channel": 9
+  },
+  {
+   "frame": "00ac0209",
+   "refusal": "malformed",
+   "kind": 0,
+   "channel": 300,
+   "at": 3
+  },
+  {
+   "frame": "010709",
+   "refusal": "malformed",
+   "kind": 1,
+   "channel": 7,
+   "at": 2
+  },
+  {
+   "frame": "0901",
+   "refusal": "malformed",
+   "kind": 9,
+   "channel": 1,
+   "at": 0
+  },
+  {
+   "frame": "",
+   "refusal": "malformed",
+   "at": 0
+  },
+  {
+   "frame": "02ffffffffffffffffff7f",
+   "refusal": "malformed",
+   "kind": 2,
+   "at": 1
+  },
+  {
+   "frame": "020700",
+   "refusal": "malformed",
+   "channel": 7,
+   "at": 2
+  },
+  {
+   "frame": "01070701086772656574696e670405616761696e",
+   "event": "value",
+   "channel": 7,
+   "tree": [
+    "map",
+    [
+     [
+      "greeting",
+      [
+       "string",
+       "again"
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "frame": "0207",
+   "event": "close",
+   "channel": 7
+  },
+  {
+   "frame": "01070701086772656574696e67040568656c6c6f",
+   "refusal": "no_schema",
+   "channel": 7
+  }
+ ]
+}

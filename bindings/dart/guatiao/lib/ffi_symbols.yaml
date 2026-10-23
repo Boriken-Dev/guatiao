@@ -158,10 +158,22 @@ files:
         name: guatiao_value_number
       c:@F@guatiao_value_string:
         name: guatiao_value_string
+      c:@F@guatiao_wire_announce:
+        name: guatiao_wire_announce
+      c:@F@guatiao_wire_close:
+        name: guatiao_wire_close
       c:@F@guatiao_wire_decode:
         name: guatiao_wire_decode
       c:@F@guatiao_wire_encode:
         name: guatiao_wire_encode
+      c:@F@guatiao_wire_receiver_accept:
+        name: guatiao_wire_receiver_accept
+      c:@F@guatiao_wire_receiver_free:
+        name: guatiao_wire_receiver_free
+      c:@F@guatiao_wire_receiver_new:
+        name: guatiao_wire_receiver_new
+      c:@F@guatiao_wire_send:
+        name: guatiao_wire_send
       c:@S@guatiao_alloc:
         name: guatiao_alloc
       c:@S@guatiao_buffer:
@@ -226,6 +238,10 @@ files:
         name: guatiao_value
       c:@S@guatiao_values:
         name: guatiao_values
+      c:@S@guatiao_wire_event:
+        name: guatiao_wire_event
+      c:@S@guatiao_wire_receiver:
+        name: guatiao_wire_receiver
       c:@U@guatiao_payload:
         name: guatiao_payload
       c:guatiao.h@T@guatiao_map_ptr:

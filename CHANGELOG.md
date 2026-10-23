@@ -14,6 +14,22 @@ write now.
 
 ### Added
 
+- **Channels from C.** `guatiao_wire_announce`, `guatiao_wire_send` and
+  `guatiao_wire_close` write a channel frame as a BYTES value;
+  `guatiao_wire_receiver_new(alloc)`, `guatiao_wire_receiver_accept(recv,
+  frame, out_event)` and `guatiao_wire_receiver_free` keep each channel's
+  schema and check every value against it. A `guatiao_wire_event` says
+  what the frame was (`kind`, `channel`, and the schema's copy or the
+  checked value, the caller's) or why it was refused: `refusal`
+  (`GUATIAO_WIRE_MALFORMED`, `_NO_SCHEMA`, `_NOT_A_SCHEMA`, `_INVALID`)
+  beside the status, the byte offset, the error's words, and for a value
+  its schema refuses, the field and what it accepts. Nothing received is
+  quoted. The wasm module exports them too.
+- **Shared wire vectors**, `crates/guatiao/tests/vectors/wire.json`:
+  values with their bytes, malformed inputs with the byte each is refused
+  at, the frames the builders write, and a conversation through one
+  receiver with every refusal. The Rust code, a C program and the
+  bindings run it.
 - **A migration page**, "Migrating from 0.0.0-alpha.0" on the docs site:
   every break since that release, grouped by what a consumer touches
   (values, schema and derives, kinds and providers, the loader and its
