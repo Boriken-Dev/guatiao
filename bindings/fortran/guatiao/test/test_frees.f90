@@ -22,6 +22,7 @@ program test_frees
   call a_handle_out_of_scope()
   call a_document_that_does_not_parse()
   call a_clone_and_copies()
+  call a_channel_conversation()
   call counting_free(c)
   call finish('frees')
 
@@ -94,6 +95,50 @@ contains
     call check(counting_live(c) > 0, 'a clone outlives its source')
     call b%close()
     call check(counting_live(c) == 0, 'and is freed on its own')
+  end subroutine
+
+  subroutine a_channel_conversation()
+    call converse()
+    call check(counting_live(c) == 0, 'a receiver, its schemas and its answers leave nothing behind')
+  end subroutine
+
+  subroutine converse()
+    type(guatiao_value) :: schema, props, field, hello, empty, back
+    type(guatiao_receiver) :: r
+    type(guatiao_wire_event) :: a, b, x
+    type(guatiao_wire_refusal) :: why
+    integer(int8), allocatable :: frame(:), bytes(:)
+    integer :: st
+    schema = guatiao_map()
+    call schema%set('type', 'object')
+    props = guatiao_map()
+    field = guatiao_map()
+    call field%set('type', 'string')
+    call props%set('greeting', field)
+    call schema%set('properties', props)
+    call schema%set('required', guatiao_list())
+    field = schema%key('required')
+    call field%push('greeting')
+    hello = guatiao_map()
+    call hello%set('greeting', 'hello')
+    empty = guatiao_map()
+    r = guatiao_open_receiver(counting_allocator(c))
+    call guatiao_wire_announce(5_int64, schema, frame)
+    call r%accept(frame, a)
+    call check(counting_live(c) > 0, 'the schema and its copy are in the counting allocator')
+    call guatiao_wire_send(5_int64, hello, frame)
+    call r%accept(frame, b)
+    call guatiao_wire_send(5_int64, empty, frame)
+    call r%accept(frame, x, why, stat=st)
+    call check_status(st, GUATIAO_ERR_BAD_VALUE, 'a value its schema refuses')
+    call r%accept([1_int8, 5_int8, 9_int8], x, why, stat=st)
+    call check_status(st, GUATIAO_ERR_BAD_VALUE, 'a malformed frame')
+    call guatiao_to_wire(hello, bytes)
+    call guatiao_from_wire(bytes(1:size(bytes) - 1), back, alloc=counting_allocator(c), stat=st)
+    call check_status(st, GUATIAO_ERR_BAD_VALUE, 'truncated bytes')
+    call guatiao_from_wire(bytes, back, alloc=counting_allocator(c))
+    call r%close()
+    call check(counting_live(c) > 0, 'what the receiver answered outlives it')
   end subroutine
 
 end program test_frees

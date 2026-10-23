@@ -314,6 +314,7 @@ contains
     type(gt_parse_error) :: per
     type(gt_str) :: s
     type(gt_owned) :: ow
+    type(gt_wire_event) :: we
     call size_is(c_sizeof(v), 40, 'guatiao_value')
     call size_is(c_sizeof(e), 72, 'guatiao_entry')
     call size_is(c_sizeof(a), 40, 'guatiao_alloc')
@@ -338,6 +339,7 @@ contains
     call size_is(c_sizeof(per), 56, 'guatiao_parse_error')
     call size_is(c_sizeof(s), 16, 'guatiao_str')
     call size_is(c_sizeof(ow), 32, 'guatiao_string')
+    call size_is(c_sizeof(we), 144, 'guatiao_wire_event')
   end subroutine
 
   subroutine size_is(got, want, what)
