@@ -23,6 +23,7 @@ Generated API references, built by `dart doc`:
 | --- | --- |
 | `package:guatiao/guatiao.dart` | `Value`, `Ref`, `MapRef`, `ListRef`, `absent`, `Registry`, `Instance`, `kindTable`, `redact`, the error classes |
 | `package:guatiao/time.dart` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants as `DateTime`, exact lengths as `Duration` |
+| `package:guatiao/wire.dart` | channel frames and a `Receiver` checking each value against its channel's schema |
 | `package:guatiao/ffi.dart` | for a package over another guatiao library: the generated bindings, `openSurface`, `NativeLib` |
 | `package:guatiao_serde/guatiao_serde.dart` | `loads` / `dumps` for JSON, TOML and YAML |
 | `package:guatiao_intake/guatiao_intake.dart` | `check`, `layout`, `isVisible`, `at`, `forSchema`, `formFor`, the flat store |

@@ -210,6 +210,45 @@ span.isZero; span.isNegative            // == unit by unit; hashable
   result outside the years 0000 to 9999. `Span(...)` throws `BadValue`
   for fields of both signs or nanoseconds of a second or more.
 
+## wire: values as bytes, and channels
+
+`ref.toWire() -> Uint8List` (any `Ref`) and `Value.fromWire(List<int>
+data, {alloc})` are the wire encoding: a tag byte per node, LEB128
+lengths, a number as its own text, bytes as bytes, a map in its order,
+the same bytes in every language. `fromWire` throws `BadValue` for bytes
+that are not exactly one value.
+
+A channel announces a schema before its values; a receiver checks every
+value against it. A frame is `kind:u8 channel:LEB128 payload`; the
+transport says where one ends.
+
+```dart
+import 'package:guatiao/wire.dart' as wire;
+
+final frames = [wire.announce(1, schema), wire.send(1, {'greeting': 'hi'}), wire.close(1)];
+final receiver = wire.Receiver();
+for (final frame in frames) {
+  final event = receiver.accept(frame);   // Event(kind, channel, value)
+  event.value?.close();                   // the schema's copy, or the checked value
+}
+receiver.close();
+```
+
+- `announce(int channel, Object? schema)`, `send(int channel, Object?
+  value)` (a `Value`, a `Ref` or what `Value.fromDart` takes),
+  `close(int channel)`, each a `Uint8List`. A channel is 64 bits: Dart's
+  `int` carries the ones past 2^63 as negative numbers.
+- `Receiver()`; `accept(List<int> frame) -> Event`; `close()`
+  (idempotent; a `NativeFinalizer` is the backstop). `Event`: `kind` a
+  `Frame` (`schema`, `value`, `close`, with `.code` the
+  `GUATIAO_FRAME_*` byte), `channel`, `value` a `Value?` the caller
+  closes.
+- A refusal throws a `Refused` (`channel`, `kind`, `message`) that is
+  also the status's exception: `Malformed` (a `BadValue`, `at` the byte
+  of the frame), `NoSchema` (`NotFound`), `NotASchema` (`WrongKind`),
+  `Invalid` (`BadValue`; `key` the field, `expected` or `known`). It
+  changes nothing the receiver keeps and quotes nothing it was given.
+
 ## Secrets
 
 ```dart

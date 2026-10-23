@@ -534,6 +534,22 @@ class Ref {
     return ListRef(owner, path);
   }
 
+  /// This node in the wire encoding: a tag byte per node, LEB128 lengths,
+  /// a number as its own text, a map in its order. [Value.fromWire] in any
+  /// language reads the same tree back.
+  Uint8List toWire() {
+    final source = requireNode();
+    final core = native.core();
+    final out = calloc<guatiao_value>();
+    try {
+      checkStatus(core.bindings.guatiao_wire_encode(core.alloc, source, out));
+      return _bufferBytes(out.ref.payload.bytes);
+    } finally {
+      core.bindings.guatiao_value_free(out);
+      calloc.free(out);
+    }
+  }
+
   /// A deep, independent copy of this node, as its own [Value].
   Value clone() {
     final source = requireNode();
@@ -849,6 +865,26 @@ class Value extends Ref implements ValueOwner, Finalizable {
     Pointer<guatiao_alloc>? alloc,
   }) =>
       Value._(raw, alloc ?? native.core().alloc);
+
+  /// The value the wire encoding in [data] holds.
+  ///
+  /// Throws [BadValue] for bytes that are not exactly one value: truncated,
+  /// an unknown tag, a length not in its shortest form, text that is not
+  /// UTF-8, a number outside the grammar, a repeated key, anything after
+  /// the value.
+  factory Value.fromWire(List<int> data, {Pointer<guatiao_alloc>? alloc}) {
+    final allocator = alloc ?? native.core().alloc;
+    return using(
+      (arena) {
+        final view = _bytesView(arena, data).ref;
+        return _build(
+          allocator,
+          (out) =>
+              native.core().bindings.guatiao_wire_decode(allocator, view, out),
+        );
+      },
+    );
+  }
 
   factory Value.nullValue() => _build(
         native.core().alloc,
