@@ -375,6 +375,59 @@ fn objects_cross_a_table_built_at_run_time_both_ways() {
     );
 }
 
+/// A listener served from its description, counting what it heard and
+/// how often it was destroyed.
+#[derive(Default)]
+struct Ears {
+    heard: Mutex<Vec<String>>,
+    destroyed: Mutex<usize>,
+}
+
+impl Serve for Ears {
+    fn call(
+        &self,
+        _: usize,
+        _: &KindDescription,
+        _: usize,
+        args: Vec<Arg<'_>>,
+    ) -> Result<Answer, ProviderError> {
+        self.heard
+            .lock()
+            .unwrap()
+            .push(arg_str(&args, 0).to_string());
+        Ok(Answer::Nothing)
+    }
+
+    fn destroy(&self, _: usize) {
+        *self.destroyed.lock().unwrap() += 1;
+    }
+}
+
+#[test]
+fn an_owned_object_is_lent_and_stays_its_owners() {
+    let (registry, _engine) = serving(true);
+    let provider = registry.provider("engine_greeter").expect("registered");
+    let caller = Arc::new(Caller::new(kinds().greeter).expect("interfaces"));
+    let remote = DescribedRemote::new(provider.view(), caller).expect("its table fits");
+    let ears = Arc::new(Ears::default());
+    let listeners = ServedTable::new(kinds().listener, |_| true, ears.clone()).expect("built");
+    let owned = listeners.object(1).expect("an object kind");
+    remote
+        .call_named(
+            "greet_into",
+            vec![Arg::Str("ed"), Arg::LentObject(owned.lend())],
+        )
+        .expect("told");
+    assert_eq!(*ears.heard.lock().unwrap(), ["hello, ed"]);
+    assert_eq!(
+        *ears.destroyed.lock().unwrap(),
+        0,
+        "a lend destroys nothing"
+    );
+    drop(owned);
+    assert_eq!(*ears.destroyed.lock().unwrap(), 1, "its owner destroys it");
+}
+
 #[test]
 fn a_compiled_provider_is_called_from_its_description() {
     #[derive(Default)]
