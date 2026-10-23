@@ -338,3 +338,55 @@ value stores; what the walk saves is a node allocated per number, which
 is why a list of floats gains least. Reading floats from JSON gains most:
 the format hands over an `f64` that the walk keeps, where the tree turns
 it into text and back.
+
+## Documents to Python and Dart objects (`documents-python.json`, `documents-dart.json`)
+
+A document to a binding's plain objects and back, three ways: through a
+value (`loads` then `to_python()`/`toDart()`, `dumps` of
+`Value.from_python`/`Value.fromDart`), through the wire bytes as a tape
+read and written in the binding's own language (`parse`, `render`), and
+through callbacks (a visitor table the library calls per event, a walker
+that calls the library's visitor per event). Each script first checks
+that the three read and write the same thing.
+
+```bash
+cargo build --release -p guatiao -p guatiao-serde \
+  --features guatiao-serde/json,guatiao-serde/toml,guatiao-serde/yaml
+GUATIAO_LIBRARY=target/release \
+  PYTHONPATH=bindings/python/guatiao/src:bindings/python/guatiao-serde/src \
+  python benchmarks/python/documents.py --save documents-python
+(cd benchmarks/dart && dart pub get && \
+  GUATIAO_LIBRARY=../../target/release dart run bin/documents.dart --save documents-dart)
+```
+
+Local and provisional: the Windows ARM64 machine, CPython 3.14.7 and
+Dart 3.12.2 (`dart run`, the JIT), one run of fifteen samples each.
+Microseconds per call, median. The configuration is fifty servers (7.6 KB
+of JSON), then ten thousand floats with fractions, then one map
+holding a 1 MiB string.
+
+| Python | value | tape | callbacks | value / tape |
+| --- | --- | --- | --- | --- |
+| configuration, parse | 1074 | 410 | 937 | 2.6x |
+| configuration, render | 2872 | 277 | 1551 | 10.4x |
+| 10k floats, parse | 13846 | 5703 | 11131 | 2.4x |
+| 10k floats, render | 46139 | 5663 | 19607 | 8.1x |
+| 1 MiB string, parse | 589 | 464 | 393 | 1.3x |
+| 1 MiB string, render | 828 | 609 | 719 | 1.4x |
+
+| Dart | value | tape | callbacks | value / tape |
+| --- | --- | --- | --- | --- |
+| configuration, parse | 220 | 122 | 168 | 1.8x |
+| configuration, render | 440 | 87 | 121 | 5.1x |
+| 10k floats, parse | 1987 | 1416 | 1734 | 1.4x |
+| 10k floats, render | 5437 | 1526 | 1924 | 3.6x |
+| 1 MiB string, parse | 4066 | 4320 | 4136 | 0.94x |
+| 1 MiB string, render | 4579 | 6180 | 4562 | 0.74x |
+
+Both bindings take the tape. A crossing costs a Python program about a
+microsecond, so a crossing per event loses to one crossing per document
+even with the decoding done in Python; Dart crosses cheaply, and the tape
+still wins wherever a document has structure. One large string is the
+exception in Dart: the tape copies it into the wire bytes and again into
+native memory, where a callback hands it over once, and the cost is
+UTF-8 conversion either way.
