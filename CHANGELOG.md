@@ -14,6 +14,12 @@ write now.
 
 ### Added
 
+- **TOML and JSON tables as field types.** `toml::Table`, `toml::Value`,
+  `serde_json::Map<String, Value>` and `serde_json::Value` implement
+  `ToValue`, `FromValue` and `Schema`, so a derived configuration type
+  can hold a table it does not describe: an open object, or any value.
+  `guatiao`'s new `toml` and `serde_json` features carry the impls, and
+  `guatiao-serde`'s `toml` and `json` features turn them on.
 - **Memory from the library's heap.** `guatiao_memory_alloc(size,
   align)` answers zeroed bytes from the library's own heap, and
   `guatiao_memory_free(ptr, size, align)` releases them. A host that

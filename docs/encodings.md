@@ -551,3 +551,5 @@ The `guatiao` crate implements every form above for these types, under
 | an exact length | `std::time::Duration` |
 | a span | `guatiao::Span` |
 | the same as `T` | `Box<T>`, `Arc<T>`, `Rc<T>`, `Cow<'_, T>`, `&T` |
+| a map of any keys and values | `toml::Table` (feature `toml`), `serde_json::Map<String, Value>` (feature `serde_json`) |
+| any value | `toml::Value` (feature `toml`), `serde_json::Value` (feature `serde_json`) |
