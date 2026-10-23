@@ -10,6 +10,7 @@
 /// no standalone program reproduced it. So the rule is checked where it
 /// is written: `value.dart` declares nothing at the top level but a
 /// `const`.
+@TestOn('vm')
 library;
 
 import 'dart:io';

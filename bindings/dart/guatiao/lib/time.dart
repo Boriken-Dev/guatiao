@@ -12,4 +12,4 @@
 /// Resolution is lazy, so importing touches no library.
 library;
 
-export 'src/time.dart';
+export 'src/time.dart' hide refusedFields, refusedText;

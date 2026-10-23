@@ -20,6 +20,14 @@ write now.
   shares no heap with the library, a page calling the WebAssembly module
   above all, puts what it passes by address there: a view's bytes, an
   out-parameter, a root it keeps.
+- **Dart on the web.** `package:guatiao`, `guatiao_serde` and
+  `guatiao_intake` run under dart2js and dart2wasm with the same API, over
+  the one WebAssembly module a page loads (`await loadModule(url)`):
+  `guatiao_intake.wasm`, built by `cargo build -p guatiao-intake --target
+  wasm32-unknown-unknown --release`, or an application's own. Values live
+  in the module's memory; what a browser cannot do (the registry, kind
+  tables) throws `Unsupported`. The shared vectors run in Chrome under
+  both compilers.
 - **One library for an application.** A docs page, "One library for your
   application", gives the recipe: a `cdylib` crate of the application's
   that depends on the guatiao crates it wants exports their C surfaces

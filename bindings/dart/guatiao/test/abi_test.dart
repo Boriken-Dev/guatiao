@@ -6,6 +6,7 @@
 ///
 /// The tag and status numbers are read straight out of the committed
 /// header, so the Dart enums cannot drift from it unnoticed.
+@TestOn('vm')
 library;
 
 import 'dart:ffi';
@@ -13,6 +14,7 @@ import 'dart:io';
 
 import 'package:guatiao/guatiao.dart';
 import 'package:guatiao/src/bindings.g.dart';
+import 'package:guatiao/wire.dart' as wire;
 import 'package:test/test.dart';
 
 import 'support.dart';
@@ -104,6 +106,19 @@ void main() {
     final constants = _headerConstants();
     for (final name in _tagNames.values) {
       expect(constants, contains(name), reason: name);
+    }
+  });
+
+  test('the event is laid out as the header says', () {
+    expect(sizeOf<guatiao_wire_event>(), 144);
+    expect(wire.Frame.values.map((f) => f.code), [0, 1, 2]);
+    final header = File(repoPath(['crates', 'guatiao', 'include', 'guatiao.h']))
+        .readAsStringSync();
+    for (final f in wire.Frame.values) {
+      expect(
+        header,
+        contains('#define GUATIAO_FRAME_${f.name.toUpperCase()} ${f.code}\n'),
+      );
     }
   });
 }

@@ -5,15 +5,21 @@
 /// `library.dart` against a real build: every library resolves, the
 /// default allocator fills once, and a name nothing answers to reports
 /// where it looked.
+@TestOn('vm')
 library;
 
 import 'dart:ffi';
+import 'dart:io';
 
 import 'package:guatiao/guatiao.dart';
 import 'package:guatiao/src/library.dart' as native;
 import 'package:test/test.dart';
 
 import 'support.dart';
+
+/// The core's own library, which carries no other surface.
+String _coreFile() =>
+    [libraryDir(), dllFilename('guatiao')].join(Platform.pathSeparator);
 
 void main() {
   setUpAll(libraryDir);
@@ -59,7 +65,14 @@ void main() {
         native.openSurface('guatiao_intake').provides('guatiao_intake_check'),
         isTrue);
     expect(native.openSurface('guatiao_serde').path,
-        endsWith(dllFilename('guatiao_serde')));
+        namedLibraryFile() ?? endsWith(dllFilename('guatiao_serde')));
+  });
+
+  test('a WebAssembly module is for the web', () async {
+    final refusal = isA<Unsupported>()
+        .having((e) => e.message, 'message', contains('is for the web'));
+    await expectLater(loadModule(Uri.parse('guatiao.wasm')), throwsA(refusal));
+    await expectLater(loadModuleBytes(const [0]), throwsA(refusal));
   });
 
   test('a missing symbol names the library and the feature', () {
@@ -75,7 +88,10 @@ void main() {
 
   test('an unknown base name reports both places it looked', () {
     expect(
-      () => native.NativeLib.open('not_a_real_guatiao_library'),
+      // A probe no library exports: a file GUATIAO_LIBRARY names is then
+      // passed over rather than taken as it is.
+      () => native.NativeLib.open('not_a_real_guatiao_library',
+          probe: 'guatiao_not_a_symbol'),
       throwsA(
         isA<LibraryNotFound>().having(
           (e) => e.toString(),
@@ -95,7 +111,7 @@ void main() {
     tearDown(native.forgetLibraries);
 
     test('answers for every surface it carries, and no other', () {
-      final path = native.resolveLibraryPath('guatiao');
+      final path = _coreFile();
       useLibrary(DynamicLibrary.open(path), path: path);
 
       // The core surface is there; the serde one is a separate library,
@@ -106,7 +122,7 @@ void main() {
     });
 
     test('takes the caller word when the surfaces are named', () {
-      final path = native.resolveLibraryPath('guatiao');
+      final path = _coreFile();
       useLibrary(
         DynamicLibrary.open(path),
         path: path,
@@ -116,7 +132,7 @@ void main() {
     });
 
     test('refuses a name that is not a surface', () {
-      final path = native.resolveLibraryPath('guatiao');
+      final path = _coreFile();
       expect(
         () => useLibrary(
           DynamicLibrary.open(path),
@@ -127,7 +143,7 @@ void main() {
     });
 
     test('is forgotten on request', () {
-      final path = native.resolveLibraryPath('guatiao');
+      final path = _coreFile();
       useLibrary(DynamicLibrary.open(path), path: path);
       expect(native.core().path, path);
       native.forgetLibraries();

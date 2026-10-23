@@ -43,11 +43,29 @@ It works with any shared library that exports the ABI, whether that is
 
 ## Platforms
 
-Android, iOS, Linux, macOS and Windows, on 64-bit targets only: every
-pointer and `size_t` in the ABI is eight bytes. **Not on the web**:
-`dart:ffi` does not exist in a browser, so the package cannot load there
-and `pubspec.yaml` declares no `web` platform. The package asks for Dart
-3.6 or newer.
+Android, iOS, Linux, macOS and Windows on 64-bit targets, through
+`dart:ffi`; and **the web**, under dart2js and dart2wasm, through the
+WebAssembly module the page loads, with the same API (see "On the web").
+The package asks for Dart 3.6 or newer.
+
+## On the web
+
+Build the module from guatiao's sources, serve it with the page, and load
+it once before the first call:
+
+```bash
+cargo build -p guatiao-intake --target wasm32-unknown-unknown --release
+```
+
+```dart
+await loadModule(Uri.parse('guatiao_intake.wasm'));
+```
+
+Every package uses that one module (`guatiao_serde` needs one built with
+its surface: an application's own crate, see the
+[docs](https://boriken-dev.github.io/guatiao/app-library/)). Values live
+in its memory and are closed as on the VM. Under dart2js an `int` is
+exact only to 2^53, so a larger integer reads back as a `BigInt`.
 
 ## Installation
 
@@ -270,7 +288,9 @@ words when it gave any.
 - `DateTime` and `Duration` count microseconds: reading an instant or
   an exact length into one drops what is below. The `Plain` classes and
   `Span` keep nanoseconds.
-- 64-bit platforms only, and not in a browser (see Platforms above).
+- 64-bit native platforms only (see Platforms above).
+- On the web there is no registry: `Registry` and `kindTable` throw
+  `Unsupported`, since a browser maps no libraries.
 
 ## API overview
 
@@ -278,6 +298,7 @@ words when it gave any.
 | --- | --- |
 | `package:guatiao/guatiao.dart` | `Value`, `Ref`, `MapRef`, `ListRef`, `absent`, `Registry`, `Instance`, `kindTable`, the error classes |
 | `package:guatiao/ffi.dart` | for a package over another guatiao library: the generated bindings, `openSurface`, `NativeLib`, `strOf`, `takeValue`, `freeNode`, `checkStatus` |
+| `package:guatiao/wasm.dart` | the same on the web: `WasmModule`, `Address`, `withScratch`, `openSurface`, `takeValue`, `freeNode`, `checkStatus` |
 | `package:guatiao/time.dart` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, `parseTimestamp`, `formatTimestamp`, `toDuration`, `fromDuration`, `normalize` |
 | `package:guatiao/wire.dart` | channel frames (`announce`, `send`, `close`), `Receiver`, `Event`, the refusals |
 

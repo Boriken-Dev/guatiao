@@ -5,6 +5,7 @@
 /// Every type in the public signatures is reachable from
 /// `package:guatiao/guatiao.dart` alone: this file imports nothing else
 /// from the package.
+@TestOn('vm')
 library;
 
 import 'dart:ffi';

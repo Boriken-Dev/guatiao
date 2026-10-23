@@ -16,4 +16,4 @@
 /// importing touches no library.
 library;
 
-export 'src/wire.dart';
+export 'src/wire.dart' hide refusalFor;

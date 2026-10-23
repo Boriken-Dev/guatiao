@@ -7,7 +7,6 @@
 library;
 
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:guatiao/guatiao.dart';
 import 'package:guatiao/time.dart' as time;
@@ -15,9 +14,9 @@ import 'package:test/test.dart';
 
 import 'support.dart';
 
-Map<String, Object?> _vectors() => jsonDecode(
-      File(repoPath(['crates', 'guatiao', 'tests', 'vectors', 'time.json']))
-          .readAsStringSync(),
+Future<Map<String, Object?>> _vectors() async => jsonDecode(
+      await readRepoText(
+          ['crates', 'guatiao', 'tests', 'vectors', 'time.json']),
     ) as Map<String, Object?>;
 
 /// Reads [text] as [form] through the Dart type, answering its fields as
@@ -54,23 +53,45 @@ Map<String, Object?> _vectors() => jsonDecode(
       );
     case time.TextForm.timestamp:
       // The DateTime mapping drops nanoseconds: the exact text comes from
-      // normalize, the fields from the microseconds DateTime keeps.
+      // normalize, the fields from what DateTime keeps.
       final t = time.parseTimestamp(text);
-      final micros = t.microsecondsSinceEpoch;
-      final below = micros % 1000000;
+      final millis = t.millisecondsSinceEpoch;
+      final below = millis % 1000;
       return (
-        [(micros - below) ~/ 1000000, below * 1000],
+        [(millis - below) ~/ 1000, below * 1000000 + t.microsecond * 1000],
         time.normalize(form, text)
       );
   }
 }
 
+/// Whether every field is an integer this platform's `int` holds exactly:
+/// all of them on the VM and dart2wasm, those within 2^53 under dart2js.
+bool _exactHere(List<num> fields) =>
+    !jsNumbers || fields.every((f) => f.abs() <= 9007199254740992);
+
+/// Says how many vectors a test passed over as past 2^53.
+void _report(int passedOver) {
+  if (passedOver > 0) {
+    print('skipped $passedOver vectors with a number past 2^53, which a '
+        'dart2js int does not hold');
+  }
+}
+
+/// A text spelling a number past 2^53, under dart2js.
+bool _pastJsIntegers(String text) =>
+    jsNumbers && RegExp(r'\d{16,}').hasMatch(text);
+
 void main() {
-  setUpAll(libraryDir);
-  final vectors = _vectors();
+  late final Map<String, Object?> vectors;
+  setUpAll(() async {
+    await setUpLibrary();
+    vectors = await _vectors();
+  });
 
   for (final form in time.TextForm.values) {
     test('every ${form.name} vector', () {
+      var passedOver = 0;
+      addTearDown(() => _report(passedOver));
       final cases = (vectors[form.name]! as List).cast<Map<String, Object?>>();
       expect(cases, isNotEmpty);
       for (final c in cases) {
@@ -96,6 +117,10 @@ void main() {
         }
         final canonical = c['canonical']! as String;
         final fields = (c['fields']! as List).cast<int>();
+        if (!_exactHere(fields)) {
+          passedOver++;
+          continue;
+        }
         final (got, written) = _read(form, text);
         if (form == time.TextForm.timestamp) {
           expect(got[0], fields[0], reason: text);
@@ -110,7 +135,13 @@ void main() {
   }
 
   test('every span applied', () {
+    var passedOver = 0;
+    addTearDown(() => _report(passedOver));
     for (final c in (vectors['date_add_span']! as List).cast<Map>()) {
+      if (_pastJsIntegers(c['span'] as String)) {
+        passedOver++;
+        continue;
+      }
       final start = time.PlainDate.parse(c['start'] as String);
       final span = time.Span.parse(c['span'] as String);
       final result = c['result'] as String?;
@@ -121,6 +152,10 @@ void main() {
       }
     }
     for (final c in (vectors['datetime_add_span']! as List).cast<Map>()) {
+      if (_pastJsIntegers(c['span'] as String)) {
+        passedOver++;
+        continue;
+      }
       final start = time.PlainDateTime.parse(c['start'] as String);
       final span = time.Span.parse(c['span'] as String);
       final result = c['result'] as String?;
