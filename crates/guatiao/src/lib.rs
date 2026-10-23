@@ -175,6 +175,48 @@ pub mod __private {
     pub fn untagged_refused(expected: crate::Kinds) -> crate::MapError {
         crate::MapError::bad_value(alloc::string::ToString::to_string(&expected))
     }
+
+    /// A `#[map(as_text)]` field written: its `Display` text.
+    pub fn text_of<T: core::fmt::Display + ?Sized>(
+        value: &T,
+        alloc: Alloc,
+    ) -> Result<Value, ValueError> {
+        let text = alloc::string::ToString::to_string(value);
+        Ok(crate::Text::new_in(alloc, &text)?.into())
+    }
+
+    /// A `#[map(as_text)]` field read: text through its `FromStr`, whose
+    /// refusal is reported in the parse error's own words.
+    pub fn from_text<T>(value: &Value) -> Result<T, crate::MapError>
+    where
+        T: core::str::FromStr,
+        T::Err: core::fmt::Display,
+    {
+        let text = <&str>::try_from(value)?;
+        text.parse().map_err(|e: T::Err| {
+            crate::MapError::bad_value(alloc::format!("text this field reads ({e})"))
+        })
+    }
+
+    /// An `Option<T>` `#[map(as_text)]` field read: a stored null is
+    /// `None`, as for any `Option`.
+    pub fn from_text_or_null<T>(value: &Value) -> Result<Option<T>, crate::MapError>
+    where
+        T: core::str::FromStr,
+        T::Err: core::fmt::Display,
+    {
+        if value.tag() == Ok(crate::Tag::GUATIAO_NULL) {
+            return Ok(None);
+        }
+        from_text(value).map(Some)
+    }
+
+    /// A `#[map(as_text)]` field's kind: a string, accepting null too for
+    /// an `Option`.
+    pub fn text_kind(alloc: Alloc, nullable: bool) -> KindBuilder {
+        let kind = KindBuilder::string_in(alloc);
+        if nullable { kind.nullable() } else { kind }
+    }
 }
 
 pub use value::convert::{Bytes, FromValue, Kinds, MapError, ToValue, TryAsMut, TryAsRef};

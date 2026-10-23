@@ -188,6 +188,7 @@ fn expand_struct(
                 || plain.default.is_some()
                 || plain.flatten
                 || plain.with.is_some()
+                || plain.as_text
                 || plain.skip_if.is_some()
             {
                 return Err(syn::Error::new_spanned(
@@ -286,6 +287,9 @@ pub(crate) struct FieldPlan {
     /// `#[map(skip_serializing_if = path)]`: not written when
     /// `path(&field)` is true.
     skip_if: Option<syn::Path>,
+    /// `#[map(as_text)]`: written with `Display`, read with `FromStr`,
+    /// described as a string.
+    as_text: bool,
 }
 
 /// `#[map(default)]` or `#[map(default = <expr>)]`.
@@ -316,6 +320,7 @@ impl FieldPlan {
             flatten: attrs.flatten,
             with: attrs.with,
             skip_if: attrs.skip_if,
+            as_text: attrs.as_text,
             ty: field.ty.clone(),
             ident,
         })
@@ -350,6 +355,7 @@ struct FieldAttrs {
     flatten: bool,
     with: Option<syn::Path>,
     skip_if: Option<syn::Path>,
+    as_text: bool,
     /// Everything only the schema reads. Collected for every derive, so a
     /// misspelled `#[schema(...)]` is reported by whichever one the user
     /// wrote rather than silently ignored by two of the three.
@@ -429,6 +435,9 @@ impl FieldAttrs {
                 } else if meta.path.is_ident("skip_serializing_if") {
                     out.skip_if = Some(path_value(&meta)?);
                     Ok(())
+                } else if meta.path.is_ident("as_text") {
+                    out.as_text = true;
+                    Ok(())
                 } else if meta.path.is_ident("default") {
                     if out.default.is_some() {
                         return Err(meta.error("`default` is given twice. Keep one."));
@@ -443,8 +452,8 @@ impl FieldAttrs {
                 } else {
                     Err(meta.error(format!(
                         "unrecognised `#[map(...)]` option. {label} knows `rename = \"...\"`, \
-                         `skip`, `default` or `default = <expr>`, `flatten`, `with = path` \
-                         and `skip_serializing_if = path`. Not `alias`: a schema refuses \
+                         `skip`, `default` or `default = <expr>`, `flatten`, `with = path`, \
+                         `as_text` and `skip_serializing_if = path`. Not `alias`: a schema refuses \
                          every key it does not declare, so an alias would read a value \
                          its own schema refuses."
                     )))
@@ -457,6 +466,7 @@ impl FieldAttrs {
                 || rename_span.is_some()
                 || default_span.is_some()
                 || out.with.is_some()
+                || out.as_text
                 || out.skip_if.is_some())
         {
             return Err(syn::Error::new_spanned(
@@ -471,6 +481,14 @@ impl FieldAttrs {
                 &field.ty,
                 "`flatten` takes a type that writes a map, and an `Option` writes a null \
                  when it is `None`, which has no keys to write beside the others.",
+            ));
+        }
+        if out.as_text && out.with.is_some() {
+            return Err(syn::Error::new_spanned(
+                &field.ident,
+                "`as_text` and `with` both say how the field converts. Keep one: \
+                 `as_text` for a type with `Display` and `FromStr`, `with` for any \
+                 other shape.",
             ));
         }
         if out.with.is_some() && option_inner(&field.ty).is_some() {
@@ -741,6 +759,29 @@ fn set_value(field: &FieldPlan, access: &TokenStream) -> TokenStream {
             ::guatiao::Map::set_in(&mut __map, #key, #with::to_value_in(#access, __alloc)?, __alloc)?;
         };
     }
+    if field.as_text {
+        // Its `Display` text; `None` omits the key, as for any `Option`.
+        let set = |value: TokenStream| {
+            quote! {
+                ::guatiao::Map::set_in(
+                    &mut __map,
+                    #key,
+                    ::guatiao::__private::text_of(#value, __alloc)?,
+                    __alloc,
+                )?;
+            }
+        };
+        return if field.optional() {
+            let set = set(quote! { __value });
+            quote! {
+                if let ::core::option::Option::Some(__value) = #access {
+                    #set
+                }
+            }
+        } else {
+            set(access.clone())
+        };
+    }
     // Written as qualified `<Ty as ToValue>::to_value` rather than the
     // inherent-looking `ToValue::to_value`, purely for the DIAGNOSTIC: the
     // qualified form carries the field type's own span, so a field whose
@@ -794,6 +835,7 @@ pub(crate) fn read_field(field: &FieldPlan) -> TokenStream {
     }
     let read = match &field.with {
         Some(with) => quote! { #with::from_value },
+        None if field.as_text => quote! { ::guatiao::__private::from_text },
         None => quote! { <#ty as ::guatiao::FromValue>::from_value },
     };
     // `under` is what turns a leaf error into a dotted path: the value
@@ -810,10 +852,15 @@ pub(crate) fn read_field(field: &FieldPlan) -> TokenStream {
         };
     }
     if field.optional() {
+        let read = if field.as_text {
+            quote! { ::guatiao::__private::from_text_or_null }
+        } else {
+            quote! { <#ty as ::guatiao::FromValue>::from_value }
+        };
         quote! {
             #ident: match __map.get(#key) {
                 ::core::option::Option::Some(__field) =>
-                    <#ty as ::guatiao::FromValue>::from_value(__field)
+                    #read(__field)
                         .map_err(|__e| ::guatiao::MapError::under(__e, #key))?,
                 // Absent reads as `None`, exactly as a stored null does.
                 // See `guatiao`'s `convert` module.
@@ -842,6 +889,10 @@ pub(crate) fn field_builder(field: &FieldPlan) -> TokenStream {
     // Inherent methods, called by path for the same reason as below.
     let mut kind = match &field.with {
         Some(with) => quote! { #with::kind(__alloc) },
+        None if field.as_text => {
+            let nullable = field.optional();
+            quote! { ::guatiao::__private::text_kind(__alloc, #nullable) }
+        }
         None => quote! { <#ty as ::guatiao::Schema>::kind(__alloc) },
     };
     for (method, n) in [
@@ -962,12 +1013,19 @@ pub(crate) fn field_builder(field: &FieldPlan) -> TokenStream {
     if !field.optional() && field.default.is_none() {
         built = quote! { #built.required() };
     }
+    // A default is written the way the field is: as its text when the
+    // field crosses as text, which is all such a type offers.
+    let write = if field.as_text {
+        quote! { ::guatiao::__private::text_of }
+    } else {
+        quote! { <#ty as ::guatiao::ToValue>::to_value_in }
+    };
     if let Some(default) = field.default_expr() {
         // The value an absent key reads as is the one the schema declares,
         // so a consumer filling a form starts from what the reader uses.
         built = quote! {
             #built.default_checked(
-                <#ty as ::guatiao::ToValue>::to_value_in(&#default, __alloc),
+                #write(&#default, __alloc),
             )
         };
     }
@@ -978,7 +1036,7 @@ pub(crate) fn field_builder(field: &FieldPlan) -> TokenStream {
         // and `finish` reports it.
         built = quote! {
             #built.default_checked(
-                <#ty as ::guatiao::ToValue>::to_value_in(&(#default), __alloc),
+                #write(&(#default), __alloc),
             )
         };
     }
@@ -2033,6 +2091,19 @@ mod tests {
     /// happens to have imported it and nowhere else, and the person who
     /// hits that has no way to know what is missing.
     #[test]
+    fn as_text_stands_apart_from_with_and_transparent() {
+        let both = to(quote! { struct S { #[map(as_text, with = m)] a: V } });
+        assert!(both.contains("Keep one"), "{both}");
+        let flat = to(quote! { struct S { #[map(as_text, flatten)] a: V } });
+        assert!(flat.contains("stands alone"), "{flat}");
+        let transparent = to(quote! { #[map(transparent)] struct S { #[map(as_text)] a: V } });
+        assert!(transparent.contains("no key of its own"), "{transparent}");
+        // An `Option` is accepted: `None` omits the key, a null reads `None`.
+        let optional = from(quote! { struct S { #[map(as_text)] a: Option<V> } });
+        assert!(optional.contains("from_text_or_null"), "{optional}");
+    }
+
+    #[test]
     fn every_path_the_expansion_emits_is_absolute() {
         // Every field shape at once, so the scan below sees every path
         // the expansion is capable of emitting -- a skipped field is the
@@ -2050,6 +2121,9 @@ mod tests {
                 #[map(skip)] c: u8,
                 #[map(default)] d: u8,
                 #[map(default = 7)] e: u8,
+                #[map(as_text)] f: Version,
+                #[map(as_text, default)] g: Version,
+                #[map(as_text)] h: ::core::option::Option<Version>,
             }
         };
         // And both enum shapes, which reach different helpers: a choice

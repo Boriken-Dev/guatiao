@@ -38,7 +38,13 @@ cannot describe a value it refuses.
 | `default = <expr>` | the same, with an expression of the field's type |
 | `flatten` | the field's own map is written beside the other keys and read from the whole map; its schema's fields join this one's. Stands alone (no `rename`, `skip`, `default`, `with`); not on an `Option` |
 | `with = path` (or `"path"`) | a module with `to_value_in(&T, Alloc) -> Result<Value, ValueError>`, `from_value(&Value) -> Result<T, MapError>` and `kind(Alloc) -> KindBuilder` converts the field in place of `T`'s impls; not on an `Option` |
+| `as_text` | the field crosses as its `Display` text and is read with `FromStr`, a refusal being `MapError::BadValue` under the key with the parse error's words (`T::Err: Display`); described as a string, to which `#[schema(format, pattern, ..)]` add. On `T` or `Option<T>`; a default is written as its text. Not beside `with` or `flatten`, nor on a transparent struct's field |
 | `skip_serializing_if = path` (or `"path"`) | the key is not written when `path(&field)` is true; needs `default` (or an `Option` field) so an absent key reads back |
+
+**`with` is the escape hatch for any other shape**, a field described
+by hand included: the module's `kind` is the field's schema, so there is
+no `#[schema(with)]` or `#[schema(kind)]` beside it. A worked module is
+at <https://boriken-dev.github.io/guatiao/configuration/>.
 
 On a struct, **`#[map(transparent)]`** makes its value its one field's
 (other fields must be `#[map(skip)]`), and **`#[map(deny_unknown_fields)]`**

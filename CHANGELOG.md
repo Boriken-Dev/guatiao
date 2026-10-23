@@ -14,6 +14,12 @@ write now.
 
 ### Added
 
+- **A field that crosses as its text.** `#[map(as_text)]` writes a field
+  with `Display`, reads it with `FromStr` (a refusal carries the parse
+  error's words under the field's key) and describes it as a string, to
+  which `#[schema(format, pattern)]` add: a type with only those two
+  traits needs no value impls to sit in a derived struct, as `T` or
+  `Option<T>`.
 - **Enums told apart by kind.** `#[map(untagged)]` on an enum whose
   variants each write a different kind of value (unit variants a string
   of their name, named fields a map, `Name(T)` whatever `T` reads) stores
