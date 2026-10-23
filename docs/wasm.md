@@ -5,11 +5,34 @@ defaults. The value model, the schema and the wire encoding all work
 there; the loader does not, since a browser has no files to map, and
 turning on `load` for a wasm target is a compile error that says so.
 
+## The module
+
+A page loads **one module** for every surface it calls: each module has a
+linear memory of its own, and a value built in one cannot be read through
+another. Each is built from guatiao's sources by one command:
+
 ```bash
 rustup target add wasm32-unknown-unknown
-cargo build -p guatiao --target wasm32-unknown-unknown --release
-# target/wasm32-unknown-unknown/release/guatiao.wasm
+cargo build -p guatiao --target wasm32-unknown-unknown --release          # the core: guatiao.wasm
+cargo build -p guatiao-intake --target wasm32-unknown-unknown --release   # the core and forms: guatiao_intake.wasm
 ```
+
+Every module carries the core, so `guatiao_intake.wasm` serves the value
+model and forms together. For JSON, TOML or YAML as well, build the
+application's own crate carrying the surfaces it wants (see
+[One library for your application](app-library.md)): the same recipe
+gives a `.wasm` file for this target. Sizes, as a release build and after
+`wasm-opt -Oz`, gzipped:
+
+| module | release | `-Oz` | `-Oz`, gzip |
+| --- | --- | --- | --- |
+| core | 367 KB | 281 KB | 120 KB |
+| core and intake | 489 KB | 373 KB | 157 KB |
+| core and serde, JSON only | 452 KB | 348 KB | 145 KB |
+| core and serde, JSON, TOML and YAML | 1.65 MB | 1.25 MB | 473 KB |
+| all three, every format | 1.77 MB | 1.33 MB | 497 KB |
+
+A module imports nothing and exports its functions and its `memory`.
 
 ## Two ways in
 
@@ -17,12 +40,61 @@ cargo build -p guatiao --target wasm32-unknown-unknown --release
 about it changes on a 32-bit target: the layout is written in pointer
 widths, and the wire encoding is the same bytes on every width.
 
-**From JavaScript**, load `guatiao.wasm` and call its exports, the same
-C surface the Python and Dart bindings call through a native library. A
-value lives in the module's linear memory; `guatiao_alloc_default()`
-answers the allocator to build it with, and the module exports the
-value, schema, merge and wire functions, channels included (not the
-loader's).
+**From JavaScript, Dart or any host of the module**, call its exports, the
+same C surface the native bindings call. A value lives in the module's
+linear memory, and so does everything passed by address: a `guatiao_str`
+view and its bytes, an out-parameter, a root a host keeps.
+`guatiao_memory_alloc(size, align)` answers zeroed bytes in the module's
+memory for them and `guatiao_memory_free(ptr, size, align)` releases
+them; `guatiao_alloc_default(out)` fills the allocator to build values
+with. The layout is the header's on a 32-bit target: pointers and
+`size_t` are four bytes, a value is 24, and a struct passed by value is
+passed by its address. A 64-bit parameter is a JavaScript `BigInt`. Any
+call may grow the memory, which detaches the `ArrayBuffer` a view was
+made over: take the module's `memory.buffer` again after each call.
+
+## Dart and Flutter
+
+The Dart packages (`guatiao`, `guatiao_serde`, `guatiao_intake`) run in a
+browser under dart2js and dart2wasm with the API they have natively. Load
+the module once, before the first call:
+
+```dart
+import 'package:guatiao/guatiao.dart';
+
+await loadModule(Uri.parse('guatiao_intake.wasm'));    // relative to the page
+final form = Value.fromDart({'host': '10.0.0.1'});
+```
+
+Every package uses that module, so it must carry their surfaces. What a
+browser cannot do throws `Unsupported` saying so: the registry and kind
+tables, since there are no libraries to map. Under dart2js an `int` is
+exact only to 2^53, so a larger integer in a value reads back as a
+`BigInt`. The packages' own pages list the rest.
+
+**In a Flutter web app**, the module is a file the app serves with its
+page. Copy the built module into the app's `web/` directory, which
+`flutter build web` copies beside `index.html` as it is:
+
+```bash
+cargo build -p guatiao-intake --target wasm32-unknown-unknown --release
+cp target/wasm32-unknown-unknown/release/guatiao_intake.wasm my_app/web/
+```
+
+and load it before `runApp`, on the web only:
+
+```dart
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:guatiao/guatiao.dart';
+
+Future<void> main() async {
+  if (kIsWeb) await loadModule(Uri.parse('guatiao_intake.wasm'));
+  runApp(const MyApp());
+}
+```
+
+The same app on Android, iOS and the desktops loads the native library
+instead, as the packages' pages describe.
 
 ## Sending values to it
 

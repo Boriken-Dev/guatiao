@@ -19,6 +19,8 @@ public surface); this file is about the repository.
 | `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `python/greeter_kind.py` and `node/greeter_kind.ts` describe its kinds for Python and Node; `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind`; `r/greeterkind` is the R package declaring them with `kind()`; `matlab/+greeterkind` declares them for MATLAB and Octave as classes inheriting `guatiao.Kind`; `fortran/` is the fpm package `greeter_kind`, the kinds as abstract types with their remotes and `bind(c)` glue |
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
 | `examples/wire_over_webtransport/` | values over WebTransport: `server/` (the shared channel and framing, `wire-server`, and `wire-probe`, a native client), `client/` (the page's wasm, its own workspace, built for `wasm32-unknown-unknown` only); commands in its `README.md` |
+| `examples/app_library/` | an application's own C library (`myapp`): depends on the three crates and exports their C surfaces beside `myapp_version`; every binding's suite also runs against it alone, and it is the Dart web suites' default module |
+| `examples/app_host/` | a Rust program linking the `guatiao` crate and `myapp` (`raw-dylib` on Windows); its test runs it |
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build; its `tests/docs_snippets.rs` compiles the Rust snippets of `docs/index.md`, `docs/ownership.md`, `docs/migrating.md` and the root `README.md` and compares them with the text shown |
 | `examples/python_host/` | a host program in Python: scans for greeters in any language, optionally adds `guatiao-py`, calls every slot; `bindings/python/guatiao/tests/test_examples.py` runs it |
 | `examples/python_provider/` | two libraries written in Python, each a module and a `*.guatiao-py.toml` manifest; commands in its `README.md` |
@@ -39,7 +41,7 @@ public surface); this file is about the repository.
 | `examples/fortran_greeter/` | a library written in Fortran (an fpm package named and versioned as its source states, which its test checks); its `CMakeLists.txt` builds it as a library file a scan finds |
 | `bindings/python/guatiao/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md`; `guatiao.ffi` is what a package over another guatiao library builds on |
 | `bindings/python/guatiao-serde/`, `bindings/python/guatiao-intake/` | the packages `guatiao-serde` and `guatiao-intake` (`import guatiao_serde`, `guatiao_intake`), each over its own library, with its own `AGENTS.md` |
-| `bindings/dart/guatiao/` | `dart:ffi` bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`; `lib/src/bindings.g.dart` (from `guatiao.h`) and `lib/ffi_symbols.yaml` are ffigen output and never hand-edited; `lib/ffi.dart` is what a package over another guatiao library builds on |
+| `bindings/dart/guatiao/` | Dart bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`: `dart:ffi` natively, the WebAssembly module on the web (`lib/src/web/`, chosen by a conditional import on `dart.library.js_interop`, `lib/wasm.dart` its counterpart of `ffi.dart`); `lib/src/bindings.g.dart` (from `guatiao.h`) and `lib/ffi_symbols.yaml` are ffigen output and never hand-edited; `lib/ffi.dart` is what a package over another guatiao library builds on |
 | `bindings/dart/guatiao_serde/`, `bindings/dart/guatiao_intake/` | the pub.dev packages `guatiao_serde` and `guatiao_intake`, each over its own library and its own ffigen output (reusing the core's types through its symbol file); `pubspec_overrides.yaml` takes the core from the checkout and is not published |
 | `bindings/node/guatiao/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads; `src/ffi.ts` (`guatiao/ffi`) is what a package over another guatiao library builds on |
 | `bindings/node/guatiao-serde/`, `bindings/node/guatiao-intake/` | the npm packages `guatiao-serde` and `guatiao-intake`, each over its own library and the core's koffi; their tests run against the core's sources |
@@ -74,6 +76,19 @@ cargo check --target wasm32-unknown-unknown -p guatiao -p guatiao-serde -p guati
   --features guatiao/derive,guatiao/provider,guatiao-serde/json,guatiao-serde/toml,guatiao-serde/yaml
 cargo build -p guatiao --target wasm32-unknown-unknown --release
 ```
+
+The Dart suites in Chrome, under each web compiler, against a module
+(`GUATIAO_WASM`, default `target/wasm32-unknown-unknown/release/myapp.wasm`,
+built by `cargo build -p myapp --target wasm32-unknown-unknown --release`;
+`CHROME_EXECUTABLE` names the browser where it is not found):
+
+```bash
+cd bindings/dart/guatiao && dart test -p chrome --compiler dart2js   # or dart2wasm
+```
+
+The Dart suites on 32-bit ARM run the libraries built for
+`armv7-unknown-linux-gnueabihf` and Dart's `linux-arm` SDK under
+qemu-user; `test.yaml`'s `dart-armv7` job is the recipe.
 
 Two gates on a pinned nightly (`rustup toolchain install nightly-2026-09-21
 --component miri,rust-src`, `cargo install cargo-public-api --version
@@ -334,7 +349,10 @@ Four workflows:
   `bindings/python/guatiao`, `bindings/python/guatiao-serde` and `bindings/python/guatiao-intake`:
   every Python from 3.9 to 3.14 on Linux, 3.9 and 3.14 on Windows and
   macOS. Its `dart` job analyzes and tests the three Dart packages on the
-  three platforms and the floor SDK. Its `node` job installs the
+  three platforms and the floor SDK; `dart-web` runs them in Chrome under
+  dart2js and dart2wasm against the application module and intake's, and
+  `dart-armv7` on 32-bit ARM under qemu-user against the separate
+  libraries and the application's. Its `node` job installs the
   `bindings/node` workspace and runs the three packages' type checks and tests
   on Node 22 and 24 on the three platforms, with the C greeter built and
   the guatiao-py bridge serving the Python greeters (a stated skip fails
