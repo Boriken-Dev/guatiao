@@ -81,9 +81,15 @@ Bindings over the same C ABI, for a consumer that is not Rust:
 | Fortran | [`bindings/fortran/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/fortran/guatiao/README.md) | fpm: `guatiao = { git = "https://github.com/Boriken-Dev/guatiao", tag = "..." }`; CMake: `FetchContent` with `SOURCE_SUBDIR bindings/fortran/guatiao` |
 | C++ | [`bindings/cpp/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/cpp/guatiao/README.md) | CMake: `find_package(guatiao CONFIG)` with `guatiao_DIR`, or `FetchContent` with `SOURCE_SUBDIR bindings/cpp/guatiao`; links the library `GUATIAO_LIBRARY` names, or builds it with cargo |
 | MATLAB, GNU Octave | [`bindings/matlab/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/matlab/guatiao/README.md) | Octave: `pkg install` a release's `guatiao-<version>.tar.gz`; MATLAB: a release's `guatiao.mltbx`, then `guatiao.build()` |
+| Lua | [`bindings/lua/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/lua/guatiao/README.md) | `luarocks make` in that directory, which builds the module with cargo for the Lua LuaRocks runs |
 
 Each drives a shared library that exports the ABI — `guatiao` itself, or
-an application that carries it — named by `GUATIAO_LIBRARY`.
+an application that carries it — named by `GUATIAO_LIBRARY`; the Lua
+module carries the library inside.
+
+Libraries written in Python and in Lua reach any host through a source
+file of their own: [`crates/guatiao-py`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-py/README.md)
+and [`crates/guatiao-lua`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-lua/README.md).
 
 JSON, TOML and YAML, and forms, are a package of their own beside each
 core one, over the `guatiao_serde` and `guatiao_intake` libraries: PyPI
