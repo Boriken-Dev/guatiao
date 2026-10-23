@@ -1899,6 +1899,33 @@ class GuatiaoBindings {
   late final _guatiao_value_free = _guatiao_value_freePtr
       .asFunction<int Function(ffi.Pointer<guatiao_value>)>();
 
+  int guatiao_value_from_walker(
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_walker> walker,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_value_from_walker(alloc, walker, out);
+  }
+
+  late final _guatiao_value_from_walkerPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_walker>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_value_from_walker');
+  late final _guatiao_value_from_walker = _guatiao_value_from_walkerPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_walker>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
   int guatiao_value_list(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
@@ -2004,6 +2031,27 @@ class GuatiaoBindings {
           guatiao_str,
           ffi.Pointer<guatiao_value>,
         )
+      >();
+
+  int guatiao_value_visit(
+    ffi.Pointer<guatiao_value> value,
+    ffi.Pointer<guatiao_visitor> visitor,
+  ) {
+    return _guatiao_value_visit(value, visitor);
+  }
+
+  late final _guatiao_value_visitPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_visitor>,
+          )
+        >
+      >('guatiao_value_visit');
+  late final _guatiao_value_visit = _guatiao_value_visitPtr
+      .asFunction<
+        int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_visitor>)
       >();
 
   int guatiao_wire_announce(
@@ -2117,6 +2165,33 @@ class GuatiaoBindings {
         )
       >();
 
+  int guatiao_wire_encode_walker(
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_walker> walker,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_wire_encode_walker(alloc, walker, out);
+  }
+
+  late final _guatiao_wire_encode_walkerPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_walker>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_wire_encode_walker');
+  late final _guatiao_wire_encode_walker = _guatiao_wire_encode_walkerPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_walker>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
   int guatiao_wire_receiver_accept(
     ffi.Pointer<guatiao_wire_receiver> recv,
     guatiao_bytes frame,
@@ -2205,6 +2280,22 @@ class GuatiaoBindings {
           ffi.Pointer<guatiao_value>,
         )
       >();
+
+  int guatiao_wire_visit(
+    guatiao_bytes bytes,
+    ffi.Pointer<guatiao_visitor> visitor,
+  ) {
+    return _guatiao_wire_visit(bytes, visitor);
+  }
+
+  late final _guatiao_wire_visitPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(guatiao_bytes, ffi.Pointer<guatiao_visitor>)
+        >
+      >('guatiao_wire_visit');
+  late final _guatiao_wire_visit = _guatiao_wire_visitPtr
+      .asFunction<int Function(guatiao_bytes, ffi.Pointer<guatiao_visitor>)>();
 }
 
 const int GUATIAO_ABI_VERSION = 1;
@@ -2309,6 +2400,8 @@ const String GUATIAO_KEY_X_ENUM_LABELS = 'x-enum-labels';
 const String GUATIAO_KEY_X_SENSITIVE = 'x-sensitive';
 
 const String GUATIAO_KEY_X_VARIANT_TAG = 'x-variant-tag';
+
+const int GUATIAO_LEN_UNKNOWN = -1;
 
 const int GUATIAO_MAX_DEPTH = 128;
 
@@ -3259,6 +3352,194 @@ final class guatiao_values extends ffi.Struct {
   }) => $allocator<guatiao_values>()
     ..ref.ptr = ptr
     ..ref.len = len;
+}
+
+final class guatiao_visitor extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  external ffi.Pointer<ffi.Void> ctx;
+
+  external ffi.Pointer<
+    ffi.NativeFunction<guatiao_status Function(ffi.Pointer<ffi.Void> ctx)>
+  >
+  absent;
+
+  external ffi.Pointer<
+    ffi.NativeFunction<guatiao_status Function(ffi.Pointer<ffi.Void> ctx)>
+  >
+  null$;
+
+  external ffi.Pointer<
+    ffi.NativeFunction<
+      guatiao_status Function(ffi.Pointer<ffi.Void> ctx, ffi.Bool value)
+    >
+  >
+  boolean;
+
+  external ffi.Pointer<
+    ffi.NativeFunction<
+      guatiao_status Function(ffi.Pointer<ffi.Void> ctx, guatiao_str text)
+    >
+  >
+  number;
+
+  external ffi.Pointer<
+    ffi.NativeFunction<
+      guatiao_status Function(ffi.Pointer<ffi.Void> ctx, guatiao_str text)
+    >
+  >
+  string;
+
+  external ffi.Pointer<
+    ffi.NativeFunction<
+      guatiao_status Function(ffi.Pointer<ffi.Void> ctx, guatiao_bytes bytes)
+    >
+  >
+  bytes;
+
+  external ffi.Pointer<
+    ffi.NativeFunction<
+      guatiao_status Function(ffi.Pointer<ffi.Void> ctx, ffi.Uint64 len)
+    >
+  >
+  list_begin;
+
+  external ffi.Pointer<
+    ffi.NativeFunction<guatiao_status Function(ffi.Pointer<ffi.Void> ctx)>
+  >
+  list_end;
+
+  external ffi.Pointer<
+    ffi.NativeFunction<
+      guatiao_status Function(ffi.Pointer<ffi.Void> ctx, ffi.Uint64 len)
+    >
+  >
+  map_begin;
+
+  external ffi.Pointer<
+    ffi.NativeFunction<
+      guatiao_status Function(ffi.Pointer<ffi.Void> ctx, guatiao_str key)
+    >
+  >
+  key;
+
+  external ffi.Pointer<
+    ffi.NativeFunction<guatiao_status Function(ffi.Pointer<ffi.Void> ctx)>
+  >
+  map_end;
+
+  static ffi.Pointer<guatiao_visitor> $allocate(
+    ffi.Allocator $allocator, {
+    required int struct_size,
+    required ffi.Pointer<ffi.Void> ctx,
+    required ffi.Pointer<
+      ffi.NativeFunction<guatiao_status Function(ffi.Pointer<ffi.Void> ctx)>
+    >
+    absent,
+    required ffi.Pointer<
+      ffi.NativeFunction<guatiao_status Function(ffi.Pointer<ffi.Void> ctx)>
+    >
+    null$,
+    required ffi.Pointer<
+      ffi.NativeFunction<
+        guatiao_status Function(ffi.Pointer<ffi.Void> ctx, ffi.Bool value)
+      >
+    >
+    boolean,
+    required ffi.Pointer<
+      ffi.NativeFunction<
+        guatiao_status Function(ffi.Pointer<ffi.Void> ctx, guatiao_str text)
+      >
+    >
+    number,
+    required ffi.Pointer<
+      ffi.NativeFunction<
+        guatiao_status Function(ffi.Pointer<ffi.Void> ctx, guatiao_str text)
+      >
+    >
+    string,
+    required ffi.Pointer<
+      ffi.NativeFunction<
+        guatiao_status Function(ffi.Pointer<ffi.Void> ctx, guatiao_bytes bytes)
+      >
+    >
+    bytes,
+    required ffi.Pointer<
+      ffi.NativeFunction<
+        guatiao_status Function(ffi.Pointer<ffi.Void> ctx, ffi.Uint64 len)
+      >
+    >
+    list_begin,
+    required ffi.Pointer<
+      ffi.NativeFunction<guatiao_status Function(ffi.Pointer<ffi.Void> ctx)>
+    >
+    list_end,
+    required ffi.Pointer<
+      ffi.NativeFunction<
+        guatiao_status Function(ffi.Pointer<ffi.Void> ctx, ffi.Uint64 len)
+      >
+    >
+    map_begin,
+    required ffi.Pointer<
+      ffi.NativeFunction<
+        guatiao_status Function(ffi.Pointer<ffi.Void> ctx, guatiao_str key)
+      >
+    >
+    key,
+    required ffi.Pointer<
+      ffi.NativeFunction<guatiao_status Function(ffi.Pointer<ffi.Void> ctx)>
+    >
+    map_end,
+  }) => $allocator<guatiao_visitor>()
+    ..ref.struct_size = struct_size
+    ..ref.ctx = ctx
+    ..ref.absent = absent
+    ..ref.null$ = null$
+    ..ref.boolean = boolean
+    ..ref.number = number
+    ..ref.string = string
+    ..ref.bytes = bytes
+    ..ref.list_begin = list_begin
+    ..ref.list_end = list_end
+    ..ref.map_begin = map_begin
+    ..ref.key = key
+    ..ref.map_end = map_end;
+}
+
+final class guatiao_walker extends ffi.Struct {
+  @ffi.Uint32()
+  external int struct_size;
+
+  external ffi.Pointer<ffi.Void> ctx;
+
+  external ffi.Pointer<
+    ffi.NativeFunction<
+      guatiao_status Function(
+        ffi.Pointer<ffi.Void> ctx,
+        ffi.Pointer<guatiao_visitor> into,
+      )
+    >
+  >
+  walk;
+
+  static ffi.Pointer<guatiao_walker> $allocate(
+    ffi.Allocator $allocator, {
+    required int struct_size,
+    required ffi.Pointer<ffi.Void> ctx,
+    required ffi.Pointer<
+      ffi.NativeFunction<
+        guatiao_status Function(
+          ffi.Pointer<ffi.Void> ctx,
+          ffi.Pointer<guatiao_visitor> into,
+        )
+      >
+    >
+    walk,
+  }) => $allocator<guatiao_walker>()
+    ..ref.struct_size = struct_size
+    ..ref.ctx = ctx
+    ..ref.walk = walk;
 }
 
 final class guatiao_wire_event extends ffi.Struct {

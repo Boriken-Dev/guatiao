@@ -81,6 +81,7 @@ pub mod schema;
 pub mod span;
 pub mod time;
 pub mod value;
+pub mod visit;
 
 /// [`guard`] for a body that answers something other than a status.
 ///

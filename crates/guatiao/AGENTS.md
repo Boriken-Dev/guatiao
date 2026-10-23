@@ -528,8 +528,8 @@ with the same `MapError`; `Value`, `Map`, `List`, `Text`, `Number`,
 bytes), where the tree codec has no limit. A walker whose input fails
 keeps its error and answers `MapError::Stopped`; `decode_as` reports the
 bytes' error. The encoder refuses a count that differs from the promised
-one (`OutOfRange`), a repeated key (`DuplicateKey`), a number outside the
-grammar, events out of order (`WrongKind`); with no promised count it
+one and events out of order (`WrongKind`), a repeated key
+(`DuplicateKey`), a number outside the grammar; with no promised count it
 reserves a byte and moves what follows when the count needs more. The
 decoder passes over what a builder leaves unread. `Visitor::f64` means
 the number's `Display` text (`2.0` writes `2`, as `ToValue` stores it);
@@ -2492,6 +2492,53 @@ Contracts that are not in the signatures:
   node's own buffer**; an overlapping source is copied out first.
 - **The schema vocabulary is in the header** as `GUATIAO_KEY_*` macros,
   so a C consumer compares keys without spelling them.
+
+## Values as events from C (`exports::visit`)
+
+```c
+typedef struct guatiao_visitor {        /* what receives a walk's events */
+  uint32_t struct_size; void *ctx;      /* sizeof as compiled; ctx handed back */
+  guatiao_status (*absent)(void *ctx);  guatiao_status (*null)(void *ctx);
+  guatiao_status (*boolean)(void *ctx, bool value);
+  guatiao_status (*number)(void *ctx, guatiao_str text);   /* JSON number grammar */
+  guatiao_status (*string)(void *ctx, guatiao_str text);
+  guatiao_status (*bytes)(void *ctx, guatiao_bytes bytes);
+  guatiao_status (*list_begin)(void *ctx, uint64_t len);   /* or GUATIAO_LEN_UNKNOWN */
+  guatiao_status (*list_end)(void *ctx);
+  guatiao_status (*map_begin)(void *ctx, uint64_t len);
+  guatiao_status (*key)(void *ctx, guatiao_str key);
+  guatiao_status (*map_end)(void *ctx);
+} guatiao_visitor;                      /* 64-bit: 104 bytes, 13 words */
+typedef struct guatiao_walker {         /* what hands its own data to a visitor */
+  uint32_t struct_size; void *ctx;
+  guatiao_status (*walk)(void *ctx, const guatiao_visitor *into);
+} guatiao_walker;
+
+guatiao_status guatiao_value_visit(const guatiao_value *value, const guatiao_visitor *visitor);
+guatiao_status guatiao_wire_visit(guatiao_bytes bytes, const guatiao_visitor *visitor);
+guatiao_status guatiao_value_from_walker(const guatiao_alloc *alloc, const guatiao_walker *walker,
+                                         guatiao_value *out);          /* a value */
+guatiao_status guatiao_wire_encode_walker(const guatiao_alloc *alloc, const guatiao_walker *walker,
+                                          guatiao_value *out);         /* a BYTES value */
+```
+
+A callback's status other than `GUATIAO_OK` stops the walk and is what
+the call returns; a null slot refuses its event with
+`GUATIAO_ERR_WRONG_KIND`; a table smaller than this build's is
+`GUATIAO_ERR_BAD_VALUE`. The visitor a walker is handed is valid for the
+`walk` call only, on the calling thread; after its first refusal every
+event answers the same status, and the call returns it whatever the
+walker returns. A walker's events out of order, a length given at a
+begin that the events do not keep (the encoder; a tree takes it as room
+only), and a walk that gave no one complete value are
+`GUATIAO_ERR_WRONG_KIND`; text not UTF-8, a number outside the grammar,
+a key repeated (the encoder) `GUATIAO_ERR_BAD_VALUE`. A callback must
+return: never unwind or `longjmp` out (the C ABI). Every export runs
+under `catch_unwind` and writes `out` ABSENT first; the walker's
+callbacks this library provides catch panics too.
+`TableSink` (a C visitor as a `Sink`, `unsafe fn from_ptr`), `Stopped`
+and `unsafe fn run_walker(walker, &mut impl Sink) -> Status` are public
+for a crate building its own C surface on these (`guatiao-serde` does).
 
 ## Dates, times and spans from C
 

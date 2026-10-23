@@ -54,11 +54,10 @@ struct Keys {
 /// A count is written before its elements: given up front when the walk
 /// promises one, else one byte is reserved and the count put there,
 /// moving the bytes after it when it needs more than one. A walk that
-/// promised one count and gave another is refused with
-/// [`ValueError::OutOfRange`]; a number outside the grammar with
-/// [`ValueError::NotANumber`]; a key repeated in its map with
-/// [`ValueError::DuplicateKey`]; events out of order with
-/// [`ValueError::WrongKind`]. After a refusal the buffer holds a prefix,
+/// promised one count and gave another, and events out of order, are
+/// refused with [`ValueError::WrongKind`]; a number outside the grammar
+/// with [`ValueError::NotANumber`]; a key repeated in its map with
+/// [`ValueError::DuplicateKey`]. After a refusal the buffer holds a prefix,
 /// which the caller discards.
 #[derive(Debug)]
 pub struct Encoder<'a> {
@@ -97,7 +96,7 @@ impl<'a> Encoder<'a> {
                 }
                 open.written += 1;
                 if open.promised.is_some_and(|n| open.written > n) {
-                    return Err(ValueError::OutOfRange);
+                    return Err(ValueError::WrongKind);
                 }
                 Ok(())
             }
@@ -150,7 +149,7 @@ impl<'a> Encoder<'a> {
         }
         let open = self.open.pop().expect("checked above");
         match open.promised {
-            Some(n) if n != open.written => return Err(ValueError::OutOfRange),
+            Some(n) if n != open.written => return Err(ValueError::WrongKind),
             Some(_) => {}
             None => {
                 let mut count = Vec::new();
@@ -586,18 +585,64 @@ fn unparsed(error: WireError) -> ValueError {
     ValueError::Unparsed { at, expected }
 }
 
-/// The node at the reader's position, with the keys of the maps above.
-struct Node<'r, 'b> {
-    reader: &'r core::cell::RefCell<Reader<'b>>,
-    keys: &'r core::cell::RefCell<Vec<&'b str>>,
+/// The node that starts at `at`, with the keys of the maps above it.
+///
+/// Walking it reads from `at` each time, so a visitor that walks an
+/// element twice (a format that looks at a value before it writes it)
+/// sees the same events; where the node ends is kept for its container,
+/// which reads the next element from there.
+struct Node<'b, 'k> {
+    bytes: &'b [u8],
+    at: usize,
+    keys: &'k core::cell::RefCell<Vec<&'b str>>,
     depth: u32,
+    end: core::cell::Cell<Option<usize>>,
+}
+
+impl<'b, 'k> Node<'b, 'k> {
+    fn reader(&self, at: usize) -> Reader<'b> {
+        Reader {
+            bytes: self.bytes,
+            at,
+            base: 0,
+        }
+    }
+
+    fn child(&self, at: usize) -> Node<'b, 'k> {
+        Node {
+            bytes: self.bytes,
+            at,
+            keys: self.keys,
+            depth: self.depth + 1,
+            end: core::cell::Cell::new(None),
+        }
+    }
+
+    /// Where `child` ends: where its walk stopped, or, when the visitor
+    /// never walked it, past it.
+    fn after(&self, child: &Node<'b, 'k>) -> Result<usize, ValueError> {
+        match child.end.get() {
+            Some(end) => Ok(end),
+            None => {
+                let mut decoder = Decoder::new(self.bytes);
+                decoder.reader.at = child.at;
+                decoder.skip().map_err(|_| {
+                    decoder
+                        .failure
+                        .take()
+                        .map_or(ValueError::WrongKind, unparsed)
+                })?;
+                Ok(decoder.reader.at)
+            }
+        }
+    }
 }
 
 impl Walk for Node<'_, '_> {
     fn walk<V: Visitor>(&self, visitor: V) -> Result<V::Ok, V::Error> {
-        let at = self.reader.borrow().offset();
-        let token = self.reader.borrow_mut().token().map_err(unparsed)?;
-        match token {
+        let mut reader = self.reader(self.at);
+        let token = reader.token().map_err(unparsed)?;
+        let walked = match token {
             Token::Absent => visitor.absent(),
             Token::Null => visitor.null(),
             Token::Bool(b) => visitor.bool(b),
@@ -606,63 +651,60 @@ impl Walk for Node<'_, '_> {
             Token::Bytes(bytes) => visitor.bytes(bytes),
             Token::List(count) | Token::Map(count) => {
                 if self.depth >= MAX_DEPTH {
-                    return Err(unparsed(WireError::TooDeep { at }).into());
+                    return Err(unparsed(WireError::TooDeep { at: self.at }).into());
                 }
-                let inside = Node {
-                    reader: self.reader,
-                    keys: self.keys,
-                    depth: self.depth + 1,
-                };
                 let len = usize::try_from(count).ok();
                 if matches!(token, Token::List(_)) {
                     let mut items = visitor.list(len)?;
                     for _ in 0..count {
-                        items.item(&inside)?;
+                        let child = self.child(reader.at);
+                        items.item(&child)?;
+                        reader.at = self.after(&child)?;
                     }
+                    self.end.set(Some(reader.at));
                     return items.end();
                 }
                 let start = self.keys.borrow().len();
                 let mut entries = visitor.map(len)?;
                 let walked = (|| -> Result<(), V::Error> {
                     for _ in 0..count {
-                        let at = self.reader.borrow().offset();
-                        let key = self.reader.borrow_mut().text().map_err(unparsed)?;
+                        let at = reader.offset();
+                        let key = reader.text().map_err(unparsed)?;
                         if self.keys.borrow()[start..].contains(&key) {
                             return Err(unparsed(WireError::DuplicateKey { at }).into());
                         }
                         self.keys.borrow_mut().push(key);
-                        entries.entry(key, &inside)?;
+                        let child = self.child(reader.at);
+                        entries.entry(key, &child)?;
+                        reader.at = self.after(&child)?;
                     }
                     Ok(())
                 })();
                 self.keys.borrow_mut().truncate(start);
                 walked?;
-                entries.end()
+                self.end.set(Some(reader.at));
+                return entries.end();
             }
-        }
+        };
+        self.end.set(Some(reader.at));
+        walked
     }
 }
 
 impl Walk for Encoded<'_> {
     fn walk<V: Visitor>(&self, visitor: V) -> Result<V::Ok, V::Error> {
-        let reader = core::cell::RefCell::new(Reader {
+        let keys = core::cell::RefCell::new(Vec::new());
+        let root = Node {
             bytes: self.0,
             at: 0,
-            base: 0,
-        });
-        let keys = core::cell::RefCell::new(Vec::new());
-        let walked = Node {
-            reader: &reader,
             keys: &keys,
             depth: 0,
-        }
-        .walk(visitor)?;
-        let reader = reader.borrow();
-        if reader.at != reader.bytes.len() {
-            return Err(unparsed(WireError::Trailing {
-                at: reader.offset(),
-            })
-            .into());
+            end: core::cell::Cell::new(None),
+        };
+        let walked = root.walk(visitor)?;
+        let end = root.after(&root)?;
+        if end != self.0.len() {
+            return Err(unparsed(WireError::Trailing { at: end }).into());
         }
         Ok(walked)
     }

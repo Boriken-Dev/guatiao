@@ -541,6 +541,8 @@ include = [
   "SpanFields",
   "TextError",
   "WireEvent",
+  "VisitorTable",
+  "WalkerTable",
 ]
 # `Entry` is defined in the trailer instead; see `after_includes`. The
 # other two are the platform loader's own functions, which the loader
@@ -616,6 +618,10 @@ exclude = ["Entry", "dl_iterate_phdr", "dladdr"]
 # A channel's receiver, opaque, and what it answers for one frame.
 "WireReceiver" = "guatiao_wire_receiver"
 "WireEvent" = "guatiao_wire_event"
+# Values as events: a table of one function per event, and a function
+# that hands its own data to one.
+"VisitorTable" = "guatiao_visitor"
+"WalkerTable" = "guatiao_walker"
 # cbindgen monomorphises the generic newtype and emits the Rust name.
 # A header shares one flat namespace, so the typedef it introduces has to
 # carry the prefix like every other name here.
