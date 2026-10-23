@@ -46,6 +46,9 @@ application that carries it.
 - **Dates, times, spans and exact lengths** — `civil.Date`, `civil.Time`,
   `civil.DateTime` and `civil.Span` to the nanosecond, instants as
   `time.Time`, read and written by the library itself.
+- **Values on the wire** — `ref.ToWire()` and `guatiao.FromWire(data)`
+  carry a tree exactly as bytes, and `WireAnnounce` announces a schema on
+  a channel before its values, with a `Receiver` that checks each one.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
 - **JSON, TOML and YAML**, and **form checks against a schema**: the
@@ -231,7 +234,7 @@ later.String() // "2026-02-28"
 
 | Package | Purpose |
 | --- | --- |
-| `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`, the errors; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `LibraryOf`, `Library` |
+| `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`, the errors; `FromWire`, `WireAnnounce`, `WireSend`, `WireClose`, `Receiver`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `LibraryOf`, `Library` |
 | `guatiao/serde` | `Parse` / `Emit` for JSON, TOML, YAML |
 | `guatiao/intake` | `Check`, `Layout`, `IsVisible`, `At`, `ForSchema`, `FormFor`, `Resolve`, `FlatKeys`, `Flatten`, `Unflatten` |
 | `guatiao/civil` | `Date`, `Time`, `DateTime`, `Span`, `Length`, instants, `Normalize` |
