@@ -30,7 +30,8 @@ derived_greeter = { path = "../derived_greeter" }
 # The docs' migration snippets, and reading a provider's form back.
 guatiao-intake = { path = "../../crates/guatiao-intake", features = ["derive"] }
 # The configuration page: a configuration read from TOML text through
-# guatiao, holding plugin tables of `toml`'s own type.
+# guatiao, holding plugin tables of `toml`'s own type through
+# `guatiao_serde::adapt`.
 guatiao-serde = { path = "../../crates/guatiao-serde", features = ["toml"] }
 toml = "1"
 

@@ -25,13 +25,9 @@ A C, C++ or Dart consumer reads a whole tree through
 | `load` | `Registry` and the scans (`load_file`, `scan_dir*`, `scan_path*`, `probe`): everything a host does | off |
 | `regex` | enforcing a schema's `pattern` in `validate_*` (carried and read either way) | off |
 | `c-header` | regenerating the committed `include/guatiao.h` | off |
-| `toml` | the three traits for `toml::Value` and `toml::Table` ("Field types") | off |
-| `serde_json` | the three traits for `serde_json::Value` and `serde_json::Map<String, Value>` | off |
 
 MSRV 1.89. No required dependencies; `derive` pulls `guatiao-derive`,
-`load` pulls `libloading` and `object`, `regex` pulls `regex`, `toml`
-pulls `toml` (no parser) and `serde_json` pulls `serde_json`.
-`guatiao-serde`'s `toml` and `json` features turn the last two on.
+`load` pulls `libloading` and `object`, and `regex` pulls `regex`.
 
 ---
 
@@ -642,23 +638,8 @@ one's grammar exactly; these types are one implementation of them.
 | `Duration` | `[secs, nanos]` | the tuple `[u64, 0..=999999999]` |
 | `Span` | ISO 8601 duration, `P1DT2H` | `string` + `format: duration` |
 | `Secret<T>` | as `T` | `T`'s + `writeOnly: true`, `x-sensitive: true` |
-| `toml::Table` (feature `toml`) | map, in the table's order | `{type: object, additionalProperties: {}}` |
-| `toml::Value` (feature `toml`) | its kind; a date or time as the text it was written as | `{}` |
-| `serde_json::Map<String, Value>` (feature `serde_json`) | map | `{type: object, additionalProperties: {}}` |
-| `serde_json::Value` (feature `serde_json`) | its kind | `{}` |
 
 `format` is never checked; `pattern` only with the `regex` feature.
-
-**`toml` and `serde_json` types** read back what they wrote, with two
-exceptions owed to the formats: a TOML date or time reads back as a
-string, and `serde_json::Map` keeps its keys sorted unless
-`serde_json/preserve_order` is on. Reading refuses what the format
-cannot hold, under the key it sits at: bytes for both, and for TOML a
-null or an integer past 64 signed bits (a number with a fraction or an
-exponent becomes the nearest `f64`). A JSON number keeps its text only
-with `serde_json/arbitrary_precision` (`guatiao-serde`'s
-`exact-numbers`); otherwise it is an `i64`, a `u64` or the nearest
-`f64`, as `serde_json` reads one.
 
 **`HashMap` and `HashSet` write in their iteration order**, which is not
 reproducible from one run to the next; `BTreeMap` and `BTreeSet` write

@@ -50,20 +50,17 @@ pub struct Daemon {
     #[map(default = PathBuf::from("/var/lib/daemon"))]
     pub state: PathBuf,
     /// Each plugin's own settings, which the plugin describes.
-    #[map(default)]
+    #[map(default, with = guatiao_serde::adapt::object)]
     pub plugins: BTreeMap<String, toml::Table>,
 }
 ```
 
-Every field type is one guatiao already reads and describes: an address
-is its text with a `pattern`, a path its text, an `Option` may be left
-out. `Tls` is written either as the word `identity` or as a table with
+Every other field type is one guatiao already reads and describes: an
+address is its text with a `pattern`, a path its text, an `Option` may
+be left out. `Tls` is written either as the word `identity` or as a table with
 two keys; an enum whose variants differ in **kind** needs no tag, and
 reads the same way in every language
-([Encodings](encodings.md#variants-told-apart-by-kind)). A
-`toml::Table` is an open table the type does not describe, with
-`guatiao-serde`'s `toml` feature (`serde_json::Map` and
-`serde_json::Value` with its `json` feature).
+([Encodings](encodings.md#variants-told-apart-by-kind)).
 
 ## Reading the file
 

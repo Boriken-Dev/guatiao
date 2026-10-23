@@ -34,12 +34,16 @@ write now.
   error naming both. `FromValue::KINDS` and `Kinds` say which kinds a
   reader accepts; `KindBuilder::title` and `description` label a union's
   arms.
-- **TOML and JSON tables as field types.** `toml::Table`, `toml::Value`,
-  `serde_json::Map<String, Value>` and `serde_json::Value` implement
-  `ToValue`, `FromValue` and `Schema`, so a derived configuration type
-  can hold a table it does not describe: an open object, or any value.
-  `guatiao`'s new `toml` and `serde_json` features carry the impls, and
-  `guatiao-serde`'s `toml` and `json` features turn them on.
+- **Any serde type as a field.** `guatiao-serde` converts a type that
+  speaks serde (`toml::Table`, `serde_json::Value`, a type of your own)
+  to and from a value, so a derived configuration type can hold a table
+  it does not describe. On a bare field, `#[map(with =
+  guatiao_serde::adapt::object)]` describes it as an open object and
+  `adapt::any` as any value; the wrapper `guatiao_serde::Serde<T, S>`
+  takes its schema from `S` (any value by default). A module of your own
+  reuses `adapt::to_value_in` and `adapt::from_value` beside its own
+  `kind`. Reading names the key it failed at and never quotes the value.
+  `guatiao` itself depends on no data-format crate, not even optionally.
 - **Dart and Flutter build the libraries from source.** Each Dart package
   has a build hook that builds its crate with cargo for the target being
   built (Android, once per ABI; iOS; macOS; Linux; Windows) and bundles

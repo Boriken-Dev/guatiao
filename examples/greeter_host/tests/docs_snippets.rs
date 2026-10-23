@@ -919,7 +919,7 @@ mod configuration_page {
         #[map(default = PathBuf::from("/var/lib/daemon"))]
         pub state: PathBuf,
         /// Each plugin's own settings, which the plugin describes.
-        #[map(default)]
+        #[map(default, with = guatiao_serde::adapt::object)]
         pub plugins: BTreeMap<String, toml::Table>,
     }
     // CONFIG-TYPE-END

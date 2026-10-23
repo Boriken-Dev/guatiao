@@ -4,8 +4,9 @@
 
 //! A daemon's configuration read through guatiao, with one set of
 //! attributes: addresses, paths, an optional address, an enum told apart
-//! by kind, a TOML table it does not describe, and lists and maps of
-//! those, with no wrapper type anywhere. It derives its schema and form,
+//! by kind, a TOML table it does not describe (through
+//! `guatiao_serde::adapt::object`), and lists and maps of those, with no
+//! wrapper type anywhere. It derives its schema and form,
 //! its own schema accepts what it writes, it reads from TOML text, and
 //! intake's `check` accepts the form naming its fields.
 
@@ -61,7 +62,9 @@ struct Daemon {
     fallbacks: Vec<Tls>,
     upstreams: BTreeMap<String, Upstream>,
     /// Settings passed through to the runtime, which describes them.
+    #[map(with = guatiao_serde::adapt::object)]
     settings: toml::Table,
+    #[map(with = guatiao_serde::adapt::object)]
     plugins: BTreeMap<String, toml::Table>,
 }
 

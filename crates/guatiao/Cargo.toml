@@ -68,24 +68,10 @@ load = ["dep:libloading", "dep:object"]
 # engine to do it.
 regex = ["dep:regex"]
 
-# `ToValue`, `FromValue` and `Schema` for `toml::Value` and `toml::Table`,
-# so a configuration type can hold a table it does not describe. Named
-# after the crate whose types gain the impls; `guatiao-serde`'s own `toml`
-# feature turns it on.
-toml = ["dep:toml"]
-
-# The same for `serde_json::Value` and `serde_json::Map<String, Value>`;
-# `guatiao-serde`'s `json` feature turns it on.
-serde_json = ["dep:serde_json"]
-
 [dependencies]
 guatiao-derive = { path = "../guatiao-derive", version = "=0.0.0-alpha.1", optional = true }
 libloading = { version = "0.8", optional = true }
 regex = { version = "1", optional = true }
-# `Value` and `Table` exist only with `serde`; nothing here parses or
-# writes TOML text, which is `guatiao-serde`'s job.
-toml = { version = "1", optional = true, default-features = false, features = ["std", "serde"] }
-serde_json = { version = "1", optional = true }
 # Parses PE, ELF and Mach-O export tables as DATA. Default features off:
 # this reads three formats and writes none, and a scan should not drag in
 # a linker's worth of code.
