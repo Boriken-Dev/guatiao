@@ -42,6 +42,10 @@ public surface); this file is about the repository.
 | `examples/matlab_host/` | a host program in MATLAB or Octave: scans for greeters in any language, registers the M library, optionally adds `guatiao-py`, calls every slot; the binding's tests run it |
 | `examples/matlab_provider/` | `mlgreeter/`, a library written in M (the folder is the library, named by its `DESCRIPTION`) |
 | `examples/fortran_host/` | a host program in Fortran (an fpm package): scans for greeters in any language, registers the Fortran library, optionally adds `guatiao-py`, calls every slot; its test calls every greeter both ways |
+| `examples/greeter_kind/cpp/` | the example kinds declared in C++ over `greeter_kind.h` (`GUATIAO_KIND`), what a C++ host and a C++ library include |
+| `examples/cpp_greeter/` | a library written in C++ (CMake): classes serving the example kinds, a library file a scan finds (`GUATIAO_LIBRARY`) |
+| `examples/cpp_host/` | a host program in C++ (CMake) and its test calling the greeters written in Rust, C, Python, Go and C++ through sources and `refresh()`; it builds the C greeter and the C++ one |
+| `examples/cpp_consumer/` | a project outside the repository consuming the three C++ packages through `find_package` |
 | `examples/fortran_greeter/` | a library written in Fortran (an fpm package named and versioned as its source states, which its test checks); its `CMakeLists.txt` builds it as a library file a scan finds |
 | `bindings/python/guatiao/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md`; `guatiao.ffi` is what a package over another guatiao library builds on |
 | `bindings/python/guatiao-serde/`, `bindings/python/guatiao-intake/` | the packages `guatiao-serde` and `guatiao-intake` (`import guatiao_serde`, `guatiao_intake`), each over its own library, with its own `AGENTS.md` |
@@ -58,8 +62,10 @@ public surface); this file is about the repository.
 | `bindings/r/guatiao/` | R bindings over the C ABI, the source package `guatiao`: `src/` holds a copy of `guatiao.h` (a test compares it with the committed one) and the C glue, compiled when the package installs, which opens the libraries at run time and calls kind slots through libffi; it registers the C table `guatiao_r_api` (`inst/include/guatiao_r_api.h`) the other packages build on; its API header is `inst/AGENTS.md`; `tests/fixtures/` holds the C its tests build |
 | `bindings/r/guatiao.serde/`, `bindings/r/guatiao.intake/` | the source packages `guatiao.serde` and `guatiao.intake`: their own header copies and small C glue over `guatiao_r_api`, depending on `guatiao` and compiled against its installed headers |
 | `bindings/fortran/guatiao/` | Fortran bindings over the C ABI in pure Fortran (`iso_c_binding`), the fpm package `guatiao` with its own `AGENTS.md` and a `CMakeLists.txt`; `src/guatiao_c.f90`, `guatiao_serde_c.f90` and `guatiao_intake_c.f90` mirror the three headers (a test compares every interface's name and argument count with them); `guatiao_loader.F90` opens the library at run time; the repository's root `fpm.toml` is the same package for an fpm git dependency (a test checks the two agree) |
+| `bindings/cpp/guatiao/` | C++ bindings over the C ABI, header-only (`include/guatiao/`), linking the library: the CMake package `guatiao` (`guatiao::guatiao`, `guatiaoConfig.cmake`, `cmake/GuatiaoNative.cmake` finding or cargo-building the library) with its own `AGENTS.md`; `cmake/GuatiaoTests.cmake` builds every suite with exceptions on and off; `tests/compile_fail/` holds files that must not compile; `tests/support/` the harness the satellites' suites share |
+| `bindings/cpp/guatiao-serde/`, `bindings/cpp/guatiao-intake/` | the CMake packages `guatiao-serde` (`guatiao::serde`) and `guatiao-intake` (`guatiao::intake`), each over its own library, with its own `AGENTS.md` |
 | `bindings/matlab/guatiao/` | MATLAB and GNU Octave bindings over the C ABI: the `+guatiao` package in `inst/` (its API header is `inst/AGENTS.md`), and `src/`, one MEX gateway in C with copies of the three headers (a test compares them with the committed ones), built by `mkoctfile --mex` at `pkg install` or by `guatiao.build()`, which opens the library at run time and calls kind slots through libffi; `tests/` is a plain runner (`run_tests`) both interpreters run, `tests/fixtures/` holds the C its tests build |
-| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, a kind's description among them, stated for any language), `kinds.md` (how each language declares a kind and a provider), `python.md`, `node.md`, `go.md`, `julia.md`, `r.md`, `matlab.md` and `fortran.md` (Python, Node, Go, Julia, R, MATLAB and Octave, and Fortran as a host and as a provider), `bridges.md` (a format of its own on the visitor traits, from Rust, C and the bindings), `wasm.md`, `migrating.md` (every break since `0.0.0-alpha.0`, with what to write now); built strictly by `docs.yml` |
+| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, a kind's description among them, stated for any language), `kinds.md` (how each language declares a kind and a provider), `python.md`, `node.md`, `go.md`, `julia.md`, `r.md`, `matlab.md`, `fortran.md` and `cpp.md` (Python, Node, Go, Julia, R, MATLAB and Octave, Fortran, and C++ as a host and as a provider), `bridges.md` (a format of its own on the visitor traits, from Rust, C and the bindings), `wasm.md`, `migrating.md` (every break since `0.0.0-alpha.0`, with what to write now); built strictly by `docs.yml` |
 | `benchmarks/` | the benchmark runner (`cargo run -p guatiao-bench --release -- --save NAME`), `python/documents.py` and `dart/` (a document to Python and Dart objects three ways), committed results in `benchmarks/results/`, and `README.md` with the protocol; run on demand, numbers are local and provisional |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 
@@ -292,9 +298,27 @@ cmake -S examples/fortran_greeter -B build/fortran-library && cmake --build buil
 GUATIAO_FORTRAN_LIBRARY=build/fortran-library cargo test -p greeter_host --test fortran_library
 ```
 
+C++ bindings, after `cargo build --workspace --all-features`, with CMake,
+Ninja and MSVC, clang or g++ (C++17; `-DCMAKE_CXX_STANDARD=20` too). Each
+package's suite builds twice, with exceptions on and off; the host's test
+takes the Python and Go greeters and `GUATIAO_REQUIRE_ALL` as the Fortran
+host's does; `GUATIAO_CPP_LIBRARY` names the C++ library file's build for
+the Rust and Python hosts' tests:
+
+```bash
+export GUATIAO_LIBRARY=$PWD/target/debug
+for p in guatiao guatiao-serde guatiao-intake; do
+  cmake -S bindings/cpp/$p -B bindings/cpp/$p/build -G Ninja && cmake --build bindings/cpp/$p/build \
+    && ctest --test-dir bindings/cpp/$p/build --output-on-failure
+done
+cmake -S examples/cpp_host -B examples/cpp_host/build -G Ninja && cmake --build examples/cpp_host/build \
+  && ctest --test-dir examples/cpp_host/build -V
+GUATIAO_CPP_LIBRARY=examples/cpp_host/build/greeters/cpp cargo test -p greeter_host --test cpp_library
+```
+
 `cargo test -p greeter_host` rebuilds the workspace's cdylibs with only
 what that package needs: build the workspace again before the Go, Julia,
-R, MATLAB, Octave, Fortran, Python, Dart or Node suites.
+R, MATLAB, Octave, Fortran, C++, Python, Dart or Node suites.
 
 The `guatiao-py` bridge, against the Python it will run with. Its tests
 and the Python suite's bridge tests find it in its own `target/debug`
@@ -447,7 +471,10 @@ release that is not a pre-release must be above `0.0.0`); `bindings/matlab/guati
 (the Octave package and the MATLAB toolbox both take the version as
 written), `bindings/fortran/guatiao/fpm.toml`, the root `fpm.toml` and
 `bindings/fortran/guatiao/CMakeLists.txt`'s project version (fpm takes three
-numbers: `0.0.0-alpha.N` is written `0.0.0`), the `require` of the core
+numbers: `0.0.0-alpha.N` is written `0.0.0`), `GUATIAO_CPP_VERSION` in
+`bindings/cpp/guatiao/include/guatiao/value.hpp` (as written) and the
+project version of each `bindings/cpp/*/CMakeLists.txt` (three numbers, as
+fpm's), the `require` of the core
 module in `bindings/go/guatiao-serde/go.mod` and `guatiao-intake/go.mod`
 (`vx.y.z`; a Go module's own version is its tag), and the
 `guatiao` entry of `examples/wire_over_webtransport/client/Cargo.lock` (a

@@ -48,6 +48,24 @@ write now.
   Flutter, Android included. `examples/dart_host` calls the Rust, C,
   Python and Dart greeters and has the Rust caller call the Dart one;
   `examples/dart_provider` is a library written in Dart.
+- **C++ bindings**, a header-only CMake package per crate:
+  `bindings/cpp/guatiao` (`guatiao::guatiao`), `bindings/cpp/guatiao-serde`
+  (`guatiao::serde`) and `bindings/cpp/guatiao-intake` (`guatiao::intake`),
+  C++17 or later, linking the libraries: the one `GUATIAO_LIBRARY` (or the
+  package's own variable) names, else built with cargo when CMake
+  configures. Values are owners freed by their destructors, views and
+  writable places borrowed like iterators, `std::string_view` text; every
+  call that can fail throws `guatiao::error` or, in its `try_` form,
+  answers `guatiao::result<T>`, so code built without exceptions uses the
+  same headers. A kind is declared once over its C table with
+  `GUATIAO_KIND`; `remote<K>`, `object<K>` and `lent<K>` call any table of
+  it, and any class whose methods fit serves it (a method that does not
+  fit, or a required slot left out, is a compile error). A
+  `guatiao::library` of such classes becomes a library file any host's
+  scan finds with `GUATIAO_LIBRARY(f, kinds...)`; `guatiao::registry` is
+  a host with sources and `refresh()`. Examples: `examples/cpp_greeter`
+  (called by the Rust and Python example hosts too), `examples/cpp_host`,
+  `examples/cpp_consumer`; docs page `cpp.md`.
 - **Values as events, with no tree in the middle.** `value::visit` is
   guatiao's own data model as traits, with no dependency: a type that
   `Walk`s hands absent, null, bool, number text, string, bytes, list and

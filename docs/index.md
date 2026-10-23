@@ -40,7 +40,9 @@ core one, over the `guatiao_serde` and `guatiao_intake` libraries: PyPI
 `bindings/julia/GuatiaoIntake`), the R packages `guatiao.serde` and
 `guatiao.intake` (`bindings/r/guatiao.serde`, `bindings/r/guatiao.intake`), and in MATLAB,
 Octave and Fortran the sub-packages `guatiao.serde` and `guatiao.intake` and
-the modules `guatiao_serde` and `guatiao_intake` of the one package. Each
+the modules `guatiao_serde` and `guatiao_intake` of the one package, and in
+C++ the CMake packages `guatiao-serde` and `guatiao-intake`
+(`bindings/cpp/guatiao-serde`, `bindings/cpp/guatiao-intake`). Each
 finds its library through `GUATIAO_SERDE_LIBRARY` or
 `GUATIAO_INTAKE_LIBRARY`, then `GUATIAO_LIBRARY` (a directory, or a file
 exporting its functions, else the file beside it).
@@ -117,6 +119,16 @@ points it at the same library:
 guatiao = { git = "https://github.com/Boriken-Dev/guatiao", tag = "..." }
 ```
 
+A C++ consumer adds the CMake package (`find_package(guatiao CONFIG)`
+with `guatiao_DIR` naming `bindings/cpp/guatiao`, or `FetchContent`) and
+links the library it finds: the one `GUATIAO_LIBRARY` names, or one it
+builds with cargo from the repository's sources:
+
+```cmake
+find_package(guatiao CONFIG REQUIRED)
+target_link_libraries(app PRIVATE guatiao::guatiao)
+```
+
 A C consumer includes `guatiao.h` and links nothing to read a value.
 
 ## 30-second tour
@@ -180,6 +192,9 @@ let greeter = registry.best("greeter").expect("something serves it");
 - [Fortran, host and provider](fortran.md): calling libraries from
   Fortran, and writing providers in Fortran, linked into a host or built
   as a library file any host loads.
+- [C++, host and provider](cpp.md): calling libraries from C++, and
+  writing providers as C++ classes, linked into a host or built as a
+  library file any host loads.
 - [One library for your application](app-library.md): guatiao's C
   surfaces in a library of the application's own, and every binding
   using it.
