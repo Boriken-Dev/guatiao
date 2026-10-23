@@ -90,8 +90,9 @@ rmp-serde = "1"
 # something a third party checked rather than something we assert. A DEV
 # dependency of this crate and never of guatiao, which has none at all.
 boon = "0.6"
-# A derived type holding a TOML or JSON table, read from a document.
+# Serde types as fields of a derived type (`tests/serde_fields.rs`).
 guatiao = { path = "../guatiao", features = ["derive"] }
+toml = "1"
 
 [lints]
 workspace = true

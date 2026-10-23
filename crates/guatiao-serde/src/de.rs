@@ -270,10 +270,10 @@ impl<'de> Visitor<'de> for ValueSeed {
 /// an arbitrary-precision NUMBER arrives under the token below, and only
 /// that one can safely be read as a number. Measured, after assuming they
 /// were the same and watching every number become a map.
-const RAW_NUMBER: &str = "$serde_json::private::Number";
+pub(crate) const RAW_NUMBER: &str = "$serde_json::private::Number";
 
 /// The `toml` crate's reserved key for a date or time carried as its text.
-const TOML_DATETIME: &str = "$__toml_private_datetime";
+pub(crate) const TOML_DATETIME: &str = "$__toml_private_datetime";
 
 /// The text under a reserved key, or an error that does not say what was
 /// there instead: reading it as a `String` refuses anything else with

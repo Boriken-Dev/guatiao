@@ -1,4 +1,41 @@
 pub mod guatiao_serde
+pub mod guatiao_serde::adapt
+pub mod guatiao_serde::adapt::any
+pub fn guatiao_serde::adapt::any::from_value<T: serde_core::de::DeserializeOwned>(&guatiao::value::value::Value) -> core::result::Result<T, guatiao::value::convert::MapError>
+pub fn guatiao_serde::adapt::any::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao_serde::adapt::any::to_value_in<T: serde_core::ser::Serialize + ?core::marker::Sized>(&T, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub mod guatiao_serde::adapt::object
+pub fn guatiao_serde::adapt::object::from_value<T: serde_core::de::DeserializeOwned>(&guatiao::value::value::Value) -> core::result::Result<T, guatiao::value::convert::MapError>
+pub fn guatiao_serde::adapt::object::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao_serde::adapt::object::to_value_in<T: serde_core::ser::Serialize + ?core::marker::Sized>(&T, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub struct guatiao_serde::adapt::Serde<T, S>(pub T, _)
+impl<T, S> guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::into_inner(self) -> T
+pub const fn guatiao_serde::adapt::Serde<T, S>::new(T) -> guatiao_serde::adapt::Serde<T, S>
+impl<T, S: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+impl<T, S> core::convert::From<T> for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::from(T) -> guatiao_serde::adapt::Serde<T, S>
+impl<T, S> core::ops::deref::Deref for guatiao_serde::adapt::Serde<T, S>
+pub type guatiao_serde::adapt::Serde<T, S>::Target = T
+pub fn guatiao_serde::adapt::Serde<T, S>::deref(&self) -> &T
+impl<T, S> core::ops::deref::DerefMut for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::deref_mut(&mut self) -> &mut T
+impl<T: core::clone::Clone, S> core::clone::Clone for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::clone(&self) -> guatiao_serde::adapt::Serde<T, S>
+impl<T: core::cmp::Eq, S> core::cmp::Eq for guatiao_serde::adapt::Serde<T, S>
+impl<T: core::cmp::PartialEq, S> core::cmp::PartialEq for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::eq(&self, &guatiao_serde::adapt::Serde<T, S>) -> bool
+impl<T: core::default::Default, S> core::default::Default for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::default() -> guatiao_serde::adapt::Serde<T, S>
+impl<T: core::fmt::Debug, S> core::fmt::Debug for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T: serde_core::de::DeserializeOwned, S> guatiao::value::convert::FromValue for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao_serde::adapt::Serde<T, S>, guatiao::value::convert::MapError>
+impl<T: serde_core::ser::Serialize, S> guatiao::value::convert::ToValue for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao_serde::adapt::from_value<T: serde_core::de::DeserializeOwned>(&guatiao::value::value::Value) -> core::result::Result<T, guatiao::value::convert::MapError>
+pub fn guatiao_serde::adapt::to_value_in<T: serde_core::ser::Serialize + ?core::marker::Sized>(&T, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub mod guatiao_serde::exports
 #[repr(C)] pub struct guatiao_serde::exports::ParseError
 pub guatiao_serde::exports::ParseError::column: u32
@@ -164,6 +201,32 @@ impl core::fmt::Debug for guatiao_serde::Presentation
 pub fn guatiao_serde::Presentation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for guatiao_serde::Presentation
 impl core::marker::StructuralPartialEq for guatiao_serde::Presentation
+pub struct guatiao_serde::Serde<T, S>(pub T, _)
+impl<T, S> guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::into_inner(self) -> T
+pub const fn guatiao_serde::adapt::Serde<T, S>::new(T) -> guatiao_serde::adapt::Serde<T, S>
+impl<T, S: guatiao::schema::describe::Schema> guatiao::schema::describe::Schema for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+impl<T, S> core::convert::From<T> for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::from(T) -> guatiao_serde::adapt::Serde<T, S>
+impl<T, S> core::ops::deref::Deref for guatiao_serde::adapt::Serde<T, S>
+pub type guatiao_serde::adapt::Serde<T, S>::Target = T
+pub fn guatiao_serde::adapt::Serde<T, S>::deref(&self) -> &T
+impl<T, S> core::ops::deref::DerefMut for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::deref_mut(&mut self) -> &mut T
+impl<T: core::clone::Clone, S> core::clone::Clone for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::clone(&self) -> guatiao_serde::adapt::Serde<T, S>
+impl<T: core::cmp::Eq, S> core::cmp::Eq for guatiao_serde::adapt::Serde<T, S>
+impl<T: core::cmp::PartialEq, S> core::cmp::PartialEq for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::eq(&self, &guatiao_serde::adapt::Serde<T, S>) -> bool
+impl<T: core::default::Default, S> core::default::Default for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::default() -> guatiao_serde::adapt::Serde<T, S>
+impl<T: core::fmt::Debug, S> core::fmt::Debug for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T: serde_core::de::DeserializeOwned, S> guatiao::value::convert::FromValue for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao_serde::adapt::Serde<T, S>, guatiao::value::convert::MapError>
+impl<T: serde_core::ser::Serialize, S> guatiao::value::convert::ToValue for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub struct guatiao_serde::Serializable<'a>
 impl<'a> guatiao_serde::Serializable<'a>
 pub fn guatiao_serde::Serializable<'a>::new(&'a guatiao::value::value::Value, guatiao_serde::Presentation) -> guatiao_serde::Serializable<'a>
