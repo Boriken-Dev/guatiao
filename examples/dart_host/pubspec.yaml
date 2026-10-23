@@ -1,0 +1,26 @@
+name: dart_host
+description: >-
+  A plugin host in Dart: calls greeters written in any language through
+  the greeter kind's classes, and has a Rust caller call one written in
+  Dart.
+publish_to: none
+version: 1.0.0
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  dart_greeter:
+    path: ../dart_provider/dart_greeter
+  ffi: ^2.1.0
+  greeter_kind:
+    path: ../greeter_kind/dart
+  guatiao:
+    path: ../../bindings/dart/guatiao
+
+# The native library comes from GUATIAO_LIBRARY in the repository's own
+# runs; an application leaves this out and its build hook builds it.
+hooks:
+  user_defines:
+    guatiao:
+      build: false
