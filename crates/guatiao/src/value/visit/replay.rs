@@ -66,7 +66,7 @@ pub enum Replay<'a, L, M> {
 }
 
 impl<L: ListWalker, M: MapWalker> Walker for Replay<'_, L, M> {
-    fn walk<B: Build>(self, build: B) -> Result<B::Out, MapError> {
+    fn build<B: Build>(self, build: B) -> Result<B::Out, MapError> {
         match self {
             Replay::Absent => build.absent(),
             Replay::Null => build.null(),

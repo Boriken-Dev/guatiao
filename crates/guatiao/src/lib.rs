@@ -144,6 +144,12 @@ pub mod __private {
     use crate::schema::{FieldBuilder, KindBuilder};
     use crate::value::{Alloc, Map, Value, ValueError};
 
+    pub use crate::value::visit::glue::{
+        AsText, ByTree, ByTreeSeed, ByWalk, Field, ListRead, MapRead, Pick, ReadList, ReadMap,
+        TextOrNullSeed, TextSeed, TreeField, TreeSeed, WalkField, WalkSeed, WithSeed, read_tree,
+        walk_tree,
+    };
+
     /// Moves every entry of the map `flat` into `map`: a flattened member,
     /// or a tagged enum's newtype arm beside its tag. Not a map is
     /// [`ValueError::WrongKind`]; a key `map` already holds is
@@ -519,6 +525,52 @@ pub use guatiao_derive::kind;
 /// use guatiao::ToValue;
 /// #[derive(ToValue)]
 /// struct Clash { host: String, #[map(rename = "host")] hostname: String }
+/// ```
+///
+/// # The streaming half
+///
+/// `#[derive(ToValue)]` also implements [`Walk`] and `#[derive(FromValue)]`
+/// [`FromWalk`]: the same value, written and read as events with no tree
+/// built (`value::wire::to_bytes_of`, `decode_as`, and a format bridge).
+/// A field whose type has only `ToValue` and `FromValue` is walked and
+/// read through its own tree; an enum, and a struct with a flattened
+/// member, through the whole type's. A walk of your own beside a derived
+/// `ToValue` is a second impl of `Walk`:
+///
+/// ```compile_fail
+/// use guatiao::ToValue;
+/// use guatiao::value::visit::{Visitor, Walk};
+///
+/// #[derive(ToValue)]
+/// struct Port(u16);
+///
+/// impl Walk for Port {
+///     fn walk<V: Visitor>(&self, visitor: V) -> Result<V::Ok, V::Error> {
+///         visitor.u64(u64::from(self.0))
+///     }
+/// }
+/// ```
+///
+/// Without the derive, the same impl stands beside a hand-written
+/// `ToValue`:
+///
+/// ```
+/// use guatiao::{Alloc, ToValue, Value, ValueError};
+/// use guatiao::value::visit::{Visitor, Walk};
+///
+/// struct Port(u16);
+///
+/// impl ToValue for Port {
+///     fn to_value_in(&self, alloc: Alloc) -> Result<Value, ValueError> {
+///         self.0.to_value_in(alloc)
+///     }
+/// }
+///
+/// impl Walk for Port {
+///     fn walk<V: Visitor>(&self, visitor: V) -> Result<V::Ok, V::Error> {
+///         visitor.u64(u64::from(self.0))
+///     }
+/// }
 /// ```
 #[cfg(feature = "derive")]
 pub use guatiao_derive::{FromValue, Schema, ToValue};

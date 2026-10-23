@@ -30,6 +30,14 @@ write now.
   containers (`WireError::TooDeep`); a type refusing well-formed bytes is
   `WireError::Refused`; a walker whose own input failed answers the new
   `MapError::Stopped` and keeps its error.
+- **Derived types stream.** `#[derive(ToValue)]` also implements `Walk`
+  and `#[derive(FromValue)]` also `FromWalk`, so a derived configuration
+  goes to wire bytes and back with no tree (about twice as fast and more,
+  measured locally: `benchmarks/README.md`). Every `#[map]` attribute
+  means what it means in the tree impls, and a field type with only
+  `ToValue`/`FromValue` is walked and read through its own tree, so every
+  type that derived before still does; enums and a flattened member go
+  through the type's tree.
 - **A page on configuration files.** Reading a configuration through
   guatiao rather than serde: the TOML text becomes a value, `FromValue`
   makes the type, and the schema and form come from the same derive, so

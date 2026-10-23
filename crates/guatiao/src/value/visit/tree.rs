@@ -152,7 +152,7 @@ fn malformed(kinds: Kinds, tag: Tag) -> MapError {
 }
 
 impl Walker for Node<'_> {
-    fn walk<B: Build>(self, build: B) -> Result<B::Out, MapError> {
+    fn build<B: Build>(self, build: B) -> Result<B::Out, MapError> {
         let node = self.value;
         let Ok(tag) = node.tag() else {
             return Err(MapError::bad_value(alloc::format!(
@@ -211,12 +211,12 @@ fn deeper(depth: u32) -> Result<u32, MapError> {
 /// A value as the source of a read: what [`FromValue`](crate::FromValue)
 /// reads, reached through a walk.
 impl Walker for &Value {
-    fn walk<B: Build>(self, build: B) -> Result<B::Out, MapError> {
+    fn build<B: Build>(self, build: B) -> Result<B::Out, MapError> {
         Node {
             value: self,
             depth: 0,
         }
-        .walk(build)
+        .build(build)
     }
 }
 
@@ -362,7 +362,7 @@ impl Build for ValueBuild {
 /// `FromValue for Value` makes one.
 impl FromWalk for Value {
     fn from_walk<W: Walker>(walker: W) -> Result<Value, MapError> {
-        walker.walk(ValueBuild)
+        walker.build(ValueBuild)
     }
 }
 

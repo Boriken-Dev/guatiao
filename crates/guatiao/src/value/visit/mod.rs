@@ -90,7 +90,7 @@
 //!
 //! impl FromWalk for Endpoint {
 //!     fn from_walk<W: Walker>(walker: W) -> Result<Endpoint, MapError> {
-//!         walker.walk(EndpointBuild)
+//!         walker.build(EndpointBuild)
 //!     }
 //! }
 //!
@@ -126,6 +126,9 @@
 
 #![forbid(unsafe_code)]
 
+// What the derives write their walks with; reached through
+// `crate::__private`.
+pub(crate) mod glue;
 mod number;
 mod read;
 mod replay;
@@ -286,7 +289,7 @@ pub trait FromWalk: Sized {
 /// buffer is implemented for `&mut` the reader.
 pub trait Walker: Sized {
     /// Calls the one method of `build` for the value this walker holds.
-    fn walk<B: Build>(self, build: B) -> Result<B::Out, MapError>;
+    fn build<B: Build>(self, build: B) -> Result<B::Out, MapError>;
 }
 
 /// What a walker hands one value to, which makes `Out` from it.

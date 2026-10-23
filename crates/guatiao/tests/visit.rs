@@ -113,7 +113,7 @@ fn every_malformed_vector_is_refused_where_the_tree_decoder_refuses_it() {
     }
 }
 
-// --- a type that walks, written by hand -----------------------------------------
+// --- a type that walks: derived, and written by hand -------------------------------
 
 #[derive(Debug, Clone, PartialEq, ToValue, FromValue)]
 struct Server {
@@ -125,31 +125,36 @@ struct Server {
     spare: Option<Bytes>,
 }
 
-impl Walk for Server {
+/// The same struct, its walk written by hand as the derive writes it.
+#[derive(Debug, Clone, PartialEq)]
+struct ByHand(Server);
+
+impl Walk for ByHand {
     fn walk<V: Visitor>(&self, visitor: V) -> Result<V::Ok, V::Error> {
-        let mut map = visitor.map(Some(5 + usize::from(self.spare.is_some())))?;
-        map.entry("host", &self.host)?;
-        map.entry("port", &self.port)?;
-        map.entry("weight", &self.weight)?;
-        map.entry("tags", &self.tags)?;
-        map.entry("labels", &self.labels)?;
-        if let Some(spare) = &self.spare {
+        let s = &self.0;
+        let mut map = visitor.map(Some(5 + usize::from(s.spare.is_some())))?;
+        map.entry("host", &s.host)?;
+        map.entry("port", &s.port)?;
+        map.entry("weight", &s.weight)?;
+        map.entry("tags", &s.tags)?;
+        map.entry("labels", &s.labels)?;
+        if let Some(spare) = &s.spare {
             map.entry("spare", spare)?;
         }
         map.end()
     }
 }
 
-struct ServerBuild;
+struct ByHandBuild;
 
-impl Build for ServerBuild {
-    type Out = Server;
+impl Build for ByHandBuild {
+    type Out = ByHand;
 
     fn kinds(&self) -> Kinds {
         Kinds::MAP
     }
 
-    fn map<M: MapWalker>(self, mut entries: M) -> Result<Server, MapError> {
+    fn map<M: MapWalker>(self, mut entries: M) -> Result<ByHand, MapError> {
         let mut host = None;
         let mut port = None;
         let mut weight = None;
@@ -176,20 +181,26 @@ impl Build for ServerBuild {
                 _ => entries.skip_value()?,
             }
         }
-        Ok(Server {
+        Ok(ByHand(Server {
             host: host.ok_or_else(|| MapError::missing("host"))?,
             port: port.ok_or_else(|| MapError::missing("port"))?,
             weight: weight.ok_or_else(|| MapError::missing("weight"))?,
             tags: tags.ok_or_else(|| MapError::missing("tags"))?,
             labels: labels.ok_or_else(|| MapError::missing("labels"))?,
             spare,
-        })
+        }))
     }
 }
 
-impl FromWalk for Server {
-    fn from_walk<W: Walker>(walker: W) -> Result<Server, MapError> {
-        walker.walk(ServerBuild)
+impl FromWalk for ByHand {
+    fn from_walk<W: Walker>(walker: W) -> Result<ByHand, MapError> {
+        walker.build(ByHandBuild)
+    }
+}
+
+impl FromValue for ByHand {
+    fn from_value(value: &Value) -> Result<ByHand, MapError> {
+        Server::from_value(value).map(ByHand)
     }
 }
 
@@ -209,14 +220,17 @@ fn servers(n: usize) -> Vec<Server> {
 #[test]
 fn a_type_streams_to_the_bytes_its_tree_encodes_to_and_back() {
     let value = servers(40);
-    let tree_bytes = to_bytes(&value.to_value().unwrap()).unwrap();
-    assert_eq!(to_bytes_of(&value).unwrap(), tree_bytes);
+    let tree = value.to_value().unwrap();
+    let tree_bytes = to_bytes(&tree).unwrap();
+
+    assert_eq!(to_bytes_of(&value).unwrap(), tree_bytes, "derived");
     assert_eq!(decode_as::<Vec<Server>>(&tree_bytes).unwrap(), value);
-    assert_eq!(
-        Vec::<Server>::from_walk(&value.to_value().unwrap()).unwrap(),
-        value
-    );
-    assert_eq!(built(&value).unwrap(), value.to_value().unwrap());
+    assert_eq!(Vec::<Server>::from_walk(&tree).unwrap(), value);
+    assert_eq!(built(&value).unwrap(), tree);
+
+    let by_hand: Vec<ByHand> = value.iter().cloned().map(ByHand).collect();
+    assert_eq!(to_bytes_of(&by_hand).unwrap(), tree_bytes, "by hand");
+    assert_eq!(decode_as::<Vec<ByHand>>(&tree_bytes).unwrap(), by_hand);
 }
 
 /// A walk names what it refuses as the tree reader does: the same error
@@ -260,6 +274,8 @@ fn a_walk_refuses_what_the_tree_reader_refuses_with_the_same_error() {
         m.into()
     });
     same::<Server>(Value::from("not a map"));
+    same::<ByHand>(Value::from("not a map"));
+    same::<ByHand>(Map::new().into());
     same::<Server>(Map::new().into());
     same::<Server>({
         let mut tree = servers(1)[0].to_value().unwrap();
@@ -434,7 +450,7 @@ impl Build for FirstBuild {
 
 impl FromWalk for First {
     fn from_walk<W: Walker>(walker: W) -> Result<First, MapError> {
-        walker.walk(FirstBuild)
+        walker.build(FirstBuild)
     }
 }
 
