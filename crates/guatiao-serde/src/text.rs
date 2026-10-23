@@ -176,11 +176,12 @@ pub mod json {
     use guatiao::value::alloc::Alloc;
     use guatiao::value::types::Value;
 
-    use guatiao::value::visit::{FromWalk, Walk};
+    use guatiao::value::visit::{FromWalk, Sink, Walk};
 
     use super::{Error, Position};
     use crate::{
-        BridgeError, Numbers, Presentation, Serializable, ValueSeed, Walked, from_deserializer,
+        BridgeError, Numbers, Presentation, Serializable, ValueSeed, Walked, deserialize_into,
+        from_deserializer,
     };
 
     /// The format's name, for a diagnostic.
@@ -271,6 +272,22 @@ pub mod json {
         de.end().map_err(|e| refusal(text, &e))?;
         Ok(read)
     }
+
+    /// Hands every event of a JSON document to `sink`, with no tree
+    /// built: the document's refusal is [`BridgeError::Format`], the
+    /// sink's [`BridgeError::Refused`].
+    pub fn visit_str<S: Sink + ?Sized>(
+        text: &str,
+        sink: &mut S,
+        how: Presentation,
+    ) -> Result<(), BridgeError<Error, S::Error>> {
+        let mut de = serde_json::Deserializer::from_str(text);
+        match deserialize_into(&mut de, sink, how) {
+            Ok(()) => de.end().map_err(|e| BridgeError::Format(refusal(text, &e))),
+            Err(BridgeError::Format(e)) => Err(BridgeError::Format(refusal(text, &e))),
+            Err(BridgeError::Refused(e)) => Err(BridgeError::Refused(e)),
+        }
+    }
 }
 
 #[cfg(feature = "toml")]
@@ -290,10 +307,13 @@ pub mod toml {
     use guatiao::value::alloc::Alloc;
     use guatiao::value::types::{Tag, Value};
 
-    use guatiao::value::visit::{FromWalk, Walk};
+    use guatiao::value::visit::{FromWalk, Sink, Visitor, Walk};
 
     use super::{Error, position_at};
-    use crate::{BridgeError, Presentation, Serializable, ValueSeed, Walked, from_deserializer};
+    use crate::{
+        BridgeError, Presentation, Serializable, ValueSeed, Walked, deserialize_into,
+        from_deserializer,
+    };
 
     /// The format's name, for a diagnostic.
     pub const NAME: &str = "toml";
@@ -328,9 +348,89 @@ pub mod toml {
     }
 
     /// Anything that walks, as TOML, with no tree built. Only a map is a
-    /// document; the format refuses anything else.
+    /// document, as for [`to_string`].
     pub fn to_string_of<T: Walk + ?Sized>(value: &T, how: Presentation) -> Result<String, Error> {
-        ::toml::to_string(&Walked::new(value, how)).map_err(|e| Error::writing(NAME, e))
+        let table = TableOnly {
+            value,
+            refused: core::cell::Cell::new(false),
+        };
+        ::toml::to_string(&Walked::new(&table, how)).map_err(|e| {
+            if table.refused.get() {
+                Error::Unsupported {
+                    format: NAME,
+                    detail: "a TOML document is a table, so only a map can be one".to_string(),
+                }
+            } else {
+                Error::writing(NAME, e)
+            }
+        })
+    }
+
+    /// A walk that must be a map, which notes when it was not.
+    struct TableOnly<'a, T: ?Sized> {
+        value: &'a T,
+        refused: core::cell::Cell<bool>,
+    }
+
+    impl<T: Walk + ?Sized> Walk for TableOnly<'_, T> {
+        fn walk<V: Visitor>(&self, visitor: V) -> Result<V::Ok, V::Error> {
+            self.value.walk(OnlyMap {
+                visitor,
+                refused: &self.refused,
+            })
+        }
+    }
+
+    /// Hands a map on and refuses anything else.
+    struct OnlyMap<'r, V> {
+        visitor: V,
+        refused: &'r core::cell::Cell<bool>,
+    }
+
+    impl<V: Visitor> OnlyMap<'_, V> {
+        fn refuse(&self) -> V::Error {
+            self.refused.set(true);
+            V::Error::from(guatiao::ValueError::WrongKind)
+        }
+    }
+
+    impl<V: Visitor> Visitor for OnlyMap<'_, V> {
+        type Ok = V::Ok;
+        type Error = V::Error;
+        type List = V::List;
+        type Map = V::Map;
+
+        fn absent(self) -> Result<V::Ok, V::Error> {
+            Err(self.refuse())
+        }
+
+        fn null(self) -> Result<V::Ok, V::Error> {
+            Err(self.refuse())
+        }
+
+        fn bool(self, _: bool) -> Result<V::Ok, V::Error> {
+            Err(self.refuse())
+        }
+
+        fn number(self, _: &str) -> Result<V::Ok, V::Error> {
+            Err(self.refuse())
+        }
+
+        fn string(self, _: &str) -> Result<V::Ok, V::Error> {
+            Err(self.refuse())
+        }
+
+        fn bytes(self, _: &[u8]) -> Result<V::Ok, V::Error> {
+            Err(self.refuse())
+        }
+
+        fn list(self, _: Option<usize>) -> Result<V::List, V::Error> {
+            Err(self.refuse())
+        }
+
+        fn map(self, len: Option<usize>) -> Result<V::Map, V::Error> {
+            self.visitor.map(len)
+        }
     }
 
     /// A `T` read from a TOML document, with no tree built.
@@ -339,6 +439,21 @@ pub mod toml {
         from_deserializer::<T, _>(de, how).map_err(|e| match e {
             BridgeError::Format(e) => refusal(text, &e),
             BridgeError::Refused(error) => Error::refused(NAME, error),
+        })
+    }
+
+    /// Hands every event of a TOML document to `sink`, with no tree
+    /// built.
+    pub fn visit_str<S: Sink + ?Sized>(
+        text: &str,
+        sink: &mut S,
+        how: Presentation,
+    ) -> Result<(), BridgeError<Error, S::Error>> {
+        let de = ::toml::Deserializer::parse(text)
+            .map_err(|e| BridgeError::Format(refusal(text, &e)))?;
+        deserialize_into(de, sink, how).map_err(|e| match e {
+            BridgeError::Format(e) => BridgeError::Format(refusal(text, &e)),
+            BridgeError::Refused(e) => BridgeError::Refused(e),
         })
     }
 }
@@ -366,10 +481,13 @@ pub mod yaml {
 
     use serde_saphyr::{DefaultMessageFormatter, MessageFormatter, Options};
 
-    use guatiao::value::visit::{FromWalk, Walk};
+    use guatiao::value::visit::{FromWalk, Sink, Walk};
 
     use super::{Error, Position};
-    use crate::{BridgeError, Presentation, Serializable, ValueSeed, Walked, from_deserializer};
+    use crate::{
+        BridgeError, Presentation, Serializable, ValueSeed, Walked, deserialize_into,
+        from_deserializer,
+    };
 
     /// The format's name, for a diagnostic.
     pub const NAME: &str = "yaml";
@@ -477,5 +595,23 @@ pub mod yaml {
         })
         .map_err(|e| refusal(&e))?;
         read.map_err(|error| Error::refused(NAME, error))
+    }
+
+    /// Hands every event of a YAML document to `sink`, with no tree
+    /// built.
+    pub fn visit_str<S: Sink + ?Sized>(
+        text: &str,
+        sink: &mut S,
+        how: Presentation,
+    ) -> Result<(), BridgeError<Error, S::Error>> {
+        let fed = serde_saphyr::with_deserializer_from_str_with_options(text, options(), |de| {
+            match deserialize_into(de, &mut *sink, how) {
+                Ok(()) => Ok(Ok(())),
+                Err(BridgeError::Format(e)) => Err(e),
+                Err(BridgeError::Refused(e)) => Ok(Err(e)),
+            }
+        })
+        .map_err(|e| BridgeError::Format(refusal(&e)))?;
+        fed.map_err(BridgeError::Refused)
     }
 }

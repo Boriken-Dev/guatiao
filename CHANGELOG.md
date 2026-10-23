@@ -52,6 +52,20 @@ write now.
   `adapt` modules are those bridges now, with the same results.
   `Number::is_number` checks text against the number grammar with nothing
   allocated.
+- **Values as events from C.** `guatiao_visitor` is a table of one C
+  function per event and `guatiao_walker` a C function that hands its own
+  data to one: `guatiao_value_visit` and `guatiao_wire_visit` walk a
+  value or wire bytes into a C visitor, and `guatiao_value_from_walker`
+  and `guatiao_wire_encode_walker` build a value or write wire bytes from
+  a C walker, a callback's status stopping the walk. In `guatiao_serde.h`,
+  each format reads a document straight into a C visitor
+  (`guatiao_json_visit`), writes one from a C walker
+  (`guatiao_json_emit_walker`), and turns a document into wire bytes and
+  back (`guatiao_json_to_wire`, `guatiao_json_from_wire`), so a program
+  in any language parses into its own objects and writes from them with
+  no value in between: through callbacks, or through the wire bytes as a
+  tape decoded with one crossing. Rust: `text::*::visit_str` hands a
+  document to any sink.
 - **A page on configuration files.** Reading a configuration through
   guatiao rather than serde: the TOML text becomes a value, `FromValue`
   makes the type, and the schema and form come from the same derive, so

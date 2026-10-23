@@ -321,6 +321,206 @@ guatiao_status guatiao_yaml_emit(const guatiao_value *value,
                                  guatiao_value *out);
 #endif
 
+/*
+ Reads a JSON document straight into a C visitor: one call per event,
+ no value built.
+
+ A callback's status stops the read and is returned. A document that
+ does not parse is `GUATIAO_ERR_BAD_VALUE`, and `out_error`, when not
+ null, receives where, as `guatiao_json_parse_ex` writes it, its
+ message built through `alloc`. A visitor table smaller than this
+ build's is `GUATIAO_ERR_BAD_VALUE`.
+
+ # Safety
+
+ `text` is a readable view for this call; `alloc` addresses a complete
+ allocator; `visitor` is null or a table readable for its
+ `struct_size` bytes whose functions return rather than unwind;
+ `out_error` as for `guatiao_json_parse_ex`.
+ */
+guatiao_status guatiao_json_visit(guatiao_str text,
+                                  uint32_t how,
+                                  const guatiao_alloc *alloc,
+                                  const guatiao_visitor *visitor,
+                                  struct guatiao_parse_error *out_error);
+
+/*
+ Reads a JSON document straight into wire bytes, a BYTES value built
+ through `alloc`: the tape a binding decodes in its own language, with
+ one crossing and no value built. The bytes are those
+ `guatiao_wire_encode` writes for the value `guatiao_json_parse` reads.
+
+ `out` is written ABSENT on entry. A document that does not parse is
+ `GUATIAO_ERR_BAD_VALUE`, with where through `out_error`, which may be
+ null.
+
+ # Safety
+
+ As [`guatiao_json_parse_ex`].
+ */
+guatiao_status guatiao_json_to_wire(guatiao_str text,
+                                    uint32_t how,
+                                    const guatiao_alloc *alloc,
+                                    guatiao_value *out,
+                                    struct guatiao_parse_error *out_error);
+
+/*
+ Writes the value wire bytes hold as a JSON document, a STRING value
+ built through `alloc`, with no value built in between.
+ `GUATIAO_PRETTY` in `how` indents it.
+
+ `out` is written ABSENT on entry. Bytes that are not a value are
+ `GUATIAO_ERR_BAD_VALUE`.
+
+ # Safety
+
+ `bytes` is readable for the call; `alloc` and `out` as for
+ `guatiao_json_emit`.
+ */
+guatiao_status guatiao_json_from_wire(guatiao_bytes bytes,
+                                      uint32_t how,
+                                      const guatiao_alloc *alloc,
+                                      guatiao_value *out);
+
+/*
+ Writes a C walker's events as a JSON document, a STRING value built
+ through `alloc`: the caller's own data to text, with no value built.
+ `GUATIAO_PRETTY` in `how` indents it.
+
+ `out` is written ABSENT on entry. The walker's own status stops the
+ write and is returned, and so does the first refusal of an event:
+ events out of order, or a walk that gave no one complete value, are
+ `GUATIAO_ERR_WRONG_KIND`; text that is not UTF-8, a number outside the
+ grammar and a key repeated in its map `GUATIAO_ERR_BAD_VALUE`.
+
+ # Safety
+
+ `walker` is null or a table readable for its `struct_size` bytes whose
+ `walk` returns rather than unwinds; `alloc` and `out` as for
+ `guatiao_json_emit`.
+ */
+guatiao_status guatiao_json_emit_walker(const guatiao_walker *walker,
+                                        uint32_t how,
+                                        const guatiao_alloc *alloc,
+                                        guatiao_value *out);
+
+#if defined(GUATIAO_SERDE_TOML)
+/*
+ [`guatiao_json_visit`], for TOML.
+
+ # Safety
+
+ As [`guatiao_json_visit`].
+ */
+guatiao_status guatiao_toml_visit(guatiao_str text,
+                                  uint32_t how,
+                                  const guatiao_alloc *alloc,
+                                  const guatiao_visitor *visitor,
+                                  struct guatiao_parse_error *out_error);
+#endif
+
+#if defined(GUATIAO_SERDE_TOML)
+/*
+ [`guatiao_json_to_wire`], for TOML.
+
+ # Safety
+
+ As [`guatiao_json_to_wire`].
+ */
+guatiao_status guatiao_toml_to_wire(guatiao_str text,
+                                    uint32_t how,
+                                    const guatiao_alloc *alloc,
+                                    guatiao_value *out,
+                                    struct guatiao_parse_error *out_error);
+#endif
+
+#if defined(GUATIAO_SERDE_TOML)
+/*
+ [`guatiao_json_from_wire`], for TOML. A TOML document is a table, so
+ bytes holding anything but a map are `GUATIAO_ERR_BAD_VALUE`.
+
+ # Safety
+
+ As [`guatiao_json_from_wire`].
+ */
+guatiao_status guatiao_toml_from_wire(guatiao_bytes bytes,
+                                      uint32_t how,
+                                      const guatiao_alloc *alloc,
+                                      guatiao_value *out);
+#endif
+
+#if defined(GUATIAO_SERDE_TOML)
+/*
+ [`guatiao_json_emit_walker`], for TOML: the walk is a map.
+
+ # Safety
+
+ As [`guatiao_json_emit_walker`].
+ */
+guatiao_status guatiao_toml_emit_walker(const guatiao_walker *walker,
+                                        uint32_t how,
+                                        const guatiao_alloc *alloc,
+                                        guatiao_value *out);
+#endif
+
+#if defined(GUATIAO_SERDE_YAML)
+/*
+ [`guatiao_json_visit`], for YAML.
+
+ # Safety
+
+ As [`guatiao_json_visit`].
+ */
+guatiao_status guatiao_yaml_visit(guatiao_str text,
+                                  uint32_t how,
+                                  const guatiao_alloc *alloc,
+                                  const guatiao_visitor *visitor,
+                                  struct guatiao_parse_error *out_error);
+#endif
+
+#if defined(GUATIAO_SERDE_YAML)
+/*
+ [`guatiao_json_to_wire`], for YAML.
+
+ # Safety
+
+ As [`guatiao_json_to_wire`].
+ */
+guatiao_status guatiao_yaml_to_wire(guatiao_str text,
+                                    uint32_t how,
+                                    const guatiao_alloc *alloc,
+                                    guatiao_value *out,
+                                    struct guatiao_parse_error *out_error);
+#endif
+
+#if defined(GUATIAO_SERDE_YAML)
+/*
+ [`guatiao_json_from_wire`], for YAML.
+
+ # Safety
+
+ As [`guatiao_json_from_wire`].
+ */
+guatiao_status guatiao_yaml_from_wire(guatiao_bytes bytes,
+                                      uint32_t how,
+                                      const guatiao_alloc *alloc,
+                                      guatiao_value *out);
+#endif
+
+#if defined(GUATIAO_SERDE_YAML)
+/*
+ [`guatiao_json_emit_walker`], for YAML.
+
+ # Safety
+
+ As [`guatiao_json_emit_walker`].
+ */
+guatiao_status guatiao_yaml_emit_walker(const guatiao_walker *walker,
+                                        uint32_t how,
+                                        const guatiao_alloc *alloc,
+                                        guatiao_value *out);
+#endif
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus
