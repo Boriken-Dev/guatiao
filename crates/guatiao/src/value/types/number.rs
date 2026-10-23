@@ -49,6 +49,12 @@ impl Number {
     pub fn float_in(alloc: Alloc, v: f64) -> Result<Number, ValueError> {
         Number::new_in(alloc, &float_text(v)?)
     }
+
+    /// Whether `text` is in the JSON number grammar: what [`Number::new`]
+    /// accepts, checked with nothing allocated.
+    pub const fn is_number(text: &str) -> bool {
+        validate_json_number(text.as_bytes()).is_ok()
+    }
 }
 
 /// A float's decimal text, or the refusal: `NaN` and the infinities have

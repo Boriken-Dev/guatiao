@@ -4939,6 +4939,7 @@ pub fn guatiao::value::types::number::Number::clone_in(&self, guatiao::value::al
 pub unsafe const fn guatiao::value::types::number::Number::from_ptr<'a>(*const guatiao::value::types::number::Number) -> core::result::Result<&'a guatiao::value::types::number::Number, guatiao::value::error::ValueError>
 impl guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::float_in(guatiao::value::alloc::Alloc, f64) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::error::ValueError>
+pub const fn guatiao::value::types::number::Number::is_number(&str) -> bool
 pub fn guatiao::value::types::number::Number::new(&str) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::number::Number::new_in(guatiao::value::alloc::Alloc, &str) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::error::ValueError>
 impl core::borrow::Borrow<str> for guatiao::value::types::number::Number
@@ -5492,6 +5493,7 @@ pub fn guatiao::value::types::number::Number::clone_in(&self, guatiao::value::al
 pub unsafe const fn guatiao::value::types::number::Number::from_ptr<'a>(*const guatiao::value::types::number::Number) -> core::result::Result<&'a guatiao::value::types::number::Number, guatiao::value::error::ValueError>
 impl guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::float_in(guatiao::value::alloc::Alloc, f64) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::error::ValueError>
+pub const fn guatiao::value::types::number::Number::is_number(&str) -> bool
 pub fn guatiao::value::types::number::Number::new(&str) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::number::Number::new_in(guatiao::value::alloc::Alloc, &str) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::error::ValueError>
 impl core::borrow::Borrow<str> for guatiao::value::types::number::Number
@@ -6440,6 +6442,10 @@ impl guatiao::value::visit::ListWalker for guatiao::value::visit::NoWalker
 pub fn guatiao::value::visit::NoWalker::len_hint(&self) -> core::option::Option<usize>
 pub fn guatiao::value::visit::NoWalker::next<T: guatiao::value::visit::FromWalk>(&mut self) -> core::result::Result<core::option::Option<T>, guatiao::value::convert::MapError>
 pub fn guatiao::value::visit::NoWalker::next_seed<S: guatiao::value::visit::Seed>(&mut self, S) -> core::result::Result<core::option::Option<<S as guatiao::value::visit::Seed>::Out>, guatiao::value::convert::MapError>
+impl<L: guatiao::value::visit::ListWalker + ?core::marker::Sized> guatiao::value::visit::ListWalker for &mut L
+pub fn &mut L::len_hint(&self) -> core::option::Option<usize>
+pub fn &mut L::next<T: guatiao::value::visit::FromWalk>(&mut self) -> core::result::Result<core::option::Option<T>, guatiao::value::convert::MapError>
+pub fn &mut L::next_seed<S: guatiao::value::visit::Seed>(&mut self, S) -> core::result::Result<core::option::Option<<S as guatiao::value::visit::Seed>::Out>, guatiao::value::convert::MapError>
 pub trait guatiao::value::visit::MapVisitor
 pub type guatiao::value::visit::MapVisitor::Error
 pub type guatiao::value::visit::MapVisitor::Ok
@@ -6462,6 +6468,12 @@ pub fn guatiao::value::visit::NoWalker::next_key<R>(&mut self, impl core::ops::f
 pub fn guatiao::value::visit::NoWalker::skip_value(&mut self) -> core::result::Result<(), guatiao::value::convert::MapError>
 pub fn guatiao::value::visit::NoWalker::value<T: guatiao::value::visit::FromWalk>(&mut self) -> core::result::Result<T, guatiao::value::convert::MapError>
 pub fn guatiao::value::visit::NoWalker::value_seed<S: guatiao::value::visit::Seed>(&mut self, S) -> core::result::Result<<S as guatiao::value::visit::Seed>::Out, guatiao::value::convert::MapError>
+impl<M: guatiao::value::visit::MapWalker + ?core::marker::Sized> guatiao::value::visit::MapWalker for &mut M
+pub fn &mut M::len_hint(&self) -> core::option::Option<usize>
+pub fn &mut M::next_key<R>(&mut self, impl core::ops::function::FnOnce(&str) -> R) -> core::result::Result<core::option::Option<R>, guatiao::value::convert::MapError>
+pub fn &mut M::skip_value(&mut self) -> core::result::Result<(), guatiao::value::convert::MapError>
+pub fn &mut M::value<T: guatiao::value::visit::FromWalk>(&mut self) -> core::result::Result<T, guatiao::value::convert::MapError>
+pub fn &mut M::value_seed<S: guatiao::value::visit::Seed>(&mut self, S) -> core::result::Result<<S as guatiao::value::visit::Seed>::Out, guatiao::value::convert::MapError>
 pub trait guatiao::value::visit::Seed: core::marker::Sized
 pub type guatiao::value::visit::Seed::Out
 pub fn guatiao::value::visit::Seed::read<W: guatiao::value::visit::Walker>(self, W) -> core::result::Result<Self::Out, guatiao::value::convert::MapError>
@@ -7422,6 +7434,7 @@ pub fn guatiao::value::types::number::Number::clone_in(&self, guatiao::value::al
 pub unsafe const fn guatiao::value::types::number::Number::from_ptr<'a>(*const guatiao::value::types::number::Number) -> core::result::Result<&'a guatiao::value::types::number::Number, guatiao::value::error::ValueError>
 impl guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::float_in(guatiao::value::alloc::Alloc, f64) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::error::ValueError>
+pub const fn guatiao::value::types::number::Number::is_number(&str) -> bool
 pub fn guatiao::value::types::number::Number::new(&str) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::number::Number::new_in(guatiao::value::alloc::Alloc, &str) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::error::ValueError>
 impl core::borrow::Borrow<str> for guatiao::value::types::number::Number
@@ -9302,6 +9315,7 @@ pub fn guatiao::value::types::number::Number::clone_in(&self, guatiao::value::al
 pub unsafe const fn guatiao::value::types::number::Number::from_ptr<'a>(*const guatiao::value::types::number::Number) -> core::result::Result<&'a guatiao::value::types::number::Number, guatiao::value::error::ValueError>
 impl guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::float_in(guatiao::value::alloc::Alloc, f64) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::error::ValueError>
+pub const fn guatiao::value::types::number::Number::is_number(&str) -> bool
 pub fn guatiao::value::types::number::Number::new(&str) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::number::Number::new_in(guatiao::value::alloc::Alloc, &str) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::error::ValueError>
 impl core::borrow::Borrow<str> for guatiao::value::types::number::Number

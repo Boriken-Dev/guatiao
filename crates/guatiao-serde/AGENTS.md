@@ -1,8 +1,10 @@
 # guatiao-serde — shipped API header
 
 serde for guatiao values. One `Serialize` and one `DeserializeSeed`, so
-every serde data format can carry a value; and `adapt`, so any serde type
-can be a field of a derived type.
+every serde data format can carry a value; bridges between serde and
+guatiao's own visitor (`value::visit`), so a derived type goes to any
+format and back with no tree; and `adapt`, so any serde type can be a
+field of a derived type.
 
 Depends on `guatiao` and `serde`; each format is a feature that adds its
 parser (`json` is on by default and adds `serde_json`). The formats in
@@ -65,12 +67,23 @@ adapt::object::{to_value_in, from_value, kind}   // #[map(with = ..)]: an open o
 struct Serde<T, S = Value>(pub T, _)             // re-exported at the root
   Serde::new(T) / From<T> / .into_inner() / Deref, DerefMut / .0
   impl ToValue (T: Serialize), FromValue (T: DeserializeOwned), Schema (S: Schema; S's kind)
+  impl Walk (T: Serialize), FromWalk (T: DeserializeOwned)   // no tree: through T's own impls
   impl Debug, Clone, PartialEq, Eq, Default on T alone
+
+// the bridges to the visitor (src/bridge/), no feature needed
+struct Walked<'a, T: ?Sized>                       // impl Serialize for T: Walk
+  Walked::new(&T, Presentation) / From<&T>        // any walk, written by any serde format
+from_deserializer<T: FromWalk, D: Deserializer>(D, Presentation)
+    -> Result<T, BridgeError<D::Error, MapError>>   // any format, read into a FromWalk type
+deserialize_into<D: Deserializer, S: Sink + ?Sized>(D, &mut S, Presentation)
+    -> Result<(), BridgeError<D::Error, S::Error>>  // a document's events, into any sink
+enum BridgeError<F, R> { Format(F), Refused(R) }    // the format's refusal, or guatiao's
 
 // the formats: `pub mod text`, one module per feature; `Error` is re-exported
 enum Error { Format { format, detail },              // a writer refused a value
              Syntax { format, position: Option<Position>, detail },  // not a document
-             Unsupported { format, detail } }        // #[non_exhaustive]
+             Unsupported { format, detail },         // #[non_exhaustive]
+             Refused { format, error: MapError } }   // the type read into refused it
 struct Position { line: usize, column: usize }       // both from 1; a column counts chars
   Error::format() -> &'static str                    // which format refused
   Error::position() -> Option<Position>              // where a parser stopped, if it said
@@ -79,7 +92,18 @@ text::toml::{NAME, to_string, from_str}                     // feature `toml`
 text::yaml::{NAME, to_string, from_str}                     // feature `yaml`
 // each: to_string(&Value, Presentation) -> Result<String, Error>
 //       from_str(&str, Alloc, Presentation) -> Result<Value, Error>
+// and, with no tree:
+//       to_string_of(&impl Walk, Presentation) -> Result<String, Error>   // json: _pretty_of too
+//       from_str_as::<T: FromWalk>(&str, Presentation) -> Result<T, Error>
 ```
+
+The `_of`/`_as` forms write and read the same text and the same value as
+the tree forms (`to_string(&x.to_value()?)`, `T::from_value(&from_str(..)?)`),
+and refuse with the same `MapError` as `Error::Refused`; reading names
+the first refusal in the document's order. A document nested past
+`MAX_DEPTH` is refused either way. A serde type's tuple or struct
+variant is collected into a small value before it is walked (serde hands
+its fields one call at a time; a visitor takes a map entry whole).
 
 `text::json` is the one thing that sets `Numbers::RawText`; `text::toml`
 refuses a value that is not a map, because a TOML document is a table.

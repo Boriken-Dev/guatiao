@@ -2,20 +2,25 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Writing a value into any serde data format.
+//! Writing a value into any serde data format: the value's walk, through
+//! the bridge every walk takes (`bridge::Walked`).
 
 #![forbid(unsafe_code)]
 
-use guatiao::value::convert::TryAsRef;
-use serde::ser::{Error as _, SerializeMap, SerializeSeq, SerializeStruct};
 use serde::{Serialize, Serializer};
 
-use guatiao::value::types::{List, Map, Number, Tag, Value};
+use guatiao::value::types::Value;
 
-use crate::{Bytes, Numbers, Presentation, data_uri};
+use crate::Presentation;
+use crate::bridge::serialize_walk;
 
 /// A value, ready for any serde [`Serializer`], carrying the policy for
 /// the kinds a format may not have.
+///
+/// The same as [`Walked`](crate::Walked) over a value, named for the
+/// common case. A value nested deeper than
+/// [`MAX_DEPTH`](guatiao::MAX_DEPTH) is refused, as every walk refuses
+/// it.
 #[derive(Debug, Clone, Copy)]
 pub struct Serializable<'a> {
     value: &'a Value,
@@ -58,172 +63,18 @@ impl<'a> From<&'a Value> for Serializable<'a> {
 
 impl Serialize for Serializable<'_> {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        fn child<'v>(v: &'v Value, how: Presentation) -> Serializable<'v> {
-            Serializable { value: v, how }
-        }
-
-        match self.value.tag() {
-            // "There is no value here" — which a map expresses by not
-            // holding the key. Reaching one means a list held it, and
-            // `null` would turn "nothing" into "nothing, deliberately".
-            Ok(Tag::GUATIAO_ABSENT) => Err(S::Error::custom(
-                "an absent value inside a list has no spelling; absent is \
-                 the ANSWER to a lookup, not a thing a container holds",
-            )),
-            Ok(Tag::GUATIAO_NULL) => s.serialize_unit(),
-            Ok(Tag::GUATIAO_BOOL) => {
-                s.serialize_bool(bool::try_from(self.value).map_err(|_| malformed::<S>("a bool"))?)
-            }
-            // VERBATIM, through the format's raw-number door where it has
-            // one. A guatiao number IS the text that declared it, so
-            // reparsing it into an `f64` to write it back is exactly how a
-            // 200-digit integer or `1e400` gets silently mangled.
-            //
-            // `serialize_i64`/`f64` would do that mangling, so neither is
-            // used: the text goes out through a newtype every
-            // self-describing format renders as a bare number, and a
-            // format that cannot gets the text.
-            Ok(Tag::GUATIAO_NUMBER) => write_number(
-                s,
-                TryAsRef::<Number>::try_as_ref(self.value)
-                    .map(AsRef::<str>::as_ref)
-                    .ok_or_else(|| malformed::<S>("a number"))?,
-                self.how.numbers_as(),
-            ),
-            Ok(Tag::GUATIAO_STRING) => s.serialize_str(
-                TryAsRef::<str>::try_as_ref(self.value)
-                    .ok_or_else(|| malformed::<S>("a string"))?,
-            ),
-            Ok(Tag::GUATIAO_BYTES) => {
-                let bytes = TryAsRef::<[u8]>::try_as_ref(self.value)
-                    .ok_or_else(|| malformed::<S>("a byte string"))?;
-                // A format WITH a byte string gets one, whatever the
-                // policy says: native bytes round-trip perfectly, and a
-                // spelling could only lose that. The policy is for the
-                // formats that have nowhere to put them.
-                if s.is_human_readable() {
-                    match self.how.bytes_as() {
-                        Bytes::DataUri => s.serialize_str(&data_uri(bytes)),
-                        Bytes::Base64 => s.serialize_str(&crate::base64(bytes)),
-                        Bytes::Array => {
-                            let mut seq = s.serialize_seq(Some(bytes.len()))?;
-                            for b in bytes {
-                                seq.serialize_element(b)?;
-                            }
-                            seq.end()
-                        }
-                        Bytes::Refuse => Err(S::Error::custom(
-                            "this document holds a byte string and the \
-                             presentation refuses to spell one",
-                        )),
-                    }
-                } else {
-                    s.serialize_bytes(bytes)
-                }
-            }
-            Ok(Tag::GUATIAO_LIST) => {
-                let items = TryAsRef::<List>::try_as_ref(self.value)
-                    .map(|list| &list[..])
-                    .ok_or_else(|| malformed::<S>("a list"))?;
-                let mut seq = s.serialize_seq(Some(items.len()))?;
-                for item in items {
-                    seq.serialize_element(&child(item, self.how))?;
-                }
-                seq.end()
-            }
-            Ok(Tag::GUATIAO_MAP) => {
-                let entries = TryAsRef::<Map>::try_as_ref(self.value)
-                    .map(Map::entries)
-                    .ok_or_else(|| malformed::<S>("a map"))?;
-                let mut map = s.serialize_map(Some(entries.len()))?;
-                for entry in entries {
-                    map.serialize_entry(entry.key(), &child(entry.value(), self.how))?;
-                }
-                map.end()
-            }
-            // A tag this build does not know. Writing anything at all
-            // would put something in a document that a reader believes;
-            // refusing says what actually happened.
-            _ => Err(S::Error::custom(
-                "a value tag this build does not know, which cannot be written",
-            )),
-        }
+        serialize_walk(self.value, s, self.how)
     }
 }
-
-/// A node whose tag and payload disagree.
-///
-/// **Refused, the same way an unknown tag is.** A node this build cannot
-/// read is one some other producer built wrong, and writing `0`, `false`
-/// or `""` for it would put a value in the document that a reader
-/// believes -- a silent substitution, where the unknown-tag arm says
-/// what actually happened.
-fn malformed<S: Serializer>(what: &str) -> S::Error {
-    S::Error::custom(format!(
-        "a node tagged as {what} whose payload cannot be read, which cannot be written"
-    ))
-}
-
-/// A number, written as exactly as the format can hold it.
-///
-/// A guatiao number is the TEXT that declared it, and the whole point is
-/// that nothing re-formats it. What a format can be told varies, so this
-/// tries in order of exactness:
-///
-/// 1. **`i64`, then `u64`** — native, exact, and what every format has.
-///    This is nearly every number anybody writes.
-/// 2. **Raw text**, for a human-readable format. serde_json splices it in
-///    verbatim through the reserved token below, so `1e400` and a
-///    200-digit integer survive as numbers rather than as strings.
-/// 3. **`f64`**, for a binary format with a number too large for `u64`.
-///    Lossy, and unavoidably so: MessagePack and CBOR have nowhere to put
-///    an arbitrary-precision number, and a string would change the type a
-///    reader sees.
-fn write_number<S: Serializer>(s: S, text: &str, how: Numbers) -> Result<S::Ok, S::Error> {
-    // An integer that fits goes out native whatever the policy: it is
-    // exact either way, and every format understands it.
-    if let Ok(n) = text.parse::<i64>() {
-        return s.serialize_i64(n);
-    }
-    if let Ok(n) = text.parse::<u64>() {
-        return s.serialize_u64(n);
-    }
-
-    if how == Numbers::RawText {
-        // serde_json's own protocol for "this string IS the document": a
-        // one-field struct whose name and field name are the token.
-        //
-        // ONLY serde_json understands it, which is why this is a stated
-        // policy and not a guess from `is_human_readable` — TOML and YAML
-        // are human-readable too, and they wrote the struct out literally,
-        // turning `1.5` into a table with a startling key. Measured.
-        let mut raw = s.serialize_struct(RAW_NUMBER, 1)?;
-        raw.serialize_field(RAW_NUMBER, text)?;
-        return raw.end();
-    }
-
-    match text.parse::<f64>() {
-        // Lossy past 53 bits of mantissa, and unavoidably so: this is
-        // what a format with no arbitrary-precision number can hold.
-        Ok(n) if n.is_finite() => s.serialize_f64(n),
-        _ => Err(S::Error::custom(format!(
-            "{text} is a number this format cannot hold; \
-             `Numbers::RawText` carries one through serde_json"
-        ))),
-    }
-}
-
-/// serde_json's reserved token for already-formatted JSON text.
-const RAW_NUMBER: &str = "$serde_json::private::RawValue";
 
 // As in `de`: the unit tests drive JSON, and `tests/every_format.rs`
 // covers a format this crate names nowhere.
 #[cfg(all(test, feature = "json"))]
 mod tests {
-    use guatiao::value::types::{Buffer, Number, Text};
+    use guatiao::value::types::{Buffer, List, Map, Number, Text};
 
     use super::*;
-    use crate::Numbers;
+    use crate::{Bytes, Numbers};
 
     /// JSON, with JSON's own number policy — which `text::json` sets for
     /// a caller and which the default deliberately does not, since the

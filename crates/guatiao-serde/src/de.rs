@@ -2,7 +2,8 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Reading a value out of any serde data format.
+//! Reading a value out of any serde data format: the document's events,
+//! through the bridge every sink takes, into a tree.
 //!
 //! # Why a seed rather than `Deserialize`
 //!
@@ -19,16 +20,17 @@
 #![forbid(unsafe_code)]
 
 use alloc::fmt;
+use core::cell::Cell;
 
 use serde::Deserializer;
-use serde::de::{DeserializeSeed, Error as _, MapAccess, SeqAccess, Visitor};
+use serde::de::{DeserializeSeed, MapAccess, SeqAccess, Visitor};
 
 use guatiao::value::alloc::Alloc;
-use guatiao::value::convert::TryAsRef;
-use guatiao::value::error::MAX_DEPTH;
-use guatiao::value::types::{Buffer, List, Map, Number, Text, Value};
+use guatiao::value::types::Value;
+use guatiao::value::visit::TreeSink;
 
-use crate::{Presentation, from_data_uri};
+use crate::Presentation;
+use crate::bridge::ToSink;
 
 /// Reads one value, building it through an allocator.
 ///
@@ -44,18 +46,16 @@ use crate::{Presentation, from_data_uri};
 /// let port: u32 = map.required("port").unwrap().try_into().unwrap();
 /// assert_eq!(port, 5900);
 /// ```
+///
+/// **A document is somebody else's input**, and a reader that recursed
+/// once per nested container would overflow the stack on one that nests
+/// deeply enough. `serde_json` caps its own recursion at 128; a serde
+/// format need not, and this crate exists to read them all. A document
+/// nested past [`MAX_DEPTH`](guatiao::MAX_DEPTH) containers is refused.
 #[derive(Debug, Clone, Copy)]
 pub struct ValueSeed {
     alloc: Alloc,
     how: Presentation,
-    /// How many containers are open above this one.
-    ///
-    /// **A document is somebody else's input**, and a reader that recurses
-    /// once per nested container overflows the stack on one that nests
-    /// deeply enough. `serde_json` caps its own recursion at 128; a serde
-    /// format need not, and this crate exists to read them all. Capped at
-    /// [`MAX_DEPTH`], which is what the value model itself can hold.
-    depth: u32,
 }
 
 impl ValueSeed {
@@ -64,36 +64,33 @@ impl ValueSeed {
         ValueSeed {
             alloc,
             how: Presentation::new(),
-            depth: 0,
         }
     }
 
     /// The same, told how the document was written.
     pub const fn with(alloc: Alloc, how: Presentation) -> ValueSeed {
-        ValueSeed {
-            alloc,
-            how,
+        ValueSeed { alloc, how }
+    }
+
+    /// Runs `feed` against a tree sink, and answers the tree or the
+    /// refusal as the format's error.
+    fn build<E: serde::de::Error>(
+        self,
+        feed: impl FnOnce(ToSink<'_, TreeSink>) -> Result<(), E>,
+    ) -> Result<Value, E> {
+        let mut sink = TreeSink::new_in(self.alloc);
+        let failed = Cell::new(None);
+        let fed = feed(ToSink {
+            sink: &mut sink,
+            failed: &failed,
             depth: 0,
+            how: self.how,
+        });
+        match (fed, failed.take()) {
+            (Ok(()), _) => sink.into_value().map_err(E::custom),
+            (Err(_), Some(refused)) => Err(E::custom(refused)),
+            (Err(format), None) => Err(format),
         }
-    }
-
-    /// The seed for what is inside this container.
-    const fn inside(self) -> ValueSeed {
-        ValueSeed {
-            depth: self.depth + 1,
-            ..self
-        }
-    }
-
-    /// Refuses a container opened past the limit.
-    fn room<E: serde::de::Error>(self) -> Result<(), E> {
-        if self.depth >= MAX_DEPTH {
-            return Err(E::custom(format!(
-                "a document nested more than {MAX_DEPTH} containers deep, \
-                 which is deeper than a value can be built"
-            )));
-        }
-        Ok(())
     }
 }
 
@@ -112,6 +109,15 @@ impl<'de> DeserializeSeed<'de> for ValueSeed {
     }
 }
 
+/// Each visit is the sink bridge's, into a tree.
+macro_rules! into_tree {
+    ($($method:ident($($arg:ident: $ty:ty),*);)*) => {$(
+        fn $method<E: serde::de::Error>(self, $($arg: $ty),*) -> Result<Value, E> {
+            self.build(|sink| sink.$method($($arg),*))
+        }
+    )*};
+}
+
 impl<'de> Visitor<'de> for ValueSeed {
     type Value = Value;
 
@@ -119,146 +125,29 @@ impl<'de> Visitor<'de> for ValueSeed {
         f.write_str("any value")
     }
 
-    fn visit_unit<E: serde::de::Error>(self) -> Result<Value, E> {
-        Ok(Value::null())
-    }
-
-    fn visit_none<E: serde::de::Error>(self) -> Result<Value, E> {
-        Ok(Value::null())
+    into_tree! {
+        visit_unit();
+        visit_none();
+        visit_bool(v: bool);
+        visit_i64(v: i64);
+        visit_u64(v: u64);
+        visit_i128(v: i128);
+        visit_u128(v: u128);
+        visit_f64(v: f64);
+        visit_str(v: &str);
+        visit_bytes(v: &[u8]);
     }
 
     fn visit_some<D: Deserializer<'de>>(self, de: D) -> Result<Value, D::Error> {
         de.deserialize_any(self)
     }
 
-    fn visit_bool<E: serde::de::Error>(self, v: bool) -> Result<Value, E> {
-        Ok(Value::from(v))
+    fn visit_seq<A: SeqAccess<'de>>(self, seq: A) -> Result<Value, A::Error> {
+        self.build(|sink| sink.visit_seq(seq))
     }
 
-    // Every integer and float arrives as text, which is what a guatiao
-    // number is. `to_string` on an `i64` or `u64` is exact; on an `f64` it
-    // is the shortest text that round-trips, which is the best any format
-    // that already handed us an `f64` can offer.
-    fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<Value, E> {
-        number(self.alloc, &v.to_string())
-    }
-
-    fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<Value, E> {
-        number(self.alloc, &v.to_string())
-    }
-
-    fn visit_i128<E: serde::de::Error>(self, v: i128) -> Result<Value, E> {
-        number(self.alloc, &v.to_string())
-    }
-
-    fn visit_u128<E: serde::de::Error>(self, v: u128) -> Result<Value, E> {
-        number(self.alloc, &v.to_string())
-    }
-
-    fn visit_f64<E: serde::de::Error>(self, v: f64) -> Result<Value, E> {
-        if !v.is_finite() {
-            // JSON has no infinity or NaN, and neither has this model: a
-            // number is text matching RFC 8259 §6.
-            return Err(E::custom(format!("{v} is not a JSON number")));
-        }
-        // `{:?}` on an `f64` is the shortest round-tripping text, and it
-        // writes `1.0` rather than `1` so the value stays a float.
-        number(self.alloc, &format!("{v:?}"))
-    }
-
-    fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Value, E> {
-        // A data URI becomes bytes only when the caller asked for it. On,
-        // a byte string survives a JSON round trip; also on, a string
-        // somebody wrote that looks like a data URI silently becomes
-        // bytes. Off is the safer default and the one that cannot
-        // surprise.
-        if self.how.reads_data_uris()
-            && let Some(bytes) = from_data_uri(v)
-        {
-            return Buffer::new_in(self.alloc, &bytes)
-                .map(Value::from)
-                .map_err(E::custom);
-        }
-        Text::new_in(self.alloc, v)
-            .map(Value::from)
-            .map_err(E::custom)
-    }
-
-    fn visit_bytes<E: serde::de::Error>(self, v: &[u8]) -> Result<Value, E> {
-        Buffer::new_in(self.alloc, v)
-            .map(Value::from)
-            .map_err(E::custom)
-    }
-
-    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Value, A::Error> {
-        self.room()?;
-        let inside = self.inside();
-        let mut list = List::new_in(self.alloc);
-        while let Some(item) = seq.next_element_seed(inside)? {
-            list.try_push(item).map_err(A::Error::custom)?;
-        }
-        Ok(list.into())
-    }
-
-    fn visit_map<A: MapAccess<'de>>(self, mut access: A) -> Result<Value, A::Error> {
-        self.room()?;
-        let inside = self.inside();
-        let mut map = Map::new_in(self.alloc);
-        // A key arrives as a `String` rather than borrowed, because a
-        // format may have had to unescape it and a borrowed key would then
-        // point at a buffer that does not outlive the call.
-        let Some(first) = access.next_key::<String>()? else {
-            return Ok(map.into());
-        };
-
-        // A NUMBER WEARING A MAP'S CLOTHES. With
-        // `serde_json/arbitrary_precision` on, `deserialize_any` reports
-        // every number as a one-entry map under this reserved key, whose
-        // value is the number's text. Reading it is NOT behind this
-        // crate's `exact-numbers` feature, and that is the point: cargo
-        // unifies features, so ANY crate in a consumer's graph can turn
-        // that on. A reader that did not know the token would then quietly
-        // turn every number in every document into a map — a bug with no
-        // error attached, caused by a dependency this crate never named.
-        //
-        // A MAP WHOSE FIRST KEY IS THAT TOKEN IS READ AS A NUMBER
-        // UNCONDITIONALLY, and the rest of it is not drained. No format
-        // produces such a map by accident -- the token is reserved, names
-        // serde_json's own private module, and is not a key anything
-        // writes -- and the alternative is worse: reading the value first
-        // to decide would mean buffering every map's first value on the
-        // chance that it was a number. A document that spells that key
-        // first is read as that number. A format whose deserializer insists
-        // on the map's remaining entries (JSON, YAML) refuses such a document
-        // when it has any; one that does not (TOML) drops them.
-        if first == RAW_NUMBER {
-            let text = reserved_text(&mut access, inside)?;
-            return number(self.alloc, &text);
-        }
-
-        // THE SAME DISGUISE ON A TOML DATE OR TIME. `toml` reports each as
-        // a one-entry map under its own reserved key whose value is the
-        // text, and reading it as a map would hand a consumer a table with
-        // a startling key in place of `1979-05-27T07:32:00Z`. All four
-        // forms (offset date-time, local date-time, local date, local time)
-        // arrive this way, and read as the text they were written as.
-        if first == TOML_DATETIME {
-            let text = reserved_text(&mut access, inside)?;
-            return Text::new_in(self.alloc, &text)
-                .map(Value::from)
-                .map_err(A::Error::custom);
-        }
-
-        let value = access.next_value_seed(inside)?;
-        map.try_set(&first, value).map_err(A::Error::custom)?;
-        while let Some(key) = access.next_key::<String>()? {
-            let value = access.next_value_seed(inside)?;
-            // A repeated key REPLACES, which is what `set` does and what a
-            // reader of the resulting map would expect. Refusing would be
-            // defensible; silently keeping the first would not.
-            map.try_set(&key, value).map_err(A::Error::custom)?;
-        }
-        Ok(map.into())
+    fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<Value, A::Error> {
+        self.build(|sink| sink.visit_map(map))
     }
 }
 
@@ -270,35 +159,46 @@ impl<'de> Visitor<'de> for ValueSeed {
 /// an arbitrary-precision NUMBER arrives under the token below, and only
 /// that one can safely be read as a number. Measured, after assuming they
 /// were the same and watching every number become a map.
+///
+/// # A number wearing a map's clothes
+///
+/// With `serde_json/arbitrary_precision` on, `deserialize_any` reports
+/// every number as a one-entry map under this key, whose value is the
+/// number's text. Reading it is NOT behind this crate's `exact-numbers`
+/// feature, and that is the point: cargo unifies features, so ANY crate in
+/// a consumer's graph can turn that on. A reader that did not know the
+/// token would then quietly turn every number in every document into a
+/// map — a bug with no error attached, caused by a dependency this crate
+/// never named.
+///
+/// A map whose first key is this token is read as a number
+/// unconditionally, and the rest of it is not drained: no format produces
+/// one by accident, and reading the value first to decide would mean
+/// buffering every map's first value. A format whose deserializer insists
+/// on the remaining entries (JSON, YAML) refuses such a document when it
+/// has any; one that does not (TOML) drops them.
 pub(crate) const RAW_NUMBER: &str = "$serde_json::private::Number";
 
-/// The `toml` crate's reserved key for a date or time carried as its text.
+/// The `toml` crate's reserved key for a date or time carried as its
+/// text: all four forms (offset date-time, local date-time, local date,
+/// local time) arrive as a one-entry map under it, and read as the text
+/// they were written as rather than as a table with a startling key.
 pub(crate) const TOML_DATETIME: &str = "$__toml_private_datetime";
 
-/// The text under a reserved key, or an error that does not say what was
-/// there instead: reading it as a `String` refuses anything else with
-/// serde's own message, which quotes the value.
-fn reserved_text<'de, A: MapAccess<'de>>(
-    access: &mut A,
-    seed: ValueSeed,
-) -> Result<String, A::Error> {
-    let value = access.next_value_seed(seed)?;
-    TryAsRef::<str>::try_as_ref(&value)
-        .map(str::to_string)
-        .ok_or_else(|| A::Error::custom("a reserved key holds something other than text"))
-}
-
-/// A number from its text, or the error saying it is not one.
+/// The refusal a number outside the grammar gets, kept for the test that
+/// pins it.
+#[cfg(test)]
 fn number<E: serde::de::Error>(alloc: Alloc, text: &str) -> Result<Value, E> {
-    Number::new_in(alloc, text)
+    guatiao::Number::new_in(alloc, text)
         .map(Value::from)
-        .map_err(E::custom)
+        .map_err(|e: guatiao::ValueError| E::custom(e))
 }
 
-// The unit tests drive a real format, and JSON is the one this crate
-// carries by default. `tests/every_format.rs` covers the rest.
 #[cfg(all(test, feature = "json"))]
 mod tests {
+    use guatiao::value::convert::TryAsRef;
+    use guatiao::value::types::{Buffer, List, Map, Number};
+
     use super::*;
     use crate::{Bytes, Serializable};
 

@@ -32,8 +32,12 @@ impl<T: core::fmt::Debug, S> core::fmt::Debug for guatiao_serde::adapt::Serde<T,
 pub fn guatiao_serde::adapt::Serde<T, S>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<T: serde_core::de::DeserializeOwned, S> guatiao::value::convert::FromValue for guatiao_serde::adapt::Serde<T, S>
 pub fn guatiao_serde::adapt::Serde<T, S>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao_serde::adapt::Serde<T, S>, guatiao::value::convert::MapError>
+impl<T: serde_core::de::DeserializeOwned, S> guatiao::value::visit::FromWalk for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao_serde::adapt::Serde<T, S>, guatiao::value::convert::MapError>
 impl<T: serde_core::ser::Serialize, S> guatiao::value::convert::ToValue for guatiao_serde::adapt::Serde<T, S>
 pub fn guatiao_serde::adapt::Serde<T, S>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: serde_core::ser::Serialize, S> guatiao::value::visit::Walk for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub fn guatiao_serde::adapt::from_value<T: serde_core::de::DeserializeOwned>(&guatiao::value::value::Value) -> core::result::Result<T, guatiao::value::convert::MapError>
 pub fn guatiao_serde::adapt::to_value_in<T: serde_core::ser::Serialize + ?core::marker::Sized>(&T, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub mod guatiao_serde::exports
@@ -65,20 +69,30 @@ pub mod guatiao_serde::text
 pub mod guatiao_serde::text::json
 pub const guatiao_serde::text::json::NAME: &str
 pub fn guatiao_serde::text::json::from_str(&str, guatiao::value::alloc::Alloc, guatiao_serde::Presentation) -> core::result::Result<guatiao::value::value::Value, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::json::from_str_as<T: guatiao::value::visit::FromWalk>(&str, guatiao_serde::Presentation) -> core::result::Result<T, guatiao_serde::text::Error>
 pub fn guatiao_serde::text::json::to_string(&guatiao::value::value::Value, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::json::to_string_of<T: guatiao::value::visit::Walk + ?core::marker::Sized>(&T, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
 pub fn guatiao_serde::text::json::to_string_pretty(&guatiao::value::value::Value, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::json::to_string_pretty_of<T: guatiao::value::visit::Walk + ?core::marker::Sized>(&T, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
 pub mod guatiao_serde::text::toml
 pub const guatiao_serde::text::toml::NAME: &str
 pub fn guatiao_serde::text::toml::from_str(&str, guatiao::value::alloc::Alloc, guatiao_serde::Presentation) -> core::result::Result<guatiao::value::value::Value, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::toml::from_str_as<T: guatiao::value::visit::FromWalk>(&str, guatiao_serde::Presentation) -> core::result::Result<T, guatiao_serde::text::Error>
 pub fn guatiao_serde::text::toml::to_string(&guatiao::value::value::Value, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::toml::to_string_of<T: guatiao::value::visit::Walk + ?core::marker::Sized>(&T, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
 pub mod guatiao_serde::text::yaml
 pub const guatiao_serde::text::yaml::NAME: &str
 pub fn guatiao_serde::text::yaml::from_str(&str, guatiao::value::alloc::Alloc, guatiao_serde::Presentation) -> core::result::Result<guatiao::value::value::Value, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::yaml::from_str_as<T: guatiao::value::visit::FromWalk>(&str, guatiao_serde::Presentation) -> core::result::Result<T, guatiao_serde::text::Error>
 pub fn guatiao_serde::text::yaml::to_string(&guatiao::value::value::Value, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::yaml::to_string_of<T: guatiao::value::visit::Walk + ?core::marker::Sized>(&T, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
 #[non_exhaustive] pub enum guatiao_serde::text::Error
 pub guatiao_serde::text::Error::Format
 pub guatiao_serde::text::Error::Format::detail: alloc::string::String
 pub guatiao_serde::text::Error::Format::format: &'static str
+pub guatiao_serde::text::Error::Refused
+pub guatiao_serde::text::Error::Refused::error: guatiao::value::convert::MapError
+pub guatiao_serde::text::Error::Refused::format: &'static str
 pub guatiao_serde::text::Error::Syntax
 pub guatiao_serde::text::Error::Syntax::detail: alloc::string::String
 pub guatiao_serde::text::Error::Syntax::format: &'static str
@@ -112,6 +126,20 @@ impl core::fmt::Debug for guatiao_serde::text::Position
 pub fn guatiao_serde::text::Position::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for guatiao_serde::text::Position
 impl core::marker::StructuralPartialEq for guatiao_serde::text::Position
+pub enum guatiao_serde::BridgeError<F, R>
+pub guatiao_serde::BridgeError::Format(F)
+pub guatiao_serde::BridgeError::Refused(R)
+impl<F: core::clone::Clone, R: core::clone::Clone> core::clone::Clone for guatiao_serde::BridgeError<F, R>
+pub fn guatiao_serde::BridgeError<F, R>::clone(&self) -> Self
+impl<F: core::cmp::Eq, R: core::cmp::Eq> core::cmp::Eq for guatiao_serde::BridgeError<F, R>
+impl<F: core::cmp::PartialEq, R: core::cmp::PartialEq> core::cmp::PartialEq for guatiao_serde::BridgeError<F, R>
+pub fn guatiao_serde::BridgeError<F, R>::eq(&self, &Self) -> bool
+impl<F: core::cmp::PartialEq, R: core::cmp::PartialEq> core::marker::StructuralPartialEq for guatiao_serde::BridgeError<F, R>
+impl<F: core::fmt::Debug + core::fmt::Display, R: core::fmt::Debug + core::fmt::Display> core::error::Error for guatiao_serde::BridgeError<F, R>
+impl<F: core::fmt::Debug, R: core::fmt::Debug> core::fmt::Debug for guatiao_serde::BridgeError<F, R>
+pub fn guatiao_serde::BridgeError<F, R>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<F: core::fmt::Display, R: core::fmt::Display> core::fmt::Display for guatiao_serde::BridgeError<F, R>
+pub fn guatiao_serde::BridgeError<F, R>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum guatiao_serde::Bytes
 pub guatiao_serde::Bytes::Array
 pub guatiao_serde::Bytes::Base64
@@ -134,6 +162,9 @@ impl core::marker::StructuralPartialEq for guatiao_serde::Bytes
 pub guatiao_serde::Error::Format
 pub guatiao_serde::Error::Format::detail: alloc::string::String
 pub guatiao_serde::Error::Format::format: &'static str
+pub guatiao_serde::Error::Refused
+pub guatiao_serde::Error::Refused::error: guatiao::value::convert::MapError
+pub guatiao_serde::Error::Refused::format: &'static str
 pub guatiao_serde::Error::Syntax
 pub guatiao_serde::Error::Syntax::detail: alloc::string::String
 pub guatiao_serde::Error::Syntax::format: &'static str
@@ -225,8 +256,12 @@ impl<T: core::fmt::Debug, S> core::fmt::Debug for guatiao_serde::adapt::Serde<T,
 pub fn guatiao_serde::adapt::Serde<T, S>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<T: serde_core::de::DeserializeOwned, S> guatiao::value::convert::FromValue for guatiao_serde::adapt::Serde<T, S>
 pub fn guatiao_serde::adapt::Serde<T, S>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao_serde::adapt::Serde<T, S>, guatiao::value::convert::MapError>
+impl<T: serde_core::de::DeserializeOwned, S> guatiao::value::visit::FromWalk for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao_serde::adapt::Serde<T, S>, guatiao::value::convert::MapError>
 impl<T: serde_core::ser::Serialize, S> guatiao::value::convert::ToValue for guatiao_serde::adapt::Serde<T, S>
 pub fn guatiao_serde::adapt::Serde<T, S>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: serde_core::ser::Serialize, S> guatiao::value::visit::Walk for guatiao_serde::adapt::Serde<T, S>
+pub fn guatiao_serde::adapt::Serde<T, S>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao_serde::Serializable<'a>
 impl<'a> guatiao_serde::Serializable<'a>
 pub fn guatiao_serde::Serializable<'a>::new(&'a guatiao::value::value::Value, guatiao_serde::Presentation) -> guatiao_serde::Serializable<'a>
@@ -269,8 +304,22 @@ pub fn guatiao_serde::ValueSeed::visit_str<E: serde_core::de::Error>(self, &str)
 pub fn guatiao_serde::ValueSeed::visit_u128<E: serde_core::de::Error>(self, u128) -> core::result::Result<guatiao::value::value::Value, E>
 pub fn guatiao_serde::ValueSeed::visit_u64<E: serde_core::de::Error>(self, u64) -> core::result::Result<guatiao::value::value::Value, E>
 pub fn guatiao_serde::ValueSeed::visit_unit<E: serde_core::de::Error>(self) -> core::result::Result<guatiao::value::value::Value, E>
+pub struct guatiao_serde::Walked<'a, T: ?core::marker::Sized>
+impl<'a, T: ?core::marker::Sized> guatiao_serde::Walked<'a, T>
+pub fn guatiao_serde::Walked<'a, T>::new(&'a T, guatiao_serde::Presentation) -> guatiao_serde::Walked<'a, T>
+impl<'a, T: ?core::marker::Sized> core::convert::From<&'a T> for guatiao_serde::Walked<'a, T>
+pub fn guatiao_serde::Walked<'a, T>::from(&'a T) -> guatiao_serde::Walked<'a, T>
+impl<T: ?core::marker::Sized> core::clone::Clone for guatiao_serde::Walked<'_, T>
+pub fn guatiao_serde::Walked<'_, T>::clone(&self) -> Self
+impl<T: ?core::marker::Sized> core::fmt::Debug for guatiao_serde::Walked<'_, T>
+pub fn guatiao_serde::Walked<'_, T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T: ?core::marker::Sized> core::marker::Copy for guatiao_serde::Walked<'_, T>
+impl<T: guatiao::value::visit::Walk + ?core::marker::Sized> serde_core::ser::Serialize for guatiao_serde::Walked<'_, T>
+pub fn guatiao_serde::Walked<'_, T>::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
 pub fn guatiao_serde::base64(&[u8]) -> alloc::string::String
 pub fn guatiao_serde::data_uri(&[u8]) -> alloc::string::String
+pub fn guatiao_serde::deserialize_into<'de, D: serde_core::de::Deserializer<'de>, S: guatiao::value::visit::Sink + ?core::marker::Sized>(D, &mut S, guatiao_serde::Presentation) -> core::result::Result<(), guatiao_serde::BridgeError<<D as serde_core::de::Deserializer>::Error, <S as guatiao::value::visit::Sink>::Error>>
 pub fn guatiao_serde::from_base64(&str) -> core::option::Option<alloc::vec::Vec<u8>>
 pub fn guatiao_serde::from_data_uri(&str) -> core::option::Option<alloc::vec::Vec<u8>>
+pub fn guatiao_serde::from_deserializer<'de, T: guatiao::value::visit::FromWalk, D: serde_core::de::Deserializer<'de>>(D, guatiao_serde::Presentation) -> core::result::Result<T, guatiao_serde::BridgeError<<D as serde_core::de::Deserializer>::Error, guatiao::value::convert::MapError>>
 pub fn guatiao_serde::from_serde<'de, D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<guatiao::value::value::Value, <D as serde_core::de::Deserializer>::Error>
