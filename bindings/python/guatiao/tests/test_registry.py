@@ -19,7 +19,9 @@ except _lib.LibraryNotFound:
 
 from guatiao.registry import Registry
 
-_TARGET_DEBUG = os.environ["GUATIAO_LIBRARY"]
+import native
+
+_TARGET_DEBUG = native.library_dir()
 
 
 def _scanned() -> Registry:

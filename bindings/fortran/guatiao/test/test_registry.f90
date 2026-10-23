@@ -28,22 +28,10 @@ program test_registry
 
 contains
 
-  function workspace() result(dir)
-    character(:), allocatable :: dir
-    character(4096) :: buf
-    integer :: n, st
-    call get_environment_variable('GUATIAO_LIBRARY', buf, n, st)
-    if (st == 0) then
-      dir = buf(1:n)
-    else
-      dir = repo_path('target/debug')
-    end if
-  end function
-
   function scanned() result(reg)
     type(guatiao_registry) :: reg
     reg = guatiao_open_registry('fortran-registry', '0.1')
-    call reg%scan_dir(workspace(), rules=['kind=greeter'])
+    call reg%scan_dir(library_dir(), rules=['kind=greeter'])
   end function
 
   ! The keys of a list of provider maps, space-separated.
@@ -64,7 +52,7 @@ contains
     type(guatiao_registry) :: reg
     type(guatiao_value) :: answer, loaded, providers
     reg = guatiao_open_registry('fortran-registry', '0.1')
-    call reg%scan_dir(workspace(), rules=['kind=greeter'], answer=answer)
+    call reg%scan_dir(library_dir(), rules=['kind=greeter'], answer=answer)
     loaded = answer%key('loaded')
     call check(loaded%length() >= 1, 'the scan loads what declares a greeter')
     call reg%providers('greeter', providers)
@@ -102,7 +90,7 @@ contains
     character(:), allocatable :: reason
     reg = guatiao_open_registry('fortran-keys', '0.1')
     call reg%keyed_by('%id@%version')
-    call reg%scan_dir(workspace(), rules=['kind=greeter'])
+    call reg%scan_dir(library_dir(), rules=['kind=greeter'])
     call reg%providers('greeter', providers)
     call check(index(keys_of(providers), '@') > 0, 'keys follow the template')
     call reg%set_priority('derived_greeter_shouter', 50)
@@ -176,10 +164,10 @@ contains
     character(:), allocatable :: first, second, bytes
     integer :: u, code
     call gt_library_file_names('derived_greeter', first, second)
-    call read_file(workspace() // '/' // first, bytes)
+    call read_file(library_dir() // '/' // first, bytes)
     if (len(bytes) == 0 .and. len(second) > 0) then
       first = second
-      call read_file(workspace() // '/' // first, bytes)
+      call read_file(library_dir() // '/' // first, bytes)
     end if
     call execute_command_line(mkdir('build/watched'), exitstat=code)
     open (newunit=u, file='build/watched/' // first, access='stream', form='unformatted', status='replace')
@@ -218,7 +206,7 @@ contains
     integer :: st
     reg = guatiao_open_registry('fortran-source', '0.1')
     call gt_library_file_names('derived_greeter', first, second)
-    call reg%add_source_file(workspace() // '/' // first, guatiao_map(), st, msg)
+    call reg%add_source_file(library_dir() // '/' // first, guatiao_map(), st, msg)
     call check(st /= GUATIAO_OK, 'a library that is no source is refused')
     call check(len(msg) > 0, 'with words')
   end subroutine
@@ -242,7 +230,7 @@ contains
     integer(int64) :: before
     c => counting_new()
     reg = guatiao_open_registry('fortran-counting', '0.1', alloc=counting_allocator(c))
-    call reg%scan_dir(workspace(), rules=['kind=greeter'])
+    call reg%scan_dir(library_dir(), rules=['kind=greeter'])
     before = counting_live(c)
     call reg%providers('greeter', providers)
     call check(counting_live(c) > before, 'an answer is built in the registry''s allocator')

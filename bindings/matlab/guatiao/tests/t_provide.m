@@ -98,7 +98,7 @@ function answers_in_carrier()
   reg = preg();
   c = guatiao.Allocator.counting();
   t = reg.provider_table('mlgreeter_hello', 'greeter');
-  lib = gt_env('workspace', 'guatiao');
+  lib = gt_env('core');
   a = guatiao_mex('alloc_address', c.Id);
   got = guatiao.serving(@() gtfixture('greet_into_alloc', lib, t.table, t.ctx, 'ana', a));
   expect_equal(got, [0 1], 'answered in the carrier''s allocator');
@@ -190,7 +190,7 @@ function create_null_out()
   lib = guatiao.library_of('mlgreeter');
   before = guatiao.internal.held('count');
   config = guatiao.Value(struct('prefix', 'hey'));
-  st = guatiao.serving(@() gtfixture('create_null_out', gt_env('workspace', 'guatiao'), lib.info(), 1, ...
+  st = guatiao.serving(@() gtfixture('create_null_out', gt_env('core'), lib.info(), 1, ...
                                      guatiao_mex('node_pointer', config.owner_id(), {})));
   expect_equal(st, 11);
   expect_equal(guatiao.internal.held('count'), before, 'nothing held');

@@ -4,7 +4,8 @@
 
 # An allocator counting the blocks it handed out and has not taken back,
 # over the core library's default: a tree built in it by one library and
-# freed through another comes back to zero.
+# freed through another comes back to zero; and where the workspace's
+# build is.
 
 using Guatiao.FFI: GAlloc, binding_alloc
 
@@ -41,3 +42,9 @@ function Counting()
     return Counting(a, index)
 end
 live(c::Counting) = COUNTS[c.index][]
+
+"The workspace's build directory: `GUATIAO_LIBRARY`, or the directory of the file it names."
+function library_dir()
+    named = ENV["GUATIAO_LIBRARY"]
+    return isdir(named) ? named : dirname(named)
+end

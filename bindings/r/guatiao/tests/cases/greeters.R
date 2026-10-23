@@ -49,7 +49,7 @@ case("one refresh loads every greeter its sources serve", with_examples({
   # Every greeter written in another language comes through a source the
   # registry keeps: the workspace's directory and the C and Go greeters'
   # as watched directories, the Python greeters through the guatiao-py bridge.
-  HOST$watch_dir(LIBRARY, rules = "kind=greeter")
+  HOST$watch_dir(LIBRARY_DIR, rules = "kind=greeter")
   PRESENT <- c(PRESENT, "rust")
   c_dir <- build_c_greeter()
   if (is.null(c_dir)) {

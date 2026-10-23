@@ -24,7 +24,7 @@ end
 function reg = scanned()
   gt_env('examples');
   reg = guatiao.Registry('m-tests', '0.1');
-  reg.scan_dir(gt_env('library'), 'kind=greeter');
+  reg.scan_dir(gt_env('dir'), 'kind=greeter');
 end
 
 function out = ids(list)
@@ -33,7 +33,7 @@ end
 
 function scans()
   reg = guatiao.Registry('m-tests', '0.1');
-  report = reg.scan_dir(gt_env('library'), 'kind=greeter');
+  report = reg.scan_dir(gt_env('dir'), 'kind=greeter');
   loaded = strjoin(cellfun(@(s) guatiao.serde.emit(s), report.loaded, 'UniformOutput', false), ' ');
   expect_true(~isempty(strfind(loaded, 'derived_greeter')), 'the Rust greeter loaded');
   expect_true(~isempty(strfind(loaded, 'hello_library')), 'hello_library loaded');
@@ -108,7 +108,7 @@ function retires()
   reg.retire('derived_greeter');
   expect_true(~any(strcmp(ids(reg.providers('greeter')), 'derived_greeter_hello')), 'out');
   expect_true(any(strcmp(ids(reg.providers('greeter')), 'hello_library_greeter')), 'the other stays');
-  again = reg.scan_dir(gt_env('library'), 'kind=greeter');
+  again = reg.scan_dir(gt_env('dir'), 'kind=greeter');
   loaded = strjoin(cellfun(@(s) guatiao.serde.emit(s), again.loaded, 'UniformOutput', false), ' ');
   expect_true(~isempty(strfind(loaded, 'derived_greeter')), 'its key is free again');
   expect_error(@() reg.retire('derived_greeter_hello'), 'guatiao:NotFound');
@@ -192,7 +192,7 @@ function source_refusals()
   e = expect_error(@() reg.add_source_file(shelf, struct('ids', {{}})), 'guatiao:');
   expect_true(~isempty(strfind(e.message, 'already added')), 'once');
   expect_error(@() reg.add_source_file(gt_env('workspace', 'derived_greeter')), 'guatiao:WrongKind');
-  expect_error(@() reg.add_source_file(fullfile(gt_env('library'), 'no-such-file')), 'guatiao:NotFound');
+  expect_error(@() reg.add_source_file(fullfile(gt_env('dir'), 'no-such-file')), 'guatiao:NotFound');
   reg.close();
 end
 

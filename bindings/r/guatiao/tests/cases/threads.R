@@ -14,7 +14,7 @@ case("an R provider runs on R's thread and refuses every other", with_examples({
     reg <- registry("r-threads", "0.1")
     reg$register_library(library_of("rgreeter"))
     t <- reg$provider_table("rgreeter_hello", "greeter")
-    lib <- workspace_library("guatiao")
+    lib <- core_library()
     on_r <- fx("fx_greet_here", lib, t$table, t$ctx, "ana", "hello, ana", 200L)
     expect_equal(on_r, c(200L, 0L, 0L, 0L))
     away <- fx("fx_greet_threads", lib, t$table, t$ctx, "ana", "hello, ana", 8L, 250L)

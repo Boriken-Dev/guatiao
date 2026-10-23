@@ -11,11 +11,15 @@ gt <- asNamespace("guatiao")
 LIBRARY <- Sys.getenv("GUATIAO_LIBRARY")
 HAVE_LIBRARY <- nzchar(LIBRARY)
 
-# A checkout: GUATIAO_REPO, else the directory two levels above a
-# GUATIAO_LIBRARY that is a target directory.
+# The directory holding the example libraries: GUATIAO_LIBRARY when it is
+# one, else the directory of the file it names.
+LIBRARY_DIR <- if (HAVE_LIBRARY && !dir.exists(LIBRARY)) dirname(LIBRARY) else LIBRARY
+
+# A checkout: GUATIAO_REPO, else the directory two levels above
+# LIBRARY_DIR when that is a target directory.
 find_repo <- function() {
   named <- Sys.getenv("GUATIAO_REPO")
-  candidates <- c(named, if (HAVE_LIBRARY) normalizePath(file.path(LIBRARY, "..", ".."), winslash = "/", mustWork = FALSE))
+  candidates <- c(named, if (HAVE_LIBRARY) normalizePath(file.path(LIBRARY_DIR, "..", ".."), winslash = "/", mustWork = FALSE))
   for (c in candidates) {
     if (nzchar(c) && file.exists(file.path(c, "crates", "guatiao", "include", "guatiao.h"))) {
       return(normalizePath(c, winslash = "/"))
@@ -47,7 +51,11 @@ vectors <- function() read_json(readLines(repo_file("crates", "guatiao", "tests"
 text_of <- function(n) if (inherits(n, "guatiao_number")) unclass(n) else n
 
 lib_file <- function(base) gt$.gt_filename(base)
-workspace_library <- function(base) file.path(LIBRARY, lib_file(base))
+workspace_library <- function(base) file.path(LIBRARY_DIR, lib_file(base))
+
+# The file serving the core surface: GUATIAO_LIBRARY when it names a file,
+# which the core takes as it is, else guatiao's own file in the directory.
+core_library <- function() if (identical(LIBRARY, LIBRARY_DIR)) workspace_library("guatiao") else LIBRARY
 
 # ---- C, built with R's own compiler -----------------------------------------
 

@@ -39,7 +39,7 @@ end
 end
 
 @testset "the library is found through each route" begin
-    dir = ENV["GUATIAO_LIBRARY"]
+    dir = library_dir()
     file(base) = joinpath(dir, Guatiao.library_filename(base))
     nowhere = joinpath(dir, "nowhere")
     for (own, shared, want) in (

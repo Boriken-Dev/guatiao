@@ -3,8 +3,9 @@
 ! file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 !> What the host's tests share: counted checks, stated skips, the
-!> workspace's build found when GUATIAO_LIBRARY is unset, C built for the
-!> greeter written in it, and a listener that keeps what it heard.
+!> workspace's build found when GUATIAO_LIBRARY is unset and the directory
+!> holding it, C built for the greeter written in it, and a listener that
+!> keeps what it heard.
 module host_helpers
   use, intrinsic :: iso_c_binding
   use, intrinsic :: iso_fortran_env, only: output_unit
@@ -14,8 +15,8 @@ module host_helpers
   implicit none
   private
 
-  public :: check, check_text, skip, finish, setup, env, library_file, build_c, ear, ear_state, new_ear, &
-            upper_of, require_all
+  public :: check, check_text, skip, finish, setup, env, library_dir, library_file, build_c, ear, ear_state, &
+            new_ear, upper_of, require_all
 
   integer :: passed = 0, failed = 0, skipped = 0
 
@@ -61,6 +62,34 @@ contains
   subroutine setup()
     if (len(env('GUATIAO_LIBRARY')) == 0) call guatiao_use_library('../../target/debug')
   end subroutine
+
+  !> The directory holding the workspace's libraries: GUATIAO_LIBRARY, or
+  !> the directory of the file it names (an application's own library
+  !> carrying every surface, the example libraries beside it).
+  function library_dir() result(dir)
+    character(:), allocatable :: dir
+    integer :: cut
+    logical :: holds
+    dir = env('GUATIAO_LIBRARY')
+    if (len(dir) == 0) then
+      dir = '../../target/debug'
+      return
+    end if
+    ! A directory is told by the guatiao file it holds, as the lookup does:
+    ! what inquire answers for a directory differs between compilers.
+    inquire (file=library_file(dir, 'guatiao'), exist=holds)
+    if (holds) return
+    ! achar(92) is the backslash: flang's preprocessing pass (CMake runs
+    ! one on every source) doubles one written as a literal.
+    cut = max(index(dir, '/', back=.true.), index(dir, achar(92), back=.true.))
+    if (cut > 1) then
+      dir = dir(1:cut - 1)
+    else if (cut == 1) then
+      dir = dir(1:1)
+    else
+      dir = '.'
+    end if
+  end function
 
   !> An environment variable's value, '' when unset.
   function env(name) result(value)

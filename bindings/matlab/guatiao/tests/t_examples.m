@@ -11,7 +11,7 @@ end
 
 function host_runs()
   addpath(fullfile(repo_root(), 'examples', 'matlab_host'));
-  args = {gt_env('library')};
+  args = {gt_env('dir')};
   c_dir = gt_env('c_greeter');
   if ~isempty(c_dir)
     args{end + 1} = c_dir;

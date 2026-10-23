@@ -7,7 +7,7 @@
 
 using GreeterKind
 
-const TARGET = ENV["GUATIAO_LIBRARY"]
+const TARGET = library_dir()
 
 function scanned()
     reg = Registry("julia-tests", "0.1")

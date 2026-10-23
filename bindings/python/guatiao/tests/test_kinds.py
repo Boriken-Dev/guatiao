@@ -52,7 +52,7 @@ from guatiao.kinds.shapes import (  # noqa: E402
 from guatiao.kinds import _serve  # noqa: E402
 from guatiao.registry import Registry  # noqa: E402
 
-_TARGET_DEBUG = os.environ["GUATIAO_LIBRARY"]
+_TARGET_DEBUG = native.library_dir()
 _HEADER = native.REPO / "examples" / "greeter_kind" / "include" / "greeter_kind.h"
 
 

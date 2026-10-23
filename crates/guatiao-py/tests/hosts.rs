@@ -115,11 +115,19 @@ fn a_c_host_serves_python_libraries() {
         println!("skipped: no C compiler");
         return;
     };
-    let Some(guatiao_dir) = std::env::var_os("GUATIAO_LIBRARY").map(PathBuf::from) else {
+    let Some(named) = std::env::var_os("GUATIAO_LIBRARY").map(PathBuf::from) else {
         println!(
             "skipped: GUATIAO_LIBRARY names no guatiao build (with `load`) for the C host to link"
         );
         return;
+    };
+    // A directory holds guatiao's own library; a file is a library carrying
+    // the core surface under a name of its own, linked as it is.
+    let (guatiao_dir, core_file) = if named.is_dir() {
+        (named, None)
+    } else {
+        let dir = named.parent().map(Path::to_path_buf).unwrap_or_default();
+        (dir, Some(named))
     };
     let out_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
     let exe = out_dir.join(if cfg!(windows) {
@@ -137,13 +145,26 @@ fn a_c_host_serves_python_libraries() {
         .arg("-o")
         .arg(&exe)
         .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/c_host.c"));
-    if cfg!(windows) {
-        compile.arg(guatiao_dir.join("guatiao.dll.lib"));
-    } else {
-        compile
-            .arg(format!("-L{}", guatiao_dir.display()))
-            .arg("-lguatiao")
-            .arg(format!("-Wl,-rpath,{}", guatiao_dir.display()));
+    match (&core_file, cfg!(windows)) {
+        (None, true) => {
+            compile.arg(guatiao_dir.join("guatiao.dll.lib"));
+        }
+        (Some(file), true) => {
+            let mut import = file.clone().into_os_string();
+            import.push(".lib");
+            compile.arg(import);
+        }
+        (None, false) => {
+            compile
+                .arg(format!("-L{}", guatiao_dir.display()))
+                .arg("-lguatiao");
+        }
+        (Some(file), false) => {
+            compile.arg(file);
+        }
+    }
+    if !cfg!(windows) {
+        compile.arg(format!("-Wl,-rpath,{}", guatiao_dir.display()));
     }
     let compiled = compile.output().expect("the compiler runs");
     assert!(

@@ -22,7 +22,7 @@ except _lib.LibraryNotFound:
 
 import native
 
-_TARGET_DEBUG = os.environ["GUATIAO_LIBRARY"]
+_TARGET_DEBUG = native.library_dir()
 _SRC = native.REPO / "bindings" / "python" / "guatiao" / "src"
 
 

@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { libraryFilename } from '../src/native.js';
-import { REPO } from './setup.js';
+import { REPO, libraryDir } from './setup.js';
 
 const CANDIDATES = ['clang', 'C:\\Program Files\\LLVM\\bin\\clang.exe', 'cc', 'gcc'];
 
@@ -78,7 +78,7 @@ export function buildCSource(name: string): string | null {
 
 /** The workspace build of `base`, beside the guatiao library. */
 export function workspaceLibrary(base: string): string {
-  return path.join(process.env.GUATIAO_LIBRARY ?? path.join(REPO, 'target', 'debug'), libraryFilename(base));
+  return path.join(libraryDir(), libraryFilename(base));
 }
 
 /** The guatiao-py bridge: `GUATIAO_PY_BRIDGE`, else its debug build, else `null`. */

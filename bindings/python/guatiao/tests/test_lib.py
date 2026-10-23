@@ -13,6 +13,8 @@ import pytest
 
 from guatiao import _lib, ffi
 
+import native
+
 
 def test_core_loads_and_declares_every_export():
     lib = _lib.core()
@@ -30,7 +32,7 @@ def test_default_alloc_is_filled_once_and_cached():
 
 
 def _built(basename: str) -> Path:
-    path = Path(os.environ["GUATIAO_LIBRARY"]) / ffi.dll_filename(basename)
+    path = Path(native.library_dir()) / ffi.dll_filename(basename)
     if not path.is_file():
         pytest.skip(f"no {path.name} built")
     return path
@@ -89,7 +91,9 @@ def test_not_found_names_every_place_tried(monkeypatch):
     assert "find_library" in message
 
 
-def test_unknown_basename_reports_where_it_looked():
+def test_unknown_basename_reports_where_it_looked(monkeypatch):
+    # A file named here would serve any base name: the core's rule.
+    monkeypatch.setenv("GUATIAO_LIBRARY", native.library_dir())
     with pytest.raises(_lib.LibraryNotFound) as excinfo:
         _lib.resolve("not_a_real_guatiao_library")
     message = str(excinfo.value)

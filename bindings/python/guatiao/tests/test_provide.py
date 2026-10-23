@@ -35,7 +35,7 @@ from greeter_kind import Conversation, Counter, Greeter, Listener  # noqa: E402
 from guatiao import BadValue, Internal, Unsupported, Value, WrongKind, kinds, provide  # noqa: E402
 from guatiao.registry import Registry  # noqa: E402
 
-_TARGET_DEBUG = os.environ["GUATIAO_LIBRARY"]
+_TARGET_DEBUG = native.library_dir()
 
 
 class Ear:

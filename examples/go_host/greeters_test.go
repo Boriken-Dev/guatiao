@@ -31,11 +31,15 @@ import (
 // repo is the repository's root, two above this package.
 var repo, _ = filepath.Abs(filepath.Join("..", ".."))
 
-// workspace is where the workspace's libraries are: GUATIAO_LIBRARY, else
-// the workspace's debug build.
+// workspace is where the workspace's libraries are: GUATIAO_LIBRARY when it
+// names a directory, the directory of the file it names, else the
+// workspace's debug build.
 func workspace() string {
-	if dir := os.Getenv("GUATIAO_LIBRARY"); dir != "" {
-		return dir
+	if named := os.Getenv("GUATIAO_LIBRARY"); named != "" {
+		if info, err := os.Stat(named); err == nil && !info.IsDir() {
+			return filepath.Dir(named)
+		}
+		return named
 	}
 	return filepath.Join(repo, "target", "debug")
 }

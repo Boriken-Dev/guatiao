@@ -30,7 +30,7 @@ from greeter_kind import Counter  # noqa: E402
 from guatiao import BadValue, NotFound, WrongKind  # noqa: E402
 from guatiao.registry import Registry  # noqa: E402
 
-_TARGET_DEBUG = os.environ["GUATIAO_LIBRARY"]
+_TARGET_DEBUG = native.library_dir()
 
 
 @pytest.fixture()

@@ -34,7 +34,15 @@ case("R data is written as guatiao builds it", with_library({
 
 case("the library is guatiao_serde's own, found through its own variable", with_library({
   path <- gt$.gt_state$opened[2L]
-  expect_true(grepl("guatiao_serde", basename(path), fixed = TRUE), path)
+  # Without GUATIAO_SERDE_LIBRARY, a GUATIAO_LIBRARY file serves serde when
+  # it carries it; otherwise guatiao_serde's own file does.
+  shared <- !nzchar(Sys.getenv("GUATIAO_SERDE_LIBRARY")) && !identical(LIBRARY, LIBRARY_DIR) &&
+    .Call(gt$C_file_carries, enc2utf8(normalizePath(LIBRARY, winslash = "/")), 1L)
+  if (shared) {
+    expect_equal(path, normalizePath(LIBRARY, winslash = "/"))
+  } else {
+    expect_true(grepl("guatiao_serde", basename(path), fixed = TRUE), path)
+  }
   expect_true(has_export("guatiao_value_free", "guatiao_serde"))
 }))
 

@@ -67,3 +67,13 @@ def build_c_greeter(into: Path) -> "Path | None":
 def build_c_source(into: Path, name: str = "c_shelf") -> "Path | None":
     """The source written in C (a shelf of counters), as a file."""
     return _build("source_in_c.c", into, name)
+
+
+def library_dir() -> str:
+    """The directory the suite's libraries are in: `GUATIAO_LIBRARY`, or
+    the directory of the file it names (an application's own library
+    carrying every surface, with the example libraries beside it)."""
+    import os
+
+    named = os.environ["GUATIAO_LIBRARY"]
+    return named if os.path.isdir(named) else os.path.dirname(named)
