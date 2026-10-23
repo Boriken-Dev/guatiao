@@ -13,6 +13,8 @@
 
 extern crate alloc;
 
+mod walk;
+
 use alloc::collections::BTreeMap;
 use core::ffi::c_void;
 use core::hint::black_box;
@@ -216,6 +218,86 @@ const METRICS: &[Metric] = &[
     Metric {
         name: "into_local_foreign",
         setup: into_local_foreign,
+    },
+    Metric {
+        name: "config_wire_tree",
+        setup: walk::config_wire_tree,
+    },
+    Metric {
+        name: "config_wire_walk",
+        setup: walk::config_wire_walk,
+    },
+    Metric {
+        name: "wire_config_tree",
+        setup: walk::wire_config_tree,
+    },
+    Metric {
+        name: "wire_config_walk",
+        setup: walk::wire_config_walk,
+    },
+    Metric {
+        name: "floats_wire_tree",
+        setup: walk::floats_wire_tree,
+    },
+    Metric {
+        name: "floats_wire_walk",
+        setup: walk::floats_wire_walk,
+    },
+    Metric {
+        name: "wire_floats_tree",
+        setup: walk::wire_floats_tree,
+    },
+    Metric {
+        name: "wire_floats_walk",
+        setup: walk::wire_floats_walk,
+    },
+    Metric {
+        name: "bytes_wire_tree",
+        setup: walk::bytes_wire_tree,
+    },
+    Metric {
+        name: "bytes_wire_walk",
+        setup: walk::bytes_wire_walk,
+    },
+    Metric {
+        name: "wire_bytes_tree",
+        setup: walk::wire_bytes_tree,
+    },
+    Metric {
+        name: "wire_bytes_walk",
+        setup: walk::wire_bytes_walk,
+    },
+    Metric {
+        name: "config_json_tree",
+        setup: walk::config_json_tree,
+    },
+    Metric {
+        name: "config_json_walk",
+        setup: walk::config_json_walk,
+    },
+    Metric {
+        name: "json_config_tree",
+        setup: walk::json_config_tree,
+    },
+    Metric {
+        name: "json_config_walk",
+        setup: walk::json_config_walk,
+    },
+    Metric {
+        name: "floats_json_tree",
+        setup: walk::floats_json_tree,
+    },
+    Metric {
+        name: "floats_json_walk",
+        setup: walk::floats_json_walk,
+    },
+    Metric {
+        name: "json_floats_tree",
+        setup: walk::json_floats_tree,
+    },
+    Metric {
+        name: "json_floats_walk",
+        setup: walk::json_floats_walk,
     },
 ];
 

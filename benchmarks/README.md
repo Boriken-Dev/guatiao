@@ -82,6 +82,13 @@ sample, which is what `--merge` pools.
 | `clone_map` | `clone()` of an eight-entry map (text, numbers, a nested map, a list), and dropping the copy |
 | `into_local_local` | `into_local()` of that map when it is already local: judged and handed back |
 | `into_local_foreign` | that map moved between this binary's allocator and another, alternately: one copy and one free per call, what `into_local()` costs a tree from elsewhere |
+| `config_wire_tree`, `config_wire_walk` | a derived configuration (twenty servers, about 1.3 KB) to wire bytes: `to_value` then `wire::to_bytes`, against `wire::to_bytes_of` |
+| `wire_config_tree`, `wire_config_walk` | those bytes back: `wire::decode` then `from_value`, against `wire::decode_as` |
+| `floats_wire_*`, `wire_floats_*` | the same for ten thousand `f64`s with fractions |
+| `bytes_wire_*`, `wire_bytes_*` | the same for a 64 KiB byte string |
+| `config_json_tree`, `config_json_walk` | the configuration to JSON: `to_value` then `text::json::to_string`, against `to_string_of` |
+| `json_config_tree`, `json_config_walk` | that text back: `json::from_str` then `from_value`, against `json::from_str_as` |
+| `floats_json_*`, `json_floats_*` | the same for the ten thousand floats |
 
 ## Results
 
@@ -301,3 +308,33 @@ tree needs copying allocated before judging the root, and then for every
 member of a flat map (it allocates only for a nested container now), and
 `Provider::offer` copied a provider's view before the check that turns
 away most providers of another kind (it checks first).
+
+## Values as events (`visitor.json`, `visitor-linux.json`)
+
+Local and provisional: the Windows ARM64 machine and its Linux (aarch64)
+environment, one run each of six rounds, the runner built alone
+(`cargo build -p guatiao-bench --release`). Built with the workspace, the
+example application's `exact-numbers` turns on `serde_json`'s
+`arbitrary_precision` for every crate, every JSON number then arrives as
+its text under a reserved key, and the JSON readings below are slower on
+both paths. Microseconds per call, median; the tree builds a `Value` in
+the middle, the walk does not.
+
+| metric | Windows tree | Windows walk | | Linux tree | Linux walk | |
+| --- | --- | --- | --- | --- | --- | --- |
+| configuration to wire bytes | 12.31 | 4.09 | 3.0x | 10.76 | 3.48 | 3.1x |
+| wire bytes to configuration | 11.84 | 6.09 | 1.9x | 11.98 | 5.18 | 2.3x |
+| 10k floats to wire bytes | 1825 | 759 | 2.4x | 1019 | 668 | 1.5x |
+| wire bytes to 10k floats | 969 | 312 | 3.1x | 579 | 304 | 1.9x |
+| 64 KiB to wire bytes | 3.74 | 1.55 | 2.4x | 2.32 | 1.32 | 1.8x |
+| wire bytes to 64 KiB | 3.55 | 1.77 | 2.0x | 2.27 | 1.31 | 1.7x |
+| configuration to JSON | 12.39 | 2.58 | 4.8x | 11.68 | 2.50 | 4.7x |
+| JSON to configuration | 16.49 | 7.08 | 2.3x | 15.46 | 6.03 | 2.6x |
+| 10k floats to JSON | 1744 | 792 | 2.2x | 1148 | 730 | 1.6x |
+| JSON to 10k floats | 1567 | 250 | 6.3x | 1338 | 216 | 6.2x |
+
+Writing a float costs its `Display` text either way, which is what a
+value stores; what the walk saves is a node allocated per number, which
+is why a list of floats gains least. Reading floats from JSON gains most:
+the format hands over an `f64` that the walk keeps, where the tree turns
+it into text and back.
