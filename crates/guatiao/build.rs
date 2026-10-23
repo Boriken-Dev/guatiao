@@ -43,6 +43,14 @@ fn main() {
     println!("cargo::rerun-if-changed=Cargo.toml");
     println!("cargo::rerun-if-env-changed=GUATIAO_WRITE_HEADER");
 
+    // FreeBSD's libc has pthread stubs that fail, and a program not linked
+    // with libthr binds to them: Rust's runtime then aborts setting up
+    // thread-local storage. Every library linking this crate names libthr,
+    // so a C program needs no `-pthread`.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("freebsd") {
+        println!("cargo::rustc-link-lib=dylib=thr");
+    }
+
     #[cfg(feature = "c-header")]
     render();
 }
