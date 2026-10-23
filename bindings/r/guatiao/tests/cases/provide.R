@@ -74,7 +74,7 @@ case("what a provider answers lands in the caller's allocator", with_examples({
   } else {
     c <- counting()
     t <- PREG$provider_table("rgreeter_hello", "greeter")
-    lib <- workspace_library("guatiao")
+    lib <- core_library()
     got <- fx("fx_greet_into_alloc", lib, t$table, t$ctx, "ana", c)
     expect_equal(got, c(0L, 1L))
     expect_equal(live(c), 0)
@@ -158,7 +158,7 @@ case("create builds nothing when it has nowhere to put the instance", with_examp
     lib <- library_of("rgreeter")
     before <- live_objects()
     config <- value(list(prefix = "hey"))
-    st <- fx("fx_create_null_out", workspace_library("guatiao"), .Call(gt$C_library_info, lib$ptr), 1L,
+    st <- fx("fx_create_null_out", core_library(), .Call(gt$C_library_info, lib$ptr), 1L,
       .Call(gt$C_node_pointer, config))
     expect_equal(st, 11L)
     expect_equal(live_objects(), before)

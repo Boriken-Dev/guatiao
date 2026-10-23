@@ -6,7 +6,7 @@
 
 case("the R host example runs", with_examples({
   host <- repo_file("examples", "r_host", "host.R")
-  args <- LIBRARY
+  args <- LIBRARY_DIR
   c_dir <- build_c_greeter()
   if (!is.null(c_dir)) args <- c(args, c_dir)
   go <- Sys.getenv("GUATIAO_GO_LIBRARY")

@@ -27,7 +27,9 @@ from guatiao import _abi
 from guatiao.registry import Registry
 from guatiao.value import Value
 
-_TARGET_DEBUG = os.environ["GUATIAO_LIBRARY"]
+import native
+
+_TARGET_DEBUG = native.library_dir()
 _GREETER_KIND_H = (
     Path(__file__).resolve().parents[4]
     / "examples"

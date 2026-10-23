@@ -53,7 +53,7 @@ const HOST = Registry("julia-greeters", "0.1")
 # registry keeps, and one refresh loads them all: the workspace's own
 # directory and the C and Go greeters' as watched directories, the Python
 # greeters through the guatiao-py bridge.
-Guatiao.watch_dir!(HOST, ENV["GUATIAO_LIBRARY"]; rules = "kind=greeter")
+Guatiao.watch_dir!(HOST, library_dir(); rules = "kind=greeter")
 push!(PRESENT, :rust)
 let dir = build_c_greeter()
     if dir === nothing

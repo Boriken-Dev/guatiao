@@ -12,7 +12,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { LibraryNotFound, libraryFilename, openSurface } from 'guatiao/ffi';
 
-const DIR = process.env.GUATIAO_LIBRARY!;
+import { libraryDir } from './setup.js';
+
+const NAMED = process.env.GUATIAO_LIBRARY!;
+const DIR = libraryDir();
 const file = (basename: string): string => path.join(DIR, libraryFilename(basename));
 const found = (): string =>
   openSurface('guatiao_serde', [['uint32_t guatiao_alloc_default(void *out)']], {
@@ -23,7 +26,7 @@ const found = (): string =>
 describe('the serde library is found', () => {
   afterEach(() => {
     delete process.env.GUATIAO_SERDE_LIBRARY;
-    process.env.GUATIAO_LIBRARY = DIR;
+    process.env.GUATIAO_LIBRARY = NAMED;
   });
 
   it('through its own variable naming a file, whatever it is called', () => {

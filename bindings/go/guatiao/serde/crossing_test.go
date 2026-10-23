@@ -10,13 +10,13 @@ package serde_test
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/internal/native"
+	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/internal/testenv"
 	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/serde"
 )
 
@@ -81,7 +81,7 @@ func TestFreesAfterADocumentThatDoesNotParse(t *testing.T) {
 // The lookup is decided once a process, so each case looks through the
 // native layer's own candidates for a fresh process's environment.
 func TestTheLibraryIsFoundThroughEachRoute(t *testing.T) {
-	dir := os.Getenv("GUATIAO_LIBRARY")
+	dir := testenv.Workspace()
 	file := func(base string) string { return filepath.Join(dir, native.Filename(base)) }
 	for _, c := range []struct {
 		name, own, shared, want string

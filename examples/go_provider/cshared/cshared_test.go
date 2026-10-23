@@ -20,9 +20,15 @@ import (
 
 func TestARustHostScansAndCallsTheGoLibrary(t *testing.T) {
 	repo, _ := filepath.Abs(filepath.Join("..", "..", ".."))
-	workspace := os.Getenv("GUATIAO_LIBRARY")
-	if workspace == "" {
-		workspace = filepath.Join(repo, "target", "debug")
+	// The library passes on as named; the host sits in its directory, or
+	// beside the one file it names.
+	library := os.Getenv("GUATIAO_LIBRARY")
+	if library == "" {
+		library = filepath.Join(repo, "target", "debug")
+	}
+	workspace := library
+	if info, err := os.Stat(library); err == nil && !info.IsDir() {
+		workspace = filepath.Dir(library)
 	}
 	host := filepath.Join(workspace, "greeter_host")
 	if runtime.GOOS == "windows" {
@@ -41,7 +47,7 @@ func TestARustHostScansAndCallsTheGoLibrary(t *testing.T) {
 		t.Fatalf("go build -buildmode=c-shared: %v\n%s", err, out)
 	}
 	run := exec.Command(host)
-	run.Env = append(os.Environ(), "GREETER_HOST_PATH="+dir, "GUATIAO_LIBRARY="+workspace)
+	run.Env = append(os.Environ(), "GREETER_HOST_PATH="+dir, "GUATIAO_LIBRARY="+library)
 	out, err := run.CombinedOutput()
 	text := string(out)
 	if err != nil {

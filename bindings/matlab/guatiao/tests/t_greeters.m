@@ -64,7 +64,7 @@ function refresh_all()
   % Every greeter written in another language comes through a source the
   % registry keeps: the workspace's folder and the C and Go greeters' as
   % watched folders, the Python greeters through the guatiao-py bridge.
-  reg.watch_dir(gt_env('library'), 'kind=greeter');
+  reg.watch_dir(gt_env('dir'), 'kind=greeter');
   present = {'rust'};
   missing = {};
   c_dir = gt_env('c_greeter');

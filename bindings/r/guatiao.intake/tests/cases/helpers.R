@@ -16,11 +16,15 @@ with_library <- function(code) {
   force(code)
 }
 
-# A checkout: GUATIAO_REPO, else the directory two levels above a
-# GUATIAO_LIBRARY that is a target directory.
+# The directory holding the workspace's libraries: GUATIAO_LIBRARY when it
+# is one, else the directory of the file it names.
+LIBRARY_DIR <- if (HAVE_LIBRARY && !dir.exists(LIBRARY)) dirname(LIBRARY) else LIBRARY
+
+# A checkout: GUATIAO_REPO, else the directory two levels above
+# LIBRARY_DIR when that is a target directory.
 find_repo <- function() {
   candidates <- c(Sys.getenv("GUATIAO_REPO"),
-    if (HAVE_LIBRARY) normalizePath(file.path(LIBRARY, "..", ".."), winslash = "/", mustWork = FALSE))
+    if (HAVE_LIBRARY) normalizePath(file.path(LIBRARY_DIR, "..", ".."), winslash = "/", mustWork = FALSE))
   for (c in candidates) {
     if (nzchar(c) && file.exists(file.path(c, "crates", "guatiao", "include", "guatiao.h"))) {
       return(normalizePath(c, winslash = "/"))

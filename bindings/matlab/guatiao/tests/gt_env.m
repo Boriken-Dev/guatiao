@@ -7,9 +7,11 @@ function out = gt_env(op, varargin)
 % the example packages on the path, and C built for the tests that need
 % it (each built once a session).
 %
-%   gt_env('library')                 GUATIAO_LIBRARY
+%   gt_env('dir')                     the folder of workspace libraries: GUATIAO_LIBRARY,
+%                                     or the folder of the file it names
+%   gt_env('core')                    the file GUATIAO_LIBRARY gives the core
 %   gt_env('file', base)              a workspace library's file name
-%   gt_env('workspace', base)         its path in the library folder
+%   gt_env('workspace', base)         its path in that folder
 %   gt_env('examples')                puts the example packages on the path
 %   gt_env('c_greeter')               the folder holding the C greeter, or ''
 %   gt_env('c_source', name)          the C shelf source built as `name`, or ''
@@ -22,12 +24,18 @@ function out = gt_env(op, varargin)
     built = struct();
   end
   switch op
-    case 'library'
+    case 'dir'
+      out = lib_dir();
+    case 'core'
+      % A file serves the core as it is; a folder holds it under its own name.
       out = getenv('GUATIAO_LIBRARY');
+      if exist(out, 'dir') == 7
+        out = fullfile(out, lib_file('guatiao'));
+      end
     case 'file'
       out = lib_file(varargin{1});
     case 'workspace'
-      out = fullfile(getenv('GUATIAO_LIBRARY'), lib_file(varargin{1}));
+      out = fullfile(lib_dir(), lib_file(varargin{1}));
     case 'examples'
       addpath(fullfile(repo_root(), 'examples', 'greeter_kind', 'matlab'));
       addpath(fullfile(repo_root(), 'examples', 'matlab_provider', 'mlgreeter'));
@@ -79,6 +87,15 @@ function out = gt_env(op, varargin)
       out = getenv('GUATIAO_GO_LIBRARY');
     otherwise
       error('gt_test:fail', 'gt_env: no %s', op);
+  end
+end
+
+function d = lib_dir()
+% GUATIAO_LIBRARY may name one file carrying every surface; the example
+% libraries are built beside it.
+  d = getenv('GUATIAO_LIBRARY');
+  if exist(d, 'dir') ~= 7
+    d = fileparts(d);
   end
 end
 

@@ -55,7 +55,7 @@ contains
     integer :: st, k
     logical :: exists
     character(:), allocatable :: msg
-    call host%watch_dir(workspace(), rules=['kind=greeter'])
+    call host%watch_dir(library_dir(), rules=['kind=greeter'])
     have(1) = .true.
     dir = build_c('../../crates/guatiao/tests/c_consumer/greeter_in_c.c', 'build/c-greeter', 'c_greeter')
     if (len(dir) == 0) then
@@ -104,12 +104,6 @@ contains
     call guatiao_register_library(host, fortran_greeter_library())
     have(5) = .true.
   end subroutine
-
-  function workspace() result(dir)
-    character(:), allocatable :: dir
-    dir = env('GUATIAO_LIBRARY')
-    if (len(dir) == 0) dir = '../../target/debug'
-  end function
 
   subroutine a_fortran_host_calls_it(i)
     integer, intent(in) :: i
@@ -230,7 +224,7 @@ contains
     type(gt_str) :: k, n
     who = trim(WHICH(i))
     greeting = trim(GREETINGS(i))
-    lib = gt_dl_open(library_file(workspace(), 'greeter_caller'))
+    lib = gt_dl_open(library_file(library_dir(), 'greeter_caller'))
     call check(c_associated(lib), who // ': the Rust caller opens')
     if (.not. c_associated(lib)) return
     call c_f_procpointer(gt_dl_sym(lib, 'greeter_caller_run'), run)

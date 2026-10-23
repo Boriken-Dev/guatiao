@@ -6,7 +6,7 @@
 
 @testset "the Julia host example runs" begin
     host = joinpath(REPO, "examples", "julia_host", "host.jl")
-    args = String[ENV["GUATIAO_LIBRARY"]]
+    args = String[library_dir()]
     c = build_c_greeter()
     c === nothing || push!(args, c)
     go = get(ENV, "GUATIAO_GO_LIBRARY", "")

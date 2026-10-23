@@ -41,6 +41,8 @@ describe('a tree between serde and the core', () => {
 
   it("is serde's own library, which carries the core too", () => {
     const lib = serde.library();
-    expect(lib.path).toMatch(/guatiao_serde\.(dll|so|dylib)$/);
+    // A GUATIAO_LIBRARY file that exports serde serves it; any other setting
+    // leads to serde's own file.
+    if (lib.path !== process.env.GUATIAO_LIBRARY) expect(lib.path).toMatch(/guatiao_serde\.(dll|so|dylib)$/);
   });
 });

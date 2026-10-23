@@ -45,8 +45,15 @@ func Filename(base string) string {
 	return "lib" + base + ".so"
 }
 
-// Workspace is the directory GUATIAO_LIBRARY names.
-func Workspace() string { return os.Getenv("GUATIAO_LIBRARY") }
+// Workspace is the directory of the workspace's libraries: GUATIAO_LIBRARY
+// when it names a directory, else the directory of the one file it names.
+func Workspace() string {
+	named := os.Getenv("GUATIAO_LIBRARY")
+	if info, err := os.Stat(named); err == nil && !info.IsDir() {
+		return filepath.Dir(named)
+	}
+	return named
+}
 
 // Compiler is the C compiler cgo uses, or "".
 func Compiler() string {

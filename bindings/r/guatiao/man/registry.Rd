@@ -50,7 +50,8 @@ refused)}. Nothing refreshes on its own.}
 \examples{
 if (nzchar(Sys.getenv("GUATIAO_LIBRARY"))) {
   reg <- registry("my-host", "1.0")
-  reg$scan_dir(Sys.getenv("GUATIAO_LIBRARY"), rules = "kind=greeter")
+  lib <- Sys.getenv("GUATIAO_LIBRARY")
+  reg$scan_dir(if (dir.exists(lib)) lib else dirname(lib), rules = "kind=greeter")
   length(reg$providers("greeter"))
   reg$close()
 }

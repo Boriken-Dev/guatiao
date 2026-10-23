@@ -7,14 +7,14 @@
 
 scanned <- function() {
   reg <- registry("r-tests", "0.1")
-  reg$scan_dir(LIBRARY, rules = "kind=greeter")
+  reg$scan_dir(LIBRARY_DIR, rules = "kind=greeter")
   reg
 }
 ids <- function(list) vapply(list, function(p) p$id, "")
 
 case("scans by rule and lists the providers", with_examples({
   reg <- registry("r-tests", "0.1")
-  report <- reg$scan_dir(LIBRARY, rules = "kind=greeter")
+  report <- reg$scan_dir(LIBRARY_DIR, rules = "kind=greeter")
   expect_true(any(grepl("derived_greeter", unlist(report$loaded))))
   expect_true(any(grepl("hello_library", unlist(report$loaded))))
   expect_true("derived_greeter_hello" %in% ids(reg$providers("greeter")))
@@ -78,7 +78,7 @@ case("retires a library and frees its key", with_examples({
   reg$retire("derived_greeter")
   expect_true(!("derived_greeter_hello" %in% ids(reg$providers("greeter"))))
   expect_true("hello_library_greeter" %in% ids(reg$providers("greeter")))
-  again <- reg$scan_dir(LIBRARY, rules = "kind=greeter")
+  again <- reg$scan_dir(LIBRARY_DIR, rules = "kind=greeter")
   expect_true(any(grepl("derived_greeter", unlist(again$loaded))))
   e <- expect_error(reg$retire("derived_greeter_hello"), "guatiao_error")
   expect_equal(e$status, "NotFound")
@@ -159,7 +159,7 @@ case("refuses with the source's own words, and a file that is no source", with_e
     expect_true(grepl("already added", e$message))
     e <- expect_error(reg$add_source_file(workspace_library("derived_greeter")), "guatiao_error")
     expect_equal(e$status, "WrongKind")
-    e <- expect_error(reg$add_source_file(file.path(LIBRARY, "no-such-file")), "guatiao_error")
+    e <- expect_error(reg$add_source_file(file.path(LIBRARY_DIR, "no-such-file")), "guatiao_error")
     expect_equal(e$status, "NotFound")
     reg$close()
   }

@@ -3,16 +3,18 @@
 ! file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 !> What every test program shares: checks that count, a stated skip, the
-!> workspace's library found when GUATIAO_LIBRARY is unset, files read
-!> whole, and an allocator counting the blocks it handed out.
+!> workspace's library found when GUATIAO_LIBRARY is unset and the
+!> directory holding it, files read whole, and an allocator counting the
+!> blocks it handed out.
 module harness
   use, intrinsic :: iso_c_binding
   use, intrinsic :: iso_fortran_env, only: int64, output_unit
   use guatiao
+  use guatiao_loader, only: gt_library_file_names
   implicit none
   private
 
-  public :: check, check_text, check_status, skip, finish, setup, read_file, repo_path, &
+  public :: check, check_text, check_status, skip, finish, setup, read_file, repo_path, library_dir, &
             counting, counting_new, counting_allocator, counting_live, counting_free, require_all
 
   integer :: passed = 0, failed = 0, skipped = 0
@@ -50,6 +52,38 @@ contains
     call get_environment_variable('GUATIAO_LIBRARY', probe, n, st)
     if (st /= 0 .and. st /= -1) call guatiao_use_library(repo_path('target/debug'))
   end subroutine
+
+  !> The directory holding the workspace's libraries: GUATIAO_LIBRARY, or
+  !> the directory of the file it names (an application's own library
+  !> carrying every surface, the example libraries beside it).
+  function library_dir() result(dir)
+    character(:), allocatable :: dir, first, second
+    character(4096) :: buf
+    integer :: n, st, cut
+    logical :: holds
+    call get_environment_variable('GUATIAO_LIBRARY', buf, n, st)
+    if (st /= 0 .or. n == 0) then
+      dir = repo_path('target/debug')
+      return
+    end if
+    dir = buf(1:n)
+    ! A directory is told by the guatiao file it holds, as the lookup does:
+    ! what inquire answers for a directory differs between compilers.
+    call gt_library_file_names('guatiao', first, second)
+    inquire (file=dir // '/' // first, exist=holds)
+    if (.not. holds .and. len(second) > 0) inquire (file=dir // '/' // second, exist=holds)
+    if (holds) return
+    ! achar(92) is the backslash: flang's preprocessing pass (CMake runs
+    ! one on every source) doubles one written as a literal.
+    cut = max(index(dir, '/', back=.true.), index(dir, achar(92), back=.true.))
+    if (cut > 1) then
+      dir = dir(1:cut - 1)
+    else if (cut == 1) then
+      dir = dir(1:1)
+    else
+      dir = '.'
+    end if
+  end function
 
   !> A path inside the repository, from this package's directory.
   function repo_path(rel) result(p)

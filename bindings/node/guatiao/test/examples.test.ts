@@ -12,6 +12,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { REPO } from './helpers.js';
+import { libraryDir } from './setup.js';
 import { bridge, bridgeConfig, buildCGreeter } from './native.js';
 
 const EXAMPLES = path.join(REPO, 'examples');
@@ -21,7 +22,7 @@ describe('examples/node_host', () => {
     if (!existsSync(path.join(EXAMPLES, 'node_modules', 'guatiao', 'dist', 'index.js'))) {
       return ctx.skip('the examples are not installed: npm run build here, then npm install in examples/');
     }
-    const args = [path.join(EXAMPLES, 'node_host', 'host.ts'), process.env.GUATIAO_LIBRARY!];
+    const args = [path.join(EXAMPLES, 'node_host', 'host.ts'), libraryDir()];
     const cDir = buildCGreeter();
     if (cDir !== null) args.push(cDir);
     args.push('--node-library', path.join(EXAMPLES, 'node_provider', 'node_greeter', 'greeters.ts'));

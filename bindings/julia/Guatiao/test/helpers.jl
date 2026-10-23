@@ -94,8 +94,14 @@ end
 "The source written in C (a shelf of counters), as a file; `nothing` without a compiler."
 build_c_source(name) = build_c(joinpath(C_CONSUMER, "source_in_c.c"), scratch("c-shelf"), name)
 
+"The workspace's build directory: `GUATIAO_LIBRARY`, or the directory of the file it names."
+function library_dir()
+    named = ENV["GUATIAO_LIBRARY"]
+    return isdir(named) ? named : dirname(named)
+end
+
 "The workspace build of `base`, beside the guatiao library."
-workspace_library(base) = joinpath(ENV["GUATIAO_LIBRARY"], Guatiao.library_filename(base))
+workspace_library(base) = joinpath(library_dir(), Guatiao.library_filename(base))
 
 "The guatiao-py bridge: `GUATIAO_PY_BRIDGE`, else its debug build when it is there, else `nothing`."
 function bridge()

@@ -22,7 +22,7 @@ function threads()
   reg = guatiao.Registry('m-threads', '0.1');
   reg.register_library(guatiao.library_of('mlgreeter'));
   t = reg.provider_table('mlgreeter_hello', 'greeter');
-  lib = gt_env('workspace', 'guatiao');
+  lib = gt_env('core');
   here = guatiao.serving(@() gtfixture('greet_here', lib, t.table, t.ctx, 'ana', 'hello, ana', 200));
   expect_equal(here, [200 0 0 0], 'on the interpreter''s thread');
   outside = gtfixture('greet_here', lib, t.table, t.ctx, 'ana', 'hello, ana', 5);

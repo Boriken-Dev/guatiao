@@ -15,8 +15,9 @@ import * as n from '../src/native.js';
 import { Counter } from '../../../../examples/greeter_kind/node/greeter_kind.ts';
 import { libraryName } from './helpers.js';
 import { buildCSource, scratch, workspaceLibrary } from './native.js';
+import { libraryDir } from './setup.js';
 
-const TARGET = process.env.GUATIAO_LIBRARY!;
+const TARGET = libraryDir();
 
 function scanned(): Registry {
   const reg = new Registry('node-tests', '0.1');

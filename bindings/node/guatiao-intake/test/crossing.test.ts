@@ -6,15 +6,13 @@
 // read and freed through the other, every block accounted for; and a
 // provider's form, read through the core's registry, checked here.
 
-import path from 'node:path';
-
 import { describe, expect, it } from 'vitest';
 
 import { Registry, Value } from 'guatiao';
 
 import * as intake from '../src/index.js';
 import { Counting } from './counting.js';
-import { REPO } from './setup.js';
+import { libraryDir } from './setup.js';
 
 describe('a tree between intake and the core', () => {
   it('the core builds it, intake reads it, and its view refuses once it is closed', () => {
@@ -37,9 +35,8 @@ describe('a tree between intake and the core', () => {
   });
 
   it("reads a provider's form from its meta, and it fits the schema", () => {
-    const dir = process.env.GUATIAO_LIBRARY ?? path.join(REPO, 'target', 'debug');
     using reg = new Registry('node-tests', '0.1');
-    reg.scanDir(dir, { rules: 'kind=greeter' });
+    reg.scanDir(libraryDir(), { rules: 'kind=greeter' });
     using meta = reg.providerMeta('derived_greeter_shouter')!;
     const form = meta.asMap().get(intake.providerFormKey)!;
     const schema = reg.providerConfig('derived_greeter_shouter')!;
