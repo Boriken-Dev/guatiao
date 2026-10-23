@@ -568,7 +568,10 @@ placeholder of the caller's choosing.
 ## In Rust
 
 The `guatiao` crate implements every form above for these types, under
-`ToValue`, `FromValue` and `Schema` and the derives.
+`ToValue`, `FromValue` and `Schema` and the derives. A type that speaks
+serde (`toml::Table`, `serde_json::Value`, a type of your own) crosses
+through `guatiao-serde`'s `Serde<T>` wrapper or its `adapt` modules, in
+serde's data model.
 
 | form | Rust types |
 | --- | --- |

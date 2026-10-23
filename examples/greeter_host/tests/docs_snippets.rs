@@ -1033,6 +1033,56 @@ fn the_configuration_page_s_with_module_converts_a_field() -> Result<(), Box<dyn
     Ok(())
 }
 
+#[test]
+fn the_configuration_page_s_serde_fields_convert() -> Result<(), Box<dyn core::error::Error>> {
+    // CONFIG-SERDE-BEGIN
+    use guatiao::{FromValue, Map, Schema, ToValue};
+    use guatiao_serde::Serde;
+
+    #[derive(ToValue, FromValue, Schema)]
+    pub struct Plugin {
+        #[map(with = guatiao_serde::adapt::any)]
+        pub extra: toml::Value,
+        pub settings: Serde<toml::Table, Map>,
+    }
+    // CONFIG-SERDE-END
+
+    // CONFIG-SERDE-WITH-BEGIN
+    mod plugin_settings {
+        pub use guatiao_serde::adapt::{from_value, to_value_in};
+
+        pub fn kind(alloc: guatiao::Alloc) -> guatiao::schema::KindBuilder {
+            guatiao::schema::KindBuilder::any_in(alloc).description("read by the plugin")
+        }
+    }
+    // CONFIG-SERDE-WITH-END
+
+    #[derive(ToValue, FromValue, Schema, Debug, PartialEq)]
+    struct Settings {
+        #[map(with = plugin_settings)]
+        settings: toml::Table,
+    }
+
+    let table: toml::Table = "factor = 1.5\n[limits]\nmax = 10\n".parse()?;
+    let plugin = Plugin {
+        extra: toml::Value::Integer(3),
+        settings: Serde::new(table.clone()),
+    };
+    let back = Plugin::from_value(&plugin.to_value()?)?;
+    assert_eq!((&back.extra, &back.settings.0), (&plugin.extra, &table));
+    let settings = Settings { settings: table };
+    assert_eq!(Settings::from_value(&settings.to_value()?)?, settings);
+    let schema = Settings::schema()?;
+    let s = guatiao::schema::SchemaRef::new(&schema).ok_or("not a schema")?;
+    assert_eq!(
+        s.find("settings").ok_or("no field")?.description(),
+        "read by the plugin"
+    );
+    assert_eq!(rust_block(CONFIGURATION, 4), marked("CONFIG-SERDE"));
+    assert_eq!(rust_block(CONFIGURATION, 5), marked("CONFIG-SERDE-WITH"));
+    Ok(())
+}
+
 /// The `index`-th fenced `rust` block of `md`, minus doctest-hidden lines
 /// (`#` alone or `# ` first).
 fn rust_block(md: &str, index: usize) -> String {

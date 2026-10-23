@@ -154,3 +154,47 @@ struct Retry {
     timeout: std::time::Duration,
 }
 ```
+
+## A type from serde
+
+`plugins` above holds `toml::Table`s, a type guatiao has no impls for.
+Any type serde reads and writes can be a field: `guatiao-serde`
+converts it through serde.
+
+- **A bare field** names a module: `#[map(with =
+  guatiao_serde::adapt::object)]` describes it as an open object,
+  `adapt::any` as any value. A `BTreeMap` of tables is one field, as
+  `plugins` is.
+- **A wrapper**, `guatiao_serde::Serde<T>`, describes it as any value;
+  `Serde<T, guatiao::Map>` as an open object, and `Serde<T, S>` as any
+  type `S` of yours that implements `Schema`. The value is `.0`.
+
+```rust
+use guatiao::{FromValue, Map, Schema, ToValue};
+use guatiao_serde::Serde;
+
+#[derive(ToValue, FromValue, Schema)]
+pub struct Plugin {
+    #[map(with = guatiao_serde::adapt::any)]
+    pub extra: toml::Value,
+    pub settings: Serde<toml::Table, Map>,
+}
+```
+
+A value crosses in serde's data model, a variant externally tagged, and
+a TOML date or time is the text it was written as. Writing keeps a
+number's spelling when serde hands over its text (`serde_json` with its
+`arbitrary_precision`, which `guatiao-serde`'s `exact-numbers` turns
+on). Reading hands serde an integer of up to 128 bits or the nearest
+`f64`, so `1.10` reads as `1.1`, and a wider integer is refused. A
+module of your own reuses the two conversions and gives its own schema:
+
+```rust
+mod plugin_settings {
+    pub use guatiao_serde::adapt::{from_value, to_value_in};
+
+    pub fn kind(alloc: guatiao::Alloc) -> guatiao::schema::KindBuilder {
+        guatiao::schema::KindBuilder::any_in(alloc).description("read by the plugin")
+    }
+}
+```
