@@ -87,8 +87,8 @@ an application that carries it — named by `GUATIAO_LIBRARY`.
 JSON, TOML and YAML, and forms, are a package of their own beside each
 core one, over the `guatiao_serde` and `guatiao_intake` libraries: PyPI
 `guatiao-serde` and `guatiao-intake`, pub.dev `guatiao_serde` and
-`guatiao_intake`, npm `guatiao-serde` and `guatiao-intake`, the Go packages
-`.../bindings/go/guatiao/serde` and `.../bindings/go/guatiao/intake`, the Julia packages
+`guatiao_intake`, npm `guatiao-serde` and `guatiao-intake`, the Go modules
+`.../bindings/go/guatiao-serde` and `.../bindings/go/guatiao-intake`, the Julia packages
 `GuatiaoSerde` and `GuatiaoIntake` (`bindings/julia/GuatiaoSerde`,
 `bindings/julia/GuatiaoIntake`), the R packages `guatiao.serde` and
 `guatiao.intake` (`bindings/r/guatiao.serde`, `bindings/r/guatiao.intake`), and in MATLAB,

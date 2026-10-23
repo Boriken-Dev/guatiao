@@ -47,7 +47,9 @@ public surface); this file is about the repository.
 | `bindings/node/guatiao/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads; `src/ffi.ts` (`guatiao/ffi`) is what a package over another guatiao library builds on |
 | `bindings/node/guatiao-serde/`, `bindings/node/guatiao-intake/` | the npm packages `guatiao-serde` and `guatiao-intake`, each over its own library and the core's koffi; their tests run against the core's sources |
 | `bindings/node/package.json` | the npm workspace of the three Node packages, with the one `package-lock.json`: `npm ci` there installs all three and links the core into the others |
-| `bindings/go/guatiao/` | Go bindings over the C ABI through cgo, the module `github.com/Boriken-Dev/guatiao/bindings/go/guatiao` with its own `AGENTS.md`: a package per crate (`guatiao`, `serde`, `intake`), each over its own library, the other two building on what `guatiao` exports for them (`Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError`); `internal/native/` holds every line of C and copies of the three headers (a test compares them with the committed ones); `cmd/guatiao-kind` writes a kind package's glue |
+| `bindings/go/guatiao/` | Go bindings over the C ABI through cgo, the module `github.com/Boriken-Dev/guatiao/bindings/go/guatiao` (package `guatiao`) with its own `AGENTS.md`: what the other two modules build on (`Surface`, `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError`); `internal/native/` holds its C and a copy of `guatiao.h` (a test compares it with the committed one); `cmd/guatiao-kind` writes a kind package's glue |
+| `bindings/go/guatiao-serde/`, `bindings/go/guatiao-intake/` | the modules `.../bindings/go/guatiao-serde` (package `serde`) and `.../bindings/go/guatiao-intake` (package `intake`), each with its own `AGENTS.md`, over its own library, requiring the core module at the same version; each carries copies of the headers it calls, compared with the committed ones by a test |
+| `bindings/go/go.work` | builds the three Go modules together from a checkout |
 | `bindings/julia/Guatiao/` | Julia bindings over the C ABI through `ccall`, the package `Guatiao` with its own `AGENTS.md`; `src/abi.jl` mirrors the header's structs (a test compares each layout with the header's text); `src/ffi.jl` (`Guatiao.FFI`) is what a package over another guatiao library builds on; `test/fixtures/` holds the C its tests build |
 | `bindings/julia/GuatiaoSerde/`, `bindings/julia/GuatiaoIntake/` | the packages `GuatiaoSerde` and `GuatiaoIntake`, each over its own library, depending on `Guatiao` |
 | `bindings/r/guatiao/` | R bindings over the C ABI, the source package `guatiao`: `src/` holds a copy of `guatiao.h` (a test compares it with the committed one) and the C glue, compiled when the package installs, which opens the libraries at run time and calls kind slots through libffi; it registers the C table `guatiao_r_api` (`inst/include/guatiao_r_api.h`) the other packages build on; its API header is `inst/AGENTS.md`; `tests/fixtures/` holds the C its tests build |
@@ -196,9 +198,10 @@ a kind's header or interfaces, `go generate ./greeter_kind/go` there:
 
 ```bash
 export GUATIAO_LIBRARY=$PWD/target/debug
-(cd bindings/go/guatiao && go vet ./... && go test ./...)
+(cd bindings/go && go vet ./guatiao/... ./guatiao-serde/... ./guatiao-intake/... \
+  && go test ./guatiao/... ./guatiao-serde/... ./guatiao-intake/...)   # through go.work
 (cd examples && go vet ./... && go test ./...)   # GUATIAO_PY_BRIDGE adds the Python greeters
-gofmt -l bindings/go/guatiao examples                     # prints nothing
+gofmt -l bindings/go examples                    # prints nothing
 # the Go library as a file, scanned by the Rust example host
 (cd examples && go build -buildmode=c-shared -o ../go-library/libgo_greeter.so ./go_provider/cshared)
 GUATIAO_GO_LIBRARY=go-library cargo test -p greeter_host --all-features --test go_library
@@ -371,8 +374,10 @@ Four workflows:
   `bindings/node` workspace and runs the three packages' type checks and tests
   on Node 22 and 24 on the three platforms, with the C greeter built and
   the guatiao-py bridge serving the Python greeters (a stated skip fails
-  it), and checks what `npm pack` ships for each. Its `go` job runs `bindings/go/guatiao` and
-  `examples` (vet, gofmt, tests) on Go 1.26 and 1.27 on the three
+  it), and checks what `npm pack` ships for each. Its `go` job runs the three Go modules
+  through `bindings/go/go.work`, serde and intake again each alone (their
+  own `go.mod`, the core replaced by the checkout's), and `examples` (vet,
+  gofmt, tests) on Go 1.26 and 1.27 on the three
   platforms, with the C greeter, the guatiao-py bridge and a stated skip
   failing the job, under `-race` and `GOEXPERIMENT=cgocheck2` on one leg,
   and builds the Go library as a file for the Rust example host's
@@ -428,7 +433,9 @@ release that is not a pre-release must be above `0.0.0`); `bindings/matlab/guati
 (the Octave package and the MATLAB toolbox both take the version as
 written), `bindings/fortran/guatiao/fpm.toml`, the root `fpm.toml` and
 `bindings/fortran/guatiao/CMakeLists.txt`'s project version (fpm takes three
-numbers: `0.0.0-alpha.N` is written `0.0.0`), and the
+numbers: `0.0.0-alpha.N` is written `0.0.0`), the `require` of the core
+module in `bindings/go/guatiao-serde/go.mod` and `guatiao-intake/go.mod`
+(`vx.y.z`; a Go module's own version is its tag), and the
 `guatiao` entry of `examples/wire_over_webtransport/client/Cargo.lock` (a
 `--locked` build refuses a stale one; `cargo build` in that directory
 rewrites it). A `## [x.y.z] - <date>` section in
@@ -444,7 +451,8 @@ name.
 packages everything (`cargo publish --workspace --dry-run`; `python -m
 build` + `twine check` of the three Python packages; `dart pub publish
 --dry-run` of the three Dart packages; `npm pack --dry-run` then `npm
-pack` of the three Node packages; the Go module vetted and built; the
+pack` of the three Node packages; the three Go modules vetted, built
+and each built alone by a consumer outside the checkout; the
 Fortran package built as a dependency and with CMake; the three Julia
 packages resolved and loaded; the three R source packages built and
 checked; the Octave package built, installed and used; and the MATLAB
@@ -452,7 +460,8 @@ toolbox packaged), then the GitHub release (carrying the R source
 packages, the Octave package and the MATLAB toolbox, which no registry
 takes)
 (marked pre-release for a tag with a `-`), then publishes, and tags the
-Go module `bindings/go/guatiao/vx.y.z` at the same commit. Each publish job
+Go modules `bindings/go/guatiao/vx.y.z`, `bindings/go/guatiao-serde/vx.y.z`
+and `bindings/go/guatiao-intake/vx.y.z` at the same commit. Each publish job
 skips a version its registry already has, so re-running a partly failed
 release finishes it. The four crates go in dependency order: `guatiao-derive`,
 `guatiao`, `guatiao-serde`, `guatiao-intake`, each naming the others with
@@ -467,7 +476,7 @@ and intake packages after it.
 | PyPI | a *pending* trusted publisher for each of `guatiao`, `guatiao-serde` and `guatiao-intake`: repository `Boriken-Dev/guatiao`, workflow `release.yml`, environment `pypi` (`guatiao` has its publisher; the other two need theirs before their first release) | the same publishers |
 | pub.dev | **by hand**, `dart pub publish` in `bindings/dart/guatiao`, then in `bindings/dart/guatiao_serde` and `bindings/dart/guatiao_intake` once `guatiao` at that version is on pub.dev (their `pubspec_overrides.yaml` is not published): automated publishing needs a package that exists | automated publishing for each package from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
 | npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists, so the token publishes `guatiao`, `guatiao-serde` and `guatiao-intake` the first time; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher on each of the three for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |
-| Go module proxy | the tag `bindings/go/guatiao/vx.y.z`, pushed by `release.yml` with the workflow's own token; the job then asks proxy.golang.org for the version, which lists it | the same; nothing to configure |
+| Go module proxy | a tag per module, `bindings/go/guatiao/vx.y.z`, `bindings/go/guatiao-serde/vx.y.z` and `bindings/go/guatiao-intake/vx.y.z`, pushed by `release.yml` with the workflow's own token, the core first; the job then asks proxy.golang.org for each, which lists it | the same; nothing to configure |
 | R-universe | nothing in `release.yml`: the owner's universe (`Boriken-Dev/boriken-dev.r-universe.dev`) lists each package in its `packages.json`, `{"package": "guatiao", "url": "https://github.com/Boriken-Dev/guatiao", "subdir": "bindings/r/guatiao"}`, and the same for `guatiao.serde` (`"subdir": "bindings/r/guatiao.serde"`) and `guatiao.intake` (`"subdir": "bindings/r/guatiao.intake"`); R-universe builds binaries for every OS from the repository, the core first as their `Depends` and `LinkingTo` name it; CRAN only if the owner asks | the same |
 | fpm registry | nothing in `release.yml`: an fpm consumer depends on the repository by its tag (the root `fpm.toml`; one package, its serde and intake modules in it); a listing in the fpm registry only on the owner's word | the same |
 | Julia General | the JuliaRegistrator app installed on `Boriken-Dev/guatiao`, and a `JULIA_REGISTRATOR_TOKEN` secret (a token of an account Registrator trusts): `release.yml` comments `@JuliaRegistrator register subdir=bindings/julia/Guatiao`, then `subdir=bindings/julia/GuatiaoSerde` and `subdir=bindings/julia/GuatiaoIntake`, on the release commit. General takes no version with pre-release data and wants a first version of `0.0.1`, `0.1.0` or `1.0.0`, so a pre-release tag registers nothing; before the first registration of `GuatiaoSerde` and `GuatiaoIntake`, their `Project.toml` gain a `[compat]` entry for `Guatiao` (General requires one) | the same; a version General lists is skipped |
