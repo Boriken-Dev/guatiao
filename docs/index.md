@@ -60,6 +60,9 @@ dart pub add guatiao
 export GUATIAO_LIBRARY=/path/to/the/library
 ```
 
+In a browser the same package loads the WebAssembly module instead
+(`await loadModule(url)`, see [In a browser](wasm.md)), with the same API.
+
 A Node consumer, TypeScript or JavaScript, installs the package the same
 way:
 
@@ -179,6 +182,7 @@ let greeter = registry.best("greeter").expect("something serves it");
   surfaces in a library of the application's own, and every binding
   using it.
 - [Python API reference](api/python.md), for the ctypes bindings.
-- [Dart API reference](api/dart.md), for the `dart:ffi` bindings -- a plain
-  Dart package, so a Flutter app uses the same one.
+- [Dart API reference](api/dart.md), for the Dart bindings, over `dart:ffi`
+  or the WebAssembly module on the web -- a plain Dart package, so a
+  Flutter app uses the same one.
 - [Changelog](changelog.md).
