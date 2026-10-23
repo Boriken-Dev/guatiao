@@ -197,12 +197,16 @@ jobs:
         with:
           tool: wasm-tools
       - name: The module exports the C surface, the wire encoding included
+        # The value encoding (2), the frames (3) and the receiver (3); and
+        # the memory a page passes arguments in.
         shell: bash
         run: |
-          exports=$(wasm-tools print target/wasm32-unknown-unknown/release/guatiao.wasm | grep -c '(export "guatiao_')
-          wire=$(wasm-tools print target/wasm32-unknown-unknown/release/guatiao.wasm | grep -c '(export "guatiao_wire_')
-          echo "guatiao_* exports: $exports, wire: $wire"
-          test "$wire" -eq 2 && test "$exports" -ge 20
+          printed=$(wasm-tools print target/wasm32-unknown-unknown/release/guatiao.wasm)
+          exports=$(grep -c '(export "guatiao_' <<<"$printed")
+          wire=$(grep -c '(export "guatiao_wire_' <<<"$printed")
+          memory=$(grep -c '(export "guatiao_memory_' <<<"$printed")
+          echo "guatiao_* exports: $exports, wire: $wire, memory: $memory"
+          test "$wire" -eq 8 && test "$memory" -eq 2 && test "$exports" -ge 20
       - name: The wire encoding
         run: cargo test -p guatiao --test wire_roundtrip --test wire_channel
       - name: The WebTransport example's page
@@ -1224,3 +1228,117 @@ jobs:
           # Absolute: the suites run from the package directories, so a path
           # relative to the workspace would not resolve.
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+
+  dart-web:
+    # The Dart packages in a browser: the same suites in Chrome under both
+    # web compilers, over one module per page. The application library's
+    # module carries all three surfaces; intake's carries the core and
+    # intake, so serde is not run against it.
+    name: Dart on the web (Chrome, ${{ matrix.compiler }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [dart2js, dart2wasm]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the modules
+        run: cargo build -p myapp -p guatiao-intake --target wasm32-unknown-unknown --release
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: stable
+      - name: Install
+        run: |
+          for p in guatiao guatiao_serde guatiao_intake; do
+            (cd "bindings/dart/$p" && dart pub get)
+          done
+        shell: bash
+      - name: Test against the application's module
+        run: |
+          for p in guatiao guatiao_serde guatiao_intake; do
+            (cd "bindings/dart/$p" && dart test -p chrome --compiler ${{ matrix.compiler }})
+          done
+        shell: bash
+        env:
+          GUATIAO_WASM: ${{ github.workspace }}/target/wasm32-unknown-unknown/release/myapp.wasm
+      - name: Test against intake's module
+        run: |
+          for p in guatiao guatiao_intake; do
+            (cd "bindings/dart/$p" && dart test -p chrome --compiler ${{ matrix.compiler }})
+          done
+        shell: bash
+        env:
+          GUATIAO_WASM: ${{ github.workspace }}/target/wasm32-unknown-unknown/release/guatiao_intake.wasm
+
+  dart-armv7:
+    # The Dart packages on 32-bit ARM, emulated: the libraries built for
+    # armv7-unknown-linux-gnueabihf and Dart's linux-arm SDK, both run
+    # through qemu-user, once against the separate libraries and once
+    # against the application's own.
+    name: Dart on armv7 (emulated)
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+      QEMU_LD_PREFIX: /usr/arm-linux-gnueabihf
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - name: Install the cross linker and qemu-user
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-arm-linux-gnueabihf libc6-dev-armhf-cross qemu-user-static
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: armv7-unknown-linux-gnueabihf
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the libraries for armv7
+        run: >-
+          cargo build --target armv7-unknown-linux-gnueabihf
+          -p guatiao -p guatiao-serde -p guatiao-intake -p hello_library -p derived_greeter -p greeter_caller -p myapp
+          --features guatiao/load,guatiao/derive,guatiao/provider,guatiao/regex,guatiao-serde/exact-numbers,guatiao-serde/toml,guatiao-serde/yaml
+      - name: Dart for linux-arm
+        # The stable channel's latest release, the one the other legs'
+        # `sdk: stable` resolves to, with its published checksum.
+        shell: bash
+        run: |
+          version=$(curl -fsSL https://storage.googleapis.com/dart-archive/channels/stable/release/latest/VERSION | python3 -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+          base=https://storage.googleapis.com/dart-archive/channels/stable/release/$version/sdk/dartsdk-linux-arm-release.zip
+          curl -fsSL -o dart-arm.zip "$base"
+          curl -fsSL -o dart-arm.zip.sha256sum "$base.sha256sum"
+          echo "$(cut -d' ' -f1 dart-arm.zip.sha256sum)  dart-arm.zip" | sha256sum -c -
+          unzip -q dart-arm.zip -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/dart-sdk/bin" >> "$GITHUB_PATH"
+      - name: Install
+        # ffigen's build hook runs with an environment that drops
+        # QEMU_LD_PREFIX, so the tooling goes as on the floor leg.
+        run: |
+          dart --version
+          for p in guatiao guatiao_serde guatiao_intake; do
+            (cd "bindings/dart/$p" && dart pub remove ffigen lints && dart pub get)
+          done
+        shell: bash
+      - name: Test against the separate libraries
+        run: |
+          for p in guatiao guatiao_serde guatiao_intake; do
+            (cd "bindings/dart/$p" && dart test)
+          done
+        shell: bash
+        env:
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/armv7-unknown-linux-gnueabihf/debug
+      - name: Test against the application's library
+        run: |
+          for p in guatiao guatiao_serde guatiao_intake; do
+            (cd "bindings/dart/$p" && dart test)
+          done
+        shell: bash
+        env:
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/armv7-unknown-linux-gnueabihf/debug/libmyapp.so
