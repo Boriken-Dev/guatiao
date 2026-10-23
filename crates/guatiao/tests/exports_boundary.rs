@@ -1767,3 +1767,28 @@ fn a_channel_conversation_crosses_the_c_surface() {
     // SAFETY: a null allocator is refused with a null handle.
     assert!(unsafe { guatiao_wire_receiver_new(core::ptr::null()) }.is_null());
 }
+
+/// Memory a host borrows from the library's heap: zeroed and aligned as
+/// asked, refused for what is no layout, and released by its partner.
+#[test]
+fn memory_from_the_library_is_zeroed_aligned_and_released() {
+    use guatiao::exports::value::{guatiao_memory_alloc, guatiao_memory_free};
+    for (size, align) in [(1, 1), (24, 4), (40, 8), (100, 16)] {
+        let block = guatiao_memory_alloc(size, align).cast::<u8>();
+        assert!(!block.is_null());
+        assert_eq!(block as usize % align, 0);
+        // SAFETY: `size` bytes were just allocated there.
+        let bytes = unsafe { core::slice::from_raw_parts_mut(block, size) };
+        assert!(bytes.iter().all(|&b| b == 0));
+        bytes.fill(0xa5);
+        // SAFETY: the block, with the layout it was asked for.
+        unsafe { guatiao_memory_free(block.cast(), size, align) };
+    }
+    assert!(guatiao_memory_alloc(0, 8).is_null());
+    assert!(guatiao_memory_alloc(8, 3).is_null());
+    // SAFETY: null, and a layout that is none, are both no-ops.
+    unsafe {
+        guatiao_memory_free(core::ptr::null_mut(), 8, 8);
+        guatiao_memory_free(core::ptr::null_mut(), 8, 3);
+    }
+}

@@ -14,6 +14,12 @@ write now.
 
 ### Added
 
+- **Memory from the library's heap.** `guatiao_memory_alloc(size,
+  align)` answers zeroed bytes from the library's own heap, and
+  `guatiao_memory_free(ptr, size, align)` releases them. A host that
+  shares no heap with the library, a page calling the WebAssembly module
+  above all, puts what it passes by address there: a view's bytes, an
+  out-parameter, a root it keeps.
 - **Channels from C.** `guatiao_wire_announce`, `guatiao_wire_send` and
   `guatiao_wire_close` write a channel frame as a BYTES value;
   `guatiao_wire_receiver_new(alloc)`, `guatiao_wire_receiver_accept(recv,

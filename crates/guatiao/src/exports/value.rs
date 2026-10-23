@@ -16,6 +16,8 @@
 #![allow(non_camel_case_types)]
 
 use crate::value::convert::{TryAsMut, TryAsRef};
+use core::alloc::Layout;
+use core::ffi::c_void;
 use core::ptr;
 
 use super::{entry, out};
@@ -632,6 +634,45 @@ pub unsafe extern "C" fn guatiao_alloc_default(out: *mut Allocator) -> Status {
         unsafe { ptr::write(out, crate::value::alloc::rust_alloc()) };
         Status::GUATIAO_OK
     })
+}
+
+/// `size` zeroed bytes aligned to `align` from this library's own heap,
+/// or null when `size` is 0, `align` is not a power of two, or the heap
+/// is exhausted.
+///
+/// For a host that shares no heap with the library, a JavaScript or Dart
+/// page calling a WebAssembly module above all: what it passes by
+/// address (a view's bytes, an out-parameter, a root it keeps) has to be
+/// in the module's memory. Released with `guatiao_memory_free`.
+#[unsafe(no_mangle)]
+pub extern "C" fn guatiao_memory_alloc(size: usize, align: usize) -> *mut c_void {
+    let Ok(layout) = Layout::from_size_align(size, align) else {
+        return ptr::null_mut();
+    };
+    if size == 0 {
+        return ptr::null_mut();
+    }
+    // SAFETY: the layout has a non-zero size.
+    unsafe { alloc::alloc::alloc_zeroed(layout) }.cast()
+}
+
+/// Releases what `guatiao_memory_alloc` answered. A null `ptr`, or a
+/// `size` and `align` that are no layout, does nothing.
+///
+/// # Safety
+///
+/// `ptr` is null, or came from `guatiao_memory_alloc` with this `size`
+/// and `align` and has not been released.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_memory_free(ptr: *mut c_void, size: usize, align: usize) {
+    if ptr.is_null() {
+        return;
+    }
+    let Ok(layout) = Layout::from_size_align(size, align) else {
+        return;
+    };
+    // SAFETY: the caller's contract: this block, with this layout.
+    unsafe { alloc::alloc::dealloc(ptr.cast(), layout) };
 }
 
 // --- the wire encoding ------------------------------------------------

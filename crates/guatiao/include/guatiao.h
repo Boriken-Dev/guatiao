@@ -2986,6 +2986,29 @@ guatiao_status guatiao_buffer_push(const struct guatiao_alloc *alloc,
 guatiao_status guatiao_alloc_default(struct guatiao_alloc *out);
 
 /*
+ `size` zeroed bytes aligned to `align` from this library's own heap,
+ or null when `size` is 0, `align` is not a power of two, or the heap
+ is exhausted.
+
+ For a host that shares no heap with the library, a JavaScript or Dart
+ page calling a WebAssembly module above all: what it passes by
+ address (a view's bytes, an out-parameter, a root it keeps) has to be
+ in the module's memory. Released with `guatiao_memory_free`.
+ */
+void *guatiao_memory_alloc(size_t size, size_t align);
+
+/*
+ Releases what `guatiao_memory_alloc` answered. A null `ptr`, or a
+ `size` and `align` that are no layout, does nothing.
+
+ # Safety
+
+ `ptr` is null, or came from `guatiao_memory_alloc` with this `size`
+ and `align` and has not been released.
+ */
+void guatiao_memory_free(void *ptr, size_t size, size_t align);
+
+/*
  Encodes `value` in the wire encoding (`guatiao::value::wire`), writing
  the bytes through `out` as a BYTES value built in `alloc`.
 
