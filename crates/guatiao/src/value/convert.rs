@@ -104,9 +104,47 @@ pub enum MapError {
         /// What the field would have accepted, phrased for a person.
         expected: String,
     },
+    /// The source being read failed for a reason of its own (bytes that
+    /// are not the wire encoding, a document that does not parse), and
+    /// keeps that error: the function that started the read reports it.
+    /// See [`visit`](crate::value::visit).
+    Stopped {
+        /// The dotted path of the key being read when it stopped.
+        key: String,
+    },
 }
 
 impl MapError {
+    /// What a walker answers when its own input failed, keeping the
+    /// error itself.
+    pub fn stopped() -> MapError {
+        MapError::Stopped { key: String::new() }
+    }
+
+    /// What a reader taking `expected` says when handed a value of kind
+    /// `found`: [`MapError::WrongType`] when it takes one kind, else
+    /// [`MapError::BadValue`] naming the kinds it takes.
+    pub fn wrong_kind(expected: Kinds, found: Tag) -> MapError {
+        for tag in [
+            Tag::GUATIAO_NULL,
+            Tag::GUATIAO_BOOL,
+            Tag::GUATIAO_NUMBER,
+            Tag::GUATIAO_STRING,
+            Tag::GUATIAO_BYTES,
+            Tag::GUATIAO_LIST,
+            Tag::GUATIAO_MAP,
+        ] {
+            if expected == Kinds::of(tag) {
+                return MapError::WrongType {
+                    key: String::new(),
+                    expected: tag,
+                    found: Some(found),
+                };
+            }
+        }
+        MapError::bad_value(expected.to_string())
+    }
+
     /// A missing key: the one error that names its key up front, because
     /// a lookup that found nothing is the only place that knows it.
     pub fn missing(key: &str) -> MapError {
@@ -154,7 +192,8 @@ impl MapError {
         match self {
             MapError::MissingKey { key }
             | MapError::WrongType { key, .. }
-            | MapError::BadValue { key, .. } => key,
+            | MapError::BadValue { key, .. }
+            | MapError::Stopped { key } => key,
         }
     }
 
@@ -209,6 +248,7 @@ impl MapError {
                 key: f(&key),
                 expected,
             },
+            MapError::Stopped { key } => MapError::Stopped { key: f(&key) },
         }
     }
 }
@@ -230,6 +270,9 @@ impl fmt::Display for MapError {
             ),
             MapError::BadValue { key, expected } => {
                 write!(f, "{} is not {expected}", named(key))
+            }
+            MapError::Stopped { key } => {
+                write!(f, "reading stopped at {}: its source failed", named(key))
             }
         }
     }

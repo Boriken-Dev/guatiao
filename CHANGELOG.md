@@ -14,6 +14,22 @@ write now.
 
 ### Added
 
+- **Values as events, with no tree in the middle.** `value::visit` is
+  guatiao's own data model as traits, with no dependency: a type that
+  `Walk`s hands absent, null, bool, number text, string, bytes, list and
+  map events to a `Visitor`, and a type that is `FromWalk` pulls them
+  from a `Walker`. A `Sink` is the same events on one type with its own
+  stack, and `Flat` makes one a visitor; `TreeSink` builds a value from
+  any walk. Both traits are implemented for what `ToValue` and
+  `FromValue` cover, writing the same tree's events and refusing with the
+  same errors, and `&Value` is a walker. The wire codec streams on them:
+  `wire::to_bytes_of`/`encode_of` write any walk as exactly the bytes its
+  tree encodes to, `wire::decode_as` reads bytes into any `FromWalk` type,
+  and `wire::Encoded` walks bytes into any visitor, each checking what
+  `decode` checks. A streaming walk follows at most `MAX_DEPTH`
+  containers (`WireError::TooDeep`); a type refusing well-formed bytes is
+  `WireError::Refused`; a walker whose own input failed answers the new
+  `MapError::Stopped` and keeps its error.
 - **A page on configuration files.** Reading a configuration through
   guatiao rather than serde: the TOML text becomes a value, `FromValue`
   makes the type, and the schema and form come from the same derive, so

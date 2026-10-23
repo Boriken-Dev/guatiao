@@ -25,6 +25,7 @@ pub mod span;
 pub mod status;
 pub mod time;
 pub mod types;
+pub mod visit;
 pub mod wire;
 // The whole-tree walks besides drop: a deep copy, and equality.
 pub(crate) mod walk;
