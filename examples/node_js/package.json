@@ -1,0 +1,10 @@
+{
+  "name": "js_greeter",
+  "version": "1.0.0",
+  "description": "Greeters written in plain JavaScript, with no build step",
+  "license": "MPL-2.0",
+  "author": "jose-pr",
+  "private": true,
+  "type": "module",
+  "exports": "./greeters.js"
+}

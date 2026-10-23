@@ -19,6 +19,7 @@
     "skipLibCheck": false,
     "noEmit": true,
     "allowImportingTsExtensions": true,
+    "allowJs": true,
     "paths": {
       "guatiao": [
         "./src/index.ts"
@@ -32,7 +33,7 @@
     "src",
     "test",
     "vitest.config.ts",
-    "../../../examples/greeter_kind/node",
+    "../../../examples/greeter_kind/node/greeter_kind.d.ts",
     "../../../examples/node_host",
     "../../../examples/node_provider"
   ]

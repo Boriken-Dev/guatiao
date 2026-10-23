@@ -5,26 +5,30 @@
 /**
  * A kind's function table, from JavaScript: calling one, and serving one.
  *
- * A kind is declared once, from its C header, as a typed value: a method
- * per slot in the header's order, the shapes from `t`, and the
- * `FLOOR_HASH` the header defines. TypeScript infers from it what a
- * provider implements (`Implementation`) and what a caller holds
- * (`Remote`).
+ * A kind that exists elsewhere is loaded from its description, the
+ * document its crate commits beside its C header: `kindsOf(document)`
+ * answers each kind by name, and `guatiao-kind` writes a module (`.js`
+ * and `.d.ts`) exporting each as a value and, in TypeScript, an interface
+ * of the same name, which a provider class implements.
  *
  * ```ts
- * export const Listener = kind('listener', {
- *   floorHash: 1867921573,
- *   object: true,
- *   methods: { heard: { args: [t.str], required: true } },
- * });
- * export const Greeter = kind('greeter', {
- *   floorHash: 2695856491,
- *   methods: {
- *     greet: { args: [t.str], answer: t.map, required: true, fallible: true },
- *     greetInto: { args: [t.str, t.lent(Listener)], fallible: true },
- *   },
- * });
- * export type Greeter = Implementation<typeof Greeter>;
+ * import { Greeter } from './greeter_kind.js';   // written by guatiao-kind
+ * export class Hello extends Provider implements Greeter {
+ *   static override readonly kinds = [Greeter];
+ *   greet(name: string) { return { greeting: `hello, ${name}` }; }
+ * }
+ * ```
+ *
+ * A kind defined here, with no header to come from, is a class with
+ * static fields, or the primitive underneath both, `kind()`: a method
+ * per slot in the table's order, the shapes from `t`.
+ *
+ * ```js
+ * export class Echo extends Kind {
+ *   static kind = 'echo';
+ *   static floorHash = 1;
+ *   static slots = { echo: slot(t.str).returns(t.text).required() };
+ * }
  * ```
  *
  * @module
@@ -55,7 +59,7 @@ export interface MethodSpec {
   /** The arguments after `ctx`, in the header's order. */
   readonly args?: readonly Shape<any, any, any, any>[];
   /** A shape, an object kind (an object the caller then owns), or none. */
-  readonly answer?: Shape<any, any, any, any> | Kind<any, true>;
+  readonly answer?: Shape<any, any, any, any> | ObjectKindLike;
   /** A slot every table fills: one the kind was born with, which its floor hash covers. */
   readonly required?: boolean;
   /** A slot ending in `guatiao_provider_error *err`: it can refuse. */
@@ -64,7 +68,10 @@ export interface MethodSpec {
 
 export type Methods = { readonly [name: string]: MethodSpec };
 
-/** A kind, as `kind()` describes it. */
+/**
+ * A kind: what `kind()` and `kindsOf()` make. Also the base of a kind
+ * defined as a class, whose static fields describe it.
+ */
 export interface Kind<M extends Methods = Methods, O extends boolean = boolean> {
   readonly name: string;
   /** The `<table>_FLOOR_HASH` the header defines, as written there. */
@@ -80,6 +87,78 @@ export interface Kind<M extends Methods = Methods, O extends boolean = boolean> 
   bind(table: bigint, size: number, ctx: bigint | null): Remote<Kind<M, O>>;
 }
 
+/**
+ * The base of a kind defined in JavaScript as a class: its static fields
+ * say what `kind()` would be told. `static kind` is its name (default: the
+ * class name in snake_case), `static floorHash` its hash, `static object`
+ * whether it is an object kind, and `static slots` a `slot()` per slot, in
+ * table order. The class itself is the kind: list it in a provider's
+ * `static kinds`, bind a table with it, pass it to `t.taken`/`t.lent`.
+ * It is described when first used, which must not be inside a call a
+ * library is making.
+ */
+// The class merges with the interface above: an instance would be a kind,
+// though none is made; what matters is the constructor and its statics.
+export abstract class Kind<M extends Methods = Methods, O extends boolean = boolean> {}
+
+declare const implType: unique symbol;
+declare const remoteType: unique symbol;
+
+/**
+ * A kind whose types are written out rather than inferred: what the
+ * `.d.ts` that `guatiao-kind` writes declares, `I` the interface a
+ * provider implements and `R` what a caller holds.
+ */
+export interface DescribedKind<I, R, O extends boolean = boolean> extends Kind<Methods, O> {
+  /** For the type checker only: nothing holds it at run time. */
+  readonly [implType]: I;
+  /** For the type checker only. */
+  readonly [remoteType]: R;
+}
+
+declare const slotSpec: unique symbol;
+
+/**
+ * One slot of a kind defined as a class, built by `slot(...args)` and
+ * refined by `.returns(answer)`, `.required()` and `.fallible()`.
+ */
+export interface Slot<S extends MethodSpec = MethodSpec> {
+  /** What the slot says, for the type checker and the description. */
+  readonly [slotSpec]: S;
+  /** What the slot answers: a shape, or an object kind. */
+  returns<A extends Shape<any, any, any, any> | ObjectKindLike>(answer: A): Slot<Omit<S, 'answer'> & { readonly answer: A }>;
+  /** A slot every table fills. */
+  required(): Slot<Omit<S, 'required'> & { readonly required: true }>;
+  /** A slot ending in `guatiao_provider_error *err`: it can refuse. */
+  fallible(): Slot<Omit<S, 'fallible'> & { readonly fallible: true }>;
+}
+
+/** A class extending `Kind`, as a type: its static fields. */
+export interface KindClass {
+  readonly prototype: Kind;
+  readonly floorHash: number;
+  readonly slots: { readonly [name: string]: Slot | MethodSpec };
+  readonly kind?: string;
+  readonly object?: boolean;
+}
+
+/** Anything naming a kind: a value `kind()` or `kindsOf()` made, or a class extending `Kind`. */
+export type KindLike = Kind<any, any> | KindClass;
+/**
+ * A kind of objects one holder owns. A class says so with `static object`,
+ * which plain JavaScript types as a `boolean`: the value is checked when
+ * the class is described.
+ */
+export type ObjectKindLike = Kind<any, true> | (KindClass & { readonly object: boolean });
+/** A kind a provider serves. */
+export type ProviderKindLike = Kind<any, false> | KindClass;
+
+type SpecOf<T> = T extends Slot<infer S> ? S : T extends MethodSpec ? T : never;
+
+/** The slots of a kind, as `kind()` would be told them. */
+export type MethodsOf<K> =
+  K extends Kind<infer M, any> ? M : K extends { readonly slots: infer S } ? { [N in keyof S]: SpecOf<S[N]> } : never;
+
 type CallArgs<S extends MethodSpec> = S['args'] extends infer A extends readonly unknown[]
   ? { -readonly [I in keyof A]: A[I] extends Shape<infer X, any, any, any> ? X : never }
   : [];
@@ -87,35 +166,39 @@ type ImplArgs<S extends MethodSpec> = S['args'] extends infer A extends readonly
   ? { -readonly [I in keyof A]: A[I] extends Shape<any, infer X, any, any> ? X : never }
   : [];
 type CallAnswer<A> =
-  A extends Kind<any, true> ? ObjectHandle<A> : A extends Shape<any, any, infer X, any> ? X : void;
+  A extends ObjectKindLike ? ObjectHandle<A> : A extends Shape<any, any, infer X, any> ? X : void;
 type ImplAnswer<A> =
-  A extends Kind<any, true> ? Implementation<A> | ObjectHandle<A> : A extends Shape<any, any, any, infer X> ? X : void;
+  A extends ObjectKindLike ? Implementation<A> | ObjectHandle<A> : A extends Shape<any, any, any, infer X> ? X : void;
 type CallMethod<S extends MethodSpec> = (...args: CallArgs<S>) => CallAnswer<S['answer']>;
 type ImplMethod<S extends MethodSpec> = (...args: ImplArgs<S>) => ImplAnswer<S['answer']>;
+
+type ImplOf<M> = M extends Methods
+  ? { [N in keyof M as M[N]['required'] extends true ? N : never]: ImplMethod<M[N]> } & {
+      [N in keyof M as M[N]['required'] extends true ? never : N]?: ImplMethod<M[N]>;
+    }
+  : never;
 
 /**
  * What implements a kind: a provider class, or an object handed to a
  * table. Required methods are mandatory, the rest optional.
  */
-export type Implementation<K> =
-  K extends Kind<infer M, any>
-    ? { [N in keyof M as M[N]['required'] extends true ? N : never]: ImplMethod<M[N]> } & {
-        [N in keyof M as M[N]['required'] extends true ? never : N]?: ImplMethod<M[N]>;
-      }
-    : never;
+export type Implementation<K> = K extends { readonly [implType]: infer I } ? I : ImplOf<MethodsOf<K>>;
 
 /** A caller's handle on a table: a method per slot, and what it is. */
 export interface RemoteBase<K> {
-  readonly kind: K;
+  /** The kind, described: for a class extending `Kind`, what its statics describe. */
+  readonly kind: K extends Kind<any, any> ? K : Kind;
   readonly table: bigint;
   readonly size: number;
   readonly ctx: bigint | null;
   /** Whether the table carries the slot for `name`. */
-  has(name: K extends Kind<infer M, any> ? keyof M & string : string): boolean;
+  has(name: keyof MethodsOf<K> & string): boolean;
 }
 
 /** A caller's handle on a table of `K`. */
-export type Remote<K> = RemoteBase<K> & (K extends Kind<infer M, any> ? { [N in keyof M]: CallMethod<M[N]> } : never);
+export type Remote<K> = K extends { readonly [remoteType]: infer R }
+  ? R
+  : RemoteBase<K> & (MethodsOf<K> extends infer M extends Methods ? { [N in keyof M]: CallMethod<M[N]> } : never);
 
 /** An object of an object kind this side owns: `close()` destroys it, once. */
 export type ObjectHandle<K> = Remote<K> & Disposable & { close(): void; readonly closed: boolean };
@@ -830,30 +913,38 @@ export const t = {
 
 type TreeShape = typeof t.value | typeof t.map | typeof t.list;
 
-function taken<K extends Kind<any, true>>(what: K): Shape<Implementation<K> | ObjectHandle<K>, ObjectHandle<K>, never, never>;
+function taken<K extends ObjectKindLike>(what: K): Shape<Implementation<K> | ObjectHandle<K>, ObjectHandle<K>, never, never>;
 function taken(what: typeof t.map): Shape<Ref | MapAnswer, Value, never, never>;
 function taken(what: typeof t.list): Shape<Ref | ListAnswer, Value, never, never>;
 function taken(what: typeof t.value): Shape<Ref | Plain, Value, never, never>;
-function taken(what: TreeShape | Kind<any, true>): Shape<any, any, any, any> {
+function taken(what: TreeShape | ObjectKindLike): Shape<any, any, any, any> {
   if (what instanceof Tree) return new Tree(`taken(${what.name})`, what.tag, 'take') as never;
-  if (what instanceof KindImpl && what.isObject) return new ObjectShape(what, 'take') as never;
+  const object = objectKind(what);
+  if (object !== undefined) return new ObjectShape(object, 'take') as never;
   throw new TypeError(`t.taken takes t.value, t.map, t.list or an object kind, not ${String(what)}`);
 }
 
-function lent<K extends Kind<any, true>>(what: K): Shape<Implementation<K> | ObjectHandle<K>, Remote<K>, never, never>;
+function lent<K extends ObjectKindLike>(what: K): Shape<Implementation<K> | ObjectHandle<K>, Remote<K>, never, never>;
 function lent(what: typeof t.map): Shape<Ref, MapRef, never, never>;
 function lent(what: typeof t.list): Shape<Ref, ListRef, never, never>;
 function lent(what: typeof t.value): Shape<Ref, Ref, never, never>;
-function lent(what: TreeShape | Kind<any, true>): Shape<any, any, any, any> {
+function lent(what: TreeShape | ObjectKindLike): Shape<any, any, any, any> {
   if (what instanceof Tree) return new Tree(`lent(${what.name})`, what.tag, 'lend') as never;
-  if (what instanceof KindImpl && what.isObject) return new ObjectShape(what, 'lend') as never;
+  const object = objectKind(what);
+  if (object !== undefined) return new ObjectShape(object, 'lend') as never;
   throw new TypeError(`t.lent takes t.value, t.map, t.list or an object kind, not ${String(what)}`);
+}
+
+/** `what` as an object kind, or undefined when it is not one. */
+function objectKind(what: unknown): KindImpl | undefined {
+  const found = what instanceof KindImpl ? what : isKindClass(what) ? asKind(what) : undefined;
+  return found?.isObject ? found : undefined;
 }
 
 // ---- a kind ------------------------------------------------------------------------
 
 /** One slot, resolved. @internal */
-interface Slot {
+interface ResolvedSlot {
   readonly name: string;
   readonly index: number;
   readonly offset: number;
@@ -865,10 +956,10 @@ interface Slot {
   readonly cTypes: readonly string[];
 }
 
-const protos = new WeakMap<Slot, unknown>();
+const protos = new WeakMap<ResolvedSlot, unknown>();
 
 /** The slot's koffi prototype, made on first use: describing a kind loads nothing. */
-function protoOf(slot: Slot): unknown {
+function protoOf(slot: ResolvedSlot): unknown {
   let proto = protos.get(slot);
   if (proto === undefined) {
     proto = n.koffi().proto('uint32_t', [...slot.cTypes]);
@@ -889,7 +980,7 @@ export class KindImpl implements Kind<Methods, boolean> {
   readonly floorHash: number;
   readonly isObject: boolean;
   readonly methods: Methods;
-  readonly slots: readonly Slot[];
+  readonly slots: readonly ResolvedSlot[];
   readonly tableSize: number;
   readonly floor: number;
   readonly destroyOffset: number | undefined;
@@ -913,7 +1004,7 @@ export class KindImpl implements Kind<Methods, boolean> {
       this.destroyOffset = offset;
       offset += WORD;
     }
-    const slots: Slot[] = [];
+    const slots: ResolvedSlot[] = [];
     let floor = this.isObject ? offset : SIZE.kindHeader;
     for (const [methodName, method] of Object.entries(spec.methods)) {
       if (RESERVED.has(methodName) || methodName in Object.prototype) {
@@ -927,9 +1018,11 @@ export class KindImpl implements Kind<Methods, boolean> {
       });
       let answer: ShapeImpl | undefined;
       if (method.answer !== undefined) {
-        if (method.answer instanceof KindImpl) {
-          if (!method.answer.isObject) throw new TypeError(`${name}.${methodName}: ${method.answer.name} is not an object kind`);
-          answer = new ObjectShape(method.answer, 'answer');
+        const answerKind =
+          method.answer instanceof KindImpl ? method.answer : isKindClass(method.answer) ? asKind(method.answer) : undefined;
+        if (answerKind !== undefined) {
+          if (!answerKind.isObject) throw new TypeError(`${name}.${methodName}: ${answerKind.name} is not an object kind`);
+          answer = new ObjectShape(answerKind, 'answer');
         } else if (method.answer instanceof Tree && method.answer.mode === 'borrow') {
           answer = new Tree(method.answer.name, method.answer.tag, 'answer');
         } else if (method.answer instanceof ShapeImpl && method.answer.answers) {
@@ -939,7 +1032,7 @@ export class KindImpl implements Kind<Methods, boolean> {
         }
       }
       const cTypes = ['void *', ...args.map((a) => a.cArg!), ...(answer ? ['void *'] : []), ...(method.fallible ? ['void *'] : [])];
-      const slot: Slot = {
+      const slot: ResolvedSlot = {
         name: methodName,
         index: slots.length,
         offset,
@@ -1003,7 +1096,7 @@ export class KindImpl implements Kind<Methods, boolean> {
     return new this.#handleClass(raw);
   }
 
-  slot(name: string): Slot | undefined {
+  slot(name: string): ResolvedSlot | undefined {
     return this.slots.find((s) => s.name === name);
   }
 
@@ -1023,6 +1116,232 @@ export function kind<const M extends Methods, const O extends boolean = false>(
   spec: { readonly floorHash: number; readonly object?: O; readonly methods: M },
 ): Kind<M, O> {
   return new KindImpl(name, spec as { floorHash: number; object?: boolean; methods: Methods }) as unknown as Kind<M, O>;
+}
+
+// ---- a kind defined as a class ----------------------------------------------------------
+
+const SLOT_SPEC = Symbol('guatiao.slot');
+
+interface SlotImpl {
+  readonly [SLOT_SPEC]: MethodSpec;
+}
+
+function slotOf(spec: MethodSpec): Slot {
+  const made = {
+    [SLOT_SPEC]: Object.freeze({ ...spec }),
+    returns: (answer: MethodSpec['answer']) => slotOf({ ...spec, answer }),
+    required: () => slotOf({ ...spec, required: true }),
+    fallible: () => slotOf({ ...spec, fallible: true }),
+  };
+  return Object.freeze(made) as unknown as Slot;
+}
+
+/**
+ * One slot of a kind defined as a class: its arguments after `ctx`, in
+ * the table's order. `.returns(answer)`, `.required()` and `.fallible()`
+ * say the rest.
+ */
+export function slot<const A extends readonly Shape<any, any, any, any>[]>(
+  ...args: A
+): Slot<{ readonly args: A; readonly required: false; readonly fallible: false }> {
+  return slotOf({ args, required: false, fallible: false }) as never;
+}
+
+function isSlot(value: unknown): value is SlotImpl {
+  return typeof value === 'object' && value !== null && SLOT_SPEC in value;
+}
+
+/** Whether `value` is a class extending `Kind`. @internal */
+export function isKindClass(value: unknown): value is KindClass {
+  return typeof value === 'function' && value.prototype instanceof Kind;
+}
+
+function snakeCase(name: string): string {
+  return name.replace(/(?<=[a-z0-9])([A-Z])/g, '_$1').toLowerCase();
+}
+
+/** Kinds described from their classes, once each. */
+const fromClasses = new WeakMap<object, KindImpl>();
+
+function describeClass(cls: KindClass & { readonly name: string }): KindImpl {
+  let found = fromClasses.get(cls);
+  if (found !== undefined) return found;
+  const name = cls.kind ?? snakeCase(cls.name);
+  if (cls.slots === null || typeof cls.slots !== 'object') {
+    throw new TypeError(`${cls.name}: a kind class says its slots in static slots`);
+  }
+  const methods: Record<string, MethodSpec> = {};
+  for (const [method, given] of Object.entries(cls.slots)) {
+    methods[method] = isSlot(given) ? given[SLOT_SPEC] : (given as MethodSpec);
+  }
+  found = new KindImpl(name, { floorHash: cls.floorHash, object: cls.object === true, methods });
+  fromClasses.set(cls, found);
+  return found;
+}
+
+// ---- a kind loaded from its description ------------------------------------------------
+
+/** One kind as its description writes it: see the encodings page of the docs. */
+export interface KindDescription {
+  readonly name: string;
+  readonly floor_hash: number;
+  readonly object?: boolean;
+  readonly doc?: string;
+  readonly slots: readonly {
+    readonly name: string;
+    readonly required?: boolean;
+    readonly fallible?: boolean;
+    readonly args?: readonly TypeDescription[];
+    readonly answer?: TypeDescription;
+    readonly doc?: string;
+  }[];
+}
+
+/** An argument or answer as a description writes it. */
+export interface TypeDescription {
+  readonly name?: string;
+  readonly type: string;
+  readonly pass?: 'borrowed' | 'taken' | 'lent';
+  readonly kind?: string;
+  readonly nullable?: boolean;
+}
+
+/** A document of kinds: what a kind crate commits beside its header. */
+export interface KindsDocument {
+  readonly format: 1;
+  readonly kinds: readonly KindDescription[];
+}
+
+/** A slot's name in JavaScript: `greet_into` is `greetInto`. */
+export function methodName(slotName: string): string {
+  return slotName.replace(/_+([a-z0-9])/g, (_m, c: string) => c.toUpperCase());
+}
+
+const SCALARS = new Set(['bool', 'i8', 'i16', 'i32', 'i64', 'u8', 'u16', 'u32', 'u64', 'usize', 'isize', 'f32', 'f64']);
+
+function shapeOf(
+  given: TypeDescription,
+  where: string,
+  answer: boolean,
+  kindNamed: (name: string) => KindImpl,
+): Shape<any, any, any, any> | Kind<any, true> {
+  const type = given?.type;
+  const shapes = t as unknown as Record<string, Shape<any, any, any, any>>;
+  if (typeof type !== 'string') throw new TypeError(`${where}: no type`);
+  if (SCALARS.has(type)) return shapes[type]!;
+  if (answer) {
+    if (type === 'text' || type === 'value' || type === 'map' || type === 'list') return shapes[type]!;
+    if (type === 'object') return objectNamed(given, where, kindNamed) as unknown as Kind<any, true>;
+    throw new TypeError(`${where}: an answer cannot be ${type}`);
+  }
+  switch (type) {
+    case 'str':
+      return t.str;
+    case 'bytes':
+      return t.bytes;
+    case 'bytes_mut':
+      return t.bytesMut;
+    case 'value':
+    case 'map':
+    case 'list': {
+      const tree = shapes[type] as TreeShape;
+      const pass = given.pass ?? 'borrowed';
+      if (pass === 'taken') return taken(tree as typeof t.map);
+      if (pass === 'lent') return lent(tree as typeof t.map);
+      if (pass === 'borrowed' && type !== 'list') return tree;
+      throw new TypeError(`${where}: a ${type} cannot be passed ${String(pass)}`);
+    }
+    case 'object': {
+      const object = objectNamed(given, where, kindNamed) as unknown as Kind<any, true>;
+      if (given.pass === 'taken') return taken(object);
+      if (given.pass === 'lent') return lent(object);
+      throw new TypeError(`${where}: an object is passed taken or lent, not ${String(given.pass)}`);
+    }
+    default:
+      throw new TypeError(`${where}: ${type} is not a type an argument can have`);
+  }
+}
+
+function objectNamed(given: TypeDescription, where: string, kindNamed: (name: string) => KindImpl): KindImpl {
+  if (typeof given.kind !== 'string') throw new TypeError(`${where}: an object names its kind`);
+  const found = kindNamed(given.kind);
+  if (!found.isObject) throw new TypeError(`${where}: ${found.name} is not an object kind`);
+  return found;
+}
+
+function fromDescription(description: KindDescription, kindNamed: (name: string) => KindImpl): KindImpl {
+  const name = description?.name;
+  if (typeof name !== 'string' || !name) throw new TypeError('a kind description has a name');
+  if (!Array.isArray(description.slots)) throw new TypeError(`${name}: a kind description has slots`);
+  const methods: Record<string, MethodSpec> = {};
+  for (const slot of description.slots) {
+    if (typeof slot?.name !== 'string') throw new TypeError(`${name}: a slot has a name`);
+    const where = `${name}.${slot.name}`;
+    const args = (slot.args ?? []).map((arg: TypeDescription, i: number) => shapeOf(arg, `${where} argument ${i}`, false, kindNamed) as Shape<any, any, any, any>);
+    const spec: MethodSpec = {
+      args,
+      required: slot.required === true,
+      fallible: slot.fallible === true,
+      ...(slot.answer === undefined ? {} : { answer: shapeOf(slot.answer, `${where} answer`, true, kindNamed) }),
+    };
+    const method = methodName(slot.name);
+    if (method in methods) throw new TypeError(`${where}: two slots are ${method} in JavaScript`);
+    methods[method] = spec;
+  }
+  return new KindImpl(name, { floorHash: description.floor_hash, object: description.object === true, methods });
+}
+
+function documentOf(given: KindsDocument | string): KindsDocument {
+  const document = typeof given === 'string' ? (JSON.parse(given) as KindsDocument) : given;
+  if (document === null || typeof document !== 'object' || document.format !== 1 || !Array.isArray(document.kinds)) {
+    throw new TypeError('a kinds document is { format: 1, kinds: [...] }');
+  }
+  return document;
+}
+
+/**
+ * Each kind a document describes (the object, or its JSON text), by its
+ * name. An object kind a slot names is found in the same document, else
+ * among `known`. Every kind is described now, which must not be inside a
+ * call a library is making.
+ */
+export function kindsOf(
+  document: KindsDocument | string,
+  options: { readonly known?: Iterable<KindLike> } = {},
+): Readonly<Record<string, Kind>> {
+  const given = documentOf(document);
+  const known = new Map<string, KindImpl>();
+  for (const k of options.known ?? []) {
+    const impl = asKind(k);
+    known.set(impl.name, impl);
+  }
+  const descriptions = new Map(given.kinds.map((d) => [d?.name, d]));
+  const made = new Map<string, KindImpl>();
+  const making = new Set<string>();
+  const kindNamed = (name: string): KindImpl => {
+    const done = made.get(name);
+    if (done !== undefined) return done;
+    const description = descriptions.get(name);
+    if (description === undefined) {
+      const found = known.get(name);
+      if (found === undefined) throw new TypeError(`no kind ${name} in the document or among the known kinds`);
+      return found;
+    }
+    if (making.has(name)) throw new TypeError(`${name} refers to itself through its slots, which a description cannot load`);
+    making.add(name);
+    const impl = fromDescription(description, kindNamed);
+    making.delete(name);
+    made.set(name, impl);
+    return impl;
+  };
+  const out: Record<string, Kind> = {};
+  for (const description of given.kinds) out[description.name] = kindNamed(description.name) as unknown as Kind;
+  return Object.freeze(out);
+}
+
+/** One kind's description as a kind; the object kinds it names come from `known`. */
+export function kindOf(description: KindDescription, options: { readonly known?: Iterable<KindLike> } = {}): Kind {
+  return kindsOf({ format: 1, kinds: [description] }, options)[description.name]!;
 }
 
 // ---- calling a table ----------------------------------------------------------------
@@ -1063,7 +1382,7 @@ export class RemoteImpl {
     if (!this.#open) throw new TypeError('this object is closed, or was handed over');
   }
 
-  #slotFn(slot: Slot): ((...args: unknown[]) => number) | undefined {
+  #slotFn(slot: ResolvedSlot): ((...args: unknown[]) => number) | undefined {
     if (slot.offset + WORD > this.size) return undefined;
     const ptr = n.ptrAt(this.table, slot.offset);
     if (!ptr) return undefined;
@@ -1082,7 +1401,7 @@ export class RemoteImpl {
   }
 
   /** @internal */
-  call(slot: Slot, args: unknown[]): unknown {
+  call(slot: ResolvedSlot, args: unknown[]): unknown {
     this.#check();
     if (args.length !== slot.args.length) {
       throw new TypeError(`${slot.name} takes ${slot.args.length} arguments, ${args.length} given`);
@@ -1242,7 +1561,7 @@ function refuse(e: unknown, err: bigint | null | undefined, where: string): numb
 /** @internal */
 export { writeErr };
 
-function shim(kind: KindImpl, slot: Slot): (...args: unknown[]) => number {
+function shim(kind: KindImpl, slot: ResolvedSlot): (...args: unknown[]) => number {
   const where = `${kind.name}.${slot.name}`;
   return (ctx: unknown, ...rest: unknown[]): number => inCall(() => serveCall(ctx, rest));
 
@@ -1296,7 +1615,7 @@ function destroyShim(where: string): (ctx: unknown) => void {
 const tables = new Map<string, bigint>();
 
 /** Whether `target` (an object, or a class's prototype) implements `slot`. @internal */
-export function implementsSlot(target: object, slot: Slot): boolean {
+export function implementsSlot(target: object, slot: ResolvedSlot): boolean {
   return typeof (target as Record<string, unknown>)[slot.name] === 'function';
 }
 
@@ -1333,8 +1652,9 @@ function serve(kind: KindImpl, target: object, scope?: Scope): RawObject {
   return { table, size: kind.tableSize, ctx };
 }
 
-/** The `Kind` a value describes, or a `TypeError`. @internal */
-export function kindOf(what: unknown): KindImpl {
+/** The kind `what` names, or a `TypeError`. @internal */
+export function asKind(what: unknown): KindImpl {
   if (what instanceof KindImpl) return what;
-  throw new TypeError(`${String(what)} is not a kind made by kind()`);
+  if (isKindClass(what)) return describeClass(what as KindClass & { readonly name: string });
+  throw new TypeError(`${String(what)} is not a kind: make one with kind() or kindsOf(), or a class extending Kind`);
 }

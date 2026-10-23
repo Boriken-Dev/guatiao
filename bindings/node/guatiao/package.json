@@ -41,6 +41,9 @@
       "import": "./dist/ffi.js"
     }
   },
+  "bin": {
+    "guatiao-kind": "./dist/kind_cli.js"
+  },
   "files": [
     "dist",
     "!dist/**/*.tsbuildinfo",

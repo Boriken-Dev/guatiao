@@ -17,7 +17,7 @@ import { OWNED, PROVIDER_ERROR, SIZE, Status, Tag, VALUE } from '../src/abi.js';
 import { kind, liveObjects, t } from '../src/kinds.js';
 import * as n from '../src/native.js';
 import { Provider, library, libraryOf } from '../src/provide.js';
-import { Greeter } from '../../../../examples/greeter_kind/node/greeter_kind.ts';
+import { Greeter } from '../../../../examples/greeter_kind/node/greeter_kind.js';
 import { Counting, REPO } from './helpers.js';
 import { cLibraries } from './native.js';
 

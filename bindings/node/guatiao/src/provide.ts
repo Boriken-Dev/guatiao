@@ -39,7 +39,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ABI_VERSION, KIND_TABLE, LIBRARY_INFO, PROVIDER_INFO, SIZE, Status, Tag, VALUE } from './abi.js';
 import * as s from './config.js';
 import { NullArgument } from './errors.js';
-import { type Kind, type KindImpl, hold, inCall, kindOf, refuseInsideACall, release, statusOf, tableFor, writeErr } from './kinds.js';
+import { type KindImpl, type ProviderKindLike, asKind, hold, inCall, refuseInsideACall, release, statusOf, tableFor, writeErr } from './kinds.js';
 import * as n from './native.js';
 import { Borrowed, Ref, Value } from './value.js';
 
@@ -62,7 +62,7 @@ export { s };
  */
 export abstract class Provider {
   /** The provider kinds this class serves, which it `implements`. */
-  static readonly kinds: readonly Kind<any, false>[] = [];
+  static readonly kinds: readonly ProviderKindLike[] = [];
   static readonly named?: string;
   static readonly id?: string;
   static readonly displayName?: string;
@@ -80,7 +80,7 @@ export abstract class Provider {
 
 /** A class extending `Provider`. */
 export type ProviderClass = (abstract new (...args: any[]) => Provider) & {
-  readonly kinds: readonly Kind<any, false>[];
+  readonly kinds: readonly ProviderKindLike[];
   readonly named?: string;
   readonly id?: string;
   readonly displayName?: string;
@@ -121,7 +121,7 @@ function specOf(cls: ProviderClass): Spec {
   const found = specs.get(cls);
   if (found !== undefined) return found;
   if (!isProviderClass(cls)) throw new TypeError(`${String(cls)} is not a class extending Provider`);
-  const kinds = (Array.isArray(cls.kinds) ? cls.kinds : []).map((k) => kindOf(k));
+  const kinds = (Array.isArray(cls.kinds) ? cls.kinds : []).map((k) => asKind(k));
   if (!kinds.length) throw new TypeError(`${cls.name} lists no kind in static kinds`);
   for (const kind of kinds) {
     if (kind.isObject) throw new TypeError(`${cls.name}: ${kind.name} is an object kind; a provider serves provider kinds`);

@@ -7,14 +7,18 @@
     "strict": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
+    "allowJs": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": false,
     "types": ["node"],
     "typeRoots": ["../bindings/node/node_modules/@types"]
   },
   "files": [
-    "greeter_kind/node/greeter_kind.ts",
+    "greeter_kind/node/greeter_kind.d.ts",
     "node_provider/node_greeter/greeters.ts",
-    "node_host/host.ts"
+    "node_host/host.ts",
+    "node_js/echo_kind.js",
+    "node_js/greeters.js",
+    "node_js/main.js"
   ]
 }

@@ -8,12 +8,11 @@ provider that builds instances from a configuration is given one its
 schema refuses, then one it accepts. It closes everything it opened and
 prints what it did.
 
-The kinds are described in
-[`../greeter_kind/node/greeter_kind.ts`](../greeter_kind/node/greeter_kind.ts),
-written by hand from the kind's C header
-([`../greeter_kind/include/greeter_kind.h`](../greeter_kind/include/greeter_kind.h)):
-each method in table order, its shapes from `t`, each `FLOOR_HASH` copied
-from its `#define`. Nothing generates them.
+The kinds come from
+[`../greeter_kind/node/greeter_kind.js`](../greeter_kind/node/greeter_kind.js)
+and its `.d.ts`, which `guatiao-kind` wrote from the kinds' description
+([`../greeter_kind/include/greeter_kind.kinds.json`](../greeter_kind/include/greeter_kind.kinds.json)),
+committed beside their C header. Nothing here says what a slot takes.
 
 ## Run it
 

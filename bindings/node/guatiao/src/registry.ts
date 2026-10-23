@@ -11,7 +11,7 @@
 
 import { SIZE } from './abi.js';
 import { NotFound, raiseForStatus } from './errors.js';
-import { type Kind, type Remote, kindOf } from './kinds.js';
+import { type KindLike, type Remote, asKind } from './kinds.js';
 import * as n from './native.js';
 import { Borrowed, Ref, Value, adopt } from './value.js';
 
@@ -49,8 +49,8 @@ export class Instance implements Disposable {
   }
 
   /** This instance as `kind`: a remote whose calls go to it. Valid until it is closed. */
-  bind<K extends Kind<any, any>>(kind: K): Remote<K> {
-    const k = kindOf(kind);
+  bind<K extends KindLike>(kind: K): Remote<K> {
+    const k = asKind(kind);
     const { table, size } = this.#registry.providerTable(this.#key, k.name);
     if (!table) throw new NotFound(`${this.#key} serves no ${k.name} table`);
     return k.remote(table, size, this.ctx) as unknown as Remote<K>;
@@ -273,8 +273,8 @@ export class Registry implements Disposable {
    * `create(...).bind(kind)`. Valid while the library is: until it is
    * unloaded or, once retired, collected.
    */
-  bind<K extends Kind<any, any>>(key: string, kind: K): Remote<K> {
-    const k = kindOf(kind);
+  bind<K extends KindLike>(key: string, kind: K): Remote<K> {
+    const k = asKind(kind);
     const { table, size, ctx } = this.providerTable(key, k.name);
     if (!table) throw new NotFound(`${key} serves no ${k.name} table`);
     return k.remote(table, size, ctx) as unknown as Remote<K>;

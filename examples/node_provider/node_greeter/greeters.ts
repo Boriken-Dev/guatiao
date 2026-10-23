@@ -14,7 +14,7 @@ import { BadValue, type MapRef, type Value } from 'guatiao';
 import type { ObjectHandle, Remote } from 'guatiao/kinds';
 import { Provider, s } from 'guatiao/provide';
 
-import { type Conversation, Counter, Greeter, Listener } from '../../greeter_kind/node/greeter_kind.ts';
+import { type Conversation, Counter, Greeter, Listener } from '../../greeter_kind/node/greeter_kind.js';
 
 /** Changed by the examples to show a different build. */
 export const GREETING = 'hello';

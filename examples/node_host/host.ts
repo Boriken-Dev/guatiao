@@ -27,7 +27,7 @@ import { FloorMismatch } from 'guatiao';
 import { type Remote, liveObjects } from 'guatiao/kinds';
 import { type Library, libraryOf } from 'guatiao/provide';
 
-import { Greeter } from '../greeter_kind/node/greeter_kind.ts';
+import { Greeter } from '../greeter_kind/node/greeter_kind.js';
 
 type Say = (line: string) => void;
 

@@ -15,8 +15,8 @@ import * as n from '../src/native.js';
 import { liveObjects, type Remote } from '../src/kinds.js';
 import { libraryOf } from '../src/provide.js';
 import { adopt } from '../src/value.js';
-import { Counter, Greeter } from '../../../../examples/greeter_kind/node/greeter_kind.ts';
-import { GREETER_KIND_H, REPO, readText } from './helpers.js';
+import { Counter, Greeter } from '../../../../examples/greeter_kind/node/greeter_kind.js';
+import { REPO } from './helpers.js';
 import { bridge, bridgeConfig, cLibraries, workspaceLibrary } from './native.js';
 import { libraryDir } from './setup.js';
 
@@ -81,21 +81,6 @@ function greeter(which: Which, skip: (note: string) => void): Remote<typeof Gree
   }
   return reg.bind(GREETERS[which].key, Greeter);
 }
-
-describe('the kind described in TypeScript', () => {
-  it('copies its floor hashes from the header', () => {
-    const header = readText(GREETER_KIND_H);
-    for (const [table, described] of [
-      ['greeter_vtable', Greeter],
-      ['counter_vtable', Counter],
-    ] as const) {
-      const found = new RegExp(`#define ${table}_FLOOR_HASH (\\d+)`).exec(header);
-      expect(Number(found?.[1]), table).toBe(described.floorHash);
-    }
-    const slots = /typedef struct greeter_vtable \{([\s\S]*?)\} greeter_vtable;/.exec(header)![1]!.match(/\(\*\w+\)/g)!;
-    expect(Greeter.tableSize).toBe(8 + slots.length * 8);
-  });
-});
 
 describe('a Node host calls every greeter', () => {
   each('%s greets', (which, ctx) => {
