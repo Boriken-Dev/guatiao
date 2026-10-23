@@ -110,6 +110,12 @@ jobs:
               for name, spec in bridge.get(table, {}).items():
                   if name.startswith("guatiao") and spec.get("version") != f"={cargo}":
                       problems.append(f"guatiao-py's {table} pin {name} to {spec.get('version')}, not ={cargo}")
+          # guatiao-bridge is published with the crates it is built on, and
+          # names each at exactly the release's version.
+          shared = tomllib.loads(pathlib.Path("crates/guatiao-bridge/Cargo.toml").read_text())
+          for name, spec in shared.get("dependencies", {}).items():
+              if name.startswith("guatiao") and spec.get("version") != f"={cargo}":
+                  problems.append(f"guatiao-bridge pins {name} to {spec.get('version')}, not ={cargo}")
           # npm writes the version as Cargo does; the lockfiles name it too.
           import json
           node = json.loads(pathlib.Path("bindings/node/guatiao/package.json").read_text())["version"]
@@ -206,10 +212,10 @@ jobs:
       - name: Dry-run the workspace publish
         run: cargo publish --workspace --dry-run
       # The dry run keeps its packages in cargo's own scratch directories,
-      # so the four are packaged again for the release. Named, because
+      # so the five are packaged again for the release. Named, because
       # `--workspace` would take in the examples, which are never packaged.
-      - name: Package the four crates for the release
-        run: cargo package -p guatiao-derive -p guatiao -p guatiao-serde -p guatiao-intake --no-verify
+      - name: Package the five crates for the release
+        run: cargo package -p guatiao-derive -p guatiao -p guatiao-serde -p guatiao-intake -p guatiao-bridge --no-verify
       - uses: actions/upload-artifact@v4
         with:
           name: crates
@@ -774,7 +780,11 @@ jobs:
 
           # A crate before everything that depends on it. `cargo publish`
           # waits until each is in the index before the next one starts.
-          for name in ["guatiao-derive", "guatiao", "guatiao-serde", "guatiao-intake"]:
+          # guatiao-bridge builds on guatiao and guatiao-serde. A crate's
+          # first publish needs the token: trusted publishing is configured
+          # on a crate that exists (AGENTS.md, "How each registry is
+          # reached").
+          for name in ["guatiao-derive", "guatiao", "guatiao-serde", "guatiao-intake", "guatiao-bridge"]:
               if published(name):
                   print(f"{name} {version} is already on crates.io; skipped")
                   continue

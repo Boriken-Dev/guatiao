@@ -166,7 +166,7 @@ jobs:
         shell: bash
         run: |
           status=0
-          for crate in guatiao guatiao-serde guatiao-intake; do
+          for crate in guatiao guatiao-serde guatiao-intake guatiao-bridge; do
             cargo public-api -p "$crate" --all-features -ss > "$RUNNER_TEMP/$crate.txt"
             diff -u "crates/$crate/public-api.txt" "$RUNNER_TEMP/$crate.txt" || status=1
           done
