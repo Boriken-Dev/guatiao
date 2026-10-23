@@ -163,9 +163,21 @@ pub mod __private {
     pub fn fields_of(kind: KindBuilder) -> alloc::vec::Vec<FieldBuilder> {
         kind.into_fields()
     }
+
+    /// The kind of a value, for an enum told apart by kind; an unknown
+    /// tag is no kind, which no variant reads.
+    pub fn kinds_of(value: &Value) -> crate::Kinds {
+        value.tag().map_or(crate::Kinds::NONE, crate::Kinds::of)
+    }
+
+    /// What an enum told apart by kind refuses a value with: the kinds
+    /// its variants read, never the value.
+    pub fn untagged_refused(expected: crate::Kinds) -> crate::MapError {
+        crate::MapError::bad_value(alloc::string::ToString::to_string(&expected))
+    }
 }
 
-pub use value::convert::{Bytes, FromValue, MapError, ToValue, TryAsMut, TryAsRef};
+pub use value::convert::{Bytes, FromValue, Kinds, MapError, ToValue, TryAsMut, TryAsRef};
 // The names generated code reaches for, at the root where it names them.
 // Keeping the derive's paths rooted here rather than at `value::` is what
 // lets the module underneath be rearranged without touching a macro every
@@ -388,6 +400,50 @@ pub use guatiao_derive::kind;
 /// let level = Level::Warning.to_value_in(alloc)?;
 /// assert_eq!(<&str>::try_from(&level)?, "warn");
 /// # Ok::<(), Box<dyn core::error::Error>>(())
+/// ```
+///
+/// Or tell the variants apart by kind with `#[map(untagged)]`: no name is
+/// stored, each value is what its variant writes, and a reader takes the
+/// variant whose kind the value has. The unit variants are strings, named
+/// fields a map, and `Name(T)` whatever `T` reads:
+///
+/// ```
+/// use guatiao::{FromValue, ToValue};
+/// #[derive(ToValue, FromValue, Debug, PartialEq)]
+/// #[map(untagged, rename_all = "lowercase")]
+/// enum Tls { Identity, Files { certificate: String, key: String } }
+///
+/// #[derive(ToValue, FromValue, Debug, PartialEq)]
+/// #[map(untagged)]
+/// enum OneOrMany<T> { One(T), Many(Vec<T>) }
+///
+/// assert_eq!(<&str>::try_from(&Tls::Identity.to_value()?)?, "identity");
+/// let files = Tls::Files { certificate: "c.pem".into(), key: "k.pem".into() };
+/// assert_eq!(Tls::from_value(&files.to_value()?)?, files);
+/// let many = OneOrMany::<u16>::from_value(&vec![1u16, 2].to_value()?)?;
+/// assert_eq!(many, OneOrMany::Many(vec![1, 2]));
+/// # Ok::<(), Box<dyn core::error::Error>>(())
+/// ```
+///
+/// Two variants that read one kind could not be told apart, so deriving
+/// `FromValue` refuses them, naming both:
+///
+/// ```compile_fail
+/// use guatiao::FromValue;
+/// #[derive(FromValue)]
+/// #[map(untagged)]
+/// enum Location { Text(String), Path(std::path::PathBuf) }
+/// ```
+///
+/// A generic one is refused for the instance that overlaps, a list in a
+/// list here:
+///
+/// ```compile_fail
+/// use guatiao::FromValue;
+/// #[derive(FromValue)]
+/// #[map(untagged)]
+/// enum OneOrMany<T> { One(T), Many(Vec<T>) }
+/// let _ = OneOrMany::<Vec<u8>>::from_value(&guatiao::Value::null());
 /// ```
 ///
 /// A tagged variant of two unnamed fields has no keys to store them under

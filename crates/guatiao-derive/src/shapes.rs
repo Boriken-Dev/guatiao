@@ -79,6 +79,8 @@ pub(crate) fn emit_transparent(
             };
             quote! {
                 #head {
+                    const KINDS: ::guatiao::Kinds = <#ty as ::guatiao::FromValue>::KINDS;
+
                     fn from_value(
                         __value: &::guatiao::Value,
                     ) -> ::core::result::Result<Self, ::guatiao::MapError> {
@@ -132,6 +134,8 @@ pub(crate) fn emit_tuple(derive: Derive, head: &TokenStream, fields: &[&Field]) 
             let items: Vec<Ident> = (0..n).map(|i| format_ident!("__f{i}")).collect();
             quote! {
                 #head {
+                    const KINDS: ::guatiao::Kinds = ::guatiao::Kinds::LIST;
+
                     fn from_value(
                         __value: &::guatiao::Value,
                     ) -> ::core::result::Result<Self, ::guatiao::MapError> {
@@ -174,6 +178,8 @@ pub(crate) fn emit_unit(derive: Derive, head: &TokenStream) -> TokenStream {
         },
         Derive::FromValue => quote! {
             #head {
+                const KINDS: ::guatiao::Kinds = ::guatiao::Kinds::NULL;
+
                 fn from_value(
                     __value: &::guatiao::Value,
                 ) -> ::core::result::Result<Self, ::guatiao::MapError> {

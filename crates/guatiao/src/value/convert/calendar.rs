@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+use super::Kinds;
 use alloc::borrow::Cow;
 use alloc::string::ToString;
 use std::time::SystemTime;
@@ -41,6 +42,7 @@ macro_rules! calendar {
         /// Text its `FromStr` reads; a refusal names the byte it stopped
         /// at and what it expected there.
         impl FromValue for $t {
+            const KINDS: Kinds = Kinds::STRING;
             fn from_value(value: &Value) -> Result<$t, MapError> {
                 <&str>::try_from(value)?.parse().map_err(|e| refused($what, e))
             }
@@ -82,6 +84,7 @@ impl ToValue for SystemTime {
 /// What a [`Timestamp`] reads, kept to the clock's resolution: 100 ns on
 /// Windows.
 impl FromValue for SystemTime {
+    const KINDS: Kinds = Kinds::STRING;
     fn from_value(value: &Value) -> Result<SystemTime, MapError> {
         SystemTime::try_from(Timestamp::from_value(value)?)
             .map_err(|_| MapError::bad_value("a date-time this platform's clock can hold"))

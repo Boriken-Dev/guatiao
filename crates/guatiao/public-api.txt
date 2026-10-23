@@ -2079,6 +2079,7 @@ pub fn guatiao::schema::build::KindBuilder::bool() -> guatiao::schema::build::Ki
 pub fn guatiao::schema::build::KindBuilder::bool_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::bytes() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::bytes_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::description(self, &str) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::enumeration(&[(&str, &str)]) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::enumeration_in(guatiao::value::alloc::Alloc, &[(&str, &str)]) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::finish(self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2112,6 +2113,7 @@ pub fn guatiao::schema::build::KindBuilder::pattern(self, &str) -> guatiao::sche
 pub fn guatiao::schema::build::KindBuilder::property_names(self, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::title(self, &str) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::tuple(alloc::vec::Vec<guatiao::schema::build::KindBuilder>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::tuple_in(guatiao::value::alloc::Alloc, alloc::vec::Vec<guatiao::schema::build::KindBuilder>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::union(alloc::vec::Vec<guatiao::schema::build::KindBuilder>) -> guatiao::schema::build::KindBuilder
@@ -2822,6 +2824,7 @@ pub fn guatiao::schema::build::KindBuilder::bool() -> guatiao::schema::build::Ki
 pub fn guatiao::schema::build::KindBuilder::bool_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::bytes() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::bytes_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::description(self, &str) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::enumeration(&[(&str, &str)]) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::enumeration_in(guatiao::value::alloc::Alloc, &[(&str, &str)]) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::finish(self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2855,6 +2858,7 @@ pub fn guatiao::schema::build::KindBuilder::pattern(self, &str) -> guatiao::sche
 pub fn guatiao::schema::build::KindBuilder::property_names(self, guatiao::schema::build::KindBuilder) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string() -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::string_in(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn guatiao::schema::build::KindBuilder::title(self, &str) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::tuple(alloc::vec::Vec<guatiao::schema::build::KindBuilder>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::tuple_in(guatiao::value::alloc::Alloc, alloc::vec::Vec<guatiao::schema::build::KindBuilder>) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::schema::build::KindBuilder::union(alloc::vec::Vec<guatiao::schema::build::KindBuilder>) -> guatiao::schema::build::KindBuilder
@@ -3373,189 +3377,309 @@ pub fn guatiao::value::convert::Bytes::kind(guatiao::value::alloc::Alloc) -> gua
 pub fn guatiao::value::convert::Bytes::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
+pub const guatiao::value::convert::Bytes::KINDS: guatiao::Kinds
 pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub struct guatiao::value::convert::Kinds(_)
+impl guatiao::Kinds
+pub const guatiao::Kinds::ANY: guatiao::Kinds
+pub const guatiao::Kinds::BOOL: guatiao::Kinds
+pub const guatiao::Kinds::BYTES: guatiao::Kinds
+pub const guatiao::Kinds::LIST: guatiao::Kinds
+pub const guatiao::Kinds::MAP: guatiao::Kinds
+pub const guatiao::Kinds::NONE: guatiao::Kinds
+pub const guatiao::Kinds::NULL: guatiao::Kinds
+pub const guatiao::Kinds::NUMBER: guatiao::Kinds
+pub const guatiao::Kinds::STRING: guatiao::Kinds
+pub const fn guatiao::Kinds::contains(self, guatiao::value::value::Tag) -> bool
+pub const fn guatiao::Kinds::intersects(self, guatiao::Kinds) -> bool
+pub const fn guatiao::Kinds::is_empty(self) -> bool
+pub const fn guatiao::Kinds::of(guatiao::value::value::Tag) -> guatiao::Kinds
+pub const fn guatiao::Kinds::union(self, guatiao::Kinds) -> guatiao::Kinds
+impl core::clone::Clone for guatiao::Kinds
+pub fn guatiao::Kinds::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::Kinds
+impl core::cmp::PartialEq for guatiao::Kinds
+pub fn guatiao::Kinds::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::Kinds
+pub fn guatiao::Kinds::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::Kinds
+pub fn guatiao::Kinds::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::Kinds
+pub fn guatiao::Kinds::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::Kinds
+impl core::marker::StructuralPartialEq for guatiao::Kinds
 pub trait guatiao::value::convert::FromValue: core::marker::Sized
+pub const guatiao::value::convert::FromValue::KINDS: guatiao::Kinds
 pub fn guatiao::value::convert::FromValue::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for ()
+pub const ()::KINDS: guatiao::Kinds
 pub fn ()::from_value(&guatiao::value::value::Value) -> core::result::Result<(), guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::boxed::Box<std::path::Path>
+pub const alloc::boxed::Box<std::path::Path>::KINDS: guatiao::Kinds
 pub fn alloc::boxed::Box<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::boxed::Box<str>
+pub const alloc::boxed::Box<str>::KINDS: guatiao::Kinds
 pub fn alloc::boxed::Box<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::rc::Rc<std::path::Path>
+pub const alloc::rc::Rc<std::path::Path>::KINDS: guatiao::Kinds
 pub fn alloc::rc::Rc<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::rc::Rc<str>
+pub const alloc::rc::Rc<str>::KINDS: guatiao::Kinds
 pub fn alloc::rc::Rc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::string::String
+pub const alloc::string::String::KINDS: guatiao::Kinds
 pub fn alloc::string::String::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::sync::Arc<std::path::Path>
+pub const alloc::sync::Arc<std::path::Path>::KINDS: guatiao::Kinds
 pub fn alloc::sync::Arc<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::sync::Arc<str>
+pub const alloc::sync::Arc<str>::KINDS: guatiao::Kinds
 pub fn alloc::sync::Arc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for bool
+pub const bool::KINDS: guatiao::Kinds
 pub fn bool::from_value(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for char
+pub const char::KINDS: guatiao::Kinds
 pub fn char::from_value(&guatiao::value::value::Value) -> core::result::Result<char, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::ip_addr::IpAddr
+pub const core::net::ip_addr::IpAddr::KINDS: guatiao::Kinds
 pub fn core::net::ip_addr::IpAddr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::IpAddr, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::ip_addr::Ipv4Addr
+pub const core::net::ip_addr::Ipv4Addr::KINDS: guatiao::Kinds
 pub fn core::net::ip_addr::Ipv4Addr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::Ipv4Addr, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::ip_addr::Ipv6Addr
+pub const core::net::ip_addr::Ipv6Addr::KINDS: guatiao::Kinds
 pub fn core::net::ip_addr::Ipv6Addr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::Ipv6Addr, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddr
+pub const core::net::socket_addr::SocketAddr::KINDS: guatiao::Kinds
 pub fn core::net::socket_addr::SocketAddr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddr, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddrV4
+pub const core::net::socket_addr::SocketAddrV4::KINDS: guatiao::Kinds
 pub fn core::net::socket_addr::SocketAddrV4::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddrV4, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddrV6
+pub const core::net::socket_addr::SocketAddrV6::KINDS: guatiao::Kinds
 pub fn core::net::socket_addr::SocketAddrV6::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddrV6, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI128
+pub const core::num::nonzero::NonZeroI128::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI128::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI16
+pub const core::num::nonzero::NonZeroI16::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI16::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI16, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI32
+pub const core::num::nonzero::NonZeroI32::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI32::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI64
+pub const core::num::nonzero::NonZeroI64::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI64::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI8
+pub const core::num::nonzero::NonZeroI8::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroIsize
+pub const core::num::nonzero::NonZeroIsize::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroIsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroIsize, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU128
+pub const core::num::nonzero::NonZeroU128::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU128::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU16
+pub const core::num::nonzero::NonZeroU16::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU16::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU16, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU32
+pub const core::num::nonzero::NonZeroU32::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU32::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU64
+pub const core::num::nonzero::NonZeroU64::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU64::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU8
+pub const core::num::nonzero::NonZeroU8::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroUsize
+pub const core::num::nonzero::NonZeroUsize::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroUsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroUsize, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::time::Duration
+pub const core::time::Duration::KINDS: guatiao::Kinds
 pub fn core::time::Duration::from_value(&guatiao::value::value::Value) -> core::result::Result<core::time::Duration, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f32
+pub const f32::KINDS: guatiao::Kinds
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
+pub const f64::KINDS: guatiao::Kinds
 pub fn f64::from_value(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::Date
+pub const guatiao::Date::KINDS: guatiao::Kinds
 pub fn guatiao::Date::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::DateTime
+pub const guatiao::DateTime::KINDS: guatiao::Kinds
 pub fn guatiao::DateTime::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::Time
+pub const guatiao::Time::KINDS: guatiao::Kinds
 pub fn guatiao::Time::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::Timestamp
+pub const guatiao::Timestamp::KINDS: guatiao::Kinds
 pub fn guatiao::Timestamp::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
+pub const guatiao::value::convert::Bytes::KINDS: guatiao::Kinds
 pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::span::Span
+pub const guatiao::value::span::Span::KINDS: guatiao::Kinds
 pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::buffer::Buffer
+pub const guatiao::value::types::buffer::Buffer::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::buffer::Buffer::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::list::List
+pub const guatiao::value::types::list::List::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::list::List::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::map::Map
+pub const guatiao::value::types::map::Map::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::map::Map::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::number::Number
+pub const guatiao::value::types::number::Number::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::number::Number::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::text::Text
+pub const guatiao::value::types::text::Text::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::text::Text::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::value::Value
+pub const guatiao::value::value::Value::KINDS: guatiao::Kinds
 pub fn guatiao::value::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i128
+pub const i128::KINDS: guatiao::Kinds
 pub fn i128::from_value(&guatiao::value::value::Value) -> core::result::Result<i128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i16
+pub const i16::KINDS: guatiao::Kinds
 pub fn i16::from_value(&guatiao::value::value::Value) -> core::result::Result<i16, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i32
+pub const i32::KINDS: guatiao::Kinds
 pub fn i32::from_value(&guatiao::value::value::Value) -> core::result::Result<i32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i64
+pub const i64::KINDS: guatiao::Kinds
 pub fn i64::from_value(&guatiao::value::value::Value) -> core::result::Result<i64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i8
+pub const i8::KINDS: guatiao::Kinds
 pub fn i8::from_value(&guatiao::value::value::Value) -> core::result::Result<i8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for isize
+pub const isize::KINDS: guatiao::Kinds
 pub fn isize::from_value(&guatiao::value::value::Value) -> core::result::Result<isize, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub const serde_json::map::Map<alloc::string::String, serde_json::value::Value>::KINDS: guatiao::Kinds
 pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::from_value(&guatiao::value::value::Value) -> core::result::Result<serde_json::map::Map<alloc::string::String, serde_json::value::Value>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for serde_json::value::Value
+pub const serde_json::value::Value::KINDS: guatiao::Kinds
 pub fn serde_json::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<serde_json::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for std::path::PathBuf
+pub const std::path::PathBuf::KINDS: guatiao::Kinds
 pub fn std::path::PathBuf::from_value(&guatiao::value::value::Value) -> core::result::Result<std::path::PathBuf, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for std::time::SystemTime
+pub const std::time::SystemTime::KINDS: guatiao::Kinds
 pub fn std::time::SystemTime::from_value(&guatiao::value::value::Value) -> core::result::Result<std::time::SystemTime, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for toml::table::Table
+pub const toml::table::Table::KINDS: guatiao::Kinds
 pub fn toml::table::Table::from_value(&guatiao::value::value::Value) -> core::result::Result<toml::table::Table, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for toml::value::Value
+pub const toml::value::Value::KINDS: guatiao::Kinds
 pub fn toml::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<toml::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u128
+pub const u128::KINDS: guatiao::Kinds
 pub fn u128::from_value(&guatiao::value::value::Value) -> core::result::Result<u128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u16
+pub const u16::KINDS: guatiao::Kinds
 pub fn u16::from_value(&guatiao::value::value::Value) -> core::result::Result<u16, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u32
+pub const u32::KINDS: guatiao::Kinds
 pub fn u32::from_value(&guatiao::value::value::Value) -> core::result::Result<u32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u64
+pub const u64::KINDS: guatiao::Kinds
 pub fn u64::from_value(&guatiao::value::value::Value) -> core::result::Result<u64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u8
+pub const u8::KINDS: guatiao::Kinds
 pub fn u8::from_value(&guatiao::value::value::Value) -> core::result::Result<u8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for usize
+pub const usize::KINDS: guatiao::Kinds
 pub fn usize::from_value(&guatiao::value::value::Value) -> core::result::Result<usize, guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue, I: guatiao::value::convert::FromValue, J: guatiao::value::convert::FromValue, K: guatiao::value::convert::FromValue, L: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H, I, J, K, L)
+pub const (A, B, C, D, E, F, G, H, I, J, K, L)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H, I, J, K, L)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H, I, J, K, L), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue, I: guatiao::value::convert::FromValue, J: guatiao::value::convert::FromValue, K: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H, I, J, K)
+pub const (A, B, C, D, E, F, G, H, I, J, K)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H, I, J, K)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H, I, J, K), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue, I: guatiao::value::convert::FromValue, J: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H, I, J)
+pub const (A, B, C, D, E, F, G, H, I, J)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H, I, J)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H, I, J), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue, I: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H, I)
+pub const (A, B, C, D, E, F, G, H, I)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H, I)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H, I), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H)
+pub const (A, B, C, D, E, F, G, H)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G)
+pub const (A, B, C, D, E, F, G)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F)
+pub const (A, B, C, D, E, F)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E)
+pub const (A, B, C, D, E)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D)
+pub const (A, B, C, D)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C)
+pub const (A, B, C)::KINDS: guatiao::Kinds
 pub fn (A, B, C)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B)
+pub const (A, B)::KINDS: guatiao::Kinds
 pub fn (A, B)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A)
+pub const (A)::KINDS: guatiao::Kinds
 pub fn (A)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A), guatiao::value::convert::MapError>
 impl<K: guatiao::value::convert::MapKey + core::cmp::Eq + core::hash::Hash, V: guatiao::value::convert::FromValue, S: core::hash::BuildHasher + core::default::Default> guatiao::value::convert::FromValue for std::collections::hash::map::HashMap<K, V, S>
+pub const std::collections::hash::map::HashMap<K, V, S>::KINDS: guatiao::Kinds
 pub fn std::collections::hash::map::HashMap<K, V, S>::from_value(&guatiao::value::value::Value) -> core::result::Result<std::collections::hash::map::HashMap<K, V, S>, guatiao::value::convert::MapError>
 impl<K: guatiao::value::convert::MapKey + core::cmp::Ord, V: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::collections::btree::map::BTreeMap<K, V>
+pub const alloc::collections::btree::map::BTreeMap<K, V>::KINDS: guatiao::Kinds
 pub fn alloc::collections::btree::map::BTreeMap<K, V>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::btree::map::BTreeMap<K, V>, guatiao::value::convert::MapError>
 impl<T: alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::value::convert::FromValue for alloc::borrow::Cow<'_, T> where <T as alloc::borrow::ToOwned>::Owned: guatiao::value::convert::FromValue
+pub const alloc::borrow::Cow<'_, T>::KINDS: guatiao::Kinds
 pub fn alloc::borrow::Cow<'_, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue + core::cmp::Eq + core::hash::Hash, S: core::hash::BuildHasher + core::default::Default> guatiao::value::convert::FromValue for std::collections::hash::set::HashSet<T, S>
+pub const std::collections::hash::set::HashSet<T, S>::KINDS: guatiao::Kinds
 pub fn std::collections::hash::set::HashSet<T, S>::from_value(&guatiao::value::value::Value) -> core::result::Result<std::collections::hash::set::HashSet<T, S>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue + core::cmp::Ord> guatiao::value::convert::FromValue for alloc::collections::btree::set::BTreeSet<T>
+pub const alloc::collections::btree::set::BTreeSet<T>::KINDS: guatiao::Kinds
 pub fn alloc::collections::btree::set::BTreeSet<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::btree::set::BTreeSet<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue, const N: usize> guatiao::value::convert::FromValue for [T; N]
+pub const [T; N]::KINDS: guatiao::Kinds
 pub fn [T; N]::from_value(&guatiao::value::value::Value) -> core::result::Result<[T; N], guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::boxed::Box<T>
+pub const alloc::boxed::Box<T>::KINDS: guatiao::Kinds
 pub fn alloc::boxed::Box<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::boxed::Box<[T]>
+pub const alloc::boxed::Box<[T]>::KINDS: guatiao::Kinds
 pub fn alloc::boxed::Box<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::collections::vec_deque::VecDeque<T>
+pub const alloc::collections::vec_deque::VecDeque<T>::KINDS: guatiao::Kinds
 pub fn alloc::collections::vec_deque::VecDeque<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::vec_deque::VecDeque<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::rc::Rc<T>
+pub const alloc::rc::Rc<T>::KINDS: guatiao::Kinds
 pub fn alloc::rc::Rc<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::rc::Rc<[T]>
+pub const alloc::rc::Rc<[T]>::KINDS: guatiao::Kinds
 pub fn alloc::rc::Rc<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::sync::Arc<T>
+pub const alloc::sync::Arc<T>::KINDS: guatiao::Kinds
 pub fn alloc::sync::Arc<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::sync::Arc<[T]>
+pub const alloc::sync::Arc<[T]>::KINDS: guatiao::Kinds
 pub fn alloc::sync::Arc<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::vec::Vec<T>
+pub const alloc::vec::Vec<T>::KINDS: guatiao::Kinds
 pub fn alloc::vec::Vec<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for core::option::Option<T>
+pub const core::option::Option<T>::KINDS: guatiao::Kinds
 pub fn core::option::Option<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<core::option::Option<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for guatiao::value::secret::Secret<T>
+pub const guatiao::value::secret::Secret<T>::KINDS: guatiao::Kinds
 pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
 pub trait guatiao::value::convert::MapKey: core::marker::Sized
 pub fn guatiao::value::convert::MapKey::from_key(&str) -> core::result::Result<Self, guatiao::value::convert::MapError>
@@ -4137,6 +4261,7 @@ pub fn guatiao::value::secret::Secret<T>::kind(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::secret::Secret<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::secret::Secret<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for guatiao::value::secret::Secret<T>
+pub const guatiao::value::secret::Secret<T>::KINDS: guatiao::Kinds
 pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for guatiao::value::secret::Secret<T>
 pub fn guatiao::value::secret::Secret<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -4212,6 +4337,7 @@ pub fn guatiao::value::span::Span::kind(guatiao::value::alloc::Alloc) -> guatiao
 pub fn guatiao::value::span::Span::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::span::Span::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::span::Span
+pub const guatiao::value::span::Span::KINDS: guatiao::Kinds
 pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::span::Span
 pub fn guatiao::value::span::Span::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -4300,6 +4426,7 @@ pub fn guatiao::Date::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::bui
 pub fn guatiao::Date::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Date::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::Date
+pub const guatiao::Date::KINDS: guatiao::Kinds
 pub fn guatiao::Date::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
 impl guatiao::value::convert::MapKey for guatiao::Date
 pub fn guatiao::Date::from_key(&str) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
@@ -4349,6 +4476,7 @@ pub fn guatiao::DateTime::kind(guatiao::value::alloc::Alloc) -> guatiao::schema:
 pub fn guatiao::DateTime::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::DateTime::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::DateTime
+pub const guatiao::DateTime::KINDS: guatiao::Kinds
 pub fn guatiao::DateTime::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
 impl guatiao::value::convert::MapKey for guatiao::DateTime
 pub fn guatiao::DateTime::from_key(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
@@ -4400,6 +4528,7 @@ pub fn guatiao::Time::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::bui
 pub fn guatiao::Time::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Time::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::Time
+pub const guatiao::Time::KINDS: guatiao::Kinds
 pub fn guatiao::Time::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
 impl guatiao::value::convert::MapKey for guatiao::Time
 pub fn guatiao::Time::from_key(&str) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
@@ -4454,6 +4583,7 @@ pub fn guatiao::Timestamp::kind(guatiao::value::alloc::Alloc) -> guatiao::schema
 pub fn guatiao::Timestamp::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Timestamp::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::Timestamp
+pub const guatiao::Timestamp::KINDS: guatiao::Kinds
 pub fn guatiao::Timestamp::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
 impl guatiao::value::convert::MapKey for guatiao::Timestamp
 pub fn guatiao::Timestamp::from_key(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
@@ -4526,6 +4656,7 @@ pub fn guatiao::value::types::buffer::Buffer::kind(guatiao::value::alloc::Alloc)
 pub fn guatiao::value::types::buffer::Buffer::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::buffer::Buffer::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::buffer::Buffer
+pub const guatiao::value::types::buffer::Buffer::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::buffer::Buffer::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -4617,6 +4748,7 @@ pub fn guatiao::value::types::list::List::kind(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::types::list::List::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::list::List::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::list::List
+pub const guatiao::value::types::list::List::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::list::List::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -4772,6 +4904,7 @@ pub fn guatiao::value::types::map::Map::kind(guatiao::value::alloc::Alloc) -> gu
 pub fn guatiao::value::types::map::Map::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::map::Map::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::map::Map
+pub const guatiao::value::types::map::Map::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::map::Map::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -4889,6 +5022,7 @@ pub fn guatiao::value::types::number::Number::kind(guatiao::value::alloc::Alloc)
 pub fn guatiao::value::types::number::Number::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::number::Number::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::number::Number
+pub const guatiao::value::types::number::Number::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::number::Number::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -4998,6 +5132,7 @@ pub fn guatiao::value::types::text::Text::kind(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::types::text::Text::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::text::Text::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::text::Text
+pub const guatiao::value::types::text::Text::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::text::Text::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -5101,6 +5236,7 @@ pub fn guatiao::value::types::buffer::Buffer::kind(guatiao::value::alloc::Alloc)
 pub fn guatiao::value::types::buffer::Buffer::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::buffer::Buffer::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::buffer::Buffer
+pub const guatiao::value::types::buffer::Buffer::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::buffer::Buffer::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -5214,6 +5350,7 @@ pub fn guatiao::value::types::list::List::kind(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::types::list::List::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::list::List::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::list::List
+pub const guatiao::value::types::list::List::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::list::List::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -5302,6 +5439,7 @@ pub fn guatiao::value::types::map::Map::kind(guatiao::value::alloc::Alloc) -> gu
 pub fn guatiao::value::types::map::Map::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::map::Map::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::map::Map
+pub const guatiao::value::types::map::Map::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::map::Map::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -5417,6 +5555,7 @@ pub fn guatiao::value::types::number::Number::kind(guatiao::value::alloc::Alloc)
 pub fn guatiao::value::types::number::Number::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::number::Number::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::number::Number
+pub const guatiao::value::types::number::Number::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::number::Number::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -5525,6 +5664,7 @@ pub fn guatiao::value::types::text::Text::kind(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::types::text::Text::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::text::Text::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::text::Text
+pub const guatiao::value::types::text::Text::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::text::Text::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -5664,6 +5804,7 @@ pub fn guatiao::value::value::Value::kind(guatiao::value::alloc::Alloc) -> guati
 pub fn guatiao::value::value::Value::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::value::Value::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::value::Value
+pub const guatiao::value::value::Value::KINDS: guatiao::Kinds
 pub fn guatiao::value::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -5900,6 +6041,7 @@ pub fn guatiao::value::value::Value::kind(guatiao::value::alloc::Alloc) -> guati
 pub fn guatiao::value::value::Value::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::value::Value::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::value::Value
+pub const guatiao::value::value::Value::KINDS: guatiao::Kinds
 pub fn guatiao::value::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6236,6 +6378,7 @@ pub fn guatiao::value::types::buffer::Buffer::kind(guatiao::value::alloc::Alloc)
 pub fn guatiao::value::types::buffer::Buffer::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::buffer::Buffer::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::buffer::Buffer
+pub const guatiao::value::types::buffer::Buffer::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::buffer::Buffer::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6275,6 +6418,7 @@ pub fn guatiao::value::convert::Bytes::kind(guatiao::value::alloc::Alloc) -> gua
 pub fn guatiao::value::convert::Bytes::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
+pub const guatiao::value::convert::Bytes::KINDS: guatiao::Kinds
 pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6321,6 +6465,7 @@ pub fn guatiao::Date::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::bui
 pub fn guatiao::Date::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Date::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::Date
+pub const guatiao::Date::KINDS: guatiao::Kinds
 pub fn guatiao::Date::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
 impl guatiao::value::convert::MapKey for guatiao::Date
 pub fn guatiao::Date::from_key(&str) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
@@ -6370,6 +6515,7 @@ pub fn guatiao::DateTime::kind(guatiao::value::alloc::Alloc) -> guatiao::schema:
 pub fn guatiao::DateTime::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::DateTime::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::DateTime
+pub const guatiao::DateTime::KINDS: guatiao::Kinds
 pub fn guatiao::DateTime::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
 impl guatiao::value::convert::MapKey for guatiao::DateTime
 pub fn guatiao::DateTime::from_key(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
@@ -6452,6 +6598,7 @@ pub fn guatiao::value::types::list::List::kind(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::types::list::List::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::list::List::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::list::List
+pub const guatiao::value::types::list::List::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::list::List::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6540,6 +6687,7 @@ pub fn guatiao::value::types::map::Map::kind(guatiao::value::alloc::Alloc) -> gu
 pub fn guatiao::value::types::map::Map::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::map::Map::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::map::Map
+pub const guatiao::value::types::map::Map::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::map::Map::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6641,6 +6789,7 @@ pub fn guatiao::value::types::number::Number::kind(guatiao::value::alloc::Alloc)
 pub fn guatiao::value::types::number::Number::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::number::Number::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::number::Number
+pub const guatiao::value::types::number::Number::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::number::Number::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6670,6 +6819,7 @@ pub fn guatiao::value::secret::Secret<T>::kind(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::secret::Secret<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::secret::Secret<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for guatiao::value::secret::Secret<T>
+pub const guatiao::value::secret::Secret<T>::KINDS: guatiao::Kinds
 pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for guatiao::value::secret::Secret<T>
 pub fn guatiao::value::secret::Secret<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6744,6 +6894,7 @@ pub fn guatiao::value::span::Span::kind(guatiao::value::alloc::Alloc) -> guatiao
 pub fn guatiao::value::span::Span::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::span::Span::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::span::Span
+pub const guatiao::value::span::Span::KINDS: guatiao::Kinds
 pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::span::Span
 pub fn guatiao::value::span::Span::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6888,6 +7039,7 @@ pub fn guatiao::value::types::text::Text::kind(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::types::text::Text::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::text::Text::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::text::Text
+pub const guatiao::value::types::text::Text::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::text::Text::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -6939,6 +7091,7 @@ pub fn guatiao::Time::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::bui
 pub fn guatiao::Time::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Time::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::Time
+pub const guatiao::Time::KINDS: guatiao::Kinds
 pub fn guatiao::Time::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
 impl guatiao::value::convert::MapKey for guatiao::Time
 pub fn guatiao::Time::from_key(&str) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
@@ -6993,6 +7146,7 @@ pub fn guatiao::Timestamp::kind(guatiao::value::alloc::Alloc) -> guatiao::schema
 pub fn guatiao::Timestamp::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Timestamp::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::Timestamp
+pub const guatiao::Timestamp::KINDS: guatiao::Kinds
 pub fn guatiao::Timestamp::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
 impl guatiao::value::convert::MapKey for guatiao::Timestamp
 pub fn guatiao::Timestamp::from_key(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
@@ -7132,6 +7286,7 @@ pub fn guatiao::value::value::Value::kind(guatiao::value::alloc::Alloc) -> guati
 pub fn guatiao::value::value::Value::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::value::Value::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::value::Value
+pub const guatiao::value::value::Value::KINDS: guatiao::Kinds
 pub fn guatiao::value::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -7188,184 +7343,274 @@ impl<T: core::convert::Into<guatiao::value::value::Value>> core::convert::From<c
 pub fn guatiao::value::value::Value::from(core::option::Option<T>) -> guatiao::value::value::Value
 pub const guatiao::value::MAX_DEPTH: u32
 pub trait guatiao::value::FromValue: core::marker::Sized
+pub const guatiao::value::FromValue::KINDS: guatiao::Kinds
 pub fn guatiao::value::FromValue::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for ()
+pub const ()::KINDS: guatiao::Kinds
 pub fn ()::from_value(&guatiao::value::value::Value) -> core::result::Result<(), guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::boxed::Box<std::path::Path>
+pub const alloc::boxed::Box<std::path::Path>::KINDS: guatiao::Kinds
 pub fn alloc::boxed::Box<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::boxed::Box<str>
+pub const alloc::boxed::Box<str>::KINDS: guatiao::Kinds
 pub fn alloc::boxed::Box<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::rc::Rc<std::path::Path>
+pub const alloc::rc::Rc<std::path::Path>::KINDS: guatiao::Kinds
 pub fn alloc::rc::Rc<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::rc::Rc<str>
+pub const alloc::rc::Rc<str>::KINDS: guatiao::Kinds
 pub fn alloc::rc::Rc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::string::String
+pub const alloc::string::String::KINDS: guatiao::Kinds
 pub fn alloc::string::String::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::sync::Arc<std::path::Path>
+pub const alloc::sync::Arc<std::path::Path>::KINDS: guatiao::Kinds
 pub fn alloc::sync::Arc<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::sync::Arc<str>
+pub const alloc::sync::Arc<str>::KINDS: guatiao::Kinds
 pub fn alloc::sync::Arc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for bool
+pub const bool::KINDS: guatiao::Kinds
 pub fn bool::from_value(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for char
+pub const char::KINDS: guatiao::Kinds
 pub fn char::from_value(&guatiao::value::value::Value) -> core::result::Result<char, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::ip_addr::IpAddr
+pub const core::net::ip_addr::IpAddr::KINDS: guatiao::Kinds
 pub fn core::net::ip_addr::IpAddr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::IpAddr, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::ip_addr::Ipv4Addr
+pub const core::net::ip_addr::Ipv4Addr::KINDS: guatiao::Kinds
 pub fn core::net::ip_addr::Ipv4Addr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::Ipv4Addr, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::ip_addr::Ipv6Addr
+pub const core::net::ip_addr::Ipv6Addr::KINDS: guatiao::Kinds
 pub fn core::net::ip_addr::Ipv6Addr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::Ipv6Addr, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddr
+pub const core::net::socket_addr::SocketAddr::KINDS: guatiao::Kinds
 pub fn core::net::socket_addr::SocketAddr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddr, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddrV4
+pub const core::net::socket_addr::SocketAddrV4::KINDS: guatiao::Kinds
 pub fn core::net::socket_addr::SocketAddrV4::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddrV4, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddrV6
+pub const core::net::socket_addr::SocketAddrV6::KINDS: guatiao::Kinds
 pub fn core::net::socket_addr::SocketAddrV6::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddrV6, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI128
+pub const core::num::nonzero::NonZeroI128::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI128::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI16
+pub const core::num::nonzero::NonZeroI16::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI16::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI16, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI32
+pub const core::num::nonzero::NonZeroI32::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI32::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI64
+pub const core::num::nonzero::NonZeroI64::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI64::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI8
+pub const core::num::nonzero::NonZeroI8::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroIsize
+pub const core::num::nonzero::NonZeroIsize::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroIsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroIsize, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU128
+pub const core::num::nonzero::NonZeroU128::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU128::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU16
+pub const core::num::nonzero::NonZeroU16::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU16::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU16, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU32
+pub const core::num::nonzero::NonZeroU32::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU32::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU64
+pub const core::num::nonzero::NonZeroU64::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU64::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU8
+pub const core::num::nonzero::NonZeroU8::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroUsize
+pub const core::num::nonzero::NonZeroUsize::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroUsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroUsize, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::time::Duration
+pub const core::time::Duration::KINDS: guatiao::Kinds
 pub fn core::time::Duration::from_value(&guatiao::value::value::Value) -> core::result::Result<core::time::Duration, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f32
+pub const f32::KINDS: guatiao::Kinds
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
+pub const f64::KINDS: guatiao::Kinds
 pub fn f64::from_value(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::Date
+pub const guatiao::Date::KINDS: guatiao::Kinds
 pub fn guatiao::Date::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::DateTime
+pub const guatiao::DateTime::KINDS: guatiao::Kinds
 pub fn guatiao::DateTime::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::Time
+pub const guatiao::Time::KINDS: guatiao::Kinds
 pub fn guatiao::Time::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::Timestamp
+pub const guatiao::Timestamp::KINDS: guatiao::Kinds
 pub fn guatiao::Timestamp::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
+pub const guatiao::value::convert::Bytes::KINDS: guatiao::Kinds
 pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::span::Span
+pub const guatiao::value::span::Span::KINDS: guatiao::Kinds
 pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::buffer::Buffer
+pub const guatiao::value::types::buffer::Buffer::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::buffer::Buffer::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::list::List
+pub const guatiao::value::types::list::List::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::list::List::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::map::Map
+pub const guatiao::value::types::map::Map::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::map::Map::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::number::Number
+pub const guatiao::value::types::number::Number::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::number::Number::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::text::Text
+pub const guatiao::value::types::text::Text::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::text::Text::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::value::Value
+pub const guatiao::value::value::Value::KINDS: guatiao::Kinds
 pub fn guatiao::value::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i128
+pub const i128::KINDS: guatiao::Kinds
 pub fn i128::from_value(&guatiao::value::value::Value) -> core::result::Result<i128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i16
+pub const i16::KINDS: guatiao::Kinds
 pub fn i16::from_value(&guatiao::value::value::Value) -> core::result::Result<i16, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i32
+pub const i32::KINDS: guatiao::Kinds
 pub fn i32::from_value(&guatiao::value::value::Value) -> core::result::Result<i32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i64
+pub const i64::KINDS: guatiao::Kinds
 pub fn i64::from_value(&guatiao::value::value::Value) -> core::result::Result<i64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i8
+pub const i8::KINDS: guatiao::Kinds
 pub fn i8::from_value(&guatiao::value::value::Value) -> core::result::Result<i8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for isize
+pub const isize::KINDS: guatiao::Kinds
 pub fn isize::from_value(&guatiao::value::value::Value) -> core::result::Result<isize, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub const serde_json::map::Map<alloc::string::String, serde_json::value::Value>::KINDS: guatiao::Kinds
 pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::from_value(&guatiao::value::value::Value) -> core::result::Result<serde_json::map::Map<alloc::string::String, serde_json::value::Value>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for serde_json::value::Value
+pub const serde_json::value::Value::KINDS: guatiao::Kinds
 pub fn serde_json::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<serde_json::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for std::path::PathBuf
+pub const std::path::PathBuf::KINDS: guatiao::Kinds
 pub fn std::path::PathBuf::from_value(&guatiao::value::value::Value) -> core::result::Result<std::path::PathBuf, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for std::time::SystemTime
+pub const std::time::SystemTime::KINDS: guatiao::Kinds
 pub fn std::time::SystemTime::from_value(&guatiao::value::value::Value) -> core::result::Result<std::time::SystemTime, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for toml::table::Table
+pub const toml::table::Table::KINDS: guatiao::Kinds
 pub fn toml::table::Table::from_value(&guatiao::value::value::Value) -> core::result::Result<toml::table::Table, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for toml::value::Value
+pub const toml::value::Value::KINDS: guatiao::Kinds
 pub fn toml::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<toml::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u128
+pub const u128::KINDS: guatiao::Kinds
 pub fn u128::from_value(&guatiao::value::value::Value) -> core::result::Result<u128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u16
+pub const u16::KINDS: guatiao::Kinds
 pub fn u16::from_value(&guatiao::value::value::Value) -> core::result::Result<u16, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u32
+pub const u32::KINDS: guatiao::Kinds
 pub fn u32::from_value(&guatiao::value::value::Value) -> core::result::Result<u32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u64
+pub const u64::KINDS: guatiao::Kinds
 pub fn u64::from_value(&guatiao::value::value::Value) -> core::result::Result<u64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u8
+pub const u8::KINDS: guatiao::Kinds
 pub fn u8::from_value(&guatiao::value::value::Value) -> core::result::Result<u8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for usize
+pub const usize::KINDS: guatiao::Kinds
 pub fn usize::from_value(&guatiao::value::value::Value) -> core::result::Result<usize, guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue, I: guatiao::value::convert::FromValue, J: guatiao::value::convert::FromValue, K: guatiao::value::convert::FromValue, L: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H, I, J, K, L)
+pub const (A, B, C, D, E, F, G, H, I, J, K, L)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H, I, J, K, L)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H, I, J, K, L), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue, I: guatiao::value::convert::FromValue, J: guatiao::value::convert::FromValue, K: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H, I, J, K)
+pub const (A, B, C, D, E, F, G, H, I, J, K)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H, I, J, K)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H, I, J, K), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue, I: guatiao::value::convert::FromValue, J: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H, I, J)
+pub const (A, B, C, D, E, F, G, H, I, J)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H, I, J)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H, I, J), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue, I: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H, I)
+pub const (A, B, C, D, E, F, G, H, I)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H, I)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H, I), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H)
+pub const (A, B, C, D, E, F, G, H)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G)
+pub const (A, B, C, D, E, F, G)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F)
+pub const (A, B, C, D, E, F)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E)
+pub const (A, B, C, D, E)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D)
+pub const (A, B, C, D)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C)
+pub const (A, B, C)::KINDS: guatiao::Kinds
 pub fn (A, B, C)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B)
+pub const (A, B)::KINDS: guatiao::Kinds
 pub fn (A, B)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A)
+pub const (A)::KINDS: guatiao::Kinds
 pub fn (A)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A), guatiao::value::convert::MapError>
 impl<K: guatiao::value::convert::MapKey + core::cmp::Eq + core::hash::Hash, V: guatiao::value::convert::FromValue, S: core::hash::BuildHasher + core::default::Default> guatiao::value::convert::FromValue for std::collections::hash::map::HashMap<K, V, S>
+pub const std::collections::hash::map::HashMap<K, V, S>::KINDS: guatiao::Kinds
 pub fn std::collections::hash::map::HashMap<K, V, S>::from_value(&guatiao::value::value::Value) -> core::result::Result<std::collections::hash::map::HashMap<K, V, S>, guatiao::value::convert::MapError>
 impl<K: guatiao::value::convert::MapKey + core::cmp::Ord, V: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::collections::btree::map::BTreeMap<K, V>
+pub const alloc::collections::btree::map::BTreeMap<K, V>::KINDS: guatiao::Kinds
 pub fn alloc::collections::btree::map::BTreeMap<K, V>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::btree::map::BTreeMap<K, V>, guatiao::value::convert::MapError>
 impl<T: alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::value::convert::FromValue for alloc::borrow::Cow<'_, T> where <T as alloc::borrow::ToOwned>::Owned: guatiao::value::convert::FromValue
+pub const alloc::borrow::Cow<'_, T>::KINDS: guatiao::Kinds
 pub fn alloc::borrow::Cow<'_, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue + core::cmp::Eq + core::hash::Hash, S: core::hash::BuildHasher + core::default::Default> guatiao::value::convert::FromValue for std::collections::hash::set::HashSet<T, S>
+pub const std::collections::hash::set::HashSet<T, S>::KINDS: guatiao::Kinds
 pub fn std::collections::hash::set::HashSet<T, S>::from_value(&guatiao::value::value::Value) -> core::result::Result<std::collections::hash::set::HashSet<T, S>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue + core::cmp::Ord> guatiao::value::convert::FromValue for alloc::collections::btree::set::BTreeSet<T>
+pub const alloc::collections::btree::set::BTreeSet<T>::KINDS: guatiao::Kinds
 pub fn alloc::collections::btree::set::BTreeSet<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::btree::set::BTreeSet<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue, const N: usize> guatiao::value::convert::FromValue for [T; N]
+pub const [T; N]::KINDS: guatiao::Kinds
 pub fn [T; N]::from_value(&guatiao::value::value::Value) -> core::result::Result<[T; N], guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::boxed::Box<T>
+pub const alloc::boxed::Box<T>::KINDS: guatiao::Kinds
 pub fn alloc::boxed::Box<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::boxed::Box<[T]>
+pub const alloc::boxed::Box<[T]>::KINDS: guatiao::Kinds
 pub fn alloc::boxed::Box<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::collections::vec_deque::VecDeque<T>
+pub const alloc::collections::vec_deque::VecDeque<T>::KINDS: guatiao::Kinds
 pub fn alloc::collections::vec_deque::VecDeque<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::vec_deque::VecDeque<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::rc::Rc<T>
+pub const alloc::rc::Rc<T>::KINDS: guatiao::Kinds
 pub fn alloc::rc::Rc<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::rc::Rc<[T]>
+pub const alloc::rc::Rc<[T]>::KINDS: guatiao::Kinds
 pub fn alloc::rc::Rc<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::sync::Arc<T>
+pub const alloc::sync::Arc<T>::KINDS: guatiao::Kinds
 pub fn alloc::sync::Arc<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::sync::Arc<[T]>
+pub const alloc::sync::Arc<[T]>::KINDS: guatiao::Kinds
 pub fn alloc::sync::Arc<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::vec::Vec<T>
+pub const alloc::vec::Vec<T>::KINDS: guatiao::Kinds
 pub fn alloc::vec::Vec<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for core::option::Option<T>
+pub const core::option::Option<T>::KINDS: guatiao::Kinds
 pub fn core::option::Option<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<core::option::Option<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for guatiao::value::secret::Secret<T>
+pub const guatiao::value::secret::Secret<T>::KINDS: guatiao::Kinds
 pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
 pub trait guatiao::value::ToValue
 pub fn guatiao::value::ToValue::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -7920,6 +8165,7 @@ pub fn guatiao::value::types::buffer::Buffer::kind(guatiao::value::alloc::Alloc)
 pub fn guatiao::value::types::buffer::Buffer::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::buffer::Buffer::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::buffer::Buffer
+pub const guatiao::value::types::buffer::Buffer::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::buffer::Buffer::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::buffer::Buffer
 pub fn guatiao::value::types::buffer::Buffer::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -7959,6 +8205,7 @@ pub fn guatiao::value::convert::Bytes::kind(guatiao::value::alloc::Alloc) -> gua
 pub fn guatiao::value::convert::Bytes::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
+pub const guatiao::value::convert::Bytes::KINDS: guatiao::Kinds
 pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -8005,6 +8252,7 @@ pub fn guatiao::Date::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::bui
 pub fn guatiao::Date::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Date::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::Date
+pub const guatiao::Date::KINDS: guatiao::Kinds
 pub fn guatiao::Date::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
 impl guatiao::value::convert::MapKey for guatiao::Date
 pub fn guatiao::Date::from_key(&str) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
@@ -8054,6 +8302,7 @@ pub fn guatiao::DateTime::kind(guatiao::value::alloc::Alloc) -> guatiao::schema:
 pub fn guatiao::DateTime::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::DateTime::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::DateTime
+pub const guatiao::DateTime::KINDS: guatiao::Kinds
 pub fn guatiao::DateTime::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
 impl guatiao::value::convert::MapKey for guatiao::DateTime
 pub fn guatiao::DateTime::from_key(&str) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
@@ -8076,6 +8325,35 @@ impl core::cmp::PartialEq for guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::eq(&self, &guatiao::value::types::map::Entry) -> bool
 impl core::fmt::Debug for guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::Kinds(_)
+impl guatiao::Kinds
+pub const guatiao::Kinds::ANY: guatiao::Kinds
+pub const guatiao::Kinds::BOOL: guatiao::Kinds
+pub const guatiao::Kinds::BYTES: guatiao::Kinds
+pub const guatiao::Kinds::LIST: guatiao::Kinds
+pub const guatiao::Kinds::MAP: guatiao::Kinds
+pub const guatiao::Kinds::NONE: guatiao::Kinds
+pub const guatiao::Kinds::NULL: guatiao::Kinds
+pub const guatiao::Kinds::NUMBER: guatiao::Kinds
+pub const guatiao::Kinds::STRING: guatiao::Kinds
+pub const fn guatiao::Kinds::contains(self, guatiao::value::value::Tag) -> bool
+pub const fn guatiao::Kinds::intersects(self, guatiao::Kinds) -> bool
+pub const fn guatiao::Kinds::is_empty(self) -> bool
+pub const fn guatiao::Kinds::of(guatiao::value::value::Tag) -> guatiao::Kinds
+pub const fn guatiao::Kinds::union(self, guatiao::Kinds) -> guatiao::Kinds
+impl core::clone::Clone for guatiao::Kinds
+pub fn guatiao::Kinds::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::Kinds
+impl core::cmp::PartialEq for guatiao::Kinds
+pub fn guatiao::Kinds::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::Kinds
+pub fn guatiao::Kinds::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::Kinds
+pub fn guatiao::Kinds::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::Kinds
+pub fn guatiao::Kinds::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::Kinds
+impl core::marker::StructuralPartialEq for guatiao::Kinds
 #[repr(C)] pub struct guatiao::List
 impl guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::alloc(&self) -> core::result::Result<guatiao::value::alloc::Alloc, guatiao::value::error::ValueError>
@@ -8133,6 +8411,7 @@ pub fn guatiao::value::types::list::List::kind(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::types::list::List::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::list::List::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::list::List
+pub const guatiao::value::types::list::List::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::list::List::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::list::List
 pub fn guatiao::value::types::list::List::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -8221,6 +8500,7 @@ pub fn guatiao::value::types::map::Map::kind(guatiao::value::alloc::Alloc) -> gu
 pub fn guatiao::value::types::map::Map::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::map::Map::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::map::Map
+pub const guatiao::value::types::map::Map::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::map::Map::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::map::Map
 pub fn guatiao::value::types::map::Map::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -8355,6 +8635,7 @@ pub fn guatiao::value::types::number::Number::kind(guatiao::value::alloc::Alloc)
 pub fn guatiao::value::types::number::Number::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::number::Number::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::number::Number
+pub const guatiao::value::types::number::Number::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::number::Number::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::number::Number
 pub fn guatiao::value::types::number::Number::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -8398,6 +8679,7 @@ pub fn guatiao::value::secret::Secret<T>::kind(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::secret::Secret<T>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::secret::Secret<T>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for guatiao::value::secret::Secret<T>
+pub const guatiao::value::secret::Secret<T>::KINDS: guatiao::Kinds
 pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for guatiao::value::secret::Secret<T>
 pub fn guatiao::value::secret::Secret<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -8472,6 +8754,7 @@ pub fn guatiao::value::span::Span::kind(guatiao::value::alloc::Alloc) -> guatiao
 pub fn guatiao::value::span::Span::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::span::Span::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::span::Span
+pub const guatiao::value::span::Span::KINDS: guatiao::Kinds
 pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::span::Span
 pub fn guatiao::value::span::Span::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -8616,6 +8899,7 @@ pub fn guatiao::value::types::text::Text::kind(guatiao::value::alloc::Alloc) -> 
 pub fn guatiao::value::types::text::Text::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::types::text::Text::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::text::Text
+pub const guatiao::value::types::text::Text::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::text::Text::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::types::text::Text
 pub fn guatiao::value::types::text::Text::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -8667,6 +8951,7 @@ pub fn guatiao::Time::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::bui
 pub fn guatiao::Time::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Time::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::Time
+pub const guatiao::Time::KINDS: guatiao::Kinds
 pub fn guatiao::Time::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
 impl guatiao::value::convert::MapKey for guatiao::Time
 pub fn guatiao::Time::from_key(&str) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
@@ -8721,6 +9006,7 @@ pub fn guatiao::Timestamp::kind(guatiao::value::alloc::Alloc) -> guatiao::schema
 pub fn guatiao::Timestamp::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Timestamp::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::Timestamp
+pub const guatiao::Timestamp::KINDS: guatiao::Kinds
 pub fn guatiao::Timestamp::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
 impl guatiao::value::convert::MapKey for guatiao::Timestamp
 pub fn guatiao::Timestamp::from_key(&str) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
@@ -8860,6 +9146,7 @@ pub fn guatiao::value::value::Value::kind(guatiao::value::alloc::Alloc) -> guati
 pub fn guatiao::value::value::Value::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::value::Value::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::FromValue for guatiao::value::value::Value
+pub const guatiao::value::value::Value::KINDS: guatiao::Kinds
 pub fn guatiao::value::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::ToValue for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -8916,184 +9203,274 @@ impl<T: core::convert::Into<guatiao::value::value::Value>> core::convert::From<c
 pub fn guatiao::value::value::Value::from(core::option::Option<T>) -> guatiao::value::value::Value
 pub const guatiao::MAX_DEPTH: u32
 pub trait guatiao::FromValue: core::marker::Sized
+pub const guatiao::FromValue::KINDS: guatiao::Kinds
 pub fn guatiao::FromValue::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for ()
+pub const ()::KINDS: guatiao::Kinds
 pub fn ()::from_value(&guatiao::value::value::Value) -> core::result::Result<(), guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::boxed::Box<std::path::Path>
+pub const alloc::boxed::Box<std::path::Path>::KINDS: guatiao::Kinds
 pub fn alloc::boxed::Box<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::boxed::Box<str>
+pub const alloc::boxed::Box<str>::KINDS: guatiao::Kinds
 pub fn alloc::boxed::Box<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::rc::Rc<std::path::Path>
+pub const alloc::rc::Rc<std::path::Path>::KINDS: guatiao::Kinds
 pub fn alloc::rc::Rc<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::rc::Rc<str>
+pub const alloc::rc::Rc<str>::KINDS: guatiao::Kinds
 pub fn alloc::rc::Rc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::string::String
+pub const alloc::string::String::KINDS: guatiao::Kinds
 pub fn alloc::string::String::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::sync::Arc<std::path::Path>
+pub const alloc::sync::Arc<std::path::Path>::KINDS: guatiao::Kinds
 pub fn alloc::sync::Arc<std::path::Path>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<std::path::Path>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for alloc::sync::Arc<str>
+pub const alloc::sync::Arc<str>::KINDS: guatiao::Kinds
 pub fn alloc::sync::Arc<str>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<str>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for bool
+pub const bool::KINDS: guatiao::Kinds
 pub fn bool::from_value(&guatiao::value::value::Value) -> core::result::Result<bool, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for char
+pub const char::KINDS: guatiao::Kinds
 pub fn char::from_value(&guatiao::value::value::Value) -> core::result::Result<char, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::ip_addr::IpAddr
+pub const core::net::ip_addr::IpAddr::KINDS: guatiao::Kinds
 pub fn core::net::ip_addr::IpAddr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::IpAddr, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::ip_addr::Ipv4Addr
+pub const core::net::ip_addr::Ipv4Addr::KINDS: guatiao::Kinds
 pub fn core::net::ip_addr::Ipv4Addr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::Ipv4Addr, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::ip_addr::Ipv6Addr
+pub const core::net::ip_addr::Ipv6Addr::KINDS: guatiao::Kinds
 pub fn core::net::ip_addr::Ipv6Addr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::ip_addr::Ipv6Addr, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddr
+pub const core::net::socket_addr::SocketAddr::KINDS: guatiao::Kinds
 pub fn core::net::socket_addr::SocketAddr::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddr, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddrV4
+pub const core::net::socket_addr::SocketAddrV4::KINDS: guatiao::Kinds
 pub fn core::net::socket_addr::SocketAddrV4::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddrV4, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::net::socket_addr::SocketAddrV6
+pub const core::net::socket_addr::SocketAddrV6::KINDS: guatiao::Kinds
 pub fn core::net::socket_addr::SocketAddrV6::from_value(&guatiao::value::value::Value) -> core::result::Result<core::net::socket_addr::SocketAddrV6, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI128
+pub const core::num::nonzero::NonZeroI128::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI128::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI16
+pub const core::num::nonzero::NonZeroI16::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI16::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI16, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI32
+pub const core::num::nonzero::NonZeroI32::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI32::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI64
+pub const core::num::nonzero::NonZeroI64::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI64::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroI8
+pub const core::num::nonzero::NonZeroI8::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroI8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroI8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroIsize
+pub const core::num::nonzero::NonZeroIsize::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroIsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroIsize, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU128
+pub const core::num::nonzero::NonZeroU128::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU128::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU16
+pub const core::num::nonzero::NonZeroU16::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU16::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU16, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU32
+pub const core::num::nonzero::NonZeroU32::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU32::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU64
+pub const core::num::nonzero::NonZeroU64::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU64::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroU8
+pub const core::num::nonzero::NonZeroU8::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroU8::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroU8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::num::nonzero::NonZeroUsize
+pub const core::num::nonzero::NonZeroUsize::KINDS: guatiao::Kinds
 pub fn core::num::nonzero::NonZeroUsize::from_value(&guatiao::value::value::Value) -> core::result::Result<core::num::nonzero::NonZeroUsize, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for core::time::Duration
+pub const core::time::Duration::KINDS: guatiao::Kinds
 pub fn core::time::Duration::from_value(&guatiao::value::value::Value) -> core::result::Result<core::time::Duration, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f32
+pub const f32::KINDS: guatiao::Kinds
 pub fn f32::from_value(&guatiao::value::value::Value) -> core::result::Result<f32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for f64
+pub const f64::KINDS: guatiao::Kinds
 pub fn f64::from_value(&guatiao::value::value::Value) -> core::result::Result<f64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::Date
+pub const guatiao::Date::KINDS: guatiao::Kinds
 pub fn guatiao::Date::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::DateTime
+pub const guatiao::DateTime::KINDS: guatiao::Kinds
 pub fn guatiao::DateTime::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::Time
+pub const guatiao::Time::KINDS: guatiao::Kinds
 pub fn guatiao::Time::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::Timestamp
+pub const guatiao::Timestamp::KINDS: guatiao::Kinds
 pub fn guatiao::Timestamp::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::convert::Bytes
+pub const guatiao::value::convert::Bytes::KINDS: guatiao::Kinds
 pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::span::Span
+pub const guatiao::value::span::Span::KINDS: guatiao::Kinds
 pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::buffer::Buffer
+pub const guatiao::value::types::buffer::Buffer::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::buffer::Buffer::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::list::List
+pub const guatiao::value::types::list::List::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::list::List::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::map::Map
+pub const guatiao::value::types::map::Map::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::map::Map::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::number::Number
+pub const guatiao::value::types::number::Number::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::number::Number::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::types::text::Text
+pub const guatiao::value::types::text::Text::KINDS: guatiao::Kinds
 pub fn guatiao::value::types::text::Text::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for guatiao::value::value::Value
+pub const guatiao::value::value::Value::KINDS: guatiao::Kinds
 pub fn guatiao::value::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i128
+pub const i128::KINDS: guatiao::Kinds
 pub fn i128::from_value(&guatiao::value::value::Value) -> core::result::Result<i128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i16
+pub const i16::KINDS: guatiao::Kinds
 pub fn i16::from_value(&guatiao::value::value::Value) -> core::result::Result<i16, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i32
+pub const i32::KINDS: guatiao::Kinds
 pub fn i32::from_value(&guatiao::value::value::Value) -> core::result::Result<i32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i64
+pub const i64::KINDS: guatiao::Kinds
 pub fn i64::from_value(&guatiao::value::value::Value) -> core::result::Result<i64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for i8
+pub const i8::KINDS: guatiao::Kinds
 pub fn i8::from_value(&guatiao::value::value::Value) -> core::result::Result<i8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for isize
+pub const isize::KINDS: guatiao::Kinds
 pub fn isize::from_value(&guatiao::value::value::Value) -> core::result::Result<isize, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub const serde_json::map::Map<alloc::string::String, serde_json::value::Value>::KINDS: guatiao::Kinds
 pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::from_value(&guatiao::value::value::Value) -> core::result::Result<serde_json::map::Map<alloc::string::String, serde_json::value::Value>, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for serde_json::value::Value
+pub const serde_json::value::Value::KINDS: guatiao::Kinds
 pub fn serde_json::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<serde_json::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for std::path::PathBuf
+pub const std::path::PathBuf::KINDS: guatiao::Kinds
 pub fn std::path::PathBuf::from_value(&guatiao::value::value::Value) -> core::result::Result<std::path::PathBuf, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for std::time::SystemTime
+pub const std::time::SystemTime::KINDS: guatiao::Kinds
 pub fn std::time::SystemTime::from_value(&guatiao::value::value::Value) -> core::result::Result<std::time::SystemTime, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for toml::table::Table
+pub const toml::table::Table::KINDS: guatiao::Kinds
 pub fn toml::table::Table::from_value(&guatiao::value::value::Value) -> core::result::Result<toml::table::Table, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for toml::value::Value
+pub const toml::value::Value::KINDS: guatiao::Kinds
 pub fn toml::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<toml::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u128
+pub const u128::KINDS: guatiao::Kinds
 pub fn u128::from_value(&guatiao::value::value::Value) -> core::result::Result<u128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u16
+pub const u16::KINDS: guatiao::Kinds
 pub fn u16::from_value(&guatiao::value::value::Value) -> core::result::Result<u16, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u32
+pub const u32::KINDS: guatiao::Kinds
 pub fn u32::from_value(&guatiao::value::value::Value) -> core::result::Result<u32, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u64
+pub const u64::KINDS: guatiao::Kinds
 pub fn u64::from_value(&guatiao::value::value::Value) -> core::result::Result<u64, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u8
+pub const u8::KINDS: guatiao::Kinds
 pub fn u8::from_value(&guatiao::value::value::Value) -> core::result::Result<u8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for usize
+pub const usize::KINDS: guatiao::Kinds
 pub fn usize::from_value(&guatiao::value::value::Value) -> core::result::Result<usize, guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue, I: guatiao::value::convert::FromValue, J: guatiao::value::convert::FromValue, K: guatiao::value::convert::FromValue, L: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H, I, J, K, L)
+pub const (A, B, C, D, E, F, G, H, I, J, K, L)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H, I, J, K, L)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H, I, J, K, L), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue, I: guatiao::value::convert::FromValue, J: guatiao::value::convert::FromValue, K: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H, I, J, K)
+pub const (A, B, C, D, E, F, G, H, I, J, K)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H, I, J, K)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H, I, J, K), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue, I: guatiao::value::convert::FromValue, J: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H, I, J)
+pub const (A, B, C, D, E, F, G, H, I, J)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H, I, J)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H, I, J), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue, I: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H, I)
+pub const (A, B, C, D, E, F, G, H, I)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H, I)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H, I), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue, H: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G, H)
+pub const (A, B, C, D, E, F, G, H)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G, H)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G, H), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue, G: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F, G)
+pub const (A, B, C, D, E, F, G)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F, G)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F, G), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue, F: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E, F)
+pub const (A, B, C, D, E, F)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E, F)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E, F), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue, E: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D, E)
+pub const (A, B, C, D, E)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D, E)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D, E), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue, D: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C, D)
+pub const (A, B, C, D)::KINDS: guatiao::Kinds
 pub fn (A, B, C, D)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C, D), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue, C: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B, C)
+pub const (A, B, C)::KINDS: guatiao::Kinds
 pub fn (A, B, C)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B, C), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue, B: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A, B)
+pub const (A, B)::KINDS: guatiao::Kinds
 pub fn (A, B)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A, B), guatiao::value::convert::MapError>
 impl<A: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for (A)
+pub const (A)::KINDS: guatiao::Kinds
 pub fn (A)::from_value(&guatiao::value::value::Value) -> core::result::Result<(A), guatiao::value::convert::MapError>
 impl<K: guatiao::value::convert::MapKey + core::cmp::Eq + core::hash::Hash, V: guatiao::value::convert::FromValue, S: core::hash::BuildHasher + core::default::Default> guatiao::value::convert::FromValue for std::collections::hash::map::HashMap<K, V, S>
+pub const std::collections::hash::map::HashMap<K, V, S>::KINDS: guatiao::Kinds
 pub fn std::collections::hash::map::HashMap<K, V, S>::from_value(&guatiao::value::value::Value) -> core::result::Result<std::collections::hash::map::HashMap<K, V, S>, guatiao::value::convert::MapError>
 impl<K: guatiao::value::convert::MapKey + core::cmp::Ord, V: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::collections::btree::map::BTreeMap<K, V>
+pub const alloc::collections::btree::map::BTreeMap<K, V>::KINDS: guatiao::Kinds
 pub fn alloc::collections::btree::map::BTreeMap<K, V>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::btree::map::BTreeMap<K, V>, guatiao::value::convert::MapError>
 impl<T: alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::value::convert::FromValue for alloc::borrow::Cow<'_, T> where <T as alloc::borrow::ToOwned>::Owned: guatiao::value::convert::FromValue
+pub const alloc::borrow::Cow<'_, T>::KINDS: guatiao::Kinds
 pub fn alloc::borrow::Cow<'_, T>::from_value(&guatiao::value::value::Value) -> core::result::Result<Self, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue + core::cmp::Eq + core::hash::Hash, S: core::hash::BuildHasher + core::default::Default> guatiao::value::convert::FromValue for std::collections::hash::set::HashSet<T, S>
+pub const std::collections::hash::set::HashSet<T, S>::KINDS: guatiao::Kinds
 pub fn std::collections::hash::set::HashSet<T, S>::from_value(&guatiao::value::value::Value) -> core::result::Result<std::collections::hash::set::HashSet<T, S>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue + core::cmp::Ord> guatiao::value::convert::FromValue for alloc::collections::btree::set::BTreeSet<T>
+pub const alloc::collections::btree::set::BTreeSet<T>::KINDS: guatiao::Kinds
 pub fn alloc::collections::btree::set::BTreeSet<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::btree::set::BTreeSet<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue, const N: usize> guatiao::value::convert::FromValue for [T; N]
+pub const [T; N]::KINDS: guatiao::Kinds
 pub fn [T; N]::from_value(&guatiao::value::value::Value) -> core::result::Result<[T; N], guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::boxed::Box<T>
+pub const alloc::boxed::Box<T>::KINDS: guatiao::Kinds
 pub fn alloc::boxed::Box<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::boxed::Box<[T]>
+pub const alloc::boxed::Box<[T]>::KINDS: guatiao::Kinds
 pub fn alloc::boxed::Box<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::boxed::Box<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::collections::vec_deque::VecDeque<T>
+pub const alloc::collections::vec_deque::VecDeque<T>::KINDS: guatiao::Kinds
 pub fn alloc::collections::vec_deque::VecDeque<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::collections::vec_deque::VecDeque<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::rc::Rc<T>
+pub const alloc::rc::Rc<T>::KINDS: guatiao::Kinds
 pub fn alloc::rc::Rc<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::rc::Rc<[T]>
+pub const alloc::rc::Rc<[T]>::KINDS: guatiao::Kinds
 pub fn alloc::rc::Rc<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::rc::Rc<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::sync::Arc<T>
+pub const alloc::sync::Arc<T>::KINDS: guatiao::Kinds
 pub fn alloc::sync::Arc<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::sync::Arc<[T]>
+pub const alloc::sync::Arc<[T]>::KINDS: guatiao::Kinds
 pub fn alloc::sync::Arc<[T]>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::sync::Arc<[T]>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for alloc::vec::Vec<T>
+pub const alloc::vec::Vec<T>::KINDS: guatiao::Kinds
 pub fn alloc::vec::Vec<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for core::option::Option<T>
+pub const core::option::Option<T>::KINDS: guatiao::Kinds
 pub fn core::option::Option<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<core::option::Option<T>, guatiao::value::convert::MapError>
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for guatiao::value::secret::Secret<T>
+pub const guatiao::value::secret::Secret<T>::KINDS: guatiao::Kinds
 pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
 pub trait guatiao::Schema
 pub fn guatiao::Schema::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder

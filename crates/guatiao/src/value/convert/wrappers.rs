@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+use super::Kinds;
 use alloc::borrow::{Cow, ToOwned};
 use alloc::boxed::Box;
 use alloc::rc::Rc;
@@ -27,18 +28,21 @@ macro_rules! pointer {
         }
 
         impl<T: FromValue> FromValue for $p<T> {
+            const KINDS: Kinds = T::KINDS;
             fn from_value(value: &Value) -> Result<$p<T>, MapError> {
                 T::from_value(value).map($p::new)
             }
         }
 
         impl FromValue for $p<str> {
+            const KINDS: Kinds = Kinds::STRING;
             fn from_value(value: &Value) -> Result<$p<str>, MapError> {
                 Ok($p::from(<&str>::try_from(value)?))
             }
         }
 
         impl<T: FromValue> FromValue for $p<[T]> {
+            const KINDS: Kinds = Kinds::LIST;
             fn from_value(value: &Value) -> Result<$p<[T]>, MapError> {
                 Vec::<T>::from_value(value).map($p::from)
             }
@@ -60,6 +64,7 @@ impl<T: ToOwned + ?Sized> FromValue for Cow<'_, T>
 where
     T::Owned: FromValue,
 {
+    const KINDS: Kinds = <T::Owned as FromValue>::KINDS;
     fn from_value(value: &Value) -> Result<Self, MapError> {
         T::Owned::from_value(value).map(Cow::Owned)
     }
@@ -73,6 +78,7 @@ impl<T: ToValue> ToValue for Secret<T> {
 }
 
 impl<T: FromValue> FromValue for Secret<T> {
+    const KINDS: Kinds = T::KINDS;
     fn from_value(value: &Value) -> Result<Secret<T>, MapError> {
         T::from_value(value).map(Secret::new)
     }
@@ -88,6 +94,7 @@ impl ToValue for char {
 /// Text of exactly one character, counted in Unicode code points as JSON
 /// Schema counts a length.
 impl FromValue for char {
+    const KINDS: Kinds = Kinds::STRING;
     fn from_value(value: &Value) -> Result<char, MapError> {
         let text = TryAsRef::<str>::try_as_ref(value)
             .ok_or_else(|| MapError::refused(Tag::GUATIAO_STRING, value))?;

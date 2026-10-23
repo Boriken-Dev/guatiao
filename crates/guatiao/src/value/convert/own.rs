@@ -8,6 +8,7 @@
 
 #![forbid(unsafe_code)]
 
+use super::Kinds;
 use super::{FromValue, MapError, ToValue, TryAsRef, copied};
 use crate::value::alloc::Alloc;
 use crate::value::error::ValueError;
@@ -24,6 +25,7 @@ macro_rules! own_container {
         /// The wrong kind is [`MapError::WrongType`]; content this build
         /// refuses to copy is [`MapError::BadValue`].
         impl FromValue for $ty {
+            const KINDS: Kinds = Kinds::of(Tag::$tag);
             fn from_value(value: &Value) -> Result<$ty, MapError> {
                 let found = TryAsRef::<$ty>::try_as_ref(value)
                     .ok_or_else(|| MapError::refused(Tag::$tag, value))?;

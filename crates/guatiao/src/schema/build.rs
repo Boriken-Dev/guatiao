@@ -663,6 +663,19 @@ impl KindBuilder {
         self.count(vocab::MAX_ITEMS, n)
     }
 
+    /// JSON Schema's `title`, on the kind itself: what an arm of a
+    /// [`union`](KindBuilder::union) is called. A field's title belongs on
+    /// its [`FieldBuilder`].
+    pub fn title(self, title: &str) -> KindBuilder {
+        self.text(vocab::TITLE, title)
+    }
+
+    /// JSON Schema's `description`, on the kind itself, as
+    /// [`title`](KindBuilder::title) is.
+    pub fn description(self, description: &str) -> KindBuilder {
+        self.text(vocab::DESCRIPTION, description)
+    }
+
     /// Any value at all: `{}`, the schema that constrains nothing.
     /// Built through the crate's own allocator. `any_in` names one,
     /// which is what a schema built into a host's arena needs.

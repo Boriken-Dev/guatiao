@@ -12,6 +12,7 @@
 
 #![forbid(unsafe_code)]
 
+use super::Kinds;
 use alloc::string::ToString;
 use serde_json::{Map as JsonMap, Number as JsonNumber, Value as Json};
 
@@ -36,12 +37,19 @@ impl ToValue for JsonMap<String, Json> {
 /// `serde_json`'s `arbitrary_precision` is on; otherwise it is an `i64`,
 /// a `u64` or the nearest `f64`, as `serde_json` reads one.
 impl FromValue for Json {
+    const KINDS: Kinds = Kinds::NULL
+        .union(Kinds::BOOL)
+        .union(Kinds::NUMBER)
+        .union(Kinds::STRING)
+        .union(Kinds::LIST)
+        .union(Kinds::MAP);
     fn from_value(value: &Value) -> Result<Json, MapError> {
         read(value, 0)
     }
 }
 
 impl FromValue for JsonMap<String, Json> {
+    const KINDS: Kinds = Kinds::MAP;
     fn from_value(value: &Value) -> Result<JsonMap<String, Json>, MapError> {
         read_object(value, 0)
     }

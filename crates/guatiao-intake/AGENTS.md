@@ -96,7 +96,9 @@ Segment::{Field(&str), Index(usize), Key(Cow<str>)}
 // projecting a value onto flat `key -> text` storage
 flatten(field, &value, &mut BTreeMap<String, String>) -> bool
                        // false: the shape contradicts the kind, or the value has
-                       // MAX_DEPTH (128) or more containers nested (not written)
+                       // MAX_DEPTH (128) or more containers nested (not written);
+                       // a union (an untagged enum) stores a scalar arm as its
+                       // text and answers false for a list or map arm
 unflatten(alloc, field, &store) -> Option<Value>
 resolve(schema, key) -> Option<FieldRef>         // for the schema alone
 resolve_in(schema, key, selected) -> Result<FieldRef, ValidationError>

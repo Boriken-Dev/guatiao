@@ -8,6 +8,7 @@
 
 #![forbid(unsafe_code)]
 
+use super::Kinds;
 use alloc::string::ToString;
 use core::time::Duration;
 
@@ -42,6 +43,7 @@ impl ToValue for Duration {
 ///
 /// Anything else is refused naming all three.
 impl FromValue for Duration {
+    const KINDS: Kinds = Kinds::NUMBER.union(Kinds::LIST).union(Kinds::MAP);
     fn from_value(value: &Value) -> Result<Duration, MapError> {
         let refused = || MapError::bad_value(DURATION);
         let parts = match value.tag() {
@@ -124,6 +126,7 @@ impl ToValue for Span {
 /// Text in either form `Span::from_str` reads; a refusal names the byte
 /// it stopped at and what it expected.
 impl FromValue for Span {
+    const KINDS: Kinds = Kinds::STRING;
     fn from_value(value: &Value) -> Result<Span, MapError> {
         <&str>::try_from(value)?.parse().map_err(|e| match e {
             ValueError::Unparsed { at, expected } => MapError::bad_value(alloc::format!(

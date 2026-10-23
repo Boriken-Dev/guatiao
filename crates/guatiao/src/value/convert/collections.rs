@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+use super::Kinds;
 use alloc::collections::{BTreeSet, VecDeque};
 use core::hash::{BuildHasher, Hash};
 use std::collections::HashSet;
@@ -47,6 +48,7 @@ impl<T: ToValue> ToValue for VecDeque<T> {
 }
 
 impl<T: FromValue> FromValue for VecDeque<T> {
+    const KINDS: Kinds = Kinds::LIST;
     fn from_value(value: &Value) -> Result<VecDeque<T>, MapError> {
         let mut out = VecDeque::new();
         read_each(value, |v| {
@@ -67,6 +69,7 @@ impl<T: ToValue> ToValue for BTreeSet<T> {
 /// A repeated element is refused rather than dropped, as the schema's
 /// `uniqueItems` refuses it.
 impl<T: FromValue + Ord> FromValue for BTreeSet<T> {
+    const KINDS: Kinds = Kinds::LIST;
     fn from_value(value: &Value) -> Result<BTreeSet<T>, MapError> {
         let mut out = BTreeSet::new();
         read_each(value, |v| out.insert(v))?;
@@ -84,6 +87,7 @@ impl<T: ToValue, S> ToValue for HashSet<T, S> {
 
 /// A repeated element is refused, as for a `BTreeSet`.
 impl<T: FromValue + Eq + Hash, S: BuildHasher + Default> FromValue for HashSet<T, S> {
+    const KINDS: Kinds = Kinds::LIST;
     fn from_value(value: &Value) -> Result<HashSet<T, S>, MapError> {
         let mut out = HashSet::with_hasher(S::default());
         read_each(value, |v| out.insert(v))?;
@@ -99,6 +103,7 @@ impl<T: ToValue, const N: usize> ToValue for [T; N] {
 
 /// A list of exactly `N` elements.
 impl<T: FromValue, const N: usize> FromValue for [T; N] {
+    const KINDS: Kinds = Kinds::LIST;
     fn from_value(value: &Value) -> Result<[T; N], MapError> {
         let len = <&List>::try_from(value)?.len();
         if len != N {
@@ -130,6 +135,7 @@ macro_rules! tuple {
         /// A list of exactly as many elements as positions, each read
         /// under `[i]`.
         impl<$($t: FromValue),+> FromValue for ($($t,)+) {
+            const KINDS: Kinds = Kinds::LIST;
             fn from_value(value: &Value) -> Result<($($t,)+), MapError> {
                 let items = &<&List>::try_from(value)?[..];
                 if items.len() != $n {
@@ -165,6 +171,7 @@ impl ToValue for () {
 
 /// Null, and only null.
 impl FromValue for () {
+    const KINDS: Kinds = Kinds::NULL;
     fn from_value(value: &Value) -> Result<(), MapError> {
         if value.tag() == Ok(Tag::GUATIAO_NULL) {
             Ok(())

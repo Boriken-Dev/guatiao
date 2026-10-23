@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+use super::Kinds;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
@@ -45,6 +46,7 @@ impl ToValue for PathBuf {
 }
 
 impl FromValue for PathBuf {
+    const KINDS: Kinds = Kinds::STRING;
     fn from_value(value: &Value) -> Result<PathBuf, MapError> {
         Ok(PathBuf::from(<&str>::try_from(value)?))
     }
@@ -53,6 +55,7 @@ impl FromValue for PathBuf {
 macro_rules! shared_path {
     ($($p:ident),*) => {$(
         impl FromValue for $p<Path> {
+            const KINDS: Kinds = Kinds::STRING;
             fn from_value(value: &Value) -> Result<$p<Path>, MapError> {
                 PathBuf::from_value(value).map($p::from)
             }
@@ -85,6 +88,7 @@ macro_rules! address {
 
         /// Text its `FromStr` reads.
         impl FromValue for $t {
+            const KINDS: Kinds = Kinds::STRING;
             fn from_value(value: &Value) -> Result<$t, MapError> {
                 <&str>::try_from(value)?
                     .parse()
@@ -130,6 +134,7 @@ macro_rules! non_zero {
 
         /// An integer of the width, other than zero.
         impl FromValue for $nz {
+            const KINDS: Kinds = Kinds::NUMBER;
             fn from_value(value: &Value) -> Result<$nz, MapError> {
                 <$nz>::new(<$t>::from_value(value)?)
                     .ok_or_else(|| MapError::bad_value("an integer other than 0"))

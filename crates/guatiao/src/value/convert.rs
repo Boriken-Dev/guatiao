@@ -62,6 +62,7 @@ mod interop_json;
 #[cfg(feature = "toml")]
 mod interop_toml;
 mod keyed;
+mod kinds;
 mod own;
 mod std_types;
 mod wrappers;
@@ -69,6 +70,7 @@ mod wrappers;
 use alloc::fmt;
 
 pub use keyed::MapKey;
+pub use kinds::Kinds;
 
 use super::alloc::Alloc;
 use super::error::ValueError;
@@ -365,6 +367,12 @@ pub trait ToValue {
 
 /// Reads `Self` out of a borrowed value.
 pub trait FromValue: Sized {
+    /// The kinds [`from_value`](FromValue::from_value) may accept; any
+    /// other is refused. Every impl in this crate and every derived one
+    /// says; the default, [`Kinds::ANY`], claims every kind, which keeps
+    /// a type that does not say out of an enum told apart by kind.
+    const KINDS: Kinds = Kinds::ANY;
+
     /// Performs the conversion.
     ///
     /// The returned error names **no key**: this value does not know what
@@ -537,6 +545,7 @@ impl<'a> TryFrom<&'a Value> for &'a [Entry] {
 // --- FromValue --------------------------------------------------------
 
 impl FromValue for bool {
+    const KINDS: Kinds = Kinds::BOOL;
     fn from_value(value: &Value) -> Result<bool, MapError> {
         TryAsRef::<bool>::try_as_ref(value)
             .copied()
@@ -557,6 +566,7 @@ fn number_text(value: &Value) -> Result<&str, MapError> {
 macro_rules! integer_from_value {
     ($($t:ty),* $(,)?) => {$(
         impl FromValue for $t {
+            const KINDS: Kinds = Kinds::NUMBER;
             fn from_value(value: &Value) -> Result<$t, MapError> {
                 let text = number_text(value)?;
                 if text.contains(['.', 'e', 'E']) {
@@ -579,6 +589,7 @@ integer_from_value!(
 );
 
 impl FromValue for f64 {
+    const KINDS: Kinds = Kinds::NUMBER;
     fn from_value(value: &Value) -> Result<f64, MapError> {
         let text = number_text(value)?;
         // Rounding is not an error: an `f64` has 53 bits of mantissa and
@@ -594,6 +605,7 @@ impl FromValue for f64 {
 /// The nearest `f32`, refused when there is no finite one: `1e39` is past
 /// `f32::MAX`.
 impl FromValue for f32 {
+    const KINDS: Kinds = Kinds::NUMBER;
     fn from_value(value: &Value) -> Result<f32, MapError> {
         let text = number_text(value)?;
         text.parse::<f32>()
@@ -604,12 +616,14 @@ impl FromValue for f32 {
 }
 
 impl FromValue for String {
+    const KINDS: Kinds = Kinds::STRING;
     fn from_value(value: &Value) -> Result<String, MapError> {
         Ok(<&str>::try_from(value)?.to_string())
     }
 }
 
 impl FromValue for Bytes {
+    const KINDS: Kinds = Kinds::BYTES;
     fn from_value(value: &Value) -> Result<Bytes, MapError> {
         Ok(Bytes(<&[u8]>::try_from(value)?.to_vec()))
     }
@@ -617,6 +631,7 @@ impl FromValue for Bytes {
 
 /// Each element is read under `[i]`, so a failure names which one.
 impl<T: FromValue> FromValue for Vec<T> {
+    const KINDS: Kinds = Kinds::LIST;
     fn from_value(value: &Value) -> Result<Vec<T>, MapError> {
         let items = &<&List>::try_from(value)?[..];
         let mut out = Vec::with_capacity(items.len());
@@ -633,6 +648,7 @@ impl<T: FromValue> FromValue for Vec<T> {
 /// Content this build refuses is [`MapError::BadValue`]; an allocation
 /// failure aborts, as `clone` does.
 impl FromValue for Value {
+    const KINDS: Kinds = Kinds::ANY;
     fn from_value(value: &Value) -> Result<Value, MapError> {
         copied(value.clone_in(Alloc::rust()))
     }
@@ -652,6 +668,7 @@ pub(crate) fn copied<T>(copy: Result<T, ValueError>) -> Result<T, MapError> {
 
 /// A stored null reads as `None`; anything else is offered to `T`.
 impl<T: FromValue> FromValue for Option<T> {
+    const KINDS: Kinds = T::KINDS.union(Kinds::NULL);
     fn from_value(value: &Value) -> Result<Option<T>, MapError> {
         if value.tag() == Ok(Tag::GUATIAO_NULL) {
             return Ok(None);

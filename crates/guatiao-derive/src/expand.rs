@@ -30,6 +30,7 @@
 //! | unit struct | null | `type: null` |
 //! | enum of unit variants | the variant's name, as text | a string `enum` |
 //! | enum with `#[map(tag = "k")]` | a map: the name under `k`, then the variant's fields, or a `Name(T)` variant's map | a tagged variant |
+//! | enum with `#[map(untagged)]` | what the variant writes, told apart by its kind | a union (`untagged.rs`) |
 //!
 //! The three that are not a map are in `shapes.rs`. A type parameter is
 //! bound by the trait derived, as serde bounds one.
@@ -259,9 +260,9 @@ fn expand_struct(
 }
 
 /// What one field contributes to the expansion.
-struct FieldPlan {
-    ident: Ident,
-    ty: Type,
+pub(crate) struct FieldPlan {
+    pub(crate) ident: Ident,
+    pub(crate) ty: Type,
     /// `Some(T)` when the declared type is a syntactic `Option<T>`. Kept
     /// separately because the three derives need different halves: the
     /// read side names the whole `Option<T>` (whose own `FromValue` impl
@@ -270,7 +271,7 @@ struct FieldPlan {
     inner: Option<Type>,
     /// The map key. Meaningless when `skip` is set, and never emitted then.
     key: String,
-    skip: bool,
+    pub(crate) skip: bool,
     /// What an absent key reads as. With one the field is not required.
     default: Option<MapDefault>,
     /// What only the schema reads. Carried on every plan so the three
@@ -278,7 +279,7 @@ struct FieldPlan {
     schema: SchemaAttrs,
     /// `#[map(flatten)]`: the field's own map is written beside the
     /// others, and read from the whole map.
-    flatten: bool,
+    pub(crate) flatten: bool,
     /// `#[map(with = path)]`: a module with `to_value_in`, `from_value`
     /// and `kind`, converting the field in place of its type's impls.
     with: Option<syn::Path>,
@@ -710,7 +711,7 @@ fn option_inner(ty: &Type) -> Option<&Type> {
 // variant.
 
 /// Writes one field into `__map`. `access` borrows the field.
-fn set_field(field: &FieldPlan, access: &TokenStream) -> TokenStream {
+pub(crate) fn set_field(field: &FieldPlan, access: &TokenStream) -> TokenStream {
     let ty = &field.ty;
     if field.flatten {
         return quote! {
@@ -777,7 +778,7 @@ fn set_value(field: &FieldPlan, access: &TokenStream) -> TokenStream {
 }
 
 /// Reads one field out of the map `__value`, as a struct-literal member.
-fn read_field(field: &FieldPlan) -> TokenStream {
+pub(crate) fn read_field(field: &FieldPlan) -> TokenStream {
     let ident = &field.ident;
     let ty = &field.ty;
     let key = &field.key;
@@ -833,7 +834,7 @@ fn read_field(field: &FieldPlan) -> TokenStream {
 /// Emitted as calls into `guatiao::schema`'s builders rather than as raw
 /// map building, so the vocabulary lives in one place and generated code
 /// cannot spell a keyword the reader does not know.
-fn field_builder(field: &FieldPlan) -> TokenStream {
+pub(crate) fn field_builder(field: &FieldPlan) -> TokenStream {
     let key = &field.key;
     let ty = &field.ty;
     let a = &field.schema;
@@ -1033,6 +1034,8 @@ fn emit_from(
 
     quote! {
         #head {
+            const KINDS: ::guatiao::Kinds = ::guatiao::Kinds::MAP;
+
             fn from_value(
                 __value: &::guatiao::Value,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
@@ -1107,6 +1110,9 @@ struct ContainerAttrs {
     /// `#[map(deny_unknown_fields)]`, on a struct: reading refuses a key
     /// no field declares, as the schema does.
     deny_unknown_fields: bool,
+    /// `#[map(untagged)]`, on an enum: its variants are told apart by
+    /// the kind of value each writes, and no name is stored.
+    untagged: bool,
 }
 
 impl ContainerAttrs {
@@ -1130,6 +1136,9 @@ impl ContainerAttrs {
                 } else if meta.path.is_ident("deny_unknown_fields") && !is_enum {
                     out.deny_unknown_fields = true;
                     Ok(())
+                } else if meta.path.is_ident("untagged") && is_enum {
+                    out.untagged = true;
+                    Ok(())
                 } else if meta.path.is_ident("tag") && is_enum {
                     out.tag = Some(meta.value()?.parse::<LitStr>()?.value());
                     Ok(())
@@ -1144,9 +1153,10 @@ impl ContainerAttrs {
                     // silently ignored would change the wire shape.
                     Err(meta.error(format!(
                         "unrecognised `#[map(...)]` option on an enum. {label} knows \
-                         three: `tag = \"...\"`, the key a variant's name is stored under, \
-                         `rename_all = \"...\"`, the case of every variant's name, and \
-                         `crate = <path>`, where `guatiao` is re-exported."
+                         four: `tag = \"...\"`, the key a variant's name is stored under, \
+                         `untagged`, for variants told apart by the kind of value they \
+                         write, `rename_all = \"...\"`, the case of every variant's name, \
+                         and `crate = <path>`, where `guatiao` is re-exported."
                     )))
                 } else {
                     Err(meta.error(format!(
@@ -1163,25 +1173,26 @@ impl ContainerAttrs {
 }
 
 /// One variant, read once and shared by all three derives.
-struct VariantPlan {
-    ident: Ident,
+pub(crate) struct VariantPlan {
+    pub(crate) ident: Ident,
     /// What is stored for it: the variant's own name, or its
     /// `#[map(rename = "...")]`.
-    stored: String,
+    pub(crate) stored: String,
     /// A unit variant, which is constructed and matched without braces.
-    unit: bool,
+    pub(crate) unit: bool,
     /// Named fields, in declaration order. Empty for a unit variant.
-    fields: Vec<FieldPlan>,
+    pub(crate) fields: Vec<FieldPlan>,
     /// The text shown for it: an arm's `title`, or a choice's entry in
     /// `x-enum-labels` -- which is why a choice declares it as `label`.
-    title: Option<String>,
+    pub(crate) title: Option<String>,
     /// An arm's `description`. A choice has none.
-    description: Option<String>,
+    pub(crate) description: Option<String>,
     /// `#[map(other)]`: the catch-all of a unit enum, holding a name no
     /// other variant is stored as. The type of its one field.
     other: Option<Type>,
-    /// A tagged enum's `Name(T)`: `T`'s map, written beside the tag.
-    newtype: Option<Type>,
+    /// `Name(T)`: a tagged enum writes `T`'s map beside the tag, an
+    /// untagged one `T`'s value.
+    pub(crate) newtype: Option<Type>,
 }
 
 impl VariantPlan {
@@ -1198,7 +1209,7 @@ impl VariantPlan {
     ///
     /// `rule` is the enum's `rename_all`, for the variant's name only, as
     /// serde applies it; a variant's own `rename` wins.
-    fn read(
+    pub(crate) fn read(
         derive: Derive,
         variant: &Variant,
         tagged: bool,
@@ -1381,10 +1392,26 @@ fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Resul
         tag,
         krate,
         rename_all,
+        untagged,
         ..
     } = ContainerAttrs::read(derive, &ast.attrs, true)?;
     let head = impl_head(derive, name, &ast.generics);
     let reroot = |tokens| crate::krate::reroot(tokens, krate.as_ref());
+
+    if untagged {
+        if tag.is_some() {
+            return Err(syn::Error::new_spanned(
+                name,
+                format!(
+                    "{label} takes `tag` or `untagged`, not both: a tag stores each \
+                     variant's name under a key, and an untagged enum stores no name, \
+                     telling its variants apart by the kind of value each writes."
+                ),
+            ));
+        }
+        let generic = ast.generics.type_params().next().is_some();
+        return crate::untagged::expand(derive, name, &head, data, rename_all, generic).map(reroot);
+    }
 
     // Before reading any variant, so the message is about the decision
     // that is missing rather than about whichever variant came first.
@@ -1442,7 +1469,7 @@ fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Resul
 
 /// Whether a variant carries `#[map(other)]`, before its plan is read.
 /// Lenient: a malformed attribute is reported by the plan, not here.
-fn says_other(variant: &Variant) -> bool {
+pub(crate) fn says_other(variant: &Variant) -> bool {
     let mut found = false;
     for attr in &variant.attrs {
         if attr.path().is_ident("map") {
@@ -1576,6 +1603,8 @@ fn emit_choice_from(head: &TokenStream, variants: &[VariantPlan]) -> TokenStream
     };
     quote! {
         #head {
+            const KINDS: ::guatiao::Kinds = ::guatiao::Kinds::STRING;
+
             fn from_value(
                 __value: &::guatiao::Value,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
@@ -1718,6 +1747,8 @@ fn emit_arm_from(head: &TokenStream, tag: &str, variants: &[VariantPlan]) -> Tok
     let expected = one_of(variants);
     quote! {
         #head {
+            const KINDS: ::guatiao::Kinds = ::guatiao::Kinds::MAP;
+
             fn from_value(
                 __value: &::guatiao::Value,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
@@ -2046,6 +2077,12 @@ mod tests {
             #[map(tag = "t")]
             enum F { A(Inner), B { #[map(flatten)] x: Inner } }
         };
+        // Told apart by kind: a choice, a record and a held type, whose
+        // kinds the reader asserts in a `const`.
+        let untagged = quote! {
+            #[map(untagged)]
+            enum W { A, B { x: u8, #[map(skip)] z: u8 }, C(::core::option::Option<u8>) }
+        };
         let output = to(positional.clone())
             + &from(positional.clone())
             + &schema(positional)
@@ -2058,6 +2095,9 @@ mod tests {
             + &to(flat.clone())
             + &from(flat.clone())
             + &schema(flat)
+            + &to(untagged.clone())
+            + &from(untagged.clone())
+            + &schema(untagged)
             + &to(declaration.clone())
             + &from(declaration.clone())
             + &schema(declaration)
@@ -2083,6 +2123,7 @@ mod tests {
             "MapError",
             "ToValue",
             "Schema",
+            "Kinds",
             "Value",
             "Map",
             "Vec",
@@ -2179,6 +2220,8 @@ mod tests {
             "Number",
             // A tuple struct is a list.
             "List",
+            // What a reader accepts, for an enum told apart by kind.
+            "Kinds",
             // The door the presentation keys go through. Their names are
             // `guatiao-intake`'s and are emitted as literals, so nothing
             // here names that crate -- which is the point: a crate

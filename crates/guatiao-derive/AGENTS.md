@@ -115,7 +115,7 @@ every path at `::guatiao_intake` (reaching `guatiao` through its hidden
 `__private` re-export), so its `crate =` names that crate's re-export and
 a consumer of the form derive needs no `guatiao` dependency of its own.
 
-**Enums**, in two shapes. Refused otherwise, with a sentence saying why.
+**Enums**, in three shapes. Refused otherwise, with a sentence saying why.
 
 | declaration | value | `Schema::kind` |
 | --- | --- | --- |
@@ -123,11 +123,13 @@ a consumer of the form derive needs no `guatiao` dependency of its own.
 | unit variants and one `#[map(other)]` | the name, or the text the catch-all holds | `type: "string"` + `examples` + `x-enum-labels`: any text is accepted, the known names are offered |
 | `#[map(tag = "k")]` on the enum | a map: name under `k` first, then the variant's fields | `type: "object"` + `x-variant-tag` + `oneOf` |
 | a tagged variant `Name(T)` | the name under the tag, then `T`'s map beside it (serde's internally tagged newtype) | the arm declares `T`'s fields. A `T` that writes no map is refused when written (`ValueError::WrongKind`) and its schema fails to build, as serde's does at run time |
+| `#[map(untagged)]` on the enum | what the variant writes: a unit variant its name, named fields a map, `Name(T)` `T`'s value | `anyOf` of the arms: the unit variants one string `enum` + `x-enum-labels`, the record an object, `T`'s kind |
 
 | on | attribute | effect |
 | --- | --- | --- |
 | enum | `#[map(tag = "...")]` | the key the variant's name is stored under; required when any variant has fields |
 | enum | `#[map(rename_all = "...")]` | every variant's stored name by one case rule (`kebab-case`: `HighEfficiency` → `high-efficiency`); `rename` on a variant wins |
+| enum | `#[map(untagged)]` | no name is stored: the variants are told apart by the kind of value each writes (below) |
 | variant | `#[map(rename = "...")]` | the name stored instead of the variant's own |
 | variant | `#[map(other)]` | **unit enums only**, on one variant of the shape `Other(T)` with `T: From<&str> + AsRef<str>` (`String`): a name no other variant is stored as is kept there rather than refused, and written back as that text |
 | variant | `#[schema(title = "...")]` | an arm's title — **tagged enums only**: an arm is a subschema |
@@ -144,6 +146,28 @@ sides are built at different times and a name one side does not know
 must not fail the whole value. Text equal to a known name always reads
 as that variant, so `Other("h264")` writes `h264` and reads back as the
 variant stored as `h264`.
+
+**`#[map(untagged)]`**: no two variants may read one kind. The unit
+variants together read a string (a name none has is `BadValue`, "one of
+.."), the one variant with named fields a map, and `Name(T)` the kinds
+`<T as FromValue>::KINDS` states. A kind no variant reads is `BadValue`
+naming the kinds ("a string or a map"). Fixed kinds are checked as the
+enum is read (two variants with named fields are refused there); a
+`Name(T)` is checked by the `FromValue` expansion in a `const` that names
+both variants when it fails, an item `const` for a concrete `T` (so
+`cargo check` reports it) and an inline one for a type parameter (so a
+build of the instance that overlaps reports it). `ToValue` and `Schema`
+alone do not check it. A unit variant takes `rename` and `label`, as in
+a unit enum; another takes `title` and `description`, which land on its
+arm (`KindBuilder::title`/`description`). Refused: `untagged` beside
+`tag`, `other`, a tuple variant of two or more fields (hold a tuple:
+`Name((A, B))`), `rename` on a variant that holds a value, two unit
+variants stored under one name.
+
+**Every derived `FromValue` states `KINDS`**: a struct with named fields,
+a tagged enum and a record a map; a unit enum a string; a tuple struct a
+list; a unit struct null; a newtype or transparent struct its field's;
+an untagged enum the union of its arms'.
 
 Refused, each with its own message: `other` on a tagged enum, on a
 variant that is not `Name(T)`, beside `rename` or `label`, or on two
@@ -328,9 +352,10 @@ writes the whole library.
   lifetimes and const parameters pass through. A borrowed field
   (`&'a str`) writes and describes itself; `FromValue` refuses it at the
   field (E0277), since nothing a reader returns can borrow from the value.
-- **Not supported**, each refused with a sentence: an untagged
-  data-carrying enum (the key telling variants apart is a wire-format
-  decision the author makes: `tag`); a tagged variant of two or more
+- **Not supported**, each refused with a sentence: a data-carrying enum
+  with neither `tag` nor `untagged` (the key telling variants apart is a
+  wire-format decision the author makes), or `untagged` with two
+  variants of one kind; a tagged variant of two or more
   unnamed fields (no keys beside the tag); `alias` (a schema refuses
   every key it does not declare, so an alias would read a value its own
   schema refuses); a union. `#[derive(Form)]` places named fields only,

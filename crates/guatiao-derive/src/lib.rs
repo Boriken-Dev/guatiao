@@ -31,12 +31,15 @@
 //! | unit struct | null | `type: null` |
 //! | unit variants only | the variant's name, as text | a string `enum` |
 //! | `#[map(tag = "k")]` on the enum | a map: the name under `k`, then the variant's fields (or a `Name(T)` variant's map) | a tagged variant |
+//! | `#[map(untagged)]` on the enum | what the variant writes: a unit variant its name, named fields a map, `Name(T)` `T`'s value | `anyOf` of the arms |
 //!
 //! A generic type's parameters are each bound by the trait derived.
 //!
 //! An enum whose variants carry fields and that names no tag is refused.
 //! The key that tells two variants apart is a wire-format decision, and it
-//! is yours to make rather than this crate's. **One trait each way, not two.** A map is a value whose tag
+//! is yours to make rather than this crate's, unless each variant writes
+//! a different kind of value: `#[map(untagged)]` stores no name, and a
+//! reader picks the variant by the value's kind. **One trait each way, not two.** A map is a value whose tag
 //! says map, so a struct that converts to a map converts to a value, and
 //! a second pair of map-shaped traits would differ from these in their
 //! name and in nothing else. Nesting needs nothing extra: a field whose
@@ -75,7 +78,7 @@
 //! On a struct, `#[map(transparent)]` and `#[map(deny_unknown_fields)]`.
 //!
 //! On an enum, `#[map(tag = "...")]` names the key a variant's name is
-//! stored under; on a variant, `#[map(rename = "...")]` changes the name
+//! stored under, and `#[map(untagged)]` stores none; on a variant, `#[map(rename = "...")]` changes the name
 //! stored. On a struct or an enum, `#[map(rename_all = "...")]` names
 //! every field (a struct's) or every variant (an enum's) by one of
 //! serde's rules, `"lowercase"`, `"snake_case"`, `"kebab-case"` or
@@ -154,13 +157,14 @@ mod rename;
 mod shapes;
 #[cfg(feature = "provider")]
 mod spelling;
+mod untagged;
 
 use proc_macro::TokenStream;
 
 use crate::expand::{Derive, expand};
 
 /// Derives `guatiao::ToValue` for a struct of any shape, an enum of unit
-/// variants, or an enum with `#[map(tag = "...")]`.
+/// variants, or an enum with `#[map(tag = "...")]` or `#[map(untagged)]`.
 ///
 /// A struct with named fields builds a map keyed by field name; a newtype
 /// its field's value, a tuple struct a list, a unit struct a null; a unit
@@ -181,8 +185,8 @@ pub fn derive_to_value(input: TokenStream) -> TokenStream {
 /// Derives `guatiao::Schema` for a struct of any shape or an enum:
 /// the values the type accepts, described as a value a consumer can read.
 ///
-/// A unit enum describes itself as a choice and a tagged enum as a
-/// variant. **A doc comment fills the most descriptive slot the thing
+/// A unit enum describes itself as a choice, a tagged enum as a variant
+/// and an untagged one as a union of its arms. **A doc comment fills the most descriptive slot the thing
 /// has**: a field or an arm has a description as well as a title, so its
 /// doc comment is the description; a choice has only a label, so its doc
 /// comment is the label.
@@ -219,7 +223,7 @@ pub fn derive_schema(input: TokenStream) -> TokenStream {
 }
 
 /// Derives `guatiao::FromValue` for a struct of any shape, an enum of unit
-/// variants, or an enum with `#[map(tag = "...")]`.
+/// variants, or an enum with `#[map(tag = "...")]` or `#[map(untagged)]`.
 ///
 /// A name no variant declares is `MapError::BadValue`, naming the
 /// alternatives and never the value it was given.

@@ -348,6 +348,42 @@ then its fields: `{"type": "Square", "side": 2}`, described with
 record writes that record's fields beside the tag:
 `{"type": "Circle", "a": 1}`.
 
+## Variants told apart by kind
+
+A variant can also store no name at all, when every alternative is a
+different **kind** of value: a string or a map, a number or a list. The
+value is the alternative's own value, and a reader picks the
+alternative by the value's kind, the same way in every language.
+
+```json
+"identity"
+{"certificate": "/etc/ssl/c.pem", "key": "/etc/ssl/k.pem"}
+```
+
+**No two alternatives are of one kind** (null, boolean, number, string,
+bytes, list, map). Alternatives with no value of their own are one
+string alternative together, its text one of their names. The schema
+is an `anyOf` of the alternatives, so at most one accepts a value:
+
+```json
+{"anyOf": [
+  {"type": "string", "enum": ["identity", "off"]},
+  {"type": "object",
+   "properties": {"certificate": {"type": "string"}, "key": {"type": "string"}},
+   "required": ["certificate", "key"], "additionalProperties": false}
+]}
+```
+
+A reader takes the value's kind, finds the one alternative of that
+kind and reads the value as it. A value of a kind no alternative has is
+refused, naming the kinds that would be accepted, and text naming no
+alternative is refused naming the names; neither quotes the value.
+
+**In a form**, the field is one entry. An alternative that is a
+string, a number or a boolean is typed as its text; one that is a list
+or a map has no one-line spelling, so a flat store cannot hold it
+(`flatten` answers false) and a form takes it as a whole value.
+
 ## A secret
 
 A secret is **not a form of its own**. It crosses as the value it holds,
@@ -551,5 +587,6 @@ The `guatiao` crate implements every form above for these types, under
 | an exact length | `std::time::Duration` |
 | a span | `guatiao::Span` |
 | the same as `T` | `Box<T>`, `Arc<T>`, `Rc<T>`, `Cow<'_, T>`, `&T` |
+| a variant told apart by kind | an enum deriving the three with `#[map(untagged)]` |
 | a map of any keys and values | `toml::Table` (feature `toml`), `serde_json::Map<String, Value>` (feature `serde_json`) |
 | any value | `toml::Value` (feature `toml`), `serde_json::Value` (feature `serde_json`) |
