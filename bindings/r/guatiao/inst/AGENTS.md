@@ -24,6 +24,7 @@ library: one is opened at run time.
 | kinds | `kind`, `method`, `lent`, `taken`, `bind_table`, `has_slot`, `call_slot`, `byte_buffer`, `live_objects`, the S4 class `guatiao_remote` |
 | providers | `provider`, `guatiao_library`, `library_of`, `live_instances` |
 | errors | `guatiao_error`, `statuses` |
+| wire | `from_wire`, `to_wire`, `wire_announce`, `wire_send`, `wire_close`, `wire_receiver` (its methods with `$`) |
 
 JSON, TOML and YAML are the package `guatiao.serde`, forms
 `guatiao.intake`: each over its own library, built on the C interface
@@ -212,6 +213,47 @@ answers a new value with every field the schema marks (`x-sensitive` or
 `writeOnly`) replaced at any depth, and whatever the schema does not
 describe hidden too. Local `$ref`s are followed. `WrongKind` for a
 schema that is not a map.
+
+## Values as bytes, and channels
+
+`to_wire(x)` (a value, a view or R data) answers a raw vector in the wire
+encoding: a tag byte per node, LEB128 lengths, a number as its own text,
+bytes as bytes, a map in its order, the same bytes in every language.
+`from_wire(bytes, alloc = NULL)` answers a `guatiao_value`; `BadValue`
+for bytes that are not exactly one value.
+
+A channel announces a schema before its values; a receiver checks every
+value against it. A frame is `kind:u8 channel:LEB128 payload`; the
+transport says where one ends.
+
+```r
+rcv <- wire_receiver()
+for (frame in list(wire_announce(1, schema), wire_send(1, list(greeting = "hi")), wire_close(1))) {
+  ev <- rcv$accept(frame)                 # list(kind, channel, value), class guatiao_wire_event
+  if (!is.null(ev$value)) close(ev$value) # the schema's copy, or the checked value
+}
+rcv$close()
+```
+
+- `wire_announce(channel, schema)`, `wire_send(channel, value)`,
+  `wire_close(channel)`: raw vectors. A channel is 0 to 2^64 - 1, as
+  every 64-bit integer argument is read (an integer, a whole double, an
+  `integer64`, a `number` or a string spelling one).
+- `wire_receiver()`: a Reference Class object. `$accept(frame)` answers an
+  event: `kind` `"schema"`, `"value"` or `"close"`, `channel` (an R
+  integer when it fits, a double up to 2^53, else a `number`), `value` a
+  `guatiao_value` to close, or `NULL`. `$close()` (idempotent; the garbage
+  collector frees one never closed), `$is_open()`. It builds in the
+  package's allocator; one receiver serves one conversation.
+- A refusal signals `guatiao_wire_malformed` (`at`, the byte of the
+  frame), `guatiao_wire_no_schema`, `guatiao_wire_not_a_schema` or
+  `guatiao_wire_invalid` (`key` the field, `expected` or `known`), each
+  also a `guatiao_wire_refused` and a `guatiao_error` with its status
+  (`BadValue`, `NotFound`, `WrongKind`, `BadValue`), carrying `refusal`,
+  `channel` and `kind`. It changes nothing the receiver keeps and quotes
+  nothing it was given.
+- Text holding a NUL decodes and re-encodes, but cannot be read into R
+  (`BadValue` from `value_data`).
 
 ## The C interface, for a package over another guatiao library
 
@@ -482,7 +524,8 @@ gave none). `statuses` is the named table: `OK` 0, `BadValue` 7,
 12, `Unsupported` 13, `Busy` 14, `Internal` 100. `guatiao_error(status,
 message)` builds one. `guatiao_parse_error` and `guatiao_unparsed` are
 `guatiao_error`s with status `BadValue` (the first is signalled by
-`guatiao.serde`). `guatiao_closed`,
+`guatiao.serde`). The `guatiao_wire_*` refusals are `guatiao_error`s with
+their status (see Values as bytes, and channels). `guatiao_closed`,
 `guatiao_library_not_found` and `guatiao_missing_symbol` are this
 package's own.
 
