@@ -37,6 +37,17 @@ write now.
   missing required method is a `TypeError` naming it. `kind()` stays as
   the primitive underneath. `examples/node_js` is a library and a host in
   plain JavaScript.
+- **Dart: kinds and providers as classes.** `dart run guatiao:kind` writes
+  a kind description's Dart: an abstract interface class per kind and per
+  appended slot, a `<Kind>Remote`, and the kind as the interface's static
+  `kind`, so `reg.bind(key, Greeter.kind)` calls a table through a class
+  and `class Hello extends Provider implements Greeter` is checked by the
+  analyzer. `Library` and `Offer` serve providers written in Dart to any
+  host in the process; `dart run guatiao:kind identity` writes a
+  library's id and version from `pubspec.yaml`. It runs under AOT and in
+  Flutter, Android included. `examples/dart_host` calls the Rust, C,
+  Python and Dart greeters and has the Rust caller call the Dart one;
+  `examples/dart_provider` is a library written in Dart.
 - **Values as events, with no tree in the middle.** `value::visit` is
   guatiao's own data model as traits, with no dependency: a type that
   `Walk`s hands absent, null, bool, number text, string, bytes, list and

@@ -6,5 +6,6 @@
 /// types its pointers name, and registering an open library.
 library;
 
-export 'bindings.g.dart' show guatiao_alloc, guatiao_value;
+export 'bindings.g.dart'
+    show guatiao_alloc, guatiao_host_info, guatiao_library_info, guatiao_value;
 export 'library.dart' show useLibrary;

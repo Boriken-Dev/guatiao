@@ -308,12 +308,145 @@ skipped, ...}`), `refused` (`{source, id?, why}`). A changed candidate
 loads before its old build is retired, and an `Instance` of the old keeps
 working; refusals are part of the answer. Nothing refreshes on its own.
 
-`kindTable<T>(found, floorHash:, floorSize:)` turns a `providerTable`
-answer into the `Struct` a kind's own C header declares (`greeter_vtable`
-and friends): checks `found.size` against `floorSize` and the header's
-`floor_hash` against `floorHash`, then casts. Throws `FloorMismatch` on
-either. `floorSize` is the caller's `sizeOf<T>()`, because `sizeOf` needs
-a type known where it is written.
+`bind(key, Greeter.kind)` answers the provider's table for that kind as
+the kind's remote class (`GreeterRemote`, below), over its own instance:
+`NotFound` when it serves no such table, `FloorMismatch` when the table
+is not the one the kind describes. `Instance.bind(kind)` does the same
+for an instance `create` built. `registerLibrary(library)` files a
+library written in Dart (below), `registerEntry(name, entry)` any linked
+`guatiao_library_entry`; each answers the load report, and the library
+is linked, not mapped (`unload` answers `WrongKind`). `host()` is the
+registry's `guatiao_host_info *`, which a library reaching providers
+through the host's services is handed.
+
+`kindTable<T>(found, floorHash:, floorSize:)` is the low road under
+`bind`: it turns a `providerTable` answer into the `Struct` a kind's own
+C header declares, checking `found.size` against `floorSize` and the
+header's `floor_hash` against `floorHash`, then casts (`FloorMismatch` on
+either).
+
+## Kinds and providers as classes (`package:guatiao/kinds.dart`)
+
+Native platforms only. **A kind is never declared by hand.** A kind
+crate commits its kinds' description beside their C header
+(`<crate>.kinds.json`: `{format: 1, kinds: [{name, floor_hash, object,
+slots: [{name, required, fallible, args, answer}]}]}`, the format on the
+docs site's encodings page), and
+
+```text
+dart run guatiao:kind DOCUMENT -o FILE [--check]
+```
+
+writes the Dart for it (commit the file; `--check` writes nothing and
+exits 1 when it is stale). For each kind, named in PascalCase
+(`greeter` is `Greeter`), it declares:
+
+| declaration | what |
+| --- | --- |
+| `abstract interface class Greeter` | the required slots, each slot's name in camelCase (`greet_into` is `greetInto`); `static final GreeterKind kind` |
+| `abstract interface class GreeterShout`, ... | one per appended slot, `<Kind><Slot>`: a provider implements the ones it serves |
+| `final class GreeterRemote extends KindRemote implements Greeter, GreeterShout, ...` | what a caller holds: a method per slot |
+| `final class GreeterKind extends Kind<GreeterRemote>` | the kind as data, and the glue that calls and serves its table |
+
+What each side sees, per description type:
+
+| type | a method receives / returns | a caller passes / gets |
+| --- | --- | --- |
+| `bool`; `i8`..`i64`, `u8`..`u64`, `isize`, `usize`; `f32`, `f64` | `bool`; `int`; `double` (a `u64` past 2^63 is negative, as Dart carries it) | the same |
+| `str` | `String` | `String` |
+| `bytes` | `Uint8List`, a copy | `List<int>` |
+| `bytes_mut` | `Uint8List`, copied back when the method returns | `Uint8List`, written in place |
+| `text` (answer) | `String` | `String` |
+| `value` borrowed (`nullable`) | `Ref` (`Ref?`), read-only, valid for the call | a `Ref` or plain data (`null`) |
+| `map` borrowed | `MapRef`, read-only, valid for the call | a `Ref` or a `Map` |
+| `value`/`map`/`list` taken | a `Value` it owns and closes | a `Value` (moved: left absent), a `Ref` (copied) or plain data |
+| `value`/`map`/`list` lent | `Ref`/`MapRef`/`ListRef`, writable, valid for the call | a `Ref` onto a tree this side owns, changed where it stands |
+| `value`/`map`/`list` (answer) | an `Object?`: a `Value`, a `Ref` or plain data, built where the caller asked | a `Value` to close |
+| `object` taken (`K`) | a `KRemote` it owns: `close()` destroys it | a Dart object implementing `K`, or a `KRemote` handle (given up) |
+| `object` lent (`K`) | a `KRemote`, valid for the call | a Dart object implementing `K`, or a `KRemote` |
+| `object` (answer, `K`) | a Dart object implementing `K`, or a handle | a `KRemote` it owns: `close()` destroys it |
+
+**A remote** (`KindRemote`): a method per slot, `has(slotName)` (the C
+name: `has('greet_into')`), `kind`, `table`, `size`, `ctx`, `close()`
+(destroys an object this side owns, once; does nothing otherwise),
+`isClosed`. A slot an older table lacks throws `Unsupported`; a refusal
+throws its status's `GuatiaoException` with the provider's words.
+A handle dropped unclosed is destroyed when it is collected.
+
+**A Dart object as an object of a kind**: any object implementing the
+kind's interface (and the appended ones it serves). Its table is built
+once per set of interfaces it implements and kept for the process; it is
+held until its holder destroys it (handed over), when it is told through
+`Disposable.dispose()` if it implements `Disposable`, or until the call
+returns (lent). `liveObjects()` counts what a C caller can reach.
+
+**A refusal**: a method throws a `GuatiaoException` (`BadValue(
+Status.badValue.code, 'nobody to greet')`) and the caller reads its
+status and words; anything else crosses as `GUATIAO_ERR_INTERNAL` with
+`"Type: text"`. A slot that cannot fail has no `err`: the error is
+printed to stderr and the status crosses alone.
+
+### Providers
+
+```dart
+final class Hello extends Provider implements Greeter, GreeterShout {
+  @override
+  Map<String, Object?> greet(String name) {
+    if (name.isEmpty) throw BadValue(Status.badValue.code, 'nobody to greet');
+    return {'greeting': 'hello, $name'};
+  }
+
+  @override
+  String shout(String name) => 'HELLO, ${name.toUpperCase()}';
+}
+
+final class Shouter extends Provider implements Greeter {
+  Shouter(Map<String, Object?> config) : prefix = config['prefix']! as String;
+  final String prefix;
+  @override
+  Map<String, Object?> greet(String name) => {'greeting': '$prefix $name'};
+}
+
+final library = Library.of(packageLibrary, offers: [
+  Offer.single(Hello(), named: 'hello', kinds: [Greeter.kind]),
+  Offer.configured(Shouter.new, named: 'shouter', kinds: [Greeter.kind],
+      schema: {'type': 'object', 'properties': {'prefix': {'type': 'string'}},
+               'required': ['prefix']}),
+]);
+registry.registerLibrary(library);
+```
+
+**A provider** extends `Provider` and implements its kinds' interfaces,
+which is what the analyzer checks: a missing required method is
+`non_abstract_class_inherits_abstract_member`, a wrong argument or answer
+type (an appended slot's included) `invalid_override`. A misspelled
+appended method implements nothing, and is not caught.
+
+**`Offer.single(instance, named:, kinds:, id?, displayName?, version?,
+meta?, available?)`**: the instance is the provider, its tables built
+from what it implements. **`Offer.configured(create, named:, kinds:,
+schema:, ...)`**: an instance per configuration the host checked against
+`schema` (a JSON Schema), `create` receiving it as plain Dart; the tables
+are those of the class `create` builds. `available` answers `null` when
+the provider can run here, else why not. Each provider's id is
+`{library id}_{named}` unless `id` says. A required slot an instance or
+class lacks is an `ArgumentError` naming it when the library is built
+(`silent does not implement greet, which the greeter kind requires`), as
+is an object kind among `kinds`. `Provider.dispose()` runs when the host
+destroys an instance, or when the library holding a single instance
+closes.
+
+**`Library(id, version, offers:, meta?)`**, or **`Library.of(identity,
+offers:, meta?)`** with a `LibraryIdentity`: `dart run guatiao:kind
+identity [-o FILE] [--pubspec FILE] [--check]` writes one from the
+package's `pubspec.yaml` (its `name`, `version`, `description` as
+`summary` and its URLs), as `const packageLibrary` in
+`lib/src/library_identity.g.dart` by default, since an AOT program has no
+pubspec to read. A `Library` builds its descriptor now and keeps it for
+the process: `entry` (the `guatiao_library_entry`), `info`, `kinds`,
+`liveInstances()`, `close()` (lets go of each single instance; the entry
+answers null from then on). Its `unload` slot answers `GUATIAO_ERR_BUSY`
+while an instance lives.
 
 ## time: dates, times, instants, spans, exact lengths
 
@@ -502,16 +635,21 @@ A process whose pointers are not four or eight bytes wide gets
 
 ## Not offered
 
-A kind's borrowed object arguments (an object lent to a call for its
-duration, `const guatiao_object *` in a kind table) are not wrapped: this
-binding drives a kind's table through the pointer `providerTable` answers
-and builds no object for a callee to borrow.
+- Kinds and providers on the web: a kind table is native code's.
+- A kind whose slots name an object kind outside its own description
+  document: `dart run guatiao:kind` refuses it.
+- Serving Dart to a host that is not this Dart process (a bridge, as
+  guatiao-py is for Python).
 
 ## Isolates
 
 A `Value` and a `Registry` are used from the isolate that made them, like
-the C handles they wrap. Nothing here crosses an isolate boundary, and a
-provider cannot call back into Dart.
+the C handles they wrap. A table this binding serves (a provider, an
+object handed or lent to a library) runs its methods on the thread of
+the isolate that built it: a library calling one from any other thread
+ends the process, as Dart does for every isolate-local callback. Its
+calls are therefore the isolate's own, made while that isolate is inside
+a native call.
 
 ## Generated bindings
 

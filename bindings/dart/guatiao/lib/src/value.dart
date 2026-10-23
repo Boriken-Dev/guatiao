@@ -336,6 +336,30 @@ void _writeDart(
   );
 }
 
+/// Builds `obj` into `raw` (absent- or null-tagged) through `alloc`, as
+/// [Value.fromDart] does. For the kind runtime; not exported.
+void writeDartInto(
+  Pointer<guatiao_value> raw,
+  Object? obj,
+  Pointer<guatiao_alloc> alloc,
+) => _writeDart(raw, obj, alloc);
+
+/// `value`'s tree moved into a new `calloc`ed root the caller owns, and
+/// `value` left absent: what a slot taking a tree is handed. For the kind
+/// runtime; not exported.
+Pointer<guatiao_value> moveOutOf(Value value) {
+  final root = value.rootNode;
+  final size = sizeOf<guatiao_value>();
+  final out = calloc<guatiao_value>();
+  out
+      .cast<Uint8>()
+      .asTypedList(size)
+      .setAll(0, root.cast<Uint8>().asTypedList(size));
+  // An all-zero node is absent and owns nothing.
+  root.cast<Uint8>().asTypedList(size).fillRange(0, size, 0);
+  return out;
+}
+
 /// Builds `obj` into a scratch node and hands it to `consume`, which
 /// moves it somewhere that owns it.
 ///

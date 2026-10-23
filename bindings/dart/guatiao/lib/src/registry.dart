@@ -8,7 +8,9 @@ import 'package:ffi/ffi.dart';
 
 import 'bindings.g.dart';
 import 'errors.dart';
+import 'kind_runtime.dart';
 import 'library.dart' as native;
+import 'provide.dart';
 import 'value.dart';
 
 /// What a provider speaks a kind through: its table, the table's size as
@@ -44,6 +46,19 @@ class Instance {
   bool _closed = false;
 
   bool get isClosed => _closed;
+
+  /// This instance as [kind]: a remote whose calls go to it, valid until
+  /// it is closed. [NotFound] when its provider serves no such table.
+  R bind<R extends KindRemote>(Kind<R> kind) {
+    final found = _registry.providerTable(_key, kind: kind.name);
+    if (found.isEmpty) {
+      throw NotFound(
+        Status.notFound.code,
+        '$_key serves no ${kind.name} table',
+      );
+    }
+    return kind.remote(found.table, found.size, ctx);
+  }
 
   /// Destroys the instance. Idempotent.
   void close() {
@@ -353,6 +368,58 @@ class Registry implements Finalizable {
   }
 
   // ---- a provider's table and configuration ---------------------------
+
+  /// The provider filed under [key] as [kind], over its own instance: a
+  /// remote with a method per slot. [NotFound] when it serves no table for
+  /// the kind, [FloorMismatch] when its table is not the one [kind]
+  /// describes. A provider that only builds instances is bound through
+  /// `create(...).bind(kind)`. Valid while its library is.
+  R bind<R extends KindRemote>(String key, Kind<R> kind) {
+    final found = providerTable(key, kind: kind.name);
+    if (found.isEmpty) {
+      throw NotFound(Status.notFound.code, '$key serves no ${kind.name} table');
+    }
+    return kind.bind(found);
+  }
+
+  /// Registers a library the host links: [entry] is its
+  /// `guatiao_library_entry`, asked for its descriptor now. Answers the
+  /// load report, as [loadFile] does.
+  Map<String, Object?> registerEntry(
+    String name,
+    Pointer<
+      NativeFunction<
+        Pointer<guatiao_library_info> Function(Pointer<guatiao_host_info>)
+      >
+    >
+    entry,
+  ) {
+    native.core().require('guatiao_registry_register_entry', feature: 'load');
+    return using(
+      (arena) => _answerMap(
+        (reg, alloc, out) =>
+            native.core().bindings.guatiao_registry_register_entry(
+              reg,
+              strOf(arena, name).ref,
+              entry,
+              alloc,
+              out,
+            ),
+      ),
+    );
+  }
+
+  /// Files a library written in Dart under its id. It is linked, not
+  /// mapped: [unload] answers [WrongKind], and [retire] takes it out.
+  Map<String, Object?> registerLibrary(Library library) =>
+      registerEntry(library.id, library.entry);
+
+  /// This registry's host block (`guatiao_host_info *`), which a library
+  /// reaching other libraries through the host's services is handed.
+  Pointer<guatiao_host_info> host() {
+    _checkOpen();
+    return native.core().bindings.guatiao_registry_host(_handle);
+  }
 
   /// The table `key` speaks `kind` through, or its single table when no
   /// `kind` is named.
