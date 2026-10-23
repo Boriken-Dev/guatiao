@@ -7,7 +7,8 @@
 [guatiao](https://github.com/Boriken-Dev/guatiao/) values, schemas and
 plugins from C++: a header-only library over the C header `guatiao.h` and
 the `guatiao` shared library, in C++'s own idiom — owners that free what
-they hold, `std::string_view` and iterators, exceptions or `try_` results.
+they hold, `std::string_view` and iterators, exceptions or `try_` results,
+kinds served by ordinary classes.
 
 > **Status: alpha.** No prebuilt library is distributed: the CMake
 > package finds one you built, or builds it with cargo.
@@ -25,6 +26,11 @@ they hold, `std::string_view` and iterators, exceptions or `try_` results.
 - **The encodings every language shares** — dates, times, spans and exact
   lengths, the wire encoding and channels, schema checks and redaction,
   each read and written by the library itself.
+- **Plugins both ways** — a `registry` loads libraries written in any
+  language, watches directories and sources and calls `refresh()`; a C++
+  class serves a kind by having the slots as methods, checked by the
+  compiler, and `GUATIAO_LIBRARY(...)` makes a shared library of them that
+  any host's scan finds.
 
 ## Installation
 
@@ -48,6 +54,37 @@ configuring builds one with cargo from the repository's sources, so Rust
 or g++.
 
 ## Quick start
+
+A host calling a greeter, whatever language wrote it:
+
+```cpp
+#include "greeter_kind.hpp"   // the kind, declared once with GUATIAO_KIND
+
+guatiao::registry reg("my-host", "1.0");
+reg.watch_dir("/opt/plugins", guatiao::rules({"kind=greeter"}));
+reg.refresh();
+auto g = greeter_kind::greeter::bind(reg, "derived_greeter_hello");
+guatiao::map answer = g.greet("ana");             // {"greeting": "hello, ana"}
+```
+
+A provider written in C++, as a library file:
+
+```cpp
+class hello {
+ public:
+  guatiao::map greet(std::string_view name) { return guatiao::map{{"greeting", "hello, " + std::string(name)}}; }
+};
+
+guatiao::library acme() {
+  guatiao::library lib("acme", "1.0.0");
+  lib.single<hello, greeter_kind::greeter>("hello");
+  return lib;
+}
+
+GUATIAO_LIBRARY(acme, greeter_kind::greeter)
+```
+
+Values:
 
 ```cpp
 #include <guatiao/guatiao.hpp>
@@ -75,6 +112,9 @@ if (!r) std::printf("%s\n", r.error().what());
 | `date`, `time_of_day`, `date_time`, `timestamp`, `span`, `length`, `normalize` | the time forms |
 | `to_wire`, `from_wire`, `wire_announce`, `wire_send`, `wire_close`, `receiver` | values as bytes, and channels |
 | `validate`, `redact`, `merge` | schemas, secrets, layering |
+| `registry`, `instance`, `rules` | a host: loading, sources, `refresh()`, ranking, unloading |
+| `GUATIAO_KIND`, `GUATIAO_OBJECT_KIND`, `remote<K>`, `object<K>`, `lent<K>` | kinds: declared over their C tables, called through any table |
+| `library`, `GUATIAO_LIBRARY`, `guatiao_library_target` | providers written in C++, as a library file a scan finds |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/cpp/guatiao/AGENTS.md)
 is the full API reference. JSON, TOML and YAML are
