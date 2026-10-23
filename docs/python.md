@@ -199,7 +199,9 @@ old build still answer.
 
 [`examples/python_provider`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/python_provider)
 holds two libraries and the commands that serve them to the Rust and
-Python example hosts.
+Python example hosts. `guatiao-py` is CPython as the engine of a
+[language bridge](language-bridges.md): the manifests, stamps and refresh
+are the bridge's.
 
 ## What Python cannot do
 
