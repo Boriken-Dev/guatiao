@@ -221,6 +221,7 @@ proxy copies the answer once. Then:
 | --- | --- |
 | `<Trait>Vtable` | `repr(C)`: `header: KindHeader`, then one `Option<unsafe extern "C" fn>` slot per method, declaration order |
 | `<Trait>Vtable::of::<T>()` | `const fn`, the table for an implementation; `floor()`; `<method>_end()` per slot; `FLOOR_HASH` as a **literal** the attribute computed, so a C header generator renders it as `#define <table>_FLOOR_HASH n` |
+| `<Trait>Vtable::description() -> String` | the kind as data, compact JSON: name, floor hash, `object`, each slot in table order with its arguments (`type`, and `pass` for a tree or an object), answer, `required`, `fallible` and doc text. The format is in the docs' encodings page; a kind crate commits a document of its kinds beside its header, which bindings load instead of declaring the kind again |
 | `impl Kind for dyn Trait` | `NAME`, `Vtable`, `FLOOR`, `FLOOR_HASH` (FNV-1a over `provider;` or `object;` and the required signatures), `REQUIRED`, `OBJECT`, `as_dyn`/`as_dyn_mut` |
 | `impl Trait for Remote<dyn Trait>` | the proxy: reads each slot under the table's size, marshals, calls, converts back |
 | `impl From<Remote<dyn Trait>> for Box<dyn Trait>` | `Box` only: `Arc` is not fundamental (`Kind::shared`) |

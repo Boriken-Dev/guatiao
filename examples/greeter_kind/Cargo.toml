@@ -25,6 +25,8 @@ cbindgen = { version = "0.29", optional = true }
 
 [dev-dependencies]
 guatiao = { path = "../../crates/guatiao", features = ["provider", "load"] }
+# Writes the kind description as indented JSON.
+guatiao-serde = { path = "../../crates/guatiao-serde", features = ["json"] }
 
 [lints]
 workspace = true

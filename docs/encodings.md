@@ -484,6 +484,76 @@ In every binding the refusal is also the status's own error, so code
 that catches a bad value catches a malformed frame and an invalid value
 alike, and code that wants the reason reads the refusal.
 
+## A kind, described
+
+A kind's C header says how to fill its table. Its **description** says
+the same as data, so a binding, a code generator or a peer can load the
+kind rather than declare it again: the kind's name, its floor hash, and
+each slot in table order, with its arguments, its answer, and whether it
+is required and whether it can refuse. It is a value, written as JSON in
+a file beside the header (`include/<crate>.kinds.json`):
+
+```json
+{
+  "format": 1,
+  "kinds": [
+    {
+      "name": "greeter",
+      "floor_hash": 2695856491,
+      "object": false,
+      "doc": "Greets by name.",
+      "slots": [
+        {
+          "name": "greet",
+          "required": true,
+          "fallible": true,
+          "args": [{ "name": "name", "type": "str" }],
+          "answer": { "type": "map" }
+        },
+        {
+          "name": "greet_into",
+          "required": false,
+          "fallible": true,
+          "args": [
+            { "name": "name", "type": "str" },
+            { "name": "listener", "type": "object", "kind": "listener", "pass": "lent" }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+- **`format`** is 1. A reader refuses another.
+- **A kind**: `name` (what a descriptor and a registry call it),
+  `floor_hash` (the `<table>_FLOOR_HASH` its header defines), `object`
+  (an object kind: its table has `destroy` right after the header), an
+  optional `doc`, and `slots`.
+- **A slot**: `name` (its field in the table), `required` (a slot every
+  table carries: the kind's original ones, a prefix of the table, which
+  the floor hash covers), `fallible` (it ends in `guatiao_provider_error
+  *err`), `args` (after `ctx`, in order), `answer` (written through a
+  pointer before `err`; absent when there is none), and an optional `doc`.
+- **An argument** is `name`, `type`, and for a tree or an object
+  `pass`. An **answer** is `type`, and `kind` for an object.
+
+| `type` | as an argument (C) | as an answer (C) |
+| --- | --- | --- |
+| `bool`, `i8`, `i16`, `i32`, `i64`, `u8`, `u16`, `u32`, `u64`, `isize`, `usize`, `f32`, `f64` | the scalar (`isize` is `intptr_t`, `usize` `size_t`) | a pointer to it |
+| `str` | `guatiao_str`, UTF-8 text the caller keeps | -- |
+| `bytes` | `guatiao_bytes`, the caller's | -- |
+| `bytes_mut` | `guatiao_bytes_mut`, the caller's memory, written in place (object kinds only) | -- |
+| `text` | -- | `guatiao_string *`: owned text |
+| `value`, `map`, `list` | `pass` says how: `borrowed` (`const guatiao_value *` / `const guatiao_map *`; a borrowed `value` may be null when `nullable` is true), `taken` (a non-`const` pointer to a tree the callee then owns) or `lent` (a non-`const` pointer to the caller's tree, for the call) | `guatiao_value *` / `guatiao_map *` / `guatiao_list *`, holding a carrier: the answer is built in the allocator it names |
+| `object` | `kind` names an object kind; `pass` is `taken` (`guatiao_object` by value: the callee owns it) or `lent` (`const guatiao_object *`, for the call) | `guatiao_object *`: the caller owns it |
+
+A `kind` an argument or answer names is found in the same document, or
+among kinds the reader already holds. A description is written by
+`#[guatiao::kind]` (`<Trait>Vtable::description()`, one kind as compact
+JSON); a kind crate writes its document with the same switch that writes
+its header, and a test compares the committed copy with a fresh one.
+
 ## In C, Python, Dart, Node, Go, Julia, R, MATLAB, Octave and Fortran
 
 Each text form above has C functions that read it into a plain struct,

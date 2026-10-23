@@ -56,6 +56,17 @@ impl MovesVtable {
     /// literal, so a C header generator can render it: what a C
     /// implementation writes into the table's header.
     pub const FLOOR_HASH: u32 = 2716657938;
+    /// The kind as data, compact JSON: its name, floor hash, and each
+    /// slot in table order with its arguments and answer, as the
+    /// header declares them, and whether it is required and fallible.
+    /// What a binding loads instead of declaring the kind again.
+    pub fn description() -> ::guatiao::__private::alloc::string::String {
+        let mut out = ::guatiao::__private::alloc::string::String::new();
+        out.push_str(
+            "{\"name\":\"moves\",\"floor_hash\":2716657938,\"object\":false,\"slots\":[{\"name\":\"keep\",\"required\":true,\"fallible\":true,\"args\":[{\"name\":\"v\",\"type\":\"value\",\"pass\":\"taken\"},{\"name\":\"name\",\"type\":\"str\"},{\"name\":\"m\",\"type\":\"map\",\"pass\":\"taken\"}],\"answer\":{\"type\":\"i64\"}},{\"name\":\"take\",\"required\":true,\"fallible\":false,\"args\":[{\"name\":\"l\",\"type\":\"list\",\"pass\":\"taken\"}],\"answer\":{\"type\":\"i64\"}}]}",
+        );
+        out
+    }
     #[doc(hidden)]
     pub const fn keep_end() -> usize {
         ::core::mem::offset_of!(Self, keep) + ::core::mem::size_of::<usize>()

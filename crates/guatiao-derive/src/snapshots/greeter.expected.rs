@@ -51,6 +51,17 @@ impl GreeterVtable {
     /// literal, so a C header generator can render it: what a C
     /// implementation writes into the table's header.
     pub const FLOOR_HASH: u32 = 4109485502;
+    /// The kind as data, compact JSON: its name, floor hash, and each
+    /// slot in table order with its arguments and answer, as the
+    /// header declares them, and whether it is required and fallible.
+    /// What a binding loads instead of declaring the kind again.
+    pub fn description() -> ::guatiao::__private::alloc::string::String {
+        let mut out = ::guatiao::__private::alloc::string::String::new();
+        out.push_str(
+            "{\"name\":\"greeter\",\"floor_hash\":4109485502,\"object\":false,\"slots\":[{\"name\":\"greet\",\"required\":true,\"fallible\":true,\"args\":[{\"name\":\"name\",\"type\":\"str\"}],\"answer\":{\"type\":\"text\"}},{\"name\":\"count\",\"required\":false,\"fallible\":false,\"args\":[{\"name\":\"bytes\",\"type\":\"bytes\"},{\"name\":\"flag\",\"type\":\"bool\"}],\"answer\":{\"type\":\"i64\"}}]}",
+        );
+        out
+    }
     #[doc(hidden)]
     pub const fn greet_end() -> usize {
         ::core::mem::offset_of!(Self, greet) + ::core::mem::size_of::<usize>()

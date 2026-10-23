@@ -314,6 +314,8 @@ struct MethodPlan {
     default: Option<Block>,
     /// The normalised signature the hash covers.
     signature: String,
+    /// The method's doc comment, for the kind's description.
+    doc: Option<String>,
 }
 
 fn plan_methods(tr: &ItemTrait, object: bool, roots: Roots<'_>) -> syn::Result<Vec<MethodPlan>> {
@@ -539,6 +541,7 @@ fn plan_method(f: &TraitItemFn, object: bool, roots: Roots<'_>) -> syn::Result<M
         mutable,
         default: f.default.clone(),
         signature,
+        doc: doc_text(&f.attrs),
     })
 }
 
@@ -904,6 +907,7 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
     // associated constant only when its value is a literal, and the hash
     // is what a C implementation writes into its table's header.
     let floor_hash = fnv1a(&hash_input);
+    let description = description_fn(tr, attr, methods, floor_hash);
     let floor_hash = syn::LitInt::new(&floor_hash.to_string(), proc_macro2::Span::call_site());
     // The floor: one past the last required slot, or past `destroy` for
     // an object kind whose methods all have defaults.
@@ -1344,6 +1348,8 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
             /// implementation writes into the table's header.
             pub const FLOOR_HASH: u32 = #floor_hash;
 
+            #description
+
             #destroy_items
 
             #(#end_fns)*
@@ -1413,6 +1419,225 @@ fn emit(tr: &ItemTrait, attr: &KindAttr, methods: &[MethodPlan]) -> TokenStream 
 
 fn end_ident(method: &Ident) -> Ident {
     format_ident!("{}_end", method)
+}
+
+// --- the description -------------------------------------------------------
+
+/// A kind's description being written: JSON text known here, and the
+/// names of the object kinds it refers to, which only their own `Kind`
+/// impls know (a `#[kind(name = ..)]` elsewhere).
+#[derive(Default)]
+struct Json(Vec<Piece>);
+
+enum Piece {
+    Text(String),
+    /// `<#ty as Kind>::NAME`, quoted.
+    KindName(Type),
+}
+
+impl Json {
+    fn text(&mut self, text: &str) {
+        match self.0.last_mut() {
+            Some(Piece::Text(t)) => t.push_str(text),
+            _ => self.0.push(Piece::Text(text.to_string())),
+        }
+    }
+
+    fn string(&mut self, text: &str) {
+        self.text(&json_string(text));
+    }
+
+    fn kind_name(&mut self, ty: &Type) {
+        self.0.push(Piece::KindName(ty.clone()));
+    }
+}
+
+/// `text` as a JSON string, quotes included.
+fn json_string(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 2);
+    out.push('"');
+    for c in text.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// A doc comment as its lines, each without the one space `///` leaves,
+/// blank lines kept between paragraphs; `None` for none.
+fn doc_text(attrs: &[syn::Attribute]) -> Option<String> {
+    let mut lines = Vec::new();
+    for attr in attrs {
+        if !attr.path().is_ident("doc") {
+            continue;
+        }
+        if let syn::Meta::NameValue(syn::MetaNameValue {
+            value:
+                syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(text),
+                    ..
+                }),
+            ..
+        }) = &attr.meta
+        {
+            // `split`, not `lines`: a blank `///` is an empty string, and
+            // `lines` would drop the paragraph break it is.
+            for line in text.value().split('\n') {
+                lines.push(
+                    line.strip_prefix(' ')
+                        .unwrap_or(line)
+                        .trim_end()
+                        .to_string(),
+                );
+            }
+        }
+    }
+    let text = lines.join("\n");
+    let text = text.trim_matches('\n');
+    (!text.is_empty()).then(|| text.to_string())
+}
+
+/// A scalar's name in a description: the Rust primitive's, which is also
+/// the width and signedness of the C type the header gives it.
+fn scalar_name(ty: &Type) -> String {
+    last_ident(ty).map_or_else(|| strip(&quote!(#ty)), |i| i.to_string())
+}
+
+fn describe_arg(json: &mut Json, arg: &ArgPlan) {
+    json.text("{\"name\":");
+    json.string(&arg.ident.unraw().to_string());
+    json.text(",\"type\":");
+    let tree = |json: &mut Json, ty: &str, pass: &str| {
+        json.text(&format!("\"{ty}\",\"pass\":\"{pass}\""));
+    };
+    match &arg.kind {
+        ArgKind::Scalar(ty) => json.string(&scalar_name(ty)),
+        ArgKind::Str => json.string("str"),
+        ArgKind::Bytes => json.string("bytes"),
+        ArgKind::BytesMut => json.string("bytes_mut"),
+        ArgKind::ValueRef | ArgKind::Owned(_) => tree(json, "value", "borrowed"),
+        ArgKind::ValueOpt => {
+            tree(json, "value", "borrowed");
+            json.text(",\"nullable\":true");
+        }
+        ArgKind::MapRef => tree(json, "map", "borrowed"),
+        ArgKind::ValueOwned => tree(json, "value", "taken"),
+        ArgKind::MapOwned => tree(json, "map", "taken"),
+        ArgKind::ListOwned => tree(json, "list", "taken"),
+        ArgKind::ValueMut => tree(json, "value", "lent"),
+        ArgKind::MapMut => tree(json, "map", "lent"),
+        ArgKind::ListMut => tree(json, "list", "lent"),
+        ArgKind::Object(inner) | ArgKind::BorrowMut(inner) | ArgKind::Borrow(inner) => {
+            json.text("\"object\",\"kind\":");
+            json.kind_name(inner);
+            let pass = if matches!(arg.kind, ArgKind::Object(_)) {
+                "taken"
+            } else {
+                "lent"
+            };
+            json.text(&format!(",\"pass\":\"{pass}\""));
+        }
+    }
+    json.text("}");
+}
+
+fn describe_answer(json: &mut Json, ret: &RetKind) {
+    let simple =
+        |json: &mut Json, ty: &str| json.text(&format!(",\"answer\":{{\"type\":\"{ty}\"}}"));
+    match ret {
+        RetKind::Unit => {}
+        RetKind::Scalar(ty) => simple(json, &scalar_name(ty)),
+        RetKind::Value | RetKind::Owned(_) => simple(json, "value"),
+        RetKind::Map => simple(json, "map"),
+        RetKind::List => simple(json, "list"),
+        RetKind::Text => simple(json, "text"),
+        RetKind::Object(inner) => {
+            json.text(",\"answer\":{\"type\":\"object\",\"kind\":");
+            json.kind_name(inner);
+            json.text("}");
+        }
+    }
+}
+
+/// `<Trait>Vtable::description()`: the kind as data, in the format
+/// `docs/encodings.md` states, for a binding to load or a generator to
+/// read.
+fn description_fn(
+    tr: &ItemTrait,
+    attr: &KindAttr,
+    methods: &[MethodPlan],
+    floor_hash: u32,
+) -> TokenStream {
+    let mut json = Json::default();
+    json.text("{\"name\":");
+    json.string(&attr.name);
+    json.text(&format!(
+        ",\"floor_hash\":{floor_hash},\"object\":{}",
+        attr.object
+    ));
+    if let Some(doc) = doc_text(&tr.attrs) {
+        json.text(",\"doc\":");
+        json.string(&doc);
+    }
+    json.text(",\"slots\":[");
+    for (i, m) in methods.iter().enumerate() {
+        if i > 0 {
+            json.text(",");
+        }
+        json.text("{\"name\":");
+        json.string(&m.ident.unraw().to_string());
+        json.text(&format!(
+            ",\"required\":{},\"fallible\":{},\"args\":[",
+            m.default.is_none(),
+            m.fallible
+        ));
+        for (j, arg) in m.args.iter().enumerate() {
+            if j > 0 {
+                json.text(",");
+            }
+            describe_arg(&mut json, arg);
+        }
+        json.text("]");
+        describe_answer(&mut json, &m.ret);
+        if let Some(doc) = &m.doc {
+            json.text(",\"doc\":");
+            json.string(doc);
+        }
+        json.text("}");
+    }
+    json.text("]}");
+    let pushes = json.0.iter().map(|piece| match piece {
+        Piece::Text(text) => quote! { out.push_str(#text); },
+        Piece::KindName(ty) => quote! {
+            out.push('"');
+            for c in <#ty as ::guatiao::library::Kind>::NAME.chars() {
+                if c == '"' || c == '\\' {
+                    out.push('\\');
+                }
+                out.push(c);
+            }
+            out.push('"');
+        },
+    });
+    quote! {
+        /// The kind as data, compact JSON: its name, floor hash, and each
+        /// slot in table order with its arguments and answer, as the
+        /// header declares them, and whether it is required and fallible.
+        /// What a binding loads instead of declaring the kind again.
+        pub fn description() -> ::guatiao::__private::alloc::string::String {
+            let mut out = ::guatiao::__private::alloc::string::String::new();
+            #(#pushes)*
+            out
+        }
+    }
 }
 
 /// FNV-1a, 32-bit: the same function as `guatiao::library::kind::fnv1a`,
@@ -3023,6 +3248,41 @@ mod tests {
         )
         .unwrap();
         assert!(out.contains("\"session_backend\""));
+    }
+
+    /// The description: the attribute's name, doc text escaped as JSON, a
+    /// value that may be null, and the referenced kind's name left to its
+    /// own `Kind` impl.
+    #[test]
+    fn the_description_is_json_naming_every_shape() {
+        let out = expand_str(
+            "name = \"codec.v2\"",
+            r#"
+            /// Says "hi"	(tab).
+            ///
+            /// Second paragraph.
+            pub trait Codec: Send + Sync {
+                fn open(&self, config: Option<&Value>, tags: List, into: &mut Value, cb: Object<dyn Sink>) -> Result<(), ProviderError>;
+                /// Appended.
+                fn close(&self) -> u32 { 0 }
+            }
+            "#,
+        )
+        .unwrap();
+        let file: syn::File = syn::parse_str(&out).unwrap();
+        let pretty = prettyplease::unparse(&file);
+        for expected in [
+            r#"{\"name\":\"codec.v2\",\"floor_hash\":"#,
+            r#"\"doc\":\"Says \\\"hi\\\"\\t(tab).\\n\\nSecond paragraph.\""#,
+            r#"{\"name\":\"config\",\"type\":\"value\",\"pass\":\"borrowed\",\"nullable\":true}"#,
+            r#"{\"name\":\"tags\",\"type\":\"list\",\"pass\":\"taken\"}"#,
+            r#"{\"name\":\"into\",\"type\":\"value\",\"pass\":\"lent\"}"#,
+            r#"{\"name\":\"cb\",\"type\":\"object\",\"kind\":"#,
+            "<dyn Sink as ::guatiao::library::Kind>::NAME",
+            r#"{\"name\":\"close\",\"required\":false,\"fallible\":false,\"args\":[],\"answer\":{\"type\":\"u32\"},\"doc\":\"Appended.\"}"#,
+        ] {
+            assert!(pretty.contains(expected), "missing {expected} in {pretty}");
+        }
     }
 
     /// Every refusal, pinned by text so a message cannot drift into

@@ -159,6 +159,7 @@ GUATIAO_WRITE_HEADER=1 cargo build -p guatiao --features c-header
 GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-serde --features c-header,json,toml,yaml
 GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-intake --features c-header
 GUATIAO_WRITE_HEADER=1 cargo build -p greeter_kind --features c-header   # the kind tables, via macro expansion
+GUATIAO_WRITE_HEADER=1 cargo test -p greeter_kind --test description_is_current   # the same kinds as data, include/greeter_kind.kinds.json
 ```
 
 Python bindings, after `cargo build --workspace --all-features`, with the
