@@ -40,6 +40,23 @@ write now.
   can hold a table it does not describe: an open object, or any value.
   `guatiao`'s new `toml` and `serde_json` features carry the impls, and
   `guatiao-serde`'s `toml` and `json` features turn them on.
+- **Dart and Flutter build the libraries from source.** Each Dart package
+  has a build hook that builds its crate with cargo for the target being
+  built (Android, once per ABI; iOS; macOS; Linux; Windows) and bundles
+  the library with the app, so `flutter build` is the whole build. The
+  one-time setup is rustup and the Rust targets; a missing piece (cargo,
+  the Rust target, the Android NDK, Xcode) stops the build with one
+  sentence naming it, the `rustup target add` line included. Cargo's
+  output is cached in the app's `.dart_tool/`, and a build with nothing
+  changed skips the hooks. An application's own crate is built instead,
+  one file carrying every surface, with `hooks: user_defines: guatiao:
+  crate: <path>` in its `pubspec.yaml`; `build: false` builds nothing.
+  The packages find the bundled library through its asset id, after
+  `GUATIAO_LIBRARY`. Inside a checkout the hook builds the checkout's
+  crates, from pub.dev the crates.io ones at the package's version; no
+  binary is downloaded. `package:guatiao/hook.dart` is that build,
+  `examples/flutter_app` an app using it, and the docs site's "Dart and
+  Flutter" page the setup.
 - **Memory from the library's heap.** `guatiao_memory_alloc(size,
   align)` answers zeroed bytes from the library's own heap, and
   `guatiao_memory_free(ptr, size, align)` releases them. A host that

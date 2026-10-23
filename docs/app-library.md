@@ -92,6 +92,11 @@ On the web there is one module for every surface, since each module has a
 memory of its own: build `myapp.wasm` and load it once (see
 [In a browser](wasm.md)).
 
+A Flutter or Dart application names the crate to the Dart packages' build
+hook instead (`hooks: user_defines: guatiao: crate: <path>` in its
+`pubspec.yaml`), which builds that one file for every target and bundles
+it in place of guatiao's own (see [Dart and Flutter](flutter.md)).
+
 ## Traps
 
 **A Rust program linking guatiao and the application's library.** On

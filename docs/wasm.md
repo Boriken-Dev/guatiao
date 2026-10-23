@@ -94,7 +94,8 @@ Future<void> main() async {
 ```
 
 The same app on Android, iOS and the desktops loads the native library
-instead, as the packages' pages describe.
+instead, which the packages' build hooks build and bundle (see
+[Dart and Flutter](flutter.md)).
 
 ## Sending values to it
 
