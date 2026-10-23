@@ -25,6 +25,19 @@ write now.
   beside the status, the byte offset, the error's words, and for a value
   its schema refuses, the field and what it accepts. Nothing received is
   quoted. The wasm module exports them too.
+- **Values on the wire and channels in every binding.** One value as
+  bytes, frames, and a receiver whose accept answers an event or raises
+  the refusal as the status's own error: Python `Value.from_wire`,
+  `ref.to_wire()` and `guatiao.wire`; Dart `Value.fromWire`, `toWire()`
+  and `package:guatiao/wire.dart`; Node `Value.fromWire`, `toWire()` and
+  `guatiao/wire`; Go `FromWire`, `ToWire`, `WireAnnounce`/`WireSend`/
+  `WireClose` and `NewReceiver`; Julia `from_wire`, `to_wire` and
+  `Guatiao.Wire`; R `from_wire`, `to_wire`, `wire_announce`/`wire_send`/
+  `wire_close` and `wire_receiver()`; MATLAB and Octave
+  `guatiao.Value.from_wire`, `to_wire` and `guatiao.wire`; Fortran
+  `guatiao_from_wire`, `guatiao_to_wire`, `guatiao_wire_*` and
+  `guatiao_open_receiver`. The encodings page states the frame grammar
+  and the refusals beside the value encoding.
 - **Shared wire vectors**, `crates/guatiao/tests/vectors/wire.json`:
   values with their bytes, malformed inputs with the byte each is refused
   at, the frames the builders write, and a conversation through one

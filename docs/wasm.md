@@ -21,7 +21,8 @@ widths, and the wire encoding is the same bytes on every width.
 C surface the Python and Dart bindings call through a native library. A
 value lives in the module's linear memory; `guatiao_alloc_default()`
 answers the allocator to build it with, and the module exports the
-value, schema and merge functions (not the loader's).
+value, schema, merge and wire functions, channels included (not the
+loader's).
 
 ## Sending values to it
 
@@ -43,3 +44,12 @@ it before handing it over; a value on a channel with no schema, or one
 its schema refuses, is an error naming why. Frames are bytes in, bytes
 out: the transport says where one ends — a length prefix on a
 WebTransport or TCP stream, one datagram, one WebSocket message.
+
+From JavaScript, or any caller of the module's C surface, the frames are
+`guatiao_wire_announce`, `guatiao_wire_send` and `guatiao_wire_close`,
+and the receiver is `guatiao_wire_receiver_new`,
+`guatiao_wire_receiver_accept` and `guatiao_wire_receiver_free`: accept
+writes a `guatiao_wire_event`, laid out in pointer widths as `guatiao.h`
+declares it, saying what the frame was or why it was refused. The grammar,
+the refusals and each language's spelling are on the
+[encodings page](encodings.md#values-on-the-wire).
