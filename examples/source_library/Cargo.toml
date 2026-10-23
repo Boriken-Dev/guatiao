@@ -1,0 +1,20 @@
+[package]
+name = "source_library"
+description = "An example guatiao source written in Rust: guatiao::source! exports it, any host adds the file"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+# Only a cdylib: what a host adds with `add_source_file`.
+crate-type = ["cdylib"]
+
+[dependencies]
+guatiao = { path = "../../crates/guatiao", features = ["provider"] }
+greeter_kind = { path = "../greeter_kind" }
+
+[lints]
+workspace = true

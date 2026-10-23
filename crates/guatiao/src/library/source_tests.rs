@@ -10,7 +10,8 @@
 use std::sync::Mutex;
 
 use super::*;
-use crate::library::kind::{LibraryParts, ProviderParts};
+use crate::library::kind::{LibraryParts, ProviderError, ProviderParts};
+use crate::library::raw::LocalLibrary;
 
 /// A shelf of libraries: what it lists is what the test put there, and
 /// it counts every open and close.

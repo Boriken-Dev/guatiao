@@ -95,6 +95,9 @@ pub mod registry;
 // it feeds. A `//` comment, never a `///`.
 #[cfg(feature = "load")]
 pub mod scan;
+// What a source is: the trait and what it lists. Not behind `load`: a
+// source file exports one and maps nothing. A `//` comment, never a `///`.
+mod serving;
 // Libraries that come and go while the host runs: a source the registry
 // keeps, and `refresh`. Behind `load` with the registry. A `//` comment,
 // never a `///`.
@@ -116,7 +119,7 @@ pub use raw::{
     SOURCE_SYMBOL, SourceFn, answer, read_host,
 };
 #[doc(hidden)]
-pub use raw::{declaration, declaration_len};
+pub use raw::{declaration, declaration_len, source_entry};
 #[cfg(feature = "load")]
 pub use registry::{
     LoadError, Loaded, Loading, Provider, Registry, Retired, Skipped, UnloadError, WhyNot,
@@ -127,5 +130,6 @@ pub use scan::{
     declares_entry_symbol, probe, scan_dir, scan_dir_ordered, scan_dir_rules, scan_dir_with,
     scan_path, scan_path_with,
 };
+pub use serving::{Candidate, Source};
 #[cfg(feature = "load")]
-pub use source::{Candidate, Refreshed, Refused, Served, Source, SourceError};
+pub use source::{Refreshed, Refused, Served, SourceError};

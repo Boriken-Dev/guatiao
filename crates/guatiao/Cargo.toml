@@ -107,6 +107,8 @@ greeter_kind = { path = "../../examples/greeter_kind" }
 hello_library = { path = "../../examples/hello_library" }
 # A library written with no glue.
 derived_greeter = { path = "../../examples/derived_greeter" }
+# A source written in Rust and exported with `source!`.
+source_library = { path = "../../examples/source_library" }
 
 # docs.rs documents every feature.
 [package.metadata.docs.rs]
