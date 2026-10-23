@@ -18,6 +18,7 @@ ships no native code of its own.
 | `guatiao/kinds` | `kind`, `t`, `Implementation`, `Remote`, `ObjectHandle`, `liveObjects` |
 | `guatiao/provide` | `Provider`, `library`, `libraryOf`, `Library`, `s` (configuration schemas) |
 | `guatiao/time` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants, exact lengths |
+| `guatiao/wire` | `announce`, `send`, `close`, `Receiver`, `Frame`, `Event`, the refusals |
 | `guatiao/ffi` | for a package over another guatiao library: `openSurface`, `Surface`, memory, `adopt`, `borrow`, `nodeOf`, `withNodes` |
 
 JSON, TOML and YAML are the package `guatiao-serde`, forms
@@ -368,6 +369,42 @@ new Span({ days: 1, hours: 2 });         // 'P1DT2H'; fields are bigint, nanosec
 - **Text the grammar refuses throws `Unparsed`** (a `BadValue`) with
   `.form`, `.at` (the byte offset in the UTF-8 text) and `.expected`; it
   never quotes the text.
+
+## wire: values as bytes, and channels
+
+`ref.toWire(): Uint8Array` (any `Ref`) and `Value.fromWire(data,
+options?)` are the wire encoding: a tag byte per node, LEB128 lengths, a
+number as its own text, bytes as bytes, a map in its order, the same
+bytes in every language. `fromWire` throws `BadValue` for bytes that are
+not exactly one value.
+
+A channel announces a schema before its values; a receiver checks every
+value against it. A frame is `kind:u8 channel:LEB128 payload`; the
+transport says where one ends.
+
+```ts
+import * as wire from 'guatiao/wire';
+
+const frames = [wire.announce(1, schema), wire.send(1, { greeting: 'hi' }), wire.close(1)];
+using receiver = new wire.Receiver();
+for (const frame of frames) {
+  const event = receiver.accept(frame); // { kind, channel, value }
+  event.value?.close();                 // the schema's copy, or the checked value
+}
+```
+
+- `announce(channel, schema)`, `send(channel, value)` (a `Value`, a `Ref`
+  or plain data), `close(channel)`, each a `Uint8Array`. A channel is
+  `number | bigint`, 0 to 2^64 - 1.
+- `new Receiver()`; `accept(frame: Uint8Array): Event`; `close()` or
+  `using` (a `FinalizationRegistry` is the backstop). `Event`: `kind` a
+  `Frame` (`Frame.SCHEMA` 0, `VALUE` 1, `CLOSE` 2), `channel` a `bigint`,
+  `value` a `Value` the caller closes, or `null`.
+- A refusal throws one of `Refused` (`channel`, `kind`, `message`), each
+  also the status's class: `Malformed` (a `BadValue`, `at` the byte of the
+  frame), `NoSchema` (`NotFound`), `NotASchema` (`WrongKind`), `Invalid`
+  (`BadValue`; `key` the field, `expected` or `known`). It changes nothing
+  the receiver keeps and quotes nothing it was given.
 
 ## Secrets
 
