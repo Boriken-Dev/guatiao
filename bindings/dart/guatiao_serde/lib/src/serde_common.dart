@@ -69,3 +69,9 @@ String parseSymbol(Format format) => 'guatiao_${format.name}_parse_ex';
 
 /// The entry point that writes [format].
 String emitSymbol(Format format) => 'guatiao_${format.name}_emit';
+
+/// The entry point that reads [format] into wire bytes.
+String toWireSymbol(Format format) => 'guatiao_${format.name}_to_wire';
+
+/// The entry point that writes wire bytes as [format].
+String fromWireSymbol(Format format) => 'guatiao_${format.name}_from_wire';

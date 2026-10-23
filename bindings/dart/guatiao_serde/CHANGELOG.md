@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`parse` and `render`: a document straight to plain Dart and back**,
+  answering what `loads(...).toDart()` and `dumps(Value.fromDart(...))`
+  do with no `Value` built: the document crosses once, as wire bytes.
+  Faster than through a `Value` on a structured document, measured
+  locally; on the VM and the web.
 - **A build hook that builds the library from source**: the crate
   `guatiao-serde`, with cargo, for the target being built, bundled with the
   app; nothing when package:guatiao's hook builds the application's own

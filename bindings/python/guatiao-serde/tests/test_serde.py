@@ -103,3 +103,74 @@ def test_a_parse_error_leaves_no_block_allocated():
     with pytest.raises(ParseError):
         serde.loads('{"a": [1,, 2]}', alloc=counting.alloc)
     assert counting.live == 0
+
+
+_DOCUMENTS = {
+    "json": [
+        '{"z": 3, "a": [1.5, true, null, "x", {}, []], "n": 1.10, "e": 1e400}',
+        '[1, -0, 12345678901234567890123, 2.5e-3]',
+        '"text"',
+        "17",
+        '{"blob": "data:;base64,AAEC", "deep": {"a": {"b": {"c": [[[]]]}}}}',
+    ],
+    "toml": ['a = 1\nb = "x"\n[t]\nc = [1.5, true]\n[[arr]]\nd = 2\n'],
+    "yaml": ["a: 1\nb: [x, 2.5, null]\nc:\n  d: true\n", "- 1\n- two\n"],
+}
+
+
+@pytest.mark.parametrize(
+    "format,text", [(f, t) for f, docs in _DOCUMENTS.items() for t in docs]
+)
+@pytest.mark.parametrize("how", [0, serde.READ_DATA_URIS])
+def test_parse_answers_what_loads_then_to_python_answers(format, text, how):
+    for numbers in ("auto", "decimal", "str"):
+        with serde.loads(text, format=format, how=how) as value:
+            expected = value.to_python(numbers=numbers)
+        got = serde.parse(text, format=format, how=how, numbers=numbers)
+        assert got == expected and repr(got) == repr(expected)
+
+
+@pytest.mark.parametrize(
+    "format,text", [(f, t) for f, docs in _DOCUMENTS.items() for t in docs]
+)
+@pytest.mark.parametrize("pretty", [False, True])
+@pytest.mark.parametrize("how", [serde.BYTES_DATA_URI, serde.BYTES_BASE64, serde.BYTES_ARRAY])
+def test_render_writes_what_dumps_of_from_python_writes(format, text, pretty, how):
+    # Decimal keeps 1e400, which a float cannot.
+    obj = serde.parse(text, format=format, how=serde.READ_DATA_URIS, numbers="decimal")
+    with Value.from_python(obj) as value:
+        expected = serde.dumps(value, format=format, pretty=pretty, how=how)
+    assert serde.render(obj, format=format, pretty=pretty, how=how) == expected
+
+
+def test_parse_and_render_refuse_as_loads_and_dumps_do():
+    from guatiao import WrongKind
+    from guatiao_serde import ParseError
+
+    with pytest.raises(ParseError) as caught:
+        serde.parse('{"a":\n 1,,}')
+    assert (caught.value.format, caught.value.line, caught.value.column) == ("json", 2, 4)
+    with pytest.raises(ParseError) as caught:
+        serde.parse("a = = 1", format="toml")
+    assert caught.value.format == "toml"
+    with pytest.raises(WrongKind):
+        serde.render([1, 2], format="toml")
+    with pytest.raises(ValueError):
+        serde.render(float("inf"))
+    with pytest.raises(TypeError):
+        serde.render({1: "x"})
+    with pytest.raises(ValueError):
+        serde.parse("1", format="xml")
+    with pytest.raises(ValueError):
+        serde.parse("1", numbers="float")
+
+
+def test_bytes_render_as_dumps_spells_them():
+    obj = {"b": b"\x00\x01\xff"}
+    with Value.from_python(obj) as value:
+        for how in (serde.BYTES_DATA_URI, serde.BYTES_BASE64, serde.BYTES_ARRAY):
+            assert serde.render(obj, how=how) == serde.dumps(value, how=how)
+        with pytest.raises(Exception) as refused:
+            serde.dumps(value, how=serde.BYTES_REFUSE)
+    with pytest.raises(type(refused.value)):
+        serde.render(obj, how=serde.BYTES_REFUSE)

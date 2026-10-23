@@ -26,6 +26,8 @@ and its errors.
   the format, line and column, and never quotes the document.
 - **Any guatiao value** — what `loads` returns is an ordinary `Value` of
   package:guatiao, and `dumps` takes any `Ref`, whichever library built it.
+- **Or plain Dart, with no value in between** — `parse` answers maps and
+  lists, `render` writes them; the document crosses once.
 
 ## Platforms
 
@@ -80,6 +82,9 @@ final text = serde.dumps(value, format: serde.Format.yaml);
 final pretty = serde.dumps(value, pretty: true);
 value.close();
 
+final config = serde.parse('{"port": 5900}');                 // {port: 5900}
+serde.render(config, format: serde.Format.toml);              // 'port = 5900\n'
+
 try {
   serde.loads('{"port": }');
 } on serde.ParseError catch (error) {
@@ -102,6 +107,8 @@ naming the symbol and its feature. A TOML document must be a map.
 | --- | --- |
 | `loads(text, {format, how, alloc})` | a document as a `Value` |
 | `dumps(value, {format, pretty, how, alloc})` | a `Value` or `Ref` as text |
+| `parse(text, {format, how, numbers})` | a document as plain Dart, no `Value` built |
+| `render(obj, {format, pretty, how})` | plain Dart as text, no `Value` built |
 | `Format`, `ParseError` | the formats, and a document that does not parse |
 | `bytesDataUri`, `bytesBase64`, `bytesArray`, `bytesRefuse`, `readDataUris`, `prettyFlag` | the `how` flags |
 | `library()` | the loaded `guatiao_serde` |

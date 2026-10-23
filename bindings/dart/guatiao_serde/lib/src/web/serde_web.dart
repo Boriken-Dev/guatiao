@@ -6,11 +6,14 @@
 /// the serde surface of the one module the page loaded.
 library;
 
+import 'dart:typed_data';
+
 import 'package:guatiao/wasm.dart';
 
 import '../serde_common.dart';
 
-export '../serde_common.dart' hide emitSymbol, parseSymbol;
+export '../serde_common.dart'
+    hide emitSymbol, fromWireSymbol, parseSymbol, toWireSymbol;
 
 // `guatiao_parse_error` on wasm32: format, line, column, then the message.
 const int _messageAt = 12;
@@ -104,6 +107,70 @@ String dumps(
   var filled = false;
   try {
     checkStatus(m.call(symbol, [value.requireNode(), flags, allocator, out]));
+    filled = true;
+    return takeValue(out)! as String;
+  } finally {
+    if (!filled) freeRoot(out);
+  }
+}
+
+/// Parses [text] as [format] straight into plain Dart, as
+/// `loads(text, format: format, how: how).toDart(numbers: numbers)`
+/// answers it, with no [Value] built: the document crosses once, as wire
+/// bytes, and is read in Dart. Throws as [loads] does.
+Object? parse(
+  String text, {
+  Format format = Format.json,
+  int how = 0,
+  Numbers numbers = Numbers.auto,
+}) {
+  final symbol = toWireSymbol(format);
+  final m = _resolved(symbol, format.feature);
+  final out = m.alloc(valueSize);
+  try {
+    withScratch((s) {
+      final error = s.alloc(_parseErrorSize);
+      try {
+        final status = m.call(symbol, [
+          s.str(text),
+          how,
+          m.defaultAlloc,
+          out,
+          error,
+        ]);
+        finishParse(status, error);
+      } finally {
+        freeNode(error + _messageAt);
+      }
+    });
+  } catch (_) {
+    freeRoot(out);
+    rethrow;
+  }
+  return wireToDart(takeValue(out)! as Uint8List, numbers: numbers);
+}
+
+/// Writes the plain Dart [obj] as [format], as
+/// `dumps(Value.fromDart(obj), ...)` writes it, with no [Value] built: it
+/// is written as wire bytes in Dart and crosses once. Takes what
+/// `Value.fromDart` takes and throws as it does; a TOML document must be
+/// a map.
+String render(
+  Object? obj, {
+  Format format = Format.json,
+  bool pretty = false,
+  int how = 0,
+}) {
+  final symbol = fromWireSymbol(format);
+  final m = _resolved(symbol, format.feature);
+  final flags = pretty ? how | prettyFlag : how;
+  final data = dartToWire(obj);
+  final out = m.alloc(valueSize);
+  var filled = false;
+  try {
+    withScratch((s) {
+      checkStatus(m.call(symbol, [s.view(data), flags, m.defaultAlloc, out]));
+    });
     filled = true;
     return takeValue(out)! as String;
   } finally {

@@ -175,8 +175,8 @@ final v = Value.fromDart({'host': '10.0.0.1'});
   memory readers and writers, `alloc`/`free` over
   `guatiao_memory_alloc`, `defaultAlloc`), `Address`, `I64`,
   `withScratch`/`Scratch` (a call's arguments, released together),
-  `openSurface`, `takeValue`, `freeNode`, `freeRoot`, `strOf`, and the
-  wasm32 layout constants. It imports `dart:js_interop` and exists on the
+  `openSurface`, `takeValue`, `freeNode`, `freeRoot`, `strOf`,
+  `wireToDart`/`dartToWire`, and the wasm32 layout constants. It imports `dart:js_interop` and exists on the
   web only.
 
 ## Values
@@ -468,6 +468,15 @@ package.
   `checkStatus(code, [message])`: throws the status's
   `GuatiaoException`. `Status`, `Tag`, `Value`, `Ref` as in
   `guatiao.dart`.
+- `Object? wireToDart(Uint8List data, {Numbers numbers = Numbers.auto})`:
+  the plain Dart wire bytes hold, read in Dart with no tree built; what
+  `Value.fromWire(data).toDart(numbers:)` answers. For bytes a library
+  just wrote (a call answering a whole document as wire bytes): it checks
+  only that each body is whole (`BadValue` otherwise), so bytes from
+  anywhere else go through `Value.fromWire`. `Uint8List dartToWire(Object?
+  obj)`: the wire bytes of what `Value.fromDart(obj)` would build, the
+  same objects and errors. One crossing per document, where reading a
+  tree costs one per node. Pure Dart, so `wasm.dart` exports both too.
 
 **A tree crosses libraries as its root node**: `Value.adopt(root,
 {alloc})` takes over a `calloc`ed root a call wrote (in `alloc`, default

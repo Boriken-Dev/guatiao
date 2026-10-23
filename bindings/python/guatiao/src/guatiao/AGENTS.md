@@ -522,6 +522,15 @@ value = ffi.adopt(out, lib.alloc)          # a guatiao.Value; it frees the tree
   `borrow(keep, find) -> Ref | None`: a read-only view of the node `find()`
   answers, asked again on every access, keeping `keep` alive.
 - `check(status, message="")`: raises the status's `GuatiaoError`.
+- `to_python(data, numbers="auto") -> Any`: the plain objects wire bytes
+  hold, read in Python with no tree built; what
+  `Value.from_wire(data).to_python(numbers)` answers. For bytes a library
+  just wrote (a call answering a whole document as wire bytes): it checks
+  only that each body is whole (`BadValue` otherwise), so bytes from
+  anywhere else go through `Value.from_wire`. `from_python(obj) -> bytes`:
+  the wire bytes of what `Value.from_python(obj)` would build, the same
+  objects and errors, for a call taking wire bytes. One crossing per
+  document, where reading a tree costs one per node.
 
 **A tree crosses libraries as its root node**: built by one library, it is
 read and freed by any other, since a value records its own allocator. The

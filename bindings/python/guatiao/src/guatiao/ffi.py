@@ -19,7 +19,7 @@ from __future__ import annotations
 import ctypes
 from typing import Any, Callable, Optional
 
-from . import _abi, _lib
+from . import _abi, _lib, _tape
 from ._abi import Alloc, Bytes, Status, Str, Tag
 from ._lib import Library, LibraryNotFound, MissingSymbol, dll_filename, find_library
 from .errors import raise_for_status
@@ -45,9 +45,11 @@ __all__ = [
     "dll_filename",
     "find_library",
     "free",
+    "from_python",
     "node_of",
     "text",
     "text_of",
+    "to_python",
 ]
 
 
@@ -100,3 +102,21 @@ def borrow(keep: Ref, find: Callable[[], Optional[Node]]) -> "Ref | None":
     if find() is None:
         return None
     return Ref(_Borrowed(keep=keep.owner, find=find), ())
+
+
+def to_python(data: "bytes | bytearray", numbers: str = "auto") -> Any:
+    """The plain Python value wire bytes hold, read in Python: what
+    `Value.from_wire(data).to_python(numbers)` answers, with no tree
+    built. For bytes a library just wrote, such as a document read
+    straight into wire bytes: it checks no more than that each body is
+    whole (`guatiao.BadValue` otherwise), so bytes from anywhere else go
+    through `Value.from_wire`."""
+    return _tape.to_python(bytes(data), numbers)
+
+
+def from_python(obj: Any) -> bytes:
+    """The wire bytes of what `Value.from_python(obj)` would build, written
+    in Python with no tree built: the same objects accepted and the same
+    errors raised. For a call that takes wire bytes and writes them out
+    as something else."""
+    return _tape.from_python(obj)

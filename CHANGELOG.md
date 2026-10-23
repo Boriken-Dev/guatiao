@@ -66,6 +66,18 @@ write now.
   no value in between: through callbacks, or through the wire bytes as a
   tape decoded with one crossing. Rust: `text::*::visit_str` hands a
   document to any sink.
+- **Python and Dart: a document straight to plain objects and back.**
+  `guatiao_serde.parse(text, format=, how=, numbers=)` answers what
+  `loads(...).to_python()` does and `render(obj, format=, pretty=, how=)`
+  writes what `dumps(Value.from_python(obj))` does, with no `Value`
+  built; Dart's `parse` and `render` likewise, on the VM and the web. The
+  document crosses once as wire bytes, read and written in the
+  binding's own language by `guatiao.ffi.to_python`/`from_python`
+  (Dart: `wireToDart`/`dartToWire` in `ffi.dart` and `wasm.dart`),
+  which measured faster than a callback per event in both. Measured
+  locally on a structured document: 2.4x to 10x faster in Python and
+  1.4x to 5x in Dart than going through a `Value`; about even on one
+  large string (`benchmarks/README.md`).
 - **A page on configuration files.** Reading a configuration through
   guatiao rather than serde: the TOML text becomes a value, `FromValue`
   makes the type, and the schema and form come from the same derive, so

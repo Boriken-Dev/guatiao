@@ -29,6 +29,8 @@ model and its errors.
 - **Any guatiao value** — what `loads` returns is an ordinary
   `guatiao.Value`, and `dumps` takes any `Value` or `Ref`, whichever
   library built it.
+- **Or plain Python, with no value in between** — `parse` answers dicts
+  and lists, `render` writes them; the document crosses once.
 
 ## Installation
 
@@ -61,6 +63,9 @@ text = serde.dumps(value, format="yaml")
 pretty = serde.dumps(value, pretty=True)
 value.close()
 
+config = serde.parse('{"port": 5900}')                   # {'port': 5900}
+serde.render(config, format="toml")                      # 'port = 5900\n'
+
 try:
     serde.loads('{"port": }')
 except serde.ParseError as error:
@@ -82,6 +87,8 @@ A format the loaded library was built without raises
 | --- | --- |
 | `loads(text, *, format="json", how=0, alloc=None)` | a document as a `guatiao.Value` |
 | `dumps(value, *, format="json", pretty=False, how=0, alloc=None)` | a `Value` or `Ref` as text |
+| `parse(text, *, format="json", how=0, numbers="auto")` | a document as plain Python, no `Value` built |
+| `render(obj, *, format="json", pretty=False, how=0)` | plain Python as text, no `Value` built |
 | `ParseError` | a document that does not parse: `format`, `line`, `column`, `message` |
 | `BYTES_DATA_URI`, `BYTES_BASE64`, `BYTES_ARRAY`, `BYTES_REFUSE`, `READ_DATA_URIS`, `PRETTY` | the `how` flags |
 | `use_library(path)`, `library()` | naming and loading `guatiao_serde` |
