@@ -28,7 +28,11 @@ guatiao-serde = { path = "../../crates/guatiao-serde", features = ["json"] }
 # binary itself does not depend on it: a host names no library.
 derived_greeter = { path = "../derived_greeter" }
 # The docs' migration snippets, and reading a provider's form back.
-guatiao-intake = { path = "../../crates/guatiao-intake" }
+guatiao-intake = { path = "../../crates/guatiao-intake", features = ["derive"] }
+# The configuration page: a configuration read from TOML text through
+# guatiao, holding plugin tables of `toml`'s own type.
+guatiao-serde = { path = "../../crates/guatiao-serde", features = ["toml"] }
+toml = "1"
 
 [lints]
 workspace = true
