@@ -9,7 +9,8 @@
 
 using Guatiao: GAlloc, GStr, GBytes, GBytesMut, GString, GBuffer, GValue, GList, GEntry, GMap,
     GProviderError, GDate, GTime, GDateTime, GTimestamp, GSpan, GTextError, GKindHeader,
-    GObject, GKinds, GKindTable, GKindTables, GProviderInfo, GProviders, GLibraryInfo, GHostInfo
+    GObject, GKinds, GKindTable, GKindTables, GProviderInfo, GProviders, GLibraryInfo, GHostInfo,
+    GWireEvent
 
 const MIRRORS = Dict(
     "guatiao_alloc" => GAlloc, "guatiao_str" => GStr, "guatiao_bytes" => GBytes,
@@ -22,6 +23,7 @@ const MIRRORS = Dict(
     "guatiao_kind_table" => GKindTable, "guatiao_kind_tables" => GKindTables,
     "guatiao_provider_info" => GProviderInfo, "guatiao_providers" => GProviders,
     "guatiao_library_info" => GLibraryInfo, "guatiao_host_info" => GHostInfo,
+    "guatiao_wire_event" => GWireEvent,
 )
 
 const SCALARS = Dict("uint8_t" => 1, "int8_t" => 1, "bool" => 1, "uint16_t" => 2, "int16_t" => 2,

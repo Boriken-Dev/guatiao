@@ -14,14 +14,15 @@ and called with `ccall`.
 
 | name | what |
 | --- | --- |
-| `Guatiao` | `Value`, `ValueRef`, `MapRef`, `ListRef`, `NumberText`, `absent`, `decode`, `schema`, `@config`, `lower`, `redact`, `use_library`, the errors; dates and spans (`Timestamp`, `Span`, `Length`, `fromtext`, `totext`, `normalize`, `readlength`); `Registry`, `Instance`; `@kind`, `Lent`, `Taken`, `bind`; `@provider`, `Provider`, `Library`, `library_of`, `register_library` |
+| `Guatiao` | `Value`, `ValueRef`, `MapRef`, `ListRef`, `NumberText`, `absent`, `decode`, `schema`, `@config`, `lower`, `redact`, `from_wire`, `to_wire`, `use_library`, the errors; dates and spans (`Timestamp`, `Span`, `Length`, `fromtext`, `totext`, `normalize`, `readlength`); `Registry`, `Instance`; `@kind`, `Lent`, `Taken`, `bind`; `@provider`, `Provider`, `Library`, `library_of`, `register_library` |
+| `Guatiao.Wire` | channels: `announce`, `send`, `close` (a frame), `Receiver`, `accept`, `Event`, `Refused` |
 | `Guatiao.FFI` | for a package over another guatiao library: `@cdef`, `surface!`, `find_library`, trees as root nodes |
 
 JSON, TOML and YAML are the package `GuatiaoSerde`, forms
 `GuatiaoIntake`: each over its own library, built on `Guatiao.FFI`.
 
 Exported: `Value`, `ValueRef`, `MapRef`, `ListRef`, `NumberText`,
-`absent`, `decode`, `schema`, `redact`, `GuatiaoError`,
+`absent`, `decode`, `schema`, `redact`, `from_wire`, `to_wire`, `Wire`, `GuatiaoError`,
 `Unparsed`, `LibraryNotFound`, `MissingSymbol`, `FloorMismatch`,
 `Timestamp`, `Span`, `Length`, `Registry`,
 `Instance`, `@kind`, `@provider`, `@required`, `@fallible`, `Lent`,
@@ -207,6 +208,46 @@ any depth, and whatever the schema does not describe is hidden too.
 Local `$ref`s are followed. `schema` and `value` are Values, views or
 plain data; the answer is a new `Value`. `WrongKind` for a schema that is
 not a map.
+
+## Values on the wire, and channels
+
+`to_wire(n) -> Vector{UInt8}` (a `Value` or a view) and
+`from_wire(bytes; alloc) -> Value` are the wire encoding: a tag byte per
+node, LEB128 lengths, a number as its own text, bytes as bytes, a map in
+its order, the same bytes in every language. `from_wire` throws a
+`GuatiaoError` with status `BadValue` for bytes that are not exactly one
+value.
+
+A channel announces a schema before its values; a receiver checks every
+value against it. A frame is `kind:u8 channel:LEB128 payload`; the
+transport says where one ends.
+
+```julia
+frames = [Wire.announce(1, schema), Wire.send(1, Dict("greeting" => "hi")), Wire.close(1)]
+r = Wire.Receiver()
+for frame in frames
+    event = Wire.accept(r, frame)     # Wire.Event(kind, channel, value)
+    event.value === nothing || close(event.value)
+end
+close(r)
+```
+
+- `Wire.announce(channel, schema)`, `Wire.send(channel, value)` (a
+  `Value`, a view or plain data), `Wire.close(channel)`, each a
+  `Vector{UInt8}`; `channel` is any `Integer` from 0 to
+  `typemax(UInt64)`. `Wire.close` writes a frame and is not
+  `Base.close`, which closes a receiver.
+- `Wire.Receiver()`; `Wire.accept(r, frame) -> Wire.Event`; `close(r)`,
+  `isopen(r)` (a finalizer is the backstop; calls on one receiver are
+  serialised by its lock). `Wire.Event`: `kind` (`:schema`, `:value`,
+  `:close`), `channel::UInt64`, `value`: a `Value` the caller closes, or
+  `nothing` for a close.
+- A refusal throws a `Wire.Refused <: GuatiaoException`: `refusal`
+  (`:malformed`, `:no_schema`, `:not_a_schema`, `:invalid`), `status`
+  (`Guatiao.status(e)`: `BadValue`, `NotFound`, `WrongKind`, `BadValue`),
+  `message`, `channel`, `kind` (the frame's byte), `at` (a malformed
+  frame's byte), and for `:invalid` `key`, `expected` or `known`. It
+  changes nothing the receiver keeps and quotes nothing it was given.
 
 ## Registry
 
@@ -491,7 +532,7 @@ the raw number). `Guatiao.Status` is an enum: `OK`, `BadValue`,
 `AllocFailed`, `WrongKind`, `NotFound`, `NullArgument`, `Gone`,
 `Unsupported`, `Busy`, `Internal`, reached as `Guatiao.BadValue` and so
 on. `GuatiaoError(status, message)` builds one. `Unparsed` has
-`Guatiao.status(e) == BadValue`; both are `Guatiao.GuatiaoException`s. `LibraryNotFound`, `MissingSymbol` and
+`Guatiao.status(e) == BadValue`, and `Wire.Refused` its own status; all three are `Guatiao.GuatiaoException`s. `LibraryNotFound`, `MissingSymbol` and
 `FloorMismatch` are this binding's own.
 
 ## Threads

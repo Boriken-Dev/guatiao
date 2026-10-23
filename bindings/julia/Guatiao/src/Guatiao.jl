@@ -22,12 +22,14 @@ include("value.jl")
 include("typed.jl")
 include("time.jl")
 include("redact.jl")
+include("wire.jl")
 include("kinds.jl")
 include("registry.jl")
 include("provide.jl")
 include("ffi.jl")
 
 export Value, ValueRef, MapRef, ListRef, NumberText, absent, decode, schema, redact,
+    from_wire, to_wire, Wire,
     GuatiaoError, Unparsed, LibraryNotFound, MissingSymbol, FloorMismatch,
     Timestamp, Span, Length,
     Registry, Instance, @kind, @provider, @required, @fallible, Lent, Taken

@@ -241,6 +241,16 @@ const P = Ptr{Cvoid}
 @cdef "guatiao" "" :plain guatiao_schema_validate(schema::PV, config::PV, a::PA, out::PV)::UInt32
 @cdef "guatiao" "" :plain guatiao_schema_redact(schema::PV, value::PV, placeholder::GStr, a::PA, out::PV)::UInt32
 
+# ---- the wire encoding and channels --------------------------------------------
+@cdef "guatiao" "" :plain guatiao_wire_encode(a::PA, value::PV, out::PV)::UInt32
+@cdef "guatiao" "" :plain guatiao_wire_decode(a::PA, b::GBytes, out::PV)::UInt32
+@cdef "guatiao" "" :plain guatiao_wire_announce(a::PA, channel::UInt64, schema::PV, out::PV)::UInt32
+@cdef "guatiao" "" :plain guatiao_wire_send(a::PA, channel::UInt64, value::PV, out::PV)::UInt32
+@cdef "guatiao" "" :plain guatiao_wire_close(a::PA, channel::UInt64, out::PV)::UInt32
+@cdef "guatiao" "" :plain guatiao_wire_receiver_new(a::PA)::P
+@cdef "guatiao" "" :plain guatiao_wire_receiver_accept(recv::P, frame::GBytes, event::Ptr{GWireEvent})::UInt32
+@cdef "guatiao" "" :plain guatiao_wire_receiver_free(recv::P)::Cvoid
+
 # ---- dates, times, spans, exact lengths --------------------------------------
 for (form, T) in ((:date, GDate), (:time, GTime), (:datetime, GDateTime), (:timestamp, GTimestamp), (:span, GSpan))
     parse_name = Symbol("guatiao_", form, "_parse")

@@ -213,6 +213,17 @@ struct GHostInfo
     services::Ptr{Cvoid}
 end
 
+"`guatiao_wire_event`: what one channel frame said, or why it was refused; its three values are the caller's."
+struct GWireEvent
+    channel::UInt64
+    kind::UInt32
+    refusal::UInt32
+    at::Csize_t
+    value::GValue
+    message::GValue
+    detail::GValue
+end
+
 const PAYLOAD = 8   # offset of the payload in a guatiao_value
 const ENTRY_VALUE = 32  # offset of the value in a guatiao_entry
 
@@ -221,7 +232,7 @@ for (T, n) in ((GAlloc, 40), (GStr, 16), (GBytes, 16), (GBytesMut, 16), (GString
     (GProviderError, 40), (GDate, 8), (GTime, 8), (GDateTime, 16),
     (GTimestamp, 16), (GSpan, 64), (GTextError, 48), (GKindHeader, 8), (GObject, 24),
     (GKinds, 16), (GKindTable, 32), (GKindTables, 24), (GProviderInfo, 152),
-    (GProviders, 24), (GLibraryInfo, 80), (GHostInfo, 64))
+    (GProviders, 24), (GLibraryInfo, 80), (GHostInfo, 64), (GWireEvent, 144))
     sizeof(T) == n || error("$(T) is $(sizeof(T)) bytes, the header's is $n: a 64-bit platform is required")
 end
 
