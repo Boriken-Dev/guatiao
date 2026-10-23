@@ -91,11 +91,75 @@ with only a few of the environment's variables, so `GUATIAO_LIBRARY`
 cannot switch the build off; at run time it still wins over the library a
 hook bundled.
 
+## Kinds and providers as classes
+
+A kind crate commits its kinds' [description](encodings.md#a-kind-described)
+beside their C header. Dart never declares them again: the `guatiao`
+package writes the Dart for a description, which you commit.
+
+```bash
+dart run guatiao:kind greeter_kind.kinds.json -o lib/greeter_kind.dart
+```
+
+For each kind it writes an abstract interface class of its required
+slots (`Greeter`), one per slot appended after them (`GreeterShout`), a
+remote class a caller holds (`GreeterRemote`), and the kind as the
+interface's static `kind`.
+
+**As a host**, a provider's table is called through the remote:
+
+```dart
+import 'package:guatiao/guatiao.dart';
+import 'greeter_kind.dart';
+
+final reg = Registry('my-host', '1.0')..scanDir(dir, rules: 'kind=greeter');
+final greeter = reg.bind('acme_hello', Greeter.kind);
+final answer = greeter.greet('ana');            // a Value: close it
+if (greeter.has('shout')) print(greeter.shout('ana'));
+```
+
+**As a provider**, a class extends `Provider` and implements the
+interfaces of what it serves, which is what the analyzer checks: a
+missing required method, or a method taking or answering the wrong type,
+does not compile. A `Library` offers it to any host in the process, a
+Rust or C caller included:
+
+```dart
+import 'package:guatiao/kinds.dart';
+import 'greeter_kind.dart';
+import 'src/library_identity.g.dart';   // dart run guatiao:kind identity
+
+final class Hello extends Provider implements Greeter, GreeterShout {
+  @override
+  Map<String, Object?> greet(String name) => {'greeting': 'hello, $name'};
+
+  @override
+  String shout(String name) => 'HELLO, ${name.toUpperCase()}';
+}
+
+final library = Library.of(packageLibrary, offers: [
+  Offer.single(Hello(), named: 'hello', kinds: [Greeter.kind]),
+]);
+reg.registerLibrary(library);           // my_package_hello
+```
+
+`dart run guatiao:kind identity` writes the library's id and version from
+`pubspec.yaml`, which an AOT program cannot read. `Offer.configured`
+builds an instance per configuration the host checked against a schema.
+Dart objects cross as objects of a kind both ways: a listener a host
+lends, a conversation a provider hands back.
+
+A table served from Dart runs on the thread of the isolate that built
+it; a library calling it from another thread ends the process, as Dart
+does for every isolate-local callback. In a Flutter app, import the
+generated file with a prefix: Flutter has a `Listener` of its own.
+
 ## The example
 
 `examples/flutter_app` in the repository is a Flutter app using the three
 packages from the checkout. It builds a value, writes it as JSON, reads it
-back, finds a field by its path, and prints where each library was loaded
+back, finds a field by its path, serves a greeter written in Dart and
+calls it back through its table, and prints where each library was loaded
 from:
 
 ```bash
@@ -106,7 +170,12 @@ GUATIAO_EXAMPLE_EXIT=1 build/windows/x64/runner/Release/flutter_app.exe
 
 ```text
 guatiao example: json {"host":"10.0.0.1","port":5900,"agent":[{"name":"first"},{"name":"second"}]}, agent[1].name second
+guatiao example: kinds: greeter {greeting: hello, ana}, heard [hello, bo]
 guatiao example: libraries: guatiao ...\guatiao.dll; guatiao_serde ...\guatiao_serde.dll; guatiao_intake ...\guatiao_intake.dll
 ```
 
-On Android the same two lines are in the log under the `flutter` tag.
+On Android the same three lines are in the log under the `flutter` tag.
+`examples/dart_host` and `examples/dart_provider` are a host and a
+library in plain Dart: the host calls greeters written in Rust, C, Python
+and Dart through the classes, and has a Rust caller call the Dart one;
+`dart build cli` makes it an AOT executable.
