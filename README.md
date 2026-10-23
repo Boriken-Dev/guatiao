@@ -140,6 +140,7 @@ here.
 | [`guatiao-derive`](https://crates.io/crates/guatiao-derive) | `#[derive(ToValue, FromValue, Schema)]` and the provider derives, reached through `guatiao`'s features |
 | [`guatiao-serde`](https://crates.io/crates/guatiao-serde) | a value in and out of JSON, TOML and YAML, and the same through a C surface |
 | [`guatiao-intake`](https://crates.io/crates/guatiao-intake) | taking a value in from a person: the path grammar, flat key-to-text storage, and how a schema is shown as a form |
+| [`guatiao-bridge`](https://crates.io/crates/guatiao-bridge) | what every bridge to a language runtime shares: the engine and its thread, manifests, the source, kinds served from their descriptions |
 
 ## Development
 
