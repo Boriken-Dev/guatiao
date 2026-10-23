@@ -2,24 +2,18 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-/// `guatiao_serde` against a real `--all-features` build.
+/// `guatiao_serde` against a real `--all-features` build, or the module.
 library;
 
-import 'dart:ffi';
-
-import 'package:ffi/ffi.dart';
-import 'package:guatiao/ffi.dart' show openSurface, strOf;
 import 'package:guatiao/guatiao.dart';
 import 'package:guatiao_serde/guatiao_serde.dart' as serde;
 import 'package:guatiao_serde/guatiao_serde.dart' show Format, ParseError;
-import 'package:guatiao_serde/src/bindings.g.dart' show guatiao_parse_error;
-import 'package:guatiao_serde/src/serde.dart' as inner;
 import 'package:test/test.dart';
 
 import 'support.dart';
 
 void main() {
-  setUpAll(libraryDir);
+  setUpAll(setUpLibrary);
 
   test('a JSON round trip keeps key order and integers', () {
     final doc = Value.fromDart({
@@ -118,36 +112,6 @@ void main() {
         isA<ParseError>()
             .having((e) => e.format, 'format', Format.yaml)
             .having((e) => e.line, 'line', 1),
-      ),
-    );
-  });
-
-  test('a refusal that is not a syntax error keeps its message', () {
-    final error = calloc<guatiao_parse_error>();
-    addTearDown(() => calloc.free(error));
-    final core = openSurface('guatiao');
-    // `message` is the last field of the struct.
-    final message = (error.cast<Uint8>() +
-            (sizeOf<guatiao_parse_error>() - sizeOf<guatiao_value>()))
-        .cast<guatiao_value>();
-    using((arena) {
-      expect(
-        core.bindings.guatiao_value_string(
-          core.alloc,
-          strOf(arena, 'the library words this itself').ref,
-          message,
-        ),
-        0,
-      );
-    });
-    expect(
-      () => inner.finishParse(Status.wrongKind.code, error),
-      throwsA(
-        isA<WrongKind>().having(
-          (e) => e.message,
-          'message',
-          'the library words this itself',
-        ),
       ),
     );
   });

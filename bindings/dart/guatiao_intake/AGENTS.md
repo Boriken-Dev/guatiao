@@ -4,8 +4,8 @@ Taking a value in from a person, over the `guatiao_intake` C ABI:
 https://github.com/Boriken-Dev/guatiao/
 Self-contained — this file ships with the package, so it names no repo path.
 Built on package:guatiao (`Value`, `Ref`, its errors,
-`package:guatiao/ffi.dart`), at the same version. 64-bit platforms only,
-not on the web.
+`package:guatiao/ffi.dart`), at the same version. 64-bit native platforms,
+and the web over the module the page loaded (below).
 
 ## Finding the native library
 
@@ -27,6 +27,17 @@ library, through package:guatiao's `openSurface('guatiao_intake')`:
 Not found throws `LibraryNotFound` naming every route. `library()`
 answers the opened `NativeLib`. The library carries the core too, so one
 file can serve both packages.
+
+## On the web
+
+The same functions under dart2js and dart2wasm, through the one
+WebAssembly module the page loaded with package:guatiao's `loadModule`:
+every surface is called in that module, since a value lives in its
+memory. The module must carry this surface (`guatiao_intake_check`): an
+application's own crate built with it, or for forms
+`guatiao_intake.wasm` itself. Without it every function throw `LibraryNotFound`.
+`library()` answers the module (`WasmModule`), and every `alloc:` is an
+`Address` (package:guatiao/wasm.dart) rather than a `Pointer`.
 
 ## Forms
 

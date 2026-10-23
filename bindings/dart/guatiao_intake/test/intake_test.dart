@@ -22,7 +22,7 @@ const _schema = <String, Object?>{
 };
 
 void main() {
-  setUpAll(libraryDir);
+  setUpAll(setUpLibrary);
 
   late Value schema;
   late Value blank;

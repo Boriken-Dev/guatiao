@@ -6,37 +6,11 @@ import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
 import 'package:guatiao/ffi.dart';
-import 'package:guatiao/guatiao.dart' show BadValue;
 
 import 'bindings.g.dart' hide guatiao_alloc, guatiao_str, guatiao_value;
+import 'serde_common.dart';
 
-/// A text format `guatiao_serde` reads and writes.
-enum Format {
-  json,
-  toml,
-  yaml;
-
-  /// The build feature the format needs, or `null` when every build has
-  /// it.
-  String? get feature => this == Format.json ? null : name;
-}
-
-/// How a byte string is spelled where the format has none: the low byte
-/// of `how`.
-const int bytesDataUri = GUATIAO_BYTES_DATA_URI;
-const int bytesBase64 = GUATIAO_BYTES_BASE64;
-const int bytesArray = GUATIAO_BYTES_ARRAY;
-const int bytesRefuse = GUATIAO_BYTES_REFUSE;
-
-/// Turns a `data:;base64,...` string back into bytes when reading.
-const int readDataUris = GUATIAO_READ_DATA_URIS;
-
-/// Indents the output for a person to read. JSON only; ignored elsewhere.
-const int prettyFlag = GUATIAO_PRETTY;
-
-String _parseSymbol(Format format) => 'guatiao_${format.name}_parse_ex';
-
-String _emitSymbol(Format format) => 'guatiao_${format.name}_emit';
+export 'serde_common.dart' hide emitSymbol, parseSymbol;
 
 /// The `guatiao_serde` library, opened on first use: the one registered
 /// for it with `useLibrary` (package:guatiao), else
@@ -68,39 +42,6 @@ NativeLib _resolved(String symbol, String? feature) {
   return lib;
 }
 
-/// A document that does not parse, and where it stopped.
-///
-/// It is a [BadValue] (what a malformed document threw before) and a
-/// [FormatException], so either catch finds it. [format] is the format
-/// that refused the document; [line] and [column] count from 1 (the
-/// column in characters) and are 0 when the parser did not say where,
-/// and for text that is not UTF-8 they name its first bad byte.
-/// [message] says what the parser expected and never quotes the
-/// document, so [source] and [offset] are `null`.
-class ParseError extends BadValue implements FormatException {
-  ParseError(
-    String message, {
-    required this.format,
-    required this.line,
-    required this.column,
-  }) : super(Status.badValue.code, message);
-
-  final Format format;
-  final int line;
-  final int column;
-
-  @override
-  dynamic get source => null;
-
-  @override
-  int? get offset => null;
-
-  @override
-  String toString() => line == 0
-      ? 'ParseError (${format.name}): $message'
-      : 'ParseError (${format.name}): $message at line $line, column $column';
-}
-
 /// Parses `text` as `format` into a new [Value].
 ///
 /// A document that does not parse throws [ParseError].
@@ -110,7 +51,7 @@ Value loads(
   int how = 0,
   Pointer<guatiao_alloc>? alloc,
 }) {
-  final symbol = _parseSymbol(format);
+  final symbol = parseSymbol(format);
   final lib = _resolved(symbol, format.feature);
   final serde = _bindingsOf(lib);
   final allocator = alloc ?? lib.alloc;
@@ -183,7 +124,7 @@ String dumps(
   // flag and ignore it.
   final wantsJsonPretty = pretty && format == Format.json;
   final symbol =
-      wantsJsonPretty ? 'guatiao_json_emit_pretty' : _emitSymbol(format);
+      wantsJsonPretty ? 'guatiao_json_emit_pretty' : emitSymbol(format);
   final lib = _resolved(symbol, format.feature);
   final serde = _bindingsOf(lib);
   final allocator = alloc ?? lib.alloc;

@@ -28,7 +28,7 @@ List<Value> _churn() => [
     ];
 
 void main() {
-  setUpAll(libraryDir);
+  setUpAll(setUpLibrary);
 
   test('a resolved field is refused once its schema is closed', () {
     final schema = Value.fromDart(_schema);

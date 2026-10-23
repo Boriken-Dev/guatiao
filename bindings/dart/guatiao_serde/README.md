@@ -29,9 +29,10 @@ and its errors.
 
 ## Platforms
 
-Android, iOS, Linux, macOS and Windows, on 64-bit targets only, as
-package:guatiao. **Not on the web**: `dart:ffi` does not exist in a
-browser. The package asks for Dart 3.6 or newer.
+Android, iOS, Linux, macOS and Windows on 64-bit targets, as
+package:guatiao; and **the web**, through the one WebAssembly module the
+page loads with package:guatiao's `loadModule`, which must carry this
+package's surface. The package asks for Dart 3.6 or newer.
 
 ## Installation
 
@@ -81,7 +82,7 @@ naming the symbol and its feature. A TOML document must be a map.
 
 - Reading JSON writes an exponent's sign: `1e400` parses as `1e+400`.
   Everything else about a number's text survives a round trip.
-- 64-bit platforms only, and not in a browser.
+- 64-bit native platforms only; on the web, the page's one module.
 
 ## API overview
 

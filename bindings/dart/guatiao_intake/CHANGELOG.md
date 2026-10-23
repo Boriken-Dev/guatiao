@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The web**: every function through the module the page loaded
+  (`guatiao_intake.wasm`, or an application's own build).
 - The package, taken out of package:guatiao, where it was
   `package:guatiao/intake.dart`: the same functions, over the
   `guatiao_intake` library, which it finds through

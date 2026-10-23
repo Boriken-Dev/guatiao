@@ -9,10 +9,7 @@ import 'package:guatiao/ffi.dart';
 
 import 'bindings.g.dart' hide guatiao_alloc, guatiao_str, guatiao_value;
 
-/// The key of a provider's `meta` holding its form document: read it with
-/// `Registry.providerMeta` (package:guatiao), then [check] it against
-/// `providerConfig`.
-const String providerFormKey = GUATIAO_INTAKE_PROVIDER_FORM_KEY;
+export 'intake_common.dart';
 
 /// The `guatiao_intake` library, opened on first use: the one registered
 /// for it with `useLibrary` (package:guatiao), else
