@@ -61,7 +61,9 @@ fn from_walk_head(name: &Ident, generics: &syn::Generics) -> TokenStream {
     )
 }
 
-/// The field, walking itself or walked as its tree.
+/// The field, walking itself or walked as its tree. Clippy reads the
+/// autoref as a needless borrow at the field's span, so every function
+/// using it allows `clippy::needless_borrow`.
 fn walkable(access: &TokenStream, ty: &Type) -> TokenStream {
     quote_spanned! {ty.span()=>
         &(&&::guatiao::__private::Field(#access)).__walkable()
@@ -246,6 +248,7 @@ fn walk_map(name: &Ident, generics: &syn::Generics, plan: &[FieldPlan]) -> Token
     let entries = written.iter().map(|f| entry(f));
     quote! {
         #head {
+            #[allow(clippy::needless_borrow)]
             fn walk<__V: ::guatiao::value::visit::Visitor>(
                 &self,
                 __visitor: __V,
@@ -348,6 +351,7 @@ fn read_map(
     });
     quote! {
         #read_head {
+            #[allow(clippy::needless_borrow)]
             fn read_map<__M: ::guatiao::value::visit::MapWalker>(
                 mut __entries: __M,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
@@ -384,6 +388,7 @@ fn read_map(
         }
 
         #from_head {
+            #[allow(clippy::needless_borrow)]
             fn from_walk<__W: ::guatiao::value::visit::Walker>(
                 __walker: __W,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
@@ -411,6 +416,7 @@ fn newtype(
         let field = walkable(&quote! { &self.#member }, ty);
         return quote! {
             #head {
+                #[allow(clippy::needless_borrow)]
                 fn walk<__V: ::guatiao::value::visit::Visitor>(
                     &self,
                     __visitor: __V,
@@ -435,6 +441,7 @@ fn newtype(
     };
     quote! {
         #head {
+            #[allow(clippy::needless_borrow)]
             fn from_walk<__W: ::guatiao::value::visit::Walker>(
                 __walker: __W,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
@@ -457,6 +464,7 @@ fn tuple(derive: Derive, name: &Ident, generics: &syn::Generics, fields: &[&Fiel
         });
         return quote! {
             #head {
+                #[allow(clippy::needless_borrow)]
                 fn walk<__V: ::guatiao::value::visit::Visitor>(
                     &self,
                     __visitor: __V,
@@ -486,6 +494,7 @@ fn tuple(derive: Derive, name: &Ident, generics: &syn::Generics, fields: &[&Fiel
     let indices = 0..n;
     quote! {
         #read_head {
+            #[allow(clippy::needless_borrow)]
             fn read_list<__L: ::guatiao::value::visit::ListWalker>(
                 mut __items: __L,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
@@ -512,6 +521,7 @@ fn tuple(derive: Derive, name: &Ident, generics: &syn::Generics, fields: &[&Fiel
         }
 
         #from_head {
+            #[allow(clippy::needless_borrow)]
             fn from_walk<__W: ::guatiao::value::visit::Walker>(
                 __walker: __W,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
@@ -529,6 +539,7 @@ fn unit(derive: Derive, name: &Ident, generics: &syn::Generics) -> TokenStream {
         let head = walk_head(name, generics);
         return quote! {
             #head {
+                #[allow(clippy::needless_borrow)]
                 fn walk<__V: ::guatiao::value::visit::Visitor>(
                     &self,
                     __visitor: __V,
@@ -541,6 +552,7 @@ fn unit(derive: Derive, name: &Ident, generics: &syn::Generics) -> TokenStream {
     let head = from_walk_head(name, generics);
     quote! {
         #head {
+            #[allow(clippy::needless_borrow)]
             fn from_walk<__W: ::guatiao::value::visit::Walker>(
                 __walker: __W,
             ) -> ::core::result::Result<Self, ::guatiao::MapError> {
