@@ -540,9 +540,11 @@ Every struct shape is accepted, as serde writes it: a newtype (or
 position (`prefixItems`), a unit struct a null; a generic type's
 parameters are each bound by the trait derived. `#[map(flatten)]`,
 `#[map(with = path)]`, `#[map(skip_serializing_if = path)]` and
-`#[map(deny_unknown_fields)]` mean what serde's do; the full list, and
-what is refused (`alias`, a union), is in
-`guatiao-derive`'s `AGENTS.md`.
+`#[map(deny_unknown_fields)]` mean what serde's do; `#[map(as_text)]`
+writes a field with `Display`, reads it with `FromStr` and describes it
+as a string, for a type with no value traits of its own. The full list,
+and what is refused (`alias`, a union), is in `guatiao-derive`'s
+`AGENTS.md`.
 
 Enums, in three shapes:
 
