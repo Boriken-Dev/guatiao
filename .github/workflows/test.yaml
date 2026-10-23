@@ -1154,7 +1154,7 @@ jobs:
         sdk: [stable]
         include:
           - os: ubuntu-latest
-            sdk: '3.6.0'
+            sdk: '3.10.0'
     steps:
       - uses: actions/checkout@v4
         with:

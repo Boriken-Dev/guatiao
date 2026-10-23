@@ -61,12 +61,27 @@ Value loads(
     using((arena) {
       final view = strOf(arena, text).ref;
       final status = switch (format) {
-        Format.json =>
-          serde.guatiao_json_parse_ex(view, how, allocator, out, error),
-        Format.toml =>
-          serde.guatiao_toml_parse_ex(view, how, allocator, out, error),
-        Format.yaml =>
-          serde.guatiao_yaml_parse_ex(view, how, allocator, out, error),
+        Format.json => serde.guatiao_json_parse_ex(
+          view,
+          how,
+          allocator,
+          out,
+          error,
+        ),
+        Format.toml => serde.guatiao_toml_parse_ex(
+          view,
+          how,
+          allocator,
+          out,
+          error,
+        ),
+        Format.yaml => serde.guatiao_yaml_parse_ex(
+          view,
+          how,
+          allocator,
+          out,
+          error,
+        ),
       };
       finishParse(status, error);
     });
@@ -123,8 +138,9 @@ String dumps(
   // JSON has a dedicated pretty entry point; the other formats take the
   // flag and ignore it.
   final wantsJsonPretty = pretty && format == Format.json;
-  final symbol =
-      wantsJsonPretty ? 'guatiao_json_emit_pretty' : emitSymbol(format);
+  final symbol = wantsJsonPretty
+      ? 'guatiao_json_emit_pretty'
+      : emitSymbol(format);
   final lib = _resolved(symbol, format.feature);
   final serde = _bindingsOf(lib);
   final allocator = alloc ?? lib.alloc;

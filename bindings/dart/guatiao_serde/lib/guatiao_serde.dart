@@ -11,5 +11,6 @@
 /// lazy, so importing touches no library.
 library;
 
-export 'src/serde.dart' if (dart.library.js_interop) 'src/web/serde_web.dart'
+export 'src/serde.dart'
+    if (dart.library.js_interop) 'src/web/serde_web.dart'
     hide finishParse;

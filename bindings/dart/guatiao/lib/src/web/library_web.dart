@@ -18,7 +18,7 @@ String dllFilename(String basename) => '$basename.wasm';
 const List<String> surfaces = <String>[
   'guatiao',
   'guatiao_serde',
-  'guatiao_intake'
+  'guatiao_intake',
 ];
 
 /// A directory to look in, on the VM. A page has none: set or not, it
@@ -41,8 +41,10 @@ Future<void> loadModule(Uri url) async {
 }
 
 /// [bytes], a module's whole file, made the one every surface uses.
-Future<void> loadModuleBytes(List<int> bytes,
-    {String source = '<bytes>'}) async {
+Future<void> loadModuleBytes(
+  List<int> bytes, {
+  String source = '<bytes>',
+}) async {
   _refuseSecond();
   await WasmModule.fromBytes(bytes, source);
 }
@@ -71,8 +73,11 @@ WasmModule openSurface(String basename, {String? variable, String? probe}) {
   }
   final symbol = probe ?? _probe[basename];
   if (symbol != null && !module.provides(symbol)) {
-    throw LibraryNotFound(basename, dllFilename(basename),
-        '${module.source} does not export $symbol');
+    throw LibraryNotFound(
+      basename,
+      dllFilename(basename),
+      '${module.source} does not export $symbol',
+    );
   }
   return module;
 }
@@ -83,6 +88,6 @@ WasmModule core() => openSurface('guatiao');
 /// Throws [Unsupported]: what [feature] names needs files and a loader,
 /// which a page does not have.
 Never unsupportedOnTheWeb(String feature) => throw Unsupported(
-      Status.unsupported.code,
-      '$feature is not available on the web: a browser maps no libraries',
-    );
+  Status.unsupported.code,
+  '$feature is not available on the web: a browser maps no libraries',
+);

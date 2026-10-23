@@ -28,8 +28,17 @@ Value redact(
   try {
     final schemaNode = nodeOf(schema);
     final valueNode = nodeOf(value);
-    withScratch((s) => checkStatus(m.call('guatiao_schema_redact',
-        [schemaNode, valueNode, s.str(placeholder), allocator, out])));
+    withScratch(
+      (s) => checkStatus(
+        m.call('guatiao_schema_redact', [
+          schemaNode,
+          valueNode,
+          s.str(placeholder),
+          allocator,
+          out,
+        ]),
+      ),
+    );
   } catch (_) {
     freeRoot(out);
     rethrow;

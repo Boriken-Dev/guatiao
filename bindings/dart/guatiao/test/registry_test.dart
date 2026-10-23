@@ -74,7 +74,9 @@ void main() {
     addTearDown(reg.close);
     expect(reg.available('greeter'), isNotEmpty);
     expect(
-        reg.provider('derived_greeter_hello')['id'], 'derived_greeter_hello');
+      reg.provider('derived_greeter_hello')['id'],
+      'derived_greeter_hello',
+    );
     expect(reg.libraries(), isNotEmpty);
   });
 

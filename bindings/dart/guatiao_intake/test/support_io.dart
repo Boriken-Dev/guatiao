@@ -21,8 +21,9 @@ String libraryDir() {
   if (cached != null) return cached;
   final env = Platform.environment['GUATIAO_LIBRARY'];
   if (env != null && env.isNotEmpty) {
-    return _libraryDir =
-        Directory(env).existsSync() ? env : File(env).parent.path;
+    return _libraryDir = Directory(env).existsSync()
+        ? env
+        : File(env).parent.path;
   }
   final found = _workspaceTargetDebug();
   guatiao.libraryDirectory = found;
@@ -38,9 +39,11 @@ String? namedLibraryFile() {
 }
 
 /// The repository root, found by walking up from this package.
-String repoRoot() => _walkUp((dir) =>
-    Directory('${dir.path}${Platform.pathSeparator}crates').existsSync() &&
-    File('${dir.path}${Platform.pathSeparator}Cargo.toml').existsSync());
+String repoRoot() => _walkUp(
+  (dir) =>
+      Directory('${dir.path}${Platform.pathSeparator}crates').existsSync() &&
+      File('${dir.path}${Platform.pathSeparator}Cargo.toml').existsSync(),
+);
 
 String _workspaceTargetDebug() {
   final root = repoRoot();

@@ -590,6 +590,9 @@ write now.
 
 ### Changed
 
+- **Breaking: the Dart packages need Dart 3.10** (Flutter 3.38), the
+  first with build hooks; they asked for 3.6. *Migration:* raise the
+  application's `sdk:` constraint to `^3.10.0`.
 - **Breaking: every binding's packages live in
   `bindings/<language>/<name>`**, each directory named as its registry
   spells the package: `bindings/python/guatiao`, `bindings/dart/guatiao_serde`,

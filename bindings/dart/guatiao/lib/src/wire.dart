@@ -4,7 +4,8 @@
 
 import 'status.dart';
 
-export 'wire_native.dart' if (dart.library.js_interop) 'web/wire_web.dart'
+export 'wire_native.dart'
+    if (dart.library.js_interop) 'web/wire_web.dart'
     show Event, Receiver, announce, close, send;
 
 /// A frame's kind byte: `GUATIAO_FRAME_*`.

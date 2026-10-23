@@ -26,20 +26,29 @@ void main() {
   test('a second module is refused while one is loaded', () async {
     await expectLater(
       loadModule(await moduleUrl()),
-      throwsA(isA<StateError>()
-          .having((e) => e.message, 'message', contains('loaded already'))),
+      throwsA(
+        isA<StateError>().having(
+          (e) => e.message,
+          'message',
+          contains('loaded already'),
+        ),
+      ),
     );
   });
 
   test('the registry and kind tables throw Unsupported, saying why', () {
     final refusal = isA<Unsupported>().having(
-        (e) => e.message, 'message', contains('a browser maps no libraries'));
+      (e) => e.message,
+      'message',
+      contains('a browser maps no libraries'),
+    );
     expect(() => Registry('page', '1.0'), throwsA(refusal));
     expect(
       () => kindTable<Object>(
-          const ProviderTable(Address.none, 0, Address.none),
-          floorHash: 0,
-          floorSize: 0),
+        const ProviderTable(Address.none, 0, Address.none),
+        floorHash: 0,
+        floorSize: 0,
+      ),
       throwsA(refusal),
     );
   });
@@ -82,8 +91,13 @@ void main() {
     // The smallest valid module: the magic number and version 1.
     await expectLater(
       loadModuleBytes(const [0, 0x61, 0x73, 0x6d, 1, 0, 0, 0]),
-      throwsA(isA<ArgumentError>().having(
-          (e) => e.message, 'message', contains('exports no guatiao surface'))),
+      throwsA(
+        isA<ArgumentError>().having(
+          (e) => e.message,
+          'message',
+          contains('exports no guatiao surface'),
+        ),
+      ),
     );
   });
 }

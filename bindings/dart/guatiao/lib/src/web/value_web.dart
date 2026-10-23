@@ -145,8 +145,10 @@ Object? _nodeToDart(Address node, Numbers numbers) {
       final out = <String, Object?>{};
       for (var i = 0; i < len; i++) {
         final entry = _entryAt(node, i);
-        out[utf8.decode(_entryKey(entry))] =
-            _nodeToDart(entry + entryValueAt, numbers);
+        out[utf8.decode(_entryKey(entry))] = _nodeToDart(
+          entry + entryValueAt,
+          numbers,
+        );
       }
       return out;
   }
@@ -199,28 +201,39 @@ void _writeDart(Address raw, Object? obj, Address alloc) {
   }
   if (obj is num || obj is BigInt) {
     final text = _textForNumber(obj);
-    withScratch((s) =>
-        checkStatus(m.call('guatiao_value_number', [alloc, s.str(text), raw])));
+    withScratch(
+      (s) => checkStatus(
+        m.call('guatiao_value_number', [alloc, s.str(text), raw]),
+      ),
+    );
     return;
   }
   if (obj is String) {
-    withScratch((s) =>
-        checkStatus(m.call('guatiao_value_string', [alloc, s.str(obj), raw])));
+    withScratch(
+      (s) =>
+          checkStatus(m.call('guatiao_value_string', [alloc, s.str(obj), raw])),
+    );
     return;
   }
   if (obj is TypedData) {
     final data = obj is Uint8List
         ? obj
         : Uint8List.view(obj.buffer, obj.offsetInBytes, obj.lengthInBytes);
-    withScratch((s) =>
-        checkStatus(m.call('guatiao_value_bytes', [alloc, s.view(data), raw])));
+    withScratch(
+      (s) => checkStatus(
+        m.call('guatiao_value_bytes', [alloc, s.view(data), raw]),
+      ),
+    );
     return;
   }
   if (obj is List) {
     checkStatus(m.call('guatiao_value_list', [alloc, raw]));
     for (final item in obj) {
-      _buildInto(alloc, item,
-          (tmp) => checkStatus(m.call('guatiao_list_push', [alloc, raw, tmp])));
+      _buildInto(
+        alloc,
+        item,
+        (tmp) => checkStatus(m.call('guatiao_list_push', [alloc, raw, tmp])),
+      );
     }
     return;
   }
@@ -234,14 +247,20 @@ void _writeDart(Address raw, Object? obj, Address alloc) {
       _buildInto(
         alloc,
         entry.value,
-        (tmp) => withScratch((s) => checkStatus(
-            m.call('guatiao_map_set', [alloc, raw, s.str(key), tmp]))),
+        (tmp) => withScratch(
+          (s) => checkStatus(
+            m.call('guatiao_map_set', [alloc, raw, s.str(key), tmp]),
+          ),
+        ),
       );
     }
     return;
   }
   throw ArgumentError.value(
-      obj, 'value', 'cannot be converted to a guatiao value');
+    obj,
+    'value',
+    'cannot be converted to a guatiao value',
+  );
 }
 
 /// Builds [obj] into a scratch node and hands it to [consume], which moves
@@ -262,7 +281,7 @@ void _buildInto(Address alloc, Object? obj, void Function(Address) consume) {
 /// and indices, walked again on every access.
 class Ref {
   Ref(ValueOwner owner, [List<Object> path = const []])
-      : this._(owner, List<Object>.unmodifiable(path));
+    : this._(owner, List<Object>.unmodifiable(path));
 
   Ref._(this._ownerOrNull, this.path);
 
@@ -358,7 +377,9 @@ class Ref {
     final source = requireNode();
     final alloc = owner is _BorrowedRoot ? _m.defaultAlloc : owner.allocator;
     return Value._build(
-        alloc, (out) => _m.call('guatiao_value_clone', [alloc, source, out]));
+      alloc,
+      (out) => _m.call('guatiao_value_clone', [alloc, source, out]),
+    );
   }
 
   @override
@@ -393,16 +414,20 @@ class MapRef extends Ref {
     _buildInto(
       alloc,
       value,
-      (tmp) => withScratch((s) => checkStatus(
-          _m.call('guatiao_map_set', [alloc, requireNode(), s.str(key), tmp]))),
+      (tmp) => withScratch(
+        (s) => checkStatus(
+          _m.call('guatiao_map_set', [alloc, requireNode(), s.str(key), tmp]),
+        ),
+      ),
     );
   }
 
   void remove(String key) {
     _writable(this);
     final target = requireNode();
-    withScratch((s) =>
-        checkStatus(_m.call('guatiao_map_discard', [target, s.str(key)])));
+    withScratch(
+      (s) => checkStatus(_m.call('guatiao_map_discard', [target, s.str(key)])),
+    );
   }
 
   List<String> get keys {
@@ -427,8 +452,13 @@ class MapRef extends Ref {
 
   void copyFrom(Ref src) {
     _writable(this);
-    checkStatus(_m.call('guatiao_map_copy_from',
-        [owner.allocator, requireNode(), src.requireNode()]));
+    checkStatus(
+      _m.call('guatiao_map_copy_from', [
+        owner.allocator,
+        requireNode(),
+        src.requireNode(),
+      ]),
+    );
   }
 
   @override
@@ -489,17 +519,19 @@ class ListRef extends Ref {
   }
 
   List<Ref> get refs => <Ref>[
-        for (var i = 0; i < length; i++) Ref(owner, [...path, i])
-      ];
+    for (var i = 0; i < length; i++) Ref(owner, [...path, i]),
+  ];
 
   void add(Object? value) {
     _writable(this);
     final alloc = owner.allocator;
     _buildInto(
-        alloc,
-        value,
-        (tmp) => checkStatus(
-            _m.call('guatiao_list_push', [alloc, requireNode(), tmp])));
+      alloc,
+      value,
+      (tmp) => checkStatus(
+        _m.call('guatiao_list_push', [alloc, requireNode(), tmp]),
+      ),
+    );
   }
 
   void insert(int index, Object? value) {
@@ -548,8 +580,13 @@ class ListRef extends Ref {
         out.add(tmp);
         // Found again each time: the clone may have grown the memory, and
         // an address stays valid where a view would not.
-        checkStatus(_m.call(
-            'guatiao_value_clone', [alloc, _listAt(requireNode(), i), tmp]));
+        checkStatus(
+          _m.call('guatiao_value_clone', [
+            alloc,
+            _listAt(requireNode(), i),
+            tmp,
+          ]),
+        );
       }
     } catch (_) {
       _releaseAll(out);
@@ -580,19 +617,19 @@ class ListRef extends Ref {
 /// Frees a dropped value's tree and its root block, in that order.
 final Finalizer<(WasmModule, Address)> _backstop =
     Finalizer<(WasmModule, Address)>((held) {
-  final (module, root) = held;
-  if (!identical(WasmModule.loaded, module)) return;
-  module.call('guatiao_value_free', [root]);
-  module.free(root, valueSize);
-});
+      final (module, root) = held;
+      if (!identical(WasmModule.loaded, module)) return;
+      module.call('guatiao_value_free', [root]);
+      module.free(root, valueSize);
+    });
 
 /// Owns a root `guatiao_value` in the module's memory and the tree under
 /// it. [close] releases both and is required; a [Finalizer] is attached as
 /// a backstop for a dropped value.
 class Value extends Ref implements ValueOwner {
   Value._(this._raw, this._allocator)
-      : _module = WasmModule.current,
-        super._(null, const []) {
+    : _module = WasmModule.current,
+      super._(null, const []) {
     _backstop.attach(this, (_module, _raw), detach: this);
   }
 
@@ -626,8 +663,10 @@ class Value extends Ref implements ValueOwner {
     final allocator = alloc ?? _m.defaultAlloc;
     return withScratch((s) {
       final view = s.view(data);
-      return _build(allocator,
-          (out) => _m.call('guatiao_wire_decode', [allocator, view, out]));
+      return _build(
+        allocator,
+        (out) => _m.call('guatiao_wire_decode', [allocator, view, out]),
+      );
     });
   }
 
@@ -638,7 +677,9 @@ class Value extends Ref implements ValueOwner {
       _build(_m.defaultAlloc, (out) => _m.call('guatiao_value_absent', [out]));
 
   factory Value.boolean(bool value) => _build(
-      _m.defaultAlloc, (out) => _m.call('guatiao_value_bool', [value, out]));
+    _m.defaultAlloc,
+    (out) => _m.call('guatiao_value_bool', [value, out]),
+  );
 
   factory Value.map() {
     final alloc = _m.defaultAlloc;
@@ -655,7 +696,9 @@ class Value extends Ref implements ValueOwner {
     return withScratch((s) {
       final view = s.str(text);
       return _build(
-          alloc, (out) => _m.call('guatiao_value_string', [alloc, view, out]));
+        alloc,
+        (out) => _m.call('guatiao_value_string', [alloc, view, out]),
+      );
     });
   }
 
@@ -665,7 +708,9 @@ class Value extends Ref implements ValueOwner {
     return withScratch((s) {
       final view = s.str(text);
       return _build(
-          alloc, (out) => _m.call('guatiao_value_number', [alloc, view, out]));
+        alloc,
+        (out) => _m.call('guatiao_value_number', [alloc, view, out]),
+      );
     });
   }
 
@@ -674,7 +719,9 @@ class Value extends Ref implements ValueOwner {
     return withScratch((s) {
       final view = s.view(data);
       return _build(
-          alloc, (out) => _m.call('guatiao_value_bytes', [alloc, view, out]));
+        alloc,
+        (out) => _m.call('guatiao_value_bytes', [alloc, view, out]),
+      );
     });
   }
 

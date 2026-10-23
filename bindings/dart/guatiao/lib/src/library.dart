@@ -80,7 +80,7 @@ String dllFilename(String basename) {
 const List<String> surfaces = <String>[
   'guatiao',
   'guatiao_serde',
-  'guatiao_intake'
+  'guatiao_intake',
 ];
 
 /// One symbol per surface, to recognise a library that carries it.
@@ -211,13 +211,13 @@ class NativeLib {
   /// `Value` attaches to itself.
   ///
   /// The C function returns a status the finalizer never reads.
-  late final Pointer<NativeFinalizerFunction> valueFreeFinalizer =
-      _dylib.lookup<NativeFinalizerFunction>('guatiao_value_free');
+  late final Pointer<NativeFinalizerFunction> valueFreeFinalizer = _dylib
+      .lookup<NativeFinalizerFunction>('guatiao_value_free');
 
   /// `guatiao_wire_receiver_free` as a finalizer callback, for the
   /// backstop a channel `Receiver` attaches to itself.
-  late final Pointer<NativeFinalizerFunction> wireReceiverFreeFinalizer =
-      _dylib.lookup<NativeFinalizerFunction>('guatiao_wire_receiver_free');
+  late final Pointer<NativeFinalizerFunction> wireReceiverFreeFinalizer = _dylib
+      .lookup<NativeFinalizerFunction>('guatiao_wire_receiver_free');
 
   /// The default allocator, filled by `guatiao_alloc_default` once.
   ///
@@ -266,7 +266,10 @@ void useLibrary(
     final probe = _probe[basename];
     if (probe == null) {
       throw ArgumentError.value(
-          basename, 'forSurfaces', 'not a guatiao surface');
+        basename,
+        'forSurfaces',
+        'not a guatiao surface',
+      );
     }
     if (forSurfaces == null && !library.providesSymbol(probe)) continue;
     _registered[basename] = NativeLib._(path, library);
@@ -311,17 +314,18 @@ NativeLib core() => openSurface('guatiao');
 /// Loads a WebAssembly module, on the web. A native process loads a
 /// shared library instead, found as above: throws `Unsupported`.
 Future<void> loadModule(Uri url) async => throw Unsupported(
-      Status.unsupported.code,
-      'loadModule is for the web: a native process loads the library '
-      'GUATIAO_LIBRARY, useLibrary or the platform search finds',
-    );
+  Status.unsupported.code,
+  'loadModule is for the web: a native process loads the library '
+  'GUATIAO_LIBRARY, useLibrary or the platform search finds',
+);
 
 /// Loads a WebAssembly module from its bytes, on the web. A native
 /// process loads a shared library instead: throws `Unsupported`.
-Future<void> loadModuleBytes(List<int> bytes,
-        {String source = '<bytes>'}) async =>
-    throw Unsupported(
-      Status.unsupported.code,
-      'loadModuleBytes is for the web: a native process loads the library '
-      'GUATIAO_LIBRARY, useLibrary or the platform search finds',
-    );
+Future<void> loadModuleBytes(
+  List<int> bytes, {
+  String source = '<bytes>',
+}) async => throw Unsupported(
+  Status.unsupported.code,
+  'loadModuleBytes is for the web: a native process loads the library '
+  'GUATIAO_LIBRARY, useLibrary or the platform search finds',
+);

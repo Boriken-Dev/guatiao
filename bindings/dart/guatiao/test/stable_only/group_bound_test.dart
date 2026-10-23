@@ -40,8 +40,9 @@ final class _Job extends Struct {
 }
 
 void _read(Pointer<_Job> job) {
-  final tree =
-      Ref.borrowed(Pointer<guatiao_value>.fromAddress(job.ref.address));
+  final tree = Ref.borrowed(
+    Pointer<guatiao_value>.fromAddress(job.ref.address),
+  );
   job.ref.result = (tree.toDart()! as Map).keys.toSet().length;
 }
 
@@ -63,20 +64,25 @@ int _posixProc(Pointer<Void> job) {
 void _onNativeThread(Pointer<_Job> job) {
   if (Platform.isWindows) {
     final kernel = DynamicLibrary.open('kernel32.dll');
-    final create = kernel.lookupFunction<
-        IntPtr Function(Pointer, IntPtr, Pointer, Pointer, Uint32, Pointer),
-        int Function(
-            Pointer, int, Pointer, Pointer, int, Pointer)>('CreateThread');
-    final wait = kernel.lookupFunction<Uint32 Function(IntPtr, Uint32),
-        int Function(int, int)>('WaitForSingleObject');
-    final close =
-        kernel.lookupFunction<Int32 Function(IntPtr), int Function(int)>(
-            'CloseHandle');
+    final create = kernel
+        .lookupFunction<
+          IntPtr Function(Pointer, IntPtr, Pointer, Pointer, Uint32, Pointer),
+          int Function(Pointer, int, Pointer, Pointer, int, Pointer)
+        >('CreateThread');
+    final wait = kernel
+        .lookupFunction<
+          Uint32 Function(IntPtr, Uint32),
+          int Function(int, int)
+        >('WaitForSingleObject');
+    final close = kernel
+        .lookupFunction<Int32 Function(IntPtr), int Function(int)>(
+          'CloseHandle',
+        );
     final proc =
         NativeCallable<Uint32 Function(Pointer<Void>)>.isolateGroupBound(
-      _windowsProc,
-      exceptionalReturn: 1,
-    );
+          _windowsProc,
+          exceptionalReturn: 1,
+        );
     try {
       final thread = create(nullptr, 0, proc.nativeFunction, job, 0, nullptr);
       expect(thread, isNot(0), reason: 'CreateThread failed');
@@ -87,21 +93,28 @@ void _onNativeThread(Pointer<_Job> job) {
     }
   } else {
     final libc = DynamicLibrary.process();
-    final create = libc.lookupFunction<
-        Int32 Function(Pointer<IntPtr>, Pointer, Pointer, Pointer),
-        int Function(
-            Pointer<IntPtr>, Pointer, Pointer, Pointer)>('pthread_create');
-    final join = libc.lookupFunction<Int32 Function(IntPtr, Pointer),
-        int Function(int, Pointer)>('pthread_join');
+    final create = libc
+        .lookupFunction<
+          Int32 Function(Pointer<IntPtr>, Pointer, Pointer, Pointer),
+          int Function(Pointer<IntPtr>, Pointer, Pointer, Pointer)
+        >('pthread_create');
+    final join = libc
+        .lookupFunction<
+          Int32 Function(IntPtr, Pointer),
+          int Function(int, Pointer)
+        >('pthread_join');
     final proc =
         NativeCallable<IntPtr Function(Pointer<Void>)>.isolateGroupBound(
-      _posixProc,
-      exceptionalReturn: 0,
-    );
+          _posixProc,
+          exceptionalReturn: 0,
+        );
     final handle = calloc<IntPtr>();
     try {
-      expect(create(handle, nullptr, proc.nativeFunction, job), 0,
-          reason: 'pthread_create failed');
+      expect(
+        create(handle, nullptr, proc.nativeFunction, job),
+        0,
+        reason: 'pthread_create failed',
+      );
       expect(join(handle.value, nullptr), 0, reason: 'pthread_join failed');
     } finally {
       calloc.free(handle);

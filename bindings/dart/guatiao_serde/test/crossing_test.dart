@@ -22,7 +22,7 @@ void main() {
       'a': [
         1,
         'two',
-        {'b': null}
+        {'b': null},
       ],
       'c': 'added through the core',
     });
@@ -33,7 +33,7 @@ void main() {
   test('a tree the core built is written by serde', () {
     final value = Value.fromDart({
       'port': 5900,
-      'tags': ['x']
+      'tags': ['x'],
     });
     addTearDown(value.close);
     expect(serde.dumps(value), '{"port":5900,"tags":["x"]}');

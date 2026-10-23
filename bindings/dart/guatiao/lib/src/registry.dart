@@ -54,10 +54,10 @@ class Instance {
     if (_registry.isClosed) return;
     using((arena) {
       native.core().bindings.guatiao_registry_provider_destroy(
-            _registry._handle,
-            strOf(arena, _key).ref,
-            ctx,
-          );
+        _registry._handle,
+        strOf(arena, _key).ref,
+        ctx,
+      );
     });
   }
 }
@@ -67,11 +67,7 @@ class Instance {
 /// Used from the isolate that made it, like the C handle it wraps.
 class Registry implements Finalizable {
   /// Opens a registry this host answers to as `id` at `version`.
-  factory Registry(
-    String id,
-    String version, {
-    Pointer<guatiao_alloc>? alloc,
-  }) {
+  factory Registry(String id, String version, {Pointer<guatiao_alloc>? alloc}) {
     final lib = native.core();
     lib.require('guatiao_registry_new', feature: 'load');
     final allocator = alloc ?? lib.alloc;
@@ -115,9 +111,12 @@ class Registry implements Finalizable {
 
   /// One `(reg, ..., alloc, out) -> status` answer, as plain Dart, freed.
   Object? _answer(
-    int Function(Pointer<guatiao_registry>, Pointer<guatiao_alloc>,
-            Pointer<guatiao_value>)
-        call,
+    int Function(
+      Pointer<guatiao_registry>,
+      Pointer<guatiao_alloc>,
+      Pointer<guatiao_value>,
+    )
+    call,
   ) {
     _checkOpen();
     final out = calloc<guatiao_value>();
@@ -135,37 +134,41 @@ class Registry implements Finalizable {
   }
 
   Map<String, Object?> _answerMap(
-    int Function(Pointer<guatiao_registry>, Pointer<guatiao_alloc>,
-            Pointer<guatiao_value>)
-        call,
-  ) =>
-      (_answer(call)! as Map).cast<String, Object?>();
+    int Function(
+      Pointer<guatiao_registry>,
+      Pointer<guatiao_alloc>,
+      Pointer<guatiao_value>,
+    )
+    call,
+  ) => (_answer(call)! as Map).cast<String, Object?>();
 
   List<Map<String, Object?>> _answerRows(
-    int Function(Pointer<guatiao_registry>, Pointer<guatiao_alloc>,
-            Pointer<guatiao_value>)
-        call,
-  ) =>
-      <Map<String, Object?>>[
-        for (final row in _answer(call)! as List)
-          (row! as Map).cast<String, Object?>(),
-      ];
+    int Function(
+      Pointer<guatiao_registry>,
+      Pointer<guatiao_alloc>,
+      Pointer<guatiao_value>,
+    )
+    call,
+  ) => <Map<String, Object?>>[
+    for (final row in _answer(call)! as List)
+      (row! as Map).cast<String, Object?>(),
+  ];
 
   // ---- loading ----------------------------------------------------
 
   /// Loads one library by path. The report says what was loaded or
   /// skipped.
-  Map<String, Object?> loadFile(String path) => using(
-        (arena) {
-          final view = strOf(arena, path).ref;
-          return _answerMap(
-            (reg, alloc, out) => native
-                .core()
-                .bindings
-                .guatiao_registry_load_file(reg, view, alloc, out),
-          );
-        },
-      );
+  Map<String, Object?> loadFile(String path) => using((arena) {
+    final view = strOf(arena, path).ref;
+    return _answerMap(
+      (reg, alloc, out) => native.core().bindings.guatiao_registry_load_file(
+        reg,
+        view,
+        alloc,
+        out,
+      ),
+    );
+  });
 
   /// Loads every library in `directory`.
   ///
@@ -175,134 +178,123 @@ class Registry implements Finalizable {
     String directory, {
     bool descending = false,
     String? rules,
-  }) =>
-      using(
-        (arena) {
-          final dir = strOf(arena, directory).ref;
-          final bindings = native.core().bindings;
-          if (rules == null) {
-            return _answerMap(
-              (reg, alloc, out) => bindings.guatiao_registry_scan_dir(
-                reg,
-                dir,
-                descending,
-                alloc,
-                out,
-              ),
-            );
-          }
-          final filter = strOf(arena, rules).ref;
-          return _answerMap(
-            (reg, alloc, out) => bindings.guatiao_registry_scan_dir_rules(
-              reg,
-              dir,
-              descending,
-              filter,
-              alloc,
-              out,
-            ),
-          );
-        },
+  }) => using((arena) {
+    final dir = strOf(arena, directory).ref;
+    final bindings = native.core().bindings;
+    if (rules == null) {
+      return _answerMap(
+        (reg, alloc, out) => bindings.guatiao_registry_scan_dir(
+          reg,
+          dir,
+          descending,
+          alloc,
+          out,
+        ),
       );
+    }
+    final filter = strOf(arena, rules).ref;
+    return _answerMap(
+      (reg, alloc, out) => bindings.guatiao_registry_scan_dir_rules(
+        reg,
+        dir,
+        descending,
+        filter,
+        alloc,
+        out,
+      ),
+    );
+  });
 
   /// Loads every library along a search path.
   Map<String, Object?> scanPath(
     String spec, {
     bool descending = false,
     String? rules,
-  }) =>
-      using(
-        (arena) {
-          final path = strOf(arena, spec).ref;
-          final filter = strOf(arena, rules ?? '').ref;
-          return _answerMap(
-            (reg, alloc, out) =>
-                native.core().bindings.guatiao_registry_scan_path(
-                      reg,
-                      path,
-                      descending,
-                      filter,
-                      alloc,
-                      out,
-                    ),
-          );
-        },
-      );
+  }) => using((arena) {
+    final path = strOf(arena, spec).ref;
+    final filter = strOf(arena, rules ?? '').ref;
+    return _answerMap(
+      (reg, alloc, out) => native.core().bindings.guatiao_registry_scan_path(
+        reg,
+        path,
+        descending,
+        filter,
+        alloc,
+        out,
+      ),
+    );
+  });
 
   // ---- what is loaded ----------------------------------------------
 
   /// Every loaded library.
   List<Map<String, Object?>> libraries() => _answerRows(
-        (reg, alloc, out) =>
-            native.core().bindings.guatiao_registry_libraries(reg, alloc, out),
-      );
+    (reg, alloc, out) =>
+        native.core().bindings.guatiao_registry_libraries(reg, alloc, out),
+  );
 
   /// Every provider that CLAIMS `kind`, best first. Every provider when
   /// `kind` is empty.
-  List<Map<String, Object?>> providers([String kind = '']) => using(
-        (arena) {
-          final view = strOf(arena, kind).ref;
-          return _answerRows(
-            (reg, alloc, out) => native
-                .core()
-                .bindings
-                .guatiao_registry_providers(reg, view, alloc, out),
-          );
-        },
-      );
+  List<Map<String, Object?>> providers([String kind = '']) => using((arena) {
+    final view = strOf(arena, kind).ref;
+    return _answerRows(
+      (reg, alloc, out) => native.core().bindings.guatiao_registry_providers(
+        reg,
+        view,
+        alloc,
+        out,
+      ),
+    );
+  });
 
   /// Every provider that can actually serve `kind` right now.
-  List<Map<String, Object?>> available([String kind = '']) => using(
-        (arena) {
-          final view = strOf(arena, kind).ref;
-          return _answerRows(
-            (reg, alloc, out) => native
-                .core()
-                .bindings
-                .guatiao_registry_available(reg, view, alloc, out),
-          );
-        },
-      );
+  List<Map<String, Object?>> available([String kind = '']) => using((arena) {
+    final view = strOf(arena, kind).ref;
+    return _answerRows(
+      (reg, alloc, out) => native.core().bindings.guatiao_registry_available(
+        reg,
+        view,
+        alloc,
+        out,
+      ),
+    );
+  });
 
   /// Why nothing can serve `kind`: `available`, and `why` with the
   /// providers that were passed over when there were any.
-  Map<String, Object?> whyNot(String kind) => using(
-        (arena) {
-          final view = strOf(arena, kind).ref;
-          return _answerMap(
-            (reg, alloc, out) => native
-                .core()
-                .bindings
-                .guatiao_registry_why_not(reg, view, alloc, out),
-          );
-        },
-      );
+  Map<String, Object?> whyNot(String kind) => using((arena) {
+    final view = strOf(arena, kind).ref;
+    return _answerMap(
+      (reg, alloc, out) => native.core().bindings.guatiao_registry_why_not(
+        reg,
+        view,
+        alloc,
+        out,
+      ),
+    );
+  });
 
   /// The provider filed under `key`.
-  Map<String, Object?> provider(String key) => using(
-        (arena) {
-          final view = strOf(arena, key).ref;
-          return _answerMap(
-            (reg, alloc, out) => native
-                .core()
-                .bindings
-                .guatiao_registry_provider(reg, view, alloc, out),
-          );
-        },
-      );
+  Map<String, Object?> provider(String key) => using((arena) {
+    final view = strOf(arena, key).ref;
+    return _answerMap(
+      (reg, alloc, out) => native.core().bindings.guatiao_registry_provider(
+        reg,
+        view,
+        alloc,
+        out,
+      ),
+    );
+  });
 
   /// The best provider that can serve `kind`.
-  Map<String, Object?> best(String kind) => using(
-        (arena) {
-          final view = strOf(arena, kind).ref;
-          return _answerMap(
-            (reg, alloc, out) => native
-                .core()
-                .bindings
-                .guatiao_registry_best(reg, view, alloc, out),
-          );
-        },
-      );
+  Map<String, Object?> best(String kind) => using((arena) {
+    final view = strOf(arena, kind).ref;
+    return _answerMap(
+      (reg, alloc, out) =>
+          native.core().bindings.guatiao_registry_best(reg, view, alloc, out),
+    );
+  });
 
   // ---- keys and priority ---------------------------------------------
 
@@ -313,9 +305,9 @@ class Registry implements Finalizable {
     using(
       (arena) => checkStatus(
         native.core().bindings.guatiao_registry_keyed_by(
-              _handle,
-              strOf(arena, template).ref,
-            ),
+          _handle,
+          strOf(arena, template).ref,
+        ),
       ),
     );
     return this;
@@ -327,9 +319,9 @@ class Registry implements Finalizable {
     using(
       (arena) => checkStatus(
         native.core().bindings.guatiao_registry_libraries_keyed_by(
-              _handle,
-              strOf(arena, template).ref,
-            ),
+          _handle,
+          strOf(arena, template).ref,
+        ),
       ),
     );
     return this;
@@ -341,10 +333,10 @@ class Registry implements Finalizable {
     using(
       (arena) => checkStatus(
         native.core().bindings.guatiao_registry_set_priority(
-              _handle,
-              strOf(arena, id).ref,
-              priority,
-            ),
+          _handle,
+          strOf(arena, id).ref,
+          priority,
+        ),
       ),
     );
   }
@@ -354,9 +346,9 @@ class Registry implements Finalizable {
     _checkOpen();
     return using(
       (arena) => native.core().bindings.guatiao_registry_priority(
-            _handle,
-            strOf(arena, id).ref,
-          ),
+        _handle,
+        strOf(arena, id).ref,
+      ),
     );
   }
 
@@ -396,9 +388,9 @@ class Registry implements Finalizable {
     _checkOpen();
     final root = using(
       (arena) => native.core().bindings.guatiao_registry_provider_config(
-            _handle,
-            strOf(arena, key).ref,
-          ),
+        _handle,
+        strOf(arena, key).ref,
+      ),
     );
     if (root == nullptr) return null;
     return Ref.borrowed(root);
@@ -420,11 +412,11 @@ class Registry implements Finalizable {
       using((arena) {
         checkStatus(
           native.core().bindings.guatiao_registry_provider_meta(
-                _handle,
-                strOf(arena, key).ref,
-                _allocator,
-                out,
-              ),
+            _handle,
+            strOf(arena, key).ref,
+            _allocator,
+            out,
+          ),
         );
       });
       if (out.ref.tag == Tag.absent.code) return null;
@@ -483,8 +475,10 @@ class Registry implements Finalizable {
     using((arena) {
       final view = strOf(arena, key).ref;
       final status = switch (name) {
-        'guatiao_registry_retire' =>
-          bindings.guatiao_registry_retire(_handle, view),
+        'guatiao_registry_retire' => bindings.guatiao_registry_retire(
+          _handle,
+          view,
+        ),
         'guatiao_registry_unload_unchecked' =>
           bindings.guatiao_registry_unload_unchecked(_handle, view),
         _ => bindings.guatiao_registry_unload(_handle, view),
@@ -516,10 +510,14 @@ class Registry implements Finalizable {
   List<String> collect() {
     native.core().require('guatiao_registry_collect', feature: 'load');
     return <String>[
-      for (final key in _answer(
-        (reg, alloc, out) =>
-            native.core().bindings.guatiao_registry_collect(reg, alloc, out),
-      )! as List)
+      for (final key
+          in _answer(
+                (reg, alloc, out) => native
+                    .core()
+                    .bindings
+                    .guatiao_registry_collect(reg, alloc, out),
+              )!
+              as List)
         key! as String,
     ];
   }
@@ -548,8 +546,10 @@ class Registry implements Finalizable {
       owned = null;
       configValue = config;
     } else {
-      owned = Value.fromDart(config ?? const <String, Object?>{},
-          alloc: _allocator);
+      owned = Value.fromDart(
+        config ?? const <String, Object?>{},
+        alloc: _allocator,
+      );
       configValue = owned;
     }
     final err = calloc<guatiao_provider_error>();
@@ -622,9 +622,7 @@ class Registry implements Finalizable {
   /// `unload` function. Either way, no table, `ctx` or borrowed schema
   /// taken from it is used again.
   void unload(String key, {bool unchecked = false}) => _keyCall(
-        unchecked
-            ? 'guatiao_registry_unload_unchecked'
-            : 'guatiao_registry_unload',
-        key,
-      );
+    unchecked ? 'guatiao_registry_unload_unchecked' : 'guatiao_registry_unload',
+    key,
+  );
 }

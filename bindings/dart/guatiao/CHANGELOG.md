@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking: Dart 3.10 or newer** (Flutter 3.38), the first with build
+  hooks; the package asked for 3.6. *Migration:* raise the application's
+  `sdk:` constraint to `^3.10.0`.
 - **Breaking: JSON, TOML and YAML, and forms, are packages of their own**:
   `guatiao_serde` and `guatiao_intake`, each over its own library and
   built on this one. `package:guatiao/serde.dart` and

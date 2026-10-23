@@ -31,7 +31,7 @@ void main() {
       'a': [
         1,
         2,
-        <String, Object?>{'b': 'c'}
+        <String, Object?>{'b': 'c'},
       ],
       'd': null,
     });
@@ -40,7 +40,7 @@ void main() {
       'a': [
         1,
         2,
-        {'b': 'c'}
+        {'b': 'c'},
       ],
       'd': null,
     });
@@ -241,8 +241,10 @@ void main() {
         final view = Ref.borrowed(owner.pointer);
         expect(view.toDart(), {'host': 'h', 'port': 5900});
         expect(() => view.asMap()['port'] = 1, throwsStateError);
-        expect(owner.toDart(), {'host': 'h', 'port': 5900},
-            reason: 'untouched');
+        expect(owner.toDart(), {
+          'host': 'h',
+          'port': 5900,
+        }, reason: 'untouched');
       } finally {
         owner.close();
       }

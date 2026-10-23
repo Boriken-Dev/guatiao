@@ -106,7 +106,7 @@ class MissingSymbol implements Exception {
 /// of its own, and a value built in one cannot be read through another.
 final class WasmModule {
   WasmModule._(this.source, this._exports)
-      : _memory = _exports.getProperty<JSObject>('memory'.toJS);
+    : _memory = _exports.getProperty<JSObject>('memory'.toJS);
 
   /// Where the module came from, for an error message.
   final String source;
@@ -134,8 +134,11 @@ final class WasmModule {
     try {
       result = await _instantiate(data.toJS, JSObject()).toDart;
     } on Object catch (error) {
-      throw ArgumentError.value(source, 'module',
-          'is not a WebAssembly module guatiao can use ($error)');
+      throw ArgumentError.value(
+        source,
+        'module',
+        'is not a WebAssembly module guatiao can use ($error)',
+      );
     }
     final exports = result
         .getProperty<JSObject>('instance'.toJS)
@@ -169,11 +172,11 @@ final class WasmModule {
   }
 
   JSFunction? _function(String name) => _functions.putIfAbsent(name, () {
-        final found = _exports.getProperty<JSAny?>(name.toJS);
-        return found != null && found.typeofEquals('function')
-            ? found as JSFunction
-            : null;
-      });
+    final found = _exports.getProperty<JSAny?>(name.toJS);
+    return found != null && found.typeofEquals('function')
+        ? found as JSFunction
+        : null;
+  });
 
   /// Whether the module exports [name].
   bool provides(String name) => _function(name) != null;
@@ -200,7 +203,9 @@ final class WasmModule {
     final f = _function(name);
     if (f == null) {
       throw Unsupported(
-          Status.unsupported.code, '$source does not export $name');
+        Status.unsupported.code,
+        '$source does not export $name',
+      );
     }
     final js = <JSAny?>[null];
     for (final a in args) {
@@ -209,7 +214,10 @@ final class WasmModule {
         final bool b => (b ? 1 : 0).toJS,
         final I64 n => _bigInt(n.value.toString().toJS),
         _ => throw ArgumentError.value(
-            a, 'args', 'not an int, Address, I64 or bool'),
+          a,
+          'args',
+          'not an int, Address, I64 or bool',
+        ),
       });
     }
     try {
@@ -227,8 +235,9 @@ final class WasmModule {
       Address(call(name, args).toUnsigned(32));
 
   /// The module's memory as it is now. Never keep it across a [call].
-  ByteData get data => _view ??=
-      ByteData.view(_memory.getProperty<JSArrayBuffer>('buffer'.toJS).toDart);
+  ByteData get data => _view ??= ByteData.view(
+    _memory.getProperty<JSArrayBuffer>('buffer'.toJS).toDart,
+  );
 
   int u8(Address at) => data.getUint8(at.value);
   int u32(Address at) => data.getUint32(at.value, Endian.little);

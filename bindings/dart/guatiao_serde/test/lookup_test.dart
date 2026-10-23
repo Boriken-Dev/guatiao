@@ -40,8 +40,10 @@ void main() {
   });
 
   test('its own variable names a directory', () {
-    expect(_found({'GUATIAO_SERDE_LIBRARY': libraryDir()}),
-        _file('guatiao_serde'));
+    expect(
+      _found({'GUATIAO_SERDE_LIBRARY': libraryDir()}),
+      _file('guatiao_serde'),
+    );
   });
 
   test('a GUATIAO_LIBRARY file carrying the surface serves it', () {
@@ -51,7 +53,9 @@ void main() {
 
   test('a GUATIAO_LIBRARY file without the surface points beside it', () {
     expect(
-        _found({'GUATIAO_LIBRARY': _file('guatiao')}), _file('guatiao_serde'));
+      _found({'GUATIAO_LIBRARY': _file('guatiao')}),
+      _file('guatiao_serde'),
+    );
   });
 
   test('not found names its own variable', () {

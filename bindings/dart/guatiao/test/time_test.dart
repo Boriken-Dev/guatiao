@@ -14,10 +14,17 @@ import 'package:test/test.dart';
 
 import 'support.dart';
 
-Future<Map<String, Object?>> _vectors() async => jsonDecode(
-      await readRepoText(
-          ['crates', 'guatiao', 'tests', 'vectors', 'time.json']),
-    ) as Map<String, Object?>;
+Future<Map<String, Object?>> _vectors() async =>
+    jsonDecode(
+          await readRepoText([
+            'crates',
+            'guatiao',
+            'tests',
+            'vectors',
+            'time.json',
+          ]),
+        )
+        as Map<String, Object?>;
 
 /// Reads [text] as [form] through the Dart type, answering its fields as
 /// the vectors list them and its canonical text.
@@ -34,7 +41,7 @@ Future<Map<String, Object?>> _vectors() async => jsonDecode(
       final (d, t) = (at.date, at.time);
       return (
         [d.year, d.month, d.day, t.hour, t.minute, t.second, t.nanosecond],
-        '$at'
+        '$at',
       );
     case time.TextForm.span:
       final s = time.Span.parse(text);
@@ -49,7 +56,7 @@ Future<Map<String, Object?>> _vectors() async => jsonDecode(
           s.seconds,
           s.nanoseconds,
         ],
-        '$s'
+        '$s',
       );
     case time.TextForm.timestamp:
       // The DateTime mapping drops nanoseconds: the exact text comes from
@@ -59,7 +66,7 @@ Future<Map<String, Object?>> _vectors() async => jsonDecode(
       final below = millis % 1000;
       return (
         [(millis - below) ~/ 1000, below * 1000000 + t.microsecond * 1000],
-        time.normalize(form, text)
+        time.normalize(form, text),
       );
   }
 }
@@ -72,8 +79,10 @@ bool _exactHere(List<num> fields) =>
 /// Says how many vectors a test passed over as past 2^53.
 void _report(int passedOver) {
   if (passedOver > 0) {
-    print('skipped $passedOver vectors with a number past 2^53, which a '
-        'dart2js int does not hold');
+    print(
+      'skipped $passedOver vectors with a number past 2^53, which a '
+      'dart2js int does not hold',
+    );
   }
 }
 
@@ -171,11 +180,17 @@ void main() {
     for (final c in (vectors['duration']! as List).cast<Map>()) {
       final expected = (c['duration'] as List?)?.cast<int>();
       if (expected == null) {
-        expect(() => time.toDuration(c['value']), throwsA(isA<BadValue>()),
-            reason: '$c');
+        expect(
+          () => time.toDuration(c['value']),
+          throwsA(isA<BadValue>()),
+          reason: '$c',
+        );
       } else if (expected[0] > 9223372036854) {
-        expect(() => time.toDuration(c['value']), throwsA(isA<RangeError>()),
-            reason: '$c');
+        expect(
+          () => time.toDuration(c['value']),
+          throwsA(isA<RangeError>()),
+          reason: '$c',
+        );
       } else {
         expect(
           time.toDuration(c['value']),
@@ -190,50 +205,66 @@ void main() {
     final t = time.PlainTime(12, 0, 0, 1);
     expect('$t', '12:00:00.000000001');
     expect(time.PlainTime.parse('12:00:00.000000001'), t);
-    expect(time.PlainDate(2026, 9, 30).compareTo(time.PlainDate(2026, 10, 1)),
-        lessThan(0));
+    expect(
+      time.PlainDate(2026, 9, 30).compareTo(time.PlainDate(2026, 10, 1)),
+      lessThan(0),
+    );
     expect(() => time.PlainDate(2026, 2, 29), throwsA(isA<BadValue>()));
     expect(() => time.PlainDate(2026, 256, 1), throwsA(isA<BadValue>()));
     expect(() => time.PlainTime(24, 0, 0), throwsA(isA<BadValue>()));
     expect(time.PlainDate(0, 1, 1).toString(), '0000-01-01');
     final local = DateTime(2026, 10, 21, 13, 45, 0, 5, 6);
-    expect('${time.PlainDateTime.fromDateTime(local)}',
-        '2026-10-21T13:45:00.005006');
     expect(
-      {time.PlainDate(2026, 1, 1), time.PlainDate.parse('2026-01-01')},
-      hasLength(1),
+      '${time.PlainDateTime.fromDateTime(local)}',
+      '2026-10-21T13:45:00.005006',
     );
+    expect({
+      time.PlainDate(2026, 1, 1),
+      time.PlainDate.parse('2026-01-01'),
+    }, hasLength(1));
   });
 
   test('an instant is a UTC DateTime', () {
     final t = time.parseTimestamp('2026-10-21T19:15:00.5+05:30');
     expect(t.isUtc, isTrue);
     expect(t, DateTime.utc(2026, 10, 21, 13, 45, 0, 500));
-    expect(time.parseTimestamp('1969-12-31T23:59:59.9999999Z'),
-        DateTime.utc(1969, 12, 31, 23, 59, 59, 999, 999),
-        reason: 'toward the past');
-    expect(time.formatTimestamp(DateTime.utc(1969, 12, 31, 23, 59, 59, 500)),
-        '1969-12-31T23:59:59.5Z');
+    expect(
+      time.parseTimestamp('1969-12-31T23:59:59.9999999Z'),
+      DateTime.utc(1969, 12, 31, 23, 59, 59, 999, 999),
+      reason: 'toward the past',
+    );
+    expect(
+      time.formatTimestamp(DateTime.utc(1969, 12, 31, 23, 59, 59, 500)),
+      '1969-12-31T23:59:59.5Z',
+    );
     expect(time.parseTimestamp('0000-01-01T00:00:00Z'), DateTime.utc(0));
     final local = DateTime(2026, 10, 21, 13, 45);
     expect(time.formatTimestamp(local), time.formatTimestamp(local.toUtc()));
   });
 
   test('an exact length is a Duration', () {
-    expect(time.toDuration([90, 500000000]),
-        const Duration(seconds: 90, milliseconds: 500));
+    expect(
+      time.toDuration([90, 500000000]),
+      const Duration(seconds: 90, milliseconds: 500),
+    );
     expect(time.toDuration(1.5), const Duration(milliseconds: 1500));
     expect(
-        time.toDuration({'secs': 1, 'nanos': 999}), const Duration(seconds: 1));
+      time.toDuration({'secs': 1, 'nanos': 999}),
+      const Duration(seconds: 1),
+    );
     final v = Value.fromDart({
-      'd': [3, 0]
+      'd': [3, 0],
     });
     addTearDown(v.close);
     expect(time.toDuration(v.asMap()['d']), const Duration(seconds: 3));
-    expect(time.fromDuration(const Duration(seconds: 90, milliseconds: 500)),
-        [90, 500000000]);
-    expect(() => time.fromDuration(const Duration(seconds: -1)),
-        throwsArgumentError);
+    expect(time.fromDuration(const Duration(seconds: 90, milliseconds: 500)), [
+      90,
+      500000000,
+    ]);
+    expect(
+      () => time.fromDuration(const Duration(seconds: -1)),
+      throwsArgumentError,
+    );
     expect(() => time.toDuration('90'), throwsA(isA<BadValue>()));
   });
 
