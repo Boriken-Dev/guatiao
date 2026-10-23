@@ -13,16 +13,14 @@ import (
 	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/internal/testenv"
 )
 
-// The module carries copies of the committed headers, since a module is
-// the files under its directory; each must be the committed one.
+// The module carries a copy of the committed header, since a module is
+// the files under its directory; it must be the committed one.
 func TestTheHeadersAreTheCommittedOnes(t *testing.T) {
 	repo := testenv.Repo()
 	if repo == "" {
 		t.Skip("outside a checkout of the repository there is nothing to compare with")
 	}
-	for name, crate := range map[string]string{
-		"guatiao.h": "guatiao", "guatiao_serde.h": "guatiao-serde", "guatiao_intake.h": "guatiao-intake",
-	} {
+	for name, crate := range map[string]string{"guatiao.h": "guatiao"} {
 		copied, err := os.ReadFile(filepath.Join("include", name))
 		if err != nil {
 			t.Fatal(err)

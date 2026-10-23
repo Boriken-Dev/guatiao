@@ -12,11 +12,11 @@ import (
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/intake"
-	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/internal/native"
+	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/intake/internal/testenv"
 )
 
 func TestATreeTheCoreBuiltIsReadByIntake(t *testing.T) {
-	c := native.NewCounting()
+	c := testenv.NewCounting()
 	defer c.Close()
 	v, err := guatiao.NewValue(map[string]any{"agent": []any{map[string]any{"name": "a"}, map[string]any{"name": "b"}}},
 		guatiao.InAllocator(c.Alloc()))

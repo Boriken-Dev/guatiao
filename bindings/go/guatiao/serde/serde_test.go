@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
-	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/internal/testenv"
 	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/serde"
+	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/serde/internal/testenv"
 )
 
 func TestMain(m *testing.M) {

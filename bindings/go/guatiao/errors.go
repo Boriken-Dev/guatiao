@@ -166,4 +166,4 @@ func core() (*native.Lib, error) {
 // package's library: serde and intake have their own UseLibrary. Call it
 // before the first call that needs the library; naming another file once
 // one is loaded is an error, naming the same one is not.
-func UseLibrary(where string) error { return native.Use(native.LibCore, where) }
+func UseLibrary(where string) error { return native.Use(where) }

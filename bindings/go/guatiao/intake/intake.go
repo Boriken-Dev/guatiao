@@ -13,35 +13,38 @@
 package intake
 
 import (
-	"errors"
 	"fmt"
 	"unsafe"
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
-	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/internal/native"
 )
 
-func lib() (*native.Lib, error) {
-	if err := guatiao.Load(); err != nil {
-		return nil, err
-	}
-	l, err := native.Intake()
-	if err != nil {
-		return nil, lift(err)
-	}
-	return l, nil
+// library is guatiao_intake.
+var library = &guatiao.Surface{
+	Basename: "guatiao_intake",
+	Variable: "GUATIAO_INTAKE_LIBRARY",
+	Probe:    "guatiao_intake_check",
+	Exports:  exports(),
 }
 
-// answer runs call with a fresh out node and hands it to read as a Value
-// it owns.
-func answer(call func(alloc, out unsafe.Pointer) uint32, read func(status uint32, out *guatiao.Value) error) error {
-	l, err := lib()
+func exports() map[string]string {
+	all := map[string]string{}
+	for _, name := range exportNames {
+		all[name] = ""
+	}
+	return all
+}
+
+// answer runs call, given the address of the export name, with a fresh
+// out node, and hands it to read as a Value it owns.
+func answer(name string, call func(fn, alloc, out unsafe.Pointer) uint32, read func(status uint32, out *guatiao.Value) error) error {
+	fn, err := library.Symbol(name)
 	if err != nil {
 		return err
 	}
-	out := native.Calloc(native.SizeValue)
-	st := call(l.Alloc(), out)
-	return read(st, guatiao.Adopt(out, l.Alloc()))
+	out := calloc()
+	st := call(fn, library.Alloc(), out)
+	return read(st, guatiao.Adopt(out, library.Alloc()))
 }
 
 // plain decodes an answer into dst and frees it.
@@ -79,14 +82,14 @@ func owned(dst **guatiao.Value) func(uint32, *guatiao.Value) error {
 func Check(schema, form any) (map[string]any, error) {
 	var why map[string]any
 	err := guatiao.WithNodes([]any{schema, form}, func(n []unsafe.Pointer) error {
-		return answer(func(alloc, out unsafe.Pointer) uint32 {
-			return native.IntakeCheck(n[0], n[1], alloc, out)
+		return answer("guatiao_intake_check", func(fn, alloc, out unsafe.Pointer) uint32 {
+			return callTwo(fn, n[0], n[1], alloc, out)
 		}, func(st uint32, out *guatiao.Value) error {
 			defer out.Close()
-			if st == native.OK {
+			if st == statusOK {
 				return nil
 			}
-			if st != native.ErrBadValue {
+			if st != badValue {
 				return guatiao.StatusError(st, "")
 			}
 			return out.Decode(&why)
@@ -106,8 +109,8 @@ type Section struct {
 func Layout(schema, form any) ([]Section, error) {
 	var sections []Section
 	err := guatiao.WithNodes([]any{schema, form}, func(n []unsafe.Pointer) error {
-		return answer(func(alloc, out unsafe.Pointer) uint32 {
-			return native.IntakeLayout(n[0], n[1], alloc, out)
+		return answer("guatiao_intake_layout", func(fn, alloc, out unsafe.Pointer) uint32 {
+			return callTwo(fn, n[0], n[1], alloc, out)
 		}, plain(&sections))
 	})
 	return sections, err
@@ -119,10 +122,11 @@ func Layout(schema, form any) ([]Section, error) {
 func IsVisible(schema, form any, key string, values any) (bool, error) {
 	var shown bool
 	err := guatiao.WithNodes([]any{schema, form, values}, func(n []unsafe.Pointer) error {
-		if _, err := lib(); err != nil {
+		fn, err := library.Symbol("guatiao_intake_is_visible")
+		if err != nil {
 			return err
 		}
-		ok, st := native.IntakeIsVisible(n[0], n[1], key, n[2])
+		ok, st := callVisible(fn, n[0], n[1], key, n[2])
 		shown = ok
 		return guatiao.StatusError(st, "")
 	})
@@ -131,10 +135,12 @@ func IsVisible(schema, form any, key string, values any) (bool, error) {
 
 // borrowedAt is a read-only Ref over what find answers inside source,
 // found again on every access; false when it answers nothing now.
-func borrowedAt(source any, find func(node unsafe.Pointer) unsafe.Pointer) (guatiao.Ref, bool, error) {
-	if _, err := lib(); err != nil {
+func borrowedAt(source any, name, path string) (guatiao.Ref, bool, error) {
+	fn, err := library.Symbol(name)
+	if err != nil {
 		return guatiao.Ref{}, false, err
 	}
+	find := func(node unsafe.Pointer) unsafe.Pointer { return callFind(fn, node, path) }
 	node, ok, err := guatiao.NodeOf(source)
 	if !ok {
 		return guatiao.Ref{}, false, fmt.Errorf("guatiao: %T is not a value; pass a *guatiao.Value or a view", source)
@@ -163,21 +169,21 @@ func borrowedAt(source any, find func(node unsafe.Pointer) unsafe.Pointer) (guat
 // borrowed from it: read-only, found again on every access, and valid
 // while value is. false when the path names nothing.
 func At(value any, path string) (guatiao.Ref, bool, error) {
-	return borrowedAt(value, func(node unsafe.Pointer) unsafe.Pointer { return native.IntakePathGet(node, path) })
+	return borrowedAt(value, "guatiao_intake_path_get", path)
 }
 
 // Resolve is the field of schema (a *guatiao.Value or a view) governing
 // a flat key, borrowed as At borrows; false for none.
 func Resolve(schema any, key string) (guatiao.Ref, bool, error) {
-	return borrowedAt(schema, func(node unsafe.Pointer) unsafe.Pointer { return native.IntakeResolve(node, key) })
+	return borrowedAt(schema, "guatiao_intake_resolve", key)
 }
 
 // ForSchema is the form a schema implies, a Value to close.
 func ForSchema(schema any) (*guatiao.Value, error) {
 	var form *guatiao.Value
 	err := guatiao.WithNodes([]any{schema}, func(n []unsafe.Pointer) error {
-		return answer(func(alloc, out unsafe.Pointer) uint32 {
-			return native.IntakeForSchema(n[0], alloc, out)
+		return answer("guatiao_intake_for_schema", func(fn, alloc, out unsafe.Pointer) uint32 {
+			return callOne(fn, n[0], alloc, out)
 		}, owned(&form))
 	})
 	return form, err
@@ -188,8 +194,8 @@ func ForSchema(schema any) (*guatiao.Value, error) {
 func FormFor(form, schema any, path string) (*guatiao.Value, error) {
 	var found *guatiao.Value
 	err := guatiao.WithNodes([]any{form, schema}, func(n []unsafe.Pointer) error {
-		return answer(func(alloc, out unsafe.Pointer) uint32 {
-			return native.IntakeFormFor(n[0], n[1], path, alloc, out)
+		return answer("guatiao_intake_form_for", func(fn, alloc, out unsafe.Pointer) uint32 {
+			return callTwoText(fn, n[0], n[1], path, alloc, out)
 		}, owned(&found))
 	})
 	return found, err
@@ -200,8 +206,8 @@ func FormFor(form, schema any, path string) (*guatiao.Value, error) {
 func FlatKeys(schema any, key string) ([]string, error) {
 	var keys []string
 	err := guatiao.WithNodes([]any{schema}, func(n []unsafe.Pointer) error {
-		return answer(func(alloc, out unsafe.Pointer) uint32 {
-			return native.IntakeFlatKeys(n[0], key, alloc, out)
+		return answer("guatiao_intake_flat_keys", func(fn, alloc, out unsafe.Pointer) uint32 {
+			return callOneText(fn, n[0], key, alloc, out)
 		}, plain(&keys))
 	})
 	return keys, err
@@ -211,8 +217,8 @@ func FlatKeys(schema any, key string) ([]string, error) {
 func Flatten(schema any, key string, value any) (map[string]string, error) {
 	store := map[string]string{}
 	err := guatiao.WithNodes([]any{schema, value}, func(n []unsafe.Pointer) error {
-		return answer(func(alloc, out unsafe.Pointer) uint32 {
-			return native.IntakeFlatten(n[0], key, n[1], alloc, out)
+		return answer("guatiao_intake_flatten", func(fn, alloc, out unsafe.Pointer) uint32 {
+			return callOneTextOne(fn, n[0], key, n[1], alloc, out)
 		}, plain(&store))
 	})
 	return store, err
@@ -227,7 +233,7 @@ func Unflatten(schema any, key string, store any) (*guatiao.Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		if !textStore(node) {
+		if !textStore(node, store) {
 			return nil, &guatiao.Error{Status: guatiao.WrongKind, Message: "a flat store maps strings to strings"}
 		}
 	} else if _, ok := store.(map[string]string); !ok {
@@ -235,10 +241,10 @@ func Unflatten(schema any, key string, store any) (*guatiao.Value, error) {
 	}
 	var rebuilt *guatiao.Value
 	err := guatiao.WithNodes([]any{schema, store}, func(n []unsafe.Pointer) error {
-		return answer(func(alloc, out unsafe.Pointer) uint32 {
-			return native.IntakeUnflatten(n[0], key, n[1], alloc, out)
+		return answer("guatiao_intake_unflatten", func(fn, alloc, out unsafe.Pointer) uint32 {
+			return callOneTextOne(fn, n[0], key, n[1], alloc, out)
 		}, func(st uint32, out *guatiao.Value) error {
-			if st == native.ErrWrongKind {
+			if st == wrongKind {
 				out.Close()
 				return nil
 			}
@@ -248,30 +254,22 @@ func Unflatten(schema any, key string, store any) (*guatiao.Value, error) {
 	return rebuilt, err
 }
 
-func textStore(node unsafe.Pointer) bool {
-	if native.Tag(node) != native.TagMap {
+// textStore reports whether node, inside keep, is a map of strings.
+func textStore(node unsafe.Pointer, keep any) bool {
+	ref, err := guatiao.Borrow(func() unsafe.Pointer { return node }, keep)
+	if err != nil {
 		return false
 	}
-	for i := uintptr(0); i < native.Len(node); i++ {
-		if native.Tag(native.EntryValue(native.EntryAt(node, i))) != native.TagString {
+	m, err := ref.Map()
+	if err != nil {
+		return false
+	}
+	for _, v := range m.All() {
+		if v.Tag() != guatiao.TagString {
 			return false
 		}
 	}
 	return true
-}
-
-// lift turns the native layer's failure to open a library into the
-// guatiao package's error for it.
-func lift(err error) error {
-	var nf *native.NotFound
-	if errors.As(err, &nf) {
-		return &guatiao.LibraryNotFound{Basename: nf.Basename, Looked: nf.Looked}
-	}
-	var ms *native.Missing
-	if errors.As(err, &ms) {
-		return &guatiao.MissingSymbol{Path: ms.Path, Symbol: ms.Symbol, Feature: ms.Feature}
-	}
-	return err
 }
 
 // UseLibrary names the guatiao_intake library to load instead of looking for
@@ -283,4 +281,4 @@ func lift(err error) error {
 // platform's search. Call it before the first call that needs the
 // library; naming another file once one is loaded is an error, naming the
 // same one is not.
-func UseLibrary(where string) error { return native.Use(native.LibIntake, where) }
+func UseLibrary(where string) error { return library.Use(where) }

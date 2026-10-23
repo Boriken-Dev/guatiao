@@ -23,8 +23,9 @@
 // guatiao_serde and guatiao_intake, each found through its own
 // UseLibrary, then GUATIAO_SERDE_LIBRARY or GUATIAO_INTAKE_LIBRARY, then
 // GUATIAO_LIBRARY (a directory, or a file exporting it, else the file
-// beside it). They build on Load, Adopt, WithNodes, NodeOf, Borrow and
-// StatusError, which any package over another guatiao library may use.
+// beside it). They open their libraries as a Surface and build on Load,
+// Adopt, WithNodes, NodeOf, Borrow and StatusError, which any package over
+// another guatiao library may use.
 //
 // # Values
 //

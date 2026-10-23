@@ -13,14 +13,13 @@ import (
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
 	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/intake"
-	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/internal/testenv"
-	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/serde"
+	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/intake/internal/testenv"
 )
 
 func TestMain(m *testing.M) {
 	testenv.Setup()
 	var err error
-	if flatSchema, err = serde.Parse(flatSchemaJSON, serde.JSON); err != nil {
+	if flatSchema, err = testenv.FromJSON(flatSchemaJSON); err != nil {
 		panic(err)
 	}
 	code := m.Run()

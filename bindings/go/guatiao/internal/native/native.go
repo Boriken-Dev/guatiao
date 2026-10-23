@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // Package native is the binding's one door to C: finding and opening the
-// guatiao libraries, a Go function per export, and reading and writing
+// guatiao library and any other a package names, a Go function per export, and reading and writing
 // the structs the header declares.
 //
 // Every size and offset comes from the header's own types, so nothing
@@ -13,7 +13,7 @@
 package native
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/include -DGUATIAO_SERDE_TOML -DGUATIAO_SERDE_YAML
+#cgo CFLAGS: -I${SRCDIR}/include
 #cgo linux LDFLAGS: -ldl
 #include <stdlib.h>
 #include "native.h"
@@ -41,7 +41,6 @@ const (
 	SizeProviderErr = unsafe.Sizeof(C.guatiao_provider_error{})
 	SizeObject      = unsafe.Sizeof(C.guatiao_object{})
 	SizeKindHeader  = unsafe.Sizeof(C.guatiao_kind_header{})
-	SizeParseError  = unsafe.Sizeof(C.guatiao_parse_error{})
 	SizeTextError   = unsafe.Sizeof(C.guatiao_text_error{})
 	OffsetPayload   = unsafe.Offsetof(C.guatiao_value{}.payload)
 	OffsetEntryVal  = unsafe.Offsetof(C.guatiao_entry{}.value)
@@ -69,15 +68,6 @@ const (
 	TagBytes      = uint32(C.GUATIAO_BYTES)
 	TagList       = uint32(C.GUATIAO_LIST)
 	TagMap        = uint32(C.GUATIAO_MAP)
-	FormatJSON    = uint32(C.GUATIAO_FORMAT_JSON)
-	FormatTOML    = uint32(C.GUATIAO_FORMAT_TOML)
-	FormatYAML    = uint32(C.GUATIAO_FORMAT_YAML)
-	BytesDataURI  = uint32(C.GUATIAO_BYTES_DATA_URI)
-	BytesBase64   = uint32(C.GUATIAO_BYTES_BASE64)
-	BytesArray    = uint32(C.GUATIAO_BYTES_ARRAY)
-	BytesRefuse   = uint32(C.GUATIAO_BYTES_REFUSE)
-	ReadDataURIs  = uint32(C.GUATIAO_READ_DATA_URIS)
-	Pretty        = uint32(C.GUATIAO_PRETTY)
 	MaxDepth      = int(C.GUATIAO_MAX_DEPTH)
 	LowUnmapped   = uintptr(0x10000)
 	ContextStride = uintptr(16)
@@ -107,11 +97,10 @@ func (e *Missing) Error() string {
 	return fmt.Sprintf("%s was not built with %s", e.Path, e.Symbol)
 }
 
-// Lib is one opened library: where it came from, its default allocator
-// and the optional exports it lacks.
+// Lib is the opened guatiao library: where it came from, its default
+// allocator and the optional exports it lacks.
 type Lib struct {
 	Path    string
-	which   C.int
 	alloc   *C.guatiao_alloc
 	missing map[string]string
 }
@@ -128,27 +117,26 @@ func (l *Lib) Need(symbol string) error {
 	return nil
 }
 
+// Spec names a library to look for.
+type Spec struct {
+	// Base is the file name without the platform's prefix and suffix.
+	Base string
+	// Variable is its own environment variable, consulted before
+	// GUATIAO_LIBRARY; "" for none.
+	Variable string
+	// Probe is an export only this library has: a file GUATIAO_LIBRARY
+	// names that lacks it is passed over for the file beside it. "" takes
+	// that file as it is, as for the core, which every library carries.
+	Probe string
+}
+
+var coreSpec = Spec{Base: "guatiao"}
+
 var (
-	mu      sync.Mutex
-	chosen  [3]string
-	libs    [3]*Lib
-	failure [3]error
-)
-
-var basenames = [3]string{"guatiao", "guatiao_serde", "guatiao_intake"}
-
-// Each surface's own environment variable, consulted before
-// GUATIAO_LIBRARY; the core has none of its own.
-var variables = [3]string{"", "GUATIAO_SERDE_LIBRARY", "GUATIAO_INTAKE_LIBRARY"}
-
-// A symbol only each surface exports: what a shared file is checked for.
-var probes = [3]string{"guatiao_value_free", "guatiao_json_parse_ex", "guatiao_intake_check"}
-
-// The surfaces, as the which of Use and open.
-const (
-	LibCore   = 0
-	LibSerde  = 1
-	LibIntake = 2
+	mu         sync.Mutex
+	coreChosen string
+	coreLib    *Lib
+	coreFailed error
 )
 
 // Filename is the platform's file name for a library of this base name.
@@ -163,26 +151,30 @@ func Filename(base string) string {
 	}
 }
 
-// Use names the library of surface which (LibCore, LibSerde, LibIntake)
-// to open instead of looking for one: a file exporting it, whatever it is
-// called, or a directory holding it. Naming another once one is open is
-// an error; naming the same one is not.
-func Use(which int, where string) error {
+// Same reports whether where (a file, or a directory holding the
+// library s names) is the file at path.
+func Same(s Spec, where, path string) bool {
+	if isDir(where) {
+		where = filepath.Join(where, Filename(s.Base))
+	}
+	a, _ := filepath.Abs(where)
+	b, _ := filepath.Abs(path)
+	return a == b
+}
+
+// Use names the guatiao library to open instead of looking for one: a
+// file exporting it, whatever it is called, or a directory holding it.
+// Naming another once one is open is an error; naming the same one is not.
+func Use(where string) error {
 	mu.Lock()
 	defer mu.Unlock()
-	if libs[which] != nil {
-		same := where
-		if isDir(where) {
-			same = filepath.Join(where, Filename(basenames[which]))
-		}
-		a, _ := filepath.Abs(same)
-		b, _ := filepath.Abs(libs[which].Path)
-		if a != b {
-			return fmt.Errorf("the %s library is already loaded from %s", basenames[which], libs[which].Path)
+	if coreLib != nil {
+		if !Same(coreSpec, where, coreLib.Path) {
+			return fmt.Errorf("the guatiao library is already loaded from %s", coreLib.Path)
 		}
 		return nil
 	}
-	chosen[which] = where
+	coreChosen = where
 	return nil
 }
 
@@ -196,20 +188,20 @@ func isFile(p string) bool {
 	return err == nil && !info.IsDir()
 }
 
-// A file to try. A shared one (a GUATIAO_LIBRARY file, for a surface other
-// than the core) that lacks the surface is passed over, not an error.
+// A file to try. A shared one (a GUATIAO_LIBRARY file, for a library with
+// a probe) that lacks the library is passed over, not an error.
 type try struct {
 	path   string
 	shared bool
 }
 
-// candidates are the files to try for surface which: what Use named, its
+// candidates are the files to try for s: chosen (what a Use named), its
 // own variable, GUATIAO_LIBRARY, then the platform's search. A directory
-// holds the surface's file under its platform name; a file named for the
-// surface is taken as it is; a GUATIAO_LIBRARY file serves every surface
-// it exports, else the surface's own file beside it does.
-func candidates(which int) (tries []try, looked []string) {
-	filename := Filename(basenames[which])
+// holds the library under its platform name; a file named for it is taken
+// as it is; a GUATIAO_LIBRARY file serves every library it exports, else
+// the library's own file beside it does.
+func candidates(s Spec, chosen string) (tries []try, looked []string) {
+	filename := Filename(s.Base)
 	named := func(where, route string, shared bool) {
 		looked = append(looked, fmt.Sprintf("%s (%s)", route, where))
 		switch {
@@ -226,18 +218,18 @@ func candidates(which int) (tries []try, looked []string) {
 			}
 		}
 	}
-	if chosen[which] != "" {
-		named(chosen[which], "UseLibrary", false)
+	if chosen != "" {
+		named(chosen, "UseLibrary", false)
 	}
-	if v := variables[which]; v != "" {
-		if own := os.Getenv(v); own != "" {
-			named(own, v, false)
+	if s.Variable != "" {
+		if own := os.Getenv(s.Variable); own != "" {
+			named(own, s.Variable, false)
 		} else {
-			looked = append(looked, v+" (unset)")
+			looked = append(looked, s.Variable+" (unset)")
 		}
 	}
 	if shared := os.Getenv("GUATIAO_LIBRARY"); shared != "" {
-		named(shared, "GUATIAO_LIBRARY", which != LibCore)
+		named(shared, "GUATIAO_LIBRARY", s.Probe != "")
 	} else {
 		looked = append(looked, "GUATIAO_LIBRARY (unset)")
 	}
@@ -246,101 +238,139 @@ func candidates(which int) (tries []try, looked []string) {
 	return tries, looked
 }
 
-// Locate is the file the lookup for surface which settles on now, without
-// opening it for use: the first candidate that is a file (a shared one
-// only when it exports the surface), else the bare file name the
-// platform's search would be given. A *NotFound when no route names
-// anything and the platform's search is all that is left is not an error
-// here: the bare name is answered.
-func Locate(which int) (string, error) {
-	mu.Lock()
-	defer mu.Unlock()
-	tries, looked := candidates(which)
+func carries(path, symbol string) bool {
+	cpath, csym := C.CString(path), C.CString(symbol)
+	defer C.free(unsafe.Pointer(cpath))
+	defer C.free(unsafe.Pointer(csym))
+	return C.gt_carries(cpath, csym) != 0
+}
+
+// Locate is the file the lookup for s settles on now, with chosen as a Use
+// named it, without opening it for use: the first candidate that is a
+// file (a shared one only when it exports s.Probe). A *NotFound when no
+// route names a file and the platform's search is all that is left.
+func Locate(s Spec, chosen string) (string, error) {
+	tries, looked := candidates(s, chosen)
 	for _, t := range tries {
 		if !isFile(t.path) {
 			continue
 		}
-		if t.shared {
-			cpath, csym := C.CString(t.path), C.CString(probes[which])
-			found := C.gt_carries(cpath, csym) != 0
-			C.free(unsafe.Pointer(cpath))
-			C.free(unsafe.Pointer(csym))
-			if !found {
-				continue
-			}
+		if t.shared && !carries(t.path, s.Probe) {
+			continue
 		}
 		return t.path, nil
 	}
-	return "", &NotFound{Basename: basenames[which], Looked: looked}
+	return "", &NotFound{Basename: s.Base, Looked: looked}
 }
 
-func open(which int) (*Lib, error) {
+// Opened is a library other than the core, open for the process: the
+// address of each export resolved, and the optional ones it lacks.
+type Opened struct {
+	Path    string
+	Symbols map[string]unsafe.Pointer
+	Missing map[string]string
+	Alloc   unsafe.Pointer
+}
+
+// Open finds the library s names, with chosen as a Use named it, and
+// resolves exports (each name and its feature: "" for one every build
+// has) and guatiao_alloc_default. A file that opens but lacks a required
+// export is a *Missing, or passed over when it is a shared one.
+func Open(s Spec, chosen string, exports map[string]string) (*Opened, error) {
+	tries, looked := candidates(s, chosen)
+	for _, t := range tries {
+		cpath := C.CString(t.path)
+		var buf [512]C.char
+		h := C.gt_load(cpath, &buf[0], C.size_t(len(buf)))
+		C.free(unsafe.Pointer(cpath))
+		if h == nil {
+			continue
+		}
+		o := &Opened{Path: t.path, Symbols: map[string]unsafe.Pointer{}, Missing: map[string]string{}}
+		absent := ""
+		find := func(name string) unsafe.Pointer {
+			cname := C.CString(name)
+			defer C.free(unsafe.Pointer(cname))
+			return C.gt_find(h, cname)
+		}
+		for name, feature := range exports {
+			if p := find(name); p != nil {
+				o.Symbols[name] = p
+			} else if feature == "" {
+				absent = name
+				break
+			} else {
+				o.Missing[name] = feature
+			}
+		}
+		defaults := find("guatiao_alloc_default")
+		if absent == "" && defaults == nil {
+			absent = "guatiao_alloc_default"
+		}
+		if absent != "" {
+			C.gt_unload(h)
+			if t.shared {
+				continue
+			}
+			// A file that opened but is not a build of this library.
+			return nil, &Missing{Path: t.path, Symbol: absent}
+		}
+		alloc := (*C.guatiao_alloc)(C.calloc(1, C.size_t(SizeAlloc)))
+		if st := C.gt_alloc_default_at(defaults, alloc); st != 0 {
+			C.free(unsafe.Pointer(alloc))
+			return nil, fmt.Errorf("guatiao_alloc_default of %s answered status %d", t.path, uint32(st))
+		}
+		o.Alloc = unsafe.Pointer(alloc)
+		return o, nil
+	}
+	return nil, &NotFound{Basename: s.Base, Looked: looked}
+}
+
+// Core opens the guatiao library on first use.
+func Core() (*Lib, error) {
 	mu.Lock()
 	defer mu.Unlock()
-	if libs[which] != nil {
-		return libs[which], nil
+	if coreLib != nil {
+		return coreLib, nil
 	}
-	if failure[which] != nil {
-		return nil, failure[which]
+	if coreFailed != nil {
+		return nil, coreFailed
 	}
-	base := basenames[which]
-	tries, looked := candidates(which)
+	tries, looked := candidates(coreSpec, coreChosen)
 	for _, t := range tries {
 		path := t.path
 		cpath := C.CString(path)
 		var buf [512]C.char
-		rc := C.gt_open(C.int(which), cpath, &buf[0], C.size_t(len(buf)))
+		rc := C.gt_open(cpath, &buf[0], C.size_t(len(buf)))
 		C.free(unsafe.Pointer(cpath))
 		why := C.GoString(&buf[0])
 		if rc == 2 {
-			if t.shared {
-				continue
-			}
 			// A file that opened but is not a build of this library.
 			return nil, &Missing{Path: path, Symbol: why}
 		}
 		if rc != 0 {
 			continue
 		}
-		lib := &Lib{Path: path, which: C.int(which), missing: map[string]string{}}
+		lib := &Lib{Path: path, missing: map[string]string{}}
 		for i := 0; ; i++ {
 			var name, feature *C.char
-			if C.gt_missing(C.int(which), C.int(i), &name, &feature) == 0 {
+			if C.gt_missing(C.int(i), &name, &feature) == 0 {
 				break
 			}
 			lib.missing[C.GoString(name)] = C.GoString(feature)
 		}
 		alloc := (*C.guatiao_alloc)(C.calloc(1, C.size_t(SizeAlloc)))
-		var st C.guatiao_status
-		switch which {
-		case 0:
-			st = C.gt_core_guatiao_alloc_default(alloc)
-		case 1:
-			st = C.gt_serde_guatiao_alloc_default(alloc)
-		default:
-			st = C.gt_intake_guatiao_alloc_default(alloc)
-		}
-		if st != 0 {
+		if st := C.gt_core_guatiao_alloc_default(alloc); st != 0 {
 			C.free(unsafe.Pointer(alloc))
 			return nil, fmt.Errorf("guatiao_alloc_default of %s answered status %d", path, uint32(st))
 		}
 		lib.alloc = alloc
-		libs[which] = lib
+		coreLib = lib
 		return lib, nil
 	}
-	err := &NotFound{Basename: base, Looked: looked}
-	failure[which] = err
-	return nil, err
+	coreFailed = &NotFound{Basename: coreSpec.Base, Looked: looked}
+	return nil, coreFailed
 }
-
-// Core opens the guatiao library on first use.
-func Core() (*Lib, error) { return open(0) }
-
-// Serde opens guatiao_serde on first use.
-func Serde() (*Lib, error) { return open(1) }
-
-// Intake opens guatiao_intake on first use.
-func Intake() (*Lib, error) { return open(2) }
 
 // ---- memory -------------------------------------------------------------
 

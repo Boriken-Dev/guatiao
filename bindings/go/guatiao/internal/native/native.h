@@ -3,9 +3,10 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 /*
- * The exports this binding calls, resolved at run time from the library a
- * process names, and the callers Go uses: one function pointer per export
- * in a table per library, and a `static inline` caller per export.
+ * The exports of the guatiao library this binding calls, resolved at run
+ * time from the file a process names, and the callers Go uses: one
+ * function pointer per export in a table, and a `static inline` caller per
+ * export. Another guatiao library is opened through gt_load and gt_find.
  *
  * Each list entry is X(return type, name, parameters, arguments, feature):
  * a feature of "" is an export every build has, checked when the library
@@ -20,8 +21,6 @@
 #include <stdint.h>
 
 #include "guatiao.h"
-#include "guatiao_intake.h"
-#include "guatiao_serde.h"
 
 #define GT_TEXT_FORMS(X, form)                                                                  \
   X(guatiao_status, guatiao_##form##_parse,                                                    \
@@ -170,70 +169,7 @@
   X(guatiao_status, guatiao_registry_collect,                                                  \
     (guatiao_registry *reg, const guatiao_alloc *alloc, guatiao_value *out), (reg, alloc, out), "load")
 
-#define GT_SERDE(X)                                                                             \
-  X(guatiao_status, guatiao_alloc_default, (guatiao_alloc *out), (out), "")                    \
-  X(guatiao_status, guatiao_json_parse_ex,                                                     \
-    (guatiao_str text, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out,            \
-     guatiao_parse_error *err),                                                                 \
-    (text, how, alloc, out, err), "")                                                           \
-  X(guatiao_status, guatiao_json_emit,                                                         \
-    (const guatiao_value *v, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out),     \
-    (v, how, alloc, out), "")                                                                   \
-  X(guatiao_status, guatiao_json_emit_pretty,                                                  \
-    (const guatiao_value *v, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out),     \
-    (v, how, alloc, out), "")                                                                   \
-  X(guatiao_status, guatiao_toml_parse_ex,                                                     \
-    (guatiao_str text, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out,            \
-     guatiao_parse_error *err),                                                                 \
-    (text, how, alloc, out, err), "toml")                                                       \
-  X(guatiao_status, guatiao_toml_emit,                                                         \
-    (const guatiao_value *v, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out),     \
-    (v, how, alloc, out), "toml")                                                               \
-  X(guatiao_status, guatiao_yaml_parse_ex,                                                     \
-    (guatiao_str text, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out,            \
-     guatiao_parse_error *err),                                                                 \
-    (text, how, alloc, out, err), "yaml")                                                       \
-  X(guatiao_status, guatiao_yaml_emit,                                                         \
-    (const guatiao_value *v, uint32_t how, const guatiao_alloc *alloc, guatiao_value *out),     \
-    (v, how, alloc, out), "yaml")
-
-#define GT_INTAKE(X)                                                                            \
-  X(guatiao_status, guatiao_alloc_default, (guatiao_alloc *out), (out), "")                    \
-  X(guatiao_status, guatiao_intake_check,                                                      \
-    (const guatiao_value *schema, const guatiao_value *form, const guatiao_alloc *alloc,        \
-     guatiao_value *out),                                                                       \
-    (schema, form, alloc, out), "")                                                             \
-  X(guatiao_status, guatiao_intake_layout,                                                     \
-    (const guatiao_value *schema, const guatiao_value *form, const guatiao_alloc *alloc,        \
-     guatiao_value *out),                                                                       \
-    (schema, form, alloc, out), "")                                                             \
-  X(guatiao_status, guatiao_intake_for_schema,                                                 \
-    (const guatiao_value *schema, const guatiao_alloc *alloc, guatiao_value *out), (schema, alloc, out), "") \
-  X(guatiao_status, guatiao_intake_form_for,                                                   \
-    (const guatiao_value *form, const guatiao_value *schema, guatiao_str path,                  \
-     const guatiao_alloc *alloc, guatiao_value *out),                                           \
-    (form, schema, path, alloc, out), "")                                                       \
-  X(guatiao_status, guatiao_intake_is_visible,                                                 \
-    (const guatiao_value *schema, const guatiao_value *form, guatiao_str key,                   \
-     const guatiao_value *values, bool *out),                                                   \
-    (schema, form, key, values, out), "")                                                       \
-  X(const guatiao_value *, guatiao_intake_path_get, (const guatiao_value *value, guatiao_str path), \
-    (value, path), "")                                                                          \
-  X(const guatiao_value *, guatiao_intake_resolve, (const guatiao_value *schema, guatiao_str key), \
-    (schema, key), "")                                                                          \
-  X(guatiao_status, guatiao_intake_flat_keys,                                                  \
-    (const guatiao_value *schema, guatiao_str key, const guatiao_alloc *alloc, guatiao_value *out), \
-    (schema, key, alloc, out), "")                                                              \
-  X(guatiao_status, guatiao_intake_flatten,                                                    \
-    (const guatiao_value *schema, guatiao_str key, const guatiao_value *value,                  \
-     const guatiao_alloc *alloc, guatiao_value *out),                                           \
-    (schema, key, value, alloc, out), "")                                                       \
-  X(guatiao_status, guatiao_intake_unflatten,                                                  \
-    (const guatiao_value *schema, guatiao_str key, const guatiao_value *store,                  \
-     const guatiao_alloc *alloc, guatiao_value *out),                                           \
-    (schema, key, store, alloc, out), "")
-
-/* One table of pointers per library, a field per export. */
+/* The table of pointers, a field per export. */
 #define GT_FIELD(ret, name, params, args, feature) ret(*name) params;
 #define GT_VOID_FIELD(name, params, args, feature) void(*name) params;
 
@@ -242,18 +178,10 @@
 typedef struct gt_core_fns {
   GT_CORE(X)
 } gt_core_fns;
-typedef struct gt_serde_fns {
-  GT_SERDE(X)
-} gt_serde_fns;
-typedef struct gt_intake_fns {
-  GT_INTAKE(X)
-} gt_intake_fns;
 #undef X
 #undef GT_VOID
 
 extern gt_core_fns gt_core;
-extern gt_serde_fns gt_serde;
-extern gt_intake_fns gt_intake;
 
 /* The callers: gt_core_guatiao_value_free(...) and so on. */
 #define GT_CALLER(lib, ret, name, params, args) \
@@ -266,29 +194,28 @@ extern gt_intake_fns gt_intake;
 GT_CORE(X)
 #undef X
 #undef GT_VOID
-#define GT_VOID(name, params, args, feature)
-#define X(ret, name, params, args, feature) GT_CALLER(serde, ret, name, params, args)
-GT_SERDE(X)
-#undef X
-#define X(ret, name, params, args, feature) GT_CALLER(intake, ret, name, params, args)
-GT_INTAKE(X)
-#undef X
-#undef GT_VOID
-
-enum { GT_LIB_CORE = 0, GT_LIB_SERDE = 1, GT_LIB_INTAKE = 2 };
 
 /*
- * Opens the library at `path` (UTF-8) as `lib` and resolves its exports.
+ * Opens the guatiao library at `path` (UTF-8) and resolves its exports.
  * Answers 0, or 1 when the file did not open (its reason in `err`), or 2
- * when an export every build has is missing (its name in `err`). Once a
- * library opened, `gt_missing` names its absent optional exports.
+ * when an export every build has is missing (its name in `err`). Once it
+ * opened, `gt_missing` names its absent optional exports.
  */
-int gt_open(int lib, const char *path, char *err, size_t errlen);
+int gt_open(const char *path, char *err, size_t errlen);
+
+/* The `index`th absent export of the guatiao library and its feature, or 0 past the last. */
+int gt_missing(int index, const char **name, const char **feature);
+
+/* Opens the file at `path` (UTF-8): its handle, or NULL with the reason in `err`. */
+void *gt_load(const char *path, char *err, size_t errlen);
+/* The address of the export `name` of a file gt_load opened, or NULL. */
+void *gt_find(void *handle, const char *name);
+/* Closes a file gt_load opened, none of whose exports is in use. */
+void gt_unload(void *handle);
 /* 1 when the file at path opens and exports symbol, else 0; it is closed again. */
 int gt_carries(const char *path, const char *symbol);
-
-/* The `index`th absent export of `lib` and its feature, or 0 past the last. */
-int gt_missing(int lib, int index, const char **name, const char **feature);
+/* Calls the guatiao_alloc_default at `fn`. */
+guatiao_status gt_alloc_default_at(void *fn, guatiao_alloc *out);
 
 /* An allocator that counts the blocks it handed out and has not had back. */
 typedef struct gt_counting {
