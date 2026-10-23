@@ -76,11 +76,17 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
       - name: Build the Dart API references
+        # dartdoc from pub, not the SDK's `dart doc`: dartdoc reads every
+        # public library of every package it meets, and the 9.0.6 that
+        # Dart 3.13 bundles throws a RangeError on a library comment whose
+        # `@docImport` lines are followed by a blank line, as those of
+        # package:hooks and package:code_assets are. Fixed in 9.0.8.
         # Into each package's own default output; mkdocs owns `site/`
         # until it has run, so the copy happens after it.
         run: |
+          dart pub global activate dartdoc 9.0.11
           for p in guatiao guatiao_serde guatiao_intake; do
-            (cd "bindings/dart/$p" && dart pub get && dart doc)
+            (cd "bindings/dart/$p" && dart pub get && dart pub global run dartdoc)
           done
       - name: Install the Python packages and the docs tooling
         # Editable, because mkdocstrings renders the package by importing
@@ -96,7 +102,7 @@ jobs:
           cp -r target/doc/. site/rust/
           printf '%s' '<!doctype html><meta http-equiv="refresh" content="0; url=guatiao/index.html">' > site/rust/index.html
       - name: Add the Dart references under /dart/, /dart-serde/, /dart-intake/
-        # `dart doc` writes its own root index, so no redirect is needed.
+        # dartdoc writes its own root index, so no redirect is needed.
         run: |
           for p in dart:guatiao dart-serde:guatiao_serde dart-intake:guatiao_intake; do
             mkdir -p "site/${p%%:*}"
