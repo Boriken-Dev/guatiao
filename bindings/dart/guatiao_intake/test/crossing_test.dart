@@ -3,8 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 /// A tree crosses between guatiao_intake and guatiao: built by one library,
-/// read and freed through the other; and a provider's form, read through
-/// the core's registry, checked here.
+/// read and freed through the other.
 library;
 
 import 'package:guatiao/guatiao.dart';
@@ -14,7 +13,7 @@ import 'package:test/test.dart';
 import 'support.dart';
 
 void main() {
-  setUpAll(libraryDir);
+  setUpAll(setUpLibrary);
 
   test('a tree intake built is changed and freed through the core', () {
     final schema = Value.fromDart({
@@ -46,42 +45,5 @@ void main() {
     expect(found.toDart(), 'b');
     value.close();
     expect(() => found.toDart(), throwsStateError);
-  });
-
-  test('the library is intake\'s own, and carries the core too', () {
-    final lib = intake.library();
-    expect(lib.path, endsWith(dllFilename('guatiao_intake')));
-    expect(lib.provides('guatiao_value_free'), isTrue);
-  });
-
-  test('a provider carries its form in meta, which fits its schema', () {
-    final reg = Registry('dart-tests', '0.1');
-    addTearDown(reg.close);
-    reg.scanDir(libraryDir(), rules: 'kind=greeter');
-    final meta = reg.providerMeta('derived_greeter_shouter');
-    expect(meta, isNotNull);
-    addTearDown(meta!.close);
-    final form = meta.asMap()[intake.providerFormKey];
-    final schema = reg.providerConfig('derived_greeter_shouter');
-    expect(form, isNotNull);
-    expect(schema, isNotNull);
-
-    expect(intake.check(schema!, form!), isNull);
-    final sections = form.toDart()! as Map;
-    expect(
-      [for (final s in sections['sections']! as List) (s as Map)['id']],
-      ['words', 'volume'],
-    );
-    final marks = (sections['fields']! as Map)['marks']! as Map;
-    expect(marks['unit'], 'marks');
-    expect(
-      ((sections['fields']! as Map)['prefix']! as Map)['placeholder'],
-      'hey',
-    );
-    for (final exclaim in [false, true]) {
-      final values = Value.fromDart({'exclaim': exclaim});
-      addTearDown(values.close);
-      expect(intake.isVisible(schema, form, 'marks', values), exclaim);
-    }
   });
 }

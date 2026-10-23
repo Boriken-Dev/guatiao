@@ -5,6 +5,7 @@
 /// Where `guatiao_serde` is found: its own variable, then `GUATIAO_LIBRARY`
 /// as a directory, a file carrying the surface, or a file beside it. Each
 /// case runs `lookup_probe.dart` in a process with its own environment.
+@TestOn('vm')
 @Timeout(Duration(minutes: 3))
 library;
 

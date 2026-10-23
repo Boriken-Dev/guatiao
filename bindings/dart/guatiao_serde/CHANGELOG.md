@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The web**: `loads` and `dumps` through the module the page loaded,
+  which carries the serde surface (an application's own build); the same
+  numbers, errors and positions as a native library.
 - The package, taken out of package:guatiao, where it was
   `package:guatiao/serde.dart`: the same functions, over the
   `guatiao_serde` library, which it finds through

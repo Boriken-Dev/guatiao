@@ -7,12 +7,14 @@ repository: https://github.com/Boriken-Dev/guatiao
 issue_tracker: https://github.com/Boriken-Dev/guatiao/issues
 documentation: https://boriken-dev.github.io/guatiao/
 
-# `dart:ffi` is not available in a browser, so there is no `web`.
+# `dart:ffi` on each native platform; on the web, the WebAssembly module
+# the page loads.
 platforms:
   android:
   ios:
   linux:
   macos:
+  web:
   windows:
 
 environment:
@@ -27,4 +29,7 @@ dependencies:
 dev_dependencies:
   ffigen: ^21.0.0
   lints: ^6.0.0
+  # The browser suites talk to the test machine through it; under dart2wasm
+  # a number arrives as a double before 2.1.1.
+  stream_channel: ^2.1.1
   test: ^1.25.0

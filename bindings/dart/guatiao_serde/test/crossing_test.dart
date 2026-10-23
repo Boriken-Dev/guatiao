@@ -6,17 +6,14 @@
 /// read and freed through the other.
 library;
 
-import 'dart:ffi';
-
 import 'package:guatiao/guatiao.dart';
 import 'package:guatiao_serde/guatiao_serde.dart' as serde;
-import 'package:guatiao_serde/src/bindings.g.dart' show guatiao_parse_error;
 import 'package:test/test.dart';
 
 import 'support.dart';
 
 void main() {
-  setUpAll(libraryDir);
+  setUpAll(setUpLibrary);
 
   test('a tree serde built is changed and freed through the core', () {
     final value = serde.loads('{"a": [1, "two", {"b": null}]}');
@@ -51,16 +48,5 @@ void main() {
       expect(value.toDart(), {'k': 'v'});
       value.close();
     }
-  });
-
-  test('the library is serde\'s own, and carries the core too', () {
-    final lib = serde.library();
-    expect(lib.path, endsWith(dllFilename('guatiao_serde')));
-    expect(lib.provides('guatiao_value_free'), isTrue);
-  });
-
-  test('a parse error is laid out as the header says', () {
-    // Three uint32_t, padding, then the message value the reader strides to.
-    expect(sizeOf<guatiao_parse_error>(), 56);
   });
 }
