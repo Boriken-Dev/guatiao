@@ -47,6 +47,9 @@ is `guatiao` itself or an application that carries it.
 - **Dates, times, spans and exact lengths** — dates, times of day and
   civil dates and times to the nanosecond, instants, spans and exact
   lengths, read and written by the library itself.
+- **Values on the wire** — `v.to_wire()` and `guatiao.Value.from_wire(b)`
+  carry a tree exactly as bytes, and `guatiao.wire` announces a schema on
+  a channel before its values, with a `Receiver` that checks each one.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
 - **JSON, TOML and YAML**, and **form checks against a schema**, through
@@ -85,7 +88,7 @@ the platform's library search is tried by file name.
 
 | Exports from | Needed for |
 | --- | --- |
-| `guatiao` | values, the registry, kinds and providers, schemas, time, redaction |
+| `guatiao` | values, the registry, kinds and providers, schemas, time, redaction, the wire and channels |
 | `guatiao_serde` | `guatiao.serde.parse`, `guatiao.serde.emit`: JSON, and TOML and YAML when the library has them; found through `GUATIAO_SERDE_LIBRARY` first, or named with `guatiao.serde.use_library` |
 | `guatiao_intake` | the `guatiao.intake` functions; found through `GUATIAO_INTAKE_LIBRARY` first, or named with `guatiao.intake.use_library` |
 
@@ -233,6 +236,7 @@ char(guatiao.time.parse('timestamp', '2026-10-21T19:15:00.5+05:30'))  % '2026-10
 | `guatiao.Config`, `guatiao.field`, `guatiao.validate` | configurations and their schemas |
 | `guatiao.Date`, `TimeOfDay`, `DateTime`, `Timestamp`, `Span`, `Duration`, `guatiao.time.*` | dates, times, spans, exact lengths |
 | `guatiao.redact` | secrets hidden |
+| `guatiao.wire.announce`, `send`, `close`, `guatiao.wire.Receiver` | values on the wire and channels |
 | `guatiao.serde.parse`, `guatiao.serde.emit` | JSON, TOML, YAML |
 | `guatiao.intake.*` | forms and the flat projection |
 | `guatiao.Registry`, `guatiao.Instance` | hosting plugins: `scan_dir`, `providers`, `bind`, `create`, `refresh`, ... |

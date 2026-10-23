@@ -57,6 +57,16 @@ classdef Value < guatiao.Tree
     end
   end
 
+  methods (Static)
+    function v = from_wire(bytes, varargin)
+    % The value the wire encoding in `bytes` (a uint8 vector) holds. Bytes
+    % that are not exactly one value raise guatiao:BadValue:malformed.
+    % Option 'Alloc': an allocator.
+      alloc = guatiao.internal.option(varargin, 'Alloc', []);
+      v = guatiao.Value.adopt(guatiao_mex('wire_decode', bytes, guatiao.internal.alloc_id(alloc)));
+    end
+  end
+
   methods (Static, Hidden)
     function v = adopt(id, borrowed)
     % A Value over an owner the gateway already filed.

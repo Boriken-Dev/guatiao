@@ -8,7 +8,7 @@ classdef (Abstract) Tree < handle
 % never a cached address: a write beside a node can move the array it
 % sits in.
 %
-% Reading:  data, tag, length, keys, has, isabsent, isnull, path, copy
+% Reading:  data, tag, length, keys, has, isabsent, isnull, path, copy, to_wire
 % Writing:  set, push, insert, remove, clear, merge
 % Views:    at(key) or at(position, from 1)
 
@@ -105,6 +105,13 @@ classdef (Abstract) Tree < handle
     % A deep copy, a new guatiao.Value. Option 'Alloc': an allocator.
       alloc = guatiao.internal.option(varargin, 'Alloc', []);
       v = guatiao.Value.adopt(guatiao_mex('node_copy', self.OwnerId, self.Steps, guatiao.internal.alloc_id(alloc)));
+    end
+
+    function b = to_wire(self)
+    % The node in the wire encoding, a uint8 row: a tag byte per node,
+    % LEB128 lengths, a number as its own text, a map in its order.
+    % guatiao.Value.from_wire reads the same tree back, in any language.
+      b = guatiao_mex('wire_encode', self.OwnerId, self.Steps);
     end
 
     function p = path(self)

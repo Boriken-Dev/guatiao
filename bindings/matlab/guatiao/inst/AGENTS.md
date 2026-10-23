@@ -67,7 +67,9 @@ Every failure is an `MException` whose identifier is
 `WrongKind` 9, `NotFound` 10, `NullArgument` 11, `Gone` 12, `Unsupported`
 13, `Busy` 14, `Internal` 100 (`guatiao.statuses()` is the table). Details:
 `parse` (a document that does not parse), `unparsed` (text a time grammar
-refuses), `closed` (a closed value, registry, instance or remote),
+refuses), `malformed`, `noSchema`, `notASchema`, `invalid` (the wire
+and its channels), `closed` (a closed value, registry, instance, remote
+or receiver),
 `library`, `symbol`, `floor` (a table not the kind's), `provider` (the
 status a provider answered). Octave puts `guatiao_mex: ` before the words.
 A provider method answers a status by raising one:
@@ -207,6 +209,49 @@ naming the byte offset and what was expected, never quoting the text;
 with two outputs `parse` and `normalize` answer `[]` and a problem struct
 (`form`, `at`, `expected`) instead. Units and seconds past 2^53 are
 refused.
+
+## Values on the wire, and channels
+
+`b = v.to_wire()` (a value or a view) is the node in the wire encoding, a
+`uint8` row: a tag byte per node, LEB128 lengths, a number as its own
+text, bytes as bytes, a map in its order, the same bytes in every
+language. `guatiao.Value.from_wire(b, 'Alloc', a)` reads it back; bytes
+that are not exactly one value raise `guatiao:BadValue:malformed`.
+
+A channel announces a schema before its values, and a receiver checks
+every value against it. A frame is `kind:u8 channel:LEB128 payload`; the
+transport says where one ends.
+
+```matlab
+r = guatiao.wire.Receiver();
+e = r.accept(guatiao.wire.announce(1, schema));   % e.kind 'schema', e.value its copy
+e.value.close();
+e = r.accept(guatiao.wire.send(1, struct('greeting', 'hi')));
+x = e.value;                                       % the checked value
+x.data()
+x.close();
+r.accept(guatiao.wire.close(1));                   % e.kind 'close', e.value []
+r.close();
+```
+
+- `guatiao.wire.announce(channel, schema)`, `guatiao.wire.send(channel,
+  value)` (a value, a view or MATLAB data) and `guatiao.wire.close(channel)`
+  answer the frame, a `uint8` row. A channel is a whole number from 0, a
+  `uint64` past 2^53.
+- `r = guatiao.wire.Receiver('Alloc', a)`; `r.accept(frame)` answers
+  `struct(kind, channel, value)`: `kind` `'schema'`, `'value'` or `'close'`,
+  `channel` a `uint64`, `value` a `guatiao.Value` (the schema's copy or the
+  checked value; close it) or `[]`. `r.close()` (a second does nothing),
+  `r.is_open()`; the last reference going frees it too.
+- A refusal raises `guatiao:BadValue:malformed` (bytes that are not a
+  frame), `guatiao:NotFound:noSchema`, `guatiao:WrongKind:notASchema` or
+  `guatiao:BadValue:invalid` (a value its schema refuses), its message the
+  library's words; with two outputs, `[e, problem] = r.accept(frame)`
+  answers `e = []` and `problem` = struct(`refusal`, `status`, `channel`,
+  `kind` (the frame's kind byte), `at` (the byte of the frame, for
+  `malformed`), `key`, `expected`, `known` (for `invalid`), `message`).
+  A refusal changes nothing the receiver keeps and quotes nothing it was
+  given.
 
 ## Secrets
 

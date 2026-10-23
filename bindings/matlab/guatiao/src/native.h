@@ -80,6 +80,23 @@
   X(guatiao_status, guatiao_duration_read,                                                     \
     (const guatiao_value *value, uint64_t *seconds, uint32_t *nanoseconds),                     \
     (value, seconds, nanoseconds), "")                                                          \
+  X(guatiao_status, guatiao_wire_encode,                                                       \
+    (const guatiao_alloc *alloc, const guatiao_value *value, guatiao_value *out), (alloc, value, out), "") \
+  X(guatiao_status, guatiao_wire_decode,                                                       \
+    (const guatiao_alloc *alloc, guatiao_bytes bytes, guatiao_value *out), (alloc, bytes, out), "") \
+  X(guatiao_status, guatiao_wire_announce,                                                     \
+    (const guatiao_alloc *alloc, uint64_t channel, const guatiao_value *schema, guatiao_value *out), \
+    (alloc, channel, schema, out), "")                                                          \
+  X(guatiao_status, guatiao_wire_send,                                                         \
+    (const guatiao_alloc *alloc, uint64_t channel, const guatiao_value *value, guatiao_value *out), \
+    (alloc, channel, value, out), "")                                                           \
+  X(guatiao_status, guatiao_wire_close,                                                        \
+    (const guatiao_alloc *alloc, uint64_t channel, guatiao_value *out), (alloc, channel, out), "") \
+  X(guatiao_wire_receiver *, guatiao_wire_receiver_new, (const guatiao_alloc *alloc), (alloc), "") \
+  X(guatiao_status, guatiao_wire_receiver_accept,                                              \
+    (guatiao_wire_receiver *recv, guatiao_bytes frame, guatiao_wire_event *out_event),          \
+    (recv, frame, out_event), "")                                                               \
+  GT_VOID(guatiao_wire_receiver_free, (guatiao_wire_receiver *recv), (recv), "")                \
   X(guatiao_registry *, guatiao_registry_new,                                                  \
     (guatiao_str id, guatiao_str version, const guatiao_alloc *alloc), (id, version, alloc), "load") \
   GT_VOID(guatiao_registry_free, (guatiao_registry *reg), (reg), "load")                        \
