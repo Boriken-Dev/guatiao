@@ -1312,15 +1312,15 @@ class map : public reader<map> {
     v.payload.map.alloc = alloc;
     v_ = value::adopt(v);
   }
-  /// The map `x` describes, built in `alloc`; a non-map is WRONG_KIND.
-  static result<map> try_of(const item& x, const guatiao_alloc* alloc = default_alloc()) {
-    auto v = try_make(x, alloc);
-    if (!v) return v.error();
-    return from(std::move(*v));
-  }
+  /// The map of `entries`, built in `alloc`. (Only a list of pairs: since
+  /// C++20 `{"k", "v"}` is also a `std::string_view` of two pointers, so
+  /// an `item` overload would make every braced call ambiguous; build an
+  /// `item` with `try_make` and `from`.)
   static result<map> try_of(std::initializer_list<std::pair<std::string_view, item>> entries,
                             const guatiao_alloc* alloc = default_alloc()) {
-    return try_of(item::map(entries), alloc);
+    auto v = try_make(item::map(entries), alloc);
+    if (!v) return v.error();
+    return from(std::move(*v));
   }
 #if GUATIAO_EXCEPTIONS
   map(std::initializer_list<std::pair<std::string_view, item>> entries, const guatiao_alloc* alloc = default_alloc())
@@ -1389,13 +1389,11 @@ class list : public reader<list> {
     v.payload.list.alloc = alloc;
     v_ = value::adopt(v);
   }
-  static result<list> try_of(const item& x, const guatiao_alloc* alloc = default_alloc()) {
-    auto v = try_make(x, alloc);
+  /// The list of `items`, built in `alloc`.
+  static result<list> try_of(std::initializer_list<item> items, const guatiao_alloc* alloc = default_alloc()) {
+    auto v = try_make(item::list(items), alloc);
     if (!v) return v.error();
     return from(std::move(*v));
-  }
-  static result<list> try_of(std::initializer_list<item> items, const guatiao_alloc* alloc = default_alloc()) {
-    return try_of(item::list(items), alloc);
   }
 #if GUATIAO_EXCEPTIONS
   list(std::initializer_list<item> items, const guatiao_alloc* alloc = default_alloc())
@@ -1686,18 +1684,27 @@ inline void record_home(guatiao_value& root, const guatiao_alloc* home) {
 /// elsewhere: a copy built through `home`, the original freed through its
 /// own allocators; then every empty buffer records `home`. So a tree
 /// crossing to another side needs nothing of the side that built it. A
-/// refused copy leaves `root` as it was.
-inline guatiao_status settle(guatiao_value& root, const guatiao_alloc* home) {
+/// refused copy leaves `root` as it was. Never throws: the walks' own
+/// memory running out is ALLOC, since serving slots call this.
+inline guatiao_status settle(guatiao_value& root, const guatiao_alloc* home) noexcept {
   if (!home) return GUATIAO_OK;
-  if (!lives_in(root, home)) {
-    guatiao_value copy = blank();
-    guatiao_status s = guatiao_value_clone(home, &root, &copy);
-    if (s != GUATIAO_OK) return s;
-    guatiao_value_free(&root);
-    root = copy;
+#if GUATIAO_EXCEPTIONS
+  try {
+#endif
+    if (!lives_in(root, home)) {
+      guatiao_value copy = blank();
+      guatiao_status s = guatiao_value_clone(home, &root, &copy);
+      if (s != GUATIAO_OK) return s;
+      guatiao_value_free(&root);
+      root = copy;
+    }
+    record_home(root, home);
+    return GUATIAO_OK;
+#if GUATIAO_EXCEPTIONS
+  } catch (...) {
+    return GUATIAO_ERR_ALLOC;
   }
-  record_home(root, home);
-  return GUATIAO_OK;
+#endif
 }
 
 }  // namespace detail

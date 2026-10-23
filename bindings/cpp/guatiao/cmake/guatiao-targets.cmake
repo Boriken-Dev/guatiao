@@ -28,6 +28,18 @@ function(guatiao_runtime_dirs out)
   set(${out} "${dirs}" PARENT_SCOPE)
 endfunction()
 
+# Makes `target` (a SHARED or MODULE library holding GUATIAO_LIBRARY) a
+# guatiao library file: only its two entry symbols exported, so no inline
+# function, table or static of it is merged with the host's or another
+# plugin's; named as a Rust cdylib names its file (no `lib` on Windows).
+function(guatiao_library_target target)
+  set_target_properties(${target} PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
+  if(WIN32)
+    set_target_properties(${target} PROPERTIES PREFIX "")
+  endif()
+  target_link_libraries(${target} PRIVATE guatiao::guatiao)
+endfunction()
+
 # Copies the guatiao libraries `target` links beside it after each build:
 # on Windows a program finds a DLL there.
 function(guatiao_copy_runtime target)

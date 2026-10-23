@@ -12,5 +12,8 @@
 #include <guatiao/time.hpp>
 #include <guatiao/wire.hpp>
 #include <guatiao/schema.hpp>
+#include <guatiao/registry.hpp>
+#include <guatiao/kind.hpp>
+#include <guatiao/library.hpp>
 
 #endif  // GUATIAO_HPP

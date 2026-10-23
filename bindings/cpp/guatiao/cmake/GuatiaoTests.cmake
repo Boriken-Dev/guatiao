@@ -8,7 +8,8 @@
 # off, and run with every guatiao library on PATH.
 #
 #   guatiao_cpp_test(<name> SOURCES <file>... LIBS <target>...
-#                    [BOTH_EXCEPTION_MODES] [DEFINITIONS <def>...])
+#                    [BOTH_EXCEPTION_MODES] [DEFINITIONS <def>...]
+#                    [INCLUDES <dir>...])
 
 include_guard(GLOBAL)
 
@@ -21,11 +22,31 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Whether exceptions are on is per suite, so the global default goes.
 string(REPLACE "/EHsc" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 
+find_package(Threads REQUIRED)
+
 get_filename_component(GUATIAO_CPP_TEST_SUPPORT "${CMAKE_CURRENT_LIST_DIR}/../tests" ABSOLUTE)
 get_filename_component(GUATIAO_REPO "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
 
+# A file that must not compile: a test building it passes only when the
+# compiler refuses it with `pattern` in its words, so it fails for the
+# reason it exists.
+#
+#   guatiao_cpp_compile_fail(<name> <source> <pattern> LIBS <target>... [INCLUDES <dir>...])
+function(guatiao_cpp_compile_fail name source pattern)
+  cmake_parse_arguments(arg "" "" "LIBS;INCLUDES" ${ARGN})
+  add_library(${name} OBJECT EXCLUDE_FROM_ALL ${source})
+  target_link_libraries(${name} PRIVATE ${arg_LIBS})
+  target_include_directories(${name} PRIVATE ${arg_INCLUDES})
+  set_target_properties(${name} PROPERTIES NO_SYSTEM_FROM_IMPORTED TRUE)
+  if(MSVC)
+    target_compile_options(${name} PRIVATE /EHsc /utf-8)
+  endif()
+  add_test(NAME ${name} COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --target ${name})
+  set_tests_properties(${name} PROPERTIES PASS_REGULAR_EXPRESSION "${pattern}")
+endfunction()
+
 function(guatiao_cpp_test name)
-  cmake_parse_arguments(arg "BOTH_EXCEPTION_MODES" "" "SOURCES;LIBS;DEFINITIONS" ${ARGN})
+  cmake_parse_arguments(arg "BOTH_EXCEPTION_MODES" "" "SOURCES;LIBS;DEFINITIONS;INCLUDES" ${ARGN})
   set(modes exceptions)
   if(arg_BOTH_EXCEPTION_MODES)
     list(APPEND modes noexcept)
@@ -38,7 +59,7 @@ function(guatiao_cpp_test name)
     endif()
     add_executable(${t} ${arg_SOURCES})
     target_link_libraries(${t} PRIVATE ${arg_LIBS})
-    target_include_directories(${t} PRIVATE "${GUATIAO_CPP_TEST_SUPPORT}")
+    target_include_directories(${t} PRIVATE "${GUATIAO_CPP_TEST_SUPPORT}" ${arg_INCLUDES})
     target_compile_definitions(${t} PRIVATE "GUATIAO_REPO=\"${GUATIAO_REPO}\"" _CRT_SECURE_NO_WARNINGS
                                ${arg_DEFINITIONS})
     # The binding's headers are what is under test: their warnings count.
