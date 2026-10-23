@@ -15,7 +15,7 @@ own: guatiao is loaded at run time.
 
 | import | what |
 | --- | --- |
-| `.../bindings/go/guatiao` (package `guatiao`) | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `Tag`, `Status`, the errors, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `Library`, `LibraryOf`; `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError` for a package over another guatiao library |
+| `.../bindings/go/guatiao` (package `guatiao`) | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `Tag`, `Status`, the errors, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`; `FromWire`, `WireAnnounce`, `WireSend`, `WireClose`, `Receiver`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `Library`, `LibraryOf`; `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError` for a package over another guatiao library |
 | `.../bindings/go/guatiao/serde` | over the `guatiao_serde` library: `Parse`, `Emit`: JSON, TOML, YAML; its own `UseLibrary` |
 | `.../bindings/go/guatiao/intake` | over the `guatiao_intake` library: forms, paths, the flat projection; its own `UseLibrary` |
 | `.../bindings/go/guatiao/civil` | `Date`, `Time`, `DateTime`, `Span`, `Length`, instants as `time.Time` |
@@ -455,6 +455,45 @@ l, err := civil.ReadLength(value)                    // [s, ns], seconds, {secs,
   byte offset in the UTF-8 text, `Expected`), an `ErrBadValue`; it never
   quotes the text.
 
+## Values on the wire, and channels
+
+```go
+func (r Ref) ToWire() ([]byte, error)                     // any Ref, a *Value included
+func FromWire(data []byte, opts ...Option) (*Value, error) // ErrBadValue: not exactly one value
+
+func WireAnnounce(channel uint64, schema any) ([]byte, error) // a Value, a view or plain data
+func WireSend(channel uint64, value any) ([]byte, error)
+func WireClose(channel uint64) ([]byte, error)
+
+func NewReceiver() (*Receiver, error)
+func (r *Receiver) Accept(frame []byte) (Event, error)    // ErrClosed after Close
+func (r *Receiver) Close() error
+type Event struct { Kind Frame; Channel uint64; Value *Value } // Value: close it; nil for a close
+type Frame uint32      // FrameSchema 0, FrameValue 1, FrameClose 2 (GUATIAO_FRAME_*)
+type Refusal uint32    // RefusalMalformed, RefusalNoSchema, RefusalNotASchema, RefusalInvalid
+type Refused struct {
+	Refusal  Refusal
+	Status   Status   // BadValue, NotFound, WrongKind, BadValue respectively
+	Channel  uint64   // 0 when the frame ended before one
+	Kind     Frame    // the frame's kind byte, an unknown one included
+	At       int      // RefusalMalformed: the byte of the frame
+	Key      string   // RefusalInvalid: the field
+	Expected string   // RefusalInvalid: what it accepts
+	Known    []string // RefusalInvalid on an unknown field: the fields there are
+	Message  string
+}
+```
+
+The wire encoding is a tag byte per node, LEB128 lengths, a number as its
+own text, bytes as bytes, a map in its order: the same bytes in every
+language. A frame is `kind:u8 channel:LEB128 payload`; the transport says
+where one ends. A `Receiver` keeps each channel's schema and checks every
+value against it. A refusal is a `*Refused`: `errors.Is` matches the
+sentinel of its status, `errors.As` finds it as an `*Error` too; it
+changes nothing the receiver keeps and quotes nothing the frame carried.
+`Accept` may be called from several goroutines (calls are serialised); a
+receiver dropped unclosed is freed by a cleanup.
+
 ## Secrets
 
 ```go
@@ -502,7 +541,8 @@ other side's own words, empty when it gave none), matched with
 `Unsupported`, `Busy`, `Internal`; `guatiao.Errorf(status, format,
 args...)` builds one. `ErrClosed`, `ErrReadOnly`, `*LibraryNotFound`,
 `*MissingSymbol` and `*FloorMismatch` are this binding's own;
-`*serde.ParseError` and `*civil.Unparsed` unwrap to `ErrBadValue`.
+`*serde.ParseError` and `*civil.Unparsed` unwrap to `ErrBadValue`; a
+channel's `*Refused` unwraps to the `*Error` of its status.
 
 ## Threads
 
