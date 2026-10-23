@@ -16,32 +16,37 @@ own: guatiao is loaded at run time.
 | import | what |
 | --- | --- |
 | `.../bindings/go/guatiao` (package `guatiao`) | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `Tag`, `Status`, the errors, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`; `FromWire`, `WireAnnounce`, `WireSend`, `WireClose`, `Receiver`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `Library`, `LibraryOf`; `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError`, `Surface` for a package over another guatiao library |
-| `.../bindings/go/guatiao/serde` | over the `guatiao_serde` library: `Parse`, `Emit`: JSON, TOML, YAML; its own `UseLibrary` |
-| `.../bindings/go/guatiao/intake` | over the `guatiao_intake` library: forms, paths, the flat projection; its own `UseLibrary` |
 | `.../bindings/go/guatiao/civil` | `Date`, `Time`, `DateTime`, `Span`, `Length`, instants as `time.Time` |
 | `.../bindings/go/guatiao/cmd/guatiao-kind` | the command writing a kind package's glue, run by `go generate` |
 
+JSON, TOML and YAML, and taking a value in from a person, are modules of
+their own that require this one, each over its own library and with its
+own `AGENTS.md`: `github.com/Boriken-Dev/guatiao/bindings/go/guatiao-serde`
+(package `serde`, over `guatiao_serde`) and
+`github.com/Boriken-Dev/guatiao/bindings/go/guatiao-intake` (package
+`intake`, over `guatiao_intake`). The three are released together, under
+the same version.
+
 ## Finding the native library
 
-Each package is over its own library: `guatiao` over `guatiao`, `serde`
-over `guatiao_serde`, `intake` over `guatiao_intake` (`civil` over
-`guatiao`). Nothing native is touched until the first call that needs a
-library; it is then found in this order:
+`guatiao` and `civil` are over the `guatiao` library. Nothing native is
+touched until the first call that needs it; it is then found in this
+order:
 
-1. The package's own `UseLibrary(path)` (`guatiao.UseLibrary`,
-   `serde.UseLibrary`, `intake.UseLibrary`), called before that first
-   call: a file exporting it, whatever it is called, or a directory.
-   Naming another file once one is loaded is an error; naming the same
-   one is not.
-2. For serde and intake, `GUATIAO_SERDE_LIBRARY` /
-   `GUATIAO_INTAKE_LIBRARY`: a file, taken as it is, or a directory
-   holding the library under its platform file name.
-3. `GUATIAO_LIBRARY`: a directory holding `guatiao.dll` /
-   `libguatiao.so` / `libguatiao.dylib` (or `guatiao_serde.dll`, ...),
-   or a file: taken as it is for `guatiao`, and for serde and intake
-   when it exports them (an application's own library carrying several
-   surfaces), else their library beside it.
-4. The platform's own library search, by file name.
+1. `guatiao.UseLibrary(path)`, called before that first call: a file
+   exporting the ABI, whatever it is called, or a directory. Naming
+   another file once one is loaded is an error; naming the same one is
+   not.
+2. `GUATIAO_LIBRARY`: a directory holding `guatiao.dll` /
+   `libguatiao.so` / `libguatiao.dylib`, or a file, taken as it is.
+3. The platform's own library search, by file name.
+
+Another guatiao library (`guatiao_serde`, `guatiao_intake`, a `Surface`
+of any package) is found the same way, with its own variable
+(`GUATIAO_SERDE_LIBRARY`, ...) consulted first, and a file
+`GUATIAO_LIBRARY` names taken when it exports that library (an
+application's own library carrying several surfaces), else the library
+beside it.
 
 Not found is a `*guatiao.LibraryNotFound` (`Basename`, `Looked`). An
 export the loaded build lacks is a `*guatiao.MissingSymbol` (`Path`,
@@ -375,47 +380,6 @@ runtime inside it cannot be unloaded. A Go host may load such a file like
 any other; the file then runs a Go runtime of its own beside the host's,
 so a Go host usually links the provider's package instead.
 
-## serde: JSON, TOML, YAML
-
-```go
-v, err := serde.Parse(`{"port": 5900}`, serde.JSON)
-text, err := serde.Emit(v, serde.YAML, serde.Pretty())
-```
-
-`Parse(text, format, opts...) (*Value, error)`; `Emit(x, format, opts...)
-(string, error)` takes a Value, a view or plain data. Options: `Pretty()`,
-`How(flags)` (`BytesDataURI`, `BytesBase64`, `BytesArray`, `BytesRefuse`,
-or'd with `ReadDataURIs`), `InAllocator(alloc)`. A document that does not
-parse is a `*serde.ParseError` (`Format`, `Line`, `Column` from 1, the
-column in characters, 0 when the parser did not say; `Reason`, which never
-quotes the document); `errors.Is(err, guatiao.ErrBadValue)`. A TOML
-document must be a map (`ErrWrongKind`). TOML and YAML need a
-`guatiao_serde` built with them (`MissingSymbol` naming the feature
-otherwise). A number keeps its exact text, except that an exponent is
-read back with its sign (`1e400` is `1e+400`).
-
-## intake
-
-```go
-why, err := intake.Check(schema, form)              // nil, or the error map
-sections, err := intake.Layout(schema, form)         // []intake.Section{Section, Fields}
-shown, err := intake.IsVisible(schema, form, "key", values)
-ref, ok, err := intake.At(value, "agent[1].name")    // borrowed
-form, err := intake.ForSchema(schema)                // a Value to close
-form, err := intake.FormFor(form, schema, "path")    // a Value to close, or nil
-ref, ok, err := intake.Resolve(schema, "auth.password")
-keys, err := intake.FlatKeys(schema, "auth")         // ErrWrongKind for an unknown key
-store, err := intake.Flatten(schema, "auth", value)  // map[string]string
-value, err := intake.Unflatten(schema, "auth", store) // a Value to close, or nil
-```
-
-Every schema, form, value and values argument is a Value, a view or plain
-data; `At` and `Resolve` take a Value or a view and answer a `Ref`
-borrowed from it: read-only, found again on every access, `ErrClosed`
-once the source is closed; `Clone()` copies it out. `Unflatten` answers
-nil only for "nothing stored"; a store that is not strings to strings is
-`ErrWrongKind`.
-
 ## civil: dates, times, spans, exact lengths
 
 The forms are text in a value, fixed at
@@ -506,9 +470,9 @@ any depth, and whatever the schema does not describe is hidden too. Local
 
 ## For a package over another guatiao library
 
-The `guatiao` package exports what `serde` and `intake` build on, and
-what any package binding a C library that takes and answers guatiao
-values may use. A tree crosses as the address of its root
+The `guatiao` package exports what the `guatiao-serde` and
+`guatiao-intake` modules build on, and what any package binding a C
+library that takes and answers guatiao values may use. A tree crosses as the address of its root
 `guatiao_value`. Built by one library, it is read and freed by any
 other, since a value records its own allocator; the library that built
 it stays loaded while the tree lives.
@@ -575,7 +539,7 @@ other side's own words, empty when it gave none), matched with
 `Unsupported`, `Busy`, `Internal`; `guatiao.Errorf(status, format,
 args...)` builds one. `ErrClosed`, `ErrReadOnly`, `*LibraryNotFound`,
 `*MissingSymbol` and `*FloorMismatch` are this binding's own;
-`*serde.ParseError` and `*civil.Unparsed` unwrap to `ErrBadValue`; a
+`*civil.Unparsed` (and `guatiao-serde`'s `*serde.ParseError`) unwrap to `ErrBadValue`; a
 channel's `*Refused` unwraps to the `*Error` of its status.
 
 ## Threads

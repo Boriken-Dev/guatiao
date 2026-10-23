@@ -6,7 +6,11 @@
 // guatiao_intake library: checking a form against its schema, laying a
 // schema out in sections, conditional visibility, the path grammar
 // (`agent[1].name`), and the flat `key -> text` projection a front end
-// stores.
+// stores. It is the module
+// github.com/Boriken-Dev/guatiao/bindings/go/guatiao-intake, over the
+// guatiao module's values:
+//
+//	import intake "github.com/Boriken-Dev/guatiao/bindings/go/guatiao-intake"
 //
 // Every schema, form, value and store argument is a *guatiao.Value, a
 // view, or plain data guatiao.NewValue takes.

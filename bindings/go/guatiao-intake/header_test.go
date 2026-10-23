@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/intake/internal/testenv"
+	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao-intake/internal/testenv"
 )
 
 // The module carries copies of the committed headers, since a module is

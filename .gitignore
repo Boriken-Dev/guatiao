@@ -67,6 +67,8 @@ Manifest-v*.toml
 /examples/fortran_*/build/
 *.mod
 *.smod
+# a Go module's manifest, not a Fortran module
+!go.mod
 
 # Python, wherever an example or a crate carries some
 __pycache__/
