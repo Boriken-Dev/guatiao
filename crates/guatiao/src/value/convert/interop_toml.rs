@@ -11,6 +11,7 @@
 
 #![forbid(unsafe_code)]
 
+use super::Kinds;
 use alloc::string::ToString;
 use toml::value::Array;
 use toml::{Table, Value as Toml};
@@ -36,12 +37,18 @@ impl ToValue for Table {
 /// signed bits, TOML's own limit; a number with a fraction or an
 /// exponent becomes the nearest `f64`.
 impl FromValue for Toml {
+    const KINDS: Kinds = Kinds::BOOL
+        .union(Kinds::NUMBER)
+        .union(Kinds::STRING)
+        .union(Kinds::LIST)
+        .union(Kinds::MAP);
     fn from_value(value: &Value) -> Result<Toml, MapError> {
         read(value, 0)
     }
 }
 
 impl FromValue for Table {
+    const KINDS: Kinds = Kinds::MAP;
     fn from_value(value: &Value) -> Result<Table, MapError> {
         read_table(value, 0)
     }

@@ -14,6 +14,15 @@ write now.
 
 ### Added
 
+- **Enums told apart by kind.** `#[map(untagged)]` on an enum whose
+  variants each write a different kind of value (unit variants a string
+  of their name, named fields a map, `Name(T)` whatever `T` reads) stores
+  no tag: a reader picks the variant by the value's kind, the same way in
+  every language, and the schema is an `anyOf` of the arms. The rule is
+  on the encodings page. Two variants reading one kind are a compile
+  error naming both. `FromValue::KINDS` and `Kinds` say which kinds a
+  reader accepts; `KindBuilder::title` and `description` label a union's
+  arms.
 - **TOML and JSON tables as field types.** `toml::Table`, `toml::Value`,
   `serde_json::Map<String, Value>` and `serde_json::Value` implement
   `ToValue`, `FromValue` and `Schema`, so a derived configuration type

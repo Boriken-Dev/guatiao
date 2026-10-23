@@ -123,9 +123,9 @@ Text::default() / Buffer::default()    // empty, allocating nothing
 Every name above is at the **crate root**: `guatiao::Text`,
 `guatiao::Entry`, `guatiao::Tag`, `guatiao::Str`, `guatiao::Number`,
 `guatiao::Payload` (what `from_raw_parts` takes), beside `Alloc`,
-`AllocError` (what the `try_` forms answer), `Buffer`, `List`, `Map`,
-`MAX_DEPTH`, `Span` (under "Field types"), `Status`, `TryAsMut`,
-`TryAsRef`, `Value` and `ValueError`.
+`AllocError` (what the `try_` forms answer), `Buffer`, `Kinds` (beside
+`MapError`), `List`, `Map`, `MAX_DEPTH`, `Span` (under "Field types"),
+`Status`, `TryAsMut`, `TryAsRef`, `Value` and `ValueError`.
 
 **The short form uses the allocator the container recorded**; the `_in`
 form adopts one and is what a literal with a null `alloc` field needs.
@@ -477,6 +477,20 @@ MapError   = MissingKey | WrongType | BadValue     // carries the path
 `MapError` builds its path on the way out: `.under(prefix)` and
 `.at(index)`.
 
+**`FromValue::KINDS: Kinds`** says which kinds `from_value` may accept;
+every impl here and every derived one states it, and an enum told apart
+by kind (`#[map(untagged)]`, below) checks its variants with it. The
+default, `Kinds::ANY`, claims every kind, so a hand-written reader that
+leaves it alone cannot share an untagged enum with another variant.
+
+```rust
+Kinds::{NONE, NULL, BOOL, NUMBER, STRING, BYTES, LIST, MAP, ANY}
+Kinds::of(Tag) -> Kinds                 // every method is const
+kinds.union(other) -> Kinds             kinds.contains(tag) -> bool
+kinds.intersects(other) -> bool         kinds.is_empty() -> bool
+// Display: "a string or a map"; Debug: Kinds(a string | a map)
+```
+
 ---
 
 # Derives (feature `derive`)
@@ -527,10 +541,10 @@ position (`prefixItems`), a unit struct a null; a generic type's
 parameters are each bound by the trait derived. `#[map(flatten)]`,
 `#[map(with = path)]`, `#[map(skip_serializing_if = path)]` and
 `#[map(deny_unknown_fields)]` mean what serde's do; the full list, and
-what is refused (an untagged data enum, `alias`, a union), is in
+what is refused (`alias`, a union), is in
 `guatiao-derive`'s `AGENTS.md`.
 
-Enums, in two shapes:
+Enums, in three shapes:
 
 ```rust
 #[derive(ToValue, FromValue, Schema)]
@@ -539,6 +553,10 @@ enum Level { Off, #[map(rename = "warn")] Warning, On }   // "Off" | "warn" | "O
 #[derive(ToValue, FromValue, Schema)]
 #[map(tag = "auth")]
 enum Auth { Ambient, UserPass { username: String } }       // {"auth": "UserPass", "username": ...}
+
+#[derive(ToValue, FromValue, Schema)]
+#[map(untagged, rename_all = "lowercase")]
+enum Tls { Identity, Files { certificate: PathBuf, key: PathBuf } }  // "identity" | {"certificate": ..}
 ```
 
 One variant of a unit enum may be the **catch-all**, `#[map(other)]
@@ -554,6 +572,18 @@ a map and describes itself as a variant. An enum whose variants carry
 fields and names **no** tag is refused: the key that tells variants apart
 is a wire-format decision, and it is yours. A doc comment on a choice is
 its label; on an arm it is the description, as on a field.
+
+**`#[map(untagged)]`** is the one way out of naming a tag, for variants
+that each write a different **kind** of value: the unit variants are
+strings of their names, named fields a map (at most one such variant),
+`Name(T)` whatever `T` reads. No name is stored; a reader takes the
+variant whose kind the value has, as any language can, and refuses a
+kind none reads (`MapError::BadValue`, naming the kinds). The schema is a
+union (`anyOf`) of the arms: the unit variants one string `enum`, the
+record an object, `T`'s kind. Two variants reading one kind are a
+compile error naming both, raised by the `FromValue` derive: from a
+`const` that `cargo check` evaluates, and for a generic enum when an
+instance whose arms overlap is built.
 
 The attribute follows the key: an arm is a subschema, so it takes
 `#[schema(title = "..", description = "..")]`; a choice is one entry in
@@ -918,6 +948,7 @@ Constraints chain onto a kind, each JSON Schema's own keyword:
 | `.min_items(n)`, `.max_items(n)` | `minItems`, `maxItems` | list | yes, on the value |
 | `.unique_items()` | `uniqueItems: true` | list | yes: numbers by what they denote, the rest structurally |
 | `.property_names(kind)` | `propertyNames` | object | yes, each key as text against `kind` |
+| `.title(text)`, `.description(text)` | `title`, `description` | any | never: what a union's arm is called |
 
 A keyword for another type is carried and ignored, as JSON Schema says.
 A count that is negative or fractional, and a step of zero or less, is

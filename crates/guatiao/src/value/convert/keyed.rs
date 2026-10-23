@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+use super::Kinds;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
@@ -201,6 +202,7 @@ impl<K: MapKey, V: ToValue, S> ToValue for HashMap<K, V, S> {
 /// reports `env[PATH]`; two keys reading as one key are refused rather
 /// than one replacing the other.
 impl<K: MapKey + Ord, V: FromValue> FromValue for BTreeMap<K, V> {
+    const KINDS: Kinds = Kinds::MAP;
     fn from_value(value: &Value) -> Result<BTreeMap<K, V>, MapError> {
         let mut out = BTreeMap::new();
         entries_from_value(value, |k, v| out.insert(k, v).is_none())?;
@@ -210,6 +212,7 @@ impl<K: MapKey + Ord, V: FromValue> FromValue for BTreeMap<K, V> {
 
 /// The same, into a `HashMap`, which keeps no order.
 impl<K: MapKey + Eq + Hash, V: FromValue, S: BuildHasher + Default> FromValue for HashMap<K, V, S> {
+    const KINDS: Kinds = Kinds::MAP;
     fn from_value(value: &Value) -> Result<HashMap<K, V, S>, MapError> {
         let mut out = HashMap::with_hasher(S::default());
         entries_from_value(value, |k, v| out.insert(k, v).is_none())?;
