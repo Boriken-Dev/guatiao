@@ -42,9 +42,9 @@ guatiao-serde = { version = "=0.0.0-alpha.1", features = ["toml", "yaml"] }
 
 | Flag | Adds | Needed for |
 | --- | --- | --- |
-| `json` (default) | `serde_json`, with `raw_value` | `text::json`; `serde_json::Value` and `serde_json::Map` as fields of a derived type |
+| `json` (default) | `serde_json`, with `raw_value` | `text::json` |
 | `exact-numbers` | `json`, and `serde_json/arbitrary_precision` | reading a JSON number as its own text; **read the cost below** |
-| `toml` | `toml`, with `preserve_order` | `text::toml`; `toml::Table` and `toml::Value` as fields of a derived type; **read the note below** |
+| `toml` | `toml`, with `preserve_order` | `text::toml`; **read the note below** |
 | `yaml` | `serde-saphyr` | `text::yaml` |
 | `c-header` | `cbindgen` | regenerating the committed C header |
 

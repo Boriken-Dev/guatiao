@@ -63,8 +63,6 @@ Optional features:
 | `load` | `libloading`, `object` | the `Registry` and loading libraries from disk into it (`load_file`, `scan_dir`, `scan_path`): a host needs it |
 | `regex` | `regex` | enforcing a schema's `pattern` when validating |
 | `c-header` | nothing | regenerating the committed C header |
-| `toml` | `toml`, without its parser | `toml::Table` and `toml::Value` as field types |
-| `serde_json` | `serde_json` | `serde_json::Map` and `serde_json::Value` as field types |
 
 A default build pulls in nothing.
 
