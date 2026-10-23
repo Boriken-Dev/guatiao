@@ -1717,8 +1717,11 @@ mod tests {
         unsafe { read_provider(ptr, size_of::<ProviderInfo>(), bounds) }
             .expect("a slot into its code is accepted");
 
-        // A per-kind table whose slot points into the image's data.
-        let table: [usize; 3] = [0, data_at, 0];
+        // A per-kind table whose first slot points into the image's data.
+        // The header before the slots is one word on a 64-bit target and
+        // two on a 32-bit one.
+        let mut table = [0usize; 4];
+        table[size_of::<crate::library::kind::KindHeader>() / size_of::<usize>()] = data_at;
         let tables = [KindTable::new(
             "greeter",
             table.as_ptr().cast(),
