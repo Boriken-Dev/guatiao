@@ -26,7 +26,9 @@ path = "src/lib.rs"
 
 [dependencies]
 guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1" }
-guatiao-serde = { path = "../guatiao-serde", version = "=0.0.0-alpha.1", default-features = false, features = ["toml"] }
+# Manifests, stamps, refresh and the source table: CPython is its engine,
+# and builds its own kind tables, so no `dynamic-kinds`.
+guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1" }
 # The stable ABI from 3.9: one Windows build serves every CPython from
 # 3.9 on (`python3.dll`). Elsewhere the build links the interpreter's
 # own `libpython3.X`, so it serves that minor.

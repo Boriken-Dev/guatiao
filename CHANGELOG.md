@@ -774,6 +774,12 @@ write now.
 
 ### Changed
 
+- **`guatiao-py` is CPython as a `guatiao-bridge` engine.** Its
+  manifests, stamps, refresh and source table are the bridge's, and its
+  entry point is written by `guatiao::source!`; it keeps the interpreter,
+  reading a module's `__version__`, and finding its own file. What a host
+  sees is unchanged: the same configuration, manifests, statuses and
+  words. *Migration:* none.
 - **`guatiao-serde` writes a value through its walk**, so a value nested
   deeper than `MAX_DEPTH` containers is refused (`ValueError::TooDeep`
   in the format's error) where serde's own recursion used to follow it,

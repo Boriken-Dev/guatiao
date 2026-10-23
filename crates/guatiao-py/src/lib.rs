@@ -14,15 +14,18 @@
 //! code as it now is.
 //!
 //! The interpreter is initialised when the source is added, or joined when
-//! the host is itself Python, and never finalised.
+//! the host is itself Python, and never finalised. Manifests, stamps,
+//! refresh and the source table are `guatiao-bridge`'s; this crate is
+//! CPython as its engine.
 
 #![deny(unsafe_code)]
 
 extern crate alloc;
 
 mod bridge;
-// The `extern "C"` surface: the source entry point and its three slots,
-// and finding this file's own path. The one module with `unsafe`.
+mod engine;
+// The `extern "C"` surface: the source entry point, the descriptor a
+// Python library built, and finding this file's own path. The one module
+// with `unsafe`.
 #[allow(unsafe_code)]
 mod exports;
-mod manifest;

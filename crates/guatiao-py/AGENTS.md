@@ -6,9 +6,11 @@ nothing else: no Rust API, nothing links it. A host adds the file with
 Python modules written with the Python binding's `guatiao.provide`
 (`bindings/python/guatiao/src/guatiao/AGENTS.md`, "Providers written in Python").
 
-Depends on `guatiao`, `guatiao-serde` (`toml`, for manifests) and `pyo3`
-0.30 with `abi3-py39`. Not published (`publish = false`); a workspace of
-its own, so no other build needs a Python to link against.
+Depends on `guatiao`, `guatiao-bridge` (manifests, stamps, refresh and
+the source table; CPython is its engine, `ThreadModel::Locked`, building
+its own kind tables) and `pyo3` 0.30 with `abi3-py39`. Not published
+(`publish = false`); a workspace of its own, so no other build needs a
+Python to link against.
 
 ## The C surface
 
