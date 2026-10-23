@@ -32,7 +32,7 @@ and its errors.
 
 ## Platforms
 
-Android, iOS, Linux, macOS and Windows on 64-bit targets, as
+Android, iOS, Linux, macOS and Windows, 64-bit and 32-bit, as
 package:guatiao; and **the web**, through the one WebAssembly module the
 page loads with package:guatiao's `loadModule`, which must carry this
 package's surface. The package asks for Dart 3.6 or newer.
@@ -87,7 +87,7 @@ meta.close();
 - What `at` and `resolve` answer borrows from the tree it was found in:
   read-only, and refused once that tree is closed. `.clone()` copies it
   out.
-- 64-bit native platforms only; on the web, the page's one module.
+- On the web, the page's one module, which must carry this surface.
 
 ## API overview
 

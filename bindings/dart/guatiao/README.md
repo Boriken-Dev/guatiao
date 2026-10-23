@@ -43,8 +43,9 @@ It works with any shared library that exports the ABI, whether that is
 
 ## Platforms
 
-Android, iOS, Linux, macOS and Windows on 64-bit targets, through
-`dart:ffi`; and **the web**, under dart2js and dart2wasm, through the
+Android, iOS, Linux, macOS and Windows through `dart:ffi`, 64-bit and
+32-bit (`armeabi-v7a`, armhf Linux): the ABI's layout is written in
+pointer widths. And **the web**, under dart2js and dart2wasm, through the
 WebAssembly module the page loads, with the same API (see "On the web").
 The package asks for Dart 3.6 or newer.
 
@@ -288,7 +289,6 @@ words when it gave any.
 - `DateTime` and `Duration` count microseconds: reading an instant or
   an exact length into one drops what is below. The `Plain` classes and
   `Span` keep nanoseconds.
-- 64-bit native platforms only (see Platforms above).
 - On the web there is no registry: `Registry` and `kindTable` throw
   `Unsupported`, since a browser maps no libraries.
 

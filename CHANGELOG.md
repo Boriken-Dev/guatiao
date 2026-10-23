@@ -20,6 +20,9 @@ write now.
   shares no heap with the library, a page calling the WebAssembly module
   above all, puts what it passes by address there: a view's bytes, an
   out-parameter, a root it keeps.
+- **Dart on 32-bit platforms.** `armeabi-v7a` and armhf Linux, whose
+  4-byte pointers the package refused: its code reads the layout in
+  pointer widths, and its suites run on 32-bit ARM.
 - **Dart on the web.** `package:guatiao`, `guatiao_serde` and
   `guatiao_intake` run under dart2js and dart2wasm with the same API, over
   the one WebAssembly module a page loads (`await loadModule(url)`):
