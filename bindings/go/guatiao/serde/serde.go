@@ -16,12 +16,10 @@
 package serde
 
 import (
-	"errors"
 	"fmt"
 	"unsafe"
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
-	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/internal/native"
 )
 
 // Format is a document format.
@@ -34,30 +32,39 @@ const (
 	YAML Format = "yaml"
 )
 
-// How bytes are written, and whether data URIs are read back as bytes:
-// one Bytes flag, or'd with ReadDataURIs, through How.
-const (
-	BytesDataURI = native.BytesDataURI
-	BytesBase64  = native.BytesBase64
-	BytesArray   = native.BytesArray
-	BytesRefuse  = native.BytesRefuse
-	ReadDataURIs = native.ReadDataURIs
-)
-
 type spec struct {
-	code        uint32
 	parse, emit string
 	pretty      string
 	feature     string
 }
 
 var specs = map[Format]spec{
-	JSON: {code: native.FormatJSON, parse: "guatiao_json_parse_ex", emit: "guatiao_json_emit", pretty: "guatiao_json_emit_pretty"},
-	TOML: {code: native.FormatTOML, parse: "guatiao_toml_parse_ex", emit: "guatiao_toml_emit", feature: "toml"},
-	YAML: {code: native.FormatYAML, parse: "guatiao_yaml_parse_ex", emit: "guatiao_yaml_emit", feature: "yaml"},
+	JSON: {parse: "guatiao_json_parse_ex", emit: "guatiao_json_emit", pretty: "guatiao_json_emit_pretty"},
+	TOML: {parse: "guatiao_toml_parse_ex", emit: "guatiao_toml_emit", feature: "toml"},
+	YAML: {parse: "guatiao_yaml_parse_ex", emit: "guatiao_yaml_emit", feature: "yaml"},
 }
 
-var names = map[uint32]Format{native.FormatJSON: JSON, native.FormatTOML: TOML, native.FormatYAML: YAML}
+var names = map[uint32]Format{formatJSON: JSON, formatTOML: TOML, formatYAML: YAML}
+
+// library is guatiao_serde, with every export a format names.
+var library = &guatiao.Surface{
+	Basename: "guatiao_serde",
+	Variable: "GUATIAO_SERDE_LIBRARY",
+	Probe:    "guatiao_json_parse_ex",
+	Exports:  exports(),
+}
+
+func exports() map[string]string {
+	all := map[string]string{"guatiao_value_free": ""}
+	for _, s := range specs {
+		for _, name := range []string{s.parse, s.emit, s.pretty} {
+			if name != "" {
+				all[name] = s.feature
+			}
+		}
+	}
+	return all
+}
 
 // Option says how a document is read or written.
 type Option func(*options)
@@ -98,22 +105,20 @@ func (e *ParseError) Error() string {
 // Unwrap is guatiao.ErrBadValue.
 func (e *ParseError) Unwrap() error { return guatiao.ErrBadValue }
 
-func open(format Format, symbol func(spec) string) (*native.Lib, spec, error) {
+// open answers the format's spec and the addresses of the export symbol
+// picks and of guatiao_value_free, the library open.
+func open(format Format, symbol func(spec) string) (s spec, fn, free unsafe.Pointer, err error) {
 	s, ok := specs[format]
 	if !ok {
-		return nil, spec{}, fmt.Errorf("guatiao: unknown format %q", format)
+		return spec{}, nil, nil, fmt.Errorf("guatiao: unknown format %q", format)
 	}
-	if err := guatiao.Load(); err != nil {
-		return nil, s, err
+	if fn, err = library.Symbol(symbol(s)); err != nil {
+		return s, nil, nil, err
 	}
-	lib, err := native.Serde()
-	if err != nil {
-		return nil, s, lift(err)
+	if free, err = library.Symbol("guatiao_value_free"); err != nil {
+		return s, nil, nil, err
 	}
-	if err := lib.Need(symbol(s)); err != nil {
-		return nil, s, lift(err)
-	}
-	return lib, s, nil
+	return s, fn, free, nil
 }
 
 // Parse reads a document into a new Value to close.
@@ -122,27 +127,26 @@ func Parse(text string, format Format, opts ...Option) (*guatiao.Value, error) {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	lib, s, err := open(format, func(s spec) string { return s.parse })
+	_, fn, free, err := open(format, func(s spec) string { return s.parse })
 	if err != nil {
 		return nil, err
 	}
 	alloc := o.alloc
 	if alloc == nil {
-		alloc = lib.Alloc()
+		alloc = library.Alloc()
 	}
-	out := native.Calloc(native.SizeValue)
-	failure, st := lib.Parse(s.code, text, o.how, alloc, out)
-	if st != native.OK {
-		native.ValueFree(out)
-		native.Free(out)
-		if st == native.ErrBadValue {
-			f := names[failure.Format]
+	out := calloc()
+	failed, st := parse(fn, free, text, o.how, alloc, out)
+	if st != statusOK {
+		release(free, out)
+		if st == badValue {
+			f := names[failed.format]
 			if f == "" {
 				f = format
 			}
-			return nil, &ParseError{Format: f, Line: int(failure.Line), Column: int(failure.Column), Reason: failure.Message}
+			return nil, &ParseError{Format: f, Line: int(failed.line), Column: int(failed.column), Reason: failed.message}
 		}
-		return nil, guatiao.StatusError(st, failure.Message)
+		return nil, guatiao.StatusError(st, failed.message)
 	}
 	return guatiao.Adopt(out, alloc), nil
 }
@@ -154,7 +158,7 @@ func Emit(x any, format Format, opts ...Option) (string, error) {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	lib, s, err := open(format, func(s spec) string {
+	s, fn, free, err := open(format, func(s spec) string {
 		if o.pretty && s.pretty != "" {
 			return s.pretty
 		}
@@ -163,36 +167,21 @@ func Emit(x any, format Format, opts ...Option) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	how := o.how
+	if o.pretty && s.pretty == "" {
+		how |= pretty
+	}
 	var text string
 	err = guatiao.WithNodes([]any{x}, func(nodes []unsafe.Pointer) error {
-		out := native.Calloc(native.SizeValue)
-		defer func() {
-			native.ValueFree(out)
-			native.Free(out)
-		}()
-		if err := guatiao.StatusError(lib.Emit(s.code, nodes[0], o.how, o.pretty, lib.Alloc(), out), ""); err != nil {
+		out := calloc()
+		defer release(free, out)
+		if err := guatiao.StatusError(emit(fn, nodes[0], how, library.Alloc(), out), ""); err != nil {
 			return err
 		}
-		if native.Tag(out) == native.TagString {
-			text = native.TextOf(out)
-		}
+		text, _ = textOf(out)
 		return nil
 	})
 	return text, err
-}
-
-// lift turns the native layer's failure to open a library into the
-// guatiao package's error for it.
-func lift(err error) error {
-	var nf *native.NotFound
-	if errors.As(err, &nf) {
-		return &guatiao.LibraryNotFound{Basename: nf.Basename, Looked: nf.Looked}
-	}
-	var ms *native.Missing
-	if errors.As(err, &ms) {
-		return &guatiao.MissingSymbol{Path: ms.Path, Symbol: ms.Symbol, Feature: ms.Feature}
-	}
-	return err
 }
 
 // UseLibrary names the guatiao_serde library to load instead of looking for
@@ -204,4 +193,4 @@ func lift(err error) error {
 // platform's search. Call it before the first call that needs the
 // library; naming another file once one is loaded is an error, naming the
 // same one is not.
-func UseLibrary(where string) error { return native.Use(native.LibSerde, where) }
+func UseLibrary(where string) error { return library.Use(where) }

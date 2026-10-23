@@ -196,12 +196,12 @@ func WriteProviderError(err unsafe.Pointer, status uint32, message string) {
 	e.status = C.guatiao_status(status)
 	msg := unsafe.Pointer(&e.message)
 	Zero(msg, SizeString)
-	if message == "" || libs[0] == nil {
+	if message == "" || coreLib == nil {
 		return
 	}
 	node := Calloc(SizeValue)
 	defer Free(node)
-	if ValueString(libs[0].Alloc(), message, node) == OK {
+	if ValueString(coreLib.Alloc(), message, node) == OK {
 		Copy(msg, Payload(node), SizeString)
 	}
 }

@@ -15,14 +15,13 @@ import (
 	"testing"
 
 	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
-	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/internal/native"
-	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/internal/testenv"
 	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/serde"
+	"github.com/Boriken-Dev/guatiao/bindings/go/guatiao/serde/internal/testenv"
 )
 
-func counting(t *testing.T) *native.Counting {
+func counting(t *testing.T) *testenv.Counting {
 	t.Helper()
-	c := native.NewCounting()
+	c := testenv.NewCounting()
 	t.Cleanup(func() {
 		if live := c.Live(); live != 0 {
 			t.Errorf("%d blocks still out", live)
@@ -78,11 +77,11 @@ func TestFreesAfterADocumentThatDoesNotParse(t *testing.T) {
 	}
 }
 
-// The lookup is decided once a process, so each case looks through the
-// native layer's own candidates for a fresh process's environment.
+// The lookup is decided once a process, so each case asks where it would
+// settle in a fresh process's environment.
 func TestTheLibraryIsFoundThroughEachRoute(t *testing.T) {
 	dir := testenv.Workspace()
-	file := func(base string) string { return filepath.Join(dir, native.Filename(base)) }
+	file := func(base string) string { return filepath.Join(dir, testenv.Filename(base)) }
 	for _, c := range []struct {
 		name, own, shared, want string
 	}{
@@ -94,7 +93,7 @@ func TestTheLibraryIsFoundThroughEachRoute(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Setenv("GUATIAO_SERDE_LIBRARY", c.own)
 			t.Setenv("GUATIAO_LIBRARY", c.shared)
-			got, err := native.Locate(native.LibSerde)
+			got, err := serde.Library.Find()
 			if err != nil || got != c.want {
 				t.Fatalf("found %q (%v), want %q", got, err, c.want)
 			}
@@ -102,7 +101,7 @@ func TestTheLibraryIsFoundThroughEachRoute(t *testing.T) {
 	}
 	t.Setenv("GUATIAO_SERDE_LIBRARY", filepath.Join(dir, "nowhere"))
 	t.Setenv("GUATIAO_LIBRARY", filepath.Join(dir, "nowhere"))
-	if _, err := native.Locate(native.LibSerde); err == nil ||
+	if _, err := serde.Library.Find(); err == nil ||
 		!strings.Contains(err.Error(), "GUATIAO_SERDE_LIBRARY") || !strings.Contains(err.Error(), "GUATIAO_LIBRARY") {
 		t.Fatalf("%v", err)
 	}

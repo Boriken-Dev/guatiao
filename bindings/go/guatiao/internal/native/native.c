@@ -15,8 +15,6 @@
 #endif
 
 gt_core_fns gt_core;
-gt_serde_fns gt_serde;
-gt_intake_fns gt_intake;
 
 #define GT_MAX_MISSING 64
 
@@ -26,7 +24,7 @@ typedef struct gt_missing_list {
   const char *feature[GT_MAX_MISSING];
 } gt_missing_list;
 
-static gt_missing_list gt_missing_of[3];
+static gt_missing_list gt_missing_core;
 
 static void *gt_open_file(const char *path, char *err, size_t errlen) {
 #ifdef _WIN32
@@ -105,42 +103,30 @@ int gt_carries(const char *path, const char *symbol) {
   return found;
 }
 
-int gt_open(int lib, const char *path, char *err, size_t errlen) {
-  if (lib < 0 || lib > 2) {
-    snprintf(err, errlen, "no such library");
-    return 1;
-  }
+void *gt_load(const char *path, char *err, size_t errlen) { return gt_open_file(path, err, errlen); }
+
+void *gt_find(void *handle, const char *name) { return gt_symbol(handle, name); }
+
+void gt_unload(void *handle) { gt_close_file(handle); }
+
+guatiao_status gt_alloc_default_at(void *fn, guatiao_alloc *out) {
+  return ((guatiao_status(*)(guatiao_alloc *))fn)(out);
+}
+
+int gt_open(const char *path, char *err, size_t errlen) {
   void *h = gt_open_file(path, err, errlen);
   if (!h) return 1;
-  gt_missing_list *missing = &gt_missing_of[lib];
+  gt_missing_list *missing = &gt_missing_core;
   missing->len = 0;
   int ok = 1;
-  switch (lib) {
-  case GT_LIB_CORE:
 #define X(ret, name, params, args, feature) GT_RESOLVE(gt_core, ret, name, params, args, feature)
 #define GT_VOID(name, params, args, feature) GT_RESOLVE_VOID(gt_core, name, params, args, feature)
-    GT_CORE(X)
+  GT_CORE(X)
 #undef X
 #undef GT_VOID
-    break;
-  case GT_LIB_SERDE:
-#define X(ret, name, params, args, feature) GT_RESOLVE(gt_serde, ret, name, params, args, feature)
-    GT_SERDE(X)
-#undef X
-    break;
-  default:
-#define X(ret, name, params, args, feature) GT_RESOLVE(gt_intake, ret, name, params, args, feature)
-    GT_INTAKE(X)
-#undef X
-    break;
-  }
   if (!ok) {
     /* Nothing of a refused file is called: its table is cleared. */
-    switch (lib) {
-    case GT_LIB_CORE: memset(&gt_core, 0, sizeof gt_core); break;
-    case GT_LIB_SERDE: memset(&gt_serde, 0, sizeof gt_serde); break;
-    default: memset(&gt_intake, 0, sizeof gt_intake); break;
-    }
+    memset(&gt_core, 0, sizeof gt_core);
     missing->len = 0;
     gt_close_file(h);
     return 2;
@@ -150,10 +136,10 @@ int gt_open(int lib, const char *path, char *err, size_t errlen) {
   return 0;
 }
 
-int gt_missing(int lib, int index, const char **name, const char **feature) {
-  if (lib < 0 || lib > 2 || index < 0 || index >= gt_missing_of[lib].len) return 0;
-  *name = gt_missing_of[lib].name[index];
-  *feature = gt_missing_of[lib].feature[index];
+int gt_missing(int index, const char **name, const char **feature) {
+  if (index < 0 || index >= gt_missing_core.len) return 0;
+  *name = gt_missing_core.name[index];
+  *feature = gt_missing_core.feature[index];
   return 1;
 }
 

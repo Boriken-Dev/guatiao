@@ -15,7 +15,7 @@ own: guatiao is loaded at run time.
 
 | import | what |
 | --- | --- |
-| `.../bindings/go/guatiao` (package `guatiao`) | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `Tag`, `Status`, the errors, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`; `FromWire`, `WireAnnounce`, `WireSend`, `WireClose`, `Receiver`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `Library`, `LibraryOf`; `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError` for a package over another guatiao library |
+| `.../bindings/go/guatiao` (package `guatiao`) | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `Tag`, `Status`, the errors, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`; `FromWire`, `WireAnnounce`, `WireSend`, `WireClose`, `Receiver`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `Library`, `LibraryOf`; `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError`, `Surface` for a package over another guatiao library |
 | `.../bindings/go/guatiao/serde` | over the `guatiao_serde` library: `Parse`, `Emit`: JSON, TOML, YAML; its own `UseLibrary` |
 | `.../bindings/go/guatiao/intake` | over the `guatiao_intake` library: forms, paths, the flat projection; its own `UseLibrary` |
 | `.../bindings/go/guatiao/civil` | `Date`, `Time`, `DateTime`, `Span`, `Length`, instants as `time.Time` |
@@ -529,6 +529,40 @@ it stays loaded while the tree lives.
   once `keep`'s value is closed.
 - `StatusError(status uint32, message string) error`: nil for OK, else
   the `*Error` for the status, carrying the library's words.
+
+Its own library is a `*Surface`, declared once in a package-level
+variable and never copied:
+
+```go
+var library = &guatiao.Surface{
+	Basename: "guatiao_serde",          // guatiao_serde.dll, libguatiao_serde.so, libguatiao_serde.dylib
+	Variable: "GUATIAO_SERDE_LIBRARY",  // its own variable, before GUATIAO_LIBRARY; "" for none
+	Probe:    "guatiao_json_parse_ex",  // an export only it has; "" takes a GUATIAO_LIBRARY file as it is
+	Exports:  map[string]string{"guatiao_json_parse_ex": "", "guatiao_toml_parse_ex": "toml"},
+}
+```
+
+`Exports` maps each export the package calls to the feature a build needs
+for it: `""` for one every build has, which a file must export to be
+opened. It is found as "Finding the native library" says, with
+`Variable` as its own variable.
+
+- `(*Surface) Use(where string) error`: the file or directory to open
+  instead of looking; another once it is open is an error.
+- `(*Surface) Find() (string, error)`: the file the lookup settles on now,
+  without opening it; a `*LibraryNotFound` naming every route.
+- `(*Surface) Open() error`: opens the guatiao library as `Load` does, then
+  this one, resolving `Exports` and `guatiao_alloc_default`; once open it
+  stays open and Open does nothing. Not found is a `*LibraryNotFound`,
+  kept for the process; a file lacking a required export a
+  `*MissingSymbol`.
+- `(*Surface) Symbol(name string) (unsafe.Pointer, error)`: opens it, then
+  the address of an export `Exports` names, to call from the package's
+  own C through a pointer of the export's type; a `*MissingSymbol` naming
+  the feature when this build lacks it.
+- `(*Surface) Alloc() unsafe.Pointer`: its default `guatiao_alloc`, kept
+  for the process; nil before Open. `(*Surface) Path() string`: the file
+  it was opened from.
 
 ## Errors
 
