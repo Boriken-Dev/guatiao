@@ -7,13 +7,14 @@
 Dart bindings for the [guatiao](https://github.com/Boriken-Dev/guatiao/)
 ABI: **one value model for passing data between languages**, a JSON
 Schema that describes a value, and a registry that loads plugin
-libraries. Plain `dart:ffi` over `package:ffi`, with nothing to compile.
-It works with any shared library that exports the ABI, whether that is
-`guatiao` itself or an application that carries it.
+libraries. Plain `dart:ffi` over `package:ffi`. It works with any shared
+library that exports the ABI, whether that is `guatiao` itself or an
+application that carries it.
 
 > **Status: alpha.** A plain Dart package — no Flutter dependency, so it
 > works both inside a Flutter app and in a command-line program. It
-> carries no native library; you point it at one.
+> carries no native library: its build hook builds one from source when
+> an app builds, or you point it at one.
 
 ## Features
 
@@ -71,11 +72,56 @@ exact only to 2^53, so a larger integer reads back as a `BigInt`.
 ## Installation
 
 ```bash
-dart pub add guatiao
+flutter pub add guatiao        # dart pub add guatiao outside Flutter
 ```
 
-The package drives a shared library that exports the guatiao ABI. Say
-where it is, either with an environment variable:
+The package drives a shared library that exports the guatiao ABI, and
+**its build hook builds it**: `flutter build` (and `flutter run`, `dart
+run`, `dart test`, `dart build`) runs cargo on guatiao's sources for the
+target being built and bundles the library with the app. Nothing binary
+is downloaded. `guatiao_serde` and `guatiao_intake` do the same for their
+own libraries.
+
+### One-time setup
+
+[rustup](https://rustup.rs), and the Rust targets of the platforms you
+build for. Nothing else beyond the platform's usual Flutter setup:
+
+| building for | once, besides rustup |
+| --- | --- |
+| Windows, Linux | nothing: the machine's own target comes with rustup |
+| Android | `rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-android`; the NDK is the one Flutter's Android setup installs |
+| macOS | `rustup target add aarch64-apple-darwin x86_64-apple-darwin` (a release app is universal); Xcode |
+| iOS | `rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios`; Xcode |
+
+A missing piece fails the build with one sentence naming it, for example
+``The Rust target x86_64-linux-android is not installed: run `rustup
+target add x86_64-linux-android`.`` The first build compiles the crates;
+later ones reuse cargo's output, and a build with nothing changed skips
+the hook. The hook finds cargo on `PATH` or in `~/.cargo/bin`.
+
+### Your own library, or none
+
+In the application's `pubspec.yaml`:
+
+```yaml
+hooks:
+  user_defines:
+    guatiao:
+      crate: native/myapp   # your own cdylib crate, built instead: one file carrying every surface it links
+      # build: false        # or build nothing, and say where the library is (below)
+```
+
+With `crate`, `guatiao_serde` and `guatiao_intake` build nothing either:
+every surface comes from your file, which carries your own functions
+too (`openSurface('guatiao').library` from `package:guatiao/ffi.dart`).
+The [docs](https://boriken-dev.github.io/guatiao/app-library/) give the
+recipe for the crate.
+
+### Saying where the library is
+
+Without a hook's library — `build: false`, or a program not built by
+`dart`/`flutter` — say where it is, either with an environment variable:
 
 ```bash
 export GUATIAO_LIBRARY=/opt/myapp/lib         # a directory holding guatiao.dll / libguatiao.so / libguatiao.dylib
@@ -91,8 +137,9 @@ import 'package:guatiao/guatiao.dart' as guatiao;
 guatiao.libraryDirectory = await resolveBundledLibraryDir();
 ```
 
-Without either, the platform's own library search is tried. Nothing is
-loaded at import time: importing always succeeds, and the first native
+`GUATIAO_LIBRARY` wins over the library a build hook bundled; without
+either, the platform's own library search is tried. Nothing is loaded at
+import time: importing always succeeds, and the first native
 call throws `LibraryNotFound` naming every place it looked. A library
 that exports only part of the ABI is fine: reaching for a function it
 lacks throws `MissingSymbol` naming it, and everything else works.
@@ -301,6 +348,7 @@ words when it gave any.
 | `package:guatiao/wasm.dart` | the same on the web: `WasmModule`, `Address`, `withScratch`, `openSurface`, `takeValue`, `freeNode`, `checkStatus` |
 | `package:guatiao/time.dart` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, `parseTimestamp`, `formatTimestamp`, `toDuration`, `fromDuration`, `normalize` |
 | `package:guatiao/wire.dart` | channel frames (`announce`, `send`, `close`), `Receiver`, `Event`, the refusals |
+| `package:guatiao/hook.dart` | for a package's build hook: `buildHook`, `buildLibrary`, `rustTarget`, `HookFailure` |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/guatiao/AGENTS.md)
 is the full API reference and ships with the package. The C ABI is
@@ -319,7 +367,10 @@ dart test
 The tests need the library and the repository's example plugins in one
 directory. `test/support.dart` points the suite at the
 repository's build output when `GUATIAO_LIBRARY` is unset; the
-repository's own `AGENTS.md` says how to produce it. Nothing skips.
+repository's own `AGENTS.md` says how to produce it. The package's own
+`pubspec.yaml` tells its hook to build nothing (`build: false`), so a
+suite runs against that build; `test/hook_test.dart` runs the hook
+itself, cargo builds included. Nothing skips.
 
 `lib/src/bindings.g.dart` is generated and never edited by hand:
 

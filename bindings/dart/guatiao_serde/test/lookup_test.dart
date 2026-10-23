@@ -16,6 +16,9 @@ import 'package:test/test.dart';
 
 import 'support.dart';
 
+/// What `lookup_probe.dart` prints before its answer.
+const _marker = 'lookup: ';
+
 String _found(Map<String, String> environment) {
   final run = Process.runSync(
     Platform.resolvedExecutable,
@@ -27,7 +30,10 @@ String _found(Map<String, String> environment) {
     },
   );
   expect(run.exitCode, 0, reason: '${run.stderr}');
-  return (run.stdout as String).trim().split('\n').last.trim();
+  // `dart run` may print its own progress first ("Running build hooks..."),
+  // on the same line.
+  final out = run.stdout as String;
+  return out.substring(out.lastIndexOf(_marker) + _marker.length).trim();
 }
 
 String _file(String basename) =>

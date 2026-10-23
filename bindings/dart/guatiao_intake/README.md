@@ -44,7 +44,17 @@ package's surface. The package asks for Dart 3.10 or newer (Flutter
 dart pub add guatiao_intake
 ```
 
-The package drives the `guatiao_intake` shared library. Say where it is:
+The package drives the `guatiao_intake` shared library, and **its build hook
+builds it**: `flutter build` (or `dart run`, `dart test`, `dart build`)
+runs cargo for the target being built and bundles the library with the
+app. Nothing binary is downloaded. The one-time setup is
+[package:guatiao's](https://pub.dev/packages/guatiao#installation):
+rustup and the Rust targets. An application whose own crate carries this
+surface names that crate to package:guatiao's hook, and this package then
+builds nothing.
+
+Without a hook's library (package:guatiao's `build: false`), say where it
+is:
 
 ```bash
 export GUATIAO_INTAKE_LIBRARY=/opt/myapp/lib         # a directory holding guatiao_intake.dll / libguatiao_intake.so / .dylib
@@ -53,8 +63,9 @@ export GUATIAO_INTAKE_LIBRARY=/opt/myapp/myapp.dll   # or the file itself, whate
 
 Without it, `GUATIAO_LIBRARY` is tried: a directory holding the library,
 or a file that exports its functions (an application's own library
-carrying several guatiao surfaces), or a file it sits beside. Then
-package:guatiao's `libraryDirectory`, then the platform's search. A
+carrying several guatiao surfaces), or a file it sits beside. Then the
+library a build hook bundled, then package:guatiao's `libraryDirectory`,
+then the platform's search. A
 library already open is registered with package:guatiao's
 `useLibrary(DynamicLibrary.open(path))`. Nothing is loaded at import
 time; the first call throws `LibraryNotFound`, naming every place it

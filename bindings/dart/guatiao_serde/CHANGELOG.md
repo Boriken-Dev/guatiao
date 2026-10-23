@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A build hook that builds the library from source**: the crate
+  `guatiao-serde`, with cargo, for the target being built, bundled with the
+  app; nothing when package:guatiao's hook builds the application's own
+  crate or nothing. Dart 3.10 or newer.
 - **The web**: `loads` and `dumps` through the module the page loaded,
   which carries the serde surface (an application's own build); the same
   numbers, errors and positions as a native library.
