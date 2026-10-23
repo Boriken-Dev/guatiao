@@ -14,6 +14,17 @@ write now.
 
 ### Added
 
+- **`guatiao-lua`: libraries written in Lua, served to any host.** A
+  source file (`crates/guatiao-lua`, built from this repository, not
+  published) with Lua 5.4 built in (`lua55` and `luau` as features): a
+  library is a Lua module returning a table whose `providers` are tables
+  of methods named for the kinds' slots, described by a
+  `*.guatiao-lua.toml` manifest and its kinds' `<crate>.kinds.json`.
+  Refresh runs an edited module afresh while the old build answers the
+  instances taken from it; limits stop runaway code (operations, time,
+  depth, memory), a `pcall` around it included, and the host carries on.
+  Values keep every shape across: an exact number, bytes apart from text,
+  null and absent, a list apart from a map, a map's order.
 - **`RawObject::lend`**: an object a caller owns, lent to a slot that
   takes a lent one, without `unsafe`.
 - **`guatiao-bridge`: what every bridge to a language runtime shares.** A
