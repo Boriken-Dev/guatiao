@@ -159,6 +159,7 @@ mod shapes;
 #[cfg(feature = "provider")]
 mod spelling;
 mod untagged;
+mod walk;
 
 use proc_macro::TokenStream;
 

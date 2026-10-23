@@ -21,8 +21,8 @@ any of them; what each derive **acts on** differs.
 
 | derive | attributes it acts on | generates |
 | --- | --- | --- |
-| `ToValue` | `map` | `impl ToValue`: the type as a map |
-| `FromValue` | `map` | `impl FromValue`: the type from a map |
+| `ToValue` | `map` | `impl ToValue`: the type as a map; and `impl Walk`, the same value streamed |
+| `FromValue` | `map` | `impl FromValue`: the type from a map; and `impl FromWalk`, read from a stream |
 | `Schema` | `map`, `schema` | `impl Schema`: a schema value for the type |
 
 ## Attributes
@@ -385,12 +385,23 @@ writes the whole library.
   the operating system (`OnceLock`). A test asserts this token by
   token, over all three derives: generated code that named a third crate
   would fail in every consumer that expanded it while passing here.
+- **The streaming impls write and read the tree impls' value.** `Walk`
+  writes exactly the events of the tree `ToValue` builds; `FromWalk`
+  refuses with the `MapError` `FromValue` gives, the first refusal in the
+  source's key order. A struct with named fields, a tuple, newtype,
+  transparent and unit struct stream field by field; a field type with
+  only the tree traits goes through its own tree (autoref picks it at
+  compile time, through `guatiao::__private::{Field, Pick}`); an enum and
+  a struct with a `#[map(flatten)]` member go through the whole type's
+  tree. Their type parameters are bound by `Walk`/`FromWalk`, or by the
+  tree trait for the ones that go through the tree. A hand-written `Walk`
+  or `FromWalk` beside the derive conflicts (E0119).
 - Errors are `compile_error!` at the offending span, never a panic.
 
 ## Gotcha
 
 The expansion names `::guatiao::` paths, so the `guatiao` crate must keep
 its root re-exports (`Value`, `Map`, `Alloc`, `ToValue`, `FromValue`,
-`MapError`, `ValueError`) wherever the modules underneath move. Rearranging
+`Walk`, `FromWalk`, `MapError`, `ValueError`) and `value::visit`'s trait paths wherever the modules underneath move. Rearranging
 `guatiao`'s internals is free; renaming a root re-export breaks every
 already-expanded macro.

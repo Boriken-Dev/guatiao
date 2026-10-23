@@ -55,7 +55,7 @@ impl Build for BoolBuild {
 
 impl FromWalk for bool {
     fn from_walk<W: Walker>(walker: W) -> Result<bool, MapError> {
-        walker.walk(BoolBuild)
+        walker.build(BoolBuild)
     }
 }
 
@@ -100,7 +100,7 @@ macro_rules! integer {
 
         impl FromWalk for $t {
             fn from_walk<W: Walker>(walker: W) -> Result<$t, MapError> {
-                walker.walk(IntBuild::<$t>(PhantomData))
+                walker.build(IntBuild::<$t>(PhantomData))
             }
         }
     )*};
@@ -138,7 +138,7 @@ impl Build for F64Build {
 
 impl FromWalk for f64 {
     fn from_walk<W: Walker>(walker: W) -> Result<f64, MapError> {
-        walker.walk(F64Build)
+        walker.build(F64Build)
     }
 }
 
@@ -161,7 +161,7 @@ impl Build for F32Build {
 
 impl FromWalk for f32 {
     fn from_walk<W: Walker>(walker: W) -> Result<f32, MapError> {
-        walker.walk(F32Build)
+        walker.build(F32Build)
     }
 }
 
@@ -181,7 +181,7 @@ impl Build for StringBuild {
 
 impl FromWalk for String {
     fn from_walk<W: Walker>(walker: W) -> Result<String, MapError> {
-        walker.walk(StringBuild)
+        walker.build(StringBuild)
     }
 }
 
@@ -205,7 +205,7 @@ impl Build for CharBuild {
 
 impl FromWalk for char {
     fn from_walk<W: Walker>(walker: W) -> Result<char, MapError> {
-        walker.walk(CharBuild)
+        walker.build(CharBuild)
     }
 }
 
@@ -225,7 +225,7 @@ impl Build for BytesBuild {
 
 impl FromWalk for Bytes {
     fn from_walk<W: Walker>(walker: W) -> Result<Bytes, MapError> {
-        walker.walk(BytesBuild)
+        walker.build(BytesBuild)
     }
 }
 
@@ -245,7 +245,7 @@ impl Build for UnitBuild {
 
 impl FromWalk for () {
     fn from_walk<W: Walker>(walker: W) -> Result<(), MapError> {
-        walker.walk(UnitBuild)
+        walker.build(UnitBuild)
     }
 }
 
@@ -316,7 +316,7 @@ impl<T: FromWalk> Build for OptionBuild<T> {
 
 impl<T: FromWalk> FromWalk for Option<T> {
     fn from_walk<W: Walker>(walker: W) -> Result<Option<T>, MapError> {
-        walker.walk(OptionBuild(PhantomData))
+        walker.build(OptionBuild(PhantomData))
     }
 }
 
@@ -390,7 +390,7 @@ fn each<T: FromWalk, W: Walker>(
     walker: W,
     keep: impl FnMut(T, Option<usize>) -> bool,
 ) -> Result<(), MapError> {
-    walker.walk(EachBuild(keep, PhantomData))
+    walker.build(EachBuild(keep, PhantomData))
 }
 
 /// Room for the elements a hint promises, bounded.
@@ -493,7 +493,7 @@ macro_rules! tuple {
 
         impl<$($t: FromWalk),+> FromWalk for ($($t,)+) {
             fn from_walk<W: Walker>(walker: W) -> Result<Self, MapError> {
-                walker.walk(TupleBuild::<($($t,)+)>(PhantomData))
+                walker.build(TupleBuild::<($($t,)+)>(PhantomData))
             }
         }
     };
@@ -560,7 +560,7 @@ impl<K: MapKey + Ord, T: FromWalk> FromWalk for BTreeMap<K, T> {
     fn from_walk<W: Walker>(walker: W) -> Result<BTreeMap<K, T>, MapError> {
         use alloc::collections::btree_map::Entry;
         let mut out = BTreeMap::new();
-        walker.walk(EntriesBuild(
+        walker.build(EntriesBuild(
             |key: K, value| match out.entry(key) {
                 Entry::Occupied(taken) => Err(repeated(taken.key())),
                 Entry::Vacant(room) => {
@@ -578,7 +578,7 @@ impl<K: MapKey + Eq + Hash, T: FromWalk, S: BuildHasher + Default> FromWalk for 
     fn from_walk<W: Walker>(walker: W) -> Result<HashMap<K, T, S>, MapError> {
         use std::collections::hash_map::Entry;
         let mut out = HashMap::with_hasher(S::default());
-        walker.walk(EntriesBuild(
+        walker.build(EntriesBuild(
             |key: K, value| match out.entry(key) {
                 Entry::Occupied(taken) => Err(repeated(taken.key())),
                 Entry::Vacant(room) => {
@@ -701,6 +701,6 @@ impl Build for IgnoredBuild {
 
 impl FromWalk for Ignored {
     fn from_walk<W: Walker>(walker: W) -> Result<Ignored, MapError> {
-        walker.walk(IgnoredBuild)
+        walker.build(IgnoredBuild)
     }
 }

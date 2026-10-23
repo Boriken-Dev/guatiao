@@ -496,7 +496,7 @@ TreeSink::new() / new_in(Alloc); sink.into_value() -> Result<Value, ValueError>
 
 // reading
 trait FromWalk: Sized { fn from_walk<W: Walker>(w: W) -> Result<Self, MapError>; }
-trait Walker: Sized { fn walk<B: Build>(self, b: B) -> Result<B::Out, MapError>; }
+trait Walker: Sized { fn build<B: Build>(self, b: B) -> Result<B::Out, MapError>; }
 trait Build: Sized {                         // every method defaults to refusing with kinds()
     type Out; fn kinds(&self) -> Kinds;
     fn absent/null/bool/number/i64/u64/f64/string/bytes(self, ..) -> Result<Out, MapError>;
@@ -678,6 +678,22 @@ and `f32` the exclusive bounds past which no finite `f32` exists, so the
 schema refuses exactly what `FromValue` refuses at the edges.
 
 Generated code names only `::guatiao::` paths, checked by a test.
+
+**The streaming half.** `#[derive(ToValue)]` also implements `Walk`,
+`#[derive(FromValue)]` also `FromWalk` (`value::visit`): the same value,
+written and read with no tree, so `wire::to_bytes_of` / `decode_as` and
+a format bridge take a derived type straight to bytes or text. A struct
+with named fields, a tuple struct, a newtype, a transparent and a unit
+struct stream field by field, with every `#[map]` attribute meaning what
+it means in the tree impls; a field type with only `ToValue`/`FromValue`
+goes through its own small tree (chosen at compile time); a `with`
+field through the module's functions over a tree of that field; an enum
+and a struct with a `#[map(flatten)]` member through the whole type's
+tree. A read refuses with the tree reader's `MapError`, but reports the
+first refusal in the order the source holds the keys, where `FromValue`
+reads in declaration order. A type parameter of the streaming impls is
+bounded by `Walk`/`FromWalk`. A hand-written `Walk` or `FromWalk` beside
+the derive is a conflicting impl: write the tree impls by hand too.
 
 ## Field types
 

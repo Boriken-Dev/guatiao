@@ -392,7 +392,7 @@ impl<'b> Decoder<'b> {
 }
 
 impl<'b> Walker for &mut Decoder<'b> {
-    fn walk<B: Build>(self, build: B) -> Result<B::Out, MapError> {
+    fn build<B: Build>(self, build: B) -> Result<B::Out, MapError> {
         if self.failure.is_some() {
             return Err(MapError::stopped());
         }

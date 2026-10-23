@@ -98,7 +98,14 @@ fn try_expand(derive: Derive, input: TokenStream) -> syn::Result<TokenStream> {
             // ignoring one would change the wire shape silently.
             let container = ContainerAttrs::read(derive, &ast.attrs, false)?;
             let head = impl_head(derive, &ast.ident, &ast.generics);
-            let tokens = expand_struct(derive, &ast.ident, &head, &container, &data.fields)?;
+            let mut tokens = expand_struct(derive, &ast.ident, &head, &container, &data.fields)?;
+            tokens.extend(crate::walk::for_struct(
+                derive,
+                &ast.ident,
+                &ast.generics,
+                &container,
+                &data.fields,
+            )?);
             Ok(crate::krate::reroot(tokens, container.krate.as_ref()))
         }
         Data::Enum(data) => expand_enum(derive, &ast, data),
@@ -269,12 +276,12 @@ pub(crate) struct FieldPlan {
     /// read side names the whole `Option<T>` (whose own `FromValue` impl
     /// handles a stored null), while the write side has already unwrapped
     /// it and must name `T`.
-    inner: Option<Type>,
+    pub(crate) inner: Option<Type>,
     /// The map key. Meaningless when `skip` is set, and never emitted then.
-    key: String,
+    pub(crate) key: String,
     pub(crate) skip: bool,
     /// What an absent key reads as. With one the field is not required.
-    default: Option<MapDefault>,
+    pub(crate) default: Option<MapDefault>,
     /// What only the schema reads. Carried on every plan so the three
     /// derives share one parse of one declaration.
     schema: SchemaAttrs,
@@ -283,17 +290,17 @@ pub(crate) struct FieldPlan {
     pub(crate) flatten: bool,
     /// `#[map(with = path)]`: a module with `to_value_in`, `from_value`
     /// and `kind`, converting the field in place of its type's impls.
-    with: Option<syn::Path>,
+    pub(crate) with: Option<syn::Path>,
     /// `#[map(skip_serializing_if = path)]`: not written when
     /// `path(&field)` is true.
-    skip_if: Option<syn::Path>,
+    pub(crate) skip_if: Option<syn::Path>,
     /// `#[map(as_text)]`: written with `Display`, read with `FromStr`,
     /// described as a string.
-    as_text: bool,
+    pub(crate) as_text: bool,
 }
 
 /// `#[map(default)]` or `#[map(default = <expr>)]`.
-enum MapDefault {
+pub(crate) enum MapDefault {
     /// The field type's own `Default`.
     Trait,
     /// An expression of the field's type.
@@ -302,7 +309,11 @@ enum MapDefault {
 
 impl FieldPlan {
     /// `rule` is the struct's `rename_all`; a field's own `rename` wins.
-    fn read(derive: Derive, field: &Field, rule: Option<RenameRule>) -> syn::Result<FieldPlan> {
+    pub(crate) fn read(
+        derive: Derive,
+        field: &Field,
+        rule: Option<RenameRule>,
+    ) -> syn::Result<FieldPlan> {
         let ident = field
             .ident
             .clone()
@@ -326,14 +337,14 @@ impl FieldPlan {
         })
     }
 
-    fn optional(&self) -> bool {
+    pub(crate) fn optional(&self) -> bool {
         self.inner.is_some()
     }
 
     /// The value an absent key reads as, as an expression of the field's
     /// type. Qualified and typed so a type with no `Default`, or an
     /// expression of another type, is reported at the field.
-    fn default_expr(&self) -> Option<TokenStream> {
+    pub(crate) fn default_expr(&self) -> Option<TokenStream> {
         let ty = &self.ty;
         match self.default.as_ref()? {
             MapDefault::Trait => Some(quote! { <#ty as ::core::default::Default>::default() }),
@@ -348,9 +359,9 @@ impl FieldPlan {
 }
 
 #[derive(Default)]
-struct FieldAttrs {
+pub(crate) struct FieldAttrs {
     rename: Option<String>,
-    skip: bool,
+    pub(crate) skip: bool,
     default: Option<MapDefault>,
     flatten: bool,
     with: Option<syn::Path>,
@@ -400,7 +411,7 @@ struct SchemaAttrs {
 }
 
 impl FieldAttrs {
-    fn read(derive: Derive, field: &Field) -> syn::Result<FieldAttrs> {
+    pub(crate) fn read(derive: Derive, field: &Field) -> syn::Result<FieldAttrs> {
         let label = derive.spelled();
         let mut out = FieldAttrs::default();
         let mut rename_span = None;
@@ -1155,7 +1166,7 @@ fn emit_schema(head: &TokenStream, plan: &[FieldPlan]) -> TokenStream {
 /// way, and `tag` -- which only an enum can mean -- is refused by name on
 /// a struct rather than accepted and ignored.
 #[derive(Default)]
-struct ContainerAttrs {
+pub(crate) struct ContainerAttrs {
     /// `#[map(tag = "...")]`: the key a variant's name is stored under.
     /// The one wire-format decision an enum can need, so the author makes
     /// it rather than this crate.
@@ -1165,12 +1176,12 @@ struct ContainerAttrs {
     krate: Option<syn::Path>,
     /// `#[map(rename_all = "..")]`: the case rule for every field of a
     /// struct, or every variant of an enum.
-    rename_all: Option<RenameRule>,
+    pub(crate) rename_all: Option<RenameRule>,
     /// `#[map(transparent)]`, on a struct: its value is its one field's.
-    transparent: bool,
+    pub(crate) transparent: bool,
     /// `#[map(deny_unknown_fields)]`, on a struct: reading refuses a key
     /// no field declares, as the schema does.
-    deny_unknown_fields: bool,
+    pub(crate) deny_unknown_fields: bool,
     /// `#[map(untagged)]`, on an enum: its variants are told apart by
     /// the kind of value each writes, and no name is stored.
     untagged: bool,
@@ -1457,7 +1468,12 @@ fn expand_enum(derive: Derive, ast: &DeriveInput, data: &DataEnum) -> syn::Resul
         ..
     } = ContainerAttrs::read(derive, &ast.attrs, true)?;
     let head = impl_head(derive, name, &ast.generics);
-    let reroot = |tokens| crate::krate::reroot(tokens, krate.as_ref());
+    // Every enum walks and reads through the tree its own impls build:
+    // which keys a variant holds is known only once the map is whole.
+    let reroot = |mut tokens: TokenStream| {
+        tokens.extend(crate::walk::through_tree(derive, name, &ast.generics));
+        crate::krate::reroot(tokens, krate.as_ref())
+    };
 
     if untagged {
         if tag.is_some() {
@@ -2312,6 +2328,21 @@ mod tests {
             "Vec",
             // How a catch-all variant's field is written as text.
             "AsRef",
+            // The streaming impls beside the tree ones: the traits and
+            // the module that holds them, and the primitive types named
+            // through `core` so a user's `usize` cannot shadow them.
+            "value",
+            "visit",
+            "Walk",
+            "Visitor",
+            "ListVisitor",
+            "MapVisitor",
+            "Walker",
+            "ListWalker",
+            "MapWalker",
+            "Seed",
+            "primitive",
+            "usize",
         ];
         for segment in &segments {
             assert!(
