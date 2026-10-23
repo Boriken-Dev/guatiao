@@ -1,0 +1,31 @@
+[package]
+name = "myapp"
+description = "An application's own C library carrying guatiao's three C surfaces beside a function of its own: the recipe for one file"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+# `cdylib` for a host that loads one file (`myapp.dll`, `libmyapp.so`,
+# `myapp.wasm`), `staticlib` for one that links it into its own binary.
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+# Each crate's `extern "C"` functions are exported from this library
+# because `src/lib.rs` links the crate. The features are the ones the
+# application's own callers need: here every serde format, and numbers read
+# from JSON kept as their exact text.
+guatiao = { path = "../../crates/guatiao" }
+guatiao-intake = { path = "../../crates/guatiao-intake" }
+guatiao-serde = { path = "../../crates/guatiao-serde", features = ["exact-numbers", "toml", "yaml"] }
+
+# The registry maps files, which a browser has none of: `load` is for
+# every other target.
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+guatiao = { path = "../../crates/guatiao", features = ["load"] }
+
+[lints]
+workspace = true

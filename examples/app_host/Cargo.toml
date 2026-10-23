@@ -1,0 +1,19 @@
+[package]
+name = "app_host"
+description = "A Rust program linking the guatiao crate and an application's own library that carries guatiao's C surfaces too"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "app_host"
+path = "src/main.rs"
+
+[dependencies]
+guatiao = { path = "../../crates/guatiao" }
+
+[lints]
+workspace = true

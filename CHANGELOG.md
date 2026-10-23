@@ -20,6 +20,13 @@ write now.
   shares no heap with the library, a page calling the WebAssembly module
   above all, puts what it passes by address there: a view's bytes, an
   out-parameter, a root it keeps.
+- **One library for an application.** A docs page, "One library for your
+  application", gives the recipe: a `cdylib` crate of the application's
+  that depends on the guatiao crates it wants exports their C surfaces
+  beside its own functions, for any target, WebAssembly included.
+  `examples/app_library` is that crate and `examples/app_host` a Rust
+  program linking it beside the `guatiao` crate. Every binding's suite runs
+  against it alone as well as against the crates' own libraries.
 - **Channels from C.** `guatiao_wire_announce`, `guatiao_wire_send` and
   `guatiao_wire_close` write a channel frame as a BYTES value;
   `guatiao_wire_receiver_new(alloc)`, `guatiao_wire_receiver_accept(recv,

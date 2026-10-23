@@ -175,6 +175,9 @@ let greeter = registry.best("greeter").expect("something serves it");
 - [Fortran, host and provider](fortran.md): calling libraries from
   Fortran, and writing providers in Fortran, linked into a host or built
   as a library file any host loads.
+- [One library for your application](app-library.md): guatiao's C
+  surfaces in a library of the application's own, and every binding
+  using it.
 - [Python API reference](api/python.md), for the ctypes bindings.
 - [Dart API reference](api/dart.md), for the `dart:ffi` bindings -- a plain
   Dart package, so a Flutter app uses the same one.
