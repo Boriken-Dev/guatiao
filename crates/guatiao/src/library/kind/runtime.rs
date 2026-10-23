@@ -889,6 +889,12 @@ impl RawObject {
         &self.raw
     }
 
+    /// Lends the object to a slot that takes a lent one: it stays this
+    /// owner's, which outlives the lend.
+    pub fn lend(&self) -> LentObject<'_> {
+        LentObject { raw: &self.raw }
+    }
+
     /// Calls slot `slot` of the object through `caller`, whose kind it must
     /// be.
     pub fn call(

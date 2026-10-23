@@ -969,6 +969,7 @@ pub fn guatiao::library::kind::RawObject::as_raw(&self) -> &guatiao::library::ki
 pub fn guatiao::library::kind::RawObject::call(&mut self, &guatiao::library::kind::Caller, usize, alloc::vec::Vec<guatiao::library::kind::Arg<'_>>) -> core::result::Result<guatiao::library::kind::Answer, guatiao::library::kind::ProviderError>
 pub unsafe fn guatiao::library::kind::RawObject::from_raw(guatiao::library::kind::ObjectRaw) -> guatiao::library::kind::RawObject
 pub fn guatiao::library::kind::RawObject::into_raw(self) -> guatiao::library::kind::ObjectRaw
+pub fn guatiao::library::kind::RawObject::lend(&self) -> guatiao::library::kind::LentObject<'_>
 impl core::fmt::Debug for guatiao::library::kind::RawObject
 pub fn guatiao::library::kind::RawObject::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Send for guatiao::library::kind::RawObject

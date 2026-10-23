@@ -14,6 +14,8 @@ write now.
 
 ### Added
 
+- **`RawObject::lend`**: an object a caller owns, lent to a slot that
+  takes a lent one, without `unsafe`.
 - **`guatiao-bridge`: what every bridge to a language runtime shares.** A
   new crate, `#![forbid(unsafe_code)]`, published with the others. A
   runtime implements `Engine` (start from the host's configuration, open
