@@ -14,6 +14,11 @@ write now.
 
 ### Added
 
+- **A page on configuration files.** Reading a configuration through
+  guatiao rather than serde: the TOML text becomes a value, `FromValue`
+  makes the type, and the schema and form come from the same derive, so
+  one set of attributes describes it; with a table from serde's
+  attributes to guatiao's and a worked `#[map(with = ..)]` module.
 - **A field that crosses as its text.** `#[map(as_text)]` writes a field
   with `Display`, reads it with `FromStr` (a refusal carries the parse
   error's words under the field's key) and describes it as a string, to

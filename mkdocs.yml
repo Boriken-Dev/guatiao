@@ -30,6 +30,7 @@ nav:
   - Home: index.md
   - Passing data: ownership.md
   - Encodings: encodings.md
+  - Configuration files: configuration.md
   - A provider's form: forms.md
   - Python, host and provider: python.md
   - Node.js, host and provider: node.md
