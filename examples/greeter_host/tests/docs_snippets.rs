@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! The Rust snippets of the landing page, the ownership guide, the migration
-//! page and the root README, compiled and checked to still be the text those
-//! pages show.
+//! page, the configuration page and the root README, compiled and checked to
+//! still be the text those pages show.
 //!
 //! Each test holds its own copy of a snippet between marker comments and
 //! compares it, line for line, with the matching fenced `rust` block of the
@@ -19,6 +19,7 @@ const README: &str = include_str!("../../../README.md");
 const OWNERSHIP: &str = include_str!("../../../docs/ownership.md");
 const MIGRATING: &str = include_str!("../../../docs/migrating.md");
 const FORMS: &str = include_str!("../../../docs/forms.md");
+const CONFIGURATION: &str = include_str!("../../../docs/configuration.md");
 const DERIVED_GREETER: &str = include_str!("../../derived_greeter/src/lib.rs");
 
 #[test]
@@ -878,6 +879,157 @@ fn the_forms_page_reads_a_provider_s_form() -> Result<(), Box<dyn core::error::E
     // FORM-HOST-END
 
     assert_eq!(rust_block(FORMS, 1), marked("FORM-HOST"));
+    Ok(())
+}
+
+/// The configuration page's type, at module level as a program declares
+/// it, with the `std` paths a program writes.
+#[allow(clippy::std_instead_of_core, clippy::std_instead_of_alloc)]
+mod configuration_page {
+    // CONFIG-TYPE-BEGIN
+    use std::collections::BTreeMap;
+    use std::net::{IpAddr, SocketAddr};
+    use std::path::PathBuf;
+
+    use guatiao::{FromValue, Schema, ToValue};
+    use guatiao_intake::Form;
+
+    /// The certificate the daemon presents.
+    #[derive(ToValue, FromValue, Schema, Debug, PartialEq)]
+    #[map(untagged, rename_all = "lowercase")]
+    pub enum Tls {
+        /// The machine's own identity.
+        Identity,
+        /// A certificate and its key, from files.
+        Files { certificate: PathBuf, key: PathBuf },
+    }
+
+    #[derive(ToValue, FromValue, Schema, Form, Debug, PartialEq)]
+    #[form(section(id = "net", label = "Network"))]
+    pub struct Daemon {
+        /// Where to listen.
+        #[schema(section = "net")]
+        #[form(placeholder = "0.0.0.0:7000")]
+        pub listen: SocketAddr,
+        /// The address to advertise, when it is not the one listened on.
+        #[schema(section = "net")]
+        pub advertise: Option<IpAddr>,
+        pub tls: Tls,
+        /// Where state is kept.
+        #[map(default = PathBuf::from("/var/lib/daemon"))]
+        pub state: PathBuf,
+        /// Each plugin's own settings, which the plugin describes.
+        #[map(default)]
+        pub plugins: BTreeMap<String, toml::Table>,
+    }
+    // CONFIG-TYPE-END
+}
+
+#[test]
+fn the_configuration_page_reads_and_describes_a_daemon() -> Result<(), Box<dyn core::error::Error>>
+{
+    use configuration_page::{Daemon, Tls};
+
+    let text = String::from(
+        "listen = \"0.0.0.0:7000\"\n\
+         tls = { certificate = \"/etc/ssl/d.pem\", key = \"/etc/ssl/d.key\" }\n\
+         [plugins.scaler]\n\
+         factor = 1.5\n",
+    );
+
+    // CONFIG-READ-BEGIN
+    use guatiao::schema::SchemaRef;
+    use guatiao::schema::validate::validate_map;
+    use guatiao::{Alloc, FromValue, Schema};
+    use guatiao_serde::Presentation;
+    use guatiao_serde::text::toml;
+
+    let value = toml::from_str(&text, Alloc::rust(), Presentation::new())?;
+
+    // The schema refuses what the type does not declare, a misspelled key
+    // included, naming the key; reading alone would skip it.
+    let schema = Daemon::schema()?;
+    validate_map(SchemaRef::new(&schema).ok_or("not a schema")?, &value)?;
+
+    let daemon = Daemon::from_value(&value)?;
+    // CONFIG-READ-END
+    assert_eq!(daemon.listen.port(), 7000);
+    assert!(matches!(daemon.tls, Tls::Files { .. }));
+    assert_eq!(daemon.state, std::path::PathBuf::from("/var/lib/daemon"));
+    assert_eq!(daemon.plugins["scaler"]["factor"].as_float(), Some(1.5));
+
+    // CONFIG-DESCRIBE-BEGIN
+    use guatiao_intake::{FormRef, Screen, check};
+    use guatiao_serde::text::json;
+
+    let schema = Daemon::schema()?;
+    let form = Daemon::form(Alloc::rust())?;
+    check(
+        SchemaRef::new(&schema).ok_or("not a schema")?,
+        FormRef::new(&form).ok_or("not a form")?,
+    )?;
+
+    // The schema is a JSON Schema: an editor that reads one completes and
+    // checks the file as it is written.
+    let document = json::to_string_pretty(&schema, Presentation::new())?;
+    // CONFIG-DESCRIBE-END
+    assert!(document.contains("\"anyOf\""));
+
+    assert_eq!(rust_block(CONFIGURATION, 0), marked("CONFIG-TYPE"));
+    assert_eq!(rust_block(CONFIGURATION, 1), marked("CONFIG-READ"));
+    assert_eq!(rust_block(CONFIGURATION, 2), marked("CONFIG-DESCRIBE"));
+    Ok(())
+}
+
+#[test]
+#[allow(clippy::std_instead_of_core)]
+fn the_configuration_page_s_with_module_converts_a_field() -> Result<(), Box<dyn core::error::Error>>
+{
+    use guatiao::{FromValue, Schema, ToValue};
+
+    // CONFIG-WITH-BEGIN
+    mod millis {
+        use std::time::Duration;
+
+        use guatiao::schema::KindBuilder;
+        use guatiao::{Alloc, FromValue, MapError, Schema, ToValue, Value, ValueError};
+
+        pub fn to_value_in(timeout: &Duration, alloc: Alloc) -> Result<Value, ValueError> {
+            let ms = u64::try_from(timeout.as_millis()).map_err(|_| ValueError::OutOfRange)?;
+            ms.to_value_in(alloc)
+        }
+
+        pub fn from_value(value: &Value) -> Result<Duration, MapError> {
+            u64::from_value(value).map(Duration::from_millis)
+        }
+
+        pub fn kind(alloc: Alloc) -> KindBuilder {
+            u64::kind(alloc).description("milliseconds")
+        }
+    }
+
+    #[derive(ToValue, FromValue, Schema)]
+    struct Retry {
+        #[map(with = millis)]
+        timeout: std::time::Duration,
+    }
+    // CONFIG-WITH-END
+
+    let retry = Retry {
+        timeout: std::time::Duration::from_millis(1500),
+    };
+    let value = retry.to_value()?;
+    let map: &guatiao::Map = (&value).try_into()?;
+    assert_eq!(u64::from_value(map.required("timeout")?)?, 1500);
+    assert_eq!(Retry::from_value(&value)?.timeout, retry.timeout);
+    let schema = Retry::schema()?;
+    let s = guatiao::schema::SchemaRef::new(&schema).ok_or("not a schema")?;
+    assert_eq!(
+        s.find("timeout").ok_or("no field")?.description(),
+        "milliseconds"
+    );
+
+    assert_eq!(rust_block(CONFIGURATION, 3), marked("CONFIG-WITH"));
     Ok(())
 }
 
