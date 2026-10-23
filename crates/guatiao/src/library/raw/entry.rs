@@ -118,6 +118,14 @@ pub type SourceFn = unsafe extern "C" fn(
     err: *mut crate::library::kind::ProviderError,
 ) -> Status;
 
+// SAFETY: a descriptor is plain data its producer does not write once it
+// is answered: moving or sharing one moves addresses, and what they
+// address is read under the producer's contract, from whichever thread a
+// registry is called on.
+unsafe impl Send for LibraryInfo<'_> {}
+// SAFETY: as above.
+unsafe impl Sync for LibraryInfo<'_> {}
+
 /// A library descriptor a host links rather than loads: what a describe
 /// function hands
 /// [`Registry::register_local`](crate::library::Registry::register_local).
@@ -482,6 +490,55 @@ macro_rules! local_providers {
             ::core::option::Option::Some(
                 $crate::library::kind::LibraryParts::new($id, $version, providers),
             )
+        }
+    };
+}
+
+/// Writes a source file from a [`Source`](crate::library::Source) the
+/// crate implements: the `providers!` of sources.
+///
+/// `serves` names what it serves, declared as `source=<serves>` so a scan
+/// reports the file as a source and never loads it. `make` is a function
+/// taking the [`Host`] and the configuration map the host passed to
+/// `add_source_file` (empty when it passed none) and answering the source,
+/// or a [`ProviderError`](crate::library::ProviderError) the host reads as
+/// the refusal:
+///
+/// ```ignore
+/// fn start(host: Host, config: &Map) -> Result<Shelf, ProviderError> { .. }
+/// guatiao::source!(serves = "shelf", make = start);
+/// ```
+///
+/// The source and the table it answers are kept for the life of the
+/// process, as a source file's are. A descriptor `open` answers stays
+/// valid until the registry closes it: owned parts are kept and dropped
+/// before [`Source::close`](crate::library::Source::close) is called; a
+/// borrowed descriptor is the source's to keep until then. A panic in any
+/// call becomes a status. Call it from a crate that is only a `cdylib`,
+/// for the reason [`providers!`](crate::providers) gives.
+#[macro_export]
+macro_rules! source {
+    (serves = $serves:literal, make = $make:path $(,)?) => {
+        $crate::__guatiao_declares!(kinds = [], pairs = [::core::concat!("source=", $serves)]);
+        /// The symbol a `guatiao` host adds this source by.
+        ///
+        /// # Safety
+        ///
+        /// As `guatiao_source` in `guatiao.h`: `host` is null or a host
+        /// descriptor valid for the process, `config` null or a
+        /// well-formed value, `out` and `err` null or writable.
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn guatiao_source(
+            host: *const $crate::library::HostInfo<'static>,
+            config: *const $crate::Value,
+            out: *mut *const $crate::library::SourceInfo,
+            err: *mut $crate::library::ProviderError,
+        ) -> $crate::Status {
+            // Bound outside the `unsafe` block, so the caller's path gets
+            // none of it.
+            let make = $make;
+            // SAFETY: the loader's side of the contract, forwarded.
+            unsafe { $crate::library::source_entry(host, config, out, err, make) }
         }
     };
 }

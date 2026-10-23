@@ -46,6 +46,7 @@ use crate::value::types::{Map, MaybeNull, Str, Value};
 
 pub(crate) mod check;
 mod entry;
+mod export;
 mod host;
 mod image;
 mod lease;
@@ -55,6 +56,7 @@ mod mapped;
 mod source;
 
 pub use self::entry::*;
+pub use self::export::source_entry;
 pub use self::host::*;
 pub use self::image::*;
 pub(crate) use self::lease::{Hold, Lease, Pin};

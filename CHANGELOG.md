@@ -14,6 +14,16 @@ write now.
 
 ### Added
 
+- **A source written in Rust is a file any host adds.**
+  `guatiao::source!(serves = "...", make = start)` exports a type
+  implementing `Source` as a source file's `guatiao_source`, declaring
+  `source=<serves>` so a scan reports it and never loads it; `start(host,
+  config)` builds the source from the host's configuration map or refuses
+  it in its own words. The table it answers keeps each descriptor `open`
+  hands over until the registry closes it, and turns every panic into a
+  status. `Source` and `Candidate` no longer need the `load` feature.
+  `examples/source_library` is one, added by a Rust host and a C host in
+  the tests.
 - **A kind describes itself as data.** `#[guatiao::kind]` adds
   `<Trait>Vtable::description()`: the kind's name, floor hash, whether it
   is an object kind, and every slot in table order with its arguments,

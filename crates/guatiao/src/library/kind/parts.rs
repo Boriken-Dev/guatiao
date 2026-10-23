@@ -44,6 +44,9 @@ pub struct ProviderParts {
     name: String,
     #[allow(dead_code)]
     version: String,
+    /// Every kind name `kinds` and `tables` view, owned.
+    #[allow(dead_code)]
+    names: Vec<String>,
     #[allow(dead_code)]
     kinds: Vec<Str<'static>>,
     #[allow(dead_code)]
@@ -52,7 +55,24 @@ pub struct ProviderParts {
     config: Vec<Value>,
     #[allow(dead_code)]
     meta: Vec<Map>,
+    #[allow(dead_code)]
+    kept: Kept,
     info: ProviderInfo<'static>,
+}
+
+/// What a provider's descriptor points into without being described by
+/// it: tables built at run time, an engine's handles. Freed with the parts.
+#[derive(Default)]
+struct Kept(Vec<Box<dyn core::any::Any + Send + Sync>>);
+
+// Nothing reads what is kept: a panic cannot observe it half-changed.
+impl core::panic::UnwindSafe for Kept {}
+impl core::panic::RefUnwindSafe for Kept {}
+
+impl core::fmt::Debug for Kept {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Kept({})", self.0.len())
+    }
 }
 
 // SAFETY: built once and never written; every pointer in `info` addresses
@@ -81,6 +101,7 @@ impl ProviderParts {
             available: None,
             create: None,
             destroy: None,
+            kept: Kept::default(),
         }
     }
 
@@ -106,14 +127,16 @@ pub struct ProviderPartsBuilder {
     id: String,
     name: String,
     version: String,
-    kinds: Vec<&'static str>,
-    tables: Vec<KindTable<'static>>,
+    kinds: Vec<String>,
+    /// Each table's kind, address and size.
+    tables: Vec<(String, *const c_void, u32)>,
     config: Option<Value>,
     meta: Option<Map>,
     ctx: *mut c_void,
     available: Option<unsafe extern "C" fn(ctx: *mut c_void, reason: *mut Str) -> bool>,
     create: Option<CreateFn>,
     destroy: Option<DestroyFn>,
+    kept: Kept,
 }
 
 impl ProviderPartsBuilder {
@@ -130,15 +153,19 @@ impl ProviderPartsBuilder {
         self
     }
 
-    /// Kinds it serves, appended to any given before.
-    pub fn kinds(mut self, kinds: &[&'static str]) -> Self {
-        self.kinds.extend_from_slice(kinds);
+    /// Kinds it serves, appended to any given before. The names are
+    /// copied.
+    pub fn kinds(mut self, kinds: &[&str]) -> Self {
+        self.kinds.extend(kinds.iter().map(|k| String::from(*k)));
         self
     }
 
-    /// One kind's function table. See [`KindTable::new`].
-    pub fn table(mut self, table: KindTable<'static>) -> Self {
-        self.tables.push(table);
+    /// One kind's function table. See [`KindTable::new`]. Its kind name is
+    /// copied; the table itself must live as the builder's contract says.
+    pub fn table(mut self, table: KindTable<'_>) -> Self {
+        let kind = core::str::from_utf8(<&[u8]>::from(table.kind)).unwrap_or_default();
+        self.tables
+            .push((String::from(kind), table.vtable, table.vtable_size));
         self
     }
 
@@ -186,6 +213,15 @@ impl ProviderPartsBuilder {
         self
     }
 
+    /// Keeps `owner` with the parts, dropped when they are: what a table
+    /// or `ctx` given above points into and nothing else owns, such as a
+    /// table built at run time. The registry holds the parts while any
+    /// handle into the provider lives.
+    pub fn keep(mut self, owner: impl core::any::Any + Send + Sync) -> Self {
+        self.kept.0.push(Box::new(owner));
+        self
+    }
+
     /// Owns the parts and builds the descriptor over them.
     pub fn build(self) -> ProviderParts {
         let ProviderPartsBuilder {
@@ -200,8 +236,28 @@ impl ProviderPartsBuilder {
             available,
             create,
             destroy,
+            kept,
         } = self;
-        let kinds: Vec<Str> = kinds.iter().map(|k| Str::new(k)).collect();
+        // The names first, never pushed to after: their heap text is what
+        // the views below address.
+        let names: Vec<String> = kinds
+            .into_iter()
+            .chain(tables.iter().map(|(k, _, _)| k.clone()))
+            .collect();
+        let served = names.len() - tables.len();
+        // SAFETY (both maps): each string is kept, unchanged, in `names`.
+        let kinds: Vec<Str<'static>> = names[..served]
+            .iter()
+            .map(|k| unsafe { crate::library::raw::view_of_owned(k) })
+            .collect();
+        let tables: Vec<KindTable<'static>> = tables
+            .iter()
+            .zip(&names[served..])
+            .map(|(&(_, vtable, size), k)| KindTable {
+                kind: unsafe { crate::library::raw::view_of_owned(k) },
+                ..KindTable::new("", vtable, size as usize)
+            })
+            .collect();
         let config: Vec<Value> = config.into_iter().collect();
         let meta: Vec<Map> = meta.into_iter().collect();
         // The heap storage does not move when the struct does.
@@ -239,10 +295,12 @@ impl ProviderPartsBuilder {
             id,
             name,
             version,
+            names,
             kinds,
             tables,
             config,
             meta,
+            kept,
             info,
         }
     }

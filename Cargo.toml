@@ -8,6 +8,7 @@ members = [
     "examples/hello_library",
     "examples/greeter_kind",
     "examples/derived_greeter",
+    "examples/source_library",
     "examples/greeter_host",
     "examples/greeter_caller",
     "examples/app_library",
