@@ -1,0 +1,27 @@
+name: guatiao_documents_bench
+description: >-
+  A document to plain Dart and back through a Value, the wire bytes as a
+  tape, and dart:ffi callbacks. Run by hand; never published.
+publish_to: none
+
+environment:
+  sdk: ^3.10.0
+
+dependencies:
+  ffi: ^2.1.0
+  guatiao:
+    path: ../../bindings/dart/guatiao
+  guatiao_serde:
+    path: ../../bindings/dart/guatiao_serde
+
+# guatiao_serde names guatiao from pub.dev; here it is the checkout's.
+dependency_overrides:
+  guatiao:
+    path: ../../bindings/dart/guatiao
+
+# Runs against the libraries GUATIAO_LIBRARY names, built by cargo
+# beforehand: the hook builds nothing.
+hooks:
+  user_defines:
+    guatiao:
+      build: false
