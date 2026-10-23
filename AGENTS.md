@@ -506,16 +506,16 @@ takes)
 Go modules `bindings/go/guatiao/vx.y.z`, `bindings/go/guatiao-serde/vx.y.z`
 and `bindings/go/guatiao-intake/vx.y.z` at the same commit. Each publish job
 skips a version its registry already has, so re-running a partly failed
-release finishes it. The four crates go in dependency order: `guatiao-derive`,
-`guatiao`, `guatiao-serde`, `guatiao-intake`, each naming the others with
-`=x.y.z`; in every other registry the core package goes first and the serde
+release finishes it. The five crates go in dependency order: `guatiao-derive`,
+`guatiao`, `guatiao-serde`, `guatiao-intake`, `guatiao-bridge`, each naming
+the others with `=x.y.z`; in every other registry the core package goes first and the serde
 and intake packages after it.
 
 **How each registry is reached**:
 
 | registry | first release | afterwards |
 | --- | --- | --- |
-| crates.io | `CARGO_REGISTRY_TOKEN` secret: trusted publishing needs a crate that exists | trusted publishing per crate, then repository variable `CRATES_IO_TRUSTED_PUBLISHING=true` and delete the secret |
+| crates.io | `CARGO_REGISTRY_TOKEN` secret: trusted publishing needs a crate that exists (so a new crate, `guatiao-bridge` the first time, is published with the token) | trusted publishing per crate, then repository variable `CRATES_IO_TRUSTED_PUBLISHING=true` and delete the secret |
 | PyPI | a *pending* trusted publisher for each of `guatiao`, `guatiao-serde` and `guatiao-intake`: repository `Boriken-Dev/guatiao`, workflow `release.yml`, environment `pypi` (`guatiao` has its publisher; the other two need theirs before their first release) | the same publishers |
 | pub.dev | **by hand**, `dart pub publish` in `bindings/dart/guatiao`, then in `bindings/dart/guatiao_serde` and `bindings/dart/guatiao_intake` once `guatiao` at that version is on pub.dev (their `pubspec_overrides.yaml` is not published): automated publishing needs a package that exists | automated publishing for each package from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
 | npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists, so the token publishes `guatiao`, `guatiao-serde` and `guatiao-intake` the first time; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher on each of the three for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |
@@ -528,7 +528,7 @@ and intake packages after it.
 organisation, so each is published by a person and handed over:
 
 - **crates.io** has no organisations; a crate is owned by people and GitHub
-  teams. The four crates belong to the `boriken-dev` team of the
+  teams. The five crates belong to the `boriken-dev` team of the
   `Boriken-Dev` organisation: `cargo owner --add github:Boriken-Dev:boriken-dev
   <crate>` on each, once it exists. A team owner may publish but not change
   owners, so one person stays an owner as well.
