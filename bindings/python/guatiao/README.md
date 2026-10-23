@@ -35,6 +35,9 @@ that is `guatiao` itself or an application that carries it.
 - **Dates, times, instants and spans as Python's own types** — `date`,
   `time`, naive and aware `datetime`, `timedelta`, and a `Span` class for
   calendar lengths, read and written by the library itself.
+- **Values on the wire** — `value.to_wire()` and `Value.from_wire(data)`
+  carry a tree exactly as bytes, and `guatiao.wire` announces a schema on
+  a channel before its values, with a `Receiver` that checks each one.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
 - **JSON, TOML and YAML**, and **forms checked against a schema**, are
@@ -279,6 +282,7 @@ provider's own words when it gave any.
 | Module | Purpose |
 | --- | --- |
 | `guatiao` | `Value`, `Ref`, `Map`, `List`, `ABSENT`, `Registry`, `Instance`, `redact`, the error classes |
+| `guatiao.wire` | channel frames (`announce`, `send`, `close`) and a `Receiver` checking each value against its channel's schema |
 | `guatiao.time` | dates, times, instants and exact lengths as `datetime` types; `Span`; `normalize` |
 | `guatiao.registry` | the plugin host: load, scan, list, rank, configure, instantiate |
 | `guatiao.kinds` | a kind as a typed `Protocol` class; call a provider's table; serve a table over a Python object |

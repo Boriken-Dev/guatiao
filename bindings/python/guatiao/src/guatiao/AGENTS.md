@@ -419,6 +419,45 @@ span.add_to(date_or_naive_datetime)         # same type back
   a `date` or a result outside the years 1 to 9999; `ValueError` for an
   aware `datetime`.
 
+## wire: values as bytes, and channels
+
+`value.to_wire() -> bytes` (any `Ref`) and `Value.from_wire(data, *,
+alloc=None) -> Value` are the wire encoding: a tag byte per node, LEB128
+lengths, a number as its own text, bytes as bytes, a map in its order,
+the same bytes in every language. `from_wire` raises `BadValue` for bytes
+that are not exactly one value.
+
+A channel announces a schema before its values, and a receiver checks
+every value against it. A frame is `kind:u8 channel:LEB128 payload`; the
+transport says where one ends.
+
+```python
+from guatiao import wire
+
+frames = [wire.announce(1, schema), wire.send(1, {"greeting": "hi"}), wire.close(1)]
+with wire.Receiver() as receiver:
+    for frame in frames:
+        event = receiver.accept(frame)   # Event(kind, channel, value)
+        if event.value is not None:
+            with event.value as value:   # the schema's copy, or the checked value
+                ...
+```
+
+- `announce(channel, schema) -> bytes`, `send(channel, value) -> bytes`
+  (a `Value`, a `Ref` or what `Value(...)` takes), `close(channel) ->
+  bytes`. `channel` is 0 to 2**64-1.
+- `Receiver()`; `accept(frame) -> Event`; `close()`, a context manager.
+  Calls on one receiver are serialised by a lock. `Event` is a
+  `NamedTuple`: `kind` a `Frame` (`SCHEMA`, `VALUE`, `CLOSE`, the
+  `GUATIAO_FRAME_*` bytes), `channel` an `int`, `value` a `Value` the
+  caller closes, or `None` for a close.
+- A refusal raises a `wire.Refused` (`.channel`, `.kind`, `.message`)
+  that is also the status's class: `Malformed` (`BadValue`, `.at` the
+  byte of the frame), `NoSchema` (`NotFound`), `NotASchema`
+  (`WrongKind`), `Invalid` (`BadValue`; `.key` the field, `.expected` or
+  `.known`). It changes nothing the receiver keeps and quotes nothing it
+  was given.
+
 ## Secrets
 
 A secret crosses as the value it holds; its schema marks it with
