@@ -17,8 +17,6 @@ use std::sync::OnceLock;
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 
-use crate::manifest::Manifest;
-
 /// The Python half, loaded once into the interpreter.
 static BRIDGE: OnceLock<Py<PyModule>> = OnceLock::new();
 
@@ -47,29 +45,29 @@ pub(crate) fn start(paths: &[String], own: Option<&str>) -> Result<(), String> {
 }
 
 /// The version a manifest leaves to its module: `__version__` read as a
-/// literal from the module's source, which is not imported.
-pub(crate) fn literal_version(manifest: &Manifest) -> Result<String, String> {
+/// literal from the module's source under `paths`, which is not imported.
+pub(crate) fn literal_version(module: &str, paths: &[String]) -> Result<String, String> {
     Python::attach(|py| -> PyResult<String> {
         bridge(py)?
             .getattr("literal_version")?
-            .call1((manifest.id.as_str(), manifest.paths.clone()))?
+            .call1((module, paths.to_vec()))?
             .extract()
     })
     .map_err(|e| e.to_string())
 }
 
-/// Imports the library `manifest` describes: the address of its
-/// descriptor, and the handle [`close`] takes.
-pub(crate) fn open(manifest: &Manifest, version: &str) -> Result<(usize, i64), String> {
+/// Imports `module` from `paths` as the library a manifest describes: the
+/// address of its descriptor, and the handle [`close`] takes.
+pub(crate) fn open(
+    module: &str,
+    version: &str,
+    kinds: &[String],
+    paths: &[String],
+) -> Result<(usize, i64), String> {
     Python::attach(|py| -> PyResult<(usize, i64)> {
         bridge(py)?
             .getattr("open_library")?
-            .call1((
-                manifest.id.as_str(),
-                version,
-                manifest.kinds.clone(),
-                manifest.paths.clone(),
-            ))?
+            .call1((module, version, kinds.to_vec(), paths.to_vec()))?
             .extract()
     })
     .map_err(|e| e.to_string())
