@@ -45,6 +45,9 @@ application that carries it.
 - **Dates, times, spans and exact lengths** — `Dates.Date`,
   `Dates.Time` (to the nanosecond), `Dates.DateTime`, instants as
   `Timestamp`, `Span` and `Length`, read and written by the library itself.
+- **Values on the wire** — `to_wire(v)` and `from_wire(bytes)` carry a
+  tree exactly as bytes, and `Guatiao.Wire` announces a schema on a
+  channel before its values, with a `Receiver` that checks each one.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
 - **JSON, TOML and YAML**, and **forms checked against a schema**, are
@@ -201,6 +204,7 @@ Guatiao.fromtext(Timestamp, "2026-10-21T19:15:00.5+05:30")   # Timestamp("2026-1
 | `decode`, `Guatiao.schema`, `Guatiao.@config`, `Guatiao.lower` | Julia types in and out, and their schemas |
 | `Timestamp`, `Span`, `Length`, `Guatiao.fromtext`, `Guatiao.totext`, `Guatiao.normalize` | dates, times, spans, exact lengths |
 | `redact` | secrets hidden |
+| `from_wire`, `to_wire`, `Guatiao.Wire` | values as bytes; channel frames and a receiver checking each value against its channel's schema |
 | `Guatiao.FFI` | for a package over another guatiao library |
 | `Registry`, `Instance`, `Guatiao.bind`, `Guatiao.create`, `Guatiao.refresh!` | hosting plugins |
 | `@kind`, `Lent`, `Taken`, `@required`, `@fallible` | a kind, declared from its C header |

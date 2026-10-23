@@ -28,6 +28,9 @@ include("json.jl")
     @testset "time" begin
         include("time.jl")
     end
+    @testset "wire" begin
+        include("wire.jl")
+    end
     @testset "frees" begin
         include("frees.jl")
     end
