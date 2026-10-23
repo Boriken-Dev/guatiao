@@ -16,7 +16,7 @@ nothing of it. The sources are pure Fortran (one `.F90` file chooses
 
 | `use` | what |
 | --- | --- |
-| `guatiao` | `guatiao_value`, `guatiao_text`, the constructors, statuses and tags, `GUATIAO_C_TRUE`/`GUATIAO_C_FALSE` (a C `bool`), `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`; schemas and `guatiao_config`; `guatiao_registry`, `guatiao_instance`; `guatiao_impl`, `guatiao_kind`, `guatiao_serving`, `guatiao_remote`; `guatiao_library` |
+| `guatiao` | `guatiao_value`, `guatiao_text`, the constructors, statuses and tags, `GUATIAO_C_TRUE`/`GUATIAO_C_FALSE` (a C `bool`), `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`; schemas and `guatiao_config`; the wire encoding and channels (`guatiao_wire`); `guatiao_registry`, `guatiao_instance`; `guatiao_impl`, `guatiao_kind`, `guatiao_serving`, `guatiao_remote`; `guatiao_library` |
 | `guatiao_kinds` | what a kind's own module uses for its glue: served boxes, carriers, lent and handed-over arguments, objects |
 | `guatiao_serde` | over the `guatiao_serde` library: `guatiao_parse`, `guatiao_emit`: JSON, TOML, YAML; `guatiao_serde_use_library` |
 | `guatiao_intake` | over the `guatiao_intake` library: forms, paths, the flat store; `guatiao_intake_use_library` |
@@ -181,6 +181,62 @@ or `GUATIAO_ERR_BAD_VALUE` with `why` the map saying why (`why` optional).
 a copy with every field the schema marks (`x-sensitive`, `writeOnly`)
 replaced, local `$ref`s followed, and whatever it does not describe
 hidden too.
+
+## Values on the wire, and channels
+
+The wire encoding is a tag byte per node, LEB128 lengths, a number as
+its own text, bytes as bytes, a map in its order: the same bytes in every
+language. Bytes cross as `integer(int8)` arrays.
+
+```fortran
+integer(int8), allocatable :: bytes(:), frame(:)
+call guatiao_to_wire(v, bytes)                  ! what v names
+call guatiao_from_wire(bytes, back, alloc, stat, errmsg)
+```
+
+`guatiao_from_wire` answers `GUATIAO_ERR_BAD_VALUE` for bytes that are not
+exactly one value (truncated, an unknown tag, a length not in its
+shortest form, text that is not UTF-8, a number outside the grammar, a
+repeated key, anything after it), leaving `value` as it was.
+
+A channel announces a schema before its values, and a receiver checks
+every value against it. A frame is `kind:u8 channel:LEB128 payload`; the
+transport says where one ends.
+
+```fortran
+type(guatiao_receiver) :: r
+type(guatiao_wire_event) :: event
+type(guatiao_wire_refusal) :: why
+call guatiao_wire_announce(1_int64, schema, frame)
+r = guatiao_open_receiver()
+call r%accept(frame, event, why, stat)   ! event%kind, %channel, %value
+call guatiao_wire_send(1_int64, v, frame)
+call guatiao_wire_close(1_int64, frame)
+call r%close()
+```
+
+- `guatiao_wire_announce(channel, schema, frame, stat, errmsg)`,
+  `guatiao_wire_send(channel, value, frame, ...)`,
+  `guatiao_wire_close(channel, frame, ...)`: `channel` is an
+  `integer(int64)` holding the 64 bits C reads as unsigned; `frame` an
+  allocatable `integer(int8)` array. A schema is not judged when it is
+  sent: the receiver refuses one that is not a map.
+- `guatiao_open_receiver(alloc, stat, errmsg)`: what it answers and the
+  schemas it keeps are built in `alloc`, which outlives it. Copies share
+  one receiver, freed when the last goes or on `close()`; then
+  `GUATIAO_STAT_CLOSED`. Not safe from two threads at once.
+- `r%accept(frame, event, refused, stat, errmsg)`: `event%kind`
+  (`GUATIAO_FRAME_SCHEMA`, `_VALUE`, `_CLOSE`), `event%channel`,
+  `event%value` (a copy of the schema now the channel's, or the value its
+  schema accepted, this side's to keep; absent for a close). A refusal is
+  its status, and `refused` (`type(guatiao_wire_refusal)`) says which:
+  `code` `GUATIAO_WIRE_MALFORMED` (`GUATIAO_ERR_BAD_VALUE`, `at` the byte
+  of the frame from 0), `GUATIAO_WIRE_NO_SCHEMA` (`GUATIAO_ERR_NOT_FOUND`),
+  `GUATIAO_WIRE_NOT_A_SCHEMA` (`GUATIAO_ERR_WRONG_KIND`),
+  `GUATIAO_WIRE_INVALID` (`GUATIAO_ERR_BAD_VALUE`, `key` the field,
+  `expected` what it accepts when the schema says, `detail` the map
+  `guatiao_validate` answers); `channel`, `kind` and `message` too. It
+  changes nothing the receiver keeps and quotes nothing it was given.
 
 ## Registry
 

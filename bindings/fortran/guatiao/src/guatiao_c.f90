@@ -219,6 +219,18 @@ module guatiao_c
     integer(c_size_t) :: len = 0
   end type
 
+  !> `guatiao_wire_event`: 144 bytes. What a channel frame said, or why
+  !> it was refused; its three values are the caller's.
+  type, bind(c) :: gt_wire_event
+    integer(c_int64_t) :: channel = 0
+    integer(c_int32_t) :: kind = 0
+    integer(c_int32_t) :: refusal = 0
+    integer(c_size_t) :: at = 0
+    type(gt_value) :: value
+    type(gt_value) :: message
+    type(gt_value) :: detail
+  end type
+
   !> One export this binding calls: its name, how many arguments the
   !> header gives it, and the build feature it needs ('' for none).
   type :: gt_export
@@ -227,7 +239,7 @@ module guatiao_c
     character(len=8) :: feature
   end type
 
-  type(gt_export), parameter :: gt_core_exports(72) = [ &
+  type(gt_export), parameter :: gt_core_exports(80) = [ &
     gt_export('guatiao_alloc_default              ', 1, ''), &
     gt_export('guatiao_value_free                 ', 1, ''), &
     gt_export('guatiao_value_clone                ', 3, ''), &
@@ -268,6 +280,14 @@ module guatiao_c
     gt_export('guatiao_span_format                ', 3, ''), &
     gt_export('guatiao_span_normalize             ', 4, ''), &
     gt_export('guatiao_duration_read              ', 3, ''), &
+    gt_export('guatiao_wire_encode                ', 3, ''), &
+    gt_export('guatiao_wire_decode                ', 3, ''), &
+    gt_export('guatiao_wire_announce              ', 4, ''), &
+    gt_export('guatiao_wire_send                  ', 4, ''), &
+    gt_export('guatiao_wire_close                 ', 3, ''), &
+    gt_export('guatiao_wire_receiver_new          ', 1, ''), &
+    gt_export('guatiao_wire_receiver_accept       ', 3, ''), &
+    gt_export('guatiao_wire_receiver_free         ', 1, ''), &
     gt_export('guatiao_registry_new               ', 3, 'load'), &
     gt_export('guatiao_registry_free              ', 1, 'load'), &
     gt_export('guatiao_registry_host              ', 1, 'load'), &
@@ -825,6 +845,59 @@ module guatiao_c
       type(c_ptr), value :: out
       integer(c_int32_t) :: r
     end function
+    function guatiao_wire_encode_i(alloc, value, out) bind(c) result(r)
+      import :: c_int32_t, c_ptr
+      type(c_ptr), value :: alloc
+      type(c_ptr), value :: value
+      type(c_ptr), value :: out
+      integer(c_int32_t) :: r
+    end function
+    function guatiao_wire_decode_i(alloc, bytes, out) bind(c) result(r)
+      import :: c_int32_t, c_ptr, gt_str
+      type(c_ptr), value :: alloc
+      type(gt_str), value :: bytes
+      type(c_ptr), value :: out
+      integer(c_int32_t) :: r
+    end function
+    function guatiao_wire_announce_i(alloc, channel, schema, out) bind(c) result(r)
+      import :: c_int32_t, c_int64_t, c_ptr
+      type(c_ptr), value :: alloc
+      integer(c_int64_t), value :: channel
+      type(c_ptr), value :: schema
+      type(c_ptr), value :: out
+      integer(c_int32_t) :: r
+    end function
+    function guatiao_wire_send_i(alloc, channel, value, out) bind(c) result(r)
+      import :: c_int32_t, c_int64_t, c_ptr
+      type(c_ptr), value :: alloc
+      integer(c_int64_t), value :: channel
+      type(c_ptr), value :: value
+      type(c_ptr), value :: out
+      integer(c_int32_t) :: r
+    end function
+    function guatiao_wire_close_i(alloc, channel, out) bind(c) result(r)
+      import :: c_int32_t, c_int64_t, c_ptr
+      type(c_ptr), value :: alloc
+      integer(c_int64_t), value :: channel
+      type(c_ptr), value :: out
+      integer(c_int32_t) :: r
+    end function
+    function guatiao_wire_receiver_new_i(alloc) bind(c) result(r)
+      import :: c_ptr
+      type(c_ptr), value :: alloc
+      type(c_ptr) :: r
+    end function
+    function guatiao_wire_receiver_accept_i(recv, frame, out_event) bind(c) result(r)
+      import :: c_int32_t, c_ptr, gt_str
+      type(c_ptr), value :: recv
+      type(gt_str), value :: frame
+      type(c_ptr), value :: out_event
+      integer(c_int32_t) :: r
+    end function
+    subroutine guatiao_wire_receiver_free_i(recv) bind(c)
+      import :: c_ptr
+      type(c_ptr), value :: recv
+    end subroutine
   end interface
 
   procedure(guatiao_alloc_default_i), pointer :: gt_alloc_default => null()
@@ -901,6 +974,14 @@ module guatiao_c
   procedure(guatiao_registry_unload_i), pointer :: gt_registry_unload => null()
   procedure(guatiao_registry_unload_unchecked_i), pointer :: gt_registry_unload_unchecked => null()
   procedure(guatiao_registry_collect_i), pointer :: gt_registry_collect => null()
+  procedure(guatiao_wire_encode_i), pointer :: gt_wire_encode => null()
+  procedure(guatiao_wire_decode_i), pointer :: gt_wire_decode => null()
+  procedure(guatiao_wire_announce_i), pointer :: gt_wire_announce => null()
+  procedure(guatiao_wire_send_i), pointer :: gt_wire_send => null()
+  procedure(guatiao_wire_close_i), pointer :: gt_wire_close => null()
+  procedure(guatiao_wire_receiver_new_i), pointer :: gt_wire_receiver_new => null()
+  procedure(guatiao_wire_receiver_accept_i), pointer :: gt_wire_receiver_accept => null()
+  procedure(guatiao_wire_receiver_free_i), pointer :: gt_wire_receiver_free => null()
 
 contains
 
@@ -982,6 +1063,14 @@ contains
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_unload'), gt_registry_unload)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_unload_unchecked'), gt_registry_unload_unchecked)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_collect'), gt_registry_collect)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_wire_encode'), gt_wire_encode)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_wire_decode'), gt_wire_decode)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_wire_announce'), gt_wire_announce)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_wire_send'), gt_wire_send)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_wire_close'), gt_wire_close)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_wire_receiver_new'), gt_wire_receiver_new)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_wire_receiver_accept'), gt_wire_receiver_accept)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_wire_receiver_free'), gt_wire_receiver_free)
   end subroutine
 
 end module guatiao_c

@@ -14,12 +14,13 @@ module guatiao_holds
   private
 
   public :: gt_hold, gt_hold_box, gt_new_hold, gt_hold_parent, GT_HOLD_REGISTRY, GT_HOLD_INSTANCE, &
-            GT_HOLD_OBJECT, GT_HOLD_LENT
+            GT_HOLD_OBJECT, GT_HOLD_LENT, GT_HOLD_RECEIVER
 
   integer, parameter :: GT_HOLD_REGISTRY = 1   ! guatiao_registry_free
   integer, parameter :: GT_HOLD_INSTANCE = 2   ! guatiao_registry_provider_destroy
   integer, parameter :: GT_HOLD_OBJECT = 3     ! the object table's destroy slot
   integer, parameter :: GT_HOLD_LENT = 4       ! nothing: another side owns it
+  integer, parameter :: GT_HOLD_RECEIVER = 5   ! guatiao_wire_receiver_free (ctx)
 
   type :: gt_hold_box
     integer :: what = 0
@@ -134,6 +135,8 @@ contains
         key = b%key
         call gt_registry_provider_destroy(b%reg, gt_view(key), b%ctx)
       end if
+    case (GT_HOLD_RECEIVER)
+      if (c_associated(b%ctx)) call gt_wire_receiver_free(b%ctx)
     case (GT_HOLD_OBJECT)
       if (c_associated(b%table) .and. b%size >= storage_size(head) / 8) then
         call c_f_pointer(b%table, head)

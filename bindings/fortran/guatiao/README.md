@@ -40,6 +40,9 @@ that is `guatiao` itself or an application that carries it.
 - **Dates, times, spans and exact lengths** — `guatiao_date`,
   `guatiao_time`, `guatiao_datetime`, `guatiao_timestamp`, `guatiao_span`
   and `guatiao_length`, to the nanosecond.
+- **Values on the wire** — `guatiao_to_wire` and `guatiao_from_wire`
+  carry a tree exactly as bytes, and a channel announces a schema before
+  its values, with a `guatiao_receiver` that checks each one.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
 - **JSON, TOML and YAML**, and **form checks against a schema**, through
@@ -79,7 +82,7 @@ either, the platform's library search is tried by file name.
 
 | Library | Module | Its own variable, before `GUATIAO_LIBRARY` |
 | --- | --- | --- |
-| `guatiao` | `guatiao`: values, schemas, configurations, dates and times, redaction | |
+| `guatiao` | `guatiao`: values, schemas, configurations, values on the wire and channels, dates and times, redaction | |
 | `guatiao_serde` | `guatiao_serde`: JSON, and TOML and YAML when the library has them | `GUATIAO_SERDE_LIBRARY` |
 | `guatiao_intake` | `guatiao_intake` | `GUATIAO_INTAKE_LIBRARY` |
 
@@ -238,7 +241,7 @@ call guatiao_to_text(later, text)   ! "2026-02-28"
 
 | Module | Purpose |
 | --- | --- |
-| `guatiao` | `guatiao_value` and its constructors, statuses, `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`, `guatiao_validate`, `guatiao_redact`, `guatiao_schema_builder`, `guatiao_config`; `guatiao_registry`, `guatiao_instance`; `guatiao_impl`, `guatiao_kind`, `guatiao_serving`, `guatiao_remote`; `guatiao_library`, `guatiao_register_library` |
+| `guatiao` | `guatiao_value` and its constructors, statuses, `guatiao_error`, `guatiao_allocator`, `guatiao_use_library`, `guatiao_validate`, `guatiao_redact`, `guatiao_schema_builder`, `guatiao_config`; `guatiao_to_wire`, `guatiao_from_wire`, the channel frames and `guatiao_receiver`; `guatiao_registry`, `guatiao_instance`; `guatiao_impl`, `guatiao_kind`, `guatiao_serving`, `guatiao_remote`; `guatiao_library`, `guatiao_register_library` |
 | `guatiao_kinds` | the helpers a kind's module writes its glue with |
 | `guatiao_serde` | `guatiao_parse` / `guatiao_emit` for JSON, TOML, YAML |
 | `guatiao_intake` | `check`, `layout`, `is_visible`, `at`, `for_schema`, `form_for`, `resolve`, `flat_keys`, `flatten`, `unflatten` |
