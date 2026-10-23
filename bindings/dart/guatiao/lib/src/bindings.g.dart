@@ -411,6 +411,42 @@ class GuatiaoBindings {
       int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
           guatiao_str, ffi.Pointer<guatiao_value>)>();
 
+  ffi.Pointer<ffi.Void> guatiao_memory_alloc(
+    int size,
+    int align,
+  ) {
+    return _guatiao_memory_alloc(
+      size,
+      align,
+    );
+  }
+
+  late final _guatiao_memory_allocPtr = _lookup<
+          ffi
+          .NativeFunction<ffi.Pointer<ffi.Void> Function(ffi.Size, ffi.Size)>>(
+      'guatiao_memory_alloc');
+  late final _guatiao_memory_alloc = _guatiao_memory_allocPtr
+      .asFunction<ffi.Pointer<ffi.Void> Function(int, int)>();
+
+  void guatiao_memory_free(
+    ffi.Pointer<ffi.Void> ptr,
+    int size,
+    int align,
+  ) {
+    return _guatiao_memory_free(
+      ptr,
+      size,
+      align,
+    );
+  }
+
+  late final _guatiao_memory_freePtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<ffi.Void>, ffi.Size,
+              ffi.Size)>>('guatiao_memory_free');
+  late final _guatiao_memory_free = _guatiao_memory_freePtr
+      .asFunction<void Function(ffi.Pointer<ffi.Void>, int, int)>();
+
   int guatiao_merge(
     int mode,
     ffi.Pointer<guatiao_value> earlier,
