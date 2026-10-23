@@ -1,0 +1,232 @@
+{
+  "format": 1,
+  "kinds": [
+    {
+      "name": "greeter",
+      "floor_hash": 2695856491,
+      "object": false,
+      "doc": "Greets by name.",
+      "slots": [
+        {
+          "name": "greet",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "name",
+              "type": "str"
+            }
+          ],
+          "answer": {
+            "type": "map"
+          },
+          "doc": "`{\"greeting\": \"...\"}`, or why not."
+        },
+        {
+          "name": "shout",
+          "required": false,
+          "fallible": false,
+          "args": [
+            {
+              "name": "name",
+              "type": "str"
+            }
+          ],
+          "answer": {
+            "type": "text"
+          },
+          "doc": "Appended after `greet`: a library built before it existed makes\nthe proxy run this body instead."
+        },
+        {
+          "name": "start",
+          "required": false,
+          "fallible": true,
+          "args": [
+            {
+              "name": "listener",
+              "type": "object",
+              "kind": "listener",
+              "pass": "taken"
+            }
+          ],
+          "answer": {
+            "type": "object",
+            "kind": "conversation"
+          },
+          "doc": "Appended: a conversation the caller then drives, told to the\nlistener the caller handed in. A greeter built before this slot\nexisted, or one that holds no conversations, answers the default."
+        },
+        {
+          "name": "greet_into",
+          "required": false,
+          "fallible": true,
+          "args": [
+            {
+              "name": "name",
+              "type": "str"
+            },
+            {
+              "name": "listener",
+              "type": "object",
+              "kind": "listener",
+              "pass": "lent"
+            }
+          ],
+          "doc": "Appended: the greeting, told to a listener the caller LENDS for\nthis call alone. It stays on the caller's side: nothing is\nallocated to pass it and nothing is destroyed after. A greeter\nbuilt before this slot existed greets through `greet`."
+        },
+        {
+          "name": "greet_from",
+          "required": false,
+          "fallible": true,
+          "args": [
+            {
+              "name": "config",
+              "type": "map",
+              "pass": "taken"
+            }
+          ],
+          "answer": {
+            "type": "map"
+          },
+          "doc": "Appended: the greeting for a configuration the caller HANDS OVER\n(`{\"name\": \"..\"}`). The greeter owns the map from the call on,\nwhatever it answers, and may keep it; nothing is copied to pass\nit. A greeter built before this slot existed greets the name\nthrough `greet`."
+        },
+        {
+          "name": "check",
+          "required": false,
+          "fallible": true,
+          "args": [
+            {
+              "name": "config",
+              "type": "map",
+              "pass": "lent"
+            }
+          ],
+          "answer": {
+            "type": "bool"
+          },
+          "doc": "Appended: completes a configuration for `greet_from` that the\ncaller LENDS for this call, in the caller's own map: fills in what\nit leaves out and adds what follows from it. Answers whether it can\nbe greeted. A greeter built before this slot existed changes\nnothing."
+        }
+      ]
+    },
+    {
+      "name": "listener",
+      "floor_hash": 1867921573,
+      "object": true,
+      "doc": "What a conversation tells whoever is listening. Implemented by the\nHOST and handed to the library, which owns it from then on.",
+      "slots": [
+        {
+          "name": "heard",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "what",
+              "type": "str"
+            }
+          ],
+          "doc": "Something was said."
+        }
+      ]
+    },
+    {
+      "name": "conversation",
+      "floor_hash": 2769624503,
+      "object": true,
+      "doc": "One conversation a greeter started: state the caller drives.",
+      "slots": [
+        {
+          "name": "say",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "what",
+              "type": "str"
+            }
+          ],
+          "doc": "Say something; the listener hears it."
+        },
+        {
+          "name": "read",
+          "required": true,
+          "fallible": false,
+          "args": [
+            {
+              "name": "dst",
+              "type": "bytes_mut"
+            }
+          ],
+          "answer": {
+            "type": "i64"
+          },
+          "doc": "Copies the transcript so far into `dst` and answers how many bytes\nit wrote — an out-buffer, the caller's own memory."
+        },
+        {
+          "name": "turns",
+          "required": true,
+          "fallible": false,
+          "args": [],
+          "answer": {
+            "type": "i64"
+          },
+          "doc": "How many things were said."
+        }
+      ]
+    },
+    {
+      "name": "counter",
+      "floor_hash": 1227528937,
+      "object": false,
+      "doc": "Counts how often it was asked.",
+      "slots": [
+        {
+          "name": "count",
+          "required": true,
+          "fallible": false,
+          "args": [],
+          "answer": {
+            "type": "i64"
+          },
+          "doc": "The count so far, after this call."
+        }
+      ]
+    },
+    {
+      "name": "wide",
+      "floor_hash": 3673689684,
+      "object": false,
+      "doc": "Answers the 64-bit integer it is given, unchanged: what a host in any\nlanguage crosses its 64-bit numbers with, both ways and at their\nlimits.",
+      "slots": [
+        {
+          "name": "echo_i64",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "x",
+              "type": "i64"
+            }
+          ],
+          "answer": {
+            "type": "i64"
+          },
+          "doc": "`x`, as it arrived."
+        },
+        {
+          "name": "echo_u64",
+          "required": true,
+          "fallible": true,
+          "args": [
+            {
+              "name": "x",
+              "type": "u64"
+            }
+          ],
+          "answer": {
+            "type": "u64"
+          },
+          "doc": "`x`, as it arrived."
+        }
+      ]
+    }
+  ]
+}

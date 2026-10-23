@@ -60,6 +60,17 @@ impl LendsVtable {
     /// literal, so a C header generator can render it: what a C
     /// implementation writes into the table's header.
     pub const FLOOR_HASH: u32 = 2814562052;
+    /// The kind as data, compact JSON: its name, floor hash, and each
+    /// slot in table order with its arguments and answer, as the
+    /// header declares them, and whether it is required and fallible.
+    /// What a binding loads instead of declaring the kind again.
+    pub fn description() -> ::guatiao::__private::alloc::string::String {
+        let mut out = ::guatiao::__private::alloc::string::String::new();
+        out.push_str(
+            "{\"name\":\"lends\",\"floor_hash\":2814562052,\"object\":false,\"slots\":[{\"name\":\"check\",\"required\":true,\"fallible\":true,\"args\":[{\"name\":\"config\",\"type\":\"map\",\"pass\":\"lent\"}],\"answer\":{\"type\":\"bool\"}},{\"name\":\"fill\",\"required\":true,\"fallible\":false,\"args\":[{\"name\":\"v\",\"type\":\"value\",\"pass\":\"lent\"},{\"name\":\"l\",\"type\":\"list\",\"pass\":\"lent\"},{\"name\":\"name\",\"type\":\"str\"}],\"answer\":{\"type\":\"i64\"}}]}",
+        );
+        out
+    }
     #[doc(hidden)]
     pub const fn check_end() -> usize {
         ::core::mem::offset_of!(Self, check) + ::core::mem::size_of::<usize>()

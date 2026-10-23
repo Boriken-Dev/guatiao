@@ -99,6 +99,17 @@ impl TreesVtable {
     /// literal, so a C header generator can render it: what a C
     /// implementation writes into the table's header.
     pub const FLOOR_HASH: u32 = 3903901445;
+    /// The kind as data, compact JSON: its name, floor hash, and each
+    /// slot in table order with its arguments and answer, as the
+    /// header declares them, and whether it is required and fallible.
+    /// What a binding loads instead of declaring the kind again.
+    pub fn description() -> ::guatiao::__private::alloc::string::String {
+        let mut out = ::guatiao::__private::alloc::string::String::new();
+        out.push_str(
+            "{\"name\":\"trees\",\"floor_hash\":3903901445,\"object\":false,\"slots\":[{\"name\":\"map\",\"required\":true,\"fallible\":true,\"args\":[{\"name\":\"name\",\"type\":\"str\"}],\"answer\":{\"type\":\"map\"}},{\"name\":\"value\",\"required\":true,\"fallible\":false,\"args\":[],\"answer\":{\"type\":\"value\"}},{\"name\":\"list\",\"required\":false,\"fallible\":false,\"args\":[],\"answer\":{\"type\":\"list\"}}]}",
+        );
+        out
+    }
     #[doc(hidden)]
     pub const fn map_end() -> usize {
         ::core::mem::offset_of!(Self, map) + ::core::mem::size_of::<usize>()

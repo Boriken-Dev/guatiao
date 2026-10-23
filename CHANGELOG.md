@@ -14,6 +14,15 @@ write now.
 
 ### Added
 
+- **A kind describes itself as data.** `#[guatiao::kind]` adds
+  `<Trait>Vtable::description()`: the kind's name, floor hash, whether it
+  is an object kind, and every slot in table order with its arguments,
+  answer, whether it is required and whether it can refuse, as JSON. A
+  kind crate commits the document of its kinds beside its C header
+  (`examples/greeter_kind/include/greeter_kind.kinds.json`), written by
+  the same `GUATIAO_WRITE_HEADER` switch and compared by a test, so a
+  binding loads a kind instead of declaring it again. The format is in
+  the docs' encodings page.
 - **Values as events, with no tree in the middle.** `value::visit` is
   guatiao's own data model as traits, with no dependency: a type that
   `Walk`s hands absent, null, bool, number text, string, bytes, list and
