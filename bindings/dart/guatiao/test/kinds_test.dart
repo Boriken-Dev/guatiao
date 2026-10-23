@@ -141,12 +141,22 @@ final class Shouter extends Provider implements Greeter {
 /// A provider that serves the greeter kind and lacks its required slot.
 final class Silent extends Provider {}
 
-/// The greeter written in C, built into a directory of its own, or null
-/// without a C compiler.
-String? cGreeterDir() {
+/// The directory holding the greeter written in C, or null without a C
+/// compiler. Built once, on first use. It stays in the system's temporary
+/// directory: Windows refuses to delete a library that is still mapped,
+/// and a loaded one can stay mapped until the process ends.
+final String? cGreeterDir = _buildCGreeter();
+
+/// Compiles with `CC` where it is set, as the other suites do: the default
+/// compiler builds for the machine, which is not this process's
+/// architecture under emulation. Else the first of clang and cc found.
+String? _buildCGreeter() {
+  final named = Platform.environment['CC'] ?? '';
+  final compilers = named.isNotEmpty
+      ? [named]
+      : ['clang', r'C:\Program Files\LLVM\bin\clang.exe', 'cc'];
   final out = Directory.systemTemp.createTempSync('guatiao-dart-c-');
-  addTearDown(() => out.deleteSync(recursive: true));
-  for (final cc in ['clang', r'C:\Program Files\LLVM\bin\clang.exe', 'cc']) {
+  for (final cc in compilers) {
     try {
       final result = Process.runSync(cc, [
         '-shared',
@@ -169,9 +179,10 @@ String? cGreeterDir() {
       expect(result.exitCode, 0, reason: '${result.stderr}');
       return out.path;
     } on ProcessException {
-      continue;
+      if (named.isNotEmpty) rethrow;
     }
   }
+  out.deleteSync();
   return null;
 }
 
@@ -259,12 +270,16 @@ void main() {
     });
 
     test('written in C: an older table answers has() and Unsupported', () {
-      final dir = cGreeterDir();
+      final dir = cGreeterDir;
       if (dir == null) {
         markTestSkipped('no C compiler');
         return;
       }
-      reg.scanDir(dir, rules: 'kind=greeter');
+      expect(
+        reg.scanDir(dir, rules: 'kind=greeter')['failed'],
+        isEmpty,
+        reason: 'set CC to a compiler for this architecture',
+      );
       final greeter = reg.bind('c_greeter', Greeter.kind);
       exerciseAll(greeter, 'hello from C');
       expect(greeter.has('shout'), isFalse);
