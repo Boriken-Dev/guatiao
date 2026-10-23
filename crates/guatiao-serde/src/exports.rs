@@ -68,12 +68,16 @@
 use core::panic::AssertUnwindSafe;
 use std::panic::catch_unwind;
 
+use guatiao::ValueError;
+use guatiao::exports::visit::{Stopped, TableSink, VisitorTable, WalkerTable, run_walker};
 use guatiao::value::alloc::{Alloc, Allocator};
 use guatiao::value::status::Status;
+use guatiao::value::types::Bytes as View;
 use guatiao::value::types::{Str, Text, Value};
+use guatiao::value::wire::{Encoded, Encoder};
 
 use crate::text::{Error, Position, position_at};
-use crate::{Bytes, Presentation};
+use crate::{BridgeError, Bytes, Presentation};
 
 /// Which format refused a document: `guatiao_parse_error.format`.
 pub const GUATIAO_FORMAT_JSON: u32 = 0;
@@ -667,4 +671,610 @@ pub unsafe extern "C" fn guatiao_yaml_emit(
 ) -> Status {
     // SAFETY: forwarded.
     unsafe { emit_with(value, how, alloc, out, crate::text::yaml::to_string, None) }
+}
+
+// --- documents as events, with no tree ----------------------------------
+//
+// A document's events go straight to a C visitor, or into wire bytes (the
+// tape a binding decodes in its own language with one crossing); a C
+// walker's events, or wire bytes, go straight to a document. Nothing in
+// between is a tree.
+
+/// A format's reader into a C visitor.
+type Visit = fn(&str, &mut TableSink, Presentation) -> Result<(), BridgeError<Error, Stopped>>;
+
+/// A format's reader into wire bytes.
+type ToWire = fn(&str, Presentation) -> Result<Vec<u8>, BridgeError<Error, ValueError>>;
+
+/// A format's writer of the value wire bytes hold.
+type FromWire = fn(&[u8], Presentation) -> Result<String, Error>;
+
+/// The document `text` reads as, or the refusal, written through
+/// `out_error`, of text that is not UTF-8.
+fn document<'a>(
+    text: Str<'a>,
+    format: u32,
+    alloc: Alloc,
+    out_error: *mut ParseError,
+) -> Result<&'a str, Status> {
+    let bytes: &[u8] = text.into();
+    core::str::from_utf8(bytes).map_err(|e| {
+        // Where the text stops being UTF-8, counted over the part that is.
+        let valid = core::str::from_utf8(&bytes[..e.valid_up_to()]).unwrap_or("");
+        let at = position_at(valid, valid.len());
+        reported(
+            out_error,
+            ParseError::at(format, Some(at), "the text is not UTF-8", alloc),
+            Status::from(e),
+        )
+    })
+}
+
+/// Writes a refusal through `out_error` when there is one: `status`, or
+/// `GUATIAO_ERR_ALLOC` when its message could not be built.
+fn reported(out_error: *mut ParseError, detail: Option<ParseError>, status: Status) -> Status {
+    if out_error.is_null() {
+        return status;
+    }
+    let Some(detail) = detail else {
+        return Status::GUATIAO_ERR_ALLOC;
+    };
+    // SAFETY: non-null, and writable by the caller's contract; written
+    // empty on entry, so it holds nothing this overwrites.
+    unsafe { out_error.write(detail) };
+    status
+}
+
+/// One parse into a C visitor, whichever format's reader is handed in.
+///
+/// # Safety
+///
+/// As the functions that call it.
+unsafe fn visit_with(
+    text: Str,
+    how: u32,
+    alloc: *const Allocator,
+    visitor: *const VisitorTable,
+    out_error: *mut ParseError,
+    format: u32,
+    visit: Visit,
+) -> Status {
+    if !out_error.is_null() {
+        // SAFETY: the caller's contract.
+        unsafe { core::ptr::write(out_error, ParseError::none(format)) };
+    }
+    guard(|| {
+        if visitor.is_null() {
+            return Status::GUATIAO_ERR_NULL;
+        }
+        // SAFETY: the caller's contract.
+        let Ok(alloc) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        // SAFETY: checked non-null; the rest is the caller's contract.
+        let Some(mut sink) = (unsafe { TableSink::from_ptr(visitor) }) else {
+            return Status::GUATIAO_ERR_BAD_VALUE;
+        };
+        let text = match document(text, format, alloc, out_error) {
+            Ok(text) => text,
+            Err(status) => return status,
+        };
+        match visit(text, &mut sink, presentation(how)) {
+            Ok(()) => Status::GUATIAO_OK,
+            Err(BridgeError::Refused(Stopped(status))) => status,
+            Err(BridgeError::Format(e)) => {
+                reported(out_error, ParseError::of(&e, format, alloc), status_of(&e))
+            }
+        }
+    })
+}
+
+/// One parse into wire bytes, whichever format's reader is handed in.
+///
+/// # Safety
+///
+/// As the functions that call it.
+unsafe fn to_wire_with(
+    text: Str,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+    out_error: *mut ParseError,
+    format: u32,
+    to_wire: ToWire,
+) -> Status {
+    // SAFETY: the caller's contract, for both pointers.
+    unsafe {
+        let _ = Value::absent().write_to(out, core::ptr::null());
+        if !out_error.is_null() {
+            core::ptr::write(out_error, ParseError::none(format));
+        }
+    }
+    guard(|| {
+        // SAFETY: the caller's contract; an empty view never dereferences.
+        let (_, alloc) = match unsafe { inputs(Str::empty(), alloc, out) } {
+            Ok(pair) => pair,
+            Err(status) => return status,
+        };
+        let text = match document(text, format, alloc, out_error) {
+            Ok(text) => text,
+            Err(status) => return status,
+        };
+        match to_wire(text, presentation(how)) {
+            Ok(bytes) => match guatiao::Buffer::new_in(alloc, &bytes) {
+                // SAFETY: `out` is writable by contract and was written
+                // ABSENT on entry.
+                Ok(buffer) => unsafe { Value::from(buffer).write_to(out, alloc.as_raw()) },
+                Err(e) => Status::from(e),
+            },
+            Err(BridgeError::Refused(e)) => Status::from(e),
+            Err(BridgeError::Format(e)) => {
+                reported(out_error, ParseError::of(&e, format, alloc), status_of(&e))
+            }
+        }
+    })
+}
+
+/// A document written from wire bytes, as a STRING value through `out`.
+fn write_wire(
+    bytes: &[u8],
+    how: u32,
+    alloc: Alloc,
+    out: *mut Value,
+    write: FromWire,
+    indented: Option<FromWire>,
+) -> Status {
+    let write = match indented {
+        Some(indented) if pretty(how) => indented,
+        _ => write,
+    };
+    match write(bytes, presentation(how)).map(|text| Text::new_in(alloc, &text)) {
+        // SAFETY: `out` is writable by the callers' contract and was
+        // written ABSENT on entry.
+        Ok(Ok(text)) => unsafe { Value::from(text).write_to(out, alloc.as_raw()) },
+        Ok(Err(e)) => Status::from(e),
+        Err(e) => status_of(&e),
+    }
+}
+
+/// One write from wire bytes, whichever format's writer is handed in.
+///
+/// # Safety
+///
+/// As the functions that call it.
+unsafe fn from_wire_with(
+    bytes: View,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+    write: FromWire,
+    indented: Option<FromWire>,
+) -> Status {
+    // SAFETY: the caller's contract.
+    let _ = unsafe { Value::absent().write_to(out, core::ptr::null()) };
+    guard(|| {
+        // SAFETY: the caller's contract; an empty view never dereferences.
+        let (_, alloc) = match unsafe { inputs(Str::empty(), alloc, out) } {
+            Ok(pair) => pair,
+            Err(status) => return status,
+        };
+        write_wire(bytes.into(), how, alloc, out, write, indented)
+    })
+}
+
+/// One write from a C walker: its events into wire bytes, then the
+/// document, whichever format's writer is handed in.
+///
+/// # Safety
+///
+/// As the functions that call it.
+unsafe fn emit_walker_with(
+    walker: *const WalkerTable,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+    write: FromWire,
+    indented: Option<FromWire>,
+) -> Status {
+    // SAFETY: the caller's contract.
+    let _ = unsafe { Value::absent().write_to(out, core::ptr::null()) };
+    guard(|| {
+        if walker.is_null() {
+            return Status::GUATIAO_ERR_NULL;
+        }
+        // SAFETY: the caller's contract; an empty view never dereferences.
+        let (_, alloc) = match unsafe { inputs(Str::empty(), alloc, out) } {
+            Ok(pair) => pair,
+            Err(status) => return status,
+        };
+        let mut bytes = Vec::new();
+        let mut encoder = Encoder::new(&mut bytes);
+        // SAFETY: checked non-null; the rest is the caller's contract.
+        let walked = unsafe { run_walker(walker, &mut encoder) };
+        if !walked.is_ok() {
+            return walked;
+        }
+        if !encoder.is_complete() {
+            return Status::GUATIAO_ERR_WRONG_KIND;
+        }
+        write_wire(&bytes, how, alloc, out, write, indented)
+    })
+}
+
+/// A format's readers and writers over the visitor, as plain functions
+/// the pointers above take.
+macro_rules! over_events {
+    ($module:ident) => {
+        pub(super) fn visit(
+            text: &str,
+            sink: &mut TableSink,
+            how: Presentation,
+        ) -> Result<(), BridgeError<Error, Stopped>> {
+            crate::text::$module::visit_str(text, sink, how)
+        }
+
+        pub(super) fn to_wire(
+            text: &str,
+            how: Presentation,
+        ) -> Result<Vec<u8>, BridgeError<Error, ValueError>> {
+            let mut bytes = Vec::new();
+            let mut encoder = Encoder::new(&mut bytes);
+            crate::text::$module::visit_str(text, &mut encoder, how)?;
+            if !encoder.is_complete() {
+                return Err(BridgeError::Refused(ValueError::WrongKind));
+            }
+            Ok(bytes)
+        }
+
+        pub(super) fn from_wire(bytes: &[u8], how: Presentation) -> Result<String, Error> {
+            crate::text::$module::to_string_of(&Encoded(bytes), how)
+        }
+    };
+}
+
+#[cfg(feature = "json")]
+mod json_events {
+    use super::*;
+
+    over_events!(json);
+
+    pub(super) fn from_wire_pretty(bytes: &[u8], how: Presentation) -> Result<String, Error> {
+        crate::text::json::to_string_pretty_of(&Encoded(bytes), how)
+    }
+}
+
+#[cfg(feature = "toml")]
+mod toml_events {
+    use super::*;
+
+    over_events!(toml);
+}
+
+#[cfg(feature = "yaml")]
+mod yaml_events {
+    use super::*;
+
+    over_events!(yaml);
+}
+
+/// Reads a JSON document straight into a C visitor: one call per event,
+/// no value built.
+///
+/// A callback's status stops the read and is returned. A document that
+/// does not parse is `GUATIAO_ERR_BAD_VALUE`, and `out_error`, when not
+/// null, receives where, as `guatiao_json_parse_ex` writes it, its
+/// message built through `alloc`. A visitor table smaller than this
+/// build's is `GUATIAO_ERR_BAD_VALUE`.
+///
+/// # Safety
+///
+/// `text` is a readable view for this call; `alloc` addresses a complete
+/// allocator; `visitor` is null or a table readable for its
+/// `struct_size` bytes whose functions return rather than unwind;
+/// `out_error` as for `guatiao_json_parse_ex`.
+#[cfg(feature = "json")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_json_visit(
+    text: Str,
+    how: u32,
+    alloc: *const Allocator,
+    visitor: *const VisitorTable,
+    out_error: *mut ParseError,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe {
+        visit_with(
+            text,
+            how,
+            alloc,
+            visitor,
+            out_error,
+            GUATIAO_FORMAT_JSON,
+            json_events::visit,
+        )
+    }
+}
+
+/// Reads a JSON document straight into wire bytes, a BYTES value built
+/// through `alloc`: the tape a binding decodes in its own language, with
+/// one crossing and no value built. The bytes are those
+/// `guatiao_wire_encode` writes for the value `guatiao_json_parse` reads.
+///
+/// `out` is written ABSENT on entry. A document that does not parse is
+/// `GUATIAO_ERR_BAD_VALUE`, with where through `out_error`, which may be
+/// null.
+///
+/// # Safety
+///
+/// As [`guatiao_json_parse_ex`].
+#[cfg(feature = "json")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_json_to_wire(
+    text: Str,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+    out_error: *mut ParseError,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe {
+        to_wire_with(
+            text,
+            how,
+            alloc,
+            out,
+            out_error,
+            GUATIAO_FORMAT_JSON,
+            json_events::to_wire,
+        )
+    }
+}
+
+/// Writes the value wire bytes hold as a JSON document, a STRING value
+/// built through `alloc`, with no value built in between.
+/// `GUATIAO_PRETTY` in `how` indents it.
+///
+/// `out` is written ABSENT on entry. Bytes that are not a value are
+/// `GUATIAO_ERR_BAD_VALUE`.
+///
+/// # Safety
+///
+/// `bytes` is readable for the call; `alloc` and `out` as for
+/// `guatiao_json_emit`.
+#[cfg(feature = "json")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_json_from_wire(
+    bytes: View,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe {
+        from_wire_with(
+            bytes,
+            how,
+            alloc,
+            out,
+            json_events::from_wire,
+            Some(json_events::from_wire_pretty),
+        )
+    }
+}
+
+/// Writes a C walker's events as a JSON document, a STRING value built
+/// through `alloc`: the caller's own data to text, with no value built.
+/// `GUATIAO_PRETTY` in `how` indents it.
+///
+/// `out` is written ABSENT on entry. The walker's own status stops the
+/// write and is returned, and so does the first refusal of an event:
+/// events out of order, or a walk that gave no one complete value, are
+/// `GUATIAO_ERR_WRONG_KIND`; text that is not UTF-8, a number outside the
+/// grammar and a key repeated in its map `GUATIAO_ERR_BAD_VALUE`.
+///
+/// # Safety
+///
+/// `walker` is null or a table readable for its `struct_size` bytes whose
+/// `walk` returns rather than unwinds; `alloc` and `out` as for
+/// `guatiao_json_emit`.
+#[cfg(feature = "json")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_json_emit_walker(
+    walker: *const WalkerTable,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe {
+        emit_walker_with(
+            walker,
+            how,
+            alloc,
+            out,
+            json_events::from_wire,
+            Some(json_events::from_wire_pretty),
+        )
+    }
+}
+
+/// [`guatiao_json_visit`], for TOML.
+///
+/// # Safety
+///
+/// As [`guatiao_json_visit`].
+#[cfg(feature = "toml")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_toml_visit(
+    text: Str,
+    how: u32,
+    alloc: *const Allocator,
+    visitor: *const VisitorTable,
+    out_error: *mut ParseError,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe {
+        visit_with(
+            text,
+            how,
+            alloc,
+            visitor,
+            out_error,
+            GUATIAO_FORMAT_TOML,
+            toml_events::visit,
+        )
+    }
+}
+
+/// [`guatiao_json_to_wire`], for TOML.
+///
+/// # Safety
+///
+/// As [`guatiao_json_to_wire`].
+#[cfg(feature = "toml")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_toml_to_wire(
+    text: Str,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+    out_error: *mut ParseError,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe {
+        to_wire_with(
+            text,
+            how,
+            alloc,
+            out,
+            out_error,
+            GUATIAO_FORMAT_TOML,
+            toml_events::to_wire,
+        )
+    }
+}
+
+/// [`guatiao_json_from_wire`], for TOML. A TOML document is a table, so
+/// bytes holding anything but a map are `GUATIAO_ERR_BAD_VALUE`.
+///
+/// # Safety
+///
+/// As [`guatiao_json_from_wire`].
+#[cfg(feature = "toml")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_toml_from_wire(
+    bytes: View,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe { from_wire_with(bytes, how, alloc, out, toml_events::from_wire, None) }
+}
+
+/// [`guatiao_json_emit_walker`], for TOML: the walk is a map.
+///
+/// # Safety
+///
+/// As [`guatiao_json_emit_walker`].
+#[cfg(feature = "toml")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_toml_emit_walker(
+    walker: *const WalkerTable,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe { emit_walker_with(walker, how, alloc, out, toml_events::from_wire, None) }
+}
+
+/// [`guatiao_json_visit`], for YAML.
+///
+/// # Safety
+///
+/// As [`guatiao_json_visit`].
+#[cfg(feature = "yaml")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_yaml_visit(
+    text: Str,
+    how: u32,
+    alloc: *const Allocator,
+    visitor: *const VisitorTable,
+    out_error: *mut ParseError,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe {
+        visit_with(
+            text,
+            how,
+            alloc,
+            visitor,
+            out_error,
+            GUATIAO_FORMAT_YAML,
+            yaml_events::visit,
+        )
+    }
+}
+
+/// [`guatiao_json_to_wire`], for YAML.
+///
+/// # Safety
+///
+/// As [`guatiao_json_to_wire`].
+#[cfg(feature = "yaml")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_yaml_to_wire(
+    text: Str,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+    out_error: *mut ParseError,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe {
+        to_wire_with(
+            text,
+            how,
+            alloc,
+            out,
+            out_error,
+            GUATIAO_FORMAT_YAML,
+            yaml_events::to_wire,
+        )
+    }
+}
+
+/// [`guatiao_json_from_wire`], for YAML.
+///
+/// # Safety
+///
+/// As [`guatiao_json_from_wire`].
+#[cfg(feature = "yaml")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_yaml_from_wire(
+    bytes: View,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe { from_wire_with(bytes, how, alloc, out, yaml_events::from_wire, None) }
+}
+
+/// [`guatiao_json_emit_walker`], for YAML.
+///
+/// # Safety
+///
+/// As [`guatiao_json_emit_walker`].
+#[cfg(feature = "yaml")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_yaml_emit_walker(
+    walker: *const WalkerTable,
+    how: u32,
+    alloc: *const Allocator,
+    out: *mut Value,
+) -> Status {
+    // SAFETY: forwarded.
+    unsafe { emit_walker_with(walker, how, alloc, out, yaml_events::from_wire, None) }
 }

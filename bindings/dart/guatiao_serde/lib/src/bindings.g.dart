@@ -89,6 +89,66 @@ class GuatiaoSerdeBindings {
         )
       >();
 
+  imp$1.Dartguatiao_status guatiao_json_emit_walker(
+    ffi.Pointer<guatiao_walker> walker,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_json_emit_walker(walker, how, alloc, out);
+  }
+
+  late final _guatiao_json_emit_walkerPtr =
+      _lookup<
+        ffi.NativeFunction<
+          imp$1.guatiao_status Function(
+            ffi.Pointer<guatiao_walker>,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_json_emit_walker');
+  late final _guatiao_json_emit_walker = _guatiao_json_emit_walkerPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          ffi.Pointer<guatiao_walker>,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
+  imp$1.Dartguatiao_status guatiao_json_from_wire(
+    guatiao_bytes bytes,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_json_from_wire(bytes, how, alloc, out);
+  }
+
+  late final _guatiao_json_from_wirePtr =
+      _lookup<
+        ffi.NativeFunction<
+          imp$1.guatiao_status Function(
+            guatiao_bytes,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_json_from_wire');
+  late final _guatiao_json_from_wire = _guatiao_json_from_wirePtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          guatiao_bytes,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
   imp$1.Dartguatiao_status guatiao_json_parse(
     guatiao_str text,
     int how,
@@ -152,6 +212,72 @@ class GuatiaoSerdeBindings {
         )
       >();
 
+  imp$1.Dartguatiao_status guatiao_json_to_wire(
+    guatiao_str text,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+    ffi.Pointer<guatiao_parse_error> out_error,
+  ) {
+    return _guatiao_json_to_wire(text, how, alloc, out, out_error);
+  }
+
+  late final _guatiao_json_to_wirePtr =
+      _lookup<
+        ffi.NativeFunction<
+          imp$1.guatiao_status Function(
+            guatiao_str,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_parse_error>,
+          )
+        >
+      >('guatiao_json_to_wire');
+  late final _guatiao_json_to_wire = _guatiao_json_to_wirePtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          guatiao_str,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_parse_error>,
+        )
+      >();
+
+  imp$1.Dartguatiao_status guatiao_json_visit(
+    guatiao_str text,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_visitor> visitor,
+    ffi.Pointer<guatiao_parse_error> out_error,
+  ) {
+    return _guatiao_json_visit(text, how, alloc, visitor, out_error);
+  }
+
+  late final _guatiao_json_visitPtr =
+      _lookup<
+        ffi.NativeFunction<
+          imp$1.guatiao_status Function(
+            guatiao_str,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_visitor>,
+            ffi.Pointer<guatiao_parse_error>,
+          )
+        >
+      >('guatiao_json_visit');
+  late final _guatiao_json_visit = _guatiao_json_visitPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          guatiao_str,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_visitor>,
+          ffi.Pointer<guatiao_parse_error>,
+        )
+      >();
+
   imp$1.Dartguatiao_status guatiao_toml_emit(
     ffi.Pointer<guatiao_value> value,
     int how,
@@ -176,6 +302,66 @@ class GuatiaoSerdeBindings {
       .asFunction<
         imp$1.Dartguatiao_status Function(
           ffi.Pointer<guatiao_value>,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
+  imp$1.Dartguatiao_status guatiao_toml_emit_walker(
+    ffi.Pointer<guatiao_walker> walker,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_toml_emit_walker(walker, how, alloc, out);
+  }
+
+  late final _guatiao_toml_emit_walkerPtr =
+      _lookup<
+        ffi.NativeFunction<
+          imp$1.guatiao_status Function(
+            ffi.Pointer<guatiao_walker>,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_toml_emit_walker');
+  late final _guatiao_toml_emit_walker = _guatiao_toml_emit_walkerPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          ffi.Pointer<guatiao_walker>,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
+  imp$1.Dartguatiao_status guatiao_toml_from_wire(
+    guatiao_bytes bytes,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_toml_from_wire(bytes, how, alloc, out);
+  }
+
+  late final _guatiao_toml_from_wirePtr =
+      _lookup<
+        ffi.NativeFunction<
+          imp$1.guatiao_status Function(
+            guatiao_bytes,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_toml_from_wire');
+  late final _guatiao_toml_from_wire = _guatiao_toml_from_wirePtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          guatiao_bytes,
           int,
           ffi.Pointer<guatiao_alloc>,
           ffi.Pointer<guatiao_value>,
@@ -245,6 +431,72 @@ class GuatiaoSerdeBindings {
         )
       >();
 
+  imp$1.Dartguatiao_status guatiao_toml_to_wire(
+    guatiao_str text,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+    ffi.Pointer<guatiao_parse_error> out_error,
+  ) {
+    return _guatiao_toml_to_wire(text, how, alloc, out, out_error);
+  }
+
+  late final _guatiao_toml_to_wirePtr =
+      _lookup<
+        ffi.NativeFunction<
+          imp$1.guatiao_status Function(
+            guatiao_str,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_parse_error>,
+          )
+        >
+      >('guatiao_toml_to_wire');
+  late final _guatiao_toml_to_wire = _guatiao_toml_to_wirePtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          guatiao_str,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_parse_error>,
+        )
+      >();
+
+  imp$1.Dartguatiao_status guatiao_toml_visit(
+    guatiao_str text,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_visitor> visitor,
+    ffi.Pointer<guatiao_parse_error> out_error,
+  ) {
+    return _guatiao_toml_visit(text, how, alloc, visitor, out_error);
+  }
+
+  late final _guatiao_toml_visitPtr =
+      _lookup<
+        ffi.NativeFunction<
+          imp$1.guatiao_status Function(
+            guatiao_str,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_visitor>,
+            ffi.Pointer<guatiao_parse_error>,
+          )
+        >
+      >('guatiao_toml_visit');
+  late final _guatiao_toml_visit = _guatiao_toml_visitPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          guatiao_str,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_visitor>,
+          ffi.Pointer<guatiao_parse_error>,
+        )
+      >();
+
   imp$1.Dartguatiao_status guatiao_yaml_emit(
     ffi.Pointer<guatiao_value> value,
     int how,
@@ -269,6 +521,66 @@ class GuatiaoSerdeBindings {
       .asFunction<
         imp$1.Dartguatiao_status Function(
           ffi.Pointer<guatiao_value>,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
+  imp$1.Dartguatiao_status guatiao_yaml_emit_walker(
+    ffi.Pointer<guatiao_walker> walker,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_yaml_emit_walker(walker, how, alloc, out);
+  }
+
+  late final _guatiao_yaml_emit_walkerPtr =
+      _lookup<
+        ffi.NativeFunction<
+          imp$1.guatiao_status Function(
+            ffi.Pointer<guatiao_walker>,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_yaml_emit_walker');
+  late final _guatiao_yaml_emit_walker = _guatiao_yaml_emit_walkerPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          ffi.Pointer<guatiao_walker>,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
+
+  imp$1.Dartguatiao_status guatiao_yaml_from_wire(
+    guatiao_bytes bytes,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+  ) {
+    return _guatiao_yaml_from_wire(bytes, how, alloc, out);
+  }
+
+  late final _guatiao_yaml_from_wirePtr =
+      _lookup<
+        ffi.NativeFunction<
+          imp$1.guatiao_status Function(
+            guatiao_bytes,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_yaml_from_wire');
+  late final _guatiao_yaml_from_wire = _guatiao_yaml_from_wirePtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          guatiao_bytes,
           int,
           ffi.Pointer<guatiao_alloc>,
           ffi.Pointer<guatiao_value>,
@@ -337,6 +649,72 @@ class GuatiaoSerdeBindings {
           ffi.Pointer<guatiao_parse_error>,
         )
       >();
+
+  imp$1.Dartguatiao_status guatiao_yaml_to_wire(
+    guatiao_str text,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_value> out,
+    ffi.Pointer<guatiao_parse_error> out_error,
+  ) {
+    return _guatiao_yaml_to_wire(text, how, alloc, out, out_error);
+  }
+
+  late final _guatiao_yaml_to_wirePtr =
+      _lookup<
+        ffi.NativeFunction<
+          imp$1.guatiao_status Function(
+            guatiao_str,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_parse_error>,
+          )
+        >
+      >('guatiao_yaml_to_wire');
+  late final _guatiao_yaml_to_wire = _guatiao_yaml_to_wirePtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          guatiao_str,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_parse_error>,
+        )
+      >();
+
+  imp$1.Dartguatiao_status guatiao_yaml_visit(
+    guatiao_str text,
+    int how,
+    ffi.Pointer<guatiao_alloc> alloc,
+    ffi.Pointer<guatiao_visitor> visitor,
+    ffi.Pointer<guatiao_parse_error> out_error,
+  ) {
+    return _guatiao_yaml_visit(text, how, alloc, visitor, out_error);
+  }
+
+  late final _guatiao_yaml_visitPtr =
+      _lookup<
+        ffi.NativeFunction<
+          imp$1.guatiao_status Function(
+            guatiao_str,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_visitor>,
+            ffi.Pointer<guatiao_parse_error>,
+          )
+        >
+      >('guatiao_yaml_visit');
+  late final _guatiao_yaml_visit = _guatiao_yaml_visitPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          guatiao_str,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_visitor>,
+          ffi.Pointer<guatiao_parse_error>,
+        )
+      >();
 }
 
 const int GUATIAO_BYTES_ARRAY = 2;
@@ -358,6 +736,7 @@ const int GUATIAO_PRETTY = 512;
 const int GUATIAO_READ_DATA_URIS = 256;
 
 typedef guatiao_alloc = imp$1.guatiao_alloc;
+typedef guatiao_bytes = imp$1.guatiao_bytes;
 
 final class guatiao_parse_error extends ffi.Struct {
   @ffi.Uint32()
@@ -386,3 +765,5 @@ final class guatiao_parse_error extends ffi.Struct {
 
 typedef guatiao_str = imp$1.guatiao_str;
 typedef guatiao_value = imp$1.guatiao_value;
+typedef guatiao_visitor = imp$1.guatiao_visitor;
+typedef guatiao_walker = imp$1.guatiao_walker;

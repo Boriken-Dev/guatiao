@@ -87,6 +87,11 @@ exclude = [
 "Str" = "guatiao_str"
 "Allocator" = "guatiao_alloc"
 "Status" = "guatiao_status"
+# The value model's byte view and its visitor tables, which a document's
+# events cross through.
+"View" = "guatiao_bytes"
+"VisitorTable" = "guatiao_visitor"
+"WalkerTable" = "guatiao_walker"
 # This crate's own struct, spelled with the prefix every name in the header
 # carries.
 "ParseError" = "guatiao_parse_error"

@@ -105,8 +105,21 @@ fn first_difference(a: &str, b: &str) -> Option<String> {
 /// A C program loads and dumps a value in three formats.
 #[test]
 fn a_c_program_loads_and_dumps_a_value() {
+    compile_and_run("serde_consumer", "guatiao_serde_consumer");
+}
+
+/// A C program reads JSON into its own struct and writes TOML from it,
+/// with no value in between.
+#[test]
+fn a_c_program_reads_and_writes_its_own_struct() {
+    compile_and_run("visit_consumer", "guatiao_visit_consumer");
+}
+
+/// Compiles `tests/c_consumer/<source>.c` against the committed headers,
+/// links both libraries, runs it, and checks it reported success.
+fn compile_and_run(source: &str, exe: &str) {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let source = manifest.join("tests/c_consumer/serde_consumer.c");
+    let source = manifest.join(format!("tests/c_consumer/{source}.c"));
     assert!(
         source.exists(),
         "the C source is missing: {}",
@@ -133,9 +146,9 @@ fn a_c_program_loads_and_dumps_a_value() {
     };
 
     let out = dir.join(if cfg!(windows) {
-        "guatiao_serde_consumer.exe"
+        format!("{exe}.exe")
     } else {
-        "guatiao_serde_consumer"
+        exe.to_string()
     });
 
     let mut compile = Command::new(&cc);

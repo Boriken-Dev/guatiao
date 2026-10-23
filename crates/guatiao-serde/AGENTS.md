@@ -95,6 +95,7 @@ text::yaml::{NAME, to_string, from_str}                     // feature `yaml`
 // and, with no tree:
 //       to_string_of(&impl Walk, Presentation) -> Result<String, Error>   // json: _pretty_of too
 //       from_str_as::<T: FromWalk>(&str, Presentation) -> Result<T, Error>
+//       visit_str<S: Sink>(&str, &mut S, Presentation) -> Result<(), BridgeError<Error, S::Error>>
 ```
 
 The `_of`/`_as` forms write and read the same text and the same value as
@@ -159,6 +160,37 @@ typedef struct guatiao_parse_error {
   allocate**, `GUATIAO_ERR_BAD_VALUE` for text that is not UTF-8 or a
   document the format refused, `GUATIAO_ERR_WRONG_KIND` for a value the
   format cannot carry, `GUATIAO_ERR_INTERNAL` if a panic was caught.
+
+Documents as events, with no value in between (`guatiao_visitor` and
+`guatiao_walker` are `guatiao.h`'s):
+
+```c
+/* a document's events into a C visitor; out_error may be NULL */
+guatiao_status guatiao_json_visit      (guatiao_str text, uint32_t how, const guatiao_alloc *alloc,
+                                        const guatiao_visitor *visitor, guatiao_parse_error *out_error);
+/* the caller's own data, walked by a C walker, written as a document (a STRING value) */
+guatiao_status guatiao_json_emit_walker(const guatiao_walker *walker, uint32_t how,
+                                        const guatiao_alloc *alloc, guatiao_value *out);
+/* the tape: a document as wire bytes (a BYTES value), and wire bytes as a document */
+guatiao_status guatiao_json_to_wire    (guatiao_str text, uint32_t how, const guatiao_alloc *alloc,
+                                        guatiao_value *out, guatiao_parse_error *out_error);
+guatiao_status guatiao_json_from_wire  (guatiao_bytes bytes, uint32_t how,
+                                        const guatiao_alloc *alloc, guatiao_value *out);
+/* and _toml_ (GUATIAO_SERDE_TOML), _yaml_ (GUATIAO_SERDE_YAML), the same four each */
+```
+
+`_visit` stops at a callback's status and returns it; a document that
+does not parse is `GUATIAO_ERR_BAD_VALUE` with where through
+`out_error` (its message built in `alloc`). `_emit_walker` returns the
+walker's status or the first refusal of an event (out of order or no one
+complete value `GUATIAO_ERR_WRONG_KIND`; not UTF-8, not a number, a key
+repeated `GUATIAO_ERR_BAD_VALUE`); TOML takes only a map, refusing
+anything else with `GUATIAO_ERR_WRONG_KIND`, as `_toml_emit` does.
+`_to_wire` writes the bytes `guatiao_wire_encode` writes for the value
+`_parse` reads; `_from_wire` the text `_emit` writes for the value the
+bytes hold; `GUATIAO_PRETTY` indents JSON. A binding decoding the tape
+in its own language reads a document with one crossing and builds only
+its own objects.
 
 ## A serde type as a field
 

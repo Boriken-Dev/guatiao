@@ -57,14 +57,26 @@ pub const guatiao_serde::exports::GUATIAO_PRETTY: u32
 pub const guatiao_serde::exports::GUATIAO_READ_DATA_URIS: u32
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_emit(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_emit_pretty(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_emit_walker(*const guatiao::exports::visit::WalkerTable, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_from_wire(guatiao::value::types::buffer::Bytes<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_parse(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_parse_ex(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_to_wire(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_json_visit(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *const guatiao::exports::visit::VisitorTable, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_emit(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_emit_walker(*const guatiao::exports::visit::WalkerTable, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_from_wire(guatiao::value::types::buffer::Bytes<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_parse(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_parse_ex(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_to_wire(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_toml_visit(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *const guatiao::exports::visit::VisitorTable, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_emit(*const guatiao::value::value::Value, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_emit_walker(*const guatiao::exports::visit::WalkerTable, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_from_wire(guatiao::value::types::buffer::Bytes<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_parse(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_parse_ex(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_to_wire(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *mut guatiao::value::value::Value, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao_serde::exports::guatiao_yaml_visit(guatiao::value::types::text::Str<'_>, u32, *const guatiao::value::alloc::Allocator, *const guatiao::exports::visit::VisitorTable, *mut guatiao_serde::exports::ParseError) -> guatiao::value::status::Status
 pub mod guatiao_serde::text
 pub mod guatiao_serde::text::json
 pub const guatiao_serde::text::json::NAME: &str
@@ -74,18 +86,21 @@ pub fn guatiao_serde::text::json::to_string(&guatiao::value::value::Value, guati
 pub fn guatiao_serde::text::json::to_string_of<T: guatiao::value::visit::Walk + ?core::marker::Sized>(&T, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
 pub fn guatiao_serde::text::json::to_string_pretty(&guatiao::value::value::Value, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
 pub fn guatiao_serde::text::json::to_string_pretty_of<T: guatiao::value::visit::Walk + ?core::marker::Sized>(&T, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::json::visit_str<S: guatiao::value::visit::Sink + ?core::marker::Sized>(&str, &mut S, guatiao_serde::Presentation) -> core::result::Result<(), guatiao_serde::BridgeError<guatiao_serde::text::Error, <S as guatiao::value::visit::Sink>::Error>>
 pub mod guatiao_serde::text::toml
 pub const guatiao_serde::text::toml::NAME: &str
 pub fn guatiao_serde::text::toml::from_str(&str, guatiao::value::alloc::Alloc, guatiao_serde::Presentation) -> core::result::Result<guatiao::value::value::Value, guatiao_serde::text::Error>
 pub fn guatiao_serde::text::toml::from_str_as<T: guatiao::value::visit::FromWalk>(&str, guatiao_serde::Presentation) -> core::result::Result<T, guatiao_serde::text::Error>
 pub fn guatiao_serde::text::toml::to_string(&guatiao::value::value::Value, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
 pub fn guatiao_serde::text::toml::to_string_of<T: guatiao::value::visit::Walk + ?core::marker::Sized>(&T, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::toml::visit_str<S: guatiao::value::visit::Sink + ?core::marker::Sized>(&str, &mut S, guatiao_serde::Presentation) -> core::result::Result<(), guatiao_serde::BridgeError<guatiao_serde::text::Error, <S as guatiao::value::visit::Sink>::Error>>
 pub mod guatiao_serde::text::yaml
 pub const guatiao_serde::text::yaml::NAME: &str
 pub fn guatiao_serde::text::yaml::from_str(&str, guatiao::value::alloc::Alloc, guatiao_serde::Presentation) -> core::result::Result<guatiao::value::value::Value, guatiao_serde::text::Error>
 pub fn guatiao_serde::text::yaml::from_str_as<T: guatiao::value::visit::FromWalk>(&str, guatiao_serde::Presentation) -> core::result::Result<T, guatiao_serde::text::Error>
 pub fn guatiao_serde::text::yaml::to_string(&guatiao::value::value::Value, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
 pub fn guatiao_serde::text::yaml::to_string_of<T: guatiao::value::visit::Walk + ?core::marker::Sized>(&T, guatiao_serde::Presentation) -> core::result::Result<alloc::string::String, guatiao_serde::text::Error>
+pub fn guatiao_serde::text::yaml::visit_str<S: guatiao::value::visit::Sink + ?core::marker::Sized>(&str, &mut S, guatiao_serde::Presentation) -> core::result::Result<(), guatiao_serde::BridgeError<guatiao_serde::text::Error, <S as guatiao::value::visit::Sink>::Error>>
 #[non_exhaustive] pub enum guatiao_serde::text::Error
 pub guatiao_serde::text::Error::Format
 pub guatiao_serde::text::Error::Format::detail: alloc::string::String
