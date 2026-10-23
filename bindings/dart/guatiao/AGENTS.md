@@ -3,11 +3,12 @@
 `dart:ffi` bindings over the `guatiao` C ABI: https://github.com/Boriken-Dev/guatiao/
 Self-contained — this file ships with the package, so it names no repo path.
 
-A plain Dart package with one dependency, `package:ffi`. It does **not**
-depend on Flutter: a plain Dart package works inside a Flutter app, and
-the reverse is not true. 32- and 64-bit native platforms (`armeabi-v7a`
-included), and the web: there the same API runs over the WebAssembly
-module a page loads (below).
+A plain Dart package, Dart 3.10 or newer. Its dependencies are
+`package:ffi`, and `package:hooks` and `package:code_assets` for its build
+hook (below). It does **not** depend on Flutter: a plain Dart package
+works inside a Flutter app, and the reverse is not true. 32- and 64-bit
+native platforms (`armeabi-v7a` included), and the web: there the same
+API runs over the WebAssembly module a page loads (below).
 
 ## Finding the native library
 
@@ -17,11 +18,16 @@ native call is resolved lazily, on first use, in this order:
 1. A library registered with `useLibrary` for the surface.
 2. `GUATIAO_LIBRARY` — a directory holding `guatiao.dll` /
    `libguatiao.so` / `libguatiao.dylib`, or a file, taken as it is.
-3. `libraryDirectory`, a settable top-level in
+3. The library the package's build hook bundled (below), wherever the
+   build put it and whatever it is called: found through its asset id
+   `package:guatiao/guatiao`, by the address of one of its symbols
+   (`dladdr`, `GetModuleFileNameW`). `bundledLibraryPath` in
+   `package:guatiao/ffi.dart` answers it, or `null`.
+4. `libraryDirectory`, a settable top-level in
    `package:guatiao/guatiao.dart`. A process cannot set its own
    environment, so this is how an app that ships its own copies says
    where they landed.
-4. The platform's own library search, by name.
+5. The platform's own library search, by name.
 
 Not found throws `LibraryNotFound` naming every route. A symbol a build
 does not export throws `MissingSymbol` naming it. JSON, TOML and YAML are
@@ -29,6 +35,90 @@ the package `guatiao_serde`, forms `guatiao_intake`: each opens its own
 library through `openSurface` (below), consulting its own variable
 (`GUATIAO_SERDE_LIBRARY`, `GUATIAO_INTAKE_LIBRARY`) before
 `GUATIAO_LIBRARY`.
+
+## The build hook
+
+`hook/build.dart` builds the crate `guatiao` (features `load`, `regex`)
+from source with cargo for the target a Dart or Flutter build names, and
+bundles it as the code asset `package:guatiao/guatiao`. `guatiao_serde`
+and `guatiao_intake` do the same with their crates, through the same
+code. It never downloads a binary.
+
+- **Source**: the repository checkout the package sits in (a path or git
+  dependency: `crates/` three directories up), else the crate on
+  crates.io at the package's own version (`=x.y.z`).
+- **Cache**: cargo's target directory is in the hook's shared output
+  directory (`.dart_tool/hooks_runner/shared/<package>/`); the hook
+  declares every source in cargo's dep-info and each path crate's
+  manifest, so an unchanged build is skipped (`Skipping build for
+  guatiao`) and an edited crate rebuilds.
+- **Log**: the cargo command, in the hook's `stdout.txt` beside its
+  `output.json`; cargo's own output on its stderr.
+- **Targets**: Android `aarch64-linux-android`, `armv7-linux-androideabi`
+  (clang target `armv7a-linux-androideabi<api>`), `x86_64-linux-android`,
+  `riscv64-linux-android`; Linux `aarch64`, `armv7` (gnueabihf),
+  `x86_64`, `riscv64gc` `-unknown-linux-gnu`; Windows `aarch64`/`x86_64`
+  `-pc-windows-msvc`; macOS `aarch64`/`x86_64` `-apple-darwin`; iOS
+  `aarch64-apple-ios`, `aarch64-apple-ios-sim`, `x86_64-apple-ios`. No
+  32-bit x86: a `u64` there is aligned to four bytes, which the ABI's
+  structs are not written for.
+- **Linking**: Android links with the NDK clang the build hands the hook
+  (Flutter passes the NDK's), else the newest NDK under
+  `ANDROID_NDK_HOME`, `ANDROID_NDK_ROOT`, `ANDROID_NDK`,
+  `ANDROID_NDK_LATEST_HOME` or `ANDROID_HOME/ndk`, with
+  `--target=<clang triple><api>` and 16 KB pages on 64-bit. macOS and iOS
+  set `MACOSX_DEPLOYMENT_TARGET` / `IPHONEOS_DEPLOYMENT_TARGET` from the
+  build. Linux links with the C compiler the build hands the hook
+  (Flutter passes clang), else `cc`; Windows with the MSVC rustc finds.
+- **Failures**, one sentence each, in this order: cargo not on `PATH` or
+  in `~/.cargo/bin`; the Android NDK not found; Xcode not found (`xcrun`
+  has no SDK); the Rust target not installed (``run `rustup target add
+  <target>` ``). A failed cargo build quotes its last lines.
+- **The hook's environment** is the one the Dart SDK passes hooks: `PATH`,
+  `HOME`, `USERPROFILE`, the Android variables, the temp and proxy ones.
+  **`GUATIAO_LIBRARY` does not reach it**, nor `CARGO_TARGET_*`.
+
+User defines, in the root `pubspec.yaml` (the application's, or a
+workspace's), read by the core package's hook:
+
+```yaml
+hooks:
+  user_defines:
+    guatiao:
+      crate: native/myapp   # a path, relative to that pubspec
+      build: false
+```
+
+- `crate`: the application's own crate (a directory holding
+  `Cargo.toml`, or the file), whose `[lib]` has `crate-type =
+  ["cdylib"]`, built instead of `guatiao` as the asset
+  `package:guatiao/guatiao`; cargo runs in its directory, so its own
+  toolchain file applies. `guatiao_serde` and `guatiao_intake` then build
+  nothing, and each surface resolves to that file when it exports the
+  surface's probe. A crate missing a surface the app calls answers
+  `LibraryNotFound` for it.
+- `build: false`: nothing is built or bundled, for the three packages;
+  the library comes from `GUATIAO_LIBRARY`, `useLibrary`,
+  `libraryDirectory` or the platform search. This package's own
+  `pubspec.yaml` says so for its own suites.
+
+`package:guatiao/hook.dart`, for a package's own `hook/build.dart`:
+
+- `buildHook(List<String> arguments, {required String crate,
+  List<String> features = const []})`: a hook's `main`, running
+  `buildLibrary` and reporting a `HookFailure` as the hook's `BuildError`.
+- `buildLibrary(BuildInput input, BuildOutputBuilder output, {required
+  String crate, List<String> features = const [], Map<String, String>?
+  environment})`: the build itself. A feature `dep/feat` turns on `feat`
+  of the crate's dependency `dep`. `environment` is where cargo and the
+  NDK are looked for and what cargo runs with (the process's own by
+  default). The core package publishes `library` metadata (`guatiao`,
+  `app` or `none`) for the hooks of the packages over it.
+- `rustTarget(OS, Architecture, {IOSSdk? iOSSdk}) -> String?`: the
+  target table above; `null` where there is none.
+- `missingTarget(String triple) -> String`: the sentence a missing target
+  fails with.
+- `HookFailure` (`message`): a missing prerequisite or a failed build.
 
 ## On the web
 
@@ -362,8 +452,10 @@ package.
   registered with `useLibrary` for it, else `variable` (a file taken as
   it is, a directory holding the platform filename), else
   `GUATIAO_LIBRARY` (a directory; or a file, taken when it exports
-  `probe`, else its sibling), else `libraryDirectory`, else the platform
-  search. `'guatiao_serde'` and `'guatiao_intake'` know their own
+  `probe`, else its sibling), else the library a build hook bundled
+  (`bundledLibraryPath(basename, probe:)`: the surface's own, else the
+  core's when it exports `probe`), else `libraryDirectory`, else the
+  platform search. `'guatiao_serde'` and `'guatiao_intake'` know their own
   variable and probe. `resolveLibraryPath` is the path half alone.
 - `NativeLib`: `.path`, `.library` (the `DynamicLibrary`, for a
   package's own generated bindings), `.bindings` (the core's, over the

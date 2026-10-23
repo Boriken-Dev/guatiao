@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A build hook that builds the library from source**: the crate
+  `guatiao-intake`, with cargo, for the target being built, bundled with the
+  app; nothing when package:guatiao's hook builds the application's own
+  crate or nothing. Dart 3.10 or newer.
 - **The web**: every function through the module the page loaded
   (`guatiao_intake.wasm`, or an application's own build).
 - The package, taken out of package:guatiao, where it was

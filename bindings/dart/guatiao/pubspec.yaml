@@ -22,7 +22,11 @@ environment:
   sdk: ^3.10.0
 
 dependencies:
+  # The build hook (package:guatiao/hook.dart): cargo builds the library
+  # for the target a Flutter or Dart build names.
+  code_assets: ^1.0.0
   ffi: ^2.1.0
+  hooks: '>=1.0.0 <3.0.0'
 
 dev_dependencies:
   ffigen: ^21.0.0
@@ -31,3 +35,11 @@ dev_dependencies:
   # a number arrives as a double before 2.1.1.
   stream_channel: ^2.1.1
   test: ^1.25.0
+
+# This package's own suites run against the libraries GUATIAO_LIBRARY
+# names, built by cargo beforehand: as the root package, its hook builds
+# nothing. An application depending on it is unaffected.
+hooks:
+  user_defines:
+    guatiao:
+      build: false

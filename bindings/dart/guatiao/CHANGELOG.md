@@ -26,6 +26,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A build hook that builds the library from source**: `flutter build`
+  (or `dart run`, `dart test`, `dart build`) runs cargo for the target
+  being built and bundles the library with the app. One-time setup:
+  rustup and the Rust targets. A missing piece stops the build with one
+  sentence naming it. In the application's `pubspec.yaml`, `hooks:
+  user_defines: guatiao: crate: <path>` builds its own crate instead (one
+  file for every surface), and `build: false` builds nothing. The library
+  is found through its asset id after `GUATIAO_LIBRARY`
+  (`bundledLibraryPath` in `package:guatiao/ffi.dart`).
+  `package:guatiao/hook.dart` is the build, for other packages' hooks.
 - **32-bit platforms**: `armeabi-v7a` and armhf Linux, whose 4-byte
   pointers the package refused; the suites run on 32-bit ARM.
 - **The web**: the same API under dart2js and dart2wasm, over the

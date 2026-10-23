@@ -21,12 +21,25 @@ library, through package:guatiao's `openSurface('guatiao_intake')`:
 3. `GUATIAO_LIBRARY`: such a directory; or a file, used when it exports
    `guatiao_intake_check` (an application's own library carrying several
    surfaces), else the library beside it;
-4. package:guatiao's `libraryDirectory`;
-5. the platform's own search, by name.
+4. the library this package's build hook bundled, else the one
+   package:guatiao's hook bundled when it exports `guatiao_intake_check` (an
+   application's own crate);
+5. package:guatiao's `libraryDirectory`;
+6. the platform's own search, by name.
 
 Not found throws `LibraryNotFound` naming every route. `library()`
 answers the opened `NativeLib`. The library carries the core too, so one
 file can serve both packages.
+
+## The build hook
+
+`hook/build.dart` builds the crate `guatiao-intake` from source with cargo
+for the target a Dart or Flutter build names, with a schema's patterns checked (the core crate's `regex`),
+and bundles it as the code asset `package:guatiao_intake/guatiao_intake`: it is
+package:guatiao's `buildHook` (`package:guatiao/hook.dart`), and needs
+what that does. It builds nothing when package:guatiao's hook built the
+application's own crate (`crate:`) or was told `build: false`. Dart 3.10
+or newer.
 
 ## On the web
 

@@ -33,3 +33,11 @@ dev_dependencies:
   # a number arrives as a double before 2.1.1.
   stream_channel: ^2.1.1
   test: ^1.25.0
+
+# This package's own suites run against the libraries GUATIAO_LIBRARY
+# names, built by cargo beforehand: as the root package, its hook builds
+# nothing. An application depending on it is unaffected.
+hooks:
+  user_defines:
+    guatiao:
+      build: false

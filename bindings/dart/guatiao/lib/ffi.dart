@@ -40,6 +40,7 @@ export 'src/library.dart'
         LibraryNotFound,
         MissingSymbol,
         NativeLib,
+        bundledLibraryPath,
         dllFilename,
         libraryDirectory,
         openSurface,

@@ -13,8 +13,8 @@ import 'package:guatiao_serde/guatiao_serde.dart' as serde;
 
 void main() {
   try {
-    print(serde.library().path);
+    print('lookup: ${serde.library().path}');
   } on LibraryNotFound catch (error) {
-    print('$error'.replaceAll(RegExp(r'\s+'), ' '));
+    print('lookup: ${'$error'.replaceAll(RegExp(r'\s+'), ' ')}');
   }
 }

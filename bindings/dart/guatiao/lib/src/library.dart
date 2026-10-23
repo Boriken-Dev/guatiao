@@ -32,8 +32,9 @@ class LibraryNotFound implements Exception {
     final own = variable == null ? '' : 'the $variable environment variable, ';
     return 'LibraryNotFound: could not find $filename: checked the '
         'libraries registered with guatiao.useLibrary, $own'
-        'the GUATIAO_LIBRARY environment variable, guatiao.libraryDirectory '
-        'and the platform library search path$tail';
+        'the GUATIAO_LIBRARY environment variable, the library a build '
+        'hook bundled, guatiao.libraryDirectory and the platform library '
+        'search path$tail';
   }
 }
 
@@ -111,6 +112,130 @@ String? _inDirectory(String directory, String filename) {
   return File(candidate).existsSync() ? candidate : null;
 }
 
+// The library each package's build hook bundled, reached through the
+// asset id the hook gave it: whatever its file is called (an application's
+// own crate), wherever the build put it (a `dart run` cache, an APK).
+// Never called: their addresses lead to the file that holds them.
+@Native<Void Function()>(
+  symbol: 'guatiao_value_free',
+  assetId: 'package:guatiao/guatiao',
+)
+external void _bundledCore();
+
+@Native<Void Function()>(
+  symbol: 'guatiao_json_parse',
+  assetId: 'package:guatiao_serde/guatiao_serde',
+)
+external void _bundledSerde();
+
+@Native<Void Function()>(
+  symbol: 'guatiao_intake_check',
+  assetId: 'package:guatiao_intake/guatiao_intake',
+)
+external void _bundledIntake();
+
+/// Where the library a build hook bundled for [basename] is, or `null`
+/// when none was (no hook ran, or it was told to build nothing).
+///
+/// A surface other than the core falls back to the core's bundled library
+/// when that exports [probe]: an application's own crate, built by the
+/// core's hook, carries every surface it links.
+String? bundledLibraryPath(String basename, {String? probe}) {
+  final own = _bundledFile(basename);
+  if (own != null) return own;
+  if (basename == 'guatiao' || probe == null) return null;
+  final core = _bundledFile('guatiao');
+  return core != null && _carries(core, probe) ? core : null;
+}
+
+String? _bundledFile(String basename) {
+  final Pointer<Void> address;
+  try {
+    address = switch (basename) {
+      'guatiao' => Native.addressOf<NativeFunction<Void Function()>>(
+        _bundledCore,
+      ),
+      'guatiao_serde' => Native.addressOf<NativeFunction<Void Function()>>(
+        _bundledSerde,
+      ),
+      'guatiao_intake' => Native.addressOf<NativeFunction<Void Function()>>(
+        _bundledIntake,
+      ),
+      _ => nullptr,
+    }.cast<Void>();
+  } on Object {
+    return null;
+  }
+  if (address == nullptr) return null;
+  final path = _fileHolding(address);
+  // A symbol found in the program itself (a static link) is not a file
+  // to open again.
+  if (path == null || path == Platform.resolvedExecutable) return null;
+  // Android maps a library straight out of the APK (`base.apk!/lib/...`);
+  // its own loader finds it again by name.
+  if (Platform.isAndroid && path.contains('!/')) {
+    return path.substring(path.lastIndexOf('/') + 1);
+  }
+  return path;
+}
+
+typedef _GetModuleHandleExC =
+    Int32 Function(Uint32, Pointer<Void>, Pointer<Pointer<Void>>);
+typedef _GetModuleHandleExDart =
+    int Function(int, Pointer<Void>, Pointer<Pointer<Void>>);
+typedef _GetModuleFileNameC =
+    Uint32 Function(Pointer<Void>, Pointer<Utf16>, Uint32);
+typedef _GetModuleFileNameDart =
+    int Function(Pointer<Void>, Pointer<Utf16>, int);
+typedef _DladdrC = Int32 Function(Pointer<Void>, Pointer<Pointer<Void>>);
+typedef _DladdrDart = int Function(Pointer<Void>, Pointer<Pointer<Void>>);
+
+/// The file of the loaded image holding [address]: `GetModuleHandleExW` on
+/// Windows, `dladdr` elsewhere.
+String? _fileHolding(Pointer<Void> address) {
+  try {
+    if (Platform.isWindows) {
+      final kernel32 = DynamicLibrary.open('kernel32.dll');
+      final handleOf = kernel32
+          .lookupFunction<_GetModuleHandleExC, _GetModuleHandleExDart>(
+            'GetModuleHandleExW',
+          );
+      final nameOf = kernel32
+          .lookupFunction<_GetModuleFileNameC, _GetModuleFileNameDart>(
+            'GetModuleFileNameW',
+          );
+      return using((arena) {
+        final module = arena<Pointer<Void>>();
+        // FROM_ADDRESS | UNCHANGED_REFCOUNT: a lookup, not a load.
+        if (handleOf(0x4 | 0x2, address, module) == 0) return null;
+        const capacity = 32768;
+        final name = arena<Uint16>(capacity).cast<Utf16>();
+        final length = nameOf(module.value, name, capacity);
+        if (length == 0 || length >= capacity) return null;
+        return name.toDartString(length: length);
+      });
+    }
+    final DynamicLibrary libdl;
+    if (Platform.isAndroid) {
+      libdl = DynamicLibrary.open('libdl.so');
+    } else if (DynamicLibrary.process().providesSymbol('dladdr')) {
+      libdl = DynamicLibrary.process();
+    } else {
+      libdl = DynamicLibrary.open('libdl.so.2');
+    }
+    final dladdr = libdl.lookupFunction<_DladdrC, _DladdrDart>('dladdr');
+    return using((arena) {
+      // Dl_info: dli_fname, dli_fbase, dli_sname, dli_saddr.
+      final info = arena<Pointer<Void>>(4);
+      if (dladdr(address, info) == 0) return null;
+      final name = info[0];
+      return name == nullptr ? null : name.cast<Utf8>().toDartString();
+    });
+  } on Object {
+    return null;
+  }
+}
+
 bool _carries(String path, String symbol) {
   try {
     return DynamicLibrary.open(path).providesSymbol(symbol);
@@ -125,9 +250,9 @@ bool _carries(String path, String symbol) {
 /// names is taken as it is, a directory holds the platform's filename.
 /// Then `GUATIAO_LIBRARY`: a directory holding the platform's filename,
 /// or a file, taken when it exports [probe] (or when [probe] is `null`),
-/// else the platform's filename beside it. Then [libraryDirectory];
-/// otherwise the bare filename, which hands the search to the platform's
-/// own loader.
+/// else the platform's filename beside it. Then the library a build hook
+/// bundled ([bundledLibraryPath]). Then [libraryDirectory]; otherwise the
+/// bare filename, which hands the search to the platform's own loader.
 String resolveLibraryPath(String basename, {String? variable, String? probe}) {
   final filename = dllFilename(basename);
   final own = variable == null || variable == 'GUATIAO_LIBRARY'
@@ -154,6 +279,8 @@ String resolveLibraryPath(String basename, {String? variable, String? probe}) {
       if (beside != null) return beside;
     }
   }
+  final bundled = bundledLibraryPath(basename, probe: probe);
+  if (bundled != null) return bundled;
   final configured = libraryDirectory;
   if (configured != null && configured.isNotEmpty) {
     final found = _inDirectory(configured, filename);
