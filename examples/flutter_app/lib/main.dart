@@ -5,8 +5,11 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+// Prefixed: Flutter has a `Listener` of its own.
+import 'package:greeter_kind/greeter_kind.dart' as gk;
 import 'package:guatiao/ffi.dart' show openSurface;
 import 'package:guatiao/guatiao.dart';
+import 'package:guatiao/kinds.dart';
 import 'package:guatiao_intake/guatiao_intake.dart' as intake;
 import 'package:guatiao_serde/guatiao_serde.dart' as serde;
 
@@ -35,6 +38,54 @@ String roundTrip() {
   }
 }
 
+/// A greeter written in Dart: a class implementing the greeter kind's
+/// interfaces, which `dart run guatiao:kind` wrote from its description.
+final class AppGreeter extends Provider
+    implements gk.Greeter, gk.GreeterGreetInto {
+  @override
+  Map<String, Object?> greet(String name) => {'greeting': 'hello, $name'};
+
+  @override
+  void greetInto(String name, gk.ListenerRemote listener) =>
+      listener.heard('hello, $name');
+}
+
+/// A listener the app lends a greeter for one call.
+final class Ear implements gk.Listener {
+  final List<String> heardSoFar = <String>[];
+
+  @override
+  void heard(String what) => heardSoFar.add(what);
+}
+
+/// The Dart greeter served as a library and called back through its C
+/// table: a map answered, a listener lent.
+String kinds() {
+  final library = Library(
+    'flutter_app',
+    '1.0.0',
+    offers: [
+      Offer.single(AppGreeter(), named: 'greeter', kinds: [gk.Greeter.kind]),
+    ],
+  );
+  final reg = Registry('flutter-app', '1.0');
+  try {
+    reg.registerLibrary(library);
+    final greeter = reg.bind('flutter_app_greeter', gk.Greeter.kind);
+    final answer = greeter.greet('ana');
+    final ear = Ear();
+    try {
+      greeter.greetInto('bo', ear);
+      return 'greeter ${answer.toDart()}, heard ${ear.heardSoFar}';
+    } finally {
+      answer.close();
+    }
+  } finally {
+    reg.close();
+    library.close();
+  }
+}
+
 /// Where each surface's library was loaded from: the build hooks' files.
 String libraries() => surfaces
     .map((surface) => '$surface ${openSurface(surface).path}')
@@ -43,7 +94,7 @@ String libraries() => surfaces
 void main() {
   String report;
   try {
-    report = '${roundTrip()}\nlibraries: ${libraries()}';
+    report = '${roundTrip()}\nkinds: ${kinds()}\nlibraries: ${libraries()}';
   } on Object catch (error) {
     report = 'failed: $error';
   }

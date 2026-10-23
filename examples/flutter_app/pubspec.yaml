@@ -11,6 +11,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # The greeter kinds, as `dart run guatiao:kind` wrote them.
+  greeter_kind:
+    path: ../greeter_kind/dart
   guatiao:
     path: ../../bindings/dart/guatiao
   guatiao_intake:
