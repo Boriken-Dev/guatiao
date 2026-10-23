@@ -22,7 +22,7 @@ from guatiao import _abi, _lib  # noqa: E402
 from guatiao.registry import Registry  # noqa: E402
 from guatiao.value import Value, _make_str  # noqa: E402
 
-assert _lib.core().path == os.environ["GUATIAO_LIBRARY"], _lib.core().path
+assert os.path.samefile(_lib.core().path, os.environ["GUATIAO_LIBRARY"]), _lib.core().path
 
 with Registry("app-library", "0.1") as reg:
     reg.scan_dir(native.library_dir(), rules="kind=greeter")
