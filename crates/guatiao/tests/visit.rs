@@ -299,14 +299,14 @@ fn the_encoder_refuses_a_walk_that_breaks_the_encoding() {
     e.null().unwrap();
     assert_eq!(
         e.list_end(),
-        Err(ValueError::OutOfRange),
+        Err(ValueError::WrongKind),
         "fewer than promised"
     );
 
     let mut e = Encoder::new(&mut out);
     e.list_begin(Some(1)).unwrap();
     e.null().unwrap();
-    assert_eq!(e.null(), Err(ValueError::OutOfRange), "more than promised");
+    assert_eq!(e.null(), Err(ValueError::WrongKind), "more than promised");
 
     let mut e = Encoder::new(&mut out);
     e.map_begin(None).unwrap();
@@ -592,6 +592,91 @@ fn a_sink_sees_the_events_in_order() {
             "end list",
         ]
     );
+}
+
+/// A visitor that walks every element twice, as a format that looks at a
+/// value before writing it does, sees the same events both times.
+#[test]
+fn bytes_walked_twice_give_the_same_events() {
+    use guatiao::value::visit::{ListVisitor, MapVisitor};
+
+    struct Twice<'a>(&'a mut TreeSink);
+
+    struct TwiceList<'a>(guatiao::value::visit::FlatList<'a, TreeSink>);
+    struct TwiceMap<'a>(guatiao::value::visit::FlatMap<'a, TreeSink>);
+
+    fn looked_at<W: Walk + ?Sized>(w: &W) -> Result<(), ValueError> {
+        let mut scratch = TreeSink::new();
+        w.walk(Flat(&mut scratch))
+    }
+
+    impl ListVisitor for TwiceList<'_> {
+        type Ok = ();
+        type Error = ValueError;
+        fn item<W: Walk + ?Sized>(&mut self, w: &W) -> Result<(), ValueError> {
+            looked_at(w)?;
+            self.0.item(w)
+        }
+        fn end(self) -> Result<(), ValueError> {
+            self.0.end()
+        }
+    }
+
+    impl MapVisitor for TwiceMap<'_> {
+        type Ok = ();
+        type Error = ValueError;
+        fn entry<W: Walk + ?Sized>(&mut self, k: &str, w: &W) -> Result<(), ValueError> {
+            looked_at(w)?;
+            self.0.entry(k, w)
+        }
+        fn end(self) -> Result<(), ValueError> {
+            self.0.end()
+        }
+    }
+
+    impl<'a> Visitor for Twice<'a> {
+        type Ok = ();
+        type Error = ValueError;
+        type List = TwiceList<'a>;
+        type Map = TwiceMap<'a>;
+        fn absent(self) -> Result<(), ValueError> {
+            Flat(self.0).absent()
+        }
+        fn null(self) -> Result<(), ValueError> {
+            Flat(self.0).null()
+        }
+        fn bool(self, v: bool) -> Result<(), ValueError> {
+            Flat(self.0).bool(v)
+        }
+        fn number(self, t: &str) -> Result<(), ValueError> {
+            Flat(self.0).number(t)
+        }
+        fn string(self, t: &str) -> Result<(), ValueError> {
+            Flat(self.0).string(t)
+        }
+        fn bytes(self, b: &[u8]) -> Result<(), ValueError> {
+            Flat(self.0).bytes(b)
+        }
+        fn list(self, n: Option<usize>) -> Result<TwiceList<'a>, ValueError> {
+            Flat(self.0).list(n).map(TwiceList)
+        }
+        fn map(self, n: Option<usize>) -> Result<TwiceMap<'a>, ValueError> {
+            Flat(self.0).map(n).map(TwiceMap)
+        }
+    }
+
+    let doc = wire_file();
+    for v in list(&doc, "values") {
+        let bytes = hex(v["hex"].as_str().unwrap());
+        let mut sink = TreeSink::new();
+        Encoded(&bytes).walk(Twice(&mut sink)).unwrap();
+        assert_eq!(
+            sink.into_value().unwrap(),
+            tree(&v["tree"]),
+            "{}",
+            v["name"]
+        );
+    }
 }
 
 #[test]

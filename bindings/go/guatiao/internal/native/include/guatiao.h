@@ -151,6 +151,12 @@ typedef struct guatiao_entry guatiao_entry;
 #define GUATIAO_MERGE_OPT_MERGELISTS 1
 
 /*
+ A container's length when it is not known: `list_begin` and
+ `map_begin` are told it rather than a count.
+ */
+#define GUATIAO_LEN_UNKNOWN UINT64_MAX
+
+/*
  The envelope's own version, for a library that wants to refuse a host
  it does not understand.
 
@@ -1405,6 +1411,95 @@ typedef struct guatiao_timestamp {
    */
   uint32_t nanoseconds;
 } guatiao_timestamp;
+
+/*
+ What receives a walk's events, in C.
+
+ `struct_size` is `sizeof(guatiao_visitor)` as the caller compiled it;
+ a smaller one is refused. `ctx` is handed back to every callback. A
+ callback returns `GUATIAO_OK` to go on, anything else to stop the walk
+ with that status; a slot left null refuses its event with
+ `GUATIAO_ERR_WRONG_KIND`. A text the walk hands over is UTF-8, a
+ number's text is in the JSON number grammar, and each view is valid
+ only for the call.
+ */
+typedef struct guatiao_visitor {
+  /*
+   `sizeof(guatiao_visitor)` as the caller compiled it.
+   */
+  uint32_t struct_size;
+  /*
+   Handed back to every callback.
+   */
+  void *ctx;
+  /*
+   `GUATIAO_ABSENT`: there is no value here.
+   */
+  guatiao_status (*absent)(void *ctx);
+  /*
+   Null.
+   */
+  guatiao_status (*null)(void *ctx);
+  /*
+   A boolean.
+   */
+  guatiao_status (*boolean)(void *ctx, bool value);
+  /*
+   A number, as its text in the JSON number grammar.
+   */
+  guatiao_status (*number)(void *ctx, struct guatiao_str text);
+  /*
+   A string.
+   */
+  guatiao_status (*string)(void *ctx, struct guatiao_str text);
+  /*
+   A byte string.
+   */
+  guatiao_status (*bytes)(void *ctx, struct guatiao_bytes bytes);
+  /*
+   A list opens; `len` values follow, or `GUATIAO_LEN_UNKNOWN`.
+   */
+  guatiao_status (*list_begin)(void *ctx, uint64_t len);
+  /*
+   The innermost open list closes.
+   */
+  guatiao_status (*list_end)(void *ctx);
+  /*
+   A map opens; `len` entries follow, or `GUATIAO_LEN_UNKNOWN`.
+   */
+  guatiao_status (*map_begin)(void *ctx, uint64_t len);
+  /*
+   The next entry's key; its value is the next value.
+   */
+  guatiao_status (*key)(void *ctx, struct guatiao_str key);
+  /*
+   The innermost open map closes.
+   */
+  guatiao_status (*map_end)(void *ctx);
+} guatiao_visitor;
+
+/*
+ What hands its own data to a visitor, in C.
+
+ `walk` is called once with `ctx` and a visitor this library made; it
+ calls the visitor's functions for one value (a container's begin, its
+ elements, its end), then returns `GUATIAO_OK`, or the status a
+ callback answered to stop. The visitor is valid only during `walk`.
+ */
+typedef struct guatiao_walker {
+  /*
+   `sizeof(guatiao_walker)` as the caller compiled it.
+   */
+  uint32_t struct_size;
+  /*
+   Handed back to `walk`.
+   */
+  void *ctx;
+  /*
+   Hands one value's events to `into`.
+   */
+  guatiao_status (*walk)(void *ctx, const struct guatiao_visitor *into);
+} guatiao_walker;
 
 /*
  A borrowed sequence of values, in order.
@@ -3043,6 +3138,86 @@ guatiao_status guatiao_wire_encode(const struct guatiao_alloc *alloc,
 guatiao_status guatiao_wire_decode(const struct guatiao_alloc *alloc,
                                    struct guatiao_bytes bytes,
                                    struct guatiao_value *out);
+
+/*
+ Walks `value` into `visitor`: one call per event, in order, nothing
+ built.
+
+ A callback's status stops the walk and is returned. A value nested
+ deeper than `GUATIAO_MAX_DEPTH`, a node whose payload its own reader
+ refuses, and a visitor table smaller than this build's are
+ `GUATIAO_ERR_BAD_VALUE`; a tag this build does not know is
+ `GUATIAO_ERR_WRONG_KIND`.
+
+ # Safety
+
+ `value` is null or a well-formed value; `visitor` is null or a table
+ readable for its `struct_size` bytes whose functions return rather
+ than unwind.
+ */
+guatiao_status guatiao_value_visit(const struct guatiao_value *value,
+                                   const struct guatiao_visitor *visitor);
+
+/*
+ Walks the value the wire bytes `bytes` hold into `visitor`, checking
+ them as `guatiao_wire_decode` does, with nothing built.
+
+ Bytes that are not a value are `GUATIAO_ERR_BAD_VALUE`, refused where
+ the fault is: the visitor has seen the events before it. A value
+ nested deeper than `GUATIAO_MAX_DEPTH` is refused.
+
+ # Safety
+
+ `bytes` is readable for the call; `visitor` is null or a table
+ readable for its `struct_size` bytes whose functions return rather
+ than unwind.
+ */
+guatiao_status guatiao_wire_visit(struct guatiao_bytes bytes,
+                                  const struct guatiao_visitor *visitor);
+
+/*
+ Builds the value a C walker's events describe, in `alloc`, through
+ `out`.
+
+ `out` is written the absent marker on entry. A walker's own status
+ stops the build and is returned, and so does the first refusal of an
+ event, which every later event is answered with too: events out of
+ order (an end that matches nothing, a value where a key is due) and a
+ walk that gave no one complete value are `GUATIAO_ERR_WRONG_KIND`;
+ text that is not UTF-8 and a number outside the grammar
+ `GUATIAO_ERR_BAD_VALUE`; a null or unusable allocator, or one that
+ refuses, `GUATIAO_ERR_ALLOC`. A repeated key replaces the first.
+
+ # Safety
+
+ `walker` is null or a table readable for its `struct_size` bytes
+ whose `walk` returns rather than unwinds; `out` addresses writable
+ storage for one value that does not already hold one.
+ */
+guatiao_status guatiao_value_from_walker(const struct guatiao_alloc *alloc,
+                                         const struct guatiao_walker *walker,
+                                         struct guatiao_value *out);
+
+/*
+ Writes the wire bytes of a C walker's events, as a BYTES value built
+ in `alloc`, through `out`: the bytes `guatiao_wire_encode` writes for
+ the value the events describe, with no value built.
+
+ `out` is written the absent marker on entry. A walker's own status
+ stops the encoding and is returned, and so does the first refusal of
+ an event: events out of order, a length given at a begin that the
+ events do not keep, and a walk that gave no one complete value are
+ `GUATIAO_ERR_WRONG_KIND`; text that is not UTF-8, a number outside the
+ grammar and a key repeated in its map `GUATIAO_ERR_BAD_VALUE`; a null
+ or unusable allocator `GUATIAO_ERR_ALLOC`.
+
+ # Safety
+
+ As for `guatiao_value_from_walker`.
+ */
+guatiao_status guatiao_wire_encode_walker(const struct guatiao_alloc *alloc,
+                                          const struct guatiao_walker *walker,
+                                          struct guatiao_value *out);
 
 #ifdef __cplusplus
 }  // extern "C"

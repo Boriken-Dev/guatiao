@@ -807,6 +807,45 @@ fn out_parameter_cases() -> Vec<(&'static str, fn())> {
                 )
             });
         }),
+        ("guatiao_value_from_walker", || {
+            let walker = guatiao::exports::visit::WalkerTable {
+                struct_size: size_of::<guatiao::exports::visit::WalkerTable>() as u32,
+                ctx: core::ptr::null_mut(),
+                walk: None,
+            };
+            // SAFETY: a null allocator is the failure under test.
+            leaves_absent(
+                "value_from_walker",
+                Status::GUATIAO_ERR_ALLOC,
+                |out| unsafe {
+                    guatiao::exports::visit::guatiao_value_from_walker(
+                        core::ptr::null(),
+                        &walker,
+                        out,
+                    )
+                },
+            );
+        }),
+        ("guatiao_wire_encode_walker", || {
+            let walker = guatiao::exports::visit::WalkerTable {
+                struct_size: size_of::<guatiao::exports::visit::WalkerTable>() as u32,
+                ctx: core::ptr::null_mut(),
+                walk: None,
+            };
+            let alloc = Alloc::rust();
+            // SAFETY: a walker with no function is the failure under test.
+            leaves_absent(
+                "wire_encode_walker",
+                Status::GUATIAO_ERR_NULL,
+                |out| unsafe {
+                    guatiao::exports::visit::guatiao_wire_encode_walker(
+                        alloc.as_raw(),
+                        &walker,
+                        out,
+                    )
+                },
+            );
+        }),
         ("guatiao_wire_announce", || {
             let schema = Value::from(Map::new());
             // SAFETY: a null allocator is the failure under test.

@@ -152,6 +152,8 @@ files:
         name: guatiao_value_clone
       c:@F@guatiao_value_free:
         name: guatiao_value_free
+      c:@F@guatiao_value_from_walker:
+        name: guatiao_value_from_walker
       c:@F@guatiao_value_list:
         name: guatiao_value_list
       c:@F@guatiao_value_map:
@@ -162,6 +164,8 @@ files:
         name: guatiao_value_number
       c:@F@guatiao_value_string:
         name: guatiao_value_string
+      c:@F@guatiao_value_visit:
+        name: guatiao_value_visit
       c:@F@guatiao_wire_announce:
         name: guatiao_wire_announce
       c:@F@guatiao_wire_close:
@@ -170,6 +174,8 @@ files:
         name: guatiao_wire_decode
       c:@F@guatiao_wire_encode:
         name: guatiao_wire_encode
+      c:@F@guatiao_wire_encode_walker:
+        name: guatiao_wire_encode_walker
       c:@F@guatiao_wire_receiver_accept:
         name: guatiao_wire_receiver_accept
       c:@F@guatiao_wire_receiver_free:
@@ -178,6 +184,8 @@ files:
         name: guatiao_wire_receiver_new
       c:@F@guatiao_wire_send:
         name: guatiao_wire_send
+      c:@F@guatiao_wire_visit:
+        name: guatiao_wire_visit
       c:@S@guatiao_alloc:
         name: guatiao_alloc
       c:@S@guatiao_buffer:
@@ -242,6 +250,10 @@ files:
         name: guatiao_value
       c:@S@guatiao_values:
         name: guatiao_values
+      c:@S@guatiao_visitor:
+        name: guatiao_visitor
+      c:@S@guatiao_walker:
+        name: guatiao_walker
       c:@S@guatiao_wire_event:
         name: guatiao_wire_event
       c:@S@guatiao_wire_receiver:

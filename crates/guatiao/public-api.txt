@@ -240,6 +240,76 @@ pub mod guatiao::exports::value
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_value_string(*const guatiao::value::alloc::Allocator, guatiao::value::types::text::Str<'_>, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_wire_decode(*const guatiao::value::alloc::Allocator, guatiao::value::types::buffer::Bytes<'_>, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 #[no_mangle] pub unsafe c fn guatiao::exports::value::guatiao_wire_encode(*const guatiao::value::alloc::Allocator, *const guatiao::value::value::Value, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+pub mod guatiao::exports::visit
+pub struct guatiao::exports::visit::Stopped(pub guatiao::value::status::Status)
+impl core::clone::Clone for guatiao::exports::visit::Stopped
+pub fn guatiao::exports::visit::Stopped::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::exports::visit::Stopped
+impl core::cmp::PartialEq for guatiao::exports::visit::Stopped
+pub fn guatiao::exports::visit::Stopped::eq(&self, &Self) -> bool
+impl core::convert::From<guatiao::exports::visit::Stopped> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(guatiao::exports::visit::Stopped) -> guatiao::value::status::Status
+impl core::convert::From<guatiao::value::error::ValueError> for guatiao::exports::visit::Stopped
+pub fn guatiao::exports::visit::Stopped::from(guatiao::value::error::ValueError) -> guatiao::exports::visit::Stopped
+impl core::fmt::Debug for guatiao::exports::visit::Stopped
+pub fn guatiao::exports::visit::Stopped::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::exports::visit::Stopped
+impl core::marker::StructuralPartialEq for guatiao::exports::visit::Stopped
+pub struct guatiao::exports::visit::TableSink(_)
+impl guatiao::exports::visit::TableSink
+pub unsafe fn guatiao::exports::visit::TableSink::from_ptr(*const guatiao::exports::visit::VisitorTable) -> core::option::Option<guatiao::exports::visit::TableSink>
+impl core::clone::Clone for guatiao::exports::visit::TableSink
+pub fn guatiao::exports::visit::TableSink::clone(&self) -> Self
+impl core::fmt::Debug for guatiao::exports::visit::TableSink
+pub fn guatiao::exports::visit::TableSink::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::exports::visit::TableSink
+impl guatiao::value::visit::Sink for guatiao::exports::visit::TableSink
+pub type guatiao::exports::visit::TableSink::Error = guatiao::exports::visit::Stopped
+pub fn guatiao::exports::visit::TableSink::absent(&mut self) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::bool(&mut self, bool) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::bytes(&mut self, &[u8]) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::key(&mut self, &str) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::list_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::list_end(&mut self) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::map_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::map_end(&mut self) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::null(&mut self) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::number(&mut self, &str) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::string(&mut self, &str) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+#[repr(C)] pub struct guatiao::exports::visit::VisitorTable
+pub guatiao::exports::visit::VisitorTable::absent: core::option::Option<fn(*mut core::ffi::c_void) -> guatiao::value::status::Status>
+pub guatiao::exports::visit::VisitorTable::boolean: core::option::Option<fn(*mut core::ffi::c_void, bool) -> guatiao::value::status::Status>
+pub guatiao::exports::visit::VisitorTable::bytes: core::option::Option<fn(*mut core::ffi::c_void, guatiao::value::types::buffer::Bytes<'_>) -> guatiao::value::status::Status>
+pub guatiao::exports::visit::VisitorTable::ctx: *mut core::ffi::c_void
+pub guatiao::exports::visit::VisitorTable::key: core::option::Option<fn(*mut core::ffi::c_void, guatiao::value::types::text::Str<'_>) -> guatiao::value::status::Status>
+pub guatiao::exports::visit::VisitorTable::list_begin: core::option::Option<fn(*mut core::ffi::c_void, u64) -> guatiao::value::status::Status>
+pub guatiao::exports::visit::VisitorTable::list_end: core::option::Option<fn(*mut core::ffi::c_void) -> guatiao::value::status::Status>
+pub guatiao::exports::visit::VisitorTable::map_begin: core::option::Option<fn(*mut core::ffi::c_void, u64) -> guatiao::value::status::Status>
+pub guatiao::exports::visit::VisitorTable::map_end: core::option::Option<fn(*mut core::ffi::c_void) -> guatiao::value::status::Status>
+pub guatiao::exports::visit::VisitorTable::null: core::option::Option<fn(*mut core::ffi::c_void) -> guatiao::value::status::Status>
+pub guatiao::exports::visit::VisitorTable::number: core::option::Option<fn(*mut core::ffi::c_void, guatiao::value::types::text::Str<'_>) -> guatiao::value::status::Status>
+pub guatiao::exports::visit::VisitorTable::string: core::option::Option<fn(*mut core::ffi::c_void, guatiao::value::types::text::Str<'_>) -> guatiao::value::status::Status>
+pub guatiao::exports::visit::VisitorTable::struct_size: u32
+impl core::clone::Clone for guatiao::exports::visit::VisitorTable
+pub fn guatiao::exports::visit::VisitorTable::clone(&self) -> Self
+impl core::fmt::Debug for guatiao::exports::visit::VisitorTable
+pub fn guatiao::exports::visit::VisitorTable::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::exports::visit::VisitorTable
+#[repr(C)] pub struct guatiao::exports::visit::WalkerTable
+pub guatiao::exports::visit::WalkerTable::ctx: *mut core::ffi::c_void
+pub guatiao::exports::visit::WalkerTable::struct_size: u32
+pub guatiao::exports::visit::WalkerTable::walk: core::option::Option<fn(*mut core::ffi::c_void, *const guatiao::exports::visit::VisitorTable) -> guatiao::value::status::Status>
+impl core::clone::Clone for guatiao::exports::visit::WalkerTable
+pub fn guatiao::exports::visit::WalkerTable::clone(&self) -> Self
+impl core::fmt::Debug for guatiao::exports::visit::WalkerTable
+pub fn guatiao::exports::visit::WalkerTable::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::exports::visit::WalkerTable
+pub const guatiao::exports::visit::GUATIAO_LEN_UNKNOWN: u64
+#[no_mangle] pub unsafe c fn guatiao::exports::visit::guatiao_value_from_walker(*const guatiao::value::alloc::Allocator, *const guatiao::exports::visit::WalkerTable, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::visit::guatiao_value_visit(*const guatiao::value::value::Value, *const guatiao::exports::visit::VisitorTable) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::visit::guatiao_wire_encode_walker(*const guatiao::value::alloc::Allocator, *const guatiao::exports::visit::WalkerTable, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::visit::guatiao_wire_visit(guatiao::value::types::buffer::Bytes<'_>, *const guatiao::exports::visit::VisitorTable) -> guatiao::value::status::Status
+pub unsafe fn guatiao::exports::visit::run_walker<S: guatiao::value::visit::Sink>(*const guatiao::exports::visit::WalkerTable, &mut S) -> guatiao::value::status::Status where guatiao::value::status::Status: core::convert::From<<S as guatiao::value::visit::Sink>::Error>
 pub mod guatiao::library
 pub mod guatiao::library::desc
 #[repr(C)] pub struct guatiao::library::desc::HostInfo<'a>
@@ -4063,6 +4133,8 @@ impl core::convert::From<core::str::error::Utf8Error> for guatiao::value::error:
 pub fn guatiao::value::error::ValueError::from(core::str::error::Utf8Error) -> guatiao::value::error::ValueError
 impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::error::ValueError
 pub fn guatiao::value::error::ValueError::from(guatiao::value::alloc::AllocError) -> guatiao::value::error::ValueError
+impl core::convert::From<guatiao::value::error::ValueError> for guatiao::exports::visit::Stopped
+pub fn guatiao::exports::visit::Stopped::from(guatiao::value::error::ValueError) -> guatiao::exports::visit::Stopped
 impl core::convert::From<guatiao::value::error::ValueError> for guatiao::library::kind::ProviderError
 pub fn guatiao::library::kind::ProviderError::from(guatiao::value::error::ValueError) -> guatiao::library::kind::ProviderError
 impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::merge::MergeError
@@ -4325,6 +4397,8 @@ impl core::convert::From<&guatiao::value::merge::MergeError> for guatiao::value:
 pub fn guatiao::value::status::Status::from(&guatiao::value::merge::MergeError) -> guatiao::value::status::Status
 impl core::convert::From<core::str::error::Utf8Error> for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::from(core::str::error::Utf8Error) -> guatiao::value::status::Status
+impl core::convert::From<guatiao::exports::visit::Stopped> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(guatiao::exports::visit::Stopped) -> guatiao::value::status::Status
 impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::from(guatiao::value::alloc::AllocError) -> guatiao::value::status::Status
 impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::status::Status
@@ -6505,6 +6579,19 @@ pub fn guatiao::value::visit::Sink::map_end(&mut self) -> core::result::Result<(
 pub fn guatiao::value::visit::Sink::null(&mut self) -> core::result::Result<(), Self::Error>
 pub fn guatiao::value::visit::Sink::number(&mut self, &str) -> core::result::Result<(), Self::Error>
 pub fn guatiao::value::visit::Sink::string(&mut self, &str) -> core::result::Result<(), Self::Error>
+impl guatiao::value::visit::Sink for guatiao::exports::visit::TableSink
+pub type guatiao::exports::visit::TableSink::Error = guatiao::exports::visit::Stopped
+pub fn guatiao::exports::visit::TableSink::absent(&mut self) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::bool(&mut self, bool) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::bytes(&mut self, &[u8]) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::key(&mut self, &str) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::list_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::list_end(&mut self) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::map_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::map_end(&mut self) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::null(&mut self) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::number(&mut self, &str) -> core::result::Result<(), guatiao::exports::visit::Stopped>
+pub fn guatiao::exports::visit::TableSink::string(&mut self, &str) -> core::result::Result<(), guatiao::exports::visit::Stopped>
 impl guatiao::value::visit::Sink for guatiao::value::visit::TreeSink
 pub type guatiao::value::visit::TreeSink::Error = guatiao::value::error::ValueError
 pub fn guatiao::value::visit::TreeSink::absent(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
@@ -6960,6 +7047,8 @@ impl core::convert::From<core::str::error::Utf8Error> for guatiao::value::error:
 pub fn guatiao::value::error::ValueError::from(core::str::error::Utf8Error) -> guatiao::value::error::ValueError
 impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::error::ValueError
 pub fn guatiao::value::error::ValueError::from(guatiao::value::alloc::AllocError) -> guatiao::value::error::ValueError
+impl core::convert::From<guatiao::value::error::ValueError> for guatiao::exports::visit::Stopped
+pub fn guatiao::exports::visit::Stopped::from(guatiao::value::error::ValueError) -> guatiao::exports::visit::Stopped
 impl core::convert::From<guatiao::value::error::ValueError> for guatiao::library::kind::ProviderError
 pub fn guatiao::library::kind::ProviderError::from(guatiao::value::error::ValueError) -> guatiao::library::kind::ProviderError
 impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::merge::MergeError
@@ -7650,6 +7739,8 @@ impl core::convert::From<&guatiao::value::merge::MergeError> for guatiao::value:
 pub fn guatiao::value::status::Status::from(&guatiao::value::merge::MergeError) -> guatiao::value::status::Status
 impl core::convert::From<core::str::error::Utf8Error> for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::from(core::str::error::Utf8Error) -> guatiao::value::status::Status
+impl core::convert::From<guatiao::exports::visit::Stopped> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(guatiao::exports::visit::Stopped) -> guatiao::value::status::Status
 impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::from(guatiao::value::alloc::AllocError) -> guatiao::value::status::Status
 impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::status::Status
@@ -8793,6 +8884,8 @@ impl core::convert::From<core::str::error::Utf8Error> for guatiao::value::error:
 pub fn guatiao::value::error::ValueError::from(core::str::error::Utf8Error) -> guatiao::value::error::ValueError
 impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::error::ValueError
 pub fn guatiao::value::error::ValueError::from(guatiao::value::alloc::AllocError) -> guatiao::value::error::ValueError
+impl core::convert::From<guatiao::value::error::ValueError> for guatiao::exports::visit::Stopped
+pub fn guatiao::exports::visit::Stopped::from(guatiao::value::error::ValueError) -> guatiao::exports::visit::Stopped
 impl core::convert::From<guatiao::value::error::ValueError> for guatiao::library::kind::ProviderError
 pub fn guatiao::library::kind::ProviderError::from(guatiao::value::error::ValueError) -> guatiao::library::kind::ProviderError
 impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::merge::MergeError
@@ -9545,6 +9638,8 @@ impl core::convert::From<&guatiao::value::merge::MergeError> for guatiao::value:
 pub fn guatiao::value::status::Status::from(&guatiao::value::merge::MergeError) -> guatiao::value::status::Status
 impl core::convert::From<core::str::error::Utf8Error> for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::from(core::str::error::Utf8Error) -> guatiao::value::status::Status
+impl core::convert::From<guatiao::exports::visit::Stopped> for guatiao::value::status::Status
+pub fn guatiao::value::status::Status::from(guatiao::exports::visit::Stopped) -> guatiao::value::status::Status
 impl core::convert::From<guatiao::value::alloc::AllocError> for guatiao::value::status::Status
 pub fn guatiao::value::status::Status::from(guatiao::value::alloc::AllocError) -> guatiao::value::status::Status
 impl core::convert::From<guatiao::value::error::ValueError> for guatiao::value::status::Status
