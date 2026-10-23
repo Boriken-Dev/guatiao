@@ -30,6 +30,7 @@ nav:
   - Home: index.md
   - Passing data: ownership.md
   - Encodings: encodings.md
+  - Kinds in every language: kinds.md
   - Configuration files: configuration.md
   - A bridge to another format: bridges.md
   - A provider's form: forms.md
