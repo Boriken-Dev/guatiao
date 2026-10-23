@@ -16,6 +16,7 @@
 #include <chrono>
 
 namespace guatiao {
+inline namespace GUATIAO_ABI {
 
 struct span;
 
@@ -204,13 +205,29 @@ struct timestamp {
   std::string to_string() const { return try_to_string().value(); }
 #endif
 
-  /// The instant on the system clock, to the clock's resolution.
+  /// The instant on `Clock`, to its resolution, counted from its epoch
+  /// (the Unix epoch for the system clock). BAD_VALUE for one the clock
+  /// cannot hold: a clock counting nanoseconds in 64 bits ends in 2262.
   template <class Clock = std::chrono::system_clock>
-  typename Clock::time_point to_time_point() const {
-    auto since = std::chrono::duration_cast<typename Clock::duration>(std::chrono::seconds(seconds) +
-                                                         std::chrono::nanoseconds(nanoseconds));
+  result<typename Clock::time_point> try_to_time_point() const {
+    using dur = typename Clock::duration;
+    using std::chrono::duration_cast;
+    // Whole seconds the clock holds with room for the fraction, worked
+    // out by division so nothing here overflows.
+    const auto most = duration_cast<std::chrono::seconds>(dur::max()).count() - 1;
+    const auto least = duration_cast<std::chrono::seconds>(dur::min()).count() + 1;
+    if (seconds > most || seconds < least)
+      return detail::error_of(GUATIAO_ERR_BAD_VALUE, "the instant is outside what the clock holds");
+    dur since = duration_cast<dur>(std::chrono::seconds(seconds)) +
+                duration_cast<dur>(std::chrono::nanoseconds(nanoseconds));
     return typename Clock::time_point(since);
   }
+#if GUATIAO_EXCEPTIONS
+  template <class Clock = std::chrono::system_clock>
+  typename Clock::time_point to_time_point() const {
+    return try_to_time_point<Clock>().value();
+  }
+#endif
   template <class Clock, class Duration>
   static timestamp from(std::chrono::time_point<Clock, Duration> at) {
     auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(at.time_since_epoch()).count();
@@ -261,8 +278,11 @@ struct span {
   bool is_zero() const noexcept {
     return !years && !months && !weeks && !days && !hours && !minutes && !seconds && !nanoseconds;
   }
+  /// Every field's sign flipped; INT64_MIN, which no span holds, stays.
   span negated() const noexcept {
-    return {-years, -months, -weeks, -days, -hours, -minutes, -seconds, -nanoseconds};
+    auto neg = [](std::int64_t x) { return x == std::numeric_limits<std::int64_t>::min() ? x : -x; };
+    return {neg(years),   neg(months),  neg(weeks),   neg(days),
+            neg(hours),   neg(minutes), neg(seconds), static_cast<std::int32_t>(-std::int64_t(nanoseconds))};
   }
   static span from(const guatiao_span& s) noexcept {
     return {s.years, s.months, s.weeks, s.days, s.hours, s.minutes, s.seconds, s.nanoseconds};
@@ -369,6 +389,7 @@ inline result<std::string> try_normalize(form f, std::string_view text) {
 inline std::string normalize(form f, std::string_view text) { return try_normalize(f, text).value(); }
 #endif
 
+}  // namespace GUATIAO_ABI
 }  // namespace guatiao
 
 #endif  // GUATIAO_TIME_HPP

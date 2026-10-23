@@ -15,6 +15,20 @@ namespace {
 using guatiao::item;
 using guatiao::view;
 
+/// Clocks counting from the Unix epoch in nanoseconds and in seconds.
+struct nano_clock {
+  using duration = std::chrono::nanoseconds;
+  using rep = duration::rep;
+  using period = duration::period;
+  using time_point = std::chrono::time_point<nano_clock>;
+};
+struct seconds_clock {
+  using duration = std::chrono::seconds;
+  using rep = duration::rep;
+  using period = duration::period;
+  using time_point = std::chrono::time_point<seconds_clock>;
+};
+
 void building_and_reading() {
   guatiao::value v = MUST(guatiao::try_make(item::map({
       {"host", "10.0.0.1"},
@@ -230,11 +244,43 @@ void times() {
   CHECK(mixed.try_to_string().code() == guatiao::status::bad_value);
   guatiao::timestamp t = MUST(guatiao::timestamp::try_parse("2026-10-21T19:15:00+05:30"));
   CHECK(MUST(t.try_to_string()) == "2026-10-21T13:45:00Z");
-  auto at = t.to_time_point();
+  auto at = MUST(t.try_to_time_point());
   CHECK(guatiao::timestamp::from(at) == t);
+  // A clock counting nanoseconds in 64 bits ends in 2262: the last instant
+  // the forms hold is refused rather than overflowed.
+  guatiao::timestamp last = MUST(guatiao::timestamp::try_parse("9999-12-31T23:59:59.999999999Z"));
+  CHECK(last.try_to_time_point<nano_clock>().code() == guatiao::status::bad_value);
+  CHECK(last.try_to_time_point<seconds_clock>().ok());
   guatiao::length l = guatiao::length::from(std::chrono::milliseconds(1500));
   CHECK(l.seconds == 1 && l.nanoseconds == 500000000);
   CHECK(l.to_duration() == std::chrono::milliseconds(1500));
+}
+
+void absent_inside_a_container() {
+  // The wire vectors carry an ABSENT inside a list; a container holds one
+  // as every language does, and a lookup reads it as nothing there.
+  guatiao::value l = MUST(guatiao::try_make(item::list({1, item::absent()})));
+  CHECK(l.size() == 2 && l[1].is_absent());
+  guatiao::value m = MUST(guatiao::try_make(item::map({})));
+  MUST(m.try_set("k", guatiao::value()));
+  CHECK(m.size() == 1 && m["k"].is_absent());
+}
+
+void iterators() {
+  guatiao::value l = MUST(guatiao::try_make(item::list({10, 20, 30})));
+  guatiao::list_view lv = l.as_list();
+  auto it = lv.end();
+  it -= 1;
+  CHECK((*it).int_or(0) == 30);
+  CHECK((it - 2)->int_or(0) == 10);
+  CHECK(lv.begin() < lv.end() && lv.end() >= lv.begin() && (lv.end() - lv.begin()) == 3);
+  guatiao::value m = MUST(guatiao::try_make(item::map({{"a", 1}, {"b", 2}})));
+  guatiao::map_view mv = m.as_map();
+  CHECK((mv.begin() + 1)->key == "b");
+  CHECK((1 + mv.begin())[0].key == "b");
+  guatiao::span s{};
+  s.days = -std::numeric_limits<std::int64_t>::max();
+  CHECK(s.negated().days == std::numeric_limits<std::int64_t>::max());
 }
 
 void wire_round_trip() {
@@ -260,6 +306,8 @@ int main() {
   moves();
   schemas();
   times();
+  absent_inside_a_container();
+  iterators();
   wire_round_trip();
   return gt_test::finish("values");
 }

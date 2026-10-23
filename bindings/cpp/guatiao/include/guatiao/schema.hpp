@@ -12,6 +12,7 @@
 #include <guatiao/value.hpp>
 
 namespace guatiao {
+inline namespace GUATIAO_ABI {
 
 namespace detail {
 
@@ -85,6 +86,12 @@ inline result<value> try_merge(merge_mode mode, view earlier, view later, const 
                                    overrides.empty() ? nullptr : overrides.data(), overrides.size(), &out, &err);
   if (s != GUATIAO_OK) {
     guatiao_value_free(&out);
+    // The detail lives as long as the error: not in a caller's allocator
+    // that may be gone by then.
+    if (detail::settle(err, default_alloc()) != GUATIAO_OK) {
+      guatiao_value_free(&err);
+      err = detail::blank();
+    }
     return detail::with_detail(s, err, "the two values do not merge");
   }
   guatiao_value_free(&err);
@@ -102,6 +109,7 @@ inline value merge(merge_mode mode, view earlier, view later, const merge_option
 }
 #endif
 
+}  // namespace GUATIAO_ABI
 }  // namespace guatiao
 
 #endif  // GUATIAO_SCHEMA_HPP

@@ -12,6 +12,7 @@
 #include <guatiao/value.hpp>
 
 namespace guatiao {
+inline namespace GUATIAO_ABI {
 
 namespace detail {
 
@@ -168,6 +169,7 @@ class receiver {
   guatiao_wire_receiver* r_ = nullptr;
 };
 
+}  // namespace GUATIAO_ABI
 }  // namespace guatiao
 
 #endif  // GUATIAO_WIRE_HPP

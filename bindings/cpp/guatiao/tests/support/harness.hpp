@@ -57,6 +57,13 @@ inline void skip(const std::string& why) {
   }
 }
 
+/// A skip for a fact of the machine no setting supplies (a locale that
+/// is not installed): stated, never a failure.
+inline void skip_machine(const std::string& why) {
+  ++tally().skipped;
+  std::printf("  SKIP %s\n", why.c_str());
+}
+
 inline int finish(const char* name) {
   std::printf("%s: %d passed, %d failed, %d skipped\n", name, tally().passed, tally().failed, tally().skipped);
   return tally().failed ? 1 : 0;

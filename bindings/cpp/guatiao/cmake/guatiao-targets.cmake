@@ -32,8 +32,9 @@ endfunction()
 # on Windows a program finds a DLL there.
 function(guatiao_copy_runtime target)
   if(WIN32)
+    set(dlls "$<TARGET_RUNTIME_DLLS:${target}>")
     add_custom_command(TARGET ${target} POST_BUILD
-      COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_RUNTIME_DLLS:${target}>" "$<TARGET_FILE_DIR:${target}>"
+      COMMAND "$<IF:$<BOOL:${dlls}>,${CMAKE_COMMAND};-E;copy_if_different;${dlls};$<TARGET_FILE_DIR:${target}>,${CMAKE_COMMAND};-E;true>"
       COMMAND_EXPAND_LISTS)
   endif()
 endfunction()

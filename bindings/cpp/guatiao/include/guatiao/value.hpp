@@ -13,6 +13,7 @@
 #include <guatiao.h>
 
 #include <charconv>
+#include <clocale>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -44,9 +45,29 @@
 #define GUATIAO_EXCEPTIONS 0
 #endif
 
+// Code built with and without exceptions gets a set of names each, so a
+// program mixing the two links each to its own: `result::value()` throws
+// in one and aborts in the other, and one definition cannot serve both.
+#if GUATIAO_EXCEPTIONS
+#define GUATIAO_ABI cxx_exceptions
+#else
+#define GUATIAO_ABI cxx_no_exceptions
+#endif
+
+// Whether <charconv> converts floating point (libstdc++ 11, MSVC 2019,
+// libc++ 20). Without it a double crosses through snprintf and strtod,
+// with the locale's decimal point put back to '.';
+// GUATIAO_CPP_NO_FLOAT_CHARCONV takes that path anyway (a test does).
+#if !defined(GUATIAO_CPP_NO_FLOAT_CHARCONV) && defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
+#define GUATIAO_FLOAT_CHARCONV 1
+#else
+#define GUATIAO_FLOAT_CHARCONV 0
+#endif
+
 #define GUATIAO_CPP_VERSION "0.0.0-alpha.1"
 
 namespace guatiao {
+inline namespace GUATIAO_ABI {
 
 // ---- statuses ---------------------------------------------------------
 
@@ -102,8 +123,28 @@ class map;
 class list;
 
 namespace detail {
+template <class T>
+constexpr bool is_char_v = std::is_same_v<T, char> || std::is_same_v<T, wchar_t> || std::is_same_v<T, char16_t> ||
+                           std::is_same_v<T, char32_t>
+#if defined(__cpp_char8_t)
+                           || std::is_same_v<T, char8_t>
+#endif
+    ;
+/// An integer that is a number, not a character or a truth value.
 template <class I>
-using if_index = std::enable_if_t<std::is_integral_v<I> && !std::is_same_v<I, bool>, int>;
+constexpr bool is_number_v = std::is_integral_v<I> && !std::is_same_v<I, bool> && !is_char_v<I>;
+template <class I>
+using if_index = std::enable_if_t<is_number_v<I>, int>;
+
+/// The types that own a tree: a view taken from a temporary one dangles.
+template <class T>
+struct owns : std::false_type {};
+template <>
+struct owns<value> : std::true_type {};
+template <>
+struct owns<map> : std::true_type {};
+template <>
+struct owns<list> : std::true_type {};
 }  // namespace detail
 
 // ---- errors -------------------------------------------------------------
@@ -390,13 +431,14 @@ inline void release_string(guatiao_string& s) noexcept {
 /// refuses.
 inline bool make_string(const guatiao_alloc* a, std::string_view text, guatiao_string& out) noexcept {
   out = guatiao_string{};
-  out.alloc = a;
   if (text.empty()) return true;
+  if (!a || !a->alloc) return false;
   void* p = a->alloc(a->ctx, text.size(), 1);
   if (!p) return false;
   std::memcpy(p, text.data(), text.size());
   out.ptr = static_cast<std::uint8_t*>(p);
   out.len = out.cap = text.size();
+  out.alloc = a;
   return true;
 }
 
@@ -431,9 +473,18 @@ std::optional<I> integer_of(std::string_view t) noexcept {
   return out;
 }
 
+#if !GUATIAO_FLOAT_CHARCONV
+/// The decimal point the C library's locale writes and reads: what
+/// `snprintf` and `strtod` use where `<charconv>` has no floating point.
+inline char locale_point() noexcept {
+  const lconv* l = std::localeconv();
+  return (l && l->decimal_point && l->decimal_point[0]) ? l->decimal_point[0] : '.';
+}
+#endif
+
 inline std::optional<double> double_of(std::string_view t) noexcept {
   if (t.empty()) return std::nullopt;
-#if defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
+#if GUATIAO_FLOAT_CHARCONV
   double out = 0;
   auto r = std::from_chars(t.data(), t.data() + t.size(), out);
   if (r.ec != std::errc() || r.ptr != t.data() + t.size()) return std::nullopt;
@@ -441,7 +492,8 @@ inline std::optional<double> double_of(std::string_view t) noexcept {
 #else
   char buf[344];
   if (t.size() >= sizeof buf) return std::nullopt;
-  std::memcpy(buf, t.data(), t.size());
+  char point = locale_point();
+  for (std::size_t i = 0; i < t.size(); ++i) buf[i] = t[i] == '.' ? point : t[i];
   buf[t.size()] = '\0';
   char* end = nullptr;
   double out = std::strtod(buf, &end);
@@ -456,16 +508,22 @@ inline std::string text_of(double d) {
   if (d != d || d > std::numeric_limits<double>::max() || d < -std::numeric_limits<double>::max())
     return {};
   char buf[64];
-#if defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L
+#if GUATIAO_FLOAT_CHARCONV
   auto r = std::to_chars(buf, buf + sizeof buf, d);
-  std::string s(buf, r.ptr);
+  return std::string(buf, r.ptr);
 #else
-  std::snprintf(buf, sizeof buf, "%.17g", d);
+  // The fewest significant digits that read back as `d`, as to_chars
+  // writes, with the locale's decimal point put back to '.'.
+  char point = locale_point();
+  for (int digits = 1; digits <= 17; ++digits) {
+    std::snprintf(buf, sizeof buf, "%.*g", digits, d);
+    if (digits == 17 || std::strtod(buf, nullptr) == d) break;
+  }
   std::string s(buf);
-#endif
-  // JSON has no `inf`/`nan` and needs a digit before an exponent; to_chars
-  // writes neither for a finite double.
+  for (char& c : s)
+    if (c == point) c = '.';
   return s;
+#endif
 }
 
 template <class I>
@@ -530,7 +588,7 @@ class reader {
   std::optional<T> as() const {
     if constexpr (std::is_same_v<T, bool>) {
       return boolean();
-    } else if constexpr (std::is_integral_v<T>) {
+    } else if constexpr (detail::is_number_v<T>) {
       auto t = number_text();
       if (!t) return std::nullopt;
       return detail::integer_of<T>(*t);
@@ -549,7 +607,8 @@ class reader {
     } else if constexpr (std::is_same_v<T, bytes_view>) {
       return bytes();
     } else {
-      static_assert(sizeof(T) == 0, "guatiao: as<T> reads bool, integers, floating point, text and bytes");
+      static_assert(sizeof(T) == 0,
+                    "guatiao: as<T> reads bool, integers (not characters), floating point, text and bytes");
     }
   }
 
@@ -563,10 +622,14 @@ class reader {
   }
 
   /// The map this value is; an empty view for another kind (`is_map()`
-  /// tells the two apart). A view, so `for (auto e : v.as_map())` is safe.
-  map_view as_map() const noexcept;
-  /// The list this value is; an empty view for another kind.
-  list_view as_list() const noexcept;
+  /// tells the two apart). It borrows: `for (auto e : v.as_map())` reads
+  /// `v` while `v` lives, so asking it of a temporary owner is refused at
+  /// compile time.
+  map_view as_map() const& noexcept;
+  map_view as_map() const&& noexcept;
+  /// The list this value is; an empty view for another kind. As `as_map`.
+  list_view as_list() const& noexcept;
+  list_view as_list() const&& noexcept;
 
   /// The value under `key` in a map; absent when there is none, or this is
   /// not a map. Keys compare as bytes.
@@ -618,6 +681,15 @@ class view : public reader<view> {
 bool operator==(view a, view b);
 inline bool operator!=(view a, view b) { return !(a == b); }
 
+namespace detail {
+/// What `->` on an iterator answering a proxy points at: the proxy.
+template <class T>
+struct arrow {
+  T held;
+  const T* operator->() const noexcept { return &held; }
+};
+}  // namespace detail
+
 /// One map entry, read-only.
 struct entry {
   std::string_view key;
@@ -629,7 +701,12 @@ class map_view {
  public:
   class iterator {
    public:
-    using iterator_category = std::random_access_iterator_tag;
+    // A proxy answers each element, which the legacy categories allow only
+    // of an input iterator; C++20 ranges see it as random access.
+    using iterator_category = std::input_iterator_tag;
+#if defined(__cpp_lib_ranges)
+    using iterator_concept = std::random_access_iterator_tag;
+#endif
     using value_type = entry;
     using difference_type = std::ptrdiff_t;
     using pointer = void;
@@ -637,6 +714,7 @@ class map_view {
     iterator() noexcept = default;
     explicit iterator(const guatiao_entry* p) noexcept : p_(p) {}
     entry operator*() const noexcept { return entry{detail::text(p_->key), view(&p_->value)}; }
+    detail::arrow<entry> operator->() const noexcept { return {**this}; }
     iterator& operator++() noexcept { return ++p_, *this; }
     iterator operator++(int) noexcept { return iterator(p_++); }
     iterator& operator--() noexcept { return --p_, *this; }
@@ -644,9 +722,16 @@ class map_view {
     friend iterator operator+(iterator i, difference_type d) noexcept { return i += d; }
     friend difference_type operator-(iterator a, iterator b) noexcept { return a.p_ - b.p_; }
     entry operator[](difference_type d) const noexcept { return *(*this + d); }
+    iterator operator--(int) noexcept { return iterator(p_--); }
+    iterator& operator-=(difference_type d) noexcept { return p_ -= d, *this; }
+    friend iterator operator+(difference_type d, iterator i) noexcept { return i += d; }
+    friend iterator operator-(iterator i, difference_type d) noexcept { return i -= d; }
     friend bool operator==(iterator a, iterator b) noexcept { return a.p_ == b.p_; }
     friend bool operator!=(iterator a, iterator b) noexcept { return a.p_ != b.p_; }
     friend bool operator<(iterator a, iterator b) noexcept { return a.p_ < b.p_; }
+    friend bool operator>(iterator a, iterator b) noexcept { return a.p_ > b.p_; }
+    friend bool operator<=(iterator a, iterator b) noexcept { return a.p_ <= b.p_; }
+    friend bool operator>=(iterator a, iterator b) noexcept { return a.p_ >= b.p_; }
 
    private:
     const guatiao_entry* p_ = nullptr;
@@ -685,7 +770,12 @@ class list_view {
  public:
   class iterator {
    public:
-    using iterator_category = std::random_access_iterator_tag;
+    // A proxy answers each element, which the legacy categories allow only
+    // of an input iterator; C++20 ranges see it as random access.
+    using iterator_category = std::input_iterator_tag;
+#if defined(__cpp_lib_ranges)
+    using iterator_concept = std::random_access_iterator_tag;
+#endif
     using value_type = view;
     using difference_type = std::ptrdiff_t;
     using pointer = void;
@@ -693,6 +783,7 @@ class list_view {
     iterator() noexcept = default;
     explicit iterator(const guatiao_value* p) noexcept : p_(p) {}
     view operator*() const noexcept { return view(p_); }
+    detail::arrow<view> operator->() const noexcept { return {view(p_)}; }
     iterator& operator++() noexcept { return ++p_, *this; }
     iterator operator++(int) noexcept { return iterator(p_++); }
     iterator& operator--() noexcept { return --p_, *this; }
@@ -700,9 +791,16 @@ class list_view {
     friend iterator operator+(iterator i, difference_type d) noexcept { return i += d; }
     friend difference_type operator-(iterator a, iterator b) noexcept { return a.p_ - b.p_; }
     view operator[](difference_type d) const noexcept { return view(p_ + d); }
+    iterator operator--(int) noexcept { return iterator(p_--); }
+    iterator& operator-=(difference_type d) noexcept { return p_ -= d, *this; }
+    friend iterator operator+(difference_type d, iterator i) noexcept { return i += d; }
+    friend iterator operator-(iterator i, difference_type d) noexcept { return i -= d; }
     friend bool operator==(iterator a, iterator b) noexcept { return a.p_ == b.p_; }
     friend bool operator!=(iterator a, iterator b) noexcept { return a.p_ != b.p_; }
     friend bool operator<(iterator a, iterator b) noexcept { return a.p_ < b.p_; }
+    friend bool operator>(iterator a, iterator b) noexcept { return a.p_ > b.p_; }
+    friend bool operator<=(iterator a, iterator b) noexcept { return a.p_ <= b.p_; }
+    friend bool operator>=(iterator a, iterator b) noexcept { return a.p_ >= b.p_; }
 
    private:
     const guatiao_value* p_ = nullptr;
@@ -725,15 +823,27 @@ class list_view {
 };
 
 template <class D>
-map_view reader<D>::as_map() const noexcept {
+map_view reader<D>::as_map() const& noexcept {
   if (!is_map()) return map_view();
   return map_view(&self()->payload.map);
 }
 
 template <class D>
-list_view reader<D>::as_list() const noexcept {
+list_view reader<D>::as_list() const& noexcept {
   if (!is_list()) return list_view();
   return list_view(&self()->payload.list);
+}
+
+template <class D>
+map_view reader<D>::as_map() const&& noexcept {
+  static_assert(!detail::owns<D>::value, "guatiao: as_map() of a temporary value would dangle: name the value first");
+  return static_cast<const reader&>(*this).as_map();
+}
+
+template <class D>
+list_view reader<D>::as_list() const&& noexcept {
+  static_assert(!detail::owns<D>::value, "guatiao: as_list() of a temporary value would dangle: name the value first");
+  return static_cast<const reader&>(*this).as_list();
 }
 
 template <class D>
@@ -802,20 +912,22 @@ class item {
   item() noexcept : v_(std::monostate{}) {}
   item(std::nullptr_t) noexcept : v_(std::monostate{}) {}
   item(bool b) noexcept : v_(b) {}
-  template <class I, std::enable_if_t<std::is_integral_v<I> && !std::is_same_v<I, bool> &&
-                                          !std::is_same_v<I, char> && std::is_signed_v<I>,
-                                      int> = 0>
+  template <class I, std::enable_if_t<detail::is_number_v<I> && std::is_signed_v<I>, int> = 0>
   item(I i) noexcept : v_(static_cast<std::int64_t>(i)) {}
-  template <class I, std::enable_if_t<std::is_integral_v<I> && !std::is_same_v<I, bool> &&
-                                          !std::is_same_v<I, char> && std::is_unsigned_v<I>,
-                                      int> = 0>
+  template <class I, std::enable_if_t<detail::is_number_v<I> && std::is_unsigned_v<I>, int> = 0>
   item(I i) noexcept : v_(static_cast<std::uint64_t>(i)) {}
-  item(char) = delete;
+  /// A character is not a number, and a pointer is not a truth value:
+  /// say which is meant (`std::string(1, c)`, `int(c)`, `p != nullptr`).
+  template <class C, std::enable_if_t<detail::is_char_v<C>, int> = 0>
+  item(C) = delete;
+  template <class T>
+  item(T*) = delete;
   /// A finite double, as the shortest text reading back as it; a NaN or an
   /// infinity is refused when built.
   item(double d) noexcept : v_(d) {}
   item(float f) noexcept : v_(static_cast<double>(f)) {}
   item(const char* s) : v_(std::string(s ? s : "")) {}
+  item(char* s) : v_(std::string(s ? s : "")) {}
   item(std::string_view s) : v_(std::string(s)) {}
   item(const std::string& s) : v_(s) {}
   item(std::string&& s) noexcept : v_(std::move(s)) {}
@@ -994,7 +1106,8 @@ class node : public reader<node> {
   }
 
   /// Stores `v` under `key` in a map, moving it (`v` is ABSENT after);
-  /// replaces an entry in place. A refusal leaves `v` as it was.
+  /// replaces an entry in place. A refusal leaves `v` as it was. `v` is not
+  /// the tree holding this node.
   result<void> try_set(std::string_view key, value&& v) const {
     if (!n_) return detail::error_of(GUATIAO_ERR_NULL);
     guatiao_status s = guatiao_map_set(alloc(), n_, detail::str(key), v.raw());
@@ -1021,7 +1134,7 @@ class node : public reader<node> {
     return true;
   }
   /// Appends `v` to a list, moving it (`v` is ABSENT after). A refusal
-  /// leaves `v` as it was.
+  /// leaves `v` as it was. `v` is not the tree holding this node.
   result<void> try_push(value&& v) const {
     if (!n_) return detail::error_of(GUATIAO_ERR_NULL);
     guatiao_status s = guatiao_list_push(alloc(), n_, v.raw());
@@ -1066,7 +1179,8 @@ class node : public reader<node> {
     if (!n_) return detail::error_of(GUATIAO_ERR_NULL);
     return detail::check(guatiao_buffer_push(alloc(), n_, bytes.raw()));
   }
-  /// Replaces this node with `v`, freeing what it held.
+  /// Replaces this node with `v`, freeing what it held. `v` is not the
+  /// tree holding this node.
   void assign(value&& v) const noexcept {
     if (!n_) return;
     guatiao_value_free(n_);
@@ -1124,7 +1238,7 @@ class map_ref : public reader<map_ref> {
   explicit map_ref(node n) noexcept : n_(n) {}
   const guatiao_value* address() const noexcept { return n_.raw(); }
   node as_node() const noexcept { return n_; }
-  map_view get() const noexcept { return map_view(n_.raw() ? &n_.raw()->payload.map : nullptr); }
+  map_view get() const noexcept { return n_.as_map(); }
   operator map_view() const noexcept { return get(); }
   operator view() const noexcept { return n_.get(); }
   const guatiao_alloc* alloc() const noexcept { return n_.alloc(); }
@@ -1159,7 +1273,7 @@ class list_ref : public reader<list_ref> {
   explicit list_ref(node n) noexcept : n_(n) {}
   const guatiao_value* address() const noexcept { return n_.raw(); }
   node as_node() const noexcept { return n_; }
-  list_view get() const noexcept { return list_view(n_.raw() ? &n_.raw()->payload.list : nullptr); }
+  list_view get() const noexcept { return n_.as_list(); }
   operator list_view() const noexcept { return get(); }
   operator view() const noexcept { return n_.get(); }
   const guatiao_alloc* alloc() const noexcept { return n_.alloc(); }
@@ -1212,7 +1326,7 @@ class map : public reader<map> {
   map(std::initializer_list<std::pair<std::string_view, item>> entries, const guatiao_alloc* alloc = default_alloc())
       : map(try_of(entries, alloc).value()) {}
 #endif
-  /// `v` as a map; anything else is WRONG_KIND and is freed.
+  /// `v` as a map; anything else is WRONG_KIND, and stays the caller's.
   static result<map> from(value&& v) {
     if (!v.is_map()) return detail::error_of(GUATIAO_ERR_WRONG_KIND, "not a map");
     map m(nullptr);
@@ -1230,13 +1344,14 @@ class map : public reader<map> {
   }
   /// Gives the container up, leaving this an empty map with no allocator.
   guatiao_map release() noexcept {
+    if (!v_.is_map()) return guatiao_map{};
     guatiao_map out = v_.raw()->payload.map;
     v_.raw()->payload.map = guatiao_map{};
     return out;
   }
 
   const guatiao_value* address() const noexcept { return v_.raw(); }
-  map_view get() const noexcept { return map_view(&v_.raw()->payload.map); }
+  map_view get() const noexcept { return v_.as_map(); }
   operator map_view() const noexcept { return get(); }
   operator view() const noexcept { return v_.get(); }
   map_ref ref() noexcept { return map_ref(v_.ref()); }
@@ -1301,13 +1416,14 @@ class list : public reader<list> {
     return l;
   }
   guatiao_list release() noexcept {
+    if (!v_.is_list()) return guatiao_list{};
     guatiao_list out = v_.raw()->payload.list;
     v_.raw()->payload.list = guatiao_list{};
     return out;
   }
 
   const guatiao_value* address() const noexcept { return v_.raw(); }
-  list_view get() const noexcept { return list_view(&v_.raw()->payload.list); }
+  list_view get() const noexcept { return v_.as_list(); }
   operator list_view() const noexcept { return get(); }
   operator view() const noexcept { return v_.get(); }
   list_ref ref() noexcept { return list_ref(v_.ref()); }
@@ -1588,6 +1704,7 @@ inline guatiao_status settle(guatiao_value& root, const guatiao_alloc* home) {
 
 inline bool operator==(view a, view b) { return detail::equal_nodes(a.raw(), b.raw()); }
 
+}  // namespace GUATIAO_ABI
 }  // namespace guatiao
 
 #endif  // GUATIAO_VALUE_HPP
