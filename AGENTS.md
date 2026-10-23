@@ -16,7 +16,7 @@ public surface); this file is about the repository.
 | `crates/guatiao-intake/` | taking a value in from a person: the path grammar (`agent[1].name`), flat `key -> text` storage, checking a store of text, and how a schema is shown (sections, widget hints, conditional visibility, `#[derive(Form)]`); C surface in `include/guatiao_intake.h` |
 | `crates/guatiao-py/` | a source of libraries written in Python: a cdylib exporting `guatiao_source`, built with pyo3 for the stable ABI; a workspace of its own (no other build needs a Python to link), not published |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
-| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `python/greeter_kind.py` and `node/greeter_kind.ts` describe its kinds for Python and Node; `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind`; `r/greeterkind` is the R package declaring them with `kind()`; `matlab/+greeterkind` declares them for MATLAB and Octave as classes inheriting `guatiao.Kind`; `fortran/` is the fpm package `greeter_kind`, the kinds as abstract types with their remotes and `bind(c)` glue |
+| `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `include/greeter_kind.kinds.json` is the same kinds as data, written by its `description_is_current` test; `python/greeter_kind.py` describes them for Python; `node/` is what `guatiao-kind` writes from the description (`greeter_kind.js` and `.d.ts`; the Node suite checks it is current); `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind`; `r/greeterkind` is the R package declaring them with `kind()`; `matlab/+greeterkind` declares them for MATLAB and Octave as classes inheriting `guatiao.Kind`; `fortran/` is the fpm package `greeter_kind`, the kinds as abstract types with their remotes and `bind(c)` glue |
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
 | `examples/wire_over_webtransport/` | values over WebTransport: `server/` (the shared channel and framing, `wire-server`, and `wire-probe`, a native client), `client/` (the page's wasm, its own workspace, built for `wasm32-unknown-unknown` only); commands in its `README.md` |
 | `examples/app_library/` | an application's own C library (`myapp`): depends on the three crates and exports their C surfaces beside `myapp_version`; every binding's suite also runs against it alone, and it is the Dart web suites' default module |
@@ -29,6 +29,7 @@ public surface); this file is about the repository.
 | `examples/package.json` | the Node examples' one dependency, on `bindings/node/guatiao`: `npm ci` here, after `npm run build` there (its dependencies live in `bindings/node/node_modules`) |
 | `examples/node_host/` | a host program in TypeScript: scans for greeters in any language, registers Node libraries, optionally adds `guatiao-py`, calls every slot; `bindings/node/guatiao/test/examples.test.ts` runs it |
 | `examples/node_provider/` | `node_greeter/`, a library written in TypeScript: a package whose module is the library |
+| `examples/node_js/` | a library and a host in plain JavaScript, run with no build step, and a kind defined in JavaScript as a class; `bindings/node/guatiao/test/examples.test.ts` runs it |
 | `examples/go.mod` | the Go examples' module, using `bindings/go/guatiao` through a `replace`; `examples/internal/` holds what its tests drive in C |
 | `examples/go_host/` | a host program in Go: scans for greeters in any language, registers the Go library, optionally adds `guatiao-py`, calls every slot; its tests call the Rust, C, Python and Go greeters both ways |
 | `examples/go_provider/` | `go_greeter/`, a library written in Go (the package is the library), and `cshared/`, the same as a `-buildmode=c-shared` file the Rust example host scans |
@@ -190,6 +191,14 @@ for p in guatiao guatiao-serde guatiao-intake; do   # each suite also runs alone
 done
 (cd bindings/node/guatiao-serde && npm run build) && (cd bindings/node/guatiao-intake && npm run build)
 (cd bindings/node/guatiao && npm pack --dry-run)      # what ships; the same in the other two
+```
+
+After the greeter kinds' description changes, the Node module written
+from it (the suite fails until it is):
+
+```bash
+(cd examples/greeter_kind/node && node ../../../bindings/node/guatiao/dist/kind_cli.js \
+  ../include/greeter_kind.kinds.json --out greeter_kind)
 ```
 
 Go bindings, after `cargo build --workspace --all-features`, with Go
