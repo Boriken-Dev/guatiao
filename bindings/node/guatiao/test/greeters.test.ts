@@ -17,7 +17,7 @@ import { libraryOf } from '../src/provide.js';
 import { adopt } from '../src/value.js';
 import { Counter, Greeter } from '../../../../examples/greeter_kind/node/greeter_kind.ts';
 import { GREETER_KIND_H, REPO, readText } from './helpers.js';
-import { bridge, bridgeConfig, buildCGreeter, workspaceLibrary } from './native.js';
+import { bridge, bridgeConfig, cLibraries, workspaceLibrary } from './native.js';
 import { libraryDir } from './setup.js';
 
 const NODE_GREETER = path.join(REPO, 'examples', 'node_provider', 'node_greeter', 'greeters.ts');
@@ -54,8 +54,8 @@ beforeAll(async () => {
   reg = new Registry('node-greeters', '0.1');
   reg.scanDir(libraryDir(), { rules: 'kind=greeter' });
   present.add('rust');
-  const cDir = buildCGreeter();
-  if (cDir !== null) {
+  const cDir = cLibraries()?.greeterDir;
+  if (cDir !== undefined) {
     reg.scanDir(cDir, { rules: 'kind=greeter' });
     present.add('c');
   }

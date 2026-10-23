@@ -19,7 +19,7 @@ import * as n from '../src/native.js';
 import { Provider, library, libraryOf } from '../src/provide.js';
 import { Greeter } from '../../../../examples/greeter_kind/node/greeter_kind.ts';
 import { Counting, REPO } from './helpers.js';
-import { buildC, scratch } from './native.js';
+import { cLibraries } from './native.js';
 
 const NODE_GREETER = path.join(REPO, 'examples', 'node_provider', 'node_greeter', 'greeters.ts');
 
@@ -181,10 +181,10 @@ describe('a caller handing trees over', () => {
 
 describe('a call from a thread Node did not start', () => {
   it('runs on Node thread when the event loop turns, the caller waiting', async (ctx_) => {
-    const built = buildC(path.join(REPO, 'bindings', 'node', 'guatiao', 'test', 'fixtures', 'foreign_thread.c'), scratch('foreign'), 'foreign_thread');
+    const built = cLibraries();
     if (built === null) return ctx_.skip('no C compiler: the fixture is not built');
     const k = n.koffi();
-    const lib = k.load(built);
+    const lib = k.load(built.foreignThread);
     const start = lib.func('int foreign_greet(void *table, void *ctx, const char *name, void *free_value)');
     const done = lib.func('int foreign_done(void)');
     const status = lib.func('uint32_t foreign_status(void)');
