@@ -489,10 +489,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     # Go's two newest releases on the three platforms: the library's
     # filename, how it is found, and the C compiler cgo drives are each per
-    # platform. The examples' greeters are written in Rust, C, Python
-    # (through the guatiao-py bridge) and Go, both ways, and the Go library
-    # built as a file is scanned and called by the Rust example host. A
-    # stated skip fails the job.
+    # platform. The three modules are tested together through
+    # bindings/go/go.work, and serde and intake again each alone against
+    # the core by a replace, as a consumer builds them. The examples'
+    # greeters are written in Rust, C, Python (through the guatiao-py
+    # bridge) and Go, both ways, and the Go library built as a file is
+    # scanned and called by the Rust example host. A stated skip fails the
+    # job.
     strategy:
       fail-fast: false
       matrix:
@@ -537,11 +540,11 @@ jobs:
       - name: The C compiler cgo uses
         run: go env CC && "$(go env CC)" --version
       - name: Vet and format
-        working-directory: bindings/go/guatiao
+        working-directory: bindings/go
         run: |
-          go vet ./...
-          (cd ../../../examples && go vet ./...)
-          unformatted=$(gofmt -l . ../../../examples/greeter_kind/go ../../../examples/go_host ../../../examples/go_provider ../../../examples/internal)
+          go vet ./guatiao/... ./guatiao-serde/... ./guatiao-intake/...
+          (cd ../../examples && go vet ./...)
+          unformatted=$(gofmt -l . ../../examples/greeter_kind/go ../../examples/go_host ../../examples/go_provider ../../examples/internal)
           test -z "$unformatted" || { echo "not gofmt'd: $unformatted"; exit 1; }
       - name: Test the binding and the examples
         run: |
@@ -551,8 +554,17 @@ jobs:
             Windows) bridge=guatiao_py.dll ;;
           esac
           export GUATIAO_PY_BRIDGE="$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge"
-          (cd bindings/go/guatiao && go test -count=1 -v ./...) 2>&1 | tee go-test.log
+          (cd bindings/go && go test -count=1 -v ./guatiao/... ./guatiao-serde/... ./guatiao-intake/...) 2>&1 | tee go-test.log
           test "${PIPESTATUS[0]}" -eq 0
+          # serde and intake alone, outside the workspace: their own go.mod
+          # with the core replaced by this checkout's, nothing downloaded.
+          for module in guatiao-serde guatiao-intake; do
+            modfile="$RUNNER_TEMP/$module.mod"
+            cp "bindings/go/$module/go.mod" "$modfile"
+            echo "replace github.com/Boriken-Dev/guatiao/bindings/go/guatiao => $GITHUB_WORKSPACE/bindings/go/guatiao" >> "$modfile"
+            (cd "bindings/go/$module" && GOWORK=off GOPROXY=off GOFLAGS=-mod=mod go test -count=1 -v -modfile="$modfile" ./...) 2>&1 | tee -a go-test.log
+            test "${PIPESTATUS[0]}" -eq 0
+          done
           (cd examples && go test -count=1 -v ./...) 2>&1 | tee -a go-test.log
           test "${PIPESTATUS[0]}" -eq 0
           ! grep -n -- "--- SKIP" go-test.log
@@ -561,7 +573,8 @@ jobs:
       - name: Under the race detector and the strict pointer checks
         if: matrix.os == 'ubuntu-latest' && matrix.go == '1.27'
         run: |
-          (cd bindings/go/guatiao && go test -count=1 -race ./... && GOEXPERIMENT=cgocheck2 go test -count=1 ./...)
+          modules="./guatiao/... ./guatiao-serde/... ./guatiao-intake/..."
+          (cd bindings/go && go test -count=1 -race $modules && GOEXPERIMENT=cgocheck2 go test -count=1 $modules)
           (cd examples && go test -count=1 -race ./... && GOEXPERIMENT=cgocheck2 go test -count=1 ./...)
         env:
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
