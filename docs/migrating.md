@@ -841,7 +841,7 @@ spells the package (`bindings/python/guatiao-serde`,
 `bindings/julia/GuatiaoSerde`, `bindings/r/guatiao.serde`,
 `bindings/fortran/guatiao`, ...). Only what names a repository path
 changes: an install from a subdirectory, a CMake `add_subdirectory`, and
-the Go module path below. An fpm git dependency is unchanged.
+the Go module paths below. An fpm git dependency is unchanged.
 
 ### Python
 
@@ -911,21 +911,39 @@ import { ParseError } from 'guatiao-serde';
 
 ### Go
 
-The module moved: it is `github.com/Boriken-Dev/guatiao/bindings/go/guatiao`
-now, and its packages are `.../bindings/go/guatiao`,
-`.../bindings/go/guatiao/serde` and `.../bindings/go/guatiao/intake`.
+The binding is three modules, one per crate, released together under one
+version: `github.com/Boriken-Dev/guatiao/bindings/go/guatiao` (package
+`guatiao`), `.../bindings/go/guatiao-serde` (package `serde`) and
+`.../bindings/go/guatiao-intake` (package `intake`). The serde and intake
+modules require the core at the same version.
 
 ```sh
 go get github.com/Boriken-Dev/guatiao/bindings/go/guatiao
+go get github.com/Boriken-Dev/guatiao/bindings/go/guatiao-serde
+go get github.com/Boriken-Dev/guatiao/bindings/go/guatiao-intake
+```
+
+```go
+// before
+import (
+    "github.com/Boriken-Dev/guatiao/bindings/go"
+    "github.com/Boriken-Dev/guatiao/bindings/go/intake"
+    "github.com/Boriken-Dev/guatiao/bindings/go/serde"
+)
 ```
 
 ```go
 import (
-    "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
-    "github.com/Boriken-Dev/guatiao/bindings/go/guatiao/intake"
-    "github.com/Boriken-Dev/guatiao/bindings/go/guatiao/serde"
+    guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
+    intake "github.com/Boriken-Dev/guatiao/bindings/go/guatiao-intake"
+    serde "github.com/Boriken-Dev/guatiao/bindings/go/guatiao-serde"
 )
 ```
+
+An import of `.../bindings/go/guatiao/serde` or
+`.../bindings/go/guatiao/intake` changes the same way. The package names
+did not change, so only the imports do; an import names the serde and
+intake packages, since their paths no longer end in their names.
 
 A program that named its library with `guatiao.UseLibrary` and relied on
 `guatiao_serde` and `guatiao_intake` being found beside it names them too,

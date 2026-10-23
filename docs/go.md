@@ -18,6 +18,35 @@ first native call: the one `guatiao.UseLibrary(path)` named, else
 `GUATIAO_LIBRARY` (a file or a directory), else the platform's library
 search.
 
+## Three modules
+
+The binding is a module per crate, released together under one version:
+
+| module | package | library | its own variable |
+| --- | --- | --- | --- |
+| `github.com/Boriken-Dev/guatiao/bindings/go/guatiao` | `guatiao` (and `civil`) | `guatiao` | |
+| `github.com/Boriken-Dev/guatiao/bindings/go/guatiao-serde` | `serde` | `guatiao_serde` | `GUATIAO_SERDE_LIBRARY` |
+| `github.com/Boriken-Dev/guatiao/bindings/go/guatiao-intake` | `intake` | `guatiao_intake` | `GUATIAO_INTAKE_LIBRARY` |
+
+```bash
+go get github.com/Boriken-Dev/guatiao/bindings/go/guatiao-serde   # requires guatiao at the same version
+```
+
+```go
+import (
+	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
+	serde "github.com/Boriken-Dev/guatiao/bindings/go/guatiao-serde"
+)
+
+doc, err := serde.Parse(`{"port": 5900}`, serde.JSON) // a *guatiao.Value
+```
+
+The serde and intake modules find their libraries through their own
+variable first, then `GUATIAO_LIBRARY` (a directory, or a file that
+exports them, else the file beside it). They are built on the core's
+`guatiao.Surface`, which opens any other guatiao C library a package binds.
+In a checkout, `bindings/go/go.work` builds the three together.
+
 ## A kind, as an interface
 
 A kind is the table its C header declares. In Go it is an interface

@@ -621,12 +621,12 @@ write now.
   `bindings/r/guatiao.intake`, `bindings/matlab/guatiao`,
   `bindings/fortran/guatiao` and so on; the Node packages are developed as
   the workspace `bindings/node`. *Migration:* only what names a path in
-  the repository changes. The Go module is
-  `github.com/Boriken-Dev/guatiao/bindings/go/guatiao` (its packages
-  `.../guatiao`, `.../guatiao/serde`, `.../guatiao/intake`, tagged
-  `bindings/go/guatiao/vX.Y.Z`): change the imports and `go get` the new
-  path. A Julia or R install from the repository names the new
-  subdirectory (`subdir = "bindings/julia/Guatiao"`,
+  the repository changes. The Go modules are
+  `github.com/Boriken-Dev/guatiao/bindings/go/guatiao`,
+  `.../bindings/go/guatiao-serde` and `.../bindings/go/guatiao-intake`
+  (below), each tagged `bindings/go/<module>/vX.Y.Z`: change the imports
+  and `go get` the new paths. A Julia or R install from the repository
+  names the new subdirectory (`subdir = "bindings/julia/Guatiao"`,
   `remotes::install_github("Boriken-Dev/guatiao", subdir =
   "bindings/r/guatiao")`); a CMake `add_subdirectory` or `SOURCE_SUBDIR`
   names `bindings/fortran/guatiao`. An fpm git dependency is unchanged: the
@@ -656,13 +656,24 @@ write now.
     `guatiao-intake`, each with its own `useLibrary`. `guatiao/ffi` is
     new: `openSurface`, memory, `adopt`, `borrow`, `nodeOf`, `withNodes`
     and the one koffi, for a package over another guatiao library.
-  - Go: the module already had a package per crate; it moved to
-    `github.com/Boriken-Dev/guatiao/bindings/go/guatiao` (below), and
-    `serde` and `intake` each find their own library and have their own
-    `UseLibrary`: `guatiao.UseLibrary` names only the core's now (a file
-    it named was the place the others were looked for beside). The core
-    exports `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow` and
-    `StatusError` for a package over another guatiao library.
+  - Go: three modules, one per crate, each with its own tag and
+    requiring the core at the same version:
+    `github.com/Boriken-Dev/guatiao/bindings/go/guatiao` (package
+    `guatiao`), `.../bindings/go/guatiao-serde` (package `serde`) and
+    `.../bindings/go/guatiao-intake` (package `intake`). `go get` the
+    serde and intake modules; the import
+    `"github.com/Boriken-Dev/guatiao/bindings/go/serde"` (or
+    `".../bindings/go/guatiao/serde"`) is
+    `serde "github.com/Boriken-Dev/guatiao/bindings/go/guatiao-serde"`, and
+    `".../bindings/go/intake"` (or `".../bindings/go/guatiao/intake"`) is
+    `intake "github.com/Boriken-Dev/guatiao/bindings/go/guatiao-intake"`;
+    the package names are unchanged, so the code using them is too. Each
+    finds its own library and has its own `UseLibrary`:
+    `guatiao.UseLibrary` names only the core's now (a file it named was
+    the place the others were looked for beside). The core exports
+    `Surface` (a guatiao C library other than its own: found, opened, its
+    exports resolved), `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`
+    and `StatusError` for a package over another guatiao library.
   - Julia: `Guatiao.Serde` is the package `GuatiaoSerde` and
     `Guatiao.Intake` is `GuatiaoIntake` (`bindings/julia/GuatiaoSerde`,
     `bindings/julia/GuatiaoIntake`); `ParseError` moves to `GuatiaoSerde`.
