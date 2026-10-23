@@ -5,6 +5,31 @@ pub use guatiao::Schema
 pub use guatiao::ToValue
 pub use guatiao::kind
 pub mod guatiao::exports
+pub mod guatiao::exports::channel
+#[repr(C)] pub struct guatiao::exports::channel::WireEvent
+pub guatiao::exports::channel::WireEvent::at: usize
+pub guatiao::exports::channel::WireEvent::channel: u64
+pub guatiao::exports::channel::WireEvent::detail: guatiao::value::value::Value
+pub guatiao::exports::channel::WireEvent::kind: u32
+pub guatiao::exports::channel::WireEvent::message: guatiao::value::value::Value
+pub guatiao::exports::channel::WireEvent::refusal: u32
+pub guatiao::exports::channel::WireEvent::value: guatiao::value::value::Value
+impl core::fmt::Debug for guatiao::exports::channel::WireEvent
+pub fn guatiao::exports::channel::WireEvent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::exports::channel::WireReceiver
+impl core::fmt::Debug for guatiao::exports::channel::WireReceiver
+pub fn guatiao::exports::channel::WireReceiver::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub const guatiao::exports::channel::GUATIAO_WIRE_ACCEPTED: u32
+pub const guatiao::exports::channel::GUATIAO_WIRE_INVALID: u32
+pub const guatiao::exports::channel::GUATIAO_WIRE_MALFORMED: u32
+pub const guatiao::exports::channel::GUATIAO_WIRE_NOT_A_SCHEMA: u32
+pub const guatiao::exports::channel::GUATIAO_WIRE_NO_SCHEMA: u32
+#[no_mangle] pub unsafe c fn guatiao::exports::channel::guatiao_wire_announce(*const guatiao::value::alloc::Allocator, u64, *const guatiao::value::value::Value, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::channel::guatiao_wire_close(*const guatiao::value::alloc::Allocator, u64, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::channel::guatiao_wire_receiver_accept(*mut guatiao::exports::channel::WireReceiver, guatiao::value::types::buffer::Bytes<'_>, *mut guatiao::exports::channel::WireEvent) -> guatiao::value::status::Status
+#[no_mangle] pub unsafe c fn guatiao::exports::channel::guatiao_wire_receiver_free(*mut guatiao::exports::channel::WireReceiver)
+#[no_mangle] pub unsafe c fn guatiao::exports::channel::guatiao_wire_receiver_new(*const guatiao::value::alloc::Allocator) -> *mut guatiao::exports::channel::WireReceiver
+#[no_mangle] pub unsafe c fn guatiao::exports::channel::guatiao_wire_send(*const guatiao::value::alloc::Allocator, u64, *const guatiao::value::value::Value, *mut guatiao::value::value::Value) -> guatiao::value::status::Status
 pub mod guatiao::exports::library
 pub struct guatiao::exports::library::HostRegistry
 impl core::fmt::Debug for guatiao::exports::library::HostRegistry

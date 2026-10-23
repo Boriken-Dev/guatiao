@@ -123,3 +123,52 @@ pub fn to_value(v: &Json) -> guatiao::Value {
         }
     }
 }
+
+/// `wire.json`, the wire encoding's and channels' shared vectors.
+pub fn wire_file() -> Json {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/vectors/wire.json");
+    let text = std::fs::read_to_string(path).expect("the vector file is readable");
+    serde_json::from_str(&text).expect("the vector file is JSON")
+}
+
+/// Hex text as bytes.
+pub fn hex(text: &str) -> Vec<u8> {
+    assert!(text.len().is_multiple_of(2), "hex of even length: {text}");
+    (0..text.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&text[i..i + 2], 16).expect("hex"))
+        .collect()
+}
+
+/// A tree of `wire.json` (`[tag]` or `[tag, x]`) as the value it names.
+pub fn tree(t: &Json) -> guatiao::Value {
+    use guatiao::{Buffer, List, Map, Number, Value};
+    let parts = t.as_array().expect("a tree is a list");
+    let tag = parts[0].as_str().expect("a tree starts with its tag");
+    let arg = parts.get(1);
+    let text = || arg.and_then(Json::as_str).expect("text");
+    match tag {
+        "absent" => Value::absent(),
+        "null" => Value::null(),
+        "bool" => Value::from(arg.and_then(Json::as_bool).expect("a bool")),
+        "number" => Value::from(Number::new(text()).expect("a number")),
+        "string" => Value::from(text()),
+        "bytes" => Value::from(Buffer::new(&hex(text()))),
+        "list" => {
+            let mut list = List::new();
+            for item in arg.and_then(Json::as_array).expect("items") {
+                list.push(tree(item));
+            }
+            list.into()
+        }
+        "map" => {
+            let mut map = Map::new();
+            for pair in arg.and_then(Json::as_array).expect("pairs") {
+                let key = pair[0].as_str().expect("a key");
+                map.set(key, tree(&pair[1]));
+            }
+            map.into()
+        }
+        other => panic!("unknown tag {other}"),
+    }
+}

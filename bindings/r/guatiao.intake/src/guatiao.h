@@ -98,6 +98,38 @@ typedef struct guatiao_entry guatiao_entry;
 #define GUATIAO_FRAME_CLOSE 2
 
 /*
+ A `guatiao_wire_event`'s `refusal` for a frame that was read.
+ */
+#define GUATIAO_WIRE_ACCEPTED 0
+
+/*
+ A `guatiao_wire_event`'s `refusal` for bytes that are not a frame: truncated, an
+ unknown frame kind or tag, a length not in its shortest form, text that
+ is not UTF-8, a number outside the grammar, a repeated key, bytes after
+ the value. `at` names the byte. The status is `GUATIAO_ERR_BAD_VALUE`.
+ */
+#define GUATIAO_WIRE_MALFORMED 1
+
+/*
+ A `guatiao_wire_event`'s `refusal` for a value on a channel no schema was announced
+ on. The status is `GUATIAO_ERR_NOT_FOUND`.
+ */
+#define GUATIAO_WIRE_NO_SCHEMA 2
+
+/*
+ A `guatiao_wire_event`'s `refusal` for a schema frame whose value is not a schema.
+ The status is `GUATIAO_ERR_WRONG_KIND`.
+ */
+#define GUATIAO_WIRE_NOT_A_SCHEMA 3
+
+/*
+ A `guatiao_wire_event`'s `refusal` for a value its channel's schema refuses;
+ `detail` says which field and why. The status is
+ `GUATIAO_ERR_BAD_VALUE`.
+ */
+#define GUATIAO_WIRE_INVALID 4
+
+/*
  Shallow: top-level keys replace, nested maps are not recursed into.
  */
 #define GUATIAO_MERGE_SIMPLE 1
@@ -258,22 +290,21 @@ typedef uint32_t guatiao_status_code;
 typedef struct guatiao_registry guatiao_registry;
 
 /*
- Borrowed UTF-8 text: a pointer and a length, no NUL terminator. Text
- that is not UTF-8 is refused where it crosses into Rust.
-
- **Check `len` before `ptr`**: an empty view may carry a dangling or
- null pointer.
+ A receiver: each channel's schema, and the allocator everything it
+ answers is built in. Opaque to C.
  */
-typedef struct guatiao_str {
-  /*
-   First byte. May be null or dangling when `len` is 0.
-   */
-  const uint8_t *ptr;
-  /*
-   Length in bytes.
-   */
-  size_t len;
-} guatiao_str;
+typedef struct guatiao_wire_receiver guatiao_wire_receiver;
+
+/*
+ What an entry point reports: 0 is success and everything else is
+ failure.
+
+ An integer, never an enum: the space may be shared with a host's own
+ codes, so one `switch` covers both, and a code nobody here defines is
+ still a status. The codes this crate defines are `GUATIAO_OK` and the
+ `GUATIAO_ERR_*` constants.
+ */
+typedef uint32_t guatiao_status;
 
 /*
  An allocator, as a vtable a foreign caller can fill in.
@@ -314,17 +345,6 @@ typedef struct guatiao_alloc {
    */
   void (*release)(void *ctx);
 } guatiao_alloc;
-
-/*
- What an entry point reports: 0 is success and everything else is
- failure.
-
- An integer, never an enum: the space may be shared with a host's own
- codes, so one `switch` covers both, and a code nobody here defines is
- still a status. The codes this crate defines are `GUATIAO_OK` and the
- `GUATIAO_ERR_*` constants.
- */
-typedef uint32_t guatiao_status;
 
 /*
  Owned, growable UTF-8 text. `cap == 0` means the buffer is **not
@@ -499,6 +519,83 @@ typedef struct guatiao_value {
    */
   union guatiao_payload payload;
 } guatiao_value;
+
+/*
+ Borrowed bytes: any content at all, NULs included.
+
+ Same shape and check-the-length rule as `guatiao_str`, and a separate
+ type because "text" and "arbitrary bytes" are different promises.
+ */
+typedef struct guatiao_bytes {
+  /*
+   First byte. May be null or dangling when `len` is 0.
+   */
+  const uint8_t *ptr;
+  /*
+   Length in bytes.
+   */
+  size_t len;
+} guatiao_bytes;
+
+/*
+ What one frame said, or why it was refused.
+
+ Written empty (zeros, every value ABSENT) on entry to
+ `guatiao_wire_receiver_accept`. Its three values are the caller's, each
+ freed with `guatiao_value_free`.
+ */
+typedef struct guatiao_wire_event {
+  /*
+   The channel the frame named; 0 when the frame ended before it.
+   */
+  uint64_t channel;
+  /*
+   The frame's kind byte (`GUATIAO_FRAME_SCHEMA`, `_VALUE`, `_CLOSE`,
+   or the unknown byte a refusal names); 0 for an empty frame.
+   */
+  uint32_t kind;
+  /*
+   `GUATIAO_WIRE_ACCEPTED`, or which refusal: `GUATIAO_WIRE_*`.
+   */
+  uint32_t refusal;
+  /*
+   For `GUATIAO_WIRE_MALFORMED`, the offset of the byte in the frame
+   it went wrong at; 0 otherwise.
+   */
+  size_t at;
+  /*
+   For a schema frame, a copy of the schema now the channel's; for a
+   value frame, the value, checked against it. ABSENT otherwise.
+   */
+  struct guatiao_value value;
+  /*
+   The refusal in words, a STRING; ABSENT when the frame was read.
+   */
+  struct guatiao_value message;
+  /*
+   For `GUATIAO_WIRE_INVALID`, the map `guatiao_schema_validate` writes
+   (`key`, then `expected` or `known`, and `message`); ABSENT otherwise.
+   */
+  struct guatiao_value detail;
+} guatiao_wire_event;
+
+/*
+ Borrowed UTF-8 text: a pointer and a length, no NUL terminator. Text
+ that is not UTF-8 is refused where it crosses into Rust.
+
+ **Check `len` before `ptr`**: an empty view may carry a dangling or
+ null pointer.
+ */
+typedef struct guatiao_str {
+  /*
+   First byte. May be null or dangling when `len` is 0.
+   */
+  const uint8_t *ptr;
+  /*
+   Length in bytes.
+   */
+  size_t len;
+} guatiao_str;
 
 /*
  Why a call across a kind failed, as a provider states it.
@@ -1310,23 +1407,6 @@ typedef struct guatiao_timestamp {
 } guatiao_timestamp;
 
 /*
- Borrowed bytes: any content at all, NULs included.
-
- Same shape and check-the-length rule as `guatiao_str`, and a separate
- type because "text" and "arbitrary bytes" are different promises.
- */
-typedef struct guatiao_bytes {
-  /*
-   First byte. May be null or dangling when `len` is 0.
-   */
-  const uint8_t *ptr;
-  /*
-   Length in bytes.
-   */
-  size_t len;
-} guatiao_bytes;
-
-/*
  A borrowed sequence of values, in order.
  */
 typedef struct guatiao_values {
@@ -1459,6 +1539,120 @@ typedef struct guatiao_bytes_mut {
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
+
+/*
+ The frame that announces `schema` on `channel`, written through `out`
+ as a BYTES value built in `alloc`. A later announcement on the same
+ channel replaces it.
+
+ `out` is written the absent marker on entry. The schema is not judged
+ here: a receiver refuses one that is not a schema. A node `schema`
+ holds that its own reader refuses (text that is not UTF-8, a number
+ outside the grammar, an unknown tag) is `GUATIAO_ERR_BAD_VALUE`; a null
+ or unusable allocator is `GUATIAO_ERR_ALLOC`.
+
+ # Safety
+
+ The pointers are null or valid, and `out` addresses writable storage
+ for one value that does not already hold one.
+ */
+guatiao_status guatiao_wire_announce(const struct guatiao_alloc *alloc,
+                                     uint64_t channel,
+                                     const struct guatiao_value *schema,
+                                     struct guatiao_value *out);
+
+/*
+ The frame that carries `value` on `channel`, written through `out` as
+ a BYTES value built in `alloc`.
+
+ `out` is written the absent marker on entry; the refusals are
+ `guatiao_wire_announce`'s.
+
+ # Safety
+
+ As `guatiao_wire_announce`.
+ */
+guatiao_status guatiao_wire_send(const struct guatiao_alloc *alloc,
+                                 uint64_t channel,
+                                 const struct guatiao_value *value,
+                                 struct guatiao_value *out);
+
+/*
+ The frame that ends `channel`, written through `out` as a BYTES value
+ built in `alloc`. A receiver forgets the channel's schema.
+
+ `out` is written the absent marker on entry. A null or unusable
+ allocator is `GUATIAO_ERR_ALLOC`.
+
+ # Safety
+
+ `alloc` is null or valid, and `out` addresses writable storage for one
+ value that does not already hold one.
+ */
+guatiao_status guatiao_wire_close(const struct guatiao_alloc *alloc,
+                                  uint64_t channel,
+                                  struct guatiao_value *out);
+
+/*
+ A receiver that builds everything it answers, and the schemas it
+ keeps, in `alloc`. Null when `alloc` is null or unusable.
+
+ Free it with `guatiao_wire_receiver_free`. One caller at a time: it
+ is not safe to use from two threads at once.
+
+ # Safety
+
+ `alloc` is null or valid, and outlives the receiver and every value it
+ answers.
+ */
+struct guatiao_wire_receiver *guatiao_wire_receiver_new(const struct guatiao_alloc *alloc);
+
+/*
+ Frees a receiver and the schemas it keeps. Null is accepted and does
+ nothing.
+
+ # Safety
+
+ `recv` is null, or a live handle from `guatiao_wire_receiver_new` that
+ has not been freed and that nothing else is using.
+ */
+void guatiao_wire_receiver_free(struct guatiao_wire_receiver *recv);
+
+/*
+ Reads one `frame`, writing what it said through `out_event`.
+
+ A schema frame makes its schema the channel's; a value frame answers
+ its value only once its channel has a schema, and only if that schema
+ accepts it; a close frame forgets the channel's schema. The event's
+ `value` is the caller's: the schema's copy or the checked value, built
+ in the receiver's allocator.
+
+ A refusal is a status, with `out_event` saying which and why
+ (`refusal`, `at`, `message`, `detail`) and changing nothing the
+ receiver keeps:
+
+ - bytes that are not a frame: `GUATIAO_ERR_BAD_VALUE`,
+   `GUATIAO_WIRE_MALFORMED`, `at` the byte;
+ - a value on a channel with no schema: `GUATIAO_ERR_NOT_FOUND`,
+   `GUATIAO_WIRE_NO_SCHEMA`;
+ - a schema frame that is not a schema: `GUATIAO_ERR_WRONG_KIND`,
+   `GUATIAO_WIRE_NOT_A_SCHEMA`;
+ - a value its schema refuses: `GUATIAO_ERR_BAD_VALUE`,
+   `GUATIAO_WIRE_INVALID`, `detail` the field and what it accepts.
+
+ The allocator refusing is `GUATIAO_ERR_ALLOC` with `refusal` left
+ `GUATIAO_WIRE_ACCEPTED`; a schema frame that got that far is already
+ the channel's. `out_event` is written empty on entry.
+
+ # Safety
+
+ `recv` is null or a live handle nothing else is using; the frame's
+ bytes are readable for the call; `out_event` is null or addresses
+ writable storage for one event holding no value the caller still owns.
+ */
+guatiao_status guatiao_wire_receiver_accept(struct guatiao_wire_receiver *recv,
+                                            struct guatiao_bytes frame,
+                                            struct guatiao_wire_event *out_event);
 
 /*
  A new registry introducing its host as `id`/`version`.

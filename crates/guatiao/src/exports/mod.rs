@@ -73,6 +73,7 @@ use crate::value::status::Status;
 // Loading needs `libloading`, and the `load` feature exists so a library
 // AUTHOR takes no dependency at all. The artifact a host links turns it
 // on. A `//` comment, never a `///`.
+pub mod channel;
 #[cfg(feature = "load")]
 pub mod library;
 pub mod merge;

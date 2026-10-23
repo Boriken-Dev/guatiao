@@ -440,3 +440,152 @@ fn a_c_program_reads_and_writes_every_time_vector() {
     );
     println!("{}", stdout.trim());
 }
+
+/// The wire bytes of a vector file's tree, as hex.
+fn tree_hex(tree: &serde_json::Value) -> String {
+    guatiao::value::wire::to_bytes(&vectors::tree(tree))
+        .expect("a vector's tree encodes")
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// `tests/vectors/wire.json` as C arrays, for `wire_consumer.c`.
+fn wire_vectors_header() -> String {
+    let doc = vectors::wire_file();
+    let mut h = String::from(
+        "/* Generated from tests/vectors/wire.json by tests/c_exports.rs. */\n\
+         typedef struct { int build; unsigned long long channel; const char *payload;\n\
+         \x20                const char *frame; } frame_vector;\n\
+         typedef struct { const char *frame; unsigned status; unsigned refusal; int kind;\n\
+         \x20                unsigned long long channel; size_t at; const char *tree;\n\
+         \x20                const char *key; } step_vector;\n\
+         static const frame_vector FRAME_VECTORS[] = {\n",
+    );
+    let frames = doc["frames"].as_array().expect("frames");
+    for f in frames {
+        let build = match f["build"].as_str().unwrap() {
+            "announce" => 0,
+            "send" => 1,
+            _ => 2,
+        };
+        let payload = f.get("tree").map_or(String::new(), tree_hex);
+        h.push_str(&format!(
+            "  {{{build}, {}ULL, {}, {}}},\n",
+            f["channel"].as_u64().unwrap(),
+            c_string(&payload),
+            c_string(f["hex"].as_str().unwrap())
+        ));
+    }
+    h.push_str(&format!(
+        "}};\nstatic const size_t FRAME_COUNT = {};\nstatic const step_vector STEP_VECTORS[] = {{\n",
+        frames.len()
+    ));
+    let steps = doc["conversation"].as_array().expect("a conversation");
+    for s in steps {
+        let (status, refusal) = match s["refusal"].as_str() {
+            None => (
+                "GUATIAO_OK".to_string(),
+                "GUATIAO_WIRE_ACCEPTED".to_string(),
+            ),
+            Some(r) => (
+                doc["statuses"][r].as_str().unwrap().to_string(),
+                format!("GUATIAO_WIRE_{}", r.to_uppercase()),
+            ),
+        };
+        let kind = match (s["event"].as_str(), s["kind"].as_i64()) {
+            (Some("schema"), _) => 0,
+            (Some("value"), _) => 1,
+            (Some(_), _) => 2,
+            (None, Some(k)) => k,
+            (None, None) => -1,
+        };
+        let tree = s
+            .get("tree")
+            .map_or("NULL".into(), |t| c_string(&tree_hex(t)));
+        let key = s["key"].as_str().map_or("NULL".into(), c_string);
+        h.push_str(&format!(
+            "  {{{}, {status}, {refusal}, {kind}, {}ULL, {}, {tree}, {key}}},\n",
+            c_string(s["frame"].as_str().unwrap()),
+            s["channel"].as_u64().unwrap_or(0),
+            s["at"].as_u64().unwrap_or(0),
+        ));
+    }
+    h.push_str(&format!(
+        "}};\nstatic const size_t STEP_COUNT = {};\n",
+        steps.len()
+    ));
+    h
+}
+
+/// The wire vectors' frames built, and their conversation received, by a
+/// C program through the exported functions, every refusal included.
+#[test]
+fn a_c_program_announces_sends_closes_and_receives() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let source = manifest.join("tests/c_consumer/wire_consumer.c");
+    let include = manifest.join("include");
+
+    let Some(cc) = find_compiler() else {
+        println!("skipped: no C compiler found. See the other tests here for why that is a skip.");
+        return;
+    };
+    let Some((dir, dll)) = shared_library() else {
+        println!(
+            "skipped: the guatiao shared library is not beside this test \
+             binary; run `cargo build -p guatiao --all-features` first."
+        );
+        return;
+    };
+
+    let generated = dir.join("guatiao_wire_vectors");
+    std::fs::create_dir_all(&generated).expect("a directory for the generated header");
+    std::fs::write(generated.join("wire_vectors.h"), wire_vectors_header())
+        .expect("the generated header is written");
+    let out = dir.join(if cfg!(windows) {
+        "guatiao_wire_consumer.exe"
+    } else {
+        "guatiao_wire_consumer"
+    });
+
+    let mut compile = Command::new(&cc);
+    compile
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
+        .arg("-I")
+        .arg(&include)
+        .arg("-I")
+        .arg(&generated)
+        .arg("-o")
+        .arg(&out)
+        .arg(&source);
+    if cfg!(windows) {
+        compile.arg(dll.with_extension("dll.lib"));
+    } else {
+        compile
+            .arg(format!("-L{}", dir.display()))
+            .arg("-lguatiao")
+            .arg("-Wl,-rpath,$ORIGIN");
+    }
+    let compiled = compile.output().expect("the compiler runs");
+    assert!(
+        compiled.status.success(),
+        "the C program did not compile or link.\nstderr:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+
+    let run = Command::new(&out)
+        .current_dir(&dir)
+        .output()
+        .expect("the program was just built");
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        run.status.success(),
+        "the C program failed its own checks.\nstdout:\n{stdout}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(
+        stdout.contains("all checks passed"),
+        "the program exited 0 without reporting success.\nstdout:\n{stdout}"
+    );
+    println!("{}", stdout.trim());
+}

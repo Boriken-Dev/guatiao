@@ -78,7 +78,7 @@ cargo build -p guatiao --target wasm32-unknown-unknown --release
 Two gates on a pinned nightly (`rustup toolchain install nightly-2026-09-21
 --component miri,rust-src`, `cargo install cargo-public-api --version
 0.52.0`). Miri runs the tests that load no library; the deep-tree test is
-skipped for time only:
+skipped for time only, and the vector test reads its file (isolation off):
 
 ```bash
 cargo +nightly-2026-09-21 miri test -p guatiao --all-features --lib -- value:: schema::
@@ -92,6 +92,8 @@ cargo +nightly-2026-09-21 miri test -p guatiao-intake --all-features \
 cargo +nightly-2026-09-21 miri test -p guatiao --all-features --test wire_roundtrip \
   --test wire_channel -- --skip ten_thousand_random --skip a_tree_deeper_than \
   --skip a_thousand_keys
+MIRIFLAGS="-Zmiri-disable-isolation" \
+  cargo +nightly-2026-09-21 miri test -p guatiao --all-features --test wire_vectors
 ```
 
 The loader, the kind runtime and sources, through descriptors the host

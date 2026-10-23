@@ -807,6 +807,54 @@ fn out_parameter_cases() -> Vec<(&'static str, fn())> {
                 )
             });
         }),
+        ("guatiao_wire_announce", || {
+            let schema = Value::from(Map::new());
+            // SAFETY: a null allocator is the failure under test.
+            leaves_absent("wire_announce", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+                guatiao::exports::channel::guatiao_wire_announce(core::ptr::null(), 1, &schema, out)
+            });
+        }),
+        ("guatiao_wire_send", || {
+            let value = Value::null();
+            // SAFETY: as above.
+            leaves_absent("wire_send", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+                guatiao::exports::channel::guatiao_wire_send(core::ptr::null(), 1, &value, out)
+            });
+        }),
+        ("guatiao_wire_close", || {
+            // SAFETY: as above.
+            leaves_absent("wire_close", Status::GUATIAO_ERR_ALLOC, |out| unsafe {
+                guatiao::exports::channel::guatiao_wire_close(core::ptr::null(), 1, out)
+            });
+        }),
+        ("guatiao_wire_receiver_accept", || {
+            use guatiao::exports::channel::{WireEvent, guatiao_wire_receiver_accept};
+            let mut event = WireEvent {
+                channel: 9,
+                kind: 9,
+                refusal: 9,
+                at: 9,
+                value: stale(),
+                message: stale(),
+                detail: stale(),
+            };
+            // SAFETY: a null receiver is the failure under test.
+            let status = unsafe {
+                guatiao_wire_receiver_accept(
+                    core::ptr::null_mut(),
+                    guatiao::value::types::Bytes::new(&[2, 1]),
+                    &mut event,
+                )
+            };
+            assert_eq!(status, Status::GUATIAO_ERR_NULL);
+            assert_eq!(
+                (event.channel, event.kind, event.refusal, event.at),
+                (0, 0, 0, 0)
+            );
+            assert!(
+                is_absent(&event.value) && is_absent(&event.message) && is_absent(&event.detail)
+            );
+        }),
         ("guatiao_merge", || {
             let (a, b) = (Value::from(Map::new()), Value::from(Map::new()));
             let mut error = stale();
@@ -1577,4 +1625,145 @@ fn time_cases() -> Vec<(&'static str, fn())> {
             assert_eq!((secs, nanos), (0, 0));
         }),
     ]
+}
+
+/// A channel conversation through the C surface, frames built by the C
+/// builders: every event's value is the caller's to free, and every
+/// refusal reaches C as its status, its code and its words.
+#[test]
+fn a_channel_conversation_crosses_the_c_surface() {
+    use guatiao::exports::channel::*;
+    use guatiao::exports::value::guatiao_value_free;
+    use guatiao::value::types::Bytes;
+
+    let alloc = Alloc::rust();
+    let schema = SchemaBuilder::new()
+        .field(FieldBuilder::new("greeting", KindBuilder::string()).required())
+        .finish()
+        .unwrap();
+    let mut hello = Map::new();
+    hello.set("greeting", "hello");
+    let hello = Value::from(hello);
+
+    let frame = |build: &dyn Fn(*mut Value) -> Status| {
+        let mut out = Value::null();
+        assert_eq!(build(&mut out), Status::GUATIAO_OK);
+        TryAsRef::<[u8]>::try_as_ref(&out).unwrap().to_vec()
+    };
+    // SAFETY: valid pointers throughout; each `out` holds nothing owned.
+    let announce = frame(&|out| unsafe { guatiao_wire_announce(alloc.as_raw(), 5, &schema, out) });
+    // SAFETY: as above.
+    let send = frame(&|out| unsafe { guatiao_wire_send(alloc.as_raw(), 5, &hello, out) });
+    let empty = Value::from(Map::new());
+    // SAFETY: as above.
+    let invalid = frame(&|out| unsafe { guatiao_wire_send(alloc.as_raw(), 5, &empty, out) });
+    // SAFETY: as above.
+    let stray = frame(&|out| unsafe { guatiao_wire_send(alloc.as_raw(), 6, &hello, out) });
+    let five = Value::from(5i64);
+    // SAFETY: as above.
+    let not_schema = frame(&|out| unsafe { guatiao_wire_announce(alloc.as_raw(), 6, &five, out) });
+    // SAFETY: as above.
+    let close = frame(&|out| unsafe { guatiao_wire_close(alloc.as_raw(), 5, out) });
+
+    // SAFETY: a valid allocator outliving the receiver.
+    let recv = unsafe { guatiao_wire_receiver_new(alloc.as_raw()) };
+    assert!(!recv.is_null());
+    let accept = |bytes: &[u8]| {
+        let mut event = core::mem::MaybeUninit::<WireEvent>::uninit();
+        // SAFETY: a live receiver, readable bytes, writable storage.
+        let status =
+            unsafe { guatiao_wire_receiver_accept(recv, Bytes::new(bytes), event.as_mut_ptr()) };
+        // SAFETY: written on entry.
+        (status, unsafe { event.assume_init() })
+    };
+    let free = |mut event: WireEvent| {
+        for v in [&mut event.value, &mut event.message, &mut event.detail] {
+            // SAFETY: values the event handed over, freed once.
+            assert_eq!(unsafe { guatiao_value_free(v) }, Status::GUATIAO_OK);
+        }
+    };
+
+    let (status, event) = accept(&announce);
+    assert_eq!(
+        (status, event.kind, event.channel),
+        (Status::GUATIAO_OK, 0, 5)
+    );
+    assert_eq!(event.value, schema, "a copy of the schema, the caller's");
+    free(event);
+
+    let (status, event) = accept(&send);
+    assert_eq!(
+        (status, event.kind, event.channel),
+        (Status::GUATIAO_OK, 1, 5)
+    );
+    assert_eq!(event.value, hello);
+    free(event);
+
+    let (status, event) = accept(&invalid);
+    assert_eq!(
+        (status, event.refusal),
+        (Status::GUATIAO_ERR_BAD_VALUE, GUATIAO_WIRE_INVALID)
+    );
+    let key = TryAsRef::<Map>::try_as_ref(&event.detail).and_then(|m| m.get("key"));
+    assert_eq!(str_or(key, ""), "greeting");
+    assert!(
+        TryAsRef::<str>::try_as_ref(&event.message)
+            .unwrap()
+            .contains("greeting")
+    );
+    free(event);
+
+    let (status, event) = accept(&stray);
+    assert_eq!(
+        (status, event.refusal, event.channel),
+        (Status::GUATIAO_ERR_NOT_FOUND, GUATIAO_WIRE_NO_SCHEMA, 6)
+    );
+    free(event);
+
+    let (status, event) = accept(&not_schema);
+    assert_eq!(
+        (status, event.refusal),
+        (Status::GUATIAO_ERR_WRONG_KIND, GUATIAO_WIRE_NOT_A_SCHEMA)
+    );
+    free(event);
+
+    let (status, event) = accept(&[1, 5, 9]);
+    assert_eq!(
+        (status, event.refusal, event.at),
+        (Status::GUATIAO_ERR_BAD_VALUE, GUATIAO_WIRE_MALFORMED, 2)
+    );
+    assert!(is_absent(&event.detail));
+    free(event);
+
+    let (status, event) = accept(&close);
+    assert_eq!(
+        (status, event.kind, event.channel),
+        (Status::GUATIAO_OK, 2, 5)
+    );
+    assert!(is_absent(&event.value));
+    free(event);
+
+    let (status, event) = accept(&send);
+    assert_eq!(
+        event.refusal, GUATIAO_WIRE_NO_SCHEMA,
+        "closing forgot the schema"
+    );
+    assert_eq!(status, Status::GUATIAO_ERR_NOT_FOUND);
+    free(event);
+
+    // An empty frame is refused, not read past.
+    let (status, event) = accept(&[]);
+    assert_eq!(
+        (status, event.refusal, event.at),
+        (Status::GUATIAO_ERR_BAD_VALUE, GUATIAO_WIRE_MALFORMED, 0)
+    );
+    free(event);
+
+    // SAFETY: a live receiver freed once; null is accepted.
+    unsafe {
+        guatiao_wire_receiver_free(recv);
+        guatiao_wire_receiver_free(core::ptr::null_mut());
+    }
+    // SAFETY: a null allocator is refused with a null handle.
+    assert!(unsafe { guatiao_wire_receiver_new(core::ptr::null()) }.is_null());
 }

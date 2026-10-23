@@ -166,6 +166,14 @@ impl Receiver {
     }
 }
 
+/// The kind byte and the channel number `frame` starts with, each as far
+/// as it can be read.
+pub(crate) fn head(frame: &[u8]) -> (Option<u8>, Option<u64>) {
+    let kind = frame.first().copied();
+    let channel = kind.and_then(|_| channel_of(frame).ok()).map(|(c, _)| c);
+    (kind, channel)
+}
+
 /// The channel number after the kind byte, and where the payload starts.
 fn channel_of(frame: &[u8]) -> Result<(u64, usize), WireError> {
     let mut r = Reader {

@@ -93,7 +93,7 @@ pub unsafe extern "C" fn guatiao_schema_validate(
 }
 
 /// The validation failure as a value, in the same shape as the merge's.
-fn describe_validation(error: &ValidationError, alloc: Alloc) -> Option<Value> {
+pub(crate) fn describe_validation(error: &ValidationError, alloc: Alloc) -> Option<Value> {
     let mut out = Map::new_in(alloc);
     match error {
         ValidationError::UnknownOption { key, known } => {
