@@ -31,6 +31,7 @@ nav:
   - Passing data: ownership.md
   - Encodings: encodings.md
   - Configuration files: configuration.md
+  - A bridge to another format: bridges.md
   - A provider's form: forms.md
   - Python, host and provider: python.md
   - Node.js, host and provider: node.md

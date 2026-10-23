@@ -3,8 +3,8 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! The Rust snippets of the landing page, the ownership guide, the migration
-//! page, the configuration page and the root README, compiled and checked to
-//! still be the text those pages show.
+//! page, the configuration page, the page on bridges and the root README,
+//! compiled and checked to still be the text those pages show.
 //!
 //! Each test holds its own copy of a snippet between marker comments and
 //! compares it, line for line, with the matching fenced `rust` block of the
@@ -20,6 +20,7 @@ const OWNERSHIP: &str = include_str!("../../../docs/ownership.md");
 const MIGRATING: &str = include_str!("../../../docs/migrating.md");
 const FORMS: &str = include_str!("../../../docs/forms.md");
 const CONFIGURATION: &str = include_str!("../../../docs/configuration.md");
+const BRIDGES: &str = include_str!("../../../docs/bridges.md");
 const DERIVED_GREETER: &str = include_str!("../../derived_greeter/src/lib.rs");
 
 #[test]
@@ -1080,6 +1081,229 @@ fn the_configuration_page_s_serde_fields_convert() -> Result<(), Box<dyn core::e
     );
     assert_eq!(rust_block(CONFIGURATION, 4), marked("CONFIG-SERDE"));
     assert_eq!(rust_block(CONFIGURATION, 5), marked("CONFIG-SERDE-WITH"));
+    Ok(())
+}
+
+#[test]
+fn the_bridges_page_writes_lines_from_any_walk() -> Result<(), Box<dyn core::error::Error>> {
+    // BRIDGE-WRITE-BEGIN
+    use guatiao::value::visit::{Flat, Sink};
+    use guatiao::{ToValue, ValueError, Walk};
+
+    /// Writes any walk as `dotted.path=value` lines: a map's entries
+    /// under their keys, a list's elements under their indexes.
+    #[derive(Default)]
+    struct Lines {
+        out: String,
+        path: Vec<String>,
+        // Per open container: a list's next index, or `None` for a map.
+        open: Vec<Option<usize>>,
+    }
+
+    impl Lines {
+        fn line(&mut self, text: &str) -> Result<(), ValueError> {
+            self.out.push_str(&self.path.join("."));
+            self.out.push('=');
+            self.out.push_str(text);
+            self.out.push('\n');
+            self.next();
+            Ok(())
+        }
+
+        /// After an element: a list's next one goes under the next index.
+        fn next(&mut self) {
+            if let Some(Some(index)) = self.open.last_mut() {
+                *index += 1;
+                let index = index.to_string();
+                if let Some(last) = self.path.last_mut() {
+                    *last = index;
+                }
+            }
+        }
+
+        fn close(&mut self) -> Result<(), ValueError> {
+            self.open.pop();
+            self.path.pop();
+            self.next();
+            Ok(())
+        }
+    }
+
+    impl Sink for Lines {
+        type Error = ValueError;
+
+        fn absent(&mut self) -> Result<(), ValueError> {
+            self.next();
+            Ok(())
+        }
+        fn null(&mut self) -> Result<(), ValueError> {
+            self.line("")
+        }
+        fn bool(&mut self, value: bool) -> Result<(), ValueError> {
+            self.line(if value { "true" } else { "false" })
+        }
+        fn number(&mut self, text: &str) -> Result<(), ValueError> {
+            self.line(text)
+        }
+        fn string(&mut self, text: &str) -> Result<(), ValueError> {
+            self.line(text)
+        }
+        fn bytes(&mut self, _bytes: &[u8]) -> Result<(), ValueError> {
+            Err(ValueError::WrongKind)
+        }
+        fn list_begin(&mut self, _len: Option<usize>) -> Result<(), ValueError> {
+            self.open.push(Some(0));
+            self.path.push("0".into());
+            Ok(())
+        }
+        fn list_end(&mut self) -> Result<(), ValueError> {
+            self.close()
+        }
+        fn map_begin(&mut self, _len: Option<usize>) -> Result<(), ValueError> {
+            self.open.push(None);
+            self.path.push(String::new());
+            Ok(())
+        }
+        fn key(&mut self, key: &str) -> Result<(), ValueError> {
+            if let Some(last) = self.path.last_mut() {
+                *last = key.into();
+            }
+            Ok(())
+        }
+        fn map_end(&mut self) -> Result<(), ValueError> {
+            self.close()
+        }
+    }
+
+    #[derive(ToValue)]
+    struct Server {
+        host: String,
+        port: u16,
+    }
+
+    #[derive(ToValue)]
+    struct Fleet {
+        name: String,
+        servers: Vec<Server>,
+    }
+
+    let fleet = Fleet {
+        name: "edge".into(),
+        servers: vec![
+            Server {
+                host: "10.0.0.1".into(),
+                port: 5900,
+            },
+            Server {
+                host: "10.0.0.2".into(),
+                port: 5901,
+            },
+        ],
+    };
+    let mut lines = Lines::default();
+    fleet.walk(Flat(&mut lines))?;
+    assert_eq!(
+        lines.out,
+        "name=edge\n\
+         servers.0.host=10.0.0.1\nservers.0.port=5900\n\
+         servers.1.host=10.0.0.2\nservers.1.port=5901\n"
+    );
+    // BRIDGE-WRITE-END
+
+    // A value walks into it the same way, and wire bytes do too.
+    let mut from_tree = Lines::default();
+    fleet.to_value()?.walk(Flat(&mut from_tree))?;
+    assert_eq!(from_tree.out, lines.out);
+    let bytes = guatiao::value::wire::to_bytes_of(&fleet)?;
+    let mut from_bytes = Lines::default();
+    guatiao::value::wire::Encoded(&bytes).walk(Flat(&mut from_bytes))?;
+    assert_eq!(from_bytes.out, lines.out);
+
+    assert_eq!(rust_block(BRIDGES, 0), marked("BRIDGE-WRITE"));
+    Ok(())
+}
+
+#[test]
+fn the_bridges_page_reads_lines_into_any_type() -> Result<(), Box<dyn core::error::Error>> {
+    // BRIDGE-READ-BEGIN
+    use guatiao::value::visit::{Build, MapWalker, Seed, Walker};
+    use guatiao::{FromValue, FromWalk, Kinds, MapError, Number};
+
+    /// `key=value` lines as one map. The format has no types, so each
+    /// value goes to the reader as what it accepts: a number when it takes
+    /// one and the text is one, else a string.
+    struct Lines<'a>(&'a str);
+
+    struct Entries<'a> {
+        lines: core::str::Lines<'a>,
+        value: &'a str,
+    }
+
+    struct Text<'a>(&'a str);
+
+    impl Walker for Lines<'_> {
+        fn build<B: Build>(self, build: B) -> Result<B::Out, MapError> {
+            build.map(Entries {
+                lines: self.0.lines(),
+                value: "",
+            })
+        }
+    }
+
+    impl MapWalker for Entries<'_> {
+        fn len_hint(&self) -> Option<usize> {
+            None
+        }
+
+        fn next_key<R>(&mut self, read: impl FnOnce(&str) -> R) -> Result<Option<R>, MapError> {
+            let Some(line) = self.lines.find(|line| !line.is_empty()) else {
+                return Ok(None);
+            };
+            let (key, value) = line.split_once('=').unwrap_or((line, ""));
+            self.value = value;
+            Ok(Some(read(key)))
+        }
+
+        fn value_seed<S: Seed>(&mut self, seed: S) -> Result<S::Out, MapError> {
+            seed.read(Text(self.value))
+        }
+    }
+
+    impl Walker for Text<'_> {
+        fn build<B: Build>(self, build: B) -> Result<B::Out, MapError> {
+            if build.kinds().intersects(Kinds::NUMBER) && Number::is_number(self.0) {
+                build.number(self.0)
+            } else {
+                build.string(self.0)
+            }
+        }
+    }
+
+    #[derive(FromValue, Debug, PartialEq)]
+    struct Endpoint {
+        host: String,
+        port: u16,
+        label: Option<String>,
+    }
+
+    let endpoint = Endpoint::from_walk(Lines("host=10.0.0.1\nport=5900\n"))?;
+    assert_eq!(
+        endpoint,
+        Endpoint {
+            host: "10.0.0.1".into(),
+            port: 5900,
+            label: None
+        }
+    );
+    // BRIDGE-READ-END
+
+    // Into a value through the same walker; text a field refuses is an error.
+    let value = guatiao::Value::from_walk(Lines("host=h\nport=1\n"))?;
+    assert_eq!(Endpoint::from_value(&value)?.port, 1);
+    let refused = Endpoint::from_walk(Lines("host=h\nport=many\n"));
+    assert!(refused.is_err());
+
+    assert_eq!(rust_block(BRIDGES, 1), marked("BRIDGE-READ"));
     Ok(())
 }
 
