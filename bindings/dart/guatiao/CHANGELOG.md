@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **The web**: the same API under dart2js and dart2wasm, over the
+  WebAssembly module a page loads with `loadModule(url)` or
+  `loadModuleBytes(bytes)`; one module per page, every package using it.
+  Nodes and allocators are an `Address` there; `Registry` and `kindTable`
+  throw `Unsupported`. `package:guatiao/wasm.dart` is the web's
+  counterpart of `ffi.dart`. `pubspec.yaml` declares `web`.
 - **Values on the wire and channels**: `ref.toWire()` and
   `Value.fromWire(bytes)`; `package:guatiao/wire.dart` with `announce`,
   `send` and `close` frames and a `Receiver` whose `accept(frame)`

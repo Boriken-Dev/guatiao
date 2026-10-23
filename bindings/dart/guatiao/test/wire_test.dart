@@ -9,24 +9,18 @@
 library;
 
 import 'dart:convert';
-import 'dart:ffi';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:guatiao/guatiao.dart';
-import 'package:guatiao/src/bindings.g.dart';
 import 'package:guatiao/wire.dart' as wire;
 import 'package:test/test.dart';
 
 import 'support.dart';
 
-Map<String, Object?> _vectors() => jsonDecode(
-      File(repoPath(['crates', 'guatiao', 'tests', 'vectors', 'wire.json']))
-          .readAsStringSync(),
-    ) as Map<String, Object?>;
+late final Map<String, Object?> _vectors;
 
 List<Map<String, Object?>> _list(String key) =>
-    (_vectors()[key] as List).cast<Map<String, Object?>>();
+    (_vectors[key] as List).cast<Map<String, Object?>>();
 
 Uint8List _hex(String text) => Uint8List.fromList([
       for (var i = 0; i < text.length; i += 2)
@@ -37,16 +31,17 @@ String _toHex(List<int> bytes) =>
     bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
 /// The channel a frame names, read from its bytes: JSON numbers past 2^53
-/// do not survive `jsonDecode`, and a channel is 64 bits.
+/// do not survive `jsonDecode`, and a channel is 64 bits, the ones past
+/// 2^63 carried as negative `int`s.
 int _channelOf(Uint8List frame) {
-  var n = 0;
+  var n = BigInt.zero;
   var shift = 0;
   for (var i = 1; i < frame.length; i++) {
-    n |= (frame[i] & 0x7f) << shift;
+    n |= BigInt.from(frame[i] & 0x7f) << shift;
     if (frame[i] & 0x80 == 0) break;
     shift += 7;
   }
-  return n;
+  return n.toSigned(64).toInt();
 }
 
 /// A node as the vector file writes a tree.
@@ -117,7 +112,12 @@ Value build(List<Object?> tree) {
 }
 
 void main() {
-  setUpAll(libraryDir);
+  setUpAll(() async {
+    await setUpLibrary();
+    _vectors = jsonDecode(await readRepoText(
+            ['crates', 'guatiao', 'tests', 'vectors', 'wire.json']))
+        as Map<String, Object?>;
+  });
 
   test('every value decodes to its tree and encodes to its bytes', () {
     final cases = _list('values');
@@ -179,6 +179,15 @@ void main() {
     );
   });
 
+  test('a channel past 2^63 comes back as Dart carries it', () {
+    final receiver = wire.Receiver();
+    addTearDown(receiver.close);
+    // 2^64 - 1, the largest channel: -1 as a Dart int on every platform.
+    final event = receiver.accept(wire.close(-1));
+    expect(event.kind, wire.Frame.close);
+    expect(event.channel, -1);
+  });
+
   test('the conversation runs through one receiver', () {
     final receiver = wire.Receiver();
     final kinds = {
@@ -231,18 +240,5 @@ void main() {
     receiver.close();
     receiver.close();
     expect(() => receiver.accept(wire.close(1)), throwsStateError);
-  });
-
-  test('the event is laid out as the header says', () {
-    expect(sizeOf<guatiao_wire_event>(), 144);
-    expect(wire.Frame.values.map((f) => f.code), [0, 1, 2]);
-    final header = File(repoPath(['crates', 'guatiao', 'include', 'guatiao.h']))
-        .readAsStringSync();
-    for (final f in wire.Frame.values) {
-      expect(
-        header,
-        contains('#define GUATIAO_FRAME_${f.name.toUpperCase()} ${f.code}\n'),
-      );
-    }
   });
 }

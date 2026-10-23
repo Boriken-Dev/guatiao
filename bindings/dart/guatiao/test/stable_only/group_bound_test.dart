@@ -17,6 +17,7 @@
 /// `NativeCallable.isolateGroupBound` is not in SDK 3.6, so this file does
 /// not compile there. It lives in `stable_only/`, which the floor leg of CI
 /// leaves out by running `test/*_test.dart`.
+@TestOn('vm')
 library;
 
 import 'dart:ffi';

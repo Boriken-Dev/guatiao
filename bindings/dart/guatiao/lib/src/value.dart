@@ -11,56 +11,9 @@ import 'package:ffi/ffi.dart';
 import 'bindings.g.dart';
 import 'errors.dart';
 import 'library.dart' as native;
+import 'value_common.dart';
 
-/// `guatiao_tag`: which arm of a value's payload is live.
-enum Tag {
-  absent(0),
-  nullValue(1),
-  boolean(2),
-  number(3),
-  string(4),
-  bytes(5),
-  list(6),
-  map(7);
-
-  const Tag(this.code);
-
-  final int code;
-
-  /// The tag `code` names, or `null` for a tag this binding does not know.
-  static Tag? fromCode(int code) {
-    for (final tag in Tag.values) {
-      if (tag.code == code) return tag;
-    }
-    return null;
-  }
-}
-
-/// How a number's exact text becomes a Dart value.
-enum Numbers {
-  /// An `int` when the text has no `.`, `e` or `E` and fits 64 bits, a
-  /// `BigInt` when it does not fit, a `double` otherwise.
-  auto,
-
-  /// The exact text, always.
-  text,
-
-  /// A `BigInt` when the text is integral, a `double` when it is not.
-  bigInt,
-}
-
-/// The answer to a lookup that found nothing.
-///
-/// Distinct from `null`, which is the stored null.
-class Absent {
-  const Absent._();
-
-  @override
-  String toString() => 'guatiao.absent';
-}
-
-/// The one [Absent].
-const Absent absent = Absent._();
+export 'value_common.dart';
 
 class _Unset {
   const _Unset();
@@ -193,20 +146,8 @@ Pointer<guatiao_value> _walk(Pointer<guatiao_value> root, List<Object> path) {
 
 Uint8List _utf8Bytes(String text) => Uint8List.fromList(utf8.encode(text));
 
-Object _numberToDart(Uint8List text, Numbers numbers) {
-  final s = String.fromCharCodes(text);
-  switch (numbers) {
-    case Numbers.text:
-      return s;
-    case Numbers.bigInt:
-      return BigInt.tryParse(s) ?? double.parse(s);
-    case Numbers.auto:
-      if (s.contains('.') || s.contains('e') || s.contains('E')) {
-        return double.parse(s);
-      }
-      return int.tryParse(s) ?? BigInt.parse(s);
-  }
-}
+Object _numberToDart(Uint8List text, Numbers numbers) =>
+    numberFromText(String.fromCharCodes(text), numbers);
 
 Object? _nodeToDart(Pointer<guatiao_value> node, Numbers numbers) {
   if (node == nullptr) return absent;
@@ -497,9 +438,7 @@ class Ref {
   int intOr(int fallback) {
     final text = _numberText(node());
     if (text.isEmpty || text.length >= 48) return fallback;
-    final s = String.fromCharCodes(text);
-    if (s.contains('.') || s.contains('e') || s.contains('E')) return fallback;
-    return int.tryParse(s) ?? fallback;
+    return intFromText(String.fromCharCodes(text)) ?? fallback;
   }
 
   /// This node as a `double`, or `fallback`.

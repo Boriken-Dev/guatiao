@@ -5,9 +5,8 @@ Self-contained — this file ships with the package, so it names no repo path.
 
 A plain Dart package with one dependency, `package:ffi`. It does **not**
 depend on Flutter: a plain Dart package works inside a Flutter app, and
-the reverse is not true. 64-bit platforms only, and **not on the web**:
-`dart:ffi` does not exist in a browser, so `pubspec.yaml` declares
-Android, iOS, Linux, macOS and Windows and no `web`.
+the reverse is not true. 64-bit native platforms, and the web: there the
+same API runs over the WebAssembly module a page loads (below).
 
 ## Finding the native library
 
@@ -29,6 +28,65 @@ the package `guatiao_serde`, forms `guatiao_intake`: each opens its own
 library through `openSurface` (below), consulting its own variable
 (`GUATIAO_SERDE_LIBRARY`, `GUATIAO_INTAKE_LIBRARY`) before
 `GUATIAO_LIBRARY`.
+
+## On the web
+
+The same libraries and API, over one WebAssembly module instead of a
+native library: a conditional import picks it under dart2js and dart2wasm.
+The module is built from guatiao's sources by one command, the core and
+forms in one file:
+
+```bash
+cargo build -p guatiao-intake --target wasm32-unknown-unknown --release
+# target/wasm32-unknown-unknown/release/guatiao_intake.wasm
+```
+
+or an application's own crate carrying the surfaces it wants, JSON, TOML
+and YAML included. Serve it with the page and load it before the first
+call:
+
+```dart
+import 'package:guatiao/guatiao.dart';
+
+await loadModule(Uri.parse('guatiao_intake.wasm'));   // relative to the page
+final v = Value.fromDart({'host': '10.0.0.1'});
+```
+
+- `loadModule(Uri)` fetches and instantiates it; `loadModuleBytes(bytes)`
+  takes the file's bytes. **One module per page**: a second load throws
+  `StateError`, since every value lives in the loaded module's memory.
+  `forgetLibraries()` drops it; a value built in it then throws
+  `StateError`. A call before any load throws `LibraryNotFound`.
+- `guatiao_serde` and `guatiao_intake` call the same module, so it must
+  carry their surfaces: a missing one is `LibraryNotFound`, a format the
+  build left out `UnsupportedError` naming its feature.
+- Values live in the module's memory; text and bytes are copied in and
+  out. `close()` is required as on the VM; a `Finalizer` backstop frees
+  both the tree and its root. The memory may grow on any call, and every
+  read goes through the module again, so a value stays readable.
+- Where the VM names `Pointer<guatiao_value>` or `Pointer<guatiao_alloc>`
+  the web has `Address`, an offset into the module's memory:
+  `Value.adopt(Address, {Address? alloc})`, `Ref.borrowed(Address)`,
+  `value.pointer`, `ref.requireNode()`, `ValueOwner.rootNode` and
+  `allocator`, and every `alloc:` parameter.
+- **Not on the web**, each throwing `Unsupported` that says so: `Registry`
+  (its constructor) and `kindTable`, since a browser maps no libraries.
+  `useLibrary` and `package:guatiao/ffi.dart` do not exist there;
+  `libraryDirectory` is settable and ignored. `loadModule` and
+  `loadModuleBytes` on the VM throw `Unsupported`.
+- **dart2js integers** are JavaScript numbers, exact to 2^53: `toDart()`
+  answers a `BigInt` for an integer past that, `intOr` falls back, a
+  channel or a span field past it is not exact, and a `double` with no
+  fraction is an `int` and is written as one (`1`, not `1.0`). dart2wasm
+  has 64-bit integers, as the VM does.
+- `package:guatiao/wasm.dart` is the web's counterpart of `ffi.dart`, for
+  a package over another surface: `WasmModule` (`call`, `provides`,
+  memory readers and writers, `alloc`/`free` over
+  `guatiao_memory_alloc`, `defaultAlloc`), `Address`, `I64`,
+  `withScratch`/`Scratch` (a call's arguments, released together),
+  `openSurface`, `takeValue`, `freeNode`, `freeRoot`, `strOf`, and the
+  wasm32 layout constants. It imports `dart:js_interop` and exists on the
+  web only.
 
 ## Values
 

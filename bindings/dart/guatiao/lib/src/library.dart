@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 
 import 'bindings.g.dart';
+import 'status.dart';
 
 /// No library of this base name was found by any route.
 class LibraryNotFound implements Exception {
@@ -306,3 +307,21 @@ NativeLib openSurface(String basename, {String? variable, String? probe}) =>
 
 /// The `guatiao` library, loaded on first use.
 NativeLib core() => openSurface('guatiao');
+
+/// Loads a WebAssembly module, on the web. A native process loads a
+/// shared library instead, found as above: throws `Unsupported`.
+Future<void> loadModule(Uri url) async => throw Unsupported(
+      Status.unsupported.code,
+      'loadModule is for the web: a native process loads the library '
+      'GUATIAO_LIBRARY, useLibrary or the platform search finds',
+    );
+
+/// Loads a WebAssembly module from its bytes, on the web. A native
+/// process loads a shared library instead: throws `Unsupported`.
+Future<void> loadModuleBytes(List<int> bytes,
+        {String source = '<bytes>'}) async =>
+    throw Unsupported(
+      Status.unsupported.code,
+      'loadModuleBytes is for the web: a native process loads the library '
+      'GUATIAO_LIBRARY, useLibrary or the platform search finds',
+    );

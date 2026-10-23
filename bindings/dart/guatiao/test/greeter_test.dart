@@ -5,6 +5,7 @@
 /// A provider's kind table, called live from Dart: fetched by kind,
 /// checked against the floor hash the kind's own header names, and asked
 /// to greet.
+@TestOn('vm')
 library;
 
 import 'dart:ffi';

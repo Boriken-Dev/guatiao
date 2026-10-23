@@ -13,7 +13,7 @@ import 'package:test/test.dart';
 import 'support.dart';
 
 void main() {
-  setUpAll(libraryDir);
+  setUpAll(setUpLibrary);
 
   test('every kind round-trips', () {
     expect(Value.nullValue().toDart(), isNull);
@@ -75,11 +75,22 @@ void main() {
     expect(v.toDart(numbers: Numbers.text), '7' * 200);
   });
 
-  test('a 64-bit integer stays an int', () {
-    final v = Value.fromDart(9007199254740993);
+  test('an integer stays an int where an int holds it exactly', () {
+    final v = Value.number('9007199254740993');
     addTearDown(v.close);
-    expect(v.toDart(), isA<int>());
-    expect(v.toDart(), 9007199254740993);
+    if (jsNumbers) {
+      // dart2js: an int is a JavaScript number, exact only up to 2^53.
+      expect(v.toDart(), BigInt.parse('9007199254740993'));
+      expect(v.intOr(-1), -1);
+    } else {
+      expect(v.toDart(), isA<int>());
+      final exact = int.parse('9007199254740993');
+      expect(v.toDart(), exact);
+      expect(v.intOr(-1), exact);
+    }
+    final small = Value.fromDart(9007199254740991);
+    addTearDown(small.close);
+    expect(small.toDart(), 9007199254740991);
   });
 
   test('a non-finite double is refused', () {

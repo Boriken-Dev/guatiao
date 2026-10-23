@@ -4,6 +4,7 @@
 
 /// Sources from Dart: a watched directory refreshed as files come and go,
 /// and a file that is no source refused with words.
+@TestOn('vm')
 library;
 
 import 'dart:io';
