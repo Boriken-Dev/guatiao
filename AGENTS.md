@@ -21,6 +21,7 @@ public surface); this file is about the repository.
 | `examples/wire_over_webtransport/` | values over WebTransport: `server/` (the shared channel and framing, `wire-server`, and `wire-probe`, a native client), `client/` (the page's wasm, its own workspace, built for `wasm32-unknown-unknown` only); commands in its `README.md` |
 | `examples/app_library/` | an application's own C library (`myapp`): depends on the three crates and exports their C surfaces beside `myapp_version`; every binding's suite also runs against it alone, and it is the Dart web suites' default module |
 | `examples/app_host/` | a Rust program linking the `guatiao` crate and `myapp` (`raw-dylib` on Windows); its test runs it |
+| `examples/flutter_app/` | a Flutter app over the three Dart packages from the checkout: their build hooks build the libraries with cargo for each target; it prints what each surface answered and where its library was loaded from (`GUATIAO_EXAMPLE_EXIT=1` ends a desktop run there); `pubspec.yaml` shows the user define that builds `examples/app_library` instead |
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build; its `tests/docs_snippets.rs` compiles the Rust snippets of `docs/index.md`, `docs/ownership.md`, `docs/migrating.md`, `docs/configuration.md` and the root `README.md` and compares them with the text shown; `tests/configuration_files.rs` reads a configuration from TOML text through guatiao |
 | `examples/python_host/` | a host program in Python: scans for greeters in any language, optionally adds `guatiao-py`, calls every slot; `bindings/python/guatiao/tests/test_examples.py` runs it |
 | `examples/python_provider/` | two libraries written in Python, each a module and a `*.guatiao-py.toml` manifest; commands in its `README.md` |
@@ -41,7 +42,7 @@ public surface); this file is about the repository.
 | `examples/fortran_greeter/` | a library written in Fortran (an fpm package named and versioned as its source states, which its test checks); its `CMakeLists.txt` builds it as a library file a scan finds |
 | `bindings/python/guatiao/` | ctypes bindings over the C ABI, `src/guatiao/` package with its own `AGENTS.md`; `guatiao.ffi` is what a package over another guatiao library builds on |
 | `bindings/python/guatiao-serde/`, `bindings/python/guatiao-intake/` | the packages `guatiao-serde` and `guatiao-intake` (`import guatiao_serde`, `guatiao_intake`), each over its own library, with its own `AGENTS.md` |
-| `bindings/dart/guatiao/` | Dart bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`: `dart:ffi` natively, the WebAssembly module on the web (`lib/src/web/`, chosen by a conditional import on `dart.library.js_interop`, `lib/wasm.dart` its counterpart of `ffi.dart`); `lib/src/bindings.g.dart` (from `guatiao.h`) and `lib/ffi_symbols.yaml` are ffigen output and never hand-edited; `lib/ffi.dart` is what a package over another guatiao library builds on |
+| `bindings/dart/guatiao/` | Dart bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`: `dart:ffi` natively, the WebAssembly module on the web (`lib/src/web/`, chosen by a conditional import on `dart.library.js_interop`, `lib/wasm.dart` its counterpart of `ffi.dart`); `lib/src/bindings.g.dart` (from `guatiao.h`) and `lib/ffi_symbols.yaml` are ffigen output and never hand-edited; `lib/ffi.dart` is what a package over another guatiao library builds on; `hook/build.dart` builds the core crate with cargo for the target a Dart or Flutter build names, through `lib/hook.dart`, which the other two packages' hooks use too; its own `pubspec.yaml` tells the hook to build nothing for its own suites |
 | `bindings/dart/guatiao_serde/`, `bindings/dart/guatiao_intake/` | the pub.dev packages `guatiao_serde` and `guatiao_intake`, each over its own library and its own ffigen output (reusing the core's types through its symbol file); `pubspec_overrides.yaml` takes the core from the checkout and is not published |
 | `bindings/node/guatiao/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads; `src/ffi.ts` (`guatiao/ffi`) is what a package over another guatiao library builds on |
 | `bindings/node/guatiao-serde/`, `bindings/node/guatiao-intake/` | the npm packages `guatiao-serde` and `guatiao-intake`, each over its own library and the core's koffi; their tests run against the core's sources |
@@ -88,7 +89,18 @@ cd bindings/dart/guatiao && dart test -p chrome --compiler dart2js   # or dart2w
 
 The Dart suites on 32-bit ARM run the libraries built for
 `armv7-unknown-linux-gnueabihf` and Dart's `linux-arm` SDK under
-qemu-user; `test.yaml`'s `dart-armv7` job is the recipe.
+qemu-user; `test.yaml`'s `dart-armv7` job is the recipe. A build hook runs
+with a filtered environment, so `QEMU_LD_PREFIX` does not reach it: the
+ARM loader goes where an ARM program looks for it.
+
+The Flutter example, after rustup's targets for the platform (Android:
+`aarch64-linux-android armv7-linux-androideabi x86_64-linux-android`):
+
+```bash
+cd examples/flutter_app
+flutter build windows          # or linux, macos, apk, ios --simulator
+GUATIAO_EXAMPLE_EXIT=1 build/windows/x64/runner/Release/flutter_app.exe
+```
 
 Two gates on a pinned nightly (`rustup toolchain install nightly-2026-09-21
 --component miri,rust-src`, `cargo install cargo-public-api --version
@@ -352,7 +364,10 @@ Four workflows:
   three platforms and the floor SDK; `dart-web` runs them in Chrome under
   dart2js and dart2wasm against the application module and intake's, and
   `dart-armv7` on 32-bit ARM under qemu-user against the separate
-  libraries and the application's. Its `node` job installs the
+  libraries and the application's. Its `flutter` job builds
+  `examples/flutter_app` on each platform for its desktop, twice (the
+  second must run no hook) and runs it; the APK on Linux, checked for
+  every library on every ABI; the iOS simulator app on macOS. Its `node` job installs the
   `bindings/node` workspace and runs the three packages' type checks and tests
   on Node 22 and 24 on the three platforms, with the C greeter built and
   the guatiao-py bridge serving the Python greeters (a stated skip fails

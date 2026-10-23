@@ -1040,6 +1040,21 @@ A table and `ctx` taken from a retired library (`provider_table`,
 next call. Closing a registry (Python `Registry.close()`) no longer
 unmaps its libraries.
 
+### Dart 3.10 or newer
+
+The three Dart packages ask for Dart 3.10 (Flutter 3.38), the first with
+build hooks, and their hooks now build the libraries for the app (see
+[Dart and Flutter](flutter.md)). Raise the application's `sdk:` constraint
+to `^3.10.0`. An application that supplies its own copy of the library, as
+before, says so in its `pubspec.yaml`:
+
+```yaml
+hooks:
+  user_defines:
+    guatiao:
+      build: false
+```
+
 ### Stricter intake answers
 
 - `intake.unflatten` raises `TypeError` (Python) or throws `ArgumentError`

@@ -53,11 +53,13 @@ pip install guatiao
 export GUATIAO_LIBRARY=/path/to/the/library
 ```
 
-A Dart consumer adds the package and points it at the same library:
+A Dart or Flutter consumer adds the package, whose build hook builds the
+library from source for the target being built (see
+[Dart and Flutter](flutter.md)), or points it at the same library:
 
 ```bash
-dart pub add guatiao
-export GUATIAO_LIBRARY=/path/to/the/library
+flutter pub add guatiao
+export GUATIAO_LIBRARY=/path/to/the/library   # or this, without the hook
 ```
 
 In a browser the same package loads the WebAssembly module instead
