@@ -26,13 +26,17 @@ ABI, whether that is `guatiao` itself or an application that carries it.
   declares before loading it, list providers best first, build an
   instance from a configuration, call a provider through its table with
   JavaScript values in and out.
-- **A kind described once, checked by `tsc`** — a kind is a typed value
-  copied from its C header; a provider class `implements` it, and a
-  misspelled method or a wrong type fails the type check.
-- **Write a provider in TypeScript** — classes become providers of a kind,
-  in a library a host calls the way it calls one written in Rust, C or
-  Python; an ES module of a package is a library, named and versioned by
-  its `package.json`.
+- **A kind is never declared twice** — a kind crate commits its kinds'
+  description beside their C header; `guatiao-kind` writes a module from
+  it whose kinds are values in JavaScript and interfaces in TypeScript, so
+  `class Hello extends Provider implements Greeter` is checked by `tsc`,
+  and `kindsOf()` loads the same description at run time.
+- **Write a provider in TypeScript or plain JavaScript** — classes become
+  providers of a kind, in a library a host calls the way it calls one
+  written in Rust, C or Python; an ES module of a package is a library,
+  named and versioned by its `package.json`. No build step: Node runs a
+  JavaScript provider as it is, and refuses one missing a required method,
+  naming it.
 - **Hand a library a JavaScript object** — any object with the right
   methods becomes an object of a kind (a listener, a callback) that a
   library calls, or holds until it is done with it.
@@ -110,7 +114,7 @@ big.toJS();                     // 18446744073709551616n
 
 ```ts
 import { Registry } from 'guatiao';
-import { Greeter } from './greeter_kind.js';   // the kind, described from its header
+import { Greeter } from './greeter_kind.js';   // written by guatiao-kind from the kind's description
 
 using reg = new Registry('my-host', '1.0');
 reg.scanDir('/opt/plugins', { rules: 'kind=greeter' });
@@ -123,18 +127,17 @@ answer.toJS();                                // { greeting: 'hello, ana' }
 
 ### A kind, and a provider of it
 
+A kind crate commits its kinds as data beside its C header
+(`greeter_kind.kinds.json`). Write the module once, and commit it:
+
+```bash
+npx guatiao-kind greeter_kind.kinds.json --out greeter_kind   # greeter_kind.js and greeter_kind.d.ts
+```
+
 ```ts
 import { BadValue } from 'guatiao';
-import { type Implementation, kind, t } from 'guatiao/kinds';
 import { Provider, library } from 'guatiao/provide';
-
-export const Greeter = kind('greeter', {
-  floorHash: 2695856491,                      // greeter_vtable_FLOOR_HASH, from the header
-  methods: {
-    greet: { args: [t.str], answer: t.map, required: true, fallible: true },
-  },
-});
-export type Greeter = Implementation<typeof Greeter>;
+import { Greeter } from './greeter_kind.js';   // a value, and in TypeScript an interface
 
 export class Hello extends Provider implements Greeter {
   static override readonly kinds = [Greeter];
@@ -147,8 +150,20 @@ export class Hello extends Provider implements Greeter {
 reg.registerLibrary(library('hello', '1.0.0', { providers: [Hello] }));
 ```
 
-A host in this process, written in any language, calls `Hello` through
-the same table it would call a Rust or C greeter through.
+The same provider in JavaScript drops the types (`static kinds =
+[Greeter]`), and `/** @implements {Greeter} */` lets an editor with
+`// @ts-check` check it. A host in this process, written in any language,
+calls `Hello` through the same table it would call a Rust or C greeter
+through. A kind with no header behind it is a class:
+
+```js
+import { Kind, slot, t } from 'guatiao/kinds';
+
+export class Echo extends Kind {
+  static floorHash = 0x6563686f;
+  static slots = { echo: slot(t.str).returns(t.text).required() };
+}
+```
 
 ### Dates and spans
 
@@ -176,9 +191,11 @@ PlainDate.parse('2026-01-31').add(Span.parse('1mo')).toString();   // '2026-02-2
   refused.
 - A `Remote` cannot run a kind's default body for a slot an older table
   lacks, as a Rust caller does: it throws `Unsupported`.
-- Describe kinds (`kind()`) and build libraries (`library()`) at module
-  level, not inside a call a library is making: koffi cannot register a
-  callback there.
+- Describe kinds (`kind()`, `kindsOf()`, a kind class's first use) and
+  build libraries (`library()`) at module level, not inside a call a
+  library is making: koffi cannot register a callback there.
+- A kind whose slots refer to itself, directly or through another kind,
+  cannot be loaded from a description.
 - On Linux and macOS, CPython served through the guatiao-py bridge inside
   a Node process does not free what a call from Node drops: a Python object such
   a call releases is never deallocated.
@@ -189,7 +206,8 @@ PlainDate.parse('2026-01-31').add(Span.parse('1mo')).toString();   // '2026-02-2
 | Module | Purpose |
 | --- | --- |
 | `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Registry`, `Instance`, `redact`, `useLibrary`, the errors |
-| `guatiao/kinds` | `kind`, `t`: a kind as a typed description; `Remote`, `ObjectHandle`; serving a table over an object |
+| `guatiao/kinds` | `kindsOf`, `kindOf`: kinds loaded from their description; `Kind`, `slot`: a kind defined as a class; `kind`, `t`: the descriptor underneath; `Remote`, `ObjectHandle`; serving a table over an object |
+| `guatiao-kind` (a command) | writes a module and its `.d.ts` from a kinds description |
 | `guatiao/provide` | `Provider`, `library`, `libraryOf`, `s`: providers written in TypeScript, a module as a library |
 | `guatiao/time` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants, exact lengths, `normalize` |
 | `guatiao/wire` | channel frames (`announce`, `send`, `close`) and a `Receiver` checking each value against its channel's schema |

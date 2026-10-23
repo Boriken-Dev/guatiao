@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest';
 
 import { BadValue, Busy, NotFound, Registry, Tag, WrongKind } from '../src/index.js';
 import * as n from '../src/native.js';
-import { Counter } from '../../../../examples/greeter_kind/node/greeter_kind.ts';
+import { Counter } from '../../../../examples/greeter_kind/node/greeter_kind.js';
 import { libraryName } from './helpers.js';
 import { cLibraries, scratch, workspaceLibrary } from './native.js';
 import { libraryDir } from './setup.js';

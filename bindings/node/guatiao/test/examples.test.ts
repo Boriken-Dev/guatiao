@@ -26,6 +26,7 @@ describe('examples/node_host', () => {
     const cDir = cLibraries()?.greeterDir;
     if (cDir !== undefined) args.push(cDir);
     args.push('--node-library', path.join(EXAMPLES, 'node_provider', 'node_greeter', 'greeters.ts'));
+    args.push('--node-library', path.join(EXAMPLES, 'node_js', 'greeters.js'));
     const py = bridge();
     if (py !== null) {
       const config = bridgeConfig();
@@ -34,6 +35,8 @@ describe('examples/node_host', () => {
     }
     const out = execFileSync(process.execPath, args, { cwd: REPO, encoding: 'utf8', env: process.env });
     expect(out).toContain('registered node_greeter 1.0.0 from Node');
+    expect(out).toContain('registered js_greeter 1.0.0 from Node');
+    expect(out).toMatch(/js_greeter_hello[\s\S]*greet: \{"greeting":"hello from JS, ana"\}/);
     expect(out).toMatch(/derived_greeter_hello[\s\S]*greet: \{"greeting":"hello, ana"\}/);
     expect(out).toMatch(/node_greeter_hello[\s\S]*conversation: 2 turns, transcript "hi\\nagain"/);
     expect(out).toMatch(/node_greeter_shouter[\s\S]*instance from \{"prefix":"hey"\}/);
@@ -47,5 +50,40 @@ describe('examples/node_host', () => {
     // conversation held (see greeters.test.ts).
     if (py === null || process.platform === 'win32') expect(out).toContain('objects a library can still reach: 0');
     else expect(out).toMatch(/objects a library can still reach: \d+/);
+  });
+});
+
+describe('examples/node_js', () => {
+  const installed = (): boolean => existsSync(path.join(EXAMPLES, 'node_modules', 'guatiao', 'dist', 'index.js'));
+
+  it('runs as plain JavaScript, with no build step', (ctx) => {
+    if (!installed()) return ctx.skip('the examples are not installed: npm run build here, then npm install in examples/');
+    const out = execFileSync(process.execPath, [path.join(EXAMPLES, 'node_js', 'main.js'), libraryDir()], {
+      cwd: REPO,
+      encoding: 'utf8',
+      env: process.env,
+    });
+    expect(out).toContain('registered js_greeter 1.0.0');
+    expect(out).toContain('derived_greeter_hello: {"greeting":"hello, ana"}');
+    expect(out).toContain('js_greeter_hello: {"greeting":"hello from JS, ana"}');
+    expect(out).toContain('js_greeter_hello: refused, BadValue: nobody to greet');
+    expect(out).toContain('echo: hi, hi');
+    expect(out).toContain('the lent page: ["ho","ho, ho"]');
+  });
+
+  it('refuses a plain JavaScript provider missing a required method, naming it', (ctx) => {
+    if (!installed()) return ctx.skip('the examples are not installed: npm run build here, then npm install in examples/');
+    const script = [
+      "import { Provider, library } from 'guatiao/provide';",
+      "import { Greeter } from './greeter_kind/node/greeter_kind.js';",
+      'class Silent extends Provider { static kinds = [Greeter]; shout(name) { return name; } }',
+      "try { library('silent', '1', { providers: [Silent] }); } catch (e) { console.log(`${e.constructor.name}: ${e.message}`); }",
+    ].join('\n');
+    const out = execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+      cwd: EXAMPLES,
+      encoding: 'utf8',
+      env: process.env,
+    });
+    expect(out.trim()).toBe('TypeError: Silent does not implement greet, which the greeter kind requires');
   });
 });

@@ -23,6 +23,20 @@ write now.
   the same `GUATIAO_WRITE_HEADER` switch and compared by a test, so a
   binding loads a kind instead of declaring it again. The format is in
   the docs' encodings page.
+- **Node: a kind that exists is loaded, and a kind is a class.**
+  `kindsOf(document)` and `kindOf(description)` load kinds from their
+  description. The package installs `guatiao-kind`, which writes a module
+  from a description: each kind a value in JavaScript and, under the same
+  name in its `.d.ts`, an interface (required slots as methods, appended
+  ones optional) and a `<Kind>Remote`, so `class Hello extends Provider
+  implements Greeter` is checked by `tsc --strict` with nothing declared
+  by hand; `--check` fails on a stale module. A kind defined in
+  JavaScript, with no header behind it, is a class extending `Kind` whose
+  static fields (`kind`, `floorHash`, `object`, `slots` of `slot(...)`)
+  describe it. Plain JavaScript providers run with no build step, and a
+  missing required method is a `TypeError` naming it. `kind()` stays as
+  the primitive underneath. `examples/node_js` is a library and a host in
+  plain JavaScript.
 - **Values as events, with no tree in the middle.** `value::visit` is
   guatiao's own data model as traits, with no dependency: a type that
   `Walk`s hands absent, null, bool, number text, string, bytes, list and

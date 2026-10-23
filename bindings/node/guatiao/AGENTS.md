@@ -15,7 +15,8 @@ ships no native code of its own.
 | import | what |
 | --- | --- |
 | `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Registry`, `Instance`, `Tag`, `Status`, `redact`, `useLibrary`, the errors |
-| `guatiao/kinds` | `kind`, `t`, `Implementation`, `Remote`, `ObjectHandle`, `liveObjects` |
+| `guatiao/kinds` | `kindsOf`, `kindOf`, `Kind`, `slot`, `kind`, `t`, `Implementation`, `Remote`, `ObjectHandle`, `DescribedKind`, `liveObjects` |
+| `guatiao-kind` (bin) | writes `<base>.js` and `<base>.d.ts` from a kinds description |
 | `guatiao/provide` | `Provider`, `library`, `libraryOf`, `Library`, `s` (configuration schemas) |
 | `guatiao/time` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, instants, exact lengths |
 | `guatiao/wire` | `announce`, `send`, `close`, `Receiver`, `Frame`, `Event`, the refusals |
@@ -27,7 +28,7 @@ JSON, TOML and YAML are the package `guatiao-serde`, forms
 ## Finding the native library
 
 Importing the package touches nothing native: koffi loads on the first
-call that needs it (or when `kind()` describes a kind), and the library
+call that needs it (or when a kind is described), and the library
 on the first call that needs it, found in this order:
 
 1. `useLibrary(pathOrUrl)`, when called before that first call: a file
@@ -159,10 +160,65 @@ its own.
 
 ## Kinds: calling a table, serving one
 
-A kind is described once, from its C header, as a typed value: a method
-per slot in the header's order (the `methods` object's order), the shapes
-from `t`, and the header's `<table>_FLOOR_HASH`. TypeScript infers what a
-provider implements and what a caller holds.
+**A kind that exists is loaded, never declared again.** A kind crate
+commits its kinds' description beside their C header
+(`<crate>.kinds.json`: `{ format: 1, kinds: [{ name, floor_hash, object,
+slots: [{ name, required, fallible, args, answer }] }] }`, the format on
+the docs site's encodings page). Two ways to load it:
+
+- **`guatiao-kind DOCUMENT [--out BASE] [--from MODULE] [--check]`**
+  writes `BASE.js` (it calls `kindsOf` on the document, embedded) and
+  `BASE.d.ts`, both committed. For each kind the declarations hold an
+  interface of the kind's name in PascalCase (`greeter` is `Greeter`; its
+  required slots as methods, the appended ones optional, each slot's name
+  in camelCase), a `<Kind>Remote` interface (what a caller holds), and a
+  value of the kind's name (`DescribedKind<Greeter, GreeterRemote>`):
+  TypeScript merges the two, so `implements Greeter` and `static kinds =
+  [Greeter]` name one import. `BASE` defaults to the document's path
+  without `.kinds.json`; `--from` is the guatiao package's specifier
+  (default `guatiao`); `--check` writes nothing and exits 1 when the files
+  are not what it would write. A slot naming an object kind outside the
+  document is refused.
+- **`kindsOf(document, { known? })`** (the object, or its JSON text)
+  answers each kind by its name; **`kindOf(description, { known? })`** one
+  kind. An object kind a slot names is found in the document, else among
+  `known`. `TypeError` naming the kind, the slot and the argument for a
+  document that is not one, a `type` it does not know, or kinds that refer
+  to each other in a cycle.
+
+```ts
+import { Greeter } from './greeter_kind.js';   // written by guatiao-kind
+export class Hello extends Provider implements Greeter {
+  static override readonly kinds = [Greeter];
+  greet(name: string) { return { greeting: `hello, ${name}` }; }
+}
+```
+
+**A kind defined here**, with no header behind it, is a class extending
+`Kind` whose static fields describe it: `kind` (its name; default the
+class name in snake_case), `floorHash`, `object` (an object kind), and
+`slots`, a `slot(...args)` per slot in table order, refined by
+`.returns(answer)`, `.required()` and `.fallible()`. The class itself is
+the kind wherever one is asked for; it is described on first use, which
+must be at module level like `kind()`. `Implementation<typeof Echo>` and
+`Remote<typeof Echo>` read its statics.
+
+```js
+import { Kind, slot, t } from 'guatiao/kinds';
+
+export class Echo extends Kind {
+  static kind = 'echo';
+  static floorHash = 0x6563686f;
+  static slots = {
+    echo: slot(t.str).returns(t.text).required().fallible(),
+  };
+}
+```
+
+**Underneath both, `kind()`**: a method per slot in the header's order
+(the `methods` object's order), the shapes from `t`, and the header's
+`<table>_FLOOR_HASH`. TypeScript infers what a provider implements and
+what a caller holds.
 
 ```ts
 import { type Implementation, kind, t } from 'guatiao/kinds';
@@ -213,6 +269,13 @@ K>` an object of an object kind the caller owns.
 | `K` (answer) | `guatiao_object *out` | an `ObjectHandle`; `close()` destroys it once | an object implementing `K`, or an `ObjectHandle` |
 | no `answer` | -- | `undefined` | anything, ignored |
 
+A description names the same shapes: its scalars as `t` does (`i64`,
+`usize`, ...), `str`, `bytes`, `bytes_mut` (`t.bytesMut`), `text`;
+`value`/`map`/`list` with `pass` `borrowed` (`t.value`, `t.map`),
+`taken` (`t.taken(...)`) or `lent` (`t.lent(...)`); `object` with its
+`kind`, `pass` `taken` or `lent`, and as an answer the object kind
+itself.
+
 **A `Remote`**: a method per slot, plus `has(name)` (whether the table
 carries it), `kind`, `table`, `size`, `ctx`. A slot past the table's size
 or null throws `Unsupported` (a Rust caller would run the kind's default
@@ -239,11 +302,12 @@ a `GuatiaoWarning` (`process.emitWarning`) and the status crosses alone.
 A method answers before it returns: a promise is refused as `Internal`.
 
 **Describe kinds and build libraries at module level.** koffi cannot
-register a callback from inside one, so `kind()` registers every slot's
-callback when it runs and `library()` its descriptor's; both throw when
-called inside a call a library is making into this binding.
+register a callback from inside one, so `kind()` and `kindsOf()` register
+every slot's callback when they run, a kind class when it is first used,
+and `library()` its descriptor's; each throws when called inside a call a
+library is making into this binding.
 
-## Providers written in TypeScript
+## Providers written in TypeScript or JavaScript
 
 ```ts
 // greeters.ts, in a package named node_greeter
@@ -289,6 +353,13 @@ fields: `named` (default: the class name in snake_case), `id` (default
 available()` (`undefined` or `null` when it can run here, else why not;
 asked every time a host asks). Methods must be on the prototype: an arrow
 function in a field is not seen.
+
+**In plain JavaScript** the same class drops the types and `override`
+(`static kinds = [Greeter, Counter];`) and runs as it is, with no build
+step; a missing required method is the same `TypeError` (`Hello does not
+implement greet, which the greeter kind requires`). With `// @ts-check`,
+`/** @implements {Greeter} */` above the class has an editor check its
+methods against the generated `.d.ts`.
 
 **Configuration**: with neither `config` nor `configSchema` the provider is
 its one instance, `new cls()`, built with the library. `static config =

@@ -8,11 +8,12 @@ whose module, `greeters.ts`, serves the `greeter` and `counter` kinds:
 - `Shouter`, built per configuration from the schema `ShouterConfig`
   writes with `s`.
 
-The kinds are the descriptions in
-[`../greeter_kind/node/greeter_kind.ts`](../greeter_kind/node/greeter_kind.ts),
-written from the kind's C header. Each provider class extends `Provider`,
-`implements` its kinds' types, so `tsc --strict` checks its methods, and
-lists them in `static kinds`.
+The kinds are loaded from their description by the module `guatiao-kind`
+wrote, [`../greeter_kind/node/greeter_kind.js`](../greeter_kind/node/greeter_kind.js),
+whose `.d.ts` declares each kind as an interface too. Each provider class
+extends `Provider`, `implements` its kinds, so `tsc --strict` checks its
+methods, and lists them in `static kinds`. The same library in plain
+JavaScript is [`../node_js`](../node_js/).
 
 The module is a library as the binding reads one: the package's `name` is
 its id, its `version` the library's, the `Provider` classes it exports its
