@@ -17,19 +17,10 @@ import { libraryOf } from '../src/provide.js';
 import { adopt } from '../src/value.js';
 import { Counter, Greeter } from '../../../../examples/greeter_kind/node/greeter_kind.js';
 import { REPO } from './helpers.js';
-import { bridge, bridgeConfig, cLibraries, workspaceLibrary } from './native.js';
+import { PYTHON_FREES_HERE, bridge, bridgeConfig, cLibraries, workspaceLibrary } from './native.js';
 import { libraryDir } from './setup.js';
 
 const NODE_GREETER = path.join(REPO, 'examples', 'node_provider', 'node_greeter', 'greeters.ts');
-
-/**
- * Whether CPython, embedded through the guatiao-py bridge in this process,
- * frees what a call from here drops. Off Windows it does not: an object
- * dropped during a call that reached Python through koffi is never
- * deallocated (its `__del__` never runs), so what a Python conversation
- * holds outlives it. A Python host and a Rust host do not see this.
- */
-const PYTHON_FREES_HERE = process.platform === 'win32';
 
 /** Each greeter: where it comes from, its key, the greeting it answers "ana" with. */
 const GREETERS = {

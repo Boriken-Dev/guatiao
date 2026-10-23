@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 
 import { REPO } from './helpers.js';
 import { libraryDir } from './setup.js';
-import { bridge, bridgeConfig, cLibraries } from './native.js';
+import { PYTHON_FREES_HERE, bridge, bridgeConfig, cLibraries } from './native.js';
 
 const EXAMPLES = path.join(REPO, 'examples');
 
@@ -46,9 +46,9 @@ describe('examples/node_host', () => {
       expect(out).toContain('served py_greeter from Python');
       expect(out).toMatch(/py_greeter_hello[\s\S]*greetInto: the lent listener heard \["hello, dee"\]/);
     }
-    // Off Windows, CPython in this process keeps what a closed Python
-    // conversation held (see greeters.test.ts).
-    if (py === null || process.platform === 'win32') expect(out).toContain('objects a library can still reach: 0');
+    // On Linux and macOS, CPython in this process keeps what a closed
+    // Python conversation held (see PYTHON_FREES_HERE).
+    if (py === null || PYTHON_FREES_HERE) expect(out).toContain('objects a library can still reach: 0');
     else expect(out).toMatch(/objects a library can still reach: \d+/);
   });
 });
