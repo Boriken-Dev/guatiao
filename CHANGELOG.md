@@ -691,6 +691,10 @@ write now.
 
 ### Fixed
 
+- **A `with` field's default is written through its module.** The schema
+  wrote a `#[map(default)]` or `#[map(default = ..)]` beside `with`
+  through the field type's own `ToValue`, so a type with no value impls
+  could not take a default.
 - **A tree a Rust provider answers reaches a caller in any language in
   the caller's allocator.** A slot `#[guatiao::kind]` generates called
   `<method>_in` with the carrier's allocator and wrote what it answered

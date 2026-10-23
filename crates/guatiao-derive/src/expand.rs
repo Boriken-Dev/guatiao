@@ -1013,9 +1013,12 @@ pub(crate) fn field_builder(field: &FieldPlan) -> TokenStream {
     if !field.optional() && field.default.is_none() {
         built = quote! { #built.required() };
     }
-    // A default is written the way the field is: as its text when the
-    // field crosses as text, which is all such a type offers.
-    let write = if field.as_text {
+    // A default is written the way the field is: through its `with`
+    // module, or as its text when the field crosses as text, which is all
+    // such a type offers.
+    let write = if let Some(with) = &field.with {
+        quote! { #with::to_value_in }
+    } else if field.as_text {
         quote! { ::guatiao::__private::text_of }
     } else {
         quote! { <#ty as ::guatiao::ToValue>::to_value_in }

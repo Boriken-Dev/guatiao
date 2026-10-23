@@ -272,6 +272,52 @@ fn with_skip_serializing_if_and_deny_unknown_fields() {
     check(t);
 }
 
+/// A type with no value impls, so only its module can write it.
+#[derive(Debug, PartialEq, Default)]
+struct Opaque(u64);
+
+mod opaque {
+    use guatiao::schema::KindBuilder;
+    use guatiao::{Alloc, FromValue, MapError, Schema, ToValue, Value, ValueError};
+
+    pub fn to_value_in(o: &super::Opaque, alloc: Alloc) -> Result<Value, ValueError> {
+        o.0.to_value_in(alloc)
+    }
+
+    pub fn from_value(v: &Value) -> Result<super::Opaque, MapError> {
+        u64::from_value(v).map(super::Opaque)
+    }
+
+    pub fn kind(alloc: Alloc) -> KindBuilder {
+        u64::kind(alloc)
+    }
+}
+
+#[derive(Debug, PartialEq, ToValue, FromValue, Schema)]
+struct Defaulted {
+    #[map(default, with = opaque)]
+    a: Opaque,
+    #[map(default = Opaque(7), with = opaque)]
+    b: Opaque,
+}
+
+#[test]
+fn a_with_field_s_default_is_written_through_its_module() {
+    let read = Defaulted::from_value(&Map::new().into()).unwrap();
+    assert_eq!(
+        read,
+        Defaulted {
+            a: Opaque(0),
+            b: Opaque(7)
+        }
+    );
+    let schema = Defaulted::schema().unwrap();
+    let s = SchemaRef::new(&schema).unwrap();
+    assert_eq!(s.find("a").unwrap().default(), Some(&Value::from(0u64)));
+    assert_eq!(s.find("b").unwrap().default(), Some(&Value::from(7u64)));
+    check(read);
+}
+
 #[test]
 fn shapes_nest() {
     let list: List = [Pair("a".into(), 1), Pair("b".into(), 2)]
