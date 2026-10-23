@@ -378,6 +378,76 @@ What a mark does not do: encrypt the value, compare it in constant time,
 or wipe it from memory. It says who may see it, and the code that shows,
 logs or returns values honours it.
 
+## Values on the wire
+
+The forms above are trees of the eight kinds. To carry a tree as bytes,
+over a socket, in a file or through a message queue, it is written in
+the **wire encoding**: exact, the same bytes on every platform and
+pointer width, and needing nothing but the bytes to read.
+
+```text
+value := tag:u8 body
+body  := (nothing)                ABSENT 0, NULL 1
+       | 0 | 1                    BOOL 2
+       | len text                 NUMBER 3 (the JSON number grammar), STRING 4 (UTF-8)
+       | len bytes                BYTES 5
+       | count value*             LIST 6
+       | count (len key value)*   MAP 7 (keys UTF-8, none repeated, in order)
+len, count := unsigned LEB128, the shortest form, at most 64 bits
+```
+
+A number crosses as its own text, so `1.10` stays `1.10`; bytes cross
+as bytes and are never confused with text. A reader refuses, naming the
+byte it went wrong at, an unknown tag, a body cut short, a length not in
+its shortest form or past 64 bits, text that is not UTF-8, a number
+outside the grammar, a bool byte other than 0 or 1, a key repeated in
+its map, and anything after the value. Nothing is repaired.
+
+**Channels** give values a meaning: a schema is announced on a channel
+before the values sent on it, and a receiver checks every value against
+its channel's schema before handing it over.
+
+```text
+frame := kind:u8 channel:LEB128 payload
+kind  := 0 schema   (payload: a schema, wire-encoded; it replaces any earlier one)
+       | 1 value    (payload: a value, wire-encoded)
+       | 2 close    (no payload: the channel's schema is forgotten)
+```
+
+A frame does not say how long it is: the transport does (a length prefix
+on a stream, one datagram, one WebSocket message). A receiver refuses a
+frame without changing what it keeps, for one of four reasons, each with
+its status:
+
+| refusal | status | what it carries |
+| --- | --- | --- |
+| malformed: the bytes are not a frame | `GUATIAO_ERR_BAD_VALUE` | the offset of the byte in the frame |
+| no schema: a value on a channel nothing was announced on | `GUATIAO_ERR_NOT_FOUND` | the channel |
+| not a schema: a schema frame whose value is not a map | `GUATIAO_ERR_WRONG_KIND` | the channel |
+| invalid: a value its channel's schema refuses | `GUATIAO_ERR_BAD_VALUE` | the channel, the field and what it accepts |
+
+A refusal never quotes what it was given. The vectors every
+implementation runs, values with their bytes, malformed inputs, frames
+and a conversation with every refusal, are
+[`crates/guatiao/tests/vectors/wire.json`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao/tests/vectors/wire.json).
+
+| | one value | frames | receiving |
+| --- | --- | --- | --- |
+| C | `guatiao_wire_encode`, `guatiao_wire_decode` | `guatiao_wire_announce`, `_send`, `_close` | `guatiao_wire_receiver_new`, `_accept` (a `guatiao_wire_event`), `_free` |
+| Rust | `wire::to_bytes`, `wire::decode` | `wire::channel::{announce, send, close}` | `Receiver::accept`, `Received`, `WireError` |
+| Python | `ref.to_wire()`, `Value.from_wire(data)` | `guatiao.wire.{announce, send, close}` | `wire.Receiver().accept(frame)`; `Malformed`, `NoSchema`, `NotASchema`, `Invalid` |
+| Dart | `ref.toWire()`, `Value.fromWire(data)` | `package:guatiao/wire.dart`: `announce`, `send`, `close` | `Receiver().accept(frame)`; the same four, each a `Refused` |
+| Node | `ref.toWire()`, `Value.fromWire(data)` | `guatiao/wire`: `announce`, `send`, `close` | `new Receiver().accept(frame)`; the same four |
+| Go | `ref.ToWire()`, `FromWire(data)` | `WireAnnounce`, `WireSend`, `WireClose` | `NewReceiver()`, `Accept(frame)`; a `*Refused` |
+| Julia | `to_wire(v)`, `from_wire(data)` | `Wire.announce`, `Wire.send`, `Wire.close` | `Wire.Receiver()`, `Wire.accept(r, frame)`; a `Wire.Refused` |
+| R | `to_wire(x)`, `from_wire(bytes)` | `wire_announce`, `wire_send`, `wire_close` | `wire_receiver()$accept(frame)`; conditions `guatiao_wire_*` |
+| MATLAB, Octave | `v.to_wire()`, `guatiao.Value.from_wire(b)` | `guatiao.wire.announce`, `.send`, `.close` | `guatiao.wire.Receiver().accept(frame)`; `guatiao:<Status>:<refusal>` errors |
+| Fortran | `guatiao_to_wire`, `guatiao_from_wire` | `guatiao_wire_announce`, `_send`, `_close` | `guatiao_open_receiver`, `r%accept`; a `guatiao_wire_refusal` |
+
+In every binding the refusal is also the status's own error, so code
+that catches a bad value catches a malformed frame and an invalid value
+alike, and code that wants the reason reads the refusal.
+
 ## In C, Python, Dart, Node, Go, Julia, R, MATLAB, Octave and Fortran
 
 Each text form above has C functions that read it into a plain struct,
