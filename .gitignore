@@ -62,6 +62,10 @@ Manifest-v*.toml
 *.Rcheck/
 .Rhistory
 
+# C++: what a CMake build of a package or an example writes beside it
+/bindings/cpp/*/build/
+/examples/cpp_*/build/
+
 # Fortran: what fpm and a CMake build write beside the sources
 /bindings/fortran/guatiao/build/
 /examples/fortran_*/build/
