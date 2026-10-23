@@ -79,6 +79,7 @@ Bindings over the same C ABI, for a consumer that is not Rust:
 | Julia | [`bindings/julia/Guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/julia/Guatiao/README.md) | `Pkg.add(url = "https://github.com/Boriken-Dev/guatiao", subdir = "bindings/julia/Guatiao")` |
 | R | [`bindings/r/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/r/guatiao/README.md) | `remotes::install_github("Boriken-Dev/guatiao", subdir = "bindings/r/guatiao")` |
 | Fortran | [`bindings/fortran/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/fortran/guatiao/README.md) | fpm: `guatiao = { git = "https://github.com/Boriken-Dev/guatiao", tag = "..." }`; CMake: `FetchContent` with `SOURCE_SUBDIR bindings/fortran/guatiao` |
+| C++ | [`bindings/cpp/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/cpp/guatiao/README.md) | CMake: `find_package(guatiao CONFIG)` with `guatiao_DIR`, or `FetchContent` with `SOURCE_SUBDIR bindings/cpp/guatiao`; links the library `GUATIAO_LIBRARY` names, or builds it with cargo |
 | MATLAB, GNU Octave | [`bindings/matlab/guatiao/`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/matlab/guatiao/README.md) | Octave: `pkg install` a release's `guatiao-<version>.tar.gz`; MATLAB: a release's `guatiao.mltbx`, then `guatiao.build()` |
 
 Each drives a shared library that exports the ABI — `guatiao` itself, or
@@ -93,7 +94,9 @@ core one, over the `guatiao_serde` and `guatiao_intake` libraries: PyPI
 `bindings/julia/GuatiaoIntake`), the R packages `guatiao.serde` and
 `guatiao.intake` (`bindings/r/guatiao.serde`, `bindings/r/guatiao.intake`), and in MATLAB,
 Octave and Fortran the sub-packages `guatiao.serde` and `guatiao.intake` and
-the modules `guatiao_serde` and `guatiao_intake` of the one package. Each
+the modules `guatiao_serde` and `guatiao_intake` of the one package, and in
+C++ the CMake packages `guatiao-serde` and `guatiao-intake`
+(`bindings/cpp/guatiao-serde`, `bindings/cpp/guatiao-intake`). Each
 finds its library through `GUATIAO_SERDE_LIBRARY` or
 `GUATIAO_INTAKE_LIBRARY`, then `GUATIAO_LIBRARY` (a directory, or a file
 exporting its functions, else the file beside it).
