@@ -1229,6 +1229,92 @@ jobs:
           # relative to the workspace would not resolve.
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
 
+  flutter:
+    # The example Flutter app, built the way an application builds: the
+    # three packages' build hooks run cargo for each target, with nothing
+    # installed but rustup's targets and the platform's Flutter setup. The
+    # desktop app is run and must print what each surface answered; the
+    # APK must carry every library for every ABI.
+    name: Flutter example (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            desktop: linux
+            targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+          - os: windows-latest
+            desktop: windows
+            targets: ''
+          - os: macos-latest
+            desktop: macos
+            # A release macOS app is universal, and the simulator build
+            # covers both of its architectures.
+            targets: aarch64-apple-darwin,x86_64-apple-darwin,aarch64-apple-ios-sim,x86_64-apple-ios
+    defaults:
+      run:
+        shell: bash
+        working-directory: examples/flutter_app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+          targets: ${{ matrix.targets }}
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ninja-build libgtk-3-dev xvfb
+      - uses: actions/setup-java@v4
+        if: runner.os == 'Linux'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Build the desktop app
+        run: flutter build ${{ matrix.desktop }} --release
+      - name: Build it again, from the hooks' cache
+        # Nothing changed, so no hook may run again.
+        run: |
+          flutter build ${{ matrix.desktop }} --release -v > rebuild.log 2>&1 || { tail -50 rebuild.log; exit 1; }
+          grep -c 'Skipping build for guatiao' rebuild.log
+          if grep -q 'Rerunning build for guatiao' rebuild.log; then exit 1; fi
+      - name: Run the desktop app
+        env:
+          GUATIAO_EXAMPLE_EXIT: '1'
+        run: |
+          case "${{ matrix.desktop }}" in
+            linux) xvfb-run -a build/linux/x64/release/bundle/flutter_app > run.log 2>&1 ;;
+            windows) build/windows/x64/runner/Release/flutter_app.exe > run.log 2>&1 ;;
+            macos) build/macos/Build/Products/Release/flutter_app.app/Contents/MacOS/flutter_app > run.log 2>&1 ;;
+          esac
+          cat run.log
+          grep -q 'guatiao example: json .*agent\[1\].name second' run.log
+          grep 'guatiao example: libraries' run.log
+      - name: Build the Android app
+        if: runner.os == 'Linux'
+        run: |
+          flutter build apk --release
+          python3 - <<'EOF'
+          import zipfile
+          names = set(zipfile.ZipFile("build/app/outputs/flutter-apk/app-release.apk").namelist())
+          missing = [f"lib/{abi}/lib{lib}.so"
+                     for abi in ("arm64-v8a", "armeabi-v7a", "x86_64")
+                     for lib in ("guatiao", "guatiao_serde", "guatiao_intake")
+                     if f"lib/{abi}/lib{lib}.so" not in names]
+          print("missing:", missing)
+          raise SystemExit(1 if missing else 0)
+          EOF
+      - name: Build the iOS app for the simulator
+        if: runner.os == 'macOS'
+        run: flutter build ios --simulator
+
   dart-web:
     # The Dart packages in a browser: the same suites in Chrome under both
     # web compilers, over one module per page. The application library's
@@ -1317,9 +1403,18 @@ jobs:
           echo "$(cut -d' ' -f1 dart-arm.zip.sha256sum)  dart-arm.zip" | sha256sum -c -
           unzip -q dart-arm.zip -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/dart-sdk/bin" >> "$GITHUB_PATH"
+      - name: Run ARM programs without QEMU_LD_PREFIX
+        # A build hook (guatiao's, ffigen's) runs with an environment that
+        # drops QEMU_LD_PREFIX, so the ARM loader and C library go where an
+        # ARM program looks for them.
+        run: |
+          [ -e /lib/ld-linux-armhf.so.3 ] || sudo ln -s /usr/arm-linux-gnueabihf/lib/ld-linux-armhf.so.3 /lib/ld-linux-armhf.so.3
+          [ -e /lib/arm-linux-gnueabihf ] || sudo ln -s /usr/arm-linux-gnueabihf/lib /lib/arm-linux-gnueabihf
+          env -u QEMU_LD_PREFIX dart --version
+        shell: bash
       - name: Install
-        # ffigen's build hook runs with an environment that drops
-        # QEMU_LD_PREFIX, so the tooling goes as on the floor leg.
+        # The tooling goes as on the floor leg: ffigen and lints are not
+        # needed to run the suites, and under emulation every hook is slow.
         run: |
           dart --version
           for p in guatiao guatiao_serde guatiao_intake; do
