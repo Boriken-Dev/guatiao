@@ -12,7 +12,7 @@ one resolves it from its own variable (`GUATIAO_SERDE_LIBRARY`,
 `GUATIAO_INTAKE_LIBRARY`), then `GUATIAO_LIBRARY`, then
 `libraryDirectory`, then the platform's own search.
 
-Generated API references, built by `dart doc`:
+Generated API references, built by dartdoc:
 **[guatiao →](https://boriken-dev.github.io/guatiao/dart/index.html)**,
 **[guatiao_serde →](https://boriken-dev.github.io/guatiao/dart-serde/index.html)**,
 **[guatiao_intake →](https://boriken-dev.github.io/guatiao/dart-intake/index.html)**.
