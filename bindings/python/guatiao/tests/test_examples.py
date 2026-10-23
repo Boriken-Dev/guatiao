@@ -81,6 +81,27 @@ def test_the_python_host_serves_python_greeters_through_the_bridge() -> None:
     assert out.rstrip().endswith("python objects a library can still reach: 0")
 
 
+def test_the_python_host_calls_greeters_written_in_cpp() -> None:
+    cpp = os.environ.get("GUATIAO_CPP_LIBRARY")
+    if not cpp:
+        pytest.skip("GUATIAO_CPP_LIBRARY names no directory holding the C++ greeters")
+    host = native.REPO / "examples" / "python_host" / "host.py"
+    out = _run(host, cpp)
+    assert "cpp_greeter_hello (cpp_greeter 1.0.0)" in out
+    assert "greet: {'greeting': 'hello, ana'}" in out
+    assert "greet refused: BadValue: nobody to greet" in out
+    assert "shout: HELLO, ANA" in out
+    assert "check: True, lent map now {'name': 'bo', 'greeting': 'hello, bo'}" in out
+    assert "greet_from: {'greeting': 'hello, cy'}" in out
+    assert "greet_into: the lent listener heard ['hello, dee']" in out
+    assert "conversation: 2 turns, transcript b'hi\\nagain', listener heard ['hi', 'again']" in out
+    assert "an empty configuration is refused" in out
+    assert "greet: {'greeting': 'hey ANA'}" in out
+    # A C++ library agrees to be unmapped once nothing it served is alive.
+    assert "unloaded cpp_greeter" in out
+    assert out.rstrip().endswith("python objects a library can still reach: 0")
+
+
 def test_the_python_host_calls_greeters_written_in_fortran() -> None:
     fortran = os.environ.get("GUATIAO_FORTRAN_LIBRARY")
     if not fortran:
