@@ -3,7 +3,11 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // Package serde reads and writes values as JSON, TOML and YAML documents,
-// through the guatiao_serde library.
+// through the guatiao_serde library. It is the module
+// github.com/Boriken-Dev/guatiao/bindings/go/guatiao-serde, over the
+// guatiao module's values:
+//
+//	import serde "github.com/Boriken-Dev/guatiao/bindings/go/guatiao-serde"
 //
 //	v, err := serde.Parse(`{"port": 5900}`, serde.JSON)
 //	defer v.Close()

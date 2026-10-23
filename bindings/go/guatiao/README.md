@@ -52,8 +52,9 @@ application that carries it.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
 - **JSON, TOML and YAML**, and **form checks against a schema**: the
-  `serde` and `intake` packages, each over its own library
-  (`guatiao_serde`, `guatiao_intake`).
+  [`guatiao-serde`](https://pkg.go.dev/github.com/Boriken-Dev/guatiao/bindings/go/guatiao-serde)
+  and [`guatiao-intake`](https://pkg.go.dev/github.com/Boriken-Dev/guatiao/bindings/go/guatiao-intake)
+  modules, each over its own library (`guatiao_serde`, `guatiao_intake`).
 - **Nothing native until it is needed** — the library is looked for on
   first use, and a missing one names every place that was searched.
 
@@ -75,17 +76,18 @@ export GUATIAO_LIBRARY=/opt/myapp/myapp.dll    # or the file itself, whatever it
 ```
 
 or call `guatiao.UseLibrary(path)` before the first call. Without either,
-the platform's library search is tried by file name.
+the platform's library search is tried by file name. The `civil` package
+uses the same library.
 
-| Package | Library | Its own variable, before `GUATIAO_LIBRARY` |
+| Module | Library | Its own variable, before `GUATIAO_LIBRARY` |
 | --- | --- | --- |
-| `guatiao`, `civil` | `guatiao` | |
-| `serde` | `guatiao_serde` | `GUATIAO_SERDE_LIBRARY` |
-| `intake` | `guatiao_intake` | `GUATIAO_INTAKE_LIBRARY` |
+| `.../bindings/go/guatiao` | `guatiao` | |
+| `.../bindings/go/guatiao-serde` | `guatiao_serde` | `GUATIAO_SERDE_LIBRARY` |
+| `.../bindings/go/guatiao-intake` | `guatiao_intake` | `GUATIAO_INTAKE_LIBRARY` |
 
-A file `GUATIAO_LIBRARY` names serves every package whose functions it
+A file `GUATIAO_LIBRARY` names serves every module whose functions it
 exports (an application's own library carrying several surfaces), and
-the others find theirs beside it. Each package has its own `UseLibrary`.
+the others find theirs beside it. Each has its own `UseLibrary`.
 
 Go 1.26 or later, on a 64-bit platform.
 
@@ -195,7 +197,11 @@ defer schema.Close()
 
 ### JSON, TOML and YAML
 
+With the `guatiao-serde` module:
+
 ```go
+import serde "github.com/Boriken-Dev/guatiao/bindings/go/guatiao-serde"
+
 doc, err := serde.Parse(`{"name": "ana", "n": 1.10}`, serde.JSON)
 defer doc.Close()
 text, err := serde.Emit(doc, serde.YAML)
@@ -234,12 +240,12 @@ later.String() // "2026-02-28"
 
 | Package | Purpose |
 | --- | --- |
-| `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`, the errors; `FromWire`, `WireAnnounce`, `WireSend`, `WireClose`, `Receiver`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `LibraryOf`, `Library` |
-| `guatiao/serde` | `Parse` / `Emit` for JSON, TOML, YAML |
-| `guatiao/intake` | `Check`, `Layout`, `IsVisible`, `At`, `ForSchema`, `FormFor`, `Resolve`, `FlatKeys`, `Flatten`, `Unflatten` |
+| `guatiao` | `Value`, `Ref`, `MapRef`, `ListRef`, `Number`, `NewValue`, `SchemaOf`, `Redact`, `UseLibrary`, the errors; `FromWire`, `WireAnnounce`, `WireSend`, `WireClose`, `Receiver`; `Registry`, `Instance`; `Kind`, `Remote`; `Single`, `Configured`, `LibraryOf`, `Library`; `Surface` and the rest of what a package over another guatiao library builds on |
 | `guatiao/civil` | `Date`, `Time`, `DateTime`, `Span`, `Length`, instants, `Normalize` |
 | `guatiao/cmd/guatiao-kind` | writes a kind package's glue from its C header, run by `go generate` |
 
+`serde` and `intake` are modules of their own, `guatiao-serde` and
+`guatiao-intake`, which require this one.
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/go/guatiao/AGENTS.md)
 is the full API reference and ships in the module. The C ABI is described
 by [`guatiao.h`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao/include/guatiao.h).
@@ -252,9 +258,11 @@ go vet ./...
 go test ./...
 ```
 
-The tests need the three libraries in one directory; they point
-`GUATIAO_LIBRARY` at the repository's build output when the variable is
-unset, and the repository's own `AGENTS.md` says how to produce it. The
+`bindings/go/go.work` builds this module with `guatiao-serde` and
+`guatiao-intake` from the same checkout. The tests need the workspace's
+libraries in one directory; they point `GUATIAO_LIBRARY` at the
+repository's build output when the variable is unset, and the
+repository's own `AGENTS.md` says how to produce it. The
 examples (`examples/`, a module of their own) hold the greeter kinds, a
 host and a library of providers written in Go, and the tests that call
 greeters written in Rust, C, Python and Go both ways.

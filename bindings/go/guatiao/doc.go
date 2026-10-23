@@ -19,9 +19,12 @@
 // search by file name. Not found is a *LibraryNotFound naming every
 // route; an export the loaded build lacks is a *MissingSymbol.
 //
-// The serde and intake packages are over their own libraries,
-// guatiao_serde and guatiao_intake, each found through its own
-// UseLibrary, then GUATIAO_SERDE_LIBRARY or GUATIAO_INTAKE_LIBRARY, then
+// JSON, TOML and YAML, and taking a value in from a person, are the
+// modules github.com/Boriken-Dev/guatiao/bindings/go/guatiao-serde
+// (package serde) and .../guatiao-intake (package intake), released with
+// this one under the same version. Each is over its own library,
+// guatiao_serde and guatiao_intake, found through its own UseLibrary,
+// then GUATIAO_SERDE_LIBRARY or GUATIAO_INTAKE_LIBRARY, then
 // GUATIAO_LIBRARY (a directory, or a file exporting it, else the file
 // beside it). They open their libraries as a Surface and build on Load,
 // Adopt, WithNodes, NodeOf, Borrow and StatusError, which any package over
