@@ -24,6 +24,22 @@ write now.
   status. `Source` and `Candidate` no longer need the `load` feature.
   `examples/source_library` is one, added by a Rust host and a C host in
   the tests.
+- **Kind tables built at run time from a description.**
+  `KindDescription` reads a kind's description from a value (a kind or a
+  `{"format": 1, "kinds": [..]}` document), with no dependency. Behind the
+  new default-off `dynamic-kinds` feature, `ServedTable` builds a kind's
+  table from it: each slot a libffi closure calling one `Serve` handler
+  with the slot and its arguments as `Arg`s, and writing its `Answer` back
+  as the kind's C table promises (a tree in the caller's carrier, an error
+  through `err`, a panic as `GUATIAO_ERR_INTERNAL`); a slot left out is
+  null, so a caller runs the kind's default. `Caller` calls any table of a
+  described kind, `RawObject` and `LentObject` an object one was handed,
+  and `DescribedRemote` a provider a registry offers. What a bridge to an
+  engine with no FFI of its own (Lua, JavaScript, Rhai, wasm) serves and
+  calls kinds with. The feature builds libffi from C and is not available
+  on wasm32. `ProviderPartsBuilder::keep` keeps what a provider's tables
+  point into with its parts, and `kinds` and `table` take names that are
+  not `'static`.
 - **A kind describes itself as data.** `#[guatiao::kind]` adds
   `<Trait>Vtable::description()`: the kind's name, floor hash, whether it
   is an object kind, and every slot in table order with its arguments,

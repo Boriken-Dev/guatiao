@@ -531,6 +531,74 @@ impl core::fmt::Display for guatiao::library::key::KeyTemplate
 pub fn guatiao::library::key::KeyTemplate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao::library::key::KeyTemplate
 pub mod guatiao::library::kind
+#[non_exhaustive] pub enum guatiao::library::kind::Answer
+pub guatiao::library::kind::Answer::Bool(bool)
+pub guatiao::library::kind::Answer::Float(f64)
+pub guatiao::library::kind::Answer::Int(i64)
+pub guatiao::library::kind::Answer::List(guatiao::value::types::list::List)
+pub guatiao::library::kind::Answer::Map(guatiao::value::types::map::Map)
+pub guatiao::library::kind::Answer::Nothing
+pub guatiao::library::kind::Answer::Object(guatiao::library::kind::RawObject)
+pub guatiao::library::kind::Answer::Text(alloc::string::String)
+pub guatiao::library::kind::Answer::Uint(u64)
+pub guatiao::library::kind::Answer::Value(guatiao::value::value::Value)
+impl core::fmt::Debug for guatiao::library::kind::Answer
+pub fn guatiao::library::kind::Answer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum guatiao::library::kind::AnswerType
+pub guatiao::library::kind::AnswerType::Object
+pub guatiao::library::kind::AnswerType::Object::kind: alloc::string::String
+pub guatiao::library::kind::AnswerType::Scalar(guatiao::library::kind::Scalar)
+pub guatiao::library::kind::AnswerType::Text
+pub guatiao::library::kind::AnswerType::Tree(guatiao::library::kind::Tree)
+impl core::clone::Clone for guatiao::library::kind::AnswerType
+pub fn guatiao::library::kind::AnswerType::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::kind::AnswerType
+impl core::cmp::PartialEq for guatiao::library::kind::AnswerType
+pub fn guatiao::library::kind::AnswerType::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::kind::AnswerType
+pub fn guatiao::library::kind::AnswerType::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::kind::AnswerType
+#[non_exhaustive] pub enum guatiao::library::kind::Arg<'a>
+pub guatiao::library::kind::Arg::Bool(bool)
+pub guatiao::library::kind::Arg::Buffer(&'a mut [u8])
+pub guatiao::library::kind::Arg::Bytes(&'a [u8])
+pub guatiao::library::kind::Arg::Float(f64)
+pub guatiao::library::kind::Arg::Int(i64)
+pub guatiao::library::kind::Arg::LentList(&'a mut guatiao::value::types::list::List)
+pub guatiao::library::kind::Arg::LentMap(&'a mut guatiao::value::types::map::Map)
+pub guatiao::library::kind::Arg::LentObject(guatiao::library::kind::LentObject<'a>)
+pub guatiao::library::kind::Arg::LentValue(&'a mut guatiao::value::value::Value)
+pub guatiao::library::kind::Arg::List(&'a guatiao::value::types::list::List)
+pub guatiao::library::kind::Arg::Map(&'a guatiao::value::types::map::Map)
+pub guatiao::library::kind::Arg::Object(guatiao::library::kind::RawObject)
+pub guatiao::library::kind::Arg::Str(&'a str)
+pub guatiao::library::kind::Arg::TakenList(guatiao::value::types::list::List)
+pub guatiao::library::kind::Arg::TakenMap(guatiao::value::types::map::Map)
+pub guatiao::library::kind::Arg::TakenValue(guatiao::value::value::Value)
+pub guatiao::library::kind::Arg::Uint(u64)
+pub guatiao::library::kind::Arg::Value(core::option::Option<&'a guatiao::value::value::Value>)
+impl<'a> core::fmt::Debug for guatiao::library::kind::Arg<'a>
+pub fn guatiao::library::kind::Arg<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum guatiao::library::kind::ArgType
+pub guatiao::library::kind::ArgType::Bytes
+pub guatiao::library::kind::ArgType::BytesMut
+pub guatiao::library::kind::ArgType::Object
+pub guatiao::library::kind::ArgType::Object::kind: alloc::string::String
+pub guatiao::library::kind::ArgType::Object::pass: guatiao::library::kind::Pass
+pub guatiao::library::kind::ArgType::Scalar(guatiao::library::kind::Scalar)
+pub guatiao::library::kind::ArgType::Str
+pub guatiao::library::kind::ArgType::Tree
+pub guatiao::library::kind::ArgType::Tree::nullable: bool
+pub guatiao::library::kind::ArgType::Tree::pass: guatiao::library::kind::Pass
+pub guatiao::library::kind::ArgType::Tree::tree: guatiao::library::kind::Tree
+impl core::clone::Clone for guatiao::library::kind::ArgType
+pub fn guatiao::library::kind::ArgType::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::kind::ArgType
+impl core::cmp::PartialEq for guatiao::library::kind::ArgType
+pub fn guatiao::library::kind::ArgType::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::kind::ArgType
+pub fn guatiao::library::kind::ArgType::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::kind::ArgType
 #[non_exhaustive] pub enum guatiao::library::kind::InstantiateError
 pub guatiao::library::kind::InstantiateError::Invalid(guatiao::schema::ValidationError)
 pub guatiao::library::kind::InstantiateError::Refused(guatiao::library::kind::ProviderError)
@@ -569,6 +637,93 @@ pub fn guatiao::library::kind::KindMismatch::fmt(&self, &mut core::fmt::Formatte
 impl core::fmt::Display for guatiao::library::kind::KindMismatch
 pub fn guatiao::library::kind::KindMismatch::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao::library::kind::KindMismatch
+#[non_exhaustive] pub enum guatiao::library::kind::Pass
+pub guatiao::library::kind::Pass::Borrowed
+pub guatiao::library::kind::Pass::Lent
+pub guatiao::library::kind::Pass::Taken
+impl core::clone::Clone for guatiao::library::kind::Pass
+pub fn guatiao::library::kind::Pass::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::kind::Pass
+impl core::cmp::PartialEq for guatiao::library::kind::Pass
+pub fn guatiao::library::kind::Pass::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::kind::Pass
+pub fn guatiao::library::kind::Pass::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::library::kind::Pass
+pub fn guatiao::library::kind::Pass::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::library::kind::Pass
+impl core::marker::StructuralPartialEq for guatiao::library::kind::Pass
+#[non_exhaustive] pub enum guatiao::library::kind::Scalar
+pub guatiao::library::kind::Scalar::Bool
+pub guatiao::library::kind::Scalar::F32
+pub guatiao::library::kind::Scalar::F64
+pub guatiao::library::kind::Scalar::I128
+pub guatiao::library::kind::Scalar::I16
+pub guatiao::library::kind::Scalar::I32
+pub guatiao::library::kind::Scalar::I64
+pub guatiao::library::kind::Scalar::I8
+pub guatiao::library::kind::Scalar::Isize
+pub guatiao::library::kind::Scalar::U128
+pub guatiao::library::kind::Scalar::U16
+pub guatiao::library::kind::Scalar::U32
+pub guatiao::library::kind::Scalar::U64
+pub guatiao::library::kind::Scalar::U8
+pub guatiao::library::kind::Scalar::Usize
+impl guatiao::library::kind::Scalar
+pub fn guatiao::library::kind::Scalar::from_name(&str) -> core::option::Option<guatiao::library::kind::Scalar>
+pub fn guatiao::library::kind::Scalar::name(self) -> &'static str
+impl core::clone::Clone for guatiao::library::kind::Scalar
+pub fn guatiao::library::kind::Scalar::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::kind::Scalar
+impl core::cmp::PartialEq for guatiao::library::kind::Scalar
+pub fn guatiao::library::kind::Scalar::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::kind::Scalar
+pub fn guatiao::library::kind::Scalar::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::library::kind::Scalar
+pub fn guatiao::library::kind::Scalar::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::library::kind::Scalar
+impl core::marker::StructuralPartialEq for guatiao::library::kind::Scalar
+#[non_exhaustive] pub enum guatiao::library::kind::TableError
+pub guatiao::library::kind::TableError::Ffi(u32)
+pub guatiao::library::kind::TableError::MissingRequired(alloc::string::String)
+pub guatiao::library::kind::TableError::Unsupported(alloc::string::String)
+impl core::clone::Clone for guatiao::library::kind::TableError
+pub fn guatiao::library::kind::TableError::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::kind::TableError
+impl core::cmp::PartialEq for guatiao::library::kind::TableError
+pub fn guatiao::library::kind::TableError::eq(&self, &Self) -> bool
+impl core::error::Error for guatiao::library::kind::TableError
+impl core::fmt::Debug for guatiao::library::kind::TableError
+pub fn guatiao::library::kind::TableError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::library::kind::TableError
+pub fn guatiao::library::kind::TableError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::kind::TableError
+#[non_exhaustive] pub enum guatiao::library::kind::Tree
+pub guatiao::library::kind::Tree::List
+pub guatiao::library::kind::Tree::Map
+pub guatiao::library::kind::Tree::Value
+impl core::clone::Clone for guatiao::library::kind::Tree
+pub fn guatiao::library::kind::Tree::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::kind::Tree
+impl core::cmp::PartialEq for guatiao::library::kind::Tree
+pub fn guatiao::library::kind::Tree::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::kind::Tree
+pub fn guatiao::library::kind::Tree::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao::library::kind::Tree
+pub fn guatiao::library::kind::Tree::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao::library::kind::Tree
+impl core::marker::StructuralPartialEq for guatiao::library::kind::Tree
+pub struct guatiao::library::kind::ArgDescription
+impl guatiao::library::kind::ArgDescription
+pub fn guatiao::library::kind::ArgDescription::name(&self) -> &str
+pub fn guatiao::library::kind::ArgDescription::ty(&self) -> &guatiao::library::kind::ArgType
+impl core::clone::Clone for guatiao::library::kind::ArgDescription
+pub fn guatiao::library::kind::ArgDescription::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::kind::ArgDescription
+impl core::cmp::PartialEq for guatiao::library::kind::ArgDescription
+pub fn guatiao::library::kind::ArgDescription::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::kind::ArgDescription
+pub fn guatiao::library::kind::ArgDescription::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::kind::ArgDescription
 pub struct guatiao::library::kind::Borrowed<'a, K: ?core::marker::Sized>
 impl<'a, K: ?core::marker::Sized + guatiao::library::kind::Kind> guatiao::library::kind::Borrowed<'a, K>
 pub unsafe fn guatiao::library::kind::Borrowed<'a, K>::from_raw(&'a guatiao::library::kind::ObjectRaw) -> core::result::Result<guatiao::library::kind::Borrowed<'a, K>, guatiao::library::kind::KindMismatch>
@@ -600,6 +755,37 @@ impl<'a> core::convert::From<guatiao::library::kind::BytesMut<'a>> for &'a mut [
 pub fn &'a mut [u8]::from(guatiao::library::kind::BytesMut<'a>) -> &'a mut [u8]
 impl<'a> core::fmt::Debug for guatiao::library::kind::BytesMut<'a>
 pub fn guatiao::library::kind::BytesMut<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::library::kind::Caller
+impl guatiao::library::kind::Caller
+pub unsafe fn guatiao::library::kind::Caller::call_raw(&self, *const core::ffi::c_void, usize, *mut core::ffi::c_void, usize, alloc::vec::Vec<guatiao::library::kind::Arg<'_>>) -> core::result::Result<guatiao::library::kind::Answer, guatiao::library::kind::ProviderError>
+pub fn guatiao::library::kind::Caller::kind(&self) -> &alloc::sync::Arc<guatiao::library::kind::KindDescription>
+pub fn guatiao::library::kind::Caller::new(alloc::sync::Arc<guatiao::library::kind::KindDescription>) -> core::result::Result<guatiao::library::kind::Caller, guatiao::library::kind::TableError>
+impl core::fmt::Debug for guatiao::library::kind::Caller
+pub fn guatiao::library::kind::Caller::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::library::kind::DescribedRemote
+impl guatiao::library::kind::DescribedRemote
+pub fn guatiao::library::kind::DescribedRemote::call(&self, usize, alloc::vec::Vec<guatiao::library::kind::Arg<'_>>) -> core::result::Result<guatiao::library::kind::Answer, guatiao::library::kind::ProviderError>
+pub fn guatiao::library::kind::DescribedRemote::call_named(&self, &str, alloc::vec::Vec<guatiao::library::kind::Arg<'_>>) -> core::result::Result<guatiao::library::kind::Answer, guatiao::library::kind::ProviderError>
+pub fn guatiao::library::kind::DescribedRemote::new(&guatiao::library::raw::ProviderView, alloc::sync::Arc<guatiao::library::kind::Caller>) -> core::result::Result<guatiao::library::kind::DescribedRemote, guatiao::library::kind::KindMismatch>
+impl core::fmt::Debug for guatiao::library::kind::DescribedRemote
+pub fn guatiao::library::kind::DescribedRemote::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Send for guatiao::library::kind::DescribedRemote
+impl core::marker::Sync for guatiao::library::kind::DescribedRemote
+pub struct guatiao::library::kind::DescriptionError
+impl guatiao::library::kind::DescriptionError
+pub fn guatiao::library::kind::DescriptionError::at(&self) -> &str
+pub fn guatiao::library::kind::DescriptionError::why(&self) -> &str
+impl core::clone::Clone for guatiao::library::kind::DescriptionError
+pub fn guatiao::library::kind::DescriptionError::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::kind::DescriptionError
+impl core::cmp::PartialEq for guatiao::library::kind::DescriptionError
+pub fn guatiao::library::kind::DescriptionError::eq(&self, &Self) -> bool
+impl core::error::Error for guatiao::library::kind::DescriptionError
+impl core::fmt::Debug for guatiao::library::kind::DescriptionError
+pub fn guatiao::library::kind::DescriptionError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao::library::kind::DescriptionError
+pub fn guatiao::library::kind::DescriptionError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::kind::DescriptionError
 pub struct guatiao::library::kind::Instance<K: ?core::marker::Sized>
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> guatiao::library::kind::Instance<K>
 pub fn guatiao::library::kind::Instance<K>::ctx(&self) -> *mut core::ffi::c_void
@@ -613,6 +799,27 @@ impl<K: ?core::marker::Sized> core::marker::Send for guatiao::library::kind::Ins
 impl<K: ?core::marker::Sized> core::marker::Sync for guatiao::library::kind::Instance<K>
 impl<K: ?core::marker::Sized> core::ops::drop::Drop for guatiao::library::kind::Instance<K>
 pub fn guatiao::library::kind::Instance<K>::drop(&mut self)
+pub struct guatiao::library::kind::KindDescription
+impl guatiao::library::kind::KindDescription
+pub fn guatiao::library::kind::KindDescription::doc(&self) -> core::option::Option<&str>
+pub fn guatiao::library::kind::KindDescription::document(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<guatiao::library::kind::KindDescription>, guatiao::library::kind::DescriptionError>
+pub fn guatiao::library::kind::KindDescription::floor(&self) -> usize
+pub fn guatiao::library::kind::KindDescription::floor_hash(&self) -> u32
+pub fn guatiao::library::kind::KindDescription::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::library::kind::KindDescription, guatiao::library::kind::DescriptionError>
+pub fn guatiao::library::kind::KindDescription::name(&self) -> &str
+pub fn guatiao::library::kind::KindDescription::object(&self) -> bool
+pub fn guatiao::library::kind::KindDescription::size(&self) -> usize
+pub fn guatiao::library::kind::KindDescription::slot(&self, &str) -> core::option::Option<(usize, &guatiao::library::kind::SlotDescription)>
+pub fn guatiao::library::kind::KindDescription::slots(&self) -> &[guatiao::library::kind::SlotDescription]
+pub fn guatiao::library::kind::KindDescription::word_of(&self, usize) -> usize
+impl core::clone::Clone for guatiao::library::kind::KindDescription
+pub fn guatiao::library::kind::KindDescription::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::kind::KindDescription
+impl core::cmp::PartialEq for guatiao::library::kind::KindDescription
+pub fn guatiao::library::kind::KindDescription::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::kind::KindDescription
+pub fn guatiao::library::kind::KindDescription::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::kind::KindDescription
 #[repr(C)] pub struct guatiao::library::kind::KindHeader
 pub guatiao::library::kind::KindHeader::floor_hash: u32
 pub guatiao::library::kind::KindHeader::struct_size: u32
@@ -627,6 +834,25 @@ impl core::fmt::Debug for guatiao::library::kind::KindHeader
 pub fn guatiao::library::kind::KindHeader::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for guatiao::library::kind::KindHeader
 impl core::marker::StructuralPartialEq for guatiao::library::kind::KindHeader
+pub struct guatiao::library::kind::LentHandle
+impl guatiao::library::kind::LentHandle
+pub fn guatiao::library::kind::LentHandle::call(&self, &guatiao::library::kind::Caller, usize, alloc::vec::Vec<guatiao::library::kind::Arg<'_>>) -> core::result::Result<guatiao::library::kind::Answer, guatiao::library::kind::ProviderError>
+pub fn guatiao::library::kind::LentHandle::lend<R>(&self, impl core::ops::function::FnOnce(core::option::Option<guatiao::library::kind::LentObject<'_>>) -> R) -> R
+impl core::clone::Clone for guatiao::library::kind::LentHandle
+pub fn guatiao::library::kind::LentHandle::clone(&self) -> Self
+impl core::fmt::Debug for guatiao::library::kind::LentHandle
+pub fn guatiao::library::kind::LentHandle::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::library::kind::LentObject<'a>
+impl<'a> guatiao::library::kind::LentObject<'a>
+pub fn guatiao::library::kind::LentObject<'a>::as_raw(&self) -> &'a guatiao::library::kind::ObjectRaw
+pub fn guatiao::library::kind::LentObject<'a>::call(&self, &guatiao::library::kind::Caller, usize, alloc::vec::Vec<guatiao::library::kind::Arg<'_>>) -> core::result::Result<guatiao::library::kind::Answer, guatiao::library::kind::ProviderError>
+pub unsafe fn guatiao::library::kind::LentObject<'a>::from_raw(&'a guatiao::library::kind::ObjectRaw) -> guatiao::library::kind::LentObject<'a>
+pub fn guatiao::library::kind::LentObject<'a>::share<R>(&self, impl core::ops::function::FnOnce(guatiao::library::kind::LentHandle) -> R) -> R
+impl<'a> core::clone::Clone for guatiao::library::kind::LentObject<'a>
+pub fn guatiao::library::kind::LentObject<'a>::clone(&self) -> Self
+impl<'a> core::fmt::Debug for guatiao::library::kind::LentObject<'a>
+pub fn guatiao::library::kind::LentObject<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for guatiao::library::kind::LentObject<'a>
 pub struct guatiao::library::kind::LibraryParts
 impl guatiao::library::kind::LibraryParts
 pub fn guatiao::library::kind::LibraryParts::info(&self) -> &guatiao::library::desc::LibraryInfo<'_>
@@ -737,6 +963,17 @@ pub fn guatiao::library::kind::ProviderPartsBuilder::table(self, guatiao::librar
 pub fn guatiao::library::kind::ProviderPartsBuilder::version(self, &str) -> Self
 impl core::fmt::Debug for guatiao::library::kind::ProviderPartsBuilder
 pub fn guatiao::library::kind::ProviderPartsBuilder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao::library::kind::RawObject
+impl guatiao::library::kind::RawObject
+pub fn guatiao::library::kind::RawObject::as_raw(&self) -> &guatiao::library::kind::ObjectRaw
+pub fn guatiao::library::kind::RawObject::call(&mut self, &guatiao::library::kind::Caller, usize, alloc::vec::Vec<guatiao::library::kind::Arg<'_>>) -> core::result::Result<guatiao::library::kind::Answer, guatiao::library::kind::ProviderError>
+pub unsafe fn guatiao::library::kind::RawObject::from_raw(guatiao::library::kind::ObjectRaw) -> guatiao::library::kind::RawObject
+pub fn guatiao::library::kind::RawObject::into_raw(self) -> guatiao::library::kind::ObjectRaw
+impl core::fmt::Debug for guatiao::library::kind::RawObject
+pub fn guatiao::library::kind::RawObject::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Send for guatiao::library::kind::RawObject
+impl core::ops::drop::Drop for guatiao::library::kind::RawObject
+pub fn guatiao::library::kind::RawObject::drop(&mut self)
 pub struct guatiao::library::kind::Remote<K: ?core::marker::Sized>
 impl<K: ?core::marker::Sized + guatiao::library::kind::Kind> guatiao::library::kind::Remote<K>
 pub fn guatiao::library::kind::Remote<K>::as_dyn(&self) -> &K
@@ -750,6 +987,34 @@ impl<K: ?core::marker::Sized> core::clone::Clone for guatiao::library::kind::Rem
 pub fn guatiao::library::kind::Remote<K>::clone(&self) -> guatiao::library::kind::Remote<K>
 impl<K: ?core::marker::Sized> core::marker::Send for guatiao::library::kind::Remote<K>
 impl<K: ?core::marker::Sized> core::marker::Sync for guatiao::library::kind::Remote<K>
+pub struct guatiao::library::kind::ServedTable
+impl guatiao::library::kind::ServedTable
+pub fn guatiao::library::kind::ServedTable::as_ptr(&self) -> *const core::ffi::c_void
+pub fn guatiao::library::kind::ServedTable::kind(&self) -> &alloc::sync::Arc<guatiao::library::kind::KindDescription>
+pub fn guatiao::library::kind::ServedTable::kind_table(&self) -> guatiao::library::desc::KindTable<'_>
+pub fn guatiao::library::kind::ServedTable::new(alloc::sync::Arc<guatiao::library::kind::KindDescription>, impl core::ops::function::Fn(&guatiao::library::kind::SlotDescription) -> bool, alloc::sync::Arc<dyn guatiao::library::kind::Serve>) -> core::result::Result<guatiao::library::kind::ServedTable, guatiao::library::kind::TableError>
+pub fn guatiao::library::kind::ServedTable::object(&self, usize) -> core::option::Option<guatiao::library::kind::RawObject>
+pub fn guatiao::library::kind::ServedTable::size(&self) -> usize
+impl core::fmt::Debug for guatiao::library::kind::ServedTable
+pub fn guatiao::library::kind::ServedTable::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Send for guatiao::library::kind::ServedTable
+impl core::marker::Sync for guatiao::library::kind::ServedTable
+pub struct guatiao::library::kind::SlotDescription
+impl guatiao::library::kind::SlotDescription
+pub fn guatiao::library::kind::SlotDescription::answer(&self) -> core::option::Option<&guatiao::library::kind::AnswerType>
+pub fn guatiao::library::kind::SlotDescription::args(&self) -> &[guatiao::library::kind::ArgDescription]
+pub fn guatiao::library::kind::SlotDescription::doc(&self) -> core::option::Option<&str>
+pub fn guatiao::library::kind::SlotDescription::fallible(&self) -> bool
+pub fn guatiao::library::kind::SlotDescription::name(&self) -> &str
+pub fn guatiao::library::kind::SlotDescription::required(&self) -> bool
+impl core::clone::Clone for guatiao::library::kind::SlotDescription
+pub fn guatiao::library::kind::SlotDescription::clone(&self) -> Self
+impl core::cmp::Eq for guatiao::library::kind::SlotDescription
+impl core::cmp::PartialEq for guatiao::library::kind::SlotDescription
+pub fn guatiao::library::kind::SlotDescription::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao::library::kind::SlotDescription
+pub fn guatiao::library::kind::SlotDescription::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao::library::kind::SlotDescription
 pub trait guatiao::library::kind::Kind: 'static
 pub type guatiao::library::kind::Kind::Vtable: 'static
 pub const guatiao::library::kind::Kind::FLOOR: usize
@@ -764,6 +1029,9 @@ pub fn guatiao::library::kind::Kind::shared(guatiao::library::kind::Remote<Self>
 pub trait guatiao::library::kind::ProviderDecl
 pub const guatiao::library::kind::ProviderDecl::KINDS: &'static [&'static str]
 pub fn guatiao::library::kind::ProviderDecl::provider(guatiao::library::raw::Host, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::library::kind::ProviderParts, guatiao::value::error::ValueError>
+pub trait guatiao::library::kind::Serve: core::marker::Send + core::marker::Sync + 'static
+pub fn guatiao::library::kind::Serve::call(&self, usize, &guatiao::library::kind::KindDescription, usize, alloc::vec::Vec<guatiao::library::kind::Arg<'_>>) -> core::result::Result<guatiao::library::kind::Answer, guatiao::library::kind::ProviderError>
+pub fn guatiao::library::kind::Serve::destroy(&self, usize)
 pub mod guatiao::library::notices
 pub struct guatiao::library::notices::Notice<'a>
 pub guatiao::library::notices::Notice::component: &'a str
