@@ -43,6 +43,7 @@ nav:
   - MATLAB and Octave, host and provider: matlab.md
   - Fortran, host and provider: fortran.md
   - C++, host and provider: cpp.md
+  - Lua, host and provider: lua.md
   - API Reference:
       # rustdoc's own output, built by `cargo doc` and copied under
       # `rust/` by the docs workflow. An absolute URL because it is not a

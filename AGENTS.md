@@ -16,6 +16,7 @@ public surface); this file is about the repository.
 | `crates/guatiao-intake/` | taking a value in from a person: the path grammar (`agent[1].name`), flat `key -> text` storage, checking a store of text, and how a schema is shown (sections, widget hints, conditional visibility, `#[derive(Form)]`); C surface in `include/guatiao_intake.h` |
 | `crates/guatiao-bridge/` | what every bridge to a language runtime shares: the `Engine` trait and its thread, manifests and stamps, `BridgeSource` (an engine as a `Source`), kinds served through tables built from their descriptions (`dynamic-kinds`), limits, error mapping, `Convert` and the shared vectors (`vectors/wire.json`, a copy of the core's); `#![forbid(unsafe_code)]`, published; `tests/toy_engine.rs` serves a toy language through every piece |
 | `crates/guatiao-py/` | a source of libraries written in Python: a cdylib exporting `guatiao_source`, built with pyo3 for the stable ABI; a workspace of its own (no other build needs a Python to link), not published |
+| `crates/guatiao-lua/` | a source of libraries written in Lua (a guatiao-bridge engine, Lua built in from C: `lua54` default, `lua55`, `luau`), and Lua's side of guatiao (values, handles on kinds, a registry) the loadable module builds on; cdylib + rlib, a workspace of its own (exclusive Lua features), not published |
 | `examples/source_library/` | a source written in Rust and exported with `guatiao::source!`: a Rust host and a C host add it in `crates/guatiao/tests/source_export.rs` |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
 | `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `include/greeter_kind.kinds.json` is the same kinds as data, written by its `description_is_current` test; `python/greeter_kind.py` describes them for Python; `node/` is what `guatiao-kind` writes from the description (`greeter_kind.js` and `.d.ts`; the Node suite checks it is current); `dart/` is the Dart package `greeter_kind`, its `lib/greeter_kind.dart` what `dart run guatiao:kind` writes from the description (the Dart suite checks it is current); `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind`; `r/greeterkind` is the R package declaring them with `kind()`; `matlab/+greeterkind` declares them for MATLAB and Octave as classes inheriting `guatiao.Kind`; `fortran/` is the fpm package `greeter_kind`, the kinds as abstract types with their remotes and `bind(c)` glue |
@@ -29,6 +30,8 @@ public surface); this file is about the repository.
 | `examples/greeter_host/` | a host program: scans a search path, offers what it found as the trait, builds a provider from a configuration it wrote with its own derives; `cargo run -p greeter_host` after a workspace build; its `tests/docs_snippets.rs` compiles the Rust snippets of `docs/index.md`, `docs/ownership.md`, `docs/migrating.md`, `docs/configuration.md`, `docs/bridges.md` and the root `README.md` and compares them with the text shown; `tests/configuration_files.rs` reads a configuration from TOML text through guatiao |
 | `examples/python_host/` | a host program in Python: scans for greeters in any language, optionally adds `guatiao-py`, calls every slot; `bindings/python/guatiao/tests/test_examples.py` runs it |
 | `examples/python_provider/` | two libraries written in Python, each a module and a `*.guatiao-py.toml` manifest; commands in its `README.md` |
+| `examples/lua_provider/` | `lua_greeter`, a library written in Lua (a module and its `*.guatiao-lua.toml`) serving every slot of the example kinds |
+| `examples/lua_host/` | `host.lua`, a host in Lua: loads libraries and sources, calls every slot of every greeter; guatiao-lua's tests run it embedded, the module's in a stock interpreter |
 | `examples/greeter_caller/` | a cdylib whose C functions call every slot of a greeter, or of a `wide` provider, through the kind's Rust proxy, for a host in another language to have its providers called from Rust |
 | `examples/package.json` | the Node examples' one dependency, on `bindings/node/guatiao`: `npm ci` here, after `npm run build` there (its dependencies live in `bindings/node/node_modules`) |
 | `examples/node_host/` | a host program in TypeScript: scans for greeters in any language, registers Node libraries, optionally adds `guatiao-py`, calls every slot; `bindings/node/guatiao/test/examples.test.ts` runs it |
@@ -67,7 +70,8 @@ public surface); this file is about the repository.
 | `bindings/cpp/guatiao/` | C++ bindings over the C ABI, header-only (`include/guatiao/`), linking the library: the CMake package `guatiao` (`guatiao::guatiao`, `guatiaoConfig.cmake`, `cmake/GuatiaoNative.cmake` finding or cargo-building the library) with its own `AGENTS.md`; `cmake/GuatiaoTests.cmake` builds every suite with exceptions on and off; `tests/compile_fail/` holds files that must not compile; `tests/support/` the harness the satellites' suites share |
 | `bindings/cpp/guatiao-serde/`, `bindings/cpp/guatiao-intake/` | the CMake packages `guatiao-serde` (`guatiao::serde`) and `guatiao-intake` (`guatiao::intake`), each over its own library, with its own `AGENTS.md` |
 | `bindings/matlab/guatiao/` | MATLAB and GNU Octave bindings over the C ABI: the `+guatiao` package in `inst/` (its API header is `inst/AGENTS.md`), and `src/`, one MEX gateway in C with copies of the three headers (a test compares them with the committed ones), built by `mkoctfile --mex` at `pkg install` or by `guatiao.build()`, which opens the library at run time and calls kind slots through libffi; `tests/` is a plain runner (`run_tests`) both interpreters run, `tests/fixtures/` holds the C its tests build |
-| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, a kind's description among them, stated for any language), `kinds.md` (how each language declares a kind and a provider), `python.md`, `node.md`, `go.md`, `julia.md`, `r.md`, `matlab.md`, `fortran.md` and `cpp.md` (Python, Node, Go, Julia, R, MATLAB and Octave, Fortran, and C++ as a host and as a provider), `bridges.md` (a format of its own on the visitor traits, from Rust, C and the bindings), `wasm.md`, `migrating.md` (every break since `0.0.0-alpha.0`, with what to write now); built strictly by `docs.yml` |
+| `bindings/lua/guatiao/` | the module a stock Lua requires (`require "guatiao"`, `luaopen_guatiao`): a cdylib over `guatiao-lua` built against the interpreter that loads it (`lua54` default, `lua55`, `luajit`), the guatiao library linked in; `guatiao-dev-1.rockspec` (`luarocks make`); its own `AGENTS.md`; a workspace of its own |
+| `docs/` | the documentation site (mkdocs): `index.md`, `ownership.md` (passing data between a host and a library without needless copies), `encodings.md` (every value encoding, a kind's description among them, stated for any language), `kinds.md` (how each language declares a kind and a provider), `python.md`, `node.md`, `go.md`, `julia.md`, `r.md`, `matlab.md`, `fortran.md`, `cpp.md` and `lua.md` (Python, Node, Go, Julia, R, MATLAB and Octave, Fortran, C++ and Lua as a host and as a provider), `language-bridges.md` (a bridge to another language on guatiao-bridge), `bridges.md` (a format of its own on the visitor traits, from Rust, C and the bindings), `wasm.md`, `migrating.md` (every break since `0.0.0-alpha.0`, with what to write now); built strictly by `docs.yml` |
 | `benchmarks/` | the benchmark runner (`cargo run -p guatiao-bench --release -- --save NAME`), `python/documents.py` and `dart/` (a document to Python and Dart objects three ways), committed results in `benchmarks/results/`, and `README.md` with the protocol; run on demand, numbers are local and provisional |
 | `.github/workflows/test.yaml` | the on-demand test workflow |
 
@@ -171,6 +175,22 @@ GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-serde --features c-header,json,tom
 GUATIAO_WRITE_HEADER=1 cargo build -p guatiao-intake --features c-header
 GUATIAO_WRITE_HEADER=1 cargo build -p greeter_kind --features c-header   # the kind tables, via macro expansion
 GUATIAO_WRITE_HEADER=1 cargo test -p greeter_kind --test description_is_current   # the same kinds as data, include/greeter_kind.kinds.json
+```
+
+Lua, after `cargo build --workspace --all-features` (the Rust greeter
+and the library the C hosts link): the source and the module are
+workspaces of their own, built before their tests, which add them as
+files. `GUATIAO_PY_BRIDGE` (a guatiao-py build) adds the Python
+greeters, `GUATIAO_LUA` names the stock interpreter (else `lua`), and
+`GUATIAO_LUA_SOURCE` the source for the module's host test:
+
+```bash
+cargo build --manifest-path crates/guatiao-lua/Cargo.toml
+GUATIAO_LIBRARY=target/debug cargo test --manifest-path crates/guatiao-lua/Cargo.toml
+cargo test --manifest-path crates/guatiao-lua/Cargo.toml --no-default-features --features luau,source
+cargo build --manifest-path bindings/lua/guatiao/Cargo.toml
+GUATIAO_LIBRARY=target/debug GUATIAO_LUA_SOURCE=crates/guatiao-lua/target/debug/libguatiao_lua.so \
+  cargo test --manifest-path bindings/lua/guatiao/Cargo.toml
 ```
 
 Python bindings, after `cargo build --workspace --all-features`, with the
