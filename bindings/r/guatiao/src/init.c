@@ -82,6 +82,12 @@ SEXP C_units(SEXP, SEXP, SEXP);
 SEXP C_value_close(SEXP);
 SEXP C_value_is_open(SEXP);
 SEXP C_value_new(SEXP, SEXP);
+SEXP C_wire_accept(SEXP, SEXP);
+SEXP C_wire_decode(SEXP, SEXP);
+SEXP C_wire_encode(SEXP);
+SEXP C_wire_frame(SEXP, SEXP, SEXP);
+SEXP C_wire_receiver_free(SEXP);
+SEXP C_wire_receiver_new(void);
 SEXP C_xptr_live(SEXP);
 
 void gt_kinds_init(void);
@@ -161,6 +167,12 @@ static const R_CallMethodDef calls[] = {
     {"C_value_close", (DL_FUNC)(void (*)(void)) & C_value_close, 1},
     {"C_value_is_open", (DL_FUNC)(void (*)(void)) & C_value_is_open, 1},
     {"C_value_new", (DL_FUNC)(void (*)(void)) & C_value_new, 2},
+    {"C_wire_accept", (DL_FUNC)(void (*)(void)) & C_wire_accept, 2},
+    {"C_wire_decode", (DL_FUNC)(void (*)(void)) & C_wire_decode, 2},
+    {"C_wire_encode", (DL_FUNC)(void (*)(void)) & C_wire_encode, 1},
+    {"C_wire_frame", (DL_FUNC)(void (*)(void)) & C_wire_frame, 3},
+    {"C_wire_receiver_free", (DL_FUNC)(void (*)(void)) & C_wire_receiver_free, 1},
+    {"C_wire_receiver_new", (DL_FUNC)(void (*)(void)) & C_wire_receiver_new, 0},
     {"C_xptr_live", (DL_FUNC)(void (*)(void)) & C_xptr_live, 1},
     {NULL, NULL, 0}};
 

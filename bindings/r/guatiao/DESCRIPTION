@@ -20,4 +20,4 @@ Suggests: bit64
 SystemRequirements: libffi
 Encoding: UTF-8
 NeedsCompilation: yes
-Collate: native.R value.R time.R typed.R schema.R kinds.R registry.R provide.R
+Collate: native.R value.R time.R typed.R schema.R kinds.R registry.R provide.R wire.R

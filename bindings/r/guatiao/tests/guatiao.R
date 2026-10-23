@@ -18,7 +18,7 @@ source(file.path(.tests_dir, "helpers.R"))
 source(file.path(.tests_dir, "json.R"))
 
 files <- c("abi.R", "values.R", "typed.R", "redact.R", "time.R", "frees.R",
-  "greeters.R", "provide.R", "wide.R", "integer64.R", "threads.R", "registry.R", "examples.R")
+  "greeters.R", "provide.R", "wide.R", "integer64.R", "threads.R", "registry.R", "wire.R", "examples.R")
 for (f in files) {
   path <- file.path(.tests_dir, f)
   if (file.exists(path)) run_file(path)

@@ -47,6 +47,9 @@ that carries it.
 - **Dates, times, spans and exact lengths** — `Date`, times of day and
   civil dates and times to the nanosecond, instants, spans and exact
   lengths, read and written by the library itself.
+- **Values on the wire** — `to_wire()` and `from_wire()` carry a tree
+  exactly as bytes, and `wire_receiver()` reads channel frames, checking
+  each value against the schema its channel announced.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
 - **JSON, TOML and YAML**, and **forms checked against a schema**, are
@@ -202,6 +205,7 @@ time_parse("timestamp", "2026-10-21T19:15:00.5+05:30")    # <instant 2026-10-21T
 | `schema_of`, `config_class`, `field`, `from_value`, `validate` | configurations and their schemas |
 | `time_parse`, `time_format`, `time_normalize`, `civil_time`, `civil_datetime`, `instant`, `span`, `exact_length`, `add_span`, `read_length` | dates, times, spans, exact lengths |
 | `redact` | secrets hidden |
+| `to_wire`, `from_wire`, `wire_announce`, `wire_send`, `wire_close`, `wire_receiver` | values as bytes, and channels |
 | `registry` | hosting plugins: `$scan_dir`, `$providers`, `$bind`, `$create`, `$refresh`, ... |
 | `kind`, `method`, `lent`, `taken`, `has_slot`, `byte_buffer`, `bind_table` | a kind, declared from its C header |
 | `provider`, `guatiao_library`, `library_of`, `live_instances` | providers and libraries written in R |
