@@ -213,6 +213,11 @@ class NativeLib {
   late final Pointer<NativeFinalizerFunction> valueFreeFinalizer =
       _dylib.lookup<NativeFinalizerFunction>('guatiao_value_free');
 
+  /// `guatiao_wire_receiver_free` as a finalizer callback, for the
+  /// backstop a channel `Receiver` attaches to itself.
+  late final Pointer<NativeFinalizerFunction> wireReceiverFreeFinalizer =
+      _dylib.lookup<NativeFinalizerFunction>('guatiao_wire_receiver_free');
+
   /// The default allocator, filled by `guatiao_alloc_default` once.
   ///
   /// Allocated for the life of the library and never released: every

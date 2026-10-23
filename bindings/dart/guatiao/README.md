@@ -28,6 +28,10 @@ It works with any shared library that exports the ABI, whether that is
 - **Dates, times, instants and spans** — `PlainDate`, `PlainTime`,
   `PlainDateTime` and `Span`, a UTC `DateTime` for an instant and a
   `Duration` for an exact length, read and written by the library itself.
+- **Values on the wire** — `value.toWire()` and `Value.fromWire(bytes)`
+  carry a tree exactly as bytes, and `package:guatiao/wire.dart`
+  announces a schema on a channel before its values, with a `Receiver`
+  that checks each one.
 - **Redaction** — a copy of a value with every field its schema marks
   secret hidden.
 - **JSON, TOML and YAML**, and **forms checked against a schema**, are
@@ -275,6 +279,7 @@ words when it gave any.
 | `package:guatiao/guatiao.dart` | `Value`, `Ref`, `MapRef`, `ListRef`, `absent`, `Registry`, `Instance`, `kindTable`, the error classes |
 | `package:guatiao/ffi.dart` | for a package over another guatiao library: the generated bindings, `openSurface`, `NativeLib`, `strOf`, `takeValue`, `freeNode`, `checkStatus` |
 | `package:guatiao/time.dart` | `PlainDate`, `PlainTime`, `PlainDateTime`, `Span`, `parseTimestamp`, `formatTimestamp`, `toDuration`, `fromDuration`, `normalize` |
+| `package:guatiao/wire.dart` | channel frames (`announce`, `send`, `close`), `Receiver`, `Event`, the refusals |
 
 [`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/bindings/dart/guatiao/AGENTS.md)
 is the full API reference and ships with the package. The C ABI is

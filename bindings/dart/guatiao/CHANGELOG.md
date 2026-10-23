@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Values on the wire and channels**: `ref.toWire()` and
+  `Value.fromWire(bytes)`; `package:guatiao/wire.dart` with `announce`,
+  `send` and `close` frames and a `Receiver` whose `accept(frame)`
+  answers an `Event` or throws the refusal (`Malformed`, `NoSchema`,
+  `NotASchema`, `Invalid`, each also the status's exception).
 - `package:guatiao/ffi.dart`: what a package over another guatiao library
   builds on: the generated bindings, `openSurface` (a surface's library,
   found through its own variable, then `GUATIAO_LIBRARY`: a directory, or
