@@ -1153,6 +1153,151 @@ jobs:
           test "${PIPESTATUS[0]}" -eq 0
           ! grep -n "skipped" fortran-python.log
 
+  cpp:
+    name: C++ bindings (${{ matrix.cxx }}, C++${{ matrix.std }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # The three header-only packages (each suite built with exceptions on
+    # and off, and the files that must not compile), the host calling
+    # greeters written in Rust, C, Python (through the guatiao-py bridge),
+    # Go (built as a library file) and C++ through sources and refresh();
+    # the C++ library file scanned and called by the Rust and Python example
+    # hosts; and a project outside the repository consuming the packages
+    # through find_package. One leg configures that project with no library
+    # named, so the packages build theirs with cargo. A stated skip fails
+    # the job.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, cxx: g++, cc: gcc, std: "17", cargo_fallback: true }
+          - { os: ubuntu-latest, cxx: clang++, cc: clang, std: "20", cargo_fallback: false }
+          - { os: macos-latest, cxx: clang++, cc: clang, std: "17", cargo_fallback: false }
+          - { os: windows-latest, cxx: cl, cc: cl, std: "17", cargo_fallback: false }
+          - { os: windows-latest, cxx: cl, cc: cl, std: "20", cargo_fallback: false }
+    defaults:
+      run:
+        shell: bash
+    env:
+      GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+      GUATIAO_REQUIRE_ALL: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/guatiao-py
+      - name: Build native libraries
+        # The libraries, the Rust greeters, the Rust caller of any greeter
+        # and the Rust example host.
+        run: cargo build --workspace --all-features
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: "3.14"
+      - name: Where a host that is not Python finds libpython
+        if: runner.os != 'Windows'
+        run: |
+          echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+      - name: Build the guatiao-py bridge, for the Python greeters
+        run: |
+          cargo build --manifest-path crates/guatiao-py/Cargo.toml
+          case "$RUNNER_OS" in
+            Linux)   bridge=libguatiao_py.so ;;
+            macOS)   bridge=libguatiao_py.dylib ;;
+            Windows) bridge=guatiao_py.dll ;;
+          esac
+          echo "GUATIAO_PY_BRIDGE=$GITHUB_WORKSPACE/crates/guatiao-py/target/debug/$bridge" >> "$GITHUB_ENV"
+        env:
+          PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.27"
+          cache: false
+      - name: Build the Go greeter as a library file
+        run: |
+          case "$RUNNER_OS" in
+            Linux)   name=libgo_greeter.so ;;
+            macOS)   name=libgo_greeter.dylib ;;
+            Windows) name=go_greeter.dll ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/go-library"
+          (cd examples && go build -buildmode=c-shared -o "$RUNNER_TEMP/go-library/$name" ./go_provider/cshared)
+          echo "GUATIAO_GO_LIBRARY=$RUNNER_TEMP/go-library" >> "$GITHUB_ENV"
+        env:
+          CGO_ENABLED: "1"
+      - uses: ilammy/msvc-dev-cmd@v1
+        # cl and the Windows SDK on PATH, for CMake with Ninja.
+        if: runner.os == 'Windows'
+      - name: Ninja, and the compilers
+        run: |
+          python -m pip install ninja
+          echo "CXX=${{ matrix.cxx }}" >> "$GITHUB_ENV"
+          echo "CC=${{ matrix.cc }}" >> "$GITHUB_ENV"
+          if [ "$RUNNER_OS" = Windows ]; then
+            # Git's coreutils `link` shadows Visual Studio's link.exe.
+            which -a link | while read -r f; do
+              case "$f" in
+                *"Microsoft Visual Studio"*) ;;
+                *) rm -f "$f" "$f.exe" ;;
+              esac
+            done
+          else
+            "${{ matrix.cxx }}" --version
+          fi
+          cmake --version
+      - name: Test the packages
+        run: |
+          for p in guatiao guatiao-serde guatiao-intake; do
+            cmake -S "bindings/cpp/$p" -B "$RUNNER_TEMP/cpp-$p" -G Ninja -DCMAKE_CXX_STANDARD=${{ matrix.std }}
+            cmake --build "$RUNNER_TEMP/cpp-$p"
+            ctest --test-dir "$RUNNER_TEMP/cpp-$p" --output-on-failure
+          done
+      - name: Test the host, calling every greeter
+        run: |
+          cmake -S examples/cpp_host -B "$RUNNER_TEMP/cpp-host" -G Ninja -DCMAKE_CXX_STANDARD=${{ matrix.std }}
+          cmake --build "$RUNNER_TEMP/cpp-host"
+          ctest --test-dir "$RUNNER_TEMP/cpp-host" -V 2>&1 | tee cpp-host.log
+          test "${PIPESTATUS[0]}" -eq 0
+          if grep -n "  SKIP" cpp-host.log; then exit 1; fi
+      - name: The Rust and Python hosts scan the C++ library and call it
+        run: |
+          export GUATIAO_CPP_LIBRARY="$RUNNER_TEMP/cpp-host/greeters/cpp"
+          cargo test -p greeter_host --all-features --test cpp_library -- --nocapture 2>&1 | tee cpp-library.log
+          test "${PIPESTATUS[0]}" -eq 0
+          if grep -n "skipped:" cpp-library.log; then exit 1; fi
+          # The Rust host's test rebuilt the libraries without serde's
+          # features; the Python host reads them as they ship.
+          cargo build --workspace --all-features
+          python -m pip install -e "bindings/python/guatiao[dev]"
+          python -m pytest -p no:cacheprovider bindings/python/guatiao/tests/test_examples.py -k cpp -rs -q 2>&1 | tee cpp-python.log
+          test "${PIPESTATUS[0]}" -eq 0
+          if grep -n "skipped" cpp-python.log; then exit 1; fi
+      - name: A project outside the repository consumes the packages
+        run: |
+          cmake -S examples/cpp_consumer -B "$RUNNER_TEMP/cpp-consumer" -G Ninja \
+            -DCMAKE_CXX_STANDARD=${{ matrix.std }} \
+            -Dguatiao_DIR="$GITHUB_WORKSPACE/bindings/cpp/guatiao" \
+            -Dguatiao-serde_DIR="$GITHUB_WORKSPACE/bindings/cpp/guatiao-serde" \
+            -Dguatiao-intake_DIR="$GITHUB_WORKSPACE/bindings/cpp/guatiao-intake"
+          cmake --build "$RUNNER_TEMP/cpp-consumer"
+          ctest --test-dir "$RUNNER_TEMP/cpp-consumer" --output-on-failure
+      - name: The packages build their libraries with cargo when none is named
+        if: matrix.cargo_fallback
+        run: |
+          unset GUATIAO_LIBRARY
+          cmake -S examples/cpp_consumer -B "$RUNNER_TEMP/cpp-consumer-cargo" -G Ninja \
+            -Dguatiao_DIR="$GITHUB_WORKSPACE/bindings/cpp/guatiao" \
+            -Dguatiao-serde_DIR="$GITHUB_WORKSPACE/bindings/cpp/guatiao-serde" \
+            -Dguatiao-intake_DIR="$GITHUB_WORKSPACE/bindings/cpp/guatiao-intake"
+          cmake --build "$RUNNER_TEMP/cpp-consumer-cargo"
+          ctest --test-dir "$RUNNER_TEMP/cpp-consumer-cargo" --output-on-failure
+
   dart:
     name: Dart bindings (${{ matrix.os }}, ${{ matrix.sdk }})
     runs-on: ${{ matrix.os }}
