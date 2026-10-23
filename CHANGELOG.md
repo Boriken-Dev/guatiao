@@ -777,6 +777,10 @@ write now.
 
 ### Fixed
 
+- **On FreeBSD a C program needs no `-pthread`.** A program built
+  without it bound libc's failing thread stubs, and the library aborted
+  with `fatal runtime error: out of TLS keys`. Every library that links
+  guatiao now names libthr itself (`NEEDED libthr.so.3`).
 - **A `with` field's default is written through its module.** The schema
   wrote a `#[map(default)]` or `#[map(default = ..)]` beside `with`
   through the field type's own `ToValue`, so a type with no value impls
