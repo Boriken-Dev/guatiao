@@ -1,0 +1,35 @@
+[package]
+name = "guatiao-lua-module"
+description = "The guatiao module a Lua interpreter requires: values, kinds and a registry, from Lua"
+version = "0.0.0-alpha.1"
+edition = "2024"
+rust-version = "1.89"
+repository = "https://github.com/Boriken-Dev/guatiao"
+license = "MPL-2.0"
+readme = "README.md"
+# Built by its user against the Lua that loads it (`luarocks make`, or
+# cargo): nothing is published.
+publish = false
+exclude = [".*", "*.local.*"]
+
+# A workspace of its own: built against one interpreter's Lua, chosen by
+# an exclusive feature.
+[workspace]
+
+[lib]
+# `require "guatiao"` finds `guatiao.so` / `guatiao.dll`: the rockspec (or
+# whoever copies it) names the file; the entry point is `luaopen_guatiao`.
+name = "guatiao_lua_module"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[features]
+default = ["lua54"]
+# The Lua that loads it: exactly one.
+lua54 = ["mlua/lua54", "guatiao-lua/lua54"]
+lua55 = ["mlua/lua55", "guatiao-lua/lua55"]
+luajit = ["mlua/luajit", "guatiao-lua/luajit"]
+
+[dependencies]
+guatiao-lua = { path = "../../../crates/guatiao-lua", version = "=0.0.0-alpha.1", default-features = false, features = ["module"] }
+mlua = { version = "0.12.2", features = ["module"] }

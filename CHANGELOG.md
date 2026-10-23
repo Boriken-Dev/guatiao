@@ -25,6 +25,12 @@ write now.
   depth, memory), a `pcall` around it included, and the host carries on.
   Values keep every shape across: an exact number, bytes apart from text,
   null and absent, a list apart from a map, a map's order.
+- **Lua as a host: `require "guatiao"`.** A module a stock Lua
+  interpreter loads (`bindings/lua/guatiao`, built for Lua 5.4, 5.5 or
+  LuaJIT with `luarocks make` or cargo), the guatiao library inside:
+  a registry that loads libraries and sources, kinds read from their
+  descriptions, providers bound to a kind and called as methods, refusals
+  as `nil, err`, and Lua tables handed to providers as objects.
 - **`RawObject::lend`**: an object a caller owns, lent to a slot that
   takes a lent one, without `unsafe`.
 - **`guatiao-bridge`: what every bridge to a language runtime shares.** A

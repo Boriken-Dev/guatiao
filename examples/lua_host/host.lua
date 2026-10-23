@@ -79,6 +79,13 @@ local function offered(answer, err)
   return true
 end
 
+-- A greeter that runs on a thread of its own (a Lua library, through the
+-- guatiao-lua source) cannot call a Lua table back: the table is called
+-- on this interpreter's thread only, which is waiting for the answer.
+local function elsewhere(answer, err)
+  return answer == nil and err ~= nil and err.status == "internal"
+end
+
 local called = 0
 for _, p in ipairs(registry:providers("greeter")) do
   if p.configured then
@@ -111,7 +118,9 @@ for _, p in ipairs(registry:providers("greeter")) do
 
     local ear, heard = listener()
     local told, terr = g:greet_into("di", ear)
-    if offered(told, terr) then
+    if elsewhere(told, terr) then
+      print(("%s cannot call a Lua table back from its thread"):format(p.key))
+    elseif offered(told, terr) then
       check(told and heard[1] and heard[1]:find("di", 1, true), p.key .. " tells a lent listener: " .. tostring(terr))
       print(("%s told a lent listener: %s"):format(p.key, heard[1]))
     end
@@ -119,13 +128,16 @@ for _, p in ipairs(registry:providers("greeter")) do
     local talker, said = listener()
     local talk, serr = g:start(talker)
     if offered(talk, serr) and talk then
-      assert(talk:say("one"))
-      assert(talk:say("two"))
-      check(talk:turns() == 2, p.key .. " counts turns")
-      local buf = guatiao.buffer(64)
-      local n = talk:read(buf)
-      print(("%s held a conversation: %s"):format(p.key, buf:sub(1, n)))
-      check(said[2] == "two", p.key .. " told the handed listener")
+      local first, ferr2 = talk:say("one")
+      if not elsewhere(first, ferr2) then
+        check(first, p.key .. " says: " .. tostring(ferr2))
+        assert(talk:say("two"))
+        check(talk:turns() == 2, p.key .. " counts turns")
+        local buf = guatiao.buffer(64)
+        local n = talk:read(buf)
+        print(("%s held a conversation: %s"):format(p.key, buf:sub(1, n)))
+        check(said[2] == "two", p.key .. " told the handed listener")
+      end
     end
     called = called + 1
   end
