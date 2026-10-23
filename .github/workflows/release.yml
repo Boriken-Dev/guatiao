@@ -165,6 +165,16 @@ jobs:
           cmake = re.search(r"project\(guatiao_fortran VERSION (\S+)", pathlib.Path("bindings/fortran/guatiao/CMakeLists.txt").read_text()).group(1)
           if cmake != core:
               problems.append(f"Cargo says {cargo}, so bindings/fortran/guatiao/CMakeLists.txt wants {core}, not {cmake}")
+          # C++ names the version in its header, as written, and in each
+          # package's CMake project, three numbers as fpm's.
+          header = re.search(r'^#define GUATIAO_CPP_VERSION "([^"]+)"', pathlib.Path("bindings/cpp/guatiao/include/guatiao/value.hpp").read_text(), re.M).group(1)
+          if header != cargo:
+              problems.append(f"Cargo says {cargo} and bindings/cpp/guatiao/include/guatiao/value.hpp says {header}")
+          for package in ("guatiao", "guatiao-serde", "guatiao-intake"):
+              where = f"bindings/cpp/{package}/CMakeLists.txt"
+              found = re.search(r"project\(\w+ VERSION (\S+)", pathlib.Path(where).read_text()).group(1)
+              if found != core:
+                  problems.append(f"Cargo says {cargo}, so {where} wants {core}, not {found}")
           # A Go module's version is the tag publish-go makes from Cargo's;
           # the serde and intake modules require the core at it.
           for crate in ("serde", "intake"):
