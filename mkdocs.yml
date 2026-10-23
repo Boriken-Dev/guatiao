@@ -45,6 +45,7 @@ nav:
       - Rust: https://boriken-dev.github.io/guatiao/rust/guatiao/index.html
       - Python: api/python.md
       - Dart: api/dart.md
+  - One library for your application: app-library.md
   - In a browser: wasm.md
   - Migrating from 0.0.0-alpha.0: migrating.md
   - Changelog: changelog.md
