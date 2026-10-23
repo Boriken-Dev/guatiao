@@ -1,7 +1,8 @@
 # guatiao-serde — shipped API header
 
 serde for guatiao values. One `Serialize` and one `DeserializeSeed`, so
-every serde data format can carry a value.
+every serde data format can carry a value; and `adapt`, so any serde type
+can be a field of a derived type.
 
 Depends on `guatiao` and `serde`; each format is a feature that adds its
 parser (`json` is on by default and adds `serde_json`). The formats in
@@ -55,6 +56,16 @@ enum Numbers { Native (default), RawText }                  // #[non_exhaustive]
 // the encoding the spellings are built on
 base64(&[u8]) -> String        from_base64(&str) -> Option<Vec<u8>>
 data_uri(&[u8]) -> String      from_data_uri(&str) -> Option<Vec<u8>>
+
+// any serde type as a field (src/adapt.rs), no feature needed
+adapt::to_value_in<T: Serialize + ?Sized>(&T, Alloc) -> Result<Value, ValueError>
+adapt::from_value<T: DeserializeOwned>(&Value) -> Result<T, MapError>
+adapt::any::{to_value_in, from_value, kind}      // #[map(with = ..)]: `{}`
+adapt::object::{to_value_in, from_value, kind}   // #[map(with = ..)]: an open object
+struct Serde<T, S = Value>(pub T, _)             // re-exported at the root
+  Serde::new(T) / From<T> / .into_inner() / Deref, DerefMut / .0
+  impl ToValue (T: Serialize), FromValue (T: DeserializeOwned), Schema (S: Schema; S's kind)
+  impl Debug, Clone, PartialEq, Eq, Default on T alone
 
 // the formats: `pub mod text`, one module per feature; `Error` is re-exported
 enum Error { Format { format, detail },              // a writer refused a value
@@ -124,6 +135,34 @@ typedef struct guatiao_parse_error {
   allocate**, `GUATIAO_ERR_BAD_VALUE` for text that is not UTF-8 or a
   document the format refused, `GUATIAO_ERR_WRONG_KIND` for a value the
   format cannot carry, `GUATIAO_ERR_INTERNAL` if a panic was caught.
+
+## A serde type as a field
+
+`#[map(with = guatiao_serde::adapt::object)]` (an open object) or
+`adapt::any` (`{}`) on a bare field, or the wrapper `Serde<T, S>`, whose
+schema is `S::kind` (`Value` by default; `guatiao::Map` for an open
+object; any `Schema` type of yours). A module of your own is
+`pub use guatiao_serde::adapt::{from_value, to_value_in};` and a `kind`.
+
+- **serde's data model, externally tagged**: a unit variant is its name,
+  any other a map of one key; a unit or `None` is null; a newtype is its
+  content; a map key that is a number or a character is its text, any
+  other refused (`WrongKind`).
+- **Writing** (`to_value_in`): a float keeps a fraction (`1.0` is `1.0`;
+  NaN and infinity are `NotANumber`); a one-field struct under serde_json's
+  number token or toml's date token is that number or that text, so a
+  `serde_json::Number` under `arbitrary_precision` keeps its spelling and
+  a TOML date is its text; deeper than `MAX_DEPTH` is `TooDeep`; a
+  type's own `S::Error::custom` is `Unrepresentable` (no message).
+- **Reading** (`from_value`): a number is visited as `i64`, `u64`, `i128`,
+  `u128`, else (a fraction or exponent) the nearest finite `f64`, so
+  `1.10` reads `1.1`; an integer wider than 128 bits is refused, except
+  into an `f32`/`f64`. Text and bytes are borrowed; null and absent read
+  as `None`. Human-readable, so a type with two forms takes its text one.
+- **Errors name the key, never the value**: a struct field `a.b`, an open
+  map's key `a[b]`, a position `[i]`; `missing_field` is
+  `MapError::MissingKey`, everything else `BadValue` with what was
+  expected (serde's quoting defaults are overridden).
 
 ## Why a wrapper and a seed rather than plain impls
 

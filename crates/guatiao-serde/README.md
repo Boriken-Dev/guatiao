@@ -28,6 +28,9 @@ rather than any one format.
   `1.10`, `1e400`, a 200-digit integer — and read exactly with the
   `exact-numbers` feature, which has a cost in the rest of your build (see
   below).
+- **Any serde type as a field of a derived type**, with no impls of
+  guatiao's traits: `#[map(with = guatiao_serde::adapt::object)]` or
+  `adapt::any` on a bare field, or the wrapper `Serde<T, S>`.
 - **A C surface** with its own `include/guatiao_serde.h`.
 
 ## Installation
@@ -135,6 +138,7 @@ secret. TOML tables are read in document order.
 | `ValueSeed` | a `DeserializeSeed` that builds a value through a named allocator |
 | `Presentation`, `Bytes`, `Numbers` | how bytes and out-of-range numbers are written |
 | `text::{json, toml, yaml}` | `to_string` / `from_str` for each, behind its feature |
+| `adapt::{any, object}`, `Serde<T, S>` | any serde type as a field of a derived type: a `with` module, or a wrapper whose schema is `S`'s |
 
 ## Development
 
