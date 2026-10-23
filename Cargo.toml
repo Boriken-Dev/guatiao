@@ -54,3 +54,8 @@ license = "MPL-2.0"
 # Publishable. Each example says `publish = false` itself, so only the four
 # crates can reach a registry.
 publish = true
+
+# Dependencies build without debug info; the workspace's own crates keep it.
+# Most of a debug target directory is otherwise dependencies' `.pdb` files.
+[profile.dev.package."*"]
+debug = false
