@@ -531,6 +531,12 @@ write now.
   Fortran. A served slot runs on the thread that calls it; a Fortran
   library is never unmapped. The examples: `examples/greeter_kind/fortran/`,
   `examples/fortran_greeter/` and `examples/fortran_host/`.
+- **The C headers are tested as C++.** `guatiao.h`, `guatiao_serde.h` and
+  `guatiao_intake.h` compile alone and together as C++11, C++17 and
+  C++20 with warnings as errors (C++14 under MSVC's `cl`, its oldest
+  mode), and a C++ program calling one function from each links and
+  runs. `GUATIAO_CXX` picks the compiler; `cl` and `clang-cl` take MSVC
+  flags.
 
 ### Changed
 
