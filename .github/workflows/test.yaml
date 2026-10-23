@@ -1418,11 +1418,19 @@ jobs:
           echo "$RUNNER_TEMP/dart-sdk/bin" >> "$GITHUB_PATH"
       - name: Run ARM programs without QEMU_LD_PREFIX
         # A build hook (guatiao's, ffigen's) runs with an environment that
-        # drops QEMU_LD_PREFIX, so the ARM loader and C library go where an
-        # ARM program looks for them.
+        # drops QEMU_LD_PREFIX, so the ARM loader and each cross library go
+        # where an ARM program looks for them. That directory already exists
+        # (binutils-arm-linux-gnueabihf keeps its linker scripts there), so
+        # the libraries are linked into it one by one.
         run: |
-          [ -e /lib/ld-linux-armhf.so.3 ] || sudo ln -s /usr/arm-linux-gnueabihf/lib/ld-linux-armhf.so.3 /lib/ld-linux-armhf.so.3
-          [ -e /lib/arm-linux-gnueabihf ] || sudo ln -s /usr/arm-linux-gnueabihf/lib /lib/arm-linux-gnueabihf
+          cross=/usr/arm-linux-gnueabihf/lib
+          sudo mkdir -p /usr/lib/arm-linux-gnueabihf
+          for f in "$cross"/*.so*; do
+            [ -e "/usr/lib/arm-linux-gnueabihf/${f##*/}" ] || sudo ln -s "$f" /usr/lib/arm-linux-gnueabihf/
+          done
+          [ -e /lib/ld-linux-armhf.so.3 ] || sudo ln -s "$cross/ld-linux-armhf.so.3" /lib/ld-linux-armhf.so.3
+          env -u QEMU_LD_PREFIX /lib/ld-linux-armhf.so.3 --list "$(command -v dart)" | tee "$RUNNER_TEMP/dart-libs.txt"
+          if grep 'not found' "$RUNNER_TEMP/dart-libs.txt"; then exit 1; fi
           env -u QEMU_LD_PREFIX dart --version
         shell: bash
       - name: Install
