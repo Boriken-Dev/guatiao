@@ -53,6 +53,13 @@
   X(intake_flatten)                                                            \
   X(intake_unflatten)                                                          \
   X(redact)                                                                    \
+  X(wire_encode)                                                               \
+  X(wire_decode)                                                               \
+  X(wire_frame)                                                                \
+  X(receiver_new)                                                              \
+  X(receiver_free)                                                             \
+  X(receiver_is_open)                                                          \
+  X(receiver_accept)                                                           \
   X(schema_validate)                                                           \
   X(kind_new)                                                                  \
   X(table_floor_hash)                                                          \

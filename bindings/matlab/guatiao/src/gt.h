@@ -126,7 +126,8 @@ enum {
   GT_H_REMOTE = 5,
   GT_H_KIND = 6,
   GT_H_LIBRARY = 7,
-  GT_H_SOURCE_ENTRY = 8
+  GT_H_SOURCE_ENTRY = 8,
+  GT_H_RECEIVER = 9 /* gt_receiver: a channel receiver */
 };
 
 /* Files `ptr` under a new id (never reused); 0 when out of memory. */

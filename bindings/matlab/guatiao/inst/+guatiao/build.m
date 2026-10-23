@@ -22,7 +22,7 @@ function out = build(varargin)
                                                 'Strict', false, 'Flags', {{}}, 'Verbose', false));
   src = guatiao.internal.source_dir();
   files = {'guatiao_mex.c', 'core.c', 'convert.c', 'values.c', 'forms.c', 'native.c', ...
-           'kinds.c', 'provide.c', 'registry.c'};
+           'kinds.c', 'provide.c', 'registry.c', 'wire.c'};
   files = files(cellfun(@(f) exist(fullfile(src, f), 'file') == 2, files));
   paths = cellfun(@(f) fullfile(src, f), files, 'UniformOutput', false);
 
