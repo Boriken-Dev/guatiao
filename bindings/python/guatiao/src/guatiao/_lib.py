@@ -7,8 +7,8 @@
 Every export gets a declared `argtypes`/`restype` up front, from a table,
 so ctypes passes the width the function actually expects rather than
 whatever the platform's default promotion happens to produce. This
-declares every real, linkable export of `guatiao.h` but the two wire
-functions -- not the 22 `static inline` helpers alongside them, which
+declares every real, linkable export of `guatiao.h` -- not the 22
+`static inline` helpers alongside them, which
 have no symbol in any library and are reimplemented in `value.py`
 instead. `find_library` and `Library` serve the packages over the other
 guatiao libraries too (`guatiao.ffi`).
@@ -39,6 +39,7 @@ Alloc = _abi.Alloc
 c_int64 = ctypes.c_int64
 c_uint64 = ctypes.c_uint64
 TextError = _abi.TextError
+WireEvent = _abi.WireEvent
 ProviderError = _abi.ProviderError
 
 _P = ctypes.POINTER
@@ -380,6 +381,18 @@ _CORE_EXPORTS: dict[str, tuple[list[Any], Any, str | None]] = {
     "guatiao_string_push": ([_P(Alloc), _P(Value), Str], c_uint32, None),
     "guatiao_buffer_push": ([_P(Alloc), _P(Value), Bytes], c_uint32, None),
     "guatiao_alloc_default": ([_P(Alloc)], c_uint32, None),
+    "guatiao_wire_encode": ([_P(Alloc), _P(Value), _P(Value)], c_uint32, None),
+    "guatiao_wire_decode": ([_P(Alloc), Bytes, _P(Value)], c_uint32, None),
+    "guatiao_wire_announce": (
+        [_P(Alloc), c_uint64, _P(Value), _P(Value)],
+        c_uint32,
+        None,
+    ),
+    "guatiao_wire_send": ([_P(Alloc), c_uint64, _P(Value), _P(Value)], c_uint32, None),
+    "guatiao_wire_close": ([_P(Alloc), c_uint64, _P(Value)], c_uint32, None),
+    "guatiao_wire_receiver_new": ([_P(Alloc)], c_void_p, None),
+    "guatiao_wire_receiver_accept": ([c_void_p, Bytes, _P(WireEvent)], c_uint32, None),
+    "guatiao_wire_receiver_free": ([c_void_p], None, None),
 }
 
 # The three text functions of each date, time and span form.

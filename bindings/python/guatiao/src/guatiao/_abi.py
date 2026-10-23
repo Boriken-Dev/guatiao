@@ -231,6 +231,20 @@ class TextError(ctypes.Structure):
     _fields_ = [("at", c_size_t), ("expected", Value)]
 
 
+class WireEvent(ctypes.Structure):
+    """`guatiao_wire_event`: what one channel frame said, or why it was
+    refused. Its three values are the caller's to free."""
+
+    _fields_ = [
+        ("channel", ctypes.c_uint64),
+        ("kind", c_uint32),
+        ("refusal", c_uint32),
+        ("at", c_size_t),
+        ("value", Value),
+        ("message", Value),
+        ("detail", Value),
+    ]
+
 
 class KindHeader(ctypes.Structure):
     """`guatiao_kind_header`: the first eight bytes of every kind table."""

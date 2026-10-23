@@ -21,7 +21,7 @@ from collections.abc import Mapping
 from typing import Any, Iterator, Protocol, Union
 
 from . import _abi, _lib
-from .errors import check
+from .errors import check, raise_for_status
 
 Number = Union[int, float, decimal.Decimal]
 
@@ -378,6 +378,19 @@ class Ref:
             raise TypeError("value is not a list")
         return List(self.owner, self.path)
 
+    def to_wire(self) -> bytes:
+        """This node in the wire encoding: a tag byte per node, LEB128
+        lengths, a number as its own text, a map in its order. The same
+        tree comes back from `Value.from_wire`, in any language."""
+        node = self._require_node()
+        lib = _lib.core()
+        out = _abi.Value()
+        check(lib.guatiao_wire_encode(ctypes.byref(lib.alloc), ctypes.byref(node), ctypes.byref(out)))
+        try:
+            return _buffer_view(out.payload.bytes)
+        finally:
+            _free(out)
+
     def clone(self) -> "Value":
         """A deep, independent copy of this node, as its own `Value`."""
         node = self._require_node()
@@ -712,6 +725,24 @@ class Value(Ref):
             _lib.core().guatiao_value_bytes(
                 ctypes.byref(value._ensure_alloc()), view, ctypes.byref(value._raw)
             )
+        )
+        return value
+
+    @classmethod
+    def from_wire(cls, data: bytes, *, alloc: "_abi.Alloc | None" = None) -> "Value":
+        """The value the wire encoding in `data` holds.
+
+        Raises `BadValue` for bytes that are not exactly one value:
+        truncated, an unknown tag, a length not in its shortest form, text
+        that is not UTF-8, a number outside the grammar, a repeated key,
+        anything after the value."""
+        value = cls(alloc=alloc)
+        view, _buf = _make_bytes(bytes(data))
+        raise_for_status(
+            _lib.core().guatiao_wire_decode(
+                ctypes.byref(value._ensure_alloc()), view, ctypes.byref(value._raw)
+            ),
+            "bytes that are not a value in the wire encoding",
         )
         return value
 

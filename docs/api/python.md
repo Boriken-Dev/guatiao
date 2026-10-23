@@ -30,6 +30,10 @@ library search.
 
 ::: guatiao.time
 
+## Values on the wire, and channels
+
+::: guatiao.wire
+
 ## Secrets
 
 ::: guatiao.schema

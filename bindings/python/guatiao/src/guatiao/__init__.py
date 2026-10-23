@@ -28,6 +28,7 @@ from ._lib import LibraryNotFound, MissingSymbol, use_library
 from .registry import Instance, Registry
 from .schema import redact
 from .value import ABSENT, List, Map, Ref, Value
+from . import wire
 
 __version__ = "0.0.0a1"
 
@@ -41,6 +42,7 @@ __all__ = [
     "Registry",
     "Instance",
     "redact",
+    "wire",
     "GuatiaoError",
     "BadValue",
     "Unparsed",
