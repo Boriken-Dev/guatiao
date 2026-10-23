@@ -29,7 +29,9 @@ default = ["json"]
 # `raw_value` only adds a type; it is what writes a number's exact text as a
 # bare token. Reading a number goes through serde_json's own visitors, so
 # one past `i64`/`u64` arrives as an `f64` (`1.10` as `1.1`).
-json = ["dep:serde_json", "serde_json/raw_value"]
+# `guatiao/serde_json` gives `serde_json::Value` and `serde_json::Map` the
+# value traits, so a derived type can hold one as a field.
+json = ["dep:serde_json", "serde_json/raw_value", "guatiao/serde_json"]
 
 # A number read from JSON arrives as its own TEXT -- `1.10` stays `1.10`, a
 # 200-digit integer survives -- because serde_json keeps it. Its own opt-in,
@@ -39,8 +41,9 @@ json = ["dep:serde_json", "serde_json/raw_value"]
 exact-numbers = ["json", "serde_json/arbitrary_precision"]
 
 # A TOML document is a TABLE: writing a bare scalar or array is refused
-# rather than wrapped in a key the value never had.
-toml = ["dep:toml"]
+# rather than wrapped in a key the value never had. `guatiao/toml` gives
+# `toml::Value` and `toml::Table` the value traits.
+toml = ["dep:toml", "guatiao/toml"]
 
 # `serde-saphyr` rather than the obvious names, which are gone:
 # `serde_yaml` is deprecated and `serde_yml` describes ITSELF as an
@@ -87,6 +90,8 @@ rmp-serde = "1"
 # something a third party checked rather than something we assert. A DEV
 # dependency of this crate and never of guatiao, which has none at all.
 boon = "0.6"
+# A derived type holding a TOML or JSON table, read from a document.
+guatiao = { path = "../guatiao", features = ["derive"] }
 
 [lints]
 workspace = true

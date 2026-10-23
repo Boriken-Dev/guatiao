@@ -2326,6 +2326,14 @@ impl guatiao::schema::describe::Schema for isize
 pub fn isize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn isize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for serde_json::value::Value
+pub fn serde_json::value::Value::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn serde_json::value::Value::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn serde_json::value::Value::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for std::path::Path
 pub fn std::path::Path::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn std::path::Path::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -2342,6 +2350,14 @@ impl guatiao::schema::describe::Schema for str
 pub fn str::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn str::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn str::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for toml::table::Table
+pub fn toml::table::Table::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn toml::table::Table::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn toml::table::Table::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for toml::value::Value
+pub fn toml::value::Value::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn toml::value::Value::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn toml::value::Value::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for u128
 pub fn u128::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn u128::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -3069,6 +3085,14 @@ impl guatiao::schema::describe::Schema for isize
 pub fn isize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn isize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for serde_json::value::Value
+pub fn serde_json::value::Value::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn serde_json::value::Value::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn serde_json::value::Value::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for std::path::Path
 pub fn std::path::Path::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn std::path::Path::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -3085,6 +3109,14 @@ impl guatiao::schema::describe::Schema for str
 pub fn str::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn str::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn str::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for toml::table::Table
+pub fn toml::table::Table::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn toml::table::Table::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn toml::table::Table::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for toml::value::Value
+pub fn toml::value::Value::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn toml::value::Value::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn toml::value::Value::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for u128
 pub fn u128::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn u128::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -3445,10 +3477,18 @@ impl guatiao::value::convert::FromValue for i8
 pub fn i8::from_value(&guatiao::value::value::Value) -> core::result::Result<i8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for isize
 pub fn isize::from_value(&guatiao::value::value::Value) -> core::result::Result<isize, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::from_value(&guatiao::value::value::Value) -> core::result::Result<serde_json::map::Map<alloc::string::String, serde_json::value::Value>, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for serde_json::value::Value
+pub fn serde_json::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<serde_json::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for std::path::PathBuf
 pub fn std::path::PathBuf::from_value(&guatiao::value::value::Value) -> core::result::Result<std::path::PathBuf, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for std::time::SystemTime
 pub fn std::time::SystemTime::from_value(&guatiao::value::value::Value) -> core::result::Result<std::time::SystemTime, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for toml::table::Table
+pub fn toml::table::Table::from_value(&guatiao::value::value::Value) -> core::result::Result<toml::table::Table, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for toml::value::Value
+pub fn toml::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<toml::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u128
 pub fn u128::from_value(&guatiao::value::value::Value) -> core::result::Result<u128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u16
@@ -3769,6 +3809,12 @@ pub fn i8::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Res
 impl guatiao::value::convert::ToValue for isize
 pub fn isize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for serde_json::value::Value
+pub fn serde_json::value::Value::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn serde_json::value::Value::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for std::path::Path
 pub fn std::path::Path::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn std::path::Path::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -3781,6 +3827,12 @@ pub fn std::time::SystemTime::to_value_in(&self, guatiao::value::alloc::Alloc) -
 impl guatiao::value::convert::ToValue for str
 pub fn str::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn str::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for toml::table::Table
+pub fn toml::table::Table::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn toml::table::Table::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for toml::value::Value
+pub fn toml::value::Value::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn toml::value::Value::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for u128
 pub fn u128::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn u128::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -7235,10 +7287,18 @@ impl guatiao::value::convert::FromValue for i8
 pub fn i8::from_value(&guatiao::value::value::Value) -> core::result::Result<i8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for isize
 pub fn isize::from_value(&guatiao::value::value::Value) -> core::result::Result<isize, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::from_value(&guatiao::value::value::Value) -> core::result::Result<serde_json::map::Map<alloc::string::String, serde_json::value::Value>, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for serde_json::value::Value
+pub fn serde_json::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<serde_json::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for std::path::PathBuf
 pub fn std::path::PathBuf::from_value(&guatiao::value::value::Value) -> core::result::Result<std::path::PathBuf, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for std::time::SystemTime
 pub fn std::time::SystemTime::from_value(&guatiao::value::value::Value) -> core::result::Result<std::time::SystemTime, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for toml::table::Table
+pub fn toml::table::Table::from_value(&guatiao::value::value::Value) -> core::result::Result<toml::table::Table, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for toml::value::Value
+pub fn toml::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<toml::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u128
 pub fn u128::from_value(&guatiao::value::value::Value) -> core::result::Result<u128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u16
@@ -7439,6 +7499,12 @@ pub fn i8::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Res
 impl guatiao::value::convert::ToValue for isize
 pub fn isize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for serde_json::value::Value
+pub fn serde_json::value::Value::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn serde_json::value::Value::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for std::path::Path
 pub fn std::path::Path::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn std::path::Path::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -7451,6 +7517,12 @@ pub fn std::time::SystemTime::to_value_in(&self, guatiao::value::alloc::Alloc) -
 impl guatiao::value::convert::ToValue for str
 pub fn str::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn str::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for toml::table::Table
+pub fn toml::table::Table::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn toml::table::Table::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for toml::value::Value
+pub fn toml::value::Value::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn toml::value::Value::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for u128
 pub fn u128::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn u128::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -8943,10 +9015,18 @@ impl guatiao::value::convert::FromValue for i8
 pub fn i8::from_value(&guatiao::value::value::Value) -> core::result::Result<i8, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for isize
 pub fn isize::from_value(&guatiao::value::value::Value) -> core::result::Result<isize, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::from_value(&guatiao::value::value::Value) -> core::result::Result<serde_json::map::Map<alloc::string::String, serde_json::value::Value>, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for serde_json::value::Value
+pub fn serde_json::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<serde_json::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for std::path::PathBuf
 pub fn std::path::PathBuf::from_value(&guatiao::value::value::Value) -> core::result::Result<std::path::PathBuf, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for std::time::SystemTime
 pub fn std::time::SystemTime::from_value(&guatiao::value::value::Value) -> core::result::Result<std::time::SystemTime, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for toml::table::Table
+pub fn toml::table::Table::from_value(&guatiao::value::value::Value) -> core::result::Result<toml::table::Table, guatiao::value::convert::MapError>
+impl guatiao::value::convert::FromValue for toml::value::Value
+pub fn toml::value::Value::from_value(&guatiao::value::value::Value) -> core::result::Result<toml::value::Value, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u128
 pub fn u128::from_value(&guatiao::value::value::Value) -> core::result::Result<u128, guatiao::value::convert::MapError>
 impl guatiao::value::convert::FromValue for u16
@@ -9191,6 +9271,14 @@ impl guatiao::schema::describe::Schema for isize
 pub fn isize::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn isize::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for serde_json::value::Value
+pub fn serde_json::value::Value::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn serde_json::value::Value::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn serde_json::value::Value::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for std::path::Path
 pub fn std::path::Path::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn std::path::Path::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -9207,6 +9295,14 @@ impl guatiao::schema::describe::Schema for str
 pub fn str::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn str::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn str::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for toml::table::Table
+pub fn toml::table::Table::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn toml::table::Table::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn toml::table::Table::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::schema::describe::Schema for toml::value::Value
+pub fn toml::value::Value::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
+pub fn toml::value::Value::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn toml::value::Value::schema_in(guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::schema::describe::Schema for u128
 pub fn u128::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn u128::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -9471,6 +9567,12 @@ pub fn i8::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Res
 impl guatiao::value::convert::ToValue for isize
 pub fn isize::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn isize::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for serde_json::map::Map<alloc::string::String, serde_json::value::Value>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn serde_json::map::Map<alloc::string::String, serde_json::value::Value>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for serde_json::value::Value
+pub fn serde_json::value::Value::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn serde_json::value::Value::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for std::path::Path
 pub fn std::path::Path::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn std::path::Path::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -9483,6 +9585,12 @@ pub fn std::time::SystemTime::to_value_in(&self, guatiao::value::alloc::Alloc) -
 impl guatiao::value::convert::ToValue for str
 pub fn str::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn str::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for toml::table::Table
+pub fn toml::table::Table::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn toml::table::Table::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::convert::ToValue for toml::value::Value
+pub fn toml::value::Value::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn toml::value::Value::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 impl guatiao::value::convert::ToValue for u128
 pub fn u128::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn u128::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>

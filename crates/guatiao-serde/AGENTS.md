@@ -10,9 +10,9 @@ which format you should use.
 
 | Flag | Adds | Needed for | Default |
 | --- | --- | --- | --- |
-| `json` | `serde_json` (with `raw_value`) | `text::json` | yes |
+| `json` | `serde_json` (with `raw_value`) | `text::json`; `guatiao/serde_json`, so `serde_json::Value` and `serde_json::Map` are field types | yes |
 | `exact-numbers` | `json` and `serde_json/arbitrary_precision` | reading a JSON number as its own text | no |
-| `toml` | `toml` (with `preserve_order`) | `text::toml` | no |
+| `toml` | `toml` (with `preserve_order`) | `text::toml`; `guatiao/toml`, so `toml::Table` and `toml::Value` are field types | no |
 | `yaml` | `serde-saphyr` | `text::yaml` | no |
 | `c-header` | `cbindgen` | regenerating `include/guatiao_serde.h` | no |
 
