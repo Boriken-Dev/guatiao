@@ -26,15 +26,19 @@ void main() {
   test('the library is serde\'s own, and carries the core too', () {
     final lib = serde.library();
     expect(
-        lib.path, namedLibraryFile() ?? endsWith(dllFilename('guatiao_serde')));
+      lib.path,
+      namedLibraryFile() ?? endsWith(dllFilename('guatiao_serde')),
+    );
     expect(lib.provides('guatiao_value_free'), isTrue);
   });
 
   test('a parse error is laid out as the header says', () {
     // Three uint32_t, padding, then the message value the reader strides to.
     final word = sizeOf<IntPtr>();
-    expect(sizeOf<guatiao_parse_error>(),
-        ((12 + word - 1) & ~(word - 1)) + 8 + 4 * word);
+    expect(
+      sizeOf<guatiao_parse_error>(),
+      ((12 + word - 1) & ~(word - 1)) + 8 + 4 * word,
+    );
   });
 
   test('a refusal that is not a syntax error keeps its message', () {
@@ -42,9 +46,10 @@ void main() {
     addTearDown(() => calloc.free(error));
     final core = openSurface('guatiao');
     // `message` is the last field of the struct.
-    final message = (error.cast<Uint8>() +
-            (sizeOf<guatiao_parse_error>() - sizeOf<guatiao_value>()))
-        .cast<guatiao_value>();
+    final message =
+        (error.cast<Uint8>() +
+                (sizeOf<guatiao_parse_error>() - sizeOf<guatiao_value>()))
+            .cast<guatiao_value>();
     using((arena) {
       expect(
         core.bindings.guatiao_value_string(

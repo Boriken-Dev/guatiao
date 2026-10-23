@@ -21,11 +21,9 @@ const _schema = <String, Object?>{
 
 /// Reuses freed heap blocks, so a read through a stale address shows.
 List<Value> _churn() => [
-      for (var i = 0; i < 200; i++)
-        Value.fromDart({
-          'k' * 40: List.filled(8, 'x' * 64),
-        }),
-    ];
+  for (var i = 0; i < 200; i++)
+    Value.fromDart({'k' * 40: List.filled(8, 'x' * 64)}),
+];
 
 void main() {
   setUpAll(setUpLibrary);

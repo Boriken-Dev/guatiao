@@ -21,8 +21,10 @@ void main() {
 
   test('the library is intake\'s own, and carries the core too', () {
     final lib = intake.library();
-    expect(lib.path,
-        namedLibraryFile() ?? endsWith(dllFilename('guatiao_intake')));
+    expect(
+      lib.path,
+      namedLibraryFile() ?? endsWith(dllFilename('guatiao_intake')),
+    );
     expect(lib.provides('guatiao_value_free'), isTrue);
   });
 

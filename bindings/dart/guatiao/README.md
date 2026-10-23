@@ -47,7 +47,7 @@ Android, iOS, Linux, macOS and Windows through `dart:ffi`, 64-bit and
 32-bit (`armeabi-v7a`, armhf Linux): the ABI's layout is written in
 pointer widths. And **the web**, under dart2js and dart2wasm, through the
 WebAssembly module the page loads, with the same API (see "On the web").
-The package asks for Dart 3.6 or newer.
+The package asks for Dart 3.10 or newer (Flutter 3.38).
 
 ## On the web
 

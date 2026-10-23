@@ -141,11 +141,11 @@ bool isVisible(Ref schema, Ref form, String key, Ref values) {
 Ref? at(Ref value, String path) {
   final lib = _open();
   Pointer<guatiao_value> find() => using(
-        (arena) => lib.bindings.guatiao_intake_path_get(
-          value.requireNode(),
-          strOf(arena, path).ref,
-        ),
-      );
+    (arena) => lib.bindings.guatiao_intake_path_get(
+      value.requireNode(),
+      strOf(arena, path).ref,
+    ),
+  );
   if (find() == nullptr) return null;
   return Ref.borrowedFrom(value, find);
 }
@@ -236,11 +236,11 @@ Value? formFor(
 Ref? resolve(Ref schema, String key) {
   final lib = _open();
   Pointer<guatiao_value> find() => using(
-        (arena) => lib.bindings.guatiao_intake_resolve(
-          schema.requireNode(),
-          strOf(arena, key).ref,
-        ),
-      );
+    (arena) => lib.bindings.guatiao_intake_resolve(
+      schema.requireNode(),
+      strOf(arena, key).ref,
+    ),
+  );
   if (find() == nullptr) return null;
   return Ref.borrowedFrom(schema, find);
 }
@@ -266,11 +266,7 @@ Object? _flat(int Function(Arena arena, Pointer<guatiao_value> out) call) {
 /// field of every arm. A member that is itself a container stores its
 /// leaves below its key, and those are not listed. Throws [WrongKind]
 /// when [key] names no field.
-List<String> flatKeys(
-  Ref schema,
-  String key, {
-  Pointer<guatiao_alloc>? alloc,
-}) {
+List<String> flatKeys(Ref schema, String key, {Pointer<guatiao_alloc>? alloc}) {
   final lib = _open();
   final allocator = alloc ?? lib.alloc;
   final keys = _flat(
@@ -338,7 +334,10 @@ Value? unflatten(
     final plain = flat.toDart();
     if (plain is! Map || !plain.values.every((v) => v is String)) {
       throw ArgumentError.value(
-          flat, 'flat', 'a flat store maps String to String');
+        flat,
+        'flat',
+        'a flat store maps String to String',
+      );
     }
     store = flat;
   } else if (flat is Map &&
@@ -346,7 +345,10 @@ Value? unflatten(
     store = owned = Value.fromDart(flat, alloc: allocator);
   } else {
     throw ArgumentError.value(
-        flat, 'flat', 'a flat store maps String to String');
+      flat,
+      'flat',
+      'a flat store maps String to String',
+    );
   }
   final out = calloc<guatiao_value>();
   var filled = false;

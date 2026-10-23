@@ -23,9 +23,9 @@ List<Map<String, Object?>> _list(String key) =>
     (_vectors[key] as List).cast<Map<String, Object?>>();
 
 Uint8List _hex(String text) => Uint8List.fromList([
-      for (var i = 0; i < text.length; i += 2)
-        int.parse(text.substring(i, i + 2), radix: 16),
-    ]);
+  for (var i = 0; i < text.length; i += 2)
+    int.parse(text.substring(i, i + 2), radix: 16),
+]);
 
 String _toHex(List<int> bytes) =>
     bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
@@ -114,9 +114,17 @@ Value build(List<Object?> tree) {
 void main() {
   setUpAll(() async {
     await setUpLibrary();
-    _vectors = jsonDecode(await readRepoText(
-            ['crates', 'guatiao', 'tests', 'vectors', 'wire.json']))
-        as Map<String, Object?>;
+    _vectors =
+        jsonDecode(
+              await readRepoText([
+                'crates',
+                'guatiao',
+                'tests',
+                'vectors',
+                'wire.json',
+              ]),
+            )
+            as Map<String, Object?>;
   });
 
   test('every value decodes to its tree and encodes to its bytes', () {

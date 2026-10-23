@@ -18,17 +18,16 @@ import 'package:guatiao/ffi.dart' as imp$1;
 class GuatiaoSerdeBindings {
   /// Holds the symbol lookup function.
   final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-      _lookup;
+  _lookup;
 
   /// The symbols are looked up in [dynamicLibrary].
   GuatiaoSerdeBindings(ffi.DynamicLibrary dynamicLibrary)
-      : _lookup = dynamicLibrary.lookup;
+    : _lookup = dynamicLibrary.lookup;
 
   /// The symbols are looked up with [lookup].
   GuatiaoSerdeBindings.fromLookup(
-      ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-          lookup)
-      : _lookup = lookup;
+    ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) lookup,
+  ) : _lookup = lookup;
 
   imp$1.Dartguatiao_status guatiao_json_emit(
     ffi.Pointer<guatiao_value> value,
@@ -36,24 +35,29 @@ class GuatiaoSerdeBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_json_emit(
-      value,
-      how,
-      alloc,
-      out,
-    );
+    return _guatiao_json_emit(value, how, alloc, out);
   }
 
-  late final _guatiao_json_emitPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_json_emitPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              ffi.Uint32,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_json_emit');
-  late final _guatiao_json_emit = _guatiao_json_emitPtr.asFunction<
-      imp$1.Dartguatiao_status Function(ffi.Pointer<guatiao_value>, int,
-          ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_value>,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_json_emit');
+  late final _guatiao_json_emit = _guatiao_json_emitPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          ffi.Pointer<guatiao_value>,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_json_emit_pretty(
     ffi.Pointer<guatiao_value> value,
@@ -61,25 +65,29 @@ class GuatiaoSerdeBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_json_emit_pretty(
-      value,
-      how,
-      alloc,
-      out,
-    );
+    return _guatiao_json_emit_pretty(value, how, alloc, out);
   }
 
-  late final _guatiao_json_emit_prettyPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_json_emit_prettyPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              ffi.Uint32,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_json_emit_pretty');
-  late final _guatiao_json_emit_pretty =
-      _guatiao_json_emit_prettyPtr.asFunction<
-          imp$1.Dartguatiao_status Function(ffi.Pointer<guatiao_value>, int,
-              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_value>,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_json_emit_pretty');
+  late final _guatiao_json_emit_pretty = _guatiao_json_emit_prettyPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          ffi.Pointer<guatiao_value>,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_json_parse(
     guatiao_str text,
@@ -87,24 +95,29 @@ class GuatiaoSerdeBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_json_parse(
-      text,
-      how,
-      alloc,
-      out,
-    );
+    return _guatiao_json_parse(text, how, alloc, out);
   }
 
-  late final _guatiao_json_parsePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_json_parsePtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              guatiao_str,
-              ffi.Uint32,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_json_parse');
-  late final _guatiao_json_parse = _guatiao_json_parsePtr.asFunction<
-      imp$1.Dartguatiao_status Function(guatiao_str, int,
-          ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            guatiao_str,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_json_parse');
+  late final _guatiao_json_parse = _guatiao_json_parsePtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          guatiao_str,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_json_parse_ex(
     guatiao_str text,
@@ -113,30 +126,31 @@ class GuatiaoSerdeBindings {
     ffi.Pointer<guatiao_value> out,
     ffi.Pointer<guatiao_parse_error> out_error,
   ) {
-    return _guatiao_json_parse_ex(
-      text,
-      how,
-      alloc,
-      out,
-      out_error,
-    );
+    return _guatiao_json_parse_ex(text, how, alloc, out, out_error);
   }
 
-  late final _guatiao_json_parse_exPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_json_parse_exPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              guatiao_str,
-              ffi.Uint32,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_parse_error>)>>('guatiao_json_parse_ex');
-  late final _guatiao_json_parse_ex = _guatiao_json_parse_exPtr.asFunction<
-      imp$1.Dartguatiao_status Function(
+            guatiao_str,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_parse_error>,
+          )
+        >
+      >('guatiao_json_parse_ex');
+  late final _guatiao_json_parse_ex = _guatiao_json_parse_exPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
           guatiao_str,
           int,
           ffi.Pointer<guatiao_alloc>,
           ffi.Pointer<guatiao_value>,
-          ffi.Pointer<guatiao_parse_error>)>();
+          ffi.Pointer<guatiao_parse_error>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_toml_emit(
     ffi.Pointer<guatiao_value> value,
@@ -144,24 +158,29 @@ class GuatiaoSerdeBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_toml_emit(
-      value,
-      how,
-      alloc,
-      out,
-    );
+    return _guatiao_toml_emit(value, how, alloc, out);
   }
 
-  late final _guatiao_toml_emitPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_toml_emitPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              ffi.Uint32,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_toml_emit');
-  late final _guatiao_toml_emit = _guatiao_toml_emitPtr.asFunction<
-      imp$1.Dartguatiao_status Function(ffi.Pointer<guatiao_value>, int,
-          ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_value>,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_toml_emit');
+  late final _guatiao_toml_emit = _guatiao_toml_emitPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          ffi.Pointer<guatiao_value>,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_toml_parse(
     guatiao_str text,
@@ -169,24 +188,29 @@ class GuatiaoSerdeBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_toml_parse(
-      text,
-      how,
-      alloc,
-      out,
-    );
+    return _guatiao_toml_parse(text, how, alloc, out);
   }
 
-  late final _guatiao_toml_parsePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_toml_parsePtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              guatiao_str,
-              ffi.Uint32,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_toml_parse');
-  late final _guatiao_toml_parse = _guatiao_toml_parsePtr.asFunction<
-      imp$1.Dartguatiao_status Function(guatiao_str, int,
-          ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            guatiao_str,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_toml_parse');
+  late final _guatiao_toml_parse = _guatiao_toml_parsePtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          guatiao_str,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_toml_parse_ex(
     guatiao_str text,
@@ -195,30 +219,31 @@ class GuatiaoSerdeBindings {
     ffi.Pointer<guatiao_value> out,
     ffi.Pointer<guatiao_parse_error> out_error,
   ) {
-    return _guatiao_toml_parse_ex(
-      text,
-      how,
-      alloc,
-      out,
-      out_error,
-    );
+    return _guatiao_toml_parse_ex(text, how, alloc, out, out_error);
   }
 
-  late final _guatiao_toml_parse_exPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_toml_parse_exPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              guatiao_str,
-              ffi.Uint32,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_parse_error>)>>('guatiao_toml_parse_ex');
-  late final _guatiao_toml_parse_ex = _guatiao_toml_parse_exPtr.asFunction<
-      imp$1.Dartguatiao_status Function(
+            guatiao_str,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_parse_error>,
+          )
+        >
+      >('guatiao_toml_parse_ex');
+  late final _guatiao_toml_parse_ex = _guatiao_toml_parse_exPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
           guatiao_str,
           int,
           ffi.Pointer<guatiao_alloc>,
           ffi.Pointer<guatiao_value>,
-          ffi.Pointer<guatiao_parse_error>)>();
+          ffi.Pointer<guatiao_parse_error>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_yaml_emit(
     ffi.Pointer<guatiao_value> value,
@@ -226,24 +251,29 @@ class GuatiaoSerdeBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_yaml_emit(
-      value,
-      how,
-      alloc,
-      out,
-    );
+    return _guatiao_yaml_emit(value, how, alloc, out);
   }
 
-  late final _guatiao_yaml_emitPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_yaml_emitPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              ffi.Uint32,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_yaml_emit');
-  late final _guatiao_yaml_emit = _guatiao_yaml_emitPtr.asFunction<
-      imp$1.Dartguatiao_status Function(ffi.Pointer<guatiao_value>, int,
-          ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_value>,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_yaml_emit');
+  late final _guatiao_yaml_emit = _guatiao_yaml_emitPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          ffi.Pointer<guatiao_value>,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_yaml_parse(
     guatiao_str text,
@@ -251,24 +281,29 @@ class GuatiaoSerdeBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_yaml_parse(
-      text,
-      how,
-      alloc,
-      out,
-    );
+    return _guatiao_yaml_parse(text, how, alloc, out);
   }
 
-  late final _guatiao_yaml_parsePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_yaml_parsePtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              guatiao_str,
-              ffi.Uint32,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_yaml_parse');
-  late final _guatiao_yaml_parse = _guatiao_yaml_parsePtr.asFunction<
-      imp$1.Dartguatiao_status Function(guatiao_str, int,
-          ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            guatiao_str,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_yaml_parse');
+  late final _guatiao_yaml_parse = _guatiao_yaml_parsePtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          guatiao_str,
+          int,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_yaml_parse_ex(
     guatiao_str text,
@@ -277,30 +312,31 @@ class GuatiaoSerdeBindings {
     ffi.Pointer<guatiao_value> out,
     ffi.Pointer<guatiao_parse_error> out_error,
   ) {
-    return _guatiao_yaml_parse_ex(
-      text,
-      how,
-      alloc,
-      out,
-      out_error,
-    );
+    return _guatiao_yaml_parse_ex(text, how, alloc, out, out_error);
   }
 
-  late final _guatiao_yaml_parse_exPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_yaml_parse_exPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              guatiao_str,
-              ffi.Uint32,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_parse_error>)>>('guatiao_yaml_parse_ex');
-  late final _guatiao_yaml_parse_ex = _guatiao_yaml_parse_exPtr.asFunction<
-      imp$1.Dartguatiao_status Function(
+            guatiao_str,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_parse_error>,
+          )
+        >
+      >('guatiao_yaml_parse_ex');
+  late final _guatiao_yaml_parse_ex = _guatiao_yaml_parse_exPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
           guatiao_str,
           int,
           ffi.Pointer<guatiao_alloc>,
           ffi.Pointer<guatiao_value>,
-          ffi.Pointer<guatiao_parse_error>)>();
+          ffi.Pointer<guatiao_parse_error>,
+        )
+      >();
 }
 
 const int GUATIAO_BYTES_ARRAY = 2;
@@ -341,12 +377,11 @@ final class guatiao_parse_error extends ffi.Struct {
     required int line,
     required int column,
     required guatiao_value message,
-  }) =>
-      $allocator<guatiao_parse_error>()
-        ..ref.format = format
-        ..ref.line = line
-        ..ref.column = column
-        ..ref.message = message;
+  }) => $allocator<guatiao_parse_error>()
+    ..ref.format = format
+    ..ref.line = line
+    ..ref.column = column
+    ..ref.message = message;
 }
 
 typedef guatiao_str = imp$1.guatiao_str;

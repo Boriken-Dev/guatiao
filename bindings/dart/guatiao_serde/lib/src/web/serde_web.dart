@@ -48,8 +48,13 @@ Value loads(
     withScratch((s) {
       final error = s.alloc(_parseErrorSize);
       try {
-        final status =
-            m.call(symbol, [s.str(text), how, allocator, out, error]);
+        final status = m.call(symbol, [
+          s.str(text),
+          how,
+          allocator,
+          out,
+          error,
+        ]);
         finishParse(status, error);
       } finally {
         freeNode(error + _messageAt);
@@ -89,8 +94,9 @@ String dumps(
   Address? alloc,
 }) {
   final wantsJsonPretty = pretty && format == Format.json;
-  final symbol =
-      wantsJsonPretty ? 'guatiao_json_emit_pretty' : emitSymbol(format);
+  final symbol = wantsJsonPretty
+      ? 'guatiao_json_emit_pretty'
+      : emitSymbol(format);
   final m = _resolved(symbol, format.feature);
   final allocator = alloc ?? m.defaultAlloc;
   final flags = pretty && !wantsJsonPretty ? how | prettyFlag : how;

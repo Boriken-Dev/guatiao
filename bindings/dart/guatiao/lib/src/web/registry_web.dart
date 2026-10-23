@@ -44,12 +44,16 @@ class Registry {
   void close() {}
 
   Map<String, Object?> loadFile(String path) => _no();
-  Map<String, Object?> scanDir(String directory,
-          {bool descending = false, String? rules}) =>
-      _no();
-  Map<String, Object?> scanPath(String spec,
-          {bool descending = false, String? rules}) =>
-      _no();
+  Map<String, Object?> scanDir(
+    String directory, {
+    bool descending = false,
+    String? rules,
+  }) => _no();
+  Map<String, Object?> scanPath(
+    String spec, {
+    bool descending = false,
+    String? rules,
+  }) => _no();
   List<Map<String, Object?>> libraries() => _no();
   List<Map<String, Object?>> providers([String kind = '']) => _no();
   List<Map<String, Object?>> available([String kind = '']) => _no();
@@ -88,5 +92,4 @@ Never kindTable<T>(
   ProviderTable found, {
   required int floorHash,
   required int floorSize,
-}) =>
-    unsupportedOnTheWeb('a kind table');
+}) => unsupportedOnTheWeb('a kind table');

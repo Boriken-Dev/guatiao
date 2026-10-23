@@ -32,7 +32,8 @@ and its errors.
 Android, iOS, Linux, macOS and Windows, 64-bit and 32-bit, as
 package:guatiao; and **the web**, through the one WebAssembly module the
 page loads with package:guatiao's `loadModule`, which must carry this
-package's surface. The package asks for Dart 3.6 or newer.
+package's surface. The package asks for Dart 3.10 or newer (Flutter
+3.38).
 
 ## Installation
 

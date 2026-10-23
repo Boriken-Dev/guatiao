@@ -59,29 +59,34 @@ T _withNode<T>(Object? value, T Function(Address) use) {
 /// The frame that announces [schema] on [channel]. Under dart2js a
 /// channel past 2^53 is not exact.
 Uint8List announce(int channel, Object? schema) => _withNode(
-      schema,
-      (node) => _frame((m, alloc, out) =>
-          m.call('guatiao_wire_announce', [alloc, I64(channel), node, out])),
-    );
+  schema,
+  (node) => _frame(
+    (m, alloc, out) =>
+        m.call('guatiao_wire_announce', [alloc, I64(channel), node, out]),
+  ),
+);
 
 /// The frame that carries [value] on [channel].
 Uint8List send(int channel, Object? value) => _withNode(
-      value,
-      (node) => _frame((m, alloc, out) =>
-          m.call('guatiao_wire_send', [alloc, I64(channel), node, out])),
-    );
+  value,
+  (node) => _frame(
+    (m, alloc, out) =>
+        m.call('guatiao_wire_send', [alloc, I64(channel), node, out]),
+  ),
+);
 
 /// The frame that ends [channel].
-Uint8List close(int channel) => _frame((m, alloc, out) =>
-    m.call('guatiao_wire_close', [alloc, I64(channel), out]));
+Uint8List close(int channel) => _frame(
+  (m, alloc, out) => m.call('guatiao_wire_close', [alloc, I64(channel), out]),
+);
 
 final Finalizer<(WasmModule, Address)> _backstop =
     Finalizer<(WasmModule, Address)>((held) {
-  final (module, handle) = held;
-  if (identical(WasmModule.loaded, module)) {
-    module.call('guatiao_wire_receiver_free', [handle]);
-  }
-});
+      final (module, handle) = held;
+      if (identical(WasmModule.loaded, module)) {
+        module.call('guatiao_wire_receiver_free', [handle]);
+      }
+    });
 
 /// Keeps each channel's schema and checks every value against it.
 /// [close] releases it; a finalizer is attached as a backstop.
@@ -106,14 +111,18 @@ class Receiver {
     if (_closed) throw StateError('this receiver is closed');
     if (!identical(_module, WasmModule.loaded)) {
       throw StateError(
-          'this receiver lives in a module that is no longer loaded');
+        'this receiver lives in a module that is no longer loaded',
+      );
     }
     final m = _module;
     return withScratch((s) {
       final view = s.view(frame);
       final event = s.alloc(_eventSize);
-      final status =
-          m.call('guatiao_wire_receiver_accept', [_handle, view, event]);
+      final status = m.call('guatiao_wire_receiver_accept', [
+        _handle,
+        view,
+        event,
+      ]);
       final value = event + _valueAt;
       final message = value + valueSize;
       final detail = message + valueSize;
@@ -134,8 +143,15 @@ class Receiver {
       if (status == Status.ok.code) {
         return Event(Frame.values[kind], channel, taken);
       }
-      throw refusalFor(status, m.u32(event + 12), words, channel, kind,
-          m.u32(event + 16), found);
+      throw refusalFor(
+        status,
+        m.u32(event + 12),
+        words,
+        channel,
+        kind,
+        m.u32(event + 16),
+        found,
+      );
     });
   }
 

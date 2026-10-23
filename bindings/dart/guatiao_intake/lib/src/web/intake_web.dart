@@ -38,8 +38,12 @@ Map<String, Object?>? check(Ref schema, Ref form, {Address? alloc}) {
   final out = m.alloc(valueSize);
   var filled = false;
   try {
-    final status = m.call('guatiao_intake_check',
-        [schema.requireNode(), form.requireNode(), allocator, out]);
+    final status = m.call('guatiao_intake_check', [
+      schema.requireNode(),
+      form.requireNode(),
+      allocator,
+      out,
+    ]);
     if (status == Status.ok.code) return null;
     // A form that does not fit is the answer, not a failure: only that
     // one status carries the report.
@@ -54,8 +58,10 @@ Map<String, Object?>? check(Ref schema, Ref form, {Address? alloc}) {
 /// The schema's fields grouped into sections and put in order.
 List<Map<String, Object?>> layout(Ref schema, Ref form, {Address? alloc}) {
   final allocator = alloc ?? library().defaultAlloc;
-  final sections = _answer('guatiao_intake_layout',
-      (s) => [schema.requireNode(), form.requireNode(), allocator]);
+  final sections = _answer(
+    'guatiao_intake_layout',
+    (s) => [schema.requireNode(), form.requireNode(), allocator],
+  );
   return <Map<String, Object?>>[
     for (final section in sections! as List)
       (section! as Map).cast<String, Object?>(),
@@ -68,13 +74,15 @@ bool isVisible(Ref schema, Ref form, String key, Ref values) {
   final m = library();
   return withScratch((s) {
     final out = s.alloc(1, 1);
-    checkStatus(m.call('guatiao_intake_is_visible', [
-      schema.requireNode(),
-      form.requireNode(),
-      s.str(key),
-      values.requireNode(),
-      out,
-    ]));
+    checkStatus(
+      m.call('guatiao_intake_is_visible', [
+        schema.requireNode(),
+        form.requireNode(),
+        s.str(key),
+        values.requireNode(),
+        out,
+      ]),
+    );
     return m.u8(out) != 0;
   });
 }
@@ -83,8 +91,12 @@ bool isVisible(Ref schema, Ref form, String key, Ref values) {
 /// borrows from [value] and is found again on every access.
 Ref? at(Ref value, String path) {
   final m = library();
-  Address find() => withScratch((s) => m.callAddress(
-      'guatiao_intake_path_get', [value.requireNode(), s.str(path)]));
+  Address find() => withScratch(
+    (s) => m.callAddress('guatiao_intake_path_get', [
+      value.requireNode(),
+      s.str(path),
+    ]),
+  );
   if (find().isNull) return null;
   return Ref.borrowedFrom(value, find);
 }
@@ -96,8 +108,13 @@ Value forSchema(Ref schema, {Address? alloc}) {
   final allocator = alloc ?? m.defaultAlloc;
   final out = m.alloc(valueSize);
   try {
-    checkStatus(m.call(
-        'guatiao_intake_for_schema', [schema.requireNode(), allocator, out]));
+    checkStatus(
+      m.call('guatiao_intake_for_schema', [
+        schema.requireNode(),
+        allocator,
+        out,
+      ]),
+    );
   } catch (_) {
     freeRoot(out);
     rethrow;
@@ -113,13 +130,17 @@ Value? formFor(Ref form, Ref schema, String path, {Address? alloc}) {
   final out = m.alloc(valueSize);
   var filled = false;
   try {
-    withScratch((s) => checkStatus(m.call('guatiao_intake_form_for', [
+    withScratch(
+      (s) => checkStatus(
+        m.call('guatiao_intake_form_for', [
           form.requireNode(),
           schema.requireNode(),
           s.str(path),
           allocator,
           out,
-        ])));
+        ]),
+      ),
+    );
     // Nothing to show it with is an answer, not a failure: the slot keeps
     // the absent marker the boundary wrote.
     if (m.u32(out) == Tag.absent.code) return null;
@@ -134,8 +155,12 @@ Value? formFor(Ref form, Ref schema, String path, {Address? alloc}) {
 /// view that borrows from [schema] and is found again on every access.
 Ref? resolve(Ref schema, String key) {
   final m = library();
-  Address find() => withScratch((s) => m.callAddress(
-      'guatiao_intake_resolve', [schema.requireNode(), s.str(key)]));
+  Address find() => withScratch(
+    (s) => m.callAddress('guatiao_intake_resolve', [
+      schema.requireNode(),
+      s.str(key),
+    ]),
+  );
   if (find().isNull) return null;
   return Ref.borrowedFrom(schema, find);
 }
@@ -144,19 +169,25 @@ Ref? resolve(Ref schema, String key) {
 /// [key] names no field.
 List<String> flatKeys(Ref schema, String key, {Address? alloc}) {
   final allocator = alloc ?? library().defaultAlloc;
-  final keys = _answer('guatiao_intake_flat_keys',
-      (s) => [schema.requireNode(), s.str(key), allocator]);
+  final keys = _answer(
+    'guatiao_intake_flat_keys',
+    (s) => [schema.requireNode(), s.str(key), allocator],
+  );
   return <String>[for (final item in keys! as List) item! as String];
 }
 
 /// [value] as the flat store of `key -> text` the field [key] keeps.
-Map<String, String> flatten(Ref schema, String key, Ref value,
-    {Address? alloc}) {
+Map<String, String> flatten(
+  Ref schema,
+  String key,
+  Ref value, {
+  Address? alloc,
+}) {
   final allocator = alloc ?? library().defaultAlloc;
   final store = _answer(
-      'guatiao_intake_flatten',
-      (s) =>
-          [schema.requireNode(), s.str(key), value.requireNode(), allocator]);
+    'guatiao_intake_flatten',
+    (s) => [schema.requireNode(), s.str(key), value.requireNode(), allocator],
+  );
   return <String, String>{
     for (final entry in (store! as Map).entries)
       entry.key as String: entry.value! as String,
@@ -176,7 +207,10 @@ Value? unflatten(Ref schema, String key, Object flat, {Address? alloc}) {
     final plain = flat.toDart();
     if (plain is! Map || !plain.values.every((v) => v is String)) {
       throw ArgumentError.value(
-          flat, 'flat', 'a flat store maps String to String');
+        flat,
+        'flat',
+        'a flat store maps String to String',
+      );
     }
     store = flat;
   } else if (flat is Map &&
@@ -184,18 +218,23 @@ Value? unflatten(Ref schema, String key, Object flat, {Address? alloc}) {
     store = owned = Value.fromDart(flat, alloc: allocator);
   } else {
     throw ArgumentError.value(
-        flat, 'flat', 'a flat store maps String to String');
+      flat,
+      'flat',
+      'a flat store maps String to String',
+    );
   }
   final out = m.alloc(valueSize);
   var filled = false;
   try {
-    final status = withScratch((s) => m.call('guatiao_intake_unflatten', [
-          schema.requireNode(),
-          s.str(key),
-          store.requireNode(),
-          allocator,
-          out,
-        ]));
+    final status = withScratch(
+      (s) => m.call('guatiao_intake_unflatten', [
+        schema.requireNode(),
+        s.str(key),
+        store.requireNode(),
+        allocator,
+        out,
+      ]),
+    );
     if (status == Status.wrongKind.code) return null;
     checkStatus(status);
     filled = true;

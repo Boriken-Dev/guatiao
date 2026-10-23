@@ -18,7 +18,8 @@
 /// `package:guatiao/wasm.dart`).
 library;
 
-export 'src/kinds.dart' if (dart.library.js_interop) 'src/web/registry_web.dart'
+export 'src/kinds.dart'
+    if (dart.library.js_interop) 'src/web/registry_web.dart'
     show FloorMismatch, kindTable;
 export 'src/library.dart'
     if (dart.library.js_interop) 'src/web/library_web.dart'
@@ -36,7 +37,8 @@ export 'src/platform_native.dart'
 export 'src/registry.dart'
     if (dart.library.js_interop) 'src/web/registry_web.dart'
     show Instance, ProviderTable, Registry;
-export 'src/schema.dart' if (dart.library.js_interop) 'src/web/schema_web.dart'
+export 'src/schema.dart'
+    if (dart.library.js_interop) 'src/web/schema_web.dart'
     show redact;
 export 'src/status.dart'
     show
@@ -52,6 +54,7 @@ export 'src/status.dart'
         Unsupported,
         WrongKind;
 export 'src/time.dart' show TextForm, Unparsed;
-export 'src/value.dart' if (dart.library.js_interop) 'src/web/value_web.dart'
+export 'src/value.dart'
+    if (dart.library.js_interop) 'src/web/value_web.dart'
     show ListRef, MapRef, Ref, Value, ValueOwner;
 export 'src/value_common.dart' show Absent, Numbers, Tag, absent;

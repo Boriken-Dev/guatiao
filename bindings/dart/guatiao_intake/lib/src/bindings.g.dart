@@ -18,17 +18,16 @@ import 'package:guatiao/ffi.dart' as imp$1;
 class GuatiaoIntakeBindings {
   /// Holds the symbol lookup function.
   final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-      _lookup;
+  _lookup;
 
   /// The symbols are looked up in [dynamicLibrary].
   GuatiaoIntakeBindings(ffi.DynamicLibrary dynamicLibrary)
-      : _lookup = dynamicLibrary.lookup;
+    : _lookup = dynamicLibrary.lookup;
 
   /// The symbols are looked up with [lookup].
   GuatiaoIntakeBindings.fromLookup(
-      ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-          lookup)
-      : _lookup = lookup;
+    ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) lookup,
+  ) : _lookup = lookup;
 
   imp$1.Dartguatiao_status guatiao_intake_check(
     ffi.Pointer<guatiao_value> schema,
@@ -36,27 +35,29 @@ class GuatiaoIntakeBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out_error,
   ) {
-    return _guatiao_intake_check(
-      schema,
-      form,
-      alloc,
-      out_error,
-    );
+    return _guatiao_intake_check(schema, form, alloc, out_error);
   }
 
-  late final _guatiao_intake_checkPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_intake_checkPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_intake_check');
-  late final _guatiao_intake_check = _guatiao_intake_checkPtr.asFunction<
-      imp$1.Dartguatiao_status Function(
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_intake_check');
+  late final _guatiao_intake_check = _guatiao_intake_checkPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
           ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_alloc>,
-          ffi.Pointer<guatiao_value>)>();
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_intake_flat_keys(
     ffi.Pointer<guatiao_value> schema,
@@ -64,28 +65,29 @@ class GuatiaoIntakeBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_intake_flat_keys(
-      schema,
-      key,
-      alloc,
-      out,
-    );
+    return _guatiao_intake_flat_keys(schema, key, alloc, out);
   }
 
-  late final _guatiao_intake_flat_keysPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_intake_flat_keysPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_intake_flat_keys');
-  late final _guatiao_intake_flat_keys =
-      _guatiao_intake_flat_keysPtr.asFunction<
-          imp$1.Dartguatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_value>,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_intake_flat_keys');
+  late final _guatiao_intake_flat_keys = _guatiao_intake_flat_keysPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          ffi.Pointer<guatiao_value>,
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_intake_flatten(
     ffi.Pointer<guatiao_value> schema,
@@ -94,53 +96,58 @@ class GuatiaoIntakeBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_intake_flatten(
-      schema,
-      key,
-      value,
-      alloc,
-      out,
-    );
+    return _guatiao_intake_flatten(schema, key, value, alloc, out);
   }
 
-  late final _guatiao_intake_flattenPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_intake_flattenPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_intake_flatten');
-  late final _guatiao_intake_flatten = _guatiao_intake_flattenPtr.asFunction<
-      imp$1.Dartguatiao_status Function(
+            ffi.Pointer<guatiao_value>,
+            guatiao_str,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_intake_flatten');
+  late final _guatiao_intake_flatten = _guatiao_intake_flattenPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
           ffi.Pointer<guatiao_value>,
           guatiao_str,
           ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_alloc>,
-          ffi.Pointer<guatiao_value>)>();
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_intake_for_schema(
     ffi.Pointer<guatiao_value> schema,
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_intake_for_schema(
-      schema,
-      alloc,
-      out,
-    );
+    return _guatiao_intake_for_schema(schema, alloc, out);
   }
 
-  late final _guatiao_intake_for_schemaPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_intake_for_schemaPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_intake_for_schema');
-  late final _guatiao_intake_for_schema =
-      _guatiao_intake_for_schemaPtr.asFunction<
-          imp$1.Dartguatiao_status Function(ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_intake_for_schema');
+  late final _guatiao_intake_for_schema = _guatiao_intake_for_schemaPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_intake_form_for(
     ffi.Pointer<guatiao_value> form,
@@ -149,30 +156,31 @@ class GuatiaoIntakeBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_intake_form_for(
-      form,
-      schema,
-      path,
-      alloc,
-      out,
-    );
+    return _guatiao_intake_form_for(form, schema, path, alloc, out);
   }
 
-  late final _guatiao_intake_form_forPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_intake_form_forPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_intake_form_for');
-  late final _guatiao_intake_form_for = _guatiao_intake_form_forPtr.asFunction<
-      imp$1.Dartguatiao_status Function(
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_intake_form_for');
+  late final _guatiao_intake_form_for = _guatiao_intake_form_forPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
           ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_value>,
           guatiao_str,
           ffi.Pointer<guatiao_alloc>,
-          ffi.Pointer<guatiao_value>)>();
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_intake_is_visible(
     ffi.Pointer<guatiao_value> schema,
@@ -181,31 +189,31 @@ class GuatiaoIntakeBindings {
     ffi.Pointer<guatiao_value> values,
     ffi.Pointer<ffi.Bool> out,
   ) {
-    return _guatiao_intake_is_visible(
-      schema,
-      form,
-      key,
-      values,
-      out,
-    );
+    return _guatiao_intake_is_visible(schema, form, key, values, out);
   }
 
-  late final _guatiao_intake_is_visiblePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_intake_is_visiblePtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<ffi.Bool>)>>('guatiao_intake_is_visible');
-  late final _guatiao_intake_is_visible =
-      _guatiao_intake_is_visiblePtr.asFunction<
-          imp$1.Dartguatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<ffi.Bool>)>();
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+            guatiao_str,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<ffi.Bool>,
+          )
+        >
+      >('guatiao_intake_is_visible');
+  late final _guatiao_intake_is_visible = _guatiao_intake_is_visiblePtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+          guatiao_str,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<ffi.Bool>,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_intake_layout(
     ffi.Pointer<guatiao_value> schema,
@@ -213,63 +221,77 @@ class GuatiaoIntakeBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_intake_layout(
-      schema,
-      form,
-      alloc,
-      out,
-    );
+    return _guatiao_intake_layout(schema, form, alloc, out);
   }
 
-  late final _guatiao_intake_layoutPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_intake_layoutPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_intake_layout');
-  late final _guatiao_intake_layout = _guatiao_intake_layoutPtr.asFunction<
-      imp$1.Dartguatiao_status Function(
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_intake_layout');
+  late final _guatiao_intake_layout = _guatiao_intake_layoutPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
           ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_alloc>,
-          ffi.Pointer<guatiao_value>)>();
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   ffi.Pointer<guatiao_value> guatiao_intake_path_get(
     ffi.Pointer<guatiao_value> value,
     guatiao_str path,
   ) {
-    return _guatiao_intake_path_get(
-      value,
-      path,
-    );
+    return _guatiao_intake_path_get(value, path);
   }
 
-  late final _guatiao_intake_path_getPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Pointer<guatiao_value> Function(ffi.Pointer<guatiao_value>,
-              guatiao_str)>>('guatiao_intake_path_get');
-  late final _guatiao_intake_path_get = _guatiao_intake_path_getPtr.asFunction<
-      ffi.Pointer<guatiao_value> Function(
-          ffi.Pointer<guatiao_value>, guatiao_str)>();
+  late final _guatiao_intake_path_getPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<guatiao_value> Function(
+            ffi.Pointer<guatiao_value>,
+            guatiao_str,
+          )
+        >
+      >('guatiao_intake_path_get');
+  late final _guatiao_intake_path_get = _guatiao_intake_path_getPtr
+      .asFunction<
+        ffi.Pointer<guatiao_value> Function(
+          ffi.Pointer<guatiao_value>,
+          guatiao_str,
+        )
+      >();
 
   ffi.Pointer<guatiao_value> guatiao_intake_resolve(
     ffi.Pointer<guatiao_value> schema,
     guatiao_str key,
   ) {
-    return _guatiao_intake_resolve(
-      schema,
-      key,
-    );
+    return _guatiao_intake_resolve(schema, key);
   }
 
-  late final _guatiao_intake_resolvePtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Pointer<guatiao_value> Function(ffi.Pointer<guatiao_value>,
-              guatiao_str)>>('guatiao_intake_resolve');
-  late final _guatiao_intake_resolve = _guatiao_intake_resolvePtr.asFunction<
-      ffi.Pointer<guatiao_value> Function(
-          ffi.Pointer<guatiao_value>, guatiao_str)>();
+  late final _guatiao_intake_resolvePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<guatiao_value> Function(
+            ffi.Pointer<guatiao_value>,
+            guatiao_str,
+          )
+        >
+      >('guatiao_intake_resolve');
+  late final _guatiao_intake_resolve = _guatiao_intake_resolvePtr
+      .asFunction<
+        ffi.Pointer<guatiao_value> Function(
+          ffi.Pointer<guatiao_value>,
+          guatiao_str,
+        )
+      >();
 
   imp$1.Dartguatiao_status guatiao_intake_unflatten(
     ffi.Pointer<guatiao_value> schema,
@@ -278,31 +300,31 @@ class GuatiaoIntakeBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_intake_unflatten(
-      schema,
-      key,
-      flat,
-      alloc,
-      out,
-    );
+    return _guatiao_intake_unflatten(schema, key, flat, alloc, out);
   }
 
-  late final _guatiao_intake_unflattenPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_intake_unflattenPtr =
+      _lookup<
+        ffi.NativeFunction<
           imp$1.guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_intake_unflatten');
-  late final _guatiao_intake_unflatten =
-      _guatiao_intake_unflattenPtr.asFunction<
-          imp$1.Dartguatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_value>,
+            guatiao_str,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_intake_unflatten');
+  late final _guatiao_intake_unflatten = _guatiao_intake_unflattenPtr
+      .asFunction<
+        imp$1.Dartguatiao_status Function(
+          ffi.Pointer<guatiao_value>,
+          guatiao_str,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 }
 
 const String GUATIAO_INTAKE_KEY_X_ADVANCED = 'x-advanced';

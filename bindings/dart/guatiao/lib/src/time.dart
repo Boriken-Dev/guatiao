@@ -5,7 +5,8 @@
 import 'dart:math' as math;
 
 import 'status.dart';
-import 'time_native.dart' if (dart.library.js_interop) 'web/time_web.dart'
+import 'time_native.dart'
+    if (dart.library.js_interop) 'web/time_web.dart'
     as calls;
 import 'value.dart' if (dart.library.js_interop) 'web/value_web.dart';
 
@@ -20,7 +21,7 @@ enum TextForm { date, time, datetime, timestamp, span }
 /// text, so [source] and [offset] are `null`.
 class Unparsed extends BadValue implements FormatException {
   Unparsed(this.expected, {required this.form, required this.at})
-      : super(Status.badValue.code, '$expected at byte $at');
+    : super(Status.badValue.code, '$expected at byte $at');
 
   final TextForm form;
   final int at;
@@ -67,7 +68,8 @@ void _fits(TextForm form, List<(int, int, bool)> fields) {
     // A power rather than a shift: dart2js shifts in 32 bits.
     final ok = signed
         ? (bits >= 64 ||
-            (value >= -math.pow(2, bits - 1) && value < math.pow(2, bits - 1)))
+              (value >= -math.pow(2, bits - 1) &&
+                  value < math.pow(2, bits - 1)))
         : (value >= 0 && value < math.pow(2, bits));
     if (!ok) {
       throw BadValue(Status.badValue.code, 'the fields are not a ${form.name}');
@@ -91,8 +93,11 @@ String normalize(TextForm form, String text) => calls.normalizeText(form, text);
 /// have throws [BadValue]. Ordered by the calendar.
 final class PlainDate implements Comparable<PlainDate> {
   factory PlainDate(int year, int month, int day) {
-    _fits(
-        TextForm.date, [(year, 32, true), (month, 8, false), (day, 8, false)]);
+    _fits(TextForm.date, [
+      (year, 32, true),
+      (month, 8, false),
+      (day, 8, false),
+    ]);
     final text = calls.formatDate([year, month, day]);
     return PlainDate._(year, month, day, text);
   }
@@ -127,8 +132,8 @@ final class PlainDate implements Comparable<PlainDate> {
   int compareTo(PlainDate other) => year != other.year
       ? year.compareTo(other.year)
       : month != other.month
-          ? month.compareTo(other.month)
-          : day.compareTo(other.day);
+      ? month.compareTo(other.month)
+      : day.compareTo(other.day);
 
   @override
   bool operator ==(Object other) =>
@@ -165,11 +170,11 @@ final class PlainTime implements Comparable<PlainTime> {
 
   /// The time of day [moment] shows, to its microsecond.
   factory PlainTime.fromDateTime(DateTime moment) => PlainTime(
-        moment.hour,
-        moment.minute,
-        moment.second,
-        moment.millisecond * 1000000 + moment.microsecond * 1000,
-      );
+    moment.hour,
+    moment.minute,
+    moment.second,
+    moment.millisecond * 1000000 + moment.microsecond * 1000,
+  );
 
   /// `HH:MM:SS[.fraction]`, no offset. Throws [Unparsed] for text the
   /// grammar refuses.
@@ -224,28 +229,28 @@ final class PlainDateTime implements Comparable<PlainDateTime> {
 
   /// The date and time [moment] shows, to its microsecond.
   factory PlainDateTime.fromDateTime(DateTime moment) => PlainDateTime(
-        PlainDate.fromDateTime(moment),
-        PlainTime.fromDateTime(moment),
-      );
+    PlainDate.fromDateTime(moment),
+    PlainTime.fromDateTime(moment),
+  );
 
   /// The date, `T` or `t`, the time, no offset. Throws [Unparsed] for
   /// text the grammar refuses.
   static PlainDateTime parse(String text) => _of(calls.parseDateTime(text));
 
   static PlainDateTime _of(List<int> f) => PlainDateTime(
-        PlainDate(f[0], f[1], f[2]),
-        PlainTime(f[3], f[4], f[5], f[6]),
-      );
+    PlainDate(f[0], f[1], f[2]),
+    PlainTime(f[3], f[4], f[5], f[6]),
+  );
 
   static List<int> _fieldsOf(PlainDate date, PlainTime time) => [
-        date.year,
-        date.month,
-        date.day,
-        time.hour,
-        time.minute,
-        time.second,
-        time.nanosecond,
-      ];
+    date.year,
+    date.month,
+    date.day,
+    time.hour,
+    time.minute,
+    time.second,
+    time.nanosecond,
+  ];
 
   final PlainDate date;
   final PlainTime time;
@@ -296,7 +301,9 @@ String formatTimestamp(DateTime moment) {
   final millis = moment.millisecondsSinceEpoch;
   final below = millis % 1000;
   return calls.formatTimestampFields(
-      (millis - below) ~/ 1000, below * 1000000 + moment.microsecond * 1000);
+    (millis - below) ~/ 1000,
+    below * 1000000 + moment.microsecond * 1000,
+  );
 }
 
 // ---- an exact length ------------------------------------------------------------------
@@ -338,7 +345,10 @@ Duration toDuration(Object? value) {
 List<int> fromDuration(Duration duration) {
   if (duration.isNegative) {
     throw ArgumentError.value(
-        duration, 'duration', 'an exact length is never negative');
+      duration,
+      'duration',
+      'an exact length is never negative',
+    );
   }
   final micros = duration.inMicroseconds;
   return [micros ~/ 1000000, (micros % 1000000) * 1000];
@@ -375,7 +385,7 @@ final class Span {
       hours,
       minutes,
       seconds,
-      nanoseconds
+      nanoseconds,
     ];
     return Span._(fields, calls.formatSpan(fields));
   }
@@ -419,15 +429,15 @@ final class Span {
 
   /// The same span running the other way.
   Span operator -() => Span(
-        years: -years,
-        months: -months,
-        weeks: -weeks,
-        days: -days,
-        hours: -hours,
-        minutes: -minutes,
-        seconds: -seconds,
-        nanoseconds: -nanoseconds,
-      );
+    years: -years,
+    months: -months,
+    weeks: -weeks,
+    days: -days,
+    hours: -hours,
+    minutes: -minutes,
+    seconds: -seconds,
+    nanoseconds: -nanoseconds,
+  );
 
   @override
   bool operator ==(Object other) {

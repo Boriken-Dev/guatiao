@@ -10,32 +10,36 @@ import 'dart:ffi';
 
 import 'package:guatiao/src/bindings.g.dart';
 
-typedef GreetNative = Uint32 Function(
-  Pointer<Void> ctx,
-  guatiao_str name,
-  Pointer<guatiao_map> out,
-  Pointer<guatiao_provider_error> err,
-);
+typedef GreetNative =
+    Uint32 Function(
+      Pointer<Void> ctx,
+      guatiao_str name,
+      Pointer<guatiao_map> out,
+      Pointer<guatiao_provider_error> err,
+    );
 
-typedef GreetDart = int Function(
-  Pointer<Void> ctx,
-  guatiao_str name,
-  Pointer<guatiao_map> out,
-  Pointer<guatiao_provider_error> err,
-);
+typedef GreetDart =
+    int Function(
+      Pointer<Void> ctx,
+      guatiao_str name,
+      Pointer<guatiao_map> out,
+      Pointer<guatiao_provider_error> err,
+    );
 
-typedef ShoutNative = Uint32 Function(
-  Pointer<Void> ctx,
-  guatiao_str name,
-  Pointer<guatiao_string> out,
-);
+typedef ShoutNative =
+    Uint32 Function(
+      Pointer<Void> ctx,
+      guatiao_str name,
+      Pointer<guatiao_string> out,
+    );
 
-typedef StartNative = Uint32 Function(
-  Pointer<Void> ctx,
-  guatiao_object listener,
-  Pointer<guatiao_object> out,
-  Pointer<guatiao_provider_error> err,
-);
+typedef StartNative =
+    Uint32 Function(
+      Pointer<Void> ctx,
+      guatiao_object listener,
+      Pointer<guatiao_object> out,
+      Pointer<guatiao_provider_error> err,
+    );
 
 final class GreeterVtable extends Struct {
   external guatiao_kind_header header;
@@ -55,13 +59,16 @@ final class HelloGreeterVtable extends Struct {
   external int structSize;
 
   external Pointer<
-      NativeFunction<
-          Uint32 Function(
-            Pointer<Void> ctx,
-            Pointer<guatiao_value> config,
-            Pointer<guatiao_value> out,
-          )>> greet;
+    NativeFunction<
+      Uint32 Function(
+        Pointer<Void> ctx,
+        Pointer<guatiao_value> config,
+        Pointer<guatiao_value> out,
+      )
+    >
+  >
+  greet;
 
   external Pointer<NativeFunction<Int64 Function(Pointer<Void> ctx)>>
-      outstanding;
+  outstanding;
 }

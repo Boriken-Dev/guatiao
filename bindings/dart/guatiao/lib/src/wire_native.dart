@@ -35,7 +35,8 @@ class Event {
 
 /// Builds a frame through [build], answering its bytes.
 Uint8List _frame(
-    int Function(Pointer<guatiao_alloc>, Pointer<guatiao_value>) build) {
+  int Function(Pointer<guatiao_alloc>, Pointer<guatiao_value>) build,
+) {
   final core = native.core();
   final out = calloc<guatiao_value>();
   try {
@@ -62,23 +63,27 @@ T _withNode<T>(Object? value, T Function(Pointer<guatiao_value>) use) {
 /// The frame that announces [schema] (a [Value], a [Ref] or what
 /// [Value.fromDart] takes) on [channel]. A later one replaces it.
 Uint8List announce(int channel, Object? schema) => _withNode(
-      schema,
-      (node) => _frame((alloc, out) => native
-          .core()
-          .bindings
-          .guatiao_wire_announce(alloc, channel, node, out)),
-    );
+  schema,
+  (node) => _frame(
+    (alloc, out) =>
+        native.core().bindings.guatiao_wire_announce(alloc, channel, node, out),
+  ),
+);
 
 /// The frame that carries [value] on [channel].
 Uint8List send(int channel, Object? value) => _withNode(
-      value,
-      (node) => _frame((alloc, out) =>
-          native.core().bindings.guatiao_wire_send(alloc, channel, node, out)),
-    );
+  value,
+  (node) => _frame(
+    (alloc, out) =>
+        native.core().bindings.guatiao_wire_send(alloc, channel, node, out),
+  ),
+);
 
 /// The frame that ends [channel]: a receiver forgets its schema.
-Uint8List close(int channel) => _frame((alloc, out) =>
-    native.core().bindings.guatiao_wire_close(alloc, channel, out));
+Uint8List close(int channel) => _frame(
+  (alloc, out) =>
+      native.core().bindings.guatiao_wire_close(alloc, channel, out),
+);
 
 /// Where the event's three values sit: after `channel`, `kind`, `refusal`
 /// and `at`, one after another.
@@ -90,7 +95,7 @@ int get _valueAt => 16 + sizeOf<Size>();
 /// receiver serves one conversation, and a Dart isolate is one thread.
 class Receiver implements Finalizable {
   Receiver._(this._handle)
-      : _finalizer = NativeFinalizer(native.core().wireReceiverFreeFinalizer) {
+    : _finalizer = NativeFinalizer(native.core().wireReceiverFreeFinalizer) {
     _finalizer.attach(this, _handle.cast<Void>(), detach: this);
   }
 
@@ -124,14 +129,19 @@ class Receiver implements Finalizable {
           ..len = frame.length;
       }
       final event = arena<guatiao_wire_event>();
-      final status =
-          bindings.guatiao_wire_receiver_accept(_handle, view.ref, event);
+      final status = bindings.guatiao_wire_receiver_accept(
+        _handle,
+        view.ref,
+        event,
+      );
       final at = event.address + _valueAt;
       final value = Pointer<guatiao_value>.fromAddress(at);
-      final message =
-          Pointer<guatiao_value>.fromAddress(at + sizeOf<guatiao_value>());
-      final detail =
-          Pointer<guatiao_value>.fromAddress(at + 2 * sizeOf<guatiao_value>());
+      final message = Pointer<guatiao_value>.fromAddress(
+        at + sizeOf<guatiao_value>(),
+      );
+      final detail = Pointer<guatiao_value>.fromAddress(
+        at + 2 * sizeOf<guatiao_value>(),
+      );
       final words = Ref.borrowed(message).stringOr('');
       final found = Ref.borrowed(detail).toDart(numbers: Numbers.text);
       Value? taken;
@@ -150,7 +160,14 @@ class Receiver implements Finalizable {
         return Event(Frame.values[kind], channel, taken);
       }
       throw refusalFor(
-          status, event.ref.refusal, words, channel, kind, event.ref.at, found);
+        status,
+        event.ref.refusal,
+        words,
+        channel,
+        kind,
+        event.ref.at,
+        found,
+      );
     });
   }
 

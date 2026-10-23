@@ -44,8 +44,9 @@ void main() {
     expect(() => reg.watchDir(watched.path), throwsA(isA<BadValue>()));
     expect(reg.refresh()['loaded'], isEmpty);
 
-    final copy = File(join([libraryDir(), libraryName('hello_library')]))
-        .copySync(join([watched.path, libraryName('hello_dart_watched')]));
+    final copy = File(
+      join([libraryDir(), libraryName('hello_library')]),
+    ).copySync(join([watched.path, libraryName('hello_dart_watched')]));
     final added = reg.refresh();
     expect(
       [for (final s in added['loaded']! as List) (s! as Map)['key']],
@@ -66,10 +67,16 @@ void main() {
     final reg = Registry('dart-sources', '0.1');
     addTearDown(reg.close);
     expect(
-      () => reg
-          .addSourceFile(join([libraryDir(), libraryName('derived_greeter')])),
-      throwsA(isA<WrongKind>()
-          .having((e) => e.message, 'message', contains('guatiao_source'))),
+      () => reg.addSourceFile(
+        join([libraryDir(), libraryName('derived_greeter')]),
+      ),
+      throwsA(
+        isA<WrongKind>().having(
+          (e) => e.message,
+          'message',
+          contains('guatiao_source'),
+        ),
+      ),
     );
     expect(
       () => reg.addSourceFile(join([libraryDir(), 'no-such-file'])),

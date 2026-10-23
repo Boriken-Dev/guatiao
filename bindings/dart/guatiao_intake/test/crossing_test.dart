@@ -33,17 +33,18 @@ void main() {
   });
 
   test(
-      'a tree the core built is read by intake, and the view refuses once it closes',
-      () {
-    final value = Value.fromDart({
-      'agent': [
-        {'name': 'a'},
-        {'name': 'b'},
-      ],
-    });
-    final found = intake.at(value, 'agent[1].name')!;
-    expect(found.toDart(), 'b');
-    value.close();
-    expect(() => found.toDart(), throwsStateError);
-  });
+    'a tree the core built is read by intake, and the view refuses once it closes',
+    () {
+      final value = Value.fromDart({
+        'agent': [
+          {'name': 'a'},
+          {'name': 'b'},
+        ],
+      });
+      final found = intake.at(value, 'agent[1].name')!;
+      expect(found.toDart(), 'b');
+      value.close();
+      expect(() => found.toDart(), throwsStateError);
+    },
+  );
 }

@@ -17,30 +17,25 @@ import 'dart:ffi' as ffi;
 class GuatiaoBindings {
   /// Holds the symbol lookup function.
   final ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-      _lookup;
+  _lookup;
 
   /// The symbols are looked up in [dynamicLibrary].
   GuatiaoBindings(ffi.DynamicLibrary dynamicLibrary)
-      : _lookup = dynamicLibrary.lookup;
+    : _lookup = dynamicLibrary.lookup;
 
   /// The symbols are looked up with [lookup].
   GuatiaoBindings.fromLookup(
-      ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-          lookup)
-      : _lookup = lookup;
+    ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) lookup,
+  ) : _lookup = lookup;
 
-  int guatiao_alloc_default(
-    ffi.Pointer<guatiao_alloc> out,
-  ) {
-    return _guatiao_alloc_default(
-      out,
-    );
+  int guatiao_alloc_default(ffi.Pointer<guatiao_alloc> out) {
+    return _guatiao_alloc_default(out);
   }
 
-  late final _guatiao_alloc_defaultPtr = _lookup<
-          ffi
-          .NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_alloc>)>>(
-      'guatiao_alloc_default');
+  late final _guatiao_alloc_defaultPtr =
+      _lookup<
+        ffi.NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_alloc>)>
+      >('guatiao_alloc_default');
   late final _guatiao_alloc_default = _guatiao_alloc_defaultPtr
       .asFunction<int Function(ffi.Pointer<guatiao_alloc>)>();
 
@@ -49,66 +44,81 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_value> node,
     guatiao_bytes bytes,
   ) {
-    return _guatiao_buffer_push(
-      alloc,
-      node,
-      bytes,
-    );
+    return _guatiao_buffer_push(alloc, node, bytes);
   }
 
-  late final _guatiao_buffer_pushPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_buffer_pushPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>,
-              guatiao_bytes)>>('guatiao_buffer_push');
-  late final _guatiao_buffer_push = _guatiao_buffer_pushPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
-          guatiao_bytes)>();
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            guatiao_bytes,
+          )
+        >
+      >('guatiao_buffer_push');
+  late final _guatiao_buffer_push = _guatiao_buffer_pushPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+          guatiao_bytes,
+        )
+      >();
 
   int guatiao_date_add_span(
     ffi.Pointer<guatiao_date> date,
     ffi.Pointer<guatiao_span> span,
     ffi.Pointer<guatiao_date> out,
   ) {
-    return _guatiao_date_add_span(
-      date,
-      span,
-      out,
-    );
+    return _guatiao_date_add_span(date, span, out);
   }
 
-  late final _guatiao_date_add_spanPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_date_add_spanPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_date>,
-              ffi.Pointer<guatiao_span>,
-              ffi.Pointer<guatiao_date>)>>('guatiao_date_add_span');
-  late final _guatiao_date_add_span = _guatiao_date_add_spanPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_date>, ffi.Pointer<guatiao_span>,
-          ffi.Pointer<guatiao_date>)>();
+            ffi.Pointer<guatiao_date>,
+            ffi.Pointer<guatiao_span>,
+            ffi.Pointer<guatiao_date>,
+          )
+        >
+      >('guatiao_date_add_span');
+  late final _guatiao_date_add_span = _guatiao_date_add_spanPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_date>,
+          ffi.Pointer<guatiao_span>,
+          ffi.Pointer<guatiao_date>,
+        )
+      >();
 
   int guatiao_date_format(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_date> date,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_date_format(
-      alloc,
-      date,
-      out,
-    );
+    return _guatiao_date_format(alloc, date, out);
   }
 
-  late final _guatiao_date_formatPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_date_formatPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_date>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_date_format');
-  late final _guatiao_date_format = _guatiao_date_formatPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_date>,
-          ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_date>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_date_format');
+  late final _guatiao_date_format = _guatiao_date_formatPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_date>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_date_normalize(
     ffi.Pointer<guatiao_alloc> alloc,
@@ -116,24 +126,29 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_value> out,
     ffi.Pointer<guatiao_text_error> out_error,
   ) {
-    return _guatiao_date_normalize(
-      alloc,
-      text,
-      out,
-      out_error,
-    );
+    return _guatiao_date_normalize(alloc, text, out, out_error);
   }
 
-  late final _guatiao_date_normalizePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_date_normalizePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_text_error>)>>('guatiao_date_normalize');
-  late final _guatiao_date_normalize = _guatiao_date_normalizePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-          ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_text_error>)>();
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_str,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_text_error>,
+          )
+        >
+      >('guatiao_date_normalize');
+  late final _guatiao_date_normalize = _guatiao_date_normalizePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_str,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_text_error>,
+        )
+      >();
 
   int guatiao_date_parse(
     ffi.Pointer<guatiao_alloc> alloc,
@@ -141,69 +156,83 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_date> out,
     ffi.Pointer<guatiao_text_error> out_error,
   ) {
-    return _guatiao_date_parse(
-      alloc,
-      text,
-      out,
-      out_error,
-    );
+    return _guatiao_date_parse(alloc, text, out, out_error);
   }
 
-  late final _guatiao_date_parsePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_date_parsePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              guatiao_str,
-              ffi.Pointer<guatiao_date>,
-              ffi.Pointer<guatiao_text_error>)>>('guatiao_date_parse');
-  late final _guatiao_date_parse = _guatiao_date_parsePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-          ffi.Pointer<guatiao_date>, ffi.Pointer<guatiao_text_error>)>();
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_str,
+            ffi.Pointer<guatiao_date>,
+            ffi.Pointer<guatiao_text_error>,
+          )
+        >
+      >('guatiao_date_parse');
+  late final _guatiao_date_parse = _guatiao_date_parsePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_str,
+          ffi.Pointer<guatiao_date>,
+          ffi.Pointer<guatiao_text_error>,
+        )
+      >();
 
   int guatiao_datetime_add_span(
     ffi.Pointer<guatiao_datetime> datetime,
     ffi.Pointer<guatiao_span> span,
     ffi.Pointer<guatiao_datetime> out,
   ) {
-    return _guatiao_datetime_add_span(
-      datetime,
-      span,
-      out,
-    );
+    return _guatiao_datetime_add_span(datetime, span, out);
   }
 
-  late final _guatiao_datetime_add_spanPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_datetime_add_spanPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_datetime>,
-              ffi.Pointer<guatiao_span>,
-              ffi.Pointer<guatiao_datetime>)>>('guatiao_datetime_add_span');
-  late final _guatiao_datetime_add_span =
-      _guatiao_datetime_add_spanPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_datetime>, ffi.Pointer<guatiao_span>,
-              ffi.Pointer<guatiao_datetime>)>();
+            ffi.Pointer<guatiao_datetime>,
+            ffi.Pointer<guatiao_span>,
+            ffi.Pointer<guatiao_datetime>,
+          )
+        >
+      >('guatiao_datetime_add_span');
+  late final _guatiao_datetime_add_span = _guatiao_datetime_add_spanPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_datetime>,
+          ffi.Pointer<guatiao_span>,
+          ffi.Pointer<guatiao_datetime>,
+        )
+      >();
 
   int guatiao_datetime_format(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_datetime> datetime,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_datetime_format(
-      alloc,
-      datetime,
-      out,
-    );
+    return _guatiao_datetime_format(alloc, datetime, out);
   }
 
-  late final _guatiao_datetime_formatPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_datetime_formatPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_datetime>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_datetime_format');
-  late final _guatiao_datetime_format = _guatiao_datetime_formatPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_datetime>,
-          ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_datetime>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_datetime_format');
+  late final _guatiao_datetime_format = _guatiao_datetime_formatPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_datetime>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_datetime_normalize(
     ffi.Pointer<guatiao_alloc> alloc,
@@ -211,25 +240,29 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_value> out,
     ffi.Pointer<guatiao_text_error> out_error,
   ) {
-    return _guatiao_datetime_normalize(
-      alloc,
-      text,
-      out,
-      out_error,
-    );
+    return _guatiao_datetime_normalize(alloc, text, out, out_error);
   }
 
-  late final _guatiao_datetime_normalizePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_datetime_normalizePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_text_error>)>>('guatiao_datetime_normalize');
-  late final _guatiao_datetime_normalize =
-      _guatiao_datetime_normalizePtr.asFunction<
-          int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-              ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_text_error>)>();
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_str,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_text_error>,
+          )
+        >
+      >('guatiao_datetime_normalize');
+  late final _guatiao_datetime_normalize = _guatiao_datetime_normalizePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_str,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_text_error>,
+        )
+      >();
 
   int guatiao_datetime_parse(
     ffi.Pointer<guatiao_alloc> alloc,
@@ -237,76 +270,78 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_datetime> out,
     ffi.Pointer<guatiao_text_error> out_error,
   ) {
-    return _guatiao_datetime_parse(
-      alloc,
-      text,
-      out,
-      out_error,
-    );
+    return _guatiao_datetime_parse(alloc, text, out, out_error);
   }
 
-  late final _guatiao_datetime_parsePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_datetime_parsePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              guatiao_str,
-              ffi.Pointer<guatiao_datetime>,
-              ffi.Pointer<guatiao_text_error>)>>('guatiao_datetime_parse');
-  late final _guatiao_datetime_parse = _guatiao_datetime_parsePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-          ffi.Pointer<guatiao_datetime>, ffi.Pointer<guatiao_text_error>)>();
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_str,
+            ffi.Pointer<guatiao_datetime>,
+            ffi.Pointer<guatiao_text_error>,
+          )
+        >
+      >('guatiao_datetime_parse');
+  late final _guatiao_datetime_parse = _guatiao_datetime_parsePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_str,
+          ffi.Pointer<guatiao_datetime>,
+          ffi.Pointer<guatiao_text_error>,
+        )
+      >();
 
   int guatiao_duration_read(
     ffi.Pointer<guatiao_value> value,
     ffi.Pointer<ffi.Uint64> out_seconds,
     ffi.Pointer<ffi.Uint32> out_nanoseconds,
   ) {
-    return _guatiao_duration_read(
-      value,
-      out_seconds,
-      out_nanoseconds,
-    );
+    return _guatiao_duration_read(value, out_seconds, out_nanoseconds);
   }
 
-  late final _guatiao_duration_readPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_duration_readPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<ffi.Uint64>,
-              ffi.Pointer<ffi.Uint32>)>>('guatiao_duration_read');
-  late final _guatiao_duration_read = _guatiao_duration_readPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<ffi.Uint64>,
-          ffi.Pointer<ffi.Uint32>)>();
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<ffi.Uint64>,
+            ffi.Pointer<ffi.Uint32>,
+          )
+        >
+      >('guatiao_duration_read');
+  late final _guatiao_duration_read = _guatiao_duration_readPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<ffi.Uint64>,
+          ffi.Pointer<ffi.Uint32>,
+        )
+      >();
 
-  int guatiao_list_clear(
-    ffi.Pointer<guatiao_value> node,
-  ) {
-    return _guatiao_list_clear(
-      node,
-    );
+  int guatiao_list_clear(ffi.Pointer<guatiao_value> node) {
+    return _guatiao_list_clear(node);
   }
 
-  late final _guatiao_list_clearPtr = _lookup<
-          ffi
-          .NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_value>)>>(
-      'guatiao_list_clear');
+  late final _guatiao_list_clearPtr =
+      _lookup<
+        ffi.NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_value>)>
+      >('guatiao_list_clear');
   late final _guatiao_list_clear = _guatiao_list_clearPtr
       .asFunction<int Function(ffi.Pointer<guatiao_value>)>();
 
-  int guatiao_list_discard(
-    ffi.Pointer<guatiao_value> node,
-    int index,
-  ) {
-    return _guatiao_list_discard(
-      node,
-      index,
-    );
+  int guatiao_list_discard(ffi.Pointer<guatiao_value> node, int index) {
+    return _guatiao_list_discard(node, index);
   }
 
-  late final _guatiao_list_discardPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(
-              ffi.Pointer<guatiao_value>, ffi.Size)>>('guatiao_list_discard');
+  late final _guatiao_list_discardPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(ffi.Pointer<guatiao_value>, ffi.Size)
+        >
+      >('guatiao_list_discard');
   late final _guatiao_list_discard = _guatiao_list_discardPtr
       .asFunction<int Function(ffi.Pointer<guatiao_value>, int)>();
 
@@ -315,35 +350,36 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_value> node,
     ffi.Pointer<guatiao_value> value,
   ) {
-    return _guatiao_list_push(
-      alloc,
-      node,
-      value,
-    );
+    return _guatiao_list_push(alloc, node, value);
   }
 
-  late final _guatiao_list_pushPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_list_pushPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_list_push');
-  late final _guatiao_list_push = _guatiao_list_pushPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
-          ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_list_push');
+  late final _guatiao_list_push = _guatiao_list_pushPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
-  int guatiao_map_clear(
-    ffi.Pointer<guatiao_value> node,
-  ) {
-    return _guatiao_map_clear(
-      node,
-    );
+  int guatiao_map_clear(ffi.Pointer<guatiao_value> node) {
+    return _guatiao_map_clear(node);
   }
 
-  late final _guatiao_map_clearPtr = _lookup<
-          ffi
-          .NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_value>)>>(
-      'guatiao_map_clear');
+  late final _guatiao_map_clearPtr =
+      _lookup<
+        ffi.NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_value>)>
+      >('guatiao_map_clear');
   late final _guatiao_map_clear = _guatiao_map_clearPtr
       .asFunction<int Function(ffi.Pointer<guatiao_value>)>();
 
@@ -352,37 +388,38 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_value> dst,
     ffi.Pointer<guatiao_value> src,
   ) {
-    return _guatiao_map_copy_from(
-      alloc,
-      dst,
-      src,
-    );
+    return _guatiao_map_copy_from(alloc, dst, src);
   }
 
-  late final _guatiao_map_copy_fromPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_map_copy_fromPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_map_copy_from');
-  late final _guatiao_map_copy_from = _guatiao_map_copy_fromPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
-          ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_map_copy_from');
+  late final _guatiao_map_copy_from = _guatiao_map_copy_fromPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
-  int guatiao_map_discard(
-    ffi.Pointer<guatiao_value> node,
-    guatiao_str key,
-  ) {
-    return _guatiao_map_discard(
-      node,
-      key,
-    );
+  int guatiao_map_discard(ffi.Pointer<guatiao_value> node, guatiao_str key) {
+    return _guatiao_map_discard(node, key);
   }
 
-  late final _guatiao_map_discardPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(
-              ffi.Pointer<guatiao_value>, guatiao_str)>>('guatiao_map_discard');
+  late final _guatiao_map_discardPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(ffi.Pointer<guatiao_value>, guatiao_str)
+        >
+      >('guatiao_map_discard');
   late final _guatiao_map_discard = _guatiao_map_discardPtr
       .asFunction<int Function(ffi.Pointer<guatiao_value>, guatiao_str)>();
 
@@ -392,58 +429,51 @@ class GuatiaoBindings {
     guatiao_str key,
     ffi.Pointer<guatiao_value> value,
   ) {
-    return _guatiao_map_set(
-      alloc,
-      node,
-      key,
-      value,
-    );
+    return _guatiao_map_set(alloc, node, key, value);
   }
 
-  late final _guatiao_map_setPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_map_setPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>)>>('guatiao_map_set');
-  late final _guatiao_map_set = _guatiao_map_setPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
-          guatiao_str, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            guatiao_str,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_map_set');
+  late final _guatiao_map_set = _guatiao_map_setPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+          guatiao_str,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
-  ffi.Pointer<ffi.Void> guatiao_memory_alloc(
-    int size,
-    int align,
-  ) {
-    return _guatiao_memory_alloc(
-      size,
-      align,
-    );
+  ffi.Pointer<ffi.Void> guatiao_memory_alloc(int size, int align) {
+    return _guatiao_memory_alloc(size, align);
   }
 
-  late final _guatiao_memory_allocPtr = _lookup<
-          ffi
-          .NativeFunction<ffi.Pointer<ffi.Void> Function(ffi.Size, ffi.Size)>>(
-      'guatiao_memory_alloc');
+  late final _guatiao_memory_allocPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Pointer<ffi.Void> Function(ffi.Size, ffi.Size)>
+      >('guatiao_memory_alloc');
   late final _guatiao_memory_alloc = _guatiao_memory_allocPtr
       .asFunction<ffi.Pointer<ffi.Void> Function(int, int)>();
 
-  void guatiao_memory_free(
-    ffi.Pointer<ffi.Void> ptr,
-    int size,
-    int align,
-  ) {
-    return _guatiao_memory_free(
-      ptr,
-      size,
-      align,
-    );
+  void guatiao_memory_free(ffi.Pointer<ffi.Void> ptr, int size, int align) {
+    return _guatiao_memory_free(ptr, size, align);
   }
 
-  late final _guatiao_memory_freePtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Void Function(ffi.Pointer<ffi.Void>, ffi.Size,
-              ffi.Size)>>('guatiao_memory_free');
+  late final _guatiao_memory_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<ffi.Void>, ffi.Size, ffi.Size)
+        >
+      >('guatiao_memory_free');
   late final _guatiao_memory_free = _guatiao_memory_freePtr
       .asFunction<void Function(ffi.Pointer<ffi.Void>, int, int)>();
 
@@ -471,20 +501,25 @@ class GuatiaoBindings {
     );
   }
 
-  late final _guatiao_mergePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_mergePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Uint32,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Uint32,
-              ffi.Pointer<guatiao_merge_override>,
-              ffi.Size,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_merge');
-  late final _guatiao_merge = _guatiao_mergePtr.asFunction<
-      int Function(
+            ffi.Uint32,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Uint32,
+            ffi.Pointer<guatiao_merge_override>,
+            ffi.Size,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_merge');
+  late final _guatiao_merge = _guatiao_mergePtr
+      .asFunction<
+        int Function(
           int,
           ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_value>,
@@ -493,7 +528,9 @@ class GuatiaoBindings {
           ffi.Pointer<guatiao_merge_override>,
           int,
           ffi.Pointer<guatiao_value>,
-          ffi.Pointer<guatiao_value>)>();
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_registry_add_source(
     ffi.Pointer<guatiao_registry> reg,
@@ -501,29 +538,29 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_source_info> source,
     ffi.Pointer<guatiao_provider_error> err,
   ) {
-    return _guatiao_registry_add_source(
-      reg,
-      name,
-      source,
-      err,
-    );
+    return _guatiao_registry_add_source(reg, name, source, err);
   }
 
-  late final _guatiao_registry_add_sourcePtr = _lookup<
-          ffi.NativeFunction<
-              guatiao_status Function(
-                  ffi.Pointer<guatiao_registry>,
-                  guatiao_str,
-                  ffi.Pointer<guatiao_source_info>,
-                  ffi.Pointer<guatiao_provider_error>)>>(
-      'guatiao_registry_add_source');
-  late final _guatiao_registry_add_source =
-      _guatiao_registry_add_sourcePtr.asFunction<
-          int Function(
-              ffi.Pointer<guatiao_registry>,
-              guatiao_str,
-              ffi.Pointer<guatiao_source_info>,
-              ffi.Pointer<guatiao_provider_error>)>();
+  late final _guatiao_registry_add_sourcePtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<guatiao_source_info>,
+            ffi.Pointer<guatiao_provider_error>,
+          )
+        >
+      >('guatiao_registry_add_source');
+  late final _guatiao_registry_add_source = _guatiao_registry_add_sourcePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_registry>,
+          guatiao_str,
+          ffi.Pointer<guatiao_source_info>,
+          ffi.Pointer<guatiao_provider_error>,
+        )
+      >();
 
   int guatiao_registry_add_source_file(
     ffi.Pointer<guatiao_registry> reg,
@@ -531,29 +568,30 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_value> config,
     ffi.Pointer<guatiao_provider_error> err,
   ) {
-    return _guatiao_registry_add_source_file(
-      reg,
-      path,
-      config,
-      err,
-    );
+    return _guatiao_registry_add_source_file(reg, path, config, err);
   }
 
-  late final _guatiao_registry_add_source_filePtr = _lookup<
-          ffi.NativeFunction<
-              guatiao_status Function(
-                  ffi.Pointer<guatiao_registry>,
-                  guatiao_str,
-                  ffi.Pointer<guatiao_value>,
-                  ffi.Pointer<guatiao_provider_error>)>>(
-      'guatiao_registry_add_source_file');
+  late final _guatiao_registry_add_source_filePtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_provider_error>,
+          )
+        >
+      >('guatiao_registry_add_source_file');
   late final _guatiao_registry_add_source_file =
-      _guatiao_registry_add_source_filePtr.asFunction<
-          int Function(
+      _guatiao_registry_add_source_filePtr
+          .asFunction<
+            int Function(
               ffi.Pointer<guatiao_registry>,
               guatiao_str,
               ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_provider_error>)>();
+              ffi.Pointer<guatiao_provider_error>,
+            )
+          >();
 
   int guatiao_registry_available(
     ffi.Pointer<guatiao_registry> reg,
@@ -561,25 +599,29 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_registry_available(
-      reg,
-      kind,
-      alloc,
-      out,
-    );
+    return _guatiao_registry_available(reg, kind, alloc, out);
   }
 
-  late final _guatiao_registry_availablePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_availablePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_registry>,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_available');
-  late final _guatiao_registry_available =
-      _guatiao_registry_availablePtr.asFunction<
-          int Function(ffi.Pointer<guatiao_registry>, guatiao_str,
-              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_available');
+  late final _guatiao_registry_available = _guatiao_registry_availablePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_registry>,
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_registry_best(
     ffi.Pointer<guatiao_registry> reg,
@@ -587,91 +629,98 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_registry_best(
-      reg,
-      kind,
-      alloc,
-      out,
-    );
+    return _guatiao_registry_best(reg, kind, alloc, out);
   }
 
-  late final _guatiao_registry_bestPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_bestPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_registry>,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_best');
-  late final _guatiao_registry_best = _guatiao_registry_bestPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_registry>, guatiao_str,
-          ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_best');
+  late final _guatiao_registry_best = _guatiao_registry_bestPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_registry>,
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_registry_collect(
     ffi.Pointer<guatiao_registry> reg,
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_registry_collect(
-      reg,
-      alloc,
-      out,
-    );
+    return _guatiao_registry_collect(reg, alloc, out);
   }
 
-  late final _guatiao_registry_collectPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_collectPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_registry>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_collect');
-  late final _guatiao_registry_collect =
-      _guatiao_registry_collectPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_registry>,
-              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_registry>,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_collect');
+  late final _guatiao_registry_collect = _guatiao_registry_collectPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_registry>,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
-  void guatiao_registry_free(
-    ffi.Pointer<guatiao_registry> reg,
-  ) {
-    return _guatiao_registry_free(
-      reg,
-    );
+  void guatiao_registry_free(ffi.Pointer<guatiao_registry> reg) {
+    return _guatiao_registry_free(reg);
   }
 
-  late final _guatiao_registry_freePtr = _lookup<
-          ffi.NativeFunction<ffi.Void Function(ffi.Pointer<guatiao_registry>)>>(
-      'guatiao_registry_free');
+  late final _guatiao_registry_freePtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<guatiao_registry>)>
+      >('guatiao_registry_free');
   late final _guatiao_registry_free = _guatiao_registry_freePtr
       .asFunction<void Function(ffi.Pointer<guatiao_registry>)>();
 
   ffi.Pointer<guatiao_host_info> guatiao_registry_host(
     ffi.Pointer<guatiao_registry> reg,
   ) {
-    return _guatiao_registry_host(
-      reg,
-    );
+    return _guatiao_registry_host(reg);
   }
 
-  late final _guatiao_registry_hostPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Pointer<guatiao_host_info> Function(
-              ffi.Pointer<guatiao_registry>)>>('guatiao_registry_host');
-  late final _guatiao_registry_host = _guatiao_registry_hostPtr.asFunction<
-      ffi.Pointer<guatiao_host_info> Function(ffi.Pointer<guatiao_registry>)>();
+  late final _guatiao_registry_hostPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<guatiao_host_info> Function(ffi.Pointer<guatiao_registry>)
+        >
+      >('guatiao_registry_host');
+  late final _guatiao_registry_host = _guatiao_registry_hostPtr
+      .asFunction<
+        ffi.Pointer<guatiao_host_info> Function(ffi.Pointer<guatiao_registry>)
+      >();
 
   int guatiao_registry_keyed_by(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str template_,
   ) {
-    return _guatiao_registry_keyed_by(
-      reg,
-      template_,
-    );
+    return _guatiao_registry_keyed_by(reg, template_);
   }
 
-  late final _guatiao_registry_keyed_byPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_registry>,
-              guatiao_str)>>('guatiao_registry_keyed_by');
+  late final _guatiao_registry_keyed_byPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(ffi.Pointer<guatiao_registry>, guatiao_str)
+        >
+      >('guatiao_registry_keyed_by');
   late final _guatiao_registry_keyed_by = _guatiao_registry_keyed_byPtr
       .asFunction<int Function(ffi.Pointer<guatiao_registry>, guatiao_str)>();
 
@@ -680,41 +729,46 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_registry_libraries(
-      reg,
-      alloc,
-      out,
-    );
+    return _guatiao_registry_libraries(reg, alloc, out);
   }
 
-  late final _guatiao_registry_librariesPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_librariesPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_registry>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_libraries');
-  late final _guatiao_registry_libraries =
-      _guatiao_registry_librariesPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_registry>,
-              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_registry>,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_libraries');
+  late final _guatiao_registry_libraries = _guatiao_registry_librariesPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_registry>,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_registry_libraries_keyed_by(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str template_,
   ) {
-    return _guatiao_registry_libraries_keyed_by(
-      reg,
-      template_,
-    );
+    return _guatiao_registry_libraries_keyed_by(reg, template_);
   }
 
-  late final _guatiao_registry_libraries_keyed_byPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_registry>,
-              guatiao_str)>>('guatiao_registry_libraries_keyed_by');
+  late final _guatiao_registry_libraries_keyed_byPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(ffi.Pointer<guatiao_registry>, guatiao_str)
+        >
+      >('guatiao_registry_libraries_keyed_by');
   late final _guatiao_registry_libraries_keyed_by =
-      _guatiao_registry_libraries_keyed_byPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_registry>, guatiao_str)>();
+      _guatiao_registry_libraries_keyed_byPtr
+          .asFunction<
+            int Function(ffi.Pointer<guatiao_registry>, guatiao_str)
+          >();
 
   int guatiao_registry_load_file(
     ffi.Pointer<guatiao_registry> reg,
@@ -722,60 +776,70 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_registry_load_file(
-      reg,
-      path,
-      alloc,
-      out,
-    );
+    return _guatiao_registry_load_file(reg, path, alloc, out);
   }
 
-  late final _guatiao_registry_load_filePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_load_filePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_registry>,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_load_file');
-  late final _guatiao_registry_load_file =
-      _guatiao_registry_load_filePtr.asFunction<
-          int Function(ffi.Pointer<guatiao_registry>, guatiao_str,
-              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_load_file');
+  late final _guatiao_registry_load_file = _guatiao_registry_load_filePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_registry>,
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   ffi.Pointer<guatiao_registry> guatiao_registry_new(
     guatiao_str id,
     guatiao_str version,
     ffi.Pointer<guatiao_alloc> alloc,
   ) {
-    return _guatiao_registry_new(
-      id,
-      version,
-      alloc,
-    );
+    return _guatiao_registry_new(id, version, alloc);
   }
 
-  late final _guatiao_registry_newPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Pointer<guatiao_registry> Function(guatiao_str, guatiao_str,
-              ffi.Pointer<guatiao_alloc>)>>('guatiao_registry_new');
-  late final _guatiao_registry_new = _guatiao_registry_newPtr.asFunction<
-      ffi.Pointer<guatiao_registry> Function(
-          guatiao_str, guatiao_str, ffi.Pointer<guatiao_alloc>)>();
+  late final _guatiao_registry_newPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Pointer<guatiao_registry> Function(
+            guatiao_str,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+          )
+        >
+      >('guatiao_registry_new');
+  late final _guatiao_registry_new = _guatiao_registry_newPtr
+      .asFunction<
+        ffi.Pointer<guatiao_registry> Function(
+          guatiao_str,
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+        )
+      >();
 
   int guatiao_registry_priority(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str id,
   ) {
-    return _guatiao_registry_priority(
-      reg,
-      id,
-    );
+    return _guatiao_registry_priority(reg, id);
   }
 
-  late final _guatiao_registry_priorityPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Int32 Function(ffi.Pointer<guatiao_registry>,
-              guatiao_str)>>('guatiao_registry_priority');
+  late final _guatiao_registry_priorityPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Int32 Function(ffi.Pointer<guatiao_registry>, guatiao_str)
+        >
+      >('guatiao_registry_priority');
   late final _guatiao_registry_priority = _guatiao_registry_priorityPtr
       .asFunction<int Function(ffi.Pointer<guatiao_registry>, guatiao_str)>();
 
@@ -785,66 +849,82 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_registry_provider(
-      reg,
-      key,
-      alloc,
-      out,
-    );
+    return _guatiao_registry_provider(reg, key, alloc, out);
   }
 
-  late final _guatiao_registry_providerPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_providerPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_registry>,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_provider');
-  late final _guatiao_registry_provider =
-      _guatiao_registry_providerPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_registry>, guatiao_str,
-              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_provider');
+  late final _guatiao_registry_provider = _guatiao_registry_providerPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_registry>,
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   bool guatiao_registry_provider_available(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str key,
     ffi.Pointer<guatiao_str> reason,
   ) {
-    return _guatiao_registry_provider_available(
-      reg,
-      key,
-      reason,
-    );
+    return _guatiao_registry_provider_available(reg, key, reason);
   }
 
-  late final _guatiao_registry_provider_availablePtr = _lookup<
-          ffi.NativeFunction<
-              ffi.Bool Function(ffi.Pointer<guatiao_registry>, guatiao_str,
-                  ffi.Pointer<guatiao_str>)>>(
-      'guatiao_registry_provider_available');
+  late final _guatiao_registry_provider_availablePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Bool Function(
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<guatiao_str>,
+          )
+        >
+      >('guatiao_registry_provider_available');
   late final _guatiao_registry_provider_available =
-      _guatiao_registry_provider_availablePtr.asFunction<
-          bool Function(ffi.Pointer<guatiao_registry>, guatiao_str,
-              ffi.Pointer<guatiao_str>)>();
+      _guatiao_registry_provider_availablePtr
+          .asFunction<
+            bool Function(
+              ffi.Pointer<guatiao_registry>,
+              guatiao_str,
+              ffi.Pointer<guatiao_str>,
+            )
+          >();
 
   ffi.Pointer<guatiao_value> guatiao_registry_provider_config(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str key,
   ) {
-    return _guatiao_registry_provider_config(
-      reg,
-      key,
-    );
+    return _guatiao_registry_provider_config(reg, key);
   }
 
-  late final _guatiao_registry_provider_configPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Pointer<guatiao_value> Function(ffi.Pointer<guatiao_registry>,
-              guatiao_str)>>('guatiao_registry_provider_config');
-  late final _guatiao_registry_provider_config =
-      _guatiao_registry_provider_configPtr.asFunction<
+  late final _guatiao_registry_provider_configPtr =
+      _lookup<
+        ffi.NativeFunction<
           ffi.Pointer<guatiao_value> Function(
-              ffi.Pointer<guatiao_registry>, guatiao_str)>();
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+          )
+        >
+      >('guatiao_registry_provider_config');
+  late final _guatiao_registry_provider_config =
+      _guatiao_registry_provider_configPtr
+          .asFunction<
+            ffi.Pointer<guatiao_value> Function(
+              ffi.Pointer<guatiao_registry>,
+              guatiao_str,
+            )
+          >();
 
   int guatiao_registry_provider_create(
     ffi.Pointer<guatiao_registry> reg,
@@ -853,72 +933,84 @@ class GuatiaoBindings {
     ffi.Pointer<ffi.Pointer<ffi.Void>> out,
     ffi.Pointer<guatiao_provider_error> err,
   ) {
-    return _guatiao_registry_provider_create(
-      reg,
-      key,
-      config,
-      out,
-      err,
-    );
+    return _guatiao_registry_provider_create(reg, key, config, out, err);
   }
 
-  late final _guatiao_registry_provider_createPtr = _lookup<
-          ffi.NativeFunction<
-              guatiao_status Function(
-                  ffi.Pointer<guatiao_registry>,
-                  guatiao_str,
-                  ffi.Pointer<guatiao_value>,
-                  ffi.Pointer<ffi.Pointer<ffi.Void>>,
-                  ffi.Pointer<guatiao_provider_error>)>>(
-      'guatiao_registry_provider_create');
+  late final _guatiao_registry_provider_createPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<ffi.Pointer<ffi.Void>>,
+            ffi.Pointer<guatiao_provider_error>,
+          )
+        >
+      >('guatiao_registry_provider_create');
   late final _guatiao_registry_provider_create =
-      _guatiao_registry_provider_createPtr.asFunction<
-          int Function(
+      _guatiao_registry_provider_createPtr
+          .asFunction<
+            int Function(
               ffi.Pointer<guatiao_registry>,
               guatiao_str,
               ffi.Pointer<guatiao_value>,
               ffi.Pointer<ffi.Pointer<ffi.Void>>,
-              ffi.Pointer<guatiao_provider_error>)>();
+              ffi.Pointer<guatiao_provider_error>,
+            )
+          >();
 
   ffi.Pointer<ffi.Void> guatiao_registry_provider_ctx(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str key,
   ) {
-    return _guatiao_registry_provider_ctx(
-      reg,
-      key,
-    );
+    return _guatiao_registry_provider_ctx(reg, key);
   }
 
-  late final _guatiao_registry_provider_ctxPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Pointer<ffi.Void> Function(ffi.Pointer<guatiao_registry>,
-              guatiao_str)>>('guatiao_registry_provider_ctx');
-  late final _guatiao_registry_provider_ctx =
-      _guatiao_registry_provider_ctxPtr.asFunction<
+  late final _guatiao_registry_provider_ctxPtr =
+      _lookup<
+        ffi.NativeFunction<
           ffi.Pointer<ffi.Void> Function(
-              ffi.Pointer<guatiao_registry>, guatiao_str)>();
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+          )
+        >
+      >('guatiao_registry_provider_ctx');
+  late final _guatiao_registry_provider_ctx = _guatiao_registry_provider_ctxPtr
+      .asFunction<
+        ffi.Pointer<ffi.Void> Function(
+          ffi.Pointer<guatiao_registry>,
+          guatiao_str,
+        )
+      >();
 
   void guatiao_registry_provider_destroy(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str key,
     ffi.Pointer<ffi.Void> instance,
   ) {
-    return _guatiao_registry_provider_destroy(
-      reg,
-      key,
-      instance,
-    );
+    return _guatiao_registry_provider_destroy(reg, key, instance);
   }
 
-  late final _guatiao_registry_provider_destroyPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Void Function(ffi.Pointer<guatiao_registry>, guatiao_str,
-              ffi.Pointer<ffi.Void>)>>('guatiao_registry_provider_destroy');
+  late final _guatiao_registry_provider_destroyPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<ffi.Void>,
+          )
+        >
+      >('guatiao_registry_provider_destroy');
   late final _guatiao_registry_provider_destroy =
-      _guatiao_registry_provider_destroyPtr.asFunction<
-          void Function(ffi.Pointer<guatiao_registry>, guatiao_str,
-              ffi.Pointer<ffi.Void>)>();
+      _guatiao_registry_provider_destroyPtr
+          .asFunction<
+            void Function(
+              ffi.Pointer<guatiao_registry>,
+              guatiao_str,
+              ffi.Pointer<ffi.Void>,
+            )
+          >();
 
   int guatiao_registry_provider_meta(
     ffi.Pointer<guatiao_registry> reg,
@@ -926,25 +1018,30 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_registry_provider_meta(
-      reg,
-      key,
-      alloc,
-      out,
-    );
+    return _guatiao_registry_provider_meta(reg, key, alloc, out);
   }
 
-  late final _guatiao_registry_provider_metaPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_provider_metaPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_provider_meta');
+  late final _guatiao_registry_provider_meta =
+      _guatiao_registry_provider_metaPtr
+          .asFunction<
+            int Function(
               ffi.Pointer<guatiao_registry>,
               guatiao_str,
               ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_provider_meta');
-  late final _guatiao_registry_provider_meta =
-      _guatiao_registry_provider_metaPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_registry>, guatiao_str,
-              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+              ffi.Pointer<guatiao_value>,
+            )
+          >();
 
   ffi.Pointer<ffi.Void> guatiao_registry_provider_table(
     ffi.Pointer<guatiao_registry> reg,
@@ -952,48 +1049,58 @@ class GuatiaoBindings {
     guatiao_str kind,
     ffi.Pointer<ffi.Size> size_out,
   ) {
-    return _guatiao_registry_provider_table(
-      reg,
-      key,
-      kind,
-      size_out,
-    );
+    return _guatiao_registry_provider_table(reg, key, kind, size_out);
   }
 
-  late final _guatiao_registry_provider_tablePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_provider_tablePtr =
+      _lookup<
+        ffi.NativeFunction<
           ffi.Pointer<ffi.Void> Function(
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            guatiao_str,
+            ffi.Pointer<ffi.Size>,
+          )
+        >
+      >('guatiao_registry_provider_table');
+  late final _guatiao_registry_provider_table =
+      _guatiao_registry_provider_tablePtr
+          .asFunction<
+            ffi.Pointer<ffi.Void> Function(
               ffi.Pointer<guatiao_registry>,
               guatiao_str,
               guatiao_str,
-              ffi.Pointer<ffi.Size>)>>('guatiao_registry_provider_table');
-  late final _guatiao_registry_provider_table =
-      _guatiao_registry_provider_tablePtr.asFunction<
-          ffi.Pointer<ffi.Void> Function(ffi.Pointer<guatiao_registry>,
-              guatiao_str, guatiao_str, ffi.Pointer<ffi.Size>)>();
+              ffi.Pointer<ffi.Size>,
+            )
+          >();
 
   ffi.Pointer<ffi.Void> guatiao_registry_provider_vtable(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str key,
     ffi.Pointer<ffi.Size> size_out,
   ) {
-    return _guatiao_registry_provider_vtable(
-      reg,
-      key,
-      size_out,
-    );
+    return _guatiao_registry_provider_vtable(reg, key, size_out);
   }
 
-  late final _guatiao_registry_provider_vtablePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_provider_vtablePtr =
+      _lookup<
+        ffi.NativeFunction<
           ffi.Pointer<ffi.Void> Function(
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<ffi.Size>,
+          )
+        >
+      >('guatiao_registry_provider_vtable');
+  late final _guatiao_registry_provider_vtable =
+      _guatiao_registry_provider_vtablePtr
+          .asFunction<
+            ffi.Pointer<ffi.Void> Function(
               ffi.Pointer<guatiao_registry>,
               guatiao_str,
-              ffi.Pointer<ffi.Size>)>>('guatiao_registry_provider_vtable');
-  late final _guatiao_registry_provider_vtable =
-      _guatiao_registry_provider_vtablePtr.asFunction<
-          ffi.Pointer<ffi.Void> Function(ffi.Pointer<guatiao_registry>,
-              guatiao_str, ffi.Pointer<ffi.Size>)>();
+              ffi.Pointer<ffi.Size>,
+            )
+          >();
 
   int guatiao_registry_providers(
     ffi.Pointer<guatiao_registry> reg,
@@ -1001,106 +1108,123 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_registry_providers(
-      reg,
-      kind,
-      alloc,
-      out,
-    );
+    return _guatiao_registry_providers(reg, kind, alloc, out);
   }
 
-  late final _guatiao_registry_providersPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_providersPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_registry>,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_providers');
-  late final _guatiao_registry_providers =
-      _guatiao_registry_providersPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_registry>, guatiao_str,
-              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_providers');
+  late final _guatiao_registry_providers = _guatiao_registry_providersPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_registry>,
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_registry_refresh(
     ffi.Pointer<guatiao_registry> reg,
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_registry_refresh(
-      reg,
-      alloc,
-      out,
-    );
+    return _guatiao_registry_refresh(reg, alloc, out);
   }
 
-  late final _guatiao_registry_refreshPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_refreshPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_registry>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_refresh');
-  late final _guatiao_registry_refresh =
-      _guatiao_registry_refreshPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_registry>,
-              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_registry>,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_refresh');
+  late final _guatiao_registry_refresh = _guatiao_registry_refreshPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_registry>,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_registry_register_entry(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str name,
     ffi.Pointer<
-            ffi.NativeFunction<
-                ffi.Pointer<guatiao_library_info> Function(
-                    ffi.Pointer<guatiao_host_info>)>>
-        entry,
+      ffi.NativeFunction<
+        ffi.Pointer<guatiao_library_info> Function(
+          ffi.Pointer<guatiao_host_info>,
+        )
+      >
+    >
+    entry,
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_registry_register_entry(
-      reg,
-      name,
-      entry,
-      alloc,
-      out,
-    );
+    return _guatiao_registry_register_entry(reg, name, entry, alloc, out);
   }
 
-  late final _guatiao_registry_register_entryPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_register_entryPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_registry>,
-              guatiao_str,
-              ffi.Pointer<
-                  ffi.NativeFunction<
-                      ffi.Pointer<guatiao_library_info> Function(
-                          ffi.Pointer<guatiao_host_info>)>>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_register_entry');
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<
+              ffi.NativeFunction<
+                ffi.Pointer<guatiao_library_info> Function(
+                  ffi.Pointer<guatiao_host_info>,
+                )
+              >
+            >,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_register_entry');
   late final _guatiao_registry_register_entry =
-      _guatiao_registry_register_entryPtr.asFunction<
-          int Function(
+      _guatiao_registry_register_entryPtr
+          .asFunction<
+            int Function(
               ffi.Pointer<guatiao_registry>,
               guatiao_str,
               ffi.Pointer<
-                  ffi.NativeFunction<
-                      ffi.Pointer<guatiao_library_info> Function(
-                          ffi.Pointer<guatiao_host_info>)>>,
+                ffi.NativeFunction<
+                  ffi.Pointer<guatiao_library_info> Function(
+                    ffi.Pointer<guatiao_host_info>,
+                  )
+                >
+              >,
               ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>();
+              ffi.Pointer<guatiao_value>,
+            )
+          >();
 
   int guatiao_registry_retire(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str key,
   ) {
-    return _guatiao_registry_retire(
-      reg,
-      key,
-    );
+    return _guatiao_registry_retire(reg, key);
   }
 
-  late final _guatiao_registry_retirePtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_registry>,
-              guatiao_str)>>('guatiao_registry_retire');
+  late final _guatiao_registry_retirePtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(ffi.Pointer<guatiao_registry>, guatiao_str)
+        >
+      >('guatiao_registry_retire');
   late final _guatiao_registry_retire = _guatiao_registry_retirePtr
       .asFunction<int Function(ffi.Pointer<guatiao_registry>, guatiao_str)>();
 
@@ -1111,27 +1235,31 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_registry_scan_dir(
-      reg,
-      dir,
-      descending,
-      alloc,
-      out,
-    );
+    return _guatiao_registry_scan_dir(reg, dir, descending, alloc, out);
   }
 
-  late final _guatiao_registry_scan_dirPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_scan_dirPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_registry>,
-              guatiao_str,
-              ffi.Bool,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_scan_dir');
-  late final _guatiao_registry_scan_dir =
-      _guatiao_registry_scan_dirPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_registry>, guatiao_str, bool,
-              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Bool,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_scan_dir');
+  late final _guatiao_registry_scan_dir = _guatiao_registry_scan_dirPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_registry>,
+          guatiao_str,
+          bool,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_registry_scan_dir_rules(
     ffi.Pointer<guatiao_registry> reg,
@@ -1151,24 +1279,31 @@ class GuatiaoBindings {
     );
   }
 
-  late final _guatiao_registry_scan_dir_rulesPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_scan_dir_rulesPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_registry>,
-              guatiao_str,
-              ffi.Bool,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_scan_dir_rules');
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Bool,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_scan_dir_rules');
   late final _guatiao_registry_scan_dir_rules =
-      _guatiao_registry_scan_dir_rulesPtr.asFunction<
-          int Function(
+      _guatiao_registry_scan_dir_rulesPtr
+          .asFunction<
+            int Function(
               ffi.Pointer<guatiao_registry>,
               guatiao_str,
               bool,
               guatiao_str,
               ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>();
+              ffi.Pointer<guatiao_value>,
+            )
+          >();
 
   int guatiao_registry_scan_path(
     ffi.Pointer<guatiao_registry> reg,
@@ -1188,59 +1323,67 @@ class GuatiaoBindings {
     );
   }
 
-  late final _guatiao_registry_scan_pathPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_scan_pathPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_registry>,
-              guatiao_str,
-              ffi.Bool,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_scan_path');
-  late final _guatiao_registry_scan_path =
-      _guatiao_registry_scan_pathPtr.asFunction<
-          int Function(
-              ffi.Pointer<guatiao_registry>,
-              guatiao_str,
-              bool,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Bool,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_scan_path');
+  late final _guatiao_registry_scan_path = _guatiao_registry_scan_pathPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_registry>,
+          guatiao_str,
+          bool,
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_registry_set_priority(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str id,
     int priority,
   ) {
-    return _guatiao_registry_set_priority(
-      reg,
-      id,
-      priority,
-    );
+    return _guatiao_registry_set_priority(reg, id, priority);
   }
 
-  late final _guatiao_registry_set_priorityPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_registry>, guatiao_str,
-              ffi.Int32)>>('guatiao_registry_set_priority');
-  late final _guatiao_registry_set_priority =
-      _guatiao_registry_set_priorityPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_registry>, guatiao_str, int)>();
+  late final _guatiao_registry_set_priorityPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Int32,
+          )
+        >
+      >('guatiao_registry_set_priority');
+  late final _guatiao_registry_set_priority = _guatiao_registry_set_priorityPtr
+      .asFunction<
+        int Function(ffi.Pointer<guatiao_registry>, guatiao_str, int)
+      >();
 
   int guatiao_registry_unload(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str key,
   ) {
-    return _guatiao_registry_unload(
-      reg,
-      key,
-    );
+    return _guatiao_registry_unload(reg, key);
   }
 
-  late final _guatiao_registry_unloadPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_registry>,
-              guatiao_str)>>('guatiao_registry_unload');
+  late final _guatiao_registry_unloadPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(ffi.Pointer<guatiao_registry>, guatiao_str)
+        >
+      >('guatiao_registry_unload');
   late final _guatiao_registry_unload = _guatiao_registry_unloadPtr
       .asFunction<int Function(ffi.Pointer<guatiao_registry>, guatiao_str)>();
 
@@ -1248,40 +1391,43 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str key,
   ) {
-    return _guatiao_registry_unload_unchecked(
-      reg,
-      key,
-    );
+    return _guatiao_registry_unload_unchecked(reg, key);
   }
 
-  late final _guatiao_registry_unload_uncheckedPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_registry>,
-              guatiao_str)>>('guatiao_registry_unload_unchecked');
+  late final _guatiao_registry_unload_uncheckedPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(ffi.Pointer<guatiao_registry>, guatiao_str)
+        >
+      >('guatiao_registry_unload_unchecked');
   late final _guatiao_registry_unload_unchecked =
-      _guatiao_registry_unload_uncheckedPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_registry>, guatiao_str)>();
+      _guatiao_registry_unload_uncheckedPtr
+          .asFunction<
+            int Function(ffi.Pointer<guatiao_registry>, guatiao_str)
+          >();
 
   int guatiao_registry_watch_dir(
     ffi.Pointer<guatiao_registry> reg,
     guatiao_str dir,
     guatiao_str rules,
   ) {
-    return _guatiao_registry_watch_dir(
-      reg,
-      dir,
-      rules,
-    );
+    return _guatiao_registry_watch_dir(reg, dir, rules);
   }
 
-  late final _guatiao_registry_watch_dirPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_registry>, guatiao_str,
-              guatiao_str)>>('guatiao_registry_watch_dir');
-  late final _guatiao_registry_watch_dir =
-      _guatiao_registry_watch_dirPtr.asFunction<
-          int Function(
-              ffi.Pointer<guatiao_registry>, guatiao_str, guatiao_str)>();
+  late final _guatiao_registry_watch_dirPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            guatiao_str,
+          )
+        >
+      >('guatiao_registry_watch_dir');
+  late final _guatiao_registry_watch_dir = _guatiao_registry_watch_dirPtr
+      .asFunction<
+        int Function(ffi.Pointer<guatiao_registry>, guatiao_str, guatiao_str)
+      >();
 
   int guatiao_registry_why_not(
     ffi.Pointer<guatiao_registry> reg,
@@ -1289,25 +1435,29 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_registry_why_not(
-      reg,
-      kind,
-      alloc,
-      out,
-    );
+    return _guatiao_registry_why_not(reg, kind, alloc, out);
   }
 
-  late final _guatiao_registry_why_notPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_registry_why_notPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_registry>,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_registry_why_not');
-  late final _guatiao_registry_why_not =
-      _guatiao_registry_why_notPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_registry>, guatiao_str,
-              ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_registry>,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_registry_why_not');
+  late final _guatiao_registry_why_not = _guatiao_registry_why_notPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_registry>,
+          guatiao_str,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_schema_redact(
     ffi.Pointer<guatiao_value> schema,
@@ -1316,30 +1466,31 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_schema_redact(
-      schema,
-      value,
-      placeholder,
-      alloc,
-      out,
-    );
+    return _guatiao_schema_redact(schema, value, placeholder, alloc, out);
   }
 
-  late final _guatiao_schema_redactPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_schema_redactPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>,
-              guatiao_str,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_schema_redact');
-  late final _guatiao_schema_redact = _guatiao_schema_redactPtr.asFunction<
-      int Function(
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+            guatiao_str,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_schema_redact');
+  late final _guatiao_schema_redact = _guatiao_schema_redactPtr
+      .asFunction<
+        int Function(
           ffi.Pointer<guatiao_value>,
           ffi.Pointer<guatiao_value>,
           guatiao_str,
           ffi.Pointer<guatiao_alloc>,
-          ffi.Pointer<guatiao_value>)>();
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_schema_validate(
     ffi.Pointer<guatiao_value> schema,
@@ -1347,46 +1498,56 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out_error,
   ) {
-    return _guatiao_schema_validate(
-      schema,
-      config,
-      alloc,
-      out_error,
-    );
+    return _guatiao_schema_validate(schema, config, alloc, out_error);
   }
 
-  late final _guatiao_schema_validatePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_schema_validatePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_schema_validate');
-  late final _guatiao_schema_validate = _guatiao_schema_validatePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_value>,
-          ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_schema_validate');
+  late final _guatiao_schema_validate = _guatiao_schema_validatePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_span_format(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_span> span,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_span_format(
-      alloc,
-      span,
-      out,
-    );
+    return _guatiao_span_format(alloc, span, out);
   }
 
-  late final _guatiao_span_formatPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_span_formatPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_span>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_span_format');
-  late final _guatiao_span_format = _guatiao_span_formatPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_span>,
-          ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_span>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_span_format');
+  late final _guatiao_span_format = _guatiao_span_formatPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_span>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_span_normalize(
     ffi.Pointer<guatiao_alloc> alloc,
@@ -1394,24 +1555,29 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_value> out,
     ffi.Pointer<guatiao_text_error> out_error,
   ) {
-    return _guatiao_span_normalize(
-      alloc,
-      text,
-      out,
-      out_error,
-    );
+    return _guatiao_span_normalize(alloc, text, out, out_error);
   }
 
-  late final _guatiao_span_normalizePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_span_normalizePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_text_error>)>>('guatiao_span_normalize');
-  late final _guatiao_span_normalize = _guatiao_span_normalizePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-          ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_text_error>)>();
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_str,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_text_error>,
+          )
+        >
+      >('guatiao_span_normalize');
+  late final _guatiao_span_normalize = _guatiao_span_normalizePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_str,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_text_error>,
+        )
+      >();
 
   int guatiao_span_parse(
     ffi.Pointer<guatiao_alloc> alloc,
@@ -1419,66 +1585,83 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_span> out,
     ffi.Pointer<guatiao_text_error> out_error,
   ) {
-    return _guatiao_span_parse(
-      alloc,
-      text,
-      out,
-      out_error,
-    );
+    return _guatiao_span_parse(alloc, text, out, out_error);
   }
 
-  late final _guatiao_span_parsePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_span_parsePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              guatiao_str,
-              ffi.Pointer<guatiao_span>,
-              ffi.Pointer<guatiao_text_error>)>>('guatiao_span_parse');
-  late final _guatiao_span_parse = _guatiao_span_parsePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-          ffi.Pointer<guatiao_span>, ffi.Pointer<guatiao_text_error>)>();
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_str,
+            ffi.Pointer<guatiao_span>,
+            ffi.Pointer<guatiao_text_error>,
+          )
+        >
+      >('guatiao_span_parse');
+  late final _guatiao_span_parse = _guatiao_span_parsePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_str,
+          ffi.Pointer<guatiao_span>,
+          ffi.Pointer<guatiao_text_error>,
+        )
+      >();
 
   int guatiao_string_push(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> node,
     guatiao_str text,
   ) {
-    return _guatiao_string_push(
-      alloc,
-      node,
-      text,
-    );
+    return _guatiao_string_push(alloc, node, text);
   }
 
-  late final _guatiao_string_pushPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>, guatiao_str)>>('guatiao_string_push');
-  late final _guatiao_string_push = _guatiao_string_pushPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
-          guatiao_str)>();
+  late final _guatiao_string_pushPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            guatiao_str,
+          )
+        >
+      >('guatiao_string_push');
+  late final _guatiao_string_push = _guatiao_string_pushPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+          guatiao_str,
+        )
+      >();
 
   int guatiao_time_format(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_time> time,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_time_format(
-      alloc,
-      time,
-      out,
-    );
+    return _guatiao_time_format(alloc, time, out);
   }
 
-  late final _guatiao_time_formatPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_time_formatPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_time>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_time_format');
-  late final _guatiao_time_format = _guatiao_time_formatPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_time>,
-          ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_time>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_time_format');
+  late final _guatiao_time_format = _guatiao_time_formatPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_time>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_time_normalize(
     ffi.Pointer<guatiao_alloc> alloc,
@@ -1486,24 +1669,29 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_value> out,
     ffi.Pointer<guatiao_text_error> out_error,
   ) {
-    return _guatiao_time_normalize(
-      alloc,
-      text,
-      out,
-      out_error,
-    );
+    return _guatiao_time_normalize(alloc, text, out, out_error);
   }
 
-  late final _guatiao_time_normalizePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_time_normalizePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_text_error>)>>('guatiao_time_normalize');
-  late final _guatiao_time_normalize = _guatiao_time_normalizePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-          ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_text_error>)>();
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_str,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_text_error>,
+          )
+        >
+      >('guatiao_time_normalize');
+  late final _guatiao_time_normalize = _guatiao_time_normalizePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_str,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_text_error>,
+        )
+      >();
 
   int guatiao_time_parse(
     ffi.Pointer<guatiao_alloc> alloc,
@@ -1511,47 +1699,56 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_time> out,
     ffi.Pointer<guatiao_text_error> out_error,
   ) {
-    return _guatiao_time_parse(
-      alloc,
-      text,
-      out,
-      out_error,
-    );
+    return _guatiao_time_parse(alloc, text, out, out_error);
   }
 
-  late final _guatiao_time_parsePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_time_parsePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              guatiao_str,
-              ffi.Pointer<guatiao_time>,
-              ffi.Pointer<guatiao_text_error>)>>('guatiao_time_parse');
-  late final _guatiao_time_parse = _guatiao_time_parsePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-          ffi.Pointer<guatiao_time>, ffi.Pointer<guatiao_text_error>)>();
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_str,
+            ffi.Pointer<guatiao_time>,
+            ffi.Pointer<guatiao_text_error>,
+          )
+        >
+      >('guatiao_time_parse');
+  late final _guatiao_time_parse = _guatiao_time_parsePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_str,
+          ffi.Pointer<guatiao_time>,
+          ffi.Pointer<guatiao_text_error>,
+        )
+      >();
 
   int guatiao_timestamp_format(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_timestamp> timestamp,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_timestamp_format(
-      alloc,
-      timestamp,
-      out,
-    );
+    return _guatiao_timestamp_format(alloc, timestamp, out);
   }
 
-  late final _guatiao_timestamp_formatPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_timestamp_formatPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_timestamp>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_timestamp_format');
-  late final _guatiao_timestamp_format =
-      _guatiao_timestamp_formatPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_timestamp>, ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_timestamp>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_timestamp_format');
+  late final _guatiao_timestamp_format = _guatiao_timestamp_formatPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_timestamp>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_timestamp_normalize(
     ffi.Pointer<guatiao_alloc> alloc,
@@ -1559,25 +1756,29 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_value> out,
     ffi.Pointer<guatiao_text_error> out_error,
   ) {
-    return _guatiao_timestamp_normalize(
-      alloc,
-      text,
-      out,
-      out_error,
-    );
+    return _guatiao_timestamp_normalize(alloc, text, out, out_error);
   }
 
-  late final _guatiao_timestamp_normalizePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_timestamp_normalizePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              guatiao_str,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_text_error>)>>('guatiao_timestamp_normalize');
-  late final _guatiao_timestamp_normalize =
-      _guatiao_timestamp_normalizePtr.asFunction<
-          int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-              ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_text_error>)>();
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_str,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_text_error>,
+          )
+        >
+      >('guatiao_timestamp_normalize');
+  late final _guatiao_timestamp_normalize = _guatiao_timestamp_normalizePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_str,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_text_error>,
+        )
+      >();
 
   int guatiao_timestamp_parse(
     ffi.Pointer<guatiao_alloc> alloc,
@@ -1585,54 +1786,51 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_timestamp> out,
     ffi.Pointer<guatiao_text_error> out_error,
   ) {
-    return _guatiao_timestamp_parse(
-      alloc,
-      text,
-      out,
-      out_error,
-    );
+    return _guatiao_timestamp_parse(alloc, text, out, out_error);
   }
 
-  late final _guatiao_timestamp_parsePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_timestamp_parsePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              guatiao_str,
-              ffi.Pointer<guatiao_timestamp>,
-              ffi.Pointer<guatiao_text_error>)>>('guatiao_timestamp_parse');
-  late final _guatiao_timestamp_parse = _guatiao_timestamp_parsePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-          ffi.Pointer<guatiao_timestamp>, ffi.Pointer<guatiao_text_error>)>();
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_str,
+            ffi.Pointer<guatiao_timestamp>,
+            ffi.Pointer<guatiao_text_error>,
+          )
+        >
+      >('guatiao_timestamp_parse');
+  late final _guatiao_timestamp_parse = _guatiao_timestamp_parsePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_str,
+          ffi.Pointer<guatiao_timestamp>,
+          ffi.Pointer<guatiao_text_error>,
+        )
+      >();
 
-  int guatiao_value_absent(
-    ffi.Pointer<guatiao_value> out,
-  ) {
-    return _guatiao_value_absent(
-      out,
-    );
+  int guatiao_value_absent(ffi.Pointer<guatiao_value> out) {
+    return _guatiao_value_absent(out);
   }
 
-  late final _guatiao_value_absentPtr = _lookup<
-          ffi
-          .NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_value>)>>(
-      'guatiao_value_absent');
+  late final _guatiao_value_absentPtr =
+      _lookup<
+        ffi.NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_value>)>
+      >('guatiao_value_absent');
   late final _guatiao_value_absent = _guatiao_value_absentPtr
       .asFunction<int Function(ffi.Pointer<guatiao_value>)>();
 
-  int guatiao_value_bool(
-    bool b,
-    ffi.Pointer<guatiao_value> out,
-  ) {
-    return _guatiao_value_bool(
-      b,
-      out,
-    );
+  int guatiao_value_bool(bool b, ffi.Pointer<guatiao_value> out) {
+    return _guatiao_value_bool(b, out);
   }
 
-  late final _guatiao_value_boolPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(
-              ffi.Bool, ffi.Pointer<guatiao_value>)>>('guatiao_value_bool');
+  late final _guatiao_value_boolPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(ffi.Bool, ffi.Pointer<guatiao_value>)
+        >
+      >('guatiao_value_bool');
   late final _guatiao_value_bool = _guatiao_value_boolPtr
       .asFunction<int Function(bool, ffi.Pointer<guatiao_value>)>();
 
@@ -1641,55 +1839,63 @@ class GuatiaoBindings {
     guatiao_bytes bytes,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_value_bytes(
-      alloc,
-      bytes,
-      out,
-    );
+    return _guatiao_value_bytes(alloc, bytes, out);
   }
 
-  late final _guatiao_value_bytesPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_alloc>, guatiao_bytes,
-              ffi.Pointer<guatiao_value>)>>('guatiao_value_bytes');
-  late final _guatiao_value_bytes = _guatiao_value_bytesPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, guatiao_bytes,
-          ffi.Pointer<guatiao_value>)>();
+  late final _guatiao_value_bytesPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_bytes,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_value_bytes');
+  late final _guatiao_value_bytes = _guatiao_value_bytesPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_bytes,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_value_clone(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> src,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_value_clone(
-      alloc,
-      src,
-      out,
-    );
+    return _guatiao_value_clone(alloc, src, out);
   }
 
-  late final _guatiao_value_clonePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_value_clonePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_value_clone');
-  late final _guatiao_value_clone = _guatiao_value_clonePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
-          ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_value_clone');
+  late final _guatiao_value_clone = _guatiao_value_clonePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
-  int guatiao_value_free(
-    ffi.Pointer<guatiao_value> v,
-  ) {
-    return _guatiao_value_free(
-      v,
-    );
+  int guatiao_value_free(ffi.Pointer<guatiao_value> v) {
+    return _guatiao_value_free(v);
   }
 
-  late final _guatiao_value_freePtr = _lookup<
-          ffi
-          .NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_value>)>>(
-      'guatiao_value_free');
+  late final _guatiao_value_freePtr =
+      _lookup<
+        ffi.NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_value>)>
+      >('guatiao_value_free');
   late final _guatiao_value_free = _guatiao_value_freePtr
       .asFunction<int Function(ffi.Pointer<guatiao_value>)>();
 
@@ -1697,48 +1903,52 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_value_list(
-      alloc,
-      out,
-    );
+    return _guatiao_value_list(alloc, out);
   }
 
-  late final _guatiao_value_listPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_value_list');
-  late final _guatiao_value_list = _guatiao_value_listPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+  late final _guatiao_value_listPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_value_list');
+  late final _guatiao_value_list = _guatiao_value_listPtr
+      .asFunction<
+        int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)
+      >();
 
   int guatiao_value_map(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_value_map(
-      alloc,
-      out,
-    );
+    return _guatiao_value_map(alloc, out);
   }
 
-  late final _guatiao_value_mapPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_value_map');
-  late final _guatiao_value_map = _guatiao_value_mapPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)>();
+  late final _guatiao_value_mapPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_value_map');
+  late final _guatiao_value_map = _guatiao_value_mapPtr
+      .asFunction<
+        int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)
+      >();
 
-  int guatiao_value_null(
-    ffi.Pointer<guatiao_value> out,
-  ) {
-    return _guatiao_value_null(
-      out,
-    );
+  int guatiao_value_null(ffi.Pointer<guatiao_value> out) {
+    return _guatiao_value_null(out);
   }
 
-  late final _guatiao_value_nullPtr = _lookup<
-          ffi
-          .NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_value>)>>(
-      'guatiao_value_null');
+  late final _guatiao_value_nullPtr =
+      _lookup<
+        ffi.NativeFunction<guatiao_status Function(ffi.Pointer<guatiao_value>)>
+      >('guatiao_value_null');
   late final _guatiao_value_null = _guatiao_value_nullPtr
       .asFunction<int Function(ffi.Pointer<guatiao_value>)>();
 
@@ -1747,40 +1957,54 @@ class GuatiaoBindings {
     guatiao_str text,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_value_number(
-      alloc,
-      text,
-      out,
-    );
+    return _guatiao_value_number(alloc, text, out);
   }
 
-  late final _guatiao_value_numberPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-              ffi.Pointer<guatiao_value>)>>('guatiao_value_number');
-  late final _guatiao_value_number = _guatiao_value_numberPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-          ffi.Pointer<guatiao_value>)>();
+  late final _guatiao_value_numberPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_str,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_value_number');
+  late final _guatiao_value_number = _guatiao_value_numberPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_str,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_value_string(
     ffi.Pointer<guatiao_alloc> alloc,
     guatiao_str text,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_value_string(
-      alloc,
-      text,
-      out,
-    );
+    return _guatiao_value_string(alloc, text, out);
   }
 
-  late final _guatiao_value_stringPtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-              ffi.Pointer<guatiao_value>)>>('guatiao_value_string');
-  late final _guatiao_value_string = _guatiao_value_stringPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, guatiao_str,
-          ffi.Pointer<guatiao_value>)>();
+  late final _guatiao_value_stringPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_str,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_value_string');
+  late final _guatiao_value_string = _guatiao_value_stringPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_str,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_wire_announce(
     ffi.Pointer<guatiao_alloc> alloc,
@@ -1788,140 +2012,169 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_value> schema,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_wire_announce(
-      alloc,
-      channel,
-      schema,
-      out,
-    );
+    return _guatiao_wire_announce(alloc, channel, schema, out);
   }
 
-  late final _guatiao_wire_announcePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_wire_announcePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Uint64,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_wire_announce');
-  late final _guatiao_wire_announce = _guatiao_wire_announcePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, int, ffi.Pointer<guatiao_value>,
-          ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Uint64,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_wire_announce');
+  late final _guatiao_wire_announce = _guatiao_wire_announcePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          int,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_wire_close(
     ffi.Pointer<guatiao_alloc> alloc,
     int channel,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_wire_close(
-      alloc,
-      channel,
-      out,
-    );
+    return _guatiao_wire_close(alloc, channel, out);
   }
 
-  late final _guatiao_wire_closePtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_alloc>, ffi.Uint64,
-              ffi.Pointer<guatiao_value>)>>('guatiao_wire_close');
-  late final _guatiao_wire_close = _guatiao_wire_closePtr.asFunction<
-      int Function(
-          ffi.Pointer<guatiao_alloc>, int, ffi.Pointer<guatiao_value>)>();
+  late final _guatiao_wire_closePtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Uint64,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_wire_close');
+  late final _guatiao_wire_close = _guatiao_wire_closePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          int,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_wire_decode(
     ffi.Pointer<guatiao_alloc> alloc,
     guatiao_bytes bytes,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_wire_decode(
-      alloc,
-      bytes,
-      out,
-    );
+    return _guatiao_wire_decode(alloc, bytes, out);
   }
 
-  late final _guatiao_wire_decodePtr = _lookup<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<guatiao_alloc>, guatiao_bytes,
-              ffi.Pointer<guatiao_value>)>>('guatiao_wire_decode');
-  late final _guatiao_wire_decode = _guatiao_wire_decodePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, guatiao_bytes,
-          ffi.Pointer<guatiao_value>)>();
+  late final _guatiao_wire_decodePtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_alloc>,
+            guatiao_bytes,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_wire_decode');
+  late final _guatiao_wire_decode = _guatiao_wire_decodePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          guatiao_bytes,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_wire_encode(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> value,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_wire_encode(
-      alloc,
-      value,
-      out,
-    );
+    return _guatiao_wire_encode(alloc, value, out);
   }
 
-  late final _guatiao_wire_encodePtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_wire_encodePtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_wire_encode');
-  late final _guatiao_wire_encode = _guatiao_wire_encodePtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>,
-          ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_wire_encode');
+  late final _guatiao_wire_encode = _guatiao_wire_encodePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 
   int guatiao_wire_receiver_accept(
     ffi.Pointer<guatiao_wire_receiver> recv,
     guatiao_bytes frame,
     ffi.Pointer<guatiao_wire_event> out_event,
   ) {
-    return _guatiao_wire_receiver_accept(
-      recv,
-      frame,
-      out_event,
-    );
+    return _guatiao_wire_receiver_accept(recv, frame, out_event);
   }
 
-  late final _guatiao_wire_receiver_acceptPtr = _lookup<
-          ffi.NativeFunction<
-              guatiao_status Function(ffi.Pointer<guatiao_wire_receiver>,
-                  guatiao_bytes, ffi.Pointer<guatiao_wire_event>)>>(
-      'guatiao_wire_receiver_accept');
-  late final _guatiao_wire_receiver_accept =
-      _guatiao_wire_receiver_acceptPtr.asFunction<
-          int Function(ffi.Pointer<guatiao_wire_receiver>, guatiao_bytes,
-              ffi.Pointer<guatiao_wire_event>)>();
+  late final _guatiao_wire_receiver_acceptPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_wire_receiver>,
+            guatiao_bytes,
+            ffi.Pointer<guatiao_wire_event>,
+          )
+        >
+      >('guatiao_wire_receiver_accept');
+  late final _guatiao_wire_receiver_accept = _guatiao_wire_receiver_acceptPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_wire_receiver>,
+          guatiao_bytes,
+          ffi.Pointer<guatiao_wire_event>,
+        )
+      >();
 
-  void guatiao_wire_receiver_free(
-    ffi.Pointer<guatiao_wire_receiver> recv,
-  ) {
-    return _guatiao_wire_receiver_free(
-      recv,
-    );
+  void guatiao_wire_receiver_free(ffi.Pointer<guatiao_wire_receiver> recv) {
+    return _guatiao_wire_receiver_free(recv);
   }
 
-  late final _guatiao_wire_receiver_freePtr = _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(ffi.Pointer<guatiao_wire_receiver>)>>(
-      'guatiao_wire_receiver_free');
+  late final _guatiao_wire_receiver_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<guatiao_wire_receiver>)
+        >
+      >('guatiao_wire_receiver_free');
   late final _guatiao_wire_receiver_free = _guatiao_wire_receiver_freePtr
       .asFunction<void Function(ffi.Pointer<guatiao_wire_receiver>)>();
 
   ffi.Pointer<guatiao_wire_receiver> guatiao_wire_receiver_new(
     ffi.Pointer<guatiao_alloc> alloc,
   ) {
-    return _guatiao_wire_receiver_new(
-      alloc,
-    );
+    return _guatiao_wire_receiver_new(alloc);
   }
 
-  late final _guatiao_wire_receiver_newPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_wire_receiver_newPtr =
+      _lookup<
+        ffi.NativeFunction<
           ffi.Pointer<guatiao_wire_receiver> Function(
-              ffi.Pointer<guatiao_alloc>)>>('guatiao_wire_receiver_new');
-  late final _guatiao_wire_receiver_new =
-      _guatiao_wire_receiver_newPtr.asFunction<
-          ffi.Pointer<guatiao_wire_receiver> Function(
-              ffi.Pointer<guatiao_alloc>)>();
+            ffi.Pointer<guatiao_alloc>,
+          )
+        >
+      >('guatiao_wire_receiver_new');
+  late final _guatiao_wire_receiver_new = _guatiao_wire_receiver_newPtr
+      .asFunction<
+        ffi.Pointer<guatiao_wire_receiver> Function(ffi.Pointer<guatiao_alloc>)
+      >();
 
   int guatiao_wire_send(
     ffi.Pointer<guatiao_alloc> alloc,
@@ -1929,24 +2182,29 @@ class GuatiaoBindings {
     ffi.Pointer<guatiao_value> value,
     ffi.Pointer<guatiao_value> out,
   ) {
-    return _guatiao_wire_send(
-      alloc,
-      channel,
-      value,
-      out,
-    );
+    return _guatiao_wire_send(alloc, channel, value, out);
   }
 
-  late final _guatiao_wire_sendPtr = _lookup<
-      ffi.NativeFunction<
+  late final _guatiao_wire_sendPtr =
+      _lookup<
+        ffi.NativeFunction<
           guatiao_status Function(
-              ffi.Pointer<guatiao_alloc>,
-              ffi.Uint64,
-              ffi.Pointer<guatiao_value>,
-              ffi.Pointer<guatiao_value>)>>('guatiao_wire_send');
-  late final _guatiao_wire_send = _guatiao_wire_sendPtr.asFunction<
-      int Function(ffi.Pointer<guatiao_alloc>, int, ffi.Pointer<guatiao_value>,
-          ffi.Pointer<guatiao_value>)>();
+            ffi.Pointer<guatiao_alloc>,
+            ffi.Uint64,
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_value>,
+          )
+        >
+      >('guatiao_wire_send');
+  late final _guatiao_wire_send = _guatiao_wire_sendPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<guatiao_alloc>,
+          int,
+          ffi.Pointer<guatiao_value>,
+          ffi.Pointer<guatiao_value>,
+        )
+      >();
 }
 
 const int GUATIAO_ABI_VERSION = 1;
@@ -2079,43 +2337,68 @@ final class guatiao_alloc extends ffi.Struct {
   external ffi.Pointer<ffi.Void> ctx;
 
   external ffi.Pointer<
-      ffi.NativeFunction<
-          ffi.Pointer<ffi.Void> Function(
-              ffi.Pointer<ffi.Void> ctx, ffi.Size size, ffi.Size align)>> alloc;
+    ffi.NativeFunction<
+      ffi.Pointer<ffi.Void> Function(
+        ffi.Pointer<ffi.Void> ctx,
+        ffi.Size size,
+        ffi.Size align,
+      )
+    >
+  >
+  alloc;
 
   external ffi.Pointer<
-      ffi.NativeFunction<
-          ffi.Void Function(ffi.Pointer<ffi.Void> ctx,
-              ffi.Pointer<ffi.Void> ptr, ffi.Size size, ffi.Size align)>> free;
+    ffi.NativeFunction<
+      ffi.Void Function(
+        ffi.Pointer<ffi.Void> ctx,
+        ffi.Pointer<ffi.Void> ptr,
+        ffi.Size size,
+        ffi.Size align,
+      )
+    >
+  >
+  free;
 
-  external ffi
-      .Pointer<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void> ctx)>>
-      release;
+  external ffi.Pointer<
+    ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void> ctx)>
+  >
+  release;
 
   static ffi.Pointer<guatiao_alloc> $allocate(
     ffi.Allocator $allocator, {
     required int struct_size,
     required ffi.Pointer<ffi.Void> ctx,
     required ffi.Pointer<
-            ffi.NativeFunction<
-                ffi.Pointer<ffi.Void> Function(
-                    ffi.Pointer<ffi.Void> ctx, ffi.Size size, ffi.Size align)>>
-        alloc,
+      ffi.NativeFunction<
+        ffi.Pointer<ffi.Void> Function(
+          ffi.Pointer<ffi.Void> ctx,
+          ffi.Size size,
+          ffi.Size align,
+        )
+      >
+    >
+    alloc,
     required ffi.Pointer<
-            ffi.NativeFunction<
-                ffi.Void Function(ffi.Pointer<ffi.Void> ctx,
-                    ffi.Pointer<ffi.Void> ptr, ffi.Size size, ffi.Size align)>>
-        free,
+      ffi.NativeFunction<
+        ffi.Void Function(
+          ffi.Pointer<ffi.Void> ctx,
+          ffi.Pointer<ffi.Void> ptr,
+          ffi.Size size,
+          ffi.Size align,
+        )
+      >
+    >
+    free,
     required ffi.Pointer<
-            ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void> ctx)>>
-        release,
-  }) =>
-      $allocator<guatiao_alloc>()
-        ..ref.struct_size = struct_size
-        ..ref.ctx = ctx
-        ..ref.alloc = alloc
-        ..ref.free = free
-        ..ref.release = release;
+      ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void> ctx)>
+    >
+    release,
+  }) => $allocator<guatiao_alloc>()
+    ..ref.struct_size = struct_size
+    ..ref.ctx = ctx
+    ..ref.alloc = alloc
+    ..ref.free = free
+    ..ref.release = release;
 }
 
 final class guatiao_buffer extends ffi.Struct {
@@ -2135,12 +2418,11 @@ final class guatiao_buffer extends ffi.Struct {
     required int len,
     required int cap,
     required ffi.Pointer<guatiao_alloc> alloc,
-  }) =>
-      $allocator<guatiao_buffer>()
-        ..ref.ptr = ptr
-        ..ref.len = len
-        ..ref.cap = cap
-        ..ref.alloc = alloc;
+  }) => $allocator<guatiao_buffer>()
+    ..ref.ptr = ptr
+    ..ref.len = len
+    ..ref.cap = cap
+    ..ref.alloc = alloc;
 }
 
 final class guatiao_bytes extends ffi.Struct {
@@ -2153,10 +2435,9 @@ final class guatiao_bytes extends ffi.Struct {
     ffi.Allocator $allocator, {
     required ffi.Pointer<ffi.Uint8> ptr,
     required int len,
-  }) =>
-      $allocator<guatiao_bytes>()
-        ..ref.ptr = ptr
-        ..ref.len = len;
+  }) => $allocator<guatiao_bytes>()
+    ..ref.ptr = ptr
+    ..ref.len = len;
 }
 
 final class guatiao_bytes_mut extends ffi.Struct {
@@ -2169,10 +2450,9 @@ final class guatiao_bytes_mut extends ffi.Struct {
     ffi.Allocator $allocator, {
     required ffi.Pointer<ffi.Uint8> ptr,
     required int len,
-  }) =>
-      $allocator<guatiao_bytes_mut>()
-        ..ref.ptr = ptr
-        ..ref.len = len;
+  }) => $allocator<guatiao_bytes_mut>()
+    ..ref.ptr = ptr
+    ..ref.len = len;
 }
 
 final class guatiao_date extends ffi.Struct {
@@ -2190,11 +2470,10 @@ final class guatiao_date extends ffi.Struct {
     required int year,
     required int month,
     required int day,
-  }) =>
-      $allocator<guatiao_date>()
-        ..ref.year = year
-        ..ref.month = month
-        ..ref.day = day;
+  }) => $allocator<guatiao_date>()
+    ..ref.year = year
+    ..ref.month = month
+    ..ref.day = day;
 }
 
 final class guatiao_datetime extends ffi.Struct {
@@ -2213,10 +2492,9 @@ final class guatiao_entries extends ffi.Struct {
     ffi.Allocator $allocator, {
     required ffi.Pointer<guatiao_entry> ptr,
     required int len,
-  }) =>
-      $allocator<guatiao_entries>()
-        ..ref.ptr = ptr
-        ..ref.len = len;
+  }) => $allocator<guatiao_entries>()
+    ..ref.ptr = ptr
+    ..ref.len = len;
 }
 
 final class guatiao_entry extends ffi.Struct {
@@ -2250,109 +2528,162 @@ final class guatiao_host_services extends ffi.Struct {
   external ffi.Pointer<ffi.Void> ctx;
 
   external ffi.Pointer<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<ffi.Void> ctx, guatiao_str key,
-              ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out)>> get;
+    ffi.NativeFunction<
+      guatiao_status Function(
+        ffi.Pointer<ffi.Void> ctx,
+        guatiao_str key,
+        ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
+      )
+    >
+  >
+  get;
 
   external ffi.Pointer<
-      ffi.NativeFunction<
-          guatiao_status Function(
-              ffi.Pointer<ffi.Void> ctx,
-              guatiao_str kind,
-              ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
-              ffi.Size cap,
-              ffi.Pointer<ffi.Size> total)>> list;
+    ffi.NativeFunction<
+      guatiao_status Function(
+        ffi.Pointer<ffi.Void> ctx,
+        guatiao_str kind,
+        ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
+        ffi.Size cap,
+        ffi.Pointer<ffi.Size> total,
+      )
+    >
+  >
+  list;
 
   external ffi.Pointer<
-          ffi.NativeFunction<
-              ffi.Pointer<guatiao_alloc> Function(ffi.Pointer<ffi.Void> ctx)>>
-      alloc;
+    ffi.NativeFunction<
+      ffi.Pointer<guatiao_alloc> Function(ffi.Pointer<ffi.Void> ctx)
+    >
+  >
+  alloc;
 
   external ffi.Pointer<
-      ffi.NativeFunction<
-          guatiao_status Function(ffi.Pointer<ffi.Void> ctx, guatiao_str key,
-              ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out)>> get_pinned;
+    ffi.NativeFunction<
+      guatiao_status Function(
+        ffi.Pointer<ffi.Void> ctx,
+        guatiao_str key,
+        ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
+      )
+    >
+  >
+  get_pinned;
 
   external ffi.Pointer<
-      ffi.NativeFunction<
-          guatiao_status Function(
-              ffi.Pointer<ffi.Void> ctx,
-              guatiao_str kind,
-              ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
-              ffi.Size cap,
-              ffi.Pointer<ffi.Size> total)>> list_pinned;
+    ffi.NativeFunction<
+      guatiao_status Function(
+        ffi.Pointer<ffi.Void> ctx,
+        guatiao_str kind,
+        ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
+        ffi.Size cap,
+        ffi.Pointer<ffi.Size> total,
+      )
+    >
+  >
+  list_pinned;
 
   external ffi.Pointer<
-      ffi.NativeFunction<
-          ffi.Void Function(ffi.Pointer<ffi.Void> ctx,
-              ffi.Pointer<guatiao_provider_info> desc)>> pin;
+    ffi.NativeFunction<
+      ffi.Void Function(
+        ffi.Pointer<ffi.Void> ctx,
+        ffi.Pointer<guatiao_provider_info> desc,
+      )
+    >
+  >
+  pin;
 
   external ffi.Pointer<
-      ffi.NativeFunction<
-          ffi.Void Function(ffi.Pointer<ffi.Void> ctx,
-              ffi.Pointer<guatiao_provider_info> desc)>> unpin;
+    ffi.NativeFunction<
+      ffi.Void Function(
+        ffi.Pointer<ffi.Void> ctx,
+        ffi.Pointer<guatiao_provider_info> desc,
+      )
+    >
+  >
+  unpin;
 
   static ffi.Pointer<guatiao_host_services> $allocate(
     ffi.Allocator $allocator, {
     required int struct_size,
     required ffi.Pointer<ffi.Void> ctx,
     required ffi.Pointer<
-            ffi.NativeFunction<
-                guatiao_status Function(
-                    ffi.Pointer<ffi.Void> ctx,
-                    guatiao_str key,
-                    ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out)>>
-        get,
+      ffi.NativeFunction<
+        guatiao_status Function(
+          ffi.Pointer<ffi.Void> ctx,
+          guatiao_str key,
+          ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
+        )
+      >
+    >
+    get,
     required ffi.Pointer<
-            ffi.NativeFunction<
-                guatiao_status Function(
-                    ffi.Pointer<ffi.Void> ctx,
-                    guatiao_str kind,
-                    ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
-                    ffi.Size cap,
-                    ffi.Pointer<ffi.Size> total)>>
-        list,
+      ffi.NativeFunction<
+        guatiao_status Function(
+          ffi.Pointer<ffi.Void> ctx,
+          guatiao_str kind,
+          ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
+          ffi.Size cap,
+          ffi.Pointer<ffi.Size> total,
+        )
+      >
+    >
+    list,
     required ffi.Pointer<
-            ffi.NativeFunction<
-                ffi.Pointer<guatiao_alloc> Function(ffi.Pointer<ffi.Void> ctx)>>
-        alloc,
+      ffi.NativeFunction<
+        ffi.Pointer<guatiao_alloc> Function(ffi.Pointer<ffi.Void> ctx)
+      >
+    >
+    alloc,
     required ffi.Pointer<
-            ffi.NativeFunction<
-                guatiao_status Function(
-                    ffi.Pointer<ffi.Void> ctx,
-                    guatiao_str key,
-                    ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out)>>
-        get_pinned,
+      ffi.NativeFunction<
+        guatiao_status Function(
+          ffi.Pointer<ffi.Void> ctx,
+          guatiao_str key,
+          ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
+        )
+      >
+    >
+    get_pinned,
     required ffi.Pointer<
-            ffi.NativeFunction<
-                guatiao_status Function(
-                    ffi.Pointer<ffi.Void> ctx,
-                    guatiao_str kind,
-                    ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
-                    ffi.Size cap,
-                    ffi.Pointer<ffi.Size> total)>>
-        list_pinned,
+      ffi.NativeFunction<
+        guatiao_status Function(
+          ffi.Pointer<ffi.Void> ctx,
+          guatiao_str kind,
+          ffi.Pointer<ffi.Pointer<guatiao_provider_info>> out,
+          ffi.Size cap,
+          ffi.Pointer<ffi.Size> total,
+        )
+      >
+    >
+    list_pinned,
     required ffi.Pointer<
-            ffi.NativeFunction<
-                ffi.Void Function(ffi.Pointer<ffi.Void> ctx,
-                    ffi.Pointer<guatiao_provider_info> desc)>>
-        pin,
+      ffi.NativeFunction<
+        ffi.Void Function(
+          ffi.Pointer<ffi.Void> ctx,
+          ffi.Pointer<guatiao_provider_info> desc,
+        )
+      >
+    >
+    pin,
     required ffi.Pointer<
-            ffi.NativeFunction<
-                ffi.Void Function(ffi.Pointer<ffi.Void> ctx,
-                    ffi.Pointer<guatiao_provider_info> desc)>>
-        unpin,
-  }) =>
-      $allocator<guatiao_host_services>()
-        ..ref.struct_size = struct_size
-        ..ref.ctx = ctx
-        ..ref.get = get
-        ..ref.list = list
-        ..ref.alloc = alloc
-        ..ref.get_pinned = get_pinned
-        ..ref.list_pinned = list_pinned
-        ..ref.pin = pin
-        ..ref.unpin = unpin;
+      ffi.NativeFunction<
+        ffi.Void Function(
+          ffi.Pointer<ffi.Void> ctx,
+          ffi.Pointer<guatiao_provider_info> desc,
+        )
+      >
+    >
+    unpin,
+  }) => $allocator<guatiao_host_services>()
+    ..ref.struct_size = struct_size
+    ..ref.ctx = ctx
+    ..ref.get = get
+    ..ref.list = list
+    ..ref.alloc = alloc
+    ..ref.get_pinned = get_pinned
+    ..ref.list_pinned = list_pinned
+    ..ref.pin = pin
+    ..ref.unpin = unpin;
 }
 
 final class guatiao_kind_header extends ffi.Struct {
@@ -2366,10 +2697,9 @@ final class guatiao_kind_header extends ffi.Struct {
     ffi.Allocator $allocator, {
     required int struct_size,
     required int floor_hash,
-  }) =>
-      $allocator<guatiao_kind_header>()
-        ..ref.struct_size = struct_size
-        ..ref.floor_hash = floor_hash;
+  }) => $allocator<guatiao_kind_header>()
+    ..ref.struct_size = struct_size
+    ..ref.floor_hash = floor_hash;
 }
 
 final class guatiao_kind_table extends ffi.Struct {
@@ -2398,11 +2728,10 @@ final class guatiao_kind_tables extends ffi.Struct {
     required ffi.Pointer<guatiao_kind_table> ptr,
     required int len,
     required int stride,
-  }) =>
-      $allocator<guatiao_kind_tables>()
-        ..ref.ptr = ptr
-        ..ref.len = len
-        ..ref.stride = stride;
+  }) => $allocator<guatiao_kind_tables>()
+    ..ref.ptr = ptr
+    ..ref.len = len
+    ..ref.stride = stride;
 }
 
 final class guatiao_kinds extends ffi.Struct {
@@ -2415,10 +2744,9 @@ final class guatiao_kinds extends ffi.Struct {
     ffi.Allocator $allocator, {
     required ffi.Pointer<guatiao_str> ptr,
     required int len,
-  }) =>
-      $allocator<guatiao_kinds>()
-        ..ref.ptr = ptr
-        ..ref.len = len;
+  }) => $allocator<guatiao_kinds>()
+    ..ref.ptr = ptr
+    ..ref.len = len;
 }
 
 final class guatiao_library_info extends ffi.Struct {
@@ -2456,12 +2784,11 @@ final class guatiao_list extends ffi.Struct {
     required int len,
     required int cap,
     required ffi.Pointer<guatiao_alloc> alloc,
-  }) =>
-      $allocator<guatiao_list>()
-        ..ref.ptr = ptr
-        ..ref.len = len
-        ..ref.cap = cap
-        ..ref.alloc = alloc;
+  }) => $allocator<guatiao_list>()
+    ..ref.ptr = ptr
+    ..ref.len = len
+    ..ref.cap = cap
+    ..ref.alloc = alloc;
 }
 
 final class guatiao_map extends ffi.Struct {
@@ -2481,12 +2808,11 @@ final class guatiao_map extends ffi.Struct {
     required int len,
     required int cap,
     required ffi.Pointer<guatiao_alloc> alloc,
-  }) =>
-      $allocator<guatiao_map>()
-        ..ref.ptr = ptr
-        ..ref.len = len
-        ..ref.cap = cap
-        ..ref.alloc = alloc;
+  }) => $allocator<guatiao_map>()
+    ..ref.ptr = ptr
+    ..ref.len = len
+    ..ref.cap = cap
+    ..ref.alloc = alloc;
 }
 
 typedef guatiao_map_ptr = ffi.Pointer<guatiao_map>;
@@ -2513,11 +2839,10 @@ final class guatiao_object extends ffi.Struct {
     required ffi.Pointer<ffi.Void> table,
     required int size,
     required ffi.Pointer<ffi.Void> ctx,
-  }) =>
-      $allocator<guatiao_object>()
-        ..ref.table = table
-        ..ref.size = size
-        ..ref.ctx = ctx;
+  }) => $allocator<guatiao_object>()
+    ..ref.table = table
+    ..ref.size = size
+    ..ref.ctx = ctx;
 }
 
 final class guatiao_payload extends ffi.Union {
@@ -2566,26 +2891,38 @@ final class guatiao_provider_info extends ffi.Struct {
   external guatiao_str version;
 
   external ffi.Pointer<
-          ffi.NativeFunction<
-              ffi.Bool Function(
-                  ffi.Pointer<ffi.Void> ctx, ffi.Pointer<guatiao_str> reason)>>
-      available;
+    ffi.NativeFunction<
+      ffi.Bool Function(
+        ffi.Pointer<ffi.Void> ctx,
+        ffi.Pointer<guatiao_str> reason,
+      )
+    >
+  >
+  available;
 
   external guatiao_kind_tables tables;
 
   external ffi.Pointer<
-      ffi.NativeFunction<
-          guatiao_status Function(
-              ffi.Pointer<ffi.Void> ctx,
-              ffi.Pointer<guatiao_value> config,
-              ffi.Pointer<ffi.Pointer<ffi.Void>> out,
-              ffi.Pointer<guatiao_provider_error> err)>> create;
+    ffi.NativeFunction<
+      guatiao_status Function(
+        ffi.Pointer<ffi.Void> ctx,
+        ffi.Pointer<guatiao_value> config,
+        ffi.Pointer<ffi.Pointer<ffi.Void>> out,
+        ffi.Pointer<guatiao_provider_error> err,
+      )
+    >
+  >
+  create;
 
   external ffi.Pointer<
-          ffi.NativeFunction<
-              ffi.Void Function(
-                  ffi.Pointer<ffi.Void> ctx, ffi.Pointer<ffi.Void> instance)>>
-      destroy;
+    ffi.NativeFunction<
+      ffi.Void Function(
+        ffi.Pointer<ffi.Void> ctx,
+        ffi.Pointer<ffi.Void> instance,
+      )
+    >
+  >
+  destroy;
 }
 
 final class guatiao_providers extends ffi.Struct {
@@ -2602,11 +2939,10 @@ final class guatiao_providers extends ffi.Struct {
     required ffi.Pointer<guatiao_provider_info> ptr,
     required int len,
     required int stride,
-  }) =>
-      $allocator<guatiao_providers>()
-        ..ref.ptr = ptr
-        ..ref.len = len
-        ..ref.stride = stride;
+  }) => $allocator<guatiao_providers>()
+    ..ref.ptr = ptr
+    ..ref.len = len
+    ..ref.stride = stride;
 }
 
 final class guatiao_registry extends ffi.Opaque {}
@@ -2621,25 +2957,39 @@ final class guatiao_source_info extends ffi.Struct {
   external ffi.Pointer<ffi.Void> ctx;
 
   external ffi.Pointer<
-      ffi.NativeFunction<
-          guatiao_status Function(
-              ffi.Pointer<ffi.Void> ctx,
-              ffi.Pointer<guatiao_host_info> host,
-              ffi.Pointer<guatiao_list> out)>> list;
+    ffi.NativeFunction<
+      guatiao_status Function(
+        ffi.Pointer<ffi.Void> ctx,
+        ffi.Pointer<guatiao_host_info> host,
+        ffi.Pointer<guatiao_list> out,
+      )
+    >
+  >
+  list;
 
   external ffi.Pointer<
-      ffi.NativeFunction<
-          guatiao_status Function(
-              ffi.Pointer<ffi.Void> ctx,
-              ffi.Pointer<guatiao_host_info> host,
-              guatiao_str id,
-              ffi.Pointer<ffi.Pointer<guatiao_library_info>> out,
-              ffi.Pointer<guatiao_provider_error> err)>> open;
+    ffi.NativeFunction<
+      guatiao_status Function(
+        ffi.Pointer<ffi.Void> ctx,
+        ffi.Pointer<guatiao_host_info> host,
+        guatiao_str id,
+        ffi.Pointer<ffi.Pointer<guatiao_library_info>> out,
+        ffi.Pointer<guatiao_provider_error> err,
+      )
+    >
+  >
+  open;
 
   external ffi.Pointer<
-      ffi.NativeFunction<
-          ffi.Void Function(ffi.Pointer<ffi.Void> ctx, guatiao_str id,
-              ffi.Pointer<guatiao_library_info> info)>> close;
+    ffi.NativeFunction<
+      ffi.Void Function(
+        ffi.Pointer<ffi.Void> ctx,
+        guatiao_str id,
+        ffi.Pointer<guatiao_library_info> info,
+      )
+    >
+  >
+  close;
 
   static ffi.Pointer<guatiao_source_info> $allocate(
     ffi.Allocator $allocator, {
@@ -2647,34 +2997,44 @@ final class guatiao_source_info extends ffi.Struct {
     required int abi_version,
     required ffi.Pointer<ffi.Void> ctx,
     required ffi.Pointer<
-            ffi.NativeFunction<
-                guatiao_status Function(
-                    ffi.Pointer<ffi.Void> ctx,
-                    ffi.Pointer<guatiao_host_info> host,
-                    ffi.Pointer<guatiao_list> out)>>
-        list,
+      ffi.NativeFunction<
+        guatiao_status Function(
+          ffi.Pointer<ffi.Void> ctx,
+          ffi.Pointer<guatiao_host_info> host,
+          ffi.Pointer<guatiao_list> out,
+        )
+      >
+    >
+    list,
     required ffi.Pointer<
-            ffi.NativeFunction<
-                guatiao_status Function(
-                    ffi.Pointer<ffi.Void> ctx,
-                    ffi.Pointer<guatiao_host_info> host,
-                    guatiao_str id,
-                    ffi.Pointer<ffi.Pointer<guatiao_library_info>> out,
-                    ffi.Pointer<guatiao_provider_error> err)>>
-        open,
+      ffi.NativeFunction<
+        guatiao_status Function(
+          ffi.Pointer<ffi.Void> ctx,
+          ffi.Pointer<guatiao_host_info> host,
+          guatiao_str id,
+          ffi.Pointer<ffi.Pointer<guatiao_library_info>> out,
+          ffi.Pointer<guatiao_provider_error> err,
+        )
+      >
+    >
+    open,
     required ffi.Pointer<
-            ffi.NativeFunction<
-                ffi.Void Function(ffi.Pointer<ffi.Void> ctx, guatiao_str id,
-                    ffi.Pointer<guatiao_library_info> info)>>
-        close,
-  }) =>
-      $allocator<guatiao_source_info>()
-        ..ref.struct_size = struct_size
-        ..ref.abi_version = abi_version
-        ..ref.ctx = ctx
-        ..ref.list = list
-        ..ref.open = open
-        ..ref.close = close;
+      ffi.NativeFunction<
+        ffi.Void Function(
+          ffi.Pointer<ffi.Void> ctx,
+          guatiao_str id,
+          ffi.Pointer<guatiao_library_info> info,
+        )
+      >
+    >
+    close,
+  }) => $allocator<guatiao_source_info>()
+    ..ref.struct_size = struct_size
+    ..ref.abi_version = abi_version
+    ..ref.ctx = ctx
+    ..ref.list = list
+    ..ref.open = open
+    ..ref.close = close;
 }
 
 final class guatiao_span extends ffi.Struct {
@@ -2712,16 +3072,15 @@ final class guatiao_span extends ffi.Struct {
     required int minutes,
     required int seconds,
     required int nanoseconds,
-  }) =>
-      $allocator<guatiao_span>()
-        ..ref.years = years
-        ..ref.months = months
-        ..ref.weeks = weeks
-        ..ref.days = days
-        ..ref.hours = hours
-        ..ref.minutes = minutes
-        ..ref.seconds = seconds
-        ..ref.nanoseconds = nanoseconds;
+  }) => $allocator<guatiao_span>()
+    ..ref.years = years
+    ..ref.months = months
+    ..ref.weeks = weeks
+    ..ref.days = days
+    ..ref.hours = hours
+    ..ref.minutes = minutes
+    ..ref.seconds = seconds
+    ..ref.nanoseconds = nanoseconds;
 }
 
 typedef guatiao_status = ffi.Uint32;
@@ -2743,19 +3102,18 @@ enum guatiao_status_code {
   const guatiao_status_code(this.value);
 
   static guatiao_status_code fromValue(int value) => switch (value) {
-        0 => GUATIAO_OK,
-        7 => GUATIAO_ERR_BAD_VALUE,
-        8 => GUATIAO_ERR_ALLOC,
-        9 => GUATIAO_ERR_WRONG_KIND,
-        10 => GUATIAO_ERR_NOT_FOUND,
-        11 => GUATIAO_ERR_NULL,
-        12 => GUATIAO_ERR_GONE,
-        13 => GUATIAO_ERR_UNSUPPORTED,
-        14 => GUATIAO_ERR_BUSY,
-        100 => GUATIAO_ERR_INTERNAL,
-        _ =>
-          throw ArgumentError('Unknown value for guatiao_status_code: $value'),
-      };
+    0 => GUATIAO_OK,
+    7 => GUATIAO_ERR_BAD_VALUE,
+    8 => GUATIAO_ERR_ALLOC,
+    9 => GUATIAO_ERR_WRONG_KIND,
+    10 => GUATIAO_ERR_NOT_FOUND,
+    11 => GUATIAO_ERR_NULL,
+    12 => GUATIAO_ERR_GONE,
+    13 => GUATIAO_ERR_UNSUPPORTED,
+    14 => GUATIAO_ERR_BUSY,
+    100 => GUATIAO_ERR_INTERNAL,
+    _ => throw ArgumentError('Unknown value for guatiao_status_code: $value'),
+  };
 }
 
 typedef guatiao_status_code$1 = ffi.Uint32;
@@ -2771,10 +3129,9 @@ final class guatiao_str extends ffi.Struct {
     ffi.Allocator $allocator, {
     required ffi.Pointer<ffi.Uint8> ptr,
     required int len,
-  }) =>
-      $allocator<guatiao_str>()
-        ..ref.ptr = ptr
-        ..ref.len = len;
+  }) => $allocator<guatiao_str>()
+    ..ref.ptr = ptr
+    ..ref.len = len;
 }
 
 final class guatiao_string extends ffi.Struct {
@@ -2794,12 +3151,11 @@ final class guatiao_string extends ffi.Struct {
     required int len,
     required int cap,
     required ffi.Pointer<guatiao_alloc> alloc,
-  }) =>
-      $allocator<guatiao_string>()
-        ..ref.ptr = ptr
-        ..ref.len = len
-        ..ref.cap = cap
-        ..ref.alloc = alloc;
+  }) => $allocator<guatiao_string>()
+    ..ref.ptr = ptr
+    ..ref.len = len
+    ..ref.cap = cap
+    ..ref.alloc = alloc;
 }
 
 enum guatiao_tag {
@@ -2816,16 +3172,16 @@ enum guatiao_tag {
   const guatiao_tag(this.value);
 
   static guatiao_tag fromValue(int value) => switch (value) {
-        0 => GUATIAO_ABSENT,
-        1 => GUATIAO_NULL,
-        2 => GUATIAO_BOOL,
-        3 => GUATIAO_NUMBER,
-        4 => GUATIAO_STRING,
-        5 => GUATIAO_BYTES,
-        6 => GUATIAO_LIST,
-        7 => GUATIAO_MAP,
-        _ => throw ArgumentError('Unknown value for guatiao_tag: $value'),
-      };
+    0 => GUATIAO_ABSENT,
+    1 => GUATIAO_NULL,
+    2 => GUATIAO_BOOL,
+    3 => GUATIAO_NUMBER,
+    4 => GUATIAO_STRING,
+    5 => GUATIAO_BYTES,
+    6 => GUATIAO_LIST,
+    7 => GUATIAO_MAP,
+    _ => throw ArgumentError('Unknown value for guatiao_tag: $value'),
+  };
 }
 
 typedef guatiao_tag$1 = ffi.Uint32;
@@ -2857,12 +3213,11 @@ final class guatiao_time extends ffi.Struct {
     required int minute,
     required int second,
     required int nanosecond,
-  }) =>
-      $allocator<guatiao_time>()
-        ..ref.hour = hour
-        ..ref.minute = minute
-        ..ref.second = second
-        ..ref.nanosecond = nanosecond;
+  }) => $allocator<guatiao_time>()
+    ..ref.hour = hour
+    ..ref.minute = minute
+    ..ref.second = second
+    ..ref.nanosecond = nanosecond;
 }
 
 final class guatiao_timestamp extends ffi.Struct {
@@ -2876,10 +3231,9 @@ final class guatiao_timestamp extends ffi.Struct {
     ffi.Allocator $allocator, {
     required int seconds,
     required int nanoseconds,
-  }) =>
-      $allocator<guatiao_timestamp>()
-        ..ref.seconds = seconds
-        ..ref.nanoseconds = nanoseconds;
+  }) => $allocator<guatiao_timestamp>()
+    ..ref.seconds = seconds
+    ..ref.nanoseconds = nanoseconds;
 }
 
 final class guatiao_value extends ffi.Struct {
@@ -2902,10 +3256,9 @@ final class guatiao_values extends ffi.Struct {
     ffi.Allocator $allocator, {
     required ffi.Pointer<guatiao_value> ptr,
     required int len,
-  }) =>
-      $allocator<guatiao_values>()
-        ..ref.ptr = ptr
-        ..ref.len = len;
+  }) => $allocator<guatiao_values>()
+    ..ref.ptr = ptr
+    ..ref.len = len;
 }
 
 final class guatiao_wire_event extends ffi.Struct {

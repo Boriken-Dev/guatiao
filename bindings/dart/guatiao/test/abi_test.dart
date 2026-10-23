@@ -119,11 +119,14 @@ void main() {
     // channel (u64), kind, refusal, at (size_t), three values; aligned to
     // the u64.
     final word = sizeOf<IntPtr>();
-    expect(sizeOf<guatiao_wire_event>(),
-        (16 + word + 3 * (8 + 4 * word) + 7) & ~7);
+    expect(
+      sizeOf<guatiao_wire_event>(),
+      (16 + word + 3 * (8 + 4 * word) + 7) & ~7,
+    );
     expect(wire.Frame.values.map((f) => f.code), [0, 1, 2]);
-    final header = File(repoPath(['crates', 'guatiao', 'include', 'guatiao.h']))
-        .readAsStringSync();
+    final header = File(
+      repoPath(['crates', 'guatiao', 'include', 'guatiao.h']),
+    ).readAsStringSync();
     for (final f in wire.Frame.values) {
       expect(
         header,

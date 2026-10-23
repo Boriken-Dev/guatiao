@@ -60,16 +60,36 @@ String normalizeText(TextForm form, String text) {
       _read(
         form,
         (error) => switch (form) {
-          TextForm.date =>
-            b.guatiao_date_normalize(lib.alloc, view, out, error),
-          TextForm.time =>
-            b.guatiao_time_normalize(lib.alloc, view, out, error),
-          TextForm.datetime =>
-            b.guatiao_datetime_normalize(lib.alloc, view, out, error),
-          TextForm.timestamp =>
-            b.guatiao_timestamp_normalize(lib.alloc, view, out, error),
-          TextForm.span =>
-            b.guatiao_span_normalize(lib.alloc, view, out, error),
+          TextForm.date => b.guatiao_date_normalize(
+            lib.alloc,
+            view,
+            out,
+            error,
+          ),
+          TextForm.time => b.guatiao_time_normalize(
+            lib.alloc,
+            view,
+            out,
+            error,
+          ),
+          TextForm.datetime => b.guatiao_datetime_normalize(
+            lib.alloc,
+            view,
+            out,
+            error,
+          ),
+          TextForm.timestamp => b.guatiao_timestamp_normalize(
+            lib.alloc,
+            view,
+            out,
+            error,
+          ),
+          TextForm.span => b.guatiao_span_normalize(
+            lib.alloc,
+            view,
+            out,
+            error,
+          ),
         },
       );
     });
@@ -104,14 +124,14 @@ void _dateTime(Pointer<guatiao_datetime> f, List<int> at) {
 }
 
 List<int> _dateTimeOf(guatiao_datetime f) => [
-      f.date.year,
-      f.date.month,
-      f.date.day,
-      f.time.hour,
-      f.time.minute,
-      f.time.second,
-      f.time.nanosecond,
-    ];
+  f.date.year,
+  f.date.month,
+  f.date.day,
+  f.time.hour,
+  f.time.minute,
+  f.time.second,
+  f.time.nanosecond,
+];
 
 Pointer<guatiao_span> _span(Arena arena, List<int> f) {
   final s = arena<guatiao_span>();
@@ -128,13 +148,13 @@ Pointer<guatiao_span> _span(Arena arena, List<int> f) {
 }
 
 String formatDate(List<int> d) => using((arena) {
-      final f = arena<guatiao_date>();
-      _date(f, d);
-      return _write(
-          TextForm.date,
-          (alloc, out) =>
-              native.core().bindings.guatiao_date_format(alloc, f, out));
-    });
+  final f = arena<guatiao_date>();
+  _date(f, d);
+  return _write(
+    TextForm.date,
+    (alloc, out) => native.core().bindings.guatiao_date_format(alloc, f, out),
+  );
+});
 
 List<int> parseDate(String text) {
   final lib = native.core();
@@ -142,32 +162,31 @@ List<int> parseDate(String text) {
     final view = strOf(arena, text).ref;
     final out = arena<guatiao_date>();
     _read(
-        TextForm.date,
-        (error) =>
-            lib.bindings.guatiao_date_parse(lib.alloc, view, out, error));
+      TextForm.date,
+      (error) => lib.bindings.guatiao_date_parse(lib.alloc, view, out, error),
+    );
     return [out.ref.year, out.ref.month, out.ref.day];
   });
 }
 
 List<int> dateAddSpan(List<int> d, List<int> span) => using((arena) {
-      final f = arena<guatiao_date>();
-      _date(f, d);
-      final out = arena<guatiao_date>();
-      checkStatus(native
-          .core()
-          .bindings
-          .guatiao_date_add_span(f, _span(arena, span), out));
-      return [out.ref.year, out.ref.month, out.ref.day];
-    });
+  final f = arena<guatiao_date>();
+  _date(f, d);
+  final out = arena<guatiao_date>();
+  checkStatus(
+    native.core().bindings.guatiao_date_add_span(f, _span(arena, span), out),
+  );
+  return [out.ref.year, out.ref.month, out.ref.day];
+});
 
 String formatTime(List<int> t) => using((arena) {
-      final f = arena<guatiao_time>();
-      _time(f, t);
-      return _write(
-          TextForm.time,
-          (alloc, out) =>
-              native.core().bindings.guatiao_time_format(alloc, f, out));
-    });
+  final f = arena<guatiao_time>();
+  _time(f, t);
+  return _write(
+    TextForm.time,
+    (alloc, out) => native.core().bindings.guatiao_time_format(alloc, f, out),
+  );
+});
 
 List<int> parseTime(String text) {
   final lib = native.core();
@@ -175,22 +194,23 @@ List<int> parseTime(String text) {
     final view = strOf(arena, text).ref;
     final out = arena<guatiao_time>();
     _read(
-        TextForm.time,
-        (error) =>
-            lib.bindings.guatiao_time_parse(lib.alloc, view, out, error));
+      TextForm.time,
+      (error) => lib.bindings.guatiao_time_parse(lib.alloc, view, out, error),
+    );
     final t = out.ref;
     return [t.hour, t.minute, t.second, t.nanosecond];
   });
 }
 
 String formatDateTime(List<int> at) => using((arena) {
-      final f = arena<guatiao_datetime>();
-      _dateTime(f, at);
-      return _write(
-          TextForm.datetime,
-          (alloc, out) =>
-              native.core().bindings.guatiao_datetime_format(alloc, f, out));
-    });
+  final f = arena<guatiao_datetime>();
+  _dateTime(f, at);
+  return _write(
+    TextForm.datetime,
+    (alloc, out) =>
+        native.core().bindings.guatiao_datetime_format(alloc, f, out),
+  );
+});
 
 List<int> parseDateTime(String text) {
   final lib = native.core();
@@ -198,23 +218,27 @@ List<int> parseDateTime(String text) {
     final view = strOf(arena, text).ref;
     final out = arena<guatiao_datetime>();
     _read(
-        TextForm.datetime,
-        (error) =>
-            lib.bindings.guatiao_datetime_parse(lib.alloc, view, out, error));
+      TextForm.datetime,
+      (error) =>
+          lib.bindings.guatiao_datetime_parse(lib.alloc, view, out, error),
+    );
     return _dateTimeOf(out.ref);
   });
 }
 
 List<int> dateTimeAddSpan(List<int> at, List<int> span) => using((arena) {
-      final f = arena<guatiao_datetime>();
-      _dateTime(f, at);
-      final out = arena<guatiao_datetime>();
-      checkStatus(native
-          .core()
-          .bindings
-          .guatiao_datetime_add_span(f, _span(arena, span), out));
-      return _dateTimeOf(out.ref);
-    });
+  final f = arena<guatiao_datetime>();
+  _dateTime(f, at);
+  final out = arena<guatiao_datetime>();
+  checkStatus(
+    native.core().bindings.guatiao_datetime_add_span(
+      f,
+      _span(arena, span),
+      out,
+    ),
+  );
+  return _dateTimeOf(out.ref);
+});
 
 (int, int) parseTimestampFields(String text) {
   final lib = native.core();
@@ -222,31 +246,33 @@ List<int> dateTimeAddSpan(List<int> at, List<int> span) => using((arena) {
     final view = strOf(arena, text).ref;
     final out = arena<guatiao_timestamp>();
     _read(
-        TextForm.timestamp,
-        (error) =>
-            lib.bindings.guatiao_timestamp_parse(lib.alloc, view, out, error));
+      TextForm.timestamp,
+      (error) =>
+          lib.bindings.guatiao_timestamp_parse(lib.alloc, view, out, error),
+    );
     return (out.ref.seconds, out.ref.nanoseconds);
   });
 }
 
 String formatTimestampFields(int seconds, int nanoseconds) => using((arena) {
-      final f = arena<guatiao_timestamp>();
-      f.ref
-        ..seconds = seconds
-        ..nanoseconds = nanoseconds;
-      return _write(
-          TextForm.timestamp,
-          (alloc, out) =>
-              native.core().bindings.guatiao_timestamp_format(alloc, f, out));
-    });
+  final f = arena<guatiao_timestamp>();
+  f.ref
+    ..seconds = seconds
+    ..nanoseconds = nanoseconds;
+  return _write(
+    TextForm.timestamp,
+    (alloc, out) =>
+        native.core().bindings.guatiao_timestamp_format(alloc, f, out),
+  );
+});
 
 String formatSpan(List<int> fields) => using((arena) {
-      final f = _span(arena, fields);
-      return _write(
-          TextForm.span,
-          (alloc, out) =>
-              native.core().bindings.guatiao_span_format(alloc, f, out));
-    });
+  final f = _span(arena, fields);
+  return _write(
+    TextForm.span,
+    (alloc, out) => native.core().bindings.guatiao_span_format(alloc, f, out),
+  );
+});
 
 List<int> parseSpan(String text) {
   final lib = native.core();
@@ -254,9 +280,9 @@ List<int> parseSpan(String text) {
     final view = strOf(arena, text).ref;
     final out = arena<guatiao_span>();
     _read(
-        TextForm.span,
-        (error) =>
-            lib.bindings.guatiao_span_parse(lib.alloc, view, out, error));
+      TextForm.span,
+      (error) => lib.bindings.guatiao_span_parse(lib.alloc, view, out, error),
+    );
     final s = out.ref;
     return [
       s.years,

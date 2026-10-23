@@ -291,11 +291,7 @@ void _writeDart(
   if (obj is TypedData) {
     final data = obj is Uint8List
         ? obj
-        : Uint8List.view(
-            obj.buffer,
-            obj.offsetInBytes,
-            obj.lengthInBytes,
-          );
+        : Uint8List.view(obj.buffer, obj.offsetInBytes, obj.lengthInBytes);
     using((arena) {
       checkStatus(
         bindings.guatiao_value_bytes(alloc, _bytesView(arena, data).ref, raw),
@@ -372,7 +368,7 @@ void _buildInto(
 /// into.
 class Ref {
   Ref(ValueOwner owner, [List<Object> path = const []])
-      : this._(owner, List<Object>.unmodifiable(path));
+    : this._(owner, List<Object>.unmodifiable(path));
 
   Ref._(this._ownerOrNull, this.path);
 
@@ -395,8 +391,7 @@ class Ref {
   factory Ref.borrowedFrom(
     Ref source,
     Pointer<guatiao_value> Function() find,
-  ) =>
-      Ref(_BorrowedRoot(nullptr, keep: source.owner, find: find));
+  ) => Ref(_BorrowedRoot(nullptr, keep: source.owner, find: find));
 
   final ValueOwner? _ownerOrNull;
 
@@ -492,8 +487,9 @@ class Ref {
   /// A deep, independent copy of this node, as its own [Value].
   Value clone() {
     final source = requireNode();
-    final alloc =
-        owner is _BorrowedRoot ? native.core().alloc : owner.allocator;
+    final alloc = owner is _BorrowedRoot
+        ? native.core().alloc
+        : owner.allocator;
     return Value._build(
       alloc,
       (out) => native.core().bindings.guatiao_value_clone(alloc, source, out),
@@ -537,11 +533,11 @@ class MapRef extends Ref {
       (tmp) => using(
         (arena) => checkStatus(
           native.core().bindings.guatiao_map_set(
-                alloc,
-                target,
-                strOf(arena, key).ref,
-                tmp,
-              ),
+            alloc,
+            target,
+            strOf(arena, key).ref,
+            tmp,
+          ),
         ),
       ),
     );
@@ -554,9 +550,9 @@ class MapRef extends Ref {
     using(
       (arena) => checkStatus(
         native.core().bindings.guatiao_map_discard(
-              target,
-              strOf(arena, key).ref,
-            ),
+          target,
+          strOf(arena, key).ref,
+        ),
       ),
     );
   }
@@ -590,10 +586,10 @@ class MapRef extends Ref {
     final alloc = owner.allocator;
     checkStatus(
       native.core().bindings.guatiao_map_copy_from(
-            alloc,
-            requireNode(),
-            src.requireNode(),
-          ),
+        alloc,
+        requireNode(),
+        src.requireNode(),
+      ),
     );
   }
 
@@ -663,8 +659,8 @@ class ListRef extends Ref {
 
   /// A [Ref] onto every element, in order.
   List<Ref> get refs => <Ref>[
-        for (var i = 0; i < length; i++) Ref(owner, [...path, i])
-      ];
+    for (var i = 0; i < length; i++) Ref(owner, [...path, i]),
+  ];
 
   void add(Object? value) {
     _writable(this);
@@ -726,7 +722,8 @@ class ListRef extends Ref {
         final tmp = calloc<guatiao_value>();
         out.add(tmp);
         checkStatus(
-            bindings.guatiao_value_clone(alloc, _listAt(found, i), tmp));
+          bindings.guatiao_value_clone(alloc, _listAt(found, i), tmp),
+        );
       }
     } catch (_) {
       _releaseAll(out);
@@ -767,8 +764,8 @@ class ListRef extends Ref {
 /// one native function and those two frees must be ordered.
 class Value extends Ref implements ValueOwner, Finalizable {
   Value._(this._raw, this._allocator)
-      : _finalizer = NativeFinalizer(native.core().valueFreeFinalizer),
-        super._(null, const []) {
+    : _finalizer = NativeFinalizer(native.core().valueFreeFinalizer),
+      super._(null, const []) {
     _finalizer.attach(this, _raw.cast<Void>(), detach: this);
   }
 
@@ -802,8 +799,7 @@ class Value extends Ref implements ValueOwner, Finalizable {
   factory Value.adopt(
     Pointer<guatiao_value> raw, {
     Pointer<guatiao_alloc>? alloc,
-  }) =>
-      Value._(raw, alloc ?? native.core().alloc);
+  }) => Value._(raw, alloc ?? native.core().alloc);
 
   /// The value the wire encoding in [data] holds.
   ///
@@ -813,32 +809,30 @@ class Value extends Ref implements ValueOwner, Finalizable {
   /// the value.
   factory Value.fromWire(List<int> data, {Pointer<guatiao_alloc>? alloc}) {
     final allocator = alloc ?? native.core().alloc;
-    return using(
-      (arena) {
-        final view = _bytesView(arena, data).ref;
-        return _build(
-          allocator,
-          (out) =>
-              native.core().bindings.guatiao_wire_decode(allocator, view, out),
-        );
-      },
-    );
+    return using((arena) {
+      final view = _bytesView(arena, data).ref;
+      return _build(
+        allocator,
+        (out) =>
+            native.core().bindings.guatiao_wire_decode(allocator, view, out),
+      );
+    });
   }
 
   factory Value.nullValue() => _build(
-        native.core().alloc,
-        (out) => native.core().bindings.guatiao_value_null(out),
-      );
+    native.core().alloc,
+    (out) => native.core().bindings.guatiao_value_null(out),
+  );
 
   factory Value.absent() => _build(
-        native.core().alloc,
-        (out) => native.core().bindings.guatiao_value_absent(out),
-      );
+    native.core().alloc,
+    (out) => native.core().bindings.guatiao_value_absent(out),
+  );
 
   factory Value.boolean(bool value) => _build(
-        native.core().alloc,
-        (out) => native.core().bindings.guatiao_value_bool(value, out),
-      );
+    native.core().alloc,
+    (out) => native.core().bindings.guatiao_value_bool(value, out),
+  );
 
   factory Value.map() {
     final alloc = native.core().alloc;
@@ -858,44 +852,36 @@ class Value extends Ref implements ValueOwner, Finalizable {
 
   factory Value.string(String text) {
     final alloc = native.core().alloc;
-    return using(
-      (arena) {
-        final view = strOf(arena, text).ref;
-        return _build(
-          alloc,
-          (out) =>
-              native.core().bindings.guatiao_value_string(alloc, view, out),
-        );
-      },
-    );
+    return using((arena) {
+      final view = strOf(arena, text).ref;
+      return _build(
+        alloc,
+        (out) => native.core().bindings.guatiao_value_string(alloc, view, out),
+      );
+    });
   }
 
   /// A number from its exact text, verbatim: no `double` detour.
   factory Value.number(String text) {
     final alloc = native.core().alloc;
-    return using(
-      (arena) {
-        final view = strOf(arena, text).ref;
-        return _build(
-          alloc,
-          (out) =>
-              native.core().bindings.guatiao_value_number(alloc, view, out),
-        );
-      },
-    );
+    return using((arena) {
+      final view = strOf(arena, text).ref;
+      return _build(
+        alloc,
+        (out) => native.core().bindings.guatiao_value_number(alloc, view, out),
+      );
+    });
   }
 
   factory Value.bytes(List<int> data) {
     final alloc = native.core().alloc;
-    return using(
-      (arena) {
-        final view = _bytesView(arena, data).ref;
-        return _build(
-          alloc,
-          (out) => native.core().bindings.guatiao_value_bytes(alloc, view, out),
-        );
-      },
-    );
+    return using((arena) {
+      final view = _bytesView(arena, data).ref;
+      return _build(
+        alloc,
+        (out) => native.core().bindings.guatiao_value_bytes(alloc, view, out),
+      );
+    });
   }
 
   static Value _build(

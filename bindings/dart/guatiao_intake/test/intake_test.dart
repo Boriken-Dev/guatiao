@@ -132,14 +132,11 @@ void main() {
           (doc['sections'] as List).map((s) => (s as Map)['id']).toList(),
           ['net'],
         );
-        expect(
-          ((doc['fields'] as Map)['tls'] as Map)['form'],
-          {
-            'sections': [
-              {'id': 'trust'},
-            ],
-          },
-        );
+        expect(((doc['fields'] as Map)['tls'] as Map)['form'], {
+          'sections': [
+            {'id': 'trust'},
+          ],
+        });
         expect(intake.check(nested, made), isNull);
       } finally {
         made.close();
@@ -266,24 +263,26 @@ void main() {
       });
     }
 
-    test('unflatten takes a value, and answers null when it does not apply',
-        () {
-      final store = Value.fromDart({'env[PATH]': '/bin'});
-      addTearDown(store.close);
-      final env = intake.unflatten(flat, 'env', store)!;
-      addTearDown(env.close);
-      expect(env.toDart(), {'PATH': '/bin'});
+    test(
+      'unflatten takes a value, and answers null when it does not apply',
+      () {
+        final store = Value.fromDart({'env[PATH]': '/bin'});
+        addTearDown(store.close);
+        final env = intake.unflatten(flat, 'env', store)!;
+        addTearDown(env.close);
+        expect(env.toDart(), {'PATH': '/bin'});
 
-      // A tag naming no arm, a key naming no field, and nothing stored
-      // under the field are all "does not apply".
-      expect(intake.unflatten(flat, 'auth', {'auth': 'nonesuch'}), isNull);
-      expect(intake.unflatten(flat, 'nonesuch', <String, String>{}), isNull);
-      expect(intake.unflatten(flat, 'host', <String, String>{}), isNull);
-      expect(
-        () => intake.unflatten(flat, 'host', {'host': 1}),
-        throwsArgumentError,
-      );
-    });
+        // A tag naming no arm, a key naming no field, and nothing stored
+        // under the field are all "does not apply".
+        expect(intake.unflatten(flat, 'auth', {'auth': 'nonesuch'}), isNull);
+        expect(intake.unflatten(flat, 'nonesuch', <String, String>{}), isNull);
+        expect(intake.unflatten(flat, 'host', <String, String>{}), isNull);
+        expect(
+          () => intake.unflatten(flat, 'host', {'host': 1}),
+          throwsArgumentError,
+        );
+      },
+    );
 
     test('a store that is not text to text is refused in every form', () {
       final numbers = Value.fromDart({'host': 1});

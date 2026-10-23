@@ -61,19 +61,28 @@ void main() {
       'guatiao_toml_parse',
       'guatiao_yaml_parse',
     ]) {
-      expect(native.openSurface('guatiao_serde').provides(name), isTrue,
-          reason: name);
+      expect(
+        native.openSurface('guatiao_serde').provides(name),
+        isTrue,
+        reason: name,
+      );
     }
     expect(
-        native.openSurface('guatiao_intake').provides('guatiao_intake_check'),
-        isTrue);
-    expect(native.openSurface('guatiao_serde').path,
-        namedLibraryFile() ?? endsWith(dllFilename('guatiao_serde')));
+      native.openSurface('guatiao_intake').provides('guatiao_intake_check'),
+      isTrue,
+    );
+    expect(
+      native.openSurface('guatiao_serde').path,
+      namedLibraryFile() ?? endsWith(dllFilename('guatiao_serde')),
+    );
   });
 
   test('a WebAssembly module is for the web', () async {
-    final refusal = isA<Unsupported>()
-        .having((e) => e.message, 'message', contains('is for the web'));
+    final refusal = isA<Unsupported>().having(
+      (e) => e.message,
+      'message',
+      contains('is for the web'),
+    );
     await expectLater(loadModule(Uri.parse('guatiao.wasm')), throwsA(refusal));
     await expectLater(loadModuleBytes(const [0]), throwsA(refusal));
   });
@@ -93,8 +102,10 @@ void main() {
     expect(
       // A probe no library exports: a file GUATIAO_LIBRARY names is then
       // passed over rather than taken as it is.
-      () => native.NativeLib.open('not_a_real_guatiao_library',
-          probe: 'guatiao_not_a_symbol'),
+      () => native.NativeLib.open(
+        'not_a_real_guatiao_library',
+        probe: 'guatiao_not_a_symbol',
+      ),
       throwsA(
         isA<LibraryNotFound>().having(
           (e) => e.toString(),

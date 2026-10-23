@@ -34,22 +34,33 @@ void main() {
       for (var i = 0; i < lines.length; i++)
         if (_topLevelVariable.hasMatch(lines[i])) '${i + 1}: ${lines[i]}',
     ];
-    expect(offending, isEmpty,
-        reason: 'value.dart must declare only consts at the top level');
+    expect(
+      offending,
+      isEmpty,
+      reason: 'value.dart must declare only consts at the top level',
+    );
   });
 
   test('the check sees a top-level final when there is one', () {
     expect(_topLevelVariable.hasMatch('final int _x = sizeOf<T>();'), isTrue);
     expect(_topLevelVariable.hasMatch('int _count = 0;'), isTrue);
-    expect(_topLevelVariable.hasMatch('NativeFinalizer? _cache;'), isTrue,
-        reason: 'no initialiser is still state');
+    expect(
+      _topLevelVariable.hasMatch('NativeFinalizer? _cache;'),
+      isTrue,
+      reason: 'no initialiser is still state',
+    );
     expect(_topLevelVariable.hasMatch('Map<String, int> _seen;'), isTrue);
     expect(_topLevelVariable.hasMatch('class _Unset {'), isFalse);
     expect(_topLevelVariable.hasMatch('void _writable(Ref ref) {'), isFalse);
     expect(_topLevelVariable.hasMatch("import 'dart:ffi';"), isFalse);
-    expect(_topLevelVariable.hasMatch('const Absent absent = Absent._();'),
-        isFalse);
-    expect(_topLevelVariable.hasMatch('  final x = 1;'), isFalse,
-        reason: 'indented is local');
+    expect(
+      _topLevelVariable.hasMatch('const Absent absent = Absent._();'),
+      isFalse,
+    );
+    expect(
+      _topLevelVariable.hasMatch('  final x = 1;'),
+      isFalse,
+      reason: 'indented is local',
+    );
   });
 }
