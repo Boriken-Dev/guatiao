@@ -3291,6 +3291,8 @@ pub guatiao::value::convert::MapError::BadValue::expected: alloc::string::String
 pub guatiao::value::convert::MapError::BadValue::key: alloc::string::String
 pub guatiao::value::convert::MapError::MissingKey
 pub guatiao::value::convert::MapError::MissingKey::key: alloc::string::String
+pub guatiao::value::convert::MapError::Stopped
+pub guatiao::value::convert::MapError::Stopped::key: alloc::string::String
 pub guatiao::value::convert::MapError::WrongType
 pub guatiao::value::convert::MapError::WrongType::expected: guatiao::value::value::Tag
 pub guatiao::value::convert::MapError::WrongType::found: core::option::Option<guatiao::value::value::Tag>
@@ -3301,7 +3303,9 @@ pub fn guatiao::value::convert::MapError::at_key(self, &str) -> guatiao::value::
 pub fn guatiao::value::convert::MapError::bad_value(impl core::convert::Into<alloc::string::String>) -> guatiao::value::convert::MapError
 pub fn guatiao::value::convert::MapError::key(&self) -> &str
 pub fn guatiao::value::convert::MapError::missing(&str) -> guatiao::value::convert::MapError
+pub fn guatiao::value::convert::MapError::stopped() -> guatiao::value::convert::MapError
 pub fn guatiao::value::convert::MapError::under(self, &str) -> guatiao::value::convert::MapError
+pub fn guatiao::value::convert::MapError::wrong_kind(guatiao::Kinds, guatiao::value::value::Tag) -> guatiao::value::convert::MapError
 pub fn guatiao::value::convert::MapError::wrong_type(guatiao::value::value::Tag, &guatiao::value::value::Value) -> guatiao::value::convert::MapError
 impl core::clone::Clone for guatiao::value::convert::MapError
 pub fn guatiao::value::convert::MapError::clone(&self) -> Self
@@ -3350,6 +3354,10 @@ pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value)
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::value::convert::Bytes
+pub fn guatiao::value::convert::Bytes::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::convert::Bytes
+pub fn guatiao::value::convert::Bytes::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::value::convert::Kinds(_)
 impl guatiao::Kinds
 pub const guatiao::Kinds::ANY: guatiao::Kinds
@@ -4210,6 +4218,10 @@ pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Val
 impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for guatiao::value::secret::Secret<T>
 pub fn guatiao::value::secret::Secret<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::secret::Secret<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 impl<T> core::convert::From<T> for guatiao::value::secret::Secret<T>
 pub fn guatiao::value::secret::Secret<T>::from(T) -> guatiao::value::secret::Secret<T>
 impl<T> core::fmt::Debug for guatiao::value::secret::Secret<T>
@@ -4286,6 +4298,10 @@ pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> 
 impl guatiao::value::convert::ToValue for guatiao::value::span::Span
 pub fn guatiao::value::span::Span::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::span::Span::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub mod guatiao::value::status
 #[repr(transparent)] pub struct guatiao::value::status::Status(_)
 impl guatiao::value::status::Status
@@ -4379,6 +4395,10 @@ pub fn guatiao::Date::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'
 impl guatiao::value::convert::ToValue for guatiao::Date
 pub fn guatiao::Date::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Date::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::Date
+pub fn guatiao::Date::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::Date
+pub fn guatiao::Date::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::value::time::DateTime
 impl guatiao::DateTime
 pub fn guatiao::DateTime::checked_add(self, guatiao::value::span::Span) -> core::option::Option<guatiao::DateTime>
@@ -4429,6 +4449,10 @@ pub fn guatiao::DateTime::to_key(&self) -> core::result::Result<alloc::borrow::C
 impl guatiao::value::convert::ToValue for guatiao::DateTime
 pub fn guatiao::DateTime::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::DateTime::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::DateTime
+pub fn guatiao::DateTime::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::DateTime
+pub fn guatiao::DateTime::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::value::time::Time
 impl guatiao::Time
 pub fn guatiao::Time::hour(&self) -> u8
@@ -4481,6 +4505,10 @@ pub fn guatiao::Time::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'
 impl guatiao::value::convert::ToValue for guatiao::Time
 pub fn guatiao::Time::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Time::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::Time
+pub fn guatiao::Time::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::Time
+pub fn guatiao::Time::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::value::time::Timestamp
 impl guatiao::Timestamp
 pub fn guatiao::Timestamp::from_unix(i64, u32) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
@@ -4536,6 +4564,10 @@ pub fn guatiao::Timestamp::to_key(&self) -> core::result::Result<alloc::borrow::
 impl guatiao::value::convert::ToValue for guatiao::Timestamp
 pub fn guatiao::Timestamp::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Timestamp::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::Timestamp
+pub fn guatiao::Timestamp::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub mod guatiao::value::types
 pub mod guatiao::value::types::buffer
 #[repr(C)] pub struct guatiao::value::types::buffer::Buffer
@@ -4609,6 +4641,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::buffer::Buffer> fo
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::buffer::Buffer>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::buffer::Buffer> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::buffer::Buffer>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::buffer::Buffer
+pub fn guatiao::value::types::buffer::Buffer::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::buffer::Buffer
+pub fn guatiao::value::types::buffer::Buffer::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 #[repr(C)] pub struct guatiao::value::types::buffer::Bytes<'a>
 impl<'a> guatiao::value::types::buffer::Bytes<'a>
 pub const fn guatiao::value::types::buffer::Bytes<'a>::empty() -> guatiao::value::types::buffer::Bytes<'a>
@@ -4701,6 +4737,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::list::List> for gu
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::list::List>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::list::List> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::list::List>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::list::List
+pub fn guatiao::value::types::list::List::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::list::List
+pub fn guatiao::value::types::list::List::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 impl<'a> core::convert::TryFrom<&'a guatiao::value::value::Value> for &'a guatiao::value::types::list::List
 pub type &'a guatiao::value::types::list::List::Error = guatiao::value::convert::MapError
 pub fn &'a guatiao::value::types::list::List::try_from(&'a guatiao::value::value::Value) -> core::result::Result<&'a guatiao::value::types::list::List, guatiao::value::convert::MapError>
@@ -4857,6 +4897,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::map::Map> for guat
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::map::Map>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::map::Map> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::map::Map>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::map::Map
+pub fn guatiao::value::types::map::Map::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::map::Map
+pub fn guatiao::value::types::map::Map::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 impl<'a> core::convert::TryFrom<&'a guatiao::value::value::Value> for &'a guatiao::value::types::map::Map
 pub type &'a guatiao::value::types::map::Map::Error = guatiao::value::convert::MapError
 pub fn &'a guatiao::value::types::map::Map::try_from(&'a guatiao::value::value::Value) -> core::result::Result<&'a guatiao::value::types::map::Map, guatiao::value::convert::MapError>
@@ -4975,6 +5019,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::number::Number> fo
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::number::Number>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::number::Number> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::number::Number>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub mod guatiao::value::types::text
 #[repr(C)] pub struct guatiao::value::types::text::Str<'a>
 impl<'a> guatiao::value::types::text::Str<'a>
@@ -5085,6 +5133,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::text::Text> for gu
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::text::Text>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::text::Text> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::text::Text>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 #[non_exhaustive] #[repr(u32)] pub enum guatiao::value::types::Tag
 pub guatiao::value::types::Tag::GUATIAO_ABSENT = 0
 pub guatiao::value::types::Tag::GUATIAO_BOOL = 2
@@ -5189,6 +5241,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::buffer::Buffer> fo
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::buffer::Buffer>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::buffer::Buffer> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::buffer::Buffer>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::buffer::Buffer
+pub fn guatiao::value::types::buffer::Buffer::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::buffer::Buffer
+pub fn guatiao::value::types::buffer::Buffer::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 #[repr(C)] pub struct guatiao::value::types::Bytes<'a>
 impl<'a> guatiao::value::types::buffer::Bytes<'a>
 pub const fn guatiao::value::types::buffer::Bytes<'a>::empty() -> guatiao::value::types::buffer::Bytes<'a>
@@ -5303,6 +5359,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::list::List> for gu
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::list::List>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::list::List> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::list::List>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::list::List
+pub fn guatiao::value::types::list::List::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::list::List
+pub fn guatiao::value::types::list::List::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 impl<'a> core::convert::TryFrom<&'a guatiao::value::value::Value> for &'a guatiao::value::types::list::List
 pub type &'a guatiao::value::types::list::List::Error = guatiao::value::convert::MapError
 pub fn &'a guatiao::value::types::list::List::try_from(&'a guatiao::value::value::Value) -> core::result::Result<&'a guatiao::value::types::list::List, guatiao::value::convert::MapError>
@@ -5392,6 +5452,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::map::Map> for guat
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::map::Map>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::map::Map> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::map::Map>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::map::Map
+pub fn guatiao::value::types::map::Map::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::map::Map
+pub fn guatiao::value::types::map::Map::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 impl<'a> core::convert::TryFrom<&'a guatiao::value::value::Value> for &'a guatiao::value::types::map::Map
 pub type &'a guatiao::value::types::map::Map::Error = guatiao::value::convert::MapError
 pub fn &'a guatiao::value::types::map::Map::try_from(&'a guatiao::value::value::Value) -> core::result::Result<&'a guatiao::value::types::map::Map, guatiao::value::convert::MapError>
@@ -5508,6 +5572,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::number::Number> fo
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::number::Number>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::number::Number> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::number::Number>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 #[repr(C)] pub struct guatiao::value::types::Str<'a>
 impl<'a> guatiao::value::types::text::Str<'a>
 pub const fn guatiao::value::types::text::Str<'a>::empty() -> guatiao::value::types::text::Str<'a>
@@ -5617,6 +5685,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::text::Text> for gu
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::text::Text>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::text::Text> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::text::Text>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 #[repr(C)] pub struct guatiao::value::types::Value
 impl guatiao::value::value::Value
 pub fn guatiao::value::value::Value::absent() -> guatiao::value::value::Value
@@ -5781,6 +5853,12 @@ impl guatiao::value::convert::TryAsRef<guatiao::value::types::text::Text> for gu
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::text::Text>
 impl guatiao::value::convert::TryAsRef<str> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&str>
+impl guatiao::value::visit::FromWalk for guatiao::value::value::Value
+pub fn guatiao::value::value::Value::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::value::Value, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::value::Value
+pub fn guatiao::value::value::Value::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walker for &guatiao::value::value::Value
+pub fn &guatiao::value::value::Value::walk<B: guatiao::value::visit::Build>(self, B) -> core::result::Result<<B as guatiao::value::visit::Build>::Out, guatiao::value::convert::MapError>
 impl<'a> core::convert::TryFrom<&'a guatiao::value::value::Value> for &'a [guatiao::value::types::map::Entry]
 pub type &'a [guatiao::value::types::map::Entry]::Error = guatiao::value::convert::MapError
 pub fn &'a [guatiao::value::types::map::Entry]::try_from(&'a guatiao::value::value::Value) -> core::result::Result<&'a [guatiao::value::types::map::Entry], guatiao::value::convert::MapError>
@@ -6018,6 +6096,12 @@ impl guatiao::value::convert::TryAsRef<guatiao::value::types::text::Text> for gu
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::text::Text>
 impl guatiao::value::convert::TryAsRef<str> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&str>
+impl guatiao::value::visit::FromWalk for guatiao::value::value::Value
+pub fn guatiao::value::value::Value::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::value::Value, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::value::Value
+pub fn guatiao::value::value::Value::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walker for &guatiao::value::value::Value
+pub fn &guatiao::value::value::Value::walk<B: guatiao::value::visit::Build>(self, B) -> core::result::Result<<B as guatiao::value::visit::Build>::Out, guatiao::value::convert::MapError>
 impl<'a> core::convert::TryFrom<&'a guatiao::value::value::Value> for &'a [guatiao::value::types::map::Entry]
 pub type &'a [guatiao::value::types::map::Entry]::Error = guatiao::value::convert::MapError
 pub fn &'a [guatiao::value::types::map::Entry]::try_from(&'a guatiao::value::value::Value) -> core::result::Result<&'a [guatiao::value::types::map::Entry], guatiao::value::convert::MapError>
@@ -6040,6 +6124,565 @@ impl<T: core::convert::Into<guatiao::value::types::number::Number>> core::conver
 pub fn guatiao::value::value::Value::from(T) -> guatiao::value::value::Value
 impl<T: core::convert::Into<guatiao::value::value::Value>> core::convert::From<core::option::Option<T>> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::from(core::option::Option<T>) -> guatiao::value::value::Value
+pub mod guatiao::value::visit
+pub enum guatiao::value::visit::NoWalker
+impl core::clone::Clone for guatiao::value::visit::NoWalker
+pub fn guatiao::value::visit::NoWalker::clone(&self) -> Self
+impl core::fmt::Debug for guatiao::value::visit::NoWalker
+pub fn guatiao::value::visit::NoWalker::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao::value::visit::NoWalker
+impl guatiao::value::visit::ListWalker for guatiao::value::visit::NoWalker
+pub fn guatiao::value::visit::NoWalker::len_hint(&self) -> core::option::Option<usize>
+pub fn guatiao::value::visit::NoWalker::next<T: guatiao::value::visit::FromWalk>(&mut self) -> core::result::Result<core::option::Option<T>, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::NoWalker::next_seed<S: guatiao::value::visit::Seed>(&mut self, S) -> core::result::Result<core::option::Option<<S as guatiao::value::visit::Seed>::Out>, guatiao::value::convert::MapError>
+impl guatiao::value::visit::MapWalker for guatiao::value::visit::NoWalker
+pub fn guatiao::value::visit::NoWalker::len_hint(&self) -> core::option::Option<usize>
+pub fn guatiao::value::visit::NoWalker::next_key<R>(&mut self, impl core::ops::function::FnOnce(&str) -> R) -> core::result::Result<core::option::Option<R>, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::NoWalker::skip_value(&mut self) -> core::result::Result<(), guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::NoWalker::value<T: guatiao::value::visit::FromWalk>(&mut self) -> core::result::Result<T, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::NoWalker::value_seed<S: guatiao::value::visit::Seed>(&mut self, S) -> core::result::Result<<S as guatiao::value::visit::Seed>::Out, guatiao::value::convert::MapError>
+pub enum guatiao::value::visit::Replay<'a, L, M>
+pub guatiao::value::visit::Replay::Absent
+pub guatiao::value::visit::Replay::Bool(bool)
+pub guatiao::value::visit::Replay::Bytes(&'a [u8])
+pub guatiao::value::visit::Replay::F64(f64)
+pub guatiao::value::visit::Replay::I64(i64)
+pub guatiao::value::visit::Replay::List(L)
+pub guatiao::value::visit::Replay::Map(M)
+pub guatiao::value::visit::Replay::Null
+pub guatiao::value::visit::Replay::Number(&'a str)
+pub guatiao::value::visit::Replay::String(&'a str)
+pub guatiao::value::visit::Replay::U64(u64)
+impl<'a, L: core::fmt::Debug, M: core::fmt::Debug> core::fmt::Debug for guatiao::value::visit::Replay<'a, L, M>
+pub fn guatiao::value::visit::Replay<'a, L, M>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<L: guatiao::value::visit::ListWalker, M: guatiao::value::visit::MapWalker> guatiao::value::visit::Walker for guatiao::value::visit::Replay<'_, L, M>
+pub fn guatiao::value::visit::Replay<'_, L, M>::walk<B: guatiao::value::visit::Build>(self, B) -> core::result::Result<<B as guatiao::value::visit::Build>::Out, guatiao::value::convert::MapError>
+pub struct guatiao::value::visit::Flat<'a, S: ?core::marker::Sized>(pub &'a mut S)
+impl<'a, S: core::fmt::Debug + ?core::marker::Sized> core::fmt::Debug for guatiao::value::visit::Flat<'a, S>
+pub fn guatiao::value::visit::Flat<'a, S>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a, S: guatiao::value::visit::Sink + ?core::marker::Sized> guatiao::value::visit::Visitor for guatiao::value::visit::Flat<'a, S>
+pub type guatiao::value::visit::Flat<'a, S>::Error = <S as guatiao::value::visit::Sink>::Error
+pub type guatiao::value::visit::Flat<'a, S>::List = guatiao::value::visit::FlatList<'a, S>
+pub type guatiao::value::visit::Flat<'a, S>::Map = guatiao::value::visit::FlatMap<'a, S>
+pub type guatiao::value::visit::Flat<'a, S>::Ok = ()
+pub fn guatiao::value::visit::Flat<'a, S>::absent(self) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::bool(self, bool) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::bytes(self, &[u8]) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::f64(self, f64) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::i64(self, i64) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::list(self, core::option::Option<usize>) -> core::result::Result<guatiao::value::visit::FlatList<'a, S>, <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::map(self, core::option::Option<usize>) -> core::result::Result<guatiao::value::visit::FlatMap<'a, S>, <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::null(self) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::number(self, &str) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::string(self, &str) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::u64(self, u64) -> core::result::Result<Self::Ok, Self::Error>
+pub struct guatiao::value::visit::FlatList<'a, S: ?core::marker::Sized>(_)
+impl<'a, S: core::fmt::Debug + ?core::marker::Sized> core::fmt::Debug for guatiao::value::visit::FlatList<'a, S>
+pub fn guatiao::value::visit::FlatList<'a, S>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<S: guatiao::value::visit::Sink + ?core::marker::Sized> guatiao::value::visit::ListVisitor for guatiao::value::visit::FlatList<'_, S>
+pub type guatiao::value::visit::FlatList<'_, S>::Error = <S as guatiao::value::visit::Sink>::Error
+pub type guatiao::value::visit::FlatList<'_, S>::Ok = ()
+pub fn guatiao::value::visit::FlatList<'_, S>::end(self) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::FlatList<'_, S>::item<W: guatiao::value::visit::Walk + ?core::marker::Sized>(&mut self, &W) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub struct guatiao::value::visit::FlatMap<'a, S: ?core::marker::Sized>(_)
+impl<'a, S: core::fmt::Debug + ?core::marker::Sized> core::fmt::Debug for guatiao::value::visit::FlatMap<'a, S>
+pub fn guatiao::value::visit::FlatMap<'a, S>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<S: guatiao::value::visit::Sink + ?core::marker::Sized> guatiao::value::visit::MapVisitor for guatiao::value::visit::FlatMap<'_, S>
+pub type guatiao::value::visit::FlatMap<'_, S>::Error = <S as guatiao::value::visit::Sink>::Error
+pub type guatiao::value::visit::FlatMap<'_, S>::Ok = ()
+pub fn guatiao::value::visit::FlatMap<'_, S>::end(self) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::FlatMap<'_, S>::entry<W: guatiao::value::visit::Walk + ?core::marker::Sized>(&mut self, &str, &W) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub struct guatiao::value::visit::TreeSink
+impl guatiao::value::visit::TreeSink
+pub fn guatiao::value::visit::TreeSink::into_value(self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::new() -> guatiao::value::visit::TreeSink
+pub fn guatiao::value::visit::TreeSink::new_in(guatiao::value::alloc::Alloc) -> guatiao::value::visit::TreeSink
+impl core::default::Default for guatiao::value::visit::TreeSink
+pub fn guatiao::value::visit::TreeSink::default() -> guatiao::value::visit::TreeSink
+impl core::fmt::Debug for guatiao::value::visit::TreeSink
+pub fn guatiao::value::visit::TreeSink::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl guatiao::value::visit::Sink for guatiao::value::visit::TreeSink
+pub type guatiao::value::visit::TreeSink::Error = guatiao::value::error::ValueError
+pub fn guatiao::value::visit::TreeSink::absent(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::bool(&mut self, bool) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::bytes(&mut self, &[u8]) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::key(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::list_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::list_end(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::map_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::map_end(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::null(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::number(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::string(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub trait guatiao::value::visit::Build: core::marker::Sized
+pub type guatiao::value::visit::Build::Out
+pub fn guatiao::value::visit::Build::absent(self) -> core::result::Result<Self::Out, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::Build::bool(self, bool) -> core::result::Result<Self::Out, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::Build::bytes(self, &[u8]) -> core::result::Result<Self::Out, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::Build::f64(self, f64) -> core::result::Result<Self::Out, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::Build::i64(self, i64) -> core::result::Result<Self::Out, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::Build::kinds(&self) -> guatiao::Kinds
+pub fn guatiao::value::visit::Build::list<L: guatiao::value::visit::ListWalker>(self, L) -> core::result::Result<Self::Out, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::Build::map<M: guatiao::value::visit::MapWalker>(self, M) -> core::result::Result<Self::Out, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::Build::null(self) -> core::result::Result<Self::Out, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::Build::number(self, &str) -> core::result::Result<Self::Out, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::Build::string(self, &str) -> core::result::Result<Self::Out, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::Build::u64(self, u64) -> core::result::Result<Self::Out, guatiao::value::convert::MapError>
+pub trait guatiao::value::visit::FromWalk: core::marker::Sized
+pub fn guatiao::value::visit::FromWalk::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for ()
+pub fn ()::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<(), guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for alloc::boxed::Box<str>
+pub fn alloc::boxed::Box<str>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::boxed::Box<str>, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for alloc::rc::Rc<str>
+pub fn alloc::rc::Rc<str>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::rc::Rc<str>, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for alloc::string::String
+pub fn alloc::string::String::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for alloc::sync::Arc<str>
+pub fn alloc::sync::Arc<str>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::sync::Arc<str>, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for bool
+pub fn bool::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for char
+pub fn char::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<char, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::net::ip_addr::IpAddr, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::net::ip_addr::Ipv4Addr, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::net::ip_addr::Ipv6Addr, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::net::socket_addr::SocketAddr, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::net::socket_addr::SocketAddrV4, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::net::socket_addr::SocketAddrV6, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroI128
+pub fn core::num::nonzero::NonZeroI128::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroI128, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroI16
+pub fn core::num::nonzero::NonZeroI16::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroI16, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroI32
+pub fn core::num::nonzero::NonZeroI32::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroI32, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroI64
+pub fn core::num::nonzero::NonZeroI64::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroI64, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroI8
+pub fn core::num::nonzero::NonZeroI8::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroI8, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroIsize
+pub fn core::num::nonzero::NonZeroIsize::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroIsize, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroU128
+pub fn core::num::nonzero::NonZeroU128::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroU128, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroU16
+pub fn core::num::nonzero::NonZeroU16::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroU16, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroU32
+pub fn core::num::nonzero::NonZeroU32::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroU32, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroU64
+pub fn core::num::nonzero::NonZeroU64::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroU64, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroU8
+pub fn core::num::nonzero::NonZeroU8::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroU8, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroUsize
+pub fn core::num::nonzero::NonZeroUsize::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroUsize, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::time::Duration
+pub fn core::time::Duration::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::time::Duration, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for f32
+pub fn f32::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<f32, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for f64
+pub fn f64::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<f64, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::Date
+pub fn guatiao::Date::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::DateTime
+pub fn guatiao::DateTime::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::Time
+pub fn guatiao::Time::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::convert::Bytes
+pub fn guatiao::value::convert::Bytes::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::buffer::Buffer
+pub fn guatiao::value::types::buffer::Buffer::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::list::List
+pub fn guatiao::value::types::list::List::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::map::Map
+pub fn guatiao::value::types::map::Map::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::value::Value
+pub fn guatiao::value::value::Value::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::value::Value, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for i128
+pub fn i128::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<i128, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for i16
+pub fn i16::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<i16, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for i32
+pub fn i32::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<i32, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for i64
+pub fn i64::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<i64, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for i8
+pub fn i8::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<i8, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for isize
+pub fn isize::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<isize, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for std::path::PathBuf
+pub fn std::path::PathBuf::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<std::path::PathBuf, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for std::time::SystemTime
+pub fn std::time::SystemTime::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<std::time::SystemTime, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for u128
+pub fn u128::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<u128, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for u16
+pub fn u16::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<u16, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for u32
+pub fn u32::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<u32, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for u64
+pub fn u64::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<u64, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for u8
+pub fn u8::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<u8, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for usize
+pub fn usize::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<usize, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk, G: guatiao::value::visit::FromWalk, H: guatiao::value::visit::FromWalk, I: guatiao::value::visit::FromWalk, J: guatiao::value::visit::FromWalk, K: guatiao::value::visit::FromWalk, L: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F, G, H, I, J, K, L)
+pub fn (A, B, C, D, E, F, G, H, I, J, K, L)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk, G: guatiao::value::visit::FromWalk, H: guatiao::value::visit::FromWalk, I: guatiao::value::visit::FromWalk, J: guatiao::value::visit::FromWalk, K: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F, G, H, I, J, K)
+pub fn (A, B, C, D, E, F, G, H, I, J, K)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk, G: guatiao::value::visit::FromWalk, H: guatiao::value::visit::FromWalk, I: guatiao::value::visit::FromWalk, J: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F, G, H, I, J)
+pub fn (A, B, C, D, E, F, G, H, I, J)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk, G: guatiao::value::visit::FromWalk, H: guatiao::value::visit::FromWalk, I: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F, G, H, I)
+pub fn (A, B, C, D, E, F, G, H, I)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk, G: guatiao::value::visit::FromWalk, H: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F, G, H)
+pub fn (A, B, C, D, E, F, G, H)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk, G: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F, G)
+pub fn (A, B, C, D, E, F, G)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F)
+pub fn (A, B, C, D, E, F)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E)
+pub fn (A, B, C, D, E)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D)
+pub fn (A, B, C, D)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C)
+pub fn (A, B, C)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B)
+pub fn (A, B)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A)
+pub fn (A)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<K: guatiao::value::convert::MapKey + core::cmp::Eq + core::hash::Hash, T: guatiao::value::visit::FromWalk, S: core::hash::BuildHasher + core::default::Default> guatiao::value::visit::FromWalk for std::collections::hash::map::HashMap<K, T, S>
+pub fn std::collections::hash::map::HashMap<K, T, S>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<std::collections::hash::map::HashMap<K, T, S>, guatiao::value::convert::MapError>
+impl<K: guatiao::value::convert::MapKey + core::cmp::Ord, T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::collections::btree::map::BTreeMap<K, T>
+pub fn alloc::collections::btree::map::BTreeMap<K, T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::collections::btree::map::BTreeMap<K, T>, guatiao::value::convert::MapError>
+impl<T: alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::value::visit::FromWalk for alloc::borrow::Cow<'_, T> where <T as alloc::borrow::ToOwned>::Owned: guatiao::value::visit::FromWalk
+pub fn alloc::borrow::Cow<'_, T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk + core::cmp::Eq + core::hash::Hash, S: core::hash::BuildHasher + core::default::Default> guatiao::value::visit::FromWalk for std::collections::hash::set::HashSet<T, S>
+pub fn std::collections::hash::set::HashSet<T, S>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<std::collections::hash::set::HashSet<T, S>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk + core::cmp::Ord> guatiao::value::visit::FromWalk for alloc::collections::btree::set::BTreeSet<T>
+pub fn alloc::collections::btree::set::BTreeSet<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::collections::btree::set::BTreeSet<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk, const N: usize> guatiao::value::visit::FromWalk for [T; N]
+pub fn [T; N]::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<[T; N], guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::boxed::Box<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::boxed::Box<[T]>
+pub fn alloc::boxed::Box<[T]>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::boxed::Box<[T]>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::collections::vec_deque::VecDeque<T>
+pub fn alloc::collections::vec_deque::VecDeque<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::collections::vec_deque::VecDeque<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::rc::Rc<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::rc::Rc<[T]>
+pub fn alloc::rc::Rc<[T]>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::rc::Rc<[T]>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::sync::Arc<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::sync::Arc<[T]>
+pub fn alloc::sync::Arc<[T]>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::sync::Arc<[T]>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::vec::Vec<T>
+pub fn alloc::vec::Vec<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::vec::Vec<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for core::option::Option<T>
+pub fn core::option::Option<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::option::Option<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
+pub trait guatiao::value::visit::ListVisitor
+pub type guatiao::value::visit::ListVisitor::Error
+pub type guatiao::value::visit::ListVisitor::Ok
+pub fn guatiao::value::visit::ListVisitor::end(self) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::ListVisitor::item<W: guatiao::value::visit::Walk + ?core::marker::Sized>(&mut self, &W) -> core::result::Result<(), Self::Error>
+impl<S: guatiao::value::visit::Sink + ?core::marker::Sized> guatiao::value::visit::ListVisitor for guatiao::value::visit::FlatList<'_, S>
+pub type guatiao::value::visit::FlatList<'_, S>::Error = <S as guatiao::value::visit::Sink>::Error
+pub type guatiao::value::visit::FlatList<'_, S>::Ok = ()
+pub fn guatiao::value::visit::FlatList<'_, S>::end(self) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::FlatList<'_, S>::item<W: guatiao::value::visit::Walk + ?core::marker::Sized>(&mut self, &W) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub trait guatiao::value::visit::ListWalker
+pub fn guatiao::value::visit::ListWalker::len_hint(&self) -> core::option::Option<usize>
+pub fn guatiao::value::visit::ListWalker::next<T: guatiao::value::visit::FromWalk>(&mut self) -> core::result::Result<core::option::Option<T>, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::ListWalker::next_seed<S: guatiao::value::visit::Seed>(&mut self, S) -> core::result::Result<core::option::Option<<S as guatiao::value::visit::Seed>::Out>, guatiao::value::convert::MapError>
+impl guatiao::value::visit::ListWalker for guatiao::value::visit::NoWalker
+pub fn guatiao::value::visit::NoWalker::len_hint(&self) -> core::option::Option<usize>
+pub fn guatiao::value::visit::NoWalker::next<T: guatiao::value::visit::FromWalk>(&mut self) -> core::result::Result<core::option::Option<T>, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::NoWalker::next_seed<S: guatiao::value::visit::Seed>(&mut self, S) -> core::result::Result<core::option::Option<<S as guatiao::value::visit::Seed>::Out>, guatiao::value::convert::MapError>
+pub trait guatiao::value::visit::MapVisitor
+pub type guatiao::value::visit::MapVisitor::Error
+pub type guatiao::value::visit::MapVisitor::Ok
+pub fn guatiao::value::visit::MapVisitor::end(self) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::MapVisitor::entry<W: guatiao::value::visit::Walk + ?core::marker::Sized>(&mut self, &str, &W) -> core::result::Result<(), Self::Error>
+impl<S: guatiao::value::visit::Sink + ?core::marker::Sized> guatiao::value::visit::MapVisitor for guatiao::value::visit::FlatMap<'_, S>
+pub type guatiao::value::visit::FlatMap<'_, S>::Error = <S as guatiao::value::visit::Sink>::Error
+pub type guatiao::value::visit::FlatMap<'_, S>::Ok = ()
+pub fn guatiao::value::visit::FlatMap<'_, S>::end(self) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::FlatMap<'_, S>::entry<W: guatiao::value::visit::Walk + ?core::marker::Sized>(&mut self, &str, &W) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub trait guatiao::value::visit::MapWalker
+pub fn guatiao::value::visit::MapWalker::len_hint(&self) -> core::option::Option<usize>
+pub fn guatiao::value::visit::MapWalker::next_key<R>(&mut self, impl core::ops::function::FnOnce(&str) -> R) -> core::result::Result<core::option::Option<R>, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::MapWalker::skip_value(&mut self) -> core::result::Result<(), guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::MapWalker::value<T: guatiao::value::visit::FromWalk>(&mut self) -> core::result::Result<T, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::MapWalker::value_seed<S: guatiao::value::visit::Seed>(&mut self, S) -> core::result::Result<<S as guatiao::value::visit::Seed>::Out, guatiao::value::convert::MapError>
+impl guatiao::value::visit::MapWalker for guatiao::value::visit::NoWalker
+pub fn guatiao::value::visit::NoWalker::len_hint(&self) -> core::option::Option<usize>
+pub fn guatiao::value::visit::NoWalker::next_key<R>(&mut self, impl core::ops::function::FnOnce(&str) -> R) -> core::result::Result<core::option::Option<R>, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::NoWalker::skip_value(&mut self) -> core::result::Result<(), guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::NoWalker::value<T: guatiao::value::visit::FromWalk>(&mut self) -> core::result::Result<T, guatiao::value::convert::MapError>
+pub fn guatiao::value::visit::NoWalker::value_seed<S: guatiao::value::visit::Seed>(&mut self, S) -> core::result::Result<<S as guatiao::value::visit::Seed>::Out, guatiao::value::convert::MapError>
+pub trait guatiao::value::visit::Seed: core::marker::Sized
+pub type guatiao::value::visit::Seed::Out
+pub fn guatiao::value::visit::Seed::read<W: guatiao::value::visit::Walker>(self, W) -> core::result::Result<Self::Out, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::Seed for core::marker::PhantomData<T>
+pub type core::marker::PhantomData<T>::Out = T
+pub fn core::marker::PhantomData<T>::read<W: guatiao::value::visit::Walker>(self, W) -> core::result::Result<T, guatiao::value::convert::MapError>
+pub trait guatiao::value::visit::Sink
+pub type guatiao::value::visit::Sink::Error: core::convert::From<guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::Sink::absent(&mut self) -> core::result::Result<(), Self::Error>
+pub fn guatiao::value::visit::Sink::bool(&mut self, bool) -> core::result::Result<(), Self::Error>
+pub fn guatiao::value::visit::Sink::bytes(&mut self, &[u8]) -> core::result::Result<(), Self::Error>
+pub fn guatiao::value::visit::Sink::key(&mut self, &str) -> core::result::Result<(), Self::Error>
+pub fn guatiao::value::visit::Sink::list_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), Self::Error>
+pub fn guatiao::value::visit::Sink::list_end(&mut self) -> core::result::Result<(), Self::Error>
+pub fn guatiao::value::visit::Sink::map_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), Self::Error>
+pub fn guatiao::value::visit::Sink::map_end(&mut self) -> core::result::Result<(), Self::Error>
+pub fn guatiao::value::visit::Sink::null(&mut self) -> core::result::Result<(), Self::Error>
+pub fn guatiao::value::visit::Sink::number(&mut self, &str) -> core::result::Result<(), Self::Error>
+pub fn guatiao::value::visit::Sink::string(&mut self, &str) -> core::result::Result<(), Self::Error>
+impl guatiao::value::visit::Sink for guatiao::value::visit::TreeSink
+pub type guatiao::value::visit::TreeSink::Error = guatiao::value::error::ValueError
+pub fn guatiao::value::visit::TreeSink::absent(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::bool(&mut self, bool) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::bytes(&mut self, &[u8]) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::key(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::list_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::list_end(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::map_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::map_end(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::null(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::number(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::visit::TreeSink::string(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+impl guatiao::value::visit::Sink for guatiao::value::wire::Encoder<'_>
+pub type guatiao::value::wire::Encoder<'_>::Error = guatiao::value::error::ValueError
+pub fn guatiao::value::wire::Encoder<'_>::absent(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::bool(&mut self, bool) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::bytes(&mut self, &[u8]) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::key(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::list_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::list_end(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::map_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::map_end(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::null(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::number(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::string(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub trait guatiao::value::visit::Visitor: core::marker::Sized
+pub type guatiao::value::visit::Visitor::Error: core::convert::From<guatiao::value::error::ValueError>
+pub type guatiao::value::visit::Visitor::List: guatiao::value::visit::ListVisitor<Ok = Self::Ok, Error = Self::Error>
+pub type guatiao::value::visit::Visitor::Map: guatiao::value::visit::MapVisitor<Ok = Self::Ok, Error = Self::Error>
+pub type guatiao::value::visit::Visitor::Ok
+pub fn guatiao::value::visit::Visitor::absent(self) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::Visitor::bool(self, bool) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::Visitor::bytes(self, &[u8]) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::Visitor::f64(self, f64) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::Visitor::i64(self, i64) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::Visitor::list(self, core::option::Option<usize>) -> core::result::Result<Self::List, Self::Error>
+pub fn guatiao::value::visit::Visitor::map(self, core::option::Option<usize>) -> core::result::Result<Self::Map, Self::Error>
+pub fn guatiao::value::visit::Visitor::null(self) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::Visitor::number(self, &str) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::Visitor::string(self, &str) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::Visitor::u64(self, u64) -> core::result::Result<Self::Ok, Self::Error>
+impl<'a, S: guatiao::value::visit::Sink + ?core::marker::Sized> guatiao::value::visit::Visitor for guatiao::value::visit::Flat<'a, S>
+pub type guatiao::value::visit::Flat<'a, S>::Error = <S as guatiao::value::visit::Sink>::Error
+pub type guatiao::value::visit::Flat<'a, S>::List = guatiao::value::visit::FlatList<'a, S>
+pub type guatiao::value::visit::Flat<'a, S>::Map = guatiao::value::visit::FlatMap<'a, S>
+pub type guatiao::value::visit::Flat<'a, S>::Ok = ()
+pub fn guatiao::value::visit::Flat<'a, S>::absent(self) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::bool(self, bool) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::bytes(self, &[u8]) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::f64(self, f64) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::i64(self, i64) -> core::result::Result<Self::Ok, Self::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::list(self, core::option::Option<usize>) -> core::result::Result<guatiao::value::visit::FlatList<'a, S>, <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::map(self, core::option::Option<usize>) -> core::result::Result<guatiao::value::visit::FlatMap<'a, S>, <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::null(self) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::number(self, &str) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::string(self, &str) -> core::result::Result<(), <S as guatiao::value::visit::Sink>::Error>
+pub fn guatiao::value::visit::Flat<'a, S>::u64(self, u64) -> core::result::Result<Self::Ok, Self::Error>
+pub trait guatiao::value::visit::Walk
+pub fn guatiao::value::visit::Walk::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for ()
+pub fn ()::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for alloc::string::String
+pub fn alloc::string::String::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for bool
+pub fn bool::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for char
+pub fn char::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroI128
+pub fn core::num::nonzero::NonZeroI128::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroI16
+pub fn core::num::nonzero::NonZeroI16::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroI32
+pub fn core::num::nonzero::NonZeroI32::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroI64
+pub fn core::num::nonzero::NonZeroI64::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroI8
+pub fn core::num::nonzero::NonZeroI8::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroIsize
+pub fn core::num::nonzero::NonZeroIsize::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroU128
+pub fn core::num::nonzero::NonZeroU128::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroU16
+pub fn core::num::nonzero::NonZeroU16::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroU32
+pub fn core::num::nonzero::NonZeroU32::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroU64
+pub fn core::num::nonzero::NonZeroU64::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroU8
+pub fn core::num::nonzero::NonZeroU8::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroUsize
+pub fn core::num::nonzero::NonZeroUsize::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::time::Duration
+pub fn core::time::Duration::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for f32
+pub fn f32::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for f64
+pub fn f64::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::Date
+pub fn guatiao::Date::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::DateTime
+pub fn guatiao::DateTime::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::Time
+pub fn guatiao::Time::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::Timestamp
+pub fn guatiao::Timestamp::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::convert::Bytes
+pub fn guatiao::value::convert::Bytes::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::types::buffer::Buffer
+pub fn guatiao::value::types::buffer::Buffer::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::types::list::List
+pub fn guatiao::value::types::list::List::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::types::map::Map
+pub fn guatiao::value::types::map::Map::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::value::Value
+pub fn guatiao::value::value::Value::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::wire::Encoded<'_>
+pub fn guatiao::value::wire::Encoded<'_>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for i128
+pub fn i128::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for i16
+pub fn i16::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for i32
+pub fn i32::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for i64
+pub fn i64::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for i8
+pub fn i8::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for isize
+pub fn isize::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for std::path::Path
+pub fn std::path::Path::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for std::path::PathBuf
+pub fn std::path::PathBuf::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for std::time::SystemTime
+pub fn std::time::SystemTime::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for str
+pub fn str::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for u128
+pub fn u128::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for u16
+pub fn u16::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for u32
+pub fn u32::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for u64
+pub fn u64::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for u8
+pub fn u8::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for usize
+pub fn usize::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk, G: guatiao::value::visit::Walk, H: guatiao::value::visit::Walk, I: guatiao::value::visit::Walk, J: guatiao::value::visit::Walk, K: guatiao::value::visit::Walk, L: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F, G, H, I, J, K, L)
+pub fn (A, B, C, D, E, F, G, H, I, J, K, L)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk, G: guatiao::value::visit::Walk, H: guatiao::value::visit::Walk, I: guatiao::value::visit::Walk, J: guatiao::value::visit::Walk, K: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F, G, H, I, J, K)
+pub fn (A, B, C, D, E, F, G, H, I, J, K)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk, G: guatiao::value::visit::Walk, H: guatiao::value::visit::Walk, I: guatiao::value::visit::Walk, J: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F, G, H, I, J)
+pub fn (A, B, C, D, E, F, G, H, I, J)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk, G: guatiao::value::visit::Walk, H: guatiao::value::visit::Walk, I: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F, G, H, I)
+pub fn (A, B, C, D, E, F, G, H, I)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk, G: guatiao::value::visit::Walk, H: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F, G, H)
+pub fn (A, B, C, D, E, F, G, H)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk, G: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F, G)
+pub fn (A, B, C, D, E, F, G)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F)
+pub fn (A, B, C, D, E, F)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E)
+pub fn (A, B, C, D, E)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D)
+pub fn (A, B, C, D)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C)
+pub fn (A, B, C)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B)
+pub fn (A, B)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A)
+pub fn (A)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<K: guatiao::value::convert::MapKey, T: guatiao::value::visit::Walk, S> guatiao::value::visit::Walk for std::collections::hash::map::HashMap<K, T, S>
+pub fn std::collections::hash::map::HashMap<K, T, S>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<K: guatiao::value::convert::MapKey, T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for alloc::collections::btree::map::BTreeMap<K, T>
+pub fn alloc::collections::btree::map::BTreeMap<K, T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk + ?core::marker::Sized> guatiao::value::visit::Walk for &T
+pub fn &T::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk + ?core::marker::Sized> guatiao::value::visit::Walk for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk + ?core::marker::Sized> guatiao::value::visit::Walk for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk + ?core::marker::Sized> guatiao::value::visit::Walk for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk + alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::value::visit::Walk for alloc::borrow::Cow<'_, T>
+pub fn alloc::borrow::Cow<'_, T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk, S> guatiao::value::visit::Walk for std::collections::hash::set::HashSet<T, S>
+pub fn std::collections::hash::set::HashSet<T, S>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk, const N: usize> guatiao::value::visit::Walk for [T; N]
+pub fn [T; N]::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for [T]
+pub fn [T]::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for alloc::collections::btree::set::BTreeSet<T>
+pub fn alloc::collections::btree::set::BTreeSet<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for alloc::collections::vec_deque::VecDeque<T>
+pub fn alloc::collections::vec_deque::VecDeque<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for alloc::vec::Vec<T>
+pub fn alloc::vec::Vec<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for core::option::Option<T>
+pub fn core::option::Option<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+pub trait guatiao::value::visit::Walker: core::marker::Sized
+pub fn guatiao::value::visit::Walker::walk<B: guatiao::value::visit::Build>(self, B) -> core::result::Result<<B as guatiao::value::visit::Build>::Out, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walker for &guatiao::value::value::Value
+pub fn &guatiao::value::value::Value::walk<B: guatiao::value::visit::Build>(self, B) -> core::result::Result<<B as guatiao::value::visit::Build>::Out, guatiao::value::convert::MapError>
+impl<'b> guatiao::value::visit::Walker for &mut guatiao::value::wire::Decoder<'b>
+pub fn &mut guatiao::value::wire::Decoder<'b>::walk<B: guatiao::value::visit::Build>(self, B) -> core::result::Result<<B as guatiao::value::visit::Build>::Out, guatiao::value::convert::MapError>
+impl<L: guatiao::value::visit::ListWalker, M: guatiao::value::visit::MapWalker> guatiao::value::visit::Walker for guatiao::value::visit::Replay<'_, L, M>
+pub fn guatiao::value::visit::Replay<'_, L, M>::walk<B: guatiao::value::visit::Build>(self, B) -> core::result::Result<<B as guatiao::value::visit::Build>::Out, guatiao::value::convert::MapError>
 pub mod guatiao::value::wire
 pub mod guatiao::value::wire::channel
 pub enum guatiao::value::wire::channel::Received
@@ -6088,6 +6731,10 @@ pub guatiao::value::wire::WireError::NotUtf8
 pub guatiao::value::wire::WireError::NotUtf8::at: usize
 pub guatiao::value::wire::WireError::Overlong
 pub guatiao::value::wire::WireError::Overlong::at: usize
+pub guatiao::value::wire::WireError::Refused
+pub guatiao::value::wire::WireError::Refused::error: guatiao::value::convert::MapError
+pub guatiao::value::wire::WireError::TooDeep
+pub guatiao::value::wire::WireError::TooDeep::at: usize
 pub guatiao::value::wire::WireError::Trailing
 pub guatiao::value::wire::WireError::Trailing::at: usize
 pub guatiao::value::wire::WireError::Truncated
@@ -6109,10 +6756,49 @@ pub fn guatiao::value::wire::WireError::fmt(&self, &mut core::fmt::Formatter<'_>
 impl core::fmt::Display for guatiao::value::wire::WireError
 pub fn guatiao::value::wire::WireError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::StructuralPartialEq for guatiao::value::wire::WireError
+pub struct guatiao::value::wire::Decoder<'b>
+impl<'b> guatiao::value::wire::Decoder<'b>
+pub fn guatiao::value::wire::Decoder<'b>::failure(&self) -> core::option::Option<&guatiao::value::wire::WireError>
+pub fn guatiao::value::wire::Decoder<'b>::finish(self) -> core::result::Result<(), guatiao::value::wire::WireError>
+pub fn guatiao::value::wire::Decoder<'b>::new(&'b [u8]) -> guatiao::value::wire::Decoder<'b>
+impl<'b> core::fmt::Debug for guatiao::value::wire::Decoder<'b>
+pub fn guatiao::value::wire::Decoder<'b>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'b> guatiao::value::visit::Walker for &mut guatiao::value::wire::Decoder<'b>
+pub fn &mut guatiao::value::wire::Decoder<'b>::walk<B: guatiao::value::visit::Build>(self, B) -> core::result::Result<<B as guatiao::value::visit::Build>::Out, guatiao::value::convert::MapError>
+pub struct guatiao::value::wire::Encoded<'b>(pub &'b [u8])
+impl guatiao::value::visit::Walk for guatiao::value::wire::Encoded<'_>
+pub fn guatiao::value::wire::Encoded<'_>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<'b> core::clone::Clone for guatiao::value::wire::Encoded<'b>
+pub fn guatiao::value::wire::Encoded<'b>::clone(&self) -> Self
+impl<'b> core::fmt::Debug for guatiao::value::wire::Encoded<'b>
+pub fn guatiao::value::wire::Encoded<'b>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'b> core::marker::Copy for guatiao::value::wire::Encoded<'b>
+pub struct guatiao::value::wire::Encoder<'a>
+impl<'a> guatiao::value::wire::Encoder<'a>
+pub fn guatiao::value::wire::Encoder<'a>::is_complete(&self) -> bool
+pub fn guatiao::value::wire::Encoder<'a>::new(&'a mut alloc::vec::Vec<u8>) -> guatiao::value::wire::Encoder<'a>
+impl guatiao::value::visit::Sink for guatiao::value::wire::Encoder<'_>
+pub type guatiao::value::wire::Encoder<'_>::Error = guatiao::value::error::ValueError
+pub fn guatiao::value::wire::Encoder<'_>::absent(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::bool(&mut self, bool) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::bytes(&mut self, &[u8]) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::key(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::list_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::list_end(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::map_begin(&mut self, core::option::Option<usize>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::map_end(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::null(&mut self) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::number(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::Encoder<'_>::string(&mut self, &str) -> core::result::Result<(), guatiao::value::error::ValueError>
+impl<'a> core::fmt::Debug for guatiao::value::wire::Encoder<'a>
+pub fn guatiao::value::wire::Encoder<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn guatiao::value::wire::decode(&[u8]) -> core::result::Result<guatiao::value::value::Value, guatiao::value::wire::WireError>
+pub fn guatiao::value::wire::decode_as<T: guatiao::value::visit::FromWalk>(&[u8]) -> core::result::Result<T, guatiao::value::wire::WireError>
 pub fn guatiao::value::wire::decode_in(guatiao::value::alloc::Alloc, &[u8]) -> core::result::Result<guatiao::value::value::Value, guatiao::value::wire::WireError>
 pub fn guatiao::value::wire::encode(&guatiao::value::value::Value, &mut alloc::vec::Vec<u8>) -> core::result::Result<(), guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::encode_of<T: guatiao::value::visit::Walk + ?core::marker::Sized>(&T, &mut alloc::vec::Vec<u8>) -> core::result::Result<(), guatiao::value::error::ValueError>
 pub fn guatiao::value::wire::to_bytes(&guatiao::value::value::Value) -> core::result::Result<alloc::vec::Vec<u8>, guatiao::value::error::ValueError>
+pub fn guatiao::value::wire::to_bytes_of<T: guatiao::value::visit::Walk + ?core::marker::Sized>(&T) -> core::result::Result<alloc::vec::Vec<u8>, guatiao::value::error::ValueError>
 #[non_exhaustive] pub enum guatiao::value::AllocError
 pub guatiao::value::AllocError::Failed
 pub guatiao::value::AllocError::NoAllocFn
@@ -6144,6 +6830,8 @@ pub guatiao::value::MapError::BadValue::expected: alloc::string::String
 pub guatiao::value::MapError::BadValue::key: alloc::string::String
 pub guatiao::value::MapError::MissingKey
 pub guatiao::value::MapError::MissingKey::key: alloc::string::String
+pub guatiao::value::MapError::Stopped
+pub guatiao::value::MapError::Stopped::key: alloc::string::String
 pub guatiao::value::MapError::WrongType
 pub guatiao::value::MapError::WrongType::expected: guatiao::value::value::Tag
 pub guatiao::value::MapError::WrongType::found: core::option::Option<guatiao::value::value::Tag>
@@ -6154,7 +6842,9 @@ pub fn guatiao::value::convert::MapError::at_key(self, &str) -> guatiao::value::
 pub fn guatiao::value::convert::MapError::bad_value(impl core::convert::Into<alloc::string::String>) -> guatiao::value::convert::MapError
 pub fn guatiao::value::convert::MapError::key(&self) -> &str
 pub fn guatiao::value::convert::MapError::missing(&str) -> guatiao::value::convert::MapError
+pub fn guatiao::value::convert::MapError::stopped() -> guatiao::value::convert::MapError
 pub fn guatiao::value::convert::MapError::under(self, &str) -> guatiao::value::convert::MapError
+pub fn guatiao::value::convert::MapError::wrong_kind(guatiao::Kinds, guatiao::value::value::Tag) -> guatiao::value::convert::MapError
 pub fn guatiao::value::convert::MapError::wrong_type(guatiao::value::value::Tag, &guatiao::value::value::Value) -> guatiao::value::convert::MapError
 impl core::clone::Clone for guatiao::value::convert::MapError
 pub fn guatiao::value::convert::MapError::clone(&self) -> Self
@@ -6331,6 +7021,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::buffer::Buffer> fo
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::buffer::Buffer>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::buffer::Buffer> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::buffer::Buffer>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::buffer::Buffer
+pub fn guatiao::value::types::buffer::Buffer::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::buffer::Buffer
+pub fn guatiao::value::types::buffer::Buffer::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::value::Bytes(pub alloc::vec::Vec<u8>)
 impl core::clone::Clone for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::clone(&self) -> Self
@@ -6367,6 +7061,10 @@ pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value)
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::value::convert::Bytes
+pub fn guatiao::value::convert::Bytes::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::convert::Bytes
+pub fn guatiao::value::convert::Bytes::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::value::Date
 impl guatiao::Date
 pub fn guatiao::Date::checked_add(self, guatiao::value::span::Span) -> core::option::Option<guatiao::Date>
@@ -6418,6 +7116,10 @@ pub fn guatiao::Date::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'
 impl guatiao::value::convert::ToValue for guatiao::Date
 pub fn guatiao::Date::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Date::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::Date
+pub fn guatiao::Date::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::Date
+pub fn guatiao::Date::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::value::DateTime
 impl guatiao::DateTime
 pub fn guatiao::DateTime::checked_add(self, guatiao::value::span::Span) -> core::option::Option<guatiao::DateTime>
@@ -6468,6 +7170,10 @@ pub fn guatiao::DateTime::to_key(&self) -> core::result::Result<alloc::borrow::C
 impl guatiao::value::convert::ToValue for guatiao::DateTime
 pub fn guatiao::DateTime::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::DateTime::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::DateTime
+pub fn guatiao::DateTime::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::DateTime
+pub fn guatiao::DateTime::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::value::Dump<'a>(pub &'a guatiao::value::value::Value)
 impl core::fmt::Debug for guatiao::value::read::Dump<'_>
 pub fn guatiao::value::read::Dump<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -6551,6 +7257,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::list::List> for gu
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::list::List>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::list::List> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::list::List>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::list::List
+pub fn guatiao::value::types::list::List::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::list::List
+pub fn guatiao::value::types::list::List::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 impl<'a> core::convert::TryFrom<&'a guatiao::value::value::Value> for &'a guatiao::value::types::list::List
 pub type &'a guatiao::value::types::list::List::Error = guatiao::value::convert::MapError
 pub fn &'a guatiao::value::types::list::List::try_from(&'a guatiao::value::value::Value) -> core::result::Result<&'a guatiao::value::types::list::List, guatiao::value::convert::MapError>
@@ -6640,6 +7350,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::map::Map> for guat
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::map::Map>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::map::Map> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::map::Map>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::map::Map
+pub fn guatiao::value::types::map::Map::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::map::Map
+pub fn guatiao::value::types::map::Map::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 impl<'a> core::convert::TryFrom<&'a guatiao::value::value::Value> for &'a guatiao::value::types::map::Map
 pub type &'a guatiao::value::types::map::Map::Error = guatiao::value::convert::MapError
 pub fn &'a guatiao::value::types::map::Map::try_from(&'a guatiao::value::value::Value) -> core::result::Result<&'a guatiao::value::types::map::Map, guatiao::value::convert::MapError>
@@ -6742,6 +7456,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::number::Number> fo
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::number::Number>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::number::Number> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::number::Number>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::value::Secret<T>(_)
 impl<T> guatiao::value::secret::Secret<T>
 pub fn guatiao::value::secret::Secret<T>::expose(&self) -> &T
@@ -6768,6 +7486,10 @@ pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Val
 impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for guatiao::value::secret::Secret<T>
 pub fn guatiao::value::secret::Secret<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::secret::Secret<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 impl<T> core::convert::From<T> for guatiao::value::secret::Secret<T>
 pub fn guatiao::value::secret::Secret<T>::from(T) -> guatiao::value::secret::Secret<T>
 impl<T> core::fmt::Debug for guatiao::value::secret::Secret<T>
@@ -6843,6 +7565,10 @@ pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> 
 impl guatiao::value::convert::ToValue for guatiao::value::span::Span
 pub fn guatiao::value::span::Span::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::span::Span::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 #[repr(transparent)] pub struct guatiao::value::Status(_)
 impl guatiao::value::status::Status
 pub const guatiao::value::status::Status::GUATIAO_ERR_ALLOC: guatiao::value::status::Status
@@ -6992,6 +7718,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::text::Text> for gu
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::text::Text>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::text::Text> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::text::Text>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::value::Time
 impl guatiao::Time
 pub fn guatiao::Time::hour(&self) -> u8
@@ -7044,6 +7774,10 @@ pub fn guatiao::Time::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'
 impl guatiao::value::convert::ToValue for guatiao::Time
 pub fn guatiao::Time::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Time::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::Time
+pub fn guatiao::Time::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::Time
+pub fn guatiao::Time::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::value::Timestamp
 impl guatiao::Timestamp
 pub fn guatiao::Timestamp::from_unix(i64, u32) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
@@ -7099,6 +7833,10 @@ pub fn guatiao::Timestamp::to_key(&self) -> core::result::Result<alloc::borrow::
 impl guatiao::value::convert::ToValue for guatiao::Timestamp
 pub fn guatiao::Timestamp::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Timestamp::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::Timestamp
+pub fn guatiao::Timestamp::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 #[repr(C)] pub struct guatiao::value::Value
 impl guatiao::value::value::Value
 pub fn guatiao::value::value::Value::absent() -> guatiao::value::value::Value
@@ -7263,6 +8001,12 @@ impl guatiao::value::convert::TryAsRef<guatiao::value::types::text::Text> for gu
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::text::Text>
 impl guatiao::value::convert::TryAsRef<str> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&str>
+impl guatiao::value::visit::FromWalk for guatiao::value::value::Value
+pub fn guatiao::value::value::Value::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::value::Value, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::value::Value
+pub fn guatiao::value::value::Value::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walker for &guatiao::value::value::Value
+pub fn &guatiao::value::value::Value::walk<B: guatiao::value::visit::Build>(self, B) -> core::result::Result<<B as guatiao::value::visit::Build>::Out, guatiao::value::convert::MapError>
 impl<'a> core::convert::TryFrom<&'a guatiao::value::value::Value> for &'a [guatiao::value::types::map::Entry]
 pub type &'a [guatiao::value::types::map::Entry]::Error = guatiao::value::convert::MapError
 pub fn &'a [guatiao::value::types::map::Entry]::try_from(&'a guatiao::value::value::Value) -> core::result::Result<&'a [guatiao::value::types::map::Entry], guatiao::value::convert::MapError>
@@ -7861,6 +8605,8 @@ pub guatiao::MapError::BadValue::expected: alloc::string::String
 pub guatiao::MapError::BadValue::key: alloc::string::String
 pub guatiao::MapError::MissingKey
 pub guatiao::MapError::MissingKey::key: alloc::string::String
+pub guatiao::MapError::Stopped
+pub guatiao::MapError::Stopped::key: alloc::string::String
 pub guatiao::MapError::WrongType
 pub guatiao::MapError::WrongType::expected: guatiao::value::value::Tag
 pub guatiao::MapError::WrongType::found: core::option::Option<guatiao::value::value::Tag>
@@ -7871,7 +8617,9 @@ pub fn guatiao::value::convert::MapError::at_key(self, &str) -> guatiao::value::
 pub fn guatiao::value::convert::MapError::bad_value(impl core::convert::Into<alloc::string::String>) -> guatiao::value::convert::MapError
 pub fn guatiao::value::convert::MapError::key(&self) -> &str
 pub fn guatiao::value::convert::MapError::missing(&str) -> guatiao::value::convert::MapError
+pub fn guatiao::value::convert::MapError::stopped() -> guatiao::value::convert::MapError
 pub fn guatiao::value::convert::MapError::under(self, &str) -> guatiao::value::convert::MapError
+pub fn guatiao::value::convert::MapError::wrong_kind(guatiao::Kinds, guatiao::value::value::Tag) -> guatiao::value::convert::MapError
 pub fn guatiao::value::convert::MapError::wrong_type(guatiao::value::value::Tag, &guatiao::value::value::Value) -> guatiao::value::convert::MapError
 impl core::clone::Clone for guatiao::value::convert::MapError
 pub fn guatiao::value::convert::MapError::clone(&self) -> Self
@@ -8094,6 +8842,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::buffer::Buffer> fo
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::buffer::Buffer>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::buffer::Buffer> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::buffer::Buffer>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::buffer::Buffer
+pub fn guatiao::value::types::buffer::Buffer::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::buffer::Buffer
+pub fn guatiao::value::types::buffer::Buffer::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::Bytes(pub alloc::vec::Vec<u8>)
 impl core::clone::Clone for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::clone(&self) -> Self
@@ -8130,6 +8882,10 @@ pub fn guatiao::value::convert::Bytes::from_value(&guatiao::value::value::Value)
 impl guatiao::value::convert::ToValue for guatiao::value::convert::Bytes
 pub fn guatiao::value::convert::Bytes::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::convert::Bytes::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::value::convert::Bytes
+pub fn guatiao::value::convert::Bytes::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::convert::Bytes
+pub fn guatiao::value::convert::Bytes::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::Date
 impl guatiao::Date
 pub fn guatiao::Date::checked_add(self, guatiao::value::span::Span) -> core::option::Option<guatiao::Date>
@@ -8181,6 +8937,10 @@ pub fn guatiao::Date::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'
 impl guatiao::value::convert::ToValue for guatiao::Date
 pub fn guatiao::Date::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Date::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::Date
+pub fn guatiao::Date::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::Date
+pub fn guatiao::Date::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::DateTime
 impl guatiao::DateTime
 pub fn guatiao::DateTime::checked_add(self, guatiao::value::span::Span) -> core::option::Option<guatiao::DateTime>
@@ -8231,6 +8991,10 @@ pub fn guatiao::DateTime::to_key(&self) -> core::result::Result<alloc::borrow::C
 impl guatiao::value::convert::ToValue for guatiao::DateTime
 pub fn guatiao::DateTime::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::DateTime::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::DateTime
+pub fn guatiao::DateTime::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::DateTime
+pub fn guatiao::DateTime::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 #[repr(C)] pub struct guatiao::Entry
 impl guatiao::value::types::map::Entry
 pub fn guatiao::value::types::map::Entry::into_parts(self) -> (guatiao::value::types::text::Text, guatiao::value::value::Value)
@@ -8340,6 +9104,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::list::List> for gu
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::list::List>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::list::List> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::list::List>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::list::List
+pub fn guatiao::value::types::list::List::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::list::List
+pub fn guatiao::value::types::list::List::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 impl<'a> core::convert::TryFrom<&'a guatiao::value::value::Value> for &'a guatiao::value::types::list::List
 pub type &'a guatiao::value::types::list::List::Error = guatiao::value::convert::MapError
 pub fn &'a guatiao::value::types::list::List::try_from(&'a guatiao::value::value::Value) -> core::result::Result<&'a guatiao::value::types::list::List, guatiao::value::convert::MapError>
@@ -8429,6 +9197,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::map::Map> for guat
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::map::Map>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::map::Map> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::map::Map>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::map::Map
+pub fn guatiao::value::types::map::Map::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::map::Map
+pub fn guatiao::value::types::map::Map::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 impl<'a> core::convert::TryFrom<&'a guatiao::value::value::Value> for &'a guatiao::value::types::map::Map
 pub type &'a guatiao::value::types::map::Map::Error = guatiao::value::convert::MapError
 pub fn &'a guatiao::value::types::map::Map::try_from(&'a guatiao::value::value::Value) -> core::result::Result<&'a guatiao::value::types::map::Map, guatiao::value::convert::MapError>
@@ -8564,6 +9336,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::number::Number> fo
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::number::Number>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::number::Number> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::number::Number>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::Provenance<'a>
 impl<'a> guatiao::value::merge::Provenance<'a>
 pub fn guatiao::value::merge::Provenance<'a>::leaves(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&[alloc::string::String], &'a str)>
@@ -8604,6 +9380,10 @@ pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Val
 impl<T: guatiao::value::convert::ToValue> guatiao::value::convert::ToValue for guatiao::value::secret::Secret<T>
 pub fn guatiao::value::secret::Secret<T>::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::secret::Secret<T>::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 impl<T> core::convert::From<T> for guatiao::value::secret::Secret<T>
 pub fn guatiao::value::secret::Secret<T>::from(T) -> guatiao::value::secret::Secret<T>
 impl<T> core::fmt::Debug for guatiao::value::secret::Secret<T>
@@ -8679,6 +9459,10 @@ pub fn guatiao::value::span::Span::from_value(&guatiao::value::value::Value) -> 
 impl guatiao::value::convert::ToValue for guatiao::value::span::Span
 pub fn guatiao::value::span::Span::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::value::span::Span::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 #[repr(transparent)] pub struct guatiao::Status(_)
 impl guatiao::value::status::Status
 pub const guatiao::value::status::Status::GUATIAO_ERR_ALLOC: guatiao::value::status::Status
@@ -8828,6 +9612,10 @@ impl guatiao::value::convert::TryAsMut<guatiao::value::types::text::Text> for gu
 pub fn guatiao::value::value::Value::try_as_mut(&mut self) -> core::option::Option<&mut guatiao::value::types::text::Text>
 impl guatiao::value::convert::TryAsRef<guatiao::value::types::text::Text> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::text::Text>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::Time
 impl guatiao::Time
 pub fn guatiao::Time::hour(&self) -> u8
@@ -8880,6 +9668,10 @@ pub fn guatiao::Time::to_key(&self) -> core::result::Result<alloc::borrow::Cow<'
 impl guatiao::value::convert::ToValue for guatiao::Time
 pub fn guatiao::Time::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Time::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::Time
+pub fn guatiao::Time::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::Time
+pub fn guatiao::Time::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 pub struct guatiao::Timestamp
 impl guatiao::Timestamp
 pub fn guatiao::Timestamp::from_unix(i64, u32) -> core::result::Result<guatiao::Timestamp, guatiao::value::error::ValueError>
@@ -8935,6 +9727,10 @@ pub fn guatiao::Timestamp::to_key(&self) -> core::result::Result<alloc::borrow::
 impl guatiao::value::convert::ToValue for guatiao::Timestamp
 pub fn guatiao::Timestamp::to_value(&self) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
 pub fn guatiao::Timestamp::to_value_in(&self, guatiao::value::alloc::Alloc) -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
+impl guatiao::value::visit::FromWalk for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::Timestamp
+pub fn guatiao::Timestamp::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
 #[repr(C)] pub struct guatiao::Value
 impl guatiao::value::value::Value
 pub fn guatiao::value::value::Value::absent() -> guatiao::value::value::Value
@@ -9099,6 +9895,12 @@ impl guatiao::value::convert::TryAsRef<guatiao::value::types::text::Text> for gu
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::text::Text>
 impl guatiao::value::convert::TryAsRef<str> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&str>
+impl guatiao::value::visit::FromWalk for guatiao::value::value::Value
+pub fn guatiao::value::value::Value::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::value::Value, guatiao::value::convert::MapError>
+impl guatiao::value::visit::Walk for guatiao::value::value::Value
+pub fn guatiao::value::value::Value::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walker for &guatiao::value::value::Value
+pub fn &guatiao::value::value::Value::walk<B: guatiao::value::visit::Build>(self, B) -> core::result::Result<<B as guatiao::value::visit::Build>::Out, guatiao::value::convert::MapError>
 impl<'a> core::convert::TryFrom<&'a guatiao::value::value::Value> for &'a [guatiao::value::types::map::Entry]
 pub type &'a [guatiao::value::types::map::Entry]::Error = guatiao::value::convert::MapError
 pub fn &'a [guatiao::value::types::map::Entry]::try_from(&'a guatiao::value::value::Value) -> core::result::Result<&'a [guatiao::value::types::map::Entry], guatiao::value::convert::MapError>
@@ -9380,6 +10182,172 @@ pub fn core::option::Option<T>::from_value(&guatiao::value::value::Value) -> cor
 impl<T: guatiao::value::convert::FromValue> guatiao::value::convert::FromValue for guatiao::value::secret::Secret<T>
 pub const guatiao::value::secret::Secret<T>::KINDS: guatiao::Kinds
 pub fn guatiao::value::secret::Secret<T>::from_value(&guatiao::value::value::Value) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
+pub trait guatiao::FromWalk: core::marker::Sized
+pub fn guatiao::FromWalk::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for ()
+pub fn ()::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<(), guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for alloc::boxed::Box<str>
+pub fn alloc::boxed::Box<str>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::boxed::Box<str>, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for alloc::rc::Rc<str>
+pub fn alloc::rc::Rc<str>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::rc::Rc<str>, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for alloc::string::String
+pub fn alloc::string::String::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::string::String, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for alloc::sync::Arc<str>
+pub fn alloc::sync::Arc<str>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::sync::Arc<str>, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for bool
+pub fn bool::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<bool, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for char
+pub fn char::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<char, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::net::ip_addr::IpAddr, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::net::ip_addr::Ipv4Addr, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::net::ip_addr::Ipv6Addr, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::net::socket_addr::SocketAddr, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::net::socket_addr::SocketAddrV4, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::net::socket_addr::SocketAddrV6, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroI128
+pub fn core::num::nonzero::NonZeroI128::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroI128, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroI16
+pub fn core::num::nonzero::NonZeroI16::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroI16, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroI32
+pub fn core::num::nonzero::NonZeroI32::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroI32, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroI64
+pub fn core::num::nonzero::NonZeroI64::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroI64, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroI8
+pub fn core::num::nonzero::NonZeroI8::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroI8, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroIsize
+pub fn core::num::nonzero::NonZeroIsize::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroIsize, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroU128
+pub fn core::num::nonzero::NonZeroU128::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroU128, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroU16
+pub fn core::num::nonzero::NonZeroU16::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroU16, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroU32
+pub fn core::num::nonzero::NonZeroU32::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroU32, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroU64
+pub fn core::num::nonzero::NonZeroU64::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroU64, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroU8
+pub fn core::num::nonzero::NonZeroU8::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroU8, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::num::nonzero::NonZeroUsize
+pub fn core::num::nonzero::NonZeroUsize::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::num::nonzero::NonZeroUsize, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for core::time::Duration
+pub fn core::time::Duration::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::time::Duration, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for f32
+pub fn f32::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<f32, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for f64
+pub fn f64::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<f64, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::Date
+pub fn guatiao::Date::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Date, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::DateTime
+pub fn guatiao::DateTime::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::DateTime, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::Time
+pub fn guatiao::Time::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Time, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::Timestamp
+pub fn guatiao::Timestamp::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::Timestamp, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::convert::Bytes
+pub fn guatiao::value::convert::Bytes::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::convert::Bytes, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::span::Span, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::buffer::Buffer
+pub fn guatiao::value::types::buffer::Buffer::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::buffer::Buffer, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::list::List
+pub fn guatiao::value::types::list::List::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::list::List, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::map::Map
+pub fn guatiao::value::types::map::Map::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::map::Map, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::number::Number, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::types::text::Text, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for guatiao::value::value::Value
+pub fn guatiao::value::value::Value::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::value::Value, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for i128
+pub fn i128::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<i128, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for i16
+pub fn i16::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<i16, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for i32
+pub fn i32::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<i32, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for i64
+pub fn i64::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<i64, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for i8
+pub fn i8::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<i8, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for isize
+pub fn isize::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<isize, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for std::path::PathBuf
+pub fn std::path::PathBuf::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<std::path::PathBuf, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for std::time::SystemTime
+pub fn std::time::SystemTime::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<std::time::SystemTime, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for u128
+pub fn u128::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<u128, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for u16
+pub fn u16::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<u16, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for u32
+pub fn u32::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<u32, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for u64
+pub fn u64::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<u64, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for u8
+pub fn u8::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<u8, guatiao::value::convert::MapError>
+impl guatiao::value::visit::FromWalk for usize
+pub fn usize::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<usize, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk, G: guatiao::value::visit::FromWalk, H: guatiao::value::visit::FromWalk, I: guatiao::value::visit::FromWalk, J: guatiao::value::visit::FromWalk, K: guatiao::value::visit::FromWalk, L: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F, G, H, I, J, K, L)
+pub fn (A, B, C, D, E, F, G, H, I, J, K, L)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk, G: guatiao::value::visit::FromWalk, H: guatiao::value::visit::FromWalk, I: guatiao::value::visit::FromWalk, J: guatiao::value::visit::FromWalk, K: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F, G, H, I, J, K)
+pub fn (A, B, C, D, E, F, G, H, I, J, K)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk, G: guatiao::value::visit::FromWalk, H: guatiao::value::visit::FromWalk, I: guatiao::value::visit::FromWalk, J: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F, G, H, I, J)
+pub fn (A, B, C, D, E, F, G, H, I, J)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk, G: guatiao::value::visit::FromWalk, H: guatiao::value::visit::FromWalk, I: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F, G, H, I)
+pub fn (A, B, C, D, E, F, G, H, I)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk, G: guatiao::value::visit::FromWalk, H: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F, G, H)
+pub fn (A, B, C, D, E, F, G, H)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk, G: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F, G)
+pub fn (A, B, C, D, E, F, G)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk, F: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E, F)
+pub fn (A, B, C, D, E, F)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk, E: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D, E)
+pub fn (A, B, C, D, E)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk, D: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C, D)
+pub fn (A, B, C, D)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk, C: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B, C)
+pub fn (A, B, C)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk, B: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A, B)
+pub fn (A, B)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<A: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for (A)
+pub fn (A)::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<K: guatiao::value::convert::MapKey + core::cmp::Eq + core::hash::Hash, T: guatiao::value::visit::FromWalk, S: core::hash::BuildHasher + core::default::Default> guatiao::value::visit::FromWalk for std::collections::hash::map::HashMap<K, T, S>
+pub fn std::collections::hash::map::HashMap<K, T, S>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<std::collections::hash::map::HashMap<K, T, S>, guatiao::value::convert::MapError>
+impl<K: guatiao::value::convert::MapKey + core::cmp::Ord, T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::collections::btree::map::BTreeMap<K, T>
+pub fn alloc::collections::btree::map::BTreeMap<K, T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::collections::btree::map::BTreeMap<K, T>, guatiao::value::convert::MapError>
+impl<T: alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::value::visit::FromWalk for alloc::borrow::Cow<'_, T> where <T as alloc::borrow::ToOwned>::Owned: guatiao::value::visit::FromWalk
+pub fn alloc::borrow::Cow<'_, T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<Self, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk + core::cmp::Eq + core::hash::Hash, S: core::hash::BuildHasher + core::default::Default> guatiao::value::visit::FromWalk for std::collections::hash::set::HashSet<T, S>
+pub fn std::collections::hash::set::HashSet<T, S>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<std::collections::hash::set::HashSet<T, S>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk + core::cmp::Ord> guatiao::value::visit::FromWalk for alloc::collections::btree::set::BTreeSet<T>
+pub fn alloc::collections::btree::set::BTreeSet<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::collections::btree::set::BTreeSet<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk, const N: usize> guatiao::value::visit::FromWalk for [T; N]
+pub fn [T; N]::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<[T; N], guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::boxed::Box<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::boxed::Box<[T]>
+pub fn alloc::boxed::Box<[T]>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::boxed::Box<[T]>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::collections::vec_deque::VecDeque<T>
+pub fn alloc::collections::vec_deque::VecDeque<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::collections::vec_deque::VecDeque<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::rc::Rc<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::rc::Rc<[T]>
+pub fn alloc::rc::Rc<[T]>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::rc::Rc<[T]>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::sync::Arc<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::sync::Arc<[T]>
+pub fn alloc::sync::Arc<[T]>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::sync::Arc<[T]>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for alloc::vec::Vec<T>
+pub fn alloc::vec::Vec<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<alloc::vec::Vec<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for core::option::Option<T>
+pub fn core::option::Option<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<core::option::Option<T>, guatiao::value::convert::MapError>
+impl<T: guatiao::value::visit::FromWalk> guatiao::value::visit::FromWalk for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::from_walk<W: guatiao::value::visit::Walker>(W) -> core::result::Result<guatiao::value::secret::Secret<T>, guatiao::value::convert::MapError>
 pub trait guatiao::Schema
 pub fn guatiao::Schema::kind(guatiao::value::alloc::Alloc) -> guatiao::schema::build::KindBuilder
 pub fn guatiao::Schema::schema() -> core::result::Result<guatiao::value::value::Value, guatiao::value::error::ValueError>
@@ -9979,3 +10947,167 @@ impl guatiao::value::convert::TryAsRef<guatiao::value::types::text::Text> for gu
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&guatiao::value::types::text::Text>
 impl guatiao::value::convert::TryAsRef<str> for guatiao::value::value::Value
 pub fn guatiao::value::value::Value::try_as_ref(&self) -> core::option::Option<&str>
+pub trait guatiao::Walk
+pub fn guatiao::Walk::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for ()
+pub fn ()::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for alloc::string::String
+pub fn alloc::string::String::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for bool
+pub fn bool::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for char
+pub fn char::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::net::ip_addr::IpAddr
+pub fn core::net::ip_addr::IpAddr::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::net::ip_addr::Ipv4Addr
+pub fn core::net::ip_addr::Ipv4Addr::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::net::ip_addr::Ipv6Addr
+pub fn core::net::ip_addr::Ipv6Addr::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::net::socket_addr::SocketAddr
+pub fn core::net::socket_addr::SocketAddr::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::net::socket_addr::SocketAddrV4
+pub fn core::net::socket_addr::SocketAddrV4::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::net::socket_addr::SocketAddrV6
+pub fn core::net::socket_addr::SocketAddrV6::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroI128
+pub fn core::num::nonzero::NonZeroI128::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroI16
+pub fn core::num::nonzero::NonZeroI16::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroI32
+pub fn core::num::nonzero::NonZeroI32::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroI64
+pub fn core::num::nonzero::NonZeroI64::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroI8
+pub fn core::num::nonzero::NonZeroI8::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroIsize
+pub fn core::num::nonzero::NonZeroIsize::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroU128
+pub fn core::num::nonzero::NonZeroU128::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroU16
+pub fn core::num::nonzero::NonZeroU16::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroU32
+pub fn core::num::nonzero::NonZeroU32::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroU64
+pub fn core::num::nonzero::NonZeroU64::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroU8
+pub fn core::num::nonzero::NonZeroU8::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::num::nonzero::NonZeroUsize
+pub fn core::num::nonzero::NonZeroUsize::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for core::time::Duration
+pub fn core::time::Duration::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for f32
+pub fn f32::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for f64
+pub fn f64::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::Date
+pub fn guatiao::Date::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::DateTime
+pub fn guatiao::DateTime::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::Time
+pub fn guatiao::Time::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::Timestamp
+pub fn guatiao::Timestamp::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::convert::Bytes
+pub fn guatiao::value::convert::Bytes::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::span::Span
+pub fn guatiao::value::span::Span::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::types::buffer::Buffer
+pub fn guatiao::value::types::buffer::Buffer::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::types::list::List
+pub fn guatiao::value::types::list::List::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::types::map::Map
+pub fn guatiao::value::types::map::Map::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::types::number::Number
+pub fn guatiao::value::types::number::Number::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::types::text::Text
+pub fn guatiao::value::types::text::Text::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::value::Value
+pub fn guatiao::value::value::Value::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for guatiao::value::wire::Encoded<'_>
+pub fn guatiao::value::wire::Encoded<'_>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for i128
+pub fn i128::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for i16
+pub fn i16::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for i32
+pub fn i32::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for i64
+pub fn i64::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for i8
+pub fn i8::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for isize
+pub fn isize::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for std::path::Path
+pub fn std::path::Path::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for std::path::PathBuf
+pub fn std::path::PathBuf::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for std::time::SystemTime
+pub fn std::time::SystemTime::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for str
+pub fn str::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for u128
+pub fn u128::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for u16
+pub fn u16::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for u32
+pub fn u32::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for u64
+pub fn u64::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for u8
+pub fn u8::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl guatiao::value::visit::Walk for usize
+pub fn usize::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk, G: guatiao::value::visit::Walk, H: guatiao::value::visit::Walk, I: guatiao::value::visit::Walk, J: guatiao::value::visit::Walk, K: guatiao::value::visit::Walk, L: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F, G, H, I, J, K, L)
+pub fn (A, B, C, D, E, F, G, H, I, J, K, L)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk, G: guatiao::value::visit::Walk, H: guatiao::value::visit::Walk, I: guatiao::value::visit::Walk, J: guatiao::value::visit::Walk, K: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F, G, H, I, J, K)
+pub fn (A, B, C, D, E, F, G, H, I, J, K)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk, G: guatiao::value::visit::Walk, H: guatiao::value::visit::Walk, I: guatiao::value::visit::Walk, J: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F, G, H, I, J)
+pub fn (A, B, C, D, E, F, G, H, I, J)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk, G: guatiao::value::visit::Walk, H: guatiao::value::visit::Walk, I: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F, G, H, I)
+pub fn (A, B, C, D, E, F, G, H, I)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk, G: guatiao::value::visit::Walk, H: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F, G, H)
+pub fn (A, B, C, D, E, F, G, H)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk, G: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F, G)
+pub fn (A, B, C, D, E, F, G)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk, F: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E, F)
+pub fn (A, B, C, D, E, F)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk, E: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D, E)
+pub fn (A, B, C, D, E)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk, D: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C, D)
+pub fn (A, B, C, D)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk, C: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B, C)
+pub fn (A, B, C)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk, B: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A, B)
+pub fn (A, B)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<A: guatiao::value::visit::Walk> guatiao::value::visit::Walk for (A)
+pub fn (A)::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<K: guatiao::value::convert::MapKey, T: guatiao::value::visit::Walk, S> guatiao::value::visit::Walk for std::collections::hash::map::HashMap<K, T, S>
+pub fn std::collections::hash::map::HashMap<K, T, S>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<K: guatiao::value::convert::MapKey, T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for alloc::collections::btree::map::BTreeMap<K, T>
+pub fn alloc::collections::btree::map::BTreeMap<K, T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk + ?core::marker::Sized> guatiao::value::visit::Walk for &T
+pub fn &T::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk + ?core::marker::Sized> guatiao::value::visit::Walk for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk + ?core::marker::Sized> guatiao::value::visit::Walk for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk + ?core::marker::Sized> guatiao::value::visit::Walk for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk + alloc::borrow::ToOwned + ?core::marker::Sized> guatiao::value::visit::Walk for alloc::borrow::Cow<'_, T>
+pub fn alloc::borrow::Cow<'_, T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk, S> guatiao::value::visit::Walk for std::collections::hash::set::HashSet<T, S>
+pub fn std::collections::hash::set::HashSet<T, S>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk, const N: usize> guatiao::value::visit::Walk for [T; N]
+pub fn [T; N]::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for [T]
+pub fn [T]::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for alloc::collections::btree::set::BTreeSet<T>
+pub fn alloc::collections::btree::set::BTreeSet<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for alloc::collections::vec_deque::VecDeque<T>
+pub fn alloc::collections::vec_deque::VecDeque<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for alloc::vec::Vec<T>
+pub fn alloc::vec::Vec<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for core::option::Option<T>
+pub fn core::option::Option<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>
+impl<T: guatiao::value::visit::Walk> guatiao::value::visit::Walk for guatiao::value::secret::Secret<T>
+pub fn guatiao::value::secret::Secret<T>::walk<V: guatiao::value::visit::Visitor>(&self, V) -> core::result::Result<<V as guatiao::value::visit::Visitor>::Ok, <V as guatiao::value::visit::Visitor>::Error>

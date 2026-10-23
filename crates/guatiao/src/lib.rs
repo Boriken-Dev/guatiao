@@ -220,6 +220,9 @@ pub mod __private {
 }
 
 pub use value::convert::{Bytes, FromValue, Kinds, MapError, ToValue, TryAsMut, TryAsRef};
+// The two traits a type implements to stream, beside the two that build
+// and read a tree; the rest of the vocabulary stays in `value::visit`.
+pub use value::visit::{FromWalk, Walk};
 // The names generated code reaches for, at the root where it names them.
 // Keeping the derive's paths rooted here rather than at `value::` is what
 // lets the module underneath be rearranged without touching a macro every

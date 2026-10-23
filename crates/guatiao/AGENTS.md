@@ -460,6 +460,80 @@ written in pointer widths); `load` there is a compile error. The module
 exports the value, schema, merge and wire C surface, channels included; a
 JavaScript caller builds with `guatiao_alloc_default()`.
 
+## Streaming, with no tree: `value::visit`
+
+A value as events: absent, null, bool, a number as its text, a string,
+bytes, a list, a map of keyed values. A type that **walks** hands them to
+a visitor; a type **built from a walk** pulls them from a walker. The
+wire codec, a tree, and a format bridge (`guatiao-serde`) are each one
+implementation, so a struct goes to bytes or text and back with no
+`Value` built. Shaped like serde's traits, so bridging serde needs no
+buffer either way.
+
+```rust
+// writing
+trait Walk { fn walk<V: Visitor>(&self, v: V) -> Result<V::Ok, V::Error>; }
+trait Visitor: Sized {                       // one method per value, consuming
+    type Ok; type Error: From<ValueError>;
+    type List: ListVisitor<Ok = Self::Ok, Error = Self::Error>;
+    type Map: MapVisitor<Ok = Self::Ok, Error = Self::Error>;
+    fn absent(self); fn null(self); fn bool(self, bool); fn number(self, &str);
+    fn i64(self, i64); fn u64(self, u64); fn f64(self, f64);   // default: Display text
+    fn string(self, &str); fn bytes(self, &[u8]);
+    fn list(self, len: Option<usize>) -> Result<Self::List, _>;  // Some(n): exactly n follow
+    fn map(self, len: Option<usize>) -> Result<Self::Map, _>;
+}
+trait ListVisitor { fn item<W: Walk + ?Sized>(&mut self, &W); fn end(self) -> Result<Ok, _>; }
+trait MapVisitor  { fn entry<W: Walk + ?Sized>(&mut self, key: &str, &W); fn end(self); }
+trait Sink {                                 // the same events, &mut self, own stack: what C's table is
+    type Error: From<ValueError>;
+    fn absent/null/bool/number/string/bytes(&mut self, ..);
+    fn list_begin(&mut self, Option<usize>); fn list_end(&mut self);
+    fn map_begin(&mut self, Option<usize>); fn key(&mut self, &str); fn map_end(&mut self);
+}
+Flat(&mut sink)                              // a Sink as a Visitor: value.walk(Flat(&mut sink))
+TreeSink::new() / new_in(Alloc); sink.into_value() -> Result<Value, ValueError>
+
+// reading
+trait FromWalk: Sized { fn from_walk<W: Walker>(w: W) -> Result<Self, MapError>; }
+trait Walker: Sized { fn walk<B: Build>(self, b: B) -> Result<B::Out, MapError>; }
+trait Build: Sized {                         // every method defaults to refusing with kinds()
+    type Out; fn kinds(&self) -> Kinds;
+    fn absent/null/bool/number/i64/u64/f64/string/bytes(self, ..) -> Result<Out, MapError>;
+    fn list<L: ListWalker>(self, L); fn map<M: MapWalker>(self, M);
+}
+trait ListWalker { fn len_hint(&self) -> Option<usize>;
+                   fn next_seed<S: Seed>(&mut self, S) -> Result<Option<S::Out>, MapError>;
+                   fn next<T: FromWalk>(&mut self) -> Result<Option<T>, MapError>; }
+trait MapWalker  { fn len_hint; fn next_key<R>(&mut self, impl FnOnce(&str) -> R) -> Result<Option<R>, _>;
+                   fn value_seed<S: Seed>(&mut self, S); fn value<T: FromWalk>(&mut self); fn skip_value(&mut self); }
+trait Seed: Sized { type Out; fn read<W: Walker>(self, W) -> Result<Self::Out, MapError>; }  // PhantomData<T: FromWalk> is one
+Replay::{Absent, Null, Bool, Number, I64, U64, F64, String, Bytes, List(L), Map(M)}  // one event handed on; NoWalker fills L/M
+
+// the wire codec on them (value::wire)
+wire::encode_of(&impl Walk, &mut Vec<u8>) -> Result<(), ValueError>   // = encode(&to_value())'s bytes
+wire::to_bytes_of(&impl Walk) -> Result<Vec<u8>, ValueError>
+wire::decode_as::<T: FromWalk>(&[u8]) -> Result<T, WireError>         // Refused { error: MapError }
+Encoder::new(&mut Vec<u8>): Sink;  Decoder::new(&[u8]): &mut Decoder is a Walker
+Encoded(&[u8]): Walk                                                 // bytes walked as read, checked
+```
+
+`Walk` and `FromWalk` (re-exported at the root) are implemented for what
+`ToValue`/`FromValue` cover, writing the same tree's events and refusing
+with the same `MapError`; `Value`, `Map`, `List`, `Text`, `Number`,
+`Buffer` walk themselves, `&Value` is a walker. A walk follows at most
+`MAX_DEPTH` containers (`ValueError::TooDeep`; `WireError::TooDeep` from
+bytes), where the tree codec has no limit. A walker whose input fails
+keeps its error and answers `MapError::Stopped`; `decode_as` reports the
+bytes' error. The encoder refuses a count that differs from the promised
+one (`OutOfRange`), a repeated key (`DuplicateKey`), a number outside the
+grammar, events out of order (`WrongKind`); with no promised count it
+reserves a byte and moves what follows when the count needs more. The
+decoder passes over what a builder leaves unread. `Visitor::f64` means
+the number's `Display` text (`2.0` writes `2`, as `ToValue` stores it);
+`Build::f64` defaults to the shortest text with a fraction (`2.0`), as a
+value read from a format holds it.
+
 ## Errors
 
 ```rust
@@ -468,6 +542,8 @@ ValueError = Alloc(AllocError) | NotANumber | NotUtf8 | WrongKind
            | Unrepresentable                 // no spelling in its text form
            | Unparsed { at: usize, expected: &'static str }  // a grammar refused text
 MapError   = MissingKey | WrongType | BadValue     // carries the path
+           | Stopped                               // a walker's own input failed; it keeps why
+MapError::wrong_kind(expected: Kinds, found: Tag)  // WrongType for one kind, else BadValue
 ```
 
 `MapError` builds its path on the way out: `.under(prefix)` and

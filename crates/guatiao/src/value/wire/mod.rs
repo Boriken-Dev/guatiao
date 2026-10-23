@@ -34,6 +34,9 @@
 #![forbid(unsafe_code)]
 
 pub mod channel;
+mod stream;
+
+pub use stream::{Decoder, Encoded, Encoder, decode_as, encode_of, to_bytes_of};
 
 use alloc::fmt;
 
@@ -122,6 +125,18 @@ pub enum WireError {
         /// Why the schema refused it.
         error: crate::schema::ValidationError,
     },
+    /// A container opened past [`MAX_DEPTH`](crate::MAX_DEPTH), which a
+    /// streaming read follows no deeper than.
+    TooDeep {
+        /// The container's tag byte.
+        at: usize,
+    },
+    /// Well-formed bytes whose value the type read into refuses, as its
+    /// [`FromWalk`](crate::value::visit::FromWalk) impl says.
+    Refused {
+        /// Why, naming the key.
+        error: crate::value::convert::MapError,
+    },
 }
 
 impl fmt::Display for WireError {
@@ -147,6 +162,12 @@ impl fmt::Display for WireError {
                 "channel {channel} announced something that is not a schema"
             ),
             WireError::Invalid { channel, error } => write!(f, "channel {channel}: {error}"),
+            WireError::TooDeep { at } => write!(
+                f,
+                "a container nested deeper than {} at {at}",
+                crate::MAX_DEPTH
+            ),
+            WireError::Refused { error } => write!(f, "{error}"),
         }
     }
 }
@@ -374,10 +395,24 @@ enum Node {
     Map(u64),
 }
 
+#[derive(Debug)]
 struct Reader<'a> {
     bytes: &'a [u8],
     at: usize,
     base: usize,
+}
+
+/// One node's head as a streaming reader sees it: a leaf whole, a
+/// container as its count.
+enum Token<'a> {
+    Absent,
+    Null,
+    Bool(bool),
+    Number(&'a str),
+    String(&'a str),
+    Bytes(&'a [u8]),
+    List(u64),
+    Map(u64),
 }
 
 impl<'a> Reader<'a> {
@@ -486,5 +521,37 @@ impl<'a> Reader<'a> {
             Ok(Tag::GUATIAO_MAP) => return Ok(Node::Map(self.count()?)),
             Err(_) => return Err(WireError::UnknownTag { at, tag }),
         }))
+    }
+
+    /// One node's head, refused as [`node`](Reader::node) refuses it,
+    /// with nothing built.
+    fn token(&mut self) -> Result<Token<'a>, WireError> {
+        let at = self.offset();
+        let tag = self.byte()?;
+        Ok(match Tag::try_from(u32::from(tag)) {
+            Ok(Tag::GUATIAO_ABSENT) => Token::Absent,
+            Ok(Tag::GUATIAO_NULL) => Token::Null,
+            Ok(Tag::GUATIAO_BOOL) => {
+                let at = self.offset();
+                match self.byte()? {
+                    0 => Token::Bool(false),
+                    1 => Token::Bool(true),
+                    byte => return Err(WireError::NotABool { at, byte }),
+                }
+            }
+            Ok(Tag::GUATIAO_NUMBER) => {
+                let body = self.offset();
+                let text = self.text()?;
+                if super::types::number::validate_json_number(text.as_bytes()).is_err() {
+                    return Err(WireError::NotANumber { at: body });
+                }
+                Token::Number(text)
+            }
+            Ok(Tag::GUATIAO_STRING) => Token::String(self.text()?),
+            Ok(Tag::GUATIAO_BYTES) => Token::Bytes(self.slice()?),
+            Ok(Tag::GUATIAO_LIST) => Token::List(self.count()?),
+            Ok(Tag::GUATIAO_MAP) => Token::Map(self.count()?),
+            Err(_) => return Err(WireError::UnknownTag { at, tag }),
+        })
     }
 }

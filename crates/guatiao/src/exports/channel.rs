@@ -362,10 +362,14 @@ fn refuse(event: &mut WireEvent, error: &WireError, alloc: Alloc) -> Status {
         | WireError::NotABool { at, .. }
         | WireError::DuplicateKey { at }
         | WireError::Trailing { at }
-        | WireError::UnknownFrame { at, .. } => {
+        | WireError::UnknownFrame { at, .. }
+        | WireError::TooDeep { at } => {
             event.at = *at;
             (GUATIAO_WIRE_MALFORMED, Status::GUATIAO_ERR_BAD_VALUE)
         }
+        // A receiver builds a tree, which no type refuses; named for
+        // completeness, as what a typed read calls invalid.
+        WireError::Refused { .. } => (GUATIAO_WIRE_INVALID, Status::GUATIAO_ERR_BAD_VALUE),
     };
     event.refusal = refusal;
     event.message =
