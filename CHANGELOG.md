@@ -14,6 +14,27 @@ write now.
 
 ### Added
 
+- **`guatiao-bridge`: what every bridge to a language runtime shares.** A
+  new crate, `#![forbid(unsafe_code)]`, published with the others. A
+  runtime implements `Engine` (start from the host's configuration, open
+  the library a manifest describes, answer calls, close) and states its
+  `ThreadModel`: called from any thread, behind its own lock, or pinned to
+  an engine thread the bridge starts, which queues calls from other
+  threads and runs one the engine makes into itself there and then.
+  `BridgeSource` is the engine as a guatiao `Source`, exported with
+  `guatiao::source!`: manifests read without running code
+  (`ManifestFormat` names the file suffix, the id key and the code a stamp
+  follows), stamps that change with the manifest or the newest code file,
+  refresh, an old build kept open for the instance taken from it.
+  `Opened::Built` is a library whose tables the engine built itself;
+  `Opened::Described` declares providers and the slots they implement, and
+  with the `dynamic-kinds` feature their tables are built from the kinds'
+  descriptions (`Kinds`, from `<crate>.kinds.json`), every slot a `Call`
+  into the engine with owned arguments, lent ones written back, and
+  objects both ways. `Limits` (operations, memory, time, depth) come from
+  the configuration and `BridgeError` maps every refusal to a status.
+  `Convert` is an engine's values both ways, and `conformance::round_trip`
+  checks one against the shared wire vectors.
 - **A source written in Rust is a file any host adds.**
   `guatiao::source!(serves = "...", make = start)` exports a type
   implementing `Source` as a source file's `guatiao_source`, declaring

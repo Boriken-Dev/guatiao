@@ -1,0 +1,305 @@
+pub mod guatiao_bridge
+pub mod guatiao_bridge::conformance
+#[non_exhaustive] pub enum guatiao_bridge::conformance::Outcome
+pub guatiao_bridge::conformance::Outcome::Changed(guatiao::value::value::Value)
+pub guatiao_bridge::conformance::Outcome::Refused(alloc::string::String)
+pub guatiao_bridge::conformance::Outcome::Same
+impl core::fmt::Debug for guatiao_bridge::conformance::Outcome
+pub fn guatiao_bridge::conformance::Outcome::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn guatiao_bridge::conformance::round_trip<C: guatiao_bridge::Convert>(&C) -> alloc::vec::Vec<(alloc::string::String, guatiao_bridge::conformance::Outcome)>
+pub fn guatiao_bridge::conformance::values() -> alloc::vec::Vec<(alloc::string::String, guatiao::value::value::Value)>
+pub mod guatiao_bridge::manifest
+#[non_exhaustive] pub enum guatiao_bridge::manifest::Found
+pub guatiao_bridge::manifest::Found::Broken
+pub guatiao_bridge::manifest::Found::Broken::path: std::path::PathBuf
+pub guatiao_bridge::manifest::Found::Broken::stamp: alloc::string::String
+pub guatiao_bridge::manifest::Found::Broken::why: alloc::string::String
+pub guatiao_bridge::manifest::Found::Library(guatiao_bridge::manifest::Manifest)
+impl guatiao_bridge::manifest::Found
+pub fn guatiao_bridge::manifest::Found::id(&self) -> alloc::string::String
+pub fn guatiao_bridge::manifest::Found::stamp(&self) -> &str
+impl core::clone::Clone for guatiao_bridge::manifest::Found
+pub fn guatiao_bridge::manifest::Found::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_bridge::manifest::Found
+pub fn guatiao_bridge::manifest::Found::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_bridge::manifest::Manifest
+impl guatiao_bridge::manifest::Manifest
+pub fn guatiao_bridge::manifest::Manifest::id(&self) -> &str
+pub fn guatiao_bridge::manifest::Manifest::kinds(&self) -> &[alloc::string::String]
+pub fn guatiao_bridge::manifest::Manifest::path(&self) -> &std::path::Path
+pub fn guatiao_bridge::manifest::Manifest::paths(&self) -> &[alloc::string::String]
+pub fn guatiao_bridge::manifest::Manifest::stamp(&self) -> &str
+pub fn guatiao_bridge::manifest::Manifest::table(&self) -> &guatiao::value::types::map::Map
+pub fn guatiao_bridge::manifest::Manifest::version(&self) -> core::option::Option<&str>
+impl core::clone::Clone for guatiao_bridge::manifest::Manifest
+pub fn guatiao_bridge::manifest::Manifest::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_bridge::manifest::Manifest
+pub fn guatiao_bridge::manifest::Manifest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_bridge::manifest::ManifestFormat
+pub guatiao_bridge::manifest::ManifestFormat::code_extensions: &'static [&'static str]
+pub guatiao_bridge::manifest::ManifestFormat::id_key: &'static str
+pub guatiao_bridge::manifest::ManifestFormat::skip_dirs: &'static [&'static str]
+pub guatiao_bridge::manifest::ManifestFormat::suffix: &'static str
+impl core::clone::Clone for guatiao_bridge::manifest::ManifestFormat
+pub fn guatiao_bridge::manifest::ManifestFormat::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_bridge::manifest::ManifestFormat
+impl core::cmp::PartialEq for guatiao_bridge::manifest::ManifestFormat
+pub fn guatiao_bridge::manifest::ManifestFormat::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_bridge::manifest::ManifestFormat
+pub fn guatiao_bridge::manifest::ManifestFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao_bridge::manifest::ManifestFormat
+impl core::marker::StructuralPartialEq for guatiao_bridge::manifest::ManifestFormat
+pub fn guatiao_bridge::manifest::find(&guatiao_bridge::manifest::ManifestFormat, &[std::path::PathBuf], &[std::path::PathBuf]) -> alloc::vec::Vec<guatiao_bridge::manifest::Found>
+pub fn guatiao_bridge::manifest::read(&guatiao_bridge::manifest::ManifestFormat, &std::path::Path) -> guatiao_bridge::manifest::Found
+#[non_exhaustive] pub enum guatiao_bridge::BridgeError
+pub guatiao_bridge::BridgeError::Config
+pub guatiao_bridge::BridgeError::Config::key: alloc::string::String
+pub guatiao_bridge::BridgeError::Config::why: alloc::string::String
+pub guatiao_bridge::BridgeError::Engine(alloc::string::String)
+pub guatiao_bridge::BridgeError::EngineGone
+pub guatiao_bridge::BridgeError::Limit
+pub guatiao_bridge::BridgeError::Limit::at: u64
+pub guatiao_bridge::BridgeError::Limit::limit: guatiao_bridge::Limit
+pub guatiao_bridge::BridgeError::Manifest
+pub guatiao_bridge::BridgeError::Manifest::path: std::path::PathBuf
+pub guatiao_bridge::BridgeError::Manifest::why: alloc::string::String
+pub guatiao_bridge::BridgeError::NotListed
+pub guatiao_bridge::BridgeError::NotListed::id: alloc::string::String
+pub guatiao_bridge::BridgeError::Table(alloc::string::String)
+pub guatiao_bridge::BridgeError::Unavailable(alloc::string::String)
+pub guatiao_bridge::BridgeError::UnknownKind(alloc::string::String)
+impl guatiao_bridge::BridgeError
+pub fn guatiao_bridge::BridgeError::config(&str, impl core::convert::Into<alloc::string::String>) -> guatiao_bridge::BridgeError
+pub fn guatiao_bridge::BridgeError::engine(impl core::convert::Into<alloc::string::String>) -> guatiao_bridge::BridgeError
+pub fn guatiao_bridge::BridgeError::status(&self) -> guatiao::value::status::Status
+impl core::clone::Clone for guatiao_bridge::BridgeError
+pub fn guatiao_bridge::BridgeError::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_bridge::BridgeError
+impl core::cmp::PartialEq for guatiao_bridge::BridgeError
+pub fn guatiao_bridge::BridgeError::eq(&self, &Self) -> bool
+impl core::convert::From<guatiao_bridge::BridgeError> for guatiao::library::kind::ProviderError
+pub fn guatiao::library::kind::ProviderError::from(guatiao_bridge::BridgeError) -> guatiao::library::kind::ProviderError
+impl core::error::Error for guatiao_bridge::BridgeError
+impl core::fmt::Debug for guatiao_bridge::BridgeError
+pub fn guatiao_bridge::BridgeError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for guatiao_bridge::BridgeError
+pub fn guatiao_bridge::BridgeError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao_bridge::BridgeError
+#[non_exhaustive] pub enum guatiao_bridge::CallArg
+pub guatiao_bridge::CallArg::Buffer(alloc::vec::Vec<u8>)
+pub guatiao_bridge::CallArg::Lent(guatiao::value::value::Value)
+pub guatiao_bridge::CallArg::LentObject(guatiao::library::kind::runtime::LentHandle)
+pub guatiao_bridge::CallArg::Object(guatiao::library::kind::runtime::RawObject)
+pub guatiao_bridge::CallArg::Value(guatiao::value::value::Value)
+impl core::fmt::Debug for guatiao_bridge::CallArg
+pub fn guatiao_bridge::CallArg::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum guatiao_bridge::Found
+pub guatiao_bridge::Found::Broken
+pub guatiao_bridge::Found::Broken::path: std::path::PathBuf
+pub guatiao_bridge::Found::Broken::stamp: alloc::string::String
+pub guatiao_bridge::Found::Broken::why: alloc::string::String
+pub guatiao_bridge::Found::Library(guatiao_bridge::manifest::Manifest)
+impl guatiao_bridge::manifest::Found
+pub fn guatiao_bridge::manifest::Found::id(&self) -> alloc::string::String
+pub fn guatiao_bridge::manifest::Found::stamp(&self) -> &str
+impl core::clone::Clone for guatiao_bridge::manifest::Found
+pub fn guatiao_bridge::manifest::Found::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_bridge::manifest::Found
+pub fn guatiao_bridge::manifest::Found::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum guatiao_bridge::Limit
+pub guatiao_bridge::Limit::Depth
+pub guatiao_bridge::Limit::Memory
+pub guatiao_bridge::Limit::Operations
+pub guatiao_bridge::Limit::Time
+impl guatiao_bridge::Limit
+pub fn guatiao_bridge::Limit::name(self) -> &'static str
+impl core::clone::Clone for guatiao_bridge::Limit
+pub fn guatiao_bridge::Limit::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_bridge::Limit
+impl core::cmp::PartialEq for guatiao_bridge::Limit
+pub fn guatiao_bridge::Limit::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_bridge::Limit
+pub fn guatiao_bridge::Limit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao_bridge::Limit
+pub fn guatiao_bridge::Limit::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao_bridge::Limit
+impl core::marker::StructuralPartialEq for guatiao_bridge::Limit
+#[non_exhaustive] pub enum guatiao_bridge::Opened<L>
+pub guatiao_bridge::Opened::Built
+pub guatiao_bridge::Opened::Built::descriptor: guatiao::library::raw::entry::LocalLibrary<'static>
+pub guatiao_bridge::Opened::Built::library: L
+pub guatiao_bridge::Opened::Described
+pub guatiao_bridge::Opened::Described::library: L
+pub guatiao_bridge::Opened::Described::providers: alloc::vec::Vec<guatiao_bridge::Provided>
+impl<L> core::fmt::Debug for guatiao_bridge::Opened<L>
+pub fn guatiao_bridge::Opened<L>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum guatiao_bridge::Reply
+pub guatiao_bridge::Reply::Handed(guatiao::library::kind::runtime::RawObject)
+pub guatiao_bridge::Reply::Nothing
+pub guatiao_bridge::Reply::Object
+pub guatiao_bridge::Reply::Object::id: u64
+pub guatiao_bridge::Reply::Object::kind: alloc::string::String
+pub guatiao_bridge::Reply::Value(guatiao::value::value::Value)
+impl core::fmt::Debug for guatiao_bridge::Reply
+pub fn guatiao_bridge::Reply::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum guatiao_bridge::Target
+pub guatiao_bridge::Target::Object(u64)
+pub guatiao_bridge::Target::Provider(alloc::string::String)
+impl core::clone::Clone for guatiao_bridge::Target
+pub fn guatiao_bridge::Target::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_bridge::Target
+impl core::cmp::PartialEq for guatiao_bridge::Target
+pub fn guatiao_bridge::Target::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_bridge::Target
+pub fn guatiao_bridge::Target::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for guatiao_bridge::Target
+#[non_exhaustive] pub enum guatiao_bridge::ThreadModel
+pub guatiao_bridge::ThreadModel::Any
+pub guatiao_bridge::ThreadModel::Locked
+pub guatiao_bridge::ThreadModel::Pinned
+impl core::clone::Clone for guatiao_bridge::ThreadModel
+pub fn guatiao_bridge::ThreadModel::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_bridge::ThreadModel
+impl core::cmp::PartialEq for guatiao_bridge::ThreadModel
+pub fn guatiao_bridge::ThreadModel::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_bridge::ThreadModel
+pub fn guatiao_bridge::ThreadModel::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao_bridge::ThreadModel
+impl core::marker::StructuralPartialEq for guatiao_bridge::ThreadModel
+pub struct guatiao_bridge::BridgeSource<E: guatiao_bridge::Engine>
+impl<E: guatiao_bridge::Engine> guatiao_bridge::BridgeSource<E>
+pub fn guatiao_bridge::BridgeSource<E>::config(&self) -> &guatiao_bridge::Config
+pub fn guatiao_bridge::BridgeSource<E>::kinds(&self) -> &guatiao_bridge::Kinds
+pub fn guatiao_bridge::BridgeSource<E>::pinned(&guatiao::value::types::map::Map, &str) -> core::result::Result<guatiao_bridge::BridgeSource<E>, guatiao_bridge::BridgeError>
+pub fn guatiao_bridge::BridgeSource<E>::run<T: core::marker::Send + 'static>(&self, impl core::ops::function::FnOnce(&E) -> T + core::marker::Send + 'static) -> core::result::Result<T, guatiao_bridge::BridgeError>
+pub fn guatiao_bridge::BridgeSource<E>::shared(&guatiao::value::types::map::Map) -> core::result::Result<guatiao_bridge::BridgeSource<E>, guatiao_bridge::BridgeError> where E: core::marker::Send + core::marker::Sync
+pub fn guatiao_bridge::BridgeSource<E>::threads(&self) -> guatiao_bridge::ThreadModel
+impl<E: guatiao_bridge::Engine> core::fmt::Debug for guatiao_bridge::BridgeSource<E>
+pub fn guatiao_bridge::BridgeSource<E>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<E: guatiao_bridge::Engine> guatiao::library::serving::Source for guatiao_bridge::BridgeSource<E>
+pub fn guatiao_bridge::BridgeSource<E>::close(&self, &str, &str)
+pub fn guatiao_bridge::BridgeSource<E>::list(&self, guatiao::library::raw::host::Host) -> core::result::Result<alloc::vec::Vec<guatiao::library::serving::Candidate>, guatiao::library::kind::ProviderError>
+pub fn guatiao_bridge::BridgeSource<E>::open(&self, guatiao::library::raw::host::Host, &str) -> core::result::Result<guatiao::library::raw::entry::LocalLibrary<'static>, guatiao::library::kind::ProviderError>
+pub struct guatiao_bridge::Budget
+impl guatiao_bridge::Budget
+pub fn guatiao_bridge::Budget::spend(&mut self, u64) -> core::result::Result<(), guatiao_bridge::BridgeError>
+pub fn guatiao_bridge::Budget::spent(&self) -> u64
+impl core::clone::Clone for guatiao_bridge::Budget
+pub fn guatiao_bridge::Budget::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_bridge::Budget
+pub fn guatiao_bridge::Budget::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_bridge::Call
+pub guatiao_bridge::Call::args: alloc::vec::Vec<guatiao_bridge::CallArg>
+impl guatiao_bridge::Call
+pub fn guatiao_bridge::Call::kind(&self) -> &alloc::sync::Arc<guatiao::library::kind::description::KindDescription>
+pub fn guatiao_bridge::Call::method(&self) -> &str
+pub fn guatiao_bridge::Call::new(guatiao_bridge::Target, alloc::sync::Arc<guatiao::library::kind::description::KindDescription>, usize, alloc::vec::Vec<guatiao_bridge::CallArg>) -> guatiao_bridge::Call
+pub fn guatiao_bridge::Call::slot(&self) -> usize
+pub fn guatiao_bridge::Call::slot_description(&self) -> &guatiao::library::kind::description::SlotDescription
+pub fn guatiao_bridge::Call::target(&self) -> &guatiao_bridge::Target
+impl core::fmt::Debug for guatiao_bridge::Call
+pub fn guatiao_bridge::Call::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_bridge::Config
+impl guatiao_bridge::Config
+pub fn guatiao_bridge::Config::dirs(&self) -> &[std::path::PathBuf]
+pub fn guatiao_bridge::Config::from_map(&guatiao::value::types::map::Map) -> core::result::Result<guatiao_bridge::Config, guatiao_bridge::BridgeError>
+pub fn guatiao_bridge::Config::kinds(&self) -> &[std::path::PathBuf]
+pub fn guatiao_bridge::Config::limits(&self) -> &guatiao_bridge::Limits
+pub fn guatiao_bridge::Config::manifests(&self) -> &[std::path::PathBuf]
+pub fn guatiao_bridge::Config::map(&self) -> &guatiao::value::types::map::Map
+impl core::clone::Clone for guatiao_bridge::Config
+pub fn guatiao_bridge::Config::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_bridge::Config
+pub fn guatiao_bridge::Config::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_bridge::Kinds
+impl guatiao_bridge::Kinds
+pub fn guatiao_bridge::Kinds::add(&mut self, guatiao::library::kind::description::KindDescription) -> core::result::Result<(), guatiao_bridge::BridgeError>
+pub fn guatiao_bridge::Kinds::add_json(&mut self, &str) -> core::result::Result<usize, guatiao_bridge::BridgeError>
+pub fn guatiao_bridge::Kinds::add_value(&mut self, &guatiao::value::value::Value) -> core::result::Result<usize, guatiao_bridge::BridgeError>
+pub fn guatiao_bridge::Kinds::get(&self, &str) -> core::option::Option<&alloc::sync::Arc<guatiao::library::kind::description::KindDescription>>
+pub fn guatiao_bridge::Kinds::load(&mut self, &std::path::Path) -> core::result::Result<usize, guatiao_bridge::BridgeError>
+pub fn guatiao_bridge::Kinds::names(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+pub fn guatiao_bridge::Kinds::new() -> guatiao_bridge::Kinds
+impl core::clone::Clone for guatiao_bridge::Kinds
+pub fn guatiao_bridge::Kinds::clone(&self) -> Self
+impl core::default::Default for guatiao_bridge::Kinds
+pub fn guatiao_bridge::Kinds::default() -> Self
+impl core::fmt::Debug for guatiao_bridge::Kinds
+pub fn guatiao_bridge::Kinds::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_bridge::Limits
+pub guatiao_bridge::Limits::depth: core::option::Option<u64>
+pub guatiao_bridge::Limits::memory: core::option::Option<u64>
+pub guatiao_bridge::Limits::operations: core::option::Option<u64>
+pub guatiao_bridge::Limits::time: core::option::Option<core::time::Duration>
+impl guatiao_bridge::Limits
+pub const guatiao_bridge::Limits::KEY: &'static str
+pub fn guatiao_bridge::Limits::budget(&self) -> guatiao_bridge::Budget
+pub fn guatiao_bridge::Limits::from_config(&guatiao::value::types::map::Map) -> core::result::Result<guatiao_bridge::Limits, guatiao_bridge::BridgeError>
+impl core::clone::Clone for guatiao_bridge::Limits
+pub fn guatiao_bridge::Limits::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_bridge::Limits
+impl core::cmp::PartialEq for guatiao_bridge::Limits
+pub fn guatiao_bridge::Limits::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao_bridge::Limits
+pub fn guatiao_bridge::Limits::default() -> Self
+impl core::fmt::Debug for guatiao_bridge::Limits
+pub fn guatiao_bridge::Limits::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao_bridge::Limits
+impl core::marker::StructuralPartialEq for guatiao_bridge::Limits
+pub struct guatiao_bridge::Manifest
+impl guatiao_bridge::manifest::Manifest
+pub fn guatiao_bridge::manifest::Manifest::id(&self) -> &str
+pub fn guatiao_bridge::manifest::Manifest::kinds(&self) -> &[alloc::string::String]
+pub fn guatiao_bridge::manifest::Manifest::path(&self) -> &std::path::Path
+pub fn guatiao_bridge::manifest::Manifest::paths(&self) -> &[alloc::string::String]
+pub fn guatiao_bridge::manifest::Manifest::stamp(&self) -> &str
+pub fn guatiao_bridge::manifest::Manifest::table(&self) -> &guatiao::value::types::map::Map
+pub fn guatiao_bridge::manifest::Manifest::version(&self) -> core::option::Option<&str>
+impl core::clone::Clone for guatiao_bridge::manifest::Manifest
+pub fn guatiao_bridge::manifest::Manifest::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_bridge::manifest::Manifest
+pub fn guatiao_bridge::manifest::Manifest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct guatiao_bridge::ManifestFormat
+pub guatiao_bridge::ManifestFormat::code_extensions: &'static [&'static str]
+pub guatiao_bridge::ManifestFormat::id_key: &'static str
+pub guatiao_bridge::ManifestFormat::skip_dirs: &'static [&'static str]
+pub guatiao_bridge::ManifestFormat::suffix: &'static str
+impl core::clone::Clone for guatiao_bridge::manifest::ManifestFormat
+pub fn guatiao_bridge::manifest::ManifestFormat::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_bridge::manifest::ManifestFormat
+impl core::cmp::PartialEq for guatiao_bridge::manifest::ManifestFormat
+pub fn guatiao_bridge::manifest::ManifestFormat::eq(&self, &Self) -> bool
+impl core::fmt::Debug for guatiao_bridge::manifest::ManifestFormat
+pub fn guatiao_bridge::manifest::ManifestFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for guatiao_bridge::manifest::ManifestFormat
+impl core::marker::StructuralPartialEq for guatiao_bridge::manifest::ManifestFormat
+pub struct guatiao_bridge::Provided
+impl guatiao_bridge::Provided
+pub fn guatiao_bridge::Provided::declared_meta(&self) -> core::option::Option<&guatiao::value::types::map::Map>
+pub fn guatiao_bridge::Provided::display_name(&self) -> &str
+pub fn guatiao_bridge::Provided::id(&self) -> &str
+pub fn guatiao_bridge::Provided::kinds(&self) -> &[(alloc::string::String, alloc::vec::Vec<alloc::string::String>)]
+pub fn guatiao_bridge::Provided::meta(self, guatiao::value::types::map::Map) -> guatiao_bridge::Provided
+pub fn guatiao_bridge::Provided::name(self, &str) -> guatiao_bridge::Provided
+pub fn guatiao_bridge::Provided::new(&str) -> guatiao_bridge::Provided
+pub fn guatiao_bridge::Provided::serves<S: core::convert::AsRef<str>>(self, &str, impl core::iter::traits::collect::IntoIterator<Item = S>) -> guatiao_bridge::Provided
+impl core::clone::Clone for guatiao_bridge::Provided
+pub fn guatiao_bridge::Provided::clone(&self) -> Self
+impl core::fmt::Debug for guatiao_bridge::Provided
+pub fn guatiao_bridge::Provided::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub trait guatiao_bridge::Convert
+pub type guatiao_bridge::Convert::Error: core::fmt::Display
+pub type guatiao_bridge::Convert::Native<'a> where Self: 'a
+pub fn guatiao_bridge::Convert::to_native<'a>(&'a self, &guatiao::value::value::Value) -> core::result::Result<Self::Native, Self::Error>
+pub fn guatiao_bridge::Convert::to_value<'a>(&'a self, Self::Native) -> core::result::Result<guatiao::value::value::Value, Self::Error>
+pub trait guatiao_bridge::Engine: 'static
+pub type guatiao_bridge::Engine::Library: core::clone::Clone + core::marker::Send + core::marker::Sync + 'static
+pub const guatiao_bridge::Engine::MANIFESTS: guatiao_bridge::manifest::ManifestFormat
+pub const guatiao_bridge::Engine::THREADS: guatiao_bridge::ThreadModel
+pub fn guatiao_bridge::Engine::call(&self, &Self::Library, &mut guatiao_bridge::Call) -> core::result::Result<guatiao_bridge::Reply, guatiao::library::kind::ProviderError>
+pub fn guatiao_bridge::Engine::close(&self, Self::Library)
+pub fn guatiao_bridge::Engine::open(&self, &guatiao_bridge::manifest::Manifest, &str) -> core::result::Result<guatiao_bridge::Opened<Self::Library>, guatiao_bridge::BridgeError>
+pub fn guatiao_bridge::Engine::release(&self, &Self::Library, u64)
+pub fn guatiao_bridge::Engine::start(&guatiao_bridge::Config) -> core::result::Result<Self, guatiao_bridge::BridgeError> where Self: core::marker::Sized
+pub fn guatiao_bridge::Engine::version_of(&self, &guatiao_bridge::manifest::Manifest) -> core::result::Result<alloc::string::String, guatiao_bridge::BridgeError>
+pub fn guatiao_bridge::text_list(&guatiao::value::types::map::Map, &str) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, guatiao_bridge::BridgeError>
