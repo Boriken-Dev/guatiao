@@ -156,6 +156,8 @@ files:
         name: guatiao_value_from_walker
       c:@F@guatiao_value_list:
         name: guatiao_value_list
+      c:@F@guatiao_value_make_local:
+        name: guatiao_value_make_local
       c:@F@guatiao_value_map:
         name: guatiao_value_map
       c:@F@guatiao_value_null:

@@ -147,10 +147,14 @@ final class Silent extends Provider {}
 /// and a loaded one can stay mapped until the process ends.
 final String? cGreeterDir = _buildCGreeter();
 
+/// The same greeter built to ignore the carrier: its answers are built in
+/// its own allocator, as an older or careless library's are.
+final String? carelessCGreeterDir = _buildCGreeter(ignoresCarrier: true);
+
 /// Compiles with `CC` where it is set, as the other suites do: the default
 /// compiler builds for the machine, which is not this process's
 /// architecture under emulation. Else the first of clang and cc found.
-String? _buildCGreeter() {
+String? _buildCGreeter({bool ignoresCarrier = false}) {
   final named = Platform.environment['CC'] ?? '';
   final compilers = named.isNotEmpty
       ? [named]
@@ -162,6 +166,7 @@ String? _buildCGreeter() {
         '-shared',
         '-std=c11',
         if (!Platform.isWindows) '-fPIC',
+        if (ignoresCarrier) '-DGREETER_IGNORES_CARRIER',
         '-I',
         repoPath(['crates', 'guatiao', 'include']),
         '-I',
@@ -306,6 +311,27 @@ void main() {
       exerciseAll(greeter, 'hello');
       expect(greeter.shout('ana'), 'HELLO, ANA');
     });
+
+    test(
+      'written in C, ignoring the carrier: the answer outlives the unload',
+      () {
+        final dir = carelessCGreeterDir;
+        if (dir == null) {
+          markTestSkipped('no C compiler');
+          return;
+        }
+        final own = Registry('dart-kinds-careless', '0.1');
+        addTearDown(own.close);
+        expect(own.scanDir(dir, rules: 'kind=greeter')['failed'], isEmpty);
+        final answer = own.bind('c_greeter', Greeter.kind).greet('hal');
+        // The C greeter has no `unload` function: nothing it handed out is
+        // alive, which the caller states.
+        own.unload('c_greeter_library', unchecked: true);
+        expect(own.libraries(), isEmpty);
+        expect(answer.toDart(), {'greeting': 'hello from C, hal'});
+        answer.close();
+      },
+    );
 
     test('a table of another kind is refused before anything runs', () {
       expect(

@@ -1947,6 +1947,27 @@ class GuatiaoBindings {
         int Function(ffi.Pointer<guatiao_alloc>, ffi.Pointer<guatiao_value>)
       >();
 
+  int guatiao_value_make_local(
+    ffi.Pointer<guatiao_value> v,
+    ffi.Pointer<guatiao_alloc> alloc,
+  ) {
+    return _guatiao_value_make_local(v, alloc);
+  }
+
+  late final _guatiao_value_make_localPtr =
+      _lookup<
+        ffi.NativeFunction<
+          guatiao_status Function(
+            ffi.Pointer<guatiao_value>,
+            ffi.Pointer<guatiao_alloc>,
+          )
+        >
+      >('guatiao_value_make_local');
+  late final _guatiao_value_make_local = _guatiao_value_make_localPtr
+      .asFunction<
+        int Function(ffi.Pointer<guatiao_value>, ffi.Pointer<guatiao_alloc>)
+      >();
+
   int guatiao_value_map(
     ffi.Pointer<guatiao_alloc> alloc,
     ffi.Pointer<guatiao_value> out,

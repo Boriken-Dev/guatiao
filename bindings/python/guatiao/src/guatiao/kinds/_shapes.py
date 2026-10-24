@@ -20,7 +20,7 @@ from collections.abc import Mapping
 from typing import Any, Callable
 
 from .. import _abi, _lib
-from ..errors import BadValue, NullArgument
+from ..errors import BadValue, NullArgument, raise_for_status
 from ..value import List, Map, Ref, Value, _make_bytes, _make_str
 
 _P = ctypes.POINTER
@@ -144,6 +144,19 @@ def _owned_tree(value: Any, tag: "int | None", alloc: Any) -> "_abi.Value":
 
 def _free_node(node: "_abi.Value") -> None:
     _lib.core().guatiao_value_free(ctypes.byref(node))
+
+
+def _make_local(node: "_abi.Value") -> None:
+    """Moves a tree a slot answered into this binding's allocator, so it
+    outlives the library: a slot that ignored the carrier built it in its
+    own. A library older than the export is left as it answered."""
+    lib = _lib.core()
+    if "guatiao_value_make_local" in lib.symbols_missing():
+        return
+    status = lib.guatiao_value_make_local(ctypes.byref(node), ctypes.byref(binding_alloc()))
+    if status != _abi.Status.OK:
+        _free_node(node)
+        raise_for_status(status, "moving the answer into this binding's allocator")
 
 
 def _recorded_alloc(node: "_abi.Value") -> Any:
@@ -406,6 +419,7 @@ class _Tree(Shape):
 
     def answer(self, out: Any, scope: Scope) -> Any:
         node = out if self.tag is None else self._node_over(out)
+        _make_local(node)
         return Value(_raw=node, alloc=binding_alloc())
 
     # -- the callee ---------------------------------------------------------
