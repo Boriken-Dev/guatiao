@@ -124,6 +124,32 @@ func TestAnswersASingleTableAndATablePerKind(t *testing.T) {
 	}
 }
 
+func TestAProvidersMetaIsACopyCarryingItsForm(t *testing.T) {
+	reg := scanned(t)
+	meta, ok, err := reg.ProviderMeta("derived_greeter_shouter")
+	if err != nil || !ok {
+		t.Fatalf("%v %v", ok, err)
+	}
+	var form struct {
+		Sections []struct {
+			ID string `guatiao:"id"`
+		} `guatiao:"sections"`
+	}
+	if err := meta.Key("form").Decode(&form); err != nil {
+		t.Fatal(err)
+	}
+	meta.Close()
+	if len(form.Sections) != 2 || form.Sections[0].ID != "words" || form.Sections[1].ID != "volume" {
+		t.Fatalf("%+v", form)
+	}
+	if _, ok, err := reg.ProviderMeta("derived_greeter_hello"); ok || err != nil {
+		t.Fatalf("a provider declaring nothing answered meta: %v %v", ok, err)
+	}
+	if _, _, err := reg.ProviderMeta("nobody"); !errors.Is(err, guatiao.ErrNotFound) {
+		t.Fatalf("%v", err)
+	}
+}
+
 func TestBuildsAnInstanceAndLendsItsSchema(t *testing.T) {
 	reg := scanned(t)
 	schema, ok, err := reg.ProviderConfig("derived_greeter_shouter")

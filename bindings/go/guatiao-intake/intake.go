@@ -79,6 +79,11 @@ func owned(dst **guatiao.Value) func(uint32, *guatiao.Value) error {
 	}
 }
 
+// ProviderFormKey is the key of a provider's meta holding its form
+// document: read it with guatiao's Registry.ProviderMeta, then Check it
+// against the provider's ProviderConfig.
+const ProviderFormKey = "form"
+
 // Check is nil when form fits schema, else the reason as a map: `kind`
 // (`malformed`, `unknown_field`, `duplicate_section`,
 // `condition_refused` or `cyclic_condition`), `at`, whichever of `path`,
