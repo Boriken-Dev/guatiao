@@ -564,6 +564,17 @@ func ValueFree(node unsafe.Pointer) uint32 {
 func ValueClone(alloc, src, out unsafe.Pointer) uint32 {
 	return uint32(C.gt_core_guatiao_value_clone(a(alloc), n(src), n(out)))
 }
+
+// ValueMakeLocal moves the tree at node where it stands into alloc, so it
+// outlives the library whose allocator built it. A core older than the
+// export leaves the tree as it was built.
+func ValueMakeLocal(node, alloc unsafe.Pointer) uint32 {
+	if C.gt_core.guatiao_value_make_local == nil {
+		return OK
+	}
+	return uint32(C.gt_core_guatiao_value_make_local(n(node), a(alloc)))
+}
+
 func ValueNull(out unsafe.Pointer) uint32   { return uint32(C.gt_core_guatiao_value_null(n(out))) }
 func ValueAbsent(out unsafe.Pointer) uint32 { return uint32(C.gt_core_guatiao_value_absent(n(out))) }
 func ValueBool(b bool, out unsafe.Pointer) uint32 {
