@@ -63,7 +63,8 @@ write now.
   build answers its instances. Limits stop runaway code (operations and
   time by QuickJS's interrupt, which a `try` cannot catch, depth by stack
   size, memory; the promise reactions a call queued included, and the
-  lists and buffers a script makes) and the host carries on. 64-bit integers cross as
+  size of what a script hands back) and the host carries on. 64-bit
+  integers cross as
   `bigint`, a decimal a double would change as an `ExactNumber`. See
   `docs/js.md` for what differs from Node.
 - **`guatiao-lua`: libraries written in Lua, served to any host.** A
