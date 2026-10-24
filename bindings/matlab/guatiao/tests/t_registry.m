@@ -7,6 +7,7 @@ function cases = t_registry()
 % collect and unload, and sources.
   cases = {
     'scans by rule and lists the providers', @scans
+    'says a scan of a file names no directory, and a bad rule is the rule', @scan_refusals
     'answers the documented fields for the best provider', @best
     'answers a single table, and a table per kind', @tables
     'builds an instance, and gives a copy of its configuration schema', @instances
@@ -25,6 +26,20 @@ function reg = scanned()
   gt_env('examples');
   reg = guatiao.Registry('m-tests', '0.1');
   reg.scan_dir(gt_env('dir'), 'kind=greeter');
+end
+
+function scan_refusals()
+  gt_env('examples');
+  reg = guatiao.Registry('m-tests', '0.1');
+  file = [tempname() '.txt'];
+  fid = fopen(file, 'w');
+  fclose(fid);
+  e = expect_error(@() reg.scan_dir(file, 'kind=greeter'), 'guatiao:NotFound');
+  expect_true(~isempty(strfind(e.message, 'no directory')), e.message);
+  e = expect_error(@() reg.scan_dir(gt_env('dir'), 'not a rule'), 'guatiao:BadValue');
+  expect_true(~isempty(strfind(e.message, 'a rule that is not one')), e.message);
+  delete(file);
+  reg.close();
 end
 
 function out = ids(list)
