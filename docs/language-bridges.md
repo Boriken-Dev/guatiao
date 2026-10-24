@@ -7,7 +7,8 @@ whose libraries are that language's modules, listed without running them,
 opened when they appear or change, and closed once nothing holds them.
 `guatiao-py` is one for Python. `guatiao-bridge` is what every such bridge
 shares, so a bridge for a new language is its runtime and its value
-conversion, and nothing else.
+conversion, and nothing else. The Rhai source ([rhai.md](rhai.md)) is a
+worked example of a pinned engine with limits.
 
 ## The pieces
 
