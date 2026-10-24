@@ -357,9 +357,9 @@ its remote. Object kinds a slot names are declared before it.
 | `Lent{Vector{UInt8}}` | `guatiao_bytes_mut` | a `Vector{UInt8}`, written in place | a copy, written back when the method returns |
 | `Bool`, `Int8`..`UInt64`, `Int`, `UInt`, `Float32`, `Float64` | the C scalar (`UInt` is `size_t`, `Int` `intptr_t`) | a number that converts | the scalar |
 | `ValueRef`, `MapRef` | `const guatiao_value *`, `const guatiao_map *` | a Value, a view or plain data (`nothing` is a null value pointer) | a read-only view, valid for the call |
-| `Lent{ValueRef}`, `Lent{MapRef}`, `Lent{ListRef}` | the same without `const`, "Lent for the call" | a Value or a view, changed in place | a writable view, valid for the call; what is added is built in the allocator the tree records |
+| `Lent{ValueRef}`, `Lent{MapRef}`, `Lent{ListRef}` | the same without `const`, "Lent for the call" | a Value or a view, changed in place | a writable view, valid for the call; what is added is built in the allocator the tree records, and what a callee built elsewhere is moved there when the call returns |
 | `Taken{ValueRef}`, `Taken{MapRef}`, `Taken{ListRef}` | the same, handed over | a Value (moved: it holds absent afterwards), a view (copied) or plain data | a `Value` the method owns (and closes, or its finalizer frees it) |
-| answer `ValueRef`, `MapRef`, `ListRef` | `guatiao_value/map/list *out` | a `Value` | any Julia data or a `Value`, built in the allocator the carrier names (a Value elsewhere is copied there and closed) |
+| answer `ValueRef`, `MapRef`, `ListRef` | `guatiao_value/map/list *out` | a `Value`, moved into this binding's allocator on arrival when the slot built it in its own | any Julia data or a `Value`, built in the allocator the carrier names (a Value elsewhere is copied there and closed) |
 | answer `String` | `guatiao_string *out` | a `String` | a `String` |
 | answer scalar | `T *out` | the scalar | the scalar |
 | answer `Nothing` | no answer | `nothing` | ignored |
