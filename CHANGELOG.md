@@ -20,8 +20,9 @@ write now.
   allocating nothing when it is already there. Call it while the library
   is loaded, on a tree answer or a lent tree; a map or list moves inside
   a value tagged `GUATIAO_MAP` or `GUATIAO_LIST` holding it. The Python
-  and Dart kind callers call it on every tree answer, so one from such a
-  slot no longer crashes when freed after the unload.
+  and Dart kind callers call it on every tree answer, and on a lent tree
+  once the call returns (into the allocator the tree records), so neither
+  crashes when freed after the unload.
 - **`guatiao-lua`: libraries written in Lua, served to any host.** A
   source file (`crates/guatiao-lua`, built from this repository, not
   published) with Lua 5.4 built in (`lua55` and `luau` as features): a
