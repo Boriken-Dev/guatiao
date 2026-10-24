@@ -31,6 +31,7 @@ program test_intake
   call resolves_a_flat_key()
   call flat_keys_flatten_and_unflatten()
   call a_view_is_gone_once_its_source_is_closed()
+  call a_providers_form_from_its_meta_fits_its_schema()
   call finish('intake')
 
 contains
@@ -40,6 +41,29 @@ contains
     type(guatiao_value) :: v
     call guatiao_parse(text, GUATIAO_FORMAT_JSON, v)
   end function
+
+  subroutine a_providers_form_from_its_meta_fits_its_schema()
+    type(guatiao_registry) :: reg
+    type(guatiao_value) :: meta, form, schema, why, got
+    logical :: shown
+    integer :: st
+    reg = guatiao_open_registry('fortran-intake', '0.1')
+    call reg%scan_dir(library_dir(), rules=['kind=greeter'])
+    call reg%provider_meta('derived_greeter_shouter', meta)
+    form = meta%key(GT_INTAKE_PROVIDER_FORM_KEY)
+    schema = reg%provider_config('derived_greeter_shouter')
+    call guatiao_intake_check(schema, form, why, st)
+    call check_status(st, GUATIAO_OK, 'the provider''s form fits its schema')
+    got = form%at('fields', 'prefix', 'placeholder')
+    call check_text(got%string_or(''), 'hey', 'a placeholder')
+    got = form%at('fields', 'marks', 'unit')
+    call check_text(got%string_or(''), 'marks', 'a unit')
+    shown = .true.
+    call guatiao_intake_is_visible(schema, form, 'marks', json('{"exclaim": false}'), shown)
+    call check(.not. shown, 'hidden while exclaim is false')
+    call guatiao_intake_is_visible(schema, form, 'marks', json('{"exclaim": true}'), shown)
+    call check(shown, 'shown once it is true')
+  end subroutine
 
   subroutine checks_a_form()
     type(guatiao_value) :: schema, why, kind

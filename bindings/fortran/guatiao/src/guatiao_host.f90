@@ -50,6 +50,7 @@ module guatiao_host
     procedure :: provider_table => reg_provider_table
     procedure :: provider_ctx => reg_provider_ctx
     procedure :: provider_config => reg_provider_config
+    procedure :: provider_meta => reg_provider_meta
     procedure :: create => reg_create
     procedure :: retire => reg_retire
     procedure :: unload => reg_unload
@@ -398,6 +399,9 @@ contains
     case (5)
       st = gt_registry_best(p, gt_view(text), self%alloc, out)
       if (st /= GUATIAO_OK) msg = 'guatiao: no provider of "' // text // '" can run here'
+    case (6)
+      st = gt_registry_provider_meta(p, gt_view(text), self%alloc, out)
+      if (st == GUATIAO_ERR_NOT_FOUND) msg = 'guatiao: no provider "' // text // '"'
     end select
   end subroutine
 
@@ -615,6 +619,22 @@ contains
       schema = guatiao_absent()
     end if
   end function
+
+  !> What the provider under `key` declared beyond its schema (its legal
+  !> notices, or its form under GT_INTAKE_PROVIDER_FORM_KEY): a copy the
+  !> caller owns, outliving the library; absent when it declares nothing.
+  !> GUATIAO_ERR_NOT_FOUND for an unknown key.
+  recursive subroutine reg_provider_meta(self, key, answer, stat, errmsg)
+    class(guatiao_registry), intent(in) :: self
+    character(*), intent(in) :: key
+    type(guatiao_value), intent(inout) :: answer
+    integer, intent(out), optional :: stat
+    character(:), allocatable, intent(inout), optional :: errmsg
+    integer :: st
+    character(:), allocatable :: msg
+    call by_text(self, 6, key, answer, st, msg)
+    call gt_report(st, msg, stat, errmsg)
+  end subroutine
 
   !> Builds an instance of the provider under `key` from `config`, which
   !> is checked against the provider's schema first.
