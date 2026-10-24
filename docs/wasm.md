@@ -126,3 +126,75 @@ writes a `guatiao_wire_event`, laid out in pointer widths as `guatiao.h`
 declares it, saying what the frame was or why it was refused. The grammar,
 the refusals and each language's spelling are on the
 [encodings page](encodings.md#values-on-the-wire).
+
+## Providers compiled to WebAssembly
+
+The other way round: a **native host** calling providers that run as
+WebAssembly. The `guatiao-wasm` source (`crates/guatiao-wasm`, built from
+this repository, not published) is a file any host adds, in Rust, C,
+Python or any language with a binding, the way it adds any
+[source](language-bridges.md): its libraries are WebAssembly modules,
+each run by wasmtime in a sandbox of its own. A module sees its own
+memory and what a call hands it, and nothing else: no files, no network,
+no environment, no host memory. The same `.wasm` file serves every
+platform, and a refresh serves a rebuilt one while the old build answers
+the instances taken from it.
+
+```bash
+cargo build --release --manifest-path crates/guatiao-wasm/Cargo.toml
+```
+
+A library is a module and a manifest beside it, `greeters.guatiao-wasm.toml`:
+
+```toml
+module = "greeters"               # greeters.wasm, in this directory
+kinds = ["greeter", "counter"]    # every kind its providers serve
+version = "1.0.0"                 # optional when the module states its own
+```
+
+and the host gives the source where the manifests and the kinds'
+descriptions are, and its limits:
+
+```python
+from guatiao import Registry
+
+reg = Registry("myapp", "1.0")
+reg.add_source_file("libguatiao_wasm.so", {
+    "dirs": ["/opt/myapp/wasm"],
+    "kinds": ["/opt/myapp/greeter_kind.kinds.json"],
+    "limits": {"operations": 10_000_000, "time_ms": 100, "memory": 64 * 1024 * 1024},
+})
+reg.refresh()
+hello = reg.bind("greeters_hello", Greeter)
+```
+
+**Writing one.** In Rust, a `cdylib` built for `wasm32-unknown-unknown`
+with the guest crate, `guatiao-wasm-guest`
+([`examples/wasm_greeter_rust`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/wasm_greeter_rust)):
+each provider is a handler called with the kind and slot named and
+guatiao's own values. In Go 1.24 or later, a reactor built by Go's own
+toolchain (`GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared`) with the
+`guest` package
+([`examples/wasm_greeter_go`](https://github.com/Boriken-Dev/guatiao/tree/main/examples/wasm_greeter_go)).
+Both serve every slot of the example kinds and pass the same host tests.
+
+**Any other language** that emits a core WebAssembly module speaks
+**guatiao ABI 1**: five exports (`guatiao_guest_abi`, `_alloc`, `_declare`,
+`_call`, and optionally `_release`) and five imports from `guatiao`
+(`answer`, `write_back`, `object_call`, `result`, `drop`), every value as
+its [wire encoding](encodings.md#values-on-the-wire) in the module's
+memory. A call is the wire list `[kind, method, arg...]`; its answer a
+wire value, or a status and its words. The whole interface, every refusal
+and its status are in the crate's
+[`AGENTS.md`](https://github.com/Boriken-Dev/guatiao/blob/main/crates/guatiao-wasm/AGENTS.md).
+A module that imports anything else, beyond fifteen WASI preview-1
+functions that grant stdio, a clock and randomness, is refused before it
+runs.
+
+**Limits** are per call, opening included: `operations` (wasmtime's fuel),
+`time_ms` and `memory`. A limit stops the call (`GUATIAO_ERR_INTERNAL`,
+`GUATIAO_ERR_ALLOC` for memory, "stopped at its operations limit
+(10000000)"); so does a trap, named with what the module last said. Either
+way the host carries on, and the library is made afresh for its next
+call. Calls run on the caller's thread, each library behind a lock of its
+own: calls into different libraries run at once.
