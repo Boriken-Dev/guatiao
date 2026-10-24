@@ -278,6 +278,21 @@ Whether a slot can refuse with words is read from the table (a trailing
 pointer in C**: the kind's declaration says which, as the C header's slot
 comment does ("Lent for the call"); declare it as the header says.
 
+**Checked against the description**: a kind with a `<crate>.kinds.json`
+is checked, not compiled, by `guatiao_check_kinds(<test name> HEADER
+<file.hpp> DESCRIPTION <file.kinds.json> [EXPECT <regex>])`, a CMake
+function `find_package(guatiao)` defines (`cmake/GuatiaoKindCheck.cmake`).
+It adds a test failing on any declared kind that is not described, or of
+the other sort (object or not), and any slot missing, undescribed,
+required or optional against its description, or whose signature is not
+the one the description spells: lent `node`/`map_ref`/`list_ref`/`lent<K>`,
+handed over `value`/`map`/`list`/`object<K>`, borrowed
+`view`/`map_view`/`list_view`, and the scalar types as `std::int64_t`,
+`std::size_t` (`usize`), `std::ptrdiff_t` (`isize`), `float`, `double`.
+Namespace qualifiers are ignored. With `EXPECT`, the test passes only when
+the check's output matches. A kind with no description is declared by hand
+alone.
+
 **Calling a table**: `remote<K>` (a provider's table and `ctx`, from
 `K::bind(registry, key)`, `K::bind(instance)`,
 `try_bind_table<K>(table, size, ctx, alloc)`), `object<K>` (an object
