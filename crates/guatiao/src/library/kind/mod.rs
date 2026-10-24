@@ -131,9 +131,10 @@ pub trait Kind: 'static {
 /// answer over the carrier without freeing it: a caller may hold the
 /// answer after the library is unloaded. A slot `#[guatiao::kind]`
 /// generates always does; a Rust caller also copies, on arrival, an
-/// answer some other slot built elsewhere. A caller passes an initialised
-/// out slot: a carrier, or zeroes, which answers in the slot's own
-/// allocator, to be freed while the library is loaded.
+/// answer some other slot built elsewhere, and a C caller does the same
+/// with `guatiao_value_make_local` while the library is loaded. A caller
+/// passes an initialised out slot: a carrier, or zeroes, which answers in
+/// the slot's own allocator, to be freed while the library is loaded.
 ///
 /// **A tree argument by value is a move.** A slot argument that is a
 /// `guatiao_value *`, `guatiao_map *` or `guatiao_list *` without `const`
@@ -145,7 +146,8 @@ pub trait Kind: 'static {
 /// tree for the call only (a Rust `&mut Map`, `&mut List` or `&mut
 /// Value`): read it, change it, grow it, never free it or keep the
 /// pointer. Build what goes into it through the allocator it records; a
-/// Rust caller moves anything built elsewhere there once the call returns.
+/// Rust caller moves anything built elsewhere there once the call returns,
+/// and a C caller calls `guatiao_value_make_local` on it.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KindHeader {

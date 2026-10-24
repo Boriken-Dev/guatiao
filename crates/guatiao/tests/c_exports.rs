@@ -283,6 +283,98 @@ fn a_c_program_builds_and_frees_a_tree_through_the_exports() {
     println!("{}", stdout.trim());
 }
 
+/// A C caller keeps an answer past the unload of a library whose table
+/// ignored the carrier, by moving it home with `guatiao_value_make_local`.
+#[test]
+fn a_c_caller_moves_an_answer_home_before_the_unload() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let include = manifest.join("include");
+    let Some(cc) = find_compiler() else {
+        println!("skipped: no C compiler found. See the test above for why that is a skip.");
+        return;
+    };
+    let Some((dir, dll)) = shared_library() else {
+        println!(
+            "skipped: the guatiao shared library is not beside this test \
+             binary. Run `cargo build -p guatiao --all-features` first."
+        );
+        return;
+    };
+
+    let library = dir.join(if cfg!(windows) {
+        "guatiao_carrier_ignored.dll"
+    } else if cfg!(target_vendor = "apple") {
+        "libguatiao_carrier_ignored.dylib"
+    } else {
+        "libguatiao_carrier_ignored.so"
+    });
+    let mut compile = Command::new(&cc);
+    compile
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror", "-shared"])
+        .arg("-I")
+        .arg(&include)
+        .arg("-o")
+        .arg(&library)
+        .arg(manifest.join("tests/c_consumer/carrier_ignored.c"));
+    if !cfg!(windows) {
+        compile.arg("-fPIC");
+    }
+    let compiled = compile.output().expect("the compiler runs");
+    assert!(
+        compiled.status.success(),
+        "the library did not compile.\nstderr:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+
+    let host = dir.join(if cfg!(windows) {
+        "guatiao_make_local_host.exe"
+    } else {
+        "guatiao_make_local_host"
+    });
+    let mut compile = Command::new(&cc);
+    compile
+        .args(["-std=c11", "-Wall", "-Wextra", "-Werror"])
+        .arg("-I")
+        .arg(&include)
+        .arg("-o")
+        .arg(&host)
+        .arg(manifest.join("tests/c_consumer/make_local_host.c"));
+    if cfg!(windows) {
+        compile.arg(dll.with_extension("dll.lib"));
+    } else {
+        compile
+            .arg(format!("-L{}", dir.display()))
+            .arg("-lguatiao")
+            .arg("-Wl,-rpath,$ORIGIN");
+        if cfg!(target_os = "linux") {
+            compile.arg("-ldl");
+        }
+    }
+    let compiled = compile.output().expect("the compiler runs");
+    assert!(
+        compiled.status.success(),
+        "the host did not compile or link.\nstderr:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+
+    let run = Command::new(&host)
+        .arg(&library)
+        .current_dir(&dir)
+        .output()
+        .expect("the host was just built");
+    let stdout = String::from_utf8_lossy(&run.stdout);
+    assert!(
+        run.status.success(),
+        "the host failed its own checks.\nstdout:\n{stdout}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert!(
+        stdout.contains("all checks passed"),
+        "the host exited 0 without reporting success.\nstdout:\n{stdout}"
+    );
+    println!("{}", stdout.trim());
+}
+
 #[path = "vectors/read.rs"]
 mod vectors;
 
