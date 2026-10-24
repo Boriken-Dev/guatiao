@@ -104,7 +104,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   allocator the slot built it in: one that ignored the carrier built it in
   its own, freed after the unload through code that was gone. It is moved
   into this binding's on arrival (`guatiao_value_make_local`; a library
-  older than that export is left as it answered).
+  older than that export is left as it answered). What a slot grew a lent
+  tree with is moved, once the call returns, into the allocator the tree
+  records.
 
 ## [0.0.0-alpha.1] - 2026-10-19
 
