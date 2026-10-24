@@ -205,6 +205,75 @@ String? bridge() {
   return File(named).existsSync() ? named : null;
 }
 
+/// The report of `greeter_caller_wide` for the provider filed under `key`:
+/// what Rust's proxy got back for each limit, as exact integers.
+Map<Object?, Object?> callWide(
+  Registry reg,
+  DynamicLibrary caller,
+  String key,
+) {
+  final wide = caller
+      .lookupFunction<
+        Uint32 Function(
+          Pointer<guatiao_host_info>,
+          guatiao_str,
+          Pointer<guatiao_value>,
+        ),
+        int Function(
+          Pointer<guatiao_host_info>,
+          guatiao_str,
+          Pointer<guatiao_value>,
+        )
+      >('greeter_caller_wide');
+  final out = calloc<guatiao_value>();
+  final status = using((arena) => wide(reg.host(), strOf(arena, key).ref, out));
+  final limits = Value.adopt(out);
+  addTearDown(limits.close);
+  checkStatus(status);
+  return limits.toDart(numbers: Numbers.bigInt)! as Map<Object?, Object?>;
+}
+
+void expectWideLimits(Map<Object?, Object?> read) {
+  expect(read['i64'], [
+    BigInt.parse('9007199254740993'),
+    BigInt.parse('-9223372036854775808'),
+    BigInt.parse('9223372036854775807'),
+  ]);
+  expect(read['u64'], [
+    BigInt.parse('9007199254740993'),
+    BigInt.parse('9223372036854775808'),
+    BigInt.parse('18446744073709551615'),
+  ]);
+}
+
+// A Dart `int` is a signed 64-bit integer, so every `i64` is one, and a
+// `u64` is carried as its bits: past 2^63 it is negative, and 2^64 - 1 is -1.
+const twoPow53Plus1 = 9007199254740993;
+const int64Min = -9223372036854775808;
+const int64Max = 9223372036854775807;
+final i64Limits = <int>[twoPow53Plus1, int64Min, int64Max];
+// 2^53 + 1, INT64_MAX + 1 and UINT64_MAX, as Dart carries them.
+final u64Limits = <int>[twoPow53Plus1, int64Min, -1];
+final u64Exact = <BigInt>[
+  BigInt.parse('9007199254740993'),
+  BigInt.parse('9223372036854775808'),
+  BigInt.parse('18446744073709551615'),
+];
+
+/// What a `u64` slot carries, as the number it stands for.
+BigInt unsigned(int bits) => BigInt.from(bits).toUnsigned(64);
+
+void crossesExactly(WideRemote wide) {
+  for (final x in i64Limits) {
+    expect(wide.echoI64(x), x);
+  }
+  for (var i = 0; i < u64Limits.length; i++) {
+    final got = wide.echoU64(u64Limits[i]);
+    expect(got, u64Limits[i]);
+    expect(unsigned(got), u64Exact[i]);
+  }
+}
+
 void exerciseAll(GreeterRemote greeter, String greeting) {
   final answer = greeter.greet('ana');
   addTearDown(answer.close);
@@ -362,6 +431,63 @@ void main() {
     });
   });
 
+  group('a Dart host crosses 64-bit integers through a slot', () {
+    late Registry reg;
+    setUp(() {
+      reg = Registry('dart-wide', '0.1')
+        ..scanDir(libraryDir(), rules: 'kind=greeter');
+      addTearDown(reg.close);
+    });
+
+    test('written in Rust, exactly', () {
+      crossesExactly(reg.bind('derived_greeter_hello', Wide.kind));
+    });
+
+    test('written in C, exactly', () {
+      final dir = cGreeterDir;
+      if (dir == null) {
+        markTestSkipped('no C compiler');
+        return;
+      }
+      expect(reg.scanDir(dir, rules: 'kind=greeter')['failed'], isEmpty);
+      crossesExactly(reg.bind('c_greeter', Wide.kind));
+    });
+
+    test('written in Dart, exactly, and Rust calls each of them', () {
+      final library = Library(
+        'dart_wide',
+        '0.1.0',
+        offers: [
+          Offer.single(Echo(), named: 'echo', kinds: [Wide.kind]),
+        ],
+      );
+      addTearDown(library.close);
+      reg.registerLibrary(library);
+      crossesExactly(reg.bind('dart_wide_echo', Wide.kind));
+      final caller = DynamicLibrary.open(
+        '${libraryDir()}/${dllFilename('greeter_caller')}',
+      );
+      for (final key in ['dart_wide_echo', 'derived_greeter_hello']) {
+        expectWideLimits(callWide(reg, caller, key));
+      }
+      final dir = cGreeterDir;
+      if (dir != null) {
+        reg.scanDir(dir, rules: 'kind=greeter');
+        expectWideLimits(callWide(reg, caller, 'c_greeter'));
+      }
+    });
+
+    test('a u64 past INT64_MAX is the negative int holding its bits', () {
+      final wide = reg.bind('derived_greeter_hello', Wide.kind);
+      expect(wide.echoU64(-1), -1);
+      expect(unsigned(wide.echoU64(-1)), BigInt.two.pow(64) - BigInt.one);
+      expect(unsigned(wide.echoU64(int64Min)), BigInt.two.pow(63));
+      expect(unsigned(wide.echoU64(int64Max)), BigInt.two.pow(63) - BigInt.one);
+      // An i64 carries the same bits as a signed number.
+      expect(wide.echoI64(-1), -1);
+    });
+  });
+
   group('a provider written in Dart', () {
     late Registry reg;
     late Library library;
@@ -468,38 +594,7 @@ void main() {
       expect(got['conversation'], containsPair('turns', 2));
       expect(got['conversation'], containsPair('dropped', true));
 
-      final wide = caller
-          .lookupFunction<
-            Uint32 Function(
-              Pointer<guatiao_host_info>,
-              guatiao_str,
-              Pointer<guatiao_value>,
-            ),
-            int Function(
-              Pointer<guatiao_host_info>,
-              guatiao_str,
-              Pointer<guatiao_value>,
-            )
-          >('greeter_caller_wide');
-      final wideOut = calloc<guatiao_value>();
-      final wideStatus = using(
-        (arena) =>
-            wide(reg.host(), strOf(arena, 'dart_tests_echo').ref, wideOut),
-      );
-      final limits = Value.adopt(wideOut);
-      addTearDown(limits.close);
-      checkStatus(wideStatus);
-      final read = (limits.toDart(numbers: Numbers.bigInt)! as Map);
-      expect(read['i64'], [
-        BigInt.parse('9007199254740993'),
-        BigInt.parse('-9223372036854775808'),
-        BigInt.parse('9223372036854775807'),
-      ]);
-      expect(read['u64'], [
-        BigInt.parse('9007199254740993'),
-        BigInt.parse('9223372036854775808'),
-        BigInt.parse('18446744073709551615'),
-      ]);
+      expectWideLimits(callWide(reg, caller, 'dart_tests_echo'));
     });
 
     test('builds an instance per configuration the host checked', () {
