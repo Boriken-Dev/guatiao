@@ -377,6 +377,76 @@ jobs:
           grep -q "py_greeter_hello greets: hello, ana" host.log
           grep -q "py_greeter_shouter configured with" host.log
 
+  wasm-source:
+    name: guatiao-wasm (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    # The WebAssembly source from a Rust host, a C host and a Python host,
+    # over guests written in Rust (wasm32-unknown-unknown) and Go (wasip1,
+    # Go's own toolchain). Its own workspace, as are the Rust guest crate
+    # and example, so their format, lint and tests run here and nowhere
+    # else. A stated skip (no guest toolchain, no compiler) fails the job.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/guatiao-wasm
+            crates/guatiao-wasm/guest
+            examples/wasm_greeter_rust
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Build the guatiao library the C and Python hosts load
+        run: cargo build -p guatiao --features load
+      - name: Format check and clippy (source, Rust guest crate, example)
+        run: |
+          (cd crates/guatiao-wasm && cargo fmt --check && cargo clippy --all-targets -- -D warnings)
+          (cd crates/guatiao-wasm/guest && cargo fmt --check && cargo clippy --all-targets -- -D warnings \
+            && cargo clippy --target wasm32-unknown-unknown -- -D warnings)
+          (cd examples/wasm_greeter_rust && cargo fmt --check \
+            && cargo clippy --release --target wasm32-unknown-unknown -- -D warnings)
+      - name: The Rust guest crate and the Go guest package, natively
+        run: |
+          (cd crates/guatiao-wasm/guest && cargo test)
+          (cd crates/guatiao-wasm/guest-go && test -z "$(gofmt -l .)" && go vet ./... && go test ./...)
+          (cd examples/wasm_greeter_go && test -z "$(gofmt -l .)" && GOOS=wasip1 GOARCH=wasm go vet .)
+      - name: Build the source
+        run: cargo build --manifest-path crates/guatiao-wasm/Cargo.toml
+      - name: Test, from a Rust host and a C host (builds both guests)
+        run: |
+          cargo test --manifest-path crates/guatiao-wasm/Cargo.toml -- --nocapture 2>&1 | tee wasm-test.log
+          test "${PIPESTATUS[0]}" -eq 0
+          ! grep -n "skipped:" wasm-test.log
+        env:
+          GUATIAO_REQUIRE_ALL: "1"
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+      - name: Test, from a Python host
+        run: |
+          pip install -e "bindings/python/guatiao[dev]"
+          python -m pytest bindings/python/guatiao/tests/test_wasm_source.py -rs 2>&1 | tee wasm-py.log
+          test "${PIPESTATUS[0]}" -eq 0
+          ! grep -n "SKIPPED" wasm-py.log
+        env:
+          GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+
   node:
     name: Node bindings (node${{ matrix.node }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
