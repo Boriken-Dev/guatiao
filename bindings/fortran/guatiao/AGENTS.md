@@ -331,8 +331,9 @@ its last copy goes or on `close()`.
 
 **A slot method's Fortran types**: `guatiao_str` is `character(*)`;
 `guatiao_bytes_mut` an `integer(int8)` array over the caller's memory,
-valid for the call; scalars their `iso_c_binding`/`int64` kinds, `bool`
-`logical`; a tree answer a `guatiao_value` holding an empty map in the
+valid for the call; scalars their `iso_c_binding`/`int64` kinds (a
+`uint64` is the `int64` holding its bits: Fortran has no unsigned integer,
+so past 2^63 - 1 it is negative and 2^64 - 1 is -1), `bool` `logical`; a tree answer a `guatiao_value` holding an empty map in the
 carrier's allocator, filled in place (an answer the method replaces is
 copied there); a `guatiao_string` answer `character(:), allocatable`; a
 borrowed tree a read-only `guatiao_value`, a lent one a writable one, both
