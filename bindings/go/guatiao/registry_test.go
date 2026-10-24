@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -291,13 +292,16 @@ func TestServesLibrariesThatComeAndGoFromASource(t *testing.T) {
 }
 
 // mappedDir is a directory for a library this process maps, which stays
-// mapped, so it is not removed after the test: Windows refuses to delete a
-// mapped image.
+// mapped, so on Windows it is not removed after the test: Windows refuses
+// to delete a mapped image.
 func mappedDir(t *testing.T) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", "guatiao-go-test-")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" {
+		t.Cleanup(func() { os.RemoveAll(dir) })
 	}
 	return dir
 }
