@@ -20,18 +20,19 @@ module greeter_kinds
   implicit none
   private
 
-  public :: listener, conversation, greeter, counter
-  public :: listener_remote, conversation_remote, greeter_remote, counter_remote
-  public :: listener_kind, conversation_kind, greeter_kind, counter_kind
-  public :: greeter_serving, counter_serving
-  public :: greeter_bind, greeter_bind_instance, counter_bind
-  public :: GREETER_FLOOR_HASH, COUNTER_FLOOR_HASH, CONVERSATION_FLOOR_HASH, LISTENER_FLOOR_HASH
+  public :: listener, conversation, greeter, counter, wide
+  public :: listener_remote, conversation_remote, greeter_remote, counter_remote, wide_remote
+  public :: listener_kind, conversation_kind, greeter_kind, counter_kind, wide_kind
+  public :: greeter_serving, counter_serving, wide_serving
+  public :: greeter_bind, greeter_bind_instance, counter_bind, wide_bind
+  public :: GREETER_FLOOR_HASH, COUNTER_FLOOR_HASH, CONVERSATION_FLOOR_HASH, LISTENER_FLOOR_HASH, WIDE_FLOOR_HASH
 
   ! The headers' *_FLOOR_HASH, as the uint32 bits an int32 holds.
   integer(c_int32_t), parameter :: GREETER_FLOOR_HASH = -1599110805_c_int32_t       ! 2695856491
   integer(c_int32_t), parameter :: COUNTER_FLOOR_HASH = 1227528937_c_int32_t
   integer(c_int32_t), parameter :: CONVERSATION_FLOOR_HASH = -1525342793_c_int32_t  ! 2769624503
   integer(c_int32_t), parameter :: LISTENER_FLOOR_HASH = 1867921573_c_int32_t
+  integer(c_int32_t), parameter :: WIDE_FLOOR_HASH = -621277612_c_int32_t           ! 3673689684
 
   ! ---- the tables, as greeter_kind.h lays them out ---------------------
 
@@ -48,6 +49,12 @@ module greeter_kinds
   type, bind(c) :: counter_vtable
     type(gt_kind_header) :: header
     type(c_funptr) :: count = c_null_funptr
+  end type
+
+  type, bind(c) :: wide_vtable
+    type(gt_kind_header) :: header
+    type(c_funptr) :: echo_i64 = c_null_funptr
+    type(c_funptr) :: echo_u64 = c_null_funptr
   end type
 
   type, bind(c) :: conversation_vtable
@@ -98,6 +105,16 @@ module greeter_kinds
     procedure(counter_count), deferred :: count
   end type
 
+  !> The wide kind: answers the 64-bit integer it is given. Fortran has no
+  !> unsigned integer, so `echo_u64` carries its `uint64` as the `int64`
+  !> holding the same bits: a value past 2^63 - 1 is negative, and
+  !> 2^64 - 1 is -1.
+  type, abstract, extends(guatiao_impl) :: wide
+  contains
+    procedure(wide_echo), deferred :: echo_i64
+    procedure(wide_echo), deferred :: echo_u64
+  end type
+
   abstract interface
     subroutine listener_heard(self, what, error)
       import :: listener, guatiao_error
@@ -137,6 +154,13 @@ module greeter_kinds
     subroutine counter_count(self, answer, error)
       import :: counter, guatiao_error, int64
       class(counter), intent(inout) :: self
+      integer(int64), intent(out) :: answer
+      type(guatiao_error), allocatable, intent(out) :: error
+    end subroutine
+    subroutine wide_echo(self, x, answer, error)
+      import :: wide, guatiao_error, int64
+      class(wide), intent(inout) :: self
+      integer(int64), intent(in) :: x
       integer(int64), intent(out) :: answer
       type(guatiao_error), allocatable, intent(out) :: error
     end subroutine
@@ -183,9 +207,23 @@ module greeter_kinds
     procedure :: count => counter_remote_count
   end type
 
+  type, extends(wide) :: wide_remote
+    type(guatiao_remote) :: r
+  contains
+    procedure :: echo_i64 => wide_remote_echo_i64
+    procedure :: echo_u64 => wide_remote_echo_u64
+  end type
+
   ! ---- the C slots -----------------------------------------------------
 
   abstract interface
+    function echo_c(ctx, x, out, err) bind(c) result(status)
+      import :: c_ptr, c_int64_t, c_int32_t
+      type(c_ptr), value :: ctx
+      integer(c_int64_t), value :: x
+      type(c_ptr), value :: out, err
+      integer(c_int32_t) :: status
+    end function
     function greet_c(ctx, name, out, err) bind(c) result(status)
       import :: c_ptr, gt_str, c_int32_t
       type(c_ptr), value :: ctx
@@ -263,6 +301,7 @@ module greeter_kinds
   ! for every counter and object.
   type(greeter_vtable), target, save :: greeter_tables(0:31)
   type(counter_vtable), target, save :: counter_table
+  type(wide_vtable), target, save :: wide_table
   type(conversation_vtable), target, save :: conversation_table
   type(listener_vtable), target, save :: listener_table
 
@@ -321,6 +360,15 @@ contains
     k%accepts => is_counter
   end function
 
+  recursive function wide_kind() result(k)
+    type(guatiao_kind) :: k
+    k%name = 'wide'
+    k%floor_hash = WIDE_FLOOR_HASH
+    k%size = c_sizeof(wide_table)
+    k%floor_size = k%size
+    k%accepts => is_wide
+  end function
+
   recursive logical function is_listener(impl)
     class(guatiao_impl), intent(in) :: impl
     select type (impl)
@@ -358,6 +406,16 @@ contains
       is_counter = .true.
     class default
       is_counter = .false.
+    end select
+  end function
+
+  recursive logical function is_wide(impl)
+    class(guatiao_impl), intent(in) :: impl
+    select type (impl)
+    class is (wide)
+      is_wide = .true.
+    class default
+      is_wide = .false.
     end select
   end function
 
@@ -407,6 +465,18 @@ contains
     if (present(impl)) s%impl => impl
   end function
 
+  recursive function wide_serving(impl) result(s)
+    class(wide), intent(in), target, optional :: impl
+    type(guatiao_serving) :: s
+    wide_table%header%struct_size = int(c_sizeof(wide_table), c_int32_t)
+    wide_table%header%floor_hash = WIDE_FLOOR_HASH
+    wide_table%echo_i64 = c_funloc(echo_i64_slot)
+    wide_table%echo_u64 = c_funloc(echo_u64_slot)
+    s%kind = wide_kind()
+    s%table = c_loc(wide_table)
+    if (present(impl)) s%impl => impl
+  end function
+
   !> The provider under `key` as a greeter.
   recursive subroutine greeter_bind(reg, key, g, stat, errmsg)
     type(guatiao_registry), intent(in) :: reg
@@ -433,6 +503,15 @@ contains
     integer, intent(out), optional :: stat
     character(:), allocatable, intent(inout), optional :: errmsg
     call guatiao_bind(reg, key, counter_kind(), c%r, stat, errmsg)
+  end subroutine
+
+  recursive subroutine wide_bind(reg, key, w, stat, errmsg)
+    type(guatiao_registry), intent(in) :: reg
+    character(*), intent(in) :: key
+    type(wide_remote), intent(inout) :: w
+    integer, intent(out), optional :: stat
+    character(:), allocatable, intent(inout), optional :: errmsg
+    call guatiao_bind(reg, key, wide_kind(), w%r, stat, errmsg)
   end subroutine
 
   ! ---- optional slots a provider does not override --------------------
@@ -686,6 +765,54 @@ contains
     if (status == GUATIAO_OK .and. c_associated(out)) then
       call c_f_pointer(out, answer)
       answer = n
+    end if
+  end function
+
+  recursive function echo_i64_slot(ctx, x, out, err) bind(c) result(status)
+    type(c_ptr), value :: ctx
+    integer(c_int64_t), value :: x
+    type(c_ptr), value :: out, err
+    integer(c_int32_t) :: status
+    class(guatiao_impl), pointer :: impl
+    integer(int64) :: y
+    integer(c_int64_t), pointer :: answer
+    type(guatiao_error), allocatable :: error
+    impl => guatiao_impl_at(ctx, 'wide')
+    status = GUATIAO_ERR_GONE
+    if (.not. associated(impl)) return
+    y = 0
+    select type (impl)
+    class is (wide)
+      call impl%echo_i64(x, y, error)
+    end select
+    status = guatiao_failed(error, err)
+    if (status == GUATIAO_OK .and. c_associated(out)) then
+      call c_f_pointer(out, answer)
+      answer = y
+    end if
+  end function
+
+  recursive function echo_u64_slot(ctx, x, out, err) bind(c) result(status)
+    type(c_ptr), value :: ctx
+    integer(c_int64_t), value :: x
+    type(c_ptr), value :: out, err
+    integer(c_int32_t) :: status
+    class(guatiao_impl), pointer :: impl
+    integer(int64) :: y
+    integer(c_int64_t), pointer :: answer
+    type(guatiao_error), allocatable :: error
+    impl => guatiao_impl_at(ctx, 'wide')
+    status = GUATIAO_ERR_GONE
+    if (.not. associated(impl)) return
+    y = 0
+    select type (impl)
+    class is (wide)
+      call impl%echo_u64(x, y, error)
+    end select
+    status = guatiao_failed(error, err)
+    if (status == GUATIAO_OK .and. c_associated(out)) then
+      call c_f_pointer(out, answer)
+      answer = y
     end if
   end function
 
@@ -1010,6 +1137,42 @@ contains
     out = 0
     st = f(self%r%ctx, c_loc(out))
     if (st /= GUATIAO_OK) call guatiao_fail(error, int(st), 'count failed')
+    answer = out
+  end subroutine
+
+  recursive subroutine wide_remote_echo_i64(self, x, answer, error)
+    class(wide_remote), intent(inout) :: self
+    integer(int64), intent(in) :: x
+    integer(int64), intent(out) :: answer
+    type(guatiao_error), allocatable, intent(out) :: error
+    procedure(echo_c), pointer :: f
+    integer(c_int64_t), target :: out
+    type(gt_provider_error), target :: err
+    integer(c_int32_t) :: st
+    answer = 0
+    if (lacks(self%r, 1, error)) return
+    call c_f_procpointer(self%r%slot(1), f)
+    out = 0
+    st = f(self%r%ctx, x, c_loc(out), c_loc(err))
+    call guatiao_call_error(st, err, error)
+    answer = out
+  end subroutine
+
+  recursive subroutine wide_remote_echo_u64(self, x, answer, error)
+    class(wide_remote), intent(inout) :: self
+    integer(int64), intent(in) :: x
+    integer(int64), intent(out) :: answer
+    type(guatiao_error), allocatable, intent(out) :: error
+    procedure(echo_c), pointer :: f
+    integer(c_int64_t), target :: out
+    type(gt_provider_error), target :: err
+    integer(c_int32_t) :: st
+    answer = 0
+    if (lacks(self%r, 2, error)) return
+    call c_f_procpointer(self%r%slot(2), f)
+    out = 0
+    st = f(self%r%ctx, x, c_loc(out), c_loc(err))
+    call guatiao_call_error(st, err, error)
     answer = out
   end subroutine
 
