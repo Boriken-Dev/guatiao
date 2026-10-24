@@ -59,6 +59,9 @@ node_modules/
 Manifest.toml
 Manifest-v*.toml
 
+# MATLAB and Octave: the gateway the test runner builds beside the package
+/bindings/matlab/guatiao/inst/guatiao_mex.mex*
+
 # R: what installing or checking the package from its source writes
 /bindings/r/guatiao/src/Makevars
 /bindings/r/*/src/*.o
