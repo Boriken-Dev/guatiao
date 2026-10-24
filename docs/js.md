@@ -132,8 +132,9 @@ The shapes are the Node binding's, with these exceptions:
 ## What JavaScript cannot do here
 
 - **Wait.** There is no event loop and no timer. Promise reactions run
-  after each call, and a slot answers before it returns: an `async` slot
-  is refused.
+  after each call, under the call's limits (a call whose reactions run
+  past them is stopped, and the rest are killed), and a slot answers
+  before it returns: an `async` slot is refused.
 - **Stop native work mid-call.** A limit is looked at once per poll: one
   long `repeat` or sort runs to its end, and the memory limit bounds what
   it can build.
