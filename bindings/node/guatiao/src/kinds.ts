@@ -39,6 +39,27 @@ import { BadValue, FloorMismatch, GuatiaoError, Internal, NullArgument, Unsuppor
 import * as n from './native.js';
 import { ListRef, MapRef, Ref, Value, adopt, writeJS, type Owner } from './value.js';
 
+export type {
+  Borrowed,
+  BytesMut,
+  Lent,
+  ObjectKind,
+  Taken,
+  ValueAnswer,
+  f32,
+  f64,
+  i8,
+  i16,
+  i32,
+  i64,
+  isize,
+  u8,
+  u16,
+  u32,
+  u64,
+  usize,
+} from './markers.js';
+
 // ---- the types a description gives ---------------------------------------------
 
 declare const types: unique symbol;
@@ -64,6 +85,10 @@ export interface MethodSpec {
   readonly required?: boolean;
   /** A slot ending in `guatiao_provider_error *err`: it can refuse. */
   readonly fallible?: boolean;
+  /** What the slot does, for the description. */
+  readonly doc?: string;
+  /** The arguments' names, for the description (default `arg0`, `arg1`, ...). */
+  readonly argNames?: readonly string[];
 }
 
 export type Methods = { readonly [name: string]: MethodSpec };
@@ -78,6 +103,8 @@ export interface Kind<M extends Methods = Methods, O extends boolean = boolean> 
   readonly floorHash: number;
   /** An object kind: `destroy` first, an object one holder owns. */
   readonly isObject: O;
+  /** What the kind is, for the description. */
+  readonly doc?: string;
   readonly methods: M;
   /** The table's size in bytes: the header, `destroy`, a word per slot. */
   readonly tableSize: number;
@@ -131,6 +158,10 @@ export interface Slot<S extends MethodSpec = MethodSpec> {
   required(): Slot<Omit<S, 'required'> & { readonly required: true }>;
   /** A slot ending in `guatiao_provider_error *err`: it can refuse. */
   fallible(): Slot<Omit<S, 'fallible'> & { readonly fallible: true }>;
+  /** What the slot does, for the description. */
+  doc(text: string): Slot<S>;
+  /** The arguments' names, in order, for the description. */
+  named(...names: string[]): Slot<S>;
 }
 
 /** A class extending `Kind`, as a type: its static fields. */
@@ -140,6 +171,7 @@ export interface KindClass {
   readonly slots: { readonly [name: string]: Slot | MethodSpec };
   readonly kind?: string;
   readonly object?: boolean;
+  readonly doc?: string;
 }
 
 /** Anything naming a kind: a value `kind()` or `kindsOf()` made, or a class extending `Kind`. */
@@ -203,9 +235,9 @@ export type Remote<K> = K extends { readonly [remoteType]: infer R }
 /** An object of an object kind this side owns: `close()` destroys it, once. */
 export type ObjectHandle<K> = Remote<K> & Disposable & { close(): void; readonly closed: boolean };
 
-/** What a slot answering a map may return. */
+/** What a slot answering a map may return. @guatiaoType answer_map */
 export type MapAnswer = MapRef | Value | { readonly [key: string]: unknown } | ReadonlyMap<string, unknown>;
-/** What a slot answering a list may return. */
+/** What a slot answering a list may return. @guatiaoType answer_list */
 export type ListAnswer = ListRef | Value | readonly unknown[];
 
 // ---- one call's lifetime ------------------------------------------------------------
@@ -422,6 +454,9 @@ abstract class ShapeImpl {
   /** Releases what `receive` handed a method that never ran. */
   unused(_received: unknown): void {}
 
+  /** How a description spells this shape. */
+  abstract describe(): TypeDescription;
+
   toString(): string {
     return `t.${this.name}`;
   }
@@ -471,6 +506,10 @@ class Scalar extends ShapeImpl {
     const big = BigInt(value);
     if (big < this.#lo || big > this.#hi) throw new RangeError(`${value} does not fit t.${this.name}`);
     return this.#wide ? big : value;
+  }
+
+  override describe(): TypeDescription {
+    return { type: this.name };
   }
 
   #normal(value: unknown): unknown {
@@ -547,6 +586,9 @@ function textArg(arg: unknown, what: string): string {
 class Str extends ShapeImpl {
   readonly name = 'str';
   override readonly cArg = 'guatiao_str';
+  override describe(): TypeDescription {
+    return { type: 'str' };
+  }
   override pass(value: unknown): unknown {
     if (typeof value !== 'string') throw new TypeError(`t.str takes a string, not ${typeof value}`);
     return n.str(value);
@@ -566,6 +608,9 @@ function bytesOf(value: unknown, what: string): Uint8Array {
 class Bytes extends ShapeImpl {
   readonly name = 'bytes';
   override readonly cArg = 'guatiao_bytes';
+  override describe(): TypeDescription {
+    return { type: 'bytes' };
+  }
   override pass(value: unknown): unknown {
     return n.bytesArg(bytesOf(value, 't.bytes'));
   }
@@ -576,9 +621,12 @@ class Bytes extends ShapeImpl {
 }
 
 /** An out-buffer: the caller's writable memory, for the call. */
-class BytesMut extends ShapeImpl {
+class BytesMutShape extends ShapeImpl {
   readonly name = 'bytesMut';
   override readonly cArg = 'guatiao_bytes_mut';
+  override describe(): TypeDescription {
+    return { type: 'bytes_mut' };
+  }
   override pass(value: unknown): unknown {
     const bytes = bytesOf(value, 't.bytesMut');
     // The callee writes straight into the caller's memory, pinned for the call.
@@ -601,6 +649,9 @@ class BytesMut extends ShapeImpl {
 class Text extends ShapeImpl {
   readonly name = 'text';
   override readonly answers = true;
+  override describe(): TypeDescription {
+    return { type: 'text' };
+  }
   override outSlot(scope: Scope): bigint {
     return scope.block(SIZE.string);
   }
@@ -638,6 +689,12 @@ class Tree extends ShapeImpl {
     this.answers = mode === 'answer';
     this.takes = mode === 'take';
     this.cArg = mode === 'answer' ? undefined : 'void *';
+  }
+
+  override describe(): TypeDescription {
+    const type = this.tag === Tag.MAP ? 'map' : this.tag === Tag.LIST ? 'list' : 'value';
+    if (this.mode === 'answer') return { type };
+    return { type, pass: this.mode === 'take' ? 'taken' : this.mode === 'lend' ? 'lent' : 'borrowed' };
   }
 
   /** The struct that crosses inside `node`: the node for a value, its payload for a map or list. */
@@ -791,6 +848,11 @@ class ObjectShape extends ShapeImpl {
     this.cArg = mode === 'take' ? 'guatiao_object' : mode === 'lend' ? 'void *' : undefined;
   }
 
+  override describe(): TypeDescription {
+    if (this.mode === 'answer') return { type: 'object', kind: this.kind.name };
+    return { type: 'object', kind: this.kind.name, pass: this.mode === 'take' ? 'taken' : 'lent' };
+  }
+
   #raw(value: unknown, scope: Scope | undefined, lent: boolean): RawObject {
     if (value instanceof RemoteImpl && value.isHandle) {
       if (value.kind !== this.kind) {
@@ -896,7 +958,7 @@ export const t = {
   /** `guatiao_bytes`: borrowed bytes. */
   bytes: new Bytes() as unknown as Shape<Uint8Array | ArrayBuffer | ArrayBufferView, Uint8Array, never, never>,
   /** `guatiao_bytes_mut`: the caller's buffer, written in place. */
-  bytesMut: new BytesMut() as unknown as Shape<Uint8Array, Uint8Array, never, never>,
+  bytesMut: new BytesMutShape() as unknown as Shape<Uint8Array, Uint8Array, never, never>,
   /** Owned text as an answer (`guatiao_string *out`). */
   text: new Text() as unknown as Shape<never, never, string, string>,
   /** A value: borrowed as an argument (`const guatiao_value *`, null allowed), or an answer. */
@@ -979,6 +1041,7 @@ export class KindImpl implements Kind<Methods, boolean> {
   readonly name: string;
   readonly floorHash: number;
   readonly isObject: boolean;
+  readonly doc: string | undefined;
   readonly methods: Methods;
   readonly slots: readonly ResolvedSlot[];
   readonly tableSize: number;
@@ -990,7 +1053,7 @@ export class KindImpl implements Kind<Methods, boolean> {
   readonly #remoteClass: new (raw: RawObject, scope?: Scope) => RemoteImpl;
   readonly #handleClass: new (raw: RawObject) => RemoteImpl;
 
-  constructor(name: string, spec: { floorHash: number; object?: boolean; methods: Methods }) {
+  constructor(name: string, spec: { floorHash: number; object?: boolean; doc?: string; methods: Methods }) {
     if (typeof name !== 'string' || !name) throw new TypeError('a kind has a name');
     if (!Number.isInteger(spec.floorHash) || spec.floorHash < 0 || spec.floorHash > 0xffffffff) {
       throw new TypeError(`${name}: floorHash is the header's <table>_FLOOR_HASH, a 32-bit unsigned integer`);
@@ -998,6 +1061,7 @@ export class KindImpl implements Kind<Methods, boolean> {
     this.name = name;
     this.floorHash = spec.floorHash;
     this.isObject = spec.object === true;
+    this.doc = spec.doc;
     this.methods = spec.methods;
     let offset = SIZE.kindHeader;
     if (this.isObject) {
@@ -1132,6 +1196,8 @@ function slotOf(spec: MethodSpec): Slot {
     returns: (answer: MethodSpec['answer']) => slotOf({ ...spec, answer }),
     required: () => slotOf({ ...spec, required: true }),
     fallible: () => slotOf({ ...spec, fallible: true }),
+    doc: (text: string) => slotOf({ ...spec, doc: text }),
+    named: (...names: string[]) => slotOf({ ...spec, argNames: names }),
   };
   return Object.freeze(made) as unknown as Slot;
 }
@@ -1174,7 +1240,12 @@ function describeClass(cls: KindClass & { readonly name: string }): KindImpl {
   for (const [method, given] of Object.entries(cls.slots)) {
     methods[method] = isSlot(given) ? given[SLOT_SPEC] : (given as MethodSpec);
   }
-  found = new KindImpl(name, { floorHash: cls.floorHash, object: cls.object === true, methods });
+  found = new KindImpl(name, {
+    floorHash: cls.floorHash,
+    object: cls.object === true,
+    ...(cls.doc === undefined ? {} : { doc: cls.doc }),
+    methods,
+  });
   fromClasses.set(cls, found);
   return found;
 }
@@ -1213,8 +1284,13 @@ export interface KindsDocument {
 }
 
 /** A slot's name in JavaScript: `greet_into` is `greetInto`. */
-export function methodName(slotName: string): string {
-  return slotName.replace(/_+([a-z0-9])/g, (_m, c: string) => c.toUpperCase());
+export function methodName(slot: string): string {
+  return slot.replace(/_+([a-z0-9])/g, (_m, c: string) => c.toUpperCase());
+}
+
+/** A method's slot name in a description: `greetInto` is `greet_into`, the inverse of `methodName`. */
+export function slotName(method: string): string {
+  return snakeCase(method);
 }
 
 const SCALARS = new Set(['bool', 'i8', 'i16', 'i32', 'i64', 'u8', 'u16', 'u32', 'u64', 'usize', 'isize', 'f32', 'f64']);
@@ -1283,12 +1359,19 @@ function fromDescription(description: KindDescription, kindNamed: (name: string)
       required: slot.required === true,
       fallible: slot.fallible === true,
       ...(slot.answer === undefined ? {} : { answer: shapeOf(slot.answer, `${where} answer`, true, kindNamed) }),
+      ...(slot.doc === undefined ? {} : { doc: slot.doc }),
+      argNames: (slot.args ?? []).map((a: TypeDescription, i: number) => a.name ?? `arg${i}`),
     };
     const method = methodName(slot.name);
     if (method in methods) throw new TypeError(`${where}: two slots are ${method} in JavaScript`);
     methods[method] = spec;
   }
-  return new KindImpl(name, { floorHash: description.floor_hash, object: description.object === true, methods });
+  return new KindImpl(name, {
+    floorHash: description.floor_hash,
+    object: description.object === true,
+    ...(description.doc === undefined ? {} : { doc: description.doc }),
+    methods,
+  });
 }
 
 function documentOf(given: KindsDocument | string): KindsDocument {
@@ -1342,6 +1425,60 @@ export function kindsOf(
 /** One kind's description as a kind; the object kinds it names come from `known`. */
 export function kindOf(description: KindDescription, options: { readonly known?: Iterable<KindLike> } = {}): Kind {
   return kindsOf({ format: 1, kinds: [description] }, options)[description.name]!;
+}
+
+/**
+ * The kinds in `kinds`, and the object kinds their slots reach, as the
+ * document a kind crate commits beside its header: what `kindsOf` loads
+ * and `guatiao-kind` and the Dart generator write code from. A kind made by
+ * `kind()` or `kindsOf()` or defined as a class is described as it was
+ * given; a method's slot name is its snake_case (`greetInto` is
+ * `greet_into`), and a borrowed value is described as one that is not
+ * null. A kind written as a TypeScript interface is `describeInterfaces`'s.
+ */
+export function describeKinds(kinds: Iterable<KindLike>): KindsDocument {
+  const queue: KindImpl[] = [];
+  const named = new Map<string, KindImpl>();
+  const add = (impl: KindImpl): void => {
+    const other = named.get(impl.name);
+    if (other === undefined) {
+      named.set(impl.name, impl);
+      queue.push(impl);
+    } else if (other !== impl) {
+      throw new TypeError(`two different kinds are called ${impl.name}`);
+    }
+  };
+  for (const k of kinds) add(asKind(k));
+  const described: KindDescription[] = [];
+  for (let i = 0; i < queue.length; i += 1) {
+    const impl = queue[i]!;
+    const slots = impl.slots.map((slot) => {
+      const spec = impl.methods[slot.name]!;
+      const name = slotName(slot.name);
+      if (methodName(name) !== slot.name) {
+        throw new TypeError(`${impl.name}.${slot.name}: its slot would be named ${name}, which JavaScript writes ${methodName(name)}; name the method that`);
+      }
+      for (const shape of [...slot.args, ...(slot.answer === undefined ? [] : [slot.answer])]) {
+        if (shape instanceof ObjectShape) add(shape.kind);
+      }
+      return {
+        name,
+        required: slot.required,
+        fallible: slot.fallible,
+        args: slot.args.map((shape, j) => ({ name: spec.argNames?.[j] ?? `arg${j}`, ...shape.describe() })),
+        ...(slot.answer === undefined ? {} : { answer: slot.answer.describe() }),
+        ...(spec.doc === undefined ? {} : { doc: spec.doc }),
+      };
+    });
+    described.push({
+      name: impl.name,
+      floor_hash: impl.floorHash,
+      object: impl.isObject,
+      ...(impl.doc === undefined ? {} : { doc: impl.doc }),
+      slots,
+    });
+  }
+  return { format: 1, kinds: described };
 }
 
 // ---- calling a table ----------------------------------------------------------------

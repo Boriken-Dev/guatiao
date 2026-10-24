@@ -19,6 +19,7 @@ public surface); this file is about the repository.
 | `examples/source_library/` | a source written in Rust and exported with `guatiao::source!`: a Rust host and a C host add it in `crates/guatiao/tests/source_export.rs` |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
 | `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `include/greeter_kind.kinds.json` is the same kinds as data, written by its `description_is_current` test; `python/greeter_kind.py` describes them for Python; `node/` is what `guatiao-kind` writes from the description (`greeter_kind.js` and `.d.ts`; the Node suite checks it is current); `dart/` is the Dart package `greeter_kind`, its `lib/greeter_kind.dart` what `dart run guatiao:kind` writes from the description (the Dart suite checks it is current); `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind`; `r/greeterkind` is the R package declaring them with `kind()`; `matlab/+greeterkind` declares them for MATLAB and Octave as classes inheriting `guatiao.Kind`; `fortran/` is the fpm package `greeter_kind`, the kinds as abstract types with their remotes and `bind(c)` glue |
+| `examples/tally_kind/` | a kind that exists only in TypeScript: `tally_kind.ts` declares it as interfaces (`u32`, `Lent<Watcher>`, `extends ObjectKind`), `guatiao-kind` reads them into `include/tally_kind.kinds.json` and writes `node/` from it, and `dart/` is the Dart package `dart run guatiao:kind` writes from the same document; the Node suite checks the document and the Node files, the Dart suite the Dart ones, and each serves the kind from a provider of its own |
 | `examples/derived_greeter/` | a library written with no glue: `#[derive(Provider)]` and `guatiao::providers!` |
 | `examples/wire_over_webtransport/` | values over WebTransport: `server/` (the shared channel and framing, `wire-server`, and `wire-probe`, a native client), `client/` (the page's wasm, its own workspace, built for `wasm32-unknown-unknown` only); commands in its `README.md` |
 | `examples/app_library/` | an application's own C library (`myapp`): depends on the three crates and exports their C surfaces beside `myapp_version`; every binding's suite also runs against it alone, and it is the Dart web suites' default module |
@@ -53,7 +54,7 @@ public surface); this file is about the repository.
 | `bindings/python/guatiao-serde/`, `bindings/python/guatiao-intake/` | the packages `guatiao-serde` and `guatiao-intake` (`import guatiao_serde`, `guatiao_intake`), each over its own library, with its own `AGENTS.md` |
 | `bindings/dart/guatiao/` | Dart bindings over the C ABI, a plain Dart package (no Flutter) with its own `AGENTS.md`: `dart:ffi` natively, the WebAssembly module on the web (`lib/src/web/`, chosen by a conditional import on `dart.library.js_interop`, `lib/wasm.dart` its counterpart of `ffi.dart`); `lib/src/bindings.g.dart` (from `guatiao.h`) and `lib/ffi_symbols.yaml` are ffigen output and never hand-edited; `lib/ffi.dart` is what a package over another guatiao library builds on; `lib/kinds.dart` kinds and providers as classes, `bin/kind.dart` (`dart run guatiao:kind`) writing a kind description's Dart and a library identity, `lib/kind_glue.dart` what that code calls; `hook/build.dart` builds the core crate with cargo for the target a Dart or Flutter build names, through `lib/hook.dart`, which the other two packages' hooks use too; its own `pubspec.yaml` tells the hook to build nothing for its own suites |
 | `bindings/dart/guatiao_serde/`, `bindings/dart/guatiao_intake/` | the pub.dev packages `guatiao_serde` and `guatiao_intake`, each over its own library and its own ffigen output (reusing the core's types through its symbol file); `pubspec_overrides.yaml` takes the core from the checkout and is not published |
-| `bindings/node/guatiao/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads; `src/ffi.ts` (`guatiao/ffi`) is what a package over another guatiao library builds on |
+| `bindings/node/guatiao/` | Node.js and TypeScript bindings over the C ABI through koffi, an ESM package (npm `guatiao`) with its own `AGENTS.md`; `src/abi.ts` holds every struct layout the binding reads; `src/ffi.ts` (`guatiao/ffi`) is what a package over another guatiao library builds on; `src/markers.ts` the types a kind written as an interface is spelled with and `src/describe.ts` (`guatiao/describe`) reads such interfaces through the TypeScript 7 compiler API into a description |
 | `bindings/node/guatiao-serde/`, `bindings/node/guatiao-intake/` | the npm packages `guatiao-serde` and `guatiao-intake`, each over its own library and the core's koffi; their tests run against the core's sources |
 | `bindings/node/package.json` | the npm workspace of the three Node packages, with the one `package-lock.json`: `npm ci` there installs all three and links the core into the others |
 | `bindings/go/guatiao/` | Go bindings over the C ABI through cgo, the module `github.com/Boriken-Dev/guatiao/bindings/go/guatiao` (package `guatiao`) with its own `AGENTS.md`: what the other two modules build on (`Surface`, `Load`, `Adopt`, `WithNodes`, `NodeOf`, `Borrow`, `StatusError`); `internal/native/` holds its C and a copy of `guatiao.h` (a test compares it with the committed one); `cmd/guatiao-kind` writes a kind package's glue |
@@ -211,6 +212,16 @@ Dart file written from it (each suite fails until they are):
   ../include/greeter_kind.kinds.json --out greeter_kind)
 (cd examples/greeter_kind/dart && dart run guatiao:kind ../include/greeter_kind.kinds.json -o lib/greeter_kind.dart)
 (cd examples/dart_provider/dart_greeter && dart run guatiao:kind identity)   # after its pubspec's version moves
+```
+
+After `examples/tally_kind/tally_kind.ts` changes, its document, the Node
+module and the Dart file (the document is read by the compiler, so the
+workspace's `typescript` must be installed):
+
+```bash
+(cd examples/tally_kind/node && node ../../../bindings/node/guatiao/dist/kind_cli.js ../tally_kind.ts \
+  --out tally_kind --document ../include/tally_kind.kinds.json --project ../tsconfig.json)
+(cd examples/tally_kind/dart && dart run guatiao:kind ../include/tally_kind.kinds.json -o lib/tally_kind.dart)
 ```
 
 Go bindings, after `cargo build --workspace --all-features`, with Go

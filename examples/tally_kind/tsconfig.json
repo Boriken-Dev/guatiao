@@ -1,0 +1,19 @@
+{
+  // Resolves guatiao from this checkout; a project that installs the
+  // package needs no `paths`.
+  "compilerOptions": {
+    "target": "es2024",
+    "lib": ["es2024", "esnext.disposable"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": [],
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "guatiao": ["../../bindings/node/guatiao/src/index.ts"],
+      "guatiao/*": ["../../bindings/node/guatiao/src/*.ts"]
+    }
+  },
+  "include": ["tally_kind.ts"]
+}
