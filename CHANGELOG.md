@@ -70,13 +70,22 @@ write now.
   refresh, an old build kept open for the instance taken from it.
   `Opened::Built` is a library whose tables the engine built itself;
   `Opened::Described` declares providers and the slots they implement, and
-  with the `dynamic-kinds` feature their tables are built from the kinds'
-  descriptions (`Kinds`, from `<crate>.kinds.json`), every slot a `Call`
+  their tables are built from the kinds' descriptions (`Kinds`, from
+  `<crate>.kinds.json`) by the mechanism the source is given
+  (`with_mechanism`; without one such a library is refused), every slot a `Call`
   into the engine with owned arguments, lent ones written back, and
   objects both ways. `Limits` (operations, memory, time, depth) come from
   the configuration and `BridgeError` maps every refusal to a status.
   `Convert` is an engine's values both ways, and `conformance::round_trip`
   checks one against the shared wire vectors.
+- **`guatiao-libffi`: libffi as the mechanism for tables built at run
+  time.** A new crate, published with the others, depending on `guatiao`
+  alone: `Libffi` prepares a slot's signature as a libffi call interface,
+  makes each served slot a libffi closure, and calls a table through
+  `ffi_call`. A bridge for a runtime with no FFI hands it to its source
+  (`with_mechanism(Arc::new(Libffi))`); `guatiao-lua` does. It builds
+  libffi from C and is not available on wasm32; `guatiao` and
+  `guatiao-bridge` build no C.
 - **A source written in Rust is a file any host adds.**
   `guatiao::source!(serves = "...", make = start)` exports a type
   implementing `Source` as a source file's `guatiao_source`, declaring
@@ -89,9 +98,9 @@ write now.
   the tests.
 - **Kind tables built at run time from a description.**
   `KindDescription` reads a kind's description from a value (a kind or a
-  `{"format": 1, "kinds": [..]}` document), with no dependency. Behind the
-  new default-off `dynamic-kinds` feature, `ServedTable` builds a kind's
-  table from it: each slot a libffi closure calling one `Serve` handler
+  `{"format": 1, "kinds": [..]}` document), with no dependency, and
+  `ServedTable` builds a kind's table from it, with no feature: each slot a
+  closure calling one `Serve` handler
   with the slot and its arguments as `Arg`s, and writing its `Answer` back
   as the kind's C table promises (a tree in the caller's carrier, an error
   through `err`, a panic as `GUATIAO_ERR_INTERNAL`); a slot left out is
@@ -99,8 +108,10 @@ write now.
   described kind, `RawObject` and `LentObject` an object one was handed,
   and `DescribedRemote` a provider a registry offers. What a bridge to an
   engine with no FFI of its own (Lua, JavaScript, Rhai, wasm) serves and
-  calls kinds with. The feature builds libffi from C and is not available
-  on wasm32. `ProviderPartsBuilder::keep` keeps what a provider's tables
+  calls kinds with. The closures and the calls come from a `Mechanism`
+  (`ServedTable::new(.., &mechanism)`, `Caller::new(kind, &mechanism)`):
+  the one thing Rust cannot do for a signature it learns at run time, an
+  `unsafe` trait of two operations over a slot's `CSignature`. `ProviderPartsBuilder::keep` keeps what a provider's tables
   point into with its parts, and `kinds` and `table` take names that are
   not `'static`.
 - **A kind describes itself as data.** `#[guatiao::kind]` adds

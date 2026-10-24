@@ -125,9 +125,18 @@ does through ctypes, and answers `Opened::Built` with the library's
 descriptor.
 
 A runtime with none answers `Opened::Described`: each provider, the kinds
-it serves and the slots it implements. With the `dynamic-kinds` feature
-the bridge builds each kind's table from its description, every slot a
-libffi closure that becomes a `Call` into the engine:
+it serves and the slots it implements. The bridge builds each kind's
+table from its description, every slot a closure that becomes a `Call`
+into the engine. Rust cannot make a function pointer for a signature it
+learns at run time, so the closures come from a mechanism the source is
+given, `guatiao-libffi`'s `Libffi` over libffi:
+
+```rust,ignore
+BridgeSource::pinned(config, "lua")?.with_mechanism(Arc::new(Libffi))
+```
+
+Without one, a described library is refused when opened. What the
+closures do:
 
 - **arguments arrive owned**, so a call crosses to an engine thread:
   numbers, text and bytes as values, a borrowed tree copied, a handed-over
@@ -143,10 +152,12 @@ libffi closure that becomes a `Call` into the engine:
   naming it.
 
 The tables come from the kinds' descriptions, the same documents the
-bindings read. Core offers the mechanism to any Rust code, bridge or not:
-`ServedTable` builds a table of a described kind over one handler, and
-`Caller` calls any table of one, so an engine can call an object it was
-handed or a provider a registry offers (`DescribedRemote`).
+bindings read. Core offers them to any Rust code, bridge or not, with no
+feature: `ServedTable` builds a table of a described kind over one
+handler, and `Caller` calls any table of one, so an engine can call an
+object it was handed or a provider a registry offers (`DescribedRemote`).
+Both take the mechanism (`&Libffi`); another one, written against
+`guatiao::library::kind::Mechanism`, plugs in the same way.
 
 ## Limits and refusals
 
