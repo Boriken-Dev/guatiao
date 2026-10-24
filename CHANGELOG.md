@@ -895,6 +895,12 @@ write now.
 
 ### Fixed
 
+- **Reading a wide map off the wire is linear in its keys.** Every
+  reader (`decode`, `decode_as`, `Decoder`, walking `Encoded` bytes)
+  checked each key against every earlier key of its map, so bytes anyone
+  wrote could make a reader spend seconds on a few hundred kilobytes (40 000
+  keys, 7.7 s) and hours on megabytes. Past 16 keys a map's keys are now
+  checked against a set; a repeated key is still refused where it starts.
 - **On FreeBSD a C program needs no `-pthread`.** A program built
   without it bound libc's failing thread stubs, and the library aborted
   with `fatal runtime error: out of TLS keys`. Every library that links
