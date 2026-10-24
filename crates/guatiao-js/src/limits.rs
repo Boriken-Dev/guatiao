@@ -73,14 +73,21 @@ impl Meter {
         Meter { limits, state }
     }
 
+    /// The memory limit, in bytes, 0 for none: what QuickJS is told.
+    pub(crate) fn memory(&self) -> usize {
+        self.limits
+            .memory
+            .map_or(0, |m| usize::try_from(m).unwrap_or(usize::MAX))
+    }
+
     /// Whether the call running was told to stop.
     pub(crate) fn stopped(&self) -> bool {
         self.state.stop.borrow().is_some()
     }
 
     /// Runs `f` as one call, counted from nothing against every limit. A
-    /// call that failed because the interrupt handler stopped it answers
-    /// the limit, not QuickJS's "interrupted".
+    /// call the interrupt handler stopped answers the limit, whatever `f`
+    /// came to: not QuickJS's "interrupted", and not success.
     pub(crate) fn run<R, E: From<BridgeError>>(
         &self,
         f: impl FnOnce() -> Result<R, E>,
@@ -89,9 +96,9 @@ impl Meter {
         let answer = f();
         self.state.calls.borrow_mut().pop();
         let stop = self.state.stop.borrow_mut().take();
-        match (answer, stop) {
-            (Err(_), Some(stop)) => Err(stop.into()),
-            (answer, _) => answer,
+        match stop {
+            Some(stop) => Err(stop.into()),
+            None => answer,
         }
     }
 }

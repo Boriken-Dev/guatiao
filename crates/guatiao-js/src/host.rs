@@ -26,16 +26,26 @@ use crate::errors::{self, Words, bad_value};
 use crate::prelude::{self, Core};
 use crate::values::{self, Conversion};
 
-/// The property a handle's identity is kept under: a symbol, so no
-/// script's own key meets it.
-const HANDLE: &str = "guatiao.handle";
+/// The key of the context a script runs in.
+pub(crate) fn context_key(ctx: &Ctx<'_>) -> usize {
+    ctx.as_raw().as_ptr() as usize
+}
+
+/// A handle known by id: the context it was made for, and the handle.
+type Registered = (usize, Weak<RefCell<Handle>>);
 
 /// What every context shares: the kinds the host described, a caller per
 /// kind, and the handles scripts hold.
 pub(crate) struct Shared {
     kinds: RefCell<Kinds>,
     callers: RefCell<BTreeMap<String, Arc<Caller>>>,
-    handles: RefCell<BTreeMap<u64, Weak<RefCell<Handle>>>>,
+    /// Each handle by its id, with the context it was made for.
+    handles: RefCell<BTreeMap<u64, Registered>>,
+    /// Objects whose handle was freed. A handle is freed inside QuickJS's
+    /// collector, where nothing may run script; destroying an object can
+    /// (its owner may be a script), so the engine destroys these once
+    /// every frame has returned.
+    graveyard: RefCell<Vec<RawObject>>,
     next: Cell<u64>,
     purge_at: Cell<usize>,
     pub(crate) words: Words,
@@ -47,6 +57,7 @@ impl Shared {
             kinds: RefCell::new(kinds),
             callers: RefCell::new(BTreeMap::new()),
             handles: RefCell::new(BTreeMap::new()),
+            graveyard: RefCell::new(Vec::new()),
             next: Cell::new(0),
             purge_at: Cell::new(256),
             words,
@@ -78,20 +89,34 @@ impl Shared {
         Ok(made)
     }
 
-    fn register(&self, handle: &Rc<RefCell<Handle>>) -> u64 {
+    /// Keeps `object` until the engine can destroy it.
+    fn bury(&self, object: RawObject) {
+        self.graveyard.borrow_mut().push(object);
+    }
+
+    /// The objects waiting to be destroyed.
+    pub(crate) fn take_graveyard(&self) -> Vec<RawObject> {
+        core::mem::take(&mut *self.graveyard.borrow_mut())
+    }
+
+    fn register(&self, context: usize, handle: &Rc<RefCell<Handle>>) -> u64 {
         let id = self.next.get() + 1;
         self.next.set(id);
         let mut handles = self.handles.borrow_mut();
         if handles.len() >= self.purge_at.get() {
-            handles.retain(|_, w| w.strong_count() > 0);
+            handles.retain(|_, (_, w)| w.strong_count() > 0);
             self.purge_at.set((handles.len() * 2).max(256));
         }
-        handles.insert(id, Rc::downgrade(handle));
+        handles.insert(id, (context, Rc::downgrade(handle)));
         id
     }
 
-    fn find(&self, id: u64) -> Option<Rc<RefCell<Handle>>> {
-        self.handles.borrow().get(&id)?.upgrade()
+    /// The handle `id` names, if it was made for `context`: a library
+    /// holds no other's.
+    fn find(&self, id: u64, context: usize) -> Option<Rc<RefCell<Handle>>> {
+        let handles = self.handles.borrow();
+        let (made_for, handle) = handles.get(&id)?;
+        (*made_for == context).then(|| handle.upgrade()).flatten()
     }
 }
 
@@ -107,6 +132,19 @@ pub(crate) enum Target {
 pub(crate) struct Handle {
     target: Target,
     caller: Arc<Caller>,
+    shared: Rc<Shared>,
+}
+
+impl Drop for Handle {
+    /// Freed by QuickJS's collector, so it only hands the object to the
+    /// engine to destroy later.
+    fn drop(&mut self) {
+        if let Target::Object(object) = &mut self.target
+            && let Some(object) = object.take()
+        {
+            self.shared.bury(object);
+        }
+    }
 }
 
 impl Handle {
@@ -176,13 +214,14 @@ pub(crate) fn handle_object<'js>(
     target: Target,
 ) -> rquickjs::Result<(Object<'js>, Rc<RefCell<Handle>>)> {
     let kind = Arc::clone(caller.kind());
-    let state = Rc::new(RefCell::new(Handle { target, caller }));
-    let id = shared.register(&state);
+    let state = Rc::new(RefCell::new(Handle {
+        target,
+        caller,
+        shared: Rc::clone(shared),
+    }));
+    let id = shared.register(context_key(ctx), &state);
     let object = Object::new(ctx.clone())?;
-    object.set(
-        Symbol::new_global(ctx.clone(), HANDLE)?.as_atom(),
-        id as f64,
-    )?;
+    object.set(prelude::core(ctx)?.handle_key.as_atom(), id as f64)?;
     for (index, slot) in kind.slots().iter().enumerate() {
         let state = Rc::clone(&state);
         let shared = Rc::clone(shared);
@@ -195,8 +234,10 @@ pub(crate) fn handle_object<'js>(
     let close = Function::new(ctx.clone(), move || {
         if let Ok(mut handle) = owned.try_borrow_mut()
             && let Target::Object(object) = &mut handle.target
+            && let Some(object) = object.take()
         {
-            drop(object.take());
+            // Destroyed once the call returns, as a freed handle's is.
+            handle.shared.bury(object);
         }
     })?;
     object.set("close", close.clone())?;
@@ -223,13 +264,13 @@ pub(crate) fn object_for<'js>(
 /// The handle a script's value is, if it is one.
 pub(crate) fn handle_of<'js>(
     ctx: &Ctx<'js>,
+    core: &Core<'js>,
     shared: &Shared,
     v: &Js<'js>,
 ) -> Option<Rc<RefCell<Handle>>> {
     let object = v.as_object()?;
-    let key = Symbol::new_global(ctx.clone(), HANDLE).ok()?;
-    let id: f64 = object.get(key.as_atom()).ok()?;
-    shared.find(id as u64)
+    let id: f64 = object.get(core.handle_key.as_atom()).ok()?;
+    shared.find(id as u64, context_key(ctx))
 }
 
 /// Takes the object out of a handle the script is handing back.
@@ -281,15 +322,39 @@ fn call_slot<'js>(
     let caller = Arc::clone(&state.borrow().caller);
     let kind = Arc::clone(caller.kind());
     let slot = &kind.slots()[index];
-    let mut prepared =
-        prepare(ctx, &core, shared, slot, args).map_err(|e| throw(ctx, &core, &e))?;
-    let answer = with_args(&mut prepared, |args| state.borrow().call(index, args));
-    settle(ctx, &core, prepared).map_err(|e| throw_conversion(ctx, &core, shared, e))?;
+    let mut held = prepare(ctx, &core, shared, slot, args).map_err(|e| throw(ctx, &core, &e))?;
+    let answer = with_args(&mut held.0, |args| state.borrow().call(index, args));
+    settle(ctx, &core, &mut held).map_err(|e| throw_conversion(ctx, &core, shared, e))?;
     match answer {
         Ok(answer) => {
             answer_to_js(ctx, &core, shared, slot, answer).map_err(|e| throw(ctx, &core, &e))
         }
         Err(e) => Err(throw(ctx, &core, &e)),
+    }
+}
+
+/// The arguments of a call. However the call ends, an object of the
+/// script's own that was taken out of its handle for it goes back in: a
+/// refused later argument, or a failed write-back, must not destroy what
+/// was only lent.
+struct Held<'js>(Vec<Prepared<'js>>);
+
+impl Drop for Held<'_> {
+    fn drop(&mut self) {
+        for p in self.0.drain(..) {
+            if let Prepared::Object(Some(object), handle)
+            | Prepared::LentOwned(Some(object), handle) = p
+            {
+                give_back(&handle, object);
+            }
+        }
+    }
+}
+
+/// Puts `object` back in the handle it was taken from.
+fn give_back(handle: &Rc<RefCell<Handle>>, object: RawObject) {
+    if let Ok(mut state) = handle.try_borrow_mut() {
+        state.target = Target::Object(Some(object));
     }
 }
 
@@ -311,7 +376,8 @@ enum Prepared<'js> {
     LentValue(Value, Option<Js<'js>>),
     LentMap(Map, Option<Js<'js>>),
     LentList(List, Option<Js<'js>>),
-    Object(Option<RawObject>),
+    /// An object handed over, with the handle it came out of.
+    Object(Option<RawObject>, Rc<RefCell<Handle>>),
     /// An object this side owns, lent for the call and put back after.
     LentOwned(Option<RawObject>, Rc<RefCell<Handle>>),
     /// A lent object passed on.
@@ -434,13 +500,14 @@ fn tree_of<'js>(
 /// An object argument: a handle, handed over or lent on.
 fn object_arg<'js>(
     ctx: &Ctx<'js>,
+    core: &Core<'js>,
     shared: &Shared,
     v: &Js<'js>,
     kind: &str,
     pass: Pass,
     what: &str,
 ) -> Result<Prepared<'js>, ProviderError> {
-    let Some(handle) = handle_of(ctx, shared, v) else {
+    let Some(handle) = handle_of(ctx, core, shared, v) else {
         return Err(bad_value(format!(
             "{what} is an object of `{kind}` (a handle a host gave this library), not a {}",
             v.type_name()
@@ -456,17 +523,16 @@ fn object_arg<'js>(
         )));
     }
     match (&mut state.target, pass) {
-        (Target::Object(object), Pass::Taken) => {
-            Ok(Prepared::Object(Some(object.take().ok_or_else(|| {
-                bad_value(format!("{what} was already handed over"))
-            })?)))
-        }
-        (Target::Object(object), _) => {
+        (Target::Object(object), pass) => {
             let taken = object
                 .take()
                 .ok_or_else(|| bad_value(format!("{what} was already handed over")))?;
             drop(state);
-            Ok(Prepared::LentOwned(Some(taken), handle))
+            Ok(if pass == Pass::Taken {
+                Prepared::Object(Some(taken), handle)
+            } else {
+                Prepared::LentOwned(Some(taken), handle)
+            })
         }
         (Target::Lent(lent), Pass::Lent) => Ok(Prepared::LentPassed(lent.clone())),
         (Target::Lent(_), _) => Err(bad_value(format!(
@@ -482,15 +548,15 @@ fn prepare<'js>(
     shared: &Shared,
     slot: &SlotDescription,
     args: Vec<Js<'js>>,
-) -> Result<Vec<Prepared<'js>>, ProviderError> {
+) -> Result<Held<'js>, ProviderError> {
     let mut args = args.into_iter();
-    let mut out = Vec::with_capacity(slot.args().len());
+    let mut out = Held(Vec::with_capacity(slot.args().len()));
     for described in slot.args() {
         let v = args
             .next()
             .unwrap_or_else(|| Js::new_undefined(ctx.clone()));
         let what = format!("`{}`'s argument `{}`", slot.name(), described.name());
-        out.push(match described.ty() {
+        out.0.push(match described.ty() {
             ArgType::Scalar(s) => scalar(core, &v, *s, &what)?,
             ArgType::Str => match v.as_string() {
                 Some(s) => Prepared::Str(
@@ -512,10 +578,16 @@ fn prepare<'js>(
                 {
                     Prepared::Buffer(bytes_of(core, &v, &what)?, Some(v))
                 }
-                Type::Int => Prepared::Buffer(
-                    vec![0; usize::try_from(v.as_int().unwrap_or(0)).unwrap_or(0)],
-                    None,
-                ),
+                Type::Int => {
+                    let n = usize::try_from(v.as_int().unwrap_or(0)).unwrap_or(0);
+                    if n > core.bounds.bytes {
+                        return Err(bad_value(format!(
+                            "{what}: {n} bytes is more than the {} this source makes",
+                            core.bounds.bytes
+                        )));
+                    }
+                    Prepared::Buffer(vec![0; n], None)
+                }
                 other => {
                     return Err(bad_value(format!(
                         "{what} is a Uint8Array to write into (or its length), not a {}",
@@ -556,7 +628,9 @@ fn prepare<'js>(
                     }
                 }
             }
-            ArgType::Object { kind, pass } => object_arg(ctx, shared, &v, kind, *pass, &what)?,
+            ArgType::Object { kind, pass } => {
+                object_arg(ctx, core, shared, &v, kind, *pass, &what)?
+            }
             _ => {
                 return Err(bad_value(format!(
                     "{what} has a type this binding does not carry"
@@ -599,7 +673,7 @@ fn with_args<R>(prepared: &mut [Prepared<'_>], f: impl FnOnce(Vec<Arg<'_>>) -> R
                 Prepared::LentValue(v, _) => Arg::LentValue(v),
                 Prepared::LentMap(m, _) => Arg::LentMap(m),
                 Prepared::LentList(l, _) => Arg::LentList(l),
-                Prepared::Object(o) => match o.take() {
+                Prepared::Object(o, _) => match o.take() {
                     Some(o) => Arg::Object(o),
                     None => Arg::Value(None),
                 },
@@ -635,22 +709,15 @@ fn lending<R>(
 /// After the call: each lent tree written back over the object it came
 /// from, each buffer into its `Uint8Array`, each object lent from a handle
 /// put back in it.
-fn settle<'js>(
-    ctx: &Ctx<'js>,
-    core: &Core<'js>,
-    prepared: Vec<Prepared<'js>>,
-) -> Result<(), Conversion> {
-    for p in prepared {
+fn settle<'js>(ctx: &Ctx<'js>, core: &Core<'js>, held: &mut Held<'js>) -> Result<(), Conversion> {
+    // Popped one at a time, so that what a failure leaves is still in `held`.
+    while let Some(p) = held.0.pop() {
         match p {
             Prepared::LentValue(v, Some(home)) => values::refill(core, ctx, &home, &v)?,
             Prepared::LentMap(m, Some(home)) => values::refill(core, ctx, &home, &Value::from(m))?,
             Prepared::LentList(l, Some(home)) => values::refill(core, ctx, &home, &Value::from(l))?,
             Prepared::Buffer(bytes, Some(home)) => values::overwrite(ctx, &home, &bytes)?,
-            Prepared::LentOwned(Some(object), handle) => {
-                if let Ok(mut state) = handle.try_borrow_mut() {
-                    state.target = Target::Object(Some(object));
-                }
-            }
+            Prepared::LentOwned(Some(object), handle) => give_back(&handle, object),
             _ => {}
         }
     }
@@ -677,7 +744,7 @@ fn answer_to_js<'js>(
         Answer::Bool(b) => Js::new_bool(ctx.clone(), b),
         Answer::Int(n) => values::scalar_to_js(ctx, scalar, &n.to_string()).map_err(wrong)?,
         Answer::Uint(n) => values::scalar_to_js(ctx, scalar, &n.to_string()).map_err(wrong)?,
-        Answer::Float(x) => Js::new_number(ctx.clone(), x),
+        Answer::Float(x) => values::number(ctx, x),
         Answer::Text(t) => rquickjs::String::from_str(ctx.clone(), &t)
             .map_err(|e| errors::caught(ctx, Some(core), &e, shared.words))?
             .into_value(),

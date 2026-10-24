@@ -31,9 +31,14 @@ impl Roots {
         ctx.as_raw().as_ptr() as usize
     }
 
-    /// Lets `ctx` import files under `paths`.
+    /// Lets `ctx` import files under `paths`, as the files themselves are
+    /// found: a link out of them does not lead out.
     pub(crate) fn allow(&self, ctx: &Ctx<'_>, paths: Vec<PathBuf>) {
-        self.0.borrow_mut().insert(Self::key(ctx), paths);
+        let real = paths
+            .into_iter()
+            .map(|p| std::fs::canonicalize(&p).unwrap_or(p))
+            .collect();
+        self.0.borrow_mut().insert(Self::key(ctx), real);
     }
 
     /// Takes the permission back.
@@ -42,6 +47,7 @@ impl Roots {
     }
 
     fn allows(&self, ctx: &Ctx<'_>, file: &Path) -> bool {
+        let file = &std::fs::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
         self.0
             .borrow()
             .get(&Self::key(ctx))
