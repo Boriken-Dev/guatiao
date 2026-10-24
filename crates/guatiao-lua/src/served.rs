@@ -19,6 +19,7 @@ use guatiao::library::kind::{
     Answer, Arg, KindDescription, LentHandle, LentObject, RawObject, Serve, ServedTable,
 };
 use guatiao::{List, Map, Status, Value};
+use guatiao_libffi::Libffi;
 use mlua::prelude::*;
 
 use crate::calls::{self, Handle, Outcome, ReadBack, Received, Target};
@@ -325,6 +326,7 @@ pub(crate) fn object(lua: &Lua, kind: &str, table: LuaTable) -> LuaResult<RawObj
                 Arc::new(LuaServe {
                     thread: thread::current().id(),
                 }),
+                &Libffi,
             )
             .map_err(|e| LuaError::runtime(e.to_string()))?,
         );

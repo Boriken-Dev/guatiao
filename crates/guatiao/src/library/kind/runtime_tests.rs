@@ -3,8 +3,10 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Tables built at run time. The dispatch tests hand `dispatch` the
-//! argument array libffi would, so they run under Miri; the closures and
-//! `ffi_call` run natively only.
+//! argument array a closure would; the table tests build and call tables
+//! through [`Direct`], a mechanism with no foreign code, so all of it runs
+//! under Miri. A real mechanism's closures and calls are tested where it
+//! lives (`guatiao-libffi`).
 
 use std::sync::Mutex;
 
@@ -155,7 +157,7 @@ impl Serve for Served {
     }
 }
 
-/// Builds the argument array libffi hands a closure: one address per
+/// Builds the argument array a closure hands its handler: one address per
 /// argument.
 fn array(parts: &mut [&mut dyn ArgSlot]) -> Vec<*mut c_void> {
     // Through the trait object, to the argument's own storage.
@@ -348,17 +350,119 @@ fn a_number_is_narrowed_to_its_slot_or_refused() {
     assert_eq!(out, u64::MAX);
 }
 
-// --- the closures and ffi_call, natively -----------------------------------------
+// --- tables end to end, through a mechanism with no foreign code -------------
+
+/// A [`Mechanism`] whose closures are marker functions, never called as
+/// code: its [`Prepared::call`] finds the handler by the marker's address
+/// and runs it on the same argument array a real call would hand it. Only
+/// [`Caller`] reaches these tables, so the markers' signatures never
+/// matter.
+#[derive(Default)]
+struct Direct {
+    made: Registered,
+}
+
+struct DirectPrepared {
+    made: Registered,
+}
+
+/// Each live closure's marker address and handler.
+type Registered = Arc<Mutex<Vec<(usize, Arc<SlotHandler>)>>>;
+
+/// Distinct functions, so each closure has an address of its own.
+extern "C" fn marker<const J: usize>() {
+    core::hint::black_box(J);
+}
+
+const MARKERS: [extern "C" fn(); 12] = [
+    marker::<0>,
+    marker::<1>,
+    marker::<2>,
+    marker::<3>,
+    marker::<4>,
+    marker::<5>,
+    marker::<6>,
+    marker::<7>,
+    marker::<8>,
+    marker::<9>,
+    marker::<10>,
+    marker::<11>,
+];
+
+/// Forgets a closure's handler when the closure drops.
+struct Made {
+    made: Registered,
+    code: usize,
+}
+
+impl Drop for Made {
+    fn drop(&mut self) {
+        self.made.lock().unwrap().retain(|(c, _)| *c != self.code);
+    }
+}
+
+// SAFETY: test-only, and weaker than the contract: a marker is never
+// called as code, only through `DirectPrepared::call`, which runs the
+// handler on the array a call with the signature would hand it.
+unsafe impl Mechanism for Direct {
+    fn prepare(&self, _: &CSignature) -> Result<Arc<dyn Prepared>, TableError> {
+        Ok(Arc::new(DirectPrepared {
+            made: Arc::clone(&self.made),
+        }))
+    }
+}
+
+// SAFETY: as `Direct`.
+unsafe impl Prepared for DirectPrepared {
+    fn closure(self: Arc<Self>, handler: SlotHandler) -> Result<Closure, TableError> {
+        let mut made = self.made.lock().unwrap();
+        let free = MARKERS
+            .iter()
+            .map(|m| *m as usize)
+            .find(|m| made.iter().all(|(c, _)| c != m))
+            .ok_or_else(|| TableError::Mechanism("out of markers".to_string()))?;
+        made.push((free, Arc::new(handler)));
+        let code = MARKERS
+            .into_iter()
+            .find(|m| *m as usize == free)
+            .expect("a marker");
+        let owner = Made {
+            made: Arc::clone(&self.made),
+            code: free,
+        };
+        // SAFETY: as `Direct`: the marker stands for the handler while
+        // `owner` keeps it registered.
+        Ok(unsafe { Closure::new(code, Box::new(owner)) })
+    }
+
+    unsafe fn call(&self, f: unsafe extern "C" fn(), args: &[*mut c_void]) -> u32 {
+        let handler = self
+            .made
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(c, _)| *c == f as usize)
+            .map(|(_, h)| Arc::clone(h))
+            .expect("a closure this mechanism made");
+        // SAFETY: the caller's contract: the array of a call with the
+        // signature the handler's slot has.
+        unsafe { handler.call(args.as_ptr()) }
+    }
+}
 
 type GreetFn = unsafe extern "C" fn(*mut c_void, Str, *mut Map, *mut ProviderError) -> Status;
 
 #[test]
-#[cfg_attr(miri, ignore = "libffi")]
 fn a_table_is_built_with_its_header_and_a_null_for_each_slot_left_out() {
     let greeter = kind("greeter");
     let serve: Arc<dyn Serve> = Arc::new(Served::default());
-    let table =
-        ServedTable::new(Arc::clone(&greeter), |s| s.name() != "shout", serve).expect("built");
+    let table = ServedTable::new(
+        Arc::clone(&greeter),
+        |s| s.name() != "shout",
+        serve,
+        &Direct::default(),
+    )
+    .expect("built");
     // SAFETY: the table's own header.
     let header = unsafe { table.as_ptr().cast::<KindHeader>().read() };
     assert_eq!(header.floor_hash, greeter.floor_hash());
@@ -368,27 +472,34 @@ fn a_table_is_built_with_its_header_and_a_null_for_each_slot_left_out() {
         let slots = table.as_ptr().cast::<u8>().add(8).cast::<Option<GreetFn>>();
         (slots.read(), slots.add(1).read())
     };
+    assert!(greet.is_some());
     assert!(shout.is_none());
-    let greet = greet.expect("greet is served");
-    let mut out = Map::carrier(Alloc::rust());
-    let mut err = ProviderError::none();
-    // SAFETY: the slot's own signature, as the description gives it.
-    let status = unsafe { greet(ctx(9), Str::new("cy"), &mut out, &mut err) };
-    assert_eq!(status, Status::GUATIAO_OK);
-    assert_eq!(
-        out.get("greeting").and_then(TryAsRef::<str>::try_as_ref),
-        Some("hello, cy (9)")
-    );
 
     let required = ServedTable::new(
         greeter,
         |s| s.name() != "greet",
         Arc::new(Served::default()),
+        &Direct::default(),
     );
     assert_eq!(
         required.unwrap_err(),
         TableError::MissingRequired("greet".to_string())
     );
+}
+
+#[test]
+fn a_signature_is_read_from_the_slot() {
+    let greeter = kind("greeter");
+    let (greet, _) = greeter.slot("greet").expect("a slot");
+    let signature = CSignature::of_slot(&greeter, greet).expect("a signature");
+    let view = CType::Struct(vec![CType::Pointer, CType::Usize]);
+    assert_eq!(
+        signature.args(),
+        &[CType::Pointer, view, CType::Pointer, CType::Pointer]
+    );
+    assert!(signature.returns_status());
+    assert!(!CSignature::destroy().returns_status());
+    assert_eq!(CSignature::destroy().args(), &[CType::Pointer]);
 }
 
 fn call_on(
@@ -403,12 +514,13 @@ fn call_on(
 }
 
 #[test]
-#[cfg_attr(miri, ignore = "libffi")]
 fn a_caller_reaches_a_served_table_with_every_shape() {
+    let mechanism = Direct::default();
     let serve = Arc::new(Served::default());
     let wide = kind("wide");
-    let table = ServedTable::new(Arc::clone(&wide), |_| true, serve.clone()).expect("built");
-    let caller = Caller::new(Arc::clone(&wide)).expect("interfaces");
+    let table =
+        ServedTable::new(Arc::clone(&wide), |_| true, serve.clone(), &mechanism).expect("built");
+    let caller = Caller::new(Arc::clone(&wide), &mechanism).expect("prepared");
     let call = |slot, args| call_on(&caller, &table, 2, slot, args);
     assert!(matches!(
         call(0, vec![Arg::Int(i64::MIN)]),
@@ -425,8 +537,9 @@ fn a_caller_reaches_a_served_table_with_every_shape() {
     );
 
     let greeter = kind("greeter");
-    let table = ServedTable::new(Arc::clone(&greeter), |_| true, serve.clone()).expect("built");
-    let caller = Caller::new(Arc::clone(&greeter)).expect("interfaces");
+    let table =
+        ServedTable::new(Arc::clone(&greeter), |_| true, serve.clone(), &mechanism).expect("built");
+    let caller = Caller::new(Arc::clone(&greeter), &mechanism).expect("prepared");
     let call = |slot, args: Vec<Arg<'static>>| call_on(&caller, &table, 4, slot, args);
     let (greet, _) = greeter.slot("greet").expect("a slot");
     let Ok(Answer::Map(map)) = call(greet, vec![Arg::Str("di")]) else {
@@ -460,28 +573,37 @@ fn a_caller_reaches_a_served_table_with_every_shape() {
 }
 
 #[test]
-#[cfg_attr(miri, ignore = "libffi")]
 fn an_object_table_built_at_run_time_is_destroyed_through_its_handler() {
+    let mechanism = Direct::default();
     let serve = Arc::new(Served::default());
     let listener = kind("listener");
-    let table = ServedTable::new(Arc::clone(&listener), |_| true, serve.clone()).expect("built");
-    let caller = Caller::new(listener).expect("interfaces");
+    let table = ServedTable::new(Arc::clone(&listener), |_| true, serve.clone(), &mechanism)
+        .expect("built");
+    let caller = Caller::new(listener, &mechanism).expect("prepared");
     let mut object = table.object(11).expect("an object kind");
     assert!(matches!(
         object.call(&caller, 0, vec![Arg::Str("hi")]),
         Ok(Answer::Nothing)
     ));
-    drop(object);
+    // `destroy` is a marker here, never called as code: give the object
+    // up and run the handler as its closure would.
+    let raw = object.into_raw();
+    let mut c = raw.ctx;
+    let args = array(&mut [&mut c]);
+    let destroy = mechanism.made.lock().unwrap()[0].1.clone();
+    // SAFETY: `destroy(ctx)`: the array of a call with one pointer.
+    assert_eq!(unsafe { destroy.call(args.as_ptr()) }, 0);
     assert_eq!(*serve.destroyed.lock().unwrap(), 1);
 }
 
 #[test]
-#[cfg_attr(miri, ignore = "libffi")]
 fn a_lent_object_is_called_from_another_thread_while_lent_and_refused_after() {
+    let mechanism = Direct::default();
     let serve = Arc::new(Served::default());
     let listener = kind("listener");
-    let table = ServedTable::new(Arc::clone(&listener), |_| true, serve.clone()).expect("built");
-    let caller = Arc::new(Caller::new(listener).expect("interfaces"));
+    let table = ServedTable::new(Arc::clone(&listener), |_| true, serve.clone(), &mechanism)
+        .expect("built");
+    let caller = Arc::new(Caller::new(listener, &mechanism).expect("prepared"));
     let object = table.object(12).expect("an object kind");
     // SAFETY: an object this test owns, lent for the scope below.
     let lent = unsafe { LentObject::from_raw(object.as_raw()) };
@@ -500,5 +622,6 @@ fn a_lent_object_is_called_from_another_thread_while_lent_and_refused_after() {
         1,
         "the late call never reached it"
     );
-    drop(object);
+    // Its `destroy` is a marker: let it go without calling it.
+    let _ = object.into_raw();
 }

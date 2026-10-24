@@ -355,9 +355,8 @@ mod description;
 mod object;
 mod parts;
 mod proxy;
-// Tables built at run time from a description: libffi closures and calls.
+// Tables built at run time from a description, over a `Mechanism`.
 // Carries `unsafe`, listed in `tests/forbid_unsafe_per_module.rs`.
-#[cfg(feature = "dynamic-kinds")]
 mod runtime;
 mod shim;
 
@@ -365,7 +364,6 @@ pub use self::description::*;
 pub use self::object::*;
 pub use self::parts::*;
 pub use self::proxy::*;
-#[cfg(feature = "dynamic-kinds")]
 pub use self::runtime::*;
 pub use self::shim::*;
 

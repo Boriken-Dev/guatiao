@@ -24,6 +24,7 @@ use guatiao::library::{Candidate, Host, LocalLibrary, ProviderError, Registry, S
 use guatiao::value::convert::TryAsRef;
 use guatiao::{List, Map, Status};
 use guatiao_bridge::BridgeSource;
+use guatiao_libffi::Libffi;
 use guatiao_lua::LuaEngine;
 
 fn repo() -> PathBuf {
@@ -87,8 +88,11 @@ impl Source for Held {
 }
 
 fn serving(config: &Map) -> Registry {
-    let source =
-        Arc::new(BridgeSource::<LuaEngine>::pinned(config, "lua-test").expect("Lua starts"));
+    let source = Arc::new(
+        BridgeSource::<LuaEngine>::pinned(config, "lua-test")
+            .expect("Lua starts")
+            .with_mechanism(Arc::new(Libffi)),
+    );
     let mut registry = Registry::new("lua-test-host", "1.0");
     registry.add_source("lua", Held(source)).expect("added");
     registry

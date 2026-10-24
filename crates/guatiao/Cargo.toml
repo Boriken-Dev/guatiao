@@ -62,18 +62,6 @@ c-header = ["dep:cbindgen"]
 # that can abort the process. See `src/library/scan.rs`.
 load = ["dep:libloading", "dep:object"]
 
-# Kind tables built at run time from a kind's description, and any table
-# called from one (`library::kind::{ServedTable, Caller}`): what a bridge
-# to an engine with no FFI of its own (Lua, JavaScript, Rhai, wasm) serves
-# and calls kinds with. Each slot is a libffi closure whose call interface
-# is read from the description, so `libffi` comes in here and nowhere else:
-# an FFI mechanism, not a data format. libffi builds from C source (MSVC's
-# tools on Windows, `configure` and `make` elsewhere; `libffi/system` links
-# the platform's own). On a Windows MSVC target a `CC` naming a GNU-style
-# compiler (`clang`) breaks that build: leave `CC` unset for cargo. Not on
-# wasm32, which libffi does not support.
-dynamic-kinds = ["dep:libffi"]
-
 # Enforces a schema's `pattern` in `validate_text` and `validate_value`.
 # Without it the keyword is carried and read but never checked -- a
 # consumer validating lengths and bounds should not compile a regex
@@ -84,8 +72,6 @@ regex = ["dep:regex"]
 guatiao-derive = { path = "../guatiao-derive", version = "=0.0.0-alpha.1", optional = true }
 libloading = { version = "0.8", optional = true }
 regex = { version = "1", optional = true }
-# Closures and calls for `dynamic-kinds`; nothing else uses it.
-libffi = { version = "5.2", optional = true }
 # Parses PE, ELF and Mach-O export tables as DATA. Default features off:
 # this reads three formats and writes none, and a scan should not drag in
 # a linker's worth of code.

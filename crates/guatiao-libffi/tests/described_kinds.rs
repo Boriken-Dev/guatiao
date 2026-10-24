@@ -7,8 +7,6 @@
 //! registry -- the same proxies a compiled library's tables are called
 //! through -- and a compiled provider called from its description.
 
-#![cfg(all(feature = "provider", feature = "load", feature = "dynamic-kinds"))]
-
 extern crate alloc;
 
 use alloc::collections::BTreeMap;
@@ -25,39 +23,18 @@ use guatiao::library::kind::{
 };
 use guatiao::library::{Object, ProviderError, Registry};
 use guatiao::value::convert::TryAsRef;
-use guatiao::{List, Map, Status, Value};
-
-fn value_of(json: &serde_json::Value) -> Value {
-    match json {
-        serde_json::Value::Null => Value::null(),
-        serde_json::Value::Bool(b) => Value::from(*b),
-        serde_json::Value::Number(n) => match (n.as_u64(), n.as_i64()) {
-            (Some(u), _) => Value::from(u),
-            (None, Some(i)) => Value::from(i),
-            _ => panic!("no floats in a description"),
-        },
-        serde_json::Value::String(s) => Value::from(s.as_str()),
-        serde_json::Value::Array(items) => {
-            let mut list = List::new();
-            for item in items {
-                list.push(value_of(item));
-            }
-            Value::from(list)
-        }
-        serde_json::Value::Object(entries) => {
-            let mut map = Map::new();
-            for (k, v) in entries {
-                map.set(k.as_str(), value_of(v));
-            }
-            Value::from(map)
-        }
-    }
-}
+use guatiao::{Map, Status};
+use guatiao_libffi::Libffi;
 
 /// A kind as `#[guatiao::kind]` describes it.
 fn described(json: &str) -> Arc<KindDescription> {
-    let json: serde_json::Value = serde_json::from_str(json).expect("JSON");
-    Arc::new(KindDescription::from_value(&value_of(&json)).expect("a description"))
+    let value = guatiao_serde::text::json::from_str(
+        json,
+        guatiao::Alloc::rust(),
+        guatiao_serde::Presentation::new(),
+    )
+    .expect("JSON");
+    Arc::new(KindDescription::from_value(&value).expect("a description"))
 }
 
 struct Kinds {
@@ -230,7 +207,7 @@ impl Serve for Engine {
 fn serving(shout: bool) -> (Registry, Arc<Engine>) {
     let k = kinds();
     let engine = Arc::new(Engine {
-        listener: Caller::new(Arc::clone(&k.listener)).expect("interfaces"),
+        listener: Caller::new(Arc::clone(&k.listener), &Libffi).expect("interfaces"),
         conversations: Mutex::new(BTreeMap::new()),
         next: Mutex::new(0),
         conversation_table: OnceLock::new(),
@@ -241,10 +218,12 @@ fn serving(shout: bool) -> (Registry, Arc<Engine>) {
         k.greeter,
         |s| shout || s.name() != "shout",
         Arc::clone(&serve),
+        &Libffi,
     )
     .expect("built");
-    let conversation =
-        Arc::new(ServedTable::new(k.conversation, |_| true, Arc::clone(&serve)).expect("built"));
+    let conversation = Arc::new(
+        ServedTable::new(k.conversation, |_| true, Arc::clone(&serve), &Libffi).expect("built"),
+    );
     assert!(
         engine
             .conversation_table
@@ -252,8 +231,9 @@ fn serving(shout: bool) -> (Registry, Arc<Engine>) {
             .is_ok(),
         "set once"
     );
-    let counter = ServedTable::new(k.counter, |_| true, Arc::clone(&serve)).expect("built");
-    let wide = ServedTable::new(k.wide, |_| true, Arc::clone(&serve)).expect("built");
+    let counter =
+        ServedTable::new(k.counter, |_| true, Arc::clone(&serve), &Libffi).expect("built");
+    let wide = ServedTable::new(k.wide, |_| true, Arc::clone(&serve), &Libffi).expect("built");
     let provider = ProviderParts::builder("engine_greeter")
         .kinds(&["greeter", "counter", "wide"])
         .table(greeter.kind_table())
@@ -407,10 +387,11 @@ impl Serve for Ears {
 fn an_owned_object_is_lent_and_stays_its_owners() {
     let (registry, _engine) = serving(true);
     let provider = registry.provider("engine_greeter").expect("registered");
-    let caller = Arc::new(Caller::new(kinds().greeter).expect("interfaces"));
+    let caller = Arc::new(Caller::new(kinds().greeter, &Libffi).expect("interfaces"));
     let remote = DescribedRemote::new(provider.view(), caller).expect("its table fits");
     let ears = Arc::new(Ears::default());
-    let listeners = ServedTable::new(kinds().listener, |_| true, ears.clone()).expect("built");
+    let listeners =
+        ServedTable::new(kinds().listener, |_| true, ears.clone(), &Libffi).expect("built");
     let owned = listeners.object(1).expect("an object kind");
     remote
         .call_named(
@@ -455,7 +436,7 @@ fn a_compiled_provider_is_called_from_its_description() {
         })
         .expect("registered");
     let provider = registry.provider("compiled_hello").expect("registered");
-    let caller = Arc::new(Caller::new(kinds().greeter).expect("interfaces"));
+    let caller = Arc::new(Caller::new(kinds().greeter, &Libffi).expect("interfaces"));
     let remote = DescribedRemote::new(provider.view(), caller).expect("its table fits");
     let Answer::Map(map) = remote
         .call_named("greet", vec![Arg::Str("ed")])
@@ -531,7 +512,7 @@ fn a_c_host_calls_a_table_built_at_run_time() {
             &["-fPIC"][..]
         })
         .arg("-I")
-        .arg(manifest.join("include"))
+        .arg(manifest.join("../guatiao/include"))
         .arg("-I")
         .arg(manifest.join("../../examples/greeter_kind/include"))
         .arg("-o")
@@ -564,15 +545,15 @@ fn a_c_host_calls_a_table_built_at_run_time() {
 
     let k = kinds();
     let engine = Arc::new(Engine {
-        listener: Caller::new(Arc::clone(&k.listener)).expect("interfaces"),
+        listener: Caller::new(Arc::clone(&k.listener), &Libffi).expect("interfaces"),
         conversations: Mutex::new(BTreeMap::new()),
         next: Mutex::new(0),
         conversation_table: OnceLock::new(),
         counted: Mutex::new(0),
     });
-    let greeter =
-        ServedTable::new(k.greeter, |s| s.name() != "shout", engine.clone()).expect("built");
-    let wide = ServedTable::new(k.wide, |_| true, engine).expect("built");
+    let greeter = ServedTable::new(k.greeter, |s| s.name() != "shout", engine.clone(), &Libffi)
+        .expect("built");
+    let wide = ServedTable::new(k.wide, |_| true, engine, &Libffi).expect("built");
     let ctx = core::ptr::without_provenance_mut(1);
 
     let mut answer = Map::new();

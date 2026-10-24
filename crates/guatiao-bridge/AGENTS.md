@@ -4,11 +4,13 @@ What every guatiao bridge to a language runtime shares: the engine trait
 and its thread, manifests and stamps, the glue to guatiao's `Source`,
 kinds served from their descriptions, limits and error mapping, and value
 conversion checked against shared vectors. `#![forbid(unsafe_code)]`.
-Depends on `guatiao` and `guatiao-serde` (`json`, `toml`).
+Depends on `guatiao` and `guatiao-serde` (`json`, `toml`). No features.
 
-| feature | adds |
-| --- | --- |
-| `dynamic-kinds` | `guatiao/dynamic-kinds` (libffi, built from C; not on wasm32): providers an engine declares get tables built from their kinds' descriptions |
+Providers an engine declares are served through tables built from their
+kinds' descriptions by a `guatiao::library::kind::Mechanism` the source is
+given (`with_mechanism`); `guatiao-libffi`'s `Libffi` is one, and needs a
+C build. A runtime that builds its own tables (CPython does, through
+ctypes) needs none.
 
 ## Writing a bridge
 
@@ -41,7 +43,7 @@ pub trait Engine: 'static {
 }
 pub enum Opened<L> {
     Built { library: L, descriptor: LocalLibrary<'static> },   // the engine built its own tables
-    Described { library: L, providers: Vec<Provided> },        // the bridge builds them (dynamic-kinds)
+    Described { library: L, providers: Vec<Provided> },        // the bridge builds them (with_mechanism)
 }
 Provided::new(id).name(n).serves(kind, ["slot", ..]).meta(map)
 ```
@@ -70,7 +72,7 @@ Provided::new(id).name(n).serves(kind, ["slot", ..]).meta(map)
 pub struct Call { pub args: Vec<CallArg>, .. }      // target(), kind(), slot(), slot_description(), method()
 pub enum Target { Provider(String), Object(u64) }
 pub enum CallArg { Value(Value), Lent(Value), Buffer(Vec<u8>),
-                   Object(RawObject), LentObject(LentHandle) }      // the last two with dynamic-kinds
+                   Object(RawObject), LentObject(LentHandle) }      // guatiao::library::kind's
 pub enum Reply { Nothing, Value(Value), Object { kind: String, id: u64 }, Handed(RawObject) }
 ```
 
@@ -93,9 +95,11 @@ pub enum Reply { Nothing, Value(Value), Object { kind: String, id: u64 }, Handed
 
 ## `BridgeSource<E>`
 
-`impl Source`. `shared(config)`, `pinned(config, thread)`, `config()`,
-`kinds()`, `threads()`, `run(|e| ..)` (reach the engine where its thread
-model says; `T: Send + 'static`).
+`impl Source`. `shared(config)`, `pinned(config, thread)`,
+`with_mechanism(Arc<dyn Mechanism>)` (serve `Opened::Described`; without
+one such a library is refused, `Unavailable`), `config()`, `kinds()`,
+`threads()`, `run(|e| ..)` (reach the engine where its thread model says;
+`T: Send + 'static`).
 
 - **list**: every manifest in `dirs` (and their immediate
   subdirectories) and `manifests`, each once, in path order. Runs no code
@@ -184,7 +188,5 @@ compared byte for byte by a test.
   cloned once per call, even for a `Shared` engine.
 - **A required slot an engine leaves out refuses the whole library** on
   open, in words naming the provider, the slot and the kind.
-- **`dynamic-kinds` builds libffi from C**: MSVC's tools on a Windows
-  MSVC target, where a `CC` naming a GNU-style compiler (`clang`) breaks
-  the build (libffi's build runs it with `cl`'s `/EP`): leave `CC` unset
-  for cargo, or set it to `cl` inside a developer shell.
+- **`guatiao-libffi` builds libffi from C**: see its header; the bridge
+  itself builds no C.

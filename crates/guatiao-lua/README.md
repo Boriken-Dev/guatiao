@@ -43,8 +43,8 @@ cargo build --release --manifest-path crates/guatiao-lua/Cargo.toml --no-default
 ```
 
 The output is `libguatiao_lua.so`, `libguatiao_lua.dylib` or
-`guatiao_lua.dll`. Building needs a C compiler (Lua, and libffi for the
-kind tables).
+`guatiao_lua.dll`. Building needs a C compiler (Lua, and libffi through
+`guatiao-libffi` for the kind tables).
 
 ## Quick start
 
