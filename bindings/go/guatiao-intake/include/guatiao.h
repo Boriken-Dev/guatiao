@@ -1544,9 +1544,10 @@ typedef struct guatiao_entries {
  answer over the carrier without freeing it: a caller may hold the
  answer after the library is unloaded. A slot `#[guatiao::kind]`
  generates always does; a Rust caller also copies, on arrival, an
- answer some other slot built elsewhere. A caller passes an initialised
- out slot: a carrier, or zeroes, which answers in the slot's own
- allocator, to be freed while the library is loaded.
+ answer some other slot built elsewhere, and a C caller does the same
+ with `guatiao_value_make_local` while the library is loaded. A caller
+ passes an initialised out slot: a carrier, or zeroes, which answers in
+ the slot's own allocator, to be freed while the library is loaded.
 
  **A tree argument by value is a move.** A slot argument that is a
  `guatiao_value *`, `guatiao_map *` or `guatiao_list *` without `const`
@@ -1558,7 +1559,8 @@ typedef struct guatiao_entries {
  tree for the call only (a Rust `&mut Map`, `&mut List` or `&mut
  Value`): read it, change it, grow it, never free it or keep the
  pointer. Build what goes into it through the allocator it records; a
- Rust caller moves anything built elsewhere there once the call returns.
+ Rust caller moves anything built elsewhere there once the call returns,
+ and a C caller calls `guatiao_value_make_local` on it.
  */
 typedef struct guatiao_kind_header {
   /*
@@ -2834,6 +2836,29 @@ guatiao_status guatiao_value_free(struct guatiao_value *v);
 guatiao_status guatiao_value_clone(const struct guatiao_alloc *alloc,
                                    const struct guatiao_value *src,
                                    struct guatiao_value *out);
+
+/*
+ Moves the tree in `v` into `alloc` where it stands: every block
+ another allocator made is moved into one from `alloc` and the old one
+ freed through the allocator that made it. Allocates nothing when
+ everything already records `alloc`.
+
+ What a caller of a kind table calls on a tree answer, or a lent tree,
+ a slot may have built in the library's own allocator: afterwards the
+ tree outlives the library. Call it while the library is loaded. A map
+ or list answer moves inside a value tagged `GUATIAO_MAP` or
+ `GUATIAO_LIST` holding it.
+
+ A null or unusable allocator is `GUATIAO_ERR_ALLOC`, and so is
+ `alloc` refusing: the tree is then whole, every block either moved or
+ where it was.
+
+ # Safety
+
+ The pointers are null or valid, and `v` addresses a well-formed value
+ nothing else is reading or freeing.
+ */
+guatiao_status guatiao_value_make_local(struct guatiao_value *v, const struct guatiao_alloc *alloc);
 
 /*
  Writes the stored nothing through `out`.
