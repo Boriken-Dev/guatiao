@@ -726,9 +726,8 @@ write now.
   exactly; where a suite has Rust call its provider, `greeter_caller_wide`
   reads the same six back. A value that does not fit is refused naming the
   call in Python (`OverflowError`), Node (`RangeError`), Julia
-  (`InexactError`) and MATLAB and Octave (`guatiao:BadValue`); Go and
-  Fortran take the slot's own 64-bit types, and C++ converts as C++ does
-  (`-1` to a `uint64_t` is UINT64_MAX). Dart and Fortran have no unsigned
+  (`InexactError`) and MATLAB and Octave (`guatiao:BadValue`); Go and C++
+  take the slot's own 64-bit types. Dart and Fortran have no unsigned
   64-bit integer: a `uint64` is the signed integer holding its bits,
   negative past 2^63 - 1 (UINT64_MAX is -1; in Dart,
   `BigInt.from(x).toUnsigned(64)` is the number).
