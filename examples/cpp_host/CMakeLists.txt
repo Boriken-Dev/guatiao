@@ -42,6 +42,23 @@ if(WIN32)
   set_target_properties(c_greeter PROPERTIES PREFIX "")
 endif()
 
+# The same greeter twice more, each in a directory of its own for a test
+# that unmaps it: one built to ignore the carrier (its answers are built in
+# its own allocator), one stock.
+foreach(variant IN ITEMS careless lent)
+  set(dir "${CMAKE_BINARY_DIR}/greeters/c_${variant}")
+  add_library(c_greeter_${variant} SHARED "${CMAKE_CURRENT_SOURCE_DIR}/../../crates/guatiao/tests/c_consumer/greeter_in_c.c")
+  target_include_directories(c_greeter_${variant} PRIVATE ${kinds_include} "${CMAKE_CURRENT_SOURCE_DIR}/../../crates/guatiao/include")
+  set_target_properties(c_greeter_${variant} PROPERTIES
+    C_STANDARD 11
+    OUTPUT_NAME c_greeter
+    LIBRARY_OUTPUT_DIRECTORY "${dir}" RUNTIME_OUTPUT_DIRECTORY "${dir}")
+  if(WIN32)
+    set_target_properties(c_greeter_${variant} PROPERTIES PREFIX "")
+  endif()
+endforeach()
+target_compile_definitions(c_greeter_careless PRIVATE GREETER_IGNORES_CARRIER)
+
 option(CPP_HOST_TESTS "Build the C++ host's test" ON)
 if(CPP_HOST_TESTS)
   enable_testing()
@@ -53,8 +70,10 @@ if(CPP_HOST_TESTS)
     "GUATIAO_REPO=\"${repo}\""
     "RUST_GREETERS_DIR=\"${guatiao_native_core_DIRECTORY}\""
     "C_GREETER_DIR=\"${c_greeter_dir}\""
+    "C_CARELESS_GREETER_DIR=\"${CMAKE_BINARY_DIR}/greeters/c_careless\""
+    "C_LENT_GREETER_DIR=\"${CMAKE_BINARY_DIR}/greeters/c_lent\""
     "CPP_GREETER_DIR=\"${cpp_greeter_dir}\"")
-  add_dependencies(test_greeters cpp_greeter c_greeter)
+  add_dependencies(test_greeters cpp_greeter c_greeter c_greeter_careless c_greeter_lent)
   add_test(NAME cpp_host_greeters COMMAND test_greeters)
 
   # 64-bit integers through the wide kind: Rust, C and a provider written here.
