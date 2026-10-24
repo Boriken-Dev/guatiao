@@ -30,7 +30,9 @@ code the host did not write.
   the host carries on, even code that wraps the stopped loop in
   `try`/`catch`.
 - **No way out of the sandbox.** A script reaches no file, no network and
-  no other module: `import` is refused.
+  no other module: `import` is refused, and `print` and `debug` do
+  nothing. It can still abort the host if it nests values with no
+  `operations` limit set, or over many calls (see below).
 - **One engine on a thread of its own**, which every call reaches.
 
 ## Building
@@ -85,6 +87,14 @@ holds a greeter serving every slot of the example kinds.
 
 ## What Rhai cannot do here
 
+- **Be safe without `operations`.** Rhai copies and drops nested values by
+  recursion on the native stack, and no size limit bounds how deep they
+  nest (a chain of closures costs one operation a level), so a script
+  with no `operations` limit can overflow the stack and abort the host.
+  With one (at most 16 777 216) every call runs on a stack that holds what
+  it can nest, and values a library keeps are dropped on a large one.
+  Depth built up in a provider's state over many calls is not covered.
+  Function bodies nest expressions at most 16 deep.
 - **Bound its memory as a whole.** `memory` becomes Rhai's own size
   limits: one string, array or map may not outgrow them, and nested ones
   are counted. A script can still hold many containers each under the
