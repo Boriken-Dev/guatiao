@@ -39,7 +39,7 @@ Base.close(e::Ear) = (e.closed = true; nothing)
 @testset "the kinds copy their floor hashes from the header" begin
     header = read(GREETER_KIND_H, String)
     for (table, K) in (("greeter_vtable", Greeter), ("counter_vtable", Counter),
-        ("conversation_vtable", Conversation), ("listener_vtable", Listener))
+        ("conversation_vtable", Conversation), ("listener_vtable", Listener), ("wide_vtable", Wide))
         found = match(Regex("#define $(table)_FLOOR_HASH (\\d+)"), header)
         @test parse(UInt32, found.captures[1]) == Guatiao.kind(K).floor_hash
         body = match(Regex("typedef struct $table \\{(.*?)\\} $table;", "s"), header).captures[1]
@@ -205,4 +205,87 @@ end
     @test Guatiao.live_objects() == before + 2   # the conversation, and the listener it holds
     close(chat)
     @test Guatiao.live_objects() == before
+end
+
+# ---- 64-bit integers cross a slot exactly --------------------------------------------
+
+const SIGNED = Int64[Int64(2)^53 + 1, typemin(Int64), typemax(Int64)]
+const UNSIGNED = UInt64[UInt64(2)^53 + 1, UInt64(2)^63, typemax(UInt64)]
+
+"Answers what it is handed, and refuses 7."
+struct Echo <: Wide end
+function GreeterKind.echo_i64(::Echo, x::Int64)
+    x == 7 && throw(GuatiaoError(Guatiao.BadValue, "seven is no number"))
+    return x
+end
+function GreeterKind.echo_u64(::Echo, x::UInt64)
+    x == 7 && throw(GuatiaoError(Guatiao.BadValue, "seven is no number"))
+    return x
+end
+
+"Answers a number its slot cannot hold."
+struct Overshoot <: Wide end
+GreeterKind.echo_i64(::Overshoot, x::Int64) = big(x) + 1
+GreeterKind.echo_u64(::Overshoot, x::UInt64) = -1
+
+Guatiao.register_library(HOST, Guatiao.Library("julia_wide", "0.1.0"; providers = [Echo, Overshoot]))
+
+const WIDE = [
+    (:rust, "derived_greeter_hello"),
+    (:c, "c_greeter"),
+    (:julia, "julia_wide_echo"),
+]
+
+@testset "a slot carries 64-bit integers exactly: $which" for (which, key) in WIDE
+    which in PRESENT || which === :julia || continue
+    w = Guatiao.bind(HOST, key, Wide)
+    for x in SIGNED
+        @test GreeterKind.echo_i64(w, x) === x
+    end
+    for x in UNSIGNED
+        @test GreeterKind.echo_u64(w, x) === x
+    end
+    # A number that is whole converts; what does not fit or is no number is refused.
+    @test GreeterKind.echo_i64(w, 5.0) === Int64(5)
+    @test GreeterKind.echo_u64(w, 2^53) === UInt64(2)^53
+    for bad in (UInt64(2)^63, big(2)^63, big(-2)^63 - 1, 1.5, 9.3e18)
+        @test_throws InexactError GreeterKind.echo_i64(w, bad)
+    end
+    for bad in (-1, big(2)^64, big(-1), 3.0e19, 1.5)
+        @test_throws InexactError GreeterKind.echo_u64(w, bad)
+    end
+    @test_throws MethodError GreeterKind.echo_i64(w, "5")
+    @test_throws MethodError GreeterKind.echo_u64(w, nothing)
+end
+
+@testset "a Julia provider refuses with its own words, and fails a call whose answer does not fit" begin
+    w = Guatiao.bind(HOST, "julia_wide_echo", Wide)
+    for call in (() -> GreeterKind.echo_i64(w, 7), () -> GreeterKind.echo_u64(w, 7))
+        e = try call() catch e; e end
+        @test e isa GuatiaoError && e.status == Guatiao.BadValue && occursin("seven is no number", e.message)
+    end
+    o = Guatiao.bind(HOST, "julia_wide_overshoot", Wide)
+    @test GreeterKind.echo_i64(o, Int64(5)) == 6
+    for call in (() -> GreeterKind.echo_i64(o, typemax(Int64)), () -> GreeterKind.echo_u64(o, UInt64(0)))
+        e = try call() catch e; e end
+        @test e isa GuatiaoError && e.status == Guatiao.Internal
+    end
+end
+
+@testset "the Rust proxy calls a wide provider exactly: $which" for (which, key) in WIDE
+    which in PRESENT || which === :julia || continue
+    caller = Libdl.dlopen(workspace_library("greeter_caller"))
+    wide = Libdl.dlsym(caller, :greeter_caller_wide)
+    out = Guatiao.new_root()
+    host = Guatiao.host(HOST)
+    status = GC.@preserve key begin
+        gs = Guatiao.gc_safe_enter()
+        s = ccall(wide, UInt32, (Ptr{Cvoid}, Guatiao.GStr, Ptr{Guatiao.GValue}), host, Guatiao.gstr(key), out)
+        Guatiao.gc_safe_leave(gs)
+        s
+    end
+    @test status == 0
+    report = Value(out)[]
+    @test report["i64"] == SIGNED
+    @test report["u64"] == UNSIGNED
 end
