@@ -194,6 +194,24 @@ SEXP C_registry_provider_config(SEXP x, SEXP key) {
   return owner;
 }
 
+/* What a provider declared beyond its schema, a copy in this binding's
+ * allocator, or NULL when it declares nothing. */
+SEXP C_registry_provider_meta(SEXP x, SEXP key) {
+  guatiao_registry *reg = reg_of(x);
+  guatiao_value meta;
+  set_absent(&meta);
+  guatiao_status st = GT_CORE_FN(guatiao_registry_provider_meta)(reg, gt_str_arg(key, "the key"),
+                                                                 &gt_binding_alloc, &meta);
+  if (st) gt_raise(st, st == GUATIAO_ERR_NOT_FOUND ? "no provider answers to that key" : "the meta was refused");
+  if (meta.tag == GUATIAO_ABSENT) return R_NilValue;
+  SEXP owner = gt_owner_new(&meta, &gt_binding_alloc, R_NilValue);
+  if (!owner) {
+    gt_free(&meta);
+    gt_raise(GUATIAO_ERR_ALLOC, "out of memory");
+  }
+  return owner;
+}
+
 SEXP C_registry_host(SEXP x) {
   guatiao_registry *reg = reg_of(x);
   const guatiao_host_info *h = GT_CORE_FN(guatiao_registry_host)(reg);

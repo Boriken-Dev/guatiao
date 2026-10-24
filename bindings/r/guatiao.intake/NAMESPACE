@@ -4,3 +4,4 @@ importFrom(guatiao, use_library)
 
 export(intake_check, intake_layout, intake_is_visible, intake_at, intake_for_schema, intake_form_for)
 export(intake_resolve, intake_flat_keys, intake_flatten, intake_unflatten)
+export(intake_provider_form_key)

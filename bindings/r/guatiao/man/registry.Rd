@@ -30,6 +30,10 @@ R (\code{\link{library_of}}).}
 \item{\code{provider_table(key, kind = NULL)}, \code{provider_config(key)},
 \code{host()}}{A provider's table (\code{list(table, size, ctx)}), a copy of its
 configuration schema (or \code{NULL}), and the registry's host block.}
+\item{\code{provider_meta(key)}}{What the provider declared beyond its schema,
+its notices or its form under \code{guatiao.intake}'s
+\code{intake_provider_form_key}: a copy, outliving the library, or \code{NULL}
+when it declares nothing; \code{NotFound} for an unknown key.}
 \item{\code{create(key, config)}}{An instance built from a configuration,
 checked against the provider's schema first (\code{BadValue} naming the field).
 \code{inst$close()} reaches the provider that built it, even after a retire or a

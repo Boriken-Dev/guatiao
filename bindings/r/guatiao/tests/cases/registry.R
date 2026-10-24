@@ -61,6 +61,20 @@ case("answers a single table, and a table per kind", with_examples({
   reg$close()
 }))
 
+case("a provider's meta is a copy carrying its form", with_examples({
+  reg <- scanned()
+  meta <- reg$provider_meta("derived_greeter_shouter")
+  reg$close()
+  sections <- vapply(value_data(meta$form$sections), function(s) s$id, "")
+  expect_equal(sections, c("words", "volume"))
+  close(meta)
+  reg <- scanned()
+  expect_true(is.null(reg$provider_meta("derived_greeter_hello")))
+  e <- expect_error(reg$provider_meta("nobody"), "guatiao_error")
+  expect_equal(e$status, "NotFound")
+  reg$close()
+}))
+
 case("builds an instance, and gives a copy of its configuration schema", with_examples({
   reg <- scanned()
   schema <- reg$provider_config("derived_greeter_shouter")

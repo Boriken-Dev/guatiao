@@ -43,6 +43,7 @@ intake_resolve(schema, "auth.password")     # a view, or NULL
 intake_flat_keys(schema, "auth")            # character vector
 intake_flatten(schema, "auth", value)       # named character vector
 intake_unflatten(schema, "auth", store)     # a value, or NULL
+intake_provider_form_key                    # "form": a provider's form in reg$provider_meta(key)
 ```
 
 Every schema, form, value and values argument is a value of `guatiao`, a
