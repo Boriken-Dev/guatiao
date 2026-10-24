@@ -11,8 +11,8 @@ use std::sync::OnceLock;
 
 use guatiao::library::ProviderError;
 use guatiao::library::kind::{
-    Answer, AnswerType, Arg, KindDescription, LentHandle, LentObject, LibraryParts, ProviderParts,
-    Serve, ServedTable, TableError,
+    Answer, AnswerType, Arg, KindDescription, LentHandle, LentObject, LibraryParts, Mechanism,
+    ProviderParts, Serve, ServedTable, TableError,
 };
 use guatiao::value::types::{Buffer, Number};
 use guatiao::{Alloc, List, Map, Status, Value};
@@ -270,10 +270,11 @@ fn table_error(provider: &str, kind: &str, e: TableError) -> BridgeError {
 }
 
 /// The library an engine opened as described providers, its tables built
-/// from `kinds`, every slot a call through `runner`.
+/// from `kinds` by `mechanism`, every slot a call through `runner`.
 pub(crate) fn library<E: Engine>(
     runner: Runner<E>,
     kinds: &Arc<Kinds>,
+    mechanism: &dyn Mechanism,
     id: &str,
     version: &str,
     library: E::Library,
@@ -304,8 +305,13 @@ pub(crate) fn library<E: Engine>(
             continue;
         };
         let table = Arc::new(
-            ServedTable::new(Arc::clone(described), |_| true, Arc::clone(&serve))
-                .map_err(|e| table_error(id, &object, e))?,
+            ServedTable::new(
+                Arc::clone(described),
+                |_| true,
+                Arc::clone(&serve),
+                mechanism,
+            )
+            .map_err(|e| table_error(id, &object, e))?,
         );
         weak.insert(object, Arc::downgrade(&table));
         object_tables.push(table);
@@ -330,6 +336,7 @@ pub(crate) fn library<E: Engine>(
                 Arc::clone(described),
                 |s| implements.iter().any(|m| m == s.name()),
                 Arc::clone(&serve),
+                mechanism,
             )
             .map_err(|e| table_error(provider.id(), kind, e))?;
             builder = builder.kinds(&[kind.as_str()]).table(table.kind_table());

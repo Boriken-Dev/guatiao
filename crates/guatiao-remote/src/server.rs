@@ -22,6 +22,7 @@ use guatiao::library::{ProviderError, Refreshed, Registry};
 use guatiao::value::convert::TryAsRef;
 use guatiao::{Alloc, List, Map, Status, Value};
 use guatiao_bridge::Kinds;
+use guatiao_libffi::Libffi;
 
 use crate::link::{Handler, Inner, Link, LinkError, LinkOptions, Proxies, Setup, Table};
 use crate::protocol::catalog::{Catalog, LibraryEntry, ProviderEntry, TableEntry};
@@ -187,7 +188,7 @@ impl ServerInner {
             return Ok(Arc::clone(c));
         }
         let c =
-            Arc::new(Caller::new(Arc::clone(kind)).map_err(|e| {
+            Arc::new(Caller::new(Arc::clone(kind), &Libffi).map_err(|e| {
                 ProviderError::new(Status::GUATIAO_ERR_UNSUPPORTED, &e.to_string())
             })?);
         callers.insert(kind.name().to_string(), Arc::clone(&c));

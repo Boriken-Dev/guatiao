@@ -1898,6 +1898,73 @@ drop(s);                                                             // the libr
 - A provider that cannot build its config schema makes the library
   decline the host.
 
+### A kind known only by its description
+
+A kind an engine learns while it runs (a Lua or JavaScript provider, a
+remote peer) has no trait to compile against, only its description: the
+JSON `#[guatiao::kind]` writes (`<Trait>Vtable::description()`, a
+crate's `<crate>.kinds.json`). Tables of it are built and called from
+that description. Always built, no feature, no dependency; the one thing
+Rust cannot do here -- make a C function pointer for a signature it
+learns at run time, and call one -- is a `Mechanism`'s, and
+`guatiao-libffi` (`Libffi`) is one.
+
+```rust
+KindDescription::from_value(&v)? / ::document(&v)?   // one kind / {"format": 1, "kinds": [..]}
+kind.name() .floor_hash() .object() .slots() .slot("greet") -> Option<(usize, &SlotDescription)>
+     .size() .floor() .word_of(slot)
+slot.name() .required() .fallible() .args() .answer() .doc()
+
+// Serving: every slot of the table calls one handler.
+pub trait Serve: Send + Sync + 'static {
+    fn call(&self, ctx: usize, kind: &KindDescription, slot: usize, args: Vec<Arg<'_>>)
+        -> Result<Answer, ProviderError>;
+    fn destroy(&self, ctx: usize) {}                 // an object kind's destroy
+}
+let table = ServedTable::new(kind, |slot| implemented, serve, &Libffi)?;  // Result<_, TableError>
+table.as_ptr() .size() .kind() .kind_table()     // kind_table() -> ProviderPartsBuilder::table
+table.object(ctx) -> Option<RawObject>           // an object of this kind, for an answer
+// Keep the table as long as anything may call it: ProviderPartsBuilder::keep(table).
+
+// Calling: any table of the kind.
+let caller = Caller::new(kind, &Libffi)?;
+unsafe { caller.call_raw(table, size, ctx, slot, args) } -> Result<Answer, ProviderError>
+DescribedRemote::new(provider.view(), Arc::new(caller))? .call(slot, args) .call_named("greet", args)
+                                                 // holds the provider's library loaded
+raw_object.call(&caller, slot, args)  lent.call(..)  handle.call(..)
+
+enum Arg<'a> { Bool, Int(i64), Uint(u64), Float(f64), Str(&str), Bytes(&[u8]), Buffer(&mut [u8]),
+               Value(Option<&Value>), Map(&Map), List(&List), TakenValue(Value), TakenMap(Map),
+               TakenList(List), LentValue(&mut Value), LentMap(&mut Map), LentList(&mut List),
+               Object(RawObject), LentObject(LentObject<'a>) }      // #[non_exhaustive]
+enum Answer { Nothing, Bool, Int, Uint, Float, Text(String), Value, Map, List, Object(RawObject) }
+enum TableError { Unsupported(String), MissingRequired(String), Mechanism(String) }
+RawObject (owned; drop calls the kind's destroy) .lend() .into_raw() .as_raw(); unsafe from_raw
+LentObject<'a> .share(|handle: LentHandle| ..)   // callable from another thread while lent;
+                                                 // GUATIAO_ERR_GONE after
+```
+
+Scalars arrive widened (`Int`, `Uint`, `Float`) and a `Caller` narrows
+them to the slot's width, refusing one that does not fit
+(`GUATIAO_ERR_BAD_VALUE`); a scalar or text answer may be an
+`Answer::Value`, converted exactly. A handler's panic stops at the slot
+(`GUATIAO_ERR_INTERNAL`).
+
+**Writing a mechanism.** `unsafe trait Mechanism { fn prepare(&self,
+&CSignature) -> Result<Arc<dyn Prepared>, TableError> }`, and `unsafe
+trait Prepared { fn closure(self: Arc<Self>, SlotHandler) ->
+Result<Closure, TableError>; unsafe fn call(&self, f, args: &[*mut
+c_void]) -> u32 }`. A `CSignature` (`CSignature::of_slot(kind, slot)`,
+`::destroy()`) is `args() -> &[CType]` (`ctx` first, then the slot's
+arguments, `out`, `err`) and `returns_status()` (a `u32`, or nothing for
+`destroy`); `CType` is the fixed-width integers, `F32`, `F64`, `Pointer`
+and `Struct(fields)` by value (a `Str` is `{Pointer, Usize}`). The
+contract: a closure's code is callable with exactly the signature, from
+any thread, until the `Closure` (`unsafe Closure::new(code, owner)`)
+drops, and each call runs `SlotHandler::call(args)` once with one address
+per argument, returning its status; `call` calls `f` with the signature
+and returns its status.
+
 ### Ordering is `(priority DESC, key ASC)`
 
 `providers`, `available` and `providers_of` all answer **best first**.

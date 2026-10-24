@@ -6,6 +6,7 @@ members = [
     "crates/guatiao-serde",
     "crates/guatiao-intake",
     "crates/guatiao-bridge",
+    "crates/guatiao-libffi",
     "crates/guatiao-remote",
     "examples/hello_library",
     "examples/greeter_kind",

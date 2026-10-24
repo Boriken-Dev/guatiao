@@ -4,8 +4,8 @@ guatiao providers called across a process, a machine or a network: a
 `Source` a host adds, a `Server` exposing a registry, and one framed
 protocol over every transport. `#![deny(unsafe_code)]`; `unsafe` only in
 `src/exports.rs` (the `guatiao::source!` expansion). Depends on `guatiao`
-(`dynamic-kinds`, `load`: libffi built from C), `guatiao-bridge` (kind
-descriptions) and `guatiao-serde` (`json`).
+(`load`), `guatiao-libffi` (the kind tables' mechanism: libffi built from
+C), `guatiao-bridge` (kind descriptions) and `guatiao-serde` (`json`).
 
 | feature | adds |
 | --- | --- |

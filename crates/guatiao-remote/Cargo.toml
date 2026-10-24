@@ -43,7 +43,9 @@ local = ["dep:interprocess"]
 shm = ["local", "dep:memmap2"]
 
 [dependencies]
-guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["dynamic-kinds", "load"] }
+guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"] }
+# The kind tables it serves and calls through: libffi's closures and calls.
+guatiao-libffi = { path = "../guatiao-libffi", version = "=0.0.0-alpha.1" }
 # Kind descriptions read from their JSON documents.
 guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1" }
 guatiao-serde = { path = "../guatiao-serde", version = "=0.0.0-alpha.1", default-features = false, features = ["json"] }
@@ -61,7 +63,7 @@ memmap2 = { version = "0.9", optional = true }
 interprocess = { version = "2", optional = true, default-features = false }
 
 [dev-dependencies]
-guatiao = { path = "../guatiao", features = ["provider", "load", "dynamic-kinds"] }
+guatiao = { path = "../guatiao", features = ["provider", "load"] }
 # The example kinds the tests serve and call.
 greeter_kind = { path = "../../examples/greeter_kind" }
 # Reads the shared vectors.

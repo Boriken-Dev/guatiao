@@ -78,8 +78,8 @@ const UNSAFE_PATHS: &[&str] = &[
     "library/kind/object.rs",
     "library/kind/parts.rs",
     "library/kind/proxy.rs",
-    // Tables built at run time: libffi closures, calls, and the argument
-    // arrays they read, with the tests that hand it such arrays.
+    // Tables built at run time: the argument arrays a mechanism's closures
+    // hand them and its calls take, with the tests that build such arrays.
     "library/kind/runtime.rs",
     "library/kind/runtime_tests.rs",
     "library/kind/shim.rs",

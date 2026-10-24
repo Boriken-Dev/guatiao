@@ -23,6 +23,7 @@ use guatiao::library::kind::{
 };
 use guatiao::library::{Candidate, Host, LocalLibrary, ProviderError, Source};
 use guatiao_bridge::Kinds;
+use guatiao_libffi::Libffi;
 
 use crate::link::{Inner, Link, LinkOptions, Nothing, Proxies, Setup};
 use crate::protocol::Target;
@@ -255,6 +256,7 @@ impl Source for RemoteSource {
                     kind,
                     |s| t.slots.iter().any(|n| n == s.name()),
                     Arc::clone(&serve),
+                    &Libffi,
                 )
                 .map_err(|e| {
                     ProviderError::new(

@@ -46,7 +46,8 @@ guatiao-remote = { version = "=0.0.0-alpha.1", features = ["tcp"] }
 | `local` | `interprocess` (Windows only) | a Unix socket or a named pipe |
 | `shm` | `local`, `memmap2` | shared memory beside a local connection |
 
-Kind tables are built at run time with libffi, built from C.
+Kind tables are built at run time through `guatiao-libffi` (libffi, built
+from C).
 
 ## Usage
 
