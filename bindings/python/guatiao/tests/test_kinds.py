@@ -135,12 +135,35 @@ def test_a_rust_greeter_is_called_through_the_description(reg):
     assert [counter.count(), counter.count()] == [1, 2]
 
 
+_I64_LIMITS = (2**53 + 1, -(2**63), 2**63 - 1)
+_U64_LIMITS = (2**53 + 1, 2**63, 2**64 - 1)
+
+
+def _crosses_exactly(wide) -> None:
+    for x in _I64_LIMITS:
+        assert wide.echo_i64(x) == x
+    for x in _U64_LIMITS:
+        assert wide.echo_u64(x) == x
+
+
+def _refuses_what_does_not_fit(wide) -> None:
+    for x in (2**63, -(2**63) - 1, 2**64):
+        with pytest.raises(OverflowError, match="does not fit"):
+            wide.echo_i64(x)
+    for x in (-1, 2**64, -(2**63)):
+        with pytest.raises(OverflowError, match="does not fit"):
+            wide.echo_u64(x)
+    for x in (1.5, True, "5", None):
+        with pytest.raises(TypeError, match="takes an int"):
+            wide.echo_i64(x)
+        with pytest.raises(TypeError, match="takes an int"):
+            wide.echo_u64(x)
+
+
 def test_64_bit_integers_cross_a_rust_slot_exactly(reg):
     wide = reg.bind("derived_greeter_hello", Wide.kind)
-    for x in (2**53 + 1, -(2**63), 2**63 - 1):
-        assert wide.echo_i64(x) == x
-    for x in (2**53 + 1, 2**63, 2**64 - 1):
-        assert wide.echo_u64(x) == x
+    _crosses_exactly(wide)
+    _refuses_what_does_not_fit(wide)
 
 
 def test_a_lent_map_is_changed_where_it_stands(reg):
@@ -235,6 +258,52 @@ def test_a_slot_an_older_table_lacks_is_unsupported(c_greeter_dir):
         with Value({"name": "ivy"}) as config:
             assert greeter.check(config)
             assert config.to_python() == {"name": "ivy", "checked_by": "C"}
+
+
+def test_64_bit_integers_cross_a_slot_in_c_exactly(c_greeter_dir):
+    with Registry("py-kinds", "0.1") as registry:
+        registry.scan_dir(str(c_greeter_dir), rules="kind=greeter")
+        wide = registry.bind("c_greeter", Wide.kind)
+        _crosses_exactly(wide)
+        _refuses_what_does_not_fit(wide)
+
+
+class Echoes:
+    def echo_i64(self, x):
+        return x
+
+    def echo_u64(self, x):
+        return x
+
+
+class Overshoots:
+    def echo_i64(self, x):
+        return x + 1
+
+    def echo_u64(self, x):
+        return x - 1
+
+
+def test_64_bit_integers_cross_a_slot_written_in_python_exactly():
+    raw = _serve.serve(Wide.kind, Echoes())
+    try:
+        wide = Wide.kind.bind(raw.table, raw.size, raw.ctx)
+        _crosses_exactly(wide)
+        _refuses_what_does_not_fit(wide)
+    finally:
+        _serve.release(raw.ctx)
+
+
+def test_an_answer_that_does_not_fit_fails_the_call_that_asked():
+    raw = _serve.serve(Wide.kind, Overshoots())
+    try:
+        wide = Wide.kind.bind(raw.table, raw.size, raw.ctx)
+        with pytest.raises(Internal, match="OverflowError"):
+            wide.echo_i64(2**63 - 1)
+        with pytest.raises(Internal, match="OverflowError"):
+            wide.echo_u64(0)
+    finally:
+        _serve.release(raw.ctx)
 
 
 # ---- a table over a Python object, called from Python through C pointers --
