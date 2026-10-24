@@ -50,3 +50,5 @@ function(guatiao_copy_runtime target)
       COMMAND_EXPAND_LISTS)
   endif()
 endfunction()
+
+include("${CMAKE_CURRENT_LIST_DIR}/GuatiaoKindCheck.cmake")

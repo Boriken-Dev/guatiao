@@ -26,3 +26,10 @@ guatiao_cpp_compile_fail(cpp_refuses_an_argument_the_slot_does_not_take compile_
                          "not one the slot takes" LIBS guatiao::guatiao INCLUDES ${kinds_include})
 guatiao_cpp_test(cpp_number_text SOURCES test_number_text.cpp LIBS guatiao::guatiao BOTH_EXCEPTION_MODES
                  DEFINITIONS GUATIAO_CPP_NO_FLOAT_CHARCONV)
+guatiao_check_kinds(cpp_kinds_agree_with_their_description
+                    HEADER "${GUATIAO_REPO}/examples/greeter_kind/cpp/greeter_kind.hpp"
+                    DESCRIPTION "${GUATIAO_REPO}/examples/greeter_kind/include/greeter_kind.kinds.json")
+guatiao_check_kinds(cpp_kind_check_refuses_a_lent_tree_declared_taken
+                    HEADER "${CMAKE_CURRENT_SOURCE_DIR}/kind_check/lent_declared_taken.hpp"
+                    DESCRIPTION "${GUATIAO_REPO}/examples/greeter_kind/include/greeter_kind.kinds.json"
+                    EXPECT "greeter.check: declared bool\\(map\\), described bool\\(map_ref\\)")
