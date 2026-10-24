@@ -27,6 +27,7 @@ CLAUDE*
 /crates/guatiao-lua/target/
 /crates/guatiao-js/target/
 /crates/guatiao-remote/rdma-tests/target/
+/crates/guatiao-rhai/target/
 /bindings/lua/guatiao/target/
 /crates/guatiao-wasm/target/
 /crates/guatiao-wasm/guest/target/

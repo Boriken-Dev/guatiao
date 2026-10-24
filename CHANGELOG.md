@@ -116,6 +116,19 @@ write now.
   reads `derived_greeter_shouter`'s form and checks it against its
   schema.
 
+- **`guatiao-rhai`: libraries written in Rhai, served to any host.** A
+  source file (`crates/guatiao-rhai`, built from this repository, not
+  published) with Rhai built in: a library is a script ending in a map of
+  providers, whose function members are the kinds' slots and whose other
+  members are their state, described by a `*.guatiao-rhai.toml` manifest
+  and the kinds' `<crate>.kinds.json`; its version is the script's
+  `const VERSION`, read from the parse. Refresh runs an edited script
+  afresh while the old build answers the instances taken from it; limits
+  stop runaway code (operations, time, depth, and the size of strings,
+  arrays and maps), a `try`/`catch` around it included, and the host
+  carries on. A script reaches no file and cannot import. Values keep
+  null apart from absent, an exact number's text and bytes apart from
+  text; a map's keys come back in byte order, as a Rhai map keeps them.
 - **`guatiao-lua`: libraries written in Lua, served to any host.** A
   source file (`crates/guatiao-lua`, built from this repository, not
   published) with Lua 5.4 built in (`lua55` and `luau` as features): a

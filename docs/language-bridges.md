@@ -12,6 +12,8 @@ binding's providers ([JavaScript without Node](js.md)), and
 ([providers compiled to WebAssembly](wasm.md#providers-compiled-to-webassembly)).
 `guatiao-bridge` is what every such bridge shares, so a bridge for a new
 language is its runtime and its value conversion, and nothing else.
+The Rhai source ([rhai.md](rhai.md)) is a worked example of a pinned
+engine with limits.
 
 ## The pieces
 
