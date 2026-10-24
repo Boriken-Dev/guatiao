@@ -31,9 +31,11 @@ program test_lookup
     call skip('the lookup cases: no guatiao and guatiao_serde built in ' // dir)
     call finish('lookup')
   end if
-  renamed = temp_dir() // '/guatiao-fortran-lookup-renamed'
+  ! Named with an extension no loader appends to: Windows adds .dll to a
+  ! name with none.
+  renamed = temp_dir() // '/guatiao-fortran-lookup-renamed.bin'
   call copy_file(serde, renamed)
-  lone_core = temp_dir() // '/guatiao-fortran-lookup-core'
+  lone_core = temp_dir() // '/guatiao-fortran-lookup-core.bin'
   call copy_file(core, lone_core)
 
   call check_text(serde_found_with('GUATIAO_SERDE_LIBRARY', renamed, 'GUATIAO_LIBRARY', lone_core), &

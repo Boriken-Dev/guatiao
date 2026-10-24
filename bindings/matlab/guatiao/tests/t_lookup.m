@@ -57,7 +57,9 @@ function path = built(base)
 end
 
 function path = copy_of(file, what)
-  path = [tempname() '-guatiao-lookup-' what];
+% Named with an extension no loader appends to: Windows adds .dll to a
+% name with none.
+  path = [tempname() '-guatiao-lookup-' what '.bin'];
   copy_bytes(file, path);
 end
 
@@ -67,8 +69,17 @@ function served = serde_served_with(var, value, other, other_value)
   names = {var, other};
   values = {value, other_value};
   saved = cellfun(@getenv, names, 'UniformOutput', false);
-  for k = 1:2
-    setenv(names{k}, values{k});
+  sets = '';
+  if ispc()
+    % Set for the child by cmd itself: a line that opens with a quote
+    % loses its first and last under `cmd /c`.
+    for k = 1:2
+      sets = [sets sprintf('set "%s=%s" & ', names{k}, values{k})]; %#ok<AGROW>
+    end
+  else
+    for k = 1:2
+      setenv(names{k}, values{k});
+    end
   end
   gateway = fileparts(which('guatiao_mex'));
   script = sprintf(['addpath(''%s''); guatiao_mex(''has_export'', 1, ''guatiao_json_parse_ex''); ' ...
@@ -79,7 +90,7 @@ function served = serde_served_with(var, value, other, other_value)
   else
     command = sprintf('"%s" -batch "%s"', fullfile(matlabroot(), 'bin', 'matlab'), script);
   end
-  [~, out] = system(command);
+  [~, out] = system([sets command]);
   for k = 1:2
     setenv(names{k}, saved{k});
   end
