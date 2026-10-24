@@ -77,6 +77,14 @@ SEXP C_registry_register_entry(SEXP x, SEXP name, SEXP entry) {
                 "the library was refused");
 }
 
+/* The scan's refusal in words: the core says NOT_FOUND for a path that is
+   missing or names a file, BAD_VALUE for a rule that is not one. */
+static const char *scan_refusal(guatiao_status st) {
+  if (st == GUATIAO_ERR_NOT_FOUND) return "the path names no directory (missing, or a file)";
+  if (st == GUATIAO_ERR_BAD_VALUE) return "the scan was refused (a rule that is not one?)";
+  return "the scan was refused";
+}
+
 SEXP C_registry_scan(SEXP x, SEXP where, SEXP rules, SEXP descending, SEXP is_path) {
   guatiao_registry *reg = reg_of(x);
   guatiao_str w = gt_str_arg(where, "the directory");
@@ -87,7 +95,7 @@ SEXP C_registry_scan(SEXP x, SEXP where, SEXP rules, SEXP descending, SEXP is_pa
   guatiao_status st = Rf_asLogical(is_path) == 1
                           ? GT_CORE_FN(guatiao_registry_scan_path)(reg, w, desc, r, &gt_binding_alloc, &out)
                           : GT_CORE_FN(guatiao_registry_scan_dir_rules)(reg, w, desc, r, &gt_binding_alloc, &out);
-  return answer(st, &out, "the scan was refused (a rule that is not one?)");
+  return answer(st, &out, scan_refusal(st));
 }
 
 SEXP C_registry_query(SEXP x, SEXP what, SEXP arg) {
