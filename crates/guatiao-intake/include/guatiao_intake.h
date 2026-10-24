@@ -42,7 +42,7 @@
 /*
  Between a field's key and one of its payload fields.
  */
-#define SEPARATOR '.'
+#define GUATIAO_INTAKE_SEPARATOR '.'
 
 #ifdef __cplusplus
 extern "C" {

@@ -825,6 +825,14 @@ library's own. A library that keeps such a descriptor past the call, or
 may race a retire, uses the appended `get_pinned` and `list_pinned`, then
 `unpin` when done.
 
+### `guatiao_intake.h` spells its separator `GUATIAO_INTAKE_SEPARATOR`
+
+The header defined a bare `SEPARATOR` macro, which took that name from
+every file that included it. It is now `GUATIAO_INTAKE_SEPARATOR` (still
+`'.'`); write that name where you used the old one. Rust's
+`guatiao_intake::SEPARATOR` is unchanged, and so is Dart's value, now the
+constant `GUATIAO_INTAKE_SEPARATOR`.
+
 ## Serde and intake are packages of their own
 
 Every binding offers JSON, TOML and YAML, and forms, as packages beside

@@ -335,7 +335,7 @@ const String GUATIAO_INTAKE_KEY_X_SECTION = 'x-section';
 
 const String GUATIAO_INTAKE_PROVIDER_FORM_KEY = 'form';
 
-const int SEPARATOR = 46;
+const int GUATIAO_INTAKE_SEPARATOR = 46;
 
 typedef guatiao_alloc = imp$1.guatiao_alloc;
 typedef guatiao_str = imp$1.guatiao_str;
