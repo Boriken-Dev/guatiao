@@ -77,7 +77,8 @@ let hello = #{
   place and read back); `bytes_mut` as a blob the slot writes into
   (`dst.write_utf8(0, n, text)`, `dst[i] = b`); an object as a handle whose
   methods are its kind's slots (a lent one answers `gone` after the call).
-- **Its answer** is the value the function returns; `()` for none. An
+- **Its answer** is the value the function returns (a text slot's may be a
+  string or a char); `()` for none. An
   object kind's answer is a map of that kind's slots, held until the caller
   destroys it, or a handle handed back.
 - **A refusal** is `throw "why"` (`GUATIAO_ERR_BAD_VALUE`) or
@@ -108,7 +109,9 @@ except those the host lends *to the callee* (a lent tree, a buffer): a
 script cannot pass them, and says so. A handle can be handed on to a slot
 taking an object of its kind (handed over: it is gone from the handle; or
 lent). A failing slot raises a `Refusal` (`try { .. } catch (e) { e.status
-}`). A copy of a handle is the same object.
+}`). A copy of a handle is the same object. An object handed to the script is
+used by one call at a time: a call into it from inside one of its own
+(through the host) raises a `busy` refusal.
 
 ## Values (`RhaiValues`)
 
@@ -155,15 +158,30 @@ opening a library included:
 
 | limit | kept by |
 | --- | --- |
-| `operations` | Rhai's operation count (`set_max_operations`); a `try`/`catch` cannot catch the stop |
+| `operations` | Rhai's operation count (`set_max_operations`), at most 16 777 216; a `try`/`catch` cannot catch the stop |
 | `time_ms` | a progress callback reading the clock every 64 operations; not catchable either; a call inside another has the shorter of the two |
-| `depth` | Rhai's call levels (`set_max_call_levels`), at most 8192; the native stack for that many is mapped for each call when the thread's own would not hold it (above about 80 levels in a release build; it costs about 35 microseconds a call). Unset: Rhai's default (64 levels; 8 in a debug build) |
+| `depth` | Rhai's call levels (`set_max_call_levels`), at most 8192. Unset: 32 |
 | `memory` | in bytes, turned into Rhai's size limits: a string may be that long, an array holds `memory / 16` items (a blob counts a byte as one), a map `memory / 64` |
 
 A stop is `GUATIAO_ERR_INTERNAL` ("stopped at its operations limit
-(200000)"), or `GUATIAO_ERR_ALLOC` for memory; the engine answers the
-next call. Arguments the host passes are checked against the size limits
-too. Expression nesting is fixed at Rhai's release defaults (64, 32).
+(200000)", "stopped at its depth limit (32)"), or `GUATIAO_ERR_ALLOC` for
+memory; the engine answers the next call. Arguments the host passes are
+checked against the size limits too.
+
+**The native stack.** Rhai recurses on the native stack, for calls and for
+copying and dropping the values a script nests, and a script that
+overflows it aborts the host process. So function bodies and closures nest
+expressions at most 16 deep (`set_max_expr_depths(64, 16)`; a deeper
+script does not open: "Expression exceeds maximum complexity"), which
+bounds a level of calls at 14 KiB in a release build and 85 KiB in a debug
+one, and every call runs on a stack sized from the limits: 32 KiB (192 KiB
+in debug) for each call level, and, when `operations` is set, 320 bytes
+(1 KiB in debug) for each third operation, the nesting a script can build
+with them (the fewest operations that nest one level is four). A stack the
+thread's own would not hold is mapped for the call, which costs about 25
+microseconds: with nothing set, or `depth` up to about 40, a call is
+under 10; with `operations` set, about 30 to 40. Values a library keeps
+are dropped on a stack for a hundred thousand levels.
 
 ## Errors
 
@@ -186,11 +204,20 @@ guatiao_status guatiao_source(const guatiao_host_info *host,
 As `guatiao.h` declares any source's entry. The file declares
 `source=rhai`, so a scan reports it as a source and never maps it as a
 library. A configuration that is not a map is `GUATIAO_ERR_WRONG_KIND`; a
-key that is not a list of text, a misspelled limit, or a `depth` above
-8192, `GUATIAO_ERR_BAD_VALUE`.
+key that is not a list of text, a misspelled limit, a `depth` above 8192
+or `operations` above 16 777 216, `GUATIAO_ERR_BAD_VALUE`.
 
 ## Gotchas
 
+- **Nesting is bounded by `operations`, per call.** Without `operations`
+  a script can nest values (arrays, maps, closures that capture the last
+  one) until the native stack ends and the host aborts: no size limit
+  bounds how deep they nest, and a closure chain costs one operation a
+  level. With it, one call is safe, and a library's values are dropped on a
+  large stack. **Not covered**: depth built up over many calls in a
+  provider's state (`this`), which no limit sees. Set `operations`, and
+  do not serve scripts that keep state you cannot trust to a host that
+  cannot afford an abort.
 - **`memory` does not bound the whole**: it bounds each string, array and
   map, nested ones counted. A script can hold many strings each under the
   limit, and a map filled with `m[key] = value` is not counted at all (the
@@ -199,8 +226,8 @@ key that is not a list of text, a misspelled limit, or a `depth` above
   `push` re-counts the array, so building one of `n` items takes time
   proportional to `n` squared (80 000 pushes took 6 s against 50 ms
   without a limit, release build).
-- **One engine, one set of globals.** Rhai has none a script can change,
-  but `print` and `debug` write to the host's standard output and error.
+- **`print` and `debug` do nothing**: the host's standard output may be
+  a protocol, and a script has no business writing to it.
 - **No `import`**: a library is one script; the engine has no module
   resolver.
 - **`try`/`catch` is a statement**: its value is not the closure's. Write
@@ -214,7 +241,8 @@ key that is not a list of text, a misspelled limit, or a `depth` above
 - **A limit is checked between operations**: one long call into a Rhai
   function (a big `sort`, a `pad`) runs to its end; the size limits bound
   what it can build.
-- **A provider is re-entered with `BUSY`**, not queued: the host calling
-  back into the provider that is calling it is refused.
+- **A provider, or an object, is re-entered with `BUSY`**, not queued:
+  the host calling back into the provider that is calling it, or into a
+  handle the script is calling, is refused.
 - **`cargo test` does not build the file**: `cargo build` first, or the
   tests adding it by file state a skip.
