@@ -19,7 +19,11 @@ module guatiao_intake
   public :: guatiao_intake_check, guatiao_intake_layout, guatiao_intake_is_visible, guatiao_intake_at, &
             guatiao_intake_for_schema, guatiao_intake_form_for, guatiao_intake_resolve, &
             guatiao_intake_flat_keys, guatiao_intake_flatten, guatiao_intake_unflatten, &
-            guatiao_intake_use_library
+            guatiao_intake_use_library, GT_INTAKE_PROVIDER_FORM_KEY
+
+  !> The key of a provider's meta holding its form: read it with the
+  !> registry's provider_meta, then check it against provider_config.
+  character(*), parameter :: GT_INTAKE_PROVIDER_FORM_KEY = 'form'
 
 contains
 

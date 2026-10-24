@@ -239,7 +239,7 @@ module guatiao_c
     character(len=8) :: feature
   end type
 
-  type(gt_export), parameter :: gt_core_exports(80) = [ &
+  type(gt_export), parameter :: gt_core_exports(81) = [ &
     gt_export('guatiao_alloc_default              ', 1, ''), &
     gt_export('guatiao_value_free                 ', 1, ''), &
     gt_export('guatiao_value_clone                ', 3, ''), &
@@ -314,6 +314,7 @@ module guatiao_c
     gt_export('guatiao_registry_provider_table    ', 4, 'load'), &
     gt_export('guatiao_registry_provider_ctx      ', 2, 'load'), &
     gt_export('guatiao_registry_provider_config   ', 2, 'load'), &
+    gt_export('guatiao_registry_provider_meta     ', 4, 'load'), &
     gt_export('guatiao_registry_provider_create   ', 5, 'load'), &
     gt_export('guatiao_registry_provider_destroy  ', 3, 'load'), &
     gt_export('guatiao_registry_retire            ', 2, 'load'), &
@@ -805,6 +806,14 @@ module guatiao_c
       type(gt_str), value :: key
       type(c_ptr) :: r
     end function
+    function guatiao_registry_provider_meta_i(reg, key, alloc, out) bind(c) result(r)
+      import :: c_int32_t, c_ptr, gt_str
+      type(c_ptr), value :: reg
+      type(gt_str), value :: key
+      type(c_ptr), value :: alloc
+      type(c_ptr), value :: out
+      integer(c_int32_t) :: r
+    end function
     function guatiao_registry_provider_create_i(reg, key, config, out, err) bind(c) result(r)
       import :: c_int32_t, c_ptr, gt_str
       type(c_ptr), value :: reg
@@ -968,6 +977,7 @@ module guatiao_c
   procedure(guatiao_registry_provider_table_i), pointer :: gt_registry_provider_table => null()
   procedure(guatiao_registry_provider_ctx_i), pointer :: gt_registry_provider_ctx => null()
   procedure(guatiao_registry_provider_config_i), pointer :: gt_registry_provider_config => null()
+  procedure(guatiao_registry_provider_meta_i), pointer :: gt_registry_provider_meta => null()
   procedure(guatiao_registry_provider_create_i), pointer :: gt_registry_provider_create => null()
   procedure(guatiao_registry_provider_destroy_i), pointer :: gt_registry_provider_destroy => null()
   procedure(guatiao_registry_retire_i), pointer :: gt_registry_retire => null()
@@ -1057,6 +1067,7 @@ contains
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_provider_table'), gt_registry_provider_table)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_provider_ctx'), gt_registry_provider_ctx)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_provider_config'), gt_registry_provider_config)
+    call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_provider_meta'), gt_registry_provider_meta)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_provider_create'), gt_registry_provider_create)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_provider_destroy'), gt_registry_provider_destroy)
     call c_f_procpointer(gt_dl_sym(h, 'guatiao_registry_retire'), gt_registry_retire)

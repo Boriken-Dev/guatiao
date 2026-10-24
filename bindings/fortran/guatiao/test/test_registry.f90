@@ -19,6 +19,7 @@ program test_registry
   call answers_the_documented_fields()
   call keys_ranks_and_rekeys()
   call builds_an_instance_and_lends_its_schema()
+  call a_providers_meta_is_a_copy_carrying_its_form()
   call retires_and_unloads()
   call follows_a_watched_directory()
   call a_source_refuses_with_its_own_words()
@@ -111,6 +112,22 @@ contains
     v = list%at(i, 'key')
     k = v%string_or('')
   end function
+
+  subroutine a_providers_meta_is_a_copy_carrying_its_form()
+    type(guatiao_registry) :: reg
+    type(guatiao_value) :: meta, id
+    integer :: st
+    reg = scanned()
+    call reg%provider_meta('derived_greeter_shouter', meta)
+    id = meta%at('form', 'sections', 1, 'id')
+    call check_text(id%string_or(''), 'words', 'the form''s first section')
+    id = meta%at('form', 'sections', 2, 'id')
+    call check_text(id%string_or(''), 'volume', 'and its second')
+    call reg%provider_meta('derived_greeter_hello', meta)
+    call check(meta%is_absent(), 'a provider declaring nothing answers absent')
+    call reg%provider_meta('nobody', meta, st)
+    call check_status(st, GUATIAO_ERR_NOT_FOUND, 'an unknown key')
+  end subroutine
 
   subroutine builds_an_instance_and_lends_its_schema()
     type(guatiao_registry) :: reg
