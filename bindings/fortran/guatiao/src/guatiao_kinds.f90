@@ -29,7 +29,7 @@ module guatiao_kinds
             guatiao_settle_value, guatiao_lent_map, guatiao_end_lent_map, guatiao_taken_map, &
             guatiao_borrowed_map, guatiao_borrowed_value, guatiao_string_out, guatiao_bytes_in
   public :: guatiao_call_error, guatiao_map_out, guatiao_settle_home, guatiao_string_in, &
-            guatiao_lend_tree, guatiao_hand_over, guatiao_object_arg
+            guatiao_lend_tree, guatiao_settle_lent, guatiao_hand_over, guatiao_object_arg
 
   !> What every kind's abstract type extends. `close` runs when the side
   !> holding the object last lets it go (an instance its host destroys,
@@ -702,20 +702,45 @@ contains
     out = c_loc(root%payload)
   end subroutine
 
-  !> Moves an answer built in another allocator into this tree's: the
-  !> callee ignored the carrier. Nothing to do when it did not.
+  !> Moves an answer into this tree's allocator, so it outlives the
+  !> library: a slot that ignored the carrier built it in its own, wholly
+  !> or in part. A core older than `guatiao_value_make_local` copies an
+  !> answer whose top container records another allocator. A refusal
+  !> leaves the answer as it came.
   recursive subroutine guatiao_settle_home(answer)
     type(guatiao_value), intent(inout) :: answer
     type(gt_value), pointer :: root
     type(guatiao_value) :: home
+    integer(c_int32_t) :: moved
     integer :: st
     if (.not. c_associated(gt_root(answer))) return
+    if (associated(gt_value_make_local)) then
+      moved = gt_value_make_local(gt_root(answer), gt_box_alloc(answer))
+      return
+    end if
     call c_f_pointer(gt_root(answer), root)
     if (.not. c_associated(root%payload%alloc)) return
     if (c_associated(root%payload%alloc, gt_box_alloc(answer))) return
     if (root%tag /= GUATIAO_TAG_MAP .and. root%tag /= GUATIAO_TAG_LIST) return
     home = answer%clone(stat=st)
     if (st == GUATIAO_OK) answer = home
+  end subroutine
+
+  !> A tree lent to a remote slot (see guatiao_lend_tree), once the call
+  !> returned: moved where it stands into the allocator it records, so what
+  !> the callee grew it with outlives the callee's library. A refusal
+  !> leaves it whole, where it was.
+  recursive subroutine guatiao_settle_lent(v, tag)
+    type(guatiao_value), intent(in) :: v
+    integer(c_int32_t), intent(in) :: tag
+    type(c_ptr) :: node, alloc
+    integer :: stat
+    integer(c_int32_t) :: moved
+    character(:), allocatable :: msg
+    if (.not. associated(gt_value_make_local)) return
+    call gt_writable_node(v, tag, node, alloc, stat, msg)
+    if (stat /= GUATIAO_OK) return
+    moved = gt_value_make_local(node, alloc)
   end subroutine
 
   !> The error a remote slot answered: its status and the callee's words,

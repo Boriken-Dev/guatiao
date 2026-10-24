@@ -207,9 +207,10 @@ contains
   end function
 
   !> `source` built as the library `stem` in `dir`, with the repository's
-  !> headers; '' without a C compiler.
-  function build_c(source, dir, stem) result(out)
+  !> headers and `-D<define>` when one is given; '' without a C compiler.
+  function build_c(source, dir, stem, define) result(out)
     character(*), intent(in) :: source, dir, stem
+    character(*), intent(in), optional :: define
     character(:), allocatable :: out
     character(:), allocatable :: cc, command, native_dir
     integer :: code, i
@@ -228,6 +229,7 @@ contains
     out = library_file(dir, stem)
     command = cc // ' -shared -std=c11 -Wall -Wextra'
     if (.not. gt_windows) command = command // ' -fPIC -pthread'
+    if (present(define)) command = command // ' -D' // define
     command = command // ' -I ../../crates/guatiao/include -I ../greeter_kind/include -o ' // out // ' ' // source
     call execute_command_line(command, exitstat=code)
     if (code /= 0) then
