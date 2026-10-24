@@ -82,6 +82,16 @@ write now.
   instructions, decoding) and takes from it; a trap or a limit discards
   the instance, the next call makes it afresh, and the host carries on.
   Calls run on the caller's thread, each library behind a lock of its own.
+- **A provider's meta, and its form, from Go, Julia, R, MATLAB and Octave,
+  and Fortran.** `Registry.ProviderMeta` (Go), `Guatiao.provider_meta`
+  (Julia), `reg$provider_meta` (R), `reg.provider_meta` (MATLAB and
+  Octave) and `reg%provider_meta` (Fortran) answer a copy of what a
+  provider declared beyond its schema, or that binding's "none"; the form
+  key is `intake.ProviderFormKey`, `GuatiaoIntake.PROVIDER_FORM_KEY`,
+  `intake_provider_form_key`, `guatiao.intake.provider_form_key()` and
+  `GT_INTAKE_PROVIDER_FORM_KEY`. Each suite reads
+  `derived_greeter_shouter`'s form and checks it against its schema.
+
 - **`guatiao-lua`: libraries written in Lua, served to any host.** A
   source file (`crates/guatiao-lua`, built from this repository, not
   published) with Lua 5.4 built in (`lua55` and `luau` as features): a
