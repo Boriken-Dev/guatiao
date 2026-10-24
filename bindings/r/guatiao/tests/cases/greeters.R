@@ -141,6 +141,41 @@ for (gr in GREETERS) {
   }))
 }
 
+# Each of these unloads a library of its own: no other registry keeps it mapped.
+case("an answer built in the library's allocator outlives the unload", with_examples({
+  dir <- build_c_greeter("GREETER_IGNORES_CARRIER")
+  if (is.null(dir)) {
+    absent_greeter("c", "no C compiler: the greeter written in C is not built")
+  } else {
+    own <- registry("r-careless", "0.1")
+    own$scan_dir(dir, rules = "kind=greeter")
+    answer <- greet(own$bind("c_greeter", Greeter), "hal")
+    # The C greeter has no `unload` function: nothing it handed out is
+    # alive, which the caller states.
+    own$unload("c_greeter_library", unchecked = TRUE)
+    expect_equal(length(own$libraries()), 0)
+    expect_equal(value_data(answer), list(greeting = "hello from C, hal"))
+    close(answer)
+    own$close()
+  }
+}))
+
+case("what a slot grew a lent map with outlives the unload", with_examples({
+  dir <- build_c_greeter()
+  if (is.null(dir)) {
+    absent_greeter("c", "no C compiler: the greeter written in C is not built")
+  } else {
+    own <- registry("r-lent", "0.1")
+    own$scan_dir(dir, rules = "kind=greeter")
+    config <- value(list(name = "ivy"))
+    expect_true(isTRUE(check(own$bind("c_greeter", Greeter), config)))
+    own$unload("c_greeter_library", unchecked = TRUE)
+    expect_equal(value_data(config), list(name = "ivy", checked_by = "C"))
+    close(config)
+    own$close()
+  }
+}))
+
 case("the Rust proxy calls every greeter", with_examples({
   if (is.null(fixture())) {
     skip_case("no C compiler: the fixture is not built")

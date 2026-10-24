@@ -425,8 +425,12 @@ static void raise_called(guatiao_status st, guatiao_provider_error *err) {
   Rf_error("unreachable");
 }
 
-/* A tree answered in another allocator, moved into the binding's. */
-static void into_binding(guatiao_value *v) {
+/* A tree answered by a slot, moved into the binding's allocator so it
+ * outlives the library: a slot that ignored the carrier built it in its
+ * own, wholly or in part. A core older than guatiao_value_make_local
+ * copies a tree whose top container records another allocator. */
+static guatiao_status into_binding(guatiao_value *v) {
+  if (gt_core.guatiao_value_make_local) return gt_core.guatiao_value_make_local(v, &gt_binding_alloc);
   const guatiao_alloc *a = NULL;
   switch (v->tag) {
   case GUATIAO_MAP: a = v->payload.map.alloc; break;
@@ -434,15 +438,32 @@ static void into_binding(guatiao_value *v) {
   case GUATIAO_STRING:
   case GUATIAO_NUMBER: a = v->payload.text.alloc; break;
   case GUATIAO_BYTES: a = v->payload.bytes.alloc; break;
-  default: return;
+  default: return GUATIAO_OK;
   }
-  if (!a || a == &gt_binding_alloc) return;
+  if (!a || a == &gt_binding_alloc) return GUATIAO_OK;
   guatiao_value copy;
   set_absent(&copy);
-  if (gt_core.guatiao_value_clone(&gt_binding_alloc, v, &copy) == GUATIAO_OK) {
+  guatiao_status st = gt_core.guatiao_value_clone(&gt_binding_alloc, v, &copy);
+  if (st == GUATIAO_OK) {
     gt_free(v);
     *v = copy;
   }
+  return st;
+}
+
+/* The allocator a container node records when it can build, else `fallback`. */
+static const guatiao_alloc *recorded_alloc(const guatiao_value *node, const guatiao_alloc *fallback) {
+  const guatiao_alloc *a = NULL;
+  switch (node->tag) {
+  case GUATIAO_MAP: a = node->payload.map.alloc; break;
+  case GUATIAO_LIST: a = node->payload.list.alloc; break;
+  case GUATIAO_STRING:
+  case GUATIAO_NUMBER: a = node->payload.text.alloc; break;
+  case GUATIAO_BYTES: a = node->payload.bytes.alloc; break;
+  default: break;
+  }
+  if (a && a->struct_size >= offsetof(guatiao_alloc, free) + sizeof a->free && a->alloc && a->free) return a;
+  return fallback;
 }
 
 static SEXP remote_answer(const gt_slot *sl, out_store *outs, int mode) {
@@ -462,7 +483,11 @@ static SEXP remote_answer(const gt_slot *sl, out_store *outs, int mode) {
     guatiao_value v = out.v;
     if (sl->ret == S_MAP) v.tag = GUATIAO_MAP;
     if (sl->ret == S_LIST) v.tag = GUATIAO_LIST;
-    into_binding(&v);
+    guatiao_status moved = into_binding(&v);
+    if (moved != GUATIAO_OK) {
+      gt_free(&v);
+      gt_raise(moved, "moving the answer into this binding's allocator");
+    }
     SEXP owner = gt_owner_new(&v, &gt_binding_alloc, R_NilValue);
     if (!owner) {
       gt_free(&v);
@@ -504,9 +529,12 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args, SEXP int64) {
   arg_store store[GT_MAX_ARGS];
   guatiao_value tmp[GT_MAX_ARGS];
   int built[GT_MAX_ARGS];
+  guatiao_value *lent[GT_MAX_ARGS]; /* a lent tree of the caller's, settled once the call returns */
+  const guatiao_alloc *lent_home[GT_MAX_ARGS];
   void *values[GT_MAX_ARGS + 3];
   memset(store, 0, sizeof store);
   memset(built, 0, sizeof built);
+  memset(lent, 0, sizeof lent);
   for (int j = 0; j < sl->nargs; j++) set_absent(&tmp[j]);
   char msg[1024];
   msg[0] = '\0';
@@ -626,6 +654,10 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args, SEXP int64) {
       break;
     }
     store[j].p = p;
+    if (s >= S_LENT_VALUE && s <= S_LENT_LIST && !built[j]) {
+      lent[j] = node;
+      lent_home[j] = recorded_alloc(node, o->alloc);
+    }
   }
   if (fail) {
     for (int j = 0; j < sl->nargs; j++) gt_free(&tmp[j]);
@@ -694,6 +726,10 @@ SEXP C_remote_call(SEXP handle, SEXP index, SEXP args, SEXP int64) {
   ffi_arg rc = 0;
   ffi_call(&sl->cif, FFI_FN(fn), &rc, values);
   guatiao_status st = (guatiao_status)rc;
+  /* What the callee grew a lent tree with may be in its library's allocator. */
+  if (gt_core.guatiao_value_make_local)
+    for (int j = 0; j < sl->nargs; j++)
+      if (lent[j]) gt_core.guatiao_value_make_local(lent[j], lent_home[j]);
   for (int j = 0; j < sl->nargs; j++) {
     int s = sl->args[j];
     if (s < S_TAKEN_VALUE && built[j]) gt_free(&tmp[j]); /* what was handed over is the callee's */
