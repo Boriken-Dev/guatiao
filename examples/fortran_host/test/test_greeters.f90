@@ -42,6 +42,8 @@ program test_greeters
       call the_rust_proxy_calls_it(i)
     end if
   end do
+  call an_answer_built_in_the_librarys_allocator_outlives_the_unload()
+  call what_a_slot_grew_a_lent_map_with_outlives_the_unload()
   call a_table_that_is_not_the_kinds_is_refused()
   call a_configured_provider_builds_instances()
   call native_threads_call_the_fortran_greeter()
@@ -201,6 +203,63 @@ contains
     else
       call check(who == 'c', who // ': every greeter but the C one holds conversations')
     end if
+  end subroutine
+
+  !> Each of the next two unloads a library of its own: no other registry
+  !> keeps it mapped.
+  subroutine an_answer_built_in_the_librarys_allocator_outlives_the_unload()
+    type(guatiao_registry) :: own
+    type(greeter_remote) :: g
+    type(guatiao_value) :: answer, libraries
+    type(guatiao_error), allocatable :: error
+    character(:), allocatable :: text
+    integer :: st
+    if (len(build_c('../../crates/guatiao/tests/c_consumer/greeter_in_c.c', 'build/c-careless', 'c_greeter', &
+                    'GREETER_IGNORES_CARRIER')) == 0) then
+      call skip('no C compiler: the greeter written in C is not built')
+      return
+    end if
+    own = guatiao_open_registry('fortran-careless', '0.1')
+    call own%scan_dir('build/c-careless', rules=['kind=greeter'])
+    call greeter_bind(own, 'c_greeter', g, st)
+    call check(st == GUATIAO_OK, 'the careless greeter binds')
+    call g%greet('hal', answer, error)
+    call check(.not. allocated(error), 'and greets')
+    ! The C greeter has no unload function: nothing it handed out is alive,
+    ! which the caller states.
+    call own%unload_unchecked('c_greeter_library', st)
+    call check(st == GUATIAO_OK, 'its library is unmapped')
+    call own%libraries(libraries)
+    call check(libraries%length() == 0, 'none is left loaded')
+    call guatiao_emit(answer, GUATIAO_FORMAT_JSON, text)
+    call check_text(text, '{"greeting":"hello from C, hal"}', 'the answer outlives the unload')
+    call own%close()
+  end subroutine
+
+  subroutine what_a_slot_grew_a_lent_map_with_outlives_the_unload()
+    type(guatiao_registry) :: own
+    type(greeter_remote) :: g
+    type(guatiao_value) :: config
+    type(guatiao_error), allocatable :: error
+    character(:), allocatable :: text
+    logical :: usable
+    integer :: st
+    if (len(build_c('../../crates/guatiao/tests/c_consumer/greeter_in_c.c', 'build/c-lent', 'c_greeter')) == 0) then
+      call skip('no C compiler: the greeter written in C is not built')
+      return
+    end if
+    own = guatiao_open_registry('fortran-lent', '0.1')
+    call own%scan_dir('build/c-lent', rules=['kind=greeter'])
+    call greeter_bind(own, 'c_greeter', g, st)
+    call check(st == GUATIAO_OK, 'the greeter binds')
+    call guatiao_parse('{"name": "ivy"}', GUATIAO_FORMAT_JSON, config)
+    call g%check(config, usable, error)
+    call check(.not. allocated(error) .and. usable, 'check grows the lent map')
+    call own%unload_unchecked('c_greeter_library', st)
+    call check(st == GUATIAO_OK, 'its library is unmapped')
+    call guatiao_emit(config, GUATIAO_FORMAT_JSON, text)
+    call check_text(text, '{"name":"ivy","checked_by":"C"}', 'the lent map outlives the unload')
+    call own%close()
   end subroutine
 
   subroutine the_rust_proxy_calls_it(i)

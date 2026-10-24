@@ -323,7 +323,10 @@ required slots or carries another floor hash. A slot past the table's
 size or null answers `GUATIAO_ERR_UNSUPPORTED` (a Rust caller would run
 the kind's default body instead); a closed remote `GUATIAO_ERR_GONE`. A
 tree answer is built in the registry's allocator (the carrier the remote
-passes names it) and moved there when the callee built it elsewhere. A
+passes names it) and moved there when the callee built it elsewhere
+(`guatiao_settle_home`, with `guatiao_value_make_local`); a tree lent to a
+slot (`guatiao_lend_tree`) is settled with `guatiao_settle_lent` once the
+call returns, into the allocator it records. A
 remote holding an object another side handed over destroys it once, when
 its last copy goes or on `close()`.
 
