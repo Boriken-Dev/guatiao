@@ -47,14 +47,15 @@ export function bridge(): string | null {
 
 /**
  * Whether CPython, embedded through the guatiao-py bridge in this process,
- * frees what a call from here drops. On Linux and macOS it does not: an
- * object dropped during a call that reached Python through koffi is never
- * deallocated (its `__del__` never runs), so what a Python conversation
- * holds outlives it. Measured freeing on Windows and on FreeBSD (Python
- * 3.12 and 3.14), so every platform not named here is expected to free. A
- * Python host and a Rust host do not see this.
+ * frees what a call from here drops. On macOS with Python 3.14 it does not:
+ * koffi runs the call on a stack of its own, CPython judges that stack too
+ * deep, and an object dropped during the call is never deallocated (its
+ * `__del__` never runs), so what a Python conversation holds outlives it.
+ * On Linux the bridge points CPython at the stack the call runs on, and it
+ * frees; Windows and FreeBSD free as they are. A Python host and a Rust
+ * host do not see this.
  */
-export const PYTHON_FREES_HERE = !['linux', 'darwin'].includes(process.platform);
+export const PYTHON_FREES_HERE = process.platform !== 'darwin';
 
 /** What the bridge is told: where the Python greeters are, and what they import. */
 export function bridgeConfig(): Record<string, string[]> {

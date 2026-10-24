@@ -29,3 +29,7 @@ mod engine;
 // with `unsafe`.
 #[allow(unsafe_code)]
 mod exports;
+// Which stack a call runs on, told to CPython: libpython's own functions,
+// found at run time. The other module with `unsafe`.
+#[allow(unsafe_code)]
+mod stack;
