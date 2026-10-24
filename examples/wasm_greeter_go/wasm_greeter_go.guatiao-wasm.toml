@@ -1,0 +1,6 @@
+# The library guatiao-wasm serves from this directory, after
+#   GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o wasm_greeter_go.wasm .
+# Go writes no custom section, so the version is stated here.
+module = "wasm_greeter_go"
+version = "1.0.0"
+kinds = ["greeter", "counter", "wide"]
