@@ -352,7 +352,7 @@ What each side sees, per description type:
 
 | type | a method receives / returns | a caller passes / gets |
 | --- | --- | --- |
-| `bool`; `i8`..`i64`, `u8`..`u64`, `isize`, `usize`; `f32`, `f64` | `bool`; `int`; `double` (a `u64` past 2^63 is negative, as Dart carries it) | the same |
+| `bool`; `i8`..`i64`, `u8`..`u64`, `isize`, `usize`; `f32`, `f64` | `bool`; `int`; `double` (a `u64` past 2^63 is negative, as Dart carries it: `BigInt.from(x).toUnsigned(64)` is the number) | the same |
 | `str` | `String` | `String` |
 | `bytes` | `Uint8List`, a copy | `List<int>` |
 | `bytes_mut` | `Uint8List`, copied back when the method returns | `Uint8List`, written in place |
