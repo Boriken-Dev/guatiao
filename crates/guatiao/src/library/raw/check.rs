@@ -134,14 +134,15 @@ impl Image {
         self.code.iter().any(|r| r.contains(&addr))
     }
 
-    /// The executable ranges.
-    #[cfg(test)]
+    /// The executable ranges. Only the test of the loader's record reads
+    /// these, and it runs where that record is read.
+    #[cfg(all(test, any(windows, target_vendor = "apple", target_os = "linux")))]
     pub(crate) fn code_ranges(&self) -> &[Range<usize>] {
         &self.code
     }
 
-    /// The whole span.
-    #[cfg(test)]
+    /// The whole span. As [`Image::code_ranges`].
+    #[cfg(all(test, any(windows, target_vendor = "apple", target_os = "linux")))]
     pub(crate) fn span_range(&self) -> Range<usize> {
         self.span.clone()
     }
