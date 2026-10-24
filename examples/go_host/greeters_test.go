@@ -139,6 +139,9 @@ func TestMain(m *testing.M) {
 	}
 	reg.Close()
 	goLib.Close()
+	if wideLib != nil {
+		wideLib.Close()
+	}
 	// Windows refuses to delete a library this process still maps.
 	if cGreeterDir != "" && runtime.GOOS != "windows" {
 		os.RemoveAll(cGreeterDir)
@@ -189,6 +192,9 @@ func setup() (int, error) {
 		return 1, err
 	}
 	if _, err := reg.RegisterLibrary(goLib); err != nil {
+		return 1, err
+	}
+	if err := registerWide(); err != nil {
 		return 1, err
 	}
 	return 0, nil

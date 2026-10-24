@@ -89,3 +89,13 @@ type Conversation interface {
 	Turns() (int64, error)
 	Close() error
 }
+
+// Wide answers the 64-bit integer it is given, unchanged: wide_vtable,
+// what a host crosses its 64-bit numbers with, both ways and at their
+// limits.
+//
+//guatiao:kind wide wide_vtable
+type Wide interface {
+	EchoI64(x int64) (int64, error)
+	EchoU64(x uint64) (uint64, error)
+}

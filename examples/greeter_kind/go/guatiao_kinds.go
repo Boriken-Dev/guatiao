@@ -565,3 +565,104 @@ func gk91140e18_conversation_turns(ctx C.uintptr_t, out unsafe.Pointer) C.uint32
 		return nil
 	}))
 }
+
+// WideKind is the wide kind (wide_vtable), as a host binds it and a provider names it.
+var WideKind = guatiao.NewKind(guatiao.KindSpec{
+	Name:      "wide",
+	FloorHash: 3673689684,
+	Object:    false,
+	Slots: []guatiao.SlotSpec{
+		{Name: "echo_i64", Required: true, Fallible: true, Serve: C.gk91140e18_serve_wide_echo_i64(), Iface: reflect.TypeFor[Wide]()},
+		{Name: "echo_u64", Required: true, Fallible: true, Serve: C.gk91140e18_serve_wide_echo_u64(), Iface: reflect.TypeFor[Wide]()},
+	},
+}, func(r guatiao.Remote) *WideRemote { return &WideRemote{Remote: r} })
+
+// WideRemote is a caller's handle on a wide_vtable table: a method per slot. A slot
+// the table lacks answers guatiao.ErrUnsupported.
+type WideRemote struct{ guatiao.Remote }
+
+var _ Wide = (*WideRemote)(nil)
+
+// EchoI64 calls the echo_i64 slot.
+func (r *WideRemote) EchoI64(x int64) (int64, error) {
+	var zero int64
+	c, err := r.Begin(0)
+	if err != nil {
+		return zero, err
+	}
+	defer c.End()
+	out := c.OutScalar()
+	errp := c.Err()
+	st := C.gk91140e18_call_wide_echo_i64(c.Fn(), C.uintptr_t(c.Ctx()), C.int64_t(x), out, errp)
+	if err := c.Status(uint32(st)); err != nil {
+		return zero, err
+	}
+	return int64(*(*C.int64_t)(out)), nil
+}
+
+//export gk91140e18_wide_echo_i64
+func gk91140e18_wide_echo_i64(ctx C.uintptr_t, a0 C.int64_t, out unsafe.Pointer, errp unsafe.Pointer) C.uint32_t {
+	return C.uint32_t(WideKind.Serve(uintptr(ctx), errp, 0, func(s *guatiao.Served) error {
+		t, err := s.Target()
+		if err != nil {
+			return err
+		}
+		target, ok := t.(Wide)
+		if !ok {
+			return guatiao.Errorf(guatiao.Unsupported, "%T does not implement Wide", t)
+		}
+		v0 := int64(a0)
+		s.Ran()
+		res, err := target.EchoI64(v0)
+		if err != nil {
+			return err
+		}
+		if out == nil {
+			return guatiao.Errorf(guatiao.NullArgument, "no slot for the answer")
+		}
+		*(*C.int64_t)(out) = C.int64_t(res)
+		return nil
+	}))
+}
+
+// EchoU64 calls the echo_u64 slot.
+func (r *WideRemote) EchoU64(x uint64) (uint64, error) {
+	var zero uint64
+	c, err := r.Begin(1)
+	if err != nil {
+		return zero, err
+	}
+	defer c.End()
+	out := c.OutScalar()
+	errp := c.Err()
+	st := C.gk91140e18_call_wide_echo_u64(c.Fn(), C.uintptr_t(c.Ctx()), C.uint64_t(x), out, errp)
+	if err := c.Status(uint32(st)); err != nil {
+		return zero, err
+	}
+	return uint64(*(*C.uint64_t)(out)), nil
+}
+
+//export gk91140e18_wide_echo_u64
+func gk91140e18_wide_echo_u64(ctx C.uintptr_t, a0 C.uint64_t, out unsafe.Pointer, errp unsafe.Pointer) C.uint32_t {
+	return C.uint32_t(WideKind.Serve(uintptr(ctx), errp, 1, func(s *guatiao.Served) error {
+		t, err := s.Target()
+		if err != nil {
+			return err
+		}
+		target, ok := t.(Wide)
+		if !ok {
+			return guatiao.Errorf(guatiao.Unsupported, "%T does not implement Wide", t)
+		}
+		v0 := uint64(a0)
+		s.Ran()
+		res, err := target.EchoU64(v0)
+		if err != nil {
+			return err
+		}
+		if out == nil {
+			return guatiao.Errorf(guatiao.NullArgument, "no slot for the answer")
+		}
+		*(*C.uint64_t)(out) = C.uint64_t(res)
+		return nil
+	}))
+}
