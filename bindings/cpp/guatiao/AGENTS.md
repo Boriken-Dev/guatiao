@@ -289,9 +289,11 @@ the one the description spells: lent `node`/`map_ref`/`list_ref`/`lent<K>`,
 handed over `value`/`map`/`list`/`object<K>`, borrowed
 `view`/`map_view`/`list_view`, and the scalar types as `std::int64_t`,
 `std::size_t` (`usize`), `std::ptrdiff_t` (`isize`), `float`, `double`.
-Namespace qualifiers are ignored. With `EXPECT`, the test passes only when
-the check's output matches. A kind with no description is declared by hand
-alone.
+Namespace qualifiers are ignored; a `_NAMED` kind is looked up by the name
+it gives, and `object<K>`/`lent<K>` of it spelled by its struct. Relative
+paths are from the calling directory. With `EXPECT`, the test passes only
+when the check's output matches. A kind with no description is declared by
+hand alone.
 
 **Calling a table**: `remote<K>` (a provider's table and `ctx`, from
 `K::bind(registry, key)`, `K::bind(instance)`,
