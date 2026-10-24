@@ -333,20 +333,20 @@ its last copy goes or on `close()`.
 `guatiao_bytes_mut` an `integer(int8)` array over the caller's memory,
 valid for the call; scalars their `iso_c_binding`/`int64` kinds (a
 `uint64` is the `int64` holding its bits: Fortran has no unsigned integer,
-so past 2^63 - 1 it is negative and 2^64 - 1 is -1), `bool` `logical`; a tree answer a `guatiao_value` holding an empty map in the
-carrier's allocator, filled in place (an answer the method replaces is
-copied there); a `guatiao_string` answer `character(:), allocatable`; a
-borrowed tree a read-only `guatiao_value`, a lent one a writable one, both
-closed when the call returns (keep a copy and it reads closed); a tree
-handed over a `guatiao_value` the method owns; an object handed over a
-`class(<kind>), allocatable` the method keeps with `move_alloc` (or leaves,
-and it is released); a lent object `class(<kind>), intent(inout),
-target`; an object answer `class(<kind>), allocatable, intent(out)`.
-Every slot method ends with `type(guatiao_error), allocatable,
-intent(out) :: error`: unallocated is success; `guatiao_fail(error,
-status, message)` refuses, and the status and words cross. A slot with no
-`err` in C reports a failure's words on standard error and its status
-alone.
+so past 2^63 - 1 it is negative and 2^64 - 1 is -1), `bool` `logical`; a
+tree answer a `guatiao_value` holding an empty map in the carrier's
+allocator, filled in place (an answer the method replaces is copied
+there); a `guatiao_string` answer `character(:), allocatable`; a borrowed
+tree a read-only `guatiao_value`, a lent one a writable one, both closed
+when the call returns (keep a copy and it reads closed); a tree handed
+over a `guatiao_value` the method owns; an object handed over a
+`class(<kind>), allocatable` the method keeps with `move_alloc` (or
+leaves, and it is released); a lent object `class(<kind>), intent(inout),
+target`; an object answer `class(<kind>), allocatable, intent(out)`. Every
+slot method ends with `type(guatiao_error), allocatable, intent(out) ::
+error`: unallocated is success; `guatiao_fail(error, status, message)`
+refuses, and the status and words cross. A slot with no `err` in C reports
+a failure's words on standard error and its status alone.
 
 A served slot runs on the thread that calls it, a thread Fortran did not
 start included; nothing is queued, so a provider guards what it shares.

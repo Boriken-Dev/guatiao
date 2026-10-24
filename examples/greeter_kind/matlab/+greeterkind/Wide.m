@@ -5,7 +5,8 @@
 classdef Wide < guatiao.Kind
 % wide_vtable of include/greeter_kind.h: answers the 64-bit integer it is
 % given, unchanged. Pass int64 and uint64 values: a double holds a whole
-% number exactly only to 2^53.
+% number exactly only to 2^53. An answer within 2^53 comes back as a
+% double, one past it as int64 or uint64.
 
   properties (Constant, Hidden)
     WideKind = guatiao.Kind.describe('wide', 3673689684, ...
