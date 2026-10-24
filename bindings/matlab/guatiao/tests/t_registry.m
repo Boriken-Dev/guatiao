@@ -11,6 +11,8 @@ function cases = t_registry()
     'answers the documented fields for the best provider', @best
     'answers a single table, and a table per kind', @tables
     'builds an instance, and gives a copy of its configuration schema', @instances
+    'a provider''s meta is a copy carrying its form', @meta
+    'a provider''s form, read from its meta, fits its schema', @form_fits
     'keys, ranks and re-keys', @keys
     'retires a library and frees its key', @retires
     'unloads only when the library agrees', @unloads
@@ -84,6 +86,34 @@ function tables()
   expect_true(isempty(t.table), 'none for another kind');
   c = reg.bind('derived_greeter_hello', 'greeterkind.Counter');
   expect_true(isnumeric(c.count()), 'count');
+  reg.close();
+end
+
+function meta()
+  reg = scanned();
+  m = reg.provider_meta('derived_greeter_shouter');
+  reg.close();
+  sections = m.at('form').at('sections').data();
+  expect_equal(cellfun(@(s) s.id, sections, 'UniformOutput', false), {'words', 'volume'});
+  m.close();
+  reg = scanned();
+  expect_equal(reg.provider_meta('derived_greeter_hello'), []);
+  expect_error(@() reg.provider_meta('nobody'), 'guatiao:NotFound');
+  reg.close();
+end
+
+function form_fits()
+  reg = scanned();
+  m = reg.provider_meta('derived_greeter_shouter');
+  form = m.at(guatiao.intake.provider_form_key());
+  schema = reg.provider_config('derived_greeter_shouter');
+  expect_equal(guatiao.intake.check(schema, form), []);
+  expect_equal(form.at('fields').at('prefix').at('placeholder').data(), 'hey');
+  expect_equal(form.at('fields').at('marks').at('unit').data(), 'marks');
+  expect_true(~guatiao.intake.is_visible(schema, form, 'marks', struct('exclaim', false)), 'hidden');
+  expect_true(guatiao.intake.is_visible(schema, form, 'marks', struct('exclaim', true)), 'shown');
+  schema.close();
+  m.close();
   reg.close();
 end
 

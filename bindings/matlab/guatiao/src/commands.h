@@ -89,6 +89,7 @@
   X(registry_priority)                                                         \
   X(registry_provider_table)                                                   \
   X(registry_provider_config)                                                  \
+  X(registry_provider_meta)                                                    \
   X(registry_host)                                                             \
   X(registry_create)                                                           \
   X(instance_ctx)                                                              \

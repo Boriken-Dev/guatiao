@@ -248,6 +248,26 @@ int cmd_registry_provider_config(gt_call *c) {
   return 1;
 }
 
+/* What a provider declared beyond its schema, a copy in this binding's
+ * allocator; nothing answered when it declares nothing. */
+int cmd_registry_provider_meta(gt_call *c) {
+  guatiao_registry *reg = NULL;
+  guatiao_str k;
+  if (!reg_arg(c, 0, &reg) || !gt_arg_text(c, 1, "the key", &k)) return 0;
+  guatiao_value meta;
+  set_absent(&meta);
+  guatiao_status st = gt_core.guatiao_registry_provider_meta(reg, k, &gt_binding_alloc, &meta);
+  if (st) return gt_fail(c, st, st == GUATIAO_ERR_NOT_FOUND ? "no provider answers to that key" : "the meta was refused");
+  if (meta.tag == GUATIAO_ABSENT) return 1;
+  uint64_t id = gt_owner_new(&meta, &gt_binding_alloc);
+  if (!id) {
+    gt_free(&meta);
+    return gt_fail(c, GUATIAO_ERR_ALLOC, "out of memory");
+  }
+  gt_answer(c, 0, mxCreateDoubleScalar((double)id));
+  return 1;
+}
+
 int cmd_registry_host(gt_call *c) {
   guatiao_registry *reg = NULL;
   if (!reg_arg(c, 0, &reg)) return 0;

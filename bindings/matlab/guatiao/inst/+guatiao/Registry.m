@@ -163,6 +163,19 @@ classdef Registry < handle
       end
     end
 
+    function v = provider_meta(self, key)
+    % What the provider declared beyond its schema (its notices, or its form
+    % under guatiao.intake.provider_form_key) as a guatiao.Value: a copy,
+    % outliving the library, or [] when it declares nothing.
+    % guatiao:NotFound for an unknown key.
+      id = guatiao_mex('registry_provider_meta', self.id(), key);
+      if isempty(id)
+        v = [];
+      else
+        v = guatiao.Value.adopt(id);
+      end
+    end
+
     function h = host(self)
     % The registry's guatiao_host_info *, as a uint64.
       h = guatiao_mex('registry_host', self.id());
