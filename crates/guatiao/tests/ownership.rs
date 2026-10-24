@@ -432,6 +432,46 @@ fn a_value_and_a_list_move_too() {
     });
 }
 
+/// The C export over `make_local_in`: what a C caller of a table that
+/// ignored the carrier calls on the answer.
+#[test]
+fn the_c_export_moves_a_tree_home_and_refuses_nulls() {
+    use guatiao::exports::value::guatiao_value_make_local;
+    use guatiao::value::status::Status;
+    with_arena(|arena, counter| {
+        let home = Alloc::rust();
+        let mut value = Value::from(tree_in(arena));
+        // SAFETY: a well-formed value nobody else holds; the allocator is
+        // a complete vtable, or null.
+        unsafe {
+            assert_eq!(
+                guatiao_value_make_local(core::ptr::null_mut(), home.as_raw()),
+                Status::GUATIAO_ERR_NULL
+            );
+            assert_eq!(
+                guatiao_value_make_local(&mut value, core::ptr::null()),
+                Status::GUATIAO_ERR_ALLOC
+            );
+            assert!(counter.outstanding.get() > 0, "a refusal moves nothing");
+            assert_eq!(
+                guatiao_value_make_local(&mut value, home.as_raw()),
+                Status::GUATIAO_OK
+            );
+        }
+        assert_eq!(counter.outstanding.get(), 0, "every arena block was freed");
+        assert!(value.is_local());
+        assert_eq!(value, Value::from(tree_in(home)));
+
+        let mut value = Value::from(tree_in(home));
+        counter.fail_at.set(counter.allocs.get() + 2);
+        // SAFETY: as above.
+        let refused = unsafe { guatiao_value_make_local(&mut value, arena.as_raw()) };
+        assert_eq!(refused, Status::GUATIAO_ERR_ALLOC);
+        assert_eq!(value, Value::from(tree_in(home)), "whole after a refusal");
+        drop(value);
+    });
+}
+
 /// Past the depth judged on the thread's stack, the walk still reaches
 /// the leaf.
 #[test]

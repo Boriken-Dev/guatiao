@@ -83,6 +83,44 @@ pub unsafe extern "C" fn guatiao_value_clone(
     })
 }
 
+/// Moves the tree in `v` into `alloc` where it stands: every block
+/// another allocator made is moved into one from `alloc` and the old one
+/// freed through the allocator that made it. Allocates nothing when
+/// everything already records `alloc`.
+///
+/// What a caller of a kind table calls on a tree answer, or a lent tree,
+/// a slot may have built in the library's own allocator: afterwards the
+/// tree outlives the library. Call it while the library is loaded. A map
+/// or list answer moves inside a value tagged `GUATIAO_MAP` or
+/// `GUATIAO_LIST` holding it.
+///
+/// A null or unusable allocator is `GUATIAO_ERR_ALLOC`, and so is
+/// `alloc` refusing: the tree is then whole, every block either moved or
+/// where it was.
+///
+/// # Safety
+///
+/// The pointers are null or valid, and `v` addresses a well-formed value
+/// nothing else is reading or freeing.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn guatiao_value_make_local(
+    v: *mut Value,
+    alloc: *const Allocator,
+) -> Status {
+    entry!(v => {
+        // SAFETY: null or valid by the caller's contract; `from_raw`
+        // answers `Null` for a null one rather than reading it.
+        let Ok(a) = (unsafe { Alloc::from_raw(alloc) }) else {
+            return Status::GUATIAO_ERR_ALLOC;
+        };
+        // SAFETY: checked non-null; well-formed and unaliased by contract.
+        match unsafe { (*v).make_local_in(a) } {
+            Ok(()) => Status::GUATIAO_OK,
+            Err(e) => e.into(),
+        }
+    })
+}
+
 // --- constructors -----------------------------------------------------
 //
 // Written out one by one rather than through a macro, and the reason is
