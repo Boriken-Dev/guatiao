@@ -91,8 +91,9 @@ pub unsafe extern "C" fn guatiao_value_clone(
 /// What a caller of a kind table calls on a tree answer, or a lent tree,
 /// a slot may have built in the library's own allocator: afterwards the
 /// tree outlives the library. Call it while the library is loaded. A map
-/// or list answer moves inside a value tagged `GUATIAO_MAP` or
-/// `GUATIAO_LIST` holding it.
+/// or list moves inside a value tagged `GUATIAO_MAP` or `GUATIAO_LIST`
+/// holding it, and lives in that value afterwards: copy its `payload.map`
+/// or `payload.list` back over a struct it came from, whose array moved.
 ///
 /// A null or unusable allocator is `GUATIAO_ERR_ALLOC`, and so is
 /// `alloc` refusing: the tree is then whole, every block either moved or

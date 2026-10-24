@@ -331,7 +331,8 @@ for the call, not handed over".
   receives the caller's tree to change: read it, change it, grow it
   through the allocator it records, never free it or keep the pointer. A
   C caller lending one gets back whatever the callee built; a Rust callee
-  following the rule above builds it in the tree's own allocator.
+  following the rule above builds it in the tree's own allocator, and
+  `guatiao_value_make_local` moves home what another built elsewhere.
 - **Writing a provider in C**, the same rules from the other side: build
   the answer through the carrier's `alloc` and write it over the carrier
   without freeing it; free or keep what was handed over, through the
@@ -343,6 +344,9 @@ guatiao_provider_error err = {0};
 guatiao_status s = table->load(ctx, &out, &err);
 guatiao_value answer = {GUATIAO_MAP, 0};
 answer.payload.map = out;
+/* A slot that ignored the carrier built it in its library's allocator:
+ * move it home while the library is loaded. */
+guatiao_value_make_local(&answer, &my_alloc);
 /* ... read it ... */
 guatiao_value_free(&answer);                    /* through what each part recorded */
 ```
