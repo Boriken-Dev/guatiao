@@ -2377,6 +2377,12 @@ handed over" (a Rust `&mut`): then it is the caller's, to change and grow
 through the allocator it records, never freed or kept. A `const` one is
 lent for reading. A provider error's message is the
 caller's to free through its `alloc` when its `cap` is not 0.
+`guatiao_value_make_local(v, alloc)` moves a tree answer, or a lent tree
+the slot grew, into `alloc` where it stands (a map or list inside a value
+with its tag, copied back after), so it outlives the library: what the
+Rust proxy does on arrival, for a slot that built elsewhere. Call it while
+the library is loaded; it allocates nothing when the tree is already
+there.
 
 ---
 
