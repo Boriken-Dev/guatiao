@@ -17,6 +17,7 @@ use guatiao::library::kind::{
 };
 use guatiao::{List, Map, Status, Value};
 use guatiao_bridge::{BridgeError, Kinds, Limit};
+use guatiao_libffi::Libffi;
 use mlua::prelude::*;
 use mlua::{MetaMethod, UserData, UserDataFields, UserDataMethods};
 
@@ -229,7 +230,8 @@ pub(crate) fn caller(lua: &Lua, name: &str) -> LuaResult<Arc<Caller>> {
     let described = known.kinds.get(name).cloned().ok_or_else(|| {
         LuaError::runtime(format!("no description of the kind `{name}` was given"))
     })?;
-    let made = Arc::new(Caller::new(described).map_err(|e| LuaError::runtime(e.to_string()))?);
+    let made =
+        Arc::new(Caller::new(described, &Libffi).map_err(|e| LuaError::runtime(e.to_string()))?);
     known.callers.insert(name.to_string(), Arc::clone(&made));
     Ok(made)
 }

@@ -9,6 +9,7 @@
 use alloc::sync::Arc;
 use std::sync::{Mutex, PoisonError};
 
+use guatiao::library::kind::Mechanism;
 use guatiao::library::{Candidate, Host, LocalLibrary, ProviderError, Source};
 
 use crate::config::Config;
@@ -28,10 +29,16 @@ use crate::thread::Runner;
 /// the manifest leaves out is read by [`Engine::version_of`]), opens a new
 /// or changed one through [`Engine::open`], and closes one the registry
 /// let go through [`Engine::close`].
+///
+/// Providers an engine declares ([`Opened::Described`]) are served through
+/// tables built from their kinds' descriptions, which needs a
+/// [`Mechanism`] ([`with_mechanism`](Self::with_mechanism)); without one,
+/// such a library is refused.
 pub struct BridgeSource<E: Engine> {
     runner: Runner<E>,
     config: Config,
     kinds: Arc<Kinds>,
+    mechanism: Option<Arc<dyn Mechanism>>,
     /// The stamp each id was last listed under: what the registry names an
     /// open by when it closes it.
     listed: Mutex<Vec<(String, String)>>,
@@ -80,6 +87,7 @@ impl<E: Engine> BridgeSource<E> {
             runner: Runner::shared(engine),
             config,
             kinds: Arc::new(kinds),
+            mechanism: None,
             listed: Mutex::new(Vec::new()),
             open: Mutex::new(Vec::new()),
         })
@@ -96,9 +104,18 @@ impl<E: Engine> BridgeSource<E> {
             runner,
             config,
             kinds: Arc::new(kinds),
+            mechanism: None,
             listed: Mutex::new(Vec::new()),
             open: Mutex::new(Vec::new()),
         })
+    }
+
+    /// Serves the providers an engine declares through tables `mechanism`
+    /// builds (`guatiao_libffi::Libffi`, for one).
+    #[must_use]
+    pub fn with_mechanism(mut self, mechanism: Arc<dyn Mechanism>) -> BridgeSource<E> {
+        self.mechanism = Some(mechanism);
+        self
     }
 
     /// Its configuration.
@@ -156,7 +173,6 @@ impl<E: Engine> BridgeSource<E> {
         lock(&self.open).push((id.to_string(), stamp, library));
     }
 
-    #[cfg(feature = "dynamic-kinds")]
     fn described(
         &self,
         manifest: &Manifest,
@@ -164,29 +180,23 @@ impl<E: Engine> BridgeSource<E> {
         library: E::Library,
         providers: Vec<crate::engine::Provided>,
     ) -> Result<LocalLibrary<'static>, BridgeError> {
+        let Some(mechanism) = &self.mechanism else {
+            return Err(BridgeError::Unavailable(
+                "serving described providers needs a mechanism: give the source one with \
+                 `with_mechanism`"
+                    .to_string(),
+            ));
+        };
         crate::described::library(
             self.runner.clone(),
             &self.kinds,
+            &**mechanism,
             manifest.id(),
             version,
             library,
             providers,
         )
         .map(LocalLibrary::from)
-    }
-
-    #[cfg(not(feature = "dynamic-kinds"))]
-    fn described(
-        &self,
-        _: &Manifest,
-        _: &str,
-        _: E::Library,
-        _: Vec<crate::engine::Provided>,
-    ) -> Result<LocalLibrary<'static>, BridgeError> {
-        Err(BridgeError::Unavailable(
-            "serving described providers needs guatiao-bridge's `dynamic-kinds` feature"
-                .to_string(),
-        ))
     }
 }
 

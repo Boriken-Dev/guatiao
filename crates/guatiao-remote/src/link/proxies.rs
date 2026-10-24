@@ -20,6 +20,7 @@ use guatiao::library::ProviderError;
 use guatiao::library::kind::{
     Answer, Arg, KindDescription, ObjectRaw, RawObject, Serve, ServedTable,
 };
+use guatiao_libffi::Libffi;
 
 use super::Inner;
 use crate::protocol::Target;
@@ -151,7 +152,7 @@ impl Proxies {
             proxies: Arc::downgrade(&self.inner),
         });
         let table = Arc::new(
-            ServedTable::new(Arc::clone(kind), |_| true, serve).map_err(|e| {
+            ServedTable::new(Arc::clone(kind), |_| true, serve, &Libffi).map_err(|e| {
                 ProviderError::new(
                     Status::GUATIAO_ERR_UNSUPPORTED,
                     &format!("no table for `{}`: {e}", kind.name()),

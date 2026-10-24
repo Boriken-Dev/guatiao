@@ -17,8 +17,8 @@ the source at <https://github.com/Boriken-Dev/guatiao>.
 
 Exactly one Lua. `source` and `module` exclude each other, as do `source`
 and `luajit` (its count hook is not called in compiled code) and `module`
-and `luau`. MSRV 1.89. Depends on `guatiao` (`load`, `dynamic-kinds`),
-`guatiao-bridge` (`dynamic-kinds`) and `mlua` 0.12. Not published; a
+and `luau`. MSRV 1.89. Depends on `guatiao` (`load`), `guatiao-bridge`,
+`guatiao-libffi` and `mlua` 0.12. Not published; a
 workspace of its own. `crate-type = ["cdylib", "rlib"]`.
 
 The root re-exports everything public: `LuaEngine` (with `source`),
@@ -156,7 +156,7 @@ not `Send`, on the bridge's thread), manifests `*.guatiao-lua.toml` with
 
 ```rust
 fn start(_host: Host, config: &Map) -> Result<BridgeSource<LuaEngine>, ProviderError> {
-    Ok(BridgeSource::pinned(config, "guatiao-lua")?)
+    Ok(BridgeSource::pinned(config, "guatiao-lua")?.with_mechanism(Arc::new(Libffi)))
 }
 guatiao::source!(serves = "lua", make = start);
 ```

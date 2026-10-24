@@ -4,15 +4,18 @@
 
 //! `guatiao_source`: this file as a source of Lua libraries.
 
+use alloc::sync::Arc;
+
 use guatiao::Map;
 use guatiao::library::{Host, ProviderError};
 use guatiao_bridge::BridgeSource;
+use guatiao_libffi::Libffi;
 
 use crate::engine::LuaEngine;
 
 /// Starts the Lua state on a thread of its own for the source's life.
 fn start(_host: Host, config: &Map) -> Result<BridgeSource<LuaEngine>, ProviderError> {
-    Ok(BridgeSource::pinned(config, "guatiao-lua")?)
+    Ok(BridgeSource::pinned(config, "guatiao-lua")?.with_mechanism(Arc::new(Libffi)))
 }
 
 guatiao::source!(serves = "lua", make = start);

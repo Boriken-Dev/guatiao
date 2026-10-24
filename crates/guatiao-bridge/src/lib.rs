@@ -16,9 +16,10 @@
 //! - [`manifest`]: libraries described without running them, and their
 //!   stamps;
 //! - [`BridgeSource`]: the glue from an engine to guatiao's `Source`;
-//! - [`Kinds`]: kinds known from their descriptions, and, with the
-//!   `dynamic-kinds` feature, providers an engine declares served through
-//!   tables built from them;
+//! - [`Kinds`]: kinds known from their descriptions, and providers an
+//!   engine declares served through tables built from them, once the
+//!   source is given a mechanism ([`BridgeSource::with_mechanism`]; the
+//!   crate `guatiao-libffi` is one);
 //! - [`Limits`] and [`BridgeError`]: what a library's code may use, and
 //!   what each refusal crosses as;
 //! - [`Convert`]: an engine's values both ways, and the shared vectors.
@@ -39,7 +40,6 @@ extern crate alloc;
 
 mod config;
 mod convert;
-#[cfg(feature = "dynamic-kinds")]
 mod described;
 mod engine;
 mod error;

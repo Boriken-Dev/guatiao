@@ -30,7 +30,8 @@ value conversion, and nothing else.
 - **Kinds from their descriptions** — a runtime with no FFI declares its
   providers and the slots they implement; the kind tables are built at run
   time from the kinds' descriptions (`<crate>.kinds.json`), every slot a
-  call into the engine, objects included (`dynamic-kinds`).
+  call into the engine, objects included, by the mechanism the source is
+  given (`guatiao-libffi`).
 - **Limits and refusals** — operations, memory, time and depth from the
   configuration, and one mapping from every refusal to a status.
 - **Conversion, checked** — a trait for an engine's values both ways, and
@@ -40,21 +41,22 @@ value conversion, and nothing else.
 
 ```toml
 [dependencies]
-guatiao-bridge = { version = "=0.0.0-alpha.1", features = ["dynamic-kinds"] }
+guatiao-bridge = "=0.0.0-alpha.1"
+# For a runtime with no FFI of its own: its providers' tables.
+guatiao-libffi = "=0.0.0-alpha.1"
 ```
 
-| Flag | Adds | Needed for |
-| --- | --- | --- |
-| `dynamic-kinds` | `guatiao/dynamic-kinds` (libffi, built from C) | serving providers an engine declares, through tables built from their kinds' descriptions |
-
-A runtime that builds its own kind tables (CPython does, through ctypes)
-needs no flag.
+No features. The bridge builds no C; a runtime that builds its own kind
+tables (CPython does, through ctypes) needs nothing else; one that does
+not gives its source a mechanism (`with_mechanism(Arc::new(Libffi))`).
 
 ## Usage
 
 ```rust,ignore
+use std::sync::Arc;
 use guatiao::library::{Host, ProviderError};
 use guatiao::Map;
+use guatiao_libffi::Libffi;
 use guatiao_bridge::{BridgeError, BridgeSource, Call, Config, Engine, Manifest,
                      ManifestFormat, Opened, Provided, Reply, ThreadModel};
 
@@ -82,7 +84,7 @@ impl Engine for Lua {
 }
 
 fn start(_host: Host, config: &Map) -> Result<BridgeSource<Lua>, ProviderError> {
-    Ok(BridgeSource::pinned(config, "lua")?)
+    Ok(BridgeSource::pinned(config, "lua")?.with_mechanism(Arc::new(Libffi)))
 }
 guatiao::source!(serves = "lua", make = start);
 ```

@@ -5,10 +5,8 @@
 //! A toy engine served through every piece of the bridge: its libraries
 //! are `.toy` files of `key = value` lines described by manifests; it is
 //! not `Send`, so it lives on the engine thread; it has no FFI, so its
-//! providers are served through tables built from `greeter_kind`'s
+//! providers are served through tables libffi builds from `greeter_kind`'s
 //! descriptions. A Rust host calls it through the kinds' traits.
-
-#![cfg(feature = "dynamic-kinds")]
 
 extern crate alloc;
 
@@ -29,6 +27,7 @@ use guatiao_bridge::{
     BridgeError, BridgeSource, Call, CallArg, Config, Engine, Kinds, Limits, Manifest,
     ManifestFormat, Opened, Provided, Reply, Target, ThreadModel,
 };
+use guatiao_libffi::Libffi;
 
 /// One open library: its words, and the conversations it holds.
 struct Lib {
@@ -108,7 +107,8 @@ impl Engine for Toy {
         Ok(Toy {
             thread: thread::current().id(),
             limits: *config.limits(),
-            listener: Caller::new(listener).map_err(|e| BridgeError::Table(e.to_string()))?,
+            listener: Caller::new(listener, &Libffi)
+                .map_err(|e| BridgeError::Table(e.to_string()))?,
             libraries: RefCell::new(BTreeMap::new()),
             next: Cell::new(0),
             closed: Cell::new(0),
@@ -312,7 +312,9 @@ fn config(dir: &Path, limits: Option<u64>) -> Map {
 
 fn serving(dir: &Path, limits: Option<u64>) -> (Registry, Arc<BridgeSource<Toy>>) {
     let source = Arc::new(
-        BridgeSource::<Toy>::pinned(&config(dir, limits), "toy-engine").expect("the engine starts"),
+        BridgeSource::<Toy>::pinned(&config(dir, limits), "toy-engine")
+            .expect("the engine starts")
+            .with_mechanism(Arc::new(Libffi)),
     );
     assert_eq!(source.threads(), ThreadModel::Pinned);
     let mut registry = Registry::new("toy-host", "1.0");
@@ -426,6 +428,24 @@ fn an_edit_serves_new_code_while_the_old_instance_keeps_working() {
     assert_eq!(third.retired.len(), 1, "{third:?}");
     registry.collect();
     assert_eq!(source.run(|toy| toy.closed.get()).expect("ran"), 2);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_described_library_is_refused_by_a_source_with_no_mechanism() {
+    let dir = scratch("no-mechanism");
+    put(&dir, "toy_hello", "version = \"1.0.0\"\n", "word = hello\n");
+    let source =
+        BridgeSource::<Toy>::pinned(&config(&dir, None), "toy-engine").expect("the engine starts");
+    let mut registry = Registry::new("toy-host", "1.0");
+    registry.add_source("toy", source).expect("added");
+    let changed = registry.refresh();
+    assert!(changed.loaded.is_empty(), "{changed:?}");
+    let reasons: Vec<&str> = changed.refused.iter().map(|r| r.reason.as_str()).collect();
+    assert!(
+        reasons.iter().any(|r| r.contains("needs a mechanism")),
+        "{reasons:?}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

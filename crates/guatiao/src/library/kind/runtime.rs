@@ -3,18 +3,23 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //! Kind tables built at run time from a [`KindDescription`], and any table
-//! called from one. Behind the `dynamic-kinds` feature.
+//! called from one.
 //!
 //! A kind compiled into a program has its table, shims and proxy written
 //! by `#[guatiao::kind]`. A kind an engine learns while it runs -- a Lua or
 //! JavaScript provider, a remote peer -- has only its description, so its
-//! slots are built here: each a libffi closure whose call interface is
-//! read from the slot's description, all of a table's closures calling one
+//! slots are built here: each a function pointer of the slot's C
+//! signature ([`CSignature`]), all of a table's slots calling one
 //! [`Serve`] handler with the slot and its arguments as [`Arg`]s, and
 //! writing the [`Answer`] back as the kind's C table promises (a tree in
 //! the caller's carrier, an error through `err`). [`Caller`] goes the
 //! other way: it calls any table of a described kind, so an engine can
 //! call an object it was handed, or a provider a registry offers.
+//!
+//! Rust cannot make a function pointer for a signature it learns at run
+//! time, nor call one, so a [`Mechanism`] does those two things; the crate
+//! `guatiao-libffi` is one, over libffi. Everything else -- reading the
+//! arguments, writing the answer, laying out a call -- is here.
 //!
 //! The description is the producer's contract, as a header is: a table is
 //! checked against its floor hash and size, and its slots are then called
@@ -23,9 +28,6 @@
 use alloc::sync::Arc;
 use core::ffi::c_void;
 use core::mem::ManuallyDrop;
-
-use libffi::middle::{Cif, Type};
-use libffi::raw as ffi;
 
 use super::description::{AnswerType, ArgType, KindDescription, Pass, Scalar, Tree};
 use super::*;
@@ -161,8 +163,9 @@ pub enum TableError {
     Unsupported(String),
     /// A required slot the builder was told is not implemented, named.
     MissingRequired(String),
-    /// libffi refused a call interface or a closure, with its status.
-    Ffi(u32),
+    /// The mechanism could not prepare a signature or make a closure, in
+    /// its words.
+    Mechanism(String),
 }
 
 impl core::fmt::Display for TableError {
@@ -174,106 +177,257 @@ impl core::fmt::Display for TableError {
             TableError::MissingRequired(slot) => {
                 write!(f, "the required slot `{slot}` is not implemented")
             }
-            TableError::Ffi(status) => write!(f, "libffi refused the call interface ({status})"),
+            TableError::Mechanism(why) => write!(f, "the mechanism refused: {why}"),
         }
     }
 }
 
 impl core::error::Error for TableError {}
 
-// --- call interfaces --------------------------------------------------------
+// --- signatures and the mechanism ---------------------------------------------
 
-fn scalar_type(s: Scalar) -> Result<Type, TableError> {
+/// A C type a slot's signature is made of, as the description lays it out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CType {
+    /// `uint8_t`, and `bool`.
+    U8,
+    /// `int8_t`.
+    I8,
+    /// `uint16_t`.
+    U16,
+    /// `int16_t`.
+    I16,
+    /// `uint32_t`.
+    U32,
+    /// `int32_t`.
+    I32,
+    /// `uint64_t`.
+    U64,
+    /// `int64_t`.
+    I64,
+    /// `size_t`.
+    Usize,
+    /// `ptrdiff_t`.
+    Isize,
+    /// `float`.
+    F32,
+    /// `double`.
+    F64,
+    /// Any pointer.
+    Pointer,
+    /// A struct passed by value, its fields in order (`Str` is a pointer
+    /// and a `size_t`).
+    Struct(Vec<CType>),
+}
+
+fn scalar_type(s: Scalar) -> Result<CType, TableError> {
     Ok(match s {
-        Scalar::Bool | Scalar::U8 => Type::u8(),
-        Scalar::I8 => Type::i8(),
-        Scalar::I16 => Type::i16(),
-        Scalar::I32 => Type::i32(),
-        Scalar::I64 => Type::i64(),
-        Scalar::Isize => Type::isize(),
-        Scalar::U16 => Type::u16(),
-        Scalar::U32 => Type::u32(),
-        Scalar::U64 => Type::u64(),
-        Scalar::Usize => Type::usize(),
-        Scalar::F32 => Type::f32(),
-        Scalar::F64 => Type::f64(),
+        Scalar::Bool | Scalar::U8 => CType::U8,
+        Scalar::I8 => CType::I8,
+        Scalar::I16 => CType::I16,
+        Scalar::I32 => CType::I32,
+        Scalar::I64 => CType::I64,
+        Scalar::Isize => CType::Isize,
+        Scalar::U16 => CType::U16,
+        Scalar::U32 => CType::U32,
+        Scalar::U64 => CType::U64,
+        Scalar::Usize => CType::Usize,
+        Scalar::F32 => CType::F32,
+        Scalar::F64 => CType::F64,
         Scalar::I128 | Scalar::U128 => {
             return Err(TableError::Unsupported(format!("`{}`", s.name())));
         }
     })
 }
 
-fn view_type() -> Type {
-    Type::structure([Type::pointer(), Type::usize()])
+fn view_type() -> CType {
+    CType::Struct(vec![CType::Pointer, CType::Usize])
 }
 
-fn arg_type(ty: &ArgType) -> Result<Type, TableError> {
+fn arg_type(ty: &ArgType) -> Result<CType, TableError> {
     Ok(match ty {
         ArgType::Scalar(s) => scalar_type(*s)?,
         ArgType::Str | ArgType::Bytes | ArgType::BytesMut => view_type(),
-        ArgType::Tree { .. } => Type::pointer(),
+        ArgType::Tree { .. } => CType::Pointer,
         ArgType::Object {
             pass: Pass::Taken, ..
-        } => Type::structure([Type::pointer(), Type::usize(), Type::pointer()]),
-        ArgType::Object { .. } => Type::pointer(),
+        } => CType::Struct(vec![CType::Pointer, CType::Usize, CType::Pointer]),
+        ArgType::Object { .. } => CType::Pointer,
     })
 }
 
-/// A call interface libffi prepared, with the types it points into.
-struct Interface(Cif);
+/// A slot's C signature: `ctx`, its arguments, `out` when it answers,
+/// `err` when it can fail, and a `u32` status back; or an object kind's
+/// `destroy`, `ctx` and nothing back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CSignature {
+    args: Vec<CType>,
+    returns_status: bool,
+}
 
-// SAFETY: prepared once and only read after, by libffi, from any thread.
-unsafe impl Send for Interface {}
-// SAFETY: as above.
-unsafe impl Sync for Interface {}
-
-/// The call interface of slot `slot`: `ctx`, its arguments, `out` when it
-/// answers, `err` when it can fail; a status back.
-fn slot_interface(kind: &KindDescription, slot: usize) -> Result<Interface, TableError> {
-    let s = &kind.slots()[slot];
-    let mut args = vec![Type::pointer()];
-    for a in s.args() {
-        args.push(arg_type(a.ty())?);
-    }
-    if let Some(answer) = s.answer() {
-        if let AnswerType::Scalar(scalar) = answer {
-            scalar_type(*scalar)?;
+impl CSignature {
+    /// The signature of `kind`'s slot `slot` (an index into its slots).
+    pub fn of_slot(kind: &KindDescription, slot: usize) -> Result<CSignature, TableError> {
+        let s = kind
+            .slots()
+            .get(slot)
+            .ok_or_else(|| TableError::Unsupported(format!("slot {slot} of `{}`", kind.name())))?;
+        let mut args = vec![CType::Pointer];
+        for a in s.args() {
+            args.push(arg_type(a.ty())?);
         }
-        args.push(Type::pointer());
+        if let Some(answer) = s.answer() {
+            if let AnswerType::Scalar(scalar) = answer {
+                scalar_type(*scalar)?;
+            }
+            args.push(CType::Pointer);
+        }
+        if s.fallible() {
+            args.push(CType::Pointer);
+        }
+        Ok(CSignature {
+            args,
+            returns_status: true,
+        })
     }
-    if s.fallible() {
-        args.push(Type::pointer());
+
+    /// An object kind's `destroy`: `ctx`, nothing back.
+    pub fn destroy() -> CSignature {
+        CSignature {
+            args: vec![CType::Pointer],
+            returns_status: false,
+        }
     }
-    Ok(Interface(Cif::new(args, Type::u32())))
+
+    /// Its arguments, in order.
+    pub fn args(&self) -> &[CType] {
+        &self.args
+    }
+
+    /// Whether it returns a `u32` status; otherwise it returns nothing.
+    pub fn returns_status(&self) -> bool {
+        self.returns_status
+    }
 }
 
-/// An object kind's `destroy`: `ctx`, nothing back.
-fn destroy_interface() -> Interface {
-    Interface(Cif::new([Type::pointer()], Type::void()))
+/// Turns a signature known only at run time into function pointers and
+/// calls: what [`ServedTable`] and [`Caller`] are built on.
+///
+/// # Safety
+///
+/// An implementation upholds, for every signature it prepares:
+///
+/// - a [`Closure`] made by [`Prepared::closure`] has a code address
+///   callable with exactly that C signature, from any thread, until the
+///   closure drops; each call runs the handler's [`SlotHandler::call`] once
+///   with an array holding one address per argument, in order, each
+///   addressing a value of that argument's [`CType`], and returns the
+///   status it answers (nothing, for a signature that returns nothing);
+/// - [`Prepared::call`] calls `f` with that C signature, passing the values
+///   `args` addresses, and returns the status `f` returned.
+pub unsafe trait Mechanism: Send + Sync + 'static {
+    /// Prepares `signature` once, for every closure and call of it.
+    fn prepare(&self, signature: &CSignature) -> Result<Arc<dyn Prepared>, TableError>;
 }
 
-// --- the served side ----------------------------------------------------------
+/// One signature a [`Mechanism`] prepared.
+///
+/// # Safety
+///
+/// As [`Mechanism`].
+pub unsafe trait Prepared: Send + Sync {
+    /// A function pointer of this signature that calls `handler`. The
+    /// closure keeps this signature alive.
+    fn closure(self: Arc<Self>, handler: SlotHandler) -> Result<Closure, TableError>;
 
-/// What one closure is prepared with.
-struct SlotCell {
+    /// Calls `f` with this signature.
+    ///
+    /// # Safety
+    ///
+    /// `f` has this signature; `args` holds one address per argument, each
+    /// addressing a value of its type, valid for the call.
+    unsafe fn call(&self, f: unsafe extern "C" fn(), args: &[*mut c_void]) -> u32;
+}
+
+/// A function pointer a [`Mechanism`] made, and what keeps it callable.
+pub struct Closure {
+    code: unsafe extern "C" fn(),
+    _owner: Box<dyn Send + Sync>,
+}
+
+impl Closure {
+    /// A closure whose `code` stays callable, as [`Mechanism`] states,
+    /// while `owner` lives.
+    ///
+    /// # Safety
+    ///
+    /// The contract on [`Mechanism`] holds for `code` until `owner` drops.
+    pub unsafe fn new(code: unsafe extern "C" fn(), owner: Box<dyn Send + Sync>) -> Closure {
+        Closure {
+            code,
+            _owner: owner,
+        }
+    }
+
+    /// The code address.
+    pub fn code(&self) -> unsafe extern "C" fn() {
+        self.code
+    }
+}
+
+impl core::fmt::Debug for Closure {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Closure").finish_non_exhaustive()
+    }
+}
+
+/// What a closure calls: one slot of a [`ServedTable`], or an object
+/// kind's `destroy`, reading its arguments and calling the table's
+/// [`Serve`] handler.
+pub struct SlotHandler {
     serve: Arc<dyn Serve>,
     kind: Arc<KindDescription>,
     /// An index into the kind's slots, or `None` for `destroy`.
     slot: Option<usize>,
 }
 
-/// One libffi closure, freed with the table.
-struct Closure {
-    raw: *mut c_void,
-}
-
-impl Drop for Closure {
-    fn drop(&mut self) {
-        // SAFETY: from `ffi_closure_alloc`, freed once; no caller holds
-        // the table any longer, by the `ServedTable` contract.
-        unsafe { ffi::ffi_closure_free(self.raw) };
+impl core::fmt::Debug for SlotHandler {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SlotHandler")
+            .field("kind", &self.kind.name())
+            .field("slot", &self.slot)
+            .finish()
     }
 }
+
+impl SlotHandler {
+    /// Runs the slot on a call's arguments: the status it answers, or 0
+    /// for `destroy`, which answers nothing.
+    ///
+    /// # Safety
+    ///
+    /// `args` is the argument array of a call with the slot's
+    /// [`CSignature`]: one address per argument, each addressing a value
+    /// of its type, valid for the call.
+    pub unsafe fn call(&self, args: *const *mut c_void) -> u32 {
+        match self.slot {
+            None => {
+                // SAFETY: `destroy(ctx)`: one pointer argument.
+                let ctx = unsafe { args.cast::<*const *mut c_void>().read().read() };
+                catch_unit(|| self.serve.destroy(ctx.addr()));
+                0
+            }
+            Some(slot) => {
+                // SAFETY: the caller's contract.
+                let status = unsafe { dispatch(&*self.serve, &self.kind, slot, args) };
+                u32::from(status)
+            }
+        }
+    }
+}
+
+// --- the served side ----------------------------------------------------------
 
 /// A kind's table whose slots call one [`Serve`] handler, built from the
 /// kind's description.
@@ -283,17 +437,16 @@ impl Drop for Closure {
 /// provider keeps it in its parts with
 /// [`ProviderPartsBuilder::keep`](super::ProviderPartsBuilder::keep)).
 pub struct ServedTable {
-    // Dropped first: the closures read the cells and interfaces below.
+    // Each keeps its signature and its handler alive.
     _closures: Vec<Closure>,
-    _interfaces: Vec<Interface>,
-    _cells: Vec<SlotCell>,
     /// The header's bytes, then a code pointer or null per slot.
     words: Vec<*const c_void>,
     kind: Arc<KindDescription>,
 }
 
 // SAFETY: built once and only read after; the closures are callable from
-// any thread and call a handler that is `Send + Sync`.
+// any thread, as `Mechanism` promises, and call a handler that is
+// `Send + Sync`.
 unsafe impl Send for ServedTable {}
 // SAFETY: as above.
 unsafe impl Sync for ServedTable {}
@@ -311,38 +464,29 @@ impl core::fmt::Debug for ServedTable {
 const HEADER_WORDS: usize = size_of::<KindHeader>().div_ceil(size_of::<usize>());
 
 impl ServedTable {
-    /// Builds `kind`'s table. A slot `implemented` answers `false` for is
-    /// null, so a caller runs the kind's default for it; a required one is
-    /// refused. An object kind's `destroy` calls [`Serve::destroy`].
+    /// Builds `kind`'s table, its slots made by `mechanism`. A slot
+    /// `implemented` answers `false` for is null, so a caller runs the
+    /// kind's default for it; a required one is refused. An object kind's
+    /// `destroy` calls [`Serve::destroy`].
     pub fn new(
         kind: Arc<KindDescription>,
         implemented: impl Fn(&SlotDescription) -> bool,
         serve: Arc<dyn Serve>,
+        mechanism: &dyn Mechanism,
     ) -> Result<ServedTable, TableError> {
-        let mut cells = Vec::new();
-        let mut interfaces = Vec::new();
+        let mut made = Vec::new();
         if kind.object() {
-            cells.push(SlotCell {
-                serve: Arc::clone(&serve),
-                kind: Arc::clone(&kind),
-                slot: None,
-            });
-            interfaces.push(destroy_interface());
+            made.push((CSignature::destroy(), None));
         }
         for (i, slot) in kind.slots().iter().enumerate() {
-            let interface = slot_interface(&kind, i)?;
+            let signature = CSignature::of_slot(&kind, i)?;
             if !implemented(slot) {
                 if slot.required() {
                     return Err(TableError::MissingRequired(slot.name().to_string()));
                 }
                 continue;
             }
-            cells.push(SlotCell {
-                serve: Arc::clone(&serve),
-                kind: Arc::clone(&kind),
-                slot: Some(i),
-            });
-            interfaces.push(interface);
+            made.push((signature, Some(i)));
         }
         let words_len = HEADER_WORDS + kind.slots().len() + usize::from(kind.object());
         let mut words = vec![core::ptr::null::<c_void>(); words_len];
@@ -358,42 +502,22 @@ impl ServedTable {
             word[..chunk.len()].copy_from_slice(chunk);
             *w = core::ptr::without_provenance(usize::from_ne_bytes(word));
         }
-        let mut closures = Vec::with_capacity(cells.len());
-        for (cell, interface) in cells.iter().zip(&interfaces) {
-            let mut code: *mut c_void = core::ptr::null_mut();
-            // SAFETY: allocates a closure and its code address, or answers
-            // null.
-            let raw = unsafe { ffi::ffi_closure_alloc(size_of::<ffi::ffi_closure>(), &mut code) };
-            if raw.is_null() {
-                return Err(TableError::Ffi(u32::MAX));
-            }
-            let closure = Closure { raw };
-            // SAFETY: a closure just allocated; the interface and the cell
-            // live in vectors this table keeps and never grows again, so
-            // their addresses outlive the closure, which is freed first.
-            let status = unsafe {
-                ffi::ffi_prep_closure_loc(
-                    raw.cast::<ffi::ffi_closure>(),
-                    interface.0.as_raw_ptr(),
-                    Some(on_call),
-                    (cell as *const SlotCell).cast_mut().cast::<c_void>(),
-                    code,
-                )
-            };
-            if status != ffi::ffi_status_FFI_OK {
-                return Err(TableError::Ffi(status));
-            }
-            closures.push(closure);
-            let word = match cell.slot {
+        let mut closures = Vec::with_capacity(made.len());
+        for (signature, slot) in made {
+            let closure = mechanism.prepare(&signature)?.closure(SlotHandler {
+                serve: Arc::clone(&serve),
+                kind: Arc::clone(&kind),
+                slot,
+            })?;
+            let word = match slot {
                 None => 0,
                 Some(i) => kind.word_of(i),
             };
-            words[HEADER_WORDS + word] = code.cast_const();
+            words[HEADER_WORDS + word] = (closure.code() as *const ()).cast::<c_void>();
+            closures.push(closure);
         }
         Ok(ServedTable {
             _closures: closures,
-            _interfaces: interfaces,
-            _cells: cells,
             words,
             kind,
         })
@@ -437,32 +561,6 @@ impl ServedTable {
                 ctx: core::ptr::without_provenance_mut(ctx),
             },
         })
-    }
-}
-
-/// Every closure's entry: the cell names the slot.
-unsafe extern "C" fn on_call(
-    _cif: *mut ffi::ffi_cif,
-    ret: *mut c_void,
-    args: *mut *mut c_void,
-    data: *mut c_void,
-) {
-    // SAFETY: the cell this closure was prepared with, alive while the
-    // table is, which its builder keeps for as long as it can be called.
-    let cell = unsafe { &*data.cast::<SlotCell>() };
-    match cell.slot {
-        None => {
-            // SAFETY: `destroy(ctx)`: one pointer argument.
-            let ctx = unsafe { args.cast::<*const *mut c_void>().read().read() };
-            catch_unit(|| cell.serve.destroy(ctx.addr()));
-        }
-        Some(slot) => {
-            // SAFETY: libffi's argument array for this slot's interface.
-            let status = unsafe { dispatch(&*cell.serve, &cell.kind, slot, args.cast_const()) };
-            // SAFETY: libffi's return buffer, at least `ffi_arg` wide; an
-            // integer answer is written widened to it.
-            unsafe { ret.cast::<usize>().write(u32::from(status) as usize) };
-        }
     }
 }
 
@@ -573,14 +671,13 @@ unsafe fn take_arg<'a>(ty: &ArgType, at: *const c_void) -> Result<Arg<'a>, Provi
     }
 }
 
-/// One served slot called: reads its arguments from libffi's array, calls
-/// the handler, writes the answer or the error. Plain Rust over the array,
-/// so it runs under Miri without libffi.
+/// One served slot called: reads its arguments from the call's array,
+/// calls the handler, writes the answer or the error.
 ///
 /// # Safety
 ///
 /// `args` is the argument array of a call to `kind`'s slot `slot`, as
-/// libffi hands a closure one: a pointer per argument (`ctx` first, then
+/// [`SlotHandler::call`] takes one: a pointer per argument (`ctx` first, then
 /// the slot's arguments, `out` if it answers, `err` if it can fail), each
 /// addressing an argument of the slot's described shape.
 pub(crate) unsafe fn dispatch(
@@ -1035,11 +1132,11 @@ impl LentHandle {
 
 // --- the calling side -----------------------------------------------------------
 
-/// Calls any table of one described kind: the call interfaces, prepared
-/// once.
+/// Calls any table of one described kind: its slots' signatures, prepared
+/// once by a [`Mechanism`].
 pub struct Caller {
     kind: Arc<KindDescription>,
-    interfaces: Vec<Option<Interface>>,
+    interfaces: Vec<Arc<dyn Prepared>>,
 }
 
 impl core::fmt::Debug for Caller {
@@ -1050,7 +1147,7 @@ impl core::fmt::Debug for Caller {
     }
 }
 
-/// One argument's storage for `ffi_call`.
+/// One argument's storage for a call.
 enum Cell<'a> {
     U8(u8),
     I8(i8),
@@ -1136,11 +1233,14 @@ enum Pending<'a> {
 }
 
 impl Caller {
-    /// Prepares the call interfaces of every slot of `kind`.
-    pub fn new(kind: Arc<KindDescription>) -> Result<Caller, TableError> {
+    /// Prepares every slot of `kind` with `mechanism`.
+    pub fn new(
+        kind: Arc<KindDescription>,
+        mechanism: &dyn Mechanism,
+    ) -> Result<Caller, TableError> {
         let mut interfaces = Vec::new();
         for i in 0..kind.slots().len() {
-            interfaces.push(Some(slot_interface(&kind, i)?));
+            interfaces.push(mechanism.prepare(&CSignature::of_slot(&kind, i)?)?);
         }
         Ok(Caller { kind, interfaces })
     }
@@ -1228,7 +1328,7 @@ impl Caller {
                 ),
             ));
         }
-        let Some(Some(interface)) = self.interfaces.get(slot) else {
+        let Some(interface) = self.interfaces.get(slot) else {
             return Err(ProviderError::from(Status::GUATIAO_ERR_INTERNAL));
         };
 
@@ -1367,21 +1467,12 @@ impl Caller {
         if s.fallible() {
             cells.push(Cell::Ptr((&mut err as *mut ProviderError).cast()));
         }
-        let mut addresses: Vec<*mut c_void> = cells.iter_mut().map(Cell::address).collect();
-        let mut ret: usize = 0;
-        // SAFETY: the interface was prepared for this slot's description,
+        let addresses: Vec<*mut c_void> = cells.iter_mut().map(Cell::address).collect();
+        // SAFETY: the signature was prepared from this slot's description,
         // which the table was built for (its hash checked); each address
-        // holds an argument of the shape the interface names, and lives
+        // holds an argument of the shape the signature names, and lives
         // until the call returns.
-        unsafe {
-            ffi::ffi_call(
-                interface.0.as_raw_ptr(),
-                Some(f),
-                (&mut ret as *mut usize).cast(),
-                addresses.as_mut_ptr(),
-            );
-        }
-        let status = Status::from(ret as u32);
+        let status = Status::from(unsafe { interface.call(f, &addresses) });
         // What was handed over is the callee's, whatever it answered; lent
         // trees go home, whatever it answered.
         let mut settled = Ok(());

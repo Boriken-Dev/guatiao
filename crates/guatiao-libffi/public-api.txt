@@ -1,0 +1,17 @@
+pub mod guatiao_libffi
+pub struct guatiao_libffi::Libffi
+impl core::clone::Clone for guatiao_libffi::Libffi
+pub fn guatiao_libffi::Libffi::clone(&self) -> Self
+impl core::cmp::Eq for guatiao_libffi::Libffi
+impl core::cmp::PartialEq for guatiao_libffi::Libffi
+pub fn guatiao_libffi::Libffi::eq(&self, &Self) -> bool
+impl core::default::Default for guatiao_libffi::Libffi
+pub fn guatiao_libffi::Libffi::default() -> Self
+impl core::fmt::Debug for guatiao_libffi::Libffi
+pub fn guatiao_libffi::Libffi::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for guatiao_libffi::Libffi
+pub fn guatiao_libffi::Libffi::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for guatiao_libffi::Libffi
+impl core::marker::StructuralPartialEq for guatiao_libffi::Libffi
+impl guatiao::library::kind::runtime::Mechanism for guatiao_libffi::Libffi
+pub fn guatiao_libffi::Libffi::prepare(&self, &guatiao::library::kind::runtime::CSignature) -> core::result::Result<alloc::sync::Arc<dyn guatiao::library::kind::runtime::Prepared>, guatiao::library::kind::runtime::TableError>

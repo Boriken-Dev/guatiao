@@ -27,7 +27,7 @@ path = "src/lib.rs"
 [dependencies]
 guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1" }
 # Manifests, stamps, refresh and the source table: CPython is its engine,
-# and builds its own kind tables, so no `dynamic-kinds`.
+# and builds its own kind tables (ctypes), so it needs no mechanism.
 guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1" }
 # The stable ABI from 3.9: one Windows build serves every CPython from
 # 3.9 on (`python3.dll`). Elsewhere the build links the interpreter's

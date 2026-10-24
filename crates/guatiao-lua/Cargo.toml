@@ -43,10 +43,13 @@ source = ["mlua/vendored"]
 module = ["mlua/module"]
 
 [dependencies]
-guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load", "dynamic-kinds"] }
+guatiao = { path = "../guatiao", version = "=0.0.0-alpha.1", features = ["load"] }
 # Manifests, stamps, refresh, the source table, kinds served from their
 # descriptions and the limits: Lua is its engine.
-guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1", features = ["dynamic-kinds"] }
+guatiao-bridge = { path = "../guatiao-bridge", version = "=0.0.0-alpha.1" }
+# Lua has no FFI: its providers' tables, and its calls through a kind's
+# table, are libffi closures and calls.
+guatiao-libffi = { path = "../guatiao-libffi", version = "=0.0.0-alpha.1" }
 mlua = { version = "0.12.2" }
 
 [dev-dependencies]

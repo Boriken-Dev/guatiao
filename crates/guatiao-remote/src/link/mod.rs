@@ -45,6 +45,7 @@ use guatiao::library::kind::{
 };
 use guatiao::{Alloc, Status, Value};
 use guatiao_bridge::Kinds;
+use guatiao_libffi::Libffi;
 
 use crate::protocol::args::ObjectRef;
 use crate::protocol::{
@@ -974,7 +975,7 @@ impl Inner {
             return Ok(Arc::clone(c));
         }
         let caller =
-            Arc::new(Caller::new(Arc::clone(kind)).map_err(|e| {
+            Arc::new(Caller::new(Arc::clone(kind), &Libffi).map_err(|e| {
                 ProviderError::new(Status::GUATIAO_ERR_UNSUPPORTED, &e.to_string())
             })?);
         callers.insert(key, Arc::clone(&caller));

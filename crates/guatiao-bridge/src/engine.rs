@@ -10,9 +10,7 @@ use alloc::sync::Arc;
 use guatiao::Value;
 use guatiao::library::LocalLibrary;
 use guatiao::library::ProviderError;
-use guatiao::library::kind::{KindDescription, SlotDescription};
-#[cfg(feature = "dynamic-kinds")]
-use guatiao::library::kind::{LentHandle, RawObject};
+use guatiao::library::kind::{KindDescription, LentHandle, RawObject, SlotDescription};
 
 use crate::config::Config;
 use crate::error::BridgeError;
@@ -114,8 +112,8 @@ pub enum Opened<L> {
         descriptor: LocalLibrary<'static>,
     },
     /// Providers whose kinds the bridge builds tables for from their
-    /// descriptions, every slot a [`Call`] to [`Engine::call`]. Needs the
-    /// `dynamic-kinds` feature.
+    /// descriptions, every slot a [`Call`] to [`Engine::call`]. Needs a
+    /// mechanism ([`BridgeSource::with_mechanism`](crate::BridgeSource::with_mechanism)).
     Described {
         /// The engine's handle on it.
         library: L,
@@ -236,10 +234,8 @@ pub enum CallArg {
     Buffer(Vec<u8>),
     /// An object handed over: the engine owns it, and destroys it by
     /// dropping it.
-    #[cfg(feature = "dynamic-kinds")]
     Object(RawObject),
     /// An object lent for this call: callable until the call returns.
-    #[cfg(feature = "dynamic-kinds")]
     LentObject(LentHandle),
 }
 
@@ -314,6 +310,5 @@ pub enum Reply {
         id: u64,
     },
     /// An object handed back as it came.
-    #[cfg(feature = "dynamic-kinds")]
     Handed(RawObject),
 }
