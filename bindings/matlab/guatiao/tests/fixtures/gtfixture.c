@@ -6,7 +6,8 @@
  * A MEX file a test calls as a library with threads of its own would: it
  * calls a greeter's `greet` slot on the interpreter's thread, from threads
  * it joins and from one it leaves running; destroys an object from another
- * thread; and runs greeter_caller_run, the Rust caller of any greeter.
+ * thread; and runs greeter_caller_run and greeter_caller_wide, the Rust
+ * callers of any greeter and of any provider of the wide kind.
  * Exports are found at run time from the files the test names, so this
  * links nothing of guatiao. Addresses cross as uint64 scalars.
  */
@@ -29,6 +30,8 @@
 typedef guatiao_status (*value_free_fn)(guatiao_value *value);
 typedef guatiao_status (*caller_fn)(const guatiao_host_info *host, guatiao_str key, guatiao_str name,
                                     guatiao_value *out);
+
+typedef guatiao_status (*wide_caller_fn)(const guatiao_host_info *host, guatiao_str key, guatiao_value *out);
 
 static char failure[256];
 
@@ -271,6 +274,23 @@ static int dispatch(const char *cmd, int nlhs, mxArray *plhs[], int nrhs, const 
     mxGetString(prhs[4], n, sizeof n);
     guatiao_status st = run_caller((const guatiao_host_info *)addr(prhs[2]), guatiao_str_from(k, strlen(k)),
                                    guatiao_str_from(n, strlen(n)), (guatiao_value *)addr(prhs[5]));
+    plhs[0] = mxCreateDoubleScalar((double)st);
+    return 1;
+  }
+  if (!strcmp(cmd, "wide_caller")) {
+    /* wide_caller(caller path, host, key, out node) -> status */
+    if (nrhs < 5) return 0;
+    void *p = open_symbol(prhs[1], "greeter_caller_wide");
+    if (!p) {
+      snprintf(failure, sizeof failure, "greeter_caller_wide not found");
+      return 0;
+    }
+    wide_caller_fn run_wide;
+    memcpy(&run_wide, &p, sizeof run_wide);
+    char k[256];
+    mxGetString(prhs[3], k, sizeof k);
+    guatiao_status st = run_wide((const guatiao_host_info *)addr(prhs[2]), guatiao_str_from(k, strlen(k)),
+                                 (guatiao_value *)addr(prhs[4]));
     plhs[0] = mxCreateDoubleScalar((double)st);
     return 1;
   }
