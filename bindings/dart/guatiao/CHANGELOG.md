@@ -98,6 +98,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   source serves now, answering what loaded, retired, was skipped or
   refused.
 
+### Fixed
+
+- **A tree a kind's slot answers outlives its library**, whatever
+  allocator the slot built it in: one that ignored the carrier built it in
+  its own, freed after the unload through code that was gone. It is moved
+  into this binding's on arrival (`guatiao_value_make_local`; a library
+  older than that export is left as it answered).
+
 ## [0.0.0-alpha.1] - 2026-10-19
 
 ### Changed
