@@ -41,6 +41,14 @@ write now.
   and Dart kind callers call it on every tree answer, and on a lent tree
   once the call returns (into the allocator the tree records), so neither
   crashes when freed after the unload.
+- **C++: `guatiao_check_kinds` holds a kind's declaration to its
+  description.** A CMake function the package defines adds a test that
+  reads the `GUATIAO_KIND` and `GUATIAO_OBJECT_KIND` lines of a header
+  and the kind's `<crate>.kinds.json`, and fails on a lent tree declared
+  handed over (or the reverse), a required slot declared optional, a slot
+  left out, or any other signature than the one described: the
+  difference the compiler cannot see, since both are the same C pointer.
+  The example greeter kinds are checked.
 - **`guatiao-lua`: libraries written in Lua, served to any host.** A
   source file (`crates/guatiao-lua`, built from this repository, not
   published) with Lua 5.4 built in (`lua55` and `luau` as features): a
