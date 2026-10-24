@@ -9,6 +9,7 @@
 \alias{intake_flat_keys}
 \alias{intake_flatten}
 \alias{intake_unflatten}
+\alias{intake_provider_form_key}
 \title{Forms, paths and the flat projection}
 \usage{
 intake_check(schema, form)
@@ -21,6 +22,7 @@ intake_resolve(schema, key)
 intake_flat_keys(schema, key)
 intake_flatten(schema, key, value)
 intake_unflatten(schema, key, store)
+intake_provider_form_key
 }
 \arguments{
 \item{schema, form, value, values}{Values, views or R data.}
@@ -37,7 +39,8 @@ intake_unflatten(schema, key, store)
 \code{intake_for_schema}: a value. \code{intake_form_for} and
 \code{intake_unflatten}: a value, or \code{NULL} for nothing there.
 \code{intake_flat_keys}: a character vector. \code{intake_flatten}: a named
-character vector.
+character vector. \code{intake_provider_form_key}: \code{"form"}, the key
+of a provider's meta holding its form (a registry's \code{provider_meta()}).
 }
 \description{
 Taking a value in from a person: whether a form fits a schema and how its

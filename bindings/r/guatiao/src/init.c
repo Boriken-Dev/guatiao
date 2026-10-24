@@ -57,6 +57,7 @@ SEXP C_registry_new(SEXP, SEXP, SEXP);
 SEXP C_registry_priority(SEXP, SEXP);
 SEXP C_registry_provider_available(SEXP, SEXP);
 SEXP C_registry_provider_config(SEXP, SEXP);
+SEXP C_registry_provider_meta(SEXP, SEXP);
 SEXP C_registry_provider_table(SEXP, SEXP, SEXP);
 SEXP C_registry_query(SEXP, SEXP, SEXP);
 SEXP C_registry_refresh(SEXP);
@@ -142,6 +143,7 @@ static const R_CallMethodDef calls[] = {
     {"C_registry_priority", (DL_FUNC)(void (*)(void)) & C_registry_priority, 2},
     {"C_registry_provider_available", (DL_FUNC)(void (*)(void)) & C_registry_provider_available, 2},
     {"C_registry_provider_config", (DL_FUNC)(void (*)(void)) & C_registry_provider_config, 2},
+    {"C_registry_provider_meta", (DL_FUNC)(void (*)(void)) & C_registry_provider_meta, 2},
     {"C_registry_provider_table", (DL_FUNC)(void (*)(void)) & C_registry_provider_table, 3},
     {"C_registry_query", (DL_FUNC)(void (*)(void)) & C_registry_query, 3},
     {"C_registry_refresh", (DL_FUNC)(void (*)(void)) & C_registry_refresh, 1},

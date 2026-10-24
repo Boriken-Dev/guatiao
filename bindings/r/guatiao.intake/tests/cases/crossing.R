@@ -23,6 +23,22 @@ case("a tree intake built is changed and freed through guatiao", with_library({
   close(schema)
 }))
 
+case("a provider's form, read from its meta, fits its schema", with_library({
+  reg <- guatiao::registry("r-intake-tests", "0.1")
+  reg$scan_dir(LIBRARY_DIR, rules = "kind=greeter")
+  meta <- reg$provider_meta("derived_greeter_shouter")
+  form <- meta[[intake_provider_form_key]]
+  schema <- reg$provider_config("derived_greeter_shouter")
+  expect_true(is.null(intake_check(schema, form)))
+  expect_equal(value_data(form$fields$prefix$placeholder), "hey")
+  expect_equal(value_data(form$fields$marks$unit), "marks")
+  expect_true(!intake_is_visible(schema, form, "marks", list(exclaim = FALSE)))
+  expect_true(intake_is_visible(schema, form, "marks", list(exclaim = TRUE)))
+  close(schema)
+  close(meta)
+  reg$close()
+}))
+
 # The glue compiles against copies of the headers: they must be the
 # committed ones.
 case("the header copies are the committed headers", with_repo({

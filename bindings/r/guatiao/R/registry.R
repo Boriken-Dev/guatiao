@@ -99,6 +99,11 @@
       r <- .Call(C_registry_provider_config, .gt_reg(.self), key)
       if (is.null(r)) NULL else .gt_root(r)
     },
+    provider_meta = function(key) {
+      "What the provider declared beyond its schema (its notices, or its form under guatiao.intake's PROVIDER_FORM_KEY): a copy, outliving the library, or NULL when it declares nothing."
+      r <- .Call(C_registry_provider_meta, .gt_reg(.self), key)
+      if (is.null(r)) NULL else .gt_root(r)
+    },
     host = function() {
       "The registry's guatiao_host_info, as an external pointer."
       .Call(C_registry_host, .gt_reg(.self))

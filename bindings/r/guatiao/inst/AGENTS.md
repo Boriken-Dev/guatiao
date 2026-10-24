@@ -320,6 +320,9 @@ default; `%name`, `%library`, `%version`), `set_priority(id, p)` /
 `priority(id)`, `provider_table(key, kind = NULL)` (`list(table, size,
 ctx)`, `table` NULL for none; no `kind` for a single table),
 `provider_config(key)` (a copy of the schema, a value, or NULL),
+`provider_meta(key)` (what the provider declared beyond its schema, its
+notices or its form under `guatiao.intake`'s `intake_provider_form_key`: a
+copy, outliving the library, or NULL; `NotFound` for an unknown key),
 `host()` (the `guatiao_host_info *` as an external pointer).
 
 `create(key, config)` checks the configuration against the provider's
