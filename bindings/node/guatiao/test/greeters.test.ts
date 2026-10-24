@@ -156,6 +156,34 @@ describe('a Node host calls every greeter', () => {
   });
 });
 
+describe('a tree built in the library\'s allocator outlives the unload', () => {
+  // Each test unloads a library of its own: no other registry keeps it mapped.
+  it('answered by a greeter that ignores the carrier', (ctx) => {
+    const dir = cLibraries()?.carelessGreeterDir;
+    if (dir === undefined) return ctx.skip('no C compiler: the greeter written in C is not built');
+    using own = new Registry('node-careless', '0.1');
+    own.scanDir(dir, { rules: 'kind=greeter' });
+    const answer = own.bind('c_greeter', Greeter).greet('hal');
+    // The C greeter has no `unload` function: nothing it handed out is
+    // alive, which the caller states.
+    own.unload('c_greeter_library', { unchecked: true });
+    expect(own.libraries()).toEqual([]);
+    expect(answer.toJS()).toEqual({ greeting: 'hello from C, hal' });
+    answer.close();
+  });
+
+  it('grown into a lent map by a slot', (ctx) => {
+    const dir = cLibraries()?.lentGreeterDir;
+    if (dir === undefined) return ctx.skip('no C compiler: the greeter written in C is not built');
+    using own = new Registry('node-lent', '0.1');
+    own.scanDir(dir, { rules: 'kind=greeter' });
+    using config = new Value({ name: 'ivy' });
+    expect(own.bind('c_greeter', Greeter).check(config)).toBe(true);
+    own.unload('c_greeter_library', { unchecked: true });
+    expect(config.toJS()).toEqual({ name: 'ivy', checked_by: 'C' });
+  });
+});
+
 describe('a Rust caller calls every greeter through its proxy', () => {
   let run: (host: bigint, key: n.StrArg, name: n.StrArg, out: bigint) => number;
   beforeAll(() => {

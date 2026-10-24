@@ -33,10 +33,10 @@ function compiler(): string | null {
  * `source` (a path) built with `cc` into `into` as the library `name`. A
  * compile error fails loudly: the header changed under it.
  */
-function buildC(cc: string, source: string, into: string, name: string): string {
+function buildC(cc: string, source: string, into: string, name: string, defines: readonly string[] = []): string {
   mkdirSync(into, { recursive: true });
   const out = path.join(into, libraryFilename(name));
-  const args = ['-shared', '-std=c11', '-Wall', '-Wextra', '-Werror'];
+  const args = ['-shared', '-std=c11', '-Wall', '-Wextra', '-Werror', ...defines.map((d) => `-D${d}`)];
   if (process.platform !== 'win32') args.push('-fPIC');
   args.push(
     '-I',
@@ -55,6 +55,10 @@ function buildC(cc: string, source: string, into: string, name: string): string 
 export interface CLibraries {
   /** The directory holding the greeter written in C, and nothing else. */
   greeterDir: string;
+  /** The same greeter built to ignore the carrier (its answers are built in its own allocator), in a directory of its own. */
+  carelessGreeterDir: string;
+  /** The stock greeter again, in a directory of its own: a test unloads it, so nothing else may keep it mapped. */
+  lentGreeterDir: string;
   /** Two builds of the source written in C (a shelf of counters), one per test that changes its state. */
   shelfA: string;
   shelfB: string;
@@ -70,8 +74,14 @@ export function buildCLibraries(): CLibraries | null {
   const C_CONSUMER = path.join(REPO, 'crates', 'guatiao', 'tests', 'c_consumer');
   const greeterDir = path.join(root, 'greeter');
   buildC(cc, path.join(C_CONSUMER, 'greeter_in_c.c'), greeterDir, 'c_greeter');
+  const carelessGreeterDir = path.join(root, 'careless');
+  buildC(cc, path.join(C_CONSUMER, 'greeter_in_c.c'), carelessGreeterDir, 'c_greeter', ['GREETER_IGNORES_CARRIER']);
+  const lentGreeterDir = path.join(root, 'lent');
+  buildC(cc, path.join(C_CONSUMER, 'greeter_in_c.c'), lentGreeterDir, 'c_greeter');
   return {
     greeterDir,
+    carelessGreeterDir,
+    lentGreeterDir,
     shelfA: buildC(cc, path.join(C_CONSUMER, 'source_in_c.c'), path.join(root, 'shelf_a'), 'node_shelf_a'),
     shelfB: buildC(cc, path.join(C_CONSUMER, 'source_in_c.c'), path.join(root, 'shelf_b'), 'node_shelf_b'),
     foreignThread: buildC(

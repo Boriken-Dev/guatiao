@@ -328,8 +328,8 @@ K>` an object of an object kind the caller owns.
 | `t.value` | `const guatiao_value *` (null allowed) | a `Ref`, plain data or `null` | a read-only `Ref` or `null`, valid for the call |
 | `t.map` | `const guatiao_map *` | a `Ref` or plain data | a read-only `MapRef`, valid for the call |
 | `t.taken(t.map)`, `t.taken(t.list)`, `t.taken(t.value)` | a tree handed over | a `Value` (moved: left absent), a `Ref` (copied) or plain data | a `Value` it owns |
-| `t.lent(t.map)`, `t.lent(t.list)`, `t.lent(t.value)` | a tree lent (`&mut`) | a `Value` or `Ref`, changed where it stands | a writable `MapRef` / `ListRef` / `Ref`, valid for the call; what it adds is built in the allocator the tree records |
-| `t.map`, `t.list`, `t.value` (answer) | `guatiao_map/list/value *out`, a carrier | a `Value` to close | a `Value`, a `Ref` or plain data, built in the allocator the carrier names |
+| `t.lent(t.map)`, `t.lent(t.list)`, `t.lent(t.value)` | a tree lent (`&mut`) | a `Value` or `Ref`, changed where it stands | a writable `MapRef` / `ListRef` / `Ref`, valid for the call; what it adds is built in the allocator the tree records, and what a callee built elsewhere is moved there when the call returns |
+| `t.map`, `t.list`, `t.value` (answer) | `guatiao_map/list/value *out`, a carrier | a `Value` to close | a `Value`, a `Ref` or plain data, built in the allocator the carrier names; a `Value` answered is moved into this binding's allocator on arrival when the slot built it in its own |
 | `t.taken(K)`, `K` an object kind | `guatiao_object` | an object implementing `K`, or an `ObjectHandle` | an `ObjectHandle` it owns |
 | `t.lent(K)` | `const guatiao_object *` | an object implementing `K`, or an `ObjectHandle` | a `Remote`, valid for the call |
 | `K` (answer) | `guatiao_object *out` | an `ObjectHandle`; `close()` destroys it once | an object implementing `K`, or an `ObjectHandle` |
