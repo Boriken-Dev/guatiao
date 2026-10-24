@@ -211,7 +211,70 @@ intake.layout(schema, form);
 intake.isVisible(schema, form, 'marks', { exclaim: false }); // false
 ```
 
-In Python, Dart and Node the `meta` is a copy you close; the schema is
-borrowed from the registry and never closed. Go, Julia, R, MATLAB and
-Fortran carry `guatiao_registry_provider_meta` in their headers but do not
-wrap it yet.
+### Go
+
+```go
+import (
+	guatiao "github.com/Boriken-Dev/guatiao/bindings/go/guatiao"
+	intake "github.com/Boriken-Dev/guatiao/bindings/go/guatiao-intake"
+)
+
+meta, ok, err := reg.ProviderMeta("derived_greeter_shouter") // ok false: no meta
+if err == nil && ok {
+	defer meta.Close()
+	form := meta.Key(intake.ProviderFormKey)
+	schema, _, _ := reg.ProviderConfig("derived_greeter_shouter")
+	why, _ := intake.Check(schema, form)                      // nil: it fits
+	shown, _ := intake.IsVisible(schema, form, "marks", map[string]any{"exclaim": false})
+}
+```
+
+### Julia
+
+```julia
+using Guatiao, GuatiaoIntake
+
+meta = Guatiao.provider_meta(reg, "derived_greeter_shouter")   # nothing: no meta
+form = meta[GuatiaoIntake.PROVIDER_FORM_KEY]
+schema = Guatiao.provider_config(reg, "derived_greeter_shouter")
+GuatiaoIntake.check(schema, form)                               # nothing: it fits
+GuatiaoIntake.isvisible(schema, form, "marks", Dict("exclaim" => false))
+close(meta)
+```
+
+### R
+
+```r
+meta <- reg$provider_meta("derived_greeter_shouter")   # NULL: no meta
+form <- meta[[intake_provider_form_key]]
+schema <- reg$provider_config("derived_greeter_shouter")
+intake_check(schema, form)                             # NULL: it fits
+intake_is_visible(schema, form, "marks", list(exclaim = FALSE))
+close(meta)
+```
+
+### MATLAB and Octave
+
+```matlab
+meta = reg.provider_meta('derived_greeter_shouter');   % []: no meta
+form = meta.at(guatiao.intake.provider_form_key());
+schema = reg.provider_config('derived_greeter_shouter');
+guatiao.intake.check(schema, form)                     % []: it fits
+guatiao.intake.is_visible(schema, form, 'marks', struct('exclaim', false))
+meta.close();
+```
+
+### Fortran
+
+```fortran
+call reg%provider_meta('derived_greeter_shouter', meta)   ! absent: no meta
+form = meta%key(GT_INTAKE_PROVIDER_FORM_KEY)
+schema = reg%provider_config('derived_greeter_shouter')
+call guatiao_intake_check(schema, form, why, st)          ! GUATIAO_OK: it fits
+call guatiao_intake_is_visible(schema, form, 'marks', values, shown)
+```
+
+In every binding the `meta` is a copy, outliving the library, that you
+close (or that its finalizer frees); the schema is the registry's (a
+borrowed view in Python, Dart, Node, Go, Julia and Fortran, a copy in R
+and MATLAB).
