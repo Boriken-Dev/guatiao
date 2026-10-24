@@ -123,13 +123,13 @@ function rust_calls()
     expect_equal(st, 0, [keys{r, 1} ' greeter_caller_wide']);
     report = out.data();
     out.close();
-    % A tree holds an integer past INT64_MAX as uint64 and any other as int64.
+    % A tree holds an integer past INT64_MAX as uint64 and any other as
+    % int64: each is compared with that exact value in that class.
     s = signed_limits();
-    u = unsigned_limits();
+    u = {bitshift(int64(1), 53) + 1, bitshift(uint64(1), 63), intmax('uint64')};
     for i = 1:3
-      expect_true(isinteger(report.i64{i}) && isinteger(report.u64{i}), [keys{r, 1} ' integers, not doubles']);
-      expect_equal(report.i64{i}, cast(s{i}, class(report.i64{i})), [keys{r, 1} ' i64']);
-      expect_equal(report.u64{i}, cast(u{i}, class(report.u64{i})), [keys{r, 1} ' u64']);
+      expect_equal(report.i64{i}, s{i}, [keys{r, 1} ' i64']);
+      expect_equal(report.u64{i}, u{i}, [keys{r, 1} ' u64']);
     end
   end
 end
