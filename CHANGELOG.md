@@ -22,11 +22,13 @@ write now.
   binding's authoring shape, so the same file runs under Node and here;
   it is described by a `*.guatiao-js.toml` manifest, with its version and
   entry taken from the `package.json` beside it, and its kinds come from
-  their `<crate>.kinds.json`. Each library runs in a context of its own:
+  their `<crate>.kinds.json`. Each library runs in a context of its own,
+  and holds only the host objects it was given:
   refresh serves an edited module (or any file it imports) while the old
   build answers its instances. Limits stop runaway code (operations and
   time by QuickJS's interrupt, which a `try` cannot catch, depth by stack
-  size, memory) and the host carries on. 64-bit integers cross as
+  size, memory; the promise reactions a call queued included, and the
+  lists and buffers a script makes) and the host carries on. 64-bit integers cross as
   `bigint`, a decimal a double would change as an `ExactNumber`. See
   `docs/js.md` for what differs from Node.
 - **`guatiao-lua`: libraries written in Lua, served to any host.** A
