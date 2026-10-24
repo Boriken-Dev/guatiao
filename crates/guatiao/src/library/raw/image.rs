@@ -888,7 +888,7 @@ pub(crate) enum Opened {
 #[cfg(feature = "load")]
 pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, libloading::Error> {
     // SAFETY: the caller's side of the contract, stated above.
-    let library = unsafe { libloading::Library::new(path)? };
+    let library = unsafe { map(path)? };
 
     // SAFETY: the symbol either is absent, which is an answer, or has the
     // signature this crate defines for it.
@@ -922,6 +922,35 @@ pub(crate) unsafe fn open(path: &std::path::Path, host: Host) -> Result<Opened, 
             Ok(Opened::Rejected(why))
         }
     }
+}
+
+/// Maps `path`. Windows looks for what a library imports beside the host,
+/// on `PATH` and among what is loaded, never beside the library itself: a
+/// load that fails is tried again with the library's own directory in place
+/// of the host's, `PATH` still searched, so a plugin shipped beside the
+/// `guatiao.dll` it links is found.
+///
+/// # Safety
+///
+/// As [`open`].
+#[cfg(feature = "load")]
+unsafe fn map(path: &std::path::Path) -> Result<libloading::Library, libloading::Error> {
+    // SAFETY: forwarded.
+    let first = unsafe { libloading::Library::new(path) };
+    #[cfg(windows)]
+    if first.is_err()
+        && let Ok(absolute) = std::path::absolute(path)
+    {
+        use libloading::os::windows::{LOAD_WITH_ALTERED_SEARCH_PATH, Library};
+        // SAFETY: forwarded: the same file, its own directory searched for
+        // what it imports (the flag wants an absolute path).
+        if let Ok(library) =
+            unsafe { Library::load_with_flags(&absolute, LOAD_WITH_ALTERED_SEARCH_PATH) }
+        {
+            return Ok(library.into());
+        }
+    }
+    first
 }
 
 /// What a library the host LINKS came to: its describe function's answer,

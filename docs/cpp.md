@@ -176,8 +176,9 @@ or inline function is merged with the host's or another library's.
 `examples/cpp_greeter` is the example; the Rust and Python example hosts
 scan it and call it. A host carrying the library itself calls
 `reg.register_library<greeters>("name")` instead. On Windows the library
-imports `guatiao.dll`, found as any DLL's dependency is: already loaded in
-the process, beside the host's executable, or on `PATH`.
+imports `guatiao.dll`, found already loaded in the process, beside the
+host's executable, on `PATH`, or beside the library itself: a load that
+fails is tried again with the library's own directory searched.
 
 ## What C++ cannot do that Rust can
 
