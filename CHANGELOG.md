@@ -24,7 +24,11 @@ write now.
   afresh while the old build answers the instances taken from it; limits
   stop runaway code (operations, time, depth, and the size of strings,
   arrays and maps), a `try`/`catch` around it included, and the host
-  carries on. A script reaches no file and cannot import. Values keep
+  carries on; every call runs on a stack sized from them, so deep
+  recursion and values nested within an `operations` limit stop or finish
+  instead of aborting the process (nesting built up over many calls in a
+  provider's state, or with no `operations` set, is not bounded). A script
+  reaches no file, cannot import, and its `print` does nothing. Values keep
   null apart from absent, an exact number's text and bytes apart from
   text; a map's keys come back in byte order, as a Rhai map keeps them.
 - **`guatiao-lua`: libraries written in Lua, served to any host.** A
