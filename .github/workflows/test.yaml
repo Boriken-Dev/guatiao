@@ -1466,10 +1466,30 @@ jobs:
           ref: ${{ inputs.ref || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            crates/guatiao-py
       - name: Build native libraries
         # The bindings drive a shared library, and `--all-features` is
         # what exports the registry surface and the serde formats.
         run: cargo build --workspace --all-features
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: "3.14"
+      - name: Where a host that is not Python finds libpython
+        if: runner.os != 'Windows'
+        run: |
+          echo "LD_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$pythonLocation/lib" >> "$GITHUB_ENV"
+      - name: Build the guatiao-py bridge, for the Python greeters
+        # The kinds cases call a greeter written in Python through it, and
+        # one written in C, which each suite compiles with the runner's
+        # own compiler.
+        run: cargo build --manifest-path crates/guatiao-py/Cargo.toml
+        env:
+          PYO3_PYTHON: ${{ steps.python.outputs.python-path }}
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: ${{ matrix.sdk }}
@@ -1508,10 +1528,14 @@ jobs:
         shell: bash
         if: matrix.sdk == 'stable'
       - name: Test
-        # Each package's suite alone.
+        # Each package's suite alone. A stated skip fails the step: the
+        # job builds everything a case needs.
         run: |
           for p in guatiao guatiao_serde guatiao_intake; do
-            (cd "bindings/dart/$p" && dart test)
+            (cd "bindings/dart/$p" && dart test --reporter expanded 2>&1 | tee "$RUNNER_TEMP/$p-test.log"; test "${PIPESTATUS[0]}" -eq 0)
+            if grep -qE '^[0-9:]+ \+[0-9]+ ~[0-9]+' "$RUNNER_TEMP/$p-test.log"; then
+              grep -n 'Skip:' "$RUNNER_TEMP/$p-test.log"; exit 1
+            fi
           done
         shell: bash
         if: matrix.sdk == 'stable'
@@ -1519,13 +1543,17 @@ jobs:
           # Absolute: the suites run from the package directories, so a path
           # relative to the workspace would not resolve.
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+          GUATIAO_PY_BRIDGE: ${{ github.workspace }}/crates/guatiao-py/target/debug/${{ runner.os == 'Windows' && 'guatiao_py.dll' || runner.os == 'macOS' && 'libguatiao_py.dylib' || 'libguatiao_py.so' }}
       - name: Test on the floor
         # Only the top-level suites: `test/stable_only/` holds what needs an
         # SDK newer than the floor, and one file that does not compile there
         # fails the whole run.
         run: |
           for p in guatiao guatiao_serde guatiao_intake; do
-            (cd "bindings/dart/$p" && dart test test/*_test.dart)
+            (cd "bindings/dart/$p" && dart test --reporter expanded test/*_test.dart 2>&1 | tee "$RUNNER_TEMP/$p-test.log"; test "${PIPESTATUS[0]}" -eq 0)
+            if grep -qE '^[0-9:]+ \+[0-9]+ ~[0-9]+' "$RUNNER_TEMP/$p-test.log"; then
+              grep -n 'Skip:' "$RUNNER_TEMP/$p-test.log"; exit 1
+            fi
           done
         shell: bash
         if: matrix.sdk != 'stable'
@@ -1533,6 +1561,7 @@ jobs:
           # Absolute: the suites run from the package directories, so a path
           # relative to the workspace would not resolve.
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
+          GUATIAO_PY_BRIDGE: ${{ github.workspace }}/crates/guatiao-py/target/debug/libguatiao_py.so
 
   flutter:
     # The example Flutter app, built the way an application builds: the
