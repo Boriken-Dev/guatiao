@@ -157,6 +157,42 @@ push!(PRESENT, :julia)
     end
 end
 
+# Each of these unloads a library of its own: no other registry keeps it mapped.
+@testset "a tree built in the library's allocator outlives the unload" begin
+    @testset "an answer from a greeter that ignores the carrier" begin
+        dir = build_c_greeter(; ignores_carrier = true)
+        if dir === nothing
+            absent_greeter(:c, "no C compiler: the greeter written in C is not built")
+        else
+            own = Registry("julia-careless", "0.1")
+            Guatiao.scan_dir(own, dir; rules = "kind=greeter")
+            answer = GreeterKind.greet(Guatiao.bind(own, "c_greeter", Greeter), "hal")
+            # The C greeter has no `unload` function: nothing it handed out is
+            # alive, which the caller states.
+            Guatiao.unload!(own, "c_greeter_library"; unchecked = true)
+            @test isempty(Guatiao.libraries(own))
+            @test answer[] == Dict("greeting" => "hello from C, hal")
+            close(answer)
+            close(own)
+        end
+    end
+    @testset "what a slot grew a lent map with" begin
+        dir = build_c_greeter()
+        if dir === nothing
+            absent_greeter(:c, "no C compiler: the greeter written in C is not built")
+        else
+            own = Registry("julia-lent", "0.1")
+            Guatiao.scan_dir(own, dir; rules = "kind=greeter")
+            config = Value(Dict("name" => "ivy"))
+            @test GreeterKind.check(Guatiao.bind(own, "c_greeter", Greeter), config) === true
+            Guatiao.unload!(own, "c_greeter_library"; unchecked = true)
+            @test config[] == Dict("name" => "ivy", "checked_by" => "C")
+            close(config)
+            close(own)
+        end
+    end
+end
+
 @testset "the Rust proxy calls every greeter: $which" for (which, key, greeting) in GREETERS
     which in PRESENT || continue
     caller = Libdl.dlopen(workspace_library("greeter_caller"))

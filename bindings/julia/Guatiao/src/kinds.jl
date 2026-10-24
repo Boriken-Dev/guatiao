@@ -316,7 +316,10 @@ function pass_lent(x, scope::Scope, kind::Symbol)
     x isa Node || throw(ArgumentError("a lent argument is a Value or a view, so what the callee changes has somewhere to go"))
     writable_alloc(owner_of(x))
     keep!(scope, owner_of(x))
-    return arm_ptr(require_node(x), kind, "a lent argument")
+    node = require_node(x)
+    # What the callee grew it with may be in its library's allocator.
+    makes_local() && after!(() -> guatiao_value_make_local(node, recorded_alloc(node)), scope)
+    return arm_ptr(node, kind, "a lent argument")
 end
 
 "A root holding `x`'s tree, given up by whoever held it: a Value is moved, a view copied, other data built."
@@ -358,9 +361,20 @@ function carrier(kind::Symbol)
     return Ref(node_of(TAG_ABSENT, GMap(C_NULL, 0, 0, alloc)))
 end
 
+"Whether the core moves a tree home: a library older than `guatiao_value_make_local` leaves one as a slot built it."
+makes_local() = exports("guatiao", "guatiao_value_make_local")
+
 function answer_tree(out::Ref, kind::Symbol)
     root = new_root()
     unsafe_store!(root, kind === :value ? out[] : node_of(TREE_TAG[kind], out[]))
+    if makes_local()
+        # A slot that ignored the carrier built it in its own allocator; moved home, it outlives the library.
+        status = guatiao_value_make_local(root, binding_alloc())
+        if status != 0
+            free_root(root)
+            throw(GuatiaoError(status, "moving the answer into this binding's allocator"))
+        end
+    end
     return adopt(root)
 end
 

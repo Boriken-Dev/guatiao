@@ -63,13 +63,13 @@ function c_compiler()
     return nothing
 end
 
-"`source` built as the library `name` in `dir`; `nothing` without a compiler."
-function build_c(source::AbstractString, dir::AbstractString, name::AbstractString; includes = String[])
+"`source` built as the library `name` in `dir`, with `-D` for each of `defines`; `nothing` without a compiler."
+function build_c(source::AbstractString, dir::AbstractString, name::AbstractString; includes = String[], defines = String[])
     cc = c_compiler()
     cc === nothing && return nothing
     mkpath(dir)
     out = joinpath(dir, Guatiao.library_filename(name))
-    args = ["-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"]
+    args = ["-shared", "-std=c11", "-Wall", "-Wextra", "-Werror", ("-D" * d for d in defines)...]
     Sys.iswindows() || append!(args, ["-fPIC"])
     Sys.islinux() && push!(args, "-pthread")
     for inc in [joinpath(REPO, "crates", "guatiao", "include"); joinpath(REPO, "examples", "greeter_kind", "include"); includes]
@@ -85,10 +85,15 @@ const C_CONSUMER = joinpath(REPO, "crates", "guatiao", "tests", "c_consumer")
 "A fresh directory under the system's temporary one, left for the system to clean."
 scratch(name) = mktempdir(; prefix = "guatiao-julia-$name-", cleanup = false)
 
-"The greeter written in C, in a directory of its own; `nothing` without a compiler."
-function build_c_greeter()
+"""
+The greeter written in C, in a directory of its own; `nothing` without a
+compiler. With `ignores_carrier`, one whose answers are built in its own
+allocator.
+"""
+function build_c_greeter(; ignores_carrier::Bool = false)
     dir = scratch("c-greeter")
-    return build_c(joinpath(C_CONSUMER, "greeter_in_c.c"), dir, "c_greeter") === nothing ? nothing : dir
+    defines = ignores_carrier ? ["GREETER_IGNORES_CARRIER"] : String[]
+    return build_c(joinpath(C_CONSUMER, "greeter_in_c.c"), dir, "c_greeter"; defines) === nothing ? nothing : dir
 end
 
 "The source written in C (a shelf of counters), as a file; `nothing` without a compiler."

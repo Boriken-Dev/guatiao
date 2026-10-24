@@ -223,6 +223,7 @@ const P = Ptr{Cvoid}
 @cdef "guatiao" "" :plain guatiao_alloc_default(out::PA)::UInt32
 @cdef "guatiao" "" :plain guatiao_value_free(v::PV)::UInt32
 @cdef "guatiao" "" :plain guatiao_value_clone(a::PA, src::PV, out::PV)::UInt32
+@cdef "guatiao" "" :plain guatiao_value_make_local(v::PV, a::PA)::UInt32
 @cdef "guatiao" "" :plain guatiao_value_null(out::PV)::UInt32
 @cdef "guatiao" "" :plain guatiao_value_absent(out::PV)::UInt32
 @cdef "guatiao" "" :plain guatiao_value_bool(b::Bool, out::PV)::UInt32
