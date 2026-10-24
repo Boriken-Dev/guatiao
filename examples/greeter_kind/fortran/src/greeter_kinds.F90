@@ -976,6 +976,7 @@ contains
     end if
     out = GUATIAO_C_FALSE
     st = f(self%r%ctx, lent, c_loc(out), c_loc(err))
+    call guatiao_settle_lent(config, GUATIAO_TAG_MAP)
     call guatiao_call_error(st, err, error)
     if (st == GUATIAO_OK) answer = out /= GUATIAO_C_FALSE
   end subroutine
