@@ -1534,7 +1534,9 @@ jobs:
           for p in guatiao guatiao_serde guatiao_intake; do
             (cd "bindings/dart/$p" && dart test --reporter expanded 2>&1 | tee "$RUNNER_TEMP/$p-test.log"; test "${PIPESTATUS[0]}" -eq 0)
             if grep -qE '^[0-9:]+ \+[0-9]+ ~[0-9]+' "$RUNNER_TEMP/$p-test.log"; then
-              grep -n 'Skip:' "$RUNNER_TEMP/$p-test.log"; exit 1
+              # The first line counting a skip names the case; the reason follows it.
+              grep -nE -m1 -A2 '^[0-9:]+ \+[0-9]+ ~[0-9]+' "$RUNNER_TEMP/$p-test.log" || true
+              exit 1
             fi
           done
         shell: bash
@@ -1544,6 +1546,8 @@ jobs:
           # relative to the workspace would not resolve.
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
           GUATIAO_PY_BRIDGE: ${{ github.workspace }}/crates/guatiao-py/target/debug/${{ runner.os == 'Windows' && 'guatiao_py.dll' || runner.os == 'macOS' && 'libguatiao_py.dylib' || 'libguatiao_py.so' }}
+          # Plain lines, so the skip count stays where the check reads it.
+          NO_COLOR: '1'
       - name: Test on the floor
         # Only the top-level suites: `test/stable_only/` holds what needs an
         # SDK newer than the floor, and one file that does not compile there
@@ -1552,7 +1556,9 @@ jobs:
           for p in guatiao guatiao_serde guatiao_intake; do
             (cd "bindings/dart/$p" && dart test --reporter expanded test/*_test.dart 2>&1 | tee "$RUNNER_TEMP/$p-test.log"; test "${PIPESTATUS[0]}" -eq 0)
             if grep -qE '^[0-9:]+ \+[0-9]+ ~[0-9]+' "$RUNNER_TEMP/$p-test.log"; then
-              grep -n 'Skip:' "$RUNNER_TEMP/$p-test.log"; exit 1
+              # The first line counting a skip names the case; the reason follows it.
+              grep -nE -m1 -A2 '^[0-9:]+ \+[0-9]+ ~[0-9]+' "$RUNNER_TEMP/$p-test.log" || true
+              exit 1
             fi
           done
         shell: bash
@@ -1561,7 +1567,9 @@ jobs:
           # Absolute: the suites run from the package directories, so a path
           # relative to the workspace would not resolve.
           GUATIAO_LIBRARY: ${{ github.workspace }}/target/debug
-          GUATIAO_PY_BRIDGE: ${{ github.workspace }}/crates/guatiao-py/target/debug/libguatiao_py.so
+          GUATIAO_PY_BRIDGE: ${{ github.workspace }}/crates/guatiao-py/target/debug/${{ runner.os == 'Windows' && 'guatiao_py.dll' || runner.os == 'macOS' && 'libguatiao_py.dylib' || 'libguatiao_py.so' }}
+          # Plain lines, so the skip count stays where the check reads it.
+          NO_COLOR: '1'
 
   flutter:
     # The example Flutter app, built the way an application builds: the
