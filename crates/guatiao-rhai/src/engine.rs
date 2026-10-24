@@ -230,7 +230,7 @@ impl RhaiEngine {
                 }
             }
             Some(AnswerType::Text) => {
-                if result.is_string() {
+                if result.is_string() || result.is_char() {
                     Outcome::Value(values::to_value(&result).map_err(refused)?)
                 } else {
                     return Err(wrong(format!(
@@ -477,13 +477,13 @@ impl Engine for RhaiEngine {
     fn release(&self, handle: &u64, object: u64) {
         if let Ok(lib) = self.library(*handle) {
             let gone = lib.objects.borrow_mut().remove(&object);
-            drop(gone);
+            self.meter.dropping(|| drop(gone));
         }
     }
 
     fn close(&self, handle: u64) {
         let gone = self.libraries.borrow_mut().remove(&handle);
-        drop(gone);
+        self.meter.dropping(|| drop(gone));
     }
 }
 

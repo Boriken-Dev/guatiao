@@ -197,20 +197,30 @@ enum Target {
     Lent(LentHandle),
 }
 
-struct Held {
-    target: Target,
+struct Inner {
     caller: Arc<Caller>,
+    target: RefCell<Target>,
 }
 
 /// An object of a described kind that a host handed to a script (a
 /// listener) or that a slot answered: its methods are the kind's slots
 /// (`listener.heard("hi")`). A copy of it is the same object.
 #[derive(Clone)]
-pub struct Handle(Rc<RefCell<Held>>);
+pub struct Handle(Rc<Inner>);
+
+fn busy() -> ProviderError {
+    ProviderError::new(
+        Status::GUATIAO_ERR_BUSY,
+        "the object is already in use: a call re-entered it",
+    )
+}
 
 impl Handle {
     fn new(target: Target, caller: Arc<Caller>) -> Handle {
-        Handle(Rc::new(RefCell::new(Held { target, caller })))
+        Handle(Rc::new(Inner {
+            caller,
+            target: RefCell::new(target),
+        }))
     }
 
     pub(crate) fn object(caller: Arc<Caller>, object: RawObject) -> Handle {
@@ -224,17 +234,16 @@ impl Handle {
     /// The object, if this handle still holds it: what an answer that is a
     /// handle hands back.
     pub(crate) fn take_object(&self, kind: &str) -> Result<RawObject, ProviderError> {
-        let mut held = self.0.borrow_mut();
-        if held.caller.kind().name() != kind {
+        if self.0.caller.kind().name() != kind {
             return Err(ProviderError::new(
                 Status::GUATIAO_ERR_WRONG_KIND,
                 &format!(
                     "an object of `{kind}` is answered, not of `{}`",
-                    held.caller.kind().name()
+                    self.0.caller.kind().name()
                 ),
             ));
         }
-        match &mut held.target {
+        match &mut *self.0.target.try_borrow_mut().map_err(|_| busy())? {
             Target::Object(o) => o.take().ok_or_else(|| {
                 ProviderError::new(
                     Status::GUATIAO_ERR_GONE,
@@ -249,15 +258,22 @@ impl Handle {
     }
 
     fn call(&self, slot: usize, args: Vec<Arg<'_>>) -> Result<Answer, ProviderError> {
-        let mut held = self.0.borrow_mut();
-        let held = &mut *held;
-        match &mut held.target {
-            Target::Object(Some(object)) => object.call(&held.caller, slot, args),
-            Target::Object(None) => Err(ProviderError::new(
+        let caller = &self.0.caller;
+        // A lent object is the host's to guard: only a held one is borrowed
+        // for the length of the call.
+        let lent = match &*self.0.target.try_borrow().map_err(|_| busy())? {
+            Target::Lent(handle) => Some(handle.clone()),
+            Target::Object(_) => None,
+        };
+        if let Some(handle) = lent {
+            return handle.call(caller, slot, args);
+        }
+        match &mut *self.0.target.try_borrow_mut().map_err(|_| busy())? {
+            Target::Object(Some(object)) => object.call(caller, slot, args),
+            _ => Err(ProviderError::new(
                 Status::GUATIAO_ERR_GONE,
                 "the object was handed over",
             )),
-            Target::Lent(handle) => handle.call(&held.caller, slot, args),
         }
     }
 }
@@ -287,7 +303,7 @@ fn call_slot(
     args: Vec<Dynamic>,
 ) -> Result<Dynamic, ProviderError> {
     let bad = |why: String| ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, &why);
-    let kind = Arc::clone(handle.0.borrow().caller.kind());
+    let kind = Arc::clone(handle.0.caller.kind());
     let (slot, described) = kind
         .slot(name)
         .ok_or_else(|| bad(format!("the `{}` kind has no slot `{name}`", kind.name())))?;
@@ -300,7 +316,7 @@ fn call_slot(
             args.len()
         )));
     }
-    let mut prepared = prepare(described, args).map_err(bad)?;
+    let mut prepared = prepare(described, args)?;
     let answer = with_args(&mut prepared, |args| handle.call(slot, args));
     settle(prepared);
     answer_to_dynamic(known, described, answer?)
@@ -393,54 +409,56 @@ fn tree_of(d: &Dynamic, tree: Tree, what: &str) -> Result<Value, String> {
 }
 
 /// An object argument: a handle handed over, lent, or passed on.
-fn object_arg(d: Dynamic, kind: &str, pass: Pass, what: &str) -> Result<Prepared, String> {
+fn object_arg(d: Dynamic, kind: &str, pass: Pass, what: &str) -> Result<Prepared, ProviderError> {
+    let bad = |why: String| ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, &why);
     let shown = type_name(&d);
     let Some(handle) = d.try_cast::<Handle>() else {
-        return Err(format!(
+        return Err(bad(format!(
             "{what} is an object of `{kind}` (a handle), not a {shown}"
-        ));
+        )));
     };
-    let mut held = handle.0.borrow_mut();
-    if held.caller.kind().name() != kind {
-        return Err(format!(
+    if handle.0.caller.kind().name() != kind {
+        return Err(bad(format!(
             "{what} is a `{kind}`, not a `{}`",
-            held.caller.kind().name()
-        ));
+            handle.0.caller.kind().name()
+        )));
     }
-    match (&mut held.target, pass) {
+    let mut target = handle.0.target.try_borrow_mut().map_err(|_| busy())?;
+    match (&mut *target, pass) {
         (Target::Object(object), Pass::Taken) => {
             Ok(Prepared::Object(Some(object.take().ok_or_else(|| {
-                format!("{what} was already handed over")
+                bad(format!("{what} was already handed over"))
             })?)))
         }
         (Target::Object(object), _) => {
             let taken = object
                 .take()
-                .ok_or_else(|| format!("{what} was already handed over"))?;
-            drop(held);
+                .ok_or_else(|| bad(format!("{what} was already handed over")))?;
+            drop(target);
             Ok(Prepared::LentOwned(Some(taken), handle))
         }
         (Target::Lent(lent), Pass::Lent) => Ok(Prepared::LentPassed(lent.clone())),
-        (Target::Lent(_), _) => Err(format!(
+        (Target::Lent(_), _) => Err(bad(format!(
             "{what} was lent to this call, and cannot be handed over"
-        )),
+        ))),
     }
 }
 
 /// Rhai values as `slot`'s arguments, held for the call.
-fn prepare(slot: &SlotDescription, args: Vec<Dynamic>) -> Result<Vec<Prepared>, String> {
+fn prepare(slot: &SlotDescription, args: Vec<Dynamic>) -> Result<Vec<Prepared>, ProviderError> {
+    let bad = |why: String| ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, &why);
     let mut out = Vec::with_capacity(args.len());
     for (d, described) in args.into_iter().zip(slot.args()) {
         let what = format!("`{}`'s argument `{}`", slot.name(), described.name());
         out.push(match described.ty() {
-            ArgType::Scalar(s) => scalar(&d, *s, &what)?,
+            ArgType::Scalar(s) => scalar(&d, *s, &what).map_err(bad)?,
             ArgType::Str => {
                 if let Some(s) = d.read_lock::<ImmutableString>() {
                     Prepared::Str(s.to_string())
                 } else if let Ok(c) = d.as_char() {
                     Prepared::Str(c.to_string())
                 } else {
-                    return Err(format!("{what} is text, not a {}", type_name(&d)));
+                    return Err(bad(format!("{what} is text, not a {}", type_name(&d))));
                 }
             }
             ArgType::Bytes => {
@@ -449,7 +467,7 @@ fn prepare(slot: &SlotDescription, args: Vec<Dynamic>) -> Result<Vec<Prepared>, 
                 } else if let Some(s) = d.read_lock::<ImmutableString>() {
                     Prepared::Bytes(s.as_bytes().to_vec())
                 } else {
-                    return Err(format!("{what} is a blob, not a {}", type_name(&d)));
+                    return Err(bad(format!("{what} is a blob, not a {}", type_name(&d))));
                 }
             }
             ArgType::Tree {
@@ -460,11 +478,11 @@ fn prepare(slot: &SlotDescription, args: Vec<Dynamic>) -> Result<Vec<Prepared>, 
                 if d.is_unit() && *nullable && *pass == Pass::Borrowed {
                     Prepared::Value(None)
                 } else if *pass == Pass::Lent {
-                    return Err(format!(
+                    return Err(bad(format!(
                         "{what} is lent to the slot by its caller; a script cannot lend a value"
-                    ));
+                    )));
                 } else {
-                    let value = tree_of(&d, *tree, &what)?;
+                    let value = tree_of(&d, *tree, &what).map_err(bad)?;
                     match (tree, pass) {
                         (Tree::Map, Pass::Borrowed) => {
                             Prepared::Map(Map::try_from(value).unwrap_or_default())
@@ -481,11 +499,15 @@ fn prepare(slot: &SlotDescription, args: Vec<Dynamic>) -> Result<Vec<Prepared>, 
             }
             ArgType::Object { kind, pass } => object_arg(d, kind, *pass, &what)?,
             ArgType::BytesMut => {
-                return Err(format!(
+                return Err(bad(format!(
                     "{what} is a buffer the slot's caller owns; a script cannot lend one"
-                ));
+                )));
             }
-            _ => return Err(format!("{what} has a type this binding does not carry")),
+            _ => {
+                return Err(bad(format!(
+                    "{what} has a type this binding does not carry"
+                )));
+            }
         });
     }
     Ok(out)
@@ -556,7 +578,8 @@ fn lending<R>(
 fn settle(prepared: Vec<Prepared>) {
     for p in prepared {
         if let Prepared::LentOwned(Some(object), handle) = p
-            && let Target::Object(slot) = &mut handle.0.borrow_mut().target
+            && let Ok(mut target) = handle.0.target.try_borrow_mut()
+            && let Target::Object(slot) = &mut *target
         {
             *slot = Some(object);
         }
