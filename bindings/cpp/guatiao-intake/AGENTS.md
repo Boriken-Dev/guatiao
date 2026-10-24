@@ -21,9 +21,6 @@ package's directory), `add_subdirectory` or `FetchContent`, then
 when that file is the core's own, else the file itself), then a cargo
 build from the Rust sources beside the package.
 
-`<guatiao_intake.h>` defines a macro named `SEPARATOR`; include it after
-anything of yours that uses that name.
-
 ## Forms
 
 A form is a value: a map of `sections` (a list, in display order) and

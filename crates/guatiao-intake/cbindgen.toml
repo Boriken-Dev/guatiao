@@ -82,6 +82,9 @@ exclude = [
 "Str" = "guatiao_str"
 "Allocator" = "guatiao_alloc"
 "Status" = "guatiao_status"
+# A bare `SEPARATOR` macro would take the name from every translation unit
+# that includes this header; the Rust name stays `flat::SEPARATOR`.
+"SEPARATOR" = "GUATIAO_INTAKE_SEPARATOR"
 
 [parse]
 parse_deps = false
