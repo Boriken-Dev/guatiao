@@ -34,16 +34,16 @@ def library_name(base: str) -> str:
     return f"lib{base}.so"
 
 
-def _build(source: str, into: Path, name: str) -> "Path | None":
-    """`source` (under the crate's C tests) built into `into` as `name`, or
-    `None` without a compiler. A compile error fails loudly: the header
-    changed under it."""
+def _build(source: str, into: Path, name: str, defines: "tuple[str, ...]" = ()) -> "Path | None":
+    """`source` (under the crate's C tests) built into `into` as `name`, with
+    `-D` for each of `defines`, or `None` without a compiler. A compile
+    error fails loudly: the header changed under it."""
     cc = compiler()
     if cc is None:
         return None
     into.mkdir(parents=True, exist_ok=True)
     out = into / library_name(name)
-    command = [cc, "-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"]
+    command = [cc, "-shared", "-std=c11", "-Wall", "-Wextra", "-Werror", *(f"-D{d}" for d in defines)]
     if platform.system() != "Windows":
         command.append("-fPIC")
     command += [
@@ -58,9 +58,11 @@ def _build(source: str, into: Path, name: str) -> "Path | None":
     return out
 
 
-def build_c_greeter(into: Path) -> "Path | None":
-    """The greeter written in C, in a directory of its own."""
-    built = _build("greeter_in_c.c", into, "c_greeter")
+def build_c_greeter(into: Path, *, ignores_carrier: bool = False) -> "Path | None":
+    """The greeter written in C, in a directory of its own; with
+    `ignores_carrier`, one whose answers are built in its own allocator."""
+    defines = ("GREETER_IGNORES_CARRIER",) if ignores_carrier else ()
+    built = _build("greeter_in_c.c", into, "c_greeter", defines)
     return None if built is None else into
 
 
