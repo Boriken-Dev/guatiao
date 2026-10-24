@@ -120,9 +120,6 @@ void a_slot_carries_64_bit_integers_exactly(guatiao::registry& reg, const provid
     auto u = w.try_echo_u64(unsigned_limits[k]);
     check(u.ok() && *u == unsigned_limits[k], who + ": echo_u64 " + unsigned_text[k]);
   }
-  // C++ converts what it is given: -1 is UINT64_MAX in a uint64_t slot.
-  auto minus_one = w.try_echo_u64(static_cast<std::uint64_t>(-1));
-  check(minus_one.ok() && *minus_one == u64_max, who + ": -1 converts to UINT64_MAX");
 }
 
 void a_cpp_provider_refuses_with_its_words(guatiao::registry& reg) {
