@@ -280,6 +280,7 @@ TOML writes only a map, and no null. A number keeps its exact text.
 guatiao.intake.check(schema, form)              % [] or the error as data
 guatiao.intake.layout(schema, form)             % a cell of sections
 guatiao.intake.is_visible(schema, form, 'key', values)
+guatiao.intake.provider_form_key()   % 'form': a provider's form in reg.provider_meta(key)
 guatiao.intake.at(value, 'agent[1].name')       % a view, a copy, or []
 guatiao.intake.for_schema(schema)               % a guatiao.Value
 guatiao.intake.form_for(form, schema, 'path')   % a guatiao.Value, or []
@@ -321,7 +322,11 @@ it is mapped), `libraries()`, `providers(kind)`, `available(kind)`,
 `%version`), `set_priority(id, p)` / `priority(id)`, `provider_table(key,
 kind)` (struct(table, size, ctx), addresses as `uint64`, `table` `[]` for
 none; no `kind` for a single table), `provider_config(key)` (a copy of the
-schema, a `guatiao.Value`, or `[]`), `host()` (the `guatiao_host_info *`).
+schema, a `guatiao.Value`, or `[]`), `provider_meta(key)` (what the
+provider declared beyond its schema, its notices or its form under
+`guatiao.intake.provider_form_key()`: a copy outliving the library, or
+`[]`; `guatiao:NotFound` for an unknown key), `host()` (the
+`guatiao_host_info *`).
 
 `create(key, config)` checks the configuration against the provider's
 schema first (`BadValue` naming the field), then answers a
