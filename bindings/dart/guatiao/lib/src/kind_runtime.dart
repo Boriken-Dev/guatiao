@@ -415,6 +415,29 @@ void _free(Pointer<guatiao_value> node) {
   calloc.free(node);
 }
 
+/// Whether the core moves a tree home: a library older than
+/// `guatiao_value_make_local` leaves an answer as the slot built it.
+final bool _makesLocal = native.core().provides('guatiao_value_make_local');
+
+/// [node], a tree a slot answered, moved into this binding's allocator so
+/// it outlives the library: a slot that ignored the carrier built it in
+/// its own. Freed, and the refusal thrown, when the move fails.
+Pointer<guatiao_value> _homed(Pointer<guatiao_value> node) {
+  if (!_makesLocal) return node;
+  final status = native.core().bindings.guatiao_value_make_local(
+    node,
+    _binding,
+  );
+  if (status != Status.ok.code) {
+    _free(node);
+    throw statusException(
+      status,
+      "moving the answer into this binding's allocator",
+    );
+  }
+  return node;
+}
+
 /// A new `calloc`ed root holding a copy of the struct at [arm]: a whole
 /// node when [tag] is null, else a map or list.
 Pointer<guatiao_value> _nodeOver(Pointer<NativeType> arm, Tag? tag) {
@@ -793,13 +816,13 @@ final class CallScope extends SlotCall {
   }
 
   Value mapAnswer(Pointer<guatiao_map> out) =>
-      Value.adopt(_nodeOver(out, Tag.map));
+      Value.adopt(_homed(_nodeOver(out, Tag.map)));
 
   Value listAnswer(Pointer<guatiao_list> out) =>
-      Value.adopt(_nodeOver(out, Tag.list));
+      Value.adopt(_homed(_nodeOver(out, Tag.list)));
 
   Value valueAnswer(Pointer<guatiao_value> out) =>
-      Value.adopt(_nodeOver(out, null));
+      Value.adopt(_homed(_nodeOver(out, null)));
 
   /// The text answered; the owned string is freed whatever it holds.
   String textAnswer(Pointer<guatiao_string> out) {

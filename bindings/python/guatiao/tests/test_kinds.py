@@ -237,6 +237,23 @@ def test_a_slot_an_older_table_lacks_is_unsupported(c_greeter_dir):
             assert config.to_python() == {"name": "ivy", "checked_by": "C"}
 
 
+def test_an_answer_built_in_the_librarys_allocator_outlives_the_unload(tmp_path):
+    # This greeter ignores the carrier; the answer is moved home on
+    # arrival, or freeing it after the unload calls into unmapped code.
+    built = native.build_c_greeter(tmp_path, ignores_carrier=True)
+    if built is None:
+        pytest.skip("no C compiler: the greeter written in C is not built")
+    with Registry("py-kinds", "0.1") as registry:
+        registry.scan_dir(str(built), rules="kind=greeter")
+        answer = registry.bind("c_greeter", Greeter.kind).greet("hal")
+        # The C greeter has no `unload` function: nothing it handed out
+        # is alive, which the caller states.
+        registry.unload("c_greeter_library", unchecked=True)
+        assert not registry.libraries()
+        assert answer.to_python() == {"greeting": "hello from C, hal"}
+        answer.close()
+
+
 # ---- a table over a Python object, called from Python through C pointers --
 
 

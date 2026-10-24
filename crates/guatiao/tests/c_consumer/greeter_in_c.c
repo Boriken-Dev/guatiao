@@ -66,14 +66,20 @@
 static guatiao_alloc ALLOC = GUATIAO_ALLOC_MALLOC;
 
 /* The allocator to build an answer in: the one the caller's carrier names
- * -- an empty map whose `alloc` is set -- or this file's own. */
+ * -- an empty map whose `alloc` is set -- or this file's own. Built with
+ * GREETER_IGNORES_CARRIER, always this file's own, as an older or careless
+ * library does: a caller then moves the answer home before the unload. */
 static const guatiao_alloc *answer_alloc(const guatiao_map *out) {
+#if defined(GREETER_IGNORES_CARRIER)
+  (void)out;
+#else
   const guatiao_alloc *a = out ? out->alloc : NULL;
   if (out && out->len == 0 && out->cap == 0 && a &&
       a->struct_size >= offsetof(guatiao_alloc, free) + sizeof(a->free) &&
       a->alloc && a->free) {
     return a;
   }
+#endif
   return &ALLOC;
 }
 
