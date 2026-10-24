@@ -5,11 +5,11 @@
 // Finds the builds the suite drives: the C libraries built for this run,
 // the Rust caller and the guatiao-py bridge.
 
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { inject } from 'vitest';
+import { inject, onTestFinished } from 'vitest';
 
 import { libraryFilename } from '../src/native.js';
 import type { CLibraries } from './c_build.js';
@@ -20,9 +20,17 @@ export function cLibraries(): CLibraries | null {
   return inject('cLibraries');
 }
 
-/** A fresh directory under the system's temporary one. */
+/**
+ * A fresh directory under the system's temporary one, removed when the
+ * test ends. Kept on Windows, which refuses to delete a library a worker
+ * still maps.
+ */
 export function scratch(name: string): string {
-  return mkdtempSync(path.join(tmpdir(), `guatiao-node-${name}-`));
+  const dir = mkdtempSync(path.join(tmpdir(), `guatiao-node-${name}-`));
+  if (process.platform !== 'win32') {
+    onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+  }
+  return dir;
 }
 
 /** The workspace build of `base`, beside the guatiao library. */
