@@ -47,7 +47,8 @@ function header()
   gt_env('examples');
   text = read_text_file(fullfile(repo_root(), 'examples', 'greeter_kind', 'include', 'greeter_kind.h'));
   pairs = {'greeter_vtable', 'greeterkind.Greeter'; 'counter_vtable', 'greeterkind.Counter'; ...
-           'conversation_vtable', 'greeterkind.Conversation'; 'listener_vtable', 'greeterkind.Listener'};
+           'conversation_vtable', 'greeterkind.Conversation'; 'listener_vtable', 'greeterkind.Listener'; ...
+           'wide_vtable', 'greeterkind.Wide'};
   for i = 1:size(pairs, 1)
     tok = regexp(text, ['#define ' pairs{i, 1} '_FLOOR_HASH ([0-9]+)'], 'tokens', 'once');
     e = guatiao.internal.kinds('of', pairs{i, 2});
