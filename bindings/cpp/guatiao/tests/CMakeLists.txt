@@ -33,3 +33,7 @@ guatiao_check_kinds(cpp_kind_check_refuses_a_lent_tree_declared_taken
                     HEADER "${CMAKE_CURRENT_SOURCE_DIR}/kind_check/lent_declared_taken.hpp"
                     DESCRIPTION "${GUATIAO_REPO}/examples/greeter_kind/include/greeter_kind.kinds.json"
                     EXPECT "greeter.check: declared bool\\(map\\), described bool\\(map_ref\\)")
+guatiao_check_kinds(cpp_kind_check_reads_a_named_kind_past_a_comment
+                    HEADER kind_check/named_after_a_comment.hpp
+                    DESCRIPTION "${GUATIAO_REPO}/examples/greeter_kind/include/greeter_kind.kinds.json"
+                    EXPECT "tally.count: declared void\\(\\), described int64_t\\(\\)")
