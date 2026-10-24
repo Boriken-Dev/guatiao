@@ -55,7 +55,7 @@ nav:
       - Dart: api/dart.md
   - One library for your application: app-library.md
   - Dart and Flutter: flutter.md
-  - In a browser: wasm.md
+  - WebAssembly, in a browser and as providers: wasm.md
   - Migrating from 0.0.0-alpha.0: migrating.md
   - Changelog: changelog.md
 

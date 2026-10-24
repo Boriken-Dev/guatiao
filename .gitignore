@@ -27,6 +27,9 @@ CLAUDE*
 /crates/guatiao-lua/target/
 /crates/guatiao-js/target/
 /bindings/lua/guatiao/target/
+/crates/guatiao-wasm/target/
+/crates/guatiao-wasm/guest/target/
+/examples/wasm_greeter_rust/target/
 **/*.rs.bk
 # A library workspace: consumers resolve their own lockfile. The browser
 # example is a program, and its README pins a tool to the version this
