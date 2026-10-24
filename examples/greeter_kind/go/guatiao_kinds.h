@@ -29,5 +29,9 @@ uint32_t gk91140e18_call_conversation_read(void *fn, uintptr_t ctx, void *a0, si
 void *gk91140e18_serve_conversation_read(void);
 uint32_t gk91140e18_call_conversation_turns(void *fn, uintptr_t ctx, void *out);
 void *gk91140e18_serve_conversation_turns(void);
+uint32_t gk91140e18_call_wide_echo_i64(void *fn, uintptr_t ctx, int64_t a0, void *out, void *err);
+void *gk91140e18_serve_wide_echo_i64(void);
+uint32_t gk91140e18_call_wide_echo_u64(void *fn, uintptr_t ctx, uint64_t a0, void *out, void *err);
+void *gk91140e18_serve_wide_echo_u64(void);
 
 #endif

@@ -125,3 +125,21 @@ static guatiao_status gk91140e18_tramp_conversation_turns(void * ctx, int64_t * 
   return gk91140e18_conversation_turns((uintptr_t)ctx, (void *)out);
 }
 void *gk91140e18_serve_conversation_turns(void) { return (void *)gk91140e18_tramp_conversation_turns; }
+
+/* wide_vtable.echo_i64 */
+uint32_t gk91140e18_call_wide_echo_i64(void *fn, uintptr_t ctx, int64_t a0, void *out, void *err) {
+  return ((guatiao_status (*)(void * ctx, int64_t x, int64_t * out, guatiao_provider_error * err))fn)((void *)ctx, a0, (int64_t *)out, (guatiao_provider_error *)err);
+}
+static guatiao_status gk91140e18_tramp_wide_echo_i64(void * ctx, int64_t x, int64_t * out, guatiao_provider_error * err) {
+  return gk91140e18_wide_echo_i64((uintptr_t)ctx, x, (void *)out, (void *)err);
+}
+void *gk91140e18_serve_wide_echo_i64(void) { return (void *)gk91140e18_tramp_wide_echo_i64; }
+
+/* wide_vtable.echo_u64 */
+uint32_t gk91140e18_call_wide_echo_u64(void *fn, uintptr_t ctx, uint64_t a0, void *out, void *err) {
+  return ((guatiao_status (*)(void * ctx, uint64_t x, uint64_t * out, guatiao_provider_error * err))fn)((void *)ctx, a0, (uint64_t *)out, (guatiao_provider_error *)err);
+}
+static guatiao_status gk91140e18_tramp_wide_echo_u64(void * ctx, uint64_t x, uint64_t * out, guatiao_provider_error * err) {
+  return gk91140e18_wide_echo_u64((uintptr_t)ctx, x, (void *)out, (void *)err);
+}
+void *gk91140e18_serve_wide_echo_u64(void) { return (void *)gk91140e18_tramp_wide_echo_u64; }
