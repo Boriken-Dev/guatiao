@@ -37,6 +37,7 @@ nav:
   - A provider's form: forms.md
   - Python, host and provider: python.md
   - Node.js, host and provider: node.md
+  - JavaScript without Node: js.md
   - Go, host and provider: go.md
   - Julia, host and provider: julia.md
   - R, host and provider: r.md

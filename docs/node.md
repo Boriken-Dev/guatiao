@@ -170,7 +170,8 @@ serves. A Node host calls greeters written in Python that way.
 ## As a provider
 
 A provider is a class extending `Provider`, implementing its kinds' types
-and listing them in `static kinds`:
+and listing them in `static kinds`. The same provider file also runs
+without Node, in any host, through [the JavaScript source](js.md):
 
 ```ts
 // greeters.ts, in a package named node_greeter
