@@ -112,7 +112,19 @@ not compile.** A `std::string_view` is a `guatiao_str`; `view`,
 place; `map`, `list` and `value` are trees **handed over**, the callee's
 from then on; `object<K>` is an object handed over and `lent<K>` one lent
 for the call. Lent and handed over are the same C pointer: the
-declaration says which, as the C header's slot comment does.
+declaration says which, as the C header's slot comment does, and a test
+checks it against the kind's description:
+
+```cmake
+find_package(guatiao CONFIG REQUIRED)
+guatiao_check_kinds(greeter_kind_cpp_agrees
+  HEADER ${CMAKE_CURRENT_SOURCE_DIR}/cpp/greeter_kind.hpp
+  DESCRIPTION ${CMAKE_CURRENT_SOURCE_DIR}/include/greeter_kind.kinds.json)
+```
+
+It fails, naming each, on a slot declared `map` that the description
+says is lent (`map_ref`), a required slot declared optional, a slot left
+out, or any signature other than the one the description spells.
 [Kinds in every language](kinds.md) sets this beside the other
 languages' declarations.
 
@@ -185,7 +197,8 @@ fails is tried again with the library's own directory searched.
 - Run a kind's default body for a slot an older table leaves out: such a
   call answers UNSUPPORTED.
 - Tell a lent tree from one handed over by its C type: the kind's
-  declaration says which.
+  declaration says which, and `guatiao_check_kinds` holds it to the
+  kind's description.
 - Hold a lease: a `remote` is valid while the provider's library is open,
   as a raw table is in C.
 
