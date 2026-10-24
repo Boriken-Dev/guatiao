@@ -309,6 +309,29 @@ func (r *Registry) ProviderConfig(key string) (Ref, bool, error) {
 	return Ref{o: &borrowed{find: find}}, true, nil
 }
 
+// ProviderMeta is what the provider under key declared beyond its schema
+// (its legal notices, or its form under the intake package's
+// ProviderFormKey) as a Value the caller owns and closes, and false when it
+// declares nothing. A copy, unlike ProviderConfig: it outlives the library.
+// ErrNotFound when nothing answers to key.
+func (r *Registry) ProviderMeta(key string) (*Value, bool, error) {
+	h, err := r.open()
+	if err != nil {
+		return nil, false, err
+	}
+	out := native.Calloc(native.SizeValue)
+	v := adopt(out, r.alloc)
+	if err := check(native.RegistryAnswer("provider_meta", h, key, r.alloc, out), ""); err != nil {
+		v.Close()
+		return nil, false, err
+	}
+	if v.Tag() == TagAbsent {
+		v.Close()
+		return nil, false, nil
+	}
+	return v, true, nil
+}
+
 // Instance is one a registry built from a configuration: what each call
 // through its tables takes. Close destroys it through the provider that
 // built it, even after a retire or a refresh loaded a new build.

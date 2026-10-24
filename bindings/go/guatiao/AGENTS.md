@@ -180,7 +180,10 @@ data is plain Go data, already freed (numbers as `Number`). Also
 `LibrariesKeyedBy`, `SetPriority` / `Priority`, `ProviderTable(key, kind)
 (Table, error)` (`ErrNotFound` for none; `kind` "" for a single table),
 `ProviderConfig(key) (Ref, bool, error)` (a borrowed, read-only view of the
-schema), `Host() unsafe.Pointer` (the `guatiao_host_info *`), `Close()`.
+schema), `ProviderMeta(key) (*Value, bool, error)` (what the provider
+declared beyond its schema, its notices or its form under
+`intake.ProviderFormKey`: a copy the caller closes, outliving the library;
+false when it declares nothing, `ErrNotFound` for an unknown key), `Host() unsafe.Pointer` (the `guatiao_host_info *`), `Close()`.
 
 `Create(key, config)` checks the configuration against the provider's
 schema first (`ErrBadValue` with the field), then builds an `*Instance`;
