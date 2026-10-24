@@ -466,7 +466,8 @@ with their `guatiao` dependency), `bindings/node/package-lock.json` and the
 `../bindings/node/guatiao` entry of `examples/package-lock.json` (`npm
 install` in `bindings/node` and in `examples` rewrites them); the
 `Project.toml` of `bindings/julia/Guatiao`, `GuatiaoSerde` and
-`GuatiaoIntake`; the `DESCRIPTION` of `bindings/r/guatiao`, `guatiao.serde`
+`GuatiaoIntake` (the last two with `[compat] Guatiao = "=x.y.z"` once the
+version is not a pre-release, which Pkg cannot bound, and with none before); the `DESCRIPTION` of `bindings/r/guatiao`, `guatiao.serde`
 and `guatiao.intake` (the last two with `guatiao (>= x.y.z.N)`; R takes
 no letters in a version: `0.0.0-alpha.N` is written `0.0.0.N`, so the first
 release that is not a pre-release must be above `0.0.0`); `bindings/matlab/guatiao/DESCRIPTION`
