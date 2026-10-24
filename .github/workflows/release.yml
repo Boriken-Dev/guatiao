@@ -139,6 +139,15 @@ jobs:
               julia = tomllib.loads(pathlib.Path(f"{where}/Project.toml").read_text())["version"]
               if julia != cargo:
                   problems.append(f"Cargo says {cargo} and {where}/Project.toml says {julia}")
+          # General needs a compat bound on Guatiao, and Pkg reads no pre-release
+          # in one: the bound is the release's exactly, and absent while the
+          # releases are pre-releases.
+          for where in ("bindings/julia/GuatiaoSerde", "bindings/julia/GuatiaoIntake"):
+              bound = tomllib.loads(pathlib.Path(f"{where}/Project.toml").read_text()).get("compat", {}).get("Guatiao")
+              if "-" in cargo and bound is not None:
+                  problems.append(f"{where}/Project.toml bounds Guatiao at {bound}, which Pkg refuses for the pre-release {cargo}: leave it out")
+              if "-" not in cargo and bound != f"={cargo}":
+                  problems.append(f"{where}/Project.toml bounds Guatiao at {bound}, not ={cargo}")
           # R's versions are integers: X.Y.Z-alpha.N is written X.Y.Z.N.
           described = re.search(r"^Version:\s*(\S+)", pathlib.Path("bindings/r/guatiao/DESCRIPTION").read_text(), re.M).group(1)
           plain = re.fullmatch(r"(\d+\.\d+\.\d+)(?:-alpha\.(\d+))?", cargo)
