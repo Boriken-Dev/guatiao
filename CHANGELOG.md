@@ -939,6 +939,12 @@ write now.
   refused on the wire at the byte where it starts, and where a format
   allows one it still replaces the first in its place.
 
+- **On Windows a library's own directory is searched for what it imports.**
+  A plugin linking `guatiao.dll` shipped beside it, in a directory of its
+  own, failed to load: Windows looked beside the host and on `PATH` only.
+  A load that fails is now tried again with the library's directory in
+  place of the host's, `PATH` still searched.
+
 - **CPython served by `guatiao-py` inside a Node host frees what a call
   drops, on Linux.** koffi runs each call on a stack of its own, which
   CPython 3.14 took for an overflowing one, deferring every deallocation
