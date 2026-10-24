@@ -14,7 +14,8 @@ public surface); this file is about the repository.
 | `crates/guatiao-derive/` | `#[derive(ToValue, FromValue, Schema)]`, `#[guatiao::kind]`/`#[derive(Provider)]`, `#[derive(Form)]`; reached through `guatiao`'s `derive`/`provider` features and `guatiao-intake`'s `derive`, never named directly |
 | `crates/guatiao-serde/` | serde for values: JSON, TOML and YAML as features, and a C surface with its own `include/guatiao_serde.h` |
 | `crates/guatiao-intake/` | taking a value in from a person: the path grammar (`agent[1].name`), flat `key -> text` storage, checking a store of text, and how a schema is shown (sections, widget hints, conditional visibility, `#[derive(Form)]`); C surface in `include/guatiao_intake.h` |
-| `crates/guatiao-bridge/` | what every bridge to a language runtime shares: the `Engine` trait and its thread, manifests and stamps, `BridgeSource` (an engine as a `Source`), kinds served through tables built from their descriptions (`dynamic-kinds`), limits, error mapping, `Convert` and the shared vectors (`vectors/wire.json`, a copy of the core's); `#![forbid(unsafe_code)]`, published; `tests/toy_engine.rs` serves a toy language through every piece |
+| `crates/guatiao-bridge/` | what every bridge to a language runtime shares: the `Engine` trait and its thread, manifests and stamps, `BridgeSource` (an engine as a `Source`), kinds served through tables built from their descriptions by the mechanism a source is given (`with_mechanism`), limits, error mapping, `Convert` and the shared vectors (`vectors/wire.json`, a copy of the core's); `#![forbid(unsafe_code)]`, published; `tests/toy_engine.rs` serves a toy language through every piece |
+| `crates/guatiao-libffi/` | `Libffi`, libffi as the `Mechanism` core's run-time kind tables are built on (`library/kind/runtime.rs`): a call interface per slot signature, a closure per served slot, `ffi_call` per call; builds libffi from C, not on wasm32; published; `tests/described_kinds.rs` (with the C caller `tests/c_consumer/described_caller.c`) and `tests/closures.rs` run the tables through it natively, while core's own tests run them under Miri through a mechanism with no foreign code |
 | `crates/guatiao-py/` | a source of libraries written in Python: a cdylib exporting `guatiao_source`, built with pyo3 for the stable ABI; a workspace of its own (no other build needs a Python to link), not published |
 | `examples/source_library/` | a source written in Rust and exported with `guatiao::source!`: a Rust host and a C host add it in `crates/guatiao/tests/source_export.rs` |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
@@ -154,7 +155,7 @@ Each crate commits its public surface. A change to it regenerates the
 snapshot in the same commit; CI fails on any difference:
 
 ```bash
-for c in guatiao guatiao-serde guatiao-intake guatiao-bridge; do
+for c in guatiao guatiao-serde guatiao-intake guatiao-bridge guatiao-libffi; do
   cargo public-api -p $c --all-features -ss > crates/$c/public-api.txt
 done
 ```
@@ -376,7 +377,8 @@ the suite rather than shipping.
   files (`library/kind/`), and `exports/` — listed in
   `tests/forbid_unsafe_per_module.rs`. In `guatiao-intake`: `exports.rs` and `exports_flat.rs`
   alone, checked by its `tests/unsafe_stays_in_exports.rs`. Every other
-  module carries `#![forbid(unsafe_code)]`.
+  module carries `#![forbid(unsafe_code)]`. `guatiao-bridge` forbids it
+  crate-wide; `guatiao-libffi` is the libffi glue and nothing else.
 - **Lines are LF** (`.gitattributes`), on every platform, including
   generated files.
 - **This crate stands alone.** It names no application that embeds it.
@@ -506,8 +508,8 @@ takes)
 Go modules `bindings/go/guatiao/vx.y.z`, `bindings/go/guatiao-serde/vx.y.z`
 and `bindings/go/guatiao-intake/vx.y.z` at the same commit. Each publish job
 skips a version its registry already has, so re-running a partly failed
-release finishes it. The five crates go in dependency order: `guatiao-derive`,
-`guatiao`, `guatiao-serde`, `guatiao-intake`, `guatiao-bridge`, each naming
+release finishes it. The six crates go in dependency order: `guatiao-derive`,
+`guatiao`, `guatiao-serde`, `guatiao-intake`, `guatiao-libffi`, `guatiao-bridge`, each naming
 the others with `=x.y.z`; in every other registry the core package goes first and the serde
 and intake packages after it.
 
@@ -515,7 +517,7 @@ and intake packages after it.
 
 | registry | first release | afterwards |
 | --- | --- | --- |
-| crates.io | `CARGO_REGISTRY_TOKEN` secret: trusted publishing needs a crate that exists (so a new crate, `guatiao-bridge` the first time, is published with the token) | trusted publishing per crate, then repository variable `CRATES_IO_TRUSTED_PUBLISHING=true` and delete the secret |
+| crates.io | `CARGO_REGISTRY_TOKEN` secret: trusted publishing needs a crate that exists (so a new crate, `guatiao-bridge` and `guatiao-libffi` the first time, is published with the token) | trusted publishing per crate, then repository variable `CRATES_IO_TRUSTED_PUBLISHING=true` and delete the secret |
 | PyPI | a *pending* trusted publisher for each of `guatiao`, `guatiao-serde` and `guatiao-intake`: repository `Boriken-Dev/guatiao`, workflow `release.yml`, environment `pypi` (`guatiao` has its publisher; the other two need theirs before their first release) | the same publishers |
 | pub.dev | **by hand**, `dart pub publish` in `bindings/dart/guatiao`, then in `bindings/dart/guatiao_serde` and `bindings/dart/guatiao_intake` once `guatiao` at that version is on pub.dev (their `pubspec_overrides.yaml` is not published): automated publishing needs a package that exists | automated publishing for each package from `Boriken-Dev/guatiao`, tag pattern `v{{version}}`, environment `pub-dev` |
 | npm | `NPM_TOKEN` secret (an automation token), environment `npm`: trusted publishing needs a package that exists, so the token publishes `guatiao`, `guatiao-serde` and `guatiao-intake` the first time; a pre-release is published under the `next` dist-tag, with provenance | a trusted publisher on each of the three for `Boriken-Dev/guatiao`, workflow `release.yml`, environment `npm`, then repository variable `NPM_TRUSTED_PUBLISHING=true` and delete the secret |
@@ -528,7 +530,7 @@ and intake packages after it.
 organisation, so each is published by a person and handed over:
 
 - **crates.io** has no organisations; a crate is owned by people and GitHub
-  teams. The five crates belong to the `boriken-dev` team of the
+  teams. The six crates belong to the `boriken-dev` team of the
   `Boriken-Dev` organisation: `cargo owner --add github:Boriken-Dev:boriken-dev
   <crate>` on each, once it exists. A team owner may publish but not change
   owners, so one person stays an owner as well.

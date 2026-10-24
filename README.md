@@ -141,6 +141,7 @@ here.
 | [`guatiao-serde`](https://crates.io/crates/guatiao-serde) | a value in and out of JSON, TOML and YAML, and the same through a C surface |
 | [`guatiao-intake`](https://crates.io/crates/guatiao-intake) | taking a value in from a person: the path grammar, flat key-to-text storage, and how a schema is shown as a form |
 | [`guatiao-bridge`](https://crates.io/crates/guatiao-bridge) | what every bridge to a language runtime shares: the engine and its thread, manifests, the source, kinds served from their descriptions |
+| [`guatiao-libffi`](https://crates.io/crates/guatiao-libffi) | libffi as the mechanism for kind tables built at run time from a kind's description, for a runtime with no FFI of its own |
 
 ## Development
 
