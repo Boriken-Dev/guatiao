@@ -38,6 +38,11 @@ registry keeps, loaded by one refresh:
 A greeter that is not there is a stated skip, and a failure with
 `GUATIAO_REQUIRE_ALL=1`.
 
+`test/test_wide.cpp` crosses the 64-bit limits of the `wide` kind (2^53 + 1,
+INT64_MIN and INT64_MAX, 2^53 + 1, INT64_MAX + 1 and UINT64_MAX) through a
+provider written in Rust, one in C and one in C++ registered by the test,
+and has the Rust caller call each of them.
+
 ```bash
 ctest --test-dir build/cpp_host --output-on-failure
 ```
