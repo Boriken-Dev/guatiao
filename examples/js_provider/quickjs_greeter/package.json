@@ -1,0 +1,10 @@
+{
+  "name": "quickjs_greeter",
+  "version": "1.0.0",
+  "description": "Greeters written in JavaScript, run by Node or by the guatiao-js source",
+  "license": "MPL-2.0",
+  "author": "jose-pr",
+  "private": true,
+  "type": "module",
+  "exports": "./greeters.js"
+}
