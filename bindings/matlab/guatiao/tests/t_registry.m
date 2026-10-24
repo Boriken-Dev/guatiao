@@ -208,7 +208,7 @@ function watched()
   r = reg.refresh();
   expect_equal(numel(r.loaded), 0);
   copy = fullfile(w, gt_env('file', 'hello_m_watched'));
-  copyfile(gt_env('workspace', 'hello_library'), copy);
+  copy_bytes(gt_env('workspace', 'hello_library'), copy);
   r = reg.refresh();
   expect_equal(cellfun(@(s) s.key, r.loaded, 'UniformOutput', false), {'hello_library'});
   % A mapped image cannot be deleted on Windows; moved aside, it is gone.
@@ -217,4 +217,15 @@ function watched()
   expect_equal(cellfun(@(s) s.key, r.retired, 'UniformOutput', false), {'hello_library'});
   expect_equal(numel(reg.libraries()), 0);
   reg.close();
+end
+
+function copy_bytes(from, to)
+  % Octave's copyfile runs xcopy where no cp.exe is on PATH, and xcopy
+  % stops to ask whether the target is a file or a directory.
+  in = fopen(from, 'r');
+  bytes = fread(in, Inf, '*uint8');
+  fclose(in);
+  out = fopen(to, 'w');
+  fwrite(out, bytes, 'uint8');
+  fclose(out);
 end
