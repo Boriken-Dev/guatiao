@@ -51,6 +51,16 @@ end
     close(reg)
 end
 
+@testset "a provider's meta is a copy carrying its form" begin
+    reg = scanned()
+    meta = Guatiao.provider_meta(reg, "derived_greeter_shouter")
+    @test [s["id"] for s in meta["form"]["sections"][]] == ["words", "volume"]
+    close(meta)
+    @test Guatiao.provider_meta(reg, "derived_greeter_hello") === nothing
+    @test_throws GuatiaoError Guatiao.provider_meta(reg, "nobody")
+    close(reg)
+end
+
 @testset "builds an instance, and lends its configuration schema" begin
     reg = scanned()
     schema = Guatiao.provider_config(reg, "derived_greeter_shouter")

@@ -278,7 +278,11 @@ library declares before it is mapped), `libraries`, `providers(reg, kind
 `%name`, `%library`, `%version`), `set_priority!` / `priority`,
 `provider_table(reg, key; kind) -> (table, size, ctx)` (`C_NULL` for
 none; no `kind` for a single table), `provider_config(reg, key)` (a
-borrowed, read-only view of the schema, or `nothing`), `host(reg)` (the
+borrowed, read-only view of the schema, or `nothing`),
+`provider_meta(reg, key)` (what the provider declared beyond its schema,
+its notices or its form under `GuatiaoIntake.PROVIDER_FORM_KEY`: a `Value`
+the caller owns, outliving the library, or `nothing`; `NotFound` for an
+unknown key), `host(reg)` (the
 `guatiao_host_info *`). All reached as `Guatiao.name`.
 
 `create(reg, key, config)` checks the configuration against the
