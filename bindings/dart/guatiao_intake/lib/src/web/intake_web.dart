@@ -6,6 +6,7 @@
 /// of the one module the page loaded. The same functions as on the VM.
 library;
 
+import 'package:guatiao/guatiao.dart' show WrongKind;
 import 'package:guatiao/wasm.dart';
 
 export '../intake_common.dart';
