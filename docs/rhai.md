@@ -113,14 +113,26 @@ with a status that names the limit while the host carries on:
 
 | limit | stops | status |
 | --- | --- | --- |
-| `operations` | a script past that many Rhai operations | `GUATIAO_ERR_INTERNAL` |
+| `operations` | a script past that many Rhai operations (at most 16 777 216) | `GUATIAO_ERR_INTERNAL` |
 | `time_ms` | a call that runs longer | `GUATIAO_ERR_INTERNAL` |
-| `depth` | recursion past that many calls | `GUATIAO_ERR_INTERNAL` |
+| `depth` | recursion past that many calls (32 when unset, at most 8192) | `GUATIAO_ERR_INTERNAL` |
 | `memory` | a string, array or map larger than the limit allows | `GUATIAO_ERR_ALLOC` |
 
 A stop cannot be caught by the script: a `try`/`catch` around a loop does
-not keep it running. A script reaches no file and no network, and cannot
-import another module.
+not keep it running. A script reaches no file and no network, cannot
+import another module, and its `print` and `debug` do nothing. A function
+body or closure nests expressions at most 16 deep; a script with a deeper
+one does not open.
+
+**Set `operations`.** Rhai copies and drops the values a script nests
+(arrays, maps, closures that capture closures) by recursion on the native
+stack, and nothing but the operations it takes bounds how deep they nest.
+With `operations` set, each call runs on a stack that holds what it can
+build, and values a library keeps are dropped on a large one; the stack is
+mapped for the call, which costs about 25 microseconds. Without it, a
+script can nest values until the stack ends and the host process aborts.
+What a provider builds up in its own state over many calls is not
+covered either.
 
 `memory` is the weakest of the four: Rhai counts each container, not the
 sum of them. A script can hold many containers each under the limit, so
