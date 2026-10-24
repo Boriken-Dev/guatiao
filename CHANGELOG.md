@@ -811,6 +811,22 @@ write now.
   answering an `int64_t`, one a `uint64_t`, served by the derived Rust
   greeter and the greeter written in C, so a binding can cross 64-bit
   integers at their limits both ways.
+- **Every binding crosses 64-bit integers through the `wide` kind.** Go
+  (`greeterkind.Wide`, written by `go generate`), Julia, MATLAB and Octave
+  and Fortran declare it beside the other example kinds. The suites of
+  Python, Node, Dart, Go, Julia, MATLAB and Octave, Fortran and C++ (R's
+  already did) send 2^53 + 1, INT64_MIN and INT64_MAX through `echo_i64`
+  and 2^53 + 1, INT64_MAX + 1 and UINT64_MAX through `echo_u64` to the
+  provider written in Rust, the one in C and one written in the binding,
+  exactly; where a suite has Rust call its provider, `greeter_caller_wide`
+  reads the same six back. A value that does not fit is refused naming the
+  call in Python (`OverflowError`), Node (`RangeError`), Julia
+  (`InexactError`) and MATLAB and Octave (`guatiao:BadValue`); Go and
+  Fortran take the slot's own 64-bit types, and C++ converts as C++ does
+  (`-1` to a `uint64_t` is UINT64_MAX). Dart and Fortran have no unsigned
+  64-bit integer: a `uint64` is the signed integer holding its bits,
+  negative past 2^63 - 1 (UINT64_MAX is -1; in Dart,
+  `BigInt.from(x).toUnsigned(64)` is the number).
 - **MATLAB and GNU Octave bindings**, `bindings/matlab/guatiao/`: the `+guatiao`
   package, `classdef` and functions that MATLAB R2024a and later and
   Octave 8.4 and later both run, over one MEX gateway in C built on the
