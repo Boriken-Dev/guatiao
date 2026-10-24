@@ -22,6 +22,20 @@ case("scans by rule and lists the providers", with_examples({
   reg$close()
 }))
 
+case("says a scan of a file names no directory, and a bad rule is the rule", with_examples({
+  reg <- registry("r-tests", "0.1")
+  file <- tempfile()
+  writeLines("", file)
+  e <- expect_error(reg$scan_dir(file, rules = "kind=greeter"), "guatiao_error")
+  expect_equal(e$status, "NotFound")
+  expect_true(grepl("no directory", conditionMessage(e)), conditionMessage(e))
+  e <- expect_error(reg$scan_dir(LIBRARY_DIR, rules = "not a rule"), "guatiao_error")
+  expect_equal(e$status, "BadValue")
+  expect_true(grepl("a rule that is not one", conditionMessage(e)), conditionMessage(e))
+  unlink(file)
+  reg$close()
+}))
+
 case("answers the documented fields for the best provider", with_examples({
   reg <- scanned()
   best <- reg$best("greeter")

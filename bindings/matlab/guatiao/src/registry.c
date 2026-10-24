@@ -103,6 +103,14 @@ int cmd_registry_register_entry(gt_call *c) {
                 "the library was refused");
 }
 
+/* The scan's refusal in words: the core says NOT_FOUND for a path that is
+   missing or names a file, BAD_VALUE for a rule that is not one. */
+static const char *scan_refusal(guatiao_status st) {
+  if (st == GUATIAO_ERR_NOT_FOUND) return "the path names no directory (missing, or a file)";
+  if (st == GUATIAO_ERR_BAD_VALUE) return "the scan was refused (a rule that is not one?)";
+  return "the scan was refused";
+}
+
 /* registry_scan(reg, where, rules, descending, is_path) */
 int cmd_registry_scan(gt_call *c) {
   guatiao_registry *reg = NULL;
@@ -115,7 +123,7 @@ int cmd_registry_scan(gt_call *c) {
   set_absent(&out);
   guatiao_status st = path ? gt_core.guatiao_registry_scan_path(reg, w, desc != 0, r, &gt_binding_alloc, &out)
                            : gt_core.guatiao_registry_scan_dir_rules(reg, w, desc != 0, r, &gt_binding_alloc, &out);
-  return answer(c, st, &out, "the scan was refused (a rule that is not one?)");
+  return answer(c, st, &out, scan_refusal(st));
 }
 
 /* registry_query(reg, what, arg): 0 libraries, 1 providers, 2 available,
