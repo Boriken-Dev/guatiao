@@ -438,6 +438,15 @@ Pointer<guatiao_value> _homed(Pointer<guatiao_value> node) {
   return node;
 }
 
+/// [node], a tree lent for a call, moved where it stands into the
+/// allocator it records, so what the callee grew it with outlives the
+/// callee's library. A refusal leaves it whole, where it was.
+void _settle(Pointer<guatiao_value> node) {
+  if (_makesLocal) {
+    native.core().bindings.guatiao_value_make_local(node, _recorded(node));
+  }
+}
+
 /// A new `calloc`ed root holding a copy of the struct at [arm]: a whole
 /// node when [tag] is null, else a map or list.
 Pointer<guatiao_value> _nodeOver(Pointer<NativeType> arm, Tag? tag) {
@@ -718,6 +727,8 @@ final class CallScope extends SlotCall {
     if (tag != null && node.ref.tag != tag.code) {
       throw ArgumentError('expected a ${tag.name}, got a ${ref.tag.name}');
     }
+    // What the callee grew it with may be in its library's allocator.
+    after(() => _settle(node));
     return node;
   }
 
