@@ -6,6 +6,7 @@ import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
 import 'package:guatiao/ffi.dart';
+import 'package:guatiao/guatiao.dart' show WrongKind;
 
 import 'bindings.g.dart' hide guatiao_alloc, guatiao_str, guatiao_value;
 
