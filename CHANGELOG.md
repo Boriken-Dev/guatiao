@@ -984,6 +984,13 @@ write now.
   bridge now tells CPython which stack the call runs on. macOS keeps the
   old behaviour.
 
+- **R and MATLAB name a scan of a file as no directory.** A refused scan
+  always suggested a bad rule; a path that is a file or missing now says
+  so (`NotFound`), and a bad rule still names the rule (`BadValue`).
+- **The Fortran binding built by CMake with LLVM flang finds serde and
+  intake beside a backslash path, and quotes keys with one backslash.**
+  flang's preprocessing doubled each backslash written as a literal.
+
 - **On FreeBSD a C program needs no `-pthread`.** A program built
   without it bound libc's failing thread stubs, and the library aborted
   with `fatal runtime error: out of TLS keys`. Every library that links
