@@ -4,11 +4,11 @@
 
 !> What the host's tests share: counted checks, stated skips, the
 !> workspace's build found when GUATIAO_LIBRARY is unset and the directory
-!> holding it, C built for the greeter written in it, and a listener that
-!> keeps what it heard.
+!> holding it, C built for the greeter written in it, a listener that
+!> keeps what it heard, and a provider of the wide kind.
 module host_helpers
   use, intrinsic :: iso_c_binding
-  use, intrinsic :: iso_fortran_env, only: output_unit
+  use, intrinsic :: iso_fortran_env, only: output_unit, int64
   use guatiao
   use guatiao_loader, only: gt_windows, gt_library_file_names
   use greeter_kinds
@@ -16,7 +16,7 @@ module host_helpers
   private
 
   public :: check, check_text, skip, finish, setup, env, library_dir, library_file, build_c, ear, ear_state, &
-            new_ear, upper_of, require_all
+            new_ear, upper_of, require_all, echo
 
   integer :: passed = 0, failed = 0, skipped = 0
 
@@ -33,7 +33,23 @@ module host_helpers
     procedure :: close => ear_close
   end type
 
+  !> Answers the 64-bit integer it is given, and refuses 7.
+  type, extends(wide) :: echo
+  contains
+    procedure :: echo_i64 => echo_answers
+    procedure :: echo_u64 => echo_answers
+  end type
+
 contains
+
+  subroutine echo_answers(self, x, answer, error)
+    class(echo), intent(inout) :: self
+    integer(int64), intent(in) :: x
+    integer(int64), intent(out) :: answer
+    type(guatiao_error), allocatable, intent(out) :: error
+    answer = x
+    if (x == 7_int64) call guatiao_fail(error, GUATIAO_ERR_BAD_VALUE, 'seven is no number')
+  end subroutine
 
   function new_ear() result(e)
     type(ear) :: e
