@@ -787,6 +787,12 @@ write now.
 
 ### Changed
 
+- **`guatiao_intake.h` names its separator `GUATIAO_INTAKE_SEPARATOR`.**
+  The bare `SEPARATOR` macro took the name from every C and C++ file
+  including the header; the value is still `'.'`, and Rust's
+  `guatiao_intake::SEPARATOR` keeps its name. Dart's generated constant is
+  renamed to match.
+
 - **`guatiao-py` is CPython as a `guatiao-bridge` engine.** Its
   manifests, stamps, refresh and source table are the bridge's, and its
   entry point is written by `guatiao::source!`; it keeps the interpreter,
