@@ -14,6 +14,8 @@ function out = gt_env(op, varargin)
 %   gt_env('workspace', base)         its path in that folder
 %   gt_env('examples')                puts the example packages on the path
 %   gt_env('c_greeter')               the folder holding the C greeter, or ''
+%   gt_env('c_greeter_own', define)   a fresh build of the C greeter in a folder of its own, with
+%                                     -D<define> when given (not kept: a test unloads it), or ''
 %   gt_env('c_source', name)          the C shelf source built as `name`, or ''
 %   gt_env('fixture')                 whether the gtfixture MEX file is built
 %   gt_env('bridge')                  GUATIAO_PY_BRIDGE when it names a file, or ''
@@ -56,6 +58,14 @@ function out = gt_env(op, varargin)
         end
       end
       out = built.c_greeter;
+    case 'c_greeter_own'
+      src = fullfile(repo_root(), 'crates', 'guatiao', 'tests', 'c_consumer', 'greeter_in_c.c');
+      dir = scratch('c-greeter-own');
+      if build_c(src, fullfile(dir, lib_file('c_greeter')), false, varargin{:})
+        out = dir;
+      else
+        out = '';
+      end
     case 'c_source'
       name = varargin{1};
       key = ['src_' name];
@@ -128,8 +138,9 @@ function cc = compiler()
   end
 end
 
-function ok = build_c(source, out, strict)
-% A shared library from one C file, with the guatiao and greeter headers.
+function ok = build_c(source, out, strict, define)
+% A shared library from one C file, with the guatiao and greeter headers
+% and -D<define> when one is given.
   ok = false;
   cc = compiler();
   if isempty(cc)
@@ -143,6 +154,9 @@ function ok = build_c(source, out, strict)
   end
   if strict
     flags = [flags ' -Werror'];
+  end
+  if nargin > 3
+    flags = [flags ' -D' define];
   end
   libs = '';
   if isunix() && ~ismac()
