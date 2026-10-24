@@ -5,9 +5,11 @@
 // Builds the suite's C libraries once, before any test file runs, so no
 // test's budget carries a compile: the first C compile on a fresh Windows
 // runner can take a minute, and a synchronous one also stops the event loop.
-// The directory stays in the system's temporary one, as the suite's other
-// scratch directories do: on Windows a library a worker loaded can still be
-// mapped when the run ends, and deleting it fails.
+// The directory is removed when the run ends, except on Windows: there a
+// library a worker loaded can still be mapped, and deleting it fails.
+
+import { rmSync } from 'node:fs';
+import path from 'node:path';
 
 import type { TestProject } from 'vitest/node';
 
@@ -19,6 +21,12 @@ declare module 'vitest' {
   }
 }
 
-export default function setup(project: TestProject): void {
-  project.provide('cLibraries', buildCLibraries());
+export default function setup(project: TestProject): () => void {
+  const built = buildCLibraries();
+  project.provide('cLibraries', built);
+  return () => {
+    if (built !== null && process.platform !== 'win32') {
+      rmSync(path.dirname(built.greeterDir), { recursive: true, force: true });
+    }
+  };
 }

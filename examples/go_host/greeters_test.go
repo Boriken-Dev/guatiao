@@ -69,6 +69,8 @@ var (
 	reg     *guatiao.Registry
 	present = map[string]string{} // which greeter -> "" when present, else why not
 	goLib   *guatiao.Library
+	// Where the greeter written in C was built, removed after the run.
+	cGreeterDir string
 )
 
 // compiler is the C compiler cgo uses.
@@ -137,6 +139,10 @@ func TestMain(m *testing.M) {
 	}
 	reg.Close()
 	goLib.Close()
+	// Windows refuses to delete a library this process still maps.
+	if cGreeterDir != "" && runtime.GOOS != "windows" {
+		os.RemoveAll(cGreeterDir)
+	}
 	os.Exit(code)
 }
 
@@ -152,6 +158,7 @@ func setup() (int, error) {
 	if err != nil {
 		return 1, err
 	}
+	cGreeterDir = cDir
 	if err := buildCGreeter(cDir); err != nil {
 		present["c"] = "the greeter written in C is not built: " + err.Error()
 	} else if _, err := reg.ScanDir(cDir, guatiao.Rules("kind=greeter")); err != nil {

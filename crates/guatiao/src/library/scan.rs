@@ -845,12 +845,29 @@ pub fn scan_path_with(
 mod tests {
     use super::*;
 
-    /// A fresh directory under the target dir, for one test.
-    fn scratch(name: &str) -> PathBuf {
+    /// A fresh directory in the temp dir for one test, removed when the
+    /// test ends, failed or not.
+    struct Scratch(PathBuf);
+
+    impl core::ops::Deref for Scratch {
+        type Target = Path;
+
+        fn deref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn scratch(name: &str) -> Scratch {
         let dir = std::env::temp_dir().join(format!("guatiao-scan-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("a scratch directory");
-        dir
+        Scratch(dir)
     }
 
     #[test]
