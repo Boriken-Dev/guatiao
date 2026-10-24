@@ -146,17 +146,36 @@ def _free_node(node: "_abi.Value") -> None:
     _lib.core().guatiao_value_free(ctypes.byref(node))
 
 
+def _makes_local() -> bool:
+    """Whether the core moves a tree home: a library older than
+    `guatiao_value_make_local` leaves a tree as the slot built it."""
+    global _MAKES_LOCAL
+    if _MAKES_LOCAL is None:
+        _MAKES_LOCAL = "guatiao_value_make_local" not in _lib.core().symbols_missing()
+    return _MAKES_LOCAL
+
+
+_MAKES_LOCAL: "bool | None" = None
+
+
 def _make_local(node: "_abi.Value") -> None:
     """Moves a tree a slot answered into this binding's allocator, so it
     outlives the library: a slot that ignored the carrier built it in its
-    own. A library older than the export is left as it answered."""
-    lib = _lib.core()
-    if "guatiao_value_make_local" in lib.symbols_missing():
+    own. Freed, and the refusal raised, when the move fails."""
+    if not _makes_local():
         return
-    status = lib.guatiao_value_make_local(ctypes.byref(node), ctypes.byref(binding_alloc()))
+    status = _lib.core().guatiao_value_make_local(ctypes.byref(node), ctypes.byref(binding_alloc()))
     if status != _abi.Status.OK:
         _free_node(node)
         raise_for_status(status, "moving the answer into this binding's allocator")
+
+
+def _settle(node: "_abi.Value") -> None:
+    """Moves a tree lent for a call where it stands into the allocator it
+    records, so what the callee grew it with outlives the callee's
+    library. A refusal leaves it whole, where it was."""
+    if _makes_local():
+        _lib.core().guatiao_value_make_local(ctypes.byref(node), ctypes.byref(_recorded_alloc(node)))
 
 
 def _recorded_alloc(node: "_abi.Value") -> Any:
@@ -399,7 +418,10 @@ class _Tree(Shape):
                     f"{self!r} takes a Value or a Ref, so what the callee changes has somewhere to go"
                 )
             value._writable()
-            return ctypes.byref(self._arm(value._require_node()))
+            node = value._require_node()
+            # What the callee grew it with may be in its library's allocator.
+            scope.after(lambda: _settle(node))
+            return ctypes.byref(self._arm(node))
         # Handed over: given up now, and freed by `close()` if the call
         # never happens.
         node = _owned_tree(value, self.tag, binding_alloc())

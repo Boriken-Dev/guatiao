@@ -333,6 +333,23 @@ void main() {
       },
     );
 
+    test('what a C slot grew a lent map with outlives the unload', () {
+      // A greeter of its own, so no other registry keeps it mapped.
+      final dir = _buildCGreeter();
+      if (dir == null) {
+        markTestSkipped('no C compiler');
+        return;
+      }
+      final own = Registry('dart-kinds-lent', '0.1');
+      addTearDown(own.close);
+      expect(own.scanDir(dir, rules: 'kind=greeter')['failed'], isEmpty);
+      final config = Value.fromDart({'name': 'ivy'});
+      addTearDown(config.close);
+      expect(own.bind('c_greeter', Greeter.kind).check(config), isTrue);
+      own.unload('c_greeter_library', unchecked: true);
+      expect(config.toDart(), {'name': 'ivy', 'checked_by': 'C'});
+    });
+
     test('a table of another kind is refused before anything runs', () {
       expect(
         () => reg.bind('hello_library_greeter', Greeter.kind),

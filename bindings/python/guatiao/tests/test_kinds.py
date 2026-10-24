@@ -254,6 +254,20 @@ def test_an_answer_built_in_the_librarys_allocator_outlives_the_unload(tmp_path)
         answer.close()
 
 
+def test_what_a_slot_grew_a_lent_tree_with_outlives_the_unload(tmp_path):
+    # `check` grows the lent map through its own allocator; the map is
+    # settled into the one it records once the call returns.
+    built = native.build_c_greeter(tmp_path)
+    if built is None:
+        pytest.skip("no C compiler: the greeter written in C is not built")
+    with Registry("py-kinds", "0.1") as registry:
+        registry.scan_dir(str(built), rules="kind=greeter")
+        with Value({"name": "ivy"}) as config:
+            assert registry.bind("c_greeter", Greeter.kind).check(config)
+            registry.unload("c_greeter_library", unchecked=True)
+            assert config.to_python() == {"name": "ivy", "checked_by": "C"}
+
+
 # ---- a table over a Python object, called from Python through C pointers --
 
 
