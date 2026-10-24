@@ -50,8 +50,12 @@ impl Frames {
             return entry.context.with(f);
         }
         // SAFETY: the frame below this one on this thread's stack is inside
-        // `Context::with`, so the runtime is locked and stays locked until
+        // `Context::with`, so the runtime is locked, and stays locked until
         // this call returns; `raw` points into `entry.context`, alive here.
+        // That the runtime is locked is not that script may run: the engine
+        // never calls here from a finalizer, which is the one place QuickJS
+        // cannot run it (handles hand what they own to `Shared::bury`
+        // instead of destroying it).
         let ctx = unsafe { Ctx::from_raw(entry.raw) };
         f(ctx)
     }
@@ -62,5 +66,16 @@ struct Leave<'a>(&'a Cell<u32>);
 impl Drop for Leave<'_> {
     fn drop(&mut self) {
         self.0.set(self.0.get() - 1);
+    }
+}
+
+/// Sets the memory limit of `ctx`'s runtime, 0 for none. `Runtime`'s own
+/// setter takes the lock a frame already holds.
+pub(crate) fn set_memory_limit(ctx: &Ctx<'_>, bytes: usize) {
+    // SAFETY: `ctx` is a live context, so its runtime is too; the call
+    // stores the limit and touches nothing else.
+    unsafe {
+        let runtime = rquickjs::qjs::JS_GetRuntime(ctx.as_raw().as_ptr());
+        rquickjs::qjs::JS_SetMemoryLimit(runtime, bytes as _);
     }
 }

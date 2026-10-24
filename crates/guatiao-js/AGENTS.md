@@ -30,9 +30,10 @@ paths = ["."]                     # where its files are, relative to this file
 - **The package** is `package.json` in the manifest's directory, read as
   JSON and never run. `version` is its `version` when the manifest states
   none (neither is a refusal asking for one). The entry is `main`, else
-  the package's `exports` (a string, the `.` of a map of subpaths, or
-  conditions `import`, `node`, `default`, `require`) or `main`, else
-  `index.js`, beside the manifest. The entry must lie under `paths`.
+  the package's `exports` (a string, the `.` of a map of subpaths, or the
+  first of its conditions, in the order it lists them, that an import
+  meets: `import`, `node`, `module-sync`, `default`; never `require`) or
+  `main`, else `index.js`, beside the manifest. The entry must lie under `paths`.
 - **A stamp** follows the manifest's bytes and the newest modification of
   a `.js`, `.mjs` or `.json` file under `paths` (not under
   `node_modules`), so an edit to any module the library imports is served
@@ -163,7 +164,11 @@ pub fn JsValues::new(ctx: &Ctx<'js>) -> rquickjs::Result<JsValues<'js>>   // giv
 | map | a plain object (a key `__proto__` is data) | a plain object (prototype `Object.prototype` or none), its own enumerable text keys in the order JavaScript keeps them |
 
 Refused: a function, a symbol, a class instance, a `Date`, a `Map`, an
-object that contains itself, trees nested deeper than 128. An integer-like
+object that contains itself, trees nested deeper than 128, a list longer
+than a sixteenth of the memory limit (16 777 216 items without one: holes
+cost QuickJS nothing, and the copy is made outside its limit), a buffer a
+script asks a host to fill that is longer than the memory limit (64 MiB
+without one). An integer-like
 key (`"1"`) comes first in an object whatever its place in the map.
 
 ## The engine (`JsEngine`)
@@ -172,7 +177,7 @@ key (`"1"`) comes first in an object whatever its place in the map.
 not `Send`, on the bridge's thread), manifests `*.guatiao-js.toml` with
 `id_key = "name"` and code extensions `js`, `mjs`, `json`,
 `Opened::Described`. `JsEngine::memory_used()` is the bytes QuickJS holds
-for every library open.
+for every library open (0 when asked from inside a call).
 
 ```rust
 fn start(_host: Host, config: &Map) -> Result<BridgeSource<JsEngine>, ProviderError> {
@@ -199,7 +204,9 @@ next call. The interrupt cannot be caught by `try`/`catch`/`finally`.
 Without a depth limit QuickJS stops a recursion at 1 MiB of stack
 (about 1 400 levels of an empty function, release build, Linux x86-64) with a `RangeError`, `GUATIAO_ERR_INTERNAL`.
 Promise reactions a call leaves queued run after its answer, under the
-same budget, and are stopped there.
+same budget; if the budget runs out there the call is the one stopped, and
+every reaction still queued is killed before it returns, so none runs in
+a later call.
 
 ## Errors
 
@@ -229,7 +236,9 @@ key that is not a list of text, or a misspelled limit,
 ## Gotchas
 
 - **A context per library, one runtime.** Libraries share nothing but the
-  runtime's memory limit and its thread. An edited library is a new
+  runtime's memory limit and its thread: a handle is known to the library
+  it was made for alone, by a key only that library's context holds, so
+  one cannot hand back another's object. An edited library is a new
   context; the old one is dropped (and the cycles it held collected) when
   its last instance goes.
 - **No event loop.** There are no timers; promise reactions run to
@@ -238,6 +247,12 @@ key that is not a list of text, or a misspelled limit,
   that calls another provider of this source is served on the same thread
   without waiting. A host that calls this source from another thread while
   the QuickJS thread waits on that thread waits on itself.
+- **Handles are destroyed after the call.** An object a script drops, or
+  closes, is destroyed by the host once no script is running (when the
+  outermost call returns), because QuickJS frees it in its collector,
+  where nothing may run; a library's `Symbol.dispose` runs then too.
+- **A link does not lead out of `paths`**: imports are resolved to the
+  files they name, links followed, before they are checked.
 - **A limit is checked at a poll**: one long native call (a `repeat`, a
   sort) runs to its end; the memory limit bounds what it can build.
 - **Stack per level is approximate** and differs by target and build

@@ -7,19 +7,25 @@
 
 use rquickjs::{ArrayBuffer, TypedArray};
 
-/// The bytes a `Uint8Array` holds, copied. Empty when it is detached.
+/// The bytes a `Uint8Array` holds, copied. Empty when it is detached,
+/// which QuickJS reports by leaving a `TypeError` pending: cleared here, or
+/// the next import in any context would take it for its own.
 pub(crate) fn of_array(array: &TypedArray<'_, u8>) -> Vec<u8> {
     // SAFETY: the slice is copied on this line and no JavaScript runs
     // while it is alive.
-    unsafe { array.as_bytes() }
-        .map(<[u8]>::to_vec)
-        .unwrap_or_default()
+    let held = unsafe { array.as_bytes() }.map(<[u8]>::to_vec);
+    held.unwrap_or_else(|| {
+        drop(array.ctx().catch());
+        Vec::new()
+    })
 }
 
 /// The bytes an `ArrayBuffer` holds, copied. Empty when it is detached.
 pub(crate) fn of_buffer(buffer: &ArrayBuffer<'_>) -> Vec<u8> {
     // SAFETY: as in `of_array`.
-    unsafe { buffer.as_bytes() }
-        .map(<[u8]>::to_vec)
-        .unwrap_or_default()
+    let held = unsafe { buffer.as_bytes() }.map(<[u8]>::to_vec);
+    held.unwrap_or_else(|| {
+        drop(buffer.ctx().catch());
+        Vec::new()
+    })
 }
