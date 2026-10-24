@@ -177,6 +177,28 @@ function provider_config(reg::Registry, key::AbstractString)
 end
 
 """
+    provider_meta(reg, key) -> Union{Value,Nothing}
+
+What the provider filed under `key` declared beyond its schema (its legal
+notices, or its form under `GuatiaoIntake.PROVIDER_FORM_KEY`) as a
+`Value` the caller owns, or `nothing` when it declares none. A copy,
+unlike `provider_config`: it outlives the library. `NotFound` when
+nothing answers to `key`.
+"""
+function provider_meta(reg::Registry, key::AbstractString)
+    out = new_root()
+    status = GC.@preserve reg with_text(k -> guatiao_registry_provider_meta(handle(reg), k, reg.alloc, out), key)
+    if status != 0
+        free_root(out)
+        check(status)
+    end
+    meta = adopt(out, reg.alloc)
+    isabsent(meta) || return meta
+    close(meta)
+    return nothing
+end
+
+"""
 An instance `create` built: `close(inst)` runs its provider's `destroy`,
 even after a retire or a refresh loaded a new build under the key.
 """

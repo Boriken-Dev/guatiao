@@ -299,6 +299,7 @@ end
 @cdef "guatiao" "load" :safe guatiao_registry_provider_table(reg::P, key::GStr, kind::GStr, size::Ptr{Csize_t})::P
 @cdef "guatiao" "load" :safe guatiao_registry_provider_ctx(reg::P, key::GStr)::P
 @cdef "guatiao" "load" :safe guatiao_registry_provider_config(reg::P, key::GStr)::PV
+@cdef "guatiao" "load" :safe guatiao_registry_provider_meta(reg::P, key::GStr, a::PA, out::PV)::UInt32
 
 """
 The allocator this binding builds in when nobody names one: the

@@ -39,6 +39,7 @@ GuatiaoIntake.resolve(schema, "auth.password")     # a borrowed ValueRef, or not
 GuatiaoIntake.flat_keys(schema, "auth")            # Vector{String}; WrongKind for an unknown key
 GuatiaoIntake.flatten(schema, "auth", value)       # Dict{String,String}
 GuatiaoIntake.unflatten(schema, "auth", store)     # a Value, or nothing
+GuatiaoIntake.PROVIDER_FORM_KEY                    # "form": a provider's form in Guatiao.provider_meta
 ```
 
 Nothing is exported: write `GuatiaoIntake.check` (or `const Intake =

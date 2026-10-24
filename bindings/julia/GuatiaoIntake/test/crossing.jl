@@ -25,3 +25,19 @@ end
     close(form)
     close(schema)
 end
+
+@testset "a provider's form, read from its meta, fits its schema" begin
+    named = ENV["GUATIAO_LIBRARY"]
+    reg = Registry("julia-intake-tests", "0.1")
+    Guatiao.scan_dir(reg, isdir(named) ? named : dirname(named); rules = "kind=greeter")
+    meta = Guatiao.provider_meta(reg, "derived_greeter_shouter")
+    form = meta[Intake.PROVIDER_FORM_KEY]
+    schema = Guatiao.provider_config(reg, "derived_greeter_shouter")
+    @test Intake.check(schema, form) === nothing
+    @test form["fields"]["prefix"]["placeholder"][] == "hey"
+    @test form["fields"]["marks"]["unit"][] == "marks"
+    @test !Intake.isvisible(schema, form, "marks", Dict("exclaim" => false))
+    @test Intake.isvisible(schema, form, "marks", Dict("exclaim" => true))
+    close(meta)
+    close(reg)
+end
