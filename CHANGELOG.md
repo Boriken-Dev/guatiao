@@ -938,6 +938,14 @@ write now.
   a map's keys are now found through a hash. A repeated key is still
   refused on the wire at the byte where it starts, and where a format
   allows one it still replaces the first in its place.
+
+- **CPython served by `guatiao-py` inside a Node host frees what a call
+  drops, on Linux.** koffi runs each call on a stack of its own, which
+  CPython 3.14 took for an overflowing one, deferring every deallocation
+  for good: a closed Python conversation kept its listener forever. The
+  bridge now tells CPython which stack the call runs on. macOS keeps the
+  old behaviour.
+
 - **On FreeBSD a C program needs no `-pthread`.** A program built
   without it bound libc's failing thread stubs, and the library aborted
   with `fatal runtime error: out of TLS keys`. Every library that links

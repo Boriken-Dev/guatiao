@@ -38,6 +38,7 @@ fn bridge(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
 pub(crate) fn start(paths: &[String], own: Option<&str>) -> Result<(), String> {
     Python::initialize();
     Python::attach(|py| -> PyResult<()> {
+        crate::stack::fit(py);
         bridge(py)?.getattr("setup")?.call1((paths.to_vec(), own))?;
         Ok(())
     })
@@ -48,6 +49,7 @@ pub(crate) fn start(paths: &[String], own: Option<&str>) -> Result<(), String> {
 /// literal from the module's source under `paths`, which is not imported.
 pub(crate) fn literal_version(module: &str, paths: &[String]) -> Result<String, String> {
     Python::attach(|py| -> PyResult<String> {
+        crate::stack::fit(py);
         bridge(py)?
             .getattr("literal_version")?
             .call1((module, paths.to_vec()))?
@@ -65,6 +67,7 @@ pub(crate) fn open(
     paths: &[String],
 ) -> Result<(usize, i64), String> {
     Python::attach(|py| -> PyResult<(usize, i64)> {
+        crate::stack::fit(py);
         bridge(py)?
             .getattr("open_library")?
             .call1((module, version, kinds.to_vec(), paths.to_vec()))?
@@ -77,6 +80,7 @@ pub(crate) fn open(
 /// has already let it go, and there is nobody left to tell.
 pub(crate) fn close(handle: i64) {
     let _ = Python::attach(|py| -> PyResult<()> {
+        crate::stack::fit(py);
         bridge(py)?.getattr("close_library")?.call1((handle,))?;
         Ok(())
     });
