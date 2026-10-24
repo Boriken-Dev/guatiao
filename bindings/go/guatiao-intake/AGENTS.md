@@ -57,6 +57,9 @@ store, err := intake.Flatten(schema, "auth", value)  // map[string]string
 value, err := intake.Unflatten(schema, "auth", store) // a Value to close, or nil
 ```
 
+- `ProviderFormKey` (`"form"`): the key of a provider's meta holding its
+  form; read it with `Registry.ProviderMeta` and check it against
+  `Registry.ProviderConfig`.
 - `Check(schema, form any) (map[string]any, error)`: nil when the form
   fits the schema, else the reason: `kind` (`malformed`, `unknown_field`,
   `duplicate_section`, `condition_refused` or `cyclic_condition`), `at`,

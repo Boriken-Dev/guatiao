@@ -75,3 +75,40 @@ func TestWhatAStructsSchemaSaysIsWhatIntakeChecks(t *testing.T) {
 		t.Fatalf("%v %v", sections, err)
 	}
 }
+
+func TestAProvidersFormFromItsMetaFitsItsSchema(t *testing.T) {
+	reg, err := guatiao.NewRegistry("go-intake-tests", "0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reg.Close()
+	if _, err := reg.ScanDir(testenv.Workspace(), guatiao.Rules("kind=greeter")); err != nil {
+		t.Fatal(err)
+	}
+	meta, ok, err := reg.ProviderMeta("derived_greeter_shouter")
+	if err != nil || !ok {
+		t.Fatalf("%v %v", ok, err)
+	}
+	defer meta.Close()
+	form := meta.Key(intake.ProviderFormKey)
+	schema, ok, err := reg.ProviderConfig("derived_greeter_shouter")
+	if err != nil || !ok {
+		t.Fatalf("%v %v", ok, err)
+	}
+	if why, err := intake.Check(schema, form); why != nil || err != nil {
+		t.Fatalf("%v %v", why, err)
+	}
+	var fields map[string]map[string]any
+	if err := form.Key("fields").Decode(&fields); err != nil {
+		t.Fatal(err)
+	}
+	if fields["prefix"]["placeholder"] != "hey" || fields["marks"]["unit"] != "marks" {
+		t.Fatalf("%v", fields)
+	}
+	for exclaim, want := range map[bool]bool{false: false, true: true} {
+		shown, err := intake.IsVisible(schema, form, "marks", map[string]any{"exclaim": exclaim})
+		if err != nil || shown != want {
+			t.Fatalf("exclaim %v: %v %v", exclaim, shown, err)
+		}
+	}
+}
