@@ -77,14 +77,43 @@ impl Source for Held {
 }
 
 pub fn serving(config: &Map) -> Registry {
+    serving_source(config).0
+}
+
+/// A registry holding the source, and the source, to reach its engine.
+pub fn serving_source(config: &Map) -> (Registry, Arc<BridgeSource<WasmEngine>>) {
     let source = Arc::new(
         BridgeSource::<WasmEngine>::shared(config)
             .expect("wasmtime starts")
             .with_mechanism(Arc::new(Libffi)),
     );
     let mut registry = Registry::new("wasm-test-host", "1.0");
-    registry.add_source("wasm", Held(source)).expect("added");
     registry
+        .add_source("wasm", Held(Arc::clone(&source)))
+        .expect("added");
+    (registry, source)
+}
+
+/// The role this process plays when a test runs itself again as a child.
+pub fn child_role() -> Option<String> {
+    std::env::var("GUATIAO_WASM_CHILD").ok()
+}
+
+/// Runs the test `name` again in a child process as `role`: what can take
+/// the whole process down (a native stack overflow aborts it) is watched
+/// from outside. Answers whether the child succeeded, and its output.
+pub fn in_child(name: &str, role: &str) -> (bool, String) {
+    let out = Command::new(std::env::current_exe().expect("this test binary"))
+        .args([name, "--exact", "--nocapture", "--test-threads=1"])
+        .env("GUATIAO_WASM_CHILD", role)
+        .output()
+        .expect("the child runs");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    (out.status.success(), text)
 }
 
 pub fn scratch(name: &str) -> PathBuf {

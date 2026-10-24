@@ -9,6 +9,7 @@
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use std::sync::Mutex;
+use std::time::Instant;
 
 use guatiao::library::ProviderError;
 use guatiao::library::kind::{
@@ -25,7 +26,26 @@ use wasmtime::{
 };
 
 use crate::abi::{self, export, import};
+use crate::budget::{self, Refused, Undecoded};
 use crate::wasi::WasiState;
+
+/// The deepest a guest's own frames go: wasmtime's `max_wasm_stack`.
+pub(crate) const WASM_STACK: usize = 512 << 10;
+/// What the host code a guest's imports run, below its frames, may use.
+const HOST_STACK: usize = 512 << 10;
+/// The stack an entry runs on when its caller's has too little left.
+const SEGMENT: usize = 4 << 20;
+
+/// Runs `f`, which enters a guest, where at least a guest's stack and the
+/// host's below it are left: on the caller's stack, or on a segment of its
+/// own. wasmtime bounds a guest's frames from where it is entered, so a
+/// caller with less left would overflow the native stack, not trap.
+pub(crate) fn with_stack<R>(f: impl FnOnce() -> R) -> R {
+    stacker::maybe_grow(WASM_STACK + HOST_STACK, SEGMENT, f)
+}
+
+/// Bytes the host copies for a guest per unit of fuel it charges.
+const BYTES_PER_FUEL: u64 = 8;
 
 /// The kinds a source was given, and a caller per object kind, made once.
 pub(crate) struct Shared {
@@ -86,10 +106,22 @@ pub(crate) enum Writable {
 }
 
 /// A store's data: the limiter's count, what the guest answered and wrote
-/// back during the current call, and the host's objects it holds.
+/// back during the current call, the host's objects it holds, and what
+/// stopped it.
 pub(crate) struct State {
     memory_limit: Option<usize>,
+    memory_bytes: usize,
+    table_entries: usize,
     pub(crate) memory_hit: bool,
+    /// The bytes the host takes from the guest at once, and decodes.
+    pub(crate) budget: u64,
+    /// Bytes past the budget the guest tried to hand over.
+    pub(crate) too_large: Option<u64>,
+    fuel: bool,
+    pub(crate) out_of_fuel: bool,
+    time: Option<core::time::Duration>,
+    deadline: Option<Instant>,
+    pub(crate) timed_out: bool,
     pub(crate) answer: Option<Vec<u8>>,
     result: Vec<u8>,
     pub(crate) writable: Vec<Writable>,
@@ -106,7 +138,16 @@ impl State {
             memory_limit: limits
                 .memory
                 .map(|m| usize::try_from(m).unwrap_or(usize::MAX)),
+            memory_bytes: 0,
+            table_entries: 0,
             memory_hit: false,
+            budget: budget::of(limits),
+            too_large: None,
+            fuel: limits.operations.is_some(),
+            out_of_fuel: false,
+            time: limits.time,
+            deadline: None,
+            timed_out: false,
             answer: None,
             result: Vec::new(),
             writable: Vec::new(),
@@ -118,6 +159,11 @@ impl State {
         }
     }
 
+    /// The handle the last object held was given.
+    pub(crate) fn next_handle(&self) -> u64 {
+        self.next_handle
+    }
+
     /// Holds an object for the guest, answering its handle.
     pub(crate) fn hold(&mut self, held: Held, caller: Arc<KindCaller>) -> u64 {
         self.next_handle += 1;
@@ -127,8 +173,25 @@ impl State {
     }
 }
 
-/// How many table entries a guest may hold under a memory limit.
-const MOST_TABLE_ENTRIES: usize = 1 << 20;
+/// What the host keeps per table entry, counted against the memory limit.
+const TABLE_ENTRY: usize = 8;
+/// The most tables a guest may have: compilers emit one.
+pub(crate) const MOST_TABLES: usize = 4;
+
+impl State {
+    /// Whether memory and tables of these sizes fit the memory limit.
+    fn fits(&mut self, memory: usize, entries: usize) -> bool {
+        let Some(limit) = self.memory_limit else {
+            return true;
+        };
+        let held = memory.saturating_add(entries.saturating_mul(TABLE_ENTRY));
+        if held > limit {
+            self.memory_hit = true;
+            return false;
+        }
+        true
+    }
+}
 
 impl ResourceLimiter for State {
     fn memory_growing(
@@ -137,23 +200,68 @@ impl ResourceLimiter for State {
         desired: usize,
         _maximum: Option<usize>,
     ) -> wasmtime::Result<bool> {
-        if let Some(limit) = self.memory_limit
-            && desired > limit
-        {
-            self.memory_hit = true;
+        if !self.fits(desired, self.table_entries) {
             return Err(wasmtime::Error::msg("the memory limit"));
         }
+        self.memory_bytes = desired;
         Ok(true)
     }
 
     fn table_growing(
         &mut self,
-        _current: usize,
+        current: usize,
         desired: usize,
         _maximum: Option<usize>,
     ) -> wasmtime::Result<bool> {
-        Ok(self.memory_limit.is_none() || desired <= MOST_TABLE_ENTRIES)
+        let entries = self
+            .table_entries
+            .saturating_add(desired.saturating_sub(current));
+        if !self.fits(self.memory_bytes, entries) {
+            return Err(wasmtime::Error::msg("the memory limit"));
+        }
+        self.table_entries = entries;
+        Ok(true)
     }
+
+    fn instances(&self) -> usize {
+        1
+    }
+
+    fn tables(&self) -> usize {
+        MOST_TABLES
+    }
+
+    fn memories(&self) -> usize {
+        1
+    }
+}
+
+/// Charges `fuel` for host work a guest asked for, when fuel is counted.
+pub(crate) fn charge(caller: &mut Caller<'_, State>, fuel: u64) -> wasmtime::Result<()> {
+    if !caller.data().fuel || fuel == 0 {
+        return Ok(());
+    }
+    let left = caller.get_fuel()?;
+    match left.checked_sub(fuel) {
+        Some(rest) => caller.set_fuel(rest),
+        None => {
+            caller.set_fuel(0)?;
+            caller.data_mut().out_of_fuel = true;
+            Err(wasmtime::Error::msg("the operations limit"))
+        }
+    }
+}
+
+/// Stops the guest once its call's time is up: host work runs between
+/// the instructions epochs interrupt.
+pub(crate) fn in_time(caller: &mut Caller<'_, State>) -> wasmtime::Result<()> {
+    if let Some(deadline) = caller.data().deadline
+        && Instant::now() > deadline
+    {
+        caller.data_mut().timed_out = true;
+        return Err(wasmtime::Error::msg("the time limit"));
+    }
+    Ok(())
 }
 
 // --- the imports -------------------------------------------------------------
@@ -165,16 +273,44 @@ fn memory_of(caller: &mut Caller<'_, State>) -> wasmtime::Result<Memory> {
         .ok_or_else(|| wasmtime::Error::msg("the guest exports no memory"))
 }
 
-/// `len` bytes of the guest's memory at `ptr`; a range outside it stops
-/// the guest.
+/// `len` bytes of the guest's memory at `ptr`, copied and charged for; a
+/// range outside it, or past the budget, stops the guest.
 fn bytes_at(caller: &mut Caller<'_, State>, ptr: i32, len: i32) -> wasmtime::Result<Vec<u8>> {
+    let n = u64::from(len as u32);
+    if n > caller.data().budget {
+        caller.data_mut().too_large = Some(n);
+        return Err(wasmtime::Error::msg("more bytes than the host takes"));
+    }
+    charge(caller, n / BYTES_PER_FUEL)?;
     let memory = memory_of(caller)?;
     let start = ptr as u32 as usize;
-    start
+    let bytes = start
         .checked_add(len as u32 as usize)
         .and_then(|end| memory.data(&*caller).get(start..end))
         .map(<[u8]>::to_vec)
-        .ok_or_else(|| wasmtime::Error::msg("the guest passed bytes outside its memory"))
+        .ok_or_else(|| wasmtime::Error::msg("the guest passed bytes outside its memory"))?;
+    in_time(caller)?;
+    Ok(bytes)
+}
+
+/// Bytes a guest handed over, decoded within the budget and charged for.
+fn decoded(caller: &mut Caller<'_, State>, bytes: &[u8]) -> wasmtime::Result<Result<Value, Undecoded>> {
+    let budget = caller.data().budget;
+    match budget::check(bytes, budget) {
+        Ok(nodes) => charge(caller, nodes)?,
+        Err(refused) => return Ok(Err(Undecoded::Refused(refused))),
+    }
+    let value = wire::decode(bytes).map_err(Undecoded::Malformed);
+    in_time(caller)?;
+    Ok(value)
+}
+
+/// The status a refusal to decode crosses as.
+pub(crate) fn refusal_status(refused: &Refused) -> Status {
+    match refused {
+        Refused::TooLarge { .. } => Status::GUATIAO_ERR_ALLOC,
+        Refused::Maps { .. } => Status::GUATIAO_ERR_BAD_VALUE,
+    }
 }
 
 fn code(status: Status) -> i32 {
@@ -188,16 +324,18 @@ fn write_back(
     len: i32,
 ) -> wasmtime::Result<i32> {
     let bytes = bytes_at(caller, ptr, len)?;
-    let state = caller.data_mut();
     let Some(kind) = usize::try_from(index)
         .ok()
-        .and_then(|i| state.writable.get(i).copied())
+        .and_then(|i| caller.data().writable.get(i).copied())
     else {
         return Ok(code(Status::GUATIAO_ERR_NOT_FOUND));
     };
-    let Ok(value) = wire::decode(&bytes) else {
-        return Ok(code(Status::GUATIAO_ERR_BAD_VALUE));
+    let value = match decoded(caller, &bytes)? {
+        Ok(value) => value,
+        Err(Undecoded::Refused(refused)) => return Ok(code(refusal_status(&refused))),
+        Err(Undecoded::Malformed(_)) => return Ok(code(Status::GUATIAO_ERR_BAD_VALUE)),
     };
+    let state = caller.data_mut();
     let fits = match kind {
         Writable::No => false,
         Writable::Tree => true,
@@ -374,8 +512,12 @@ fn answered(
     wire::to_bytes(&value).map_err(|e| bad(e.to_string()))
 }
 
-/// Calls a slot of a host object the guest holds.
-fn call_object(state: &mut State, handle: u64, request: &[u8]) -> Result<Vec<u8>, ProviderError> {
+/// Calls a slot of a host object the guest holds, with the request it sent.
+fn call_object(
+    state: &mut State,
+    handle: u64,
+    request: Result<Value, Undecoded>,
+) -> Result<Vec<u8>, ProviderError> {
     let Some(mut object) = state.handles.remove(&handle) else {
         return Err(ProviderError::new(
             Status::GUATIAO_ERR_GONE,
@@ -383,6 +525,12 @@ fn call_object(state: &mut State, handle: u64, request: &[u8]) -> Result<Vec<u8>
         ));
     };
     let outcome = (|| {
+        let request = request.map_err(|undecoded| match undecoded {
+            Undecoded::Refused(refused) => {
+                ProviderError::new(refusal_status(&refused), &refused.words("the request"))
+            }
+            Undecoded::Malformed(e) => bad(format!("the request is not a value: {e}")),
+        })?;
         let (method, args) = abi::read_request(request).map_err(bad)?;
         let HostObject { held, caller } = &mut object;
         let kind = caller.kind();
@@ -438,9 +586,11 @@ pub(crate) fn add_imports(linker: &mut Linker<State>) -> wasmtime::Result<()> {
         module,
         import::OBJECT_CALL,
         |mut caller: Caller<'_, State>, handle: i64, ptr: i32, len: i32| -> wasmtime::Result<i32> {
-            let request = bytes_at(&mut caller, ptr, len)?;
+            let bytes = bytes_at(&mut caller, ptr, len)?;
+            let request = decoded(&mut caller, &bytes)?;
             let state = caller.data_mut();
-            Ok(match call_object(state, handle as u64, &request) {
+            let outcome = call_object(state, handle as u64, request);
+            Ok(match outcome {
                 Ok(bytes) => {
                     state.result = bytes;
                     0
@@ -456,9 +606,10 @@ pub(crate) fn add_imports(linker: &mut Linker<State>) -> wasmtime::Result<()> {
         module,
         import::RESULT,
         |mut caller: Caller<'_, State>, ptr: i32, cap: i32| -> wasmtime::Result<i32> {
+            let n = caller.data().result.len().min(cap as u32 as usize);
+            charge(&mut caller, n as u64 / BYTES_PER_FUEL)?;
             let memory = memory_of(&mut caller)?;
             let (data, state) = memory.data_and_store_mut(&mut caller);
-            let n = state.result.len().min(cap as u32 as usize);
             let start = ptr as u32 as usize;
             let into = start
                 .checked_add(n)
@@ -534,6 +685,8 @@ pub(crate) fn arm(store: &mut Store<State>, limits: &Limits) -> wasmtime::Result
     if let Some(time) = limits.time {
         store.set_epoch_deadline(u64::try_from(time.as_millis()).unwrap_or(u64::MAX).max(1));
     }
+    let state = store.data_mut();
+    state.deadline = state.time.map(|t| Instant::now() + t);
     Ok(())
 }
 
@@ -665,6 +818,27 @@ pub(crate) fn stopped(
     };
     if state.memory_hit {
         return limit(Limit::Memory, limits.memory);
+    }
+    if let Some(n) = state.too_large {
+        return ProviderError::new(
+            Status::GUATIAO_ERR_ALLOC,
+            &format!(
+                "{id} handed the host {n} bytes at once, more than it takes ({}: the memory limit, or {} without one)",
+                state.budget,
+                budget::UNLIMITED
+            ),
+        );
+    }
+    if state.out_of_fuel {
+        return limit(Limit::Operations, limits.operations);
+    }
+    if state.timed_out {
+        return limit(
+            Limit::Time,
+            limits
+                .time
+                .map(|t| u64::try_from(t.as_millis()).unwrap_or(u64::MAX)),
+        );
     }
     let words = last_words(state)
         .map(|w| format!(": {w}"))

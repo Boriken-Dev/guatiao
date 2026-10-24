@@ -10,10 +10,11 @@
 use alloc::borrow::Cow;
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use core::cell::Cell;
 use core::time::Duration;
 use std::path::PathBuf;
-use std::sync::{Mutex, MutexGuard, PoisonError, TryLockError, mpsc};
-use std::thread::{self, JoinHandle, ThreadId};
+use std::sync::{Condvar, Mutex, MutexGuard, PoisonError, TryLockError};
+use std::thread::{self, JoinHandle};
 
 use guatiao::library::ProviderError;
 use guatiao::library::kind::{AnswerType, ArgType};
@@ -27,45 +28,93 @@ use guatiao_bridge::{
 use wasmtime::{ExternType, FuncType, Linker, Module};
 
 use crate::abi::{self, export};
-use crate::instance::{self, Held, Live, Shared, State, Stopped, Writable};
+use crate::budget::{self, Undecoded};
+use crate::instance::{self, Held, Live, Shared, State, Stopped, Writable, with_stack};
 use crate::{section, wasi};
 
-/// Increments the engine's epoch every millisecond while a time limit is
-/// set; stops when dropped.
+/// The largest module a source reads and compiles.
+pub const MOST_MODULE_BYTES: u64 = 128 << 20;
+
+/// How many guest calls run, and whether the ticker should stop.
+#[derive(Default)]
+struct Ticks {
+    running: usize,
+    stop: bool,
+}
+
+/// Increments the engine's epoch every millisecond while a call runs, and
+/// sleeps while none does; stops when dropped.
 struct Ticker {
-    stop: Option<mpsc::Sender<()>>,
+    ticks: Arc<(Mutex<Ticks>, Condvar)>,
     thread: Option<JoinHandle<()>>,
 }
 
 impl Ticker {
     fn start(engine: wasmtime::Engine) -> Result<Ticker, BridgeError> {
-        let (stop, stopped) = mpsc::channel::<()>();
+        let ticks = Arc::new((Mutex::new(Ticks::default()), Condvar::new()));
+        let shared = Arc::clone(&ticks);
         let thread = thread::Builder::new()
             .name("guatiao-wasm-epoch".to_string())
             .spawn(move || {
-                while let Err(mpsc::RecvTimeoutError::Timeout) =
-                    stopped.recv_timeout(Duration::from_millis(1))
-                {
-                    engine.increment_epoch();
+                let (lock, wake) = &*shared;
+                let mut state = lock.lock().unwrap_or_else(PoisonError::into_inner);
+                while !state.stop {
+                    if state.running == 0 {
+                        state = wake.wait(state).unwrap_or_else(PoisonError::into_inner);
+                        continue;
+                    }
+                    state = wake
+                        .wait_timeout(state, Duration::from_millis(1))
+                        .unwrap_or_else(PoisonError::into_inner)
+                        .0;
+                    if state.running > 0 {
+                        engine.increment_epoch();
+                    }
                 }
             })
             .map_err(|e| {
                 BridgeError::Unavailable(format!("the epoch thread did not start: {e}"))
             })?;
         Ok(Ticker {
-            stop: Some(stop),
+            ticks,
             thread: Some(thread),
         })
+    }
+
+    /// Counts a call running until the answer drops.
+    fn running(&self) -> Running<'_> {
+        let (lock, wake) = &*self.ticks;
+        lock.lock().unwrap_or_else(PoisonError::into_inner).running += 1;
+        wake.notify_one();
+        Running(self)
+    }
+}
+
+/// A call the ticker counts.
+struct Running<'a>(&'a Ticker);
+
+impl Drop for Running<'_> {
+    fn drop(&mut self) {
+        let (lock, _) = &*self.0.ticks;
+        let mut state = lock.lock().unwrap_or_else(PoisonError::into_inner);
+        state.running = state.running.saturating_sub(1);
     }
 }
 
 impl Drop for Ticker {
     fn drop(&mut self) {
-        drop(self.stop.take());
+        let (lock, wake) = &*self.ticks;
+        lock.lock().unwrap_or_else(PoisonError::into_inner).stop = true;
+        wake.notify_one();
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
     }
+}
+
+std::thread_local! {
+    /// How many libraries this thread is inside a call of.
+    static INSIDE: Cell<usize> = const { Cell::new(0) };
 }
 
 /// The engine: one wasmtime engine and linker for the source, the kinds it
@@ -76,7 +125,7 @@ pub struct WasmEngine {
     linker: Linker<State>,
     limits: Limits,
     shared: Arc<Shared>,
-    _ticker: Option<Ticker>,
+    ticker: Option<Ticker>,
 }
 
 /// One opened library: its compiled module, its providers in the order it
@@ -86,7 +135,6 @@ pub struct WasmLibrary {
     module: Module,
     providers: Vec<String>,
     slot: Mutex<Slot>,
-    inside: Mutex<Option<ThreadId>>,
     deferred: Mutex<Vec<u64>>,
 }
 
@@ -116,54 +164,43 @@ impl Slot {
     }
 }
 
-/// A library entered by this thread: its lock, and the thread named as
-/// inside it until dropped.
+/// A library this thread is inside a call of: its lock.
 struct Entered<'a> {
     slot: MutexGuard<'a, Slot>,
-    inside: &'a Mutex<Option<ThreadId>>,
 }
 
 impl Drop for Entered<'_> {
     fn drop(&mut self) {
-        *self.inside.lock().unwrap_or_else(PoisonError::into_inner) = None;
+        INSIDE.with(|n| n.set(n.get().saturating_sub(1)));
     }
 }
 
 fn busy() -> ProviderError {
     ProviderError::new(
         Status::GUATIAO_ERR_BUSY,
-        "the library is in a call on this thread already: what it called cannot call it back",
+        "the library is in a call, and this thread is inside a call of a library already: waiting could deadlock",
     )
 }
 
 impl WasmLibrary {
-    /// Takes the library's lock: waits for another thread's call, refuses
-    /// one on this thread (`None`).
+    /// Takes the library's lock. A thread inside no library's call waits
+    /// for it; one inside a call (this library's or another's, through a
+    /// host object) is refused (`None`) when it is held, since two such
+    /// threads waiting on each other's libraries would wait forever.
     fn enter(&self) -> Option<Entered<'_>> {
-        let me = thread::current().id();
+        let recover = |poisoned: PoisonError<MutexGuard<'_, Slot>>| {
+            let mut slot = poisoned.into_inner();
+            slot.discard();
+            slot
+        };
         let guard = match self.slot.try_lock() {
             Ok(guard) => guard,
-            Err(TryLockError::WouldBlock) => {
-                if *self.inside.lock().unwrap_or_else(PoisonError::into_inner) == Some(me) {
-                    return None;
-                }
-                self.slot.lock().unwrap_or_else(|poisoned| {
-                    let mut slot = poisoned.into_inner();
-                    slot.discard();
-                    slot
-                })
-            }
-            Err(TryLockError::Poisoned(poisoned)) => {
-                let mut slot = poisoned.into_inner();
-                slot.discard();
-                slot
-            }
+            Err(TryLockError::WouldBlock) if INSIDE.with(Cell::get) > 0 => return None,
+            Err(TryLockError::WouldBlock) => self.slot.lock().unwrap_or_else(recover),
+            Err(TryLockError::Poisoned(poisoned)) => recover(poisoned),
         };
-        *self.inside.lock().unwrap_or_else(PoisonError::into_inner) = Some(me);
-        Some(Entered {
-            slot: guard,
-            inside: &self.inside,
-        })
+        INSIDE.with(|n| n.set(n.get() + 1));
+        Some(Entered { slot: guard })
     }
 
     /// Its id.
@@ -189,8 +226,17 @@ fn module_file(manifest: &Manifest) -> Result<PathBuf, BridgeError> {
         })
 }
 
+/// A module's bytes, refused unread past [`MOST_MODULE_BYTES`].
 fn read(file: &PathBuf) -> Result<Vec<u8>, BridgeError> {
-    std::fs::read(file).map_err(|e| BridgeError::engine(format!("{}: {e}", file.display())))
+    let failed = |e: std::io::Error| BridgeError::engine(format!("{}: {e}", file.display()));
+    let size = std::fs::metadata(file).map_err(failed)?.len();
+    if size > MOST_MODULE_BYTES {
+        return Err(BridgeError::engine(format!(
+            "{} is {size} bytes, larger than a module may be ({MOST_MODULE_BYTES})",
+            file.display()
+        )));
+    }
+    std::fs::read(file).map_err(failed)
 }
 
 /// The version a module states in its custom section, if it states one.
@@ -295,6 +341,11 @@ fn check_shape(module: &Module, id: &str) -> Result<(), BridgeError> {
 impl WasmEngine {
     fn stopped(&self, lib: &WasmLibrary, error: &wasmtime::Error, state: &State) -> ProviderError {
         instance::stopped(&lib.id, error, state, &self.limits)
+    }
+
+    /// Counts a call for the ticker, when there is one.
+    fn running(&self) -> Option<Running<'_>> {
+        self.ticker.as_ref().map(Ticker::running)
     }
 
     /// The library's instance, made afresh after a stop.
@@ -403,7 +454,8 @@ impl Engine for WasmEngine {
         wasm.consume_fuel(limits.operations.is_some())
             .epoch_interruption(limits.time.is_some())
             .wasm_multi_memory(false)
-            .wasm_memory64(false);
+            .wasm_memory64(false)
+            .max_wasm_stack(instance::WASM_STACK);
         let engine = wasmtime::Engine::new(&wasm)
             .map_err(|e| BridgeError::Unavailable(format!("wasmtime did not start: {e}")))?;
         let mut linker = Linker::new(&engine);
@@ -423,7 +475,7 @@ impl Engine for WasmEngine {
             linker,
             limits,
             shared: Arc::new(Shared::new(kinds)),
-            _ticker: ticker,
+            ticker,
         })
     }
 
@@ -443,6 +495,40 @@ impl Engine for WasmEngine {
     /// Compiles the module, checks its exports and imports, instantiates it
     /// and reads its declaration, each step under the limits.
     fn open(
+        &self,
+        manifest: &Manifest,
+        version: &str,
+    ) -> Result<Opened<Arc<WasmLibrary>>, BridgeError> {
+        let _running = self.running();
+        with_stack(|| self.open_here(manifest, version))
+    }
+
+    fn call(&self, lib: &Arc<WasmLibrary>, call: &mut Call) -> Result<Reply, ProviderError> {
+        let _running = self.running();
+        with_stack(|| self.call_here(lib, call))
+    }
+
+    /// Tells the guest its object was destroyed; deferred to the next
+    /// call when the library is busy and this thread is inside a call.
+    fn release(&self, lib: &Arc<WasmLibrary>, object: u64) {
+        let _running = self.running();
+        with_stack(|| match lib.enter() {
+            Some(mut entered) => self.release_in(&mut entered.slot, object),
+            None => lib
+                .deferred
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .push(object),
+        });
+    }
+
+    fn close(&self, lib: Arc<WasmLibrary>) {
+        drop(lib);
+    }
+}
+
+impl WasmEngine {
+    fn open_here(
         &self,
         manifest: &Manifest,
         version: &str,
@@ -481,7 +567,7 @@ impl Engine for WasmEngine {
         if status != 0 {
             return Err(engine_error(instance::refused(id, status, Some(answer))));
         }
-        let declared = abi::read_declaration(&answer)
+        let declared = abi::read_declaration(&answer, budget::of(&self.limits))
             .map_err(|why| BridgeError::engine(format!("{id}: {why}")))?;
         let (providers, ids) = self.provided(manifest, declared)?;
         Ok(Opened::Described {
@@ -494,14 +580,13 @@ impl Engine for WasmEngine {
                     objects: BTreeMap::new(),
                     next_object: 0,
                 }),
-                inside: Mutex::new(None),
                 deferred: Mutex::new(Vec::new()),
             }),
             providers,
         })
     }
 
-    fn call(&self, lib: &Arc<WasmLibrary>, call: &mut Call) -> Result<Reply, ProviderError> {
+    fn call_here(&self, lib: &WasmLibrary, call: &mut Call) -> Result<Reply, ProviderError> {
         let mut entered = lib.enter().ok_or_else(busy)?;
         let slot = &mut *entered.slot;
         self.settle(lib, slot);
@@ -536,44 +621,25 @@ impl Engine for WasmEngine {
         let method = call.method().to_string();
         let slot_description = call.slot_description().clone();
 
-        // Objects first: each moves into the store's handles, and crosses
-        // as its handle.
+        // Everything that can fail comes first: an object crosses as the
+        // handle it will be held under, and moves into the store's handles
+        // only once the request is made, so no refusal leaves one behind.
         let state = live.store.data_mut();
-        state.writable.clear();
-        state.written.clear();
-        let mut handles = BTreeMap::new();
-        let mut lent = Vec::new();
-        for (i, (arg, d)) in call
-            .args
-            .iter_mut()
-            .zip(slot_description.args())
-            .enumerate()
-        {
-            let ArgType::Object { kind, .. } = d.ty() else {
-                continue;
-            };
-            let held = match arg {
-                CallArg::Object(_) => {
-                    let CallArg::Object(object) =
-                        core::mem::replace(arg, CallArg::Value(Value::null()))
-                    else {
-                        unreachable!("matched just above")
-                    };
-                    Held::Owned(object)
-                }
-                CallArg::LentObject(h) => Held::Lent(h.clone()),
-                _ => continue,
-            };
-            let handle = state.hold(held, self.shared.caller(kind)?);
-            if matches!(arg, CallArg::LentObject(_)) {
-                lent.push(handle);
+        let mut callers = BTreeMap::new();
+        for (i, (arg, d)) in call.args.iter().zip(slot_description.args()).enumerate() {
+            if let (ArgType::Object { kind, .. }, CallArg::Object(_) | CallArg::LentObject(_)) =
+                (d.ty(), arg)
+            {
+                callers.insert(i, self.shared.caller(kind)?);
             }
-            handles.insert(i, Value::from(handle));
         }
+        let first = state.next_handle() + 1;
+        let handle_of = |i: usize| first + callers.keys().take_while(|k| **k < i).count() as u64;
         let mut values: Vec<Cow<'_, Value>> = Vec::with_capacity(call.args.len());
+        let mut writable = Vec::with_capacity(call.args.len());
         for (i, arg) in call.args.iter().enumerate() {
-            let (value, writable) = match arg {
-                _ if handles.contains_key(&i) => (Cow::Owned(handles[&i].clone()), Writable::No),
+            let (value, w) = match arg {
+                _ if callers.contains_key(&i) => (Cow::Owned(Value::from(handle_of(i))), Writable::No),
                 CallArg::Value(v) => (Cow::Borrowed(v), Writable::No),
                 CallArg::Lent(v) => (Cow::Borrowed(v), Writable::Tree),
                 CallArg::Buffer(b) => (Cow::Owned(instance::buffer_value(b)), Writable::Buffer),
@@ -585,11 +651,33 @@ impl Engine for WasmEngine {
                 }
             };
             values.push(value);
-            state.writable.push(writable);
+            writable.push(w);
         }
         let request = abi::request(described.name(), &method, values.iter().map(|v| v.as_ref()))
             .map_err(|why| ProviderError::new(Status::GUATIAO_ERR_BAD_VALUE, &why))?;
         drop(values);
+        state.writable = writable;
+        state.written.clear();
+        let mut lent = Vec::new();
+        for (i, caller) in callers {
+            let held = match &mut call.args[i] {
+                CallArg::LentObject(h) => Held::Lent(h.clone()),
+                arg => {
+                    let CallArg::Object(object) =
+                        core::mem::replace(arg, CallArg::Value(Value::null()))
+                    else {
+                        unreachable!("only objects have callers")
+                    };
+                    Held::Owned(object)
+                }
+            };
+            let lend = matches!(held, Held::Lent(_));
+            let handle = state.hold(held, caller);
+            debug_assert_eq!(handle, handle_of(i));
+            if lend {
+                lent.push(handle);
+            }
+        }
 
         let outcome = live.call(&self.limits, object, target, &request);
         let state = live.store.data_mut();
@@ -624,11 +712,15 @@ impl Engine for WasmEngine {
                     &format!("`{method}` answered nothing, and answers {what}"),
                 )
             })?;
-            wire::decode(bytes).map_err(|e| {
-                ProviderError::new(
+            budget::decode(bytes, budget::of(&self.limits)).map_err(|e| match e {
+                Undecoded::Refused(refused) => ProviderError::new(
+                    instance::refusal_status(&refused),
+                    &refused.words(&format!("`{method}`'s answer")),
+                ),
+                Undecoded::Malformed(e) => ProviderError::new(
                     Status::GUATIAO_ERR_BAD_VALUE,
                     &format!("`{method}` answered bytes that are not a value: {e}"),
-                )
+                ),
             })
         };
         Ok(match slot_description.answer() {
@@ -650,22 +742,5 @@ impl Engine for WasmEngine {
             }
             Some(_) => Reply::Value(answered("a value")?),
         })
-    }
-
-    /// Tells the guest its object was destroyed; deferred to the next
-    /// call when the library is busy on this thread.
-    fn release(&self, lib: &Arc<WasmLibrary>, object: u64) {
-        match lib.enter() {
-            Some(mut entered) => self.release_in(&mut entered.slot, object),
-            None => lib
-                .deferred
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .push(object),
-        }
-    }
-
-    fn close(&self, lib: Arc<WasmLibrary>) {
-        drop(lib);
     }
 }

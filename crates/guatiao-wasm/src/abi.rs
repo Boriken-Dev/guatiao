@@ -33,10 +33,17 @@
 //!
 //! and, if it is a WASI preview-1 module, any of `sched_yield`,
 //! `proc_exit`, `args_get`, `args_sizes_get`, `environ_get`,
-//! `environ_sizes_get`, `clock_time_get`, `fd_write`, `random_get` and
-//! `poll_oneoff` from `wasi_snapshot_preview1`: no files, no sockets, no
-//! arguments, no environment; fd 1 is discarded and fd 2 kept to name a
-//! failure. Any other import refuses the library.
+//! `environ_sizes_get`, `clock_time_get`, `fd_write`, `random_get`,
+//! `poll_oneoff`, `fd_close`, `fd_fdstat_get`, `fd_fdstat_set_flags`,
+//! `fd_prestat_get` and `fd_prestat_dir_name` from
+//! `wasi_snapshot_preview1`: no files (no directory is preopened), no
+//! sockets, no arguments, no environment; fd 1 is discarded and fd 2 kept
+//! to name a failure. Any other import refuses the library.
+//!
+//! **What the host takes** from a guest at once (an answer, a write-back,
+//! a request) is at most [`crate::budget::UNLIMITED`] bytes, or the memory
+//! limit when one is set, and decodes to no more than that; maps whose
+//! keys squared add up past [`crate::budget::MAP_WORK`] are refused.
 //!
 //! **A call.** `object` is 0 for a provider, `target` its position in the
 //! declaration; 1 for an object the guest answered, `target` its id. The
@@ -143,10 +150,9 @@ pub(crate) fn request<'a>(
     Ok(out)
 }
 
-/// A request a guest sent [`import::OBJECT_CALL`]: its method and
-/// arguments.
-pub(crate) fn read_request(bytes: &[u8]) -> Result<(String, Vec<Value>), String> {
-    let value = wire::decode(bytes).map_err(|e| format!("the request is not a value: {e}"))?;
+/// A request a guest sent [`import::OBJECT_CALL`], decoded: its method
+/// and arguments.
+pub(crate) fn read_request(value: Value) -> Result<(String, Vec<Value>), String> {
     let list = List::try_from(value)
         .map_err(|_| "the request is not a list `[method, arg...]`".to_string())?;
     let mut items = list.into_iter();
@@ -182,8 +188,11 @@ fn texts(value: &Value, what: &str) -> Result<Vec<String>, String> {
 pub const MOST_PROVIDERS: usize = 4096;
 
 /// The providers a declaration names, in order.
-pub(crate) fn read_declaration(bytes: &[u8]) -> Result<Vec<Declared>, String> {
-    let value = wire::decode(bytes).map_err(|e| format!("the declaration is not a value: {e}"))?;
+pub(crate) fn read_declaration(bytes: &[u8], budget: u64) -> Result<Vec<Declared>, String> {
+    let value = crate::budget::decode(bytes, budget).map_err(|e| match e {
+        crate::budget::Undecoded::Refused(refused) => refused.words("the declaration"),
+        crate::budget::Undecoded::Malformed(e) => format!("the declaration is not a value: {e}"),
+    })?;
     let map: &Map =
         TryAsRef::try_as_ref(&value).ok_or_else(|| "the declaration is not a map".to_string())?;
     let providers: &List = map
@@ -287,7 +296,7 @@ mod tests {
         declaration.set("providers", providers);
         let bytes = wire::to_bytes(&Value::from(declaration.clone())).expect("encoded");
         assert_eq!(
-            read_declaration(&bytes).expect("read"),
+            read_declaration(&bytes, 1 << 20).expect("read"),
             [Declared {
                 id: "hello".into(),
                 name: "hello".into(),
@@ -301,17 +310,17 @@ mod tests {
         declaration.set("providers", twice);
         let bytes = wire::to_bytes(&Value::from(declaration)).expect("encoded");
         assert_eq!(
-            read_declaration(&bytes).unwrap_err(),
+            read_declaration(&bytes, 1 << 20).unwrap_err(),
             "two providers are declared `hello`"
         );
         assert!(
-            read_declaration(&[0xff])
+            read_declaration(&[0xff], 1 << 20)
                 .unwrap_err()
                 .contains("not a value")
         );
         let empty = wire::to_bytes(&Value::from(Map::new())).expect("encoded");
         assert!(
-            read_declaration(&empty)
+            read_declaration(&empty, 1 << 20)
                 .unwrap_err()
                 .contains("`providers`")
         );
