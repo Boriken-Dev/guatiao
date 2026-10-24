@@ -13,9 +13,41 @@ const CORE: &str = include_str!("prelude/core.js");
 /// The name the script stores its object under, as `Symbol.for` spells it.
 const KEY: &str = "guatiao.core";
 
+/// The most items of a list, and bytes of a buffer, a script may make a
+/// value of or ask a host for: what a runtime's memory limit could hold,
+/// since the copies are made on the Rust heap, outside that limit.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Bounds {
+    pub(crate) items: usize,
+    pub(crate) bytes: usize,
+}
+
+/// Without a memory limit.
+const MOST_ITEMS: usize = 1 << 24;
+const MOST_BYTES: usize = 64 << 20;
+
+impl Bounds {
+    /// What `memory` (bytes, or none) allows: a list item takes at least
+    /// 16 bytes of QuickJS's memory.
+    pub(crate) fn of(memory: Option<u64>) -> Bounds {
+        match memory.map(|m| usize::try_from(m).unwrap_or(usize::MAX)) {
+            None => Bounds {
+                items: MOST_ITEMS,
+                bytes: MOST_BYTES,
+            },
+            Some(m) => Bounds {
+                items: (m / 16).clamp(1024, MOST_ITEMS),
+                bytes: m.min(MOST_BYTES),
+            },
+        }
+    }
+}
+
 /// The script's object: the classes and functions Rust needs from it.
 pub(crate) struct Core<'js> {
     pub(crate) ctx: Ctx<'js>,
+    pub(crate) handle_key: Symbol<'js>,
+    pub(crate) bounds: Bounds,
     pub(crate) exact: Constructor<'js>,
     pub(crate) guatiao_error: Constructor<'js>,
     pub(crate) provider: Constructor<'js>,
@@ -27,13 +59,17 @@ fn key<'js>(ctx: &Ctx<'js>) -> Result<Symbol<'js>> {
     Symbol::new_global(ctx.clone(), KEY)
 }
 
-/// Gives `ctx` the script and a `console`, once.
-pub(crate) fn install(ctx: &Ctx<'_>) -> Result<()> {
+/// Gives `ctx` the script and a `console`, once, and the bounds a value
+/// made in it is held to.
+pub(crate) fn install(ctx: &Ctx<'_>, bounds: Bounds) -> Result<()> {
     let globals = ctx.globals();
     if globals.contains_key(key(ctx)?)? {
         return Ok(());
     }
     ctx.eval::<(), _>(CORE)?;
+    let object: Object<'_> = globals.get(key(ctx)?)?;
+    object.set("maxItems", bounds.items as f64)?;
+    object.set("maxBytes", bounds.bytes as f64)?;
     console(ctx, &globals)
 }
 
@@ -41,8 +77,14 @@ pub(crate) fn install(ctx: &Ctx<'_>) -> Result<()> {
 pub(crate) fn core<'js>(ctx: &Ctx<'js>) -> Result<Core<'js>> {
     let object: Object<'js> = ctx.globals().get(key(ctx)?)?;
     let object_ctor: Object<'js> = ctx.globals().get("Object")?;
+    let bound = |name: &str| -> Result<usize> { Ok(object.get::<_, f64>(name)? as usize) };
     Ok(Core {
         ctx: ctx.clone(),
+        handle_key: object.get("handleKey")?,
+        bounds: Bounds {
+            items: bound("maxItems")?,
+            bytes: bound("maxBytes")?,
+        },
         exact: object.get("ExactNumber")?,
         guatiao_error: object.get("GuatiaoError")?,
         provider: object.get("Provider")?,

@@ -171,7 +171,7 @@ pub(crate) fn outcome<'js>(
     Ok(match slot.answer() {
         None => Outcome::Nothing,
         Some(AnswerType::Object { kind }) => {
-            if let Some(handle) = host::handle_of(ctx, shared, &returned) {
+            if let Some(handle) = host::handle_of(ctx, core, shared, &returned) {
                 return Ok(Outcome::Handed(host::take_object(&handle, kind)?));
             }
             let Some(object) = returned.into_object() else {

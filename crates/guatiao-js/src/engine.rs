@@ -25,11 +25,11 @@ use rquickjs::{
 };
 
 use crate::errors::{self, Words};
-use crate::frame::{Entry, Frames};
+use crate::frame::{self, Entry, Frames};
 use crate::host::{self, Shared};
 use crate::limits::Meter;
 use crate::modules::{self, Load, Resolve, Roots};
-use crate::prelude::{self, Core};
+use crate::prelude::{self, Bounds, Core};
 use crate::served::{self, Outcome, ReadBack};
 use crate::values;
 
@@ -54,6 +54,11 @@ pub struct JsEngine {
     frames: Frames,
     libraries: RefCell<BTreeMap<u64, Rc<Library>>>,
     next: Cell<u64>,
+    /// Objects released while a frame was open: their cleanup is script,
+    /// which may not run inside another script's frame, so it waits.
+    deferred: RefCell<Vec<(u64, u64)>>,
+    /// A collection a closed library asked for while a frame was open.
+    collect_due: Cell<bool>,
     /// Last, so that it outlives everything that holds a value in it.
     runtime: Runtime,
 }
@@ -104,16 +109,20 @@ fn package_in(dir: &Path) -> Result<Option<Map>, BridgeError> {
 }
 
 /// The file a package's `exports` (or `main`) names for its entry, as
-/// Node picks it: a string, `.` of a map of subpaths, or conditions.
+/// Node picks it for an `import`: a string, `.` of a map of subpaths, or
+/// the first condition, in the order the package lists them, that an
+/// import meets (`import`, `node`, `module-sync`, `default`; never
+/// `require`).
 fn entry_of(package: &Map) -> Option<String> {
     fn pick(target: &guatiao::Value) -> Option<String> {
         if let Some(text) = TryAsRef::<str>::try_as_ref(target) {
             return Some(text.to_string());
         }
         let conditions: &Map = TryAsRef::try_as_ref(target)?;
-        ["import", "node", "default", "require"]
+        conditions
             .iter()
-            .find_map(|key| conditions.get(key).and_then(pick))
+            .filter(|c| ["import", "node", "module-sync", "default"].contains(&c.key()))
+            .find_map(|c| pick(c.value()))
     }
     match package.get("exports") {
         Some(exports) if exports.tag() != Ok(guatiao::Tag::GUATIAO_NULL) => {
@@ -162,8 +171,73 @@ fn escape(e: rquickjs::Error) -> BridgeError {
 impl JsEngine {
     /// The bytes QuickJS holds for every library open: what a host watching
     /// a source (`BridgeSource::run`) compares across refreshes.
+    /// Asked from inside a call, when the runtime cannot be looked at, it
+    /// is 0.
     pub fn memory_used(&self) -> u64 {
+        if self.frames.inside() {
+            return 0;
+        }
         u64::try_from(self.runtime.memory_usage().malloc_size).unwrap_or(0)
+    }
+
+    /// Runs `f` in `entry`'s context; when it is the outermost frame that
+    /// returns, everything that had to wait for no script to be running is
+    /// done: objects destroyed, objects released, a collection.
+    fn enter<R>(&self, entry: &Entry, f: impl for<'js> FnOnce(Ctx<'js>) -> R) -> R {
+        let answer = self.frames.enter(entry, f);
+        if !self.frames.inside() {
+            self.settle();
+        }
+        answer
+    }
+
+    /// What waited for no frame to be open. Destroying an object can run
+    /// the cleanup of one a library serves, and releasing one does; so
+    /// can a collection, by freeing handles, which queues more.
+    fn settle(&self) {
+        loop {
+            let dead = self.shared.take_graveyard();
+            let released = core::mem::take(&mut *self.deferred.borrow_mut());
+            let collect = self.collect_due.replace(false);
+            if dead.is_empty() && released.is_empty() && !collect {
+                break;
+            }
+            drop(dead);
+            for (library, object) in released {
+                self.release_now(library, object);
+            }
+            if collect {
+                self.runtime.run_gc();
+            }
+        }
+    }
+
+    fn release_now(&self, handle: u64, object: u64) {
+        let Ok(lib) = self.library(handle) else {
+            return;
+        };
+        let Some(gone) = lib.objects.borrow_mut().remove(&object) else {
+            return;
+        };
+        let _ = self.meter.run::<(), BridgeError>(|| {
+            self.enter(&lib.entry, |ctx| {
+                let dispose = || -> rquickjs::Result<()> {
+                    let object = gone.restore(&ctx)?;
+                    let symbol: Object<'_> = ctx.globals().get("Symbol")?;
+                    if let Some(key) = symbol.get::<_, Option<Symbol<'_>>>("dispose")?
+                        && let Some(f) = object.get::<_, Option<Function<'_>>>(key.as_atom())?
+                    {
+                        f.call::<_, Js<'_>>((rquickjs::function::This(object.clone()),))?;
+                    }
+                    Ok(())
+                };
+                if dispose().is_err() {
+                    let _ = ctx.catch();
+                }
+                self.run_jobs(&ctx);
+                Ok(())
+            })
+        });
     }
 
     fn library(&self, handle: u64) -> Result<Rc<Library>, ProviderError> {
@@ -178,10 +252,20 @@ impl JsEngine {
         self.shared.words
     }
 
-    /// Runs the jobs a call queued (promise reactions), until none are
-    /// left or a limit stopped the call.
+    /// Runs the jobs a call queued (promise reactions) until none are
+    /// left. The queue is the runtime's, so once a limit has stopped the
+    /// call what is left must die with it: QuickJS has no way to empty the
+    /// queue, so the jobs run with no memory to make another with, and the
+    /// interrupt still stopping any that loops.
     fn run_jobs(&self, ctx: &Ctx<'_>) {
-        while !self.meter.stopped() && ctx.execute_pending_job() {}
+        while ctx.execute_pending_job() {
+            if self.meter.stopped() {
+                frame::set_memory_limit(ctx, 1);
+                while ctx.execute_pending_job() {}
+                frame::set_memory_limit(ctx, self.meter.memory());
+                return;
+            }
+        }
     }
 
     /// Calls the slot `call` names on `receiver`: arguments converted for
@@ -218,9 +302,14 @@ impl JsEngine {
             .apply(&function)
             .map_err(|e| errors::caught(ctx, Some(&core), &e, words))?;
         self.run_jobs(ctx);
+        if self.meter.stopped() {
+            return Err(ProviderError::new(
+                Status::GUATIAO_ERR_INTERNAL,
+                "stopped while its reactions ran",
+            ));
+        }
 
-        for ((arg, described), back) in call.args.iter_mut().zip(slot.args()).zip(&received) {
-            let _ = described;
+        for (arg, back) in call.args.iter_mut().zip(&received) {
             match served::read_back(ctx, &core, &self.shared, back)? {
                 Some(ReadBack::Tree(v)) => *arg = guatiao_bridge::CallArg::Lent(v),
                 Some(ReadBack::Bytes(b)) => *arg = guatiao_bridge::CallArg::Buffer(b),
@@ -259,7 +348,7 @@ impl JsEngine {
                 words_of(errors::caught(ctx, None, &e, words))
             ))
         };
-        prelude::install(ctx).map_err(failed)?;
+        prelude::install(ctx, Bounds::of(words.memory)).map_err(failed)?;
         let core = prelude::core(ctx).map_err(failed)?;
         let promise = Module::import(ctx, entry.display().to_string()).map_err(failed)?;
         let namespace: Object<'js> = match promise.finish() {
@@ -312,6 +401,9 @@ impl JsEngine {
             providers.insert(key, Persistent::save(ctx, instance));
         }
         self.run_jobs(ctx);
+        if self.meter.stopped() {
+            return Err(BridgeError::engine(format!("{id}: stopped while loading")));
+        }
         Ok((offered, providers))
     }
 
@@ -515,6 +607,8 @@ impl Engine for JsEngine {
             frames: Frames::default(),
             libraries: RefCell::new(BTreeMap::new()),
             next: Cell::new(0),
+            deferred: RefCell::new(Vec::new()),
+            collect_due: Cell::new(false),
             runtime,
         })
     }
@@ -563,8 +657,8 @@ impl Engine for JsEngine {
         let context = Context::full(&self.runtime).map_err(escape)?;
         let raw = context.with(|ctx| ctx.as_raw());
         let entry_point = Entry::new(context, raw);
-        let (offered, providers) = self.meter.run(|| {
-            self.frames.enter(&entry_point, |ctx| {
+        let loaded = self.meter.run(|| {
+            self.enter(&entry_point, |ctx| {
                 self.roots.allow(&ctx, paths);
                 let loaded = self.load(&ctx, manifest, &entry);
                 if loaded.is_err() {
@@ -572,7 +666,16 @@ impl Engine for JsEngine {
                 }
                 loaded
             })
-        })?;
+        });
+        let (offered, providers) = match loaded {
+            Ok(loaded) => loaded,
+            Err(e) => {
+                drop(entry_point);
+                self.collect_due.set(true);
+                self.settle();
+                return Err(e);
+            }
+        };
         let handle = self.next.get() + 1;
         self.next.set(handle);
         self.libraries.borrow_mut().insert(
@@ -603,7 +706,7 @@ impl Engine for JsEngine {
             )
         })?;
         self.meter.run(|| {
-            self.frames.enter(&lib.entry, |ctx| {
+            self.enter(&lib.entry, |ctx| {
                 let receiver = receiver
                     .restore(&ctx)
                     .map_err(|e| errors::caught(&ctx, None, &e, self.words()))?;
@@ -612,41 +715,76 @@ impl Engine for JsEngine {
         })
     }
 
-    /// The object goes; its `Symbol.dispose`, if it has one, runs first.
+    /// The object goes; its `Symbol.dispose`, if it has one, runs first,
+    /// when no script is running.
     fn release(&self, handle: &u64, object: u64) {
-        let Ok(lib) = self.library(*handle) else {
-            return;
-        };
-        let Some(gone) = lib.objects.borrow_mut().remove(&object) else {
-            return;
-        };
-        let _ = self.meter.run::<(), BridgeError>(|| {
-            self.frames.enter(&lib.entry, |ctx| {
-                let dispose = || -> rquickjs::Result<()> {
-                    let object = gone.restore(&ctx)?;
-                    let symbol: Object<'_> = ctx.globals().get("Symbol")?;
-                    if let Some(key) = symbol.get::<_, Option<Symbol<'_>>>("dispose")?
-                        && let Some(f) = object.get::<_, Option<Function<'_>>>(key.as_atom())?
-                    {
-                        f.call::<_, Js<'_>>((rquickjs::function::This(object.clone()),))?;
-                    }
-                    Ok(())
-                };
-                if dispose().is_err() {
-                    let _ = ctx.catch();
-                }
-                self.run_jobs(&ctx);
-                Ok(())
-            })
-        });
+        if self.frames.inside() {
+            self.deferred.borrow_mut().push((*handle, object));
+        } else {
+            self.release_now(*handle, object);
+        }
     }
 
     fn close(&self, handle: u64) {
         let Some(lib) = self.libraries.borrow_mut().remove(&handle) else {
             return;
         };
-        self.frames.enter(&lib.entry, |ctx| self.roots.forget(&ctx));
+        self.enter(&lib.entry, |ctx| self.roots.forget(&ctx));
         drop(lib);
-        self.runtime.run_gc();
+        self.collect_due.set(true);
+        if !self.frames.inside() {
+            self.settle();
+        }
+    }
+}
+
+impl Drop for JsEngine {
+    /// The libraries go, and what their handles held is destroyed, before
+    /// the runtime does.
+    fn drop(&mut self) {
+        self.libraries.borrow_mut().clear();
+        self.deferred.borrow_mut().clear();
+        self.collect_due.set(true);
+        self.settle();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn package(json: &str) -> Map {
+        let value = guatiao_serde::text::json::from_str(
+            json,
+            Alloc::rust(),
+            guatiao_serde::Presentation::new(),
+        )
+        .expect("JSON");
+        Map::try_from(value).expect("a map")
+    }
+
+    #[test]
+    fn an_entry_is_picked_as_node_picks_it_for_an_import() {
+        let entry = |json: &str| entry_of(&package(json));
+        assert_eq!(entry(r#"{"exports": "./a.js"}"#).as_deref(), Some("./a.js"));
+        assert_eq!(entry(r#"{"main": "m.js"}"#).as_deref(), Some("m.js"));
+        assert_eq!(entry("{}").as_deref(), Some("index.js"));
+        assert_eq!(
+            entry(r#"{"exports": {".": "./dot.js", "./x": "./x.js"}}"#).as_deref(),
+            Some("./dot.js")
+        );
+        assert_eq!(entry(r#"{"exports": {"./x": "./x.js"}}"#), None);
+        // The first condition an import meets, in the package's order.
+        assert_eq!(
+            entry(r#"{"exports": {"require": "./r.js", "default": "./d.js", "import": "./i.js"}}"#)
+                .as_deref(),
+            Some("./d.js")
+        );
+        assert_eq!(
+            entry(r#"{"exports": {".": {"types": "./t.d.ts", "node": {"require": "./r.js", "import": "./ni.js"}, "import": "./i.js"}}}"#)
+                .as_deref(),
+            Some("./ni.js")
+        );
+        assert_eq!(entry(r#"{"exports": {"require": "./r.js"}}"#), None);
     }
 }

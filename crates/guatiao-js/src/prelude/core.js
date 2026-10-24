@@ -204,7 +204,12 @@
   };
   const kindOf = (description) => kindsOf({ format: 1, kinds: [description] })[description.name];
 
+  // Where a handle keeps its identity. Not a registered symbol: no script
+  // can name it without holding this object.
+  const handleKey = Symbol('guatiao.handle');
+
   globalThis[Symbol.for('guatiao.core')] = {
+    handleKey,
     Status,
     GuatiaoError,
     BadValue,

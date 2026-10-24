@@ -476,9 +476,20 @@ fn spin() -> String {
         "{}{}",
         preamble(),
         r#"
+let ticks = 0;
 export class Spin extends Provider {
   static kinds = [Greeter];
   greet(name) {
+    if (name === 'peek') return { greeting: String(ticks) };
+    if (name === 'spawn') {
+      // Two chains, each job queueing two more.
+      const again = () => { ticks++; Promise.resolve().then(again); Promise.resolve().then(again); };
+      again();
+      return { greeting: 'spawned' };
+    }
+    if (name === 'holes') return { greeting: new Array(20000000) };
+    if (name === 'huge') return { greeting: new Array(2 ** 32 - 1) };
+    if (name === 'detached') { const a = new Uint8Array(4); a.buffer.transfer(); return { greeting: a }; }
     if (name === 'loop') while (true) {}
     if (name === 'stubborn') {
       while (true) { try { while (true) {} } catch (e) {} finally { while (true) {} } }
@@ -523,10 +534,11 @@ fn runaway_code_is_stopped_at_its_limits_and_the_host_carries_on() {
         "a try around the stopped code does not keep it running"
     );
 
-    // The answer stands; the reactions the call queued run after it, under
-    // the same limits, and are stopped there.
+    // The reactions the call queued run after its answer, under the same
+    // limits: the call is the one that was stopped.
     let started = std::time::Instant::now();
-    assert_eq!(greeting(&spin.greet("jobs").expect("answered")), "queued");
+    let jobs = spin.greet("jobs").unwrap_err();
+    assert_eq!(jobs.message(), "stopped at its operations limit (200000)");
     assert!(
         started.elapsed() < core::time::Duration::from_secs(5),
         "promise reactions that queue themselves are stopped"
@@ -547,6 +559,131 @@ fn runaway_code_is_stopped_at_its_limits_and_the_host_carries_on() {
         greeting(&spin.greet("after").expect("the runtime carries on")),
         "calm, after"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn reactions_a_stopped_call_queued_die_with_it() {
+    let dir = scratch("jobs");
+    put(&dir, "js_jobs", "version = \"1.0.0\"\n", &spin());
+    let mut registry = serving(&config(&dir, Some(limits(&[("operations", 200_000)]))));
+    assert!(registry.refresh().refused.is_empty());
+    let spin = greeter(&registry, "js_jobs_spin");
+    let ticks = |spin: &Arc<dyn Greeter>| -> String {
+        greeting(&spin.greet("peek").expect("peeked")).to_string()
+    };
+    let stopped = spin.greet("spawn").unwrap_err();
+    assert_eq!(
+        stopped.message(),
+        "stopped at its operations limit (200000)",
+        "the call that left the chains running is the one stopped"
+    );
+    let after = ticks(&spin);
+    for _ in 0..3 {
+        assert_eq!(
+            greeting(&spin.greet("calm").expect("answers")),
+            "calm, calm"
+        );
+    }
+    assert_eq!(
+        ticks(&spin),
+        after,
+        "no reaction of the stopped call ran in the calls after it"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn lists_and_buffers_a_script_makes_are_bounded_by_the_memory_limit() {
+    let dir = scratch("holes");
+    put(&dir, "js_holes", "version = \"1.0.0\"\n", &spin());
+    let mut registry = serving(&config(
+        &dir,
+        Some(limits(&[("memory", 16 * 1024 * 1024), ("time_ms", 50)])),
+    ));
+    assert!(registry.refresh().refused.is_empty());
+    let spin = greeter(&registry, "js_holes_spin");
+    for name in ["holes", "huge"] {
+        let started = std::time::Instant::now();
+        let refused = spin.greet(name).unwrap_err();
+        assert!(
+            refused.message().contains("items"),
+            "{name}: {}",
+            refused.message()
+        );
+        assert!(
+            started.elapsed() < core::time::Duration::from_secs(2),
+            "{name} took {:?}",
+            started.elapsed()
+        );
+    }
+    assert_eq!(
+        greeting(&spin.greet("after").expect("carries on")),
+        "calm, after"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_detached_buffer_does_not_break_the_next_library() {
+    let dir = scratch("detached");
+    put(&dir, "js_detached", "version = \"1.0.0\"\n", &spin());
+    let mut registry = serving(&config(&dir, None));
+    assert!(registry.refresh().refused.is_empty());
+    let spin = greeter(&registry, "js_detached_spin");
+    // The bytes of a detached array are none; the answer is still a map.
+    assert!(spin.greet("detached").is_ok());
+    put(&dir, "js_next", "version = \"1.0.0\"\n", &spin_code_plain());
+    let changed = registry.refresh();
+    assert!(
+        changed.refused.is_empty() && changed.loaded.iter().any(|l| l.id == "js_next"),
+        "an unrelated library opens: {changed:?}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn spin_code_plain() -> String {
+    format!(
+        "{}export class Plain extends Provider {{ static kinds = [Greeter]; greet() {{ return {{ greeting: 'plain' }}; }} }}\n",
+        preamble()
+    )
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_out_of_the_paths_does_not_lead_out() {
+    let dir = scratch("links");
+    let lib = dir.join("lib");
+    std::fs::create_dir_all(&lib).expect("made");
+    std::fs::write(dir.join("outside.js"), "export const X = 1;\n").expect("written");
+    std::fs::write(lib.join("inside.js"), "export const Y = 2;\n").expect("written");
+    std::os::unix::fs::symlink("../outside.js", lib.join("leads_out.js")).expect("linked");
+    std::os::unix::fs::symlink("inside.js", lib.join("stays_in.js")).expect("linked");
+    for (id, imports) in [("js_leads_out", "leads_out"), ("js_stays_in", "stays_in")] {
+        put(
+            &lib,
+            id,
+            "version = \"1.0.0\"\n",
+            &format!(
+                "{}import './{imports}.js';\nexport class P extends Provider {{ static kinds = [Greeter]; greet() {{ return {{ greeting: 'ok' }}; }} }}\n",
+                preamble()
+            ),
+        );
+    }
+    let mut registry = serving(&config(&dir, None));
+    let changed = registry.refresh();
+    let refused: Vec<_> = changed
+        .refused
+        .iter()
+        .filter_map(|r| r.id.as_deref())
+        .collect();
+    assert_eq!(refused, ["js_leads_out"], "{changed:?}");
+    assert!(
+        changed.refused[0].reason.contains("outside the paths"),
+        "{}",
+        changed.refused[0].reason
+    );
+    assert_eq!(changed.loaded.len(), 1, "{changed:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

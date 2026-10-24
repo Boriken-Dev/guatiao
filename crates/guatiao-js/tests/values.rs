@@ -234,3 +234,26 @@ fn a_conversion_leaves_no_exception_pending() {
         assert!(!ctx.has_exception());
     });
 }
+
+#[test]
+fn a_detached_buffer_reads_as_no_bytes_and_leaves_no_exception_pending() {
+    with_values(|ctx, values| {
+        let v = from_js(
+            ctx,
+            values,
+            "(() => { const a = new Uint8Array(4); a.buffer.transfer(); return a; })()",
+        )
+        .expect("bytes");
+        assert_eq!(TryAsRef::<[u8]>::try_as_ref(&v), Some(&[][..]));
+        assert!(!ctx.has_exception());
+        // A detached ArrayBuffer is no buffer to QuickJS, so it is refused;
+        // asking leaves nothing pending either.
+        let refused = from_js(
+            ctx,
+            values,
+            "(() => { const b = new ArrayBuffer(4); b.transfer(); return b; })()",
+        );
+        assert!(refused.is_err());
+        assert!(!ctx.has_exception());
+    });
+}

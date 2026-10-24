@@ -82,7 +82,7 @@ pub(crate) fn integer_to_js<'js>(ctx: &Ctx<'js>, text: &str) -> Result<Js<'js>, 
 }
 
 /// A JavaScript number holding `f`; an int where it fits one.
-fn number<'js>(ctx: &Ctx<'js>, f: f64) -> Js<'js> {
+pub(crate) fn number<'js>(ctx: &Ctx<'js>, f: f64) -> Js<'js> {
     if f == 0.0 && f.is_sign_negative() {
         // `new_number` would make it the integer 0.
         return Js::new_float(ctx.clone(), f);
@@ -267,9 +267,19 @@ fn to_value_at<'js>(
         }
         Type::Array => {
             let array = v.as_array().expect("typed as an array");
+            // Holes cost QuickJS nothing, and a list of them costs the Rust
+            // heap, which no memory limit watches.
+            // `Array::len` asserts the length is an int, which 2^32 - 1 is not.
+            let length: f64 = array.as_object().get("length")?;
+            if length > core.bounds.items as f64 {
+                return refuse(format!(
+                    "a list of {length} items is more than the {} this source converts",
+                    core.bounds.items
+                ));
+            }
             enter(array.as_object(), ancestors)?;
             let mut list = List::new();
-            for i in 0..array.len() {
+            for i in 0..length as usize {
                 let item: Js<'js> = array.get(i)?;
                 list.push(to_value_at(core, &item, depth + 1, ancestors)?);
             }
@@ -406,7 +416,7 @@ impl<'js> JsValues<'js> {
     /// Conversions in `ctx`, which is given what a library is (the
     /// `guatiao` script) if it has not got it yet.
     pub fn new(ctx: &Ctx<'js>) -> rquickjs::Result<JsValues<'js>> {
-        prelude::install(ctx)?;
+        prelude::install(ctx, prelude::Bounds::of(None))?;
         Ok(JsValues { ctx: ctx.clone() })
     }
 }
