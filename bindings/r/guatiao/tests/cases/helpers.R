@@ -72,11 +72,11 @@ r_cmd <- function() file.path(R.home("bin"), if (.Platform$OS.type == "windows")
 # `file` names the output when a scan must find it: a scan probes only
 # files with the platform's own library extension (`.dylib` on macOS,
 # where R's own is `.so`).
-build_c <- function(source, dir, name, includes = character(), libs = "", file = NULL) {
+build_c <- function(source, dir, name, includes = character(), libs = "", file = NULL, defines = character()) {
   out <- file.path(dir, if (is.null(file)) paste0(name, .Platform$dynlib.ext) else file)
   incs <- c(repo_file("crates", "guatiao", "include"), repo_file("examples", "greeter_kind", "include"), includes)
   env <- c(sprintf("PKG_CPPFLAGS=%s", paste(sprintf("-I\"%s\"", incs), collapse = " ")),
-    "PKG_CFLAGS=-Wall -Wextra -Werror",
+    paste(c("PKG_CFLAGS=-Wall -Wextra -Werror", sprintf("-D%s", defines)), collapse = " "),
     sprintf("PKG_LIBS=%s %s", if (Sys.info()[["sysname"]] == "Linux") "-lpthread" else "", libs))
   src <- file.path(dir, basename(source))
   file.copy(source, src, overwrite = TRUE)
@@ -138,10 +138,12 @@ with_examples <- function(code) {
 # An absent greeter is a stated skip, which GUATIAO_REQUIRE_ALL=1 fails.
 absent_greeter <- function(which, why) skip_case(sprintf("the %s greeter: %s", which, why))
 
-# The greeter written in C, built into a directory of its own; NULL without a compiler.
-build_c_greeter <- function() {
+# The greeter written in C, built into a directory of its own, with -D for
+# each of `defines`; NULL without a compiler.
+build_c_greeter <- function(defines = character()) {
   dir <- scratch("c-greeter")
-  if (is.null(build_c(file.path(C_CONSUMER, "greeter_in_c.c"), dir, "c_greeter", file = lib_file("c_greeter")))) NULL else dir
+  built <- build_c(file.path(C_CONSUMER, "greeter_in_c.c"), dir, "c_greeter", file = lib_file("c_greeter"), defines = defines)
+  if (is.null(built)) NULL else dir
 }
 
 build_c_source <- function(name) build_c(file.path(C_CONSUMER, "source_in_c.c"), scratch("c-shelf"), name)
