@@ -56,12 +56,23 @@ if(CPP_HOST_TESTS)
     "CPP_GREETER_DIR=\"${cpp_greeter_dir}\"")
   add_dependencies(test_greeters cpp_greeter c_greeter)
   add_test(NAME cpp_host_greeters COMMAND test_greeters)
+
+  # 64-bit integers through the wide kind: Rust, C and a provider written here.
+  add_executable(test_wide test/test_wide.cpp)
+  target_include_directories(test_wide PRIVATE ${kinds_include})
+  target_link_libraries(test_wide PRIVATE guatiao::guatiao ${CMAKE_DL_LIBS})
+  target_compile_definitions(test_wide PRIVATE
+    "RUST_GREETERS_DIR=\"${guatiao_native_core_DIRECTORY}\""
+    "C_GREETER_DIR=\"${c_greeter_dir}\"")
+  add_dependencies(test_wide c_greeter)
+  add_test(NAME cpp_host_wide COMMAND test_wide)
+
   guatiao_runtime_dirs(runtime_dirs)
   if(WIN32)
     set(path_mods "")
     foreach(dir IN LISTS runtime_dirs)
       list(APPEND path_mods "PATH=path_list_prepend:${dir}")
     endforeach()
-    set_tests_properties(cpp_host_greeters PROPERTIES ENVIRONMENT_MODIFICATION "${path_mods}")
+    set_tests_properties(cpp_host_greeters cpp_host_wide PROPERTIES ENVIRONMENT_MODIFICATION "${path_mods}")
   endif()
 endif()
