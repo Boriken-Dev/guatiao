@@ -401,6 +401,19 @@ function raiseCheck(status: number): void {
   if (status !== Status.OK) throw errorFor(status);
 }
 
+/** Whether the core moves a tree home: a library older than `guatiao_value_make_local` leaves one as a slot built it. */
+function makesLocal(): boolean {
+  return !n.core().missing.has('guatiao_value_make_local');
+}
+
+/**
+ * The tree at `node`, moved where it stands into `alloc`, so it outlives
+ * the library: a slot that ignored the carrier built it in its own.
+ */
+function makeLocal(node: bigint, alloc: bigint): number {
+  return n.core().fn.guatiao_value_make_local!(node, alloc);
+}
+
 /** Fills a `guatiao_provider_error *` with `status` and owned `message`. */
 function writeErr(err: bigint | null, status: number, message: string): void {
   if (!err) return;
@@ -740,7 +753,10 @@ class Tree extends ShapeImpl {
         throw new TypeError(`${this.toString()} takes a Value or a Ref, so what the callee changes has somewhere to go`);
       }
       value.owner.checkWritable();
-      return this.#arm(value.requireNode());
+      const node = value.requireNode();
+      // What the callee grew it with may be in its library's allocator.
+      if (makesLocal()) scope.after(() => void makeLocal(node, recordedAlloc(node)));
+      return this.#arm(node);
     }
     // Handed over: given up now; freed if the call never happens.
     const node = scope.own(ownedTree(value, this.tag, binding()));
@@ -761,7 +777,16 @@ class Tree extends ShapeImpl {
   }
 
   override answer(out: bigint): unknown {
-    return adopt(this.#nodeOver(out, n.alloc(SIZE.value)), binding());
+    const node = this.#nodeOver(out, n.alloc(SIZE.value));
+    if (makesLocal()) {
+      const status = makeLocal(node, binding());
+      if (status !== Status.OK) {
+        n.freeNode(node);
+        n.release(node);
+        throw errorFor(status, "moving the answer into this binding's allocator");
+      }
+    }
+    return adopt(node, binding());
   }
 
   // -- the callee
