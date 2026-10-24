@@ -17,6 +17,8 @@ public surface); this file is about the repository.
 | `crates/guatiao-bridge/` | what every bridge to a language runtime shares: the `Engine` trait and its thread, manifests and stamps, `BridgeSource` (an engine as a `Source`), kinds served through tables built from their descriptions by the mechanism a source is given (`with_mechanism`), limits, error mapping, `Convert` and the shared vectors (`vectors/wire.json`, a copy of the core's); `#![forbid(unsafe_code)]`, published; `tests/toy_engine.rs` serves a toy language through every piece |
 | `crates/guatiao-libffi/` | `Libffi`, libffi as the `Mechanism` core's run-time kind tables are built on (`library/kind/runtime.rs`): a call interface per slot signature, a closure per served slot, `ffi_call` per call; builds libffi from C, not on wasm32; published; `tests/described_kinds.rs` (with the C caller `tests/c_consumer/described_caller.c`) and `tests/closures.rs` run the tables through it natively, while core's own tests run them under Miri through a mechanism with no foreign code |
 | `crates/guatiao-py/` | a source of libraries written in Python: a cdylib exporting `guatiao_source`, built with pyo3 for the stable ABI; a workspace of its own (no other build needs a Python to link), not published |
+| `crates/guatiao-wasm/` | a source of libraries compiled to WebAssembly: a cdylib exporting `guatiao_source` over a wasmtime engine (`ThreadModel::Locked`, a store per library), guatiao ABI 1 in `src/abi.rs`, a WASI preview-1 shim granting stdio, a clock and randomness; `guest/` is `guatiao-wasm-guest` (Rust guests, `wasm32-unknown-unknown`) and `guest-go/` the Go guest package (`wasip1` reactors); each its own workspace or module, not published; `tests/guests.rs` runs hand-written modules, `tests/source.rs` both example guests from a Rust and a C host |
+| `examples/wasm_greeter_rust/`, `examples/wasm_greeter_go/` | greeters in Rust and in Go compiled to WebAssembly, each beside its `*.guatiao-wasm.toml`; built by `crates/guatiao-wasm`'s tests |
 | `examples/source_library/` | a source written in Rust and exported with `guatiao::source!`: a Rust host and a C host add it in `crates/guatiao/tests/source_export.rs` |
 | `examples/hello_library/` | a real cdylib the test suite builds and loads, its envelope written by hand |
 | `examples/greeter_kind/` | a kind as a trait: what a host and a library both compile against; `include/greeter_kind.kinds.json` is the same kinds as data, written by its `description_is_current` test; `python/greeter_kind.py` describes them for Python; `node/` is what `guatiao-kind` writes from the description (`greeter_kind.js` and `.d.ts`; the Node suite checks it is current); `dart/` is the Dart package `greeter_kind`, its `lib/greeter_kind.dart` what `dart run guatiao:kind` writes from the description (the Dart suite checks it is current); `go/` is the Go package of its kinds, their glue written by `guatiao-kind` (`go generate`); `julia/GreeterKind` declares them for Julia with `@kind`; `r/greeterkind` is the R package declaring them with `kind()`; `matlab/+greeterkind` declares them for MATLAB and Octave as classes inheriting `guatiao.Kind`; `fortran/` is the fpm package `greeter_kind`, the kinds as abstract types with their remotes and `bind(c)` glue |
@@ -331,6 +333,16 @@ must be on `PATH` for a host that is not Python:
 ```bash
 PYO3_PYTHON=python3 cargo build --manifest-path crates/guatiao-py/Cargo.toml
 GUATIAO_LIBRARY=target/debug cargo test --manifest-path crates/guatiao-py/Cargo.toml
+```
+
+The WebAssembly source, its Rust guest crate and its Go guest package:
+
+```bash
+rustup target add wasm32-unknown-unknown        # the Rust guest; Go 1.24 or later builds the Go one
+cargo build -p guatiao --features load          # what the C host's test links
+GUATIAO_LIBRARY=$PWD/target/debug cargo test --manifest-path crates/guatiao-wasm/Cargo.toml
+(cd crates/guatiao-wasm/guest && cargo test)
+(cd crates/guatiao-wasm/guest-go && go vet ./... && go test ./...)
 ```
 
 Each crate with a C surface commits its header and has a test comparing

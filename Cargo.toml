@@ -20,11 +20,16 @@ members = [
 ]
 # Each its own workspace: the page builds only for wasm32, the Python
 # bridge needs a Python to link against, which nothing else here does,
-# and the Lua crates choose one Lua each, by exclusive features.
+# the Lua crates choose one Lua each, by exclusive features, and the
+# WebAssembly source, its Rust guest crate and example build wasmtime or
+# for wasm32, which nothing else here does.
 exclude = [
     "examples/wire_over_webtransport/client",
     "crates/guatiao-py",
     "crates/guatiao-lua",
+    "crates/guatiao-wasm",
+    "crates/guatiao-wasm/guest",
+    "examples/wasm_greeter_rust",
     "bindings/lua/guatiao",
 ]
 

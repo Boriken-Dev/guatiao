@@ -14,6 +14,20 @@ write now.
 
 ### Added
 
+- **`guatiao-wasm`: libraries compiled to WebAssembly, served to any host,
+  sandboxed.** A source file (`crates/guatiao-wasm`, built from this
+  repository, not published) with wasmtime built in: a library is a core
+  WebAssembly module speaking guatiao ABI 1 (five exports, five imports,
+  every value as its wire encoding in the module's memory), described by a
+  `*.guatiao-wasm.toml` manifest and its kinds' `<crate>.kinds.json`.
+  Guests in Rust (`guatiao-wasm-guest`) and in Go 1.24 or later (the
+  `guest` package, Go's own `wasip1` toolchain), with example greeters in
+  both (`examples/wasm_greeter_rust`, `examples/wasm_greeter_go`). A module
+  sees its own memory and what a call hands it: no files, network or
+  environment. Operations, time and memory limits stop runaway code; a trap
+  or a limit discards the instance, the next call makes it afresh, and the
+  host carries on. Calls run on the caller's thread, each library behind a
+  lock of its own.
 - **`guatiao-lua`: libraries written in Lua, served to any host.** A
   source file (`crates/guatiao-lua`, built from this repository, not
   published) with Lua 5.4 built in (`lua55` and `luau` as features): a

@@ -5,9 +5,11 @@ providers that any guatiao host loads, in any language. It is a
 [source](python.md#serving-python-to-any-host): a file the host adds once,
 whose libraries are that language's modules, listed without running them,
 opened when they appear or change, and closed once nothing holds them.
-`guatiao-py` is one for Python. `guatiao-bridge` is what every such bridge
-shares, so a bridge for a new language is its runtime and its value
-conversion, and nothing else.
+`guatiao-py` is one for Python, and `guatiao-wasm` one for WebAssembly
+modules compiled from any language
+([providers compiled to WebAssembly](wasm.md#providers-compiled-to-webassembly)).
+`guatiao-bridge` is what every such bridge shares, so a bridge for a new
+language is its runtime and its value conversion, and nothing else.
 
 ## The pieces
 
