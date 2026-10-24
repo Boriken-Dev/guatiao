@@ -242,7 +242,9 @@ contains
     at = v%at('agent', 2, 'name')
     call check_text(at%path_text(), 'agent[1].name', 'keys and positions from 0')
     at = v%at('a.b', 'c d', 'x"y')
-    call check_text(at%path_text(), '["a.b"]["c d"]["x\"y"]', 'keys that are not plain are quoted')
+    ! achar(92), not a literal: flang's preprocessing doubles one.
+    call check_text(at%path_text(), '["a.b"]["c d"]["x' // achar(92) // '"y"]', &
+                    'keys that are not plain are quoted')
   end subroutine
 
   subroutine reals_are_written_shortest()

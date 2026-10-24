@@ -192,7 +192,8 @@ contains
     native = dir
     if (gt_windows) then
       do i = 1, len(native)
-        if (native(i:i) == '/') native(i:i) = '\'
+        ! achar(92), not a literal: flang's preprocessing doubles one.
+        if (native(i:i) == '/') native(i:i) = achar(92)
       end do
       command = 'if not exist ' // native // ' mkdir ' // native
     else

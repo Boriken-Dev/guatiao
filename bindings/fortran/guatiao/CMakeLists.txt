@@ -52,6 +52,29 @@ if(GUATIAO_FORTRAN_TESTS)
     # The tests read the headers and vectors relative to this directory.
     add_test(NAME ${name} COMMAND ${name} WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
   endforeach()
+
+  # The serde calls again, GUATIAO_LIBRARY naming the core file by a path
+  # whose last separator is a backslash: serde must be found beside it.
+  # Windows writes such a path natively; elsewhere the files are links
+  # whose names hold one.
+  set(_dir "$ENV{GUATIAO_LIBRARY}")
+  if(IS_DIRECTORY "${_dir}")
+    set(_core "${CMAKE_SHARED_LIBRARY_PREFIX}guatiao${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    set(_serde "${CMAKE_SHARED_LIBRARY_PREFIX}guatiao_serde${CMAKE_SHARED_LIBRARY_SUFFIX}")
+    set(_beside "${CMAKE_CURRENT_BINARY_DIR}/beside")
+    file(MAKE_DIRECTORY "${_beside}")
+    if(WIN32)
+      file(COPY "${_dir}/${_core}" "${_dir}/${_serde}" DESTINATION "${_beside}")
+      file(TO_NATIVE_PATH "${_beside}/${_core}" _named)
+    else()
+      file(CREATE_LINK "${_dir}/${_core}" "${_beside}/core\\${_core}" SYMBOLIC)
+      file(CREATE_LINK "${_dir}/${_serde}" "${_beside}/core\\${_serde}" SYMBOLIC)
+      set(_named "${_beside}/core\\${_core}")
+    endif()
+    add_test(NAME test_serde_beside_a_backslash COMMAND test_serde
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    set_tests_properties(test_serde_beside_a_backslash PROPERTIES ENVIRONMENT "GUATIAO_LIBRARY=${_named}")
+  endif()
 endif()
 
 include(GNUInstallDirs)

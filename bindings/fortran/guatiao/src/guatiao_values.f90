@@ -589,7 +589,8 @@ contains
       integer :: c
       q = '"'
       do c = 1, len(k)
-        if (k(c:c) == '"' .or. k(c:c) == '\') q = q // '\'
+        ! achar(92), not a literal: flang's preprocessing doubles one.
+        if (k(c:c) == '"' .or. k(c:c) == achar(92)) q = q // achar(92)
         q = q // k(c:c)
       end do
       q = q // '"'
