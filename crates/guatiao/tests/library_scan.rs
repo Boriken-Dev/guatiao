@@ -24,6 +24,7 @@
 
 #![cfg(feature = "load")]
 
+use std::io;
 use std::path::{Path, PathBuf};
 
 use guatiao::library::{
@@ -473,7 +474,7 @@ fn a_search_path_is_walked_once_per_place_and_reports_what_it_could_not_read() {
     );
     assert_eq!(report.unreadable.len(), 1, "{:?}", report.unreadable);
     assert_eq!(report.unreadable[0].0, missing);
-    assert_eq!(report.unreadable[0].1.kind(), std::io::ErrorKind::NotFound);
+    assert_eq!(report.unreadable[0].1.kind(), io::ErrorKind::NotFound);
     assert!(report.failed.is_empty(), "{:?}", report.failed);
     assert_eq!(registry.loaded().len(), 1, "one library, once");
 

@@ -39,6 +39,7 @@
 
 #![forbid(unsafe_code)]
 
+use std::io;
 use std::path::{Path, PathBuf};
 
 use super::raw::{DECLARES_SYMBOL, ENTRY_SYMBOL};
@@ -339,7 +340,7 @@ pub fn probe(path: &Path) -> Result<Probe, std::io::Error> {
 
 fn unparsed() -> std::io::Error {
     std::io::Error::new(
-        std::io::ErrorKind::InvalidData,
+        io::ErrorKind::InvalidData,
         "not an object file this build can parse",
     )
 }
@@ -369,7 +370,7 @@ fn probe_slice<R: object::read::ReadCacheOps, A: object::read::macho::FatArch>(
     let want = running_cputype();
     let Some(arch) = arches.iter().find(|a| Some(a.cputype()) == want) else {
         return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
+            io::ErrorKind::InvalidData,
             "a universal file with no slice for this architecture",
         ));
     };
@@ -407,7 +408,7 @@ fn probe_object<'data, R: object::ReadRef<'data>>(data: R) -> Result<Probe, std:
     // not the same as saying it is absent.
     let exports = file.exports().map_err(|_| {
         std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
+            io::ErrorKind::InvalidData,
             "the export table could not be read",
         )
     })?;
@@ -460,7 +461,7 @@ fn probe_object<'data, R: object::ReadRef<'data>>(data: R) -> Result<Probe, std:
             Some(found) => declared = found,
             None => {
                 return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
+                    io::ErrorKind::InvalidData,
                     "the declaration is not readable as data or is not terminated",
                 ));
             }
@@ -835,7 +836,7 @@ pub fn scan_path_with(
         } else {
             report
                 .unreadable
-                .push((entry, std::io::Error::from(std::io::ErrorKind::NotFound)));
+                .push((entry, std::io::Error::from(io::ErrorKind::NotFound)));
         }
     }
     report
