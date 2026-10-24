@@ -1293,7 +1293,8 @@ jobs:
           export GUATIAO_FORTRAN_LIBRARY="$RUNNER_TEMP/fortran-library"
           cargo test -p greeter_host --all-features --test fortran_library -- --nocapture 2>&1 | tee fortran-library.log
           test "${PIPESTATUS[0]}" -eq 0
-          ! grep -n "skipped:" fortran-library.log
+          # A negated command mid-step never fails it: only the last one does.
+          if grep -n "skipped:" fortran-library.log; then exit 1; fi
           python -m pip install -e "bindings/python/guatiao[dev]"
           python -m pytest -p no:cacheprovider bindings/python/guatiao/tests/test_examples.py -k fortran -rs -q 2>&1 | tee fortran-python.log
           test "${PIPESTATUS[0]}" -eq 0
