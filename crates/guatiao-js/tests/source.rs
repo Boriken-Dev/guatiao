@@ -487,6 +487,23 @@ export class Spin extends Provider {
       again();
       return { greeting: 'spawned' };
     }
+    if (name === 'hang') {
+      // Two reactions that never end, the second catching what it can.
+      Promise.resolve().then(() => { for (;;) {} });
+      Promise.resolve().then(() => { for (;;) { try { for (;;) {} } catch (e) {} } });
+      return { greeting: 'queued' };
+    }
+    if (name === 'fill-then-catch') {
+      const kept = [];
+      try { for (;;) kept.push(new Array(1000).fill(1)); } catch (e) {}
+      for (;;) { try { for (;;) {} } catch (e) {} }
+    }
+    if (name === 'throws') {
+      Promise.resolve().then(() => { ticks++; });
+      throw new Error('after queueing');
+    }
+    if (name === 'wide') return { greeting: new Array(256).fill('x'.repeat(1 << 20)) };
+    if (name === 'doubling') { let a = [1]; for (let i = 0; i < 22; i++) a = [a, a]; return { greeting: a }; }
     if (name === 'holes') return { greeting: new Array(20000000) };
     if (name === 'huge') return { greeting: new Array(2 ** 32 - 1) };
     if (name === 'detached') { const a = new Uint8Array(4); a.buffer.transfer(); return { greeting: a }; }
@@ -496,7 +513,7 @@ export class Spin extends Provider {
     }
     if (name === 'deep') { const down = (n) => 1 + down(n + 1); return { greeting: String(down(1)) }; }
     if (name === 'grow') return { greeting: 'x'.repeat(64 * 1024 * 1024) };
-    if (name === 'jobs') { const again = () => Promise.resolve().then(again); again(); return { greeting: 'queued' }; }
+    if (name === 'jobs') { const again = () => { Promise.resolve().then(again); }; again(); return { greeting: 'queued' }; }
     return { greeting: `calm, ${name}` };
   }
 }
@@ -557,6 +574,102 @@ fn runaway_code_is_stopped_at_its_limits_and_the_host_carries_on() {
 
     assert_eq!(
         greeting(&spin.greet("after").expect("the runtime carries on")),
+        "calm, after"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Runs `f` on a thread of its own, and fails if it has not answered in
+/// `seconds`: a runaway script must not hang the suite with it.
+fn within<T: Send + 'static>(seconds: u64, f: impl FnOnce() -> T + Send + 'static) -> T {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(f());
+    });
+    rx.recv_timeout(core::time::Duration::from_secs(seconds))
+        .expect("the call ended in time")
+}
+
+#[test]
+fn a_loop_that_catches_everything_is_still_stopped() {
+    let dir = scratch("uncatchable");
+    put(&dir, "js_catch", "version = \"1.0.0\"\n", &spin());
+    let mut registry = serving(&config(
+        &dir,
+        Some(limits(&[
+            ("operations", 2_000_000),
+            ("memory", 16 * 1024 * 1024),
+        ])),
+    ));
+    assert!(registry.refresh().refused.is_empty());
+    let spin = greeter(&registry, "js_catch_spin");
+    // Reactions that never end, one of them catching.
+    let stopped = within(60, {
+        let spin = Arc::clone(&spin);
+        move || spin.greet("hang").unwrap_err()
+    });
+    assert_eq!(
+        stopped.message(),
+        "stopped at its operations limit (2000000)"
+    );
+    // Memory full to its limit, then a loop that catches the stop.
+    let stopped = within(60, {
+        let spin = Arc::clone(&spin);
+        move || spin.greet("fill-then-catch").unwrap_err()
+    });
+    assert_eq!(
+        stopped.message(),
+        "stopped at its operations limit (2000000)"
+    );
+    assert_eq!(
+        greeting(&spin.greet("after").expect("carries on")),
+        "calm, after"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn reactions_a_failed_call_queued_run_before_it_returns() {
+    let dir = scratch("throwing");
+    put(&dir, "js_throwing", "version = \"1.0.0\"\n", &spin());
+    let mut registry = serving(&config(&dir, None));
+    assert!(registry.refresh().refused.is_empty());
+    let spin = greeter(&registry, "js_throwing_spin");
+    assert!(spin.greet("throws").is_err());
+    assert_eq!(
+        greeting(&spin.greet("peek").expect("peeked")),
+        "1",
+        "the reaction ran in the call that queued it, not in the next"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn what_a_script_makes_is_bounded_as_a_whole() {
+    let dir = scratch("whole");
+    put(&dir, "js_whole", "version = \"1.0.0\"\n", &spin());
+    let mut registry = serving(&config(
+        &dir,
+        Some(limits(&[("memory", 16 * 1024 * 1024), ("time_ms", 5000)])),
+    ));
+    assert!(registry.refresh().refused.is_empty());
+    let spin = greeter(&registry, "js_whole_spin");
+    for name in ["wide", "doubling"] {
+        let started = std::time::Instant::now();
+        let refused = spin.greet(name).unwrap_err();
+        assert!(
+            refused.message().contains("more than"),
+            "{name}: {}",
+            refused.message()
+        );
+        assert!(
+            started.elapsed() < core::time::Duration::from_secs(3),
+            "{name} took {:?}",
+            started.elapsed()
+        );
+    }
+    assert_eq!(
+        greeting(&spin.greet("after").expect("carries on")),
         "calm, after"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -684,6 +797,34 @@ fn a_link_out_of_the_paths_does_not_lead_out() {
         changed.refused[0].reason
     );
     assert_eq!(changed.loaded.len(), 1, "{changed:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn one_file_is_one_module_whatever_it_is_imported_as() {
+    let dir = scratch("alias");
+    std::fs::write(dir.join("words.js"), "export const W = {};\n").expect("written");
+    std::os::unix::fs::symlink("words.js", dir.join("alias.js")).expect("linked");
+    put(
+        &dir,
+        "js_alias",
+        "version = \"1.0.0\"\n",
+        &format!(
+            "{}import * as a from './words.js';\nimport * as b from './alias.js';\nexport class P extends Provider {{ static kinds = [Greeter]; greet() {{ return {{ greeting: String(a.W === b.W) }}; }} }}\n",
+            preamble()
+        ),
+    );
+    let mut registry = serving(&config(&dir, None));
+    assert!(registry.refresh().refused.is_empty());
+    assert_eq!(
+        greeting(
+            &greeter(&registry, "js_alias_p")
+                .greet("x")
+                .expect("greeted")
+        ),
+        "true"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
