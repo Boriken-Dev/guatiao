@@ -91,6 +91,13 @@ int main(int argc, char **argv) {
   CHECK(e[0].value.payload.text.alloc != theirs, "the string left the library");
   CHECK(guatiao_value_make_local(&out, &home) == GUATIAO_OK, "moving a tree already home");
 
+#if defined(_WIN32)
+  CHECK(GetModuleHandleA(argv[1]) == lib, "the library is found by its path while loaded");
+#else
+  library again = dlopen(argv[1], RTLD_NOW | RTLD_NOLOAD);
+  CHECK(again == lib, "the library is found by its path while loaded");
+  if (again) dlclose(again);
+#endif
   CHECK(close_library(lib) == 0, "the library unloads");
   /* Unmapped, not merely released: otherwise freeing through its
    * allocator would still work and this would prove nothing. */
