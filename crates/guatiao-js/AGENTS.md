@@ -168,7 +168,10 @@ object that contains itself, trees nested deeper than 128, a list longer
 than a sixteenth of the memory limit (16 777 216 items without one: holes
 cost QuickJS nothing, and the copy is made outside its limit), a buffer a
 script asks a host to fill that is longer than the memory limit (64 MiB
-without one). An integer-like
+without one), and a conversion that adds up to more than that many values
+or that many bytes of text, keys and buffers in all (an object that
+appears twice is made twice). The bounds are the engine's own, out of the
+script's reach. An integer-like
 key (`"1"`) comes first in an object whatever its place in the map.
 
 ## The engine (`JsEngine`)
@@ -196,17 +199,21 @@ opening a library included:
 | `operations` | QuickJS's interrupt handler, polled once per 10 000 calls and loop iterations; a poll spends 10 000, so the stop comes within one poll past the limit |
 | `time_ms` | the same poll |
 | `depth` | the native stack QuickJS may use: 740 bytes per level (measured on Linux x86-64), at least 16 KiB and at most 1 MiB; a stack overflow while it is set is the limit |
-| `memory` | QuickJS's allocator, for the whole runtime, in bytes |
+| `memory` | QuickJS's allocator, for the whole runtime, in bytes; 128 KiB of it (a quarter, if the limit is small) is held back, so that the error that stops a call can always be made |
 
 A stop is `GUATIAO_ERR_INTERNAL` ("stopped at its operations limit
 (200000)"), or `GUATIAO_ERR_ALLOC` for memory; the runtime answers the
 next call. The interrupt cannot be caught by `try`/`catch`/`finally`.
 Without a depth limit QuickJS stops a recursion at 1 MiB of stack
 (about 1 400 levels of an empty function, release build, Linux x86-64) with a `RangeError`, `GUATIAO_ERR_INTERNAL`.
-Promise reactions a call leaves queued run after its answer, under the
-same budget; if the budget runs out there the call is the one stopped, and
-every reaction still queued is killed before it returns, so none runs in
-a later call.
+Promise reactions a call leaves queued run when the outermost call
+returns, whatever it came to (never inside a call made from inside
+another), under the same budget. If the budget runs out there, or before,
+the call is the one stopped, whatever its method answered; the reactions
+still queued then run on a runtime with no memory to queue another and
+reach no host, and the interrupt ends any that loops, so none outlives the
+call. A source in which more than 100 000 still run after a stop gives up
+and serves nothing more (a new source is the way back).
 
 ## Errors
 

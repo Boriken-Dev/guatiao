@@ -59,32 +59,25 @@ fn key<'js>(ctx: &Ctx<'js>) -> Result<Symbol<'js>> {
     Symbol::new_global(ctx.clone(), KEY)
 }
 
-/// Gives `ctx` the script and a `console`, once, and the bounds a value
-/// made in it is held to.
-pub(crate) fn install(ctx: &Ctx<'_>, bounds: Bounds) -> Result<()> {
+/// Gives `ctx` the script and a `console`, once.
+pub(crate) fn install(ctx: &Ctx<'_>) -> Result<()> {
     let globals = ctx.globals();
     if globals.contains_key(key(ctx)?)? {
         return Ok(());
     }
     ctx.eval::<(), _>(CORE)?;
-    let object: Object<'_> = globals.get(key(ctx)?)?;
-    object.set("maxItems", bounds.items as f64)?;
-    object.set("maxBytes", bounds.bytes as f64)?;
     console(ctx, &globals)
 }
 
-/// The script's object in `ctx`.
-pub(crate) fn core<'js>(ctx: &Ctx<'js>) -> Result<Core<'js>> {
+/// The script's object in `ctx`. The bounds are the engine's, never read
+/// from anything a script can write.
+pub(crate) fn core<'js>(ctx: &Ctx<'js>, bounds: Bounds) -> Result<Core<'js>> {
     let object: Object<'js> = ctx.globals().get(key(ctx)?)?;
     let object_ctor: Object<'js> = ctx.globals().get("Object")?;
-    let bound = |name: &str| -> Result<usize> { Ok(object.get::<_, f64>(name)? as usize) };
     Ok(Core {
         ctx: ctx.clone(),
         handle_key: object.get("handleKey")?,
-        bounds: Bounds {
-            items: bound("maxItems")?,
-            bytes: bound("maxBytes")?,
-        },
+        bounds,
         exact: object.get("ExactNumber")?,
         guatiao_error: object.get("GuatiaoError")?,
         provider: object.get("Provider")?,

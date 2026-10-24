@@ -23,7 +23,7 @@ use rquickjs::function::Rest;
 use rquickjs::{Ctx, Function, Object, Symbol, Type, TypedArray, Value as Js};
 
 use crate::errors::{self, Words, bad_value};
-use crate::prelude::{self, Core};
+use crate::prelude::{self, Bounds, Core};
 use crate::values::{self, Conversion};
 
 /// The key of the context a script runs in.
@@ -49,10 +49,14 @@ pub(crate) struct Shared {
     next: Cell<u64>,
     purge_at: Cell<usize>,
     pub(crate) words: Words,
+    /// What a conversion may make; the engine's, out of any script's reach.
+    pub(crate) bounds: Bounds,
+    /// Whether the call running was stopped: a host is not called then.
+    stopped: Rc<Cell<bool>>,
 }
 
 impl Shared {
-    pub(crate) fn new(kinds: Kinds, words: Words) -> Rc<Shared> {
+    pub(crate) fn new(kinds: Kinds, words: Words, stopped: Rc<Cell<bool>>) -> Rc<Shared> {
         Rc::new(Shared {
             kinds: RefCell::new(kinds),
             callers: RefCell::new(BTreeMap::new()),
@@ -61,6 +65,8 @@ impl Shared {
             next: Cell::new(0),
             purge_at: Cell::new(256),
             words,
+            bounds: Bounds::of(words.memory),
+            stopped,
         })
     }
 
@@ -133,6 +139,8 @@ pub(crate) struct Handle {
     target: Target,
     caller: Arc<Caller>,
     shared: Rc<Shared>,
+    /// The script closed it: nothing goes back in.
+    closed: bool,
 }
 
 impl Drop for Handle {
@@ -218,10 +226,14 @@ pub(crate) fn handle_object<'js>(
         target,
         caller,
         shared: Rc::clone(shared),
+        closed: false,
     }));
     let id = shared.register(context_key(ctx), &state);
     let object = Object::new(ctx.clone())?;
-    object.set(prelude::core(ctx)?.handle_key.as_atom(), id as f64)?;
+    object.set(
+        prelude::core(ctx, shared.bounds)?.handle_key.as_atom(),
+        id as f64,
+    )?;
     for (index, slot) in kind.slots().iter().enumerate() {
         let state = Rc::clone(&state);
         let shared = Rc::clone(shared);
@@ -232,12 +244,14 @@ pub(crate) fn handle_object<'js>(
     }
     let owned = Rc::clone(&state);
     let close = Function::new(ctx.clone(), move || {
-        if let Ok(mut handle) = owned.try_borrow_mut()
-            && let Target::Object(object) = &mut handle.target
-            && let Some(object) = object.take()
-        {
-            // Destroyed once the call returns, as a freed handle's is.
-            handle.shared.bury(object);
+        if let Ok(mut handle) = owned.try_borrow_mut() {
+            handle.closed = true;
+            if let Target::Object(object) = &mut handle.target
+                && let Some(object) = object.take()
+            {
+                // Destroyed once the call returns, as a freed handle's is.
+                handle.shared.bury(object);
+            }
         }
     })?;
     object.set("close", close.clone())?;
@@ -318,7 +332,17 @@ fn call_slot<'js>(
     index: usize,
     args: Vec<Js<'js>>,
 ) -> rquickjs::Result<Js<'js>> {
-    let core = prelude::core(ctx)?;
+    let core = prelude::core(ctx, shared.bounds)?;
+    if shared.stopped.get() {
+        return Err(throw(
+            ctx,
+            &core,
+            &ProviderError::new(
+                Status::GUATIAO_ERR_INTERNAL,
+                "the call was stopped, and reaches no host",
+            ),
+        ));
+    }
     let caller = Arc::clone(&state.borrow().caller);
     let kind = Arc::clone(caller.kind());
     let slot = &kind.slots()[index];
@@ -354,7 +378,12 @@ impl Drop for Held<'_> {
 /// Puts `object` back in the handle it was taken from.
 fn give_back(handle: &Rc<RefCell<Handle>>, object: RawObject) {
     if let Ok(mut state) = handle.try_borrow_mut() {
-        state.target = Target::Object(Some(object));
+        if state.closed {
+            // Closed while it was out: not for the script to have again.
+            state.shared.bury(object);
+        } else {
+            state.target = Target::Object(Some(object));
+        }
     }
 }
 

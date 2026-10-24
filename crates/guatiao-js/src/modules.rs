@@ -46,12 +46,17 @@ impl Roots {
         self.0.borrow_mut().remove(&Self::key(ctx));
     }
 
-    fn allows(&self, ctx: &Ctx<'_>, file: &Path) -> bool {
-        let file = &std::fs::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
+    /// The file as the files themselves are found (links followed), if it
+    /// is under the paths `ctx` may import from. It is that path that is
+    /// loaded: what was checked is what is read, and one file is one module
+    /// whatever it was imported as.
+    fn allows(&self, ctx: &Ctx<'_>, file: &Path) -> Option<PathBuf> {
+        let real = std::fs::canonicalize(file).ok()?;
         self.0
             .borrow()
             .get(&Self::key(ctx))
-            .is_some_and(|paths| paths.iter().any(|p| file.starts_with(p)))
+            .is_some_and(|paths| paths.iter().any(|p| real.starts_with(p)))
+            .then_some(real)
     }
 }
 
@@ -108,14 +113,14 @@ impl Resolver for Resolve {
             PathBuf::from(name)
         };
         let file = normalize(&joined);
-        if !self.roots.allows(ctx, &file) {
-            return Err(Error::new_resolving_message(
+        match self.roots.allows(ctx, &file) {
+            Some(real) => Ok(real.display().to_string()),
+            None => Err(Error::new_resolving_message(
                 base,
                 name,
-                "outside the paths of the library",
-            ));
+                "outside the paths of the library, or not there",
+            )),
         }
-        Ok(file.display().to_string())
     }
 }
 

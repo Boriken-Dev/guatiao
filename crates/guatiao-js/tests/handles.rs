@@ -33,6 +33,8 @@ const KINDS: &str = r#"{"format": 1, "kinds": [
               {"name": "n", "type": "u8"}]},
     {"name": "fill", "required": true, "fallible": false,
      "args": [{"name": "dst", "type": "bytes_mut"}], "answer": {"type": "i64"}},
+    {"name": "tick", "required": true, "fallible": false,
+     "args": [{"name": "n", "type": "u8"}]},
     {"name": "zero", "required": true, "fallible": false, "args": [],
      "answer": {"type": "f64"}}
   ]},
@@ -53,7 +55,13 @@ const KINDS: &str = r#"{"format": 1, "kinds": [
     {"name": "probe", "required": true, "fallible": true,
      "args": [{"name": "sink", "type": "object", "kind": "sink", "pass": "lent"}]},
     {"name": "check_zero", "required": true, "fallible": true, "args": []},
-    {"name": "fill_big", "required": true, "fallible": true, "args": []}
+    {"name": "fill_big", "required": true, "fallible": true, "args": []},
+    {"name": "leak", "required": true, "fallible": true, "args": []},
+    {"name": "nested", "required": true, "fallible": true, "args": []},
+    {"name": "peek_flag", "required": true, "fallible": false, "args": [],
+     "answer": {"type": "u64"}},
+    {"name": "forge_bounds", "required": true, "fallible": true, "args": []},
+    {"name": "close_and_spin", "required": true, "fallible": true, "args": []}
   ]}
 ]}"#;
 
@@ -71,6 +79,7 @@ class Thing {
   put() {}
   with() {}
   fill() { return 0n; }
+  tick() {}
   zero() { return 0; }
   [Symbol.dispose]() {
     disposed += 1n;
@@ -97,6 +106,8 @@ const expect = (what, got, wanted) => {
   if (got !== wanted) throw new Error(`${what}: ${String(got)}, wanted ${String(wanted)}`);
 };
 
+let flag = false;
+
 export class Holds extends Provider {
   static kinds = [holder];
   held = null;
@@ -118,6 +129,41 @@ export class Holds extends Provider {
 
   checkZero() { expect('negative zero', Object.is(this.held.zero(), -0), true); }
 
+  leak() {
+    // The first reaction never ends; the fifty after it call the host.
+    Promise.resolve().then(() => { for (;;) {} });
+    for (let i = 0; i < 50; i++) Promise.resolve().then(() => this.held.tick(1));
+  }
+
+  nested() {
+    flag = false;
+    Promise.resolve().then(() => { flag = true; });
+    // The host answers by calling this library again, from inside.
+    this.held.put({ reenter: true });
+    expect('no reaction ran in the middle of the script', flag, false);
+  }
+
+  peekFlag() { return flag ? 1n : 0n; }
+
+  forgeBounds() {
+    const core = globalThis[Symbol.for('guatiao.core')];
+    core.maxBytes = Infinity;
+    core.maxItems = Infinity;
+    for (const [what, make] of [
+      ['a buffer', () => this.held.fill(300 * 1024 * 1024)],
+      ['a list', () => this.held.put({ l: new Array(4000000) })],
+    ]) {
+      let said = '';
+      try { make(); } catch (e) { said = e.message; }
+      expect(`${what} is refused as too big`, /more than/.test(said), true);
+    }
+  }
+
+  closeAndSpin() {
+    this.held.close();
+    for (;;) {}
+  }
+
   fillBig() {
     let refused = false;
     try {
@@ -135,6 +181,8 @@ export class Holds extends Provider {
 struct Sinks {
     log: Mutex<Vec<String>>,
     destroyed: Mutex<Vec<usize>>,
+    /// The holder, for a `put` that asks the library something back.
+    holder: Mutex<Option<Arc<DescribedRemote>>>,
 }
 
 impl Serve for Sinks {
@@ -147,6 +195,14 @@ impl Serve for Sinks {
     ) -> Result<Answer, ProviderError> {
         match (kind.slots()[slot].name(), args.pop()) {
             ("put", Some(Arg::Map(map))) => {
+                if map.get("reenter").is_some() {
+                    let holder = self.holder.lock().unwrap().clone().expect("a holder");
+                    let Ok(Answer::Uint(flag)) = holder.call_named("peek_flag", vec![]) else {
+                        panic!("a flag");
+                    };
+                    self.log.lock().unwrap().push(format!("flag {flag}"));
+                    return Ok(Answer::Nothing);
+                }
                 let keys: Vec<&str> = map.keys().collect();
                 self.log
                     .lock()
@@ -155,6 +211,10 @@ impl Serve for Sinks {
                 Ok(Answer::Nothing)
             }
             ("zero", None) => Ok(Answer::Float(-0.0)),
+            ("tick", Some(Arg::Uint(_))) => {
+                self.log.lock().unwrap().push("tick".to_string());
+                Ok(Answer::Nothing)
+            }
             ("fill", Some(Arg::Buffer(_))) => Ok(Answer::Int(0)),
             (other, rest) => panic!("{other}: {rest:?}"),
         }
@@ -382,4 +442,98 @@ fn a_buffer_a_script_asks_a_host_for_is_bounded_by_the_memory_limit() {
     drop((holder,));
     finish(&mut registry);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn with_limits(pairs: &[(&str, u64)]) -> Option<Map> {
+    let mut map = Map::new();
+    for (k, v) in pairs {
+        map.set(k, *v);
+    }
+    Some(map)
+}
+
+#[test]
+fn a_stopped_calls_reactions_reach_no_host() {
+    let dir = scratch("handles-reactions");
+    let (sinks, table) = sinks();
+    let mut registry = registry(&dir, with_limits(&[("operations", 200_000)]));
+    let holder = remote(&registry, "holder_holds", "holder");
+    ok(holder.call_named(
+        "hold",
+        vec![Arg::Object(table.object(1).expect("an object"))],
+    ));
+    let stopped = holder.call_named("leak", vec![]).unwrap_err();
+    assert_eq!(
+        stopped.message(),
+        "stopped at its operations limit (200000)"
+    );
+    assert_eq!(
+        *sinks.log.lock().unwrap(),
+        Vec::<String>::new(),
+        "no reaction of a stopped call called the host"
+    );
+    drop(holder);
+    finish(&mut registry);
+}
+
+#[test]
+fn a_reaction_does_not_run_inside_a_call_made_in_the_middle_of_its_script() {
+    let dir = scratch("handles-nested");
+    let (sinks, table) = sinks();
+    let mut registry = registry(&dir, None);
+    let holder = Arc::new(remote(&registry, "holder_holds", "holder"));
+    *sinks.holder.lock().unwrap() = Some(Arc::clone(&holder));
+    ok(holder.call_named(
+        "hold",
+        vec![Arg::Object(table.object(1).expect("an object"))],
+    ));
+    ok(holder.call_named("nested", vec![]));
+    assert_eq!(
+        *sinks.log.lock().unwrap(),
+        ["flag 0"],
+        "the reaction waited for the script it was queued by"
+    );
+    let Answer::Uint(flag) = ok(holder.call_named("peek_flag", vec![])) else {
+        panic!("a flag");
+    };
+    assert_eq!(flag, 1, "and ran when that call returned");
+    *sinks.holder.lock().unwrap() = None;
+    drop(holder);
+    finish(&mut registry);
+}
+
+#[test]
+fn a_script_cannot_raise_the_bounds_it_is_held_to() {
+    let dir = scratch("handles-bounds");
+    let (_sinks, table) = sinks();
+    let mut registry = registry(&dir, with_limits(&[("memory", 16 * 1024 * 1024)]));
+    let holder = remote(&registry, "holder_holds", "holder");
+    ok(holder.call_named(
+        "hold",
+        vec![Arg::Object(table.object(1).expect("an object"))],
+    ));
+    ok(holder.call_named("forge_bounds", vec![]));
+    drop(holder);
+    finish(&mut registry);
+}
+
+#[test]
+fn closing_an_object_does_not_hide_the_limit_a_call_then_hits() {
+    let dir = scratch("handles-steal");
+    let mut registry = registry(&dir, with_limits(&[("operations", 200_000)]));
+    let maker = remote(&registry, "maker_makes", "maker");
+    let holder = remote(&registry, "holder_holds", "holder");
+    // An object this very source serves, so that destroying it runs a
+    // release of its own while the call's stop is pending.
+    let Answer::Object(made) = ok(maker.call_named("make", vec![])) else {
+        panic!("an object");
+    };
+    ok(holder.call_named("hold", vec![Arg::Object(made)]));
+    let stopped = holder.call_named("close_and_spin", vec![]).unwrap_err();
+    assert_eq!(
+        stopped.message(),
+        "stopped at its operations limit (200000)"
+    );
+    drop((maker, holder));
+    finish(&mut registry);
 }

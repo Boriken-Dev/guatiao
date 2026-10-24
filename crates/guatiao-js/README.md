@@ -88,7 +88,7 @@ holds a greeter that runs under Node and here, and one taking trees.
   built when the library opens; `static config` is refused.
 - **Define a kind in JavaScript.** A kind is a description the host gives.
 - **Wait.** There is no event loop and no timer: promise reactions run
-  after each call, and a slot answers before it returns.
+  when each call returns, and a slot answers before it returns.
 - **Stop native work mid-call.** A limit is checked once per 10 000
   calls and loop iterations: one long `repeat` or sort runs to its end
   (the memory limit bounds what it can build).

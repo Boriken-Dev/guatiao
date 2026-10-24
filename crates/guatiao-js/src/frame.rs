@@ -12,8 +12,8 @@
 use core::cell::Cell;
 use core::ptr::NonNull;
 
-use rquickjs::qjs::JSContext;
-use rquickjs::{Context, Ctx};
+use rquickjs::qjs::{JSContext, JSRuntime};
+use rquickjs::{Context, Ctx, Runtime};
 
 /// A context, and how to enter it.
 pub(crate) struct Entry {
@@ -69,13 +69,37 @@ impl Drop for Leave<'_> {
     }
 }
 
-/// Sets the memory limit of `ctx`'s runtime, 0 for none. `Runtime`'s own
-/// setter takes the lock a frame already holds.
-pub(crate) fn set_memory_limit(ctx: &Ctx<'_>, bytes: usize) {
-    // SAFETY: `ctx` is a live context, so its runtime is too; the call
-    // stores the limit and touches nothing else.
-    unsafe {
-        let runtime = rquickjs::qjs::JS_GetRuntime(ctx.as_raw().as_ptr());
-        rquickjs::qjs::JS_SetMemoryLimit(runtime, bytes as _);
+/// A QuickJS runtime reached without its lock: for the memory limit,
+/// which the interrupt handler and a frame must change while the lock is
+/// held further up the stack.
+#[derive(Clone, Copy)]
+pub(crate) struct RawRuntime(NonNull<JSRuntime>);
+
+impl RawRuntime {
+    /// The raw runtime behind `runtime`. Valid while `runtime` is.
+    pub(crate) fn of(runtime: &Runtime) -> rquickjs::Result<RawRuntime> {
+        let context = Context::base(runtime)?;
+        let raw = context.with(|ctx| {
+            // SAFETY: `ctx` is a live context, so its runtime is too.
+            unsafe { rquickjs::qjs::JS_GetRuntime(ctx.as_raw().as_ptr()) }
+        });
+        NonNull::new(raw)
+            .map(RawRuntime)
+            .ok_or(rquickjs::Error::Allocation)
+    }
+
+    /// Sets the memory limit, 0 for none.
+    pub(crate) fn set_memory_limit(&self, bytes: usize) {
+        // SAFETY: the runtime outlives every holder of this value (the
+        // engine's meter and the handler the runtime itself owns); the call
+        // stores the limit and touches nothing else.
+        unsafe { rquickjs::qjs::JS_SetMemoryLimit(self.0.as_ptr(), bytes as _) }
+    }
+}
+
+impl Frames {
+    /// How many frames are open.
+    pub(crate) fn depth(&self) -> u32 {
+        self.open.get()
     }
 }

@@ -25,11 +25,11 @@ use rquickjs::{
 };
 
 use crate::errors::{self, Words};
-use crate::frame::{self, Entry, Frames};
+use crate::frame::{Entry, Frames};
 use crate::host::{self, Shared};
 use crate::limits::Meter;
 use crate::modules::{self, Load, Resolve, Roots};
-use crate::prelude::{self, Bounds, Core};
+use crate::prelude::{self, Core};
 use crate::served::{self, Outcome, ReadBack};
 use crate::values;
 
@@ -45,6 +45,10 @@ struct Library {
 /// one's instance by id.
 type Declared = (Vec<Provided>, BTreeMap<String, Persistent<Object<'static>>>);
 
+/// The most promise reactions that run after a stop before the source is
+/// given up on.
+const MOST_JOBS_AFTER_A_STOP: usize = 100_000;
+
 /// The engine: one QuickJS runtime, on the bridge's thread for the life of
 /// the source. Not `Send`.
 pub struct JsEngine {
@@ -59,6 +63,9 @@ pub struct JsEngine {
     deferred: RefCell<Vec<(u64, u64)>>,
     /// A collection a closed library asked for while a frame was open.
     collect_due: Cell<bool>,
+    /// A job outlived a stopped call and could not be ended: nothing more
+    /// is served, since what runs next would run it.
+    poisoned: Cell<bool>,
     /// Last, so that it outlives everything that holds a value in it.
     runtime: Runtime,
 }
@@ -180,15 +187,27 @@ impl JsEngine {
         u64::try_from(self.runtime.memory_usage().malloc_size).unwrap_or(0)
     }
 
-    /// Runs `f` in `entry`'s context; when it is the outermost frame that
-    /// returns, everything that had to wait for no script to be running is
-    /// done: objects destroyed, objects released, a collection.
+    /// Runs `f` in `entry`'s context. When it is the outermost frame that
+    /// is about to return, the promise reactions `f` queued run first,
+    /// whatever `f` came to: a reaction may not run in the middle of
+    /// another script's synchronous code, nor in a later call. Always
+    /// inside a [`Meter::run`], so that they are counted.
     fn enter<R>(&self, entry: &Entry, f: impl for<'js> FnOnce(Ctx<'js>) -> R) -> R {
-        let answer = self.frames.enter(entry, f);
+        self.frames.enter(entry, |ctx| {
+            let answer = f(ctx.clone());
+            if self.frames.depth() == 1 {
+                self.run_jobs(&ctx);
+            }
+            answer
+        })
+    }
+
+    /// Settles what waited for no frame to be open, once the call that
+    /// opened the last one has been accounted for.
+    fn leave(&self) {
         if !self.frames.inside() {
             self.settle();
         }
-        answer
     }
 
     /// What waited for no frame to be open. Destroying an object can run
@@ -234,7 +253,6 @@ impl JsEngine {
                 if dispose().is_err() {
                     let _ = ctx.catch();
                 }
-                self.run_jobs(&ctx);
                 Ok(())
             })
         });
@@ -252,18 +270,31 @@ impl JsEngine {
         self.shared.words
     }
 
-    /// Runs the jobs a call queued (promise reactions) until none are
-    /// left. The queue is the runtime's, so once a limit has stopped the
-    /// call what is left must die with it: QuickJS has no way to empty the
-    /// queue, so the jobs run with no memory to make another with, and the
-    /// interrupt still stopping any that loops.
+    /// Runs the promise reactions that are queued until none are. The
+    /// queue is the runtime's and QuickJS cannot empty it, so once a limit
+    /// has stopped the call what is left must die with it: the jobs run on
+    /// a runtime with no memory to queue another with, and the interrupt
+    /// (which raises the limit just long enough to make its error, and so
+    /// cannot be caught) ends any that loops. A host is not called by them.
+    /// What no job count can end, because a job outlived them all, poisons
+    /// the source.
     fn run_jobs(&self, ctx: &Ctx<'_>) {
-        while ctx.execute_pending_job() {
-            if self.meter.stopped() {
-                frame::set_memory_limit(ctx, 1);
-                while ctx.execute_pending_job() {}
-                frame::set_memory_limit(ctx, self.meter.memory());
-                return;
+        let mut starved = None;
+        let mut after = 0usize;
+        loop {
+            if starved.is_none() && self.meter.stopped() {
+                starved = Some(self.meter.starve());
+            }
+            if !ctx.execute_pending_job() {
+                break;
+            }
+            if let Some(starved) = &starved {
+                starved.again();
+                after += 1;
+                if after > MOST_JOBS_AFTER_A_STOP {
+                    self.poisoned.set(true);
+                    break;
+                }
             }
         }
     }
@@ -276,10 +307,11 @@ impl JsEngine {
         ctx: &Ctx<'js>,
         receiver: &Object<'js>,
         call: &mut Call,
+        registered: &Cell<Option<u64>>,
     ) -> Result<Reply, ProviderError> {
         let words = self.words();
         let caught = |e: rquickjs::Error| errors::caught(ctx, None, &e, words);
-        let core = prelude::core(ctx).map_err(caught)?;
+        let core = prelude::core(ctx, self.shared.bounds).map_err(caught)?;
         let slot = call.slot_description().clone();
         let method = host::method_name(slot.name());
         let function: Js<'js> = receiver.get(method.as_str()).map_err(caught)?;
@@ -301,13 +333,6 @@ impl JsEngine {
         let returned: Js<'js> = arguments
             .apply(&function)
             .map_err(|e| errors::caught(ctx, Some(&core), &e, words))?;
-        self.run_jobs(ctx);
-        if self.meter.stopped() {
-            return Err(ProviderError::new(
-                Status::GUATIAO_ERR_INTERNAL,
-                "stopped while its reactions ran",
-            ));
-        }
 
         for (arg, back) in call.args.iter_mut().zip(&received) {
             match served::read_back(ctx, &core, &self.shared, back)? {
@@ -327,6 +352,7 @@ impl JsEngine {
                     lib.objects
                         .borrow_mut()
                         .insert(id, Persistent::save(ctx, object));
+                    registered.set(Some(id));
                     Reply::Object { kind, id }
                 }
             },
@@ -348,8 +374,8 @@ impl JsEngine {
                 words_of(errors::caught(ctx, None, &e, words))
             ))
         };
-        prelude::install(ctx, Bounds::of(words.memory)).map_err(failed)?;
-        let core = prelude::core(ctx).map_err(failed)?;
+        prelude::install(ctx).map_err(failed)?;
+        let core = prelude::core(ctx, self.shared.bounds).map_err(failed)?;
         let promise = Module::import(ctx, entry.display().to_string()).map_err(failed)?;
         let namespace: Object<'js> = match promise.finish() {
             Ok(namespace) => namespace,
@@ -399,10 +425,6 @@ impl JsEngine {
             }
             offered.push(declared);
             providers.insert(key, Persistent::save(ctx, instance));
-        }
-        self.run_jobs(ctx);
-        if self.meter.stopped() {
-            return Err(BridgeError::engine(format!("{id}: stopped while loading")));
         }
         Ok((offered, providers))
     }
@@ -589,7 +611,7 @@ impl Engine for JsEngine {
             Load,
         );
         let limits = *config.limits();
-        let meter = Meter::install(&runtime, limits);
+        let meter = Meter::install(&runtime, limits).map_err(unavailable)?;
         let mut kinds = guatiao_bridge::Kinds::default();
         for path in config.kinds() {
             kinds.load(path)?;
@@ -601,6 +623,7 @@ impl Engine for JsEngine {
                     memory: limits.memory,
                     depth: limits.depth,
                 },
+                meter.stopped_flag(),
             ),
             meter,
             roots,
@@ -609,6 +632,7 @@ impl Engine for JsEngine {
             next: Cell::new(0),
             deferred: RefCell::new(Vec::new()),
             collect_due: Cell::new(false),
+            poisoned: Cell::new(false),
             runtime,
         })
     }
@@ -630,7 +654,58 @@ impl Engine for JsEngine {
     /// Runs the entry module afresh in a context of its own and reads the
     /// providers it exports.
     fn open(&self, manifest: &Manifest, _version: &str) -> Result<Opened<u64>, BridgeError> {
+        let opened = self.open_inside(manifest);
+        self.leave();
+        opened
+    }
+
+    fn call(&self, handle: &u64, call: &mut Call) -> Result<Reply, ProviderError> {
+        let answer = self.call_inside(*handle, call);
+        self.leave();
+        answer
+    }
+
+    /// The object goes; its `Symbol.dispose`, if it has one, runs first,
+    /// when no script is running.
+    fn release(&self, handle: &u64, object: u64) {
+        if self.frames.inside() {
+            self.deferred.borrow_mut().push((*handle, object));
+        } else {
+            self.release_now(*handle, object);
+            self.leave();
+        }
+    }
+
+    fn close(&self, handle: u64) {
+        let Some(lib) = self.libraries.borrow_mut().remove(&handle) else {
+            return;
+        };
+        self.forget_roots(&lib.entry);
+        drop(lib);
+        self.collect_due.set(true);
+        self.leave();
+    }
+}
+
+impl JsEngine {
+    fn gave_up(&self) -> BridgeError {
+        BridgeError::Unavailable(
+            "a stopped call left work this source could not end: it serves no more".to_string(),
+        )
+    }
+
+    fn forget_roots(&self, entry: &Entry) {
+        let _ = self.meter.run::<(), BridgeError>(|| {
+            self.enter(entry, |ctx| self.roots.forget(&ctx));
+            Ok(())
+        });
+    }
+
+    fn open_inside(&self, manifest: &Manifest) -> Result<Opened<u64>, BridgeError> {
         let id = manifest.id();
+        if self.poisoned.get() {
+            return Err(self.gave_up());
+        }
         if self.frames.inside() {
             return Err(BridgeError::Unavailable(
                 "a library is not opened from inside a call into another".to_string(),
@@ -670,6 +745,7 @@ impl Engine for JsEngine {
         let (offered, providers) = match loaded {
             Ok(loaded) => loaded,
             Err(e) => {
+                self.forget_roots(&entry_point);
                 drop(entry_point);
                 self.collect_due.set(true);
                 self.settle();
@@ -692,8 +768,11 @@ impl Engine for JsEngine {
         })
     }
 
-    fn call(&self, handle: &u64, call: &mut Call) -> Result<Reply, ProviderError> {
-        let lib = self.library(*handle)?;
+    fn call_inside(&self, handle: u64, call: &mut Call) -> Result<Reply, ProviderError> {
+        if self.poisoned.get() {
+            return Err(self.gave_up().into());
+        }
+        let lib = self.library(handle)?;
         let receiver = match call.target() {
             Target::Provider(id) => lib.providers.get(id).cloned(),
             Target::Object(id) => lib.objects.borrow().get(id).cloned(),
@@ -705,36 +784,22 @@ impl Engine for JsEngine {
                 &format!("nothing answers `{}`", call.method()),
             )
         })?;
-        self.meter.run(|| {
+        let registered = Cell::new(None);
+        let answer = self.meter.run(|| {
             self.enter(&lib.entry, |ctx| {
                 let receiver = receiver
                     .restore(&ctx)
                     .map_err(|e| errors::caught(&ctx, None, &e, self.words()))?;
-                self.invoke(&lib, &ctx, &receiver, call)
+                self.invoke(&lib, &ctx, &receiver, call, &registered)
             })
-        })
-    }
-
-    /// The object goes; its `Symbol.dispose`, if it has one, runs first,
-    /// when no script is running.
-    fn release(&self, handle: &u64, object: u64) {
-        if self.frames.inside() {
-            self.deferred.borrow_mut().push((*handle, object));
-        } else {
-            self.release_now(*handle, object);
+        });
+        if answer.is_err()
+            && let Some(id) = registered.get()
+        {
+            // An object the stopped call answered: nobody was told of it.
+            drop(lib.objects.borrow_mut().remove(&id));
         }
-    }
-
-    fn close(&self, handle: u64) {
-        let Some(lib) = self.libraries.borrow_mut().remove(&handle) else {
-            return;
-        };
-        self.enter(&lib.entry, |ctx| self.roots.forget(&ctx));
-        drop(lib);
-        self.collect_due.set(true);
-        if !self.frames.inside() {
-            self.settle();
-        }
+        answer
     }
 }
 
