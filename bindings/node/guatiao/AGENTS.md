@@ -562,6 +562,7 @@ cannot run until it does.
 
 koffi runs a synchronous native call on a stack of its own. Another
 runtime embedded in the process that judges its stack by address can
-misjudge it: on Linux and macOS, CPython served through guatiao-py in a
-Node process does not free an object dropped during such a call (on
-Windows it does).
+misjudge it: on macOS, CPython 3.14 served through guatiao-py in a Node
+process does not free an object dropped during such a call. On Linux the
+bridge tells CPython which stack the call runs on, and it frees, as it
+does on Windows and FreeBSD.
