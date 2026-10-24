@@ -26,6 +26,7 @@ import (
 	greeterkind "github.com/Boriken-Dev/guatiao/examples/greeter_kind/go"
 	"github.com/Boriken-Dev/guatiao/examples/internal/rustcaller"
 	"github.com/Boriken-Dev/guatiao/examples/internal/threads"
+	"github.com/Boriken-Dev/guatiao/examples/internal/valuegreeter"
 )
 
 // repo is the repository's root, two above this package.
@@ -85,13 +86,17 @@ func compiler() string {
 	return strings.TrimSpace(string(out))
 }
 
-// buildCGreeter builds the greeter written in C into a directory of its own.
-func buildCGreeter(dir string) error {
+// buildCGreeter builds the greeter written in C into a directory of its
+// own, with -D for each of defines.
+func buildCGreeter(dir string, defines ...string) error {
 	cc := compiler()
 	if cc == "" {
 		return errors.New("no C compiler")
 	}
 	args := []string{"-shared", "-std=c11", "-Wall", "-Wextra", "-Werror"}
+	for _, d := range defines {
+		args = append(args, "-D"+d)
+	}
 	if runtime.GOOS != "windows" {
 		args = append(args, "-fPIC")
 	}
@@ -286,6 +291,78 @@ func TestEveryGreeterFillsALentMapInPlace(t *testing.T) {
 			t.Fatalf("%v", m.Keys())
 		}
 	})
+}
+
+// ownGreeter scans the greeter written in C, built with defines in a
+// directory of its own, into a registry of its own: no other registry
+// keeps it mapped when a test unloads it.
+func ownGreeter(t *testing.T, defines ...string) (*guatiao.Registry, *greeterkind.GreeterRemote) {
+	t.Helper()
+	if why := present["c"]; why != "" {
+		t.Skip(why)
+	}
+	dir := t.TempDir()
+	if err := buildCGreeter(dir, defines...); err != nil {
+		t.Fatal(err)
+	}
+	own, err := guatiao.NewRegistry("go-greeters-own", "0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { own.Close() })
+	if _, err := own.ScanDir(dir, guatiao.Rules("kind=greeter")); err != nil {
+		t.Fatal(err)
+	}
+	g, err := greeterkind.GreeterKind.Bind(own, "c_greeter")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return own, g
+}
+
+func TestAnAnswerBuiltInTheLibrarysAllocatorOutlivesTheUnload(t *testing.T) {
+	// This greeter ignores the carrier; a *Value answer is moved home on
+	// arrival, or closing it after the unload calls into unmapped code.
+	own, g := ownGreeter(t, "GREETER_IGNORES_CARRIER")
+	answer, err := valuegreeter.Greet(g.Remote, "hal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The C greeter has no unload function: nothing it handed out is
+	// alive, which the caller states.
+	if err := own.UnloadUnchecked("c_greeter_library"); err != nil {
+		t.Fatal(err)
+	}
+	if libraries, err := own.Libraries(); err != nil || len(libraries) != 0 {
+		t.Fatalf("%v %v", libraries, err)
+	}
+	var got greeterkind.Greeting
+	if err := answer.Decode(&got); err != nil || got.Greeting != "hello from C, hal" {
+		t.Fatalf("%q %v", got.Greeting, err)
+	}
+	answer.Close()
+}
+
+func TestWhatASlotGrewALentMapWithOutlivesTheUnload(t *testing.T) {
+	// `check` grows the lent map through its own allocator; the map is
+	// settled into the one it records once the call returns.
+	own, g := ownGreeter(t)
+	config, err := guatiao.NewValue(map[string]any{"name": "ivy"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer config.Close()
+	m, _ := config.Map()
+	if usable, err := g.Check(m); err != nil || !usable {
+		t.Fatalf("%v %v", usable, err)
+	}
+	if err := own.UnloadUnchecked("c_greeter_library"); err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := config.Decode(&got); err != nil || !reflect.DeepEqual(got, map[string]any{"name": "ivy", "checked_by": "C"}) {
+		t.Fatalf("%v %v", got, err)
+	}
 }
 
 func TestEveryGreeterGreetsFromAMapHandedOver(t *testing.T) {

@@ -115,10 +115,18 @@ func (c *Call) Lend(x any, class TreeClass) (unsafe.Pointer, error) {
 	if !ok {
 		return nil, &Error{Status: WrongKind, Message: fmt.Sprintf("a lent %s is a *guatiao.Value or a view, so what the callee changes has somewhere to go; not a %T", class, x)}
 	}
-	node, _, err := r.writable()
+	node, alloc, err := r.writable()
 	if err != nil {
 		return nil, err
 	}
+	// What the callee grew it with may be in its library's allocator.
+	c.after = append(c.after, func() {
+		home := native.Recorded(node)
+		if home == nil {
+			home = alloc
+		}
+		native.ValueMakeLocal(node, home)
+	})
 	return arm(node, class)
 }
 
@@ -259,6 +267,12 @@ func (c *Call) Answer(out unsafe.Pointer, class TreeClass, dst any) error {
 	}
 	v := adopt(node, alloc)
 	if p, ok := dst.(**Value); ok {
+		// A slot that ignored the carrier built it in its library's
+		// allocator; kept, it is moved into this binding's.
+		if err := check(native.ValueMakeLocal(node, alloc), "moving the answer into this binding's allocator"); err != nil {
+			v.Close()
+			return err
+		}
 		*p = v
 		return nil
 	}
